@@ -5,6 +5,14 @@
     "eng": { "label": "Engineer corps", "divs": 1, "cost": 18, "months": 3, "blurb": "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own, and it cannot take ground without infantry or tanks." }
   },
   "needs": { "inf": 0, "mtn": 0, "cav": 0, "eng": 0, "mot": 1, "art": 1, "arm": 2 },
+  "teams": {
+    "_about": "Release 2 (Brian, 21 Nov 03:57Z): support teams built apart from the infantry, off unless the game's 'teams' flag is set (src/campaign/teams.ts). One division's worth each. card: what each division of them is worth on the attack card (perDiv, at most 'most'): mg, a defence stiffened against men on foot; mor, the share of the defence's fieldworks the attack's mortars break up. ai: one team for every 'per' line corps, at most 'most', with 'fit' of the line at strength. frontage: how many ride into one attack without taking room on the roads. First figures, for the design director to rule.",
+    "mg": { "label": "Machine-gun brigade", "name": "Machine-Gun Brigade", "divs": 1, "cost": 16, "months": 3, "blurb": "Heavy machine guns on tripods. Fires from behind the line and stiffens a defence against men on foot, most from fieldworks. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
+    "mor": { "label": "Mortar brigade", "name": "Mortar Brigade", "divs": 1, "cost": 18, "months": 3, "blurb": "Heavy mortars. Lobs its bombs from behind the line and breaks up the fieldworks an attack goes in against. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
+    "card": { "mg": { "perDiv": 0.04, "most": 0.1 }, "mor": { "perDiv": 0.05, "most": 0.15 } },
+    "ai": { "per": 5, "most": 6, "fit": 0.9 },
+    "frontage": 2
+  },
   "air": {
     "ftr": { "label": "Fighter wing", "count": 100, "cost": 12, "months": 3, "factories": 2, "blurb": "A hundred fighters with their pilots. Fighters left on defence go up against every raid within their range, and escort your own bombers." },
     "bmr": { "label": "Bomber wing", "count": 100, "cost": 18, "months": 4, "factories": 3, "blurb": "A hundred bombers. They support the armies, bomb enemy industry and airfields, and strike at shipping." }
@@ -77,7 +85,8 @@
     "factory": { "label": "Factory", "cost": 30, "step": 5, "months": 8, "most": { "city": 3, "town": 2 }, "blurb": "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
     "yard": { "label": "Shipyard", "cost": [0, 20, 30, 45], "months": 8, "blurb": "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
     "aa": { "label": "Anti-aircraft guns", "cost": [0, 8, 12, 18], "months": 2, "upkeep": 0.05, "cut": 0.15, "flak": 0.012, "blurb": "Heavy guns round the factories and the rail yards. Each level stops part of the bombing of this province, its railway included, and brings down more of the bombers." },
-    "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." }
+    "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." },
+    "strip": { "label": "Field strip", "cost": [0, 3, 4, 5], "months": 1, "upkeep": 0.02, "holds": 500, "blurb": "Grass, steel mat or coral, laid in weeks: fighters can be based here, and each level lets 500 more aircraft fly from the province. Bombers need a concrete airfield. (Offered only with airfields as targets.)" }
   },
   "yards": {
     "Hamburg": 3, "Bremen": 3, "Schleswig-Holstein": 3, "Stettin": 1, "Konigsberg": 1,

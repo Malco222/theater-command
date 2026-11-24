@@ -15,7 +15,7 @@
 // together, and a nation's special formations (the starred sign) count apart from plain corps of their kind. The
 // whole number forming at the place is the first thing its list says.
 
-import { ARSENAL } from './arsenal';
+import { ARSENAL, workLabel } from './arsenal';
 import { CIVIC } from './buildings';
 import { PRODUCTION } from './economy';
 import { agentAt } from './intel';
@@ -109,7 +109,7 @@ function lineOf(g: Game, b: Build, nat: string): OrderLine {
     sign = b.airborne ? 'para' : b.kind ?? 'inf';
     // A nation's special formation goes by its own name: "heavy tank corps", "Commonwealth corps".
     const own = b.elite ? eliteOf(nat) : null;
-    label = b.airborne ? 'airborne corps' : own && own.id === b.elite ? (/^(Commonwealth|Guards|Ardennes|Evzone|Legion|Alpine)\b/.test(own.label) ? own.label : low(own.label)) : low(PRODUCTION.builds[b.kind ?? 'inf']?.label ?? (ARSENAL as unknown as { land?: Record<string, { label: string }> }).land?.[b.kind ?? 'inf']?.label ?? `${KIND[b.kind ?? 'inf']?.label ?? 'Infantry'} corps`);
+    label = b.airborne ? 'airborne corps' : own && own.id === b.elite ? (/^(Commonwealth|Guards|Ardennes|Evzone|Legion|Alpine)\b/.test(own.label) ? own.label : low(own.label)) : low(PRODUCTION.builds[b.kind ?? 'inf']?.label ?? (ARSENAL as unknown as { land?: Record<string, { label: string }> }).land?.[b.kind ?? 'inf']?.label ?? (ARSENAL as unknown as { teams?: Record<string, { label: string }> }).teams?.[b.kind ?? 'inf']?.label ?? `${KIND[b.kind ?? 'inf']?.label ?? 'Infantry'} corps`);
   } else if (b.what === 'air') {
     sign = b.item ?? 'ftr';
     label = low(ARSENAL.air[sign as keyof typeof ARSENAL.air]?.label ?? 'air wing');
@@ -123,7 +123,8 @@ function lineOf(g: Game, b: Build, nat: string): OrderLine {
     label = 'fortifications';
   } else if (b.what === 'work') {
     sign = b.item ?? 'factory';
-    label = low((ARSENAL.works as unknown as Record<string, { label: string }>)[sign]?.label ?? 'works');
+    // (One switch-aware name: with airfields as targets a field level is a concrete airfield or a field strip.)
+    label = low(workLabel(g, sign, b.kind));
   } else {
     const line = CIVIC.lines.find((x) => x.id === b.item);
     label = line ? `${low(line.name)} building` : 'town building';

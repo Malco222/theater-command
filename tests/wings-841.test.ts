@@ -167,7 +167,9 @@ describe('a wing ordered ashore', () => {
     expect(fields.length).toBeGreaterThan(0);
     for (const b of fields) { expect(coast).toContain(b.region); expect(g.regions[b.region].ctrl).toBe('USA'); }
     const inland = g.regions.find((r) => r.ctrl === 'USA' && !coast.includes(r.id) && airfieldsHold(g, r.id) > 0)!;
-    expect(whyNotAshore(g, ftr, inland)).toBe(`The ${fleet.name} is in the ${g.seas[fleet.zone].name}: its wing can fly ashore only to an airfield on that sea.`);
+    // Where the fleet is, as the UI director's sea words say it (13:29Z): a coast's sea is "off" it.
+    expect(g.seas[fleet.zone].name).toBe('Eastern Seaboard');
+    expect(whyNotAshore(g, ftr, inland)).toBe(`The ${fleet.name} is off the Eastern Seaboard: its wing can fly ashore only to an airfield on that sea.`);
     const to = fields.find((b) => !b.why)!;
     expect(orderAirBase(g, ftr.id, to.region)).toBe(true);
     expect(ftr.base).toBe(to.region);

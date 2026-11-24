@@ -9,10 +9,12 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { worksName } from './rivers';
-import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, km, whyNotBase } from './air';
+import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, whyNotBase } from './air';
+import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
+import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
@@ -22,7 +24,9 @@ import { stopOf } from './history';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
+import { mendStars } from './stars';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
+import { fighterTypesOn, joinBought, sellerType } from './fighters';
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
@@ -42,6 +46,8 @@ export const ARSENAL = data as unknown as {
     yard: LevelSpec;
     aa: LevelSpec & { upkeep: number; cut: number; flak: number };
     field: LevelSpec & { upkeep: number; holds: number };
+    /** Airfields as targets: a field strip (grass, steel mat, coral), offered only with that switch. */
+    strip: LevelSpec & { upkeep: number; holds: number };
   };
   yards: Record<string, number>;
   guns: { soften: number; softenMost: number; thicken: number; thickenMost: number };
@@ -81,18 +87,33 @@ export const isCity = (r: Region): boolean => r.terrain === 'urban' || r.cap || 
 
 const queued = (g: Game, nat: string, item: string, region: number): number => g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === item && b.region === region).length;
 
+/** True for an order of a field strip (airfields as targets): a 'field' work marked kind 'strip'. */
+export const isStripBuild = (b: Build): boolean => b.what === 'work' && b.item === 'field' && (b as { kind?: string }).kind === 'strip';
+
+/**
+ * The name of a work as every reader shows it (the book, the plate, the card, the ledger, the news): release 1's
+ * label, except that with airfields as targets a level of 'field' is a "Concrete airfield", or a "Field strip" where
+ * its order is marked 'strip'.
+ */
+export function workLabel(g: Game, item: string, kind?: string): string {
+  if ((item === 'field' || item === 'strip') && fieldRules(g)) return kind === 'strip' || item === 'strip' ? ARSENAL.works.strip.label : 'Concrete airfield';
+  return (ARSENAL.works as unknown as Record<string, { label: string }>)[item]?.label ?? 'Works';
+}
+
 /** What guns and airfields cost a nation to man each month, as lines for its ledger. */
 export function worksUpkeep(g: Game, nat: string): LedgerLine[] {
-  let aa = 0, field = 0;
+  let aa = 0, field = 0, strip = 0;
   // Province by province: the levels are whole numbers, so the order they are added in changes nothing.
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue;
     aa += g.flags[`wk:aa:${r.id}`] ?? 0;
     field += g.flags[`wk:field:${r.id}`] ?? 0;
+    // (Airfields as targets: the levels laid as strips cost a strip's upkeep. Never set with the switch off.)
+    strip += g.flags[`wk:strip:${r.id}`] ?? 0;
   }
   const out: LedgerLine[] = [];
   if (aa > 0) out.push({ key: 'works:aa', label: 'Anti-aircraft guns', amount: aa * ARSENAL.works.aa.upkeep, count: aa });
-  if (field > 0) out.push({ key: 'works:field', label: 'Airfields', amount: field * ARSENAL.works.field.upkeep, count: field });
+  if (field > 0) out.push({ key: 'works:field', label: 'Airfields', amount: strip > 0 ? (field - strip) * ARSENAL.works.field.upkeep + strip * ARSENAL.works.strip.upkeep : field * ARSENAL.works.field.upkeep, count: field });
   return out;
 }
 
@@ -141,6 +162,16 @@ export function whyNoWorks(g: Game, nat: string, wing: Wing): string | null {
   }
   if (from === null) return `${name} builds ${WING_WORD[other]} at home, but no ${WING_WORD[wing]}: more ${WING_WORD[wing]} come only from abroad.`;
   return null;
+}
+
+/**
+ * True for a nation with aircraft works of its own that build this kind, open yet or not: a great power's home province
+ * with the factories a wing is built in, or a smaller power's works on the record (ruling 213(d)). Plans stolen need
+ * works to build from (the fighter's plans, the design director 23 Nov 07:00Z).
+ */
+export function hasAircraftWorks(g: Game, nat: string, wing: Wing): boolean {
+  if (budgeted(g) && !greatPower(g, nat)) return (SMALL().works[nat]?.[wing] ?? null) !== null;
+  return industry(g, nat, ARSENAL.air[wing].factories);
 }
 
 /** The month a shut works opens for this kind, or null where it never builds it (the same reckoning as whyNoWorks). */
@@ -263,6 +294,9 @@ export const factoryCeiling = (g: Game, nat: string): number | null => (!budgete
 export function factoriesHeld(g: Game, nat: string): { held: number; building: number } {
   let held = 0;
   for (const r of g.regions) if (isHome(g, nat, r)) held += r.fac;
+  // Factories it built in conquered towns it still holds count against its industry too (release 2, settled towns).
+  // (Read whatever the switch says now: what was built stays built. The flag is written only with the switch on.)
+  for (const r of g.regions) if (r.ctrl === nat && r.owner !== nat) held += g.flags[`wk:facon:${r.id}:${nat}`] ?? 0;
   const building = g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === 'factory').length;
   return { held, building };
 }
@@ -340,7 +374,7 @@ export function smallAirMonth(g: Game): void {
     }
     if (to === g.human && made.length) {
       const from = giver === to ? 'from its own works' : `from ${g.nations[giver].name}`;
-      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id);
+      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id, { ready: 'air' });
     }
   });
   // The month a works opens: one plain line for its own player, never for a works that stands on the first day.
@@ -404,7 +438,7 @@ const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | 
   && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))));
 
 /** True if a ship needing a yard of this level can be laid down here. */
-export const canLay = (g: Game, nat: string, r: Region | undefined, yard: number): boolean => !!r && isHome(g, nat, r) && r.port && yardLevel(g, r) >= yard;
+export const canLay = (g: Game, nat: string, r: Region | undefined, yard: number): boolean => !!r && (isHome(g, nat, r) || settledFor(g, nat, r)) && r.port && yardLevel(g, r) >= yard;
 
 /** Where a ship would be laid down: the port asked for if its yard will do, else the nation's best yard. -1 if it has none big enough. */
 export function slipSite(g: Game, nat: string, yard: number, want = -1): number {
@@ -425,6 +459,51 @@ export function joinsFleet(g: Game, nat: string, cls: ShipClass, port: number): 
   // Submarines go to the submarine arm wherever it is based: a battle fleet has no use for them.
   if (cls === 'ss') { const arm = most(all.filter((f) => f.ships.ss > 0)); if (arm) return arm; }
   return most(here) ?? most(all.filter((f) => f.ships[cls] > 0)) ?? most(all);
+}
+
+/**
+ * (Release 2: the city at a glance, display only.) Where each wing a nation has on order would go, placed in the order
+ * the months hand them over (by month, then as ordered) and each counted in before the next is placed: deliverArsenal's
+ * own choice, made on a copy. A group on the wing's field with room for it; else a new group founded there; else the
+ * strongest group of its kind elsewhere; else nowhere (the reserve, null). Keyed by the order's id. `found` is a new
+ * group on that field, `first` the wing that founds it (a later one joins it).
+ */
+export function airJoinsPlan(g: Game, nat: string): Map<number, { name: string; base: number; found: boolean; first: boolean; nth: number } | null> {
+  const out = new Map<number, { name: string; base: number; found: boolean; first: boolean; nth: number } | null>();
+  const n = g.nations[nat];
+  if (!n) return out;
+  const war = airWar(g);
+  // (nth: for a group yet to be founded, which new group it is on its field, 1 for the first: two new groups on one
+  // field are told apart in words, "forms a second new air group here")
+  type Slot = { id: number; name: string; base: number; kind?: Wing; ftr: number; bmr: number; est: { ftr: number; bmr: number }; afloat: boolean; nth: number };
+  const slots: Slot[] = airFleetsOf(g, nat).map((f) => ({
+    id: f.id, name: f.name, base: f.base, kind: f.kind, ftr: f.ftr, bmr: f.bmr,
+    est: { ftr: f.est?.ftr ?? 0, bmr: f.est?.bmr ?? 0 }, afloat: f.ship !== undefined || f.ashore !== undefined, nth: 0,
+  }));
+  const best = (fs: Slot[]): Slot | null => fs.reduce<Slot | null>((m, f) => (!m || f.ftr + f.bmr > m.ftr + m.bmr ? f : m), null);
+  const wings = n.queue.map((b, i) => ({ b, i })).filter((x) => x.b.what === 'air').sort((x, y) => x.b.eta - y.b.eta || x.i - y.i);
+  for (const { b } of wings) {
+    const r = g.regions[b.region];
+    if (!r) { out.set(b.id, null); continue; }
+    const wing = (b.item ?? 'ftr') as Wing, count = b.count ?? ARSENAL.air[wing].count;
+    let f = canStation(g, nat, r) || r.ctrl === nat
+      ? best(slots.filter((x) => x.base === r.id && !x.afloat && (!war || (x.kind === wing && x.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))))
+      : null;
+    let first = false;
+    if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
+      const nth = slots.filter((x) => x.id < 0 && x.base === r.id).length + 1;
+      f = { id: -1 - slots.length, name: '', base: r.id, kind: war ? wing : undefined, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false, nth };
+      slots.push(f);
+      first = true;
+    } else if (!f) {
+      f = best(slots.filter((x) => !x.afloat && (!war || x.kind === wing)));
+    }
+    if (!f) { out.set(b.id, null); continue; }
+    f[wing] += count;
+    f.est[wing] += count;
+    out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first, nth: f.nth });
+  }
+  return out;
 }
 
 const liftBought = (g: Game, nat: string): number => (g.flags[`wk:tp:${nat}`] ?? 0) + g.nations[nat].queue.filter((b) => b.what === 'ship' && b.item === 'tp').length;
@@ -612,7 +691,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const cost = W.factory.cost + W.factory.step * have;
     // Ruling 213(e): a smaller power at the end of its industry: the country's fact comes before the province's reasons.
     const ceiling = whyNoFactory(g, nat);
-    const why = ceiling ?? (!r ? pick : !isHome(g, nat, r) || r.overseas ? 'Factories are built in the home country.' : !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost));
+    const why = ceiling ?? (!r ? pick : r.overseas ? 'Factories are built in the home country.' : whyNotWorksHere(g, nat, r, 'Factories are built in the home country.', !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : null) ?? (!isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost)));
     const carry = factoryCeiling(g, nat);
     const said = carry !== null && carry > 0 && !ceiling ? ` ${g.nations[nat].name} has ${factoriesHeld(g, nat).held + factoriesHeld(g, nat).building} of the ${plural(carry, 'factory', 'factories')} its industry can carry in this war.` : '';
     out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.${said}` : '', why });
@@ -628,13 +707,33 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       why: why ?? (next > TOP ? FULL[what].replace('%', r!.name) : poor(cost)),
     });
   };
-  level('yard', W.yard, r ? yardLevel(g, r) : 0, 0, !r ? pick : !isHome(g, nat, r) ? 'Shipyards are built in the home country.' : !r.port ? `${r.name} has no harbour.` : null);
+  level('yard', W.yard, r ? yardLevel(g, r) : 0, 0, !r ? pick : whyNotWorksHere(g, nat, r, 'Shipyards are built in the home country.', !r.port ? `${r.name} has no harbour.` : null) ?? (!r.port ? `${r.name} has no harbour.` : null));
   level('aa', W.aa, r ? workLevel(g, 'aa', r.id) : 0, W.aa.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
-  level('field', W.field, r ? workLevel(g, 'field', r.id) : 0, W.field.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
+  if (!fieldRules(g)) level('field', W.field, r ? workLevel(g, 'field', r.id) : 0, W.field.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
+  else {
+    // Airfields as targets: two offers on the one counter of built levels. A field strip in a month, for fighters, on
+    // bare ground or a strip; a concrete level in release 1's months and price, which makes a strip a full airfield.
+    const now = r ? workLevel(g, 'field', r.id) : 0;
+    // (A strip is queued as a 'field' work with kind 'strip', so the one count covers both.)
+    const next = now + (r ? queued(g, nat, 'field', r.id) : 0) + 1;
+    const mine = !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null;
+    const tier = r ? fieldTier(g, r.id) : 'none';
+    for (const what of ['strip', 'field'] as const) {
+      const spec = W[what];
+      const cost = priceOf(g, nat, `work:${what}`, spec.cost[Math.min(TOP, next)]);
+      const why = mine ?? (what === 'strip' && tier === 'full' ? 'This is a concrete airfield: enlarge it with concrete.' : next > TOP ? FULL.field.replace('%', r!.name) : poor(cost));
+      out.push({
+        key: `work:${what}`, group: 'works', label: what === 'strip' ? spec.label : 'Concrete airfield', blurb: what === 'strip' ? spec.blurb : 'Concrete runways, hangars and control rooms: every air group can be based here, heavy bombers fly from it and jets keep their edge. Each level lets 500 more aircraft fly from the province; the first makes a field strip a full airfield.',
+        size: `level ${Math.min(TOP, next)}`, cost, months: spec.months, upkeep: spec.upkeep, at: r ? r.id : -1,
+        note: r ? `${r.name} has ${tier === 'none' ? 'no airfield' : `${tier === 'strip' ? 'a field strip' : 'a concrete airfield'}${now ? `, level ${now}` : ''}`}${next - 1 > now ? `, level ${next - 1} building` : ''}.` : '',
+        why,
+      });
+    }
+  }
   {
     const cost = r ? fortCost(g, nat, r) : null;
     if (r && cost !== null) out.push(fortOffer(g, nat, r, cost, poor(cost)));
-    else out.push({ key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: '', cost: priceOf(g, nat, 'work:fort', PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: '', why: !r ? pick : !isHome(g, nat, r) ? 'Fortifications are built on home ground.' : `${r.name} is fortified as heavily as it can be.` });
+    else out.push({ key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: '', cost: priceOf(g, nat, 'work:fort', PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: '', why: !r ? pick : whyNotWorksHere(g, nat, r, 'Fortifications are built on home ground.') ?? `${r.name} is fortified as heavily as it can be.` });
   }
   return out;
 }
@@ -660,9 +759,14 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   const r = g.regions[o.at];
   n.pp -= o.cost;
   const b: Build = { id: g.nextBuild++, what: group as 'air' | 'ship' | 'work', item, name: '', region: o.at, ordered: g.turn, eta: g.turn + o.months, cost: o.cost };
-  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = o.from ? `${o.label} from ${theName(g.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`; if (o.from) b.from = o.from; }
+  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = o.from ? `${o.label} from ${theName(g.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`; if (o.from) { b.from = o.from; const mk = item === 'ftr' && fighterTypesOn(g) ? sellerType(g, o.from) : null; if (mk) b.mark = mk; } }
   else if (group === 'ship') { b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
+  // Airfields as targets: a strip goes on the books as a level of 'field' marked 'strip' (one counter, one cap, and a
+  // save an older build loads still delivers it as a level of airfield).
+  if (key === 'work:strip') { b.item = 'field'; (b as { kind?: string }).kind = 'strip'; }
+  // Ordered in a conquered town that has settled (release 2): it is delivered while the town is held.
+  if (r && r.owner !== nat && settledFor(g, nat, r) && (group === 'ship' || item === 'factory' || item === 'yard')) b.conq = true;
   n.queue.push(b);
   return b;
 }
@@ -698,11 +802,12 @@ export function airLine(list: AirDelivery[]): { text: string; region: number } |
 export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery[]): void {
   const n = g.nations[nat];
   const r = g.regions[b.region];
-  const tell = (text: string): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id); };
+  // (release 2: a unit handed over is tagged as ready, so that an interface can say so plainly; Brian, 24 Nov 18:30Z)
+  const tell = (text: string, ready?: 'air' | 'ship'): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id, ready ? { ready } : undefined); };
   if (b.what === 'air') {
     // (A wing bought abroad keeps its own line: the month's one line speaks of the factories.)
     const seller = b.from && g.nations[b.from] ? theName(g.nations[b.from]) : '';
-    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air && !seller) air.push(d); else headline(g, 'info', d.text, nat, d.region); };
+    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air && !seller) air.push(d); else headline(g, 'info', d.text, nat, d.region, { ready: 'air' }); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
@@ -719,9 +824,13 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (!f) {
       // No air fleet and nowhere to found one: the machines wait in reserve.
       const p = airPool(g, nat);
-      if (wing === 'ftr') { p.ftr += count; p.pilots += count; } else p.bmr += count;
+      if (wing === 'ftr') { p.ftr += count; poolIn(g, nat, count); } else p.bmr += count;
       return;
     }
+    // A wing bought abroad keeps the seller's fighter type (the switch 'Fighter types'; the design director, 23 Nov 07:00Z).
+    if (wing === 'ftr' && b.from && fighterTypesOn(g)) { const mk = b.mark ?? sellerType(g, b.from); if (mk) joinBought(f, mk, f.ftr, count); }
+    // (Under Units decide a bought wing's pilots are the buyer's, from its own schools, with no experience: BO:2067.)
+    joinPilots(g, f, count, wing, 'school');
     f[wing] += count;
     f.est[wing] += count;
     (f.extra ??= { ftr: 0, bmr: 0 })[wing] += count;
@@ -732,36 +841,52 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (hull === 'tp') {
       n.sealift += count;
       g.flags[`wk:tp:${nat}`] = (g.flags[`wk:tp:${nat}`] ?? 0) + 1;
-      tell(`New troopships are ready: the nation can now move ${plural(n.sealift, 'corps', 'corps')} by sea each month.`);
+      tell(`New troopships are ready: the nation can now move ${plural(n.sealift, 'corps', 'corps')} by sea each month.`, 'ship');
       return;
     }
     let f = joinsFleet(g, nat, hull, r.id);
-    if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
+    if (!f && (isHome(g, nat, r) || ((settledTownsOn(g) || b.conq) && r.ctrl === nat)) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
+    // New ships join at the back of their class, with no battle stars (stars.ts).
+    mendStars(f, hull);
     f.ships[hull] += count;
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);
     if (decks) syncWings(g);
-    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`);
+    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`, 'ship');
     return;
   }
   const what = b.item as Work;
   if (what === 'factory') {
-    if (!isHome(g, nat, r)) return; // the city was lost before the factory was finished
+    // The city was lost before the factory was finished. (A settled conquered town keeps one, release 2.)
+    const conquered = (settledTownsOn(g) || !!b.conq) && r.ctrl === nat && r.owner !== nat;
+    if (!isHome(g, nat, r) && !conquered) return;
     r.fac += 1;
     g.flags[`wk:fac:${r.id}`] = factoriesBuilt(g, r.id) + 1;
+    if (conquered) g.flags[`wk:facon:${r.id}:${nat}`] = (g.flags[`wk:facon:${r.id}:${nat}`] ?? 0) + 1;
     tell(`The new factory at ${r.name} is at work: the province now has ${r.fac}.`);
     return;
   }
   if (what === 'yard') {
-    if (!isHome(g, nat, r) || !r.port) return;
+    if ((!isHome(g, nat, r) && !((settledTownsOn(g) || b.conq) && r.ctrl === nat)) || !r.port) return;
     g.flags[`wk:yard:${r.id}`] = Math.min(TOP, yardLevel(g, r) + 1);
     tell(`The shipyard at ${r.name} is enlarged to level ${yardLevel(g, r)}.`);
     return;
   }
   if (r.ctrl !== nat) return; // lost before the works were finished
+  // Airfields as targets: a strip level adds to the field's built levels (and is counted as a strip's); a concrete level marks the field concrete.
+  if (what === 'field' && isStripBuild(b) && fieldRules(g)) {
+    if (workLevel(g, 'field', r.id) >= TOP) return;
+    g.flags[`wk:field:${r.id}`] = workLevel(g, 'field', r.id) + 1;
+    g.flags[`wk:strip:${r.id}`] = (g.flags[`wk:strip:${r.id}`] ?? 0) + 1;
+    tell(`The field strip at ${r.name} is laid: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft.`);
+    return;
+  }
+  if (what === 'field') setConcrete(g, r.id);
   g.flags[`wk:${what}:${r.id}`] = Math.min(TOP, workLevel(g, what, r.id) + 1);
-  tell(what === 'aa' ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g, 'aa', r.id)}.` : `The airfields at ${r.name} are ready: level ${workLevel(g, 'field', r.id)}.`);
+  tell(what === 'aa' ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g, 'aa', r.id)}.`
+    : fieldRules(g) ? `The concrete airfield at ${r.name} is ready: level ${workLevel(g, 'field', r.id)}, serving ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft.`
+    : `The airfields at ${r.name} are ready: level ${workLevel(g, 'field', r.id)}.`);
 }
 
 // ---- The computer's use of it -----------------------------------------------------------------------
@@ -816,8 +941,10 @@ function aiAirfields(g: Game, nat: string): void {
     if (v > bv) { best = r; bv = v; }
   }
   if (!best) return;
-  const o = offers(g, nat, best.id).find((x) => x.key === 'work:field');
-  if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:field', best.id);
+  // (Airfields as targets: a forward field is a strip, as the record's were.)
+  const want = fieldRules(g) ? 'work:strip' : 'work:field';
+  const o = offers(g, nat, best.id).find((x) => x.key === want);
+  if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, want, best.id);
 }
 
 /** The land fighter groups a nation has, and the shortest reach among them. */

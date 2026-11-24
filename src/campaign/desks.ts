@@ -10,25 +10,29 @@
 // A desk's month ends in one line of news, tagged with the desk so that an interface can offer to take it back.
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
-import { atWar, bloc, headline } from './game';
+import { allied, atWar, bloc, headline } from './game';
 import { turnToDate } from '../core/ticket';
-import { BUDGET, PRODUCTION, aiProduction, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
+import { BUDGET, PRODUCTION, aiProduction, aiTeams, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
 import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
-import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
+import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf, workOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
-import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
+import { INTEL, abroad, agentsOf, arrest, atWork, enemySends, foesFound, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, turnFoe, watchOdds, whyNotMission, whyNotRecruit, whyNotSend, whyNotTurn } from './intel';
+import { doublesOn, watchersOn } from './secretwar';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
 import { atSea, crossingsOf, fleetsOf, navalAI, numberWord, plannedCrossing } from './navy';
+import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
 import { landingForce } from './staff';
 import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
 import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
+import { aiRepair } from './repairs';
+import { aiFieldRepair } from './fieldstate';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
@@ -184,10 +188,10 @@ export function crossingWord(g: Game, nat: string): CrossingWord | null {
   if (wanting.length) return { ...plan, state: 'waiting', text: `Your staff is preparing ${way}. Still wanting: ${listAnd(wanting)}.` };
   const h = x.account.hold;
   if (!h.open) return { ...plan, state: 'warned', text: h.island
-    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close the ${g.seas[h.sea].name} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
-    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g.seas[h.sea].name} behind it. The order to sail under that warning is yours alone.` };
+    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close ${seaWhat(g.seas[h.sea].name)} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
+    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close ${seaWhat(g.seas[h.sea].name)} behind it. The order to sail under that warning is yours alone.` };
   const lost = Math.round(x.account.loss * 100);
-  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` The ${g.seas[h.sea].name} behind the beach is yours today, but the enemy can bring ships enough to fight you for it.` : ''} The order to land is yours.` };
+  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` ${seaHead(g.seas[h.sea].name)} behind the beach ${seaIs(g.seas[h.sea].name)} yours today, but the enemy can bring ships enough to fight you for ${seaPlural(g.seas[h.sea].name) ? 'them' : 'it'}.` : ''} The order to land is yours.` };
 }
 
 /** The month's report on the named crossing: said once in the news when it is ready, or prepared and held back by the card's warning. */
@@ -221,15 +225,21 @@ function build(g: Game, nat: string): string | null {
   // Then the month's orders: troopships for the crossing the player has named, and then as a computer nation's
   // staff places them: new corps, guns round bombed industry, building in the towns.
   const had = new Set(n.queue.map((b) => b.id));
+  let repaired: string[] = [];
   const spent = fromPurse(g, nat, () => {
     shipping(g, nat);
+    // Damaged towns first: a repair pays for itself in a few months (repairs.ts).
+    repaired = aiRepair(g, nat);
+    repaired.push(...aiFieldRepair(g, nat, (x) => allied(g, nat, x)).map((x) => `the airfield at ${x}`));
     aiProduction(g, nat);
+    aiTeams(g, nat);
     aiArsenal(g, nat);
     civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
     machines(g, nat);
   });
   const fresh = n.queue.filter((b) => !had.has(b.id));
   if (fresh.length) did.unshift(`ordered ${some(fresh.map((b) => orderWords(g, b)), 4)}`);
+  if (repaired.length) did.unshift(`repaired ${some(repaired, 4)}`);
   g.flags['dk:spent'] = spent;
   if (!did.length) return null;
   return `${listAnd(did)}.`;
@@ -302,6 +312,18 @@ function spies(g: Game, nat: string): string | null {
     const a = recruit(g, nat);
     if (a) { g.flags['dk:alw'] = Math.max(0, allowance(g, nat) - INTEL.agents.cost); did.push(`recruited agent ${a.name}`); }
   }
+  // (With the enemy's watchers, Brian, 22 November, release 2: 'Busier, mostly watchers'.) Every enemy agent that
+  // has been uncovered is dealt with at once: turned into a double agent where its service has none of his yet (with
+  // double agents in the campaign), arrested otherwise. With the switch off the staff leaves them alone, as before.
+  if (watchersOn(g)) {
+    let caught = 0;
+    for (const f of foesFound(g, nat).sort((x, y) => x.id - y.id)) {
+      const d = doublesOn(g) && whyNotTurn(g, nat, f.id) === null ? turnFoe(g, nat, f.id) : null;
+      if (d) did.push(`turned the ${g.nations[d.of]?.adj ?? 'enemy'} agent at ${g.regions[f.reg].name} into double agent ${d.name}`);
+      else if (arrest(g, nat, f.id)) caught++;
+    }
+    if (caught) did.push(`arrested ${plural(caught, 'enemy agent')}`);
+  }
   if (!war.length && !S.peace) return did.length ? `${listAnd(did)}.` : null;
   const mine = agentsOf(g, nat).filter((a) => atWork(g, a)).sort((x, y) => x.id - y.id);
   // Where an agent is worth having: the capital of the strongest enemy, for its books, and then the ground
@@ -319,10 +341,39 @@ function spies(g: Game, nat: string): string | null {
   for (const a of agentsOf(g, nat)) if (posts.includes(a.reg) && abroad(g, a)) taken.add(a.reg);
   // The guard at home is the last to go abroad: kept back once the service has more than one agent and somebody is plotting.
   const guards = agentsOf(g, nat).length > 1 && threat(g, nat).foes.length ? S.guards : 0;
+  // With the enemy's watchers, and a service big enough to keep one more back, the next agent at home hunts on the front.
+  const hunters = watchersOn(g) && guards && agentsOf(g, nat).length > guards + 1 ? S.hunters ?? 0 : 0;
   const home = mine.filter((a) => !abroad(g, a));
+  // Who guards and who hunts. Without watchers: the first agents at home guard. With them the guard comes first, and
+  // after it the hunter: whoever hunts already goes on hunting (one on the road home to hunt counts), the guard is the
+  // first of the rest, and the next one at home hunts if a hunter is still wanted. Agents in training or on the road
+  // home count as coming.
+  const coming = hunters ? agentsOf(g, nat).filter((a) => !atWork(g, a) && !abroad(g, a)) : [];
+  const toHunt = Math.max(0, Math.min(hunters - coming.filter((a) => a.mission === 'hunt').length, home.length - guards));
+  const hunting = home.filter((a) => a.mission === 'hunt').slice(0, toHunt);
+  // (With watchers an agent already on guard is kept on guard before another is put there.)
+  const rest = home.filter((a) => !hunting.includes(a));
+  const guarding = (watchersOn(g) ? [...rest.filter((a) => a.mission === 'guard'), ...rest.filter((a) => a.mission !== 'guard')] : rest).slice(0, guards);
+  hunting.push(...home.filter((a) => !hunting.includes(a) && !guarding.includes(a)).slice(0, toHunt - hunting.length));
   for (const a of mine) {
     if (abroad(g, a)) { if (!posts.includes(a.reg)) free.push(a); continue; }
-    if (home.indexOf(a) >= guards) free.push(a);
+    if (!guarding.includes(a) && !hunting.includes(a)) free.push(a);
+  }
+  // (With watchers.) A guard is on guard: a former hunter that has come to stand in its place goes back to guarding.
+  if (watchersOn(g)) {
+    for (const a of guarding) if (a.mission !== 'guard' && whyNotMission(g, nat, a.id, 'guard') === null && setMission(g, nat, a.id, 'guard')) did.push(`put ${a.name} back on guard at ${g.regions[a.reg].name}`);
+  }
+  for (const a of hunting) did.push(...hunt(g, nat, a));
+  // (With watchers.) No hunter at home and none coming (its province overrun, say, with the service full): one agent
+  // abroad comes home to hunt, the first with no post, else the one on the least of the posts; never one reading the
+  // books or on the books post.
+  if (hunting.length + coming.length < hunters) {
+    const out = mine.filter((a) => abroad(g, a) && a.mission !== 'books' && !capitals.includes(a.reg));
+    const back = out.find((a) => !posts.includes(a.reg)) ?? [...out].sort((x, y) => posts.indexOf(y.reg) - posts.indexOf(x.reg) || x.id - y.id)[0];
+    if (back) {
+      const from = back.reg, went = hunt(g, nat, back);
+      if (went.length) { did.push(...went); if (free.includes(back)) free.splice(free.indexOf(back), 1); taken.delete(from); }
+    }
   }
   for (const a of free) {
     const to = posts.find((p) => !taken.has(p) && whyNotSend(g, nat, a.id, p) === null);
@@ -338,16 +389,48 @@ function spies(g: Game, nat: string): string | null {
   return did.length ? `${listAnd(did)}.` : null;
 }
 
+/**
+ * The service's hunter: it hunts where it stands while its search (its own province and the ones beside it) reaches
+ * a province at least half as likely to hold an enemy watcher as the likeliest (watchOdds: where the services put
+ * their watchers, the front where the enemy's divisions mass or, with no land front, the coast facing him).
+ * Otherwise it goes to the likeliest, already ordered to hunt, so that it searches from the month it arrives. An
+ * agent abroad called home to hunt goes there too. With nowhere to go it hunts where it is.
+ */
+function hunt(g: Game, nat: string, a: ReturnType<typeof agentsOf>[number]): string[] {
+  const odds = watchOdds(g, nat);
+  const busy = (r: Region): number => (r.ctrl === nat ? odds.get(r.id) ?? 0 : 0);
+  let to = -1, most = 0;
+  for (const r of g.regions) { const n = busy(r); if (n > most) { most = n; to = r.id; } }
+  const here = g.regions[a.reg], out = abroad(g, a);
+  const reach = out ? 0 : Math.max(busy(here), ...here.nb.map((j) => busy(g.regions[j])));
+  if (to >= 0 && reach * 2 < most && whyNotSend(g, nat, a.id, to) === null && sendAgent(g, nat, a.id, to)) {
+    // (On the road it is not at work; at home on arrival the month keeps an agent ordered to hunt at it.)
+    a.mission = 'hunt';
+    return [out ? `called ${a.name} home from ${here.name} to hunt enemy agents at ${g.regions[to].name}` : `sent ${a.name} to hunt enemy agents at ${g.regions[to].name}`];
+  }
+  if (out) return [];
+  if (a.mission !== 'hunt' && whyNotMission(g, nat, a.id, 'hunt') === null && setMission(g, nat, a.id, 'hunt')) return [`set ${a.name} to hunt enemy agents at ${here.name}`];
+  return [];
+}
+
+/** What the staff does with a desk, in words, for this campaign: the secret service's hunter and arrests only where the enemy's watchers are in it and its services send agents at this level. */
+export function deskRuns(g: Game, id: DeskId): string {
+  const d = DEPTH.desks.find((x) => x.id === id);
+  if (!d) return '';
+  return id === 'spies' && watchersOn(g) && enemySends(g) && d.runsMore ? `${d.runs} ${d.runsMore}` : d.runs;
+}
+
 // ---- The air war --------------------------------------------------------------------------------------
 
 function raidWords(g: Game, r: AirReport): string {
   const at = r.region >= 0 ? g.regions[r.region] : null;
-  if (!at) return `ships in the ${g.seas[r.zone]?.name ?? r.place}`;
+  if (!at) return `ships ${g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${r.place}`}`;
   switch (r.mission) {
     case 'bomb': return at.fac > 0 ? `the factories at ${at.name}` : `the railway at ${at.name}`;
     case 'night': return `${at.name} by night`;
     case 'ground': return `the troops at ${at.name}`;
     case 'line': return `the fieldworks at ${at.name}`;
+    case 'airfield': return `the airfield at ${at.name}`;
     case 'town': return `the town of ${at.name}`;
     case 'superiority': return `the sky over ${at.name}`;
     case 'harbour': return `the ships in harbour at ${at.name}`;
@@ -383,7 +466,7 @@ function navy(g: Game, nat: string): string | null {
   for (const f of fleetsOf(g, nat)) {
     const w = was.get(f.id);
     if (!w || (w.zone === f.zone && w.stance === f.stance)) continue;
-    if (atSea(f)) out.push(`the ${f.name} into the ${g.seas[f.zone].name}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
+    if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
     else if (w.stance !== 'port') back.push(`the ${f.name}`);
   }
   if (out.length) did.push(`sent ${some(out)}`);
@@ -444,6 +527,8 @@ export function staffMonth(g: Game): void {
 export function handOver(g: Game, desk: DeskId, staff: boolean, now = false): boolean {
   if (!setDesk(g, desk, staff)) return false;
   const nat = g.human;
+  // Handed the navy afresh, the admirals take every fleet, those he had kept under his own orders too (1.5.1).
+  if (desk === 'navy' && staff) for (const f of g.fleets) delete f.ordered;
   if (staff && now && nat !== null && g.nations[nat]?.alive && !deskRan(g, desk)) runDesk(g, nat, desk);
   return true;
 }
@@ -521,8 +606,9 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     case 'research': {
       const s = techOf(g, nat), teams = teamsOf(g, nat) + spyTeamsOf(g, nat);
       if (!s) return '';
-      const at = s.work.map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
-      return at.length ? `${s.work.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
+      // (Ruling 240: work on a row whose switch is off is not listed.)
+      const at = workOf(s).map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
+      return at.length ? `${at.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
     }
     case 'build': {
       const corps = n.queue.filter((b) => b.what === 'corps').length, other = n.queue.length - corps;
@@ -589,7 +675,7 @@ export function commandView(g: Game): CommandView | null {
     desks: DEPTH.desks.map((d) => {
       const staff = staffRuns(g, nat, d.id);
       const news = [...g.headlines].reverse().find((h) => h.turn === g.turn && h.desk === d.id && h.nat === nat)?.text ?? null;
-      return { id: d.id, name: d.name, tab: d.tab ?? null, staff, text: staff ? d.runs : d.hand, state: stateOf(g, nat, d.id), news };
+      return { id: d.id, name: d.name, tab: d.tab ?? null, staff, text: staff ? deskRuns(g, d.id) : d.hand, state: stateOf(g, nat, d.id), news };
     }),
     cap: capPct(g), caps: DEPTH.cap.steps,
     left: g.flags['dk:alwt'] === g.turn ? g.flags['dk:alw'] ?? 0 : Math.max(0, g.nations[nat].pp) * capOf(g),

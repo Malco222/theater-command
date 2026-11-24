@@ -18,6 +18,7 @@
 #include <atomic>
 
 static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out);
+static void ReadSinkings(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSinking>& Out);
 
 namespace
 {
@@ -41,6 +42,10 @@ FCampaignSession::~FCampaignSession()
 	if (AsideRun.IsValid())
 	{
 		AsideRun.Wait();
+	}
+	if (SceneAskRun.IsValid())
+	{
+		SceneAskRun.Wait();
 	}
 }
 
@@ -132,6 +137,38 @@ bool FCampaignSession::Prepare(FString& OutError)
 			return false;
 		}
 	}
+#if !UE_BUILD_SHIPPING
+	// R2 bargains hook: -TheaterR2Deals opens new grand campaigns with a neutral's bargains and the volunteer legions (development only)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Deals")) && !Host->Evaluate(TEXT("globalThis.TC_BARGAINS = 1; globalThis.TC_LEGIONS = 1;"), TEXT("release 2 deals"), OutError))
+	{
+		return false;
+	}
+	// (Release 2) -TheaterR2Names and -TheaterR2Columns open new grand campaigns with earned nicknames and with supply
+	// columns, for a picture of each (development only; a player switches them under OPTIONS)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Names")) && !Host->Evaluate(TEXT("globalThis.TC_NICKNAMES = 1;"), TEXT("release 2 names"), OutError))
+	{
+		return false;
+	}
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Columns")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1;"), TEXT("release 2 columns"), OutError))
+	{
+		return false;
+	}
+	// (Release 2, the marked army) -TheaterR2Marked opens them with the armies that take his towns marked
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Marked")) && !Host->Evaluate(TEXT("globalThis.TC_MARKED = 1;"), TEXT("release 2 marked army"), OutError))
+	{
+		return false;
+	}
+	// (Release 2, new units ready) -TheaterR2Ready opens his month with an infantry corps on order at his capital, due next month (for the pictures)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("release 2 new units ready"), OutError))
+	{
+		return false;
+	}
+	// -TheaterR2Supply opens them with the columns and all three supply orders: the lorries moved, wagons, dumps
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Supply")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1; globalThis.TC_LORRYSHIFT = 1; globalThis.TC_WAGONS = 1; globalThis.TC_DUMPS = 1;"), TEXT("release 2 supply"), OutError))
+	{
+		return false;
+	}
+#endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
 		return false;
@@ -242,6 +279,45 @@ TArray<FStartGroup> FCampaignSession::Starts()
 	return Out;
 }
 
+namespace
+{
+	/** The arguments of TC.grand: the month, the dice, and the wider world where the table has it. */
+	FString GrandArgs(int32 From, int32 Seed)
+	{
+		return FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false"));
+	}
+
+	/** TC.grand's answer read: who can be led. */
+	TArray<FGrandNation> ReadGrandNations(const TSharedPtr<FJsonObject>& Object)
+	{
+		TArray<FGrandNation> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Listed = nullptr;
+		if (!Object.IsValid() || !Object->TryGetArrayField(TEXT("nations"), Listed))
+		{
+			return Out;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Listed)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FGrandNation& Nation = Out.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Nation.Nation);
+			Entry->TryGetStringField(TEXT("name"), Nation.Name);
+			Entry->TryGetStringField(TEXT("blurb"), Nation.Blurb);
+			Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
+			Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
+			Entry->TryGetBoolField(TEXT("small"), Nation.bSmall);
+			Entry->TryGetStringArrayField(TEXT("abilities"), Nation.Abilities);
+			Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
+			Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
+		}
+		return Out;
+	}
+}
+
 TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 {
 	TArray<FGrandNation> Out;
@@ -250,28 +326,39 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	const double Began = FPlatformTime::Seconds();
 	Settle();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
-	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false")), Json, Error)
+	if (!bReady || !Host->Call(TEXT("grand"), GrandArgs(From, Seed), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
 		UE_LOG(LogTheater, Warning, TEXT("The rules could not say who can be led from month %d: %s"), From, *Error);
 		return Out;
 	}
-	for (const TSharedPtr<FJsonValue>& Value : Object->GetArrayField(TEXT("nations")))
-	{
-		const TSharedPtr<FJsonObject> Entry = Value->AsObject();
-		FGrandNation& Nation = Out.AddDefaulted_GetRef();
-		Entry->TryGetStringField(TEXT("nat"), Nation.Nation);
-		Entry->TryGetStringField(TEXT("name"), Nation.Name);
-		Entry->TryGetStringField(TEXT("blurb"), Nation.Blurb);
-		Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
-		Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
-		Entry->TryGetBoolField(TEXT("small"), Nation.bSmall);
-		Entry->TryGetStringArrayField(TEXT("abilities"), Nation.Abilities);
-		Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
-		Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
-	}
+	Out = ReadGrandNations(Object);
 	UE_LOG(LogTheater, Display, TEXT("Grand campaign from month %d: %d countries can be led (worked out in %.0f ms)"), From, Out.Num(), (FPlatformTime::Seconds() - Began) * 1000.0);
 	return Out;
+}
+
+void FCampaignSession::GrandNationsAside(int32 From, int32 Seed, bool bAside, TFunction<void(TArray<FGrandNation>)>&& InThen)
+{
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bReady || !Host.IsValid())
+	{
+		InThen(GrandNations(From, Seed)); // (at once, as before)
+		return;
+	}
+	const double Began = FPlatformTime::Seconds();
+	Order(TEXT("grand"), GrandArgs(From, Seed), true, nullptr,
+		[From, Began, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			TArray<FGrandNation> Listed = ReadGrandNations(Answer);
+			if (Answer.IsValid())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Grand campaign from month %d: %d countries can be led (worked out beside the game in %.0f ms)"), From, Listed.Num(), (FPlatformTime::Seconds() - Began) * 1000.0);
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("The rules could not say who can be led from month %d"), From);
+			}
+			Then(MoveTemp(Listed));
+		});
 }
 
 bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth, int32 History, bool bFirstCommand)
@@ -292,6 +379,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 	FString ViewJson;
 	DropAside();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
+	TellSubScene(); // (D1: before the start, which already plays the opening month's war at sea)
 	const double Began = FPlatformTime::Seconds();
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
@@ -308,6 +396,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 	}
 	View = ParseView(Object);
 	bRunning = true;
+	++WarsBegun;
 	UE_LOG(LogTheater, Display, TEXT("Campaign started on the %s rules: %s, %d corps, the player leads %s"),
 		*View.Rules, *View.Date, View.Corps.Num(), View.Human.IsEmpty() ? TEXT("nobody") : *View.Human);
 	OnViewChanged.Broadcast();
@@ -368,6 +457,8 @@ bool FCampaignSession::Load(const FString& SaveText)
 	}
 	View = ParseView(Object);
 	bRunning = true;
+	++WarsBegun;
+	TellSubScene(); // (D1: the setting is the viewer's, outside the save: told again after every load)
 	UE_LOG(LogTheater, Display, TEXT("Campaign continued: %s, the player leads %s"), *View.Date, View.Human.IsEmpty() ? TEXT("nobody") : *View.Human);
 	OnViewChanged.Broadcast();
 	return true;
@@ -385,7 +476,8 @@ namespace
 		// leaves behind, which the tray asks before the province's card: in build 1590 it threw away the province kept
 		// ahead after every order, 2 to 14 ms of the frame after.)
 		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
-			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft") };
+			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft"),
+			TEXT("bargainsLook") }; // R2 bargains hook: the map's look at the bargains (changes nothing; Campaign/BargainCalls.cpp)
 		return Questions.Contains(Function);
 	}
 
@@ -398,6 +490,24 @@ namespace
 	{
 		static const TSet<FString> Beside = { TEXT("lessonNow"), TEXT("lessonDeed"), TEXT("lessonAct"), TEXT("notebook"), TEXT("guide") };
 		return Beside.Contains(Function);
+	}
+
+	/**
+	 * (Release 2, tc.Speed.SaveAside) The war written out (TC.save, the war as JSON text) changes nothing in it: given
+	 * aside it keeps the questions kept, as Save at once always has (it calls the rules without CallRules).
+	 */
+	bool IsWrittenOut(const FString& Function)
+	{
+		return Function == TEXT("save");
+	}
+
+	/**
+	 * (Release 2, tc.Speed.NationsAside) Asked of the rules with or without a war in hand: TC.grand plays a history of
+	 * its own (historyTo) and reads no war being played, so it may be given aside on the opening screen before any war.
+	 */
+	bool IsBeforeAnyWar(const FString& Function)
+	{
+		return Function == TEXT("grand");
 	}
 }
 
@@ -492,6 +602,172 @@ namespace
 			for (const TSharedPtr<FJsonValue>& Value : *Orders)
 			{
 				Out.Add(ReadOrder(Value->AsObject()));
+			}
+		}
+		return Out;
+	}
+
+	/** (Release 2) The city panel's AT A GLANCE page as the rules give it (the bridge's glanceShelves). */
+	FCityShelves ReadShelves(const TSharedPtr<FJsonObject>& Object)
+	{
+		FCityShelves Out;
+		if (!Object.IsValid())
+		{
+			return Out;
+		}
+		Out.bValid = true;
+		Object->TryGetBoolField(TEXT("own"), Out.bOwn);
+		Object->TryGetBoolField(TEXT("spied"), Out.bSpied);
+		Object->TryGetBoolField(TEXT("agent"), Out.bAgent);
+		Object->TryGetNumberField(TEXT("ago"), Out.Ago);
+		Object->TryGetStringField(TEXT("garrHead"), Out.GarrisonHead);
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (Object->TryGetArrayField(TEXT("garrison"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceCard& Card = Out.Garrison.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("kind"), Card.Kind);
+				Entry->TryGetStringField(TEXT("sign"), Card.Sign);
+				Entry->TryGetStringField(TEXT("name"), Card.Name);
+				Entry->TryGetStringField(TEXT("line"), Card.Line);
+				Entry->TryGetNumberField(TEXT("share"), Card.Share);
+				Entry->TryGetNumberField(TEXT("id"), Card.Id);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("orders"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceOrder& Order = Out.Orders.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("sign"), Order.Sign);
+				Entry->TryGetBoolField(TEXT("star"), Order.bStar);
+				Entry->TryGetStringField(TEXT("name"), Order.Name);
+				Entry->TryGetStringField(TEXT("line"), Order.Line);
+				Entry->TryGetNumberField(TEXT("share"), Order.Share);
+				Entry->TryGetNumberField(TEXT("months"), Order.Months);
+				Entry->TryGetNumberField(TEXT("id"), Order.Id);
+				Entry->TryGetBoolField(TEXT("fresh"), Order.bFresh);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("arriving"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceArrival& Arrival = Out.Arriving.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("name"), Arrival.Name);
+				Entry->TryGetStringField(TEXT("line"), Arrival.Line);
+				Entry->TryGetStringField(TEXT("when"), Arrival.When);
+			}
+		}
+		Object->TryGetStringField(TEXT("buildHead"), Out.BuildHead);
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("tiles"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceTile& Tile = Out.Tiles.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("kind"), Tile.Kind);
+				Entry->TryGetStringField(TEXT("sign"), Tile.Sign);
+				Entry->TryGetStringField(TEXT("name"), Tile.Name);
+				Entry->TryGetStringField(TEXT("line"), Tile.Line);
+				Entry->TryGetNumberField(TEXT("share"), Tile.Share);
+				Entry->TryGetNumberField(TEXT("months"), Tile.Months);
+				Entry->TryGetNumberField(TEXT("cost"), Tile.Cost);
+				Entry->TryGetStringField(TEXT("key"), Tile.Key);
+				Entry->TryGetStringField(TEXT("cause"), Tile.Cause);
+				Entry->TryGetStringField(TEXT("does"), Tile.Does);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("rows"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceRow& Row = Out.Rows.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("name"), Row.Name);
+				Entry->TryGetStringField(TEXT("line"), Row.Line);
+				Entry->TryGetStringField(TEXT("sign"), Row.Sign);
+				Entry->TryGetNumberField(TEXT("share"), Row.Share);
+			}
+		}
+		Object->TryGetNumberField(TEXT("agents"), Out.Agents);
+		Object->TryGetBoolField(TEXT("onGuard"), Out.bOnGuard);
+		Object->TryGetStringField(TEXT("rail"), Out.Rail);
+		// (Release 2) AIR DEFENCE, and CAN BUILD HERE.
+		const TSharedPtr<FJsonObject>* AirObject = nullptr;
+		if (Object->TryGetObjectField(TEXT("air"), AirObject) && AirObject && (*AirObject).IsValid())
+		{
+			const TSharedPtr<FJsonObject>& Air = *AirObject;
+			Out.Air.bValid = true;
+			Air->TryGetNumberField(TEXT("level"), Out.Air.Level);
+			Air->TryGetNumberField(TEXT("heavy"), Out.Air.Heavy);
+			Air->TryGetNumberField(TEXT("light"), Out.Air.Light);
+			Air->TryGetNumberField(TEXT("stop"), Out.Air.Stop);
+			Air->TryGetNumberField(TEXT("going"), Out.Air.Going);
+			Air->TryGetBoolField(TEXT("watch"), Out.Air.bWatch);
+			Air->TryGetNumberField(TEXT("fighters"), Out.Air.Fighters);
+			Air->TryGetStringField(TEXT("foe"), Out.Air.Foe);
+			Air->TryGetStringField(TEXT("sky"), Out.Air.Sky);
+			Air->TryGetStringField(TEXT("skyBy"), Out.Air.SkyBy);
+			const TSharedPtr<FJsonObject>* AddObject = nullptr;
+			if (Air->TryGetObjectField(TEXT("add"), AddObject) && AddObject && (*AddObject).IsValid())
+			{
+				Out.Air.bCanAdd = true;
+				(*AddObject)->TryGetStringField(TEXT("key"), Out.Air.AddKey);
+				(*AddObject)->TryGetStringField(TEXT("size"), Out.Air.AddSize);
+				(*AddObject)->TryGetStringField(TEXT("why"), Out.Air.AddWhy);
+				(*AddObject)->TryGetNumberField(TEXT("cost"), Out.Air.AddCost);
+				(*AddObject)->TryGetNumberField(TEXT("months"), Out.Air.AddMonths);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("can"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceCan& Can = Out.Can.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("key"), Can.Key);
+				Entry->TryGetStringField(TEXT("group"), Can.Group);
+				Entry->TryGetStringField(TEXT("sign"), Can.Sign);
+				Entry->TryGetStringField(TEXT("label"), Can.Label);
+				Entry->TryGetStringField(TEXT("size"), Can.Size);
+				Entry->TryGetBoolField(TEXT("star"), Can.bStar);
+				Entry->TryGetNumberField(TEXT("cost"), Can.Cost);
+				Entry->TryGetNumberField(TEXT("months"), Can.Months);
+				Entry->TryGetStringField(TEXT("why"), Can.Why);
 			}
 		}
 		return Out;
@@ -612,6 +888,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 					(*Thing)->TryGetStringField(TEXT("k"), Line.Screen);
 					(*Thing)->TryGetStringField(TEXT("t"), Line.Text);
 					(*Thing)->TryGetStringField(TEXT("tip"), Line.Tip);
+					(*Thing)->TryGetNumberField(TEXT("tone"), Line.Tone);
 				}
 			}
 		}
@@ -908,6 +1185,95 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 	}
+	// (Release 2, columns.ts) The month's supply columns: their roads as map points, and where each was caught (four
+	// numbers a place: x, y, 1 aircraft or 2 partisans, lorries lost).
+	const TArray<TSharedPtr<FJsonValue>>* Columns = nullptr;
+	if (Object->TryGetArrayField(TEXT("columns"), Columns))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Columns)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FViewColumn& Column = Out.Columns.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Column.Nation);
+			Entry->TryGetStringField(TEXT("side"), Column.Side);
+			Entry->TryGetNumberField(TEXT("lorries"), Column.Lorries);
+			Entry->TryGetNumberField(TEXT("lost"), Column.Lost);
+			double Share = 1.0;
+			Entry->TryGetNumberField(TEXT("share"), Share);
+			Column.Share = static_cast<float>(Share);
+			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+			if (Entry->TryGetArrayField(TEXT("path"), Points))
+			{
+				for (int32 K = 0; K + 1 < Points->Num(); K += 2)
+				{
+					Column.Path.Add(FVector2D((*Points)[K]->AsNumber(), (*Points)[K + 1]->AsNumber()));
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Hits = nullptr;
+			if (Entry->TryGetArrayField(TEXT("hits"), Hits))
+			{
+				for (int32 K = 0; K + 3 < Hits->Num(); K += 4)
+				{
+					FViewColumnHit& Hit = Column.Hits.AddDefaulted_GetRef();
+					Hit.At = FVector2D((*Hits)[K]->AsNumber(), (*Hits)[K + 1]->AsNumber());
+					Hit.bByAir = FMath::RoundToInt32((*Hits)[K + 2]->AsNumber()) != 2;
+					Hit.Lost = FMath::RoundToInt32((*Hits)[K + 3]->AsNumber());
+				}
+			}
+			// (Release 2, logistics.ts) Absent where those switches are off.
+			Entry->TryGetNumberField(TEXT("horse"), Column.Horse);
+			Entry->TryGetBoolField(TEXT("fill"), Column.bFill);
+			Entry->TryGetBoolField(TEXT("fromDump"), Column.bFromDump);
+		}
+	}
+	// (Release 2, logistics.ts) The forward dumps in sight.
+	const TArray<TSharedPtr<FJsonValue>>* Dumps = nullptr;
+	if (Object->TryGetArrayField(TEXT("dumps"), Dumps))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Dumps)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FViewDump& Dump = Out.Dumps.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Dump.Nation);
+			Entry->TryGetStringField(TEXT("side"), Dump.Side);
+			double X = 0.0, Y = 0.0;
+			Entry->TryGetNumberField(TEXT("x"), X);
+			Entry->TryGetNumberField(TEXT("y"), Y);
+			Dump.At = FVector2D(X, Y);
+			Entry->TryGetNumberField(TEXT("region"), Dump.Region);
+			Entry->TryGetNumberField(TEXT("stock"), Dump.Stock);
+			Entry->TryGetBoolField(TEXT("filling"), Dump.bFilling);
+		}
+	}
+	Object->TryGetBoolField(TEXT("lorryShiftSet"), Out.bLorryShiftSet);
+	Object->TryGetBoolField(TEXT("wagonsSet"), Out.bWagonsSet);
+	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
+	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
+	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("markedOn"), Out.bMarkedOn); // (release 2, the marked army)
+	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
+	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)
+	Object->TryGetBoolField(TEXT("taskForce"), Out.bTaskForce); // (release 2, taskforce.ts)
+	Object->TryGetBoolField(TEXT("fleetWhy"), Out.bFleetWhy); // (release 2, fleetwhy.ts)
+	Object->TryGetBoolField(TEXT("rearguard"), Out.bRearguard); // (release 2, rearguard.ts)
+	Object->TryGetBoolField(TEXT("rearBridges"), Out.bRearBridges); // (release 2, rearguard.ts)
+	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
+	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)
+	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
+	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
+	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
+	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
+	// (Release 2, the spies thread of 24 November 2026) The secret war's one switch, and whether it can still be thrown.
+	Object->TryGetBoolField(TEXT("secretWar"), Out.bSecretWar);
+	Object->TryGetBoolField(TEXT("secretWarCan"), Out.bSecretWarCan);
 	const TSharedPtr<FJsonObject>* Designs = nullptr;
 	if (Object->TryGetObjectField(TEXT("designs"), Designs))
 	{
@@ -952,6 +1318,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				Entry->TryGetNumberField(TEXT("rest"), Agent.Rest);
 				Entry->TryGetStringField(TEXT("mission"), Agent.Mission);
 				Entry->TryGetStringField(TEXT("doing"), Agent.Doing);
+				Entry->TryGetStringField(TEXT("status"), Agent.Status);
 				Entry->TryGetStringField(TEXT("stuck"), Agent.Stuck);
 				Entry->TryGetStringField(TEXT("home"), Agent.Home);
 				Entry->TryGetStringField(TEXT("will"), Agent.Will);
@@ -1007,6 +1374,25 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				}
 			}
 		}
+		// (Release 2, the spies thread of 24 November 2026) The enemy agents his hunters uncovered, and the SPIES door's number.
+		const TArray<TSharedPtr<FJsonValue>>* FoesTold = nullptr;
+		if (Object->TryGetArrayField(TEXT("foeAgents"), FoesTold))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *FoesTold)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (Entry.IsValid())
+				{
+					FViewFoeAgent& Foe = Out.FoeAgents.AddDefaulted_GetRef();
+					Entry->TryGetNumberField(TEXT("id"), Foe.Id);
+					Entry->TryGetNumberField(TEXT("region"), Foe.Region);
+					Entry->TryGetStringField(TEXT("nat"), Foe.Nat);
+					Entry->TryGetBoolField(TEXT("watch"), Foe.bWatch);
+					Entry->TryGetStringField(TEXT("text"), Foe.Text);
+				}
+			}
+		}
+		Object->TryGetNumberField(TEXT("spiesWaiting"), Out.SpiesWaiting);
 	}
 	{
 		const TArray<TSharedPtr<FJsonValue>>* CutsTold = nullptr;
@@ -1180,6 +1566,37 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetStringArrayField(TEXT("lines"), City.Lines);
 		}
 	}
+	// (Release 2) Each town's plate under its name: garrison, on order, going up, damaged.
+	const TArray<TSharedPtr<FJsonValue>>* Glance = nullptr;
+	if (Object->TryGetArrayField(TEXT("glance"), Glance))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Glance)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FCityGlance& Plate = Out.Glance.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("region"), Plate.Region);
+			Entry->TryGetBoolField(TEXT("own"), Plate.bOwn);
+			Entry->TryGetBoolField(TEXT("spied"), Plate.bSpied);
+			Entry->TryGetNumberField(TEXT("ago"), Plate.Ago);
+			Entry->TryGetNumberField(TEXT("garr"), Plate.Garrison);
+			Entry->TryGetBoolField(TEXT("guard"), Plate.bGuardOnly);
+			Entry->TryGetBoolField(TEXT("quiet"), Plate.bQuiet);
+			Entry->TryGetStringField(TEXT("garrFig"), Plate.GarrisonFigure);
+			Entry->TryGetStringField(TEXT("garrWords"), Plate.GarrisonWords);
+			Entry->TryGetStringField(TEXT("orderFig"), Plate.OrderFigure);
+			Entry->TryGetStringField(TEXT("orderWords"), Plate.OrderWords);
+			Entry->TryGetNumberField(TEXT("up"), Plate.UpMonths);
+			Entry->TryGetStringField(TEXT("upFig"), Plate.UpFigure);
+			Entry->TryGetStringField(TEXT("upWords"), Plate.UpWords);
+			Entry->TryGetNumberField(TEXT("dmg"), Plate.Damage);
+			Entry->TryGetStringField(TEXT("dmgFig"), Plate.DamageFigure);
+			Entry->TryGetStringField(TEXT("dmgWords"), Plate.DamageWords);
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Going = nullptr;
 	if (Object->TryGetArrayField(TEXT("going"), Going))
 	{
@@ -1263,10 +1680,15 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("groups"), Field.Groups);
 			Entry->TryGetNumberField(TEXT("aircraft"), Field.Aircraft);
 			Entry->TryGetBoolField(TEXT("crowded"), Field.bCrowded);
+			Entry->TryGetBoolField(TEXT("shut"), Field.bShut);
+			Entry->TryGetBoolField(TEXT("mend"), Field.bMending);
+			Entry->TryGetStringField(TEXT("tier"), Field.Tier);
 		}
 	}
+	Out.BasedGroups.Reset();
 	if (Out.Airfields.Num() > 0)
 	{
+		Out.BasedGroups = Out.AirFleets; // (for the airfield's card: each group based there, by name)
 		TArray<FViewAirFleet> Stood;
 		for (const FViewAirFleet& Group : Out.AirFleets)
 		{
@@ -1413,7 +1835,23 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
 			Unit->TryGetBoolField(TEXT("lean"), C.bLean);
+			// (Release 2: the battle schools.) Only rules that have them say 'school' at all.
+			C.bSchoolKnown = Unit->TryGetBoolField(TEXT("school"), C.bSchool);
+			Unit->TryGetStringField(TEXT("schoolTo"), C.SchoolTo);
+			Unit->TryGetStringField(TEXT("schoolWhy"), C.SchoolWhy);
+			// (Release 2, breakup.ts) Sent only for his own corps, and only where breaking corps up is on.
+			C.bBreakKnown = Unit->TryGetStringField(TEXT("breakWhy"), C.BreakWhy);
+			{
+				double Rejoin = -1.0;
+				Unit->TryGetNumberField(TEXT("rejoinId"), Rejoin);
+				C.RejoinId = Rejoin >= 0.0 ? static_cast<int32>(Rejoin) : INDEX_NONE;
+				Unit->TryGetStringField(TEXT("rejoinName"), C.RejoinName);
+			}
+			// (Release 2, rearguard.ts) Sent only for his own corps, and only where rearguards are on.
+			C.bRearKnown = Unit->TryGetStringField(TEXT("rearWhy"), C.RearWhy);
+			Unit->TryGetBoolField(TEXT("rear"), C.bRear);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
+			Unit->TryGetStringField(TEXT("vol"), C.Vol); // R2 bargains hook: a volunteer legion's home (sent only when set)
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
 			Unit->TryGetNumberField(TEXT("stale"), C.Stale);
 			{
@@ -1429,6 +1867,8 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				Unit->TryGetBoolField(TEXT("digging"), C.bDigging);
 			}
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
+			Unit->TryGetStringField(TEXT("mark"), C.Marked); // (release 2, the marked army) absent unless it took one of his towns
+			Unit->TryGetBoolField(TEXT("ready"), C.bReady); // (release 2, new units ready) absent unless handed over as his month opened
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{
 				double Morale = -1.0, Rest = -1.0;
@@ -2315,6 +2755,45 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
 			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			// ---- (release 2, the enemy's month near you: Rules/near-moves.ts)
+			Entry->TryGetBoolField(TEXT("near"), Step.bNear);
+			Entry->TryGetStringField(TEXT("nearNote"), Step.NearNote);
+			Entry->TryGetBoolField(TEXT("nearAllies"), Step.bNearAllies);
+			Entry->TryGetStringField(TEXT("allyNote"), Step.AllyNote);
+			const TArray<TSharedPtr<FJsonValue>>* Arrows = nullptr;
+			if (Entry->TryGetArrayField(TEXT("arrows"), Arrows))
+			{
+				for (const TSharedPtr<FJsonValue>& Drawing : *Arrows)
+				{
+					const TSharedPtr<FJsonObject>* Arrow = nullptr;
+					if (!Drawing.IsValid() || !Drawing->TryGetObject(Arrow))
+					{
+						continue;
+					}
+					FStepArrow Drawn;
+					double Number = 0.0;
+					Drawn.From = (*Arrow)->TryGetNumberField(TEXT("from"), Number) ? FMath::RoundToInt32(Number) : INDEX_NONE;
+					Drawn.To = (*Arrow)->TryGetNumberField(TEXT("to"), Number) ? FMath::RoundToInt32(Number) : INDEX_NONE;
+					(*Arrow)->TryGetStringField(TEXT("nat"), Drawn.Nation);
+					FString Kind;
+					(*Arrow)->TryGetStringField(TEXT("kind"), Kind);
+					Drawn.Kind = Kind == TEXT("attack") ? 1 : Kind == TEXT("fell") ? 2 : 0;
+					(*Arrow)->TryGetBoolField(TEXT("war"), Drawn.bWar);
+					(*Arrow)->TryGetBoolField(TEXT("away"), Drawn.bAway);
+					(*Arrow)->TryGetBoolField(TEXT("taken"), Drawn.bTaken);
+					(*Arrow)->TryGetBoolField(TEXT("siege"), Drawn.bSiege);
+					(*Arrow)->TryGetBoolField(TEXT("yielded"), Drawn.bYielded);
+					(*Arrow)->TryGetBoolField(TEXT("ally"), Drawn.bAlly);
+					(*Arrow)->TryGetBoolField(TEXT("ours"), Drawn.bOurs);
+					Drawn.Corps = (*Arrow)->TryGetNumberField(TEXT("corps"), Number) ? FMath::RoundToInt32(Number) : 1;
+					Drawn.Divs = (*Arrow)->TryGetNumberField(TEXT("divs"), Number) ? FMath::RoundToInt32(Number) : -1; // (null: only glimpsed)
+					if (Drawn.To >= 0) // (an arrow to nowhere is not drawn)
+					{
+						Step.Arrows.Add(MoveTemp(Drawn));
+					}
+				}
+			}
+			// ---- (end release 2)
 			const TArray<TSharedPtr<FJsonValue>>* Shelled = nullptr;
 			if (Entry->TryGetArrayField(TEXT("shelled"), Shelled))
 			{
@@ -2334,38 +2813,7 @@ FMonthResult FCampaignSession::EndMonth()
 			const TArray<TSharedPtr<FJsonValue>>* Sunk = nullptr;
 			if (Entry->TryGetArrayField(TEXT("sunk"), Sunk))
 			{
-				for (const TSharedPtr<FJsonValue>& WentDown : *Sunk)
-				{
-					const TSharedPtr<FJsonObject>* Lost = nullptr;
-					if (WentDown->TryGetObject(Lost))
-					{
-						FSinking& Sinking = Step.Sinkings.AddDefaulted_GetRef();
-						(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
-						(*Lost)->TryGetNumberField(TEXT("region"), Sinking.Region);
-						(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
-						(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
-						(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);
-						// (Brian's memorial card) The battleships and carriers among them, by name.
-						const TArray<TSharedPtr<FJsonValue>>* Named = nullptr;
-						if ((*Lost)->TryGetArrayField(TEXT("ships"), Named))
-						{
-							for (const TSharedPtr<FJsonValue>& One : *Named)
-							{
-								const TSharedPtr<FJsonObject>* Hers = nullptr;
-								if (One->TryGetObject(Hers))
-								{
-									FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
-									(*Hers)->TryGetStringField(TEXT("name"), Hull.Name); // (null where the record has run out: left empty)
-									(*Hers)->TryGetStringField(TEXT("cls"), Hull.Class);
-									(*Hers)->TryGetStringField(TEXT("type"), Hull.Type);
-									(*Hers)->TryGetNumberField(TEXT("crew"), Hull.Crew);
-									(*Hers)->TryGetNumberField(TEXT("lost"), Hull.Lost);
-									(*Hers)->TryGetBoolField(TEXT("pair"), Hull.bPair);
-								}
-							}
-						}
-					}
-				}
+				ReadSinkings(*Sunk, Step.Sinkings);
 			}
 			const TArray<TSharedPtr<FJsonValue>>* Raids = nullptr;
 			if (Entry->TryGetArrayField(TEXT("raids"), Raids))
@@ -2409,6 +2857,32 @@ FMonthResult FCampaignSession::EndMonth()
 		}
 	}
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
+	// (Release 2; Brian, 24 November 2026 18:30Z) The units handed over to him as his month opened.
+	const TArray<TSharedPtr<FJsonValue>>* ReadyList = nullptr;
+	if (Object->TryGetArrayField(TEXT("ready"), ReadyList))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ReadyList)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FReadyUnit& Unit = Out.Ready.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("what"), Unit.What);
+			Entry->TryGetStringField(TEXT("text"), Unit.Text);
+			Entry->TryGetStringField(TEXT("name"), Unit.Name);
+			double Number = 0.0;
+			if (Entry->TryGetNumberField(TEXT("region"), Number) && Number >= 0.0)
+			{
+				Unit.Region = FMath::RoundToInt32(Number);
+			}
+			if (Entry->TryGetNumberField(TEXT("corps"), Number) && Number >= 0.0)
+			{
+				Unit.Corps = FMath::RoundToInt32(Number);
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Announce = nullptr;
 	if (Object->TryGetArrayField(TEXT("announce"), Announce))
 	{
@@ -2982,6 +3456,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		(*Yield)->TryGetNumberField(TEXT("fac"), Factories);
 		(*Yield)->TryGetNumberField(TEXT("capital"), Capital);
 		(*Yield)->TryGetNumberField(TEXT("total"), Total);
+		Info.YieldTotal = Total;
 		TArray<FString> Parts;
 		auto Part = [&Parts](const TCHAR* What, int32 Amount)
 		{
@@ -3064,6 +3539,11 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	}
 	Info.Forming = ReadOrders(Object, TEXT("forming"));
 	Object->TryGetStringField(TEXT("formingHead"), Info.FormingHead);
+	const TSharedPtr<FJsonObject>* GlanceObject = nullptr;
+	if (Object->TryGetObjectField(TEXT("glance"), GlanceObject) && GlanceObject && GlanceObject->IsValid())
+	{
+		Info.Glance = ReadShelves(*GlanceObject);
+	}
 	return Info;
 }
 
@@ -3981,6 +4461,43 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	return Out;
 }
 
+/** The ships seen to go down, as the bridge lists them under 'sunk' (a month's fights at sea, or a fleet's attack just fought). */
+static void ReadSinkings(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSinking>& Out)
+{
+	for (const TSharedPtr<FJsonValue>& WentDown : List)
+	{
+		const TSharedPtr<FJsonObject>* Lost = nullptr;
+		if (WentDown->TryGetObject(Lost))
+		{
+			FSinking& Sinking = Out.AddDefaulted_GetRef();
+			(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
+			(*Lost)->TryGetNumberField(TEXT("region"), Sinking.Region);
+			(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
+			(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
+			(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);
+			// (Brian's memorial card) The battleships and carriers among them, by name.
+			const TArray<TSharedPtr<FJsonValue>>* Named = nullptr;
+			if ((*Lost)->TryGetArrayField(TEXT("ships"), Named))
+			{
+				for (const TSharedPtr<FJsonValue>& One : *Named)
+				{
+					const TSharedPtr<FJsonObject>* Hers = nullptr;
+					if (One->TryGetObject(Hers))
+					{
+						FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
+						(*Hers)->TryGetStringField(TEXT("name"), Hull.Name); // (null where the record has run out: left empty)
+						(*Hers)->TryGetStringField(TEXT("cls"), Hull.Class);
+						(*Hers)->TryGetStringField(TEXT("type"), Hull.Type);
+						(*Hers)->TryGetNumberField(TEXT("crew"), Hull.Crew);
+						(*Hers)->TryGetNumberField(TEXT("lost"), Hull.Lost);
+						(*Hers)->TryGetBoolField(TEXT("pair"), Hull.bPair);
+					}
+				}
+			}
+		}
+	}
+}
+
 /** The formations of a raid, as the rules list them. */
 static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out)
 {
@@ -4033,6 +4550,17 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 	Object->TryGetStringField(TEXT("screen"), Out.Screen);
 	Object->TryGetBoolField(TEXT("shelled"), Out.bShelled);
 	Object->TryGetNumberField(TEXT("guns"), Out.Guns);
+	// (Release 2, fleetattack.ts) The enemy fleets it can be dropped on to attack now, and why it stays put once it has.
+	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack);
+	Object->TryGetStringField(TEXT("held"), Out.Held);
+	const TArray<TSharedPtr<FJsonValue>>* Attack = nullptr;
+	if (Object->TryGetArrayField(TEXT("attack"), Attack))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Attack)
+		{
+			Out.Attack.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
 	double Ready = 1.0;
 	Object->TryGetNumberField(TEXT("ready"), Ready);
 	Out.Ready = static_cast<float>(Ready);
@@ -4107,6 +4635,15 @@ bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNo
 			Object->TryGetNumberField(TEXT("shell"), OutExtras->Shell);
 			Object->TryGetNumberField(TEXT("made"), OutExtras->Made);
 			Object->TryGetNumberField(TEXT("joined"), OutExtras->Joined);
+			// (Release 2, fleetattack.ts) A fleet sent at the enemy: the sea it was fought in, what came of it, and the ships that went down.
+			Object->TryGetNumberField(TEXT("seaFight"), OutExtras->SeaFight);
+			Object->TryGetStringField(TEXT("outcome"), OutExtras->Outcome);
+			const TArray<TSharedPtr<FJsonValue>>* Sunk = nullptr;
+			if (Object->TryGetArrayField(TEXT("sunk"), Sunk))
+			{
+				ReadSinkings(*Sunk, OutExtras->Sinkings);
+			}
+			if (OutExtras->SeaFight < 0) { OutExtras->SeaFight = INDEX_NONE; }
 			if (OutExtras->Shell < 0) { OutExtras->Shell = INDEX_NONE; }
 			if (OutExtras->Made < 0) { OutExtras->Made = INDEX_NONE; }
 			if (OutExtras->Joined < 0) { OutExtras->Joined = INDEX_NONE; }
@@ -4269,6 +4806,21 @@ bool FCampaignSession::SetDrafts(const TArray<int32>& CorpsIds, bool bTake, FStr
 	}
 	return bOk;
 }
+
+// ---- (Release 2: the battle schools.) TC.school([ids], go): release 1's rules have no such call, and its button never shows there.
+bool FCampaignSession::SendToSchool(const TArray<int32>& CorpsIds, bool bGo, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("school"), FString::Printf(TEXT("[[%s],%s]"), *IdList(CorpsIds), bGo ? TEXT("true") : TEXT("false")), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
+	return bOk;
+}
+// ---- (end of the battle schools)
 
 bool FCampaignSession::PlaceByPlan(FString& OutNote)
 {
@@ -4626,11 +5178,25 @@ struct FCampaignSession::FAside
 	std::atomic<bool> bDone{ false };
 };
 
+/** (D1) The month's scene asked for beside the war: see SubSceneAside. */
+struct FCampaignSession::FSceneAsk
+{
+	FString Arguments;
+	/** Run on the game thread (Deliver), with the answer. */
+	TFunction<void(int32 NextMark, const FString& Recording)> Then;
+	// What came back, written on the rules' thread and read on the game thread once bDone is set.
+	bool bOk = false;
+	FString Error, Recording;
+	int32 Next = -1;
+	double Seconds = 0.0;
+	std::atomic<bool> bDone{ false };
+};
+
 void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJson, bool bAside, TFunction<FHandNext(const TSharedPtr<FJsonObject>&)>&& InGuess, TFunction<void(const TSharedPtr<FJsonObject>&)>&& InThen)
 {
 	// (one order at a time: the controller takes no order while one is being answered, and an earlier one is taken first)
 	Deliver(true);
-	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || (!bRunning && !IsBeforeAnyWar(Function)) || !Host.IsValid())
 	{
 		// At once, as before: the order, its picture of the war, then its Then.
 		TSharedPtr<FJsonObject> Object;
@@ -4647,7 +5213,10 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 		InThen(Object);
 		return;
 	}
-	RulesMemo.Reset(); // (an order: nothing asked before it holds)
+	if (!IsQuestion(Function) && !IsWrittenOut(Function))
+	{
+		RulesMemo.Reset(); // (an order: nothing asked before it holds; a question asked aside, PreviewAside's, changes nothing, nor does the war written out)
+	}
 	const TSharedRef<FAside, ESPMode::ThreadSafe> Job = MakeShared<FAside, ESPMode::ThreadSafe>();
 	Job->Function = Function;
 	Job->Arguments = ArgumentsJson;
@@ -4663,12 +5232,14 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 		FString Json;
 		Job->bOk = Rules->Call(Job->Function, Job->Arguments, Json, Job->Error);
 		Job->Seconds = FPlatformTime::Seconds() - Began;
-		if (Job->bOk && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Job->Answer) && Job->Answer.IsValid()))
+		// (the rules' null, a question with nobody there to ask about: no answer, as CallRules gives it, and no fault)
+		const bool bNull = Job->bOk && Json.Len() <= 8 && Json.TrimStartAndEnd() == TEXT("null");
+		if (Job->bOk && !bNull && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Job->Answer) && Job->Answer.IsValid()))
 		{
 			Job->bOk = false;
 			Job->Error = Job->Function + TEXT(": the answer could not be read");
 		}
-		if (Job->bOk)
+		if (Job->bOk && Job->Answer.IsValid())
 		{
 			const TSharedPtr<FJsonObject>* NewView = nullptr;
 			if (Job->Answer->TryGetObjectField(TEXT("view"), NewView))
@@ -4776,6 +5347,7 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 
 void FCampaignSession::Settle()
 {
+	WaitSceneAsk(); // (the month's scene being asked for comes first: the rules answer one thing at a time)
 	if (!Aside.IsValid())
 	{
 		return;
@@ -4798,7 +5370,10 @@ void FCampaignSession::Settle()
 		View = MoveTemp(Job->View);
 		OnViewChanged.Broadcast();
 	}
-	RulesMemo.Reset(); // (the order changed the war; what was asked ahead after it holds)
+	if (!IsQuestion(Job->Function) && !IsWrittenOut(Job->Function))
+	{
+		RulesMemo.Reset(); // (the order changed the war; what was asked ahead after it holds)
+	}
 	for (FAside::FKept& Kept : Job->Kept)
 	{
 		TheaterSpeed::NoteRulesCall(Kept.Function, Kept.Seconds, false);
@@ -4831,12 +5406,153 @@ void FCampaignSession::Deliver(bool bWait)
 		AsideThen = nullptr;
 		Run();
 	}
+	// (D1) The month's scene asked for, once it is in.
+	if (SceneAsk.IsValid() && (bWait || SceneAsk->bDone.load(std::memory_order_acquire)))
+	{
+		WaitSceneAsk();
+		const TSharedPtr<FSceneAsk, ESPMode::ThreadSafe> Job = MoveTemp(SceneAsk);
+		SceneAsk.Reset();
+		SceneAskRun = TFuture<void>();
+		TheaterSpeed::NoteRulesCall(TEXT("subScene"), Job->Seconds, false);
+		if (!Job->bOk)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Sea scene: the month's scene could not be asked for (%s)"), *Job->Error);
+		}
+		if (Job->Then)
+		{
+			Job->Then(Job->Next, Job->Recording);
+		}
+	}
 }
 
 void FCampaignSession::DropAside()
 {
 	Settle();
 	AsideThen = nullptr;
+	SceneAsk.Reset(); // (its Then unrun: the war it was asked of is going)
+	SceneAskRun = TFuture<void>();
+}
+
+void FCampaignSession::WaitSceneAsk()
+{
+	if (SceneAsk.IsValid() && !SceneAsk->bDone.load(std::memory_order_acquire))
+	{
+		THEATER_SPEED_SCOPE(RulesWait);
+		SceneAskRun.Wait();
+	}
+}
+
+// ---- (D1, ruling 241) The month's submarine scene ---------------------------------------------------------------
+
+FString FCampaignSession::SubSceneFile()
+{
+	// (a run that takes pictures or plays the playtester's steps keeps its own, as it keeps its own notebook)
+	FString Run;
+	const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bRun ? TEXT("subscene-runs.json") : TEXT("subscene.json"));
+}
+
+FString FCampaignSession::GetSubScene() const
+{
+	if (!SubScene.IsEmpty())
+	{
+		return SubScene;
+	}
+	auto Known = [](const FString& Word) { return Word == TEXT("all") || Word == TEXT("mine") || Word == TEXT("never") || Word == TEXT("off"); };
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSubScene="), Asked) && Known(Asked.ToLower()))
+	{
+		SubScene = Asked.ToLower();
+		return SubScene;
+	}
+	// (a run that is not about the scene leaves it off, so that its saves and steps are as they were)
+	FString Run;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false))
+	{
+		SubScene = TEXT("off");
+		return SubScene;
+	}
+	FString Text, Kept;
+	TSharedPtr<FJsonObject> Object;
+	SubScene = FFileHelper::LoadFileToString(Text, *SubSceneFile()) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Object) && Object.IsValid()
+		&& Object->TryGetStringField(TEXT("view"), Kept) && Known(Kept) ? Kept : FString(TEXT("all"));
+	return SubScene;
+}
+
+void FCampaignSession::SetSubScene(const FString& Setting)
+{
+	const FString Word = Setting.ToLower();
+	if (Word != TEXT("all") && Word != TEXT("mine") && Word != TEXT("never") && Word != TEXT("off"))
+	{
+		return;
+	}
+	SubScene = Word;
+	FFileHelper::SaveStringToFile(FString::Printf(TEXT("{\"view\":\"%s\"}\n"), *Word), *SubSceneFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	Settle(); // (an order still being answered is answered first: the rules are told on this thread)
+	TellSubScene();
+}
+
+void FCampaignSession::TellSubScene()
+{
+	if (!Host.IsValid())
+	{
+		return;
+	}
+	// (the record is kept for every setting but "off": "never" plays nothing, but a change back finds this month's record)
+	FString Json, Error;
+	bNoSubScene = !Host->Call(TEXT("subSceneOn"), GetSubScene() == TEXT("off") ? TEXT("[false]") : TEXT("[true]"), Json, Error);
+	if (bNoSubScene)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Sea scene: these rules keep no record of the month at sea (%s)"), *Error); // (the stand-in rules, or rules before D1)
+	}
+}
+
+void FCampaignSession::SubSceneAside(int32 Mark, TFunction<void(int32 NextMark, const FString& Recording)>&& Then)
+{
+	const FString Setting = GetSubScene();
+	if (Setting == TEXT("off") || Setting == TEXT("never") || !bRunning || bNoSubScene)
+	{
+		Then(Mark, FString());
+		return;
+	}
+	// (an order still being answered, or a scene asked before and not yet taken, first: the rules answer one thing at a
+	// time, and each Then in its turn)
+	Deliver(true);
+	if (!bRunning || !Host.IsValid())
+	{
+		Then(Mark, FString());
+		return;
+	}
+	const TSharedRef<FSceneAsk, ESPMode::ThreadSafe> Job = MakeShared<FSceneAsk, ESPMode::ThreadSafe>();
+	Job->Arguments = FString::Printf(TEXT("[%s,%s]"), Mark < 0 ? TEXT("null") : *FString::FromInt(Mark), *JsonQuote(Setting));
+	Job->Next = Mark;
+	Job->Then = MoveTemp(Then);
+	SceneAsk = Job;
+	FRulesHost* Rules = Host.Get();
+	// (a thread of its own, as an order's: the answer is read there too, a recording of a few hundred kilobytes)
+	SceneAskRun = AsyncThread([Rules, Job]()
+	{
+		const double Began = FPlatformTime::Seconds();
+		FString Json;
+		Job->bOk = Rules->Call(TEXT("subScene"), Job->Arguments, Json, Job->Error);
+		TSharedPtr<FJsonObject> Answer;
+		if (Job->bOk && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Answer) && Answer.IsValid()))
+		{
+			Job->bOk = false;
+			Job->Error = TEXT("subScene: the answer could not be read");
+		}
+		if (Job->bOk)
+		{
+			double Number = 0.0;
+			if (Answer->TryGetNumberField(TEXT("mark"), Number) && Number >= 0.0)
+			{
+				Job->Next = static_cast<int32>(Number);
+			}
+			Answer->TryGetStringField(TEXT("recording"), Job->Recording); // (null where the month holds no scene for him)
+		}
+		Job->Seconds = FPlatformTime::Seconds() - Began;
+		Job->bDone.store(true, std::memory_order_release);
+	}, 8 * 1024 * 1024);
 }
 
 void FCampaignSession::MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
@@ -4879,6 +5595,41 @@ void FCampaignSession::LandAside(const TArray<int32>& CorpsIds, int32 RegionId, 
 		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
 		{
 			Then(Answer.IsValid() ? *Read : FLandingResult());
+		});
+}
+
+void FCampaignSession::PreviewAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening, bool bAside, TFunction<void(const FAttackPreview&)>&& InThen)
+{
+	if (CorpsIds.Num() == 0)
+	{
+		InThen(FAttackPreview());
+		return;
+	}
+	// (the same arguments as PreviewAttack sends, so that at once it is the same question, kept as that one is)
+	Order(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false")), bAside, nullptr,
+		[RegionId, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? ReadPreview(Answer, RegionId) : FAttackPreview());
+		});
+}
+
+void FCampaignSession::SaveAside(bool bAside, TFunction<void(FString)>&& InThen)
+{
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	{
+		InThen(Save()); // (at once, as before)
+		return;
+	}
+	// (the war as JSON text, and the answer that carries it read, on the rules' thread: by August 1944 some 2.3 MB)
+	Order(TEXT("save"), TEXT("[]"), true, nullptr,
+		[Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			FString Written;
+			if (Answer.IsValid())
+			{
+				Answer->TryGetStringField(TEXT("text"), Written);
+			}
+			Then(MoveTemp(Written));
 		});
 }
 
@@ -4945,6 +5696,7 @@ void FCampaignSession::ReadNotebook()
 		Clean = TEXT("{}");
 	}
 	FString Json, Error;
+	Settle(); // (an order or a month's scene still being answered on another thread first: the rules answer one thing at a time)
 	if (Host.IsValid() && !Host->Call(TEXT("notebook"), FString::Printf(TEXT("[%s]"), *Clean), Json, Error))
 	{
 		UE_LOG(LogTheater, Display, TEXT("FIRST COMMAND: these rules keep no staff notes (%s)"), *Error); // (the stand-in rules, or rules before 84.3.3)
@@ -5095,7 +5847,10 @@ FLessonGuide FCampaignSession::LessonGuide(bool bCard, const TArray<int32>& InHa
 
 FLessonDoor FCampaignSession::LessonDoor()
 {
-	// (Asked on the door, before any campaign is under way: straight to the rules, which need no war for it.)
+	// (Asked on the door, before any campaign is under way: straight to the rules, which need no war for it. An order or
+	// a month's scene still being answered on another thread first, should the door be opened from a war: the rules
+	// answer one thing at a time.)
+	Settle();
 	FLessonDoor Out;
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;

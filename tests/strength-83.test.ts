@@ -413,8 +413,14 @@ describe('one war at the history stop, nobody playing', () => {
     // it). Of seeds 17 to 30 on release 1's tree only seed 27 tells it: America's corps are refused on the mainland of
     // France in May 1944 and land at Rouen in June, its only first wave of that summer. Seeds 17, 18, 23, 26, 29 and 30
     // are refused but land in France that same month; 19, 20, 24, 25 and 28 put no first wave ashore in the summer of
-    // 1944, and 21 lands in Liguria unrefused. Seed 27 is the one used.)
-    const g = startOpen(createGame(27, null));
+    // 1944, and 21 lands in Liguria unrefused. Seed 27 until release 2's tree (to 22 November 2026), on which Germany
+    // falls before the summer of 1944 in seed 27. Of seeds 17 to 58 on release 2's tree (c07a8ccd), none puts an
+    // American first wave of 1944 on an island, and only seed 42 tells the story in full: Calais, Rouen, Brittany and
+    // the Cotentin refuse America's corps in May 1944, the staff lands at Nantes that month, Calais refuses again in
+    // July, and the corps land on the Cotentin in August. Seeds 23, 26, 32, 36, 40, 46, 48, 53 and 55 are refused in
+    // May 1944 but land in France that same month; 49, 51 and 57 are refused every month and hold their corps back;
+    // 19, 22, 27, 39, 44 and 47 see Germany fall first. Seed 42 is the one used.)
+    const g = startOpen(createGame(42, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();

@@ -8,6 +8,7 @@ import { createGame, setWar } from '../src/campaign/game';
 import { majorsOf } from '../src/campaign/diplomacy';
 import { INTEL, MISSIONS, intelTick, setMission, spyRoom, whyNotMission } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { setSecretWar } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
 import type { Agent, AirFleet, Game, Mission } from '../src/campaign/types';
 
@@ -16,21 +17,34 @@ const grp = (g: Game, nat: string, name: string): AirFleet => g.airFleets.find((
 const id = (g: Game, n: string): number => g.byName[n].id;
 const keep = structuredClone(AIRV);
 const keepIntel = structuredClone(INTEL.enemy);
-afterEach(() => { Object.assign(AIRV, structuredClone(keep)); Object.assign(INTEL.enemy, structuredClone(keepIntel)); });
+const keepMissions = structuredClone(INTEL.missions);
+afterEach(() => { Object.assign(AIRV, structuredClone(keep)); Object.assign(INTEL.enemy, structuredClone(keepIntel)); Object.assign(INTEL.missions, structuredClone(keepMissions)); });
 
 describe('the switches', () => {
-  it('are off for a new campaign, keep with the save, and touch nothing outside the grand campaign', () => {
+  it('a new campaign takes the field on and the guns off, keeps them with the save, and touches nothing outside the grand campaign', () => {
+    // (Brian, 22 November, release 2: WRECK THE AIRFIELD is on for new grand campaigns; the guns stay off.)
+    const g = free();
+    expect(airPiece(g, 'night')).toBe(false);
+    expect(airPiece(g, 'start')).toBe(false);
+    expect(airPiece(g, 'field')).toBe(true);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('av:'))).toEqual(['av:field']);
+    setAirPiece(g, 'night', true);
+    setAirPiece(g, 'field', false);
+    const back = loadGame(saveGame(g))!;
+    expect(airPiece(back, 'night')).toBe(true);
+    expect(airPiece(back, 'field')).toBe(false);
+    const h = createGame(7, null);
+    setAirPiece(h, 'night', true);
+    setAirPiece(h, 'field', true);
+    expect(airPiece(h, 'night')).toBe(false);
+    expect(airPiece(h, 'field')).toBe(false);
+  });
+
+  it('a campaign begun with the data switches off takes none of them', () => {
+    AIRV.nightGuns.on = AIRV.field.on = AIRV.startGuns.on = false;
     const g = free();
     for (const p of ['night', 'start', 'field'] as const) expect(airPiece(g, p)).toBe(false);
     expect(Object.keys(g.flags).some((k) => k.startsWith('av:'))).toBe(false);
-    setAirPiece(g, 'night', true);
-    setAirPiece(g, 'field', true);
-    const back = loadGame(saveGame(g))!;
-    expect(airPiece(back, 'night')).toBe(true);
-    expect(airPiece(back, 'field')).toBe(true);
-    const h = createGame(7, null);
-    setAirPiece(h, 'night', true);
-    expect(airPiece(h, 'night')).toBe(false);
   });
 
   it('a campaign begun with the data switches on takes them', () => {
@@ -110,7 +124,7 @@ describe('wrecking an airfield (ruling 151(b))', () => {
   function scene(on = true): { g: Game; a: Agent; f: AirFleet; bremen: number } {
     const g = free(7, 'UK');
     setWar(g, 'UK', 'GER');
-    if (on) setAirPiece(g, 'field', true);
+    setAirPiece(g, 'field', on);
     const bremen = id(g, 'Bremen');
     const f = g.airFleets.find((x) => x.nat === 'GER' && x.ship === undefined && x.ftr > 0)!;
     f.base = bremen;
@@ -157,13 +171,37 @@ describe('wrecking an airfield (ruling 151(b))', () => {
     expect(fightersOver(g, id(g, 'Bremen'), 'UK')).toBeGreaterThanOrEqual(over);
   });
 
+  it("names the groups grounded in plain words: 'the group', 'both groups', 'all three'", () => {
+    INTEL.missions.airfield.success = 1;
+    const said: Record<number, string> = {};
+    for (const n of [1, 2, 3]) {
+      for (let seed = 1; seed < 40 && !said[n]; seed++) {
+        const s = scene();
+        s.g.seed = seed;
+        for (const f of s.g.airFleets) if (f.base === s.bremen) f.base = id(s.g, 'Hanover');
+        s.g.airFleets.filter((f) => f.nat === 'GER' && f.ship === undefined && f.ftr + f.bmr > 0).slice(0, n).forEach((f) => { f.base = s.bremen; });
+        expect(setMission(s.g, 'UK', s.a.id, 'airfield')).toBe(true);
+        intelTick(s.g, 'UK');
+        const h = s.g.headlines.find((x) => x.text.startsWith(`Agent ${s.a.name}'s saboteurs wreck the field at Bremen.`));
+        if (h) said[n] = h.text.slice(h.text.indexOf('Bremen.') + 8);
+      }
+    }
+    expect(said).toEqual({
+      1: 'The German air group based there is grounded this month.',
+      2: 'Both German air groups based there are grounded this month.',
+      3: 'All 3 German air groups based there are grounded this month.',
+    });
+  });
+
   it("the other side's services can wreck the player's field; off, the plots go as before", () => {
     INTEL.enemy.chance = 1;
     INTEL.enemy.quiet = 0;
     AIRV.field.enemyShare = 1;
+    // (The plot that strikes at once: spy hunters off, as this test means. With them on, tests/secretwar.test.ts.)
     const g = free(7, 'UK');
     setWar(g, 'UK', 'GER');
     g.flags.spyfrom = 0;
+    setSecretWar(g, 'hunt', false);
     setAirPiece(g, 'field', true);
     intelTick(g, 'UK');
     const line = g.headlines.find((h) => /^Grounded this month: saboteurs wrecked the field at /.test(h.text));
@@ -171,6 +209,8 @@ describe('wrecking an airfield (ruling 151(b))', () => {
     const h = free(7, 'UK');
     setWar(h, 'UK', 'GER');
     h.flags.spyfrom = 0;
+    setSecretWar(h, 'hunt', false);
+    setAirPiece(h, 'field', false);
     intelTick(h, 'UK');
     expect(h.headlines.some((x) => /field/.test(x.text))).toBe(false);
   });

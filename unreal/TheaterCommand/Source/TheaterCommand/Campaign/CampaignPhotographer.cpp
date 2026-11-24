@@ -6,11 +6,13 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/CampaignStepPlayer.h"
+#include "Campaign/EdgeSeals.h"
 #include "TheaterCommand.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
@@ -106,8 +108,8 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Route = Shot.Hover = TEXT("Hamburg");
 	}
 	{
-		// What stands round an army's base says what it is about: entrenched behind sandbags and wire, in camp by
-		// its fire, supplied by its lorries, or cut off; and one that is still digging.
+		// What stands round an army's base says what it is about: dug in behind its trench and wire (release 2: on the
+		// side toward the enemy), in camp by its fire, supplied by its lorries, or cut off; and one that is still digging.
 		FShot& Shot = Add(TEXT("09f-armies-at-a-glance"), TEXT("Grenzmark"), 0.22f);
 		Shot.Dress = TEXT("Farther Pomerania:2:0:1;Grenzmark:0:1:1;Pomorze:1:0:2;Poznan:2:1:1");
 	}
@@ -702,6 +704,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("40b-works-close"), *WorksAt, 0.1f, 200.0f, 8.0f).bWorks = true;
 	}
 
+	// (Release 2: camps you can see.) "-TheaterCamps=North Texas" takes four pictures of the army standing in that
+	// province, one at each stage of its camp: in the open, a month in camp, two months digging, and dug in with its
+	// works finished. Each dresses the army as that stage and leaves the rest of the table as the rules have it.
+	FString CampsAt;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterCamps="), CampsAt, false))
+	{
+		Shots.Reset();
+		const FString Framed = TEXT("@army ") + CampsAt;
+		const TCHAR* const Stages[4] = { TEXT("50a-camp-in-the-open"), TEXT("50b-camp-one-month"), TEXT("50c-camp-two-months"), TEXT("50d-camp-dug-in") };
+		const int32 WorksFor[4] = { 0, 1, 1, 2 }; // (the old dressing's works under each: none, digging, digging, entrenched)
+		for (int32 Stage = 0; Stage < 4; ++Stage)
+		{
+			Add(Stages[Stage], *Framed, 0.16f, 0.0f, 6.0f).Dress = FString::Printf(TEXT("%s:%d:0:1:%d"), *CampsAt, WorksFor[Stage], Stage);
+		}
+	}
+
 	// "-TheaterLook=Ardennes:0.1:20:4;Tobruk:0.2" takes one picture of each place named instead: a region,
 	// then how far out (0 close, 1 far), which way the view is turned, and how far it is tipped.
 	FString Look;
@@ -794,6 +812,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	{
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterSelect="), Shots[0].Select, false);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterHover="), Shots[0].Hover, false);
+		// ("-TheaterTab=3" opens the picked province's card on that tab: 3 AT A GLANCE, 1 ORDER, 2 BUILD, 0 PROVINCE, the default.)
+		int32 TabAsked = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTab="), TabAsked))
+		{
+			Shots[0].ProvinceTab = FMath::Clamp(TabAsked, 0, 3);
+		}
 		// ("-TheaterLookWait=30" waits that many seconds more before the first picture: for something that takes time, as a train's run)
 		float LookWait = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLookWait="), LookWait))
@@ -824,6 +848,41 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Wait = Waits[K];
 		}
 	}
+
+	// ---- (release 2, the enemy's month near you) "-TheaterWatchNear" with "-TheaterGrand=FRA,1" takes the watch of the
+	// enemy's months near the player instead: the table as the months asked for ("-TheaterMonths=2") leave it, then four
+	// months ended in turn, each caught at its first stop near him, the eye there and the arrows grown.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterWatchNear")) && !GrandNation.IsEmpty())
+	{
+		Shots.Reset();
+		int32 Before = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterMonths="), Before);
+		Add(TEXT("60a-before-the-month-ends"), TEXT("@capital"), 0.6f).Months = FMath::Clamp(Before, 0, 80);
+		static const TCHAR* Names[4] = { TEXT("60b-enemy-moves-month-1"), TEXT("60c-enemy-moves-month-2"), TEXT("60d-enemy-moves-month-3"), TEXT("60e-enemy-moves-month-4") };
+		// (release 2, new units ready: with "-TheaterR2Ready" his month opens with an infantry corps on order at his
+		// capital, due as the first month ended here opens: the READY plate with SHOW ME pressed, then the new army close,
+		// its brass NEW tag on its pole)
+		const bool bReadyPictures = FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready"));
+		for (const TCHAR* Name : Names)
+		{
+			FShot& Shot = Add(Name, TEXT("@capital"), 0.6f);
+			Shot.bKeep = Shot.bWatch = true;
+			Shot.Wait = -0.4f; // (2.6 s in: the eye arrived, the arrows grown, the sentence up)
+			if (bReadyPictures && Name == Names[0])
+			{
+				FShot& Plate = Add(TEXT("60g-new-units-ready"), TEXT("@ready"), 0.42f);
+				Plate.bShowReady = Plate.bKeep = true;
+				Plate.Wait = 1.2f; // (the eye there, the plate up)
+				Add(TEXT("60h-new-army-tag"), TEXT("@ready"), 0.25f).bKeep = true;
+			}
+		}
+		// (round 2: with "-TheaterR2Marked", the army that took a town of his, close, its red tag on its pole)
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Marked")))
+		{
+			Add(TEXT("60f-marked-army"), TEXT("@marked"), 0.3f).bKeep = true;
+		}
+	}
+	// ---- (end release 2)
 
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
 	FString Only;
@@ -1024,6 +1083,53 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			}
 		}
 	}
+	if (Shot.Region == TEXT("@ready") && Controller->GetSession())
+	{
+		// (Release 2, new units ready) The first unit handed over to him this month, where it stands: the watch still
+		// going from the last picture is finished first, which says the READY plate (at once, for a picture).
+		if (Controller->IsWatching())
+		{
+			Controller->SkipWatching();
+		}
+		const TArray<FReadyUnit>& Ready = Controller->GetReadyUnits();
+		int32 ReadyPlace = Ready.Num() > 0 ? Ready[0].Region : INDEX_NONE;
+		for (const FViewCorps& Unit : Controller->GetSession()->GetView().Corps)
+		{
+			if (Ready.Num() > 0 && Unit.Id == Ready[0].Corps)
+			{
+				ReadyPlace = Unit.Region;
+				break;
+			}
+		}
+		for (const TObjectPtr<AArmyPiece>& Piece : Table->GetPieces())
+		{
+			if (ReadyPlace != INDEX_NONE && Piece && Piece->GetRegionId() == ReadyPlace && !Piece->IsHidden())
+			{
+				At = Table->WorldToMap(Piece->GetRestLocation());
+				break;
+			}
+		}
+	}
+	if (Shot.Region == TEXT("@marked") && Controller->GetSession())
+	{
+		// (Release 2, the marked army) The first army piece whose corps carry a mark: an army that took a town of his.
+		for (const FViewCorps& Unit : Controller->GetSession()->GetView().Corps)
+		{
+			if (Unit.Marked.IsEmpty())
+			{
+				continue;
+			}
+			for (const TObjectPtr<AArmyPiece>& Piece : Table->GetPieces())
+			{
+				if (Piece && Piece->GetRegionId() == Unit.Region && !Piece->IsHidden())
+				{
+					At = Table->WorldToMap(Piece->GetRestLocation());
+					break;
+				}
+			}
+			break;
+		}
+	}
 	if (Shot.Region.StartsWith(TEXT("@train")))
 	{
 		// "@train" is a train running in the open just now; "@train3" one made up under level 3 guns (two flak wagons).
@@ -1155,16 +1261,44 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			}
 			Asked.Key = -1; // (once only)
 			FString Where, What = Asked.Value;
+			int32 InRegion = INDEX_NONE;
 			if (Asked.Value.Split(TEXT(">"), &Where, &What))
 			{
 				if (const int32* Region = Table->GetData().RegionByName.Find(Where))
 				{
+					InRegion = *Region;
 					Controller->SelectRegion(*Region);
 				}
 			}
-			Controller->OpenPage(TEXT("spies"));
-			Controller->PressPage(What);
-			Controller->ClosePage();
+			if (What.StartsWith(TEXT("work:")) && InRegion != INDEX_NONE)
+			{
+				// (Release 2, the Mac pictures of 22 November: "New York>work:garrison:First Army" is an order on the
+				// province's own card, not on the spies page. A corps may be named rather than numbered, since its
+				// number differs from one start to the next: the province's offered order whose label opens with that
+				// name is the one pressed, as "First Army: into New York".)
+				FString Verb, Who;
+				const FString Rest = What.Mid(5);
+				if (Rest.Split(TEXT(":"), &Verb, &Who) && !Who.IsNumeric() && Controller->GetSession())
+				{
+					const FString Opens = FString::Printf(TEXT("work:%s:"), *Verb);
+					for (const FProvinceOption& Option : Controller->GetSession()->Province(InRegion).Options)
+					{
+						if (Option.bEnabled && Option.Action.StartsWith(Opens) && Option.Label.StartsWith(Who + TEXT(":")))
+						{
+							What = Option.Action;
+							break;
+						}
+					}
+				}
+				UE_LOG(LogTheater, Display, TEXT("Photographer: %s presses %s"), *Where, *What);
+				Controller->ProvinceAction(What);
+			}
+			else
+			{
+				Controller->OpenPage(TEXT("spies"));
+				Controller->PressPage(What);
+				Controller->ClosePage();
+			}
 			Controller->SelectRegion(INDEX_NONE);
 		}
 	};
@@ -1173,10 +1307,8 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		PressAsked(i);
 		Controller->EndMonth();
 	}
-	if (Shot.Months > 0)
-	{
-		PressAsked(Shot.Months);
-	}
+	// (Acts asked at the months gone so far, month 0 included when no months are asked.)
+	PressAsked(Shot.Months);
 	// ("-TheaterRecon=Poznan;Lodz" flies a reconnaissance flight over those provinces before the first picture: the
 	// armies there are identified.)
 	{
@@ -1331,6 +1463,7 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	if (Shot.bWatch)
 	{
 		Controller->PutDownArmy();
+		Controller->SkipWatching(); // (release 2: a watch still going from the last picture is finished first, or the month would not end)
 		Controller->EndMonthAndWatch();
 		return; // the view now follows the action
 	}
@@ -1659,6 +1792,10 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	{
 		Controller->OpenRoll();
 	}
+	if (Shot.bShowReady)
+	{
+		Controller->ShowReady(); // (release 2, new units ready: SHOW ME, the eye to the first new unit and it in hand)
+	}
 	if (!Shot.Room.IsEmpty())
 	{
 		// (a page that is asked for is not pictured under a country's fall notice: in play the notices are read first)
@@ -1813,7 +1950,8 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 					AArmyPiece* Piece = Table->FindPiece(*Where, Unit.Nation);
 					if (Piece && Nation)
 					{
-						Piece->DressAs(Table, *Nation, FCString::Atoi(*Part[1]), FCString::Atoi(*Part[2]) != 0, FCString::Atoi(*Part[3]));
+						// (a fifth part, where given, is the stage of its camp: 0 in the open to 3 dug in; see AArmyPiece::GetCampStage)
+						Piece->DressAs(Table, *Nation, FCString::Atoi(*Part[1]), FCString::Atoi(*Part[2]) != 0, FCString::Atoi(*Part[3]), Part.Num() >= 5 ? FCString::Atoi(*Part[4]) : -1);
 					}
 					break;
 				}
@@ -1906,6 +2044,37 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		{
 			Controller->OrderFromArsenal(Shot.Order);
 		}
+	}
+}
+
+void ACampaignPhotographer::StepOwnTime()
+{
+	// (a clip's fixed step is let go, and the engine's step put back as it stood)
+	if (bClipStepped)
+	{
+		bClipStepped = false;
+		FApp::SetUseFixedTimeStep(false);
+		FApp::SetFixedDeltaTime(ClipStepWas);
+	}
+}
+
+void ACampaignPhotographer::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StepOwnTime(); // (the photographer gone in the middle of a clip leaves no fixed step behind: the pre-check's note on c3c9d18d)
+	Super::EndPlay(EndPlayReason);
+}
+
+void ACampaignPhotographer::PutAwayCard(ACampaignPlayerController* Sender, bool bBare)
+{
+	// (the result card of the order "-TheaterConfirm" sent in is put away; with "-TheaterConfirmBare" the army is put
+	// down and the province's card put away in the same moment)
+	Sender->CloseFaceOff();
+	UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card put away"));
+	if (bBare)
+	{
+		Sender->PutDownArmy();
+		Sender->SelectRegion(INDEX_NONE);
+		UE_LOG(LogTheater, Display, TEXT("Photographer: the army is put down and the province's card put away"));
 	}
 }
 
@@ -2106,7 +2275,71 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 				ClipEvery = ClipGap.IsEmpty() ? 0.25f : FMath::Clamp(FCString::Atof(*ClipGap), 0.05f, 5.0f);
 				ClipTaken = 0;
 				ClipAt = Clock + ClipEvery;
+				// (Release 2, the art director's read of run 4, 22 November: the clip of his own order taking Pomorze had the
+				// middle of the province German already in its first frame. A picture is taken a tick, and a tick is as long as
+				// the computer takes over it: the still's tick carried the whole order, fought at once in a run that takes
+				// pictures, and the still itself, so the first frame came up to 0.4 s of play after it (the engine's longest
+				// step), not 0.05; and each picture after it, written out in the frame it is taken in, put as much again between
+				// it and the next. The ink's second was run within the first few frames. While the clip is taken the game is
+				// stepped by the clip's own gap instead, however long a tick takes, so that its frames are that far apart in the
+				// game's own time. Not for a gap longer than 0.4 s, the engine's longest step: the world would still go on 0.4 s a
+				// tick, and the pictures would fall on the steps either side of the gap.)
+				// (Only for the clip of an order sent in, "-TheaterConfirm" or "-TheaterConfirmBare": the month's replay moves
+				// to its next step by the computer's own clock, so a replay clip on a fixed step would lose the pacing its ink
+				// is fitted to. The code checker's note on c3c9d18d. Other clips are taken at the computer's pace, as before.)
+				const bool bOrderClip = FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare"));
+				// (Release 2, news at the map's edge: and the clip of the seals sliding in, "-TheaterSeal=slide", read as the
+				// edge's layer reads it, EdgeSeals::ReadSealAsk. The layer times the slide-in on the world's clock, so only a
+				// stepped clip shows it frame by frame. Never a replay shot's: the seals are not shown while the replay plays.)
+				FString SealAsked;
+				const bool bSealClip = !Shot.bWatch && FParse::Value(FCommandLine::Get(), TEXT("TheaterSeal="), SealAsked, false)
+					&& EdgeSeals::ReadSealAsk(std::string(TCHAR_TO_UTF8(*SealAsked))).bSlide;
+				if ((bOrderClip || bSealClip) && ClipFrames > 0 && ClipEvery <= 0.4f && !FApp::IsBenchmarking() && !FApp::UseFixedTimeStep())
+				{
+					bClipStepped = true;
+					ClipStepWas = FApp::GetFixedDeltaTime();
+					FApp::SetFixedDeltaTime(ClipEvery);
+					FApp::SetUseFixedTimeStep(true);
+				}
 			}
+		}
+		// (Release 2, the art director's read of run 3, 22 November: "-TheaterConfirm" sends in the order the first
+		// picture shows, "-TheaterArmy=Farther Pomerania -TheaterOrderTo=Pomorze", the moment that picture is taken, and
+		// puts its result card away, so that a clip made with it starts on the player's own order taking a province,
+		// outside the month's replay: the ink spreading from the side it was taken from, at the second it takes.)
+		// (Release 2, the art director's read of run 4, 22 November: the clip again "with the panels put down (Esc), and that
+		// province in the middle of the frame". "-TheaterConfirmBare" sends the order in as "-TheaterConfirm" does, then puts
+		// the army down and the province's card away in the same moment, so that neither the army's washes nor the panels
+		// stand over the ground the ink crosses.)
+		// (And the ruling that came of it: an order's ink stands at its start while its result card is up, and runs as the
+		// card is put away. "-TheaterCardFor=1.5" leaves the result card up that many seconds after the order is sent in,
+		// then puts it away, so that a clip shows the ink held under the card and then crossing the province.)
+		static const bool bConfirmBare = FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare"));
+		static float CardFor = 0.0f;
+		static const bool bCardFor = FParse::Value(FCommandLine::Get(), TEXT("TheaterCardFor="), CardFor) && CardFor > 0.0f;
+		if (Current == 0 && (bConfirmBare || FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm"))))
+		{
+			if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
+			{
+				Sender->ConfirmAttack();
+				if (bCardFor)
+				{
+					CardPutAwayAt = Clock + FMath::Min(CardFor, 10.0f);
+					UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card left up for %.2f s"), FMath::Min(CardFor, 10.0f));
+				}
+				else
+				{
+					PutAwayCard(Sender, bConfirmBare);
+				}
+			}
+		}
+	}
+	if (CardPutAwayAt >= 0.0f && Clock >= CardPutAwayAt)
+	{
+		CardPutAwayAt = -1.0f;
+		if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
+		{
+			PutAwayCard(Sender, FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare")));
 		}
 	}
 	if (bTaken && Current == 0 && ClipTaken < ClipFrames && Clock >= ClipAt)
@@ -2117,6 +2350,7 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		if (ClipTaken == ClipFrames)
 		{
 			ClipAt = Clock + 1.0f; // (and a second for the last of them to be written)
+			StepOwnTime(); // (the clip is taken: the game keeps the computer's own time again)
 		}
 		return;
 	}
@@ -2128,6 +2362,16 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 	// A second later, move on.
 	if (bTaken && Clock >= 4.0f + Shots[Current].Wait)
 	{
+		if (CardPutAwayAt >= 0.0f)
+		{
+			// (a result card "-TheaterCardFor" left up is put away with its own picture, never in the next one's)
+			CardPutAwayAt = -1.0f;
+			if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
+			{
+				PutAwayCard(Sender, FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare")));
+			}
+		}
+		StepOwnTime(); // (and a clip's fixed step, if it is still on)
 		++Current;
 		if (!Shots.IsValidIndex(Current))
 		{

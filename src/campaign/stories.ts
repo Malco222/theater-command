@@ -14,12 +14,20 @@ import budget from '../../data/campaign/budget.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
-import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
+import { DESERT, EASTERN, allied, atWar, fortRow, headline, relocate, weather, roomless } from './game';
+import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, keptByName, muster, thePlace, theUnit, type ToursDone } from './bombers';
+import { FORT_XP } from './fortrows';
+import { aceSchool, schoolPilots, unitsDecide } from './units';
 import { gainXp, generalOf } from './commanders';
+import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
+import { moraleRules, restedMonth } from './morale';
+import { seaWhat, seaWhere } from './sea-words';
+import { NICKNAMES, earnedName, hardWin, nicknamesOn, roomForName } from './nicknames';
+import { markBattle, markFallen, marksMonth } from './marked';
 import {
   STACK,
-  type AirFleet, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
+  type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
   type Region, type Rivalry, type Storied, type Stories, type UnitKind,
 } from './types';
 
@@ -50,6 +58,8 @@ export const STORIES = data as unknown as {
   home: { defence: number; attack: number; lostOrg: number; freedOrg: number };
   rivals: { meets: number; edge: number; org: number; xp: number; pc: number };
   legacy: { xp: number };
+  drill: { cap: number };
+  wear: { fresh: number; weeks: number; month: number };
   tour: { perMonth: number };
   lastStand: number;
   generalXp: number;
@@ -129,7 +139,7 @@ export function citation(g: Game, a: Award): string {
   const d = DEF.get(a.hon);
   if (!d) return '';
   const N = g.nations[a.nat];
-  return fill(d.cite, { unit: a.name, place: placeName(g, a.kind, a.at) || 'the front', year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
+  return fill(d.cite, { unit: a.name, place: placeName(g, a.kind, a.at) || 'the front', where: a.kind === 'fleet' && g.seas[a.at] ? seaWhere(g.seas[a.at].name) : `in ${placeName(g, a.kind, a.at) || 'the front'}`, year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
 }
 
 /** What an honour is worth when it is cashed in: more for the first of its kind in the nation. */
@@ -146,7 +156,10 @@ export function noteCorps(g: Game, c: Corps, what: string, where: number, n?: nu
 export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: unknown }, line: DiaryLine): string {
   const [, what, where, n] = line;
   const sea = 'ships' in u;
-  const at = where < 0 ? 'the front' : sea || what === 'strike' ? `the ${g.seas[where]?.name ?? 'sea'}` : g.regions[where]?.name ?? 'the front';
+  const seaName = where >= 0 && (sea || what === 'strike') ? g.seas[where]?.name ?? '' : null;
+  const at = where < 0 ? 'the front' : seaName !== null ? (seaName ? seaWhat(seaName) : 'the sea') : g.regions[where]?.name ?? 'the front';
+  // At sea a place is where the sea is, by the UI director's sea words ("in the North Sea", "off the Azores"); ashore "at Sedan".
+  const atIn = (prep: string): string => (seaName ? seaWhere(seaName) : `${prep} ${at}`);
   const times = n && n > 1 ? ` ${n} times` : '';
   switch (what) {
     case 'took': return `Took ${at}${n ? `, with ${n},000 prisoners` : ''}.`;
@@ -161,29 +174,31 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'cut': return `Cut off at ${at}.`;
     case 'relief': return `Back in supply at ${at} after ${n} months cut off.`;
     case 'honour': { const a = n ? awardOf(g, n) : undefined; return a ? `Honoured: ${awardTitle(g, a)}.` : 'Honoured.'; }
+    case 'named': { const nick = (u as { nick?: string | null }).nick; return `Called ${nick ?? 'by a name of its own'} by its own army after ${n ?? NICKNAMES.need} hard fights, the last at ${at}.`; }
     case 'bonds': return 'Sent home on a bond tour.';
     case 'school': return 'Sent home to the training schools as instructors.';
     case 'back': return 'Back from home and ready for orders.';
+    case 'drill': return `A month at the battle schools at ${at}${typeof n === 'number' && STORIES.grades[n] ? `: came back ${STORIES.grades[n][1].toLowerCase()}` : ''}.`;
     case 'homelost': return `${at} fell to the enemy: the place it was raised in.`;
     case 'homefree': return `${at} was freed: the place it was raised in.`;
-    case 'rival': { const r = rivalryOf(g, n); return r ? `Met ${r.theirsName} again, at ${at}. The two are old enemies now.` : `Met an old enemy again at ${at}.`; }
-    case 'score': { const r = rivalryOf(g, n); return r ? `Destroyed its old enemy ${r.theirsName} at ${at}.` : `Destroyed an old enemy at ${at}.`; }
+    case 'rival': { const r = rivalryOf(g, n); return r ? `Met ${r.theirsName} again, ${atIn('at')}. The two are old enemies now.` : `Met an old enemy again ${atIn('at')}.`; }
+    case 'score': { const r = rivalryOf(g, n); return r ? `Destroyed its old enemy ${r.theirsName} ${atIn('at')}.` : `Destroyed an old enemy ${atIn('at')}.`; }
     case 'drafts': return `Took in drafts: ${n}% of the corps is new to it.`;
     case 'reraised': return `Raised again in the name of the formation lost at ${at}.`;
     case 'folded': return `Took in the men of ${corpsNamed(g, n)} at ${at}.`;
     case 'cadre': return `Its men went to ${corpsNamed(g, n)} at ${at}. A cadre was kept to raise it again.`;
     case 'rebuilt': return `Raised again round its cadre at ${at}.`;
-    case 'destroyed': return `Destroyed at ${at}.`;
+    case 'destroyed': return `Destroyed ${atIn('at')}.`;
     case 'surrendered': return `Laid down its arms at ${at}.`;
     case 'starved': return `Cut off and out of supply, laid down its arms at ${at}.`;
     case 'raid': return `Bombed ${at}.`;
     case 'night': return `Bombed ${at} by night.`;
-    case 'strike': return `Struck at shipping in ${at}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
+    case 'strike': return `Struck at shipping ${atIn('in')}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
     case 'sky': return `Won the sky over ${at}.`;
     case 'fight': return `Fought for the sky over ${at}.`;
     case 'defend': return `Fought off raids over ${at}${times}.`;
-    case 'action': return `Won a fleet action in ${at}${n ? `: ${n} enemy ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
-    case 'beaten': return `Beaten in a fleet action in ${at}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} lost` : ''}.`;
+    case 'action': return `Won a fleet action ${atIn('in')}${n ? `: ${n} enemy ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
+    case 'beaten': return `Beaten in a fleet action ${atIn('in')}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} lost` : ''}.`;
     default: return what;
   }
 }
@@ -236,6 +251,8 @@ function award(g: Game, kind: UnitKind, u: Unit, d: HonourDef, at: number, extra
     // The first of a great power's formations to make such a name is news everywhere.
     news(g, a, `${citation(g, a)}${named ? ` The ${N.adj} ${service} has begun to call it ${named}.` : ''}`, where);
   }
+  // A man of the unit may be given his nation's highest award for it (valour.ts); never for a last stand, whose men are gone.
+  if (!d.last) decorate(g, a, d.fame, u);
   return a;
 }
 
@@ -430,6 +447,46 @@ export function storyBattle(g: Game, rep: BattleReport, target: Region, preOdds:
     for (const c of attackers) if (!c.dead) earn(g, 'corps', c, target.id);
     for (const c of defenders) if (!c.dead) earn(g, 'corps', c, target.id);
   } finally { publish(g); }
+  // Earned nicknames (release 2, nicknames.ts): a corps that has won enough hard fights is given a name by its own army.
+  if (nicknamesOn(g)) hardFights(g, rep, target, preOdds, attackers, defenders);
+  // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
+  markBattle(g, rep, target, attackers, defenders);
+}
+
+/**
+ * Counts the hard fights of a battle's winners (nicknames.ts) and names any corps whose count has reached the mark.
+ * Every nation's corps alike; nothing here changes a number. The player hears of his own corps' names, and of the
+ * name an enemy corps has made fighting his.
+ */
+function hardFights(g: Game, rep: BattleReport, target: Region, preOdds: number, attackers: Corps[], defenders: Corps[]): void {
+  const win = rep.taken;
+  const named: Corps[] = [];
+  const each = (c: Corps, u: { men: number; lost: number } | undefined, side: 'att' | 'def'): void => {
+    if (!u || c.dead || c.kind === 'fort' || (side === 'att') !== win) return;
+    if (!hardWin(side, preOdds, u.men > 0 ? u.lost / u.men : 0)) return;
+    bump(c, 'hard');
+    if (c.nick || stat(g, c, 'hard') < NICKNAMES.need || !roomForName(g, c.nat)) return;
+    const name = earnedName(g, c, target.name);
+    if (!name) return;
+    c.nick = name;
+    note(g, c, 'named', target.id, stat(g, c, 'hard'));
+    named.push(c);
+  };
+  attackers.forEach((c, i) => each(c, rep.attackers[i], 'att'));
+  defenders.forEach((c, i) => each(c, rep.defenders[i], 'def'));
+  const me = g.human;
+  if (!me) return;
+  const losers = win ? defenders : attackers;
+  for (const c of named) {
+    const hard = stat(g, c, 'hard');
+    if (c.nat === me) {
+      headline(g, 'honour', `After ${hard} hard fights, the last at ${target.name}, the men of ${c.name} are being called ${c.nick}. The name goes on its flag.`, me, target.id);
+      moment(g, 5, 'nick', c, target.id, { x: c.nick! });
+    } else if (losers.some((x) => x.nat === me)) {
+      const adj = g.nations[c.nat]?.adj ?? '';
+      headline(g, 'info', `The ${adj} ${c.name}, which ${win ? 'beat us' : 'held against us'} at ${target.name}, is spoken of on our side now as ${c.nick}.`, c.nat, target.id);
+    }
+  }
 }
 
 /** Ground taken without a fight goes in the diaries of the corps that marched in. */
@@ -490,6 +547,7 @@ function rivals(g: Game, mine: Corps[], theirs: Corps[], won: boolean, target: R
  * or are broken up to make other formations, are not written here.
  */
 export function storyFallen(g: Game, c: Corps, how: Fallen['how'], by: string, reg: number): void {
+  markFallen(g, c, by, reg); // (release 2, marked.ts: a marked corps' end is told, and its mark comes off)
   if (c.kind === 'fort') return;
   const S = g.stories;
   note(g, c, how, reg);
@@ -551,12 +609,106 @@ export function drafted(g: Game, c: Corps, before: number, add: number): void {
   if (c.nat !== g.human || add <= 0) return;
   const w = add * STORIES.veterans.dilute;
   const was = c.xp;
-  c.xp = (c.xp * before + training(g, c.nat) * w) / (before + w);
+  // (A fortress crew's drafts come from its own depots, trained as the crew is: fortrows.json crewXp, under the switch.)
+  const at = fortRow(g, c) ? Math.max(training(g, c.nat), FORT_XP) : training(g, c.nat);
+  c.xp = (c.xp * before + at * w) / (before + w);
   const fresh = add / (before + add);
   if (fresh >= 0.2 && was >= 0.4) {
     note(g, c, 'drafts', c.reg, Math.round(fresh * 100));
     moment(g, 2, 'drafts', c, c.reg);
   }
+}
+
+// ---- Battle schools (release 2) -------------------------------------------------------------
+
+/** Which grade this experience is, counted from 0 (green). */
+const gradeIndex = (xp: number): number => STORIES.grades.reduce((k, [from], i) => (xp >= from ? i : k), 0);
+
+/** The experience a month at the battle schools brings a corps that went with this much: the start of its next grade, never past the cap. */
+export function drillTo(xp: number): number {
+  const next = STORIES.grades.map(([from]) => from).find((from) => from > xp + 1e-9);
+  return next === undefined ? xp : Math.max(xp, Math.min(next, STORIES.drill.cap));
+}
+
+/** True where a corps stands on its own country's soil, held by its own country: where its battle schools are. */
+export const atHome = (g: Game, c: Corps): boolean => {
+  const r = g.regions[c.reg];
+  return !!r && r.owner === c.nat && r.ctrl === c.nat && !r.overseas;
+};
+
+/** Why this corps of the player's cannot be sent to the battle schools this month, or null if it can. */
+export function whyNoSchool(g: Game, c: Corps): string | null {
+  if (!moraleRules(g)) return 'The battle schools are open only in the grand campaign.';
+  if (c.dead || g.human === null || c.nat !== g.human) return 'Only your own corps go to your battle schools.';
+  if (c.kind === 'fort') return 'A fortress stays where it is.';
+  if (c.school) return 'It is at the battle schools already.';
+  if (c.leave !== undefined) return 'It is at home, out of the line, already.';
+  if (c.joint !== undefined) return "It marches with an ally's army, and takes that army's orders.";
+  if (c.job) return 'Its engineers have work in hand here.';
+  if (!atHome(g, c)) return "The battle schools are at home: the corps must stand on its own country's soil.";
+  if (!c.supplied) return 'It is cut off from supply.';
+  // A garrison's marches are its town's (its month opens with none): it must take the field first (the 3D button's review).
+  if (c.town !== undefined) return 'A garrison keeps to its town: order it out to take the field first.';
+  if (c.fought) return 'It has fought this month already. A term at the schools is a whole quiet month.';
+  if (c.ap < c.apMax) return 'It has marched this month already. A term at the schools is a whole quiet month.';
+  if (drillTo(c.xp) <= c.xp) return `It is ${grade(c.xp).toLowerCase()} already, and the schools can teach it no more. Only battle makes an elite.`;
+  return null;
+}
+
+/**
+ * A corps' month at the battle schools is over, at the reckoning that opens its next month: it comes back one grade
+ * better than it went ('before', its experience before the month's drafts: the schools train the drafts too), or its
+ * term was cut short because it had to fight, was cut off or left home. The order lasts the one month either way.
+ */
+export function schoolMonth(g: Game, c: Corps, before: number): boolean {
+  if (!c.school) return false;
+  delete c.school;
+  if (c.nat !== g.human) return false;
+  const to = drillTo(before);
+  const place = g.regions[c.reg]?.name ?? 'home';
+  if (restedMonth(g, c) && atHome(g, c) && to > c.xp) {
+    c.xp = to;
+    note(g, c, 'drill', c.reg, gradeIndex(to));
+    headline(g, 'info', `${c.name} is back from the battle schools at ${place}, ${grade(to).toLowerCase()} now, and ready for orders.`, c.nat, c.reg);
+    return true;
+  } else {
+    const why = c.fought ? 'it had to fight' : !c.supplied ? 'it was cut off from supply' : !atHome(g, c) ? 'it was driven from home' : 'it marched';
+    headline(g, 'info', `${c.name}'s month at the battle schools at ${place} was cut short: ${why}. It is ready for orders.`, c.nat, c.reg);
+  }
+  return false;
+}
+
+// ---- Uniforms and kit (release 2) -------------------------------------------------------------
+
+/** How worn a unit's uniforms and kit look, 0.1 (fresh) to 1 (six weeks or more in the line). Looks only. */
+export const wearOf = (c: Corps): number => c.wear ?? STORIES.wear.fresh;
+
+/** True where an army at war with the corps' nation holds the ground next door, or stands in its own province: the front. */
+const inLine = (g: Game, c: Corps): boolean => {
+  const r = g.regions[c.reg];
+  if (!r) return false;
+  if (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g, u.nat, c.nat))) return true;
+  return r.nb.some((j) => { const o = g.regions[j].ctrl; return !!o && o !== c.nat && atWar(g, o, c.nat); });
+};
+
+/**
+ * A corps' uniforms and kit at the reckoning that opens its month (release 2, Brian's "uniforms wear with time at the
+ * front"; every nation, looks only). The month gone counts its weeks in the line: a whole month if it fought, stood at
+ * the front or was cut off, else the weeks it marched. None: it was rested and refitted (fresh). Its old hands' kit wears
+ * by those weeks; the drafts that joined it this month ('before': its strength before them) come in new kit. A corps
+ * formed this month, or back from a whole term at the battle schools ('schooled'), is fresh: new kit, or a refit at home.
+ */
+export function wearMonth(g: Game, c: Corps, before: number, schooled = false): void {
+  const W = STORIES.wear;
+  const marched = c.town !== undefined || c.joint !== undefined ? 0 : Math.max(0, c.apMax - c.ap);
+  const weeks = schooled || c.born === g.turn ? 0 : c.fought || c.pressed || !c.supplied || inLine(g, c) ? W.month : marched;
+  if (weeks <= 0) { delete c.line; delete c.wear; delete c.fresh; return; }
+  c.line = (c.line ?? 0) + weeks;
+  const old = Math.min(1, wearOf(c) + ((1 - W.fresh) * weeks) / W.weeks);
+  const fresh = c.str > before + 1e-9 ? (c.str - before) / c.str : 0;
+  c.wear = Math.round((old * (1 - fresh) + W.fresh * fresh) * 1000) / 1000;
+  // The share of its men who are new this month, for a picture that draws them clean among the old hands.
+  if (fresh > 0) c.fresh = Math.round(fresh * 1000) / 1000; else delete c.fresh;
 }
 
 // ---- The monthly round ----------------------------------------------------------------------
@@ -606,7 +758,13 @@ export function storyMonth(g: Game, nat: string): void {
     earn(g, 'corps', c, c.reg);
   }
   publish(g);
+  // Bombers kept by name (bombers.ts): each group's roster is made up with the month's replacements and with any
+  // bombers lost on the ground, and the player's bond tours pay.
+  for (const f of g.airFleets) if (f.nat === nat && keptByName(f)) muster(g, f);
+  bondsMonth(g, nat);
+  valourMonth(g, nat);
   if (!mine) return;
+  marksMonth(g); // (release 2, marked.ts: a peace clears the marks of that country's corps)
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
   // (A corps at sea on a long passage is not lost: its rivalry and its meetings wait for it to land.)
@@ -625,9 +783,68 @@ export function storyMonth(g: Game, nat: string): void {
 // ---- The air war and the war at sea ------------------------------------------------------------
 
 /** An air operation is over: what each fleet that flew in it did goes in its record. */
-export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number }): void {
+const nth = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+
+/**
+ * The news of crews who have finished their tour, for the player (bombers.ts). The UI director's words (20 November
+ * 2026, ui-director/words-bombers-flak-valour.md): the tour is the crew's, a crew takes the plural verb, a bomber is
+ * given its kind on first mention, one with a name is 'her' and one known by its marking is 'it', and the gain is
+ * named in the game's own word, readiness.
+ */
+export function toursWords(unit: string, t: ToursDone): string {
+  const n = t.done.length, of = theUnit(unit);
+  const names = t.names.filter(Boolean);
+  const lift = t.lift > 0 ? " The group's readiness rises." : '';
+  if (n === 1) {
+    const her = t.named && names.length > 0 ? 'her' : 'it';
+    const home = t.school ? 'They go home to train new crews.' : t.bonds ? `They fly ${her} home for a war bond tour.` : 'They go home.';
+    const who = names.length ? `The bomber ${names[0]} of ${of}` : `A bomber of ${of}`;
+    return `${who} brings ${her === 'her' ? 'her' : 'its'} crew home from their ${nth(t.tour)} ${t.flown}, and their tour is over. ${home}${lift}`;
+  }
+  const shown = names.slice(0, 3), more = n - shown.length;
+  const who = shown.length ? `The crews of ${listOf(more > 0 ? [...shown, `${more} more`] : shown)}, of ${of},` : `${countWord(n, true)} crews of ${of}`;
+  const rest = n - t.school - t.bonds;
+  const went: [number, string][] = [];
+  if (t.school) went.push([t.school, 'home to train new crews']);
+  if (t.bonds) went.push([t.bonds, 'on a war bond tour']);
+  if (rest > 0) went.push([rest, 'home']);
+  // All the same way: 'They go home to train new crews.' Otherwise each count with its own verb.
+  const each = went.map(([k, where], i) => `${countWord(k, i === 0)} ${k === 1 ? 'goes' : 'go'} ${where}`);
+  const home = went.length === 1 ? `They go ${went[0][1]}.` : `${each.slice(0, -1).join(', ')}, and ${each[each.length - 1]}.`;
+  return `${who} have finished their tours of ${t.tour} ${t.flown}s. ${home}${lift}`;
+}
+
+/**
+ * A bomber group's bombers after an operation (bombers.ts): the lost are struck off its roster (those the field saw
+ * fall, 'fallen', where the raid was fought out), and after a month of bombing each bomber has its missions, the
+ * gunners their kills (first the bombers the field saw make them, 'seen'), and the crews that have finished a tour go home. Told to the player; for everyone else it is
+ * kept and no more. 'guns' are the raid's own gunners' kills for the group (ruling 227: the field's, or fly()'s dice).
+ */
+function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[], foe?: string, seen?: BomberShot[], guns?: number): void {
+  if (!keptByName(f)) return;
+  const struck = muster(g, f, fallen);
+  if (!f.bombers) return;
+  const mine = f.nat === g.human;
+  // An old hand that did not come back is news: the one with the most missions, if it had enough of them.
+  const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
+  if (mine && old) headline(g, 'info', `The bomber ${bomberName(g, f, old)} of ${theUnit(f.name)}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${sea ? (placeName(g, 'fleet', at) ? `the ${placeName(g, 'fleet', at)}` : 'the raid') : thePlace(placeName(g, 'air', at)) || 'the raid'}.`, f.nat, sea ? undefined : at);
+  if (!bombing) return;
+  // The gunners' kills are the raid's own (ruling 227): those the field booked to the group's boxes, or the gunners'
+  // part of fly()'s dice. Told only the kills (a caller that does not count the gunners'), of a mixed fleet's the
+  // gunners have the bombers' weight beside its fighters', and never more than 'escorted' of them (the historian).
+  const share = f.ftr > 0 ? Math.min(BOMBERS.escorted, (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners)) : 1;
+  const done = flownMonth(g, f, guns ?? Math.round(kills * share), foe, seen);
+  if (!done) return;
+  // Counted on the group's record; the bombers' own roll says which crews they were, so the group's diary does not.
+  bump(f, 'tours', done.done.length);
+  if (mine) headline(g, 'info', toursWords(f.name, done), f.nat);
+}
+
+export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]>; shot?: Record<number, BomberShot[]>; guns?: Record<number, number> }): void {
   const sea = mission === 'strike';
   const bombing = mission === 'bomb' || mission === 'night' || sea;
+  // Whose fighters the bombers' gunners shot at: the nation with the most of them up.
+  const foe = def.length ? def.reduce((a, b) => (b.ftr > a.ftr ? b : a)).nat : undefined;
   for (const f of att) {
     bump(f, 'flown');
     if (bombing) bump(f, 'missions', STORIES.tour.perMonth);
@@ -639,6 +856,7 @@ export function storyAir(g: Game, mission: string, target: number, att: AirFleet
     const had = f.hon?.length ?? 0;
     earn(g, 'air', f, sea ? -1 : target);
     if (f.nat === g.human && (f.hon?.length ?? 0) > had && honoursOf(g, f).slice(had).some((a) => a.hon === 'tour')) g.stories.mail.push({ w: 7, m: 'tour', id: -f.id, unit: f.name, reg: f.base });
+    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id], foe, facts.shot?.[f.id], facts.guns?.[f.id]);
   }
   const fighters = def.reduce((s, x) => s + x.ftr, 0);
   for (const f of def) {
@@ -673,7 +891,7 @@ export function storyConvoy(g: Game, raiders: Fleet[], escorts: Fleet[], tons: n
 /** Where a corps sent home goes: the capital if there is room, or else the nearest of its own country's towns with room. */
 function homeFor(g: Game, c: Corps): Region | null {
   const n = g.nations[c.nat];
-  const room = (r: Region): boolean => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || r.units.filter((u) => allied(g, u.nat, c.nat)).length < STACK);
+  const room = (r: Region): boolean => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || r.units.filter((u) => allied(g, u.nat, c.nat) && !roomless(g, u)).length < STACK);
   if (n.capital >= 0 && room(g.regions[n.capital])) return g.regions[n.capital];
   const here = g.regions[c.reg];
   let best: Region | null = null, bd = Infinity;
@@ -729,8 +947,13 @@ export function cashHonour(g: Game, id: number, how: Cash): boolean {
     n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C.bondsPc * fame);
     gain = `The bond drive brings in ${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and ${C.bondsPc * fame} political capital.`;
   } else {
-    g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
-    if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
+    // Under Units decide an air ace trains pilots: the flying school takes his step, not the land drafts' schools, and
+    // the pilots he trains join the reserve at its hours (#2 form Part 2 section 6).
+    if (a.kind === 'air' && unitsDecide(g)) { aceSchool(g, a.nat); schoolPilots(g, a.nat, C.pilots * fame); }
+    else {
+      g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
+      if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
+    }
     gain = 'From now on every draft reaches the front better trained.';
   }
   if (a.kind === 'corps') {

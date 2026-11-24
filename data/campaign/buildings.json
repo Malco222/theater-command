@@ -5,6 +5,8 @@
     "caps": "The most a nation's buildings add up to, however many it has.",
     "ai": "A computer-run nation sets aside 'share' of its month's income for buildings and orders from it, never letting the treasury fall below 'reserve'. It has one gang of builders, and one more for every 'gang' home provinces; each works on one building at a time. It keeps to the 'mix': the line it has fewest levels of for its weight comes next, in the richest place that can take it."
   },
+  "_settle": "Conquered towns settle (release 2; Brian 24 November 2026 18:13Z: every kind of building in a conquered city, after a short wait). With the switch 'settledTowns' (stage.json; buildings.ts settledFor): a town its holder took from another country can put up every line of building, and the military works (factories, shipyards and their slips, fortifications), once it has been held 'months' months since it last changed hands (Region.since, or the month a country's fall or a pact handed it over: flag 'hand:<id>', written only with the switch on). Until then only the lines marked 'occupied' can be set up there, as without the switch. Once settled, its buildings serve the holder as at home (learning, training, trade houses), while its shops and farms still pay at the conquered share (budget.json occupied, raised by an administration) and its administration still adds that share in place of taxes. One rule for every country. Off: nothing here is read. G: the wait, a short one as Brian asked.",
+  "settle": { "months": 3 },
   "plots": { "village": 1, "town": 2, "city": 3, "capital": 4 },
   "place": { "base": 0.6, "per": 0.75 },
   "lines": [

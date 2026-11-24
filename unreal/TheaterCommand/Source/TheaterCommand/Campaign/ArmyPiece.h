@@ -12,6 +12,7 @@ class UStaticMeshComponent;
 class UMaterialInterface;
 class UTextRenderComponent;
 class UProceduralMeshComponent;
+struct FMiniatureMesh;
 
 /**
  * One nation's force in one region, standing on the table as a single piece:
@@ -76,16 +77,55 @@ public:
 	 */
 	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
+	/**
+	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) A
+	 * fleet sails along the points given, on the water: not lifted, its bows turned the way it goes and its passage wake
+	 * thrown, and turned back to face the table (TableYaw) as it comes to rest. Longer ways take longer, from about a
+	 * second and a half to three and a half.
+	 */
+	void SailAlong(const TArray<FVector>& Waypoints, float TableYaw);
+	/** The yaw every piece turns to, to face the eye: at once, or once a fleet under sail has come to rest. */
+	void FaceTable(float Yaw);
+	bool IsSailing() const { return bMarching && bSailing; }
 	bool IsInCamp() const { return What == 0 && bCamp; }
 	int32 GetWorksState() const { return What == 0 ? WorksState : 0; }
 	int32 GetSupplyState() const { return What == 0 ? SupplyState : 0; }
-	/** For looking at the dressing itself: shows the army as entrenched (2) or digging (1), in camp, supplied (1) or cut off (2), whatever it is. */
-	void DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply);
+	/**
+	 * For looking at the dressing itself: shows the army as entrenched (2) or digging (1), in camp, supplied (1) or cut
+	 * off (2), whatever it is. Stage is its camp's (see GetCampStage); left out, it follows the works: digging is part
+	 * of a trench, entrenched is dug in with the works finished.
+	 */
+	void DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply, int32 Stage = -1);
+
+	/**
+	 * (Release 2: camps you can see. Brian, 22 November 2026.) How far an army that stays put has got with its camp, by
+	 * the months of fieldworks the rules count: 0 in the open (it came this month), 1 a month in camp (tents and a
+	 * vehicle park), 2 digging its works (part of a trench), 3 dug in with them finished (trench, wire, gun pits, nets).
+	 */
+	int32 GetCampStage() const { return What == 0 && !bGlimpsed ? CampStage : 0; }
+	/** The months written on the spade tag beside the plate: none (0) where the rules do not count them, or nothing shows yet. */
+	int32 GetCampFigure() const { return CampFigure; }
+	/** The months a dug-in army's works take to be finished, as the rules say (the view's DugFull): set before the pieces are laid out. */
+	static int32 FullWorks;
+	/**
+	 * The camp the map has laid round the base, on the ground and in the world's own frame: it faces the enemy however
+	 * the piece is turned toward the eye, and stays pitched when the piece is picked up. Made says what it was laid
+	 * from, so that the map lays it again only when that changes; with no meshes it is struck.
+	 */
+	void LayCamp(const FString& Made, const FMiniatureMesh* Solid, const FMiniatureMesh* Trodden, UMaterialInterface* SolidPaint, UMaterialInterface* TroddenInk);
+	const FString& GetCampMade() const { return CampMade; }
+	/** Shows or hides the camp (the map does it as the eye rises and comes down). New camps take it as they are laid. */
+	void SetCampShown(bool bShown);
+	static bool bCampsNear;
 	/** Where its camp fire burns, in the world, for the smoke that rises from it. */
 	FVector GetCampFire() const;
 	/** Shows or hides the flock on every base (the map does it as the eye rises and comes down). New pieces take it as they are made. */
 	void SetFlockShown(bool bShown);
 	static bool bFlockNear;
+	/** (Release 2, nicknames.ts) Whether the names corps earn are lettered over their army's flag: the map sets it from the picture before it lays the armies. */
+	static bool bNamesShown;
+	/** (Release 2, new units ready; Brian 24 Nov 18:30Z) Whether his corps handed over this month wear a brass NEW tag on their pole (the option "New units ready"). */
+	static bool bReadyTags;
 	/** A fleet lying in harbour is drawn small, at anchor by its port, with no standard over it: a small badge on the port says how many ships are in (the map is the clearer for it). */
 	void SetAtAnchor(bool bInHarbour);
 	bool IsAtAnchor() const { return What == 1 && bAtAnchor; }
@@ -197,8 +237,28 @@ private:
 	bool bCamp = false;
 	int32 SupplyState = 0;
 	FVector CampFireAt = FVector::ZeroVector; // in the piece's own frame
+	int32 CampStage = 0; // (release 2) see GetCampStage
+	int32 CampFigure = 0;
+	FString CampMade; // what the camp on the ground was laid from
+	/** The camp round the base (tents, vehicles, works, the trodden ground), laid by the map: see LayCamp. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Camp;
+	/** The months on the spade tag beside the strength plate. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> WorksLabel;
+	/** (Release 2, nicknames.ts) The name the army's corps have earned, lettered on a dark scroll over its flag. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> NameLabel;
+	FString EarnedName; // the name lettered there; empty for none
+	/** (Release 2, the marked army; marked.ts) An enemy army that took one of his towns: the town, lettered on a red tag on its pole. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> MarkLabel;
+	FString MarkedTown; // empty for none
+	bool bTagNew = false; // (release 2, new units ready) one of his corps handed over this month: a brass NEW tag in the same place
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
+	bool bSailing = false; // (release 2) a fleet under sail: see SailAlong
+	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
 	bool bSelected = false;
 	bool bHovered = false;
 

@@ -10,12 +10,10 @@
 // Whether the bombs cut the railway or wrecked a factory is decided on the field as the bombs fall, by the campaign's
 // own law (BombLaw), with one throw for each drawn when the battle starts; fly() takes the same throws, so the line the
 // field reports cut is the line the campaign cuts. Absent, fly() rolls its dice exactly as before.
-//
-// Release 1.6 (release 2's file on release 1.5's campaign): day raids and the fight for the sky only, so a strike on
-// ships is never fought here and the after card has no ships-kept-afloat line (ruling 240 is release 2's).
 
 import type { VictoryLevel } from '../core/ticket';
-import type { AirFleet, AirReport, BomberRow, BomberShot, Game, ShipClass } from './types';
+import { fleetsNamed, keptAfloat, keptAfloatPast, shipCount } from './navy';
+import type { AirFleet, AirReport, BomberRow, BomberShot, Game, SeaSide, ShipClass, Ships } from './types';
 
 export interface FoughtAir {
   /** By campaign air group id: fighters and bombers lost, and downed fighter pilots who fly again. */
@@ -264,6 +262,39 @@ const FLIP: Record<VictoryLevel, VictoryLevel> = {
 
 
 /**
+ * Ruling 240 (C3; the design director, 13:38Z on step 9): the ships damage control kept afloat in a fought strike, from
+ * the report's rows, for the after card. The card tells what happened, so the line is in the past (the UI director's
+ * rider 3: the saved sentence takes the tense of the one before it). Where the strike sank nothing, rider 2's one
+ * sentence, as the strike's report has it: "Ships of the Home Fleet were hit, but none was sunk: the repair parties kept
+ * a badly hit cruiser afloat." Where it sank some, the fleet form, a line for each fleet that has any: "A cruiser of the
+ * Home Fleet was badly hit, but the repair parties kept the ship afloat."
+ *
+ * To the fleets' owner (`owner`, the player reading his own fleets struck), the UI director's rider 6 (13:47Z): one of
+ * his fleets struck, his own ("One of your destroyers was badly hit, ..."); two or more, each by name, so the lines do
+ * not read alike ("A destroyer of your Battle Fleet was badly hit, ..."). None sunk: "Your ships were hit, but none
+ * was sunk: ..."; with two or more of his fleets, "Ships of your Battle Fleet and your 2nd Fleet were hit, ...". Empty
+ * where none was kept, always with the switch off.
+ */
+export function keptLines(rows: SeaSide[], owner: string | null): string[] {
+  const kept = rows.filter((x) => x.kept && shipCount(x.kept));
+  if (!kept.length) return [];
+  const mine = rows.filter((x) => owner !== null && x.nat === owner).length;
+  if (!rows.some((x) => shipCount(x.sunk))) {
+    const all: Ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 };
+    for (const x of kept) for (const c of Object.keys(all) as ShipClass[]) all[c] += x.kept![c];
+    // (One fleet as the strike's report names it, "the Home Fleet"; several by name, three and then "and N more"; the
+    // owner's own as "your Battle Fleet", and his one fleet struck alone as "Your ships".)
+    const names = rows.map((x) => (x.nat === owner ? `your ${x.fleet}` : fleetsNamed([{ name: x.fleet }])));
+    const who = !mine ? (rows.length === 1 ? `Ships of the ${rows[0].fleet}` : `Ships of ${fleetsNamed(rows.map((x) => ({ name: x.fleet })))}`)
+      : rows.length === 1 ? 'Your ships'
+      : `Ships of ${names.length <= 3 ? andNames(names) : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`}`;
+    return [`${who} were hit, but none was sunk: ${keptAfloatPast(all)}.`];
+  }
+  return kept.map((x) => keptAfloat({ name: x.fleet }, x.kept!, x.nat !== owner ? 'fleet' : mine > 1 ? 'your fleet' : 'yours', true));
+}
+const andNames = (xs: string[]): string => (xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
  * The after card from the raid report the campaign wrote for a fought raid, so the card's bill is the campaign's
  * bill, whether the battle was fought to the end or handed to the staff partway (whose rest the campaign's own dice
  * settled). 'Before you handed it to the staff' is the battle's own part, from what it handed back.
@@ -281,6 +312,7 @@ export function afterCard(g: Game, rep: AirReport, fought: FoughtAir): AfterCard
     place: rep.place, sky: rep.mission === 'superiority', me, adj: { att: adj(rep.attNat), def: adj(rep.defNat) },
     bombers: B, dropped, jettisoned: Math.max(0, B - dropped - lostBefore), lostBefore, staff: !!fought.staff,
     ...(fought.staff ? { how: staffHow(me, fought.staff, fought.chance) } : {}),
+    ...(rep.ships ? { kept: keptLines(rep.ships, me === 'def' ? g.human : null) } : {}),
     bill: { att: { ftr: sum(rep.att, 'lostFtr'), bmr: sum(rep.att, 'lostBmr') }, def: { ftr: sum(rep.def, 'lostFtr'), bmr: sum(rep.def, 'lostBmr') } },
     before: fought.staff ? { att: { ftr: had(rep.att, 'ftr'), bmr: had(rep.att, 'bmr') }, def: { ftr: had(rep.def, 'ftr'), bmr: had(rep.def, 'bmr') } } : null,
   });

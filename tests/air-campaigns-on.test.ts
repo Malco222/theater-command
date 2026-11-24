@@ -1,12 +1,10 @@
-// Air campaigns in a played grand campaign (ruling 236.2; the design director, 22 November 12:28Z, b623 and b636):
-// release 1's form of release 2's air-campaigns-on (fb2b66a1), read alike.
+// Air campaigns in a played grand campaign (ruling 236.2; the design director, 22 November 12:28Z, b623 and b636).
 //
 // Before this, nothing in a played path set g.flags.ac. Only the war runners did (TC_AC=1, right after
 // startOpen(createGame(seed, null))), so every gate since 236 measured air campaigns on while the game the player
 // plays had them off. As shipped now (aircampaigns.json `on`), a new grand campaign has them, in the browser (newGame)
-// and in the 3D game (the campaign bridge's start, on the unreal branch, with its own test). Each sets them right after
-// startOpen, as the runners do, so the war started there is the war the gates measured. Scenarios, history campaigns
-// and saved games keep what they had.
+// and in the 3D game (the campaign bridge's start). Each sets them right after startOpen, as the runners do, so the war
+// started there is the war the gates measured. Scenarios, history campaigns and saved games keep what they had.
 import { describe, expect, it } from 'vitest';
 import page from '../src/campaign/ui/main.ts?raw';
 import { AC, acOn, airCampaignsShipped, setAirCampaigns } from '../src/campaign/aircampaigns';
@@ -14,16 +12,21 @@ import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import * as turnAll from '../src/campaign/turn';
-import { runTurnAI } from '../src/campaign/turn';
+import { airfieldTargetsShipped, runTurnAI, setAirfieldTargets, setCityDamage } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 import { hashString } from '../src/core/rng';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
+interface Bridge { start(o: Record<string, unknown>): unknown; save(): { text: string }; load(text: string): unknown }
+const TC = (globalThis as Record<string, unknown>).TC as Bridge;
+const flagsOf = (text: string): Record<string, number> => JSON.parse(text).flags;
 const fp = (g: Game): string => hashString(saveGame(g)).toString(16);
 
-/** The gate runner's start (par6h.ts lines 19 to 22) at stop 3, with TC_AC=1. */
-function runnerStart(seed: number): Game {
+/** The gate runner's start (par6h.ts lines 19 to 24) at stop 3, with TC_AC=1 and, where asked, TC_DMG=1. */
+function runnerStart(seed: number, dmg: boolean): Game {
   const g = startOpen(createGame(seed, null));
   g.flags.ac = 1;
+  if (dmg && !setCityDamage(g, true)) throw new Error('no city damage');
   return g;
 }
 
@@ -36,14 +39,13 @@ describe('air campaigns are on in a new grand campaign as shipped (b623, b636)',
     expect(byName.setAirCampaigns).toBe(setAirCampaigns);
   });
 
-  it("the browser's newGame sets them right after the last startOpen, in a grand campaign only", () => {
+  it("the browser's newGame sets them right after startOpen, before damaged cities, in a grand campaign only", () => {
     const body = page.slice(page.indexOf('function newGame('), page.indexOf('ui.live = true;', page.indexOf('function newGame(')));
     const lines = body.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//'));
     const at = lines.indexOf('if (grand && airCampaignsShipped()) setAirCampaigns(g, true);');
     expect(at).toBeGreaterThan(0);
     expect(lines[at - 1]).toBe('if (grand && from > 1) startOpen(g);');
-    // (Release 1 has no damaged cities: the player's seat is set next.)
-    expect(lines[at + 1]).toBe('g.human = human;');
+    expect(lines[at + 1]).toBe('if (grand) setCityDamage(g, true);');
     // newGame's grand start for September 1939 and for a later month, with nothing else between startOpen and the switch.
     for (const from of [1, 4]) {
       const g = createGame(7, from > 1 ? null : 'GER');
@@ -55,38 +57,53 @@ describe('air campaigns are on in a new grand campaign as shipped (b623, b636)',
     }
   });
 
-  it('a history campaign never has them, and a grand campaign saved without the flag plays on with them off', () => {
-    // A history campaign is not open: the browser does not set the switch there, and acOn would not read it.
-    const h = createGame(7, 'GER');
-    expect(h.flags.ac).toBeUndefined();
-    expect(acOn(h)).toBe(false);
-    // An old save: a grand campaign started before the switch shipped.
-    const old = startOpen(createGame(7, 'GER'));
-    const g = loadGame(saveGame(old))!;
+  it("the bridge's start sets them for a grand campaign and an open one; a history campaign and an old save keep theirs", () => {
+    TC.start({ view: 'grand', human: 'GER', seed: 7 });
+    expect(flagsOf(TC.save().text).ac).toBe(1);
+    TC.start({ view: 'open', human: 'GER', seed: 7 });
+    expect(flagsOf(TC.save().text).ac).toBe(1);
+    TC.start({ human: 'GER', seed: 7 });
+    expect(flagsOf(TC.save().text).ac).toBeUndefined();
+    // A grand campaign saved before the switch (no flag) plays on with air campaigns off, in the bridge and the browser.
+    TC.start({ view: 'grand', human: 'GER', seed: 7 });
+    const old = JSON.parse(TC.save().text);
+    delete old.flags.ac;
+    const text = JSON.stringify(old);
+    TC.load(text);
+    expect(flagsOf(TC.save().text).ac).toBeUndefined();
+    const g = loadGame(text)!;
     expect(g.flags.open).toBe(1);
-    expect(g.flags.ac).toBeUndefined();
     expect(acOn(g)).toBe(false);
-    runTurnAI(g);
-    expect(acOn(g)).toBe(false);
-    // One saved with them on keeps them on.
-    const now = startOpen(createGame(7, 'GER'));
-    if (airCampaignsShipped()) setAirCampaigns(now, true);
-    expect(acOn(loadGame(saveGame(now))!)).toBe(true);
   });
 });
 
 describe("a war started as the game starts it is the gate runner's TC_AC=1 war (seed 17, stop 3)", () => {
-  // (The whole war, 77 months, is the gate runner's own to play: par6h.ts on this tree against ffb15404, in NOTES.)
-  it('plays the same months: the switch set where the runner sets it', { timeout: 600_000 }, () => {
-    // The game's way: startOpen, then the shipped switch as the interfaces call it.
-    const g = startOpen(createGame(17, null));
-    if (airCampaignsShipped()) setAirCampaigns(g, true);
-    const r = runnerStart(17);
-    expect(fp(g), 'start').toBe(fp(r));
-    for (let t = 1; t <= 3; t++) {
-      runTurnAI(g); runTurnAI(r);
-      expect(fp(g), `month ${t}`).toBe(fp(r));
+  it("the bridge's grand start for nobody, on the wider world, is the runner's start with TC_AC=1 and TC_DMG=1, to the byte", () => {
+    TC.start({ view: 'grand', human: null, seed: 17, world: true });
+    const bridge = TC.save().text;
+    const runner = runnerStart(17, true);
+    // (Since fe7ea2e5 the bridge also sets airfields as targets last, as the browser's newGame does, where damage.json
+    // ships them on: Brian's airfield ask, the playtester 22 November 21:26Z. The runner's start takes the same switch
+    // here; whether the gate runners set it too is the gates' own call.)
+    if (airfieldTargetsShipped()) setAirfieldTargets(runner, true);
+    expect(hashString(bridge).toString(16)).toBe(fp(runner));
+    expect(flagsOf(bridge).ac).toBe(1);
+  });
+
+  // (The whole war, 76 months, is the gate runner's own to play: par6h.ts on this tree against the release-2 base, in NOTES.)
+  it('and plays the same months: the switch set where the runner sets it, damaged cities on or off', { timeout: 600_000 }, () => {
+    for (const dmg of [false, true]) {
+      // The game's way: startOpen, then the shipped switch as the interfaces call it, then damaged cities as they do.
+      const g = startOpen(createGame(17, null));
+      if (airCampaignsShipped()) setAirCampaigns(g, true);
+      if (dmg) setCityDamage(g, true);
+      const r = runnerStart(17, dmg);
+      expect(fp(g), `dmg ${dmg}, start`).toBe(fp(r));
+      for (let t = 1; t <= 3; t++) {
+        runTurnAI(g); runTurnAI(r);
+        expect(fp(g), `dmg ${dmg}, month ${t}`).toBe(fp(r));
+      }
+      expect(acOn(g)).toBe(true);
     }
-    expect(acOn(g)).toBe(true);
   });
 });

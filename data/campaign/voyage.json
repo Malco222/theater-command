@@ -1,0 +1,5 @@
+{
+  "_about": "The voyage log (release 2; Brian, 24 November 2026 19:47Z, 'yes to all'). Each fleet writes one line at every month's end, where it was and what it fought; 'keep' is how many months of lines a fleet keeps (three years), 'show' how many runs of months its page lists, newest first. A record only: no rule reads it.",
+  "keep": 36,
+  "show": 12
+}

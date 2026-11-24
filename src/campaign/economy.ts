@@ -10,9 +10,9 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import setup from '../../data/campaign/setup-1939.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
-import { addCorps, allied, armySize, headline } from './game';
+import { addCorps, allied, armySize, fights, headline, roomless } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
-import { campXp, civicSum, deliverCivic, hallShare } from './buildings';
+import { campXp, civicSum, deliverCivic, hallShare, settledFor, settledTownsOn } from './buildings';
 import { dealsOf, tradeIncome } from './trade';
 import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
@@ -21,8 +21,10 @@ import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
 import { airLine, deliverArsenal, worksUpkeep, type AirDelivery } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
+import { damageOf } from './citydamage';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
+import { isTeam, TEAM_KINDS, TEAMS, teamName, teamsOn, type TeamKind } from './teams';
 import { TECH, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
@@ -32,6 +34,7 @@ import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
+import { bargainCost, bargainGoodsMoney, bargainMoney, bargainRules, bargainSales } from './bargains';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -49,12 +52,14 @@ export const PRODUCTION = data as unknown as {
  * raised in any game; the kinds the arsenal adds, such as artillery, only in the grand campaign.
  */
 export function specOf(g: Game, kind: string): BuildSpec | undefined {
+  // The support teams (release 2) only where they are switched on (src/campaign/teams.ts).
+  if (isTeam({ kind })) return teamsOn(g) ? TEAMS[kind as TeamKind] : undefined;
   return PRODUCTION.builds[kind] ?? (budgeted(g) ? (arsenalData.land as Record<string, BuildSpec>)[kind] : undefined);
 }
 
 /** Every kind of corps that can be ordered in this game, lightest first. */
 export function corpsKinds(g: Game): Kind[] {
-  const kinds = [...Object.keys(PRODUCTION.builds), ...(budgeted(g) ? Object.keys(arsenalData.land) : [])] as Kind[];
+  const kinds = [...Object.keys(PRODUCTION.builds), ...(budgeted(g) ? Object.keys(arsenalData.land) : []), ...(teamsOn(g) ? TEAM_KINDS : [])] as Kind[];
   // The fighting arms by the industry they need and their price, and the engineers after them.
   return kinds.sort((a, b) => Number(a === 'eng') - Number(b === 'eng') || needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
 }
@@ -113,7 +118,13 @@ export const BUDGET = budgetData as unknown as {
 export const budgeted = (g: Game): boolean => g.flags.open === 1;
 
 /** What one province brings its holder each month, before the nation-wide gains and losses. */
-export interface Yield { land: number; port: number; oil: number; fac: number; capital: number; total: number; /** True while an enemy army stands round its town: it pays its holder little or nothing. */ siege?: boolean }
+export interface Yield {
+  land: number; port: number; oil: number; fac: number; capital: number; total: number;
+  /** True while an enemy army stands round its town: it pays its holder little or nothing. */
+  siege?: boolean;
+  /** Damaged cities (the grand campaign with its switch): the share of the town in ruins, 0 to 0.8, while any of it is. Its factories, land, harbour and seat of government pay that much less. */
+  damage?: number;
+}
 
 /**
  * Ruling 214: a smaller power's land and harbours pay by its worth, not by the count of its provinces (Australia's
@@ -195,12 +206,27 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) * share : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) * share : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
+  // A town damaged by bombs, shells or the fighting pays that much less from all that stands in it, until it is
+  // repaired (citydamage.ts). Its oilfields lie outside it. (Trade's reading, `bare`, sees the town as it was built.)
+  const dmg = bare ? 0 : damageOf(g, r);
+  if (dmg > 0) return damaged(g, r, nat, whole, land, port, oil, fac, capital, dmg);
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {
     const p = SIEGE.pay;
     return { land: land * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital * p, total: (land + port + oil + fac + capital) * p, siege: true };
   }
   return { land, port, oil, fac, capital, total: land + port + oil + fac + capital };
+}
+
+/** provinceYield's ending for a damaged town: kept apart so that a town standing whole is reckoned exactly as before. */
+function damaged(g: Game, r: Region, nat: string, whole: boolean, land0: number, port0: number, oil: number, fac0: number, capital0: number, dmg: number): Yield {
+  const keep = 1 - dmg;
+  const land = land0 * keep, port = port0 * keep, fac = fac0 * keep, capital = capital0 * keep;
+  if (!whole && nat === r.ctrl && besieged(g, r)) {
+    const p = SIEGE.pay;
+    return { land: land * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital * p, total: (land + port + oil + fac + capital) * p, siege: true, damage: dmg };
+  }
+  return { land, port, oil, fac, capital, total: land + port + oil + fac + capital, damage: dmg };
 }
 
 export interface LedgerLine { key: string; label: string; amount: number; count?: number }
@@ -228,7 +254,7 @@ export interface Ledger {
   provinces: ({ id: number; name: string } & Yield)[];
 }
 
-const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorised troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops' };
+const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorised troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops', mg: 'Machine-gun brigades', mor: 'Mortar brigades' };
 const SHIP_LABEL: Record<ShipClass, string> = { bb: 'Battleships', cv: 'Carriers', ca: 'Cruisers', dd: 'Destroyers', ss: 'Submarines' };
 
 /** What it costs each month to keep one corps of this kind and size in being. */
@@ -264,6 +290,9 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   if (bmr > 0) out.push({ key: 'air:bmr', label: 'Bombers', amount: bmr * BUDGET.upkeep.air.bmr * peace, count: bmr });
   // Guns and airfields are manned whether the nation is at war or not.
   out.push(...worksUpkeep(g, nat));
+  // What it pays neutrals for their goods this month (release 2).
+  const bought = bargainCost(g, nat);
+  if (bought > 0) out.push({ key: 'bargains', label: 'Paid to neutrals for their goods', amount: bought });
   return out;
 }
 
@@ -292,6 +321,8 @@ export function ledger(g: Game, nat: string): Ledger {
   const trade = budget ? tradeIncome(g, nat) : partners * DIPLOMACY.tradeIncome;
   const towns = budget ? civicSum(g, nat, keepsStores(g, nat)) : null;
   const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
+  // A neutral's bargains (release 2): its sales, and the goods bought by a country that keeps no stocks.
+  const sales = budget ? bargainSales(g, nat) : 0, goodsBought = budget ? bargainGoodsMoney(g, nat) : 0;
   const peace = footShare(g, nat, n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome);
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   // What its armies hold outside towns they have not yet taken: factory districts, oilfields and quays.
@@ -299,7 +330,7 @@ export function ledger(g: Game, nat: string): Ledger {
   const before = seat + facHome + facOcc + away + land + ports + oil + prizes.total;
   // What the nation's own abilities earn it (the grand campaign): banks, ore, a merchant fleet, factories moved out of reach.
   const gift = traitMoney(g, nat);
-  const atPeace = before * peace + trade + gift.flat + civic;
+  const atPeace = before * peace + trade + gift.flat + civic + (sales + goodsBought);
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
   const hard = budget ? incomeMul(g, nat) : 1;
   const fed = budget ? supIncome(g, nat) : 1;
@@ -319,6 +350,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'commerce', label: 'Commerce in the towns', amount: towns?.commerce ?? 0 },
     { key: 'farms', label: 'Farm produce sold', amount: towns?.farms ?? 0 },
     { key: 'tax', label: 'Taxes the administration gathers', amount: towns?.tax ?? 0 },
+    ...(bargainRules(g) ? [{ key: 'bargains', label: 'Goods sold to countries at war', amount: sales }, { key: 'bought', label: 'Goods bought from neutrals', amount: goodsBought }] : []),
     ...gift.lines,
   ];
   const changes: LedgerLine[] = [
@@ -359,7 +391,8 @@ export function income(g: Game, nat: string): number {
     sum += seat + (n.offmap?.industry ?? 0) + prizeIncome(g, nat).total;
     // Trade is by agreement, and the towns' buildings pay their own way.
     const towns = civicSum(g, nat, keepsStores(g, nat));
-    const trade = tradeIncome(g, nat) + towns.commerce + towns.farms + towns.tax;
+    // (And a neutral's bargains, release 2: what it sells, and the goods a country that keeps no stocks buys.)
+    const trade = tradeIncome(g, nat) + towns.commerce + towns.farms + towns.tax + bargainMoney(g, nat);
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.
@@ -428,7 +461,9 @@ export function orderCorps(g: Game, nat: string, kind: Kind, region: number, rev
   if (revive !== undefined && !old) return null;
   n.pp -= cost;
   drawMen(g, nat, spec.divs);
-  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost };
+  // A support team is numbered apart from the corps (release 2), so no corps' number, nor the computer's tank cadence, moves.
+  const name = old ? old.name : isTeam({ kind }) ? teamName(g, nat, kind as TeamKind) : corpsName(nat, kind, n.corpsNo++);
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name, region, ordered: g.turn, eta: g.turn + spec.months, cost };
   if (old) b.revive = old.id;
   n.queue.push(b);
   return b;
@@ -524,7 +559,8 @@ function reform(g: Game, c: Corps, at: Region): void {
 
 /** What the next level of fortification would cost in a region, or null if it cannot be fortified further. */
 export function fortCost(g: Game, nat: string, r: Region): number | null {
-  if (!isHome(g, nat, r)) return null;
+  // Home ground, or a conquered town that has settled (release 2, buildings.ts settledFor).
+  if (!isHome(g, nat, r) && !settledFor(g, nat, r)) return null;
   const queued = g.nations[nat].queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
   const next = (r.fort?.lv ?? 0) + queued + 1;
   return next > 3 ? null : priceOf(g, nat, 'work:fort', PRODUCTION.fort.cost[next]);
@@ -537,6 +573,8 @@ export function orderFort(g: Game, nat: string, region: number): Build | null {
   if (!n.alive || cost === null || n.pp < cost) return null;
   n.pp -= cost;
   const b: Build = { id: g.nextBuild++, what: 'fort', name: `Fortifications at ${r.name}`, region, ordered: g.turn, eta: g.turn + PRODUCTION.fort.months, cost };
+  // Ordered in a conquered town that has settled (release 2): finished while the town is held.
+  if (r.owner !== nat) b.conq = true;
   n.queue.push(b);
   return b;
 }
@@ -552,6 +590,8 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   if (n.queue[i].cadre !== undefined) { /* the cadre keeps its own name and number: nothing to hand back */ }
   else if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
   else if (n.queue[i].airborne) g.flags[`para:${nat}`] = (g.flags[`para:${nat}`] ?? 1) - 1;
+  // A support team gives its own number back (release 2, src/campaign/teams.ts).
+  else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined && isTeam({ kind: n.queue[i].kind ?? '' })) g.flags[`team:${n.queue[i].kind}:${nat}`] = (g.flags[`team:${n.queue[i].kind}:${nat}`] ?? 1) - 1;
   else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
   n.queue.splice(i, 1);
   return true;
@@ -571,7 +611,8 @@ export function deliver(g: Game, nat: string): void {
     if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b, air); continue; }
     if (b.what === 'civic') { const news = deliverCivic(g, nat, b); if (news && nat === g.human) headline(g, 'info', news, nat, r.id); continue; }
     if (b.what === 'fort') {
-      if (!isHome(g, nat, r)) continue; // the ground was lost before the works were finished
+      // The ground was lost before the works were finished. (A conquered town its builder still holds keeps them, release 2.)
+      if (!isHome(g, nat, r) && !((settledTownsOn(g) || b.conq) && r.ctrl === nat)) continue;
       const vs = new Set(r.fort?.vs ?? []);
       vs.add(r.owner);
       for (const j of r.nb) vs.add(g.regions[j].owner);
@@ -579,7 +620,7 @@ export function deliver(g: Game, nat: string): void {
       if (nat === g.human) headline(g, 'info', `The new fortifications at ${r.name} are finished.`, nat, r.id);
       continue;
     }
-    const room = (x: Region): boolean => canRaise(g, nat, x) && x.units.filter((u) => allied(g, u.nat, nat)).length < STACK;
+    const room = (x: Region): boolean => canRaise(g, nat, x) && x.units.filter((u) => allied(g, u.nat, nat) && !roomless(g, u)).length < STACK;
     let at: Region | null = room(r) ? r : null;
     if (!at && n.capital >= 0 && room(g.regions[n.capital])) at = g.regions[n.capital];
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;
@@ -589,7 +630,7 @@ export function deliver(g: Game, nat: string): void {
       if (i < 0) continue;
       const c = n.cadres!.splice(i, 1)[0];
       reform(g, c, at);
-      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
+      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
       continue;
     }
     // The player's new corps are as well trained as the instructors he has sent home can make them.
@@ -598,10 +639,10 @@ export function deliver(g: Game, nat: string): void {
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
-    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
+    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
   }
   const line = airLine(air);
-  if (line) headline(g, 'info', line.text, nat, line.region);
+  if (line) headline(g, 'info', line.text, nat, line.region, { ready: 'air' });
 }
 
 /**
@@ -626,7 +667,7 @@ export function gunsWanted(g: Game, nat: string): boolean {
   const G = (arsenalData.ai as unknown as { guns: { per: number; most: number; facing: number } }).guns;
   if (armyWorn(g, nat)) return false;
   let guns = n.queue.filter((b) => b.what === 'corps' && b.kind === 'art').length, rest = 0;
-  for (const c of g.corps) if (c.nat === nat && !c.dead) { if (c.kind === 'art') guns++; else if (c.kind !== 'fort' && c.kind !== 'eng') rest++; }
+  for (const c of g.corps) if (c.nat === nat && !c.dead) { if (c.kind === 'art') guns++; else if (c.kind !== 'fort' && c.kind !== 'eng' && !isTeam(c)) rest++; }
   if (guns >= G.most || guns * G.per >= rest) return false;
   let dug = 0;
   for (const c of g.corps) {
@@ -664,7 +705,8 @@ export function aiProduction(g: Game, nat: string): void {
   // Works on order (the grand campaign's guns and airfields) do not hold up the raising of troops.
   // Engineers are ordered by their own rule (the grand campaign) and do not take a place in the army's programme.
   // (Nor do the fortifications a computer staff orders with idle money, arsenal.ts: a player's own take a place, as they always did.)
-  const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || (b.what === 'fort' && (nat === g.human || g.flags.open !== 1))).length;
+  // Nor do the support teams (release 2): they have their own rule, aiTeams.
+  const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng' && !isTeam({ kind: b.kind ?? '' })) || (b.what === 'fort' && (nat === g.human || g.flags.open !== 1))).length;
   // How many corps a staff has forming at once. Two, as history's programmes ran; in the grand campaign a great
   // industry keeps more in hand, so that a rich country at war turns its money into an army and does not sit on it.
   const most = g.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
@@ -704,4 +746,30 @@ export function aiProduction(g: Game, nat: string): void {
     if (!orderCorps(g, nat, kind, at)) break;
     spare -= cost;
   }
+}
+
+/**
+ * The support teams (release 2, src/campaign/teams.ts): a staff at war keeps one machine-gun or mortar brigade for
+ * every few corps of its line, the two in turn, mortars first where its line faces dug-in troops. One ordered a month at
+ * most, outside the army's programme (as engineers are), and only with the money, the upkeep and the men to spare.
+ * Nothing while the teams are off, or while the army is being worn away and wants men in the line first.
+ */
+export function aiTeams(g: Game, nat: string): void {
+  if (!teamsOn(g)) return;
+  const n = g.nations[nat];
+  if (byHand(g, nat, 'build') || !n?.alive || n.capital < 0 || !n.atWar.length || armyWorn(g, nat) || armyIdle(g, nat)) return;
+  if (n.queue.some((b) => b.what === 'corps' && isTeam({ kind: b.kind ?? '' }) && b.ordered === g.turn)) return;
+  const have: Record<TeamKind, number> = { mg: 0, mor: 0 };
+  let line = 0;
+  for (const c of g.corps) if (c.nat === nat && !c.dead) { if (isTeam(c)) have[c.kind as TeamKind]++; else if (fights(c)) line++; }
+  for (const b of n.queue) if (b.what === 'corps' && isTeam({ kind: b.kind ?? '' })) have[b.kind as TeamKind]++;
+  const want = Math.min(TEAMS.ai.most, Math.floor(line / TEAMS.ai.per));
+  if (have.mg + have.mor >= want) return;
+  const kind: TeamKind = have.mor < have.mg || (have.mor === have.mg && gunsWanted(g, nat)) ? 'mor' : 'mg';
+  const at = raiseSite(g, nat, kind, n.capital);
+  if (at < 0 || n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) return;
+  const up = corpsUpkeep(kind, TEAMS[kind].divs);
+  const spare = income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + (b.what === 'corps' ? corpsUpkeep(b.kind!, b.divs!) : 0), 0);
+  if (spare < up * BUDGET.debt.aiMargin || menSpare(g, nat) < TEAMS[kind].divs) return;
+  orderCorps(g, nat, kind, at);
 }

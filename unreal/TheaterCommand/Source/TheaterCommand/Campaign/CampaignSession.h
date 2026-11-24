@@ -40,6 +40,14 @@ public:
 
 	/** Who can be led in the grand campaign from a month. History is played up to it the first time this is asked. */
 	TArray<FGrandNation> GrandNations(int32 From, int32 Seed);
+	/**
+	 * (Release 2, tc.Speed.NationsAside; the UI director's bar: every press answers within a tenth of a second.)
+	 * GrandNations worked out on the rules' own thread as an order is: a later year is history played up to it, 0.7 to
+	 * 1 s for January 1941 in a cloud run, and the opening screen asks it on every year picked and every time it opens.
+	 * Then is given the list on the game thread, from Deliver, a frame or a few later (empty where the rules failed).
+	 * bAside false, or the rules not ready or not given aside, asks it at once and gives it to Then before returning.
+	 */
+	void GrandNationsAside(int32 From, int32 Seed, bool bAside, TFunction<void(TArray<FGrandNation>)>&& Then);
 
 	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
 	/** bFirstCommand (rules 84.3.3): the campaign FIRST COMMAND opened, marked as its, with the ten notes armed again once all are done. */
@@ -47,6 +55,13 @@ public:
 
 	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
 	FString Save();
+	/**
+	 * (Release 2, tc.Speed.SaveAside) Save, worked out on the rules' own thread as an order is (the war written out
+	 * changes nothing in it, so nothing kept is forgotten for it): Then is given the text on the game thread, from
+	 * Deliver, a frame or a few later, or empty where there is no campaign or the rules failed. bAside false (or the
+	 * rules not given aside) asks it at once, as Save does, and gives it to Then before returning.
+	 */
+	void SaveAside(bool bAside, TFunction<void(FString)>&& Then);
 
 	/** One line about a saved campaign ("Germany, October 1939"), or empty if the text is not a campaign that can be continued. */
 	FString DescribeSave(const FString& SaveText);
@@ -187,6 +202,8 @@ public:
 	/** Dismisses a general for good; sets the picked corps' standing order about drafts; places the army by the staff's plan on the eve of war. */
 	bool SackGeneral(int32 GeneralId, FString& OutNote);
 	bool SetDrafts(const TArray<int32>& CorpsIds, bool bTake, FString& OutNote);
+	/** (Release 2: the battle schools.) Sends the corps to the battle schools for the month (bGo), or calls them back; OutNote is the rules' word on it. */
+	bool SendToSchool(const TArray<int32>& CorpsIds, bool bGo, FString& OutNote);
 	bool PlaceByPlan(FString& OutNote);
 	/** Asks the allied corps in a province to march with the player's army there; sends one of them home again. */
 	bool JoinArmy(int32 RegionId, FString& OutNote);
@@ -321,6 +338,13 @@ public:
 	void MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
 		TFunction<FHandNext(const FMoveAnswer&)>&& Guess, TFunction<void(const FMoveAnswer&)>&& Then);
 	void LandAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bAside, TFunction<FHandNext(const FLandingResult&)>&& Guess, TFunction<void(const FLandingResult&)>&& Then);
+	/**
+	 * (Speed, the UI director's bar of 22 November 2026: every press answers within a tenth of a second.) The attack
+	 * card's forecast, PreviewAttack's, worked out on the rules' own thread as an order is (it changes nothing in the
+	 * war, so nothing kept is forgotten for it); Then is given it on the game thread, from Deliver, a frame or a few
+	 * later, or an empty forecast where the rules failed or found nobody there. bAside false asks it at once, as before.
+	 */
+	void PreviewAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening, bool bAside, TFunction<void(const FAttackPreview&)>&& Then);
 	/** Function: "attack", "take" (bAssault as Take's), "storm" or "sally" (no corps: the province says who). */
 	void FightAside(const FString& Function, const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault, bool bAside,
 		TFunction<FHandNext(const FAttackResult&)>&& Guess, TFunction<void(const FAttackResult&)>&& Then);
@@ -342,11 +366,37 @@ public:
 	void Deliver(bool bWait = false);
 
 	/**
+	 * (D1, ruling 241) The month's submarine scene: the viewer's setting, "all" (every month that holds a scene; the
+	 * default), "mine" (his own losses only), "never" (none), or "off" (none, and the rules keep no record of the month
+	 * at sea). It is the viewer's, kept outside the save (Saved/Campaign/subscene.json, a run's own subscene-runs.json,
+	 * where a run is "off" unless asked), and "-TheaterSubScene=" sets it for a run. The rules are told it before every
+	 * start and after every load (TC.subSceneOn); SetSubScene tells them at once and writes it.
+	 */
+	FString GetSubScene() const;
+	void SetSubScene(const FString& Setting);
+	/** TC.subScene(mark, view) asked on the rules' thread beside the war (it reads the war and changes nothing in it): not
+	 * an order, so IsAnswering stays false and the table takes its keys and orders meanwhile; anything else asked of the
+	 * rules waits for it first (Settle). Then, run on the game thread by Deliver, is given the mark to count from next
+	 * month and the staged recording's text, empty where this month holds no scene for him (or the rules could not
+	 * say). Mark -1: from the war's first headline. Dropped, its Then unrun, where the war is begun or read in. */
+	void SubSceneAside(int32 Mark, TFunction<void(int32 NextMark, const FString& Recording)>&& Then);
+	/** How many wars have been begun or read in since the game opened: a change says nothing kept of the last holds. */
+	int32 GetWarsBegun() const { return WarsBegun; }
+
+	/**
 	 * (Ruling 238, the air battle scene.) A battle's own call on the rules (land's battle-bridge.ts: TC.airStart,
 	 * battleTick, battleSpeed, battleOrder, battleView, battleEnd), its answer handed back as JSON text for the scene's
 	 * own reader. Every such call may change the war, so the kept answers to questions are forgotten.
 	 */
 	bool CallBattle(const FString& Function, const FString& ArgumentsJson, FString& OutJson, FString& OutError);
+
+	// R2 bargains hook: a neutral's bargains and the volunteer legions (Campaign/BargainCalls.cpp; switched off in release 1)
+	/** TC.bargainsLook()'s answer as JSON text, for Campaign/BargainFeed: {"on":false} while both are off. Changes nothing, and is kept as the questions are. */
+	bool BargainsLook(FString& OutJson);
+	/** The player bids Pp a month (one of the round's steps) for the bargain Id. */
+	bool BargainBid(const FString& Id, double Pp, FString& OutNote);
+	/** The player, as the seller, sells the bargain Id to Buyer ("" for nobody). */
+	bool BargainSell(const FString& Id, const FString& Buyer, FString& OutNote);
 
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
@@ -371,11 +421,25 @@ private:
 	bool ReadLessonDesk(const TSharedPtr<FJsonObject>& Object, FLessonDesk& Out);
 	/** The ARSENAL is open, as the screen last said (SetLessonPageOpen). */
 	bool bLessonPageOpen = false;
+	/** (D1) TC.subSceneOn as the viewer's setting says (GetSubScene), on the rules as they stand, war or none. */
+	void TellSubScene();
+	/** The setting's file, and the setting as read (empty until GetSubScene first reads it). */
+	static FString SubSceneFile();
+	mutable FString SubScene;
+	/** The rules have no month's scene (the stand-in rules, or rules before D1): nothing is asked of them. */
+	bool bNoSubScene = false;
+	int32 WarsBegun = 0;
 
 	TUniquePtr<FRulesHost> Host;
 	/** The order being answered on the rules' thread, and that thread's work; the Then of an answer taken and not yet run. */
 	TSharedPtr<FAside, ESPMode::ThreadSafe> Aside;
 	TFuture<void> AsideRun;
+	/** (D1) The month's scene being asked for on the rules' thread (SubSceneAside), and that thread's work. */
+	struct FSceneAsk;
+	TSharedPtr<FSceneAsk, ESPMode::ThreadSafe> SceneAsk;
+	TFuture<void> SceneAskRun;
+	/** Waits for the month's scene being asked for, where it is (the rules answer one thing at a time). */
+	void WaitSceneAsk();
 	TFunction<void()> AsideThen;
 	/** The rules' last answers to the questions that change nothing, by question and what was asked: see CallRules. */
 	TMap<FString, FString> RulesMemo;

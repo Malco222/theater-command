@@ -2,11 +2,12 @@
 // the player does not, and the player's orders go through the same rules.
 
 import type { FoughtAir } from './airfought';
-import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type CrewOrder, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
+import { attackTargets, fleetAttackOn, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan, type FleetAttackResult } from './fleetattack';
 import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
@@ -17,9 +18,8 @@ import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders'
 import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
-  type Assessment, type CostOf, type GroundWorks, type ProbeReport,
+  type Assessment, type CostOf, type FieldBill, type GroundWorks, type ProbeReport,
   worksMonth,
-  type FieldBill,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
@@ -37,16 +37,19 @@ import {
 } from './fleets';
 import {
   INTEL, SIGHT, armiesSeen, arrest, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
-  whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
+  turnFoe, whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, whyNotTurn, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
+import { yieldMonth } from './yield';
 import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
-import { awardOf, cashHonour } from './stories';
+import { awardOf, cashHonour, whyNoSchool } from './stories';
 import { takeWinterPeace, whyNotWinterPeace, winterMonth } from './winter';
+import { setCrewOrder } from './bombers';
+import { sendHero } from './valour';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
@@ -55,9 +58,12 @@ export { gunsLeftAlone } from './siege';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
+import { damageRules, openDamage } from './citydamage';
+import { FIELD, fieldRepairView as fieldRepairViewOf, fieldRules as fieldRulesOf, fieldView, fieldsDamaged, fieldsMonth, openFields, orderFieldRepair as repairFieldFor, undoFieldRepair as undoFieldFor, type FieldRepairView, type FieldView } from './fieldstate';
+import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
 import { gateViews, type GateView } from './gates';
-import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
+import { SIEGE, apOutOfTown, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { loadGame, saveGame } from './save';
 import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
@@ -75,11 +81,17 @@ import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
+import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
+import { aiShadows, orderShadow, shadowOn, shadowTargets, shadowsFollow, stopShadow, whyNotShadow } from './shadow';
+import { logVoyages } from './voyage';
+import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
+import { legionsMonth, recallLegion, sendLegion } from './legions';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -107,7 +119,11 @@ function closePhase(g: Game, nat: string): void {
     sidesAtPeace(g);
     // Works held outright from one month's end to the next are taken over by the side that holds them.
     worksMonth(g);
+    // Each fleet's voyage log has the month's line (release 2, voyage.ts; nothing with that switch off).
+    logVoyages(g);
     g.phase = 0; g.turn++; g.week = 1;
+    // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
+    fieldsMonth(g);
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
@@ -116,6 +132,10 @@ function closePhase(g: Game, nat: string): void {
     // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
     airWarMonth(g);
     monthlyDiplomacy(g);
+    // A neutral's bargains (release 2, switched off in release 1): terms end, bids open and close, patience moves.
+    bargainsMonth(g);
+    // Volunteer legions (release 2, switched off in release 1): they reach the line, come home, or are sent.
+    legionsMonth(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -132,7 +152,15 @@ export function stepAI(g: Game): string {
   const nat = current(g);
   g.week = 1;
   startPhase(g, nat);
-  if (g.nations[nat].alive) runAI(g, nat);
+  // Every shadow follows its quarry as a country's month opens (release 2, shadow.ts; nothing with that switch off).
+  shadowsFollow(g, nat);
+  // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
+  yieldMonth(g, nat);
+  if (g.nations[nat].alive) {
+    runAI(g, nat);
+    // The computer's admirals set their shadows, after their other orders (release 2, shadow.ts).
+    aiShadows(g, nat);
+  }
   closePhase(g, nat);
   return nat;
 }
@@ -141,6 +169,10 @@ export function stepAI(g: Game): string {
 export function beginHuman(g: Game): void {
   g.week = 1;
   startPhase(g, current(g));
+  // Every shadow follows its quarry, and his report where it is (release 2, shadow.ts; nothing with that switch off).
+  shadowsFollow(g, current(g));
+  // (The yield form: the player's country is told the month the cause is met, and yields at the next opening.)
+  yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
@@ -148,6 +180,8 @@ export function beginHuman(g: Game): void {
   quietNews(g);
   // A field of his that has become crowded since last month: the month card says so once (b448).
   crowdedNews(g);
+  // His task forces come in to refit or go back to their jobs (release 2, taskforce.ts): before his admirals' month.
+  taskForcesMonth(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }
@@ -274,7 +308,11 @@ export function whyNotSetHistory(g: Game, stop: number): string | null {
  * world decide from the next month on. `fresh` is for a campaign that starts at this stop.
  */
 export function orderHistory(g: Game, stop: number, fresh = false): boolean {
-  return (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  const ok = (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  // (A new campaign's neutral bargains are opened before its stop is set: the record's first-day buyers are read again
+  // at the stop it starts at. Release 2; nothing while the switch is off.)
+  if (ok && fresh) bargainsFirstDay(g);
+  return ok;
 }
 /** The claims on named ground that can be read now (stops 4 and 5): who claims what from whom and why, and whether it is being pressed or fought for. */
 export const claimsOf = (g: Game): ClaimView[] => claimsView(g);
@@ -316,8 +354,8 @@ export function runTurnAI(g: Game): void {
 // ---- The player's orders -----------------------------------------------------------------
 
 export function canOrder(g: Game, c: Corps): boolean {
-  // A corps sent home on a bond tour or to the schools takes no orders until it is back.
-  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined) return false;
+  // A corps sent home on a bond tour or to the schools takes no orders until it is back; nor does one at the battle schools this month.
+  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined || c.school) return false;
   // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
   return c.nat === g.human || (c.joint === g.human && allied(g, c.nat, g.human));
 }
@@ -1016,6 +1054,21 @@ export function orderTakeField(g: Game, c: Corps): boolean {
 }
 
 /**
+ * Where a corps of the player's garrison could go this month if it came out of its town first (release 2, Brian, 24
+ * November 2026: "if a unit is dug in and i click them to attack and move I want them to over ride their orders
+ * insted of me having to press a button"). The 3D game sends such a corps straight out of the town where it is
+ * ordered to march or attack: this is its reach from the open country of its province, with the move that coming
+ * out costs. Empty where it may not come out (shut in by a siege, no room outside, or not the player's to order).
+ */
+export function reachOutOfTown(g: Game, c: Corps): Map<number, Reach> {
+  if (c.town === undefined || whyNotLeaveTown(g, c) !== null) return new Map();
+  return reach(g, { ...c, town: undefined, ap: apOutOfTown(g, c) });
+}
+
+/** The moves a corps of the player's would have for an order this month: a garrison that may come out has what it keeps once out. */
+export const apForOrders = (g: Game, c: Corps): number => (c.town !== undefined && whyNotLeaveTown(g, c) === null ? apOutOfTown(g, c) : c.ap);
+
+/**
  * The player's corps round a town that could go into an assault this month. A town is assaulted once a month, and
  * every corps round it can go in, however much of its month it has used: troops that have just won the country
  * round the town may follow the beaten defenders straight to the walls.
@@ -1134,7 +1187,11 @@ export function asForecast(look: Outlook | null | undefined, rep: BattleReport, 
   return lost <= AS_FORECAST_LOSS * said.ours;
 }
 
-const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
+/**
+ * Men after "about", rounded (the UI director's HUD read, 22 November: "about 5,000 men", never "about 4,973 men"): to
+ * the nearest thousand from 1,000, the nearest hundred under it. Every line that uses it says "about" before it.
+ */
+export const menWord = (n: number): string => (n >= 1000 ? Math.round(n / 1000) * 1000 : n >= 100 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString('en-US');
 
 /**
  * A forecast read off a copy of the campaign, kept with the save the copy was made from. The pointer resting over a
@@ -1464,16 +1521,112 @@ const myFleet = (g: Game, id: number): Fleet | null => {
   return f && f.nat === g.human && current(g) === f.nat ? f : null;
 };
 
+/**
+ * A fleet the player has given an order himself is his from then on: where his admirals run the navy for him they
+ * leave it where he sent it, and do not order it back to its old beat next month (1.5.1; Brian, 24 November 2026
+ * 18:32Z: "when i move my navy they go right back to where they were before the next turn").
+ */
+const hisOrder = (f: Fleet, ok: boolean): boolean => {
+  if (ok) f.ordered = true;
+  return ok;
+};
+
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  return !!f && sail(g, f, zone, stance);
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
+  // A task force given a new job keeps that one as its standing order; sent into harbour, it is released (release 2).
+  if (ok) retask(g, f!);
+  // A new order ends a shadow (release 2, shadow.ts).
+  if (ok) stopShadow(f!);
+  return ok;
 }
 
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  return !!f && rebase(g, f, g.regions[region]);
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
+  if (ok) stopShadow(f!);
+  return ok;
+}
+
+/** True for one of the player's fleets that he has ordered himself, which his admirals leave where he sent it. */
+export const fleetKeptByHand = (g: Game, id: number): boolean => g.fleets.some((f) => f.id === id && f.nat === g.human && f.ordered === true);
+
+/** Hands one of the player's fleets back to his admirals: they sail it again from their next month's orders. A task force is released. */
+export function handBackFleet(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  if (!f || !f.ordered) return false;
+  delete f.ordered;
+  delete f.task;
+  delete f.shadow;
+  return true;
+}
+
+/** Why one of the player's fleets cannot be set to shadow an enemy fleet now, or null (release 2, shadow.ts). */
+export const whyNotShadowFleet = (g: Game, id: number, target: number): string | null => whyNotShadow(g, id, target);
+
+/** Sets one of the player's fleets to shadow an enemy fleet: it follows it and reports where it goes (release 2, shadow.ts). */
+export function orderShadowFleet(g: Game, id: number, target: number): boolean {
+  const f = myFleet(g, id);
+  if (!f || heldAfterAttack(g, f)) return false;
+  const ok = orderShadow(g, id, target);
+  if (ok) delete f.task;
+  return ok;
+}
+
+/** Ends one of the player's fleets' shadow: it stays where it is, under his orders (release 2, shadow.ts). */
+export function stopShadowFleet(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && stopShadow(f);
+}
+
+/** Why one of the player's corps cannot be ordered to hold as a rearguard now, or null (release 2, rearguard.ts). */
+export const whyNotRearguardOf = (g: Game, id: number): string | null => whyNotRearguard(g, g.corps.find((c) => c.id === id && !c.dead));
+
+/** Orders one of the player's corps to hold where it stands as a rearguard until his next month (release 2, rearguard.ts). */
+export function orderHoldRear(g: Game, id: number): boolean {
+  const c = g.corps.find((x) => x.id === id && !x.dead);
+  return !!c && orderRearguard(g, c);
+}
+
+/** Stands one of the player's rearguards down: in the month it was ordered, it has its marching back (release 2). */
+export function orderStandDown(g: Game, id: number): boolean {
+  const c = g.corps.find((x) => x.id === id && !x.dead && x.nat === g.human);
+  return !!c && current(g) === c.nat && standRearDown(g, c);
+}
+
+/** Why one of the player's fleets cannot be made a task force now, or null (release 2, taskforce.ts). */
+export const whyNotTaskForce = (g: Game, id: number): string | null => whyNotTask(g, g.fleets.find((f) => f.id === id));
+
+/** Makes one of the player's fleets a task force on the job it is doing now (release 2, taskforce.ts). */
+export function orderTaskForce(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && makeTask(g, f);
+}
+
+/** Releases one of the player's task forces: it stays where it is, under his orders (release 2, taskforce.ts). */
+export function releaseTaskForce(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && releaseTask(g, f);
+}
+
+/** A fleet sent at the enemy this month stays where the battle left it until the next (release 2, fleetattack.ts). */
+const heldAfterAttack = (g: Game, f: Fleet): boolean => f.attacked === g.turn;
+
+/** Why one of the player's fleets cannot be sent at an enemy fleet now, or null if it can (release 2, fleetattack.ts). */
+export const whyNotAttackFleet = (g: Game, id: number, target: number): string | null => whyNotFleetAttack(g, id, target);
+
+/** One of the player's fleets sent at an enemy fleet, weighed up before the order: odds, win chance, likely losses (read-only). */
+export const previewFleetAttack = (g: Game, id: number, target: number): FleetAttackPlan | null => (myFleet(g, id) ? planFleetAttack(g, id, target) : null);
+
+/** Sends one of the player's fleets straight at an enemy fleet, fought at once (release 2, fleetattack.ts). */
+export function orderFleetAttackNow(g: Game, id: number, target: number): FleetAttackResult | null {
+  const out = orderFleetAttack(g, id, target);
+  // His order too: the admirals leave it where the battle left it, and do not send it back to its old beat (1.5.1).
+  const f = out ? g.fleets.find((x) => x.id === id && x.nat === g.human) : undefined;
+  if (f) f.ordered = true;
+  return out;
 }
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
@@ -1513,6 +1666,12 @@ export interface FleetOptions {
   merge: number[];
   /** True when it has more than one ship, so that some can be split off. */
   split: boolean;
+  /** Enemy fleets it can be sent straight at now (release 2, fleetattack.ts): there only where that is switched on. */
+  attack?: number[];
+  /** Why it stays where it is this month, having been sent at the enemy (release 2): there only then. */
+  held?: string;
+  /** Enemy fleets it can be set to shadow now (release 2, shadow.ts): there only where that is switched on. */
+  shadow?: number[];
 }
 
 /** Everything one of the player's fleets could be told to do this month. Null if it is not theirs to order now. */
@@ -1520,14 +1679,19 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   const f = myFleet(g, id);
   if (!f) return null;
   const war = g.nations[f.nat].atWar.length > 0;
-  return {
-    seas: war ? seaOptions(g, f, f.nat) : [],
-    lanes: war ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
+  const held = heldAfterAttack(g, f);
+  const out: FleetOptions = {
+    seas: war && !held ? seaOptions(g, f, f.nat) : [],
+    lanes: war && !held ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
-    ports: baseTargets(g, f).map((r) => r.id),
+    ports: held ? [] : baseTargets(g, f).map((r) => r.id),
     merge: mergeTargets(g, f).map((x) => x.id),
     split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
+  if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
+  if (shadowOn(g)) out.shadow = war ? shadowTargets(g, f.id) : [];
+  if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  return out;
 }
 
 /** The shipping lanes the player has a stake in guarding, with the escorts bound to each. */
@@ -1544,7 +1708,10 @@ export function previewEscort(g: Game, id: number, lane: string): EscortPlan | n
 /** Binds one of the player's fleets to a shipping lane as its escort. */
 export function orderEscort(g: Game, id: number, lane: string): boolean {
   const f = myFleet(g, id);
-  return !!f && escortLane(g, f, lane);
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, escortLane(g, f, lane));
+  if (ok) retask(g, f!);
+  if (ok) stopShadow(f!);
+  return ok;
 }
 
 /** What shelling a coast with one of the player's fleets would do: the troops there, or the works of its city. */
@@ -1568,7 +1735,10 @@ export function whyNotSplit(g: Game, id: number, ships: Partial<Ships>): string 
 /** Splits ships off from one of the player's fleets as a squadron of their own. Returns the new fleet's id, or -1. */
 export function orderSplit(g: Game, id: number, ships: Partial<Ships>, name?: string): number {
   const f = myFleet(g, id);
-  return (f && detach(g, f, ships, name)?.id) || -1;
+  const sq = f ? detach(g, f, ships, name) : null;
+  // The squadron is of his own making: it stays where it was split off until he orders it (1.5.1).
+  if (sq) sq.ordered = true;
+  return sq?.id || -1;
 }
 
 /** Joins one of the player's fleets to another in the same harbour or the same sea. */
@@ -1920,10 +2090,36 @@ export function orderCash(g: Game, award: number, how: Cash): boolean {
   return humanUp(g) && cashHonour(g, award, how);
 }
 
+/** The player's standing order for bomber crews who finish their tour: the schools, a war bond tour, or one and then the other (bombers.ts). */
+export function orderCrews(g: Game, how: CrewOrder): boolean {
+  return humanUp(g) && setCrewOrder(g, how);
+}
+
+/** The player sends a holder of the highest award home: on a war bond tour, or to train recruits (valour.ts). */
+export function orderHero(g: Game, id: number, how: Cash): boolean {
+  return humanUp(g) && sendHero(g, id, how);
+}
+
 /** The player has read a citation. */
 export function orderSeen(g: Game, award: number): void {
   const a = awardOf(g, award);
   if (a && a.nat === g.human) a.seen = true;
+}
+
+/**
+ * The player sends a corps to the battle schools for this month, or calls it back before the month is out (release 2).
+ * See whyNoSchool for who can go. A corps called back has had no term: it is free to march and fight again.
+ */
+export function orderSchool(g: Game, c: Corps, go: boolean): boolean {
+  if (g.human === null || current(g) !== g.human || c.nat !== g.human || c.dead) return false;
+  if (!go) {
+    if (!c.school) return false;
+    delete c.school;
+    return true;
+  }
+  if (whyNoSchool(g, c) !== null) return false;
+  c.school = true;
+  return true;
 }
 
 /** The player's standing order for a corps: take drafts as they come, or keep the veterans together and take none. */
@@ -2014,6 +2210,107 @@ export function orderBuilding(g: Game, region: number, line: string): Build | nu
   return humanUp(g) ? orderCivic(g, g.human!, region, line) : null;
 }
 
+// ---- Damaged cities (the grand campaign with its switch: citydamage.ts, repairs.ts) ----------------------
+
+/** True when towns take damage and are repaired in this war. */
+export const cityDamageOn = (g: Game): boolean => damageRules(g);
+
+/**
+ * Turns damaged cities on or off for a grand campaign (the interfaces turn it on when a new one begins). Off, the
+ * war is played exactly as it was before there were damaged cities; damage already done stays on the books but
+ * neither costs nor shows anything until it is turned on again.
+ */
+export function setCityDamage(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  openDamage(g, on);
+  return damageRules(g) === on;
+}
+
+// ---- Air campaigns (aircampaigns.ts; the grand campaign's air war, ruling 236.2) ---------------------------------
+
+/** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
+export function cityDamage(g: Game, region: number): RepairView | null {
+  return damageRules(g) ? repairView(g, region, g.human) : null;
+}
+
+/** Every damaged town the player holds, the ones whose damage costs him most first. */
+export function damagedCities(g: Game): RepairView[] {
+  return g.human && damageRules(g) ? damagedTowns(g, g.human) : [];
+}
+
+/** What 'Repair all' would do now: the towns the treasury can pay for, best first, their price and what they bring back each month. */
+export function repairAllOutlook(g: Game): RepairAll | null {
+  return g.human && damageRules(g) ? repairAllPlan(g, g.human) : null;
+}
+
+/** Every damaged town on the map, for the map's marks: where and how badly. */
+export function damageMarks(g: Game): ReturnType<typeof townsDamaged> {
+  return townsDamaged(g);
+}
+
+/** Repairs one of the player's towns, paid at once. True if it was done. */
+export function orderRepair(g: Game, region: number): boolean {
+  return humanUp(g) && repairCity(g, g.human!, region);
+}
+
+/** Repairs every one of the player's damaged towns the treasury can pay for, best first. Returns the towns repaired. */
+export function orderRepairAll(g: Game): string[] {
+  return humanUp(g) ? repairAll(g, g.human!) : [];
+}
+
+/** Takes back a repair the player ordered this month: the town as it was, and the money back. */
+export function orderUndoRepair(g: Game, region: number): boolean {
+  return humanUp(g) && undoRepair(g, g.human!, region);
+}
+
+// ---- Airfields as targets (fieldstate.ts; the grand campaign's air war with its switch) ----------------------------
+
+/** True when airfields are targets in this war. (The bridge looks this up by name: fieldRules.) */
+export const airfieldTargetsOn = (g: Game): boolean => fieldRulesOf(g);
+export const fieldRules = (g: Game): boolean => fieldRulesOf(g);
+
+/** True when new grand campaigns are opened with airfields as targets (damage.json field.on; false as shipped). */
+export const airfieldTargetsShipped = (): boolean => FIELD.on === true;
+
+/** Turns airfields as targets on or off for a grand campaign. Off, the war plays as release 1 did. */
+export function setAirfieldTargets(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  openFields(g, on);
+  return (g.flags.fields === 1) === on;
+}
+
+/** The bridge's name for setAirfieldTargets: a new grand campaign, behind its option. */
+export const setFieldRules = (g: Game, on: boolean): boolean => setAirfieldTargets(g, on);
+
+/** A province's field as the glance, the province job and the airfield card read it (null with the switch off, or no field). Keys: 'work:fieldfix:<id>' (glance tile), 'fieldfix:<id>' and 'fieldfix-undo:<id>' (province job), act 'fieldfix:<id>' (card). */
+export function fieldRepairView(g: Game, region: number, viewer: string | null = g.human): FieldRepairView | null {
+  return fieldRepairViewOf(g, region, viewer);
+}
+
+/** Repairs one of the player's fields, paid at once (the bridge's name). */
+export const orderFieldRepair = (g: Game, region: number): boolean => humanUp(g) && repairFieldFor(g, g.human!, region);
+
+/** Takes back the player's field repair of this month, with his money (the bridge's name). */
+export const undoFieldRepair = (g: Game, region: number): boolean => humanUp(g) && undoFieldFor(g, g.human!, region);
+
+/** A province's airfield as the city glance and the airfield card show it: tier, room, shut, levels burned, the repair, its price and why not. Null without a field or with the switch off. */
+export function airfieldState(g: Game, region: number): FieldView | null {
+  return fieldRulesOf(g) ? fieldView(g, region, g.human) : null;
+}
+
+/** Every damaged field on the map, for the map's marks (the 3D table shows only those the player may know of). */
+export const airfieldMarks = (g: Game): ReturnType<typeof fieldsDamaged> => fieldsDamaged(g);
+
+/** Repairs one of the player's fields, paid at once: the runway opens next month, a burned level each month after. */
+export function orderAirfieldRepair(g: Game, region: number): boolean {
+  return orderFieldRepair(g, region);
+}
+
+/** Takes back a field repair the player ordered this month, with his money. */
+export function orderUndoAirfieldRepair(g: Game, region: number): boolean {
+  return undoFieldRepair(g, region);
+}
+
 export interface BuildingTip { region: number; town: string; province: string; offer: CivicOffer }
 
 /** The buildings worth ordering next, for a list on the Build tab: for each line, the richest of the player's places that can take it now. */
@@ -2046,6 +2343,26 @@ export function orderTrade(g: Game, nat: string): boolean {
 /** Ends the player's trade agreement with another country. */
 export function orderEndTrade(g: Game, nat: string): boolean {
   return humanUp(g) && endTrade(g, g.human!, nat);
+}
+
+/** The player bids for a neutral's bargain whose round is open (release 2). Returns why not, or null when the bid stands. */
+export function orderBid(g: Game, id: string, pp: number): string | null {
+  return humanUp(g) ? placeBid(g, g.human!, id, pp) : 'It is not your month.';
+}
+
+/** The player, as the seller, chooses a buyer for a bargain from the bids that stand, or nobody (release 2). */
+export function orderSellTo(g: Game, id: string, buyer: string | null): string | null {
+  return humanUp(g) ? chooseBuyer(g, g.human!, id, buyer) : 'It is not your month.';
+}
+
+/** The player, at peace outside both sides, sends a legion of volunteers to a patron against its enemy (release 2). Returns why not, or null when it is sent. */
+export function orderLegion(g: Game, patron: string, against: string): string | null {
+  return humanUp(g) ? sendLegion(g, g.human!, patron, against) : 'It is not your month.';
+}
+
+/** The player calls his legion home: it leaves at the next month's start (release 2). Returns why not, or null. */
+export function orderRecall(g: Game): string | null {
+  return humanUp(g) ? recallLegion(g, g.human!) : 'It is not your month.';
 }
 
 // ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------
@@ -2124,6 +2441,18 @@ export function whyNotArrestAgent(g: Game, id: number): string | null {
 /** ARREST: ends an enemy agent the player's hunters uncovered (ruling 151(c)). */
 export function orderArrest(g: Game, id: number): boolean {
   return whyNotArrestAgent(g, id) === null && arrest(g, g.human!, id);
+}
+
+/** Why the player cannot turn this uncovered enemy agent now, or null (double agents, Brian, 22 November, release 2). */
+export function whyNotTurnAgent(g: Game, id: number): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotTurn(g, g.human, id);
+}
+
+/** TURN: an enemy agent the player's hunters uncovered goes back to its service as his double agent. */
+export function orderTurn(g: Game, id: number): boolean {
+  return whyNotTurnAgent(g, id) === null && turnFoe(g, g.human!, id) !== null;
 }
 
 /** Retires one of the player's agents, which frees a place in the service. */

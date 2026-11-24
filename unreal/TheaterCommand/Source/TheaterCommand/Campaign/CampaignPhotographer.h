@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "CampaignPhotographer.generated.h"
 
+class ACampaignPlayerController;
+
 /**
  * A development tool, not part of the game. Started with
  * "-TheaterShots=<folder>" on the command line, it waits for the table to be
@@ -22,8 +24,14 @@ public:
 	void Begin(const FString& InFolder);
 
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	/** The result card of the order "-TheaterConfirm" sent in is put away (and with bBare the army put down and the province's card put away). */
+	void PutAwayCard(ACampaignPlayerController* Sender, bool bBare);
+	/** A clip's fixed step, if on, is let go and the engine's own put back. */
+	void StepOwnTime();
+
 	struct FShot
 	{
 		FString Name;
@@ -45,6 +53,7 @@ private:
 		bool bOpening = false; // leave the opening screen up for this picture
 		bool bMenu = false; // open the menu over the campaign
 		bool bRecord = false; // open the service record of the first corps of the army in hand
+		bool bShowReady = false; // (release 2, new units ready) press SHOW ME on the READY FOR ORDERS plate
 		bool bRoll = false; // open the roll of honour
 		bool bRail = false;
 		bool bSea = false; // switch the army in hand to going by sea
@@ -64,7 +73,7 @@ private:
 	FString TownOrder; // and order this line of building from them
 	FString Scars; // leave the scars of battle in these regions to be looked at: "Region:months since:size;..."
 	FString Prizes; // mark these regions for their prizes, to be looked at: "Region:tag of the army that holds them or -:1 if burning;..."
-	FString Dress; // dress the armies in these regions to be looked at: "Region:works:camp:supply;..." (works 0-2, camp 0-1, supply 0-2)
+	FString Dress; // dress the armies in these regions to be looked at: "Region:works:camp:supply;..." (works 0-2, camp 0-1, supply 0-2; a fifth part, the stage of its camp 0-3)
 	int32 Civic = 0; // stand every kind of town building at this level beside the region looked at (4: one of each level, some going up)
 	int32 ProvinceTab = 0; // the tab of the province panel to show
 	bool bWealth = false; // the wealth view of the map
@@ -128,6 +137,9 @@ private:
 	// ("-TheaterClip=24,0.25": after the first picture, so many more of the same view, so many seconds apart, for a short clip)
 	int32 ClipFrames = 0, ClipTaken = 0;
 	float ClipEvery = 0.25f, ClipAt = 0.0f;
+	bool bClipStepped = false; // (the game is stepped by the clip's own gap while the clip is taken: see Tick)
+	float CardPutAwayAt = -1.0f; // ("-TheaterCardFor=1.5": when the result card of the order sent in is put away, by the clock)
+	double ClipStepWas = 0.0; // (the engine's fixed step as it stood before)
 	float SheetWait = 0.0f; // how long this picture has waited for the world's fine ground
 	float WarmUp = 0.0f;
 	int32 Frames = 0;

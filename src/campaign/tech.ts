@@ -7,6 +7,7 @@
 import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
 import supportData from '../../data/campaign/support.json';
+import carrierData from '../../data/campaign/carriers.json';
 import { turnToDate } from '../core/ticket';
 import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
@@ -18,6 +19,8 @@ import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
+import { UNITS, unitsDecide } from './units';
+import causeData from '../../data/campaign/convoycause.json';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -55,6 +58,13 @@ export interface Tech {
   seaLoss?: number;
   /** The Intelligence branch (rider b542 on ruling 235): what it does for the nation's agents (intel.ts). */
   spy?: Partial<SpyTech>;
+  /**
+   * A fitting of the fleet (ruling 240): the name of its switch in carriers.json 'research', where its numbers are
+   * too. While that switch is off the row is shelved: see `shelved`.
+   */
+  ships?: 'vt' | 'dc';
+  /** A row of Units decide (src/campaign/units.ts): in the tree only where a campaign opened with that switch. See `outOfTree`. */
+  units?: boolean;
 }
 
 /** What the Intelligence branch has done for a nation's agents, all told. */
@@ -102,6 +112,71 @@ export function armourYear(g: Game, nat: string): number | null {
 }
 
 export const techById = (id: string): Tech | undefined => BY_ID[id];
+
+// ---- Ships' guns, proximity shells and damage control (ruling 240) -----------------------------------
+
+/** How good a navy's anti-aircraft guns are, by its research. */
+export type GunStage = 'early' | 'mid' | 'late';
+/** Ruling 240's three switches and the technologies they read (carriers.json 'research'). */
+export interface ShipResearch { stage: { on: boolean; mid: string; late: string }; vt: { on: boolean; tech: string }; dc: { on: boolean; tech: string } }
+/** One of ruling 240's three rules: anti-aircraft strength by research, proximity shells, damage control. */
+export type ShipRule = keyof ShipResearch;
+
+const SHIP_DATA = carrierData as unknown as { research?: ShipResearch; flak: { stage: Record<GunStage, number>; vt: number }; strike: { dc: number } };
+
+/** The three switches, read at call time (so a probe or a test can set them), or undefined where the data has none. */
+export const SHIP_RESEARCH = (): ShipResearch | undefined => SHIP_DATA.research;
+
+/** True where one of the three rules is in force: its switch on, in the grand campaign (a history campaign has no tree). */
+export const shipRule = (g: Game, k: ShipRule): boolean => SHIP_RESEARCH()?.[k]?.on === true && techRules(g);
+
+/**
+ * True for a row of the tree that waits on a switch that is off: no staff picks it, nobody can order it or be
+ * given it, and no card, list or count shows it. Asked every time, never kept.
+ */
+export const shelved = (t: Tech | undefined): boolean => !!t?.ships && SHIP_RESEARCH()?.[t.ships]?.on !== true;
+
+/**
+ * True for a row this campaign's tree does not have: one shelved by its switch, or a row of Units decide in a campaign
+ * opened without it. Like `shelved`, nobody picks it, orders it or is given it, and no card or list shows it.
+ */
+export const outOfTree = (g: Game, t: Tech | undefined): boolean => shelved(t) || (!!t?.units && !unitsDecide(g));
+
+/** What a navy's ships are fitted with: the stage of their anti-aircraft guns (null where that rule is off), proximity shells, damage control. */
+export interface ShipKit { stage: GunStage | null; vt: boolean; dc: boolean }
+
+/**
+ * A nation's ships, by its research alone (ruling 240): never the nation, the date, the side or the player. Each
+ * part asks its own switch first and only then the research, so with a switch off nothing is read, and a save made
+ * with it on plays as release 1 with it off. A kin nation's fleet (arsenal.json plans.kin) has the better of its own
+ * and its senior partner's. All three are off in a history campaign, whatever the switches say.
+ */
+export function shipKit(g: Game, nat: string): ShipKit {
+  const out: ShipKit = { stage: null, vt: false, dc: false };
+  const R = SHIP_RESEARCH();
+  if (!R || !techRules(g)) return out;
+  const senior = PLANS.kin[nat];
+  const has = (id: string): boolean => hasTech(g, nat, id) || (senior !== undefined && hasTech(g, senior, id));
+  if (R.stage?.on === true) out.stage = has(R.stage.late) ? 'late' : has(R.stage.mid) ? 'mid' : 'early';
+  if (R.vt?.on === true) out.vt = has(R.vt.tech);
+  if (R.dc?.on === true) out.dc = has(R.dc.tech);
+  return out;
+}
+
+/**
+ * What a navy's anti-aircraft guns count beside the guns of release 1: carriers.json flak.stage for its stage, times
+ * flak.vt with proximity shells. Exactly 1 with both switches off, or outside the grand campaign.
+ */
+export function flakMul(g: Game, nat: string): number {
+  const k = shipKit(g, nat);
+  return (k.stage ? SHIP_DATA.flak.stage[k.stage] : 1) * (k.vt ? SHIP_DATA.flak.vt : 1);
+}
+
+/**
+ * How many times the hits a navy's surface warships take to sink: carriers.json strike.dc with Damage control, or
+ * exactly 1 (the switch off, the research not held, or a history campaign).
+ */
+export const dcOf = (g: Game, nat: string): number => (shipKit(g, nat).dc ? SHIP_DATA.strike.dc : 1);
 
 /** The technology an order waits on, whoever is asking: 'corps:arm' waits on the tank arm. */
 export const gateOf = (key: string): Tech | undefined => GATE[key];
@@ -175,9 +250,15 @@ export function teamsOf(g: Game, nat: string): number {
  */
 export const spyTeamsOf = (g: Game, nat: string): number => (techRules(g) && planRules(g) && !PLANS.great.includes(nat) ? TECH.spyTeams ?? 0 : 0);
 
+/**
+ * The projects a nation's teams are on. (Ruling 240: work on a row whose switch is off, found in a save made with it
+ * on, does not count, and the team is free; the month's research drops it.)
+ */
+export const workOf = (s: TechState): TechState['work'] => (s.work.some((w) => shelved(BY_ID[w.id])) ? s.work.filter((w) => !shelved(BY_ID[w.id])) : s.work);
+
 /** The work of a nation's ordinary teams, and of its spy team. */
-const teamWork = (s: TechState): TechState['work'] => s.work.filter((w) => !w.spy);
-const spyWork = (s: TechState): TechState['work'] => s.work.filter((w) => w.spy);
+const teamWork = (s: TechState): TechState['work'] => workOf(s).filter((w) => !w.spy);
+const spyWork = (s: TechState): TechState['work'] => workOf(s).filter((w) => w.spy);
 
 /** True when a new project on this technology would go to the nation's spy team. */
 const forSpyTeam = (g: Game, nat: string, s: TechState, t: Tech): boolean => t.branch === 'intel' && spyWork(s).length < spyTeamsOf(g, nat);
@@ -198,7 +279,8 @@ export function spyOf(g: Game, nat: string): SpyTech {
 /** A technology gained with a great power's plans (plans.ts): in service at once, as if researched. */
 export function grantTech(g: Game, nat: string, id: string): boolean {
   const s = techOf(g, nat);
-  if (!s || !BY_ID[id] || s.done.includes(id)) return false;
+  // (Ruling 240: a row whose switch is off is given to nobody.)
+  if (!s || !BY_ID[id] || outOfTree(g, BY_ID[id]) || s.done.includes(id)) return false;
   s.done.push(id);
   s.work = s.work.filter((w) => w.id !== id);
   return true;
@@ -226,7 +308,8 @@ const and = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slic
 export function whyNotResearch(g: Game, nat: string, id: string): string | null {
   const s = techOf(g, nat), t = BY_ID[id];
   if (!s) return 'The technology tree belongs to the grand campaign.';
-  if (!t) return 'There is no such technology.';
+  // (Ruling 240: a row whose switch is off is not in the tree.)
+  if (!t || outOfTree(g, t)) return 'There is no such technology.';
   if (!g.nations[nat].alive) return 'The nation is out of the war.';
   if (s.done.includes(id)) return 'Already researched.';
   if (s.work.some((w) => w.id === id)) return 'A team is already at work on it.';
@@ -301,6 +384,8 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
   const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
   for (const t of TECH.techs) {
     if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
+    // (Ruling 240: no staff takes up a row whose switch is off.)
+    if (outOfTree(g, t)) continue;
     // (Rider b542: the spy team works the Intelligence branch alone, in its order; the other teams never do, and
     // nobody's staff begins what only a great power's plans can give it.)
     if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
@@ -323,6 +408,8 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
 function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolean): void {
   const s = n.tech!;
   kinTechs(g, n);
+  // (Ruling 240: nothing more is done on a row whose switch is off, and nothing is announced.)
+  s.work = workOf(s);
   const due: string[] = [];
   // Schools and institutes at home quicken every team.
   const pace = researchSpeed(g, n.id) * govMul(g, n.id, 'research');
@@ -350,6 +437,25 @@ function fill(g: Game, n: Nation, turn: number): string[] {
     }
   }
   return begun;
+}
+
+/**
+ * Units decide's start list (data/campaign/units.json startRows; DD 24 Nov 15:53Z, #2 form 'Where it goes'): rows a
+ * nation holds on the first day under that switch only, never in tech.json 'start'. startOpen applies it just before
+ * the opening research, so a later start's staffs count each row once in their catch-up months. Off, nothing.
+ */
+export function openUnitsRows(g: Game): void {
+  if (!techRules(g) || !unitsDecide(g)) return;
+  for (const [nat, ids] of Object.entries(UNITS.startRows)) {
+    const n = g.nations[nat];
+    if (!n) continue;
+    const s = (n.tech ??= fresh(nat));
+    for (const id of ids) {
+      if (!BY_ID[id] || s.done.includes(id)) continue;
+      s.done.push(id);
+      s.work = s.work.filter((w) => w.id !== id);
+    }
+  }
 }
 
 /**
@@ -453,21 +559,77 @@ function supportWords(id: string): string | null {
   return null;
 }
 
+/**
+ * What ruling 240's research does for a navy's ships (the UI director's words of 21 November; the numbers are
+ * carriers.json's). The two new rows always have their sentence. The two older rows that set the stage of the guns
+ * say so only while that switch is on: with it off their cards read as they did.
+ */
+function shipWords(t: Tech): string | null {
+  const R = SHIP_RESEARCH();
+  if (t.ships === 'vt') return `Ships' guns bring down ${pct(SHIP_DATA.flak.vt - 1)} more of the aircraft that attack them.`;
+  if (t.ships === 'dc') return `Ships take ${pct(SHIP_DATA.strike.dc - 1)} more hits to sink.`;
+  if (R?.stage?.on !== true) return null;
+  if (t.id === R.stage.mid) return "Ships' anti-aircraft fire rises from early-war to mid-war strength.";
+  if (t.id === R.stage.late) return "Ships' anti-aircraft fire rises from mid-war to late-war strength.";
+  return null;
+}
+
 /** What a technology does, in plain words worked out from its numbers, so the words and the rule cannot drift apart. */
+const CAUSE = causeData as unknown as { cover: number; asv: string; incident: { coordinated: number; independent: number; coordinatedKit: number; independentKit: number; atw: number }; seaLoss: string[] };
+const in100 = (x: number): number => Math.round(x * 100);
+
+/**
+ * What a land row of Units decide does (data/campaign/units.json; DD 24 Nov 15:53Z, #2 form Part 1 2a and 2b), in
+ * words, or null: Field radios adds to the army's command; the training rows climb one ladder, the same for every nation.
+ */
+function unitsWords(id: string): string | null {
+  const L = UNITS.land;
+  if (id === L.radiosRow) return `Its army's command rises ${in100(L.radios)} points in 100.`;
+  if (!L.trainRows.includes(id)) return null;
+  const names = and(L.trainRows.map((x) => BY_ID[x]?.name ?? x));
+  return `Its army's training is at least ${L.ladder[0]} with one of ${names}, ${L.ladder[1]} with two and ${L.ladder[2]} with all three. An army that began the war better trained keeps its own level.`;
+}
+
+/** What a row does in the convoy war by cause (Units decide; data/campaign/convoycause.json), in words, or null. */
+function causeWords(id: string): string | null {
+  const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
+  const kills = `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
+  const air = `submarines in the waters its aircraft reach attack with only ${third} of their strength`;
+  if (id === 'sonar') return `Its aircraft carry depth charges. With ${BY_ID[CAUSE.asv]?.name.toLowerCase() ?? 'sea-search radar'} as well, ${air}.`;
+  if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air}. Its escorts carry the sets too.`;
+  if (id === 'patrolaircraft') return 'Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.';
+  if (id === 'escortgroups') return `Destroyers sent hunting work as trained support groups. With ahead-throwing weapons too, ${kills}.`;
+  if (id === 'hedgehog') return `A convoy's own escort sinks the submarine in ${in100(I.independent * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
+  return null;
+}
+
 export function techRule(t: Tech, g?: Game, nat?: string): string {
   const out: string[] = [];
   for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
-  if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
+  // (Units decide: radar no longer adds to the convoys' escorts; the escorts' own sets do, convoy war by cause.)
+  const cause = !!g && unitsDecide(g);
+  if (t.field) out.push(cause && t.field === 'radar' ? `Fighters over their own sky are worth ${pct(RESEARCH.fields.radar.per)} more.` : FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
   // (The two radar steps, with the air campaigns on: what the warning chain and fighter control do, rider b553.)
   const radar = g && nat ? radarWords(g, nat, t.id) : null;
   if (radar) out.push(radar);
   const kit = supportWords(t.id);
   if (kit) out.push(kit);
-  const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
+  const ships = shipWords(t);
+  if (ships) out.push(ships);
+  // (Units decide: only the convoy system's flat cut stays; the rows of the convoy war by cause say what they do there.)
+  const seaLoss = cause && !CAUSE.seaLoss.includes(t.id) ? undefined : t.seaLoss;
+  const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss });
   if (rest) out.push(rest);
+  // (A row of Units decide is in the tree only with that switch, so it always says what it does there.)
+  const convoy = cause || t.units ? causeWords(t.id) : null;
+  if (convoy) out.push(convoy);
+  const land = t.units ? unitsWords(t.id) : null;
+  if (land) out.push(land);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
-  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
+  // (The design director, 22 November 20:46Z, in the UI director's words of 20:48Z: the air campaigns' oil raids cut a
+  // bombed plant's yield (ruling 236.2), so this oil is safe from submarines, not from bombers.)
+  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
   // The Intelligence branch (rider b542): what it does for the nation's agents (intel.ts).
   const x = t.spy;
   if (x?.caught !== undefined) out.push(`Its agents abroad are caught ${pct(1 - x.caught)} less often.`);
@@ -523,7 +685,8 @@ export interface TechView {
 export function techView(g: Game, nat: string): TechView | null {
   const s = techOf(g, nat);
   if (!s) return null;
-  const nodes: TechNode[] = TECH.techs.map((t) => {
+  // (Ruling 240: a row whose switch is off is not shown and not counted.)
+  const nodes: TechNode[] = TECH.techs.filter((t) => !outOfTree(g, t)).map((t) => {
     const w = s.work.find((x) => x.id === t.id);
     const done = s.done.includes(t.id);
     const open = t.needs.every((x) => s.done.includes(x));
@@ -537,7 +700,7 @@ export function techView(g: Game, nat: string): TechView | null {
     };
   });
   return {
-    nat, teams: teamsOf(g, nat) + spyTeamsOf(g, nat), busy: s.work.length, spyTeams: spyTeamsOf(g, nat),
+    nat, teams: teamsOf(g, nat) + spyTeamsOf(g, nat), busy: workOf(s).length, spyTeams: spyTeamsOf(g, nat),
     free: Math.max(0, teamsOf(g, nat) - teamWork(s).length), spyFree: Math.max(0, spyTeamsOf(g, nat) - spyWork(s).length), done: nodes.filter((x) => x.state === 'done').length, total: nodes.length,
     branches: TECH.branches.map((b) => ({ ...b, done: nodes.filter((x) => x.branch === b.id && x.state === 'done').length, total: nodes.filter((x) => x.branch === b.id).length })),
     eras: TECH.eras, nodes,

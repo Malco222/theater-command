@@ -17,6 +17,7 @@
 //   dom:laid   how many countries laid down their arms that month, with no great power left to stand beside
 import data from '../../data/campaign/domination.json';
 import { airOnFall } from './air';
+import { handedOver, holdersNow } from './buildings';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { ledger } from './economy';
 import { allied, bloc, collapseScore, endVoyages, fieldArmy, headline, relocate, removeCorps, setWar } from './game';
@@ -120,6 +121,7 @@ function leave(g: Game, n: Nation): void {
   endVoyages(g, n.id);
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);
+  const was = holdersNow(g); // settled towns (release 2): ground handed on starts settling this month
   // Ground it held goes back to its owner, or to whoever holds the country round it. Done in passes so that a
   // stretch of several provinces is handed over from its edge inward.
   for (let pass = 0; pass < 8; pass++) {
@@ -131,6 +133,7 @@ function leave(g: Game, n: Nation): void {
     }
     if (!left) break;
   }
+  handedOver(g, was);
   for (const m of Object.values(g.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
   n.atWar = [];
   n.alive = false;
@@ -222,7 +225,9 @@ function layDown(g: Game, n: Nation, to: string): void {
   fleetsOnFall(g, n.id);
   airOnFall(g, n.id);
   dropSieges(g, n.id);
+  const was = holdersNow(g); // settled towns (release 2): ground handed on starts settling this month
   for (const r of g.regions) if (r.ctrl === n.id) r.ctrl = to;
+  handedOver(g, was);
   for (const m of Object.values(g.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
   n.atWar = [];
 }

@@ -4,7 +4,7 @@
 // same war the unsaved one would have.
 
 import { Rng } from '../core/rng';
-import { atWar, capitalDistances, computeSupply, createGame, openTheatres } from './game';
+import { atWar, capitalDistances, computeSupply, createGame, openTheatres, wreckBump } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
@@ -22,6 +22,7 @@ import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
 import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
 import { openWinter } from './winter';
+import { unitsDecide } from './units';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -86,10 +87,26 @@ export function saveGame(g: Game): string {
     atSea: g.atSea?.length ? g.atSea : undefined,
     // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
     ac: g.ac,
-    // Scarred ground (release 1.5's looks): the grand campaign's own; a historical save is written as it always was,
-    // and is given its scars back from its reports when loaded.
+    // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
+    subLook: g.subLook,
+    // The month's lorry columns (release 2, columns.ts): absent while the switch is off, so such a save is written as it always was.
+    columns: g.columns,
+    // Forward dumps and the front the lorries go to first (release 2, logistics.ts): absent while those switches are off.
+    dumps: g.dumps,
+    lorryFirst: g.lorryFirst,
+    // A neutral's bargains (release 2): absent while the switch is off, so such a save is written as it always was.
+    bargains: g.bargains,
+    // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
+    legions: g.legions,
+    // Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2 section 4): written only under the switch, so a
+    // store left behind by a flag cleared by hand is never saved, and a save with the switch off is written as it always was.
+    qs: unitsDecide(g) ? g.qs : undefined,
+    // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
+    // its scars back from its reports when loaded.
     scars: g.flags.open === 1 ? g.scars : undefined,
     captured: g.flags.open === 1 ? g.captured : undefined,
+    // Old wrecks (release 2): kept as the scars are, and given back from the reports to a save without them.
+    wrecks: g.flags.open === 1 ? g.wrecks : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -244,7 +261,15 @@ export function loadGame(text: string): Game | null {
   // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
-  // Scarred ground: as saved, or for a save without it (release 1's own), from the battles its reports still hold.
+  if (Array.isArray(d.subLook)) g.subLook = d.subLook;
+  if (d.columns && typeof d.columns === 'object') g.columns = d.columns;
+  if (Array.isArray(d.dumps) && d.dumps.length) g.dumps = d.dumps;
+  if (d.lorryFirst && typeof d.lorryFirst === 'object') g.lorryFirst = d.lorryFirst;
+  if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
+  if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };
+  // Units decide's quality store: as saved; a save without it loads as before, and under the switch is seeded on first use.
+  if (d.qs && typeof d.qs === 'object') g.qs = d.qs;
+  // Scarred ground: as saved, or for a save without it, from the battles its reports still hold.
   if (d.captured && typeof d.captured === 'object') g.captured = d.captured;
   if (d.scars && typeof d.scars === 'object') g.scars = d.scars;
   else
@@ -253,6 +278,8 @@ export function loadGame(text: string): Game | null {
       const was = (g.scars ??= {})[r.region];
       g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
     }
+  if (d.wrecks && typeof d.wrecks === 'object') g.wrecks = d.wrecks;
+  else for (const r of g.reports ?? []) wreckBump(g, r);
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

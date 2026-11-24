@@ -41,6 +41,9 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
     battles: c.rec?.battles ?? 0,
     // A corps the card has come on with no river before it does not cross on the field either (b464(5)).
     ...(crosses && !crosses(c) ? { cross: false } : {}),
+    // How worn its uniforms and kit look (release 2, looks only): absent while it is fresh.
+    ...(c.wear !== undefined ? { wear: c.wear } : {}),
+    ...(c.fresh ? { fresh: c.fresh } : {}),
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;
@@ -134,7 +137,7 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // game.ts): the field lays the river before those, and no others.
     att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
     def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
-    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(band.exact ? {} : { seen: band.mid }) },
+    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact ? {} : { seen: band.mid }) },
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
     attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,
@@ -230,7 +233,7 @@ export function handBack(g: Game, corps: Corps[], target: Region, result: FieldR
   // battle as fought in them.
   const streets = streetsOf({ terrain: target.terrain, townSize: townSize(g, target) } as LandPlace);
   const rep = orderAttack(g, corps, target, result.R, fieldBill(result));
-  if (rep && streets) (rep as BattleReport & { streets?: typeof streets }).streets = streets;
+  if (rep && streets) rep.streets = streets;
   return rep;
 }
 

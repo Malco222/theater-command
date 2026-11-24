@@ -117,6 +117,10 @@ namespace
 		// (release 1.5, 24 November 03:42Z: ON. The playtester passed it on 4351110c, the Mac held 49-60 fps in flight (Part B on
 		// 6c676061) and the art director passed every raid's stills on 8913978d. -TheaterAirNoCampaignLive turns it off for a run.)
 		{ TEXT("flyLive"), TEXT("Fly raids yourself"), TEXT("On a bombing raid by day or a fight for the sky, FLY IT YOURSELF takes you into the battle in the air, where you give your groups their orders. Off: your crews fly every raid."), TEXT("TheaterAirNoCampaignLive"), true, TEXT("TheaterAirCampaignLive") },
+		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
+		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
+		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
+		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

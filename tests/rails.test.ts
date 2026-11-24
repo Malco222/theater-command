@@ -319,7 +319,8 @@ describe('the railhead', () => {
   function fromBerlin(): { g: Game; d: Int16Array } {
     const g = grand();
     ensureSupply(g);
-    const ok = g.supply.GER, berlin = g.byName['Berlin'];
+    // A copy: the picture computeSupply hands out may be kept for its next call, and is never written into.
+    const ok = (g.supply.GER = Uint8Array.from(g.supply.GER)), berlin = g.byName['Berlin'];
     for (let i = 0; i < ok.length; i++) if (ok[i] === 2) ok[i] = 1;
     ok[berlin.id] = 2;
     sever(g, berlin);

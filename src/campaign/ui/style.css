@@ -124,6 +124,7 @@ svg#map.near .lbl { opacity: 1; }
 .ctr .str.mid { fill: #d8a548; }
 .ctr .str.low { fill: #cf5a41; }
 .ctr .cmdr { font-size: 5.8px; font-weight: 600; letter-spacing: .02em; display: none; }
+.ctr .nick { font-size: 4.6px; font-style: italic; font-weight: 600; fill: #f3dfa2; paint-order: stroke; stroke: rgba(15, 12, 8, .85); stroke-width: 1.2px; letter-spacing: .02em; }
 svg#map.mid .ctr.led .cmdr, .ctr.led.chosen .cmdr { display: block; }
 svg#map.mid .ctr.led .size, .ctr.led.chosen .size { display: none; }
 .ctr.chosen .base { opacity: 1; stroke: #fff6d8; stroke-width: 1.5; }
@@ -856,7 +857,7 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
 .lbar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; margin-top: 12px; background: var(--panel-2); }
 .lbar i { display: block; height: 100%; min-width: 2px; }
 .lbar i + i { border-left: 1px solid var(--panel); }
-.army { background: #b5694a; } .navy { background: #4f86b3; } .air { background: #9a86c2; } .works { background: #8a8f6b; } .free { background: var(--green); }
+.army { background: #b5694a; } .navy { background: #4f86b3; } .air { background: #9a86c2; } .works { background: #8a8f6b; } .dues { background: #b59a4a; } .free { background: var(--green); }
 .lkey { display: flex; gap: 6px 16px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 .lkey i, .ltab i.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .lkey small { color: var(--ink-3); }
@@ -1043,6 +1044,22 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
 #lanes .lanelbl { font-family: var(--head); font-size: 8px; font-weight: 600; fill: #dbe8f4; text-anchor: middle; paint-order: stroke; stroke: rgba(10, 18, 28, .6); stroke-width: 1.3px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; }
 #lanes .lane.raided .lanelbl { fill: #f0c768; }
 #lanes .lane.cut .lanelbl { fill: #ee8a75; }
+/* (Release 2) Supply columns: the road from the railhead to the corps, the lorries on it, and a fire where they were caught. */
+#columns .colbed { fill: none; stroke: rgba(40, 28, 12, .4); stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+#columns .colroad { fill: none; stroke: #c9a35e; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+#columns .column.theirs .colroad { stroke: #c98a7a; }
+#columns .column.friend .colroad { stroke: #c8c19a; }
+#columns .column.bled .colroad { stroke: #e9b548; }
+#columns .lorry rect { fill: #6d5a3a; stroke: #15120f; stroke-width: .5; }
+#columns .column.theirs .lorry rect { fill: #6b4a44; }
+#columns .lorry .cab { fill: #87724d; }
+#columns .colhit path { fill: #e8622c; stroke: #15120f; stroke-width: .6; }
+#columns .wagon rect { fill: #7a6143; stroke: #15120f; stroke-width: .5; }
+#columns .wagon .horse { fill: #4a3726; stroke: #15120f; stroke-width: .4; }
+#columns .dump rect { fill: #8a7448; stroke: #15120f; stroke-width: .5; }
+#columns .dump.theirs rect { fill: #7a5048; }
+#columns .dump.filling rect { fill-opacity: .45; stroke-dasharray: 1 .6; }
+#columns .colhit.partisans path { fill: #c9a23a; }
 #lanes .lane:hover .laneline { stroke-width: 3; opacity: 1; }
 @media (max-width: 760px) {
   .purse.store .pl { font-size: 9px; }
@@ -1437,6 +1454,7 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .shipbox .hulls { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; min-height: 16px; }
 .shipbox .hulls svg { display: block; }
 .shipbox .hulls i { font-style: normal; font-size: 11px; color: var(--ink-2); margin-left: 2px; }
+.shipbox .starrow { color: var(--brass); letter-spacing: 1px; cursor: help; } .shipbox .starrow b { color: var(--ink-2); font-weight: inherit; }
 .tstance.fleetord, .thead .tstance.fleetord { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
 .tstance.fleetord small { display: none; }
 .tstance.fleetord button:disabled { opacity: .45; cursor: default; }
@@ -2419,6 +2437,8 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .whyoff { display: inline-flex; gap: 6px; align-items: flex-start; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); text-align: left; }
 .whyoff svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 .card footer .whyoff { align-self: center; margin-right: auto; max-width: 62%; }
+/* The attack card with FIGHT IT YOURSELF: three buttons keep one row, and the reason wraps in the room left of them. */
+.card footer.atkfoot .whyoff { flex: 1 1 0; min-width: 0; max-width: none; }
 /* An order's card in brief: who leads, the count in one line, each corps a chip. */
 .fside.brief { gap: 6px; padding: 9px 10px; }
 .fline { font-size: 13px; color: var(--ink-2); }
@@ -2466,6 +2486,7 @@ button.uchip:hover { border-color: var(--brass); }
 .rslip::after { content: ''; position: absolute; left: var(--tail, 50%); bottom: -6px; width: 12px; height: 12px; margin-left: -6px; background: #e2d7bc; transform: rotate(45deg); box-shadow: 2px 2px 2px rgba(0, 0, 0, .28); }
 .rslip.loose::after { display: none; }
 .rslip .rv { font: 700 18px/22px Georgia, 'Times New Roman', serif; color: #3f6b36; }
+.rslip .rv.loss { color: #2a2118; }
 .rslip .rl { font: 400 12.5px/17px 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; }
 .rslip .rread { justify-self: start; margin-top: 5px; padding: 3px 9px 2px; font: 700 11px/15px 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; letter-spacing: .1em; text-transform: uppercase; color: #2a2118; background: transparent; border: 1px solid rgba(42, 33, 24, .55); border-radius: 3px; }
 .rslip .rread:hover { background: rgba(42, 33, 24, .12); }

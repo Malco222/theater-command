@@ -202,7 +202,7 @@ export function lessonMoment(g: Game, l: Lesson, m: Moment): boolean {
   switch (l.due) {
     case 'army': return pickupPlace(g) >= 0;
     case 'reach': return held(g, m).some((c) => [...reach(g, c)].some(([id, x]) => id !== c.reg && !x.attack));
-    case 'foe': return mine(g).some((c) => c.ap > 0 && c.kind !== 'art' && c.kind !== 'eng' && foesBeside(g, g.regions[c.reg], me));
+    case 'foe': return mine(g).some((c) => c.ap > 0 && c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'mg' && c.kind !== 'mor' && foesBeside(g, g.regions[c.reg], me));
     case 'month': return true;
     case 'siege': return siegeOf(g) !== null;
     case 'train': return trainInHand(g, m);
@@ -247,7 +247,8 @@ export function lessonDeed(g: Game, book: Notebook, does: Deed, m: Moment = {}):
 }
 
 /** The raids that count as bombing for lesson 9: anything the bombers fly at a target, never a fight for the sky. */
-export const BOMBING: readonly string[] = ['bomb', 'night', 'ground', 'line', 'town', 'harbour', 'strike', 'fleet'];
+// (Lesson 9 is earned by the deed, a raid ordered with bombers and a target, whatever its kind: the design director, 06:21Z. The airfield raid exists only with its switch.)
+export const BOMBING: readonly string[] = ['bomb', 'night', 'ground', 'line', 'town', 'harbour', 'strike', 'fleet', 'airfield'];
 
 /** Puts the note away with LATER: it waits in the Guide, and the next lesson due comes up. */
 export function putAway(book: Notebook, id: string): void {

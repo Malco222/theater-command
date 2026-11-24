@@ -1,4 +1,5 @@
 #include "Campaign/CampaignGameMode.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Battle/AirBattle.h"
 #include "Battle/LandBattle.h"
 #include "Battle/AirStage.h"
@@ -22,7 +23,10 @@
 #include "Engine/World.h"
 #include "GameFramework/GameUserSettings.h"
 #include "HAL/IConsoleManager.h"
+#include "Async/Async.h"
+#include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
+#include "HAL/PlatformMisc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/Parse.h"
@@ -250,39 +254,101 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 
 void ACampaignGameMode::LayOutWar()
 {
-	if (Table && Session.IsValid() && Session->IsRunning())
+	THEATER_SPEED_SCOPE(LayOutWar); // (release 2, map run 7: the campaign's first laying, apart from a month's turn in the speed log)
+	LaySteps.Reset();
+	const bool bSteps = bLayInSteps;
+	bLayInSteps = false;
+	if (!Table || !Session.IsValid() || !Session->IsRunning())
 	{
-		// The rivers and railways the rules know are laid on the table, then the war as it stands.
+		return;
+	}
+	// (Release 2, tc.Speed.WarSpread: in map run 8 the war's first laying took 1.2 to 1.4 s of one frame.) The laying in
+	// its steps, in the order it was always laid. Each reads the session's picture as the step is taken: nothing changes
+	// it between them, for the opening's plate stands over the map and no order is taken until the war is entered.
+	// The rivers and railways the rules know are laid on the table, then the war as it stands.
+	LaySteps.Emplace([this]()
+	{
 		Table->SetLand(Session->Land());
+	});
+	LaySteps.Emplace([this]()
+	{
 		Table->SetTownPlots(Session->GetView().PageIds.Contains(TEXT("towns")));
 		Table->SetTowns(Session->Towns());
+	});
+	LaySteps.Emplace([this]()
+	{
+		const FCampaignView& Now = Session->GetView();
 		Table->SetInkAllowed(false); // (the table laid out as the campaign stands: nothing seeps in)
-		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League, Session->GetView().RegionOwner, Session->GetView().SiegePaint);
-		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
-		Table->ShowAgents(Session->GetView()); // (ruling 153: his agents, in a campaign taken up again)
-		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
-		Table->ShowCuts(Session->GetView().Cuts);
-		Table->ShowWorksGoing(Session->GetView().Going);
-		Table->ShowBuildings(Session->GetView().RegionWorks);
-		Table->ShowAirfieldSigns(Session->GetView().Airfields);
-		Table->ShowLanes(Session->GetView().Lanes);
-		Table->ShowFreeCapitals(Session->GetView().FreeCapitals);
-		Table->ShowShroud(Session->GetView().Unseen, Session->GetView().Glimpsed);
-		Table->ShowMud(Session->GetView().bMud ? Session->GetView().WeatherGround : TArray<int32>());
+		Table->SetHolders(Now.RegionHolder, Now.League, Now.RegionOwner, Now.SiegePaint);
+	});
+	LaySteps.Emplace([this]()
+	{
+		const FCampaignView& Now = Session->GetView();
+		Table->ShowArmies(Now, TArray<FCorpsMove>());
+		Table->ShowAgents(Now); // (ruling 153: his agents, in a campaign taken up again)
+	});
+	LaySteps.Emplace([this]()
+	{
+		const FCampaignView& Now = Session->GetView();
+		Table->ShowWorks(Now.BridgesDown, Now.RailsCut);
+		Table->ShowCuts(Now.Cuts);
+		Table->ShowWorksGoing(Now.Going);
+		Table->ShowBuildings(Now.RegionWorks);
+		Table->ShowAirfieldSigns(Now.Airfields);
+		Table->ShowLanes(Now.Lanes);
+		Table->ShowFreeCapitals(Now.FreeCapitals);
+		Table->ShowShroud(Now.Unseen, Now.Glimpsed);
+		Table->ShowMud(Now.bMud ? Now.WeatherGround : TArray<int32>());
+	});
+	LaySteps.Emplace([this]()
+	{
 		Table->SetSeason(Session->GetView().Turn);
+	});
+	LaySteps.Emplace([this]()
+	{
 		// (and what the war has left on the table: works in hand, scars, sieges, and who keeps the blackout)
-		Table->ShowCivic(Session->GetView().Civic);
-		Table->ShowScars(Session->GetView().Scars);
-		Table->ShowSieges(Session->GetView().Sieges);
-		Table->ShowBombed(Session->GetView().Bombed);
-		Table->ShowWorksLeft(Session->GetView().WorksLeft);
-		Table->ShowWrecked(Session->GetView().Wrecked);
-		Table->SetWarAtNight(Session->GetView().Blackout, Session->GetView().Fronts);
-		Table->ShowFrontLine(Session->GetView().Wars, Session->GetView().Human);
-		Table->ShowWrecks(Session->GetView().Wrecks, Session->GetView().Turn);
-		Table->ShowIdle(Session->GetView().Cold);
-		Table->ShowPrizes(Session->GetView().Prizes);
+		const FCampaignView& Now = Session->GetView();
+		Table->ShowCivic(Now.Civic);
+		Table->ShowScars(Now.Scars);
+		Table->ShowSieges(Now.Sieges);
+		Table->ShowBombed(Now.Bombed);
+		Table->ShowWorksLeft(Now.WorksLeft);
+		Table->ShowWrecked(Now.Wrecked);
+		Table->SetWarAtNight(Now.Blackout, Now.Fronts);
+		Table->ShowFrontLine(Now.Wars, Now.Human);
+		Table->ShowWrecks(Now.Wrecks, Now.Turn);
+		Table->ShowIdle(Now.Cold);
+		Table->ShowPrizes(Now.Prizes);
+	});
+	LaySteps.Emplace([this]()
+	{
+		// (release 2, map run 7: tc.Speed.SidesKept) the sides view laid out of sight now, in the load, not on the first press
+		Table->WarmSides(Session->GetView().RegionStanding);
+	});
+	if (!bSteps)
+	{
+		for (const TFunction<void()>& Step : LaySteps)
+		{
+			Step();
+		}
+		LaySteps.Reset();
 	}
+}
+
+bool ACampaignGameMode::LayNextStep()
+{
+	if (LaySteps.Num() == 0)
+	{
+		return false;
+	}
+	THEATER_SPEED_SCOPE(LayWarStep); // (tc.Speed.WarSpread: one step of a war's laying, a frame each)
+	const TFunction<void()> Step = MoveTemp(LaySteps[0]);
+	LaySteps.RemoveAt(0);
+	if (Table && Session.IsValid() && Session->IsRunning())
+	{
+		Step();
+	}
+	return true;
 }
 
 bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, const FString& Level, const FString& Depth, int32 History, bool bFirstCommand)
@@ -306,22 +372,74 @@ FString ACampaignGameMode::SaveFile()
 	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bPictures ? TEXT("campaign-pictures.json") : TEXT("campaign.json"));
 }
 
-void ACampaignGameMode::SaveCampaign()
+void ACampaignGameMode::SaveCampaign(bool bAside)
 {
+	THEATER_SPEED_SCOPE(SaveCampaign); // (release 2, map run 7: the monthly save, written out, named in the speed log)
 	if (!Session.IsValid() || !Session->IsRunning())
 	{
 		return;
 	}
+	const int32 Asked = ++SavesAsked;
+	if (bAside && TheaterSpeed::SaveAside())
+	{
+		// (Release 2, tc.Speed.SaveAside.) The war written out on the rules' thread; its text onto the disk off this one.
+		// A save asked after this one, at once or aside, is the one kept: this one is not written over it.
+		const TWeakObjectPtr<ACampaignGameMode> Self(this);
+		Session->SaveAside(true, [Self, Asked](FString Written)
+		{
+			ACampaignGameMode* Mode = Self.Get();
+			if (Mode && Asked == Mode->SavesAsked && !Written.IsEmpty())
+			{
+				Mode->WriteSave(MoveTemp(Written));
+			}
+		});
+		return;
+	}
 	const FString Text = Session->Save();
+	WaitForSave(); // (a save still being written is finished first, so that it never lands over this one)
 	if (!Text.IsEmpty())
 	{
 		FFileHelper::SaveStringToFile(Text, *SaveFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	}
 }
 
+void ACampaignGameMode::WriteSave(FString&& Text)
+{
+	THEATER_SPEED_SCOPE(SaveWrite);
+	WaitForSave(); // (one at a time, in the order they were asked)
+	const FString Path = SaveFile();
+	// (Written beside the save and then put in its place: a game that stops part way through leaves the last save whole.)
+	SaveWriting = Async(EAsyncExecution::ThreadPool, [Written = MoveTemp(Text), Path]()
+	{
+		const FString Beside = Path + TEXT(".writing");
+		if (FFileHelper::SaveStringToFile(Written, *Beside, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)
+			&& !IFileManager::Get().Move(*Path, *Beside, true, true))
+		{
+			FFileHelper::SaveStringToFile(Written, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM); // (it could not be put in place: written where it belongs)
+		}
+	});
+}
+
+void ACampaignGameMode::WaitForSave()
+{
+	if (SaveWriting.IsValid())
+	{
+		THEATER_SPEED_SCOPE(SaveWait);
+		SaveWriting.Wait();
+		SaveWriting = TFuture<void>();
+	}
+}
+
+void ACampaignGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	WaitForSave();
+	Super::EndPlay(EndPlayReason);
+}
+
 FString ACampaignGameMode::DescribeSavedCampaign()
 {
 	FString Text;
+	WaitForSave(); // (tc.Speed.SaveAside: the save is read once it is wholly written)
 	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()))
 	{
 		return FString();
@@ -329,9 +447,206 @@ FString ACampaignGameMode::DescribeSavedCampaign()
 	return Session->DescribeSave(Text);
 }
 
+FString ACampaignGameMode::SavedWarsFolder()
+{
+	// (a run that only takes pictures keeps its own, as it keeps its own campaign)
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bPictures ? TEXT("Saves-pictures") : TEXT("Saves"));
+}
+
+bool ACampaignGameMode::IsSavedWarId(const FString& Id)
+{
+	// (only a name this game made, "war-" and then figures and dashes: never a path to anywhere else)
+	if (!Id.StartsWith(TEXT("war-")) || Id.Len() > 32)
+	{
+		return false;
+	}
+	for (int32 Index = 4; Index < Id.Len(); ++Index)
+	{
+		if (!FChar::IsDigit(Id[Index]) && Id[Index] != TEXT('-'))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool ACampaignGameMode::WriteSavedWar(const FString& Text, FSavedWar& Out)
+{
+	if (Text.IsEmpty() || !Session.IsValid())
+	{
+		return false;
+	}
+	const FString Folder = SavedWarsFolder();
+	IFileManager::Get().MakeDirectory(*Folder, true);
+	const FDateTime Now = FDateTime::Now();
+	const FString Stamp = Now.ToString(TEXT("war-%Y%m%d-%H%M%S"));
+	FString Id = Stamp;
+	for (int32 Second = 2; IFileManager::Get().FileExists(*(Folder / (Id + TEXT(".json")))); ++Second)
+	{
+		Id = FString::Printf(TEXT("%s-%d"), *Stamp, Second); // (two in the same second)
+	}
+	FString Line = Session->DescribeSave(Text);
+	if (Line.IsEmpty())
+	{
+		Line = TEXT("A saved war");
+	}
+	if (!FFileHelper::SaveStringToFile(Text, *(Folder / (Id + TEXT(".json"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		// (the 1.5.1 pre-check's mend, 24 November 2026: a war that could not be written whole, the disk full, is not
+		// left part-written, so the page never lists a war that will not load)
+		IFileManager::Get().Delete(*(Folder / (Id + TEXT(".json"))), false, false, true);
+		UE_LOG(LogTheater, Warning, TEXT("The war could not be saved to %s"), *(Folder / (Id + TEXT(".json"))));
+		return false;
+	}
+	FFileHelper::SaveStringToFile(Line, *(Folder / (Id + TEXT(".txt"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	Out.Id = Id;
+	Out.Line = Line;
+	Out.When = Now;
+	UE_LOG(LogTheater, Display, TEXT("War saved as %s: %s"), *Id, *Line);
+	return true;
+}
+
+bool ACampaignGameMode::SaveWarAs(FSavedWar& Out)
+{
+	if (!Session.IsValid() || !Session->IsRunning())
+	{
+		return false;
+	}
+	return WriteSavedWar(Session->Save(), Out);
+}
+
+bool ACampaignGameMode::KeepAutosaveAsWar(FSavedWar& Out)
+{
+	FString Text;
+	WaitForSave(); // (release 2, tc.Speed.SaveAside: the save is read once it is wholly written)
+	return FFileHelper::LoadFileToString(Text, *SaveFile()) && WriteSavedWar(Text, Out);
+}
+
+TArray<FSavedWar> ACampaignGameMode::SavedWars() const
+{
+	TArray<FSavedWar> Out;
+	const FString Folder = SavedWarsFolder();
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("war-*.json")), true, false);
+	for (const FString& File : Files)
+	{
+		FSavedWar War;
+		War.Id = FPaths::GetBaseFilename(File);
+		if (!IsSavedWarId(War.Id))
+		{
+			continue;
+		}
+		FFileHelper::LoadFileToString(War.Line, *(Folder / (War.Id + TEXT(".txt"))));
+		War.Line.TrimStartAndEndInline();
+		if (War.Line.IsEmpty())
+		{
+			War.Line = TEXT("A saved war");
+		}
+		// (when it was saved, from its name: the computer's own clock, as the player read it)
+		const FString Digits = War.Id.Mid(4, 15);
+		const int32 Year = FCString::Atoi(*Digits.Mid(0, 4)), Month = FCString::Atoi(*Digits.Mid(4, 2)), Day = FCString::Atoi(*Digits.Mid(6, 2));
+		const int32 Hour = FCString::Atoi(*Digits.Mid(9, 2)), Minute = FCString::Atoi(*Digits.Mid(11, 2)), Second = FCString::Atoi(*Digits.Mid(13, 2));
+		if (Digits.Len() == 15 && FDateTime::Validate(Year, Month, Day, Hour, Minute, Second, 0))
+		{
+			War.When = FDateTime(Year, Month, Day, Hour, Minute, Second);
+		}
+		Out.Add(War);
+	}
+	Out.Sort([](const FSavedWar& A, const FSavedWar& B) { return A.When != B.When ? A.When > B.When : A.Id > B.Id; });
+	return Out;
+}
+
+bool ACampaignGameMode::LoadSavedWar(const FString& Id, FString& Why)
+{
+	FString Text;
+	if (!IsSavedWarId(Id) || !Session.IsValid() || !FFileHelper::LoadFileToString(Text, *(SavedWarsFolder() / (Id + TEXT(".json")))))
+	{
+		Why = TEXT("That saved war could not be read.");
+		return false;
+	}
+	// (as CONTINUE: a war saved on the wider world is not laid on a table of Europe alone)
+	if (Text.Contains(TEXT("\"world\":1")) && !FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")))
+	{
+		Why = TEXT("That war was saved on the whole world's map, and this game is laid with Europe alone.");
+		return false;
+	}
+	if (!Session->Load(Text))
+	{
+		Why = TEXT("That saved war could not be read.");
+		return false;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Saved war %s loaded"), *Id);
+	LayOutWar();
+	return true;
+}
+
+bool ACampaignGameMode::DeleteSavedWar(const FString& Id)
+{
+	if (!IsSavedWarId(Id))
+	{
+		return false;
+	}
+	const FString Folder = SavedWarsFolder();
+	IFileManager::Get().Delete(*(Folder / (Id + TEXT(".txt"))), false, false, true);
+	return IFileManager::Get().Delete(*(Folder / (Id + TEXT(".json"))), false, false, true);
+}
+
+int64 ACampaignGameMode::SavedWarsBytes() const
+{
+	const FString Folder = SavedWarsFolder();
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("war-*")), true, false);
+	int64 Bytes = 0;
+	for (const FString& File : Files)
+	{
+		Bytes += FMath::Max<int64>(0, IFileManager::Get().FileSize(*(Folder / File)));
+	}
+	return Bytes;
+}
+
+int64 ACampaignGameMode::FreeDiskBytes() const
+{
+	uint64 Total = 0, Free = 0;
+	return FPlatformMisc::GetDiskTotalAndFreeSpace(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()), Total, Free) ? static_cast<int64>(Free) : -1;
+}
+
+bool ACampaignGameMode::IsAutosaveKept()
+{
+	FString Kept;
+	WaitForSave(); // (release 2, tc.Speed.SaveAside: the save is read once it is wholly written)
+	const FString Folder = SavedWarsFolder();
+	const int64 Size = IFileManager::Get().FileSize(*SaveFile());
+	if (Size <= 0)
+	{
+		return false;
+	}
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("war-*.json")), true, false);
+	for (const FString& File : Files)
+	{
+		// (only one as long as it is read word for word)
+		FString Text;
+		if (IFileManager::Get().FileSize(*(Folder / File)) == Size && FFileHelper::LoadFileToString(Text, *(Folder / File)))
+		{
+			if (Kept.IsEmpty() && !FFileHelper::LoadFileToString(Kept, *SaveFile()))
+			{
+				return false;
+			}
+			if (Text.Equals(Kept, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool ACampaignGameMode::ContinueCampaign()
 {
 	FString Text;
+	WaitForSave(); // (tc.Speed.SaveAside: the save is read once it is wholly written)
 	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()))
 	{
 		return false;
