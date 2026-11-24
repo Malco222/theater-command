@@ -543,6 +543,8 @@ namespace LandField
 		SegGrid BGrid;
 		std::vector<WallRun> Walls;
 		std::vector<House> Houses;
+		std::vector<Footing> Footings;      // the kit houses' (SeatKitHouses)
+		std::vector<Col> FootingPaints;     // and each one's colour
 		std::vector<V2> WayA, WayB;
 		std::vector<double> WayHalf;
 		std::vector<int> WayOf;       // each way piece's way (Fd.Ways' index)
@@ -674,6 +676,7 @@ namespace LandField
 		bool Fits(const House& H, double Margin) const;
 		void Stamp(const House& H, double Margin);
 		void FloorOf(House& H) const;
+		void SeatKitHouses();
 		void AddWall(const Line& L, double High, double Thick, uint64_t Key);
 		void MakeParcels();
 		void MakeDistances();
@@ -1822,6 +1825,87 @@ namespace LandField
 			}
 		H.Floor = Hi + 0.15;
 		H.Foot = Lo - 0.6;
+	}
+
+	/**
+	 * The region's kit houses on their plots, once their models are read: each model's footprint (its points within 0.3 m
+	 * of its foot) centred on the plot the field kept for it, where the model's middle is off its origin (the Med and
+	 * desert houses by up to 3 m, over ground nobody had looked at); and under every house of a kit house slot, the plot's
+	 * and a planted one's alike, a footing from the lowest ground beneath its footprint up to its floor, in its walls'
+	 * own colour there, so a house on a slope stands on the ground all round (Brian, 24 November: the Algiers battle's
+	 * houses stood off the ground, men walking under them).
+	 */
+	void Ground::Impl::SeatKitHouses()
+	{
+		const int Kit0 = static_cast<int>(Base::Kit0), Kit15 = static_cast<int>(Base::Kit15);
+		struct Print
+		{
+			double X0 = 1e9, X1 = -1e9, Y0 = 1e9, Y1 = -1e9, R = 0.0, G = 0.0, B = 0.0;
+			int N = 0;
+			bool bHouse = false;
+		};
+		Print Prints[16];
+		for (const House& H : Houses)
+			if (H.bKit && static_cast<int>(H.KitB) >= Kit0 && static_cast<int>(H.KitB) <= Kit15) Prints[static_cast<int>(H.KitB) - Kit0].bHouse = true;
+		for (int K = 0; K < 16; ++K)
+		{
+			Print& P = Prints[K];
+			if (!P.bHouse) continue;
+			const Mesh& M = Bases[static_cast<size_t>(Kit0 + K)].Near;
+			for (size_t I = 0; I < M.Points(); ++I)
+			{
+				if (M.Positions[I * 3 + 2] > 0.3f) continue;
+				const double X = M.Positions[I * 3], Y = M.Positions[I * 3 + 1];
+				P.X0 = std::min(P.X0, X);
+				P.X1 = std::max(P.X1, X);
+				P.Y0 = std::min(P.Y0, Y);
+				P.Y1 = std::max(P.Y1, Y);
+				P.R += M.Colours[I].R;
+				P.G += M.Colours[I].G;
+				P.B += M.Colours[I].B;
+				++P.N;
+			}
+		}
+		for (int K = 0; K < 16; ++K)
+		{
+			const Print& P = Prints[K];
+			if (!P.bHouse || P.N == 0) continue;
+			const Base B = static_cast<Base>(Kit0 + K);
+			const double MidX = 0.5 * (P.X0 + P.X1), MidY = 0.5 * (P.Y0 + P.Y1), HalfL = 0.5 * (P.X1 - P.X0), HalfD = 0.5 * (P.Y1 - P.Y0);
+			const Col Paint = Scaled(Rgb(P.R / P.N, P.G / P.N, P.B / P.N), 0.86);
+			for (Placed& Pl : Inst[static_cast<size_t>(B)])
+			{
+				const double C = std::cos(Pl.Yaw), S = std::sin(Pl.Yaw), Sc = Pl.Scale;
+				// (a house the field laid on a floor: its model's middle on the plot's)
+				for (const House& H : Houses)
+					if (H.bKit && H.KitB == B && std::fabs(H.C.X - Pl.X) < 0.01 && std::fabs(H.C.Y - Pl.Y) < 0.01)
+					{
+						Pl.X = static_cast<float>(H.C.X - (MidX * C - MidY * S) * Sc);
+						Pl.Y = static_cast<float>(H.C.Y - (MidX * S + MidY * C) * Sc);
+						break;
+					}
+				const double CX = Pl.X + (MidX * C - MidY * S) * Sc, CY = Pl.Y + (MidX * S + MidY * C) * Sc;
+				double Lo = 1e9;
+				for (int A = -2; A <= 2; ++A)
+					for (int D = -2; D <= 2; ++D)
+					{
+						const double U = 0.5 * A * HalfL * Sc, V = 0.5 * D * HalfD * Sc;
+						const double X = CX + U * C - V * S, Y = CY + U * S + V * C;
+						Lo = std::min(Lo, Carve(X, Y, Terrain(X, Y), nullptr));
+					}
+				if (Pl.Z - Lo < 0.05) continue;
+				Footing F;
+				F.X = CX;
+				F.Y = CY;
+				F.Yaw = Pl.Yaw;
+				F.HalfL = std::max(0.3, HalfL * Sc - 0.12);
+				F.HalfD = std::max(0.3, HalfD * Sc - 0.12);
+				F.Foot = Lo - 0.4;
+				F.Top = Pl.Z + 0.05;
+				Footings.push_back(F);
+				FootingPaints.push_back(Paint);
+			}
+		}
 	}
 
 	/** A dry-stone wall along a line: its points about 2 m apart, its height wandering a little, its line kept clear. */
@@ -5243,6 +5327,16 @@ namespace LandField
 			Tile* T = TileOf(H.C.X, H.C.Y);
 			if (T) BuildHouse(T->Built, H);
 		}
+		// The kit houses' footings (SeatKitHouses): a block of the walls' stone from the lowest ground under each to its floor.
+		for (size_t K = 0; K < Footings.size(); ++K)
+		{
+			const Footing& Fo = Footings[K];
+			Tile* T = TileOf(Fo.X, Fo.Y);
+			if (!T) continue;
+			Builder Bd(T->Built);
+			const V3 U{ std::cos(Fo.Yaw), std::sin(Fo.Yaw), 0.0 }, V{ -std::sin(Fo.Yaw), std::cos(Fo.Yaw), 0.0 };
+			Bd.Box(V3{ Fo.X, Fo.Y, 0.5 * (Fo.Foot + Fo.Top) }, U * Fo.HalfL, V * Fo.HalfD, V3{ 0.0, 0.0, 0.5 * (Fo.Top - Fo.Foot) }, FootingPaints[K]);
+		}
 		// The steppe's railway on its bank: ballast, sleepers and rails near, the bank and its ballast far.
 		if (Sp && Sp->HasRail())
 		{
@@ -6886,6 +6980,7 @@ namespace LandField
 		MakePlants();
 		const auto T1 = Clock::now();
 		MakeBases();
+		SeatKitHouses();
 		MakeTiles();
 		MakeRing();
 		// (snow on the roofs and the walls' tops)
@@ -7038,6 +7133,7 @@ namespace LandField
 	const BaseMesh& Ground::BaseOf(Base B) const { return In->Bases[static_cast<size_t>(B)]; }
 	int Ground::DrawStep() const { return In->Rg ? std::clamp(In->Rg->DrawStep(), 0, 4) : -1; }
 	const std::vector<Placed>& Ground::Instances(Base B) const { return In->Inst[static_cast<size_t>(B)]; }
+	const std::vector<Footing>& Ground::Footings() const { return In->Footings; }
 	const std::vector<HedgeLine>& Ground::Hedges() const { return In->HedgeOut; }
 	const std::vector<HedgeOpening>& Ground::Openings() const { return In->OpeningOut; }
 	const std::vector<HedgeCrossing>& Ground::Crossings() const { return In->CrossOut; }
