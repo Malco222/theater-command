@@ -365,8 +365,9 @@ export const landSchools = (g: Game, kind: 'corps' | 'air' | 'fleet'): boolean =
 
 /**
  * The Guards title under Units decide (#2 form Part 1 section 1, Part 2 section 4; choice 13): every corps in `cs`, of
- * any nation, at experience 0.5 or more with three attacks won (its record's 'taken': attack wins only, never defences
- * held) takes it, the month it is earned, in its own field. It is a name only: its card and its name read it, and
+ * any nation, at experience 0.5 or more with three provinces taken (its record's 'taken': attacks won and ground walked
+ * into after the defenders gave way, never defences held; the form's 'attack wins only' is not what that counter counts)
+ * takes it, the month it is earned, in its own field. It is a name only: its card and its name read it, and
  * nothing else does. Never c.elite, which edge(), eliteCount, fold and the cadres read, since corpsBase's 0.85 + 0.4 xp
  * already prices that experience. Off, nothing is written.
  */

@@ -37,10 +37,10 @@ import { EASTERN, addCorps, capture, frozen, resolveBattle } from '../src/campai
 import { fronts } from '../src/campaign/staff';
 import { deliver } from '../src/campaign/economy';
 import { campXp } from '../src/campaign/buildings';
-import { STORIES, cashHonour, designation, drafted, fameOf, guardsWords, raisedXp, titledName, training, whyNotCash } from '../src/campaign/stories';
+import { STORIES, cashHonour, designation, drafted, fameOf, guardsWords, raisedXp, storyWalk, titledName, training, whyNotCash } from '../src/campaign/stories';
 import { VALOUR, sendHero, sendWorth, whyNotSend } from '../src/campaign/valour';
 import { eliteCount, eliteOf, eliteRule, traitDefence, whyNoElite } from '../src/campaign/traits';
-import { SUPPORT, antiTank, gunsOfRows, type Facing } from '../src/campaign/support';
+import { SUPPORT, antiTank, armourOfTheDay, gunsOfRows, gunsYear, type Facing } from '../src/campaign/support';
 import { winterAhead, winterReady } from '../src/campaign/tech';
 import { earnGuards, schoolsOf, xpByResult } from '../src/campaign/units';
 import traitsSource from '../src/campaign/traits.ts?raw';
@@ -1005,6 +1005,18 @@ describe('drafts and the schools: land.school, for every nation (#2 form Part 1 
     expect(whyNotSend(g, { ...soldier, id: 3, sent: undefined }, 'school')).toBe('The schools have all the instructors they can use.');
   });
 
+  it('is the count the Honours panel shows: the schools the drafts read, never g.stories.schools', () => {
+    expect(page).toContain('const schools = schoolsOf(g, me);');
+    expect(page).not.toMatch(/S\.schools\[/);
+    const g = open(true);
+    armsOf(g, 'GER')!.land.school = 4;
+    expect(schoolsOf(g, 'GER')).toBe(4);
+    expect(g.stories.schools.GER ?? 0).toBe(0);
+    const off = open(false);
+    off.stories.schools.GER = 2;
+    expect(schoolsOf(off, 'GER')).toBe(2);
+  });
+
   it('is today\'s off: a schools order into g.stories.schools, an airman\'s too', () => {
     const g = createGame(1, 'GER');
     startOpen(g);
@@ -1019,7 +1031,7 @@ describe('drafts and the schools: land.school, for every nation (#2 form Part 1 
 });
 
 describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Part 2 section 4; choice 13)', () => {
-  it('goes to a corps of any nation at experience 0.5 with three attacks won, the month it is earned; off, to none', () => {
+  it('goes to a corps of any nation at experience 0.5 with three provinces taken, the month it is earned; off, to none', () => {
     const g = open(true);
     const cs = ['UK', 'SOV', 'ITA'].map((n) => g.corps.find((x) => x.nat === n && x.kind === 'inf' && !x.dead)!);
     for (const c of cs) { c.xp = 0.5; c.rec = { taken: 3 }; }
@@ -1041,7 +1053,7 @@ describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Pa
     expect('guards' in c).toBe(false);
   });
 
-  it('is earned in the battle that brings the third attack won and the experience', () => {
+  it('is earned in the battle that brings the third province taken and the experience', () => {
     const f = poznan(true, 0.49, 0.2);
     for (const c of f.att) c.rec = { taken: 2 };
     resolveBattle(f.g, f.att, f.target, { fought: 3 });
@@ -1080,14 +1092,35 @@ describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Pa
     expect(titledName(ger)).toBe(`XIX ${designation('GER')} Panzer Corps`);
     expect(titledName({ ...sov, guards: undefined })).toBe('III Corps');
     expect(titledName({ ...sov, name: 'I Guards Corps' })).toBe('I Guards Corps');
-    expect(guardsWords(sov)).toBe('III Guards Corps: its men earned the title in battle in September 1939, with experience of 0.5 or more and 3 attacks won. A name only: what they have learned already counts in its strength.');
+    expect(guardsWords(sov)).toBe('III Guards Corps: its men earned the title in battle in September 1939, with experience of 50 or more and 3 provinces taken. A name only: what they have learned already counts in its strength.');
     expect(guardsWords({ ...sov, guards: undefined })).toBe('');
     // The card: the corps row and the army's card give the titled name and say what the title is.
     expect(page).toContain('<span class="nm">${esc(titledName(c))}');
     expect(page).toContain('<span class="utop"><b>${esc(titledName(c))}</b>');
-    expect(page.match(/guardsWords\(c\)/g)?.length).toBe(2);
+    // The corps row, the army's card, and the honour's tag where the corps is also named in the order of the day.
+    expect(page.match(/guardsWords\(c\)/g)?.length).toBe(3);
     // No rule reads it: not the battle's worth, the special formations, the folds or the cadres.
     for (const text of [traitsSource, gameSource, foldSource, economySource]) expect(text).not.toMatch(/(?<!land)\.guards\b/);
+  });
+
+  it('counts ground walked into after the defenders gave way, as its record\'s \'taken\' does, and says provinces taken', () => {
+    const g = open(true);
+    const c = g.corps.find((x) => x.nat === 'SOV' && x.kind === 'inf' && !x.dead)!;
+    c.xp = 0.5; c.rec = { taken: 2 };
+    storyWalk(g, [c], g.regions[c.reg]);
+    expect(c.rec.taken).toBe(3);
+    earnGuards(g, [c]);
+    expect(c.guards).toBe(g.turn);
+    expect(guardsWords(c)).toContain(`with experience of ${Math.round(UNITS.land.guards.xp * 100)} or more and ${UNITS.land.guards.won} provinces taken.`);
+    for (const w of [guardsWords(c), whyNoElite(g, 'SOV')!]) { expect(w).not.toMatch(/attacks won|0\.5/); }
+    expect(units.land._guards).toContain('provinces taken');
+    expect(units.land._guards).not.toContain('attack wins only');
+  });
+
+  it('wears the word once on the corps row where the corps is also named in the order of the day', () => {
+    // The earned title's own tag stands aside for the honour's, which then tells both.
+    expect(page).toContain('if (c.guards !== undefined && !isGuards(g, c)) tags.push(');
+    expect(page).toContain('title="Named in the order of the day: the highest honour a formation can earn.${c.guards !== undefined ? ` ${esc(guardsWords(c))}` : \'\'}"');
   });
 
   it('takes the Soviet Guards corps out of the arsenal and out of battle under the switch: neither bought nor applied', () => {
@@ -1096,7 +1129,7 @@ describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Pa
     const u = eliteOf('SOV')!;
     expect(UNITS.land.guards.elite).toContain(u.id);
     g.turn = 41; // January 1943: past the row's year
-    expect(whyNoElite(g, 'SOV')).toBe('Not raised: the title is earned in battle. A corps of any army with experience of 0.5 or more and 3 attacks won takes it, as a name only, since its experience already counts in its strength.');
+    expect(whyNoElite(g, 'SOV')).toBe('Not raised: the title is earned in battle. A corps of any army with experience of 50 or more that has taken 3 provinces earns it, as a name only, since its experience already counts in its strength.');
     expect(eliteRule(u, true)).toBe(whyNoElite(g, 'SOV'));
     const c = twin(g.corps.find((x) => x.nat === 'SOV' && x.kind === 'inf' && !x.dead)!, { id: 93100, elite: u.id });
     const plain = twin(c, { id: 93101, elite: undefined });
@@ -1175,6 +1208,44 @@ describe('anti-tank guns by the defender\'s own rows, not the year (#2 form Part
       expect(at(off, pol(off), 1), String(turn)).toBeCloseTo(day[1], 12);
       expect(at(off, ger(off), 1), String(turn)).toBeCloseTo(day[1] * SUPPORT.antiTank.without, 12);
     }
+  });
+
+  it('measures the attacker\'s armour against the tanks the defence\'s own guns were built to stop, whatever the year; off, the year\'s', () => {
+    const step = SUPPORT.antiTank.armourStep;
+    const fight = (on: boolean, turn: number, rows: string[], twinNat?: string) => {
+      const x = open(on);
+      x.turn = turn;
+      take(x, 'GER', 'mediums', 'heavies', 'latetanks');
+      give(x, 'GER', 'mediums', 'heavies');
+      take(x, 'POL', 'antitank', 'tankdestroyers');
+      give(x, 'POL', ...rows);
+      const att = [x.corps.find((c) => c.nat === 'GER' && c.kind === 'arm' && !c.dead)!];
+      const pol = x.corps.find((c) => c.nat === 'POL' && c.kind === 'inf' && !c.dead)!;
+      const def = twinNat ? [pol, twin(pol, { id: 93200, nat: twinNat })] : [pol];
+      if (twinNat) take(x, twinNat, 'antitank', 'tankdestroyers');
+      return antiTank(x, att, def, plains(x), facing).armour;
+    };
+    expect(armourOfTheDay(1939)).toBe(0);
+    expect(armourOfTheDay(1941)).toBe(1);
+    expect(armourOfTheDay(1943)).toBe(2);
+    for (const [rows, due] of [[[], 0], [['antitank'], 1], [['antitank', 'tankdestroyers'], 2]] as [string[], number][]) {
+      // The same rows on both sides: the same armour step in June 1940 as in October 1943.
+      const early = fight(true, 10, rows), late = fight(true, 50, rows);
+      expect(early, rows.join()).toBeCloseTo(step * (2 - due), 12);
+      expect(late, rows.join()).toBe(early);
+    }
+    // A defence of mixed rows is weighed as its guns are: here half with Anti-tank guns, half with neither.
+    expect(fight(true, 10, ['antitank'], 'UK')).toBeCloseTo(step * (2 - 0.5), 12);
+    // Off, the calendar's tanks, as today: two steps ahead in 1940, level in 1943.
+    expect(fight(false, 10, ['antitank'])).toBeCloseTo(step * 2, 12);
+    expect(fight(false, 50, ['antitank'])).toBeCloseTo(0, 12);
+    // The year of the guns is the defender's rows, as gunsOfRows reads them.
+    const g = open(true);
+    take(g, 'UK', 'antitank', 'tankdestroyers');
+    expect(gunsYear(g, 'UK')).toBe(1939);
+    give(g, 'UK', 'antitank');
+    expect(gunsYear(g, 'UK')).toBe(1941);
+    expect(gunsOfRows(g, 'UK')).toEqual(B('1941'));
   });
 
   it('says on the research card what each step\'s guns take off, never a year or the day', () => {

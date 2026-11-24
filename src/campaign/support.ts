@@ -62,16 +62,19 @@ export function gunsOfTheDay(year: number): [number, number] {
 }
 
 /**
- * Units decide: the infantry's own anti-tank guns by the rows its nation holds, in place of the calendar (DD 24 Nov
- * 15:53Z, #2 form Part 1 section 1; units.json land.antiTank): with neither row, 1939's guns; with Anti-tank guns,
- * 1941's; with Tank destroyers as well, 1943's. Read only under the switch: [in the open, behind finished fieldworks].
+ * Units decide: the year whose anti-tank guns a nation's infantry carries, by the rows it holds, in place of the
+ * calendar (DD 24 Nov 15:53Z, #2 form Part 1 section 1; units.json land.antiTank): with neither row, 1939; with
+ * Anti-tank guns, 1941; with Tank destroyers as well, 1943. Read only under the switch.
  */
-export function gunsOfRows(g: Game, nat: string): [number, number] {
+export function gunsYear(g: Game, nat: string): number {
   const A = UNITS.land.antiTank;
   let k = 0;
   while (k < A.rows.length && hasTech(g, nat, A.rows[k])) k++;
-  return gunsOfTheDay(A.years[k]);
+  return A.years[k];
 }
+
+/** Units decide: the infantry's own anti-tank guns by the rows its nation holds: [in the open, behind finished fieldworks]. */
+export const gunsOfRows = (g: Game, nat: string): [number, number] => gunsOfTheDay(gunsYear(g, nat));
 
 /** The tank technologies of the day: how many of the tree's steps history had reached by this year. */
 export const armourOfTheDay = (year: number): number => SUPPORT.tech.armour.filter((id) => (techById(id)?.year ?? 9999) <= year).length;
@@ -92,7 +95,7 @@ export interface AntiTank {
   works: number;
   fort: number;
   tanks: number;
-  /** What the attacker's armour takes off, when it is ahead of its day (negative when it is behind it). */
+  /** What the attacker's armour takes off, when it is ahead of its day (negative when it is behind it). Under Units decide its day is the year the defence's own rows give its guns. */
   armour: number;
   /** 0 to 1: the guns alone (the infantry's own, tank destroyers, hand-held weapons and guns in the line, against the attacker's armour). */
   gunned: number;
@@ -126,7 +129,7 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
   // nation without Anti-tank guns, so 'without' is not read on top of it. DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
   const units = unitsDecide(g);
   const close = S.handHeld.ground.includes(target.terrain);
-  let all = 0, carry = 0, tanks = 0, guns = 0, destroyers = 0, handHeld = 0, kit = true;
+  let all = 0, carry = 0, tanks = 0, guns = 0, destroyers = 0, handHeld = 0, kit = true, dueW = 0;
   for (const d of defenders) {
     if (isTeam(d)) continue;
     const k = weight(d);
@@ -134,6 +137,7 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
     if (d.kind === 'arm') { tanks += k; continue; }
     if (!carries(d)) continue;
     carry += k;
+    if (units) dueW += k * armourOfTheDay(gunsYear(g, d.nat));
     const has = hasTech(g, d.nat, T.antiTank);
     if (!has) kit = false;
     const its = units ? gunsOfRows(g, d.nat) : day;
@@ -142,8 +146,15 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
     if (hasTech(g, d.nat, T.handHeld)) handHeld += k * (close ? S.handHeld.close : S.handHeld.open);
   }
   if (carry > 0) { guns /= carry; destroyers /= carry; handHeld /= carry; }
-  // Better armour wins part of the edge back, and yesterday's tanks give it away.
-  const due = armourOfTheDay(year);
+  // Better armour wins part of the edge back, and yesterday's tanks give it away. (Units decide: the tanks are measured
+  // against those the defence's own guns were built to stop, the tanks of the year its rows give, weighed as its guns
+  // are, never the calendar's; so the defender's rows are the one cause of both. DD 24 Nov 15:53Z, #2 form Part 1
+  // section 1: nothing reads the year. A defence with no infantry to carry guns is measured by its first corps' rows,
+  // and one with no corps at all by the first row's year.)
+  const lead = units && carry === 0 ? (defenders.find((d) => !isTeam(d)) ?? defenders[0]) : undefined;
+  const due = !units ? armourOfTheDay(year)
+    : carry > 0 ? dueW / carry
+    : armourOfTheDay(lead ? gunsYear(g, lead.nat) : UNITS.land.antiTank.years[0]);
   let armour = 0, tw = 0;
   for (const c of attackers) {
     if (c.kind !== 'arm') continue;

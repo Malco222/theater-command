@@ -2810,7 +2810,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const luck = late ? `late:${target.theatre}:${g.flags[`fought:${target.theatre}`]}` : aside ? `aside:${rep.id - (g.flags.lateBattles ?? 0)}` : `${rep.id - (g.flags.asideBattles ?? 0) - (g.flags.lateWalks ?? 0)}`;
   afterBattle(g, rep, target, a.odds, attackers, attGens, defenders, defGens, luck, evenOdds(a.dice));
   storyBattle(g, rep, target, a.odds, attackers, defenders, { sea: opts.sea, air: opts.air, capital: enemyCapital });
-  // (Units decide: a corps of any nation in the fight that now has the experience and the attacks won takes the Guards
+  // (Units decide: a corps of any nation in the fight that now has the experience and the provinces taken takes the Guards
   // title, as a name only, DD 24 Nov 15:53Z, #2 form Part 1 section 1. Off, nothing.)
   earnGuards(g, attackers);
   earnGuards(g, defenders);

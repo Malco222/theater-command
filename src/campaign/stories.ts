@@ -115,7 +115,7 @@ export function titledName(c: Corps): string {
 export function guardsWords(c: Corps): string {
   if (c.guards === undefined) return '';
   const G = UNITS.land.guards;
-  return `${titledName(c)}: its men earned the title in battle in ${turnToDate(c.guards).label}, with experience of ${G.xp} or more and ${G.won} attacks won. A name only: what they have learned already counts in its strength.`;
+  return `${titledName(c)}: its men earned the title in battle in ${turnToDate(c.guards).label}, with experience of ${Math.round(G.xp * 100)} or more and ${G.won} provinces taken. A name only: what they have learned already counts in its strength.`;
 }
 
 /** The honours a unit carries, oldest first. */

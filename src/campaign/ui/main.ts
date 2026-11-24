@@ -69,7 +69,7 @@ import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitCardRule, traitsOf, type Trait } from '../traits';
-import { mostCorps, unitsDecide } from '../units';
+import { mostCorps, schoolsOf, unitsDecide } from '../units';
 import { columnsView } from '../columns';
 import { dumpsView } from '../logistics';
 import { nicknamesOn } from '../nicknames';
@@ -2332,7 +2332,8 @@ function corpsRow(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   if (special) tags.push(`<span class="tag good" title="${esc(special.text)} ${esc(eliteRule(special, unitsDecide(g)))}">★ ${esc(special.label)}</span>`);
   // (Units decide: the Guards title its men earned in battle, a name only, DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
-  if (c.guards !== undefined) tags.push(`<span class="tag good" title="${esc(guardsWords(c))}">${esc(designation(c.nat))}</span>`);
+  // A corps also named in the order of the day wears the word once: the honour's tag tells both.
+  if (c.guards !== undefined && !isGuards(g, c)) tags.push(`<span class="tag good" title="${esc(guardsWords(c))}">${esc(designation(c.nat))}</span>`);
   tags.push(...storyTags(c));
   if (c.job) tags.push(`<span class="tag good" title="${esc(jobLine(g, c))}">At work</span>`);
   else if (c.kind === 'eng' && c.nat === g.human && groundRules(g)) tags.push('<span class="tag" title="Give it work from the list under the forces: bridges, railways, bombed factories, fortifications, minefields or demolition.">Engineers: ready for work</span>');
@@ -4723,7 +4724,7 @@ function edgeText(a: Award): string {
 function storyTags(c: Corps): string[] {
   const out: string[] = [];
   const mine = c.nat === g.human;
-  if (isGuards(g, c)) out.push(`<span class="tag hon" title="Named in the order of the day: the highest honour a formation can earn.">${esc(designation(c.nat))}</span>`);
+  if (isGuards(g, c)) out.push(`<span class="tag hon" title="Named in the order of the day: the highest honour a formation can earn.${c.guards !== undefined ? ` ${esc(guardsWords(c))}` : ''}">${esc(designation(c.nat))}</span>`);
   if (c.leave !== undefined) out.push(`<span class="tag" title="At home with its fame. It cannot be given orders until it is back.">At home until ${date(c.leave)}</span>`);
   if (c.lean && mine) out.push('<span class="tag" title="This corps takes no drafts. It stays as small as its losses leave it, and keeps what it knows.">Veterans only</span>');
   if (c.school && mine) out.push('<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>');
@@ -5059,7 +5060,8 @@ function honoursPane(): string {
   const wall = S.fallen.filter((f) => f.nat === me).reverse();
   const feuds = S.rivals.filter((r) => !r.over);
   const settled = S.rivals.filter((r) => r.over === 'won');
-  const schools = S.schools[me] ?? 0;
+  // (Units decide: the count the drafts read, land.school, DD 24 Nov 15:53Z, #2 form Part 2 section 2. Off, the stories' count.)
+  const schools = schoolsOf(g, me);
   const t = Math.round(training(g, me) * 100);
   const others = S.awards.filter((a) => a.nat !== me && !a.old && (a.first || fameOf(a) >= 3)).slice(-12).reverse();
   let out = `<h2>Honours</h2><p class="sub">Every unit keeps a record of what it has done. When it has done enough it is honoured, and what you do with the fame is yours to decide: keep it at the front, where the honour makes the unit fight harder, or send its heroes home to sell war bonds or train the next drafts.</p>
