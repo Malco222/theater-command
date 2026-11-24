@@ -6090,10 +6090,34 @@ namespace
 							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
 						})
 						[
-							SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream).Justification(ETextJustify::Center).LineHeightPercentage(1.1f)
-							// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
-							.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
-							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
+							SNew(SVerticalBox)
+							// ---- (release 2, the enemy's month near you) While the watch is of the moves near him: whose month it
+							// is, by its flag and name, and how far through them he is, in brass over the sentence.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 5.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWatchHeading().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(21.0f).HeightOverride(14.0f)
+									[
+										SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetWatchNation() : FString()); })
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Typed(10)).ColorAndOpacity(BrightBrass)
+									.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->GetWatchHeading() : FString()); })
+								]
+							]
+							// ---- (end release 2)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream).Justification(ETextJustify::Center).LineHeightPercentage(1.1f)
+								// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
+								.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
+								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
+							]
 						])
 					]
 
@@ -11596,7 +11620,8 @@ namespace
 											{
 												if (Controller.IsValid() && Controller->IsWatching())
 												{
-													return FText::FromString(TEXT("the other nations move"));
+													// (release 2, the enemy's month near you)
+													return FText::FromString(Controller->IsWatchingNear() ? TEXT("moves near you") : TEXT("the other nations move"));
 												}
 												return FText::FromString(bDark ? TEXT("at any time") : TEXT("ready"));
 											})

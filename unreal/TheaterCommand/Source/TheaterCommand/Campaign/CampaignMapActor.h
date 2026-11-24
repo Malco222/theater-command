@@ -246,6 +246,12 @@ public:
 	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
 	/** RouteEnds: 0 a march, 1 a battle at the end of it, 2 a frontier that means war. */
 	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds = 0);
+	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026)
+	/** Lays the arrows of one step of the others' month, each grown to Grow (0 to 1), as Campaign/EnemyMoves draws them. An empty list clears them. */
+	void ShowStepArrows(const TArray<FStepArrow>& Arrows, float Grow);
+	/** Where to look to see these arrows whole: the middle of their ends, and how far the farthest lies from it (map units). False where there are none. */
+	bool FrameStepArrows(const TArray<FStepArrow>& Arrows, FVector2D& OutMiddle, double& OutReach) const;
+	// ---- (end release 2)
 
 	/** Called as the camera moves: decides which lettering is worth showing and turns the standards to face the viewer. */
 	void UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus);
