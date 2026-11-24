@@ -173,6 +173,12 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 1.5.1, new units ready; development only) "-TheaterReadyDemo": a campaign begun opens his month with an
+	// infantry corps on order at his capital, due next month, so that the Mac's check sees one handed over.
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterReadyDemo")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("new units ready demo"), OutError))
+	{
+		return false;
+	}
 	bReady = true;
 	ReadNotebook();
 	return true;

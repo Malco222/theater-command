@@ -958,8 +958,12 @@ function drawView() {
     markedOn: markedOn(s),
     // (Release 2, fleetattack.ts) Whether the player's fleets can be dropped on an enemy fleet to attack it at once.
     fleetAttack: fleetAttackOn(s),
+    // (The 1.5.1 patch) A grand campaign, where the OPTIONS row for it is shown (on or off).
+    fleetAttackCan: s.flags.open === 1,
     // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
     breakUp: breakUpOn(s),
+    // (The 1.5 patch) A grand campaign, where the OPTIONS row for it is shown (on or off).
+    breakUpCan: s.flags.open === 1,
     // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
     taskForce: taskForceOn(s),
     // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.

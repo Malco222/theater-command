@@ -280,6 +280,7 @@ void ACampaignGameMode::LayOutWar()
 		const FCampaignView& Now = Session->GetView();
 		Table->SetInkAllowed(false); // (the table laid out as the campaign stands: nothing seeps in)
 		Table->SetHolders(Now.RegionHolder, Now.League, Now.RegionOwner, Now.SiegePaint);
+		Table->ForgetFleetPlaces(); // (the 1.5 patch, ships that sail: the fleets of the war laid out are found where they are, not sailed there)
 	});
 	LaySteps.Emplace([this]()
 	{

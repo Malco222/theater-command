@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1a46fa65 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2be0afb9 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -55861,7 +55861,7 @@
 
   // ../../data/campaign/fleetattack.json
   var fleetattack_default = {
-    _about: "A fleet sent straight at an enemy fleet (release 2; Brian, 23 November 2026 22:23Z: 'choosing to attack someone by dragging my unit on top of theirs', as an army attacks). The player's own order, in his month, fought at once on the figures every fleet action uses (navy.ts fleetAction): ships, guns, air from the coasts, training, readiness and admirals. The odds an admiral of the computer's wants before he offers battle (navy.json battle.seek) are his caution, not a rule of the sea: the player may attack at any odds, and is told them first. Off (stage.json 'fleetAttack'), nothing of it is read and every war is the war without it.",
+    _about: "A fleet sent straight at an enemy fleet (the 1.5.1 patch; Brian, 23 November 2026 22:23Z: 'choosing to attack someone by dragging my unit on top of theirs', as an army attacks). The player's own order, in his month, fought at once on the figures every fleet action uses (navy.ts fleetAction): ships, guns, air from the coasts, training, readiness and admirals. The odds an admiral of the computer's wants before he offers battle (navy.json battle.seek) are his caution, not a rule of the sea: the player may attack at any odds, and is told them first. In the 1.5.1 patch it is on in every grand campaign; switched off in OPTIONS ('Fleets attack fleets', the flag 'fleetAttack' 0), nothing of it is read and every war is the war without it.",
     _once: "A fleet attacks once a month: it has been sent at the enemy and will not be sent again until the next.",
     _atSea: "An enemy at sea is attacked where he is: in a sea the fleet can reach this month. He stands with every fleet of his side patrolling that sea. A raider has to be caught first (navy.json battle.catchRaider). Outweighed by battle.evadeAt or more, he may make for port (battle.evade), and the attacker holds the sea.",
     _harbour: "An enemy in harbour can be attacked there, from a sea of that harbour's coast the fleet can reach. Every fleet of his side in that harbour fights. Ships at anchor cannot manoeuvre: their weight counts at 'atAnchor'. The harbour's coastal batteries add 'gunsPerLevel' for each level of its fortress, where its works serve the side that holds it. A fleet in harbour cannot make for port: it is there. These two figures are the thread's proposal, to the design director.",
@@ -55871,10 +55871,10 @@
 
   // ../../src/campaign/fleetattack.ts
   var FLEET_ATTACK = fleetattack_default;
-  var fleetAttackOn = (g2) => g2.flags.open === 1 && g2.flags.fleetAttack === 1;
+  var fleetAttackOn = (g2) => g2.flags.open === 1 && g2.flags.fleetAttack !== 0;
   function setFleetAttack(g2, on) {
-    if (on) g2.flags.fleetAttack = 1;
-    else delete g2.flags.fleetAttack;
+    if (on) delete g2.flags.fleetAttack;
+    else g2.flags.fleetAttack = 0;
   }
   var cap11 = (s) => s[0].toUpperCase() + s.slice(1);
   var zero2 = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
@@ -87670,10 +87670,10 @@
 
   // ../../src/campaign/breakup.ts
   var BREAKUP = breakup_default;
-  var breakUpOn = (g2) => g2.flags.open === 1 && g2.flags.breakUp === 1;
+  var breakUpOn = (g2) => g2.flags.open === 1 && g2.flags.breakUp !== 0;
   function setBreakUp(g2, on) {
-    if (on) g2.flags.breakUp = 1;
-    else delete g2.flags.breakUp;
+    if (on) delete g2.flags.breakUp;
+    else g2.flags.breakUp = 0;
   }
   var hisMonth4 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
   function whyNotBreakUp(g2, c, slots) {
@@ -90290,8 +90290,12 @@
       markedOn: markedOn(s),
       // (Release 2, fleetattack.ts) Whether the player's fleets can be dropped on an enemy fleet to attack it at once.
       fleetAttack: fleetAttackOn(s),
+      // (The 1.5.1 patch) A grand campaign, where the OPTIONS row for it is shown (on or off).
+      fleetAttackCan: s.flags.open === 1,
       // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
       breakUp: breakUpOn(s),
+      // (The 1.5 patch) A grand campaign, where the OPTIONS row for it is shown (on or off).
+      breakUpCan: s.flags.open === 1,
       // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
       taskForce: taskForceOn(s),
       // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.

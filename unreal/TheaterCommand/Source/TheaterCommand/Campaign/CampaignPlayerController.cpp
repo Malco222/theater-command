@@ -784,7 +784,7 @@ void ACampaignPlayerController::LoadOptions()
 	bAlliesNear = Yes(TEXT("alliesNear"), true); // (Release 2, the enemy's month near you, round 2)
 	bTakeMeThere = Yes(TEXT("takeMe"), true);
 	bCornerPings = Yes(TEXT("cornerPings"), true);
-	bShipsSail = Yes(TEXT("sail"), false); // (release 2: ships that sail)
+	bShipsSail = Yes(TEXT("sail"), true); // (the 1.5 patch: ships that sail, on unless switched off)
 	bWakes = Yes(TEXT("wakes"), false); // (release 2: fading wakes)
 	if (Map.IsValid())
 	{
@@ -6375,6 +6375,17 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	// (What an order would go to: the army whose figure is under the pointer, or else the ground. See AimedOf.)
+	// (The same spec.) Inside its ring the airfield wins over the province and the town's plate: the pointer points at the
+	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins.
+	if (PointedPiece || PointedAgent != INDEX_NONE)
+	{
+		PointedField = INDEX_NONE; // (a piece or an agent under the pointer takes the click, so the tip is not the airfield's)
+	}
+	if (PointedField != INDEX_NONE && bHandsFree && bFieldsKept)
+	{
+		PointedRegion = PointedField;
+		bPointerOnWater = false;
+	}
 	const int32 AimedRegion = AimedOf(PointedAgent == INDEX_NONE ? AimedPiece : nullptr, PointedRegion);
 
 	// The other nations' month plays itself out, a nation at a time.

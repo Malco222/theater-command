@@ -1708,7 +1708,7 @@ private:
 	TMap<int32, TObjectPtr<AArmyPiece>> AirPieces;
 	// (Release 2: ships that sail.) Where each fleet lay when the fleets were last laid out: its sea and its harbour
 	// (INDEX_NONE at sea), and the point on the map.
-	bool bShipsSail = false;
+	bool bShipsSail = true; // (the 1.5 patch: on unless switched off in OPTIONS)
 	TMap<int32, FIntPoint> FleetPlaces;
 	TMap<int32, FVector2D> FleetSpots;
 	// (Release 2: fading wakes.) Each wake laid: whose fleet, the month it was seen to move, and its way on the map.

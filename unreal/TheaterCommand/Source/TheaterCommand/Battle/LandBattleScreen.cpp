@@ -254,6 +254,8 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			Tops.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
 		}
 		Tops.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
+		// (his view from above in one press, lit while it is on; pressed again, back as it was)
+		Tops.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
 		// (ALL FALL BACK, release 1.5: his whole army back behind the ground it started from, once the battle has begun)
 		if (!bDeploying && !S.General.bAllBack)
 		{
@@ -1311,6 +1313,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Ends.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
 			}
 			Ends.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
+			Ends.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
 			if (!Clip.Deploying() && !G.bAllBack)
 			{
 				Ends.Add({ TEXT("ALL FALL BACK"), TEXT("L"), TEXT("general:allback"), G.bAllBackAsk });
@@ -1845,12 +1848,19 @@ FReply SLandBattleScreen::OnTouchGesture(const FGeometry& Geometry, const FPoint
 	}
 	// A trackpad: two fingers sliding drag the ground under them (the view goes the other way); a pinch zooms (about
 	// a notch a tenth of the fingers' spread); a twist turns the view. Handled here, the slide is not also a wheel.
+	// With Option (Alt) held the slide tilts and turns the view instead: fingers up look further down on the field (a
+	// slide the screen's height, 120 degrees), across turns it (the screen's width, 180 degrees).
 	const FVector2D Size = Geometry.GetLocalSize();
 	const FVector2D Delta = Event.GetGestureDelta();
 	switch (Event.GetGestureType())
 	{
 	case EGestureEvent::Scroll:
-		if (Size.X > 0.0 && Size.Y > 0.0)
+		if (Size.X > 0.0 && Size.Y > 0.0 && (Event.IsAltDown() || FSlateApplication::Get().GetModifierKeys().IsAltDown()))
+		{
+			S->GeneralIn.Tilt -= Delta.Y / Size.Y * 120.0;
+			S->GeneralIn.Turn -= Delta.X / Size.X * 180.0;
+		}
+		else if (Size.X > 0.0 && Size.Y > 0.0)
 		{
 			S->GeneralIn.SlideRight -= Delta.X / Size.X;
 			S->GeneralIn.SlideAhead += Delta.Y / Size.Y;
@@ -1888,6 +1898,7 @@ void SLandBattleScreen::HandViewKeys()
 	S->GeneralIn.PanRight = On(2u) - On(1u);
 	S->GeneralIn.PanAhead = On(4u) - On(8u);
 	S->GeneralTurnHeld = On(32u) - On(16u);
+	S->GeneralTiltHeld = On(64u) - On(128u);
 }
 
 void SLandBattleScreen::OnFocusLost(const FFocusEvent& Event)
@@ -1906,7 +1917,8 @@ FReply SLandBattleScreen::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Ev
 	{
 		return FReply::Unhandled();
 	}
-	ViewKeys &= ~Bit;
+	// (W or S let go ends its tilt too, Shift or not: held with Shift it tilted the view, 64 and 128)
+	ViewKeys &= ~(Bit | (Bit == 4u || Bit == 8u ? Bit << 4 : 0u));
 	HandViewKeys();
 	return FReply::Handled();
 }
@@ -1924,7 +1936,13 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 		if (FLandBattleState* S = Battle->EditState())
 		{
 			LandGeneralEye::Input& In = S->GeneralIn;
-			if (bSliding && Size.X > 0.0 && Size.Y > 0.0)
+			if (bSliding && Size.X > 0.0 && Size.Y > 0.0 && Event.IsAltDown())
+			{
+				// (the middle drag with Alt (Option) tilts and turns the view, as the trackpad's slide does)
+				In.Tilt -= Event.GetCursorDelta().Y / Size.Y * 120.0;
+				In.Turn -= Event.GetCursorDelta().X / Size.X * 180.0;
+			}
+			else if (bSliding && Size.X > 0.0 && Size.Y > 0.0)
 			{
 				In.SlideRight -= Event.GetCursorDelta().X / Size.X;
 				In.SlideAhead += Event.GetCursorDelta().Y / Size.Y;
@@ -1991,15 +2009,20 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 			}
 			Do(FString::Printf(TEXT("speed:%g"), Speed));
 		};
-		const uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
+		uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
 			: Key == EKeys::S || Key == EKeys::Down ? 8u : Key == EKeys::Q ? 16u : Key == EKeys::E ? 32u : 0u;
+		// (Shift with W or S, or the up and down arrows: his view tilted further down or back, not moved)
+		if (Event.IsShiftDown() && (Bit == 4u || Bit == 8u))
+		{
+			Bit <<= 4;
+		}
 		if (S->General.bAllBackAsk && Key == EKeys::Escape)
 		{
 			// (ALL FALL BACK's question up: Esc keeps fighting)
 			Scene->GeneralDo(TEXT("allback:no"));
 			return FReply::Handled();
 		}
-		if (AllBackAsking(S) && Bit == 0u && Key != EKeys::SpaceBar)
+		if (AllBackAsking(S) && Bit == 0u && Key != EKeys::SpaceBar && Key != EKeys::O)
 		{
 			// (the question up: no order key reaches the field; the view's keys and the pause still work)
 			return FReply::Handled();
@@ -2010,7 +2033,13 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		}
 		else if (Bit != 0u)
 		{
-			// (his view's keys, held: the scene moves the view while they are down)
+			// (his view's keys, held: the scene moves the view while they are down. W or S walks, or with Shift
+			// tilts, never both at once: the key repeats, so Shift pressed or let go while it is held switches which)
+			if (Bit == 4u || Bit == 64u || Bit == 8u || Bit == 128u)
+			{
+				const uint32 Pair = Bit == 4u || Bit == 64u ? (4u | 64u) : (8u | 128u);
+				ViewKeys &= ~Pair;
+			}
 			ViewKeys |= Bit;
 			HandViewKeys();
 			return FReply::Handled();
@@ -2048,6 +2077,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
+		else if (Key == EKeys::O) { Scene->GeneralDo(TEXT("topview")); return FReply::Handled(); }
 		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
 		else

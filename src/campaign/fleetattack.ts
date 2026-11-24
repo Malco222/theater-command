@@ -14,8 +14,9 @@
 // works serve the side that holds it (data/campaign/fleetattack.json). A fleet attacks once a month and then stays
 // where the battle leaves it until the next.
 //
-// The grand campaign's flag 'fleetAttack', set as a campaign opens where stage.json switches it on (or by the player
-// in a campaign under way). Off, nothing here is read, no die is thrown, and every war is the war without it.
+// Shipped in the 1.5.1 patch (Brian, 24 November 2026 19:47Z: "yes to all"): on in every grand campaign, new or saved,
+// and the player can switch it off in OPTIONS ("Fleets attack fleets"): the grand campaign's flag 'fleetAttack' is 0
+// then. Release 2 keeps it so. Off, nothing here is read, no die is thrown, and every war is the war without it.
 
 import data from '../../data/campaign/fleetattack.json';
 import type { TicketLine } from '../core/ticket';
@@ -30,12 +31,12 @@ import type { Fleet, Game, SeaReport, Ships } from './types';
 export const FLEET_ATTACK = data as unknown as { atAnchor: number; gunsPerLevel: number };
 
 /** True where this campaign lets the player send a fleet straight at an enemy fleet. */
-export const fleetAttackOn = (g: Game): boolean => g.flags.open === 1 && g.flags.fleetAttack === 1;
+export const fleetAttackOn = (g: Game): boolean => g.flags.open === 1 && g.flags.fleetAttack !== 0;
 
 /** Turns the direct fleet attack on or off. A battle already fought stays fought either way. */
 export function setFleetAttack(g: Game, on: boolean): void {
-  if (on) g.flags.fleetAttack = 1;
-  else delete g.flags.fleetAttack;
+  if (on) delete g.flags.fleetAttack;
+  else g.flags.fleetAttack = 0;
 }
 
 const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);

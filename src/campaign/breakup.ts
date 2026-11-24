@@ -1,6 +1,7 @@
 // Breaking a corps up into its divisions, and putting it back together (release 2; Brian, 24 November 2026 18:02Z:
 // "when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up
-// if needed"). Behind its own switch (stage.json 'breakUp', the flag 'breakUp'): off, nothing here is read.
+// if needed"). Shipped in the 1.5 patch: on in every grand campaign unless switched off (OPTIONS, the flag 'breakUp' set
+// to 0). Release 2 keeps it so (its stage switch only says so again). Off, nothing here is read.
 //
 // The player picks divisions of one of his own corps standing in the field and splits them off as a corps of their
 // own, in the same place: like lifting a few cards off a stack, nothing is lost or gained. The divisions picked take
@@ -18,12 +19,12 @@ import { MEN_PER_DIV, type Corps, type Game } from './types';
 export const BREAKUP = data as unknown as { detached: string };
 
 /** True where the player may break his corps up: the grand campaign, with the switch on. */
-export const breakUpOn = (g: Game): boolean => g.flags.open === 1 && g.flags.breakUp === 1;
+export const breakUpOn = (g: Game): boolean => g.flags.open === 1 && g.flags.breakUp !== 0;
 
 /** Turns breaking corps up on or off in a campaign under way. */
 export function setBreakUp(g: Game, on: boolean): void {
-  if (on) g.flags.breakUp = 1;
-  else delete g.flags.breakUp;
+  if (on) delete g.flags.breakUp;
+  else g.flags.breakUp = 0;
 }
 
 /** Whose month it is, with the player at the table. */

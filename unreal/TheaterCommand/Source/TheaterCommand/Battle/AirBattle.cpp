@@ -50,6 +50,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
+#include "RenderingThread.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
@@ -1054,6 +1055,7 @@ bool AAirBattle::Open(const FString& Why)
 	// (the eye stood on its opening place before it is the view: spawned at the world's middle, the frame drawn before
 	// the battle's first tick was drawn from there, at the stage's sea level; the first tick then cuts to the flyover)
 	AimEye(0.0);
+	SkyLowerOnce();
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
 		if (Eye)
@@ -1797,6 +1799,64 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 		bSkyOverSea ? *FString::Printf(TEXT("%.2f of the battle look's over the sea"), SeaDust) : TEXT("the battle look's over the land"));
 }
 
+bool AAirBattle::SkyEveryStep()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirSkyRecapture"));
+	return bAsked;
+}
+
+void AAirBattle::SkyLowerOnce()
+{
+	// The sky light's lower half (the light thrown up from under the eye) laid once for the whole raid, here inside
+	// the press's own long frame, for the bounce under the raid's first eye. A capture of the sky light holds the draw
+	// thread 0.65 to 0.9 s on the Mac (the 1.5 launch candidate's cold Rhineland raid: three captures in its first 9 s,
+	// at the press, over the cumulus tops and at the cut to the target, and a draw stall of 0.8 to 0.9 s after each,
+	// the game thread idle; a second raid in the same session the same). So the capture is run now and waited for,
+	// and the opening card holds a moment longer instead of the first seconds of flight freezing. After this the
+	// light from below moves the UnderLight alone, which has carried the bellies since 22 November.
+	// "-TheaterAirSkyRecapture": the old way, a capture at every step of 0.08 and none waited for here.
+	// "-TheaterAirSkyNoCapture": no capture at all this raid, the sky light's lower half left as the table's (to weigh
+	// the look against the press's wait on the Mac).
+	if (SkyEveryStep() || bSkyLowerLaid)
+	{
+		return;
+	}
+	bSkyLowerLaid = true;
+	static const bool bNone = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirSkyNoCapture"));
+	if (bNone)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: the sky light's lower half left as the table's, no capture this raid (-TheaterAirSkyNoCapture); the light from below moves only the lamp under the aircraft."));
+		return;
+	}
+	if (Eye)
+	{
+		WeatherAt(Eye->GetActorLocation());
+	}
+	const float B = static_cast<float>(WeatherBounce);
+	int32 Laid = 0;
+	for (const FKeptSky& Kept : KeptSkies)
+	{
+		if (USkyLightComponent* Sky = Kept.Sky.Get())
+		{
+			Sky->bLowerHemisphereIsBlack = true;
+			Sky->SetLowerHemisphereColor(FLinearColor(0.82f * B, 0.84f * B, 0.88f * B, 1.0f));
+			Sky->RecaptureSky();
+			++Laid;
+		}
+	}
+	BounceShown = WeatherBounce;
+	double Waited = 0.0;
+	if (Laid > 0 && GetWorld())
+	{
+		const double Began = FPlatformTime::Seconds();
+		USkyLightComponent::UpdateSkyCaptureContents(GetWorld());
+		FlushRenderingCommands();
+		Waited = 1000.0 * (FPlatformTime::Seconds() - Began);
+	}
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky light's lower half laid once, at the press, for the first eye's light from below %.2f (%d skies); its capture waited for in %.0f ms inside the press. After this the light from below moves only the lamp under the aircraft (-TheaterAirSkyRecapture captures the sky again at every step of 0.08)."),
+		B, Laid, Waited);
+}
+
 void AAirBattle::LightTheBattle()
 {
 	// The battle's day: every lamp white, the key (turned to the battle's sun) at the table's day strength and warmth
@@ -1848,8 +1908,11 @@ void AAirBattle::LightTheBattle()
 			Sky->SetIntensity(SkyWant);
 		}
 		// (the light from below, moved only when it has moved enough to see: each change has the sky light captured
-		// again, so in steps of 0.08, about seven captures in a climb through an overcast's tops; the pre-check, 00:55Z)
-		if (FMath::Abs(WeatherBounce - BounceShown) > 0.08)
+		// again, so in steps of 0.08, about seven captures in a climb through an overcast's tops; the pre-check, 00:55Z.
+		// Only under "-TheaterAirSkyRecapture" now: each capture held the Mac's draw thread 0.65 to 0.9 s, raid after
+		// raid. Without it the lower half is laid once, inside the press, by SkyLowerOnce, and the light from below
+		// moves the UnderLight alone; the 1.5 launch candidate's cold Rhineland raid, 24 November)
+		if (SkyEveryStep() && FMath::Abs(WeatherBounce - BounceShown) > 0.08)
 		{
 			const float B = static_cast<float>(WeatherBounce);
 			Sky->bLowerHemisphereIsBlack = true;

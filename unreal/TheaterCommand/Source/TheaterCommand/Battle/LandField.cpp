@@ -1196,6 +1196,76 @@ namespace LandField
 			RgOf[K] = R;
 			FxOfCell[K] = Fx;
 		}
+		// The rivers' beds (release 1.5 mend; Brian 24 November, "their is a huge ditch in the map", at Monterrey): the
+		// rules lay a river's water and its bridges at sea level less 2 m (field.ts: min(height, 0) - 2) whatever the
+		// ground round it, so in hills (relief to 70 m) the Rio Grande ran 30 to 55 m down a sheer-sided cut, and in
+		// mountains to 180 m. The fight keeps the rules' own heights; here the drawn water sits 2 m under the lowest bank
+		// within 150 m. Only water with a bank within 75 m everywhere is a river: the sea along a shore keeps its level.
+		// -TheaterLandOldRiverBed (Field::bOldRiverBed): as before.
+		if (!Fd.bOldRiverBed && Fd.Cols > 0 && Fd.Rows > 0)
+		{
+			std::vector<uint8_t> WetOf(Fd.Grounds.size(), 0);
+			for (size_t K = 0; K < Fd.Grounds.size(); ++K)
+			{
+				const std::string& G = Fd.Grounds[K];
+				WetOf[K] = G == "water" || G == "blown" || G == "bridge" ? 1 : 0;
+			}
+			const int C = Fd.Cols, R = Fd.Rows;
+			std::vector<uint8_t> Wet(N, 0);
+			for (size_t K = 0; K < N; ++K)
+			{
+				const int G = Fd.Ground[K];
+				Wet[K] = G >= 0 && static_cast<size_t>(G) < WetOf.size() ? WetOf[static_cast<size_t>(G)] : 0;
+			}
+			constexpr int Near = 3, Reach = 6;
+			// Each wet cell: whether a bank is within Near cells, and the lowest bank within Reach.
+			std::vector<uint8_t> Banked(N, 0);
+			std::vector<double> Low(N, std::numeric_limits<double>::infinity());
+			for (int J = 0; J < R; ++J)
+				for (int I = 0; I < C; ++I)
+				{
+					const size_t K = static_cast<size_t>(J) * C + I;
+					if (!Wet[K]) continue;
+					for (int B = std::max(0, J - Reach); B <= std::min(R - 1, J + Reach); ++B)
+						for (int A = std::max(0, I - Reach); A <= std::min(C - 1, I + Reach); ++A)
+						{
+							const size_t Q = static_cast<size_t>(B) * C + A;
+							if (Wet[Q]) continue;
+							Low[K] = std::min(Low[K], Fd.Height[Q]);
+							if (std::max(A - I, I - A) <= Near && std::max(B - J, J - B) <= Near) Banked[K] = 1;
+						}
+				}
+			// Each body of water (side by side, not corner to corner) whole: a river only if every cell of it is banked.
+			std::vector<uint8_t> Seen(N, 0);
+			std::vector<size_t> Body, Todo;
+			for (size_t K0 = 0; K0 < N; ++K0)
+			{
+				if (!Wet[K0] || Seen[K0]) continue;
+				Body.clear();
+				Todo.assign(1, K0);
+				Seen[K0] = 1;
+				bool bRiver = true;
+				while (!Todo.empty())
+				{
+					const size_t K = Todo.back();
+					Todo.pop_back();
+					Body.push_back(K);
+					if (!Banked[K] || !std::isfinite(Low[K])) bRiver = false;
+					const int I = static_cast<int>(K % static_cast<size_t>(C)), J = static_cast<int>(K / static_cast<size_t>(C));
+					const int Ni[4] = { I - 1, I + 1, I, I }, Nj[4] = { J, J, J - 1, J + 1 };
+					for (int D = 0; D < 4; ++D)
+					{
+						if (Ni[D] < 0 || Nj[D] < 0 || Ni[D] >= C || Nj[D] >= R) continue;
+						const size_t Q = static_cast<size_t>(Nj[D]) * C + Ni[D];
+						if (!Wet[Q] || Seen[Q]) continue;
+						Seen[Q] = 1;
+						Todo.push_back(Q);
+					}
+				}
+				if (!bRiver) continue;
+				for (const size_t K : Body) Fd.Height[K] = std::max(Fd.Height[K], Low[K] - 2.0);
+			}
+		}
 		CellRg.assign(N, RgOpen);
 		CellRoad.assign(N, 0);
 		double Sum = 0.0;

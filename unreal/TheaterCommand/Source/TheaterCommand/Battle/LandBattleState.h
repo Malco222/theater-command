@@ -104,10 +104,11 @@ struct FLandBattleState
 	LandEye::World EyeWorld;
 	/** The general's view (LandGeneralEye, the camera thread's): his own camera over the field while the film is not
 	 * asked for; what he does to it this frame (the screen fills it: keys held, slides, wheel, pinch, a double click),
-	 * the turn keys held (-1..1), whether it is begun, and the film and his view switched this frame (the picture cuts). */
+	 * the turn keys and the tilt keys held (-1..1), whether it is begun, and the film and his view switched this frame
+	 * (the picture cuts). */
 	LandGeneralEye::Eye GeneralEye;
 	LandGeneralEye::Input GeneralIn;
-	double GeneralTurnHeld = 0.0;
+	double GeneralTurnHeld = 0.0, GeneralTiltHeld = 0.0;
 	bool bGeneralEye = false, bEyeSwitched = false;
 
 	/** The camera's pose this frame and the words on the screen. */

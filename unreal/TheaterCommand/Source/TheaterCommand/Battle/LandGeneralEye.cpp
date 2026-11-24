@@ -108,6 +108,101 @@ namespace LandGeneralEye
 		return AimAt(Zoom) + ArmAt(Zoom) * std::sin(TiltAt(Zoom));
 	}
 
+	double Eye::TiltOwn(double Zoom, double Own) const
+	{
+		// (his tilt over the automatic one, met softly: a quarter-square across TiltSoft either side of it, so the view
+		// never turns a corner as he tilts back down to it or as the zoom carries the automatic tilt past his)
+		const double Auto = TiltAt(Zoom);
+		const double Soft = Set.TiltSoft * Rad;
+		const double D = std::min(Own, Set.TiltMost * Rad) - Auto;
+		const double Over = Soft <= 0.0 ? std::max(D, 0.0) : D >= Soft ? D : D <= -Soft ? 0.0 : (D + Soft) * (D + Soft) / (4.0 * Soft);
+		return Auto + Over;
+	}
+
+	double Eye::TiltMostAt(double Zoom) const
+	{
+		// (toward a man's shoulder his tilt is handed back to the automatic one, as the eased tilt can follow: zoomed
+		// right in, the view stands with the men and looks along the ground as it always has)
+		const double Low = TiltAt(Zoom) - (Set.TiltSoft + 1.0) * Rad;
+		const double U = std::clamp(Zoom / std::max(1e-6, Set.TiltOwnFrom), 0.0, 1.0);
+		return Low + (Set.TiltMost * Rad - Low) * U * U * (3.0 - 2.0 * U);
+	}
+
+	double Eye::UpOwn(double Zoom, double Own) const
+	{
+		return AimAt(Zoom) + ArmAt(Zoom) * std::sin(TiltOwn(Zoom, Own));
+	}
+
+	double Eye::TopZoom() const
+	{
+		double Lo = 0.0, Hi = 1.0;
+		for (int K = 0; K < 40; ++K)
+		{
+			const double Mid = 0.5 * (Lo + Hi);
+			(UpOwn(Mid, Set.TopTilt * Rad) < Set.TopUp ? Lo : Hi) = Mid;
+		}
+		return 0.5 * (Lo + Hi);
+	}
+
+	double Eye::TiltDegrees() const
+	{
+		return TiltFor(S, Tl) / Rad;
+	}
+
+	void Eye::TiltWish(const Input& In)
+	{
+		const double Soft = Set.TiltSoft * Rad;
+		// (his own tilt begun where the automatic one is, just under its soft floor: the view does not move as it is set)
+		auto Own = [&]()
+		{
+			if (bOwnTilt) return;
+			bOwnTilt = true;
+			Tl = WantTl = TlGoal = TiltAt(S) - Soft;
+			SwingTl = 0.0;
+		};
+		if (In.bTopView)
+		{
+			if (bTop)
+			{
+				// (pressed again: back to the zoom and the tilt it had, or to tilting with the zoom)
+				bTop = false;
+				WantS = TopWasS;
+				if (bTopWasOwn) WantTl = TopWasTl;
+				else bToAuto = true;
+			}
+			else
+			{
+				bTopWasOwn = bOwnTilt && !bToAuto;
+				TopWasTl = WantTl;
+				TopWasS = WantS;
+				Own();
+				bToAuto = false;
+				bTop = true;
+				// (almost straight down, from about TopUp up, or from as high as it already was)
+				WantTl = Set.TopTilt * Rad;
+				WantS = std::max(WantS, TopZoom());
+			}
+		}
+		if (In.Tilt != 0.0)
+		{
+			Own();
+			bTop = false;
+			bToAuto = false;
+			// (from where the view is tilted, never from under the automatic tilt's floor, so a press always moves it;
+			// tilted all the way back down, the view goes back to tilting with the zoom)
+			const double Floor = TiltAt(WantS) - Soft - Rad;
+			WantTl = std::min(std::max(WantTl, Floor) + In.Tilt * Rad, Set.TiltMost * Rad);
+			if (In.Tilt < 0.0 && WantTl <= Floor)
+			{
+				WantTl = Floor;
+				bToAuto = true;
+			}
+		}
+		if (bToAuto) WantTl = TiltAt(WantS) - Soft - Rad;
+		// (the top view keeps its tilt wanted, whatever a wait at a thing let go of: it gets there once clear)
+		if (bTop) WantTl = Set.TopTilt * Rad;
+	}
+
 	void Eye::Index()
 	{
 		if (!Rec || Rec->Tracks.size() == TracksSeen) return;
@@ -184,6 +279,8 @@ namespace LandGeneralEye
 		Crops.clear();
 		bGliding = false;
 		Follow = -1;
+		Tl = WantTl = SwingTl = TlGoal = 0.0;
+		bOwnTilt = bToAuto = bTop = bTopWasOwn = false;
 		bFirst = true;
 		Now = LandEye::Pose();
 		return true;
@@ -232,7 +329,7 @@ namespace LandGeneralEye
 	int Eye::Place(double Dt, bool bHold, Vec& OutEye, Vec& OutLook)
 	{
 		// On the arm, then over the ground, the corn and any thing in its way.
-		const double ArmNow = ArmAt(S), TiltNow = TiltAt(S);
+		const double ArmNow = ArmAt(S), TiltNow = TiltFor(S, Tl);
 		const Vec F2(std::sin(H), std::cos(H), 0.0);
 		{
 			// (the ground under the look-at, taken over a patch the size of the view and eased, so the view does not
@@ -452,13 +549,13 @@ namespace LandGeneralEye
 			{
 				const double Xa = Toward(Tx, SwingX, WantX, Tau), Ya = Toward(Ty, SwingY, WantY, Tau);
 				const double Sa = std::clamp(Toward(S, SwingS, WantS, Tau), 0.0, 1.0), Ha = Toward(H, SwingH, WantHNear, Tau);
-				const double A = ArmAt(Sa), Tl = TiltAt(Sa);
-				return Vec(Xa, Ya, GroundEased + AimAt(Sa)) - Vec(std::sin(Ha), std::cos(Ha), 0.0) * (A * std::cos(Tl)) + Vec(0.0, 0.0, A * std::sin(Tl));
+				const double A = ArmAt(Sa), Ta = TiltFor(Sa, Toward(Tl, SwingTl, TlGoal, Tau));
+				return Vec(Xa, Ya, GroundEased + AimAt(Sa)) - Vec(std::sin(Ha), std::cos(Ha), 0.0) * (A * std::cos(Ta)) + Vec(0.0, 0.0, A * std::sin(Ta));
 			};
 			if ((ArmEyeAt(1.6) - Eye0).Length() > 0.05)
 			{
 				// (and where the lift cannot climb in time, within the time the view takes to stop, it brakes)
-				const double StopIn = 2.0 / (bGliding ? Set.Glide : std::min({ Set.Ease, Set.ZoomEase, Set.TurnEase })) + 0.15;
+				const double StopIn = 2.0 / (bGliding ? Set.Glide : std::min({ Set.Ease, Set.ZoomEase, Set.TurnEase, bOwnTilt ? Set.TiltEase : Set.Ease })) + 0.15;
 				for (int K = 1; K <= 16; ++K)
 				{
 					const double Tau = 0.1 * K;
@@ -573,7 +670,9 @@ namespace LandGeneralEye
 			// by that speed, so the eased lift does not lag behind it into the near clearance)
 			if (Goal > 0.05 && Goal >= Need - 1e-9)
 			{
-				const double ArmDown = -((UpAt(S + 1e-3) - UpAt(S)) / 1e-3 * SwingS + GroundSwing);
+				// (and with his own tilt, as fast as the tilt brings it down too)
+				const double ArmDown = bOwnTilt ? -((UpOwn(S + 1e-3 * SwingS, Tl + 1e-3 * SwingTl) - UpOwn(S, Tl)) / 1e-3 + GroundSwing)
+					: -((UpAt(S + 1e-3) - UpAt(S)) / 1e-3 * SwingS + GroundSwing);
 				if (ArmDown > 0.0) Goal += std::min(ArmDown, Fastest) * 2.0 / Set.RiseRate;
 			}
 			double L = Lift, Sw = LiftSwing;
@@ -637,8 +736,10 @@ namespace LandGeneralEye
 		Asked = 0;
 		const Vec Fwd(std::sin(H), std::cos(H), 0.0);
 		const Vec Right(std::cos(H), -std::sin(H), 0.0);
-		const double Arm = ArmAt(S), Tilt = TiltAt(S);
-		const double Across = Arm * std::cos(Tilt);
+		const double Arm = ArmAt(S), Tilt = TiltFor(S, Tl);
+		// (the keys' pan by the zoom alone, as fast at his own tilt as at the automatic one: looking straight down the
+		// arm's reach across the ground is nothing)
+		const double Across = Arm * std::cos(TiltAt(S));
 
 		// What the player asked.
 		if (In.bGoTo)
@@ -694,11 +795,12 @@ namespace LandGeneralEye
 		if (Follow >= 0) WantS = std::max(WantS, Set.FollowNearest);
 		WantH += In.Turn * Rad;
 		ClampWanted();
+		TiltWish(In);
 		if (Rec->Ground.W > 0.0) Tx = std::clamp(Tx, -Set.Margin, Rec->Ground.W + Set.Margin);
 		if (Rec->Ground.H > 0.0) Ty = std::clamp(Ty, -Set.Margin, Rec->Ground.H + Set.Margin);
 
 		// Eased toward it.
-		const double Tx0 = Tx, Ty0 = Ty, S0 = S, H0 = H;
+		const double Tx0 = Tx, Ty0 = Ty, S0 = S, H0 = H, Tl0 = Tl;
 		if (Rec->Ground.W > 0.0) Tx = std::clamp(Tx + SlideGo.X, -Set.Margin, Rec->Ground.W + Set.Margin);
 		if (Rec->Ground.H > 0.0) Ty = std::clamp(Ty + SlideGo.Y, -Set.Margin, Rec->Ground.H + Set.Margin);
 		if (bFirst)
@@ -707,6 +809,7 @@ namespace LandGeneralEye
 			Ty = WantY;
 			S = WantS;
 			H = WantH;
+			Tl = TlGoal = std::min(WantTl, TiltMostAt(S));
 		}
 		else
 		{
@@ -724,6 +827,11 @@ namespace LandGeneralEye
 				Spring(Ty, SwingY, Ty + SwingY / Rate, Rate, Dt);
 				Spring(S, SwingS, S + SwingS / Set.ZoomEase, Set.ZoomEase, Dt);
 				Spring(H, SwingH, H + SwingH / Set.TurnEase, Set.TurnEase, Dt);
+				if (bOwnTilt)
+				{
+					WantTl = Tl + std::clamp(WantTl - Tl, -5.0 * Rad, 5.0 * Rad);
+					Spring(Tl, SwingTl, Tl + SwingTl / Set.TiltEase, Set.TiltEase, Dt);
+				}
 				BrakeFor += Dt;
 				++Braked;
 			}
@@ -731,8 +839,27 @@ namespace LandGeneralEye
 			{
 				Spring(Tx, SwingX, WantX, Rate, Dt);
 				Spring(Ty, SwingY, WantY, Rate, Dt);
-				Spring(S, SwingS, WantS, Set.ZoomEase, Dt);
 				Spring(H, SwingH, WantH, Set.TurnEase, Dt);
+				// (a spring held to its fastest and hardest: from a swing already faster, slowed no harder than the push)
+				auto Held = [Dt](double& X, double& Swing, double Want, double W, double Fastest, double Push)
+				{
+					double X1 = X, Sw = Swing;
+					Spring(X1, Sw, Want, W, Dt);
+					const double Cap = std::max(Fastest, std::abs(Swing) - Push * Dt);
+					Sw = std::clamp(std::clamp(Sw, Swing - Push * Dt, Swing + Push * Dt), -Cap, Cap);
+					X += 0.5 * (Swing + Sw) * Dt;
+					Swing = Sw;
+				};
+				if (bOwnTilt)
+				{
+					// (with his own tilt, the zoom and the tilt eased and never faster or harder than the picture bears:
+					// the top view's swing of some fifty degrees and its climb from a man's shoulder take a second or two;
+					// his tilt eases toward what he wants as far as the zoom lets it, handed back toward the shoulder)
+					Held(S, SwingS, WantS, Set.ZoomEase, Set.ZoomFastest, Set.ZoomPush);
+					TlGoal = std::min(WantTl, TiltMostAt(S));
+					Held(Tl, SwingTl, TlGoal, Set.TiltEase, Set.TiltFastest * Rad, Set.TiltPush * Rad);
+				}
+				else Spring(S, SwingS, WantS, Set.ZoomEase, Dt);
 				if (BrakeFor < 0.0) BrakeFor = std::min(0.0, BrakeFor + Dt);
 			}
 			S = std::clamp(S, 0.0, 1.0);
@@ -751,7 +878,7 @@ namespace LandGeneralEye
 		{
 			// (half the move first, then none: the least stop that keeps it clear)
 			const Kept After = Keep();
-			const double Tx1 = Tx, Ty1 = Ty, S1 = S, H1 = H;
+			const double Tx1 = Tx, Ty1 = Ty, S1 = S, H1 = H, Tl1 = Tl;
 			const double Turned = WrapNear(H1, H0) - H0;
 			bool bTook = false;
 			for (const double F : { 0.5, 0.0 })
@@ -761,6 +888,7 @@ namespace LandGeneralEye
 				Ty = Ty0 + F * (Ty1 - Ty0);
 				S = S0 + F * (S1 - S0);
 				H = WrapNear(H0 + F * Turned, 0.0);
+				Tl = Tl0 + F * (Tl1 - Tl0);
 				Vec EyeHeld, LookHeld;
 				const int Got = Place(Dt, true, EyeHeld, LookHeld);
 				if (Got == 0 || (F == 0.0 && Got < Hu))
@@ -769,6 +897,8 @@ namespace LandGeneralEye
 					SwingY *= F;
 					SwingS *= F;
 					SwingH *= F;
+					SwingTl *= F;
+					if (bOwnTilt) WantTl = Tl + std::clamp(WantTl - Tl, -5.0 * Rad, 5.0 * Rad);
 					WantX = Tx + std::clamp(WantX - Tx, -2.0, 2.0);
 					WantY = Ty + std::clamp(WantY - Ty, -2.0, 2.0);
 					WantS = S + std::clamp(WantS - S, -0.05, 0.05);
@@ -793,7 +923,16 @@ namespace LandGeneralEye
 				Ty = Ty1;
 				S = S1;
 				H = H1;
+				Tl = Tl1;
 			}
+		}
+		// (tilted all the way back to the automatic tilt, under its soft floor where his own tilt no longer shows: the
+		// view tilts with the zoom again, without a step)
+		// (and the zoom come to rest, so its own easing goes back to the automatic one's without a step)
+		if (bOwnTilt && bToAuto && !bTop && Tl <= TiltAt(S) - Set.TiltSoft * Rad && std::abs(WantS - S) < 0.005 && std::abs(SwingS) < 0.05)
+		{
+			bOwnTilt = bToAuto = false;
+			Tl = WantTl = SwingTl = TlGoal = 0.0;
 		}
 
 		Now.Eye = EyeAt;
