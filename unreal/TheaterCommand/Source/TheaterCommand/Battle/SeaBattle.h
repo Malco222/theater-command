@@ -4,6 +4,8 @@
 #include "Effects/BattleEffects.h"
 #include "Battle/ConvoyLooks.h" // D1 hook (convoy looks)
 #include "Battle/SeaUnder.h" // U1 hook (under water)
+#include "Battle/SeaFrames.h" // (the release 2 ocean, step 0: the frames by thread)
+#include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -333,6 +335,17 @@ private:
 	int32 FramesLeftOut = 0;
 	bool bLastFrameApart = false;
 	bool bFrameTimesSaid = false;
+	/** (the release 2 ocean plan, step 0: measure first) The same frames by thread, the game's, the renderer's, the RHI's
+	 * and the graphics chip's, with the whole frame and the effects kit's ground asks in each (GroundAsks, counted in its
+	 * ground), from ThreadsFrom seconds of play, for the threads' line and the "Sea look:" line after the frame-time line
+	 * (SayThreadsAndLook). "-TheaterSeaBench=drop,span" (Tools/sea_bench.sh) counts them from its drop and quits span
+	 * seconds later (BenchUntil), or at the battle's end ("drop,end": there). SeaLook: the sea's look as OpenOn applied
+	 * it, which the "Sea look:" line says. */
+	SeaFrames::Record Threads;
+	int32 GroundAsks = 0;
+	double ThreadsFrom = 1.0;
+	double BenchUntil = -1.0;
+	SeaLookSwitches::Look SeaLook;
 	TArray<FOilLater> OilLater;
 	TArray<FFlakLater> FlakLater;
 	TArray<FLater> Later;
@@ -413,6 +426,9 @@ private:
 	/** The frame-time line (the production lead, 22 November: the real frame cost of each battle kind): how many frames,
 	 * and their mean, middle, 95th and 99th in the hundred and worst times, once a battle. */
 	void SayFrameTimes();
+	/** (the release 2 ocean plan, step 0) The frames by thread (Battle/SeaFrames) and the sea's tier and switches in force
+	 * (Battle/SeaLookSwitches), each on a line of its own, after the frame-time line. */
+	void SayThreadsAndLook() const;
 	/** The screen on the viewport and off it. */
 	void ShowScreen();
 	void HideScreen();

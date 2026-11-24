@@ -1,0 +1,58 @@
+# The release 2 sea's baseline (the release 2 ocean plan, step 0, (g)): what the cloud tests count with every switch of
+# the release 2 sea at today's value (tier 0, release 1.5's sea as made), and what the Mac measured of release 1.5.
+# Every later step's runs are held to these counts. A count changes only with the change that changes it, and its line
+# here changes in the same commit. The frame-budget numbers are the cloud Xeon's and move from run to run; they are
+# here to see drift, not to be matched.
+
+Tree: 10f85ffb (Sea scene: join review fixes (deck-gun column, pattern judged as laid)), and step 0's lines.
+Run: ocean-measure-r1, 24 November 2026 (before step 0's lines: ocean-measure-r0pre, the same counts);
+ocean-measure-r2 (the review's fixes to step 0: the same counts in both existing runners); and ocean-measure-r3 (the
+second review's: 22 November's picture runs replayed, and the paired differences' 99% interval; the same counts).
+
+Tools/sea_show/run.sh
+  recordings, each ALL CHECKS PASSED: 9 of 9
+    the battles' own: light-ships (569 s), samar (435 s), two-lines (638 s)
+    the stand-ins: convoy-night-air, convoy-night (620 s), sub-34-hunt-central, wolf-pack-abandon, wolf-pack-abeam,
+    wolf-pack-surrender (600 s each)
+  sea_under_test: 408 checks, 0 failed
+  in all 1,155 "ok" lines in the log (the recordings and sea_under_test), the same in r0pre, r1, r2 and r3
+  a frame within budget (the show's own frame on the cloud Xeon, the least of three plays; one in a thousand / mean, ms):
+                          r0pre            r1               r2               r3
+    light-ships           0.506 / 0.065    0.519 / 0.066    0.724 / 0.073    0.389 / 0.067
+    samar                 0.768 / 0.112    0.754 / 0.116    0.794 / 0.115    0.768 / 0.125
+    two-lines             0.411 / 0.060    0.437 / 0.065    0.369 / 0.061    0.233 / 0.054
+
+Tools/convoy_looks/run.sh
+  convoy looks: 3,795 checks, 0 failed
+  convoy looks against the show: 423 checks, 0 failed
+
+Tools/sea_waves/run.sh (step 0's own)
+  measure_test: 37 checks, 0 failed (31 in r1; r2 adds the RHI thread, the whole frame over the same frames, the
+    battle's span counted, the look read once as the scene opens, and a bench run's quit when its recording fails)
+  graph_pin: 55 checks, 0 failed; 15 materials pinned in graphs.sha (M_MapSurface, M_Solid, M_Highlight, M_Flag, M_Land,
+    M_Sea, M_Wake, M_FlakSmoke, M_Beam, M_FlakLit, M_Glow, M_Cloud, M_DeckShade, M_StageSea, M_UnderSea)
+  pearl_pin: 33 pins, 0 changed; bUseUnity = false; CampaignMapActor, CampaignHUD, CampaignPlayerController as at 10f85ffb
+  room_scan: 24 setters, every one given back; self-test 8 cases
+  switches_scan: 10 checks; self-test 6 cases; the game's own switches: 260 (with -TheaterSeaBench=, 261)
+  bench_table self-test: 31 cases (13 in r1; 21 in r2, which pairs each tier with its own round's tier 0, leaves out
+    runs not done, never pools window sizes, and lists plain tier 0 in run order with the heat; r3 reads 22 November's
+    lines only beside their replays, and counts a difference by the 99% interval on the paired differences' mean, with
+    each run's own noise in a case of its own)
+  bench_dry_run: 18 checks (14 in r2, new then: Tools/sea_bench.sh itself, with a stand-in for the engine; r3 adds the
+    replays' command lines, their pictures not kept, SEA_BENCH_REPLAY=0, and the replays' own window and sound)
+
+Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
+
+The Mac, release 1.5 (22 November 05:23-05:32Z, the production lead's frame-time lines,
+/mnt/project-files/sea-b34a-ride-and-frame-times.txt; the whole frame from 1 s of play, mean / 95th / 99th, ms; 2881x1786)
+Picture runs (water sheets; samar's 10 pictures), not whole battles: the camera on the planned shots, skipping ahead
+between them. No command line was kept, so their sound is not known.
+  two-lines     9.5 / 11.4 / 13.7   a water sheet (-TheaterSeaWaterSheet), 24 pictures: 3647 frames over 35 s
+  light-ships   9.2 / 11.3 / 15.4   a water sheet, 24 pictures: 3729 frames over 34 s
+  samar        14.2 / 22.8 / 31.0   its own shots, 10 pictures: 11724 frames over 167 s
+  samar-warm-grade (-TheaterSeaGrade, a different grade) 17.2 / 31.2 / 45.8, 9728 frames over 167 s, 10 pictures: not a
+  second run of samar as made, and not replayed (its grade's values were not kept)
+  These are read only beside the bench's replays of the same runs (SEA_BENCH_REPLAY, 5 rounds unless told); the
+  bench's whole-battle runs are held to their own interleaved tier 0. The bench (Tools/sea_bench.sh) has not run yet.
+  Its first table, the replays against these lines and tier 0 against tier 0 asked for tier 1 and not built (an A/A
+  run: the bench's own noise), goes here.

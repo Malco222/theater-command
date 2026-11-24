@@ -3,6 +3,7 @@
 #include "Battle/AirStage.h"
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
+#include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the "Sea look:" line)
 #include "Battle/SeaSailors.h"
 #include "Battle/SeaShow.h"
 #include "Battle/ShipGuns.h"
@@ -46,6 +47,8 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
+#include "RenderTimer.h" // (the release 2 ocean, step 0: the threads' times, as the photographer reads them)
+#include "RHI.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Sound/SoundAttenuation.h"
@@ -1372,6 +1375,20 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
 	Speed = FMath::Clamp(static_cast<double>(Pace), 0.25, 4.0);
+	// (the release 2 ocean plan, step 0: a bench run, Tools/sea_bench.sh's "-TheaterSeaBench=drop,span": the frames by
+	// thread counted only after the first drop seconds of play, while the fanless Air warms, and the scene quits span
+	// seconds after that, or at the battle's end, its lines said; "drop,end" plays to the battle's end, the fight with
+	// it; it draws nothing differently)
+	{
+		FString Bench;
+		TArray<FString> BenchBits;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBench="), Bench, false) && Bench.ParseIntoArray(BenchBits, TEXT(","), false) == 2)
+		{
+			ThreadsFrom = FMath::Max(1.0, FCString::Atod(*BenchBits[0]));
+			const double BenchSpan = FCString::Atod(*BenchBits[1]);
+			BenchUntil = BenchSpan > 0.0 ? ThreadsFrom + FMath::Max(10.0, BenchSpan) : 1.0e12;
+		}
+	}
 	// U1 hook (under water): a recording named by its path ("-TheaterSeaBattle=Tools/sea_show/stand-ins/convoy-night.json"),
 	// so a Mac can play a convoy night before the battle's own recordings of one land; its pictures named by its file. Only
 	// in a development build: a shipped game plays what is staged with it.
@@ -1412,6 +1429,17 @@ bool ASeaBattle::BeginMonthScene(const FString& Text, const FString& Name)
 bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString& Where)
 {
 	using namespace SeaParts;
+	// (the release 2 ocean plan, step 0: the sea's look read once, as the scene opens, and kept for the "Sea look:" line:
+	// the tier in force, 0 until step 15 builds it, and every switch of the release 2 sea asked for, read as the engine
+	// reads them, a value to the next space, a flag whole; each step that builds a switch writes its value in force here)
+	SeaLook = SeaLookSwitches::Read([](const SeaLookSwitches::Switch& One, std::string& Value)
+		{
+			const FString Name(UTF8_TO_TCHAR(One.Name));
+			FString Got;
+			const bool bAsked = SeaLookSwitches::TakesValue(One) ? FParse::Value(FCommandLine::Get(), *Name, Got, false) : FParse::Param(FCommandLine::Get(), *Name);
+			Value = TCHAR_TO_UTF8(*Got);
+			return bAsked;
+		});
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -1472,6 +1500,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// the sea inside her hull; the sea's face everywhere else)
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 		{
+			++GroundAsks; // (the release 2 ocean plan, step 0: its asks counted a frame, SayThreadsAndLook)
 			FVector Deck;
 			if (!bOnWater && Stage && Stage->DeckUnder(Point, Deck))
 			{
@@ -5708,6 +5737,7 @@ void ASeaBattle::SayFrameTimes()
 	const FIntPoint Size = GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
 		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
+	SayThreadsAndLook(); // (the release 2 ocean plan, step 0)
 	if (Under)
 	{
 		Under->SayFrameTimes(); // U1 hook (under water): the frames under the water, said apart
@@ -5718,6 +5748,18 @@ void ASeaBattle::SayFrameTimes()
 		UE_LOG(LogTheater, Display, TEXT("Sea battle: men in the water %d of %d shown (%.0f%%), %d at once at the most; %d rafts, %d boats, %d floats in all, %d slicks; the wreck meshes %d points at the most."),
 			Kept.MenKept, Kept.MenReal, 100.0 * State->Show.MenShare(), Kept.MostMen, Kept.Rafts, Kept.Boats, Kept.Floats, Kept.Slicks, WrecksMostDrawn);
 	}
+}
+
+void ASeaBattle::SayThreadsAndLook() const
+{
+	// (the release 2 ocean plan, step 0, measure first: the frames by thread, the most of the three a frame being what the
+	// frame guard will watch, and the kit's ground asks; Tools/sea_bench.sh reads the line)
+	const FString Split(UTF8_TO_TCHAR(SeaFrames::Line(Threads, ThreadsFrom).c_str()));
+	UE_LOG(LogTheater, Display, TEXT("%s"), *Split);
+	// (and the sea's look as OpenOn applied it: its tier, 0 being release 1.5's sea as made, until step 15 builds the tier;
+	// every switch of the release 2 sea in force; and any asked for before its step has landed, which changes nothing)
+	const FString Look(UTF8_TO_TCHAR(SeaLookSwitches::Line(SeaLook).c_str()));
+	UE_LOG(LogTheater, Display, TEXT("%s"), *Look);
 }
 
 void ASeaBattle::Quit(const FString& Why)
@@ -5975,6 +6017,10 @@ void ASeaBattle::Tick(float DeltaSeconds)
 				{
 					Quit(TEXT("the recorded action could not be played"));
 				}
+				else if (BenchUntil > 0.0) // (the release 2 ocean plan, step 0: a bench run quits too, not left to its watchdog)
+				{
+					Quit(TEXT("the bench's recorded action could not be played"));
+				}
 				SetActorTickEnabled(false);
 			}
 		}
@@ -6002,6 +6048,17 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		{
 			Under->Took(Took); // U1 hook (under water): the frames under the water timed apart too
 		}
+		if (RealT >= ThreadsFrom) // (the release 2 ocean plan, step 0: the same frame by thread, as the speed log reads them, and whole)
+		{
+			Threads.Add(FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(GRHIThreadTime),
+				FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), 1000.0 * Took, GroundAsks, S.BattleT);
+		}
+	}
+	GroundAsks = 0;
+	if (BenchUntil > 0.0 && (RealT >= BenchUntil || S.BattleT >= S.EndT + 12.0))
+	{
+		Quit(TEXT("the bench run is over")); // (the release 2 ocean plan, step 0: Tools/sea_bench.sh)
+		return;
 	}
 	bLastFrameApart = false;
 	RealT += Dt;
