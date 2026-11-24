@@ -539,7 +539,10 @@ namespace
 						N = -N;
 					}
 					const V3 Pt = Where[I];
-					const double Sunny = std::max(0.0, N.Dot(Shadow.L)) * Shadow.Lit(Pt + N * 0.015, 0.02);
+					// (its bias grows with the slope to the sun and the map's texel, the soft lookup reaching 2.4 texels round:
+					// a large flat wall in a slanting sun, a church's far off, otherwise shadows itself in streaks)
+					const double NL = std::max(0.0, N.Dot(Shadow.L)), Slope = std::min(4.0, std::sqrt(std::max(0.0, 1.0 - NL * NL)) / std::max(NL, 0.05));
+					const double Sunny = NL * Shadow.Lit(Pt + N * 0.015, 0.02 + 2.5 * Shadow.Texel * Slope);
 					const double Sky = 0.55 + 0.45 * N.Z;
 					const double Low = 0.72 + 0.28 * Smooth(0.0, 0.9, Pt.Z); // the running gear sits in the shade of the hull
 					Lit[I] = Albedo[I] * (SunLight * Sunny + SkyLight * (Sky * Low) + Bounce * (0.5 - 0.5 * N.Z));
@@ -771,7 +774,8 @@ int main(int argc, char** argv)
 			double Bearing, Up, Sun;
 			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves;
 			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them); the
-			         // church's: 4 its belfry and spire's foot, 5 the tower's west door, 6 the cross, 7 where tower and nave meet
+			         // church's: 4 its belfry and spire's foot, 5 the tower's west door, 6 the cross, 7 where tower and nave meet,
+			         // 8 the tower's south face under its lower string course
 			double AimDistance;
 			const char* Caption;
 			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church
@@ -847,11 +851,16 @@ int main(int argc, char** argv)
 			{ "church_window", 0, 0, 0, 7, -22.0, 2.0, 62.0, 0, 5.0, "close: a nave window, leaded, under its ring", 3 },
 			{ "church_west", 0, 0, 0, 7, -90.0, 6.0, 120.0, 5, 13.0, "the tower's west door and window", 3 },
 			{ "church_belfry", 0, 0, 0, 7, -60.0, 8.0, 62.0, 4, 15.0, "close: belfry, parapet, pinnacles, lucarnes", 3 },
+			{ "church_tower_weather", 0, 0, 0, 7, -25.0, 6.0, 62.0, 8, 9.0, "close: the tower weathered under its string course", 3 },
 			{ "church_cross", 0, 0, 0, 7, -40.0, 6.0, 62.0, 6, 6.5, "close: the finial, the cross, the gilt cock", 3 },
+			{ "church_cross_b", 0, 0, 0, 7, 62.0, 12.0, 62.0, 6, 6.5, "the cross and cock, another heading", 3 },
 			{ "church_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage: a shell through the nave's roof", 3 },
 			{ "church_mid", 0, 1, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 3 },
 			{ "church_far", 0, 2, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 3 },
 			{ "church_roofhole_mid", 1, 1, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "roof holed, middle level", 3 },
+			{ "church_roofhole_far", 1, 2, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "roof holed, far level", 3 },
+			{ "church_hole_mid", 1, 1, 0, 7, -10.0, 42.0, 62.0, 3, 24.0, "the hole, middle level, seen at 24 m", 3 },
+			{ "church_hole_far", 1, 2, 0, 7, -10.0, 42.0, 62.0, 3, 24.0, "the hole, far level, seen at 24 m", 3 },
 			{ "church_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "church at 90 m: near level", 3 },
 			{ "church_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "church at 90 m: middle level", 3 },
 			{ "church_switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 3 }, // (not laid out: for measuring the far against it)
@@ -912,6 +921,7 @@ int main(int argc, char** argv)
 				if (K.Aim == 5) At = V3(-14.8, 0.0, 0.15 + 4.0);
 				if (K.Aim == 6) At = V3(-11.9, 0.0, 0.15 + 29.7);
 				if (K.Aim == 7) At = V3(-8.6, 0.0, 0.15 + 10.5);
+				if (K.Aim == 8) At = V3(-11.9, 2.9, 0.15 + 6.4);
 				P.bAim = true;
 				P.AimAt = At;
 				P.AimFrom = V3(std::sin(K.Bearing * Rad) * std::cos(K.Up * Rad), std::cos(K.Bearing * Rad) * std::cos(K.Up * Rad), std::sin(K.Up * Rad));

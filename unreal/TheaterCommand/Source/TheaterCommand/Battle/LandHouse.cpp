@@ -1090,12 +1090,39 @@ namespace LandHouse
 			return std::exp(-Sq((A - 0.5 * (O.A0 + O.A1)) / Wide)) * std::exp(-std::max(0.0, Rise - 0.3) / 0.8) * Smooth(O.Z1 - 0.3, O.Z1, Z);
 		}
 
+		/** A church tower's ledges the rain runs off down its walls: its two string courses' undersides and its cornice's
+		 * corbels (as ChurchExtras and TowerTop lay them). */
+		std::vector<double> TowerDrips(const Plan& P)
+		{
+			double ZBel = P.EW;
+			for (const Opening& O : P.Ops)
+				if (O.What == OpBelfry) ZBel = std::min(ZBel, O.Z0);
+			return { Snap(P, 7.8) - 0.16, Quant(P, ZBel - 0.25) - 0.16, P.EW - 0.42 };
+		}
+
 		/** The weather on a wall at a place: damp and green at its foot, streaks from the sills and the gutters' ends,
 		 * lichen, a fire's soot above the openings and over the inside. */
 		Col Weathered(const Plan& P, const Face& Fc, int F, double A, double Z, Col C, bool bFine = false)
 		{
 			const uint64_t K = P.Key;
 			if (P.Hurt == 3) C = Scaled(C, 0.86); // (a shell's stone darkened all over by the fire)
+			if (P.Kind == 5)
+			{
+				// (a church tower's ashlar aged, the art director's church round 2: under each ledge the rain's dirt washed down
+				// the blocks, darkest under it and in runs where the ledge drips most, fading a metre or two down; a splash
+				// band at the foot as high as the rain throws the mud; lichen in patches, a grey-green crust and the orange)
+				for (const double ZD : TowerDrips(P))
+				{
+					if (Z > ZD + 1e-6) continue;
+					const double Runs = Smooth(0.4, 0.78, Noise01(A / 0.42 + 11.0 * F, ZD * 1.7, K ^ 0x5E7));
+					const double Reach = 0.7 + 1.6 * Noise01(A / 0.5 + 3.0 * F, ZD * 2.3, K ^ 0x5E9);
+					C = Scaled(C, 1.0 - (0.07 + 0.15 * Runs) * std::exp(-(ZD - Z) / Reach));
+				}
+				const double Splash = 0.55 + 0.45 * Noise01(A / 0.7 + 4.0 * F, 1.3, K ^ 0x5B1);
+				C = Scaled(C, 1.0 - 0.16 * Smooth(Splash + 0.15, Splash - 0.1, Z));
+				C = Mixed(C, Rgb(132, 136, 112), 0.38 * Smooth(0.64, 0.8, Noise01(A / 0.55 + 9.0 * F, Z / 0.45, K ^ 0x11D)));
+				C = Mixed(C, Rgb(184, 140, 72), 0.3 * Smooth(0.72, 0.86, Noise01(A / 0.35 + 13.0 * F, Z / 0.3, K ^ 0x11F)));
+			}
 			C = Mixed(C, Rgb(96, 98, 78), 0.55 * Smooth(1.1, 0.0, Z));
 			if (bFine) C = Scaled(C, 1.0 - 0.07 * Smooth(0.2, 0.75, Noise01(A / 0.22, Z / 2.6, K ^ (0x57 + F)))); // rain streaks down the face
 			else C = Scaled(C, 0.975);
@@ -3800,6 +3827,74 @@ namespace LandHouse
 			if (Silled(O.What)) B.Box(At(Fc, AM, O.Z0 - 0.045, 0.02), Fc.T * (0.5 * W + 0.08), Fc.N * 0.05, Up * 0.045, Varied(P.K.Dressed, 1.0, 0.0), 0);
 		}
 
+		/**
+		 * A church's wall far off (the art director's church round 2: it read as boards): flat at its stones' mean, in bands
+		 * about a metre and a half tall (the tower's two) a shade apart, its coursing faint; the foot's band damp; the corners' quoins
+		 * painted paler (none on the tower, all of it dressed); cut to the gable's rake; left out where another part
+		 * covers it. Its openings are painted over it (ChurchOpeningPlain).
+		 */
+		void ChurchWallFar(Pen& B, const Plan& P, int F)
+		{
+			const Face Fc = FaceOf(P, F);
+			auto Top = [&](double A) { return TopOf(P, Fc, F, A, 3.0); };
+			const bool bTower = P.Kind == 5;
+			const double QW = 0.42, ZTop = Fc.bGable ? P.Ridge + 0.1 : P.EW;
+			std::vector<double> ZB{ -P.S.Below, 0.35, ZTop };
+			if (Fc.bGable) ZB.push_back(P.EW);
+			for (double Z = 0.35 + (bTower ? 2.0 : 1.4); Z < ZTop - 0.5; Z += bTower ? 2.0 : 1.4) ZB.push_back(Z <= P.EW ? Snap(P, Z) : Z);
+			for (const Opening& O : P.Ops)
+				if (O.Face == F && O.What == OpHidden)
+				{
+					ZB.push_back(std::max(O.Z0, -P.S.Below));
+					ZB.push_back(std::min(O.Z1, ZTop));
+				}
+			std::sort(ZB.begin(), ZB.end());
+			ZB.erase(std::unique(ZB.begin(), ZB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.05; }), ZB.end());
+			const Col Mean = Scaled(Mixed(bTower ? Varied(P.K.Dressed, 0.87, 0.0) : P.K.Wall, Rgb(174, 172, 132), 0.04), 0.965); // (the tower's as weathered)
+			for (size_t J = 0; J + 1 < ZB.size(); ++J)
+			{
+				const double Z0 = ZB[J], Z1 = ZB[J + 1], ZM = 0.5 * (Z0 + Z1);
+				std::vector<double> AB{ 0.0, Fc.Len };
+				if (!bTower && Z0 < P.EW - 0.01)
+				{
+					AB.push_back(QW);
+					AB.push_back(Fc.Len - QW);
+				}
+				if (Fc.bGable && Z1 > P.EW + 1e-6)
+					for (double E : { 0.5 * Fc.Len, 0.5 * Fc.Len - P.Vb, 0.5 * Fc.Len + P.Vb }) AB.push_back(E);
+				for (const Opening& O : P.Ops)
+					if (O.Face == F && O.What == OpHidden && O.Z0 < Z1 - 1e-6 && O.Z1 > Z0 + 1e-6)
+					{
+						AB.push_back(O.A0);
+						AB.push_back(O.A1);
+					}
+				std::sort(AB.begin(), AB.end());
+				AB.erase(std::unique(AB.begin(), AB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.012; }), AB.end());
+				const double Tone = 0.985 + 0.03 * Unit(Hash(P.Key ^ 0xFA2, static_cast<uint64_t>(F), J));
+				for (size_t I = 0; I + 1 < AB.size(); ++I)
+				{
+					const double A0 = std::max(0.0, AB[I]), A1 = std::min(Fc.Len, AB[I + 1]), AM = 0.5 * (A0 + A1);
+					if (A1 - A0 < 1e-4) continue;
+					bool bHole = false;
+					for (const Opening& O : P.Ops)
+						if (O.Face == F && O.What == OpHidden && AM > O.A0 && AM < O.A1 && ZM > O.Z0 && ZM < O.Z1) bHole = true;
+					if (bHole) continue;
+					double L0 = 1e9, L1 = 1e9;
+					if (Fc.bGable && Z1 > P.EW + 1e-6)
+					{
+						L0 = Top(A0 + 1e-4);
+						L1 = Top(A1 - 1e-4);
+						if (std::max(L0, L1) <= Z0 + 1e-6) continue;
+					}
+					const bool bQuoin = !bTower && (AM < QW || AM > Fc.Len - QW) && Z0 < P.EW - 0.01 && !CornerHid(P, F, AM > 0.5 * Fc.Len, Z0, Z1);
+					Col C = Scaled(bQuoin ? Varied(Mixed(P.K.Dressed, P.K.Wall, 0.25), 0.97, 0.0) : Mean, Tone);
+					C = Mixed(C, Rgb(96, 98, 78), 0.55 * Smooth(1.1, 0.0, ZM));
+					if (bTower) C = Scaled(C, 1.0 - 0.1 * Smooth(1.2, 0.4, ZM));
+					Cut(B, Fc, A0, A1, Z0, Z1, L0, L1, bQuoin ? 0.012 : 0.0, Fc.N, [&](double, double) { return C; });
+				}
+			}
+		}
+
 		/** A wall's face in cells: Step apart along it, its openings dark, its quoins and surrounds painted on (the middle
 		 * level's: its stones laid by MidStones, its reveals, sills, shutters and frames); cut to the rake and the broken
 		 * top, whose pieces are three times as long on the far level. */
@@ -3808,6 +3903,13 @@ namespace LandHouse
 			const Face Fc = FaceOf(P, F);
 			const double Sc = bMid ? 1.0 : 3.0;
 			auto Top = [&](double A) { return TopOf(P, Fc, F, A, Sc); };
+			if (!bMid && P.Kind >= 3)
+			{
+				ChurchWallFar(B, P, F);
+				for (const Opening& O : P.Ops)
+					if (O.Face == F && O.What > OpHidden) ChurchOpeningPlain(B, P, O, Fc, false);
+				return;
+			}
 			if (bMid) MidStones(B, P, F);
 			const std::vector<double> Line = bMid ? MidLine(P, F) : std::vector<double>{};
 			std::vector<double> AB{ 0.0, Fc.Len }, ZB{ bMid ? 0.35 : -P.S.Below, P.EW };
@@ -4045,6 +4147,48 @@ namespace LandHouse
 			SB.erase(std::unique(SB.begin(), SB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.05; }), SB.end());
 			const int NB = static_cast<int>(SB.size()) - 1;
 			const int NX = std::max(1, static_cast<int>(std::lround((X1 - X0) / CellX)));
+			// A church's holed roof (the art director's church round 2: it read as a skylight): round the hole the deck in
+			// slates' cells (the middle's a slate course deep), gone where the hole is, its edge ragged; under it a run of
+			// slates gone down each column of them, as far as the blast tore them, so they step down the slope; the cut
+			// edges dark, the slates near it sooted; a charred rafter or two across it.
+			const bool bRagged = P.Kind >= 3 && P.Hurt == 1;
+			auto Gone = [&](int Side, double X, double Sd) {
+				if (Side != P.HoleSide) return false;
+				const double DX = (X - P.HoleX) / P.HoleRX;
+				double DS = (Sd - P.HoleS) / P.HoleRS;
+				if (DS < 0.0) DS *= 1.0 - 0.42 * Unit(Hash(P.Key ^ 0x5D0, static_cast<uint64_t>(std::floor(X / 0.42) + 1000.0)));
+				return std::sqrt(DX * DX + DS * DS) + 0.22 * Noise(X / 0.45, Sd / 0.45, P.Key ^ 0x401E) < 0.9;
+			};
+			auto Ragged = [&](int Side, int K, int I, double XA, double XB, double S0, double S1) {
+				const int NU = std::max(1, static_cast<int>(std::ceil((XB - XA) / (bMid ? 0.42 : 1.0) - 1e-6)));
+				const int NS = std::max(1, static_cast<int>(std::lround((S1 - S0) / (bMid ? P.Gauge : 0.75))));
+				const double DU = (XB - XA) / NU, DSd = (S1 - S0) / NS;
+				for (int V = 0; V < NS; ++V)
+					for (int U = 0; U < NU; ++U)
+					{
+						const double XA2 = XA + DU * U, XB2 = XA2 + DU, SA = S0 + DSd * V, SB2 = SA + DSd, XM = 0.5 * (XA2 + XB2), SM = 0.5 * (SA + SB2);
+						if (Gone(Side, XM, SM)) continue;
+						// (its slates as the whole cell's, the band's lip and shading run on across it; sooted toward the hole)
+						const uint64_t H = Hash(P.Key, 0xBA4D, static_cast<uint64_t>(K * 256 + I * 2 + (Side > 0)));
+						Col C = Varied(P.K.Roof, (bMid ? 0.95 : 0.7) + 0.08 * Unit(H), 0.0);
+						if (!bMid && P.S.Roof == 0) C = Rgb(C.R, C.G * 1.01, C.B * 1.085);
+						C = Mixed(C, Rgb(138, 140, 118), 0.2 * Smooth(2.2, 0.0, S0));
+						const double H0 = bMid ? 1.9 * P.SlateT : 0.02, Dim = bMid ? 0.82 : 0.95;
+						auto Lift = [&](double Sd) { return H0 + (0.02 - H0) * (Sd - S0) / (S1 - S0); };
+						auto Paint = [&](double X, double Sd) { return Mixed(Scaled(C, 1.0 + (Dim - 1.0) * (Sd - S0) / (S1 - S0)), P.K.Soot, 0.7 * Smooth(1.8, 1.0, HoleDist(P, Side, X, Sd))); };
+						const RoofPt A0 = RoofAt(P, Side, XA2, SA, Lift(SA)), A1 = RoofAt(P, Side, XB2, SA, Lift(SA)), A2 = RoofAt(P, Side, XB2, SB2, Lift(SB2)), A3 = RoofAt(P, Side, XA2, SB2, Lift(SB2));
+						B.Quad(A0.P, A1.P, A2.P, A3.P, Paint(XA2, SA), Paint(XB2, SA), Paint(XB2, SB2), Paint(XA2, SB2), A0.N);
+						const RoofPt U0 = RoofAt(P, Side, XA2, SA, -0.04), U1 = RoofAt(P, Side, XB2, SA, -0.04), U2 = RoofAt(P, Side, XB2, SB2, -0.04), U3 = RoofAt(P, Side, XA2, SB2, -0.04);
+						const bool bL = Gone(Side, XM - DU, SM), bR = Gone(Side, XM + DU, SM), bD = Gone(Side, XM, SM - DSd), bU = Gone(Side, XM, SM + DSd);
+						const Col Edge = Rgb(40, 32, 28);
+						if (bMid && (K == 0 || bL || bR || bD || bU)) B.Quad1(U0.P, U1.P, U2.P, U3.P, P.K.Boards, U0.N * -1.0);
+						// (the cut edges' thickness the middle's only: far off a few centimetres are nothing)
+						if ((bMid && V == 0) || (bMid && bD)) B.Quad1(U0.P, U1.P, A1.P, A0.P, bD ? Edge : Scaled(C, 0.5), Norm(A0.P - A3.P));
+						if (bMid && bU) B.Quad1(U3.P, U2.P, A2.P, A3.P, Edge, Norm(A3.P - A0.P));
+						if ((I == 0 && U == 0) || (bMid && bL)) B.Quad1(A0.P, A3.P, U3.P, U0.P, bL ? Edge : Scaled(C, 0.6), V3{ -1.0, 0.0, 0.0 });
+						if ((I == NX - 1 && U == NU - 1) || (bMid && bR)) B.Quad1(A1.P, A2.P, U2.P, U1.P, bR ? Edge : Scaled(C, 0.6), V3{ 1.0, 0.0, 0.0 });
+					}
+			};
 			for (int Side = -1; Side <= 1; Side += 2)
 				for (int K = 0; K < NB; ++K)
 				{
@@ -4052,6 +4196,11 @@ namespace LandHouse
 					for (int I = 0; I < NX; ++I)
 					{
 						const double XA = X0 + (X1 - X0) * I / NX, XB = X0 + (X1 - X0) * (I + 1) / NX, XM = 0.5 * (XA + XB);
+						if (bRagged && Side == P.HoleSide && std::fabs(XM - P.HoleX) < 1.4 * P.HoleRX + 0.5 * (XB - XA) && SM - 0.5 * (S1 - S0) < P.HoleS + 1.4 * P.HoleRS && SM + 0.5 * (S1 - S0) > P.HoleS - 2.6 * P.HoleRS)
+						{
+							Ragged(Side, K, I, XA, XB, S0, S1);
+							continue;
+						}
 						if (!DeckThere(P, Side, XM, SM)) continue;
 						const uint64_t H = Hash(P.Key, 0xBA4D, static_cast<uint64_t>(K * 256 + I * 2 + (Side > 0)));
 						Col C = Varied(P.K.Roof, (bMid ? 0.95 : P.Kind >= 3 ? 0.7 : 0.8) + 0.08 * Unit(H), 0.0); // (a church's steep slates darker far off, as near)
@@ -4071,6 +4220,24 @@ namespace LandHouse
 						if (I < NX - 1 && !DeckThere(P, Side, XM + (XB - XA), SM)) B.Quad1(A1.P, A2.P, U2.P, U1.P, Rgb(40, 32, 28), V3{ 1.0, 0.0, 0.0 });
 					}
 				}
+			// (the church's hole: its charred rafters across it, the middle's two, one broken and hanging into the dark; the
+			// far level's one)
+			if (bRagged)
+			{
+				const int Sd = P.HoleSide;
+				const double Sa = P.HoleS - 1.15 * P.HoleRS, Sb = P.HoleS + 1.05 * P.HoleRS;
+				const double XR0 = 0.45 * std::round((P.HoleX - 0.38 * P.HoleRX) / 0.45), XR1 = XR0 + 0.9;
+				const Col Burnt = Mixed(P.K.Char, Rgb(112, 102, 92), 0.4); // (charred, the ash grey on it catching the light)
+				const RoofPt R0 = RoofAt(P, Sd, XR0, Sa, -0.11), R1 = RoofAt(P, Sd, XR0, Sb, -0.11);
+				B.Beam(R0.P, R1.P, 0.08, 0.13, Burnt, R0.N);
+				if (bMid)
+				{
+					const RoofPt T0 = RoofAt(P, Sd, XR1, Sb, -0.11), T1 = RoofAt(P, Sd, XR1, P.HoleS + 0.08, -0.11);
+					B.Beam(T0.P, T1.P, 0.08, 0.13, Burnt, T0.N);
+					const V3 Hang = T1.P - T0.N * 0.05, Down = RoofAt(P, Sd, XR1 + 0.12, P.HoleS - 0.55 * P.HoleRS, -0.85).P;
+					B.Beam(Hang, Down, 0.08, 0.12, Scaled(Burnt, 0.85), T0.N);
+				}
+			}
 			// the ridge, a rounded cap
 			const double RX0 = ChimneyAt(P, -1) ? -0.5 * P.L + 0.6 : X0, RX1 = ChimneyAt(P, 1) ? 0.5 * P.L - 0.6 : X1;
 			double CX0 = RX0, CX1 = RX1;
@@ -4123,8 +4290,26 @@ namespace LandHouse
 			else if (P.Hurt >= 2) B.Quad1(V3{ -IX, -IY, 0.02 }, V3{ IX, -IY, 0.02 }, V3{ IX, IY, 0.02 }, V3{ -IX, IY, 0.02 }, P.Hurt == 3 ? Rgb(60, 54, 48) : Rgb(96, 88, 76), Up);
 			if (P.Hurt == 1)
 			{
+				// (a church's: no loft, the dim of its nave under the hole, the rafters' black against it; its walls' inner
+				// faces above it to the roof, so that nothing shows through the hole but the nave's dark)
 				const double Z = P.Loft;
-				B.Quad1(V3{ -IX, -IY, Z }, V3{ IX, -IY, Z }, V3{ IX, IY, Z }, V3{ -IX, IY, Z }, P.K.Boards, Up);
+				B.Quad1(V3{ -IX, -IY, Z }, V3{ IX, -IY, Z }, V3{ IX, IY, Z }, V3{ -IX, IY, Z }, P.Kind >= 3 ? Rgb(64, 57, 50) : P.K.Boards, Up);
+				if (P.Kind >= 3)
+					for (int F = 0; F < 4; ++F)
+					{
+						const Face Fc = FaceOf(P, F);
+						std::vector<double> AB{ 0.0, Fc.Len };
+						if (Fc.bGable)
+							for (double E : { 0.5 * Fc.Len - P.Vb, 0.5 * Fc.Len, 0.5 * Fc.Len + P.Vb }) AB.push_back(E);
+						std::sort(AB.begin(), AB.end());
+						// (a long wall's up past its plate to the deck's underside over its inner face, closing the eaves)
+						const double Deck = RoofAt(P, 1, 0.0, SlopeAt(P, 0.5 * P.D - P.Thick), -0.04).P.Z + 0.03;
+						for (size_t I = 0; I + 1 < AB.size(); ++I)
+						{
+							const double L0 = Fc.bGable ? TopOf(P, Fc, F, AB[I] + 1e-4) : Deck, L1 = Fc.bGable ? TopOf(P, Fc, F, AB[I + 1] - 1e-4) : Deck;
+							Cut(B, Fc, AB[I], AB[I + 1], Z - 0.05, std::max(L0, L1) + 0.01, L0, L1, -P.Thick, Fc.N * -1.0, [](double, double) { return Rgb(50, 45, 40); });
+						}
+					}
 			}
 			if (P.Hurt == 2)
 			{
@@ -4368,32 +4553,107 @@ namespace LandHouse
 			B.Tube(V3{ 0.0, 0.0, Za + 0.18 }, V3{ 0.0, 0.0, Za + 0.3 }, 0.09, 0.13, 8, Fin, false);
 			B.Tube(V3{ 0.0, 0.0, Za + 0.3 }, V3{ 0.0, 0.0, Za + 0.44 }, 0.13, 0.0, 8, Fin, false);
 			B.Tube(V3{ 0.0, 0.0, Za + 0.4 }, V3{ 0.0, 0.0, Za + 2.35 }, 0.022, 0.018, 5, Iron, true);
-			B.Tube(V3{ 0.0, 0.0, Za + 0.62 }, V3{ 0.0, 0.0, Za + 0.75 }, 0.024, 0.11, 8, Iron, false);
-			B.Tube(V3{ 0.0, 0.0, Za + 0.75 }, V3{ 0.0, 0.0, Za + 0.88 }, 0.11, 0.024, 8, Iron, false);
+			// (the orb, a gilt copper ball on the rod: the art director's church round 2)
+			const Col Gilt = Rgb(158, 126, 64);
+			{
+				const V3 OC{ 0.0, 0.0, Za + 0.75 };
+				constexpr int Rings = 6, Segs = 10;
+				constexpr double OR = 0.15;
+				std::vector<uint32_t> Ix;
+				for (int I = 0; I <= Rings; ++I)
+					for (int J = 0; J <= Segs; ++J)
+					{
+						const double Th = Pi * I / Rings, Ph = 2.0 * Pi * J / Segs;
+						const V3 N{ std::sin(Th) * std::cos(Ph), std::sin(Th) * std::sin(Ph), std::cos(Th) };
+						Ix.push_back(B.Vert(OC + N * OR, N, Scaled(Gilt, 0.9 + 0.1 * N.Z)));
+					}
+				for (int I = 0; I < Rings; ++I)
+					for (int J = 0; J < Segs; ++J)
+					{
+						const uint32_t A0 = Ix[static_cast<size_t>(I * (Segs + 1) + J)], A1 = Ix[static_cast<size_t>(I * (Segs + 1) + J + 1)];
+						const uint32_t B0 = Ix[static_cast<size_t>((I + 1) * (Segs + 1) + J)], B1 = Ix[static_cast<size_t>((I + 1) * (Segs + 1) + J + 1)];
+						const double Th = Pi * (I + 0.5) / Rings, Ph = 2.0 * Pi * (J + 0.5) / Segs;
+						const V3 Out{ std::sin(Th) * std::cos(Ph), std::sin(Th) * std::sin(Ph), std::cos(Th) };
+						if (I > 0) B.Tri(A0, A1, B1, Out);
+						if (I < Rings - 1) B.Tri(A0, B1, B0, Out);
+					}
+			}
 			B.Beam(V3{ 0.0, 0.0, Za + 1.05 }, V3{ 0.0, 0.0, Za + 2.0 }, 0.05, 0.05, Iron);
 			B.Beam(V3{ 0.0, -0.34, Za + 1.65 }, V3{ 0.0, 0.34, Za + 1.65 }, 0.05, 0.05, Iron);
 			for (int Sd = -1; Sd <= 1; Sd += 2)
 				B.Box(V3{ 0.0, Sd * 0.36, Za + 1.65 }, V3{ 0.03, 0.0, 0.0 }, V3{ 0.0, 0.03, 0.0 }, V3{ 0.0, 0.0, 0.06 }, Iron);
-			// (the cockerel, gilt and tarnished, a flat silhouette over the rod, its tail to the wind)
+			// (the cockerel, gilt and tarnished, over the rod, its tail to the wind: each piece of it a plate 4 to 8 cm thick,
+			// so that it reads as a bird from its edge too; the art director's church round 2)
 			{
 				const double Yc = 2.0 * Pi * Unit(Mix(P.Key ^ 0xC0C));
 				const V3 Fw{ std::cos(Yc), std::sin(Yc), 0.0 }, Sd{ -std::sin(Yc), std::cos(Yc), 0.0 };
 				const V3 O{ 0.0, 0.0, Za + 2.32 };
-				auto Pt = [&](double U, double V) { return O + Fw * U + Up * V; };
-				const Col Gilt = Rgb(158, 126, 64), GiltD = Rgb(128, 100, 50);
-				const double Sh[][6] = {
-					{ -0.3, 0.06, -0.36, 0.4, -0.12, 0.14 },  // the tail
-					{ -0.36, 0.4, -0.24, 0.42, -0.14, 0.16 }, // its upper feathers
-					{ -0.16, 0.02, 0.13, 0.02, 0.16, 0.15 },  // the body
-					{ -0.16, 0.02, 0.16, 0.15, -0.14, 0.17 },
-					{ 0.08, 0.12, 0.18, 0.12, 0.2, 0.34 },    // the neck and head
-					{ 0.08, 0.12, 0.2, 0.34, 0.12, 0.34 },
-					{ 0.2, 0.31, 0.27, 0.29, 0.2, 0.27 },     // the beak
-					{ 0.12, 0.34, 0.2, 0.34, 0.15, 0.41 },    // the comb
-					{ -0.02, 0.02, 0.02, 0.02, 0.0, -0.06 }   // the foot on the rod
+				const Col Side = Scaled(Gilt, 0.82);
+				// (a convex outline in the bird's plane, U forward and V up, made a plate Thick through)
+				auto Plate = [&](std::initializer_list<std::pair<double, double>> Pts, double Thick) {
+					std::vector<V3> Q;
+					for (const auto& [U, V] : Pts) Q.push_back(O + Fw * U + Up * V);
+					const size_t N = Q.size();
+					V3 Mid{ 0.0, 0.0, 0.0 };
+					for (const V3& X : Q) Mid = Mid + X * (1.0 / static_cast<double>(N));
+					for (int Fc2 = -1; Fc2 <= 1; Fc2 += 2)
+						for (size_t K = 1; K + 1 < N; ++K) B.Tri1(Q[0] + Sd * (0.5 * Thick * Fc2), Q[K] + Sd * (0.5 * Thick * Fc2), Q[K + 1] + Sd * (0.5 * Thick * Fc2), Gilt, Sd * Fc2);
+					for (size_t K = 0; K < N; ++K)
+					{
+						const V3 E0 = Q[K], E1 = Q[(K + 1) % N];
+						const V3 Out = Norm(Cross(E1 - E0, Sd));
+						B.Quad1(E0 - Sd * (0.5 * Thick), E1 - Sd * (0.5 * Thick), E1 + Sd * (0.5 * Thick), E0 + Sd * (0.5 * Thick), Side, Dot(Out, (E0 + E1) * 0.5 - Mid) >= 0.0 ? Out : Out * -1.0);
+					}
 				};
-				for (const auto& T : Sh)
-					for (int Face2 = -1; Face2 <= 1; Face2 += 2) B.Tri1(Pt(T[0], T[1]), Pt(T[2], T[3]), Pt(T[4], T[5]), Face2 > 0 ? Gilt : GiltD, Sd * Face2);
+				Plate({ { -0.17, 0.10 }, { -0.12, 0.03 }, { 0.0, 0.01 }, { 0.12, 0.04 }, { 0.17, 0.11 }, { 0.12, 0.17 }, { 0.0, 0.19 }, { -0.12, 0.17 } }, 0.08); // the body
+				Plate({ { 0.07, 0.07 }, { 0.17, 0.11 }, { 0.22, 0.29 }, { 0.12, 0.31 } }, 0.07); // the breast and neck
+				Plate({ { 0.14, 0.29 }, { 0.19, 0.27 }, { 0.235, 0.3 }, { 0.235, 0.35 }, { 0.195, 0.375 }, { 0.15, 0.345 } }, 0.06); // the head
+				Plate({ { 0.23, 0.335 }, { 0.3, 0.318 }, { 0.23, 0.305 } }, 0.03);                                                  // the beak
+				Plate({ { 0.145, 0.35 }, { 0.165, 0.415 }, { 0.19, 0.37 } }, 0.04);                                                  // the comb
+				Plate({ { 0.18, 0.37 }, { 0.205, 0.43 }, { 0.225, 0.355 } }, 0.04);
+				Plate({ { 0.205, 0.295 }, { 0.235, 0.295 }, { 0.22, 0.24 } }, 0.03); // the wattle
+				// (the tail: a fan up and back from the rump, its two long sickle feathers arching over it and down)
+				Plate({ { -0.11, 0.07 }, { -0.36, 0.11 }, { -0.43, 0.21 }, { -0.42, 0.33 }, { -0.35, 0.43 }, { -0.25, 0.46 }, { -0.13, 0.19 } }, 0.06);
+				Plate({ { -0.22, 0.40 }, { -0.30, 0.52 }, { -0.36, 0.51 }, { -0.29, 0.40 } }, 0.04);
+				Plate({ { -0.36, 0.51 }, { -0.30, 0.52 }, { -0.44, 0.46 }, { -0.47, 0.40 } }, 0.04);
+				Plate({ { -0.40, 0.33 }, { -0.47, 0.40 }, { -0.50, 0.31 }, { -0.45, 0.24 } }, 0.04);
+				Plate({ { -0.02, 0.03 }, { 0.025, 0.03 }, { 0.01, -0.06 }, { -0.01, -0.06 } }, 0.025); // the leg on the rod
+			}
+		}
+
+		/** Rain streaks hanging from a church tower's ledges (near; the art director's church round 2): thin dark runs
+		 * tapering down its ashlar, most where the ledge drips most (TowerDrips' runs); none over an opening, nor where
+		 * the nave's roof covers the wall. */
+		void TowerStreaks(Pen& B, const Plan& P)
+		{
+			const Col Mean = Varied(P.K.Dressed, 0.9, 0.0), Dirt = Rgb(56, 50, 40);
+			const std::vector<double> Drips = TowerDrips(P);
+			for (int F = 0; F < 4; ++F)
+			{
+				const Face Fc = FaceOf(P, F);
+				for (size_t D = 0; D < Drips.size(); ++D)
+				{
+					const double ZD = Drips[D];
+					if (ZD < P.AbutZ[F] + 0.3) continue;
+					Rng R(Hash(P.Key ^ 0x57EA, static_cast<uint64_t>(F), D));
+					for (double A = 0.55 + R.Range(0.0, 0.3); A < Fc.Len - 0.55; A += R.Range(0.16, 0.45))
+					{
+						const double Runs = Smooth(0.4, 0.78, Noise01(A / 0.42 + 11.0 * F, ZD * 1.7, P.Key ^ 0x5E7));
+						if (R.Next() > 0.15 + 0.75 * Runs) continue;
+						const double W = R.Range(0.03, 0.1), Len = R.Range(0.35, 0.9) + 1.5 * Runs * R.Next();
+						double Lo = ZD - Len;
+						bool bSkip = false;
+						for (const Opening& O : P.Ops)
+							if (O.Face == F && A + W > O.A0 - 0.35 && A - W < O.A1 + 0.35 && O.Z0 < ZD && O.Z1 + 0.6 > Lo)
+							{
+								if (O.Z1 + 0.6 >= ZD - 0.25) bSkip = true; // (an opening right under the ledge)
+								Lo = std::max(Lo, O.Z1 + 0.6);
+							}
+						if (bSkip || ZD - Lo < 0.25) continue;
+						const Col Head = Mixed(Mean, Dirt, 0.42 + 0.25 * Runs), Foot = Mixed(Mean, Dirt, 0.1);
+						B.Quad(At(Fc, A - 0.5 * W, ZD, 0.0135), At(Fc, A + 0.5 * W, ZD, 0.0135), At(Fc, A + 0.12 * W, Lo, 0.0135), At(Fc, A - 0.12 * W, Lo, 0.0135), Head, Head, Foot, Foot, Fc.N);
+					}
+				}
 			}
 		}
 
@@ -4418,6 +4678,7 @@ namespace LandHouse
 			StringCourse(B, P, Snap(P, 7.8), Level);
 			StringCourse(B, P, Quant(P, ZBel - 0.25), Level);
 			TowerTop(B, P, Level);
+			if (Level == 0) TowerStreaks(B, P);
 		}
 
 		/** One part's three levels (a farmhouse, a barn, a byre, or a church's nave, chancel or tower). */

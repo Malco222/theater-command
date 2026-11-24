@@ -1057,7 +1057,7 @@ int main(int Argc, char** Argv)
 	// standing on its house's floor, its levels within their triangle budgets (a farmhouse's or a barn's near some 25 to 40
 	// thousand, as a vehicle's; a byre's from 18 thousand), every point a number and within the house's reach, and its
 	// normals of unit length. The village church the same, whole in one slot (nave, chancel and tower; its near some 75 to
-	// 90 thousand, three buildings' worth, its middle at most 14 thousand), standing once where the village has one.
+	// 90 thousand, three buildings' worth, its middle at most 14 thousand, its far 1.5), standing once where the village has one.
 	if (F.Tried("houses") && LookLaid == "bocage")
 	{
 		int Kinds = 0, Barns = 0, Byres = 0, Churches = 0;
@@ -1073,7 +1073,7 @@ int main(int Argc, char** Argv)
 				Churches += static_cast<int>(G.Instances(B).size());
 				std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(),
 				            Bm.MidFrom, Bm.FarFrom);
-				if (Bm.Near.Tris() < 60000 || Bm.Near.Tris() > 90000 || Bm.Mid.Tris() > 14000 || Bm.Far.Tris() > 1200 || Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight)
+				if (Bm.Near.Tris() < 60000 || Bm.Near.Tris() > 90000 || Bm.Mid.Tris() > 14000 || Bm.Far.Tris() > 1500 || Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight)
 					Bad += " " + Bm.Name + " (its levels)";
 				for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
 				{
