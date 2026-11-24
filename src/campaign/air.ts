@@ -24,6 +24,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { fighterMonth, fighterTypesOn, typeEdge } from './fighters';
+import { unitsDecide } from './units';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -67,6 +68,8 @@ export const AIR = data as unknown as {
   nations: Record<string, NatSpec>;
   range: { fullAt: number; atLimit: number };
   radar: { without: number; chains: Chain[] };
+  /** Units decide, fights of fighters alone: the field's height edge a band (measured), and the warning of observers and lookouts. */
+  height: { h: number; observers: number; lookouts: number };
   production: Record<string, Sched>;
   pilots: { home: number; away: number; perMonth: Record<string, [number, number][]> };
   reserve: Record<string, Reserve>;
@@ -1430,6 +1433,12 @@ export interface AirAssess {
    * aircraft's measured performance at the mission's height, in log units. Absent when the switch is off.
    */
   typeEdge?: number;
+  /**
+   * Units decide, a fight of fighters alone (sweep-height-form-1124.md): the defenders' warning in time W (0 to 1), who
+   * is above (x = 1 - 2W: 1 the attackers, 0 level, -1 the defenders) and the field's height edge h a band. Absent
+   * otherwise: off, by night, or with bombers in the raid (there the escort's share stands).
+   */
+  height?: { W: number; x: number; h: number };
   /** What the bombers that go are worth against ships, beside carrier crews trained for it (1). */
   naval: number;
   /** What is left of a strike on a fleet already struck this month: it is scattered and warned. */
@@ -1537,6 +1546,20 @@ const clashOf = (g: Game, m: AirMission): number => (airWar(g) && m !== 'superio
 const mostBomberLoss = (g: Game, night = false): number => (airWar(g) ? (night ? AIRWAR.losses.most : AIRWAR.losses.day) : AIR.combat.maxBomberLoss);
 
 /** What the map says about one air campaign before it is flown: who can reach, who will meet them, and what helps each side. */
+/**
+ * The defenders' warning in time over a fight of fighters alone (Units decide; the design director 24 Nov 15:20Z):
+ * 1 with a chain over the place, an order their agent read, or carriers with radar researched; a carrier's lookouts
+ * over its own fleet, and ground observers over the defender's own home ground, 0.5 (the range middle, until the
+ * historian's lead times); 0 over occupied ground or the sea with none.
+ */
+function warnedIn(g: Game, a: AirAssess, sea: boolean, amb: boolean, target: number): number {
+  if (amb || a.radar) return 1;
+  if (a.def.length && a.def.every((x) => x.f.ship !== undefined)) return a.def.every((x) => hasTech(g, x.f.nat, AIRWAR.sky.radar)) ? 1 : AIR.height.lookouts;
+  if (sea) return 0;
+  const r = g.regions[target];
+  return r && r.owner === r.ctrl ? AIR.height.observers : 0;
+}
+
 export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: number): AirAssess {
   const C = AIR.combat;
   // A strike on one fleet is fought over the sea that fleet is in.
@@ -1576,6 +1599,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (!out.att.length) { out.why = 'Nothing can reach the target.'; return out; }
   if (m !== 'superiority' && m !== 'ground' && out.B <= 0) { out.why = 'No bombers can reach the target.'; return out; }
 
+  // Units decide: a day fight of fighters alone is decided by height, which follows the defenders' warning (below).
+  const sweep = unitsDecide(g) && !night && out.B <= 0;
   // Radar, and the fighters that come up to meet the raids.
   if (sea) {
     for (const id of g.seas[zone].coast) {
@@ -1606,8 +1631,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (w <= 0) continue;
     out.def.push({ f, d, w });
     out.D += f.ftr * w;
-    // Fighters over their own ground are only as good as the radar and controllers that put them onto the raid.
-    out.Dpow += f.ftr * w * worth(g, f) * techMul(g, f.nat, 'radar');
+    // Fighters over their own ground are only as good as the radar and controllers that put them onto the raid. (In a
+    // sweep under Units decide that control is the warning that gives them the height, priced once there.)
+    out.Dpow += f.ftr * w * worth(g, f) * (sweep ? 1 : techMul(g, f.nat, 'radar'));
   }
   // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
   if (fighterTypesOn(g) && !night && out.Epow > 0 && out.Dpow > 0) {
@@ -1615,6 +1641,17 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.typeEdge = E;
     out.Epow *= Math.exp(E / 2);
     out.Dpow *= Math.exp(-E / 2);
+  }
+  // Units decide (the design director, 24 Nov 2026 02:28Z and 15:20Z; air-battles/dogfight/sweep-height-form-1124.md):
+  // in a fight of fighters alone the attacker's flat edge (escortShare) gives way to height. The sweep picks its height
+  // and flies high; defenders warned in time climb above it, half-warned meet it level, unwarned are bounced from above.
+  // The edge a band is the field's own bounce as measured there (AIR.height.h), so the card and the field agree.
+  if (sweep && out.Epow > 0 && out.Dpow > 0) {
+    const W = warnedIn(g, out, sea, amb, target), x = 1 - 2 * W, h = AIR.height.h;
+    out.height = { W, x, h };
+    // The exchange goes as the square root of the power ratio: the ratio moves by h^2x, the exchange by h^x.
+    out.Epow *= Math.pow(h, x);
+    out.Dpow *= Math.pow(h, -x);
   }
   // The bombers' own defence: formation, guns and turrets. In the air war a day raid's is the nation's of the month (ruling 227).
   out.defence = bomberDefence(g, nat, night);
@@ -1697,6 +1734,14 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
     });
   } else out.lines.push({ label: 'In range to intercept', value: 'No enemy fighters' });
+  if (out.height) {
+    const hx = out.height.h.toFixed(1);
+    out.lines.push(out.height.x < 0
+      ? { label: 'Height', value: 'The defenders will be above you', effect: `They are warned in time to climb above your fighters and dive on them: about ${hx} to 1 their way on height alone.` }
+      : out.height.x > 0
+        ? { label: 'Height', value: 'You will be above them', effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` }
+        : { label: 'Height', value: 'Level', effect: 'Ground observers warn them in time to climb to your height, not above it: neither side has the height.' });
+  }
   if (out.guns.all) {
     out.lines.push({
       label: 'Flak',
@@ -1851,7 +1896,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const share = se + sd > 0 ? se / (se + sd) : 0;
   const clash = Math.min(a.E, a.D) * clashOf(g, m);
   const dLoss = C.fighters * I * clash * 2 * share * luck();
-  const eLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare * luck();
+  const eLoss = C.fighters * I * clash * 2 * (1 - share) * (a.height ? 1 : C.escortShare) * luck();
   const bLoss = a.B * Math.min(mostBomberLoss(g, night), a.bomberLoss * luck());
   // The bombers' guns bring down some of the fighters that close with them, the more the better their defence (ruling 227).
   const gunKills = gunsDown(g, a, night, bLoss, m, target);
@@ -2121,11 +2166,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const can = Math.min(p.ftr + (built ? built[1] : 0), p.pilots + (trained ? trained[1] : 0));
       const lost = lostBy[x.f.nat] ?? 0;
       const back = lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
-      Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * techMul(g, x.f.nat, 'radar');
+      Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar'));
     });
     // The same type edge as the fight (fighters.ts), not a new reading; absent when the switch is off.
     const te = a.typeEdge;
     hold = Dnext > 0 ? (te ? (EpowAfter * Math.exp(te / 2)) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext) : 99;
+    // (And the same height as the fight, under Units decide.)
+    if (a.height && Dnext > 0) hold *= Math.pow(a.height.h, 2 * a.height.x);
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
     if (sky) g.sky[target] = { nat, turn: g.turn };
     // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.
@@ -2942,7 +2989,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
   const share = se + sd > 0 ? se / (se + sd) : 0;
   const clash = Math.min(a.E, a.D) * clashOf(g, m);
-  let ftrLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare;
+  let ftrLoss = C.fighters * I * clash * 2 * (1 - share) * (a.height ? 1 : C.escortShare);
   const bmrLoss = a.B * a.bomberLoss;
   // The defenders' losses: to the escort, and to the bombers' own guns (ruling 227).
   const foeGuns = gunsDown(g, a, m === 'night', bmrLoss, m, target);

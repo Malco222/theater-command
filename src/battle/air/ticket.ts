@@ -95,13 +95,23 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   const att: ForceTicket[] = [], def: ForceTicket[] = [];
   const share = (pow: number, all: number): number => (all > 0 ? pow / all : 0);
   const Atot = a.Epow + a.B * C.bomberDefence, Dtot = a.Dpow;
+  // Units decide, a fight of fighters alone (air.ts assessAir, a.height): the field shows the height the card weighed,
+  // by where each side starts, the sweep a band above unwarned defenders, level with half-warned ones, a band under
+  // warned ones, all of them airborne. The card's height is taken back out of the worths below, so the field's own
+  // bounce makes it (as measured for AIR.height.h) and it is not counted twice.
+  const H = a.height;
+  const attBand = (H ? (H.x > 0 ? 2 : 1) : 1) as Band;
+  // The field arms each group from the card's forecast (sim.ts arm), so it is armed from the card's forecast without
+  // the height: its own bounce from the starts above brings the card's height back, as measured, and not twice.
+  const hx = H ? Math.pow(H.h, H.x) : 1;
+  const armed = H ? forecastAir(g, { ...a, Epow: a.Epow / hx, Dpow: a.Dpow * hx }, m, target) : fc;
   a.att.forEach((x) => {
     const [rx] = rot(vec(x.f));
     const sx = clampTo(SKY.target.x + rx * 0.25, 20_000, 80_000);
     const ftr = Math.round(x.f.ftr * x.crowd), bmr = Math.round(x.bmr);
     // Fighters that cannot reach the target (or, at night, do not go) stay out of it, as they count for nothing in the forecast.
     if (x.esc > 0 && ftr > 0) {
-      starts[x.f.id] = { x: sx, y: 1_000, band: 1, fuel: SKY.fuel.full * x.esc, wait: false };
+      starts[x.f.id] = { x: sx, y: 1_000, band: attBand, fuel: SKY.fuel.full * x.esc, wait: false };
       att.push(force(x.f, 'ftr', ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
     }
     if (bmr > 0) {
@@ -132,7 +142,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     const real = Math.hypot(rx, ry), d = SKY.fields.near + Math.min(SKY.fields.far - SKY.fields.near, real * SKY.fields.squeeze);
     const ux = real > 0 ? rx / real : 0, uy = real > 0 ? ry / real : 1;
     const [bx, by] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
-    starts[x.f.id] = { x: bx, y: by, band: (a.radar ? 1 : 0) as Band, fuel: SKY.fuel.home, wait: !a.radar };
+    starts[x.f.id] = H ? { x: bx, y: by, band: (H.x < 0 ? 2 : 1) as Band, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by, band: (a.radar ? 1 : 0) as Band, fuel: SKY.fuel.home, wait: !a.radar };
     def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
   }
 
@@ -160,8 +170,8 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     law: { bombers: L.bombers, power: L.power, most, escort, guns: a.defence },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
     gunLoss: a.gunLoss, flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
-    worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
-    forecast: { foe: fc.foeLoss, foeGuns: fc.foeGuns, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
+    worth: { att: a.E > 0 ? a.Epow / a.E / hx : 1, def: a.D > 0 ? (a.Dpow / a.D) * hx : 1 },
+    forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     chance: fc.success,
     reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
     bombs: bombLaw(g, a, m, target),

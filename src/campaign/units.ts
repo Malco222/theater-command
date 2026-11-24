@@ -9,7 +9,8 @@
 //
 // Steps on it so far: the convoy war by cause (audit #5, navy.ts 'The convoy war by cause'); the honest win chance on
 // land (audit #1, game.ts winChanceOn), on its own sub-flag 'winChance' as well (stage.json), off until the 3D field's
-// spread matches the card's.
+// spread matches the card's; in a day fight of fighters alone, height by the defenders' warning in place of the
+// attacker's flat escort share (air.ts assessAir, a.height; air-battles/dogfight/sweep-height-form-1124.md).
 
 import type { Game } from './types';
 
