@@ -3397,11 +3397,33 @@ void ALandBattle::MakeMen()
 			Armies.Add(Army + Suffix);
 		}
 	}
+	// Soldiers at the vehicles' detail (release 2, -TheaterLandDetailMen; Brian, 23 November: "the soldiers at the same
+	// level of artistic detail as the vehicles, tanks, and planes"): where the soldiers thread has made an army's
+	// detailed man (Models/Soldiers/Detail/soldier_<ARMY>.json, the German rifleman first), he is drawn in its place,
+	// and his gore twin is read from the same folder (a twin is fitted to its own man's body). Off: the Detail folder
+	// is not read. A detailed file that does not load falls back to the usual one.
+	const bool bDetailMen = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandDetailMen"));
+	TSet<FString> DetailArmies;
 	int32 Files = 0;
 	for (const FString& Army : Armies)
 	{
+		const FString Name = TEXT("soldier_") + Army + TEXT(".json");
 		FString Text;
-		if (!FFileHelper::LoadFileToString(Text, *(Folder / (TEXT("soldier_") + Army + TEXT(".json")))))
+		if (bDetailMen && FFileHelper::LoadFileToString(Text, *(Folder / TEXT("Detail") / Name)))
+		{
+			auto Detail = std::make_shared<LandMen::Soldier>();
+			std::string Why;
+			if (Detail->Load(LandParts::Narrow(Text), Why))
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle: %s from Models/Soldiers/Detail"), *Name);
+				Crowd->AddSoldier(LandParts::Narrow(Army), Detail);
+				DetailArmies.Add(Army);
+				++Files;
+				continue;
+			}
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: Detail/%s: %s (the usual file instead)"), *Name, *LandParts::Wide(Why));
+		}
+		if (!FFileHelper::LoadFileToString(Text, *(Folder / Name)))
 		{
 			continue;
 		}
@@ -3425,7 +3447,8 @@ void ALandBattle::MakeMen()
 		for (const FString& Army : Armies)
 		{
 			FString Text;
-			if (!Crowd->SoldierFile(LandParts::Narrow(Army)) || !FFileHelper::LoadFileToString(Text, *(Folder / (TEXT("soldier_") + Army + TEXT("_gore.json")))))
+			const FString TwinFolder = DetailArmies.Contains(Army) ? Folder / TEXT("Detail") : Folder;
+			if (!Crowd->SoldierFile(LandParts::Narrow(Army)) || !FFileHelper::LoadFileToString(Text, *(TwinFolder / (TEXT("soldier_") + Army + TEXT("_gore.json")))))
 			{
 				continue;
 			}
