@@ -943,48 +943,72 @@ const corpsById = (s: Game, ids: number[]): Corps[] =>
 // ---- A garrison sent somewhere comes out of its town on the way (release 2, and the 1.5.1 patch) ----------------
 // (Brian, 24 November 2026: "if a unit is dug in and i click them to attack and move I want them to over ride their
 // orders insted of me having to press a button".) The corps of the player's hand that are inside a town come out as
-// part of the order's own call, as TAKE THE FIELD would bring them (one move), and stay out only if the order goes:
-// a call after which none of them has moved, spent a move, fallen or been given a march to keep (a refusal) puts
-// them back exactly as they were, with nothing spent. The calls that only look (the reach, the march's plan, the
-// odds, the march onto empty ground, guns alone, the general's battle) see them as if out and always put them back,
-// so the 3D game can show and ask about an order before anything is carried out (the 1.5 release lead, 18:42Z: a No
-// at a card, the war question's No or a refusal must leave them inside). The corps inside are judged together: where
-// they cannot all come out (room outside for one of two), none does, and the call is made with them inside, as
-// before, so that it says the rules' own sentence (the city glance thread's pre-check, 18:42Z).
-/** A shallow record of an object, its keys in their order: put back, it is the same object, key for key. */
-type Kept = { o: Record<string, unknown>; keys: string[]; vals: unknown[]; lists: [unknown[], unknown[]][] };
-const keepOf = (o: object): Kept => {
-  const r = o as Record<string, unknown>;
-  const keys = Object.keys(r), vals = keys.map((k) => r[k]);
-  return { o: r, keys, vals, lists: vals.filter((v): v is unknown[] => Array.isArray(v)).map((a) => [a, [...a]]) };
+// part of the order's own call, as TAKE THE FIELD would bring them (one move), and each stays out only if it went: a
+// corps that after the call has not moved, spent a move, fallen or been given a march to keep (a refusal, or one left
+// behind by the order, as one that went in this month and has no move once out) is put back inside, with nothing
+// spent. The calls that only look (the reach, the march's plan, the odds, the march onto empty ground, guns alone, the
+// general's battle) see them as if out and always put them back, so the 3D game can show and ask about an order
+// before anything is carried out (the 1.5 release lead, 18:42Z: a No at a card, the war question's No or a refusal
+// must leave them inside). The corps inside are judged together: where they cannot all come out (room outside for one
+// of two), none does, and the call is made with them inside, as before, so that it says the rules' own sentence (the
+// city glance thread's pre-check, 18:42Z). Putting one back touches that corps and nothing else (the release lead,
+// 18:56Z): it is taken out of its province's field by identity and set back at its old place in the town, its town and
+// moves as they were, and the corps' and the province's keys in their old order, so that a look leaves the save the
+// same to the byte and an order leaves whatever else it did as it did it.
+/** A corps of the garrison as it stood before it came out. */
+type Inside = { c: Corps; r: Region; at: number; town: number; ap: number; keys: string[]; regionKeys: string[]; march: unknown };
+const marchKey = (c: Corps): string => `march:${c.id}`;
+const insideNow = (s: Game, c: Corps): Inside => {
+  const r = s.regions[c.reg];
+  return { c, r, at: r.garr ? r.garr.indexOf(c) : -1, town: c.town!, ap: c.ap, keys: Object.keys(c), regionKeys: Object.keys(r), march: s.flags[marchKey(c)] };
 };
-const putBack = (k: Kept): void => {
-  for (const [list, was] of k.lists) list.splice(0, list.length, ...was);
-  for (const key of Object.keys(k.o)) delete k.o[key];
-  k.keys.forEach((key, i) => { k.o[key] = k.vals[i]; });
+/** An object's keys set back in an earlier order (keys since gone stay gone, new ones come after), its values as they are now. */
+const keysInOrder = (o: object, keys: string[]): void => {
+  const r = o as Record<string, unknown>, now = { ...r };
+  for (const k of Object.keys(r)) delete r[k];
+  for (const k of keys) if (k in now) r[k] = now[k];
+  for (const k of Object.keys(now)) if (!(k in r)) r[k] = now[k];
 };
+/** Puts corps that came out back inside their towns, each at its old place, touching nothing else. */
+const backInside = (xs: Inside[]): void => {
+  for (const x of [...xs].sort((p, q) => p.at - q.at)) {
+    const { c, r } = x;
+    const k = r.units.indexOf(c);
+    if (k >= 0) r.units.splice(k, 1);
+    const garr = (r.garr ??= []);
+    if (!garr.includes(c)) garr.splice(Math.min(Math.max(x.at, 0), garr.length), 0, c);
+    c.reg = r.id;
+    c.town = x.town;
+    c.ap = x.ap;
+    keysInOrder(c, x.keys);
+    keysInOrder(r, x.regionKeys);
+  }
+};
+/** True where a corps that came out went with the order: it moved, spent a move, fell, went back in, or was given a march to keep. */
+const wentOut = (s: Game, x: Inside, out: { reg: number; ap: number }): boolean =>
+  x.c.dead || x.c.reg !== out.reg || x.c.ap !== out.ap || x.c.town !== undefined || s.flags[marchKey(x.c)] !== x.march;
 /** The player's corps among these ids that stand inside a town. */
 const insideOf = (s: Game, ids: unknown): Corps[] => {
   try { return Array.isArray(ids) && s.human ? corpsById(s, ids as number[]).filter((c) => c.town !== undefined && c.nat === s.human) : []; } catch { return []; }
 };
 /**
- * Makes a call with the garrison in hand out of its town. 'looks' calls always put it back; an order keeps it out
- * only where it went. Anything not a garrison, or a garrison that cannot all come out, is called as it stands.
+ * Makes a call with the garrison in hand out of its town. 'looks' calls always put it back; after an order, each corps
+ * that did not go is put back. Anything not a garrison, or a garrison that cannot all come out, is called as it stands.
  */
 function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
   const s = game();
-  const inside = insideOf(s, ids);
+  const inside = insideOf(s, ids).map((c) => insideNow(s, c));
   if (!inside.length) return call();
-  const regions = [...new Set(inside.map((c) => c.reg))].map((id) => s.regions[id]);
-  const kept = [...regions.map(keepOf), ...inside.map(keepOf)];
-  const marchKey = (c: Corps): string => `march:${c.id}`;
-  const before = inside.map((c) => ({ c, flag: s.flags[marchKey(c)] }));
-  if (!inside.every((c) => orderTakeField(s, c))) { kept.forEach(putBack); return call(); }
-  const out = inside.map((c) => ({ c, reg: c.reg, ap: c.ap }));
+  const done: Inside[] = [];
+  for (const x of inside) {
+    if (!orderTakeField(s, x.c)) { backInside(done); return call(); }
+    done.push(x);
+  }
+  const out = inside.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
+  const settle = (): void => backInside(looks ? inside : inside.filter((x, i) => !wentOut(s, x, out[i])));
   let result: R;
-  try { result = call(); } catch (e) { if (looks) kept.forEach(putBack); throw e; }
-  const went = !looks && (out.some(({ c, reg, ap }) => c.dead || c.reg !== reg || c.ap !== ap || c.town !== undefined) || before.some(({ c, flag }) => s.flags[marchKey(c)] !== flag));
-  if (!went) kept.forEach(putBack);
+  try { result = call(); } catch (e) { settle(); throw e; }
+  settle();
   return result;
 }
 /** A call that only looks, made with the garrison in hand as if out: put back after. */

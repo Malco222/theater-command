@@ -59141,18 +59141,32 @@
     };
   }
   var corpsById = (s, ids2) => ids2.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
-  var keepOf = (o) => {
-    const r = o;
-    const keys = Object.keys(r), vals = keys.map((k) => r[k]);
-    return { o: r, keys, vals, lists: vals.filter((v) => Array.isArray(v)).map((a) => [a, [...a]]) };
+  var marchKey = (c) => `march:${c.id}`;
+  var insideNow = (s, c) => {
+    const r = s.regions[c.reg];
+    return { c, r, at: r.garr ? r.garr.indexOf(c) : -1, town: c.town, ap: c.ap, keys: Object.keys(c), regionKeys: Object.keys(r), march: s.flags[marchKey(c)] };
   };
-  var putBack = (k) => {
-    for (const [list4, was] of k.lists) list4.splice(0, list4.length, ...was);
-    for (const key6 of Object.keys(k.o)) delete k.o[key6];
-    k.keys.forEach((key6, i) => {
-      k.o[key6] = k.vals[i];
-    });
+  var keysInOrder = (o, keys) => {
+    const r = o, now = { ...r };
+    for (const k of Object.keys(r)) delete r[k];
+    for (const k of keys) if (k in now) r[k] = now[k];
+    for (const k of Object.keys(now)) if (!(k in r)) r[k] = now[k];
   };
+  var backInside = (xs) => {
+    for (const x of [...xs].sort((p, q) => p.at - q.at)) {
+      const { c, r } = x;
+      const k = r.units.indexOf(c);
+      if (k >= 0) r.units.splice(k, 1);
+      const garr = r.garr ?? (r.garr = []);
+      if (!garr.includes(c)) garr.splice(Math.min(Math.max(x.at, 0), garr.length), 0, c);
+      c.reg = r.id;
+      c.town = x.town;
+      c.ap = x.ap;
+      keysInOrder(c, x.keys);
+      keysInOrder(r, x.regionKeys);
+    }
+  };
+  var wentOut = (s, x, out) => x.c.dead || x.c.reg !== out.reg || x.c.ap !== out.ap || x.c.town !== void 0 || s.flags[marchKey(x.c)] !== x.march;
   var insideOf = (s, ids2) => {
     try {
       return Array.isArray(ids2) && s.human ? corpsById(s, ids2).filter((c) => c.town !== void 0 && c.nat === s.human) : [];
@@ -59162,26 +59176,26 @@
   };
   function comeOut(ids2, call, looks) {
     const s = game();
-    const inside2 = insideOf(s, ids2);
+    const inside2 = insideOf(s, ids2).map((c) => insideNow(s, c));
     if (!inside2.length) return call();
-    const regions = [...new Set(inside2.map((c) => c.reg))].map((id) => s.regions[id]);
-    const kept2 = [...regions.map(keepOf), ...inside2.map(keepOf)];
-    const marchKey = (c) => `march:${c.id}`;
-    const before = inside2.map((c) => ({ c, flag: s.flags[marchKey(c)] }));
-    if (!inside2.every((c) => orderTakeField(s, c))) {
-      kept2.forEach(putBack);
-      return call();
+    const done = [];
+    for (const x of inside2) {
+      if (!orderTakeField(s, x.c)) {
+        backInside(done);
+        return call();
+      }
+      done.push(x);
     }
-    const out = inside2.map((c) => ({ c, reg: c.reg, ap: c.ap }));
+    const out = inside2.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
+    const settle2 = () => backInside(looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i])));
     let result;
     try {
       result = call();
     } catch (e) {
-      if (looks) kept2.forEach(putBack);
+      settle2();
       throw e;
     }
-    const went = !looks && (out.some(({ c, reg, ap }) => c.dead || c.reg !== reg || c.ap !== ap || c.town !== void 0) || before.some(({ c, flag: flag3 }) => s.flags[marchKey(c)] !== flag3));
-    if (!went) kept2.forEach(putBack);
+    settle2();
     return result;
   }
   var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);

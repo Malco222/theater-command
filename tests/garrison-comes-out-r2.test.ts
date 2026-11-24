@@ -215,6 +215,107 @@ describe('a garrison comes out only as the order goes (release 2 and 1.5.1)', ()
     expect(corpsIn(saved(), guns.id).town).toBe(EARLIER);
   });
 
+  /**
+   * Each of these corps stands in exactly one list, its own province's field or town (the town only if it is inside),
+   * as the save writes the lists down (read raw: loading a save mends a corps missing from its lists).
+   */
+  const placedOnce = (text: string, ids: number[]): void => {
+    const g = loadGame(text)!;
+    const lists = (JSON.parse(text) as { regions: unknown[][] }).regions;
+    for (const id of ids) {
+      const c = g.corps.find((x) => x.id === id)!;
+      if (c.dead) continue;
+      const at = lists.flatMap((r, k) => [
+        ...((r[6] as number[]) ?? []).filter((x) => x === id).map(() => `${k}:field`),
+        ...((r[7] as number[] | undefined) ?? []).filter((x) => x === id).map(() => `${k}:town`),
+      ]);
+      expect(at).toEqual([`${c.reg}:${c.town === undefined ? 'field' : 'town'}`]);
+    }
+  };
+  /** Saar, with two places in its town and the French next door: a German corps put inside it, in the month given. */
+  function saar(g: Game, town: number, from?: Corps): Corps {
+    const r = g.byName['Saar'];
+    const c = from ?? r.units.find(goes) ?? g.corps.find((x) => goes(x) && x.reg !== r.id)!;
+    if (c.reg !== r.id) relocate(g, c, r);
+    expect(garrison(g, c)).toBe(true);
+    c.town = town;
+    return c;
+  }
+  const french = (g: Game): number => g.byName['Saar'].nb.find((j) => hostileUnits(g, g.regions[j], 'GER').length)!;
+
+  it('two corps out, one with no move: the one that went to the attack stays out, the other is put back inside', () => {
+    const g = playing();
+    const a = saar(g, EARLIER); // (moves once out)
+    const b = saar(g, g.turn); // (went in this month: none once out, so the attack goes without it)
+    const foe = french(g);
+    TC.load(saveGame(g));
+    const rep = TC.attack([a.id, b.id], foe);
+    expect(rep?.report).toBeTruthy();
+    const text = saved();
+    const gb = corpsIn(text, b.id);
+    expect(gb.town).toBe(g.turn);
+    expect(gb.reg).toBe(g.byName['Saar'].id);
+    expect(gb.ap).toBe(0);
+    expect(corpsIn(text, a.id).town === EARLIER).toBe(false);
+    placedOnce(text, [a.id, b.id]);
+  });
+
+  it('a corps given a march to keep goes with the order: it stays out to make it, as the rules\' note says', () => {
+    const g = playing();
+    const a = saar(g, EARLIER);
+    const b = saar(g, g.turn);
+    const home = g.byName['Saar'].nb.find((j) => g.regions[j].ctrl === 'GER' && !hostileUnits(g, g.regions[j], 'GER').length)!;
+    TC.load(saveGame(g));
+    TC.move([a.id, b.id], home);
+    const text = saved();
+    expect(corpsIn(text, a.id).reg).toBe(home);
+    const gb = corpsIn(text, b.id);
+    expect(gb.town).toBeUndefined();
+    expect(loadGame(text)!.flags[`march:${b.id}`]).toBeDefined();
+    placedOnce(text, [a.id, b.id]);
+  });
+
+  it('a hand of a garrison and a corps in the field: looks leave the game the same, and putting back touches only the garrison', () => {
+    const g = playing();
+    const a = saar(g, g.turn); // (no move once out: the attack goes without it)
+    const f = g.corps.find((x) => goes(x) && x.reg !== a.reg)!;
+    relocate(g, f, g.byName['Saar']);
+    const foe = french(g);
+    const home = g.byName['Saar'].nb.find((j) => g.regions[j].ctrl === 'GER' && !hostileUnits(g, g.regions[j], 'GER').length)!;
+    TC.load(saveGame(g));
+    const t0 = saved();
+    TC.reach([a.id, f.id]);
+    TC.marchPlan([a.id, f.id], home);
+    TC.previewAttack([a.id, f.id], foe, true, false);
+    TC.takeOutlook([a.id, f.id], home);
+    TC.lead([a.id, f.id], foe);
+    expect(saved()).toBe(t0);
+    // The corps in the field attacks; the garrison is left behind and put back inside. Whatever the attack did with
+    // the field corps (it may have gone forward), it is left as the attack left it: in one list, its own.
+    const rep = TC.attack([a.id, f.id], foe);
+    expect(rep?.report).toBeTruthy();
+    const text = saved();
+    expect(corpsIn(text, a.id).town).toBe(g.turn);
+    placedOnce(text, [a.id, f.id]);
+  });
+
+  it('putting back leaves the province\'s field as the order left it: a corps that marched in during the call stays', () => {
+    const g = playing();
+    const a = saar(g, g.turn); // (no move once out, and already where the order goes: it is put back inside)
+    const r = g.byName['Saar'];
+    const home = r.nb.find((j) => g.regions[j].ctrl === 'GER' && !hostileUnits(g, g.regions[j], 'GER').length)!;
+    const f = g.corps.find((x) => goes(x) && x.reg !== r.id && x.reg !== home)!;
+    relocate(g, f, g.regions[home]);
+    TC.load(saveGame(g));
+    // (a hand the 3D game does not make, a town corps and a corps of the next province, sent to the town's province:
+    // the bridge must not count on the hand being one army)
+    TC.move([a.id, f.id], r.id);
+    const text = saved();
+    expect(corpsIn(text, f.id).reg).toBe(r.id);
+    expect(corpsIn(text, a.id).town).toBe(g.turn);
+    placedOnce(text, [a.id, f.id]);
+  });
+
   it('two corps inside with room outside for one: neither is offered, and neither comes out', () => {
     const g = playing();
     const r = g.byName['Saar'];
