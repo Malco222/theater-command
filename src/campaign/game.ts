@@ -10,6 +10,7 @@ import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
+import { flagName } from './flagnames';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
@@ -2286,9 +2287,10 @@ function fadeWorks(g: Game, nat: string): void {
   if (g.flags.open !== 1) return;
   const idx = Object.keys(g.nations).indexOf(nat), fade = DEFENCE.handover?.fade ?? 1;
   for (const r of g.regions) {
-    const m = g.flags[`fw:${r.id}`];
-    if (m === undefined || g.flags[`fwn:${r.id}`] !== idx) continue;
-    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[`fw:${r.id}`] = Math.round((m - fade) * 100) / 100;
+    const key = flagName('fw:', r.id);
+    const m = g.flags[key];
+    if (m === undefined || g.flags[flagName('fwn:', r.id)] !== idx) continue;
+    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[key] = Math.round((m - fade) * 100) / 100;
   }
 }
 
