@@ -476,6 +476,63 @@ describe("step 1b's keys", () => {
     }
   });
 
+  it("under the ledger what is held back for air strikes, or spared by a wait's cover, keeps the blows' weight as built: priced once", () => {
+    // The ledger as the data lays it (flank and rear read at the army), with fighters on call on both sides (air support).
+    const t0 = reseed(lodz(2), 1);
+    t0.att.air = { share: 0.2, strikes: 4, groups: [{ id: 1, name: 'G1', nat: t0.att.nat, planes: 12, lose: 1 }] };
+    t0.def.air = { share: 0.15, strikes: 3, groups: [{ id: 2, name: 'G2', nat: t0.def.nat, planes: 12, lose: 1 }] };
+    const k = spreadKeys(t0, { level: true, ledger: true });
+    type Blown = { dmg: number; nerve: number; parts?: NerveParts };
+    type Air = { blow(u: LandUnit, t: LandUnit): Blown; airBank: Record<Side, Map<number, number>>; airNerve: Record<Side, Map<number, number>> };
+    const b = new LandBattle(withSpread(t0, k)), A = b as unknown as Air, blow = A.blow.bind(b);
+    // Each tick, by the block struck: its blows' weight as built, and the part of it the block reads under the split.
+    let built = new Map<number, number>(), block = new Map<number, number>();
+    A.blow = (u, t) => {
+      const r = blow(u, t);
+      built.set(t.id, (built.get(t.id) ?? 0) + r.nerve);
+      block.set(t.id, (block.get(t.id) ?? 0) + nerveSplit(r.parts!, k.ledger!.m).block);
+      return r;
+    };
+    let checked = 0, split = 0;
+    for (let i = 0; i < 400000 && !b.over && (b.contactAt === null || b.t < b.contactAt + 240); i++) {
+      const bank0 = SIDES.map((s) => new Map(A.airBank[s])), nerve0 = SIDES.map((s) => new Map(A.airNerve[s]));
+      built = new Map(); block = new Map();
+      b.step();
+      SIDES.forEach((s, j) => {
+        for (const [id, v] of A.airBank[s]) {
+          const raw = v - (bank0[j].get(id) ?? 0), n = (A.airNerve[s].get(id) ?? 0) - (nerve0[j].get(id) ?? 0);
+          if (raw <= 1e-12 || !built.has(id)) continue;
+          // Owed with the weight the blows carried as built, every part, never only the block's part of the split.
+          expect(Math.abs(n - raw * built.get(id)!) / (raw * built.get(id)!)).toBeLessThan(1e-9);
+          checked++;
+          if (built.get(id)! > block.get(id)! + 1e-9) split++;
+        }
+      });
+    }
+    expect(checked).toBeGreaterThan(0);
+    // Some was held back from a flank or rear blow, whose aspect weight the block alone no longer reads.
+    expect(split).toBeGreaterThan(0);
+
+    // A wait's cover (hold until relieved): what it spares of a rear blow, which the step hands suffer as block 1, army 3
+    // and 3 as built, is kept at 3, and lands on the block at 3 and on the ledger at 1.
+    type Wait = { suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][], blind: boolean, bare: boolean, mArmy: number, nerveBuilt: number): void; landNow(u: LandUnit): void; groundTake(u: LandUnit): number; led: { D: Record<Side, number> }; power: Record<Side, number> };
+    const w = new LandBattle(withSpread(t0, k)), Wt = w as unknown as Wait;
+    const u = w.units.find((x) => x.side === 'def' && x.kind !== 'fort' && !x.team && Wt.groundTake(x) > LAND.cover[LAND.wreck.cover] * 1.01)!;
+    expect(u).toBeTruthy();
+    u.waits = { corps: 0, due: 1e9, at: [u.x, u.y], since: 0 };
+    const d = 0.02 * u.power0;
+    Wt.suffer(u, d, 1, [], false, false, 3, 3);
+    expect(u.debt!).toBeGreaterThan(0);
+    expect(u.debtN!).toBeCloseTo(u.debt! * 3, 12);
+    delete u.waits;
+    const mor = u.mor, str = u.str, D = Wt.led.D.def, gen = t0.def.general?.level ?? 0;
+    Wt.landNow(u);
+    const lost = (str - u.str) / u.str0;
+    expect(lost).toBeGreaterThan(0);
+    expect(mor - u.mor).toBeCloseTo(lost * LAND.nerve.perLoss.def * 3 * Math.max(0.3, REF_NERVE.steady), 12);
+    expect(Wt.led.D.def - D).toBeCloseTo((u.power0 * lost * LAND.nerve.perLoss.def * 1 * Math.max(0.3, 1 - LAND.nerve.xp * u.xp - LAND.nerve.general * gen)) / Wt.power.def, 12);
+  });
+
   it('the residual by what is read', () => {
     const base = lodz(2);
     const sig = (t: T, k: SpreadReckoning): number[] => {

@@ -2483,8 +2483,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    // (dm: under the field spread's army ledger, the tick's damage times the parts of m read at the army.)
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number }>();
+    // (Under the field spread's army ledger: dm, the tick's damage times the parts of m read at the army; built, the
+    // blows' nerve weight as built, every part, with which what is held back or spared lands on the block later.)
+    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number; built?: number }>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
@@ -2529,7 +2530,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
       h.dmg += blow.dmg;
       // Under the field spread's army ledger (step 1b, choice 13) each part of m is read at the army or at the block, never both.
-      if (this.led && blow.parts) { const sp = nerveSplit(blow.parts, this.led.on); h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; }
+      if (this.led && blow.parts) { const sp = nerveSplit(blow.parts, this.led.on); h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; h.built = (h.built ?? 0) + blow.nerve; }
       else h.nerve += blow.nerve;
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
@@ -2541,10 +2542,12 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
     }
-    // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
-    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
+    // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it. (Under the
+    // field spread's army ledger, the blows' weight as built: the strike lands it on the block, or with the air part at
+    // the army on the ledger, so each part of it is priced once, never dropped with the split: G.)
+    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? h.nerve)); }
     // (The ledger reads the damage-weighted m of the tick's blows; the block keeps today's per-blow sum of what it reads.)
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1);
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve);
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
@@ -2830,16 +2833,18 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
-  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false, mArmy = 1): void {
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul): void {
     // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
     // Kept harm landing ('bare', hold until relieved) is no blow of anyone's that tick, and finds no one.
     if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, 'struck');
     // Waiting for help, dug in where it was told to wait (hold until relieved, release 2), whether help is late or not:
     // the field's light cover, never better than its ground gives; what it spares is kept, with the nerve it would have
-    // cost, and lands when the wait ends (endWait). 'bare': that harm landing.
+    // cost, and lands when the wait ends (endWait). 'bare': that harm landing. (Under the field spread's army ledger it is
+    // kept at the weight as built, every part of m (nerveBuilt), and lands on the block with it and on the ledger at 1:
+    // so no part of what was spared is dropped with the split, nor priced twice. G.)
     if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
       const take = this.groundTake(t), f = Math.min(take, LAND.cover[LAND.wreck.cover]) / Math.max(1e-9, take);
-      if (f < 1) { const spared = dmg * (1 - f); t.debt = (t.debt ?? 0) + spared; t.debtN = (t.debtN ?? 0) + spared * nerveMul; dmg *= f; }
+      if (f < 1) { const spared = dmg * (1 - f); t.debt = (t.debt ?? 0) + spared; t.debtN = (t.debtN ?? 0) + spared * (this.led ? nerveBuilt : nerveMul); dmg *= f; }
     }
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
@@ -3917,8 +3922,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt);
     for (const [id, [d, n]] of hurt) {
       const w = d > 0 ? (n / d) * LAND.air.nerve : LAND.air.nerve;
-      // Under the field spread's army ledger with the air part at the army (step 1b), the ledger reads its weight and the block 1.
-      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w); else this.suffer(this.unit(id)!, d, w, []);
+      // Under the field spread's army ledger with the air part at the army (step 1b), the ledger reads its weight and the
+      // block 1; what a wait's cover spares of it is kept at that weight, to land on the block (suffer's nerveBuilt: G).
+      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w, w); else this.suffer(this.unit(id)!, d, w, []);
     }
     this.strikes = this.strikes.filter((k) => !k.ended);
   }
@@ -4091,7 +4097,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const k of this.strikes) { for (const l of k.legs) l.done = Math.max(l.done, 1); k.ended = true; }
     for (const [id, [d, n]] of hurt) {
       const w = d > 0 ? n / d : 1;
-      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w); else this.suffer(this.unit(id)!, d, w, []);
+      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w, w); else this.suffer(this.unit(id)!, d, w, []);
     }
   }
 
