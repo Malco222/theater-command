@@ -112,7 +112,9 @@ namespace
 		// YOURSELF on the raid card of a bombing raid by day or a fight for the sky. Off until the playtester passes it (ruling
 		// 217) and the Mac holds 45 fps, then this row flips to on in one line; -TheaterAirCampaignLive turns it on for a run.
 		// The campaign reads it (AAirBattle::CampaignLiveOn); it is never sent to the land rules.)
-		{ TEXT("flyLive"), TEXT("Fly raids yourself"), TEXT("On a bombing raid by day or a fight for the sky, FLY IT YOURSELF takes you into the battle in the air, where you give your groups their orders. Off: your crews fly every raid."), TEXT("TheaterAirNoCampaignLive"), false, TEXT("TheaterAirCampaignLive") },
+		// (release 1.5, 24 November 03:42Z: ON. The playtester passed it on 4351110c, the Mac held 49-60 fps in flight (Part B on
+		// 6c676061) and the art director passed every raid's stills on 8913978d. -TheaterAirNoCampaignLive turns it off for a run.)
+		{ TEXT("flyLive"), TEXT("Fly raids yourself"), TEXT("On a bombing raid by day or a fight for the sky, FLY IT YOURSELF takes you into the battle in the air, where you give your groups their orders. Off: your crews fly every raid."), TEXT("TheaterAirNoCampaignLive"), true, TEXT("TheaterAirCampaignLive") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
