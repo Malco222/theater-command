@@ -6241,6 +6241,16 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     ok = made >= 0;
     note = ok ? `${fleetView(s, made)?.name ?? 'A new fleet'} is formed from ${fleetView(s, Number(part[1]))?.name ?? 'the fleet'}.` : whyNotSplit(s, Number(part[1]), { [part[2]]: Number(part[3]) } as Record<string, number>) ?? 'Those ships cannot be split off now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, made, view: view() };
+  } else if (part[0] === 'fleetsplitmany') {
+    // (Release 2: splitting a stack; Brian 23 November 2026 22:23Z.) The ships left behind in the 3D tray, as 'bb.1,ca.2':
+    // split off as a squadron of their own, where the fleet is and under its order, so that only the lit ships go.
+    const take: Record<string, number> = {};
+    for (const bit of (part[2] ?? '').split(',')) { const [cls, n] = bit.split('.'); if (cls && Number(n) > 0) take[cls] = (take[cls] ?? 0) + Number(n); }
+    const made = orderSplit(s, Number(part[1]), take);
+    ok = made >= 0;
+    const left = Object.entries(take).map(([c, n]) => `${n} ${SHIP_WORD[c]?.[n === 1 ? 0 : 1] ?? c}`).join(', ');
+    note = ok ? `${cap1(left)} stay${Object.values(take).reduce((a, b) => a + b, 0) === 1 ? 's' : ''} behind as ${fleetView(s, made)?.name ?? 'a squadron of their own'}.` : whyNotSplit(s, Number(part[1]), take) ?? 'Those ships cannot be split off now.';
+    return { ok, note, fly, flies: [], open: '', made, view: view() };
   } else if (part[0] === 'fleetmerge') {
     ok = orderMerge(s, Number(part[1]), Number(part[2]));
     note = ok ? `The fleets are joined as ${fleetView(s, Number(part[2]))?.name ?? 'one'}.` : 'They cannot be joined now.';

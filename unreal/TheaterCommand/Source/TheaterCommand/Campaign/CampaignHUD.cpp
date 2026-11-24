@@ -9324,6 +9324,30 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bOn ? BrightBrass : Muted)
 						];
 				};
+				// (Release 2: splitting a stack; Brian 23 November 2026 22:23Z.) How many go with the next order, of how many
+				// could, and the quick picks: ALL, NONE (then click those that are to go), and for a fleet HALF. A click on a
+				// card sends it or leaves it behind; what is left behind stays where it is.
+				auto AddGoing = [this, &OrderButton](const FArmyTray& Held, bool bShips)
+				{
+					if (Held.GoingOf <= 1)
+					{
+						return;
+					}
+					const FString Line = FString::Printf(TEXT("%d OF %d %s %s"), Held.Going, Held.GoingOf, bShips ? (Held.GoingOf == 1 ? TEXT("SHIP") : TEXT("SHIPS")) : TEXT("CORPS"), bShips ? TEXT("SAIL") : TEXT("GOING"));
+					TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(22.0f, 0.0f, 8.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Line)).Font(SmallCaps()).ColorAndOpacity(Held.Going < Held.GoingOf ? BrightBrass : Muted)
+						.ToolTipText(FText::FromString(bShips
+							? TEXT("Click a ship's card to leave it behind, or to bring it back. Only the lit ships sail with the next order; the rest stay where they are, as a squadron of their own.")
+							: TEXT("Click a corps' card to leave it behind, or to bring it back. Only the lit corps go with the next order; the rest stay where they are.")))
+					];
+					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)[OrderButton(TEXT("ALL"), Held.Going == Held.GoingOf, [this]() { if (Controller.IsValid()) { Controller->PickGoing(1); } })];
+					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)[OrderButton(TEXT("NONE"), Held.Going == 0, [this]() { if (Controller.IsValid()) { Controller->PickGoing(0); } })];
+					if (bShips)
+					{
+						TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)[OrderButton(TEXT("HALF"), false, [this]() { if (Controller.IsValid()) { Controller->PickGoing(2); } })];
+					}
+				};
 				if (Army.bFleet)
 				{
 					// A fleet in hand: what it does at sea, the way home, and a card for each ship.
@@ -9395,6 +9419,7 @@ namespace
 							SNew(STextBlock).Text(Army.FleetWarning).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Alarm)
 						];
 					}
+					AddGoing(Army, true);
 					TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
 					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 8.0f, 0.0f)
 					[
@@ -9439,24 +9464,30 @@ namespace
 						const TSharedRef<SWidget> Picture = Portrait.IsValid()
 							? StaticCastSharedRef<SWidget>(SNew(SPortrait).Picture(Portrait).Size(FVector2D(74.0, 45.0)))
 							: StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(74.0f).HeightOverride(45.0f));
+						// (Release 2: splitting a stack.) A click on the card leaves the ship behind, or brings it back: only the lit
+						// ships sail with the next order. (Where fleets are not split, the history campaigns, it takes no click.)
+						const bool bSplit = Army.GoingOf > 1;
 						Cards->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 						[
-							SNew(SButton).ButtonStyle(&PickedCard).ContentPadding(FMargin(6.0f, 6.0f, 6.0f, 7.0f)).IsFocusable(false)
-							.ToolTipText(FText::FromString(FString::Printf(TEXT("%s. %s"), *Ship.Name.ToString(), *Ship.Role.ToString())))
+							SNew(SButton).ButtonStyle(Ship.bStaying ? &LeftCard : &PickedCard).ContentPadding(FMargin(6.0f, 6.0f, 6.0f, 7.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(FString::Printf(TEXT("%s. %s%s"), *Ship.Name.ToString(), *Ship.Role.ToString(),
+								!bSplit ? TEXT("") : Ship.bStaying ? TEXT("\nLeft behind: click to send it with the fleet.") : TEXT("\nClick to leave it behind: it stays where it is, as a squadron of its own, when the fleet is sent."))))
 							.OnHovered_Lambda([this, Model = Ship.Model, Name = Ship.Name]() { if (Controller.IsValid()) { Controller->ShowShipModel(Model, Name); } })
+							.OnClicked_Lambda([this, Index = Ship.Index, bSplit]() { if (Controller.IsValid() && bSplit) { Controller->ToggleShip(Index); } return FReply::Handled(); })
 							[
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(4.0f))[Picture]]
 								+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 5.0f, 0.0f, 0.0f)
 								[
-									SNew(STextBlock).Text(Ship.Name).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(Cream)
+									SNew(STextBlock).Text(Ship.Name).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(Ship.bStaying ? Muted : Cream)
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 1.0f, 0.0f, 0.0f)
 								[
-									// What the class is for, in three words.
+									// What the class is for, in three words; or that it stays behind.
 									SNew(SBox).WidthOverride(82.0f)
 									[
-										SNew(STextBlock).Text(Ship.Brief).Font(Font(TEXT("Regular"), 8)).ColorAndOpacity(Muted).AutoWrapText(true)
+										SNew(STextBlock).Text(Ship.bStaying ? FText::FromString(TEXT("STAYING")) : Ship.Brief).Font(Ship.bStaying ? SmallCaps() : Font(TEXT("Regular"), 8))
+										.ColorAndOpacity(Ship.bStaying ? Brass : Muted).AutoWrapText(true)
 									]
 								]
 							]
@@ -9582,6 +9613,10 @@ namespace
 				}
 				}
 				// The place clicked once and waiting for the word, and the way to let the army go.
+				if (!Army.bLook)
+				{
+					AddGoing(Army, false);
+				}
 				TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
 				if (!Army.PendingButton.IsEmpty())
 				{

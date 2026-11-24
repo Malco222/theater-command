@@ -104,6 +104,12 @@ struct FShipCard
 	FText Role; // what it is for, in a line
 	FText Brief; // and in three words, for the face of the card
 	int32 Count = 1; // how many ships this card stands for, when the fleet has too many to show each
+	// (Release 2; Brian 23 November 2026 22:23Z: "select which units I want to move one place and ... another".) Its class
+	// (bb, cv, ca, dd, ss), its place in the tray, and whether it is left behind: a click on the card says. Only the lit
+	// ships sail; those left behind stay where they are as a squadron of their own once the order is given.
+	FString Class;
+	int32 Index = 0;
+	bool bStaying = false;
 };
 
 /** The adviser's first steps: shown at the start of a campaign, each ticked as the player does it. */
@@ -183,6 +189,10 @@ struct FArmyTray
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	FText HintLead; // (ruling 87) and what is said before it, in brass: "No moves left this month."
+	// (Release 2: splitting a stack.) How many of the army's corps, or of the fleet's ships, go with the next order, of
+	// how many could: "3 OF 4 CORPS GOING". GoingOf 0 or 1: nothing to split, and no line is shown.
+	int32 Going = 0;
+	int32 GoingOf = 0;
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
@@ -911,6 +921,16 @@ public:
 	 * an army's face-off. False where fleet attacks are off, and the caller does what it did before.
 	 */
 	bool AttackFleetWith(int32 Target);
+	/** (Release 2: splitting a stack.) A ship's card in the fleet tray clicked: it is left behind, or comes along again. */
+	void ToggleShip(int32 Index);
+	/** (Release 2: splitting a stack.) ALL, NONE or HALF of the army's corps, or of the fleet's ships, go with the next order: 1, 0 or 2. */
+	void PickGoing(int32 Mode);
+	/**
+	 * (Release 2: splitting a stack.) The ships left behind are split off from the fleet in hand as a squadron of their
+	 * own, where it is and under its order, so that only the lit ships go. True where the order may go ahead (nothing
+	 * was left behind, or the split was made); false where every ship was left behind or the split was refused.
+	 */
+	bool SplitOffStaying();
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
@@ -1616,6 +1636,8 @@ private:
 	FString LookNation;
 	void LayOutLook();
 	FFleetHand FleetHand; // the fleet in hand as the rules describe it
+	TSet<int32> FleetStaying; // (release 2) the fleet tray's cards left behind, by their place in the tray
+	FString FleetStayingFor; // and the fleet they were picked on, with its ships: picked afresh when either changes
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
 	bool bPointerOnWater = false;

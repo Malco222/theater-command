@@ -6156,15 +6156,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			if (bDragging)
 			{
-				// (Release 2) Let go over an enemy fleet: the attack card, odds first. Over the sea: it sails there. Anywhere
-				// else: it goes back where it lay, still in hand. (The carried piece goes back either way: the map moves it
-				// once the order is given.)
+				// (Release 2) Let go over an enemy fleet: the attack card, odds first. Anywhere else it is the order a
+				// right-click there gives: a sea (it sails there), its own harbour (home), a friendly port (its new home), an
+				// enemy coast its guns reach (the shelling card). Off the table it goes back where it lay, still in hand.
+				// (The carried piece goes back either way: the map moves it once the order is given.)
 				HeldFleetPiece->ReturnToRest();
 				const FCampaignSession* Now = GetSession();
 				const bool bOnEnemyFleet = AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE && Now && AimedPiece->GetNationTag() != Now->GetView().Human;
-				if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())) && bOnTable && bPointerOnWater)
+				if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())) && bOnTable)
 				{
-					OrderFleetTo(SeaNear(PointerMap));
+					RightClickOn(AimedRegion, bPointerOnWater ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
 				}
 			}
 			else if (bFleetWasInHand)
@@ -7236,6 +7237,11 @@ bool ACampaignPlayerController::AttackFleetWith(int32 Target)
 	// (Release 2, fleetattack.ts; Brian 23 November 2026 22:23Z) Set down on an enemy fleet: the card asks first, with the
 	// odds and what each side is likely to lose, as an army's face-off does. Where it cannot be sent (out of reach, at
 	// peace, already sent this month) the card says why, in a sentence, and SEND THEM IN is shut.
+	// (Only the lit ships go in: those left behind in the tray are split off first, and stay where they are.)
+	if (!SplitOffStaying())
+	{
+		return true;
+	}
 	CampaignSounds::Play(this, TEXT("ship_horn"), 0.4f);
 	OpenPage(FString::Printf(TEXT("fleetattack:%d:%d"), FleetInHand, Target));
 	return true;
@@ -7334,6 +7340,13 @@ void ACampaignPlayerController::LayOutFleet()
 		{ Fleet->Submarines, TEXT("ss"), TEXT("Submarine"), TEXT("Submarine"), TEXT("submarines"), TEXT("Sinks merchant ships, and slips away from the fleet."), TEXT("Commerce raider"), false },
 	};
 	const bool bAll = Fleet->Ships() <= 14;
+	// (Release 2: splitting a stack.) The cards left behind hold while the same fleet, with the same ships, is in hand.
+	const FString StayingFor = FString::Printf(TEXT("%d:%d.%d.%d.%d.%d"), Fleet->Id, Fleet->Battleships, Fleet->Carriers, Fleet->Cruisers, Fleet->Destroyers, Fleet->Submarines);
+	if (StayingFor != FleetStayingFor)
+	{
+		FleetStaying.Reset();
+		FleetStayingFor = StayingFor;
+	}
 	for (const FClass& Class : Classes)
 	{
 		if (Class.Count <= 0)
@@ -7353,7 +7366,17 @@ void ACampaignPlayerController::LayOutFleet()
 			Card.Name = FText::FromString(Card.Count == 1 ? FString(Class.One) : FString::Printf(TEXT("%d %s"), Card.Count, Class.Many));
 			Card.Role = FText::FromString(Role);
 			Card.Brief = FText::FromString(Brief);
+			Card.Class = Class.Key;
+			Card.Index = Tray.Ships.Num() - 1;
+			Card.bStaying = FleetStaying.Contains(Card.Index);
 		}
+	}
+	// (Release 2: splitting a stack, the grand campaign's, where fleets are split.) How many sail with the next order.
+	Tray.GoingOf = Tray.bFleetGrand && View.bHumanUp ? Fleet->Ships() : 0;
+	Tray.Going = 0;
+	for (const FShipCard& Card : Tray.Ships)
+	{
+		Tray.Going += Card.bStaying ? 0 : Card.Count;
 	}
 	if (Tray.Ships.Num() > 0)
 	{
@@ -7411,6 +7434,11 @@ void ACampaignPlayerController::OrderFleetTo(int32 Zone)
 		Notify(Bar && !Bar->Shut.IsEmpty() ? Bar->Shut : FString::Printf(TEXT("%s cannot reach the %s this month."), *Name, *Sea), Bar ? 8.0 : 5.0);
 		return;
 	}
+	// (Release 2) Ships left behind in the tray stay where they are, as a squadron of their own; the rest sail.
+	if (!SplitOffStaying())
+	{
+		return;
+	}
 	FString Note;
 	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:%s"), FleetInHand, Zone, *FleetNext), Note))
 	{
@@ -7460,6 +7488,10 @@ void ACampaignPlayerController::FleetToNewBase(int32 RegionId)
 	}
 	FString Note;
 	const FString Name = Fleet->Name, Port = Map->GetData().Regions[RegionId].Name;
+	if (!SplitOffStaying()) // (release 2: only the lit ships move)
+	{
+		return;
+	}
 	if (Session->OrderForce(FString::Printf(TEXT("fleetbase:%d:%d"), FleetInHand, RegionId), Note))
 	{
 		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
@@ -7483,7 +7515,12 @@ void ACampaignPlayerController::FleetToHarbour()
 	}
 	FString Note;
 	const FString Name = Fleet->Name, Port = Fleet->Port;
-	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:port"), FleetInHand, Fleet->Home), Note))
+	const int32 Home = Fleet->Home;
+	if (!SplitOffStaying()) // (release 2: only the lit ships come in)
+	{
+		return;
+	}
+	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:port"), FleetInHand, Home), Note))
 	{
 		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -8117,6 +8154,115 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 	RefreshOrders();
 }
 
+void ACampaignPlayerController::ToggleShip(int32 Index)
+{
+	if (FleetInHand == INDEX_NONE || !Tray.Ships.IsValidIndex(Index))
+	{
+		return;
+	}
+	if (!FleetStaying.Remove(Index))
+	{
+		FleetStaying.Add(Index);
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::PickGoing(int32 Mode)
+{
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (FleetInHand != INDEX_NONE)
+	{
+		// ALL: every ship sails. NONE: every card is left behind, to be clicked back one by one. HALF: of each class, the
+		// back half of its cards stays.
+		FleetStaying.Reset();
+		if (Mode != 1)
+		{
+			TMap<FString, int32> OfClass;
+			for (const FShipCard& Card : Tray.Ships)
+			{
+				++OfClass.FindOrAdd(Card.Class);
+			}
+			TMap<FString, int32> Seen;
+			for (const FShipCard& Card : Tray.Ships)
+			{
+				const int32 Nth = Seen.FindOrAdd(Card.Class)++;
+				if (Mode == 0 || Nth >= (OfClass[Card.Class] + 1) / 2)
+				{
+					FleetStaying.Add(Card.Index);
+				}
+			}
+		}
+		RefreshOrders();
+		return;
+	}
+	if (ArmyRegion != INDEX_NONE)
+	{
+		PickedCorps.Reset();
+		if (Mode != 0)
+		{
+			int32 Nth = 0;
+			for (const FTrayCard& Card : Tray.Cards)
+			{
+				if (Card.bCanOrder && !Card.bAtSchool && Card.Apart.IsEmpty() && (Mode == 1 || Nth++ % 2 == 0))
+				{
+					PickedCorps.AddUnique(Card.CorpsId);
+				}
+			}
+		}
+		RefreshOrders();
+	}
+}
+
+bool ACampaignPlayerController::SplitOffStaying()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || FleetInHand == INDEX_NONE || FleetStaying.Num() == 0)
+	{
+		return true;
+	}
+	TMap<FString, int32> Stay;
+	int32 Staying = 0, All = 0;
+	for (const FShipCard& Card : Tray.Ships)
+	{
+		All += Card.Count;
+		if (FleetStaying.Contains(Card.Index))
+		{
+			Stay.FindOrAdd(Card.Class) += Card.Count;
+			Staying += Card.Count;
+		}
+	}
+	if (Staying <= 0)
+	{
+		FleetStaying.Reset();
+		return true;
+	}
+	if (Staying >= All)
+	{
+		Notify(TEXT("Every ship is left behind: click the cards of the ships that are to sail, or ALL."), 6.0);
+		return false;
+	}
+	TArray<FString> Parts;
+	for (const TPair<FString, int32>& Each : Stay)
+	{
+		Parts.Add(FString::Printf(TEXT("%s.%d"), *Each.Key, Each.Value));
+	}
+	FString Note;
+	const bool bOk = Session->Act(FString::Printf(TEXT("fleetsplitmany:%d:%s"), FleetInHand, *FString::Join(Parts, TEXT(","))), INDEX_NONE, Note);
+	FleetStaying.Reset();
+	if (!bOk)
+	{
+		Notify(Note.IsEmpty() ? FString(TEXT("Those ships cannot be split off now.")) : Note, 6.0);
+		return false;
+	}
+	ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+	return true;
+}
+
 const FReachRegion* ACampaignPlayerController::FindReach(int32 RegionId) const
 {
 	return Reach.FindByPredicate([RegionId](const FReachRegion& R) { return R.Region == RegionId; });
@@ -8147,6 +8293,7 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Ships.Reset();
 	Tray.bFleet = false;
 	Tray.bLook = false;
+	Tray.Going = Tray.GoingOf = 0; // (release 2: splitting a stack; counted again by whatever is laid out)
 	Reach.Reset();
 	RouteTarget = INDEX_NONE;
 	PendingTarget = INDEX_NONE;
@@ -8290,6 +8437,18 @@ void ACampaignPlayerController::RefreshOrders()
 				const FViewCorps* Inside = View.Corps.FindByPredicate([&Card](const FViewCorps& Each) { return Each.Id == Card.CorpsId; });
 				Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
 			}
+		}
+	}
+
+	// (Release 2: splitting a stack.) How many of the corps that can be given orders here go with the next one.
+	Tray.GoingOf = 0;
+	Tray.Going = 0;
+	for (const FTrayCard& Card : Tray.Cards)
+	{
+		if (Card.bCanOrder && !Card.bAtSchool && Card.Apart.IsEmpty())
+		{
+			++Tray.GoingOf;
+			Tray.Going += Card.bPicked ? 1 : 0;
 		}
 	}
 
@@ -9434,8 +9593,12 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 		}
 		else if (Held && FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(RegionId))
 		{
-			// An enemy coast its guns can reach: the question is put first, with what the shelling would do.
-			OpenPage(FString::Printf(TEXT("shell:%d:%d"), FleetInHand, RegionId));
+			// An enemy coast its guns can reach: the question is put first, with what the shelling would do. (Release 2:
+			// only the lit ships stand in; those left behind are split off first.)
+			if (SplitOffStaying())
+			{
+				OpenPage(FString::Printf(TEXT("shell:%d:%d"), FleetInHand, RegionId));
+			}
 		}
 		else if (Held && Held->Bases.Contains(RegionId))
 		{

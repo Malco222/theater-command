@@ -76,4 +76,19 @@ describe('the fleet attack through the bridge', () => {
     expect((TC().fleetInHand(battle) as { fleetAttack: boolean }).fleetAttack).toBe(false);
     expect((TC().fleetAttack(true) as { on: boolean }).on).toBe(true);
   });
+
+  it('ships left behind in the tray are split off as a squadron of their own, where the fleet is', () => {
+    const { g, battle } = germany(false);
+    TC().load(saveGame(g));
+    const out = TC().act(`fleetsplitmany:${battle}:ca.2,dd.5`) as { ok: boolean; note: string; made: number };
+    expect(out.ok).toBe(true);
+    expect(out.made).toBeGreaterThan(0);
+    expect(out.note).toMatch(/2 cruisers, 5 destroyers stay behind as/);
+    const hand = TC().fleetInHand(out.made) as { cards: { cls: string; count: number }[] };
+    expect(hand.cards.map((c) => [c.cls, c.count])).toEqual([['ca', 2], ['dd', 5]]);
+    // Every ship left behind: refused, with the rules' reason.
+    const all = TC().act(`fleetsplitmany:${battle}:bb.2,ca.6,dd.15`) as { ok: boolean; note: string };
+    expect(all.ok).toBe(false);
+    expect(all.note).toMatch(/Some ships have to stay/);
+  });
 });
