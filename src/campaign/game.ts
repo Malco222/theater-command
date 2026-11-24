@@ -837,9 +837,18 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
  * railways there stand. The stores of the ports overseas, which corps are fed, the garrisons and the railheads are worked
  * out at every call as before. Nothing it gives differs from drawing every picture afresh: TC_SUPPLY_CHECK=1 draws every
  * kept picture again and stops the run on any difference.
+ * - Each picture keeps the railways it was drawn with, not the last call's: a country with no corps for a while is not
+ *   looked at, and its picture must not outlive a railway that changed meanwhile.
+ * - The railways and the desert are worked out once a call, and the very arrays that key the kept pictures are the ones
+ *   the pictures are drawn from (reachInto, desertLines), so a rule that moves a step cannot miss the key.
+ * - The roads between provinces are not keyed: they change only when the wider world is attached (attachWorld), which
+ *   also adds provinces, and a new number of provinces starts the book afresh.
+ * - A kept picture is handed out again as the same arrays: nothing may write into g.supply or g.reach in place.
  */
-interface SupplyDrawn { pass: Uint8Array; from: string; ok: Uint8Array; reach: Float32Array; east: boolean }
-interface SupplyBook { size: number; wide: boolean; long: string; deep: Uint8Array; sand: Uint8Array; rail: Float64Array; drawn: Map<string, SupplyDrawn> }
+/** The eastern railways as they stand this call: what each Soviet-owned step of the line costs, and whose home it is. */
+interface RailNow { step: Float64Array; home: Uint8Array }
+interface SupplyDrawn { pass: Uint8Array; from: string; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
+interface SupplyBook { size: number; wide: boolean; long: string; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn> }
 const supplyBooks = new WeakMap<Game, SupplyBook>();
 const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
 const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
@@ -850,7 +859,7 @@ const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
 };
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
-function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, deep: Uint8Array, sand: Uint8Array): { ok: Uint8Array; reach: Float32Array; east: boolean } {
+function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
   const size = g.regions.length;
   const ok = new Uint8Array(size);
   const q: number[] = [];
@@ -871,11 +880,11 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
   }
   // A country with no supplied ground inside the Soviet Union has no line there to measure, and one with none in
   // the desert or overseas has none there: both tables stay empty, as the long way round would leave them.
-  const reach = east ? reachInto(g, id, ok) : new Float32Array(size);
+  const reach = east ? reachInto(g, id, ok, long, deep, rail) : new Float32Array(size);
   if (desert) {
     const head = new Float32Array(size).fill(-1);
     for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
-    desertLines(g, ok, head, reach);
+    desertLines(g, ok, head, sand, reach);
   }
   return { ok, reach, east };
 }
@@ -911,26 +920,32 @@ export function computeSupply(g: Game): void {
     if (k === undefined) { k = holders.length; holderNo.set(who, k); holders.push(who); }
     road[r.id] = k;
     if (long.includes(r.owner)) deep[r.id] = 1;
-    if (inDesert(r)) sand[r.id] = 1;
+    // Desert ground (2) costs a step of the line; the coast overseas (1) only carries it. Either is the desert's table.
+    sand[r.id] = (r.overseas ? 1 : 0) | (sandRules(r) ? 2 : 0);
     if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]))) sources.push(r.id);
   }
-  // The pictures kept from the last call hold while the chart, the rules and the long line's owners are the same;
-  // those reaching into the east hold only while every eastern step costs what it did.
+  // What each step of the long line costs this month, on Soviet-owned ground: a region held long enough has had its
+  // track relaid (in the grand campaign, unless the line there is torn up), and mud and winter lengthen every step.
   const w = weather(g), bad = w.mud || w.winter ? EASTERN.badWeather : 1;
-  const rail = new Float64Array(size);
+  const step = new Float64Array(size), home = new Uint8Array(size);
   for (let j = 0; j < size; j++) {
     if (!deep[j]) continue;
     const r = g.regions[j];
-    rail[j] = (EASTERN.deepOwners.includes(r.owner) ? 1e6 : 0) + (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+    if (EASTERN.deepOwners.includes(r.owner)) home[j] = 1;
+    step[j] = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
   }
+  // The pictures kept from the last call hold while the chart, the rules, the long line's owners and the desert are the
+  // same; those reaching into the east hold only while every eastern step costs what it did when they were drawn.
   let book = supplyBooks.get(g);
-  const longKey = long.join('|');
+  const longKey = `${long.join('|')}/${DESERT.step}`;
   if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
-    book = { size, wide, long: longKey, deep, sand, rail, drawn: new Map() };
+    book = { size, wide, long: longKey, deep, sand, rail: { step, home }, drawn: new Map() };
     supplyBooks.set(g, book);
   }
-  const railSame = sameBytes(book.rail, rail);
-  book.rail = rail;
+  // The railways now: the same object as the last call's while nothing on them has changed, so most checks are one look.
+  let rail = book.rail;
+  if (!sameBytes(rail.step, step) || !sameBytes(rail.home, home)) book.rail = rail = { step, home };
+  const railHolds = (then: RailNow | null): boolean => !then || then === rail || (sameBytes(then.step, rail.step) && sameBytes(then.home, rail.home));
   for (const id of active) {
     const friend = new Uint8Array(holders.length);
     for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
@@ -972,19 +987,19 @@ export function computeSupply(g: Game): void {
     for (let j = 0; j < size; j++) pass[j] = friend[road[j]];
     const from = `${seeds.join(',')}/${heads.join(',')}`;
     const kept = book.drawn.get(id);
-    if (kept && kept.from === from && (!kept.east || railSame) && sameBytes(kept.pass, pass)) {
+    if (kept && kept.from === from && railHolds(kept.rail) && sameBytes(kept.pass, pass)) {
       if (supplyCheck) {
-        const fresh = drawSupply(g, id, pass, seeds, heads, wide, deep, sand);
+        const fresh = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
         if (!sameBytes(fresh.ok, kept.ok) || !sameBytes(fresh.reach, kept.reach)) throw new Error(`supply picture kept for ${id} in month ${g.turn} differs from a fresh one`);
       }
       g.supply[id] = kept.ok;
       g.reach[id] = kept.reach;
       continue;
     }
-    const drawn = drawSupply(g, id, pass, seeds, heads, wide, deep, sand);
+    const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
     g.supply[id] = drawn.ok;
     g.reach[id] = drawn.reach;
-    book.drawn.set(id, { pass, from, ...drawn });
+    book.drawn.set(id, { pass, from, ...drawn, rail: drawn.east ? rail : null });
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
@@ -1006,7 +1021,7 @@ export function convoyDrag(g: Game, id: string): number {
  * nearest working base, a step for every region of desert on the way. Written into the same
  * table as the line inside the Soviet Union; the two never overlap.
  */
-function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Array): void {
+function desertLines(g: Game, ok: Uint8Array, head: Float32Array, sand: Uint8Array, out: Float32Array): void {
   const d = new Float32Array(g.regions.length).fill(1e6);
   const q: number[] = [];
   for (let i = 0; i < head.length; i++) if (head[i] >= 0) { d[i] = head[i]; q.push(i); }
@@ -1014,11 +1029,11 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
     const a = q[i];
     for (const j of g.regions[a].nb) {
       if (!ok[j]) continue;
-      const far = d[a] + (sandRules(g.regions[j]) ? DESERT.step : 0);
+      const far = d[a] + (sand[j] & 2 ? DESERT.step : 0);
       if (far < d[j] - 1e-6) { d[j] = far; q.push(j); }
     }
   }
-  for (const r of g.regions) if (inDesert(r) && ok[r.id] && d[r.id] < 1e6) out[r.id] = d[r.id];
+  for (let i = 0; i < d.length; i++) if (sand[i] && ok[i] && d[i] < 1e6) out[i] = d[i];
 }
 
 /**
@@ -1027,25 +1042,22 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
  * (Ruling 221, L: on the ground of the other owners of the long line it is counted from the harbours the invader
  * holds there as well, where its ships bring the stores in.)
  */
-function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
+function reachInto(g: Game, id: string, ok: Uint8Array, long: string[], deep: Uint8Array, rail: RailNow): Float32Array {
   const d = new Float32Array(g.regions.length);
-  const long = lineOwners(g);
   if (long.includes(id)) return d; // at home on their own railways
-  const deep = (r: Region): boolean => long.includes(r.owner);
-  const quay = (r: Region): boolean => ok[r.id] === 2 && !EASTERN.deepOwners.includes(r.owner);
-  const w = weather(g);
-  const bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  // Off Soviet ground (ruling 221, L), a harbour the invader holds on the long line's ground is a railhead too.
+  const quay = (j: number): boolean => ok[j] === 2 && !rail.home[j];
   d.fill(1e6);
   const q: number[] = [];
-  for (const r of g.regions) if (ok[r.id] && (!deep(r) || quay(r))) { d[r.id] = 0; q.push(r.id); }
+  for (let j = 0; j < d.length; j++) if (ok[j] && (!deep[j] || quay(j))) { d[j] = 0; q.push(j); }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
     for (const j of g.regions[a].nb) {
-      const r = g.regions[j];
-      if (!ok[j] || !deep(r)) continue;
-      // In the grand campaign a line the defenders tore up is not relaid by time alone: engineers must do it.
-      // And a line burned under a scorched earth order is converted only from the month it was made good.
-      const step = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      if (!ok[j] || !deep[j]) continue;
+      // The step's cost (computeSupply): in the grand campaign a line the defenders tore up is not relaid by time
+      // alone, engineers must do it; and a line burned under a scorched earth order is converted only from the month
+      // it was made good.
+      const step = rail.step[j];
       if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
     }
   }
