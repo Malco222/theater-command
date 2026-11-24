@@ -22,5 +22,7 @@
   "_logistics": "Three supply orders on top of the supply columns (release 2; Brian's yes of 23 November 2026 13:06Z; src/campaign/logistics.ts, data/campaign/logistics.json), each its own switch and each read only where the columns run: 'lorryShift' (a nation's lorries are as many as its industry and fuel give, and go first to the front it names), 'wagons' (horse-drawn wagons carry what the lorries cannot, slower, and the ground tells on both) and 'dumps' (forward dumps stocked beyond the railhead feed the corps near them by a shorter road; bombing burns them and losing the ground loses them). Off: nothing of them is read. On: the grand campaigns opened from now on carry the flag (set at a campaign's start only). Forced by TC_LORRYSHIFT, TC_WAGONS, TC_DUMPS (1 or 0).",
   "lorryShift": false,
   "wagons": false,
-  "dumps": false
+  "dumps": false,
+  "_fleetAttack": "A fleet sent straight at an enemy fleet (release 2; Brian 23 November 2026 22:23Z: drag a fleet onto theirs and the battle is fought, as an army attacks; src/campaign/fleetattack.ts, data/campaign/fleetattack.json). The player's own order, in his month, at any odds, told them first, at sea or in the enemy's harbour. Off: nothing of it is read, no die is thrown and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'fleetAttack' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_FLEETATTACK=1 or TC_FLEETATTACK=0.",
+  "fleetAttack": false
 }

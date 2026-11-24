@@ -679,6 +679,8 @@ export interface Fleet extends Storied {
   fought: number;
   /** The shipping lane the fleet is escorting, while its stance is 'escort' (the grand campaign). */
   lane?: string;
+  /** Month the player last sent this fleet straight at an enemy fleet: once a month (release 2, fleetattack.ts; written only under that switch). */
+  attacked?: number;
   /** Month the fleet last shelled a coast: its guns speak once a month (the grand campaign). */
   shelled?: number;
   /** The month each nation last had this fleet in contact: it fought it, was shelled by it, or was struck by its aircraft (the grand campaign). */
@@ -771,6 +773,8 @@ export interface SeaReport {
   odds: number;
   level: VictoryLevel;
   won: boolean;
+  /** The harbour, where the attacker went in after a fleet at anchor there (release 2, fleetattack.ts). Left out at sea. */
+  port?: string;
 }
 
 /** One month on a convoy route. */
