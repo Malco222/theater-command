@@ -7048,6 +7048,16 @@ int32 ACampaignPlayerController::FieldInRing(const FVector2D& Mouse, int32 Groun
 	{
 		return OnField;
 	}
+	// (The art director, 24 November 18:29Z: the trim.) The ring only from working height down, where the airfields' badges
+	// are drawn (GetTownPlates). From the theatre view a click picks the province, as in 1.5 (only the field itself, above,
+	// is an airfield there), and the province panel's airfield row is the way in.
+	if (const ACampaignCameraPawn* Height = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		if (Height->GetDistance() > 12500.0f)
+		{
+			return INDEX_NONE;
+		}
+	}
 	// The ring: 14 of the screen's units round the middle of the runway, in the window's own pixels (GateMarkScale is the
 	// screen's pixels to its unit, as the HUD last painted).
 	const double Ring = 14.0 * GateMarkScale;
