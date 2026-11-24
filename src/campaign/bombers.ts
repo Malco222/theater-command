@@ -34,6 +34,7 @@ import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { takesThe } from '../battle/air/names';
 import { NOSE_ART, markOf, type BomberMark, type MarkStyle } from './bomber-marks';
+import { UNITS, armsOf, unitsDecide } from './units';
 import type { AirFleet, BomberRoster, BomberRow, BomberSeats, BomberShot, CrewOrder, CrewsHome, Game } from './types';
 
 export { NOSE_ART };
@@ -170,8 +171,16 @@ export function crewsHome(g: Game, nat: string): CrewsHome {
   return (all[nat] ??= { order: 'split', school: 0, bonds: [], n: 0, sold: 0 });
 }
 
-/** The experience a new bomber's crew arrives with: the player's instructors' doing, and nobody else's. */
+/**
+ * The experience a new bomber's crew arrives with: the player's instructors' doing, and nobody else's. Under Units
+ * decide, its nation's flying school's, the same rule for every nation (units.json air.head missions an hour, U: none
+ * until laid; #2 form Part 2 section 6).
+ */
 export function headStart(g: Game, nat: string): number {
+  if (unitsDecide(g)) {
+    const school = armsOf(g, nat)?.air.school, per = UNITS.air.head;
+    return school && per ? Math.min(BOMBERS.school.most, Math.floor(school * per)) : 0;
+  }
   if (nat !== g.human) return 0;
   const c = g.stories.crews?.[nat];
   return c ? Math.min(BOMBERS.school.most, Math.floor(c.school / BOMBERS.school.crews)) : 0;

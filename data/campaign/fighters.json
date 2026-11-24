@@ -7799,8 +7799,9 @@
  },
  "law": {
   "_about": "The design director, 23 Nov 2026 06:55Z and 07:00Z (air-battles/dogfight/plan-1123.md): the edge of type A over type B is k times the sum of the log ratios that apply: top speed at rated height always; for a side whose doctrine is the turning fight, wing loading (lower turns tighter; the historian's 14 trial turn times are record tests, never laid); for a side whose doctrine is dive-and-climb, climb and limiting dive speed; pilot training hours. Doctrine only picks the term. A figure not laid makes its term 1. k is one shared power fitted to the historian's fighter-against-fighter exchange anchors from both sides' loss records; until it is fitted it is 0 and no edge is given. No cap but the widest anchor the record gives.",
-  "k": 0,
-  "fitted": false,
+  "_k": "Fitted 24 Nov 2026 (the design director, 16:13Z; air-battles/dogfight/fit-gc-1124.md): 0.95, L, one anchor (Guadalcanal, Aug-Nov 1942, 115 Wildcats v 106 Zeros, the record's exchange), with planes, pilots' hours (500 v 300, historian/air-hours-guadalcanal-1124.md) and warning in one fit, the laid height cells and the default escort roles. The spread from the cells and the hours is 0.5 to 1.2. Read only under Units decide (fighters.ts lawK), where the store's hours are read and the held level leaves a pair whose hours are both laid; the switch 'Fighter types' alone keeps no k, since with the held levels in the same anchor asks 2.7.",
+  "k": 0.95,
+  "fitted": true,
   "widest": null
  },
  "doctrine": {

@@ -210,7 +210,7 @@ export function divisionsOf(g: Game, c: Corps): DivisionCard[] {
   const ds = characters(c.id, c.divs, 'ds'), dx = characters(c.id, c.divs, 'dx');
   // Each stands a little above or below the corps, within the room the corps' own figure leaves either side of it.
   const roomS = Math.min(str, 1 - str) * DIVISIONS.spread.str, roomX = Math.min(xp, 1 - xp) * DIVISIONS.spread.xp;
-  const named = DIVISIONS.historic[c.nat]?.[c.name] ?? namedDivisions(c.name, c.nat, c.kind);
+  const named = c.names ?? DIVISIONS.historic[c.nat]?.[c.name] ?? namedDivisions(c.name, c.nat, c.kind);
   return Array.from({ length: c.divs }, (_, i) => {
     const s = str + ds[i] * roomS, x = xp + dx[i] * roomX;
     const no = c.nos?.[i] ?? first + i;

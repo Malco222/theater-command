@@ -341,6 +341,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 				Now.bMarkedOn ? TEXT("ON") : TEXT("OFF"), Now.bMarkedOn);
 			Add(TEXT("fleetattackrule"), TEXT("Fleet attacks"), TEXT("Drop one of your fleets on an enemy fleet in its reach, at sea or in his harbour, and the battle is fought at once, at any odds: the card gives the odds and the likely losses first. A fleet attacks once a month, and stays where the battle leaves it. Off, fleets meet only at the month's end, where an admiral thinks the odds good enough. It can be switched in any month."),
 				Now.bFleetAttack ? TEXT("ON") : TEXT("OFF"), Now.bFleetAttack);
+			// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Divisions split off a corps, and put back.
+			Add(TEXT("breakuprule"), TEXT("Break up corps"), TEXT("Pick up an army and every division of each corps is a tile on its card. Click the tiles of the divisions you want apart and press SPLIT OFF: they become a corps of their own where the army stands, and stay behind when the army moves. REJOIN puts a part back into the corps it came from. Nothing is lost or gained, and no corps grows bigger than it was. It can be switched in any month."),
+				Now.bBreakUp ? TEXT("ON") : TEXT("OFF"), Now.bBreakUp);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
@@ -542,13 +545,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("marked"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked"))
 	{
-		// (Release 2) Earned names and fleet attacks, in any month; supply columns, in the campaign's first month only (the rules say so if not).
+		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
-			const bool bOn = Id == TEXT("nicknames") ? Session->GetView().bNickFlags : Id == TEXT("fleetattackrule") ? Session->GetView().bFleetAttack : Id == TEXT("marked") ? Session->GetView().bMarkedOn : Session->GetView().bColumnsOn;
+			const FCampaignView& Now = Session->GetView();
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -1119,6 +1123,7 @@ void ACampaignPlayerController::EnterCampaign()
 	PickedBeforeMass.Reset();
 	PutDownFleet();
 	PutDownAgent();
+	PickedDivisions.Reset(); // (nor divisions picked on a card of the war before)
 	// (Nor a split made for a card in the war before: its ids are that war's, never to be joined in this one.)
 	HeldBackSquadron = HeldBackFrom = INDEX_NONE;
 	HeldBackCard.Reset();
@@ -8320,7 +8325,101 @@ void ACampaignPlayerController::PutDownArmy()
 	}
 	ArmyRegion = INDEX_NONE;
 	PickedCorps.Reset();
+	PickedDivisions.Reset();
 	bHandOrdered = false;
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::ToggleDivision(int32 CorpsId, int32 Slot)
+{
+	const FTrayCard* Card = Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& C) { return C.CorpsId == CorpsId; });
+	if (ArmyRegion == INDEX_NONE || !Card || Slot < 0)
+	{
+		return;
+	}
+	if (!Card->bCanBreak)
+	{
+		if (!Card->BreakWhy.IsEmpty())
+		{
+			Notify(Card->BreakWhy, 6.0);
+		}
+		return;
+	}
+	TSet<int32>& Set = PickedDivisions.FindOrAdd(CorpsId);
+	if (Set.Contains(Slot))
+	{
+		Set.Remove(Slot);
+	}
+	else
+	{
+		Set.Add(Slot);
+	}
+	if (Set.Num() == 0)
+	{
+		PickedDivisions.Remove(CorpsId);
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.4f);
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::SplitOffDivisions(int32 CorpsId)
+{
+	FCampaignSession* Session = GetSession();
+	const TSet<int32>* Set = PickedDivisions.Find(CorpsId);
+	if (!Session || !Set || Set->Num() == 0)
+	{
+		Notify(TEXT("Click the tiles of the divisions to split off first."), 5.0);
+		return;
+	}
+	TArray<int32> Slots = Set->Array();
+	Slots.Sort();
+	TArray<FString> Parts;
+	for (const int32 Slot : Slots)
+	{
+		Parts.Add(FString::FromInt(Slot));
+	}
+	FString Note, Next;
+	TArray<FSortie> Sorties;
+	FActExtras Extras;
+	if (Session->Act(FString::Printf(TEXT("breakup:%d:%s"), CorpsId, *FString::Join(Parts, TEXT(","))), INDEX_NONE, Note, &Sorties, &Next, &Extras))
+	{
+		// The picks are spent; the new corps stays behind when the army moves (it is not among the corps picked to go).
+		PickedDivisions.Remove(CorpsId);
+		if (Extras.Made != INDEX_NONE)
+		{
+			PickedCorps.Remove(Extras.Made);
+		}
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	// (a refused split keeps the picks, so they can be changed and tried again)
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || CorpsId == INDEX_NONE || IntoId == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	if (Session->Act(FString::Printf(TEXT("rejoin:%d:%d"), CorpsId, IntoId), INDEX_NONE, Note))
+	{
+		PickedCorps.Remove(CorpsId);
+		PickedDivisions.Remove(CorpsId);
+		PickedDivisions.Remove(IntoId); // (its tiles are laid out afresh: the old picks no longer point at the same divisions)
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
 	RefreshOrders();
 }
 
@@ -8602,6 +8701,11 @@ void ACampaignPlayerController::RefreshOrders()
 			Card.MoodTip = FString::Join(Tip, TEXT("\n"));
 		}
 		Card.Parts = Unit.Parts;
+		// (Release 2, breakup.ts) Its division tiles can be picked and split off, where that is on and it can be done now.
+		Card.bCanBreak = Unit.bBreakKnown && Unit.BreakWhy.IsEmpty() && Unit.Divisions >= 2;
+		Card.BreakWhy = Unit.BreakWhy;
+		Card.RejoinId = Unit.RejoinId;
+		Card.RejoinName = Unit.RejoinName;
 		Card.Carry = Unit.Carry; // (Version 84)
 		Card.bDigging = Unit.bDigging;
 		Card.Experience = Unit.Experience;

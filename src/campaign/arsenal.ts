@@ -9,7 +9,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { worksName } from './rivers';
-import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, km, whyNotBase } from './air';
+import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, whyNotBase } from './air';
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
@@ -817,11 +817,13 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (!f) {
       // No air fleet and nowhere to found one: the machines wait in reserve.
       const p = airPool(g, nat);
-      if (wing === 'ftr') { p.ftr += count; p.pilots += count; } else p.bmr += count;
+      if (wing === 'ftr') { p.ftr += count; poolIn(g, nat, count); } else p.bmr += count;
       return;
     }
     // A wing bought abroad keeps the seller's fighter type (the switch 'Fighter types'; the design director, 23 Nov 07:00Z).
     if (wing === 'ftr' && b.from && fighterTypesOn(g)) { const mk = b.mark ?? sellerType(g, b.from); if (mk) joinBought(f, mk, f.ftr, count); }
+    // (Under Units decide a bought wing's pilots are the buyer's, from its own schools, with no experience: BO:2067.)
+    joinPilots(g, f, count, wing, 'school');
     f[wing] += count;
     f.est[wing] += count;
     (f.extra ??= { ftr: 0, bmr: 0 })[wing] += count;

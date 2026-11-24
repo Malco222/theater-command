@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { planRaid, raidTargets, type RaidKind } from '../src/campaign/airwar';
 import { AIR, assessAir, forecastAir } from '../src/campaign/air';
 import { techMul } from '../src/campaign/research';
+import { FIGHTERS } from '../src/campaign/fighters';
 import { loadGame } from '../src/campaign/save';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -17,6 +18,12 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TC = (globalThis as Record<string, unknown>).TC as any;
+/**
+ * Units decide flies each nation's fighter types (the dogfight switch folds into it), so the off game flies them too.
+ * The tests that pin the height alone set k to 0: then the types give no edge on either side but the research lead
+ * taken off on both, and only the height differs.
+ */
+const heightAlone = <T>(run: () => T): T => { const was = FIGHTERS.law.k; FIGHTERS.law.k = 0; try { return run(); } finally { FIGHTERS.law.k = was; } };
 
 /** A grand save of `nat` from `from`, as a fresh copy each call, with Units decide on or off (a fixture: set directly). */
 function saved(nat: string, from: number, seed: number): (on: boolean) => Game {
@@ -24,7 +31,10 @@ function saved(nat: string, from: number, seed: number): (on: boolean) => Game {
   const text = TC.save().text;
   return (on) => {
     const g = loadGame(text)!;
-    if (on) { g.flags.open = 1; g.flags.unitsDecide = 1; } else delete g.flags.unitsDecide;
+    if (on) { g.flags.open = 1; g.flags.unitsDecide = 1; } else { delete g.flags.unitsDecide; g.flags.ftrtypes = 1; }
+    // Honours are the player's own edge (storyEdge), which Units decide leaves out of a group's worth: cleared, so the
+    // two weigh the groups alike and only the height differs.
+    for (const f of g.airFleets) delete f.hon;
     return g;
   };
 }
@@ -42,7 +52,7 @@ function raid(make: (on: boolean) => Game, nat: string, kind: RaidKind, name: st
 describe('a sweep under Units decide: height follows warning (release 2)', () => {
   const ger = saved('GER', 33, 11), uk = saved('UK', 29, 11);
 
-  it('over England with its radar chain the defenders are above: x -1, no escort share, and the radar priced once', () => {
+  it('over England with its radar chain the defenders are above: x -1, no escort share, and the radar priced once', () => heightAlone(() => {
     const { on, off, g, t, m } = raid(ger, 'GER', 'superiority', 'Hampshire');
     expect(off.height).toBeUndefined();
     expect(on.height).toEqual({ W: 1, x: -1, h: AIR.height.h });
@@ -53,7 +63,7 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
     const fc = forecastAir(g, on, m, t);
     expect(fc.foeLoss / fc.ftrLoss).toBeCloseTo(Math.sqrt(on.Epow / on.Dpow), 6);
     expect(on.lines.find((l) => l.label === 'Height')?.value).toBe('The defenders will be above you');
-  });
+  }));
 
   it('over ground their side holds, without a chain, observers meet the sweep level (rule C): Holland 1942, Alsace 1939', () => {
     // (The design director 24 Nov 16:09Z, rule C: observers count on ground held by anyone on the defenders' side, so

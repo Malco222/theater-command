@@ -108,3 +108,8 @@ export const DUMPS_STAGE: boolean = staged('TC_DUMPS', 'dumps');
 // campaigns opened while this is true carry the flag 'fleetAttack'. Forced by TC_FLEETATTACK.
 /** True where new grand campaigns open with the player's fleets able to attack an enemy fleet at once (stage.json 'fleetAttack'). */
 export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack');
+
+// Breaking a corps up (release 2; Brian 24 November 2026 18:02Z, breakup.ts): the grand campaigns opened while this
+// is true carry the flag 'breakUp'. Forced by TC_BREAKUP.
+/** True where new grand campaigns open with the player able to split divisions off a corps (stage.json 'breakUp'). */
+export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');

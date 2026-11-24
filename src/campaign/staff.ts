@@ -23,7 +23,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
-import { openAirWar, openWorldAir, skyDenies } from './air';
+import { openAirWar, openPilots, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
@@ -45,7 +45,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
+import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -147,6 +147,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (DUMPS_STAGE) g.flags.dumps = 1;
   // A fleet sent straight at an enemy fleet (release 2, fleetattack.ts).
   if (FLEETATTACK_STAGE) g.flags.fleetAttack = 1;
+  // Breaking a corps up into its divisions (release 2, breakup.ts).
+  if (BREAKUP_STAGE) g.flags.breakUp = 1;
   // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
   if (MARKED_STAGE) g.flags.marked = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
@@ -179,6 +181,8 @@ export function startOpen(g: Game, wide = true): Game {
   // Units decide's quality store (units.ts; DD 24 Nov 15:53Z, #2 form Part 2): seeded once the wider world, the
   // opening research, the world's air commands and the carriers are in place. Off, nothing.
   openQuality(g);
+  // (And every air group's pilots from it: their hours and experience, under the switch only.)
+  openPilots(g);
   openSieges(g);
   openMorale(g);
   openEscorts(g);

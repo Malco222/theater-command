@@ -484,6 +484,12 @@ export interface Corps extends Storied {
   town?: number;
   /** A volunteer legion (legions.ts; release 2): the country at peace whose men these are. It fights in its patron's army under its own name and flag. */
   vol?: string;
+  /** Its divisions' own names in order, [name, short], where they are not the ones its corps' name gives (breakup.ts; release 2). */
+  names?: [string, string][];
+  /** The corps it was split off from (breakup.ts; release 2): it can rejoin that one, or another part split off it. */
+  part?: number;
+  /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
+  whole?: number[];
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */

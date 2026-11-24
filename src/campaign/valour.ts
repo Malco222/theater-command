@@ -19,6 +19,7 @@ import data from '../../data/campaign/stories.json';
 import { Rng, hashString } from '../core/rng';
 import { thePlace, theUnit } from './bombers';
 import { headline } from './game';
+import { aceSchool, schoolPilots, unitsDecide } from './units';
 import type { AirFleet, Award, Cash, Corps, Fleet, Game, Hero, UnitKind } from './types';
 
 export const VALOUR = (data as unknown as {
@@ -132,8 +133,12 @@ export function sendHero(g: Game, id: number, how: Cash): boolean {
     h.left = V.bonds.months[0] + new Rng(hashString(`valour:tour:${g.seed}:${h.id}`)).int(V.bonds.months[1] - V.bonds.months[0] + 1);
     headline(g, 'info', `${who} goes home on a war bond tour, which will bring in ${(V.bonds.pp * budget.scale).toLocaleString('en-US')} a month for ${h.left} months.`, h.nat);
   } else {
-    g.stories.schools[h.nat] = Math.min(VETERANS.maxSchools, (g.stories.schools[h.nat] ?? 0) + V.school.steps);
-    if (h.kind === 'air') { const p = g.airPool[h.nat]; if (p) p.pilots += PILOTS; }
+    // Under Units decide an air hero trains pilots: the flying school takes his step, not the land drafts' schools (#2 form Part 2 section 6).
+    if (h.kind === 'air' && unitsDecide(g)) { aceSchool(g, h.nat); schoolPilots(g, h.nat, PILOTS); }
+    else {
+      g.stories.schools[h.nat] = Math.min(VETERANS.maxSchools, (g.stories.schools[h.nat] ?? 0) + V.school.steps);
+      if (h.kind === 'air') { const p = g.airPool[h.nat]; if (p) p.pilots += PILOTS; }
+    }
     headline(g, 'info', `${who} goes home to train recruits. From now on every draft reaches the front better trained.`, h.nat);
   }
   return true;
