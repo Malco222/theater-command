@@ -774,7 +774,9 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   A live battle's notes plan it again as they come (the legs flown the same); a loss whose note comes after its plane
   was hit begins where it is. A replay from the start tells it all again.
 - **Downed pilots** (`-TheaterLandChutes`, with `-TheaterLandAirSupport`; release 2, off until the art director and a
-  45 fps reading pass; Brian, 23 November 20:09Z; redone to the art director's notes of 24 November, 02:26Z). The
+  45 fps reading pass; Brian, 23 November 20:09Z; redone to the art director's notes of 24 November, 02:26Z, and his
+  canopy's shape to her verdict of 24 November, 14:34Z: (c) its skirt, (b) how it lies; her (a) waits on the soldier
+  files). The
   rules say whether a pilot got out (air:lost's chutes: half the burning and spinning planes', never a plane blown
   apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1 to 2 s after the hit (out of a spin 0.5 to 0.9 s),
   never in her last 0.8 s, and where she is under 60 m by then at the highest she is after the hit. (`Sky::Build` plans
@@ -790,9 +792,18 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     the battle's wind, swinging under it about 4 s a swing, from 14 degrees settling to a gentle 5 that never quite
     dies. Out under 60 m (her fifth) he pulls at once and his canopy is still filling as he lands: a hard landing (his
     way still spent: 8 m/s through the air at most).
-  - *His canopy* (her sixth, and her answers): a dome 5 to 5.5 m across in the air (7 m is only its size lying flat)
-    and about half as deep, on 24 to 28 gores, her off-white for every nation (0.86, 0.85, 0.80, each chute about 4%
-    warmer or cooler). `LandAir::CanopyShape` and `HeapShape` make it (plain C++, both its faces): the seams faint
+  - *His canopy* (her sixth, and her answers): 5 to 5.5 m across in the air (7 m is only its size lying flat) and
+    about half as deep, on 24 to 28 gores, her off-white for every nation (0.86, 0.85, 0.80, each chute about 4%
+    warmer or cooler). Side-on (her verdict's (c): its skirt had dropped straight, "like a jelly mould") it is
+    widest 0.38 of its depth under its crown (`LandAir::WidestDown`; about a third, the test a quarter to a half)
+    and its skirt curves in from there all the way down to a hem 0.82 as wide (`HemIn`; her 0.8 to 0.9), by the 1.5th
+    power of the way down (`Curl`), its silk leaning in more ring by ring (10, 17, 21, then 24 degrees at the hem,
+    toward its lines at 29 to 31 degrees in to him, so that they run on from it); its crown a round dome over its
+    widest (`Crown`). A review of 24 November found it still dropping straight from 0.41 to 0.66 of its depth under a
+    flat-topped crown: its silhouette in the picture is now 0.977 of its widest half-way down its depth and 0.953 at
+    0.6 (it was 0.988 and 0.977), within 2.3% of its widest for 0.18 m under it (0.46 m), and its crown 0.34 of its
+    widest 3% under its top and 0.63 11% under (0.44 and 0.70). Its gores billow a little between the seams as
+    before. `LandAir::CanopyShape` and `HeapShape` make it (plain C++, both its faces): the seams faint
     darker lines and the hem a little darker, in the points' colours, so they cost nothing a frame; a line from each
     seam to his four risers. Its glow against the sun is one number a frame: `LandAir::Glow` (a little seen from under
     it, most against the sun, none with the sun behind the eye or at night), by the key light against a clear day's,
@@ -801,12 +812,24 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     going over; once the crowd's man has him, his lines and silk) and otherwise moved in place where it can be
     (`UpdateMeshSection`: its points, facings and colours, no new proxy; its makings' storage kept from frame to frame),
     never a frame for its look (`LandAir::SilkMoved`, `ManMoved`). In the air the silk is moved in place as it fills
-    (by 0.02 of its open share): a dome filling never folds a triangle over. Down it is made again, by 0.05 of its
-    falling in: the scene winds each triangle by where its points are, and the heap's rumple folds about one in fifty
-    over within a step (a sixth by the time it lies flat), which moved in place would show their inside's shading. His
-    part (him going over, by 0.05, and his lines) is moved in place. At 45 fps a pilot's mesh is now made 23 times (20
-    of them as his canopy falls in) and moved in place 41 to 59, against 84 to 101 makes before (a review of 24
-    November); the log tells each pilot's count once his canopy lies flat, for the 45 fps reading.
+    (by 0.02 of its open share): a canopy filling never folds a triangle over. Down it is made again each 0.05 of its
+    falling in: the scene winds each triangle by where its points are, and as it tips, falls in and lies in its folds a
+    few in a thousand turn over within a step, which kept for good would show their inside's shading. Between two
+    makes it is moved in place every frame toward the next step's shape (`LandAir::SilkStep`: each make is the step it
+    is in, the last make's next, and the next one; `At` moves its points and facings between them, and it is made
+    again as its slump reaches the next, `Due`), and its triangles are wound by where their points are half-way
+    through the step (`Wound`), so a triangle turning over shows its inside for at most half a step (0.08% of its
+    triangles' frames here). A second review of 24 November found it held still between makes and jumping up to 1.3 m
+    at a make some eleven times a second, and a smooth torpedo half fallen in. His part (him going over, by 0.05, and
+    his lines) is moved in place with it every frame. At 45 fps a pilot's mesh is now made 24 times (21 of them as his
+    canopy falls in) and moved in place 151 to 167; its silk moves 0.22 m in a frame at most (10 m/s), as much at a
+    make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,290 points and 4,368 triangles
+    on 26 gores, 2,466 and 4,704 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048,
+    on 14 rings: it is now on 11); a make (one `HeapShape`, its next step's: the step it is in is the last make's) 0.13
+    ms on a flat field and about 0.3 ms on hummocks on the cloud box, its ground read once on a grid (not twice a
+    point). The log tells each pilot's count once his canopy lies flat, for the 45 fps reading: his mesh's makes and
+    moves in place, his silk's points and triangles lying, its makes as it fell in and their time (ms a make, and the
+    longest), and the most its points moved in a frame (metres).
   - *Down* (her third, fourth and fifth notes). Seconds are real seconds from his landing. His chute's mesh draws him
     going over flat (0.5 s; 0.35 after a hard landing) under his falling canopy; 0.4 s later, as he lies there, the
     scene swaps him for a man of the crowd: in his army's tank crews' file where it has one (`USA_tanker`,
@@ -829,10 +852,45 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     nothing played back) for the scene's blends, and `Chute::Blend` over how long: 0.25 s, but 0.5 s into his harness's
     kneel, `go_prone` on his knees being far from `kneel_down`'s last pose (his pelvis 55 degrees off it, his right
     thigh 68 to 72, his pelvis 0.18 m on; no time of `go_prone` nearer than 45 degrees), so that he settles into it
-    rather than lurching. His canopy falls in over 2.5 s and lies flat 4 m downwind of him, its lines back to his
-    harness where he lay (from the half of its skirt behind its middle, the same lines all the while:
-    `LandAir::LineBack`; they had changed halves as it fell past him).
-  - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`): the planes fly as before, frame for frame.
+    rather than lurching. His canopy falls in over 3.2 s on an even clock (each part of it easing in and out on its
+    own; on an eased 2.5 s its crown had swept down at 17 m/s at its fastest), its lines back to his harness where he
+    lay (from the half of its skirt behind its middle, the same lines all the while: `LandAir::LineBack`; they had
+    changed halves as it fell past him), taut while it is up and a little slack once it lies (each line in two
+    lengths, its middle let down toward its lower end's height and bowed to one side, every other line to the
+    other).
+  - *How his canopy lies* (her verdict's (b): it had lain a flat oval in even scallops, "a doily", shrinking in place
+    as it fell in). `LandAir::HeapShape`: as it loses its air it tips forward on its lines about his harness and
+    blows downwind, its side toward him blown in over the other (a crescent), its far half going slack first (its
+    round section flattening, its side toward him coming down onto the other, its silk crumpling), flapping and
+    billowing along it until each part of it is down (its near end and its front first), and streaming out along the
+    wind ahead of coming down, so that its middle only ever moves away from him and its top only ever comes down (half
+    fallen in it is already 1.3 to 3.7 m longer along the wind than as he landed, its middle 6.3 to 7.4 m on). It lies
+    stretched along the wind, 2.05 to 2.9 times as long as it is wide (6.3 to 8.5 m long, a stronger wind stretching
+    it), its near end gathered 2.1 to 3.5 m past his harness, where its lines run back to him across the grass (2.1 to
+    3.4 m of his 4.1 m lines, a little slack; a review of 24 November found 0.6 to 1.2 m stubs), its far end standing
+    0.38 to 0.75 m up on the air it still holds (more in a stronger wind) and swelling a little there, and coming round
+    and down to the ground over its last fifth: its last ring (0.975 along it) about half as high as its far quarter
+    and its crown, its tip, on the ground (0.03 m up; the review found a beak hanging 0.23 m off it; at 40 m in the
+    picture its top is 0.48 m up 0.9 along it, 0.37 at 0.95, 0.22 at 0.98 and 0.05 at its tip, falling faster toward
+    it). Along it run four or five long loose folds, one big and the rest smaller in no order, each wandering across
+    as it goes, with two creases across where it bunched; its edges waver and its far end lies a little to one side.
+    The gaps between the folds are graded (the widest three times the narrowest, 2.6 times with five), the wider going
+    where two folds need more room to stand apart (a big one beside a small one: 1.4 times their widths, and the big
+    one's flank half-way between them under a third of the small one's height), and all of them spread together until
+    each two stand apart, so that the grading holds (the review found the narrowest held up to a floor alone, which
+    left half of them alike). All of that is drawn from the pilot's own number (`Chute::Folds`, on its own dice,
+    `0xC47E5`) and the wind (`Chute::Wind`), so no two pilots' canopies lie alike. `Chute::Heap` (its middle) lies
+    where it does: half its length on from its gathered near end (`LandAir::HeapOff`, 6.8 to 8.1 m downwind here).
+    The scene gives `HeapShape` the ground as it is now, as a wire is laid (`WireAt`): the field's (`HeightAt`: its
+    terrain, its lanes, its banks and its floors) raised to a hole's face or a breach's floor where one is torn under
+    it (`Holes.TopAt`). `HeapShape` reads it once a make on a grid a quarter of a metre square under the silk (coarser
+    over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,233 points a face), lays each point on it,
+    and keeps every edge of the silk over it (a bank's, a ditch's side, a crest's or a crater's rim between two points
+    lifts both), the grid raised by how sharply the ground bends about each cell (a step narrower than a cell). The
+    review found its points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest
+    and a crater's rim, and the scene's ground blind to holes.
+  - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`; its lying folds on `0xC47E5`, drawn after all
+    the rest): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
   has only its heavy row).
 - **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
@@ -843,7 +901,8 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
   (`paths.py`); the chutes (a pilot out of the burning and the spinning plane, none out of the one blown apart; out
   after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; flat,
-  up onto his knees, his harness, up, running from the enemy, flat; his canopy 4 m downwind; the same twice). The art
+  up onto his knees, his harness, up, running from the enemy, flat; his canopy fallen in downwind, its middle 4.5 to
+  9.5 m off; the same twice). The art
   director's notes, on that field's pilots and on a second, windy one's (5.7 m/s, an Il-2 losing her pilot 35 m up):
   falling free never above where he left her and at least half g t squared under it (first); with the air (within
   1 m/s of the wind) within 3 s of his pull, his way only dying away against the air, with the wind still 3 s after
@@ -861,9 +920,32 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   canopy filling never folds a triangle over, and his lines run back from the same half of its skirt; flat in the
   mesh his hips lie where the crowd's man's do in every soldier file that has `go_prone`'s end offset (18 of 19; read
   from `Content/Models/Soldiers`, `LAND_AIR_SOLDIERS`); each clip blended into over 0.25 s, the harness's kneel 0.5 s;
-  he lies the way he faced as he landed. The planes' hash is printed against release 1's (`e258eaf3320235ff`).
-  `chutes.py` draws each pilot's first seconds, his way through the air and his seconds on the field, and the canopy
-  as the scene draws it (with its glow and without).
+  he lies the way he faced as he landed. And her verdict of 24 November, 14:34Z, on every test pilot: side-on his
+  canopy widest a quarter to a half of its depth under its crown and its hem 0.8 to 0.9 of that, its silk leaning in
+  toward its lines ((c)); lying 2 to 3 times as long as wide, its far end up 0.3 to 0.8 m, its near end 2 to 3.6 m
+  past his harness and its lines running back to him; in a few long folds along it (most of them going on along it, 2
+  to 7 across a ring), their heights uneven and their spacing uneven (spread over mean 0.2 or more, each on its own
+  bar); another pilot's number lying apart (0.08 m or more, the root of the mean square); falling in, its middle never
+  back toward him and its top never rising, half-way longer along the wind (by 0.5 m or more) and its middle 1.5 m or
+  more on ((b)); and over 300 pilots' numbers none off. And a second review's of 24 November: side-on its skirt
+  curving in all the way down from its widest (its rings leaning in more one by one, its silhouette under 0.985 of its
+  widest 0.6 of its depth down) and its crown round (under 0.65 of its widest 11% under its top); lying, its lines
+  none longer than they are, its far end coming round and down (its last ring a quarter to three quarters of its far
+  end's height, its tip within 0.08 m of the ground); falling in at 45 fps as the scene draws it (`SilkStep`), its silk
+  moving under 0.3 m a frame and at a make, within 0.1 m of its true shape, under one in two hundred of its
+  triangles' frames showing their inside, and its makes' points, triangles and time printed (and on hummocks); none of
+  it under the ground, falling in or lying, its points nor its triangles' edges (seven places along each against the
+  ground itself), on a slope of 1 in 4 along the wind or across it, on hummocks, across a hedgerow bank 1 m high, a
+  step 0.4 m up, a ditch 0.6 m deep, a sharp crest, a crater's bowl and rim, and along a bank under one edge; and
+  lying on the slopes its underside on the ground (each ring's lowest point within 0.08 m of it). The planes' hash is
+  printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
+  the air and his seconds on the field, and the canopy as the scene draws it: side-on full through a long lens with
+  his lines to him, from under with its glow and without, falling in across the wind, lying from 40 m at a man's eye
+  height, and lying from above (his and a second pilot's, his lines a little slack as the scene draws them),
+  measuring each from its pixels (its widest and its depth, its hem, its silhouette's width 0.5 and 0.6 of its depth
+  down and its crown's 3% and 11% under its top; its middle falling in; its length, its far and near quarters'
+  heights, its far end's top over its last twentieth and its silk's sRGB luma at 40 m; its length and width and its
+  folds' light ridges from above).
   Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`, `chutes_r2.png`). The bareheaded rider:
   `Tools/land_show/run.sh` (every infantry file's rider without his helmet at each level, none drawn in its place).
 - **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
@@ -873,8 +955,21 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   chute's mesh to the crowd's man (shot 7: that the man lying prone in `go_prone` lies where the mesh's man went over,
   no jump and no frame without him; the numbers are tested, the look is not), his harness kneeling (shot 8: that he
   settles into his kneel off `go_prone` without a lurch) and the drag in a wind over 4 m/s, the limp, and an infantry
-  file's rider bareheaded (its scalp under the helmet is the file's own skin). The 45 fps reading counts each pilot's
-  mesh made and moved in place (the log, once his canopy lies flat: 23 and 41 to 59 here).
+  file's rider bareheaded (its scalp under the helmet is the file's own skin). The 45 fps reading: the log, once each
+  pilot's canopy lies flat, tells his mesh's makes and moves in place (24 and 151 to 167 here), his silk's points and
+  triangles lying (2,290 and 4,368 on 26 gores here), its makes as it fell in (21) and their time (ms a make, and the
+  longest: about 0.13 here on a flat field, 0.3 on hummocks, on the cloud box; the Mac's own on a real field is
+  owed), and the most its points moved in a frame (0.22 m here; over 0.3 m would show it jumping). For her verdict of
+  24 November, 14:34Z: a pilot's canopy side-on from about 200 m on a long lens (its skirt curving in from its widest
+  to its hem, its crown round, its lines running on from it to him), his canopy lying from 40 m at a man's eye height
+  and from above (stretched along the wind in loose uneven folds, its far end lifted and coming round and down to the
+  ground, its near end gathered 2 to 3.5 m past him and his lines a little slack across the grass, two pilots' side
+  by side to see they differ), its falling in after he lands at 45 fps (tipping and blowing downwind, going slack and
+  crumpling, flapping until it is down, moving every frame with no jump at a make, not shrinking in place nor a
+  smooth torpedo half-way), one lying on a slope (none of it under the ground, its silk not floating either), and
+  one coming down across a hedgerow bank and one into a shell hole (its silk over the bank's crest and the hole's rim
+  and lying down into its bowl, none of it through them: the test's fields are its own, the scene's ground and holes
+  are not).
   - *Her second note, as read* (her words: "Pilot 11 drops about 50 m straight down before the wind takes him. Once
     his own way is spent, he drifts with the air within 2-3 s. The wind isn't a push that builds from rest."). Its
     first sentence is release 1's fault, as her first note's first sentence is (his way died against the ground, so he

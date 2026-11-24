@@ -90,6 +90,13 @@ struct FLandBattleState
 			double Shape = -1.0, Lying = -9.0;
 			int Made = 0, Moved = 0;     // his mesh made, and moved in place (for the 45 fps reading; told once, bCounted)
 			bool bCounted = false;
+			// Down, his silk between makes (moved in place toward its next step's shape: LandAir::SilkStep), its points
+			// as last drawn and its slump then; and for the 45 fps reading, the most its points moved in a frame
+			// (metres), its makes' time (ms: the last, the longest, all of them) and how many
+			LandAir::SilkStep Step;
+			std::vector<LandAir::V3> Drawn;
+			double SlumpDrawn = -1.0, MovedMost = 0.0, MakeMs = 0.0, MakeMsMost = 0.0, MakeMsAll = 0.0;
+			int SilkMakes = 0;
 			int Man = -1;
 			/** Whether the crowd has drawn his man yet (the crowd draws a new man only when its frame's rebuilds allow:
 			 * he is kept in his chute's mesh till then, at most LandAir::RiderHoldFrames frames), and those frames. */
