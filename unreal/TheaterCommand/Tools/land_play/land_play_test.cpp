@@ -2453,7 +2453,15 @@ int main(int argc, char** argv)
 	// view to a man's shoulder, walks the view through the hedges, turns it round, slides it, runs it to the field's
 	// edges, follows a tank and his own section, then wanders at random. The eye must never stand under the ground, in a
 	// thing or among the stalks, the look-at never leave the field by more than its margin, and nothing jolt.
+	// Then again with his own tilt (Brian, 24 November: "it's hard to move the angle of the camera to see a good troop
+	// movement from above"): tilted down by hand, the top view pressed and pressed again, zoomed to the shoulder and out
+	// with his tilt kept, tilted back to the automatic tilt, a tank and his section followed from above, then a wander
+	// that also tilts and presses the top view. The same rules hold; the top view must look down from about 100 m, his
+	// tilt be kept through the zoom, and the view tilt with the zoom again once tilted all the way back.
+	for (int GenRun = 0; GenRun < 2; ++GenRun)
 	{
+		const bool bTiltRun = GenRun == 1;
+		if (bTiltRun && std::getenv("LAND_PLAY_NO_TILT")) break;
 		LandGeneralEye::Eye Gen;
 		const double* Za = Rec.Ground.ZoneAtt;
 		const double* Zd = Rec.Ground.ZoneDef;
@@ -2483,11 +2491,67 @@ int main(int argc, char** argv)
 		int GCuts = 0;
 		bool CutWas = false;
 		const double End = 260.0;
+		// (the tilted run's own checks: the top view's steepest and highest, his tilt after the zoom out, the view back to
+		// tilting with the zoom, and how often the top view and his tilt were on)
+		double TopTiltBest = 0.0, TopUpBest = 0.0, KeptTilt = -1.0, NearTilt = 0.0;
+		int BackToAuto = -1, TopFrames = 0, OwnFrames = 0, TopPresses = 0;
 		while (R < End)
 		{
 			LandGeneralEye::Input In;
 			auto Notch = [&](double Way, double Every) { if (R >= NextNotch) { In.Zoom = Way; NextNotch = R + Every; } };
-			if (R < 2.0) {}
+			auto Once = [&](double At) { return R >= At && R - Dt < At; };
+			if (bTiltRun)
+			{
+				if (R < 2.0) {}
+				else if (R < 5.0) In.Tilt = 40.0 * Dt;
+				else if (R < 7.0) In.PanAhead = 1.0;
+				else if (R < 12.0) {}
+				else if (R < 13.0) In.bTopView = Once(12.5);
+				else if (R < 18.0) In.Turn = 45.0 * Dt;
+				else if (R < 26.0) Notch(1.0, 0.25);
+				else if (R < 34.0) In.PanAhead = 1.0;
+				else if (R < 40.0) Notch(-1.0, 0.25);
+				else if (R < 46.0) { In.bTopView = Once(40.0); if (R > 41.0) In.PanRight = 1.0; }
+				else if (R < 52.0) In.Tilt = -40.0 * Dt;
+				else if (R < 60.0) { In.SlideRight = (static_cast<int>(R / 2.0) % 2 ? 1.0 : -1.0) * 0.012; In.SlideAhead = 0.006; }
+				else if (R < 64.0) In.bTopView = Once(60.0);
+				else if (R < 70.0) Notch(1.0, 0.3);
+				else if (R < 78.0) In.PanAhead = 1.0;
+				else if (R < 110.0)
+				{
+					if (Once(78.0)) In.GoBlock = TankBlock;
+					In.bFollow = true;
+					if (R < 84.0) Notch(1.0, 0.25);
+				}
+				else if (R < 140.0)
+				{
+					if (Once(110.0)) { In.GoBlock = Eye.SquadBlock(); In.bTopView = true; }
+					In.bFollow = true;
+					if (R > 115.0 && R < 117.0) In.Tilt = 30.0 * Dt;
+					if (R < 118.0) Notch(1.0, 0.3);
+				}
+				else
+				{
+					if (R >= NextWander)
+					{
+						NextWander = R + 1.5 + 3.0 * Roll();
+						Wander = LandGeneralEye::Input();
+						const double Pick = Roll();
+						if (Pick < 0.3) { Wander.PanRight = Roll() * 2.0 - 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.4) { Wander.EdgeRight = Roll() < 0.5 ? -1.0 : 1.0; Wander.bLockEdgePan = Roll() < 0.3; }
+						else if (Pick < 0.5) Wander.Turn = (Roll() * 2.0 - 1.0) * 60.0 * Dt;
+						else if (Pick < 0.65) Wander.Zoom = Roll() < 0.5 ? 1.0 : -1.0;
+						else if (Pick < 0.85) { Wander.Tilt = (Roll() * 2.0 - 1.0) * 50.0 * Dt; if (Roll() < 0.5) Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.93) Wander.bTopView = true;
+						else Wander.SlideRight = (Roll() * 2.0 - 1.0) * 0.01;
+					}
+					In = Wander;
+					if (In.Zoom != 0.0) { if (R < NextNotch) In.Zoom = 0.0; else NextNotch = R + 0.3; }
+					// (a press is one frame's)
+					Wander.bTopView = false;
+				}
+			}
+			else if (R < 2.0) {}
 			else if (R < 8.0) Notch(1.0, 0.25);
 			else if (R < 28.0) In.PanAhead = 1.0;
 			else if (R < 36.0) In.Turn = 45.0 * Dt;
@@ -2531,6 +2595,25 @@ int main(int argc, char** argv)
 			const auto GT0 = std::chrono::steady_clock::now();
 			const LandEye::Pose P = Gen.Update(In, Dt, B);
 			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GT0).count();
+			if (bTiltRun)
+			{
+				TopPresses += In.bTopView ? 1 : 0;
+				TopFrames += Gen.TopView() ? 1 : 0;
+				OwnFrames += Gen.OwnTilt() ? 1 : 0;
+				if (Gen.TopView() && R > 13.0 && R < 18.0)
+				{
+					TopTiltBest = std::max(TopTiltBest, Gen.TiltDegrees());
+					TopUpBest = std::max(TopUpBest, P.Eye.Z - P.Look.Z);
+				}
+				if (R > 45.0 && R < 45.0 + Dt) KeptTilt = Gen.TiltDegrees();
+				// (a second and a half after the zoom came right in)
+				if (R >= 25.9 && R < 26.0) NearTilt = std::max(NearTilt, Gen.TiltDegrees());
+				if (BackToAuto < 0 && R > 46.0 && !Gen.OwnTilt()) BackToAuto = static_cast<int>(R * 10.0);
+				if (std::getenv("LAND_PLAY_TILT") && static_cast<int>((R + Dt) * 4.0) != static_cast<int>(R * 4.0))
+				{
+					std::printf("  tilt at %.2f: zoom %.3f tilt %.1f own %d top %d, eye %.1f over the look-at, %.1f over the ground\n", R + Dt, Gen.Zoom(), Gen.TiltDegrees(), Gen.OwnTilt() ? 1 : 0, Gen.TopView() ? 1 : 0, P.Eye.Z - P.Look.Z, P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y));
+				}
+			}
 			Spent += Ms;
 			GSlowest = std::max(GSlowest, Ms);
 			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d, asked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), Gen.AskedNow());
@@ -2593,17 +2676,27 @@ int main(int argc, char** argv)
 			Yaw = Y;
 			Pitch = Pt;
 		}
-		std::printf("\ngeneral's view: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
-			GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
+		std::printf("\ngeneral's view%s: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
+			bTiltRun ? ", tilted by hand" : "", GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
 		if (Under > 0) Fault("the general's view went under the ground");
 		if (InThing > 0) Fault("the general's view stood in a thing or a man");
 		if (InCorn > 0) Fault("the general's view stood among the stalks");
 		if (OffField > 0) Fault("the general's view looked off the field past its margin");
 		if (Kicks > 0) Fault("the general's view jolted (a look kick over 1200 deg/s/s)");
 		if (Lifted > 0) Fault("the general's view jolted up or down (over 1200 deg/s/s as the picture sees it)");
-		if (LowestNear > 2.5) Fault("the general's view never came down to a man's shoulder");
+		if (LowestNear > 2.5 && !bTiltRun) Fault("the general's view never came down to a man's shoulder");
 		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
 		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
+		if (bTiltRun)
+		{
+			std::printf("\ngeneral's view, tilted by hand: the top view looked down %.1f degrees from %.0f m over the look-at; his tilt %.1f degrees after the zoom to the shoulder and out; at the nearest zoom tilted %.1f degrees once settled; back to tilting with the zoom at %.1f s; top view on %.0f s (%d presses), his own tilt %.0f s",
+				TopTiltBest, TopUpBest, KeptTilt, NearTilt, BackToAuto * 0.1, TopFrames * Dt, TopPresses, OwnFrames * Dt);
+			// (his tilt handed back toward the shoulder: zoomed right in, the view looks along the ground as it always has)
+			if (NearTilt > LandGeneralEye::Settings().TiltNear + 1.0) Fault("the general's own tilt was not handed back to the automatic one at the nearest zoom");
+			if (TopTiltBest < 79.0 || TopUpBest < 95.0) Fault("the general's top view did not look almost straight down from about 100 m");
+			if (KeptTilt < 84.0) Fault("the general's own tilt was not kept through the zoom to the shoulder and out");
+			if (BackToAuto < 0 || BackToAuto > 560) Fault("the general's view did not go back to tilting with the zoom once tilted all the way back");
+		}
 	}
 	if (bOnlyGen)
 	{
