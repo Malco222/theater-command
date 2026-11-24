@@ -58,14 +58,14 @@ import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers,
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
 import { MANPOWER, menWords } from '../manpower';
-import { CIVIC, civicSum, type CivicOffer, type PlotView } from '../buildings';
+import { CIVIC, civicSum, settleLeft, settledFor, settledTownsOn, type CivicOffer, type PlotView } from '../buildings';
 import { damageOf } from '../citydamage';
 import type { RepairView } from '../repairs';
 import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
 import { GOOD_NAME, RES, fieldOverseas, fieldYield, keepsStores, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
-import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
+import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
@@ -3359,7 +3359,7 @@ function provinceMuster(r: Region): string {
   if (canRaise(g, me, r)) out += head('Raise troops here') + shelf('army');
   if (budgeted(g)) {
     if (canStation(g, me, r)) out += head('Station aircraft here') + shelf('air');
-    if (isHome(g, me, r) && yardLevel(g, r) > 0) out += head('Lay down ships here') + shelf('navy');
+    if (canLay(g, me, r, 1)) out += head('Lay down ships here') + shelf('navy');
   }
   // What is forming here: the whole number first, then a row an order, units before works.
   const here = ordersIn(g, r.id);
@@ -4121,7 +4121,7 @@ function buildPane(): string {
       if (once) out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">${esc(once)}</p>${list.filter((o) => o.group === 'air').map((o) => offerButton(o, true, aircraftTag(g, me, o.key.split(':')[1] as 'ftr' | 'bmr') ?? '')).join('')}`;
       else out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">${airWar(g) ? 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on an airfield of yours, the round pads on the map. A new wing joins a group of its kind there if one has room, or forms a new air group.' : 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on airfields: a province where one of your air fleets is based, or one where you have built airfields.'} ${sel && canStation(g, me, sel) ? `Stationing at ${at(sel.name)}.` : 'Click such a province on the map to station them there.'}</p>${shelf('air')}`;
     } else if (ui.arm === 'navy') {
-      out += `<h3>Lay down ships</h3><p class="sub" style="margin:0 0 7px">Ships are laid down in a home port whose shipyard is big enough, and they take a long time. A level 1 yard builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships. ${sel && isHome(g, me, sel) && yardLevel(g, sel) > 0 ? `Building at ${at(sel.name)} where its yard will do.` : 'Click one of your ports on the map to build there.'}</p>${shelf('navy')}`;
+      out += `<h3>Lay down ships</h3><p class="sub" style="margin:0 0 7px">Ships are laid down in a home port whose shipyard is big enough, and they take a long time. A level 1 yard builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships. ${sel && canLay(g, me, sel, 1) ? `Building at ${at(sel.name)} where its yard will do.` : 'Click one of your ports on the map to build there.'}</p>${shelf('navy')}`;
     } else if (ui.arm === 'towns') out += townsShelf(sel);
     else {
       const own = !!sel && sel.ctrl === me;
@@ -4203,7 +4203,7 @@ function townCard(id: number): string {
         : `<button class="btn small${can ? ' go' : ''}" data-act="civic" data-id="${id}" data-line="${o.line}" ${can && humanUp(g) ? '' : 'disabled'}>${o.has ? 'Raise' : 'Build'} · ${money(o.cost)}<small>${months(o.months)}</small></button>`;
     return `<div class="civrow${o.has ? ' has' : ''}${!can && !going && !top && !o.poor ? ' off' : ''}">${civicGlyph(o.line)}<span class="grow"><b>${esc(o.name)}</b><span class="civlv">${names}</span><small>${esc(o.blurb)}</small>${top ? '' : `<small class="eff"><b>${esc(o.label)}:</b> ${esc(o.effect)}</small>`}${o.why && !going && !top ? `<small class="whyno">${esc(o.why)}</small>` : ''}</span>${btn}</div>`;
   };
-  const story = `Think of a town as a high street with a few empty lots. A village has one, a town two, a city three and the capital four. Each lot takes one kind of building, and each building can be raised two more levels. A lot once built on keeps its trade, so decide what each place is for: money, food, learning, soldiers, healing or government.${own ? '' : ' On conquered ground only administration and medicine can be set up.'}`;
+  const story = `Think of a town as a high street with a few empty lots. A village has one, a town two, a city three and the capital four. Each lot takes one kind of building, and each building can be raised two more levels. A lot once built on keeps its trade, so decide what each place is for: money, food, learning, soldiers, healing or government.${own ? '' : !settledTownsOn(g) ? ' On conquered ground only administration and medicine can be set up.' : settledFor(g, r.ctrl, r) ? ' This conquered town has settled: every kind of building can go up here.' : ` Until a conquered town has settled only administration and medicine can be set up: every kind of building can go up here in ${settleLeft(g, r.ctrl, r)} ${settleLeft(g, r.ctrl, r) === 1 ? 'month' : 'months'}.`}`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The town plan · ${date(g.turn)}</div><h2>${tv ? townIcon(tv, 30) : ''} ${esc(t.town)}</h2></header>
     <div class="body ledger townplan">
       <div class="lfacts"><div class="lfact"><span>Size</span><b>${esc(upFirst(tv?.sizeWord ?? t.size))}</b></div><div class="lfact"><span>Building plots</span><b>${t.plots.length}</b></div><div class="lfact"><span>Free plots</span><b>${t.free}</b></div><div class="lfact net"><span>In the treasury</span><b class="${have < 0 ? 'neg' : ''}">${inHand(have)}</b></div></div>

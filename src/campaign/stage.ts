@@ -128,3 +128,8 @@ export const FLEETWHY_STAGE: boolean = staged('TC_FLEETWHY', 'fleetWhy');
 // carry the flag 'rearguard'. Forced by TC_REARGUARD.
 /** True where new grand campaigns open with the player able to order rearguards (stage.json 'rearguard'). */
 export const REARGUARD_STAGE: boolean = staged('TC_REARGUARD', 'rearguard');
+
+// Conquered towns settle (release 2; Brian 24 November 2026 18:13Z, buildings.ts): the grand campaigns opened while
+// this is true carry the flag 'settledTowns'. Forced by TC_SETTLEDTOWNS.
+/** True where new grand campaigns open with conquered towns able to build everything once settled (stage.json 'settledTowns'). */
+export const SETTLEDTOWNS_STAGE: boolean = staged('TC_SETTLEDTOWNS', 'settledTowns');

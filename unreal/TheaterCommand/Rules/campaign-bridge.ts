@@ -138,7 +138,7 @@ import grandData from '../../../data/campaign/grand.json';
 import setupBook from '../../../data/campaign/setup-1939.json';
 import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
-import { civicSum as civicSumOf } from '../../../src/campaign/buildings';
+import { civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
@@ -964,6 +964,8 @@ function drawView() {
     fleetWhy: fleetWhyOn(s),
     // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
     rearguard: rearguardOn(s),
+    // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
+    settledTowns: settledTownsOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -3883,7 +3885,8 @@ function province(id: number) {
     }) : [],
     raiseNote: raiseHere ? '' : home ? 'New corps are raised in the home country and sent out by sea.' : '',
     // Fortifications: the next level, if there is one.
-    fort: home && cost !== null ? {
+    // (fortCost is null off home ground, save a conquered town that has settled: release 2, buildings.ts.)
+    fort: cost !== null ? {
       level: level + 1, cost: shown(cost), months: PRODUCTION.fort.months,
       ok: up && !!n && n.pp >= cost,
       why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
@@ -6491,6 +6494,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Fleet attacks are off: fleets meet only at the month\'s end, where an admiral thinks the odds good enough.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'settledtownsrule') {
+    // (Release 2, buildings.ts) Conquered towns settle, switched by the player in any month.
+    setSettledTowns(s, part[1] === 'on');
+    ok = true;
+    note = settledTownsOn(s)
+      ? 'Conquered towns settle: a few months after you take a town, every kind of building and works can go up there. Its schools, drill grounds and trade houses then serve you as at home; its pay stays at the conquered share.'
+      : 'Conquered towns stay as they were: of the buildings only administration and medicine can go up there, and no factories, shipyards or fortifications.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'columns') {
     // (Release 2, columns.ts) Supply columns, switched in the campaign's opening month only.
     ok = setColumns(s, part[1] === 'on');
@@ -7584,6 +7596,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).taskForce = (on: boolean) => { const s = game(); setTaskForce(s, !!on); return { on: taskForceOn(s) }; };
 // (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).breakUp = (on: boolean) => { const s = game(); setBreakUp(s, !!on); return { on: breakUpOn(s) }; };
+// (Release 2, buildings.ts) Conquered towns settle: TC.settledTowns(on) at any time; the options page uses act('settledtownsrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).settledTowns = (on: boolean) => { const s = game(); setSettledTowns(s, !!on); return { on: settledTownsOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
 // (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };

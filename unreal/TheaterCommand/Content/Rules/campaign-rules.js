@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e3d19060 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ad3977ae 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -903,7 +903,9 @@
     _fleetWhy: "The admirals' reasons (release 2; Brian 24 November 2026 18:32Z, 'the navy needs a lot of work and attention', and the plan sent to him: 'the admirals don't explain themselves'; src/campaign/fleetwhy.ts). Where the player's admirals run the navy for him, each fleet they order carries one sentence saying why it is where it is, on its page and its panel. It changes nothing in the war. Off: nothing is written. On: the grand campaigns opened from now on carry the flag 'fleetWhy' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_FLEETWHY=1 or TC_FLEETWHY=0.",
     fleetWhy: false,
     _rearguard: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', of the idea 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'; src/campaign/rearguard.ts, data/campaign/rearguard.json). A small corps of the player's is ordered to hold where it stands until his next month; an enemy army that attacks it loses weeks of its month, and under Units decide it screens the corps falling back behind it from the pursuit. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'rearguard' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_REARGUARD=1 or TC_REARGUARD=0.",
-    rearguard: false
+    rearguard: false,
+    _settledTowns: "Conquered towns settle (release 2; Brian 24 November 2026 18:12Z and 18:13Z: every kind of building in a conquered city, after a short wait; src/campaign/buildings.ts, data/campaign/buildings.json 'settle'). A town taken from another country can put up every line of building and the military works once it has been held a few months, and its buildings then serve its holder as at home. One rule for every country. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'settledTowns' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_SETTLEDTOWNS=1 or TC_SETTLEDTOWNS=0.",
+    settledTowns: false
   };
 
   // ../../src/campaign/stage.ts
@@ -946,6 +948,7 @@
   var TASKFORCE_STAGE = staged("TC_TASKFORCE", "taskForce");
   var FLEETWHY_STAGE = staged("TC_FLEETWHY", "fleetWhy");
   var REARGUARD_STAGE = staged("TC_REARGUARD", "rearguard");
+  var SETTLEDTOWNS_STAGE = staged("TC_SETTLEDTOWNS", "settledTowns");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -14195,6 +14198,8 @@
       caps: "The most a nation's buildings add up to, however many it has.",
       ai: "A computer-run nation sets aside 'share' of its month's income for buildings and orders from it, never letting the treasury fall below 'reserve'. It has one gang of builders, and one more for every 'gang' home provinces; each works on one building at a time. It keeps to the 'mix': the line it has fewest levels of for its weight comes next, in the richest place that can take it."
     },
+    _settle: "Conquered towns settle (release 2; Brian 24 November 2026 18:13Z: every kind of building in a conquered city, after a short wait). With the switch 'settledTowns' (stage.json; buildings.ts settledFor): a town its holder took from another country can put up every line of building, and the military works (factories, shipyards and their slips, fortifications), once it has been held 'months' months since it last changed hands (Region.since, or the month a country's fall or a pact handed it over: flag 'hand:<id>', written only with the switch on). Until then only the lines marked 'occupied' can be set up there, as without the switch. Once settled, its buildings serve the holder as at home (learning, training, trade houses), while its shops and farms still pay at the conquered share (budget.json occupied, raised by an administration) and its administration still adds that share in place of taxes. One rule for every country. Off: nothing here is read. G: the wait, a short one as Brian asked.",
+    settle: { months: 3 },
     plots: { village: 1, town: 2, city: 3, capital: 4 },
     place: { base: 0.6, per: 0.75 },
     lines: [
@@ -26798,6 +26803,7 @@
     endVoyages(g2, n.id);
     fleetsOnFall(g2, n.id);
     airOnFall(g2, n.id);
+    const was = holdersNow(g2);
     for (let pass = 0; pass < 8; pass++) {
       let left = 0;
       for (const r of g2.regions) {
@@ -26808,6 +26814,7 @@
       }
       if (!left) break;
     }
+    handedOver(g2, was);
     for (const m of Object.values(g2.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
     n.atWar = [];
     n.alive = false;
@@ -26881,7 +26888,9 @@
     fleetsOnFall(g2, n.id);
     airOnFall(g2, n.id);
     dropSieges(g2, n.id);
+    const was = holdersNow(g2);
     for (const r of g2.regions) if (r.ctrl === n.id) r.ctrl = to;
+    handedOver(g2, was);
     for (const m of Object.values(g2.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
     n.atWar = [];
   }
@@ -32572,6 +32581,7 @@
     if (TASKFORCE_STAGE) g2.flags.taskForce = 1;
     if (FLEETWHY_STAGE) g2.flags.fleetWhy = 1;
     if (REARGUARD_STAGE) g2.flags.rearguard = 1;
+    if (SETTLEDTOWNS_STAGE) g2.flags.settledTowns = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -38191,6 +38201,7 @@
   function factoriesHeld(g2, nat) {
     let held3 = 0;
     for (const r of g2.regions) if (isHome(g2, nat, r)) held3 += r.fac;
+    for (const r of g2.regions) if (r.ctrl === nat && r.owner !== nat) held3 += g2.flags[`wk:facon:${r.id}:${nat}`] ?? 0;
     const building2 = g2.nations[nat].queue.filter((b) => b.what === "work" && b.item === "factory").length;
     return { held: held3, building: building2 };
   }
@@ -38295,7 +38306,7 @@
     return best;
   }
   var fleetAt = (g2, nat, region, wing) => strongest(airFleetsOf(g2, nat).filter((f) => f.base === region && f.ship === void 0 && f.ashore === void 0 && (!airWar(g2) || !wing || f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most)));
-  var canLay = (g2, nat, r, yard) => !!r && isHome(g2, nat, r) && r.port && yardLevel(g2, r) >= yard;
+  var canLay = (g2, nat, r, yard) => !!r && (isHome(g2, nat, r) || settledFor(g2, nat, r)) && r.port && yardLevel(g2, r) >= yard;
   function slipSite(g2, nat, yard, want = -1) {
     if (canLay(g2, nat, g2.regions[want], yard)) return want;
     let best = -1;
@@ -38528,7 +38539,7 @@
       const most = r && (r.terrain === "urban" || r.cap) ? W2.factory.most.city : W2.factory.most.town;
       const cost = W2.factory.cost + W2.factory.step * have;
       const ceiling = whyNoFactory(g2, nat);
-      const why = ceiling ?? (!r ? pick4 : !isHome(g2, nat, r) || r.overseas ? "Factories are built in the home country." : !isCity(r) ? "Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size." : have >= most ? `${r.name} has room for no more new factories.` : poor(cost));
+      const why = ceiling ?? (!r ? pick4 : r.overseas ? "Factories are built in the home country." : whyNotWorksHere(g2, nat, r, "Factories are built in the home country.", !isCity(r) ? "Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size." : null) ?? (!isCity(r) ? "Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size." : have >= most ? `${r.name} has room for no more new factories.` : poor(cost)));
       const carry = factoryCeiling(g2, nat);
       const said = carry !== null && carry > 0 && !ceiling ? ` ${g2.nations[nat].name} has ${factoriesHeld(g2, nat).held + factoriesHeld(g2, nat).building} of the ${plural3(carry, "factory", "factories")} its industry can carry in this war.` : "";
       out.push({ key: "work:factory", group: "works", label: W2.factory.label, blurb: W2.factory.blurb, size: "one factory", cost, months: W2.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural3(r.fac, "factory", "factories")}${have ? `, ${have} of ${most} new ones built or building` : ""}.${said}` : "", why });
@@ -38552,7 +38563,7 @@
         why: why ?? (next > TOP ? FULL[what].replace("%", r.name) : poor(cost))
       });
     };
-    level("yard", W2.yard, r ? yardLevel(g2, r) : 0, 0, !r ? pick4 : !isHome(g2, nat, r) ? "Shipyards are built in the home country." : !r.port ? `${r.name} has no harbour.` : null);
+    level("yard", W2.yard, r ? yardLevel(g2, r) : 0, 0, !r ? pick4 : whyNotWorksHere(g2, nat, r, "Shipyards are built in the home country.", !r.port ? `${r.name} has no harbour.` : null) ?? (!r.port ? `${r.name} has no harbour.` : null));
     level("aa", W2.aa, r ? workLevel(g2, "aa", r.id) : 0, W2.aa.upkeep, !r ? pick4 : r.ctrl !== nat ? "That ground is not in your hands." : null);
     if (!fieldRules(g2)) level("field", W2.field, r ? workLevel(g2, "field", r.id) : 0, W2.field.upkeep, !r ? pick4 : r.ctrl !== nat ? "That ground is not in your hands." : null);
     else {
@@ -38582,7 +38593,7 @@
     {
       const cost = r ? fortCost(g2, nat, r) : null;
       if (r && cost !== null) out.push(fortOffer(g2, nat, r, cost, poor(cost)));
-      else out.push({ key: "work:fort", group: "works", label: "Fortifications", blurb: FORT_BLURB, size: "", cost: priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: "", why: !r ? pick4 : !isHome(g2, nat, r) ? "Fortifications are built on home ground." : `${r.name} is fortified as heavily as it can be.` });
+      else out.push({ key: "work:fort", group: "works", label: "Fortifications", blurb: FORT_BLURB, size: "", cost: priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: "", why: !r ? pick4 : whyNotWorksHere(g2, nat, r, "Fortifications are built on home ground.") ?? `${r.name} is fortified as heavily as it can be.` });
     }
     return out;
   }
@@ -38620,6 +38631,7 @@
       b.item = "field";
       b.kind = "strip";
     }
+    if (r && r.owner !== nat && settledFor(g2, nat, r) && (group === "ship" || item === "factory" || item === "yard")) b.conq = true;
     n.queue.push(b);
     return b;
   }
@@ -38687,7 +38699,7 @@
         return;
       }
       let f = joinsFleet(g2, nat, hull, r.id);
-      if (!f && isHome(g2, nat, r) && r.port && r.seas.length) f = foundFleet(g2, nat, r, `${r.name} Fleet`);
+      if (!f && (isHome(g2, nat, r) || (settledTownsOn(g2) || b.conq) && r.ctrl === nat) && r.port && r.seas.length) f = foundFleet(g2, nat, r, `${r.name} Fleet`);
       if (!f) {
         tell2(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`);
         return;
@@ -38701,14 +38713,16 @@
     }
     const what = b.item;
     if (what === "factory") {
-      if (!isHome(g2, nat, r)) return;
+      const conquered = (settledTownsOn(g2) || !!b.conq) && r.ctrl === nat && r.owner !== nat;
+      if (!isHome(g2, nat, r) && !conquered) return;
       r.fac += 1;
       g2.flags[`wk:fac:${r.id}`] = factoriesBuilt(g2, r.id) + 1;
+      if (conquered) g2.flags[`wk:facon:${r.id}:${nat}`] = (g2.flags[`wk:facon:${r.id}:${nat}`] ?? 0) + 1;
       tell2(`The new factory at ${r.name} is at work: the province now has ${r.fac}.`);
       return;
     }
     if (what === "yard") {
-      if (!isHome(g2, nat, r) || !r.port) return;
+      if (!isHome(g2, nat, r) && !((settledTownsOn(g2) || b.conq) && r.ctrl === nat) || !r.port) return;
       g2.flags[`wk:yard:${r.id}`] = Math.min(TOP, yardLevel(g2, r) + 1);
       tell2(`The shipyard at ${r.name} is enlarged to level ${yardLevel(g2, r)}.`);
       return;
@@ -39386,6 +39400,37 @@
   var lineOf = (id) => CIVIC.lines.find((l) => l.id === id);
   var key4 = (line, region) => `cv:${line}:${region}`;
   var civicRules = (g2) => g2.flags.open === 1;
+  var settledTownsOn = (g2) => g2.flags.open === 1 && g2.flags.settledTowns === 1;
+  function setSettledTowns(g2, on) {
+    if (!on) {
+      delete g2.flags.settledTowns;
+      return;
+    }
+    if (g2.flags.settledTowns !== 1) {
+      for (const r of g2.regions) if (r.ctrl !== r.owner) g2.flags[`hand:${r.id}`] = g2.turn;
+    }
+    g2.flags.settledTowns = 1;
+  }
+  var holdersNow = (g2) => settledTownsOn(g2) ? g2.regions.map((r) => r.ctrl) : null;
+  function handedOver(g2, was) {
+    if (was) {
+      for (const r of g2.regions) if (r.ctrl !== was[r.id]) g2.flags[`hand:${r.id}`] = g2.turn;
+    }
+  }
+  function settleLeft(g2, nat, r) {
+    if (r.ctrl !== nat || r.owner === nat) return 0;
+    const hand2 = g2.flags[`hand:${r.id}`];
+    const from2 = hand2 === void 0 ? r.since ?? 0 : Math.max(r.since ?? 0, hand2);
+    return Math.max(0, CIVIC.settle.months - (g2.turn - from2));
+  }
+  var settledFor = (g2, nat, r) => settledTownsOn(g2) && r.ctrl === nat && r.owner !== nat && settleLeft(g2, nat, r) === 0;
+  function whyNotWorksHere(g2, nat, r, home, never = null) {
+    if (r.owner === nat && r.ctrl === nat || settledFor(g2, nat, r)) return null;
+    if (!settledTownsOn(g2) || r.ctrl !== nat) return home;
+    if (never) return never;
+    const left = settleLeft(g2, nat, r);
+    return `${townName(r)} is still settling after it was taken: works can go up there in ${left} ${left === 1 ? "month" : "months"}.`;
+  }
   var civicLevel = (g2, line, region) => g2.flags["cv:any"] ? g2.flags[key4(line, region)] ?? 0 : 0;
   function civicAt(g2, region) {
     if (!g2.flags["cv:any"]) return [];
@@ -39409,7 +39454,7 @@
     if (l.trade) bits.push(`trade agreements worth ${pct12(l.trade)} more`);
     if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
     if (l.research) bits.push(`research ${pct12(l.research)} faster`);
-    if (l.xp) bits.push("corps raised here start more experienced");
+    if (l.xp && (own || !settledTownsOn(g2))) bits.push("corps raised here start more experienced");
     if (l.drafts) bits.push(`replacements ${pct12(l.drafts)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct12(l.rest)} faster`);
     if (own && l.tax) bits.push(`${cash(l.tax * keep2)} more tax a month`);
@@ -39420,17 +39465,18 @@
   }
   function doesOf(g2, l, r, lv, keeps) {
     const own = r.owner === r.ctrl;
+    const serve = own || settledFor(g2, r.ctrl, r);
     const share = own ? 1 : OCCUPIED;
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct12 = (x) => `${Math.round(x * 1e3) / 10}%`;
     const keep2 = keepOf(g2, r);
     if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep2)} a month`);
-    if (own && l.trade) bits.push(`trade agreements worth ${pct12(l.trade * lv)} more`);
+    if (serve && l.trade) bits.push(`trade agreements worth ${pct12(l.trade * lv)} more`);
     if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
-    if (own && l.research) bits.push(`research ${pct12(l.research * lv)} faster`);
+    if (serve && l.research) bits.push(`research ${pct12(l.research * lv)} faster`);
     if (own && l.xp) bits.push("corps raised here start more experienced");
-    if (own && l.drafts) bits.push(`replacements ${pct12(l.drafts * lv)} faster`);
+    if (serve && l.drafts) bits.push(`replacements ${pct12(l.drafts * lv)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct12(l.rest * lv)} faster`);
     if (own && l.tax) bits.push(`${cash(l.tax * lv * keep2)} tax a month`);
     if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
@@ -39445,7 +39491,11 @@
     if (!n?.alive || !r || !l) return "Nothing can be built there.";
     if (r.ctrl !== nat) return `${r.name} is not yours.`;
     const own = r.owner === nat;
-    if (!own && !l.occupied) return "Only administration and medicine can be set up on conquered ground.";
+    if (!own && !l.occupied && !settledFor(g2, nat, r)) {
+      const left = settledTownsOn(g2) ? settleLeft(g2, nat, r) : 0;
+      if (left <= 0) return "Only administration and medicine can be set up on conquered ground.";
+      return `${townName(r)} is still settling after it was taken: every kind of building can go up there in ${left} ${left === 1 ? "month" : "months"}. Administration and medicine can be set up now.`;
+    }
     const lv = civicLevel(g2, line, r.id);
     if (lv >= TOP2) return `The ${l.levels[TOP2 - 1].toLowerCase()} is as far as this goes.`;
     const size = townSize(g2, r);
@@ -39523,11 +39573,12 @@
           if (keeps) s.sup += l.sup * lv * (own ? 1 : OCCUPIED);
           else s.farms += (l.moneyElse ?? 0) * lv * (own ? 1 : OCCUPIED);
         }
-        if (!own) continue;
+        if (!own && !settledFor(g2, nat, r)) continue;
         if (l.trade) s.trade += l.trade * lv;
         if (l.house && lv >= l.house && (r.port || g2.nations[nat].capital === r.id)) s.houses++;
         if (l.research) s.research += l.research * lv;
         if (l.drafts) s.drafts += l.drafts * lv;
+        if (!own) continue;
         if (l.tax) s.tax += l.tax * lv * keep2;
         if (l.pc) s.pc += l.pc * lv;
       }
@@ -39556,7 +39607,7 @@
     let houses = 0;
     const cap13 = g2.nations[nat]?.capital;
     for (const r of g2.regions) {
-      if (!(r.port || cap13 === r.id) || r.ctrl !== nat || r.owner !== nat) continue;
+      if (!(r.port || cap13 === r.id) || r.ctrl !== nat || r.owner !== nat && !settledFor(g2, nat, r)) continue;
       for (const l of CIVIC.lines) {
         if (!l.house) continue;
         const lv = g2.flags[key4(l.id, r.id)] ?? 0;
@@ -39975,7 +40026,7 @@
     noteCorps(g2, c, "rebuilt", at4.id);
   }
   function fortCost(g2, nat, r) {
-    if (!isHome(g2, nat, r)) return null;
+    if (!isHome(g2, nat, r) && !settledFor(g2, nat, r)) return null;
     const queued2 = g2.nations[nat].queue.filter((b) => b.what === "fort" && b.region === r.id).length;
     const next = (r.fort?.lv ?? 0) + queued2 + 1;
     return next > 3 ? null : priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[next]);
@@ -39987,6 +40038,7 @@
     if (!n.alive || cost === null || n.pp < cost) return null;
     n.pp -= cost;
     const b = { id: g2.nextBuild++, what: "fort", name: `Fortifications at ${r.name}`, region, ordered: g2.turn, eta: g2.turn + PRODUCTION.fort.months, cost };
+    if (r.owner !== nat) b.conq = true;
     n.queue.push(b);
     return b;
   }
@@ -40023,7 +40075,7 @@
         continue;
       }
       if (b.what === "fort") {
-        if (!isHome(g2, nat, r)) continue;
+        if (!isHome(g2, nat, r) && !((settledTownsOn(g2) || b.conq) && r.ctrl === nat)) continue;
         const vs = new Set(r.fort?.vs ?? []);
         vs.add(r.owner);
         for (const j of r.nb) vs.add(g2.regions[j].owner);
@@ -54300,6 +54352,7 @@
   function capitulate(g2, nat, by2) {
     const X = g2.nations[nat];
     if (!X.alive) return;
+    const was = holdersNow(g2);
     X.alive = false;
     X.fellOn = { turn: g2.turn, week: g2.week, to: by2, how: "beaten" };
     recordFall(g2, nat, by2, "beaten");
@@ -54386,6 +54439,7 @@
         } else removeCorps(g2, c);
       }
     }
+    handedOver(g2, was);
     for (const n of Object.values(g2.nations)) if (n.alive && n.atWar.includes(by2)) checkCollapse(g2, n.id, by2);
     afterFall(g2, nat);
     crown(g2);
@@ -55060,6 +55114,7 @@
       const lost = g2.regions.filter((r) => r.owner === "POL" && r.ctrl !== "POL").length;
       if (lost < 5) return;
     }
+    const was = holdersNow(g2);
     g2.flags.sovietMove = 1;
     g2.week = 3;
     for (const r of g2.regions) {
@@ -55085,6 +55140,7 @@
     g2.supplyDirty = true;
     headline(g2, "event", "The Red Army crosses into eastern Poland under the pact with Germany.", "SOV");
     g2.week = 4;
+    handedOver(g2, was);
     if (!fallen) checkCollapse(g2, "POL", "GER");
   }
 
@@ -57416,7 +57472,7 @@
       striking = ph?.effort !== void 0;
       leaving = ph?.withdraw ?? null;
       given2 = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0 && ids2[k].has(id)));
-      entrusted = handedOver(g2, nat, ph);
+      entrusted = handedOver2(g2, nat, ph);
       masked = new Set((ph?.mask ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0));
       try {
         sorties(g2, nat);
@@ -57504,7 +57560,7 @@
     }
     if (ph?.release) release2(g2, nat, ph.release);
     const posture = ph?.posture ?? "defend";
-    entrusted = handedOver(g2, nat, ph);
+    entrusted = handedOver2(g2, nat, ph);
     given2 = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0));
     quiet = !!ph?.quiet;
     single = ph?.renew === false;
@@ -57559,7 +57615,7 @@
     for (const { r, to } of lineGives(g2, nat, g2.turn)) if (arrive(g2, r, to)) back.push(r);
     return back;
   }
-  function handedOver(g2, nat, ph) {
+  function handedOver2(g2, nat, ph) {
     const out = /* @__PURE__ */ new Set();
     for (const [ally, places] of Object.entries(ph?.entrust ?? {})) {
       if (!allied(g2, nat, ally)) continue;
@@ -60709,6 +60765,7 @@
     fleetsOnFall(g2, "VIC");
     airOnFall(g2, "VIC");
     dropSieges(g2, "VIC");
+    const was = holdersNow(g2);
     for (const r of g2.regions) {
       if (r.owner === "VIC") {
         r.owner = "FRA";
@@ -60716,6 +60773,7 @@
       }
       if (r.ctrl === "VIC") r.ctrl = "FRA";
     }
+    handedOver(g2, was);
     for (const n of Object.values(g2.nations)) n.atWar = n.atWar.filter((e) => e !== "VIC");
     V.atWar = [];
     handBack(g2, F);
@@ -89327,6 +89385,8 @@
       fleetWhy: fleetWhyOn(s),
       // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
       rearguard: rearguardOn(s),
+      // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
+      settledTowns: settledTownsOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -92146,7 +92206,8 @@ ${next.text}` : ""}` : next ? next.also : "";
       }) : [],
       raiseNote: raiseHere ? "" : home ? "New corps are raised in the home country and sent out by sea." : "",
       // Fortifications: the next level, if there is one.
-      fort: home && cost !== null ? {
+      // (fortCost is null off home ground, save a conquered town that has settled: release 2, buildings.ts.)
+      fort: cost !== null ? {
         level: level + 1,
         cost: shown(cost),
         months: PRODUCTION.fort.months,
@@ -94780,6 +94841,12 @@ ${standing5}`,
       note4 = fleetAttackOn(s) ? "Fleet attacks are on: drop one of your fleets on an enemy fleet in reach, and the battle is fought at once, at any odds." : "Fleet attacks are off: fleets meet only at the month's end, where an admiral thinks the odds good enough.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "settledtownsrule") {
+      setSettledTowns(s, part[1] === "on");
+      ok2 = true;
+      note4 = settledTownsOn(s) ? "Conquered towns settle: a few months after you take a town, every kind of building and works can go up there. Its schools, drill grounds and trade houses then serve you as at home; its pay stays at the conquered share." : "Conquered towns stay as they were: of the buildings only administration and medicine can go up there, and no factories, shipyards or fortifications.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
     if (part[0] === "columns") {
       ok2 = setColumns(s, part[1] === "on");
       note4 = !ok2 ? "Supply columns can be switched only in the campaign's first month." : columnsOn(s) ? "Supply columns are on: each month lorries carry the supplies from the railhead to the armies beyond it, and enemy aircraft and partisans can catch them on the road." : "Supply columns are off: the armies beyond the railhead are fed as before.";
@@ -95982,6 +96049,11 @@ ${standing5}`,
     const s = game();
     setBreakUp(s, !!on);
     return { on: breakUpOn(s) };
+  };
+  globalThis.TC.settledTowns = (on) => {
+    const s = game();
+    setSettledTowns(s, !!on);
+    return { on: settledTownsOn(s) };
   };
   globalThis.TC.columns = (on) => {
     const s = game();
