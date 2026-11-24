@@ -12,6 +12,7 @@
 #include "Campaign/CampaignGameMode.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignSession.h"
+#include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
 #include "TheaterCommand.h"
 #include "HAL/FileManager.h"
 #include "Components/InputComponent.h"
@@ -363,6 +364,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
 	Add(TEXT("newsreels"), TEXT("Newsreels"), TEXT("A month's great stories shown as film when it ends. Key K; Space skips one."), bNewsreels ? TEXT("ON") : TEXT("OFF"), bNewsreels);
 	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("The game's voice: it reads the newsreels and the opening flight aloud, speaks for the adviser, and lets your armies answer."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
+	// (Release 2, the enemy's month near you; Brian, 24 November 2026)
+	Add(TEXT("enemymoves"), TEXT("Enemy moves near you"), TEXT("On: when you end the month, the eye goes to each place where another country's army came up to your land or attacked your troops, draws the moves as arrows (red at war with you, amber at peace, a ring where your troops were attacked) and says what happened, then the month's news comes. Space or SKIP ends it. Off: nothing plays before the news, and the whole tour of the map is a press away on the month's card."), bEnemyMoves ? TEXT("ON") : TEXT("OFF"), bEnemyMoves);
 	Add(TEXT("showsfirst"), TEXT("Play the month before its card"), TEXT("Off: the month's news comes first when a month ends (as seals along the map's edge, or its card if 'Month report: open by itself' is on), and the tour of the map and the newsreel are a press away on the card. On: the other countries' moves, the newsreel and the great moments play first."), bShowsFirst ? TEXT("ON") : TEXT("OFF"), bShowsFirst);
 	// (Release 2, news at the map's edge; ruling 131: merge by hand)
 	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
@@ -427,6 +430,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("showsfirst"))
 	{
 		bShowsFirst = !bShowsFirst;
+	}
+	else if (Id == TEXT("enemymoves")) // (release 2, the enemy's month near you)
+	{
+		bEnemyMoves = !bEnemyMoves;
 	}
 	else if (Id == TEXT("cardself")) // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	{
@@ -615,7 +622,8 @@ void ACampaignPlayerController::SaveOptions() const
 		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s,\"showsFirst\":%s}\n"),
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s}\n"), Word(bMonthReportOpens)), *OptionsFile());
+	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest.
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -660,6 +668,7 @@ void ACampaignPlayerController::LoadOptions()
 	bMarchSlipDone = Yes(TEXT("marchSlip"), false);
 	bShowsFirst = Yes(TEXT("showsFirst"), false);
 	bMonthReportOpens = Yes(TEXT("reportOpens"), false); // (Release 2, news at the map's edge; ruling 131: merge by hand)
+	bEnemyMoves = Yes(TEXT("enemyMoves"), true); // (Release 2, the enemy's month near you)
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -5997,6 +6006,17 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
+	// ---- (release 2, the enemy's month near you) the step's arrows grow out from where each army came from
+	if (bArrowsGrowing && Map.IsValid())
+	{
+		const double Grow = TheaterEnemyMoves::Grown(FPlatformTime::Seconds() - ArrowsSince);
+		if (Grow > 0.0)
+		{
+			Map->ShowStepArrows(ArrowsShown, static_cast<float>(Grow));
+		}
+		bArrowsGrowing = Grow < 1.0;
+	}
+	// ---- (end release 2)
 	const bool bBusy = IsTableBusy();
 	// (Speed, b414 mark 1.) An order still being answered: the map takes no other order, and the pointer asks the rules
 	// nothing, until it is on the table. (The ground under the pointer stays lit: that asks nothing.) It is asked afresh at
@@ -11435,7 +11455,25 @@ void ACampaignPlayerController::EndMonth()
 	}
 	// (Ruling 203.) The month's card is the first thing he sees: the other countries' moves play first only where he
 	// has asked for that (Options, or END THE MONTH AND WATCH), and are TOUR THE MAP on the card otherwise.
-	if (Month.Steps.Num() > 0 && (bAlwaysWatch || (bShowsFirst && !bScripted)))
+	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026: "when the AI nations are doing their turn,
+	// show movements around my territories or if my units are attacked so i know whats going on".) With the option on
+	// (it is, unless he turns it off), the eye goes first to each of the others' months that came near his ground or
+	// touched him, draws its moves, and comes back; the card follows. "-TheaterWatchNear" has a run that takes
+	// pictures watch the month so where it would have watched every move.
+	static const bool bNearPictures = FParse::Param(FCommandLine::Get(), TEXT("TheaterWatchNear"));
+	const bool bWatchEvery = (bAlwaysWatch && !(bNearPictures && bEnemyMoves)) || (bShowsFirst && !bScripted);
+	NearCount = 0;
+	NearShown = 0;
+	if (bEnemyMoves && !bWatchEvery && (!bScripted || (bAlwaysWatch && bNearPictures)))
+	{
+		for (const FMonthStep& Step : Month.Steps)
+		{
+			NearCount += IsNearStep(Step) ? 1 : 0;
+		}
+	}
+	bWatchNear = NearCount > 0;
+	if (Month.Steps.Num() > 0 && (bWatchEvery || bWatchNear))
+	// ---- (end release 2)
 	{
 		// Other nations did things: go and look at each in turn, quickly.
 		bWatching = true;
@@ -11476,9 +11514,16 @@ void ACampaignPlayerController::EndMonthAndWatch()
 
 void ACampaignPlayerController::WatchNextStep()
 {
+	// ---- (release 2, the enemy's month near you) Only the others' months that came near him; what is passed over
+	// happened all the same: its armies are seen where it left them when the next one is shown.
+	while (bWatchNear && Month.Steps.IsValidIndex(WatchIndex) && !IsNearStep(Month.Steps[WatchIndex]))
+	{
+		++WatchIndex;
+	}
+	// ---- (end release 2)
 	// Unless he has asked to watch everything (V), the player is shown only the moves that touch him; the rest
 	// have happened all the same, and are in the month's news.
-	while (!bWatchAll && Month.Steps.IsValidIndex(WatchIndex) && !Month.Steps[WatchIndex].bMine)
+	while (!bWatchNear && !bWatchAll && Month.Steps.IsValidIndex(WatchIndex) && !Month.Steps[WatchIndex].bMine)
 	{
 		++WatchIndex;
 	}
@@ -11488,6 +11533,17 @@ void ACampaignPlayerController::WatchNextStep()
 		return;
 	}
 	const FMonthStep& Step = Month.Steps[WatchIndex++];
+	// ---- (release 2, the enemy's month near you) Its arrows, grown from nothing once the eye is on its way (PlayerTick).
+	NearShown += bWatchNear ? 1 : 0;
+	WatchNation = Step.Nation;
+	ClearStepArrows();
+	if (bEnemyMoves && Step.Arrows.Num() > 0 && Map.IsValid())
+	{
+		ArrowsShown = Step.Arrows;
+		ArrowsSince = FPlatformTime::Seconds() + 0.3; // (the eye sets off first)
+		bArrowsGrowing = true;
+	}
+	// ---- (end release 2)
 	// The armies are seen to march: every corps that stands somewhere new since the last step goes there on the table.
 	TArray<FCorpsMove> Marches;
 	for (const FViewCorps& Unit : Step.View.Corps)
@@ -11591,6 +11647,17 @@ void ACampaignPlayerController::WatchNextStep()
 				}
 			}
 		}
+		// ---- (release 2, the enemy's month near you) Where the step has arrows, the eye takes them all in: their middle,
+		// as far back as their farthest end needs (Campaign/EnemyMoves, within the watch's own range).
+		FVector2D ArrowsMiddle = FVector2D::ZeroVector;
+		double ArrowsReach = 0.0;
+		if (ArrowsShown.Num() > 0 && Map->FrameStepArrows(ArrowsShown, ArrowsMiddle, ArrowsReach))
+		{
+			const double Zoom = TheaterEnemyMoves::ZoomFor(ArrowsReach, Map->UnitScale, Eye->MinDistance, Eye->MaxDistance);
+			Eye->GoTo(Map->MapToWorld(ArrowsMiddle.X, ArrowsMiddle.Y), static_cast<float>(Zoom));
+			Count = 0; // (looked at already)
+		}
+		// ---- (end release 2)
 		if (Count > 0)
 		{
 			Middle /= Count;
@@ -11604,8 +11671,22 @@ void ACampaignPlayerController::WatchNextStep()
 		CampaignSounds::Play(this, TEXT("explosion"), 0.3f);
 	}
 	// (a raid takes its time to fly: long enough to see it reach the target when it is the player's sky)
-	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.Sinkings.Num() > 0 ? 6.4 : Step.SeaFights.Num() > 0 && Step.Battles.Num() == 0 ? (Step.bMine ? 2.4 : 1.4) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
-	Notify(Step.Note, Pause + 0.3);
+	double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.Sinkings.Num() > 0 ? 6.4 : Step.SeaFights.Num() > 0 && Step.Battles.Num() == 0 ? (Step.bMine ? 2.4 : 1.4) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
+	// ---- (release 2, the enemy's month near you) Watching only what came near him, each stop is long enough to read
+	// its sentence, which is told in his side's words.
+	if (bWatchNear)
+	{
+		int32 Attacks = 0, Lost = 0, Moves = 0;
+		for (const FStepArrow& Arrow : Step.Arrows)
+		{
+			Attacks += Arrow.Kind == 1 ? 1 : 0;
+			Lost += Arrow.Kind == 1 && Arrow.bTaken ? 1 : 0;
+			Moves += Arrow.Kind == 0 ? 1 : 0;
+		}
+		Pause = TheaterEnemyMoves::Pause(Attacks, Lost, Moves, Step.Raids.Num() > 0 ? Pause : 0.0, Step.Sinkings.Num() > 0 ? Pause : 0.0);
+	}
+	Notify(bWatchNear && !Step.NearNote.IsEmpty() ? Step.NearNote : Step.Note, Pause + 0.3);
+	// ---- (end release 2)
 	WatchNext = FPlatformTime::Seconds() + Pause;
 	// ---- (release 2, the front you can read: the ink of this step's ground runs within the step, so the next step never cuts it short)
 	if (Map.IsValid())
@@ -11615,6 +11696,37 @@ void ACampaignPlayerController::WatchNextStep()
 	// ---- (end release 2)
 }
 
+// ---- (release 2, the enemy's month near you; Brian, 24 November 2026)
+bool ACampaignPlayerController::IsNearStep(const FMonthStep& Step) const
+{
+	const FCampaignSession* Session = GetSession();
+	const FString Human = Session ? Session->GetView().Human : FString();
+	return Step.bNear && !Human.IsEmpty() && Step.Nation != Human;
+}
+
+void ACampaignPlayerController::ClearStepArrows()
+{
+	const bool bWere = ArrowsShown.Num() > 0;
+	ArrowsShown.Reset();
+	bArrowsGrowing = false;
+	if (bWere && Map.IsValid())
+	{
+		Map->ShowStepArrows(ArrowsShown, 0.0f);
+	}
+}
+
+FString ACampaignPlayerController::GetWatchHeading() const
+{
+	if (!bWatching || !bWatchNear || NearShown <= 0 || !Map.IsValid())
+	{
+		return FString();
+	}
+	const FCampaignNation* Nation = Map->GetData().FindNation(WatchNation);
+	const FString Name = Nation ? Nation->Name : WatchNation;
+	return FString::Printf(TEXT("MOVES NEAR YOU  \u00B7  %s  \u00B7  %d OF %d"), *Name.ToUpper(), FMath::Min(NearShown, NearCount), NearCount);
+}
+// ---- (end release 2)
+
 void ACampaignPlayerController::WatchAgain()
 {
 	if (bWatching || Month.Steps.Num() == 0 || !Map.IsValid())
@@ -11623,6 +11735,7 @@ void ACampaignPlayerController::WatchAgain()
 	}
 	ClosePage();
 	bRewatching = true;
+	bWatchNear = false; // (release 2: the tour from the card is the whole month, every move)
 	WatchStood.Reset();
 	for (const FViewCorps& Unit : Month.Steps[0].View.Corps)
 	{
@@ -11665,6 +11778,10 @@ void ACampaignPlayerController::FinishMonth()
 	THEATER_SPEED_SCOPE(FinishMonth);
 	FCampaignSession* Session = GetSession();
 	bWatching = false;
+	// ---- (release 2, the enemy's month near you) the last step's arrows go with the watch
+	ClearStepArrows();
+	bWatchNear = false;
+	// ---- (end release 2)
 	// (and with the new month it is morning again)
 	for (TActorIterator<ACampaignEnvironment> Room(GetWorld()); Room; ++Room)
 	{

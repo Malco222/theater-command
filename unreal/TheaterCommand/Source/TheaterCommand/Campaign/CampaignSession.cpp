@@ -2696,6 +2696,41 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
 			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			// ---- (release 2, the enemy's month near you: Rules/near-moves.ts)
+			Entry->TryGetBoolField(TEXT("near"), Step.bNear);
+			Entry->TryGetStringField(TEXT("nearNote"), Step.NearNote);
+			const TArray<TSharedPtr<FJsonValue>>* Arrows = nullptr;
+			if (Entry->TryGetArrayField(TEXT("arrows"), Arrows))
+			{
+				for (const TSharedPtr<FJsonValue>& Drawing : *Arrows)
+				{
+					const TSharedPtr<FJsonObject>* Arrow = nullptr;
+					if (!Drawing.IsValid() || !Drawing->TryGetObject(Arrow))
+					{
+						continue;
+					}
+					FStepArrow Drawn;
+					double Number = 0.0;
+					Drawn.From = (*Arrow)->TryGetNumberField(TEXT("from"), Number) ? FMath::RoundToInt32(Number) : INDEX_NONE;
+					Drawn.To = (*Arrow)->TryGetNumberField(TEXT("to"), Number) ? FMath::RoundToInt32(Number) : INDEX_NONE;
+					(*Arrow)->TryGetStringField(TEXT("nat"), Drawn.Nation);
+					FString Kind;
+					(*Arrow)->TryGetStringField(TEXT("kind"), Kind);
+					Drawn.Kind = Kind == TEXT("attack") ? 1 : Kind == TEXT("fell") ? 2 : 0;
+					(*Arrow)->TryGetBoolField(TEXT("war"), Drawn.bWar);
+					(*Arrow)->TryGetBoolField(TEXT("away"), Drawn.bAway);
+					(*Arrow)->TryGetBoolField(TEXT("taken"), Drawn.bTaken);
+					(*Arrow)->TryGetBoolField(TEXT("siege"), Drawn.bSiege);
+					(*Arrow)->TryGetBoolField(TEXT("yielded"), Drawn.bYielded);
+					Drawn.Corps = (*Arrow)->TryGetNumberField(TEXT("corps"), Number) ? FMath::RoundToInt32(Number) : 1;
+					Drawn.Divs = (*Arrow)->TryGetNumberField(TEXT("divs"), Number) ? FMath::RoundToInt32(Number) : -1; // (null: only glimpsed)
+					if (Drawn.To >= 0) // (an arrow to nowhere is not drawn)
+					{
+						Step.Arrows.Add(MoveTemp(Drawn));
+					}
+				}
+			}
+			// ---- (end release 2)
 			const TArray<TSharedPtr<FJsonValue>>* Shelled = nullptr;
 			if (Entry->TryGetArrayField(TEXT("shelled"), Shelled))
 			{

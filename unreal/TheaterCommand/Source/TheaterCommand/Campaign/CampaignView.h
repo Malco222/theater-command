@@ -1356,6 +1356,25 @@ struct FAttackResult
 	TArray<FCorpsMove> Moved; // the corps that followed up into the ground they won
 };
 
+/**
+ * (release 2, the enemy's month near you; Brian, 24 November 2026) One arrow the watch of the others' month draws on
+ * the table near the player's ground (Rules/near-moves.ts).
+ */
+struct FStepArrow
+{
+	int32 From = INDEX_NONE; // the province it came from; none where that is not known (a landing)
+	int32 To = INDEX_NONE;
+	FString Nation;
+	uint8 Kind = 0; // 0 a foreign army's move, 1 an attack on his troops, 2 his own corps falling back
+	bool bWar = true; // at war with him (red); at peace (amber)
+	bool bAway = false; // (a move) away from his ground
+	bool bTaken = false; // (an attack) the place was lost
+	bool bSiege = false; // (an attack) the field was lost, the town holds
+	bool bYielded = false; // (an attack) his troops gave ground without a fight, as ordered
+	int32 Corps = 1;
+	int32 Divs = -1; // where seen whole; -1 where only glimpsed
+};
+
 /** One computer-run nation's month, when it did something worth seeing. */
 struct FMonthStep
 {
@@ -1369,6 +1388,11 @@ struct FMonthStep
 	TArray<FSinking> Sinkings; // (release 1) and the ships that went down in them, where the player's side fought
 	TArray<int32> Shelled; // the coasts shelled from the sea in it
 	bool bMine = false; // the player's own ground or troops were involved
+	// ---- (release 2, the enemy's month near you)
+	bool bNear = false; // it came near his ground, or touched him: the watch of the enemy's month stops here
+	FString NearNote; // what it did near him, in his side's words
+	TArray<FStepArrow> Arrows;
+	// ---- (end release 2)
 	FCampaignView View; // the war as it stood when that nation had finished
 };
 
