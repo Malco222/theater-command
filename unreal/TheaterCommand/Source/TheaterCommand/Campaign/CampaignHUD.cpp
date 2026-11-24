@@ -33,6 +33,7 @@
 #include "ImageUtils.h"
 #include "TextureResource.h"
 #include "Campaign/CampaignTextures.h"
+#include "HAL/IConsoleManager.h" // (release 2, tc.UI.MonthCard)
 #include "Layout/ArrangedChildren.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Images/SImage.h"
@@ -285,12 +286,122 @@ namespace
 		return 12;
 	}
 
+	// (Release 2; Brian, 24 November 2026, of the date card: "this UI needs updating".) The month card in the leather and
+	// brass of the new province panel: the player's flag across its head, the treasury as one figure with what each month
+	// leaves, the stores as meters. Off until the art director has passed the Mac's stills of it; -TheaterMonthCard turns
+	// it on for a run.
+	TAutoConsoleVariable<int32> CVarMonthCard(
+		TEXT("tc.UI.MonthCard"), 0,
+		TEXT("1 shows the new month card (the player's flag across its head, the treasury as one figure with what each month leaves, the stores as meters of ten) and its folded strip; 0 the paper desk calendar as before (as -TheaterMonthCard)."));
+
+	bool IsMonthCardStyle()
+	{
+		static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterMonthCard"));
+		return bAsked || CVarMonthCard.GetValueOnGameThread() != 0;
+	}
+
+	// (tc.UI.MonthCard) The month card's colours, the UI kit's: desk-900 leather, the kit's line and brass-700 edge,
+	// desk-700 under the hand, an empty segment of a meter, and the amber the kit keeps for something due. (Its tiles are
+	// THIS MONTH's cells, desk-800.)
+	const FLinearColor McLeather = FLinearColor(FColor::FromHex(TEXT("17120D")));
+	const FLinearColor McLine = FLinearColor(FColor::FromHex(TEXT("4B3D2D")));
+	const FLinearColor McEdge = FLinearColor(FColor::FromHex(TEXT("8A6B3B")));
+	const FLinearColor McHover = FLinearColor(FColor::FromHex(TEXT("2D241A")));
+	const FLinearColor McSegOff = FLinearColor(FColor::FromHex(TEXT("3A2E22")));
+	const FLinearColor McAmber = FLinearColor(FColor::FromHex(TEXT("E0A13C")));
+
+	/**
+	 * (tc.UI.MonthCard) The shading laid over the month card's flag, made once. 0: the cloth's folds, across, dark and
+	 * light by turns. 1: its foot fading down into the card's leather. 2: the shade under the lettering, from the head's
+	 * bottom left corner, which keeps the month's word at 4.5 to 1 or better on any flag (the art director's mend a,
+	 * 24 November 2026).
+	 */
+	const FSlateBrush* McGradient(int32 Which)
+	{
+		static TSharedPtr<FSlateBrush> Made[3];
+		const int32 Index = FMath::Clamp(Which, 0, 2);
+		if (Made[Index].IsValid())
+		{
+			return Made[Index].Get();
+		}
+		// (a value along a line of stops, each a place from 0 to 1 and a value there)
+		auto Along = [](const TArray<FVector2D>& Stops, double At)
+		{
+			for (int32 Stop = 1; Stop < Stops.Num(); ++Stop)
+			{
+				if (At <= Stops[Stop].X)
+				{
+					const double Span = FMath::Max(Stops[Stop].X - Stops[Stop - 1].X, 1e-6);
+					return FMath::Lerp(Stops[Stop - 1].Y, Stops[Stop].Y, FMath::Clamp((At - Stops[Stop - 1].X) / Span, 0.0, 1.0));
+				}
+			}
+			return Stops.Last().Y;
+		};
+		auto Shade = [](const FLinearColor& Colour, double Alpha)
+		{
+			FColor Out = Colour.ToFColor(true);
+			Out.A = static_cast<uint8>(FMath::RoundToInt32(255.0 * FMath::Clamp(Alpha, 0.0, 1.0)));
+			return Out;
+		};
+		int32 Wide = 1, High = 1;
+		TArray<FColor> Pixels;
+		if (Index == 0)
+		{
+			// (dark where the cloth falls away, light where it catches the lamp: below nothing is a shadow, above it a light)
+			const TArray<FVector2D> Stops = { { 0.0, -0.30 }, { 0.16, 0.10 }, { 0.33, -0.26 }, { 0.51, 0.08 }, { 0.69, -0.24 }, { 0.85, 0.07 }, { 1.0, -0.32 } };
+			Wide = 128;
+			for (int32 X = 0; X < Wide; ++X)
+			{
+				const double Value = Along(Stops, (X + 0.5) / Wide);
+				Pixels.Add(Shade(Value < 0.0 ? FLinearColor::Black : FLinearColor::White, FMath::Abs(Value)));
+			}
+		}
+		else if (Index == 1)
+		{
+			const TArray<FVector2D> Stops = { { 0.0, 0.12 }, { 0.4, 0.38 }, { 0.8, 0.88 }, { 1.0, 1.0 } };
+			High = 128;
+			for (int32 Y = 0; Y < High; ++Y)
+			{
+				Pixels.Add(Shade(McLeather, Along(Stops, (Y + 0.5) / High)));
+			}
+		}
+		else
+		{
+			const TArray<FVector2D> Stops = { { 0.0, 0.82 }, { 0.45, 0.6 }, { 1.0, 0.0 } };
+			const FLinearColor Under(FColor::FromHex(TEXT("0A0806")));
+			Wide = 96;
+			High = 32;
+			for (int32 Y = 0; Y < High; ++Y)
+			{
+				for (int32 X = 0; X < Wide; ++X)
+				{
+					const double Across = (X + 0.5) / Wide, Up = 1.0 - (Y + 0.5) / High;
+					Pixels.Add(Shade(Under, Along(Stops, FMath::Sqrt(Across * Across + Up * Up))));
+				}
+			}
+		}
+		Made[Index] = MakeShared<FSlateBrush>();
+		if (UTexture2D* Texture = CampaignTextures::Create(Wide, High, Pixels, true, false, NAME_None))
+		{
+			Texture->AddToRoot();
+			Made[Index]->SetResourceObject(Texture);
+			Made[Index]->ImageSize = FVector2D(static_cast<double>(Wide), static_cast<double>(High));
+			Made[Index]->DrawAs = ESlateBrushDrawType::Image;
+		}
+		else
+		{
+			Made[Index]->DrawAs = ESlateBrushDrawType::NoDrawType;
+		}
+		return Made[Index].Get();
+	}
+
 	/**
 	 * A small sign drawn in line, as if engraved: the signs on the six doors, and the dial on the control that
 	 * ends the month. Kinds: 0 a shell (the arsenal), 1 a star (the generals), 2 a pair of dividers (research),
 	 * 3 a sealed letter (diplomacy), 4 an open book (the ledger), 5 a medal (honours), 6 a clock's dial, whose
 	 * short hand stands at the hour it is given. (Release 2) 11 an hourglass (what is on order), 12 a coin (the
-	 * treasury on the date card's strip).
+	 * treasury on the date card's strip). (Release 2, tc.UI.MonthCard) 13 a snowflake, 14 rain on mud, 15 the sun (the
+	 * weather); 16 an oil drum, 17 a crate, 18 a helmet (the stores); 19 an officer's case (the staff); 20 a chevron up.
 	 */
 	class SLineIcon : public SLeafWidget
 	{
@@ -403,6 +514,65 @@ namespace
 			case 12: // (release 2) a coin: its rim, and the ring struck inside it
 				Ring(0.5, 0.5, 0.42);
 				Ring(0.5, 0.5, 0.22);
+				break;
+			case 13: // (release 2, the month card's weather) the eastern winter: a snowflake, six arms each tipped with a fork
+				for (int32 Arm = 0; Arm < 6; ++Arm)
+				{
+					const double Out = FMath::DegreesToRadians(60.0 * Arm), Left = Out - FMath::DegreesToRadians(40.0), Right = Out + FMath::DegreesToRadians(40.0);
+					const FVector2D Heart(0.5, 0.5), Fork = Heart + FVector2D(FMath::Sin(Out), -FMath::Cos(Out)) * 0.27;
+					Line({ Heart, Heart + FVector2D(FMath::Sin(Out), -FMath::Cos(Out)) * 0.43 });
+					Line({ Fork + FVector2D(FMath::Sin(Left), -FMath::Cos(Left)) * 0.12, Fork, Fork + FVector2D(FMath::Sin(Right), -FMath::Cos(Right)) * 0.12 });
+				}
+				break;
+			case 14: // (release 2) the mud of spring and autumn: rain falling slant on churned ground
+				Line({ { 0.32, 0.1 }, { 0.24, 0.32 } });
+				Line({ { 0.56, 0.1 }, { 0.48, 0.32 } });
+				Line({ { 0.8, 0.1 }, { 0.72, 0.32 } });
+				Line({ { 0.08, 0.62 }, { 0.22, 0.54 }, { 0.36, 0.62 }, { 0.5, 0.54 }, { 0.64, 0.62 }, { 0.78, 0.54 }, { 0.92, 0.62 } });
+				Line({ { 0.15, 0.82 }, { 0.29, 0.74 }, { 0.43, 0.82 }, { 0.57, 0.74 }, { 0.71, 0.82 }, { 0.85, 0.74 } });
+				break;
+			case 15: // (release 2) fair weather: the sun and its rays
+				Ring(0.5, 0.5, 0.2);
+				for (int32 Ray = 0; Ray < 8; ++Ray)
+				{
+					const double Way = FMath::DegreesToRadians(45.0 * Ray);
+					Line({ { 0.5 + 0.3 * FMath::Sin(Way), 0.5 - 0.3 * FMath::Cos(Way) }, { 0.5 + 0.44 * FMath::Sin(Way), 0.5 - 0.44 * FMath::Cos(Way) } });
+				}
+				break;
+			case 16: // (release 2, the month card's stores) an oil drum: its lid, its sides, and a hoop round its middle
+				for (int32 Hoop = 0; Hoop < 3; ++Hoop)
+				{
+					// (the lid whole; the hoop and the foot only where they come round the front)
+					const double Down = Hoop == 0 ? 0.2 : Hoop == 1 ? 0.5 : 0.82, Turn = Hoop == 0 ? 360.0 : 180.0;
+					TArray<FVector2D>& Round = Strokes.AddDefaulted_GetRef();
+					for (int32 Step = 0; Step <= 16; ++Step)
+					{
+						const double Angle = FMath::DegreesToRadians(Turn * Step / 16.0);
+						Round.Add(FVector2D(0.5 + 0.3 * FMath::Cos(Angle), Down + 0.09 * FMath::Sin(Angle)));
+					}
+				}
+				Line({ { 0.2, 0.2 }, { 0.2, 0.82 } });
+				Line({ { 0.8, 0.2 }, { 0.8, 0.82 } });
+				break;
+			case 17: // (release 2) a crate of stores: its lid, and the boards of its side
+				Line({ { 0.14, 0.26 }, { 0.86, 0.26 }, { 0.86, 0.82 }, { 0.14, 0.82 }, { 0.14, 0.26 } });
+				Line({ { 0.14, 0.44 }, { 0.86, 0.44 } });
+				Line({ { 0.38, 0.26 }, { 0.38, 0.44 } });
+				Line({ { 0.62, 0.26 }, { 0.62, 0.44 } });
+				Line({ { 0.33, 0.63 }, { 0.48, 0.63 } });
+				break;
+			case 18: // (release 2) the reserve of men: a soldier's helmet, its dome, its brim and its crest
+				Ring(0.5, 0.66, 0.34, -90.0, 90.0);
+				Line({ { 0.08, 0.66 }, { 0.92, 0.66 } });
+				Line({ { 0.5, 0.32 }, { 0.5, 0.22 } });
+				break;
+			case 19: // (release 2) the staff: an officer's case, its body, its handle and the strap across it
+				Line({ { 0.14, 0.32 }, { 0.86, 0.32 }, { 0.86, 0.82 }, { 0.14, 0.82 }, { 0.14, 0.32 } });
+				Line({ { 0.38, 0.32 }, { 0.38, 0.22 }, { 0.44, 0.17 }, { 0.56, 0.17 }, { 0.62, 0.22 }, { 0.62, 0.32 } });
+				Line({ { 0.14, 0.52 }, { 0.86, 0.52 } });
+				break;
+			case 20: // (release 2) a chevron pointing up: fold the card away
+				Line({ { 0.25, 0.62 }, { 0.5, 0.37 }, { 0.75, 0.62 } });
 				break;
 			default: // a clock's dial: the long hand at twelve, the short one at the hour
 			{
@@ -5800,6 +5970,22 @@ namespace
 			GlanceBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(23, 18, 13)).CopyWithNewOpacity(0.96f), 4.0f, FLinearColor(FColor(138, 107, 59)), 1.0f);
 			GlanceCellStyle = MakeButtonStyle(FLinearColor(FColor(33, 26, 19)), FLinearColor(FColor(45, 36, 26)), FLinearColor(FColor(75, 61, 45)), 1.0f);
 			ToneEdgeBrush = FSlateRoundedBoxBrush(FLinearColor::White, FVector4(2.0f, 0.0f, 0.0f, 2.0f));
+			// (Release 2, tc.UI.MonthCard; the UI director's mock-up, passed by the art director on 24 November 2026.) The
+			// month card is desk-900 leather with a brass-700 edge, as THIS MONTH is, and its tiles are THIS MONTH's cells.
+			// The treasury's tile takes the alarm's edge in debt; a meter's segment is the kit's line, outlined in the alarm
+			// when the store is empty; the fold button is round; the MEN row and the tips' tab light as the kit's buttons do.
+			McCardBrush = FSlateRoundedBoxBrush(McLeather, 4.0f, McEdge, 1.0f);
+			McDebtEdge = FSlateRoundedBoxBrush(FLinearColor::Transparent, 5.0f, Alarm, 1.0f);
+			McSegBrush = FSlateRoundedBoxBrush(FLinearColor::White, 1.0f);
+			McSegEmptyBrush = FSlateRoundedBoxBrush(McSegOff, 1.0f, Alarm, 1.0f);
+			McRowStyle = MakeButtonStyle(FLinearColor::Transparent, McHover, FLinearColor::Transparent, 1.0f);
+			McTagStyle = MakeButtonStyle(McLeather, McHover, McEdge, 1.0f);
+			McRoundStyle = FButtonStyle();
+			McRoundStyle.SetNormal(FSlateRoundedBoxBrush(McLeather.CopyWithNewOpacity(0.88f), 14.0f, McEdge, 1.0f));
+			McRoundStyle.SetHovered(FSlateRoundedBoxBrush(McHover, 14.0f, BrightBrass, 1.0f));
+			McRoundStyle.SetPressed(FSlateRoundedBoxBrush(McHover, 14.0f, BrightBrass, 1.5f));
+			McRoundStyle.SetDisabled(FSlateRoundedBoxBrush(McLeather.CopyWithNewOpacity(0.88f), 14.0f, McEdge, 1.0f));
+			McRoundStyle.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f));
 
 			// One side of the face-off: whose army it is, who leads it, how strong it is, and its corps.
 			auto Side = [this, Face](bool bOurs, EHorizontalAlignment Align) -> TSharedRef<SWidget>
@@ -5934,9 +6120,10 @@ namespace
 					[
 						// (Release 2: folded to its strip, the card's own paper is not drawn round it: the strip is a paper of its own.)
 						Edge(TopLeftPiece, SNew(SBorder).Padding(FMargin(1.0f))
-						.BorderImage_Lambda([this]() -> const FSlateBrush* { return ScreenFold.bDateOpen ? &PaperBrush : &ClearBrush; })
+						// (tc.UI.MonthCard: the month card and its strip are leather, each with its own edge, and draw no paper here)
+						.BorderImage_Lambda([this]() -> const FSlateBrush* { return ScreenFold.bDateOpen && !IsMonthCardStyle() ? &PaperBrush : &ClearBrush; })
 						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); }) // (paper is not so white by night)
-						.ColorAndOpacity_Lambda([this]() { return InkLight(); }) // (and the ink on it is darker)
+						.ColorAndOpacity_Lambda([this]() { return IsMonthCardStyle() ? FLinearColor::White : InkLight(); }) // (and the ink on it is darker)
 						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::Visible; })
 						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent& Event)
 						{
@@ -5957,13 +6144,22 @@ namespace
 							[
 								DateStrip()
 							]
+							// (Release 2, tc.UI.MonthCard) The month card, and the strip it folds to, in place of the paper.
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								MonthStrip()
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								MonthCard()
+							]
 							+ SVerticalBox::Slot().AutoHeight()
 							[
 								// (The UI director, 11:19 on build 1638: the mark rises to the label size, and as a mark it is the
 								// one label that keeps its wide tracking. The binding grows round it.)
 								SNew(SBorder).BorderImage(&BindingBrush).Padding(FMargin(19.0f, 3.0f, 19.0f, 3.0f))
 								.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
-								.Visibility_Lambda([this]() { return ScreenFold.bDateOpen ? EVisibility::Visible : EVisibility::Collapsed; })
+								.Visibility_Lambda([this]() { return ScreenFold.bDateOpen && !IsMonthCardStyle() ? EVisibility::Visible : EVisibility::Collapsed; })
 								[
 									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Typed(9.0f, true, 80)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
 								]
@@ -5971,7 +6167,7 @@ namespace
 							+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(19.0f, 6.0f, 24.0f, 8.0f))
 							[
 								SNew(SVerticalBox)
-								.Visibility_Lambda([this]() { return ScreenFold.bDateOpen ? EVisibility::Visible : EVisibility::Collapsed; })
+								.Visibility_Lambda([this]() { return ScreenFold.bDateOpen && !IsMonthCardStyle() ? EVisibility::Visible : EVisibility::Collapsed; })
 								+ SVerticalBox::Slot().AutoHeight()
 								[
 									SNew(STextBlock).Font(Serif(TEXT("Bold"), 12, 300)).ColorAndOpacity(InkRed)
@@ -12047,6 +12243,10 @@ namespace
 				{
 					OneLine += 12.0 + 14.0 + Wide(Fold.TipsText, Typed(9.5f, true));
 				}
+				if (IsMonthCardStyle())
+				{
+					OneLine = 384.0; // (tc.UI.MonthCard: the new strip is 384 wide, the tips on a tab of their own under it)
+				}
 				Fold.bTwoRows = FMath::Max(OneLine, 382.0) > Doors.Min.X - Card.Min.X - 12.0;
 			}
 		}
@@ -12085,7 +12285,7 @@ namespace
 					];
 			};
 			return SNew(SBox).MinDesiredWidth_Lambda([this]() -> FOptionalSize { return ScreenFold.bTwoRows ? FOptionalSize() : FOptionalSize(380.0f); })
-				.Visibility_Lambda([this]() { return ScreenFold.bFolded ? EVisibility::Visible : EVisibility::Collapsed; })
+				.Visibility_Lambda([this]() { return ScreenFold.bFolded && !IsMonthCardStyle() ? EVisibility::Visible : EVisibility::Collapsed; })
 				[
 					SNew(SBorder).BorderImage(&DateStripBrush).Padding(FMargin(0.0f))
 					.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
@@ -12133,6 +12333,701 @@ namespace
 						[
 							Treasury(true)
 						]
+					]
+				];
+		}
+
+		/** (Release 2, tc.UI.MonthCard) The campaign's view this frame, or null outside a campaign. */
+		const FCampaignView* McView() const
+		{
+			const FCampaignSession* Running = Controller.IsValid() ? Controller->GetSession() : nullptr;
+			return Running ? &Running->GetView() : nullptr;
+		}
+
+		/**
+		 * (Release 2, tc.UI.MonthCard) The player's flag for the month card, from the map's own flags (the game's set
+		 * only: the art director's booth note of 24 November). The flags are drawn three by two; the head is near four by
+		 * one. Drawn out to it, a disc or a cross would be bent, and cut to it, cut through; so the flag is laid whole at
+		 * the head's right, and its hoist, the strip of cloth along its staff, is drawn out across the rest of the head:
+		 * the cloth runs the card's width, and no emblem stands under the lettering (mend b). bHoist asks for that strip.
+		 * The flag's dark hem is left off where the two meet. Before the flag is made, or when nobody is led, nothing.
+		 */
+		const FSlateBrush* McFlag(bool bHoist)
+		{
+			const FString Led = Controller.IsValid() ? Controller->GetPlayerTag() : FString();
+			if (Led.IsEmpty())
+			{
+				return &ClearBrush;
+			}
+			const FString Key = (bHoist ? TEXT("hoist:") : TEXT("flag:")) + Led;
+			if (const TSharedPtr<FSlateBrush>* Found = McFlagBrushes.Find(Key))
+			{
+				return Found->Get();
+			}
+			ACampaignMapActor* Table = Controller->GetMap();
+			UTexture2D* Picture = Table ? Table->GetFlagTexture(Led) : nullptr;
+			if (!Picture)
+			{
+				return &ClearBrush; // (not ready yet: asked again next frame)
+			}
+			TSharedPtr<FSlateBrush> Made = MakeShared<FSlateBrush>();
+			Made->SetResourceObject(Picture);
+			Made->DrawAs = ESlateBrushDrawType::Image;
+			Made->ImageSize = bHoist ? FVector2D(4.0, 100.0) : FVector2D(150.0, 100.0);
+			Made->SetUVRegion(bHoist ? FBox2f(FVector2f(0.008f, 0.008f), FVector2f(0.014f, 0.992f)) : FBox2f(FVector2f(0.008f, 0.008f), FVector2f(1.0f, 0.992f)));
+			McFlagBrushes.Add(Key, Made);
+			return Made.Get();
+		}
+
+		/**
+		 * (Release 2, tc.UI.MonthCard) The rules' note, as the line under the card's flag: bWho, the nation the player
+		 * leads ("United States"); otherwise the rest of the note after a dot ("·  Colonel"), or the whole note when it
+		 * names nobody led (a war watched, a country fallen).
+		 */
+		FText McLeads(bool bWho) const
+		{
+			const FString Note = Controller.IsValid() ? Controller->GetRulesNote().ToString() : FString();
+			static const FString Leads(TEXT("You lead ")), Dot(TEXT("  ·  "));
+			if (!Note.StartsWith(Leads))
+			{
+				return bWho ? FText::GetEmpty() : FText::FromString(Note);
+			}
+			FString Who = Note.Mid(Leads.Len()), Rest;
+			FString Nation = Who;
+			if (Who.Split(Dot, &Nation, &Rest))
+			{
+				Rest = TEXT("·  ") + Rest;
+			}
+			if (Nation.StartsWith(TEXT("the ")))
+			{
+				Nation = Nation.Mid(4);
+			}
+			return FText::FromString(bWho ? Nation : Rest);
+		}
+
+		/** (Release 2, tc.UI.MonthCard) The weather's line split at its colon: its heading in bold, and the rest under it. */
+		FText McWeatherPart(bool bHeading) const
+		{
+			const FString Said = Controller.IsValid() ? Controller->GetWeatherText().ToString() : FString();
+			FString Heading = Said, Rest;
+			if (Said.Split(TEXT(": "), &Heading, &Rest) && Rest.Len() > 0)
+			{
+				Rest[0] = FChar::ToUpper(Rest[0]);
+			}
+			return FText::FromString(bHeading ? Heading : Rest);
+		}
+
+		/**
+		 * (Release 2, tc.UI.MonthCard) How a store stands, for its meter's colours. 3: empty, short or spent, or dry
+		 * within a month (the alarm, which is kept for act-now or lost); 2: dry within six months, or the reserve
+		 * thinning (the kit's amber, for something due); 1: growing (its word in green); 0: plain.
+		 */
+		static int32 StoreTone(const FViewStock& Stock)
+		{
+			if (!Stock.Word.IsEmpty())
+			{
+				return Stock.Word.Equals(TEXT("Short"), ESearchCase::IgnoreCase) || Stock.Word.Equals(TEXT("Spent"), ESearchCase::IgnoreCase) ? 3
+					: Stock.Word.Equals(TEXT("Thinning"), ESearchCase::IgnoreCase) ? 2 : 0;
+			}
+			if (Stock.bShort || (Stock.Months >= 0 && Stock.Months <= 1))
+			{
+				return 3;
+			}
+			if (Stock.Months >= 2 && Stock.Months <= 6)
+			{
+				return 2;
+			}
+			return Stock.Months < 0 && Stock.Net > 0.05f ? 1 : 0;
+		}
+
+		/** (Release 2, tc.UI.MonthCard) A store's word at its meter's end, as the paper gauge said it. */
+		static FString StoreWord(const FViewStock& Stock)
+		{
+			if (!Stock.Word.IsEmpty())
+			{
+				return Stock.Word.ToLower();
+			}
+			if (Stock.bShort || Stock.Months == 0)
+			{
+				return TEXT("empty");
+			}
+			if (Stock.Months < 0)
+			{
+				return Stock.Net > 0.05f ? TEXT("growing") : TEXT("steady");
+			}
+			return Stock.Months == 1 ? FString(TEXT("1 month")) : FString::Printf(TEXT("%d months"), Stock.Months);
+		}
+
+		/** (Release 2, tc.UI.MonthCard) A store's ten segments: how many stand lit (one at least while anything is left). */
+		static int32 StoreLit(const FViewStock& Stock)
+		{
+			const float Share = Stock.Cap > 0.0f ? FMath::Clamp(Stock.Stock / Stock.Cap, 0.0f, 1.0f) : 0.0f;
+			return Share <= 0.0f ? 0 : FMath::Clamp(FMath::RoundToInt32(Share * 10.0f), 1, 10);
+		}
+
+		static FLinearColor StoreInk(int32 Tone, bool bLabel)
+		{
+			return Tone == 3 ? Alarm : Tone == 2 ? McAmber : Tone == 1 && !bLabel ? Gain : Cream;
+		}
+
+		/**
+		 * (Release 2, tc.UI.MonthCard) A store's row on the month card: its sign, its name, a meter of ten segments and
+		 * its word. Cream while it lasts; amber with its name and word when it will run dry within six months, or the
+		 * reserve is thinning; the alarm when it is empty or short, its empty segments outlined in it. The amber and the
+		 * alarm are told apart by their words and by how many segments stand lit, never by colour alone (the art
+		 * director's booth note). Its sentence, the books in words, is on its hover.
+		 */
+		TSharedRef<SWidget> MonthMeter(int32 Which, const TCHAR* Label, int32 Sign)
+		{
+			auto Tone = [this, Which]() { const FViewStock* Stock = StockOf(Which); return Stock ? StoreTone(*Stock) : 0; };
+			TSharedRef<SHorizontalBox> Segments = SNew(SHorizontalBox);
+			for (int32 Seg = 0; Seg < 10; ++Seg)
+			{
+				Segments->AddSlot().AutoWidth().Padding(Seg > 0 ? 3.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(12.0f).HeightOverride(8.0f)
+					[
+						SNew(SBorder).Padding(FMargin(0.0f))
+						.BorderImage_Lambda([this, Which]() -> const FSlateBrush*
+						{
+							const FViewStock* Stock = StockOf(Which);
+							return Stock && StoreLit(*Stock) == 0 && StoreTone(*Stock) == 3 ? &McSegEmptyBrush : &McSegBrush;
+						})
+						.BorderBackgroundColor_Lambda([this, Which, Seg]()
+						{
+							const FViewStock* Stock = StockOf(Which);
+							if (!Stock)
+							{
+								return FSlateColor(McSegOff);
+							}
+							const int32 Lit = StoreLit(*Stock);
+							return FSlateColor(Lit == 0 && StoreTone(*Stock) == 3 ? FLinearColor::White : Seg < Lit ? StoreInk(StoreTone(*Stock), true) : McSegOff);
+						})
+					]
+				];
+			}
+			return SNew(SHorizontalBox)
+				.Visibility_Lambda([this, Which]() { return StockOf(Which) ? EVisibility::Visible : EVisibility::Collapsed; })
+				.ToolTipText_Lambda([this, Which]() { const FViewStock* Stock = StockOf(Which); return Stock ? FText::FromString(Stock->Tip) : FText::GetEmpty(); })
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(SLineIcon).Kind(Sign).Size(18.0f).Weight(1.5f).Ink_Lambda([Tone]() { const int32 T = Tone(); return T >= 2 ? StoreInk(T, true) : Brass; })
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(88.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Label)).Font(Typed(9.0f, true, 100))
+						.ColorAndOpacity_Lambda([Tone]() { return FSlateColor(StoreInk(Tone(), true)); })
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					Segments
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).HAlign(HAlign_Right).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Typed(9.75f, true))
+					.ColorAndOpacity_Lambda([Tone]() { return FSlateColor(StoreInk(Tone(), false)); })
+					.Text_Lambda([this, Which]() { const FViewStock* Stock = StockOf(Which); return Stock ? FText::FromString(StoreWord(*Stock)) : FText::GetEmpty(); })
+				];
+		}
+
+		/** (Release 2, tc.UI.MonthCard) A store on the folded strip: its sign over a small bar, in its tone; its word on hover. */
+		TSharedRef<SWidget> MonthMini(int32 Which, int32 Sign, const TCHAR* Name)
+		{
+			auto Tone = [this, Which]() { const FViewStock* Stock = StockOf(Which); return Stock ? StoreTone(*Stock) : 0; };
+			auto Share = [this, Which]()
+			{
+				const FViewStock* Stock = StockOf(Which);
+				return Stock ? StoreLit(*Stock) / 10.0f : 0.0f;
+			};
+			return SNew(SBox).Padding(FMargin(5.0f, 0.0f))
+				.Visibility_Lambda([this, Which]() { return StockOf(Which) ? EVisibility::Visible : EVisibility::Collapsed; })
+				.ToolTipText_Lambda([this, Which, Name]() { const FViewStock* Stock = StockOf(Which); return Stock ? FText::FromString(FString(Name) + TEXT(": ") + StoreWord(*Stock)) : FText::GetEmpty(); })
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+					[
+						SNew(SLineIcon).Kind(Sign).Size(14.0f).Weight(1.5f).Ink_Lambda([Tone]() { const int32 T = Tone(); return T >= 2 ? StoreInk(T, true) : Brass; })
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(22.0f).HeightOverride(3.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(TAttribute<float>::CreateLambda([Share]() { return FMath::Max(Share(), 0.0001f); }))
+							[
+								SNew(SBorder).BorderImage(&McSegBrush).Padding(FMargin(0.0f)).BorderBackgroundColor_Lambda([Tone]() { return FSlateColor(StoreInk(Tone(), true)); })
+							]
+							+ SHorizontalBox::Slot().FillWidth(TAttribute<float>::CreateLambda([Share]() { return FMath::Max(1.0f - Share(), 0.0001f); }))
+							[
+								SNew(SBorder).BorderImage(&McSegBrush).Padding(FMargin(0.0f)).BorderBackgroundColor(McSegOff)
+							]
+						]
+					]
+				];
+		}
+
+		/** (Release 2, tc.UI.MonthCard) The weather's sign: the eastern winter, the mud, or fair weather. */
+		TSharedRef<SWidget> McWeatherSign(int32 Sign)
+		{
+			return SNew(SBox)
+				.Visibility_Lambda([this, Sign]()
+				{
+					const FCampaignView* View = McView();
+					const int32 Shown = !View ? 0 : View->bWinter ? 13 : View->bMud ? 14 : 15;
+					return Shown == Sign ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+				})
+				[
+					SNew(SLineIcon).Kind(Sign).Size(20.0f).Weight(1.5f).Ink(Cream)
+				];
+		}
+
+		/** (Release 2, tc.UI.MonthCard) A tile of the month card: a sign, a figure over its caption, and a button to its room. */
+		TSharedRef<SWidget> McTileButton(int32 Sign, const FText& Caption, TFunction<FText()> Figure, const FText& Tip, TFunction<void()> Do)
+		{
+			return SNew(SButton).ButtonStyle(&GlanceCellStyle).ContentPadding(FMargin(10.0f, 9.0f)).IsFocusable(false)
+				.ToolTipText(Tip)
+				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+					[
+						SNew(SLineIcon).Kind(Sign).Size(22.0f).Weight(1.5f).Ink(Brass)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(Serif(TEXT("Bold"), 15.0f)).ColorAndOpacity(Cream)
+							.Text_Lambda([Figure]() { return Figure(); })
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(Caption).Font(SmallCaps()).ColorAndOpacity(Muted)
+						]
+					]
+				];
+		}
+
+		/**
+		 * (Release 2, tc.UI.MonthCard; Brian, 24 November 2026, of the date card: "this UI needs updating". The UI
+		 * director's mock-up on the Campaign Screens canvas, passed by the art director with two mends.) The month card,
+		 * in the leather and brass of the new province panel: the player's flag across its head, the month and the year
+		 * lettered over it; whom he leads and how hard; the weather with its sign; the treasury as one figure with what
+		 * each month leaves, a button to the ledger; what is on order and the desks his staff runs, as tiles; and the
+		 * stores as meters of ten. It stands where the paper calendar stood, whole in the first month, and folds to
+		 * MonthStrip after it as the paper did. Nothing in the rules changes.
+		 */
+		TSharedRef<SWidget> MonthCard()
+		{
+			auto DatePart = [this](bool bYear)
+			{
+				FString Date = Controller.IsValid() ? Controller->GetDateText().ToString() : FString(), Month, Year;
+				if (!Date.Split(TEXT(" "), &Month, &Year, ESearchCase::IgnoreCase, ESearchDir::FromEnd))
+				{
+					return FText::FromString(bYear ? FString() : Date.ToUpper());
+				}
+				return FText::FromString(bYear ? Year : Month.ToUpper());
+			};
+			auto InDebt = [this]() { return Controller.IsValid() && Controller->IsInDebt(); };
+			return SNew(SBox).WidthOverride(384.0f)
+				.Visibility_Lambda([this]() { return IsMonthCardStyle() && ScreenFold.bDateOpen ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SBorder).BorderImage(&McCardBrush).Padding(FMargin(1.0f))
+					[
+						SNew(SVerticalBox)
+						// The head: the flag as cloth, its folds, its foot fading into the leather, and the month and the
+						// year lettered over the shade at its bottom left.
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SBox).HeightOverride(128.0f).Clipping(EWidgetClipping::ClipToBounds)
+							[
+								SNew(SOverlay)
+								+ SOverlay::Slot().VAlign(VAlign_Top)
+								[
+									SNew(SBox).HeightOverride(100.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f)
+										[
+											SNew(SImage).Image_Lambda([this]() { return McFlag(true); })
+										]
+										+ SHorizontalBox::Slot().AutoWidth()
+										[
+											SNew(SBox).WidthOverride(150.0f)
+											[
+												SNew(SImage).Image_Lambda([this]() { return McFlag(false); })
+											]
+										]
+									]
+								]
+								+ SOverlay::Slot()
+								[
+									SNew(SImage).Image(McGradient(0)).Visibility(EVisibility::HitTestInvisible)
+								]
+								+ SOverlay::Slot()
+								[
+									SNew(SImage).Image(McGradient(1)).Visibility(EVisibility::HitTestInvisible)
+								]
+								+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom)
+								[
+									SNew(SBox).WidthOverride(300.0f).HeightOverride(96.0f).Visibility(EVisibility::HitTestInvisible)
+									[
+										SNew(SImage).Image(McGradient(2))
+									]
+								]
+								+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(19.0f, 0.0f, 19.0f, 2.0f))
+								[
+									SNew(SVerticalBox).Visibility(EVisibility::HitTestInvisible)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Typed(9.0f, true, 220)).ColorAndOpacity(BrightBrass)
+										.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f)).ShadowOffset(FVector2D(0.0, 1.0))
+										.Text_Lambda([DatePart]() { return DatePart(false); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, -6.0f, 0.0f, -7.0f)
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Bold"), 36.0f)).ColorAndOpacity(Cream)
+										.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.7f)).ShadowOffset(FVector2D(0.0, 2.0))
+										.Text_Lambda([DatePart]() { return DatePart(true); })
+									]
+								]
+								// (from the second month: folds the card back to its strip at once)
+								+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.0f, 10.0f, 10.0f, 0.0f))
+								[
+									SNew(SBox).WidthOverride(28.0f).HeightOverride(28.0f)
+									.Visibility_Lambda([this]() { return ScreenFold.bFolded ? EVisibility::Visible : EVisibility::Collapsed; })
+									[
+										SNew(SButton).ButtonStyle(&McRoundStyle).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+										.HAlign(HAlign_Center).VAlign(VAlign_Center)
+										.ToolTipText(FText::FromString(TEXT("Fold the card to its strip.")))
+										.OnClicked_Lambda([this]()
+										{
+											// (it stays folded while the pointer rests on it: it opens again once the pointer has left and come back)
+											ScreenFold.bDatePinned = false;
+											ScreenFold.HoverFor = -1.0e6f;
+											return FReply::Handled();
+										})
+										[
+											SNew(SLineIcon).Kind(20).Size(14.0f).Weight(1.6f).Ink(Brass)
+										]
+									]
+								]
+							]
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(20.0f, 8.0f, 20.0f, 18.0f))
+						[
+							SNew(SVerticalBox)
+							// Whom the player leads, and how hard: under the flag (the art director's booth note).
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth()
+								[
+									SNew(STextBlock).Font(Typed(10.5f, true)).ColorAndOpacity(Cream)
+									.Text_Lambda([this]() { return McLeads(true); })
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(TAttribute<FMargin>::CreateLambda([this]() { return McLeads(true).IsEmpty() ? FMargin(0.0f) : FMargin(8.0f, 0.0f, 0.0f, 0.0f); }))
+								[
+									SNew(STextBlock).Font(Typed(10.5f)).ColorAndOpacity(Muted).AutoWrapText(true)
+									.Text_Lambda([this]() { return McLeads(false); })
+								]
+							]
+							// (Rules version 66) How deep the campaign is played, and the door to the staff's room, is the
+							// STAFF RUNS tile below: the lesson's pointer frames it there.
+							// The brass rule: a bright head on brass-700.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 14.0f)
+							[
+								SNew(SBox).HeightOverride(2.0f)
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SBox).WidthOverride(56.0f)
+										[
+											SNew(SBorder).BorderImage(&McSegBrush).Padding(FMargin(0.0f)).BorderBackgroundColor(BrightBrass)
+										]
+									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f)
+									[
+										SNew(SBorder).BorderImage(&McSegBrush).Padding(FMargin(0.0f)).BorderBackgroundColor(McEdge)
+									]
+								]
+							]
+							// The weather, with its sign: its heading in bold, the rest of the rules' line under it. It wears
+							// no good or bad colour.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWeatherText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+								[
+									SNew(SOverlay)
+									+ SOverlay::Slot()[McWeatherSign(13)]
+									+ SOverlay::Slot()[McWeatherSign(14)]
+									+ SOverlay::Slot()[McWeatherSign(15)]
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Bold"), 11.25f)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Text_Lambda([this]() { return McWeatherPart(true); })
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Regular"), 9.75f)).ColorAndOpacity(Muted).AutoWrapText(true)
+										.Text_Lambda([this]() { return McWeatherPart(false); })
+										.Visibility_Lambda([this]() { return McWeatherPart(false).IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+									]
+								]
+							]
+							// The treasury: one figure, and what each month leaves (in a scenario, what comes in) in green;
+							// in debt both are in the alarm, and the tile takes its edge. A button to the ledger, as before.
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(SOverlay)
+								.Visibility_Lambda([this]() { return ScreenFold.bTreasury ? EVisibility::Visible : EVisibility::Collapsed; })
+								+ SOverlay::Slot()
+								[
+									SNew(SButton).ButtonStyle(&GlanceCellStyle).ContentPadding(FMargin(12.0f, 10.0f, 12.0f, 9.0f)).IsFocusable(false)
+									.ToolTipText(FText::FromString(TEXT("Open the ledger: where the money comes from, what the forces cost, and what every province gives.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenLedger(); } return FReply::Handled(); })
+									[
+										SNew(SVerticalBox)
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+											[
+												SNew(SLineIcon).Kind(12).Size(26.0f).Weight(1.5f).Ink_Lambda([InDebt]() { return InDebt() ? Alarm : Brass; })
+											]
+											+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+											[
+												SNew(SVerticalBox)
+												+ SVerticalBox::Slot().AutoHeight()
+												[
+													SNew(STextBlock).Font(Serif(TEXT("Bold"), 19.5f))
+													.ColorAndOpacity_Lambda([InDebt]() { return FSlateColor(InDebt() ? Alarm : Cream); })
+													.Text_Lambda([this]() { return ScreenFold.MoneyText; })
+												]
+												+ SVerticalBox::Slot().AutoHeight()
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("TREASURY"))).Font(SmallCaps()).ColorAndOpacity(Muted)
+												]
+											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+											[
+												SNew(SVerticalBox)
+												+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+												[
+													SNew(STextBlock).Font(Serif(TEXT("Bold"), 15.0f))
+													.ColorAndOpacity_Lambda([this, InDebt]()
+													{
+														// (green where it grows; where it shrinks, the amber of something due, and in debt the alarm)
+														return FSlateColor(ScreenFold.Net > 0 ? Gain : ScreenFold.Net == 0 ? Muted : InDebt() ? Alarm : McAmber);
+													})
+													.Text_Lambda([this]() { return ScreenFold.NetText; })
+												]
+												+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("A MONTH"))).Font(SmallCaps()).ColorAndOpacity(Muted)
+												]
+											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+											[
+												SNew(SLineIcon).Kind(8).Size(14.0f).Weight(1.6f).Ink(McEdge)
+											]
+										]
+										// (what comes in and what goes to keep the forces: the grand campaign only)
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+										[
+											SNew(SVerticalBox)
+											.Visibility_Lambda([this]() { const FCampaignView* View = McView(); return View && View->Treasury.bBudget ? EVisibility::Visible : EVisibility::Collapsed; })
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(SBox).HeightOverride(1.0f)
+												[
+													SNew(SBorder).BorderImage(&McSegBrush).Padding(FMargin(0.0f)).BorderBackgroundColor(McLine)
+												]
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Typed(9.0f)).ColorAndOpacity(Muted)
+												.Text_Lambda([this]()
+												{
+													const FCampaignView* View = McView();
+													return View ? FText::FromString(FString::Printf(TEXT("%s in  ·  %s upkeep"), *Cash(View->Treasury.Gross), *Cash(View->Treasury.Upkeep))) : FText::GetEmpty();
+												})
+											]
+										]
+									]
+								]
+								+ SOverlay::Slot()
+								[
+									SNew(SBorder).BorderImage(&McDebtEdge).Padding(FMargin(0.0f))
+									.Visibility_Lambda([InDebt]() { return InDebt() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								]
+							]
+							// What is on order, and the desks the staff runs: two tiles, each a button to its room.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().FillWidth(1.0f)
+								[
+									SNew(SBox)
+									.Visibility_Lambda([this]() { return ScreenFold.bTreasury ? EVisibility::Visible : EVisibility::Collapsed; })
+									[
+										McTileButton(11, FText::FromString(TEXT("ON ORDER")), [this]() { return ScreenFold.CountText[2]; },
+											FText::FromString(TEXT("Corps, aircraft, ships and works on order, being raised or built. A click opens the ARSENAL, where more is ordered. (1)")),
+											[this]() { Controller->OpenArsenal(); })
+									]
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f)
+								[
+									SNew(SBox)
+									.Padding(TAttribute<FMargin>::CreateLambda([this]() { return ScreenFold.bTreasury ? FMargin(8.0f, 0.0f, 0.0f, 0.0f) : FMargin(0.0f); }))
+									.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetDepthLine().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+									[
+										// (the lessons on the air and on building point at YOUR STAFF here, where the staff runs those desks)
+										Aimed(TEXT("depth"), McTileButton(19, FText::FromString(TEXT("STAFF RUNS")), [this]()
+										{
+											const FCampaignView* View = McView();
+											const int32 Desks = View ? View->Staffed : 0;
+											return FText::FromString(Desks == 0 ? FString(TEXT("no desks")) : Desks == 1 ? FString(TEXT("1 desk")) : FString::Printf(TEXT("%d desks"), Desks));
+										},
+										FText::FromString(TEXT("How deep you play: which parts of the war are on your own desk and which your staff runs for you. Click to open YOUR STAFF, where the depth or any one desk can be changed in any month.")),
+										[this]() { Controller->OpenStaff(); }))
+									]
+								]
+							]
+							// The stores: oil and supplies for a power that keeps stocks of them, and the reserve of men,
+							// each a meter of ten. MEN is a button to the count of men and the call-up, as before.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 8.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("STORES"))).Font(SmallCaps()).ColorAndOpacity(Brass)
+								.Visibility_Lambda([this]() { return StoresShown() || StockOf(2) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								MonthMeter(0, TEXT("OIL"), 16)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								MonthMeter(1, TEXT("SUPPLIES"), 17)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(-6.0f, 4.0f, -6.0f, -3.0f)
+							[
+								SNew(SButton).ButtonStyle(&McRowStyle).ContentPadding(FMargin(6.0f, 3.0f)).IsFocusable(false)
+								.Visibility_Lambda([this]() { return StockOf(2) ? EVisibility::Visible : EVisibility::Collapsed; })
+								.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMen(); } return FReply::Handled(); })
+								[
+									MonthMeter(2, TEXT("MEN"), 18)
+								]
+							]
+						]
+					]
+				];
+		}
+
+		/**
+		 * (Release 2, tc.UI.MonthCard) The month card folded to its strip from the player's second month: a sliver of
+		 * his flag at its edge, the month and the year, the treasury's figure and what each month leaves, and the three
+		 * stores as small meters. A hover or a click lays the card open again, as the paper strip did. The chief's tips,
+		 * folded away, hang under it on a tab of their own. In a window too small for its width (the doors would stand
+		 * over it) the small meters go, and are on the card.
+		 */
+		TSharedRef<SWidget> MonthStrip()
+		{
+			return SNew(SVerticalBox)
+				.Visibility_Lambda([this]() { return IsMonthCardStyle() && ScreenFold.bFolded && !ScreenFold.bDateOpen ? EVisibility::Visible : EVisibility::Collapsed; })
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+				[
+					SNew(SBox).HeightOverride(48.0f)
+					.WidthOverride_Lambda([this]() -> FOptionalSize { return ScreenFold.bTwoRows ? FOptionalSize() : FOptionalSize(384.0f); })
+					[
+						SNew(SBorder).BorderImage(&McCardBrush).Padding(FMargin(1.0f))
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth()
+							[
+								SNew(SBox).WidthOverride(5.0f)
+								[
+									SNew(SImage).Image_Lambda([this]() { return McFlag(true); })
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(13.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Serif(TEXT("Bold"), 13.5f)).ColorAndOpacity(Cream)
+								.Text_Lambda([this]()
+								{
+									// ("December 1940" as "Dec 1940": made again only when the month changes)
+									if (McStripDate != ScreenFold.Date)
+									{
+										McStripDate = ScreenFold.Date;
+										FString Month, Year;
+										McStripDateText = FText::FromString(McStripDate.Split(TEXT(" "), &Month, &Year, ESearchCase::IgnoreCase, ESearchDir::FromEnd) ? Month.Left(3) + TEXT(" ") + Year : McStripDate);
+									}
+									return McStripDateText;
+								})
+							]
+							+ SHorizontalBox::Slot().AutoWidth()
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return ScreenFold.bTreasury ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(1.0f).HeightOverride(24.0f)
+									[
+										SNew(SBorder).BorderImage(&McSegBrush).Padding(FMargin(0.0f)).BorderBackgroundColor(McLine)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+								[
+									SNew(SLineIcon).Kind(12).Size(16.0f).Weight(1.5f).Ink_Lambda([this]() { return ScreenFold.Money < 0 ? Alarm : Brass; })
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Typed(11.25f, true))
+									.ColorAndOpacity_Lambda([this]() { return FSlateColor(ScreenFold.Money < 0 ? Alarm : Cream); })
+									.Text_Lambda([this]() { return ScreenFold.MoneyText; })
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Font(Typed(10.5f, true))
+									.ColorAndOpacity_Lambda([this]() { return FSlateColor(ScreenFold.Net > 0 ? Gain : ScreenFold.Net == 0 ? Muted : ScreenFold.Money < 0 ? Alarm : McAmber); })
+									.Text_Lambda([this]() { return ScreenFold.NetText; })
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f)
+							[
+								SNew(SSpacer)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 9.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return ScreenFold.bTwoRows ? EVisibility::Collapsed : EVisibility::Visible; })
+								+ SHorizontalBox::Slot().AutoWidth()[MonthMini(0, 16, TEXT("Oil"))]
+								+ SHorizontalBox::Slot().AutoWidth()[MonthMini(1, 17, TEXT("Supplies"))]
+								+ SHorizontalBox::Slot().AutoWidth()[MonthMini(2, 18, TEXT("Men"))]
+							]
+						]
+					]
+				]
+				// The chief of staff's tips, folded away: a tab under the strip that lays them out, and folds them again.
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&McTagStyle).ContentPadding(FMargin(8.0f, 3.0f, 8.0f, 4.0f)).IsFocusable(false)
+					.Visibility_Lambda([this]() { return ScreenFold.Tips > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+					.ToolTipText(FText::FromString(TEXT("Your chief of staff's tips: things left idle, folded away after your first month. Click to lay them all out, and again to fold them. Nothing you would lose this month or next is ever folded.")))
+					.OnClicked_Lambda([this]() { ScreenFold.bChiefOpen = !ScreenFold.bChiefOpen; return FReply::Handled(); })
+					[
+						SNew(STextBlock).Font(Typed(9.0f, true)).ColorAndOpacity(BrightBrass)
+						.Text_Lambda([this]() { return ScreenFold.TipsText; })
 					]
 				];
 		}
@@ -17770,6 +18665,14 @@ namespace
 		FButtonStyle ChiefTagStyle; // and the chief's tag on it
 		FSlateBrush GlanceBrush, ToneEdgeBrush; // THIS MONTH's panel; and the edge of a row of the chief's list that is due
 		FButtonStyle GlanceCellStyle; // THIS MONTH's cells
+		// (Release 2, tc.UI.MonthCard) The month card's brushes and buttons; its flag's two brushes for each nation (the
+		// flag whole, and its hoist drawn out across the head: see McFlag); and its strip's month, made again only when
+		// the month changes.
+		FSlateBrush McCardBrush, McDebtEdge, McSegBrush, McSegEmptyBrush;
+		FButtonStyle McRowStyle, McTagStyle, McRoundStyle;
+		TMap<FString, TSharedPtr<FSlateBrush>> McFlagBrushes;
+		FString McStripDate;
+		FText McStripDateText;
 		// (Rules 84.3.3) FIRST COMMAND: where the staff's note stands (see PlaceLessonNote), and what it is measured by.
 		TSharedPtr<SOverlay> ScreenRoot; // the frame's own measure, 900 high
 		TWeakPtr<SWidget> SmallMapPiece; // the small map's panel: the second home is under it
