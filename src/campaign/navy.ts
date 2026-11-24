@@ -2287,13 +2287,13 @@ export function nearerPort(g: Game, f: Fleet, z = f.station): Region | null {
 /**
  * A computer-run raider's better beat under the sea patrol (release 2, once live; Q5 (a)): of the seas of the convoy
  * routes its beat lies on, within its reach by sea, the one where the month's gain in its boats' time up on station
- * (onWatch: the passage there and back by the sea graph, less the time aircraft without kit keep them down, each beat
- * from the port its staff would base it at, nearerPort) over their time up on their own beat is most, where that gain
- * is more than the time the move itself loses (moveLoss); -1 where none is, where no aircraft without kit watch its
- * beat, for a tied fleet, and while the patrol is not live. A boat keeps its beat unless the move's gain covers the
- * time it costs (the design director's ruling of 24 November 2026 17:49Z, 1 (a)): without it the boats' staff and the
- * patrol staff chased each other from sea to sea, and with Atlantic ports held the boats spent every other month in
- * harbour.
+ * (onWatch: the passage there and back by the sea graph, less the time aircraft without kit keep them down) over their
+ * time up on their own beat, less what the move itself loses (moveLoss), is most, where that is more than nothing.
+ * Each beat, its own too, is read from the port its staff would base it at (nearerPort). -1 where none is, where no
+ * aircraft without kit watch its beat, for a tied fleet, and while the patrol is not live. A boat keeps its beat unless
+ * the move's gain covers the time it costs (the design director's ruling of 24 November 2026 17:49Z, 1 (a)): without it
+ * the boats' staff and the patrol staff chased each other from sea to sea, and with Atlantic ports held the boats spent
+ * every other month in harbour.
  */
 export function quieterBeat(g: Game, f: Fleet): number {
   if (!patrolOn(g) || f.tied || f.duty !== 'raid' || f.ships.ss <= 0) return -1;
@@ -2322,23 +2322,26 @@ export function quieterBeat(g: Game, f: Fleet): number {
 const portOf = (f: Fleet, r: Region): Pick<Fleet, 'nat' | 'base' | 'home'> => ({ nat: f.nat, base: r.id, home: r.seas[0] });
 
 /**
- * The time up on station a raider's move of beat to a sea itself loses in the month, as a share of the month (release
- * 2, the sea patrol; the design director's ruling of 24 November 2026 17:49Z, 1 (a)), read from the way its staff makes
- * the move (navalAI): the beat is changed, the boats sail to it from where they are, and the staff then bases them at
- * the held port it would raid the new beat from (nearerPort), which costs the month in harbour (rebase). So: where the
- * move takes the fleet to another base and staying would not ('rebases' without 'would'), the month's whole time up on
- * its beat (onWatch there), given up in harbour; where staying would move its base too, nothing, for the month in
- * harbour comes either way; else, for a fleet at sea, its boats on station crossing from the sea they are in to the
- * new beat: station.ss.passage days for each sea crossed by the sea graph, through the straits open to it
- * (passageSeas), at their time up on station there, over the month's days. A fleet in harbour sails to the new beat as
- * to the old, and loses nothing. Nothing while the boats' days are unread: no tuned figure stands in for them.
+ * The time up on station a raider's move of beat to a sea itself loses in the month, against keeping its beat, as a
+ * share of the month (release 2, the sea patrol; the design director's ruling of 24 November 2026 17:49Z, 1 (a)), read
+ * from the way its staff makes the move (navalAI): the beat is changed, the boats sail to it from where they are, and
+ * the staff then bases them at the held port it would raid the beat from (nearerPort), which costs the month in harbour
+ * (rebase): the month's whole time up on its beat (onWatch there, from the port it has), given up. So: where the move
+ * takes the fleet to another base and staying would not ('rebases' without 'would'), that month in harbour; where
+ * staying would move its base too, nothing, for the month in harbour comes either way. Where the move keeps its base:
+ * for a fleet at sea, its boats on station crossing from the sea they are in to the new beat, station.ss.passage days
+ * for each sea crossed by the sea graph, through the straits open to it (passageSeas), at their time up on station
+ * there, over the month's days (a fleet in harbour sails to the new beat as to the old, and loses nothing on the way);
+ * and where staying would move its base ('would'), less the month in harbour that staying costs and the move does not,
+ * so that what the move loses can be less than nothing. Nothing while the boats' days are unread: no tuned figure
+ * stands in for them.
  */
 function moveLoss(g: Game, f: Fleet, z: number, rebases: boolean, would: boolean): number {
   const D = stationDays('ss');
   if (!D) return 0;
   if (rebases) return would ? 0 : onWatch(g, f, f.station);
-  if (!atSea(f)) return 0;
-  return (onWatch(g, f, f.zone) * D.passage * passageSeas(g, { nat: f.nat, base: -1, home: f.zone }, z)) / MONTH_DAYS;
+  const passage = atSea(f) ? (onWatch(g, f, f.zone) * D.passage * passageSeas(g, { nat: f.nat, base: -1, home: f.zone }, z)) / MONTH_DAYS : 0;
+  return would ? passage - onWatch(g, f, f.station) : passage;
 }
 
 /** A route's convoy count for a month: the boats on station on its seas, the convoys that sail (both ways), those the boats sight and attack, the incidents with the escort, and the boats that meet it for each convoy attacked (the pack), all on average. */

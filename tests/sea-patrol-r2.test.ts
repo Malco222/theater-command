@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGame, declareWar } from '../src/campaign/game';
 import { allied } from '../src/campaign/game';
-import { CAUSE, FLEETS, NAVY, airKit, aswKit, convoyCount, huntersIn, laneLoss, navalAI, navalUpkeep, nearerPort, onStation, onWatch, quieterBeat, seaCover, seaLatitude, seaRoutes, seaSquares, subScene, zoneOf } from '../src/campaign/navy';
+import { CAUSE, FLEETS, NAVY, airKit, aswKit, atSea, convoyCount, huntersIn, laneLoss, navalAI, navalUpkeep, nearerPort, onStation, onWatch, passageSeas, quieterBeat, seaCover, seaLatitude, seaRoutes, seaSquares, subScene, zoneOf } from '../src/campaign/navy';
 import { AIR, AIRWAR, airAI, airPool, airRange, airfieldsHold, assessAir, fieldClass, isOffensive, kmToSea, setMission, whyNotMission } from '../src/campaign/air';
 import { groupJobs, groupRow } from '../src/campaign/airwar';
 import { byHand } from '../src/campaign/depth';
@@ -390,8 +390,9 @@ describe('what the watch does to the boats (Q4, Q5)', () => {
   });
 
   it('on their own dice and inside the hunt\'s cap: with destroyers hunting there too, the ships sink as many with the patrol as without it, and the two together never more than the cap', () => {
-    const month = (seed: number, patrol: boolean): { hunt: number; air: number; lost: number } => {
-      lay(STRONG);
+    // (A patrol far stronger than the cap allows: ten times the strong figures' attacks.)
+    const month = (seed: number, patrol: boolean): { hunt: number; air: number; lost: number; expected: number } => {
+      lay({ ...STRONG, attacks: { kit: 60, none: 60 } });
       const g = open(seed), wapp = zoneOf(g, 'wapp');
       grantTech(g, 'UK', 'asvradar');
       // (Boats on patrol, not raiding a route of Britain's, so that the ships' hunt takes its whole share of them.)
@@ -401,27 +402,31 @@ describe('what the watch does to the boats (Q4, Q5)', () => {
         setMission(g, group(g, 'No. 1 Group'), 'seapatrol', wapp);
         setMission(g, group(g, 'No. 2 Group'), 'seapatrol', wapp);
       }
+      // (What the patrol alone would sink of the boats there, on average, as patrolSubs counts it before the cap.)
+      const w = watchAgainst(g, wapp, 'GER');
+      const expected = w ? b.ships.ss * onStation(g, b, wapp) * w.s * w.kills : 0;
       // (The submarine scene's record of the month's hunt, by sea: the ships' kills alone.)
       subScene.on = true;
       try { navalUpkeep(g, 'UK'); } finally { subScene.on = false; }
       const hunt = (g.subLook ?? []).find((l) => l.nat === 'UK' && l.turn === g.turn)?.hunts.find((h) => h.zone === wapp)?.sunk ?? 0;
-      return { hunt, air: g.patrolSunk?.UK?.seas[wapp] ?? 0, lost: 40 - b.ships.ss };
+      return { hunt, air: g.patrolSunk?.UK?.seas[wapp] ?? 0, lost: 40 - b.ships.ss, expected };
     };
-    // (The cap: 'most' of the boats a fleet had at the month's start, an expected count, rolled whole.)
-    const cap = Math.ceil(FLEETS.hunt.most * 40);
-    let full = 0;
+    // (The cap: 'most' of the boats a fleet had at the month's start, an expected count, rolled whole. Here a whole
+    // number, so the room the hunt leaves is whole too.)
+    const cap = FLEETS.hunt.most * 40;
+    expect(Number.isInteger(cap)).toBe(true);
     for (let seed = 1; seed <= 4; seed++) {
       const without = month(seed, false), withP = month(seed, true);
       expect(without.hunt).toBeGreaterThan(0);
       expect(without.air).toBe(0);
       expect(withP.hunt).toBe(without.hunt);
-      expect(withP.air).toBeGreaterThan(0);
+      // (The patrol alone would sink more than the whole cap, let alone the room the hunt leaves: the cap is what stops
+      // it, in every seed, at exactly that room.)
+      expect(withP.expected).toBeGreaterThan(cap);
+      expect(withP.air).toBe(cap - withP.hunt);
       expect(withP.lost).toBe(withP.hunt + withP.air);
-      expect(withP.lost).toBeLessThanOrEqual(cap);
-      if (withP.lost === cap) full++;
+      expect(withP.lost).toBe(cap);
     }
-    // (The patrol alone would sink more than the room the hunt leaves: the cap is what stops it.)
-    expect(full).toBeGreaterThan(0);
   });
 
   it('the month\'s words name each nation\'s boats sunk from the air by its own name', () => {
@@ -681,6 +686,30 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     expect(n1.target).toBe(wapp);
   });
 
+  it('a group left on support whose patrol is worth nothing is passed over, and the next best placed is sent', () => {
+    // (The support phase: no raid is weighed. No. 1 Group, of 600 bombers, is the best placed, but on patrol it would lose
+    // more to the operational share than its patrol would gain; No. 2 Group's 20 would gain more than they lose.)
+    lay({ ...FIG, lost: 0.02 });
+    const g = open(), wapp = zoneOf(g, 'wapp');
+    quiet(g);
+    g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
+    const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 20 }, 'raid');
+    f.duty = 'raid'; f.station = wapp; f.tied = false;
+    const n1 = group(g, 'No. 1 Group'), n2 = group(g, 'No. 2 Group');
+    n1.bmr = 600; n1.est.bmr = 600;
+    n2.bmr = 20; n2.est.bmr = 20;
+    const mine = g.airFleets.filter((x) => x.nat === 'UK');
+    for (const x of mine) if (x !== n1 && x !== n2 && x.kind !== 'ftr') x.mission = 'rest';
+    expect(patrolAircraft(g, n1, wapp)).toBeGreaterThan(patrolAircraft(g, n2, wapp));
+    const B = f.ships.ss * onWatch(g, f, wapp);
+    expect(patrolWorth(g, 'UK', n1, wapp, atlantic, B, B)).toBeLessThanOrEqual(0);
+    expect(patrolWorth(g, 'UK', n2, wapp, atlantic, B, B)).toBeGreaterThan(0);
+    expect(patrolStaff(g, 'UK', mine)).toBe(true);
+    expect(n2.mission).toBe('seapatrol');
+    expect(n2.target).toBe(wapp);
+    expect(n1.mission).toBe('support');
+  });
+
   it('a patrol goes wherever it is worth more than the raid it would replace, with no floor besides (the design director\'s ruling of 17:49Z, 3 (a))', () => {
     // (No. 2 Group in Ulster, with no enemy works in its reach and so no raid to give up; its patrol worth less than
     // what a raid must be worth to be flown, but more than nothing.)
@@ -816,6 +845,150 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     f.station = wapp;
     expect(onWatch(g, f, natl) - up).toBeGreaterThan((up * D.passage! * 1) / 30);
     expect(quieterBeat(g, f)).toBe(natl);
+  });
+
+  // Each part of what a move loses, and the beat it is weighed against. Strong figures and a0 8, no German fighter up,
+  // and the U-boat Fleet of 40 at sea on its beat in the Western Approaches, based at its own port, Wilhelmshaven, unless
+  // another is named; Germany holds the ports named since last month.
+  function raider(g: Game, held: string[], base?: string): Fleet {
+    quiet(g);
+    for (const r of g.regions) if (held.includes(r.name)) { r.ctrl = 'GER'; r.since = g.turn - 1; }
+    const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 40 }, 'raid');
+    if (base) { const b = g.byName[base]; f.base = b.id; f.port = b.name; f.home = b.seas[0]; }
+    f.duty = 'raid'; f.station = f.zone; f.tied = false;
+    return f;
+  }
+  /** Puts a group on patrol over a sea with so many bombers at full readiness, from another airfield where named. */
+  function patrolWith(g: Game, name: string, z: string, bmr: number, at?: string): void {
+    const x = group(g, name);
+    if (at) x.base = g.byName[at].id;
+    x.bmr = bmr; x.est.bmr = bmr; x.ready = 1;
+    expect(setMission(g, x, 'seapatrol', zoneOf(g, z))).toBe(true);
+  }
+  /** The port the boats' staff would raid a beat from (nearerPort, read with the beat set there): undefined for their own. */
+  const portFor = (g: Game, f: Fleet, z: number): string | undefined => { const keep = f.station; f.station = z; try { return nearerPort(g, f)?.name; } finally { f.station = keep; } };
+  /** The boats' time up on station in a sea, raiding from a port. */
+  const upFrom = (g: Game, port: string, z: number): number => { const r = g.byName[port]; return onWatch(g, { nat: 'GER', base: r.id, home: r.seas[0] }, z); };
+
+  it('a move that keeps the boats\' base is spared the month in harbour that keeping their beat would cost: they move, rather than lie a month in port', () => {
+    // (Germany has held Brittany since last month. Kept on the Western Approaches, the boats would be based there, a sea
+    // nearer, and lie the month in harbour. The Irish Sea, unwatched, is as far from Wilhelmshaven as the Western
+    // Approaches: the boats sail there from their own port, losing only the crossing.)
+    lay({ ...STRONG, a0: 8 });
+    const g = open(), wapp = zoneOf(g, 'wapp'), irish = zoneOf(g, 'irish');
+    const f = raider(g, ['Brittany']);
+    patrolWith(g, 'No. 1 Group', 'wapp', 140);
+    patrolWith(g, 'No. 2 Group', 'natl', 140);
+    expect(portFor(g, f, wapp)).toBe('Brittany');
+    expect(portFor(g, f, irish)).toBeUndefined();
+    // (Weighed against the beat as kept from Brittany, the Irish Sea's gain is less than the crossing; but keeping the
+    // beat costs the month in harbour, and the move does not.)
+    const D = CAUSE.station.ss!, gain = onWatch(g, f, irish) - upFrom(g, 'Brittany', wapp);
+    expect(gain).toBeGreaterThan(0);
+    expect(gain).toBeLessThan((onWatch(g, f, wapp) * D.passage! * 1) / 30);
+    expect(quieterBeat(g, f)).toBe(irish);
+    navalAI(g, 'GER');
+    expect(f.station).toBe(irish);
+    expect(f.port).toBe('Wilhelmshaven');
+    expect(f.stance).toBe('raid');
+    expect(atSea(f)).toBe(true);
+    // (And there they stay: no aircraft watch the Irish Sea, and no port is nearer it.)
+    expect(quieterBeat(g, f)).toBe(-1);
+    expect(nearerPort(g, f)).toBeNull();
+  });
+
+  it('a fleet in harbour sails to a new beat as to its own, so it moves for any gain; at sea on its beat, the same gain does not cover the crossing', () => {
+    lay({ ...STRONG, a0: 8 });
+    const set = (harbour: boolean): { g: Game; f: Fleet } => {
+      const g = open();
+      const f = raider(g, []);
+      if (harbour) { f.stance = 'port'; f.zone = f.home; }
+      patrolWith(g, 'No. 1 Group', 'wapp', 20);
+      patrolWith(g, 'No. 2 Group', 'natl', 60);
+      return { g, f };
+    };
+    const D = CAUSE.station.ss!;
+    const port = set(true), wapp = zoneOf(port.g, 'wapp'), natl = zoneOf(port.g, 'natl');
+    expect(atSea(port.f)).toBe(false);
+    expect(quieterBeat(port.g, port.f)).toBe(natl);
+    // (A gain less than the crossing from its port's sea would be to a fleet at sea there, and less than the crossing
+    // from its beat.)
+    const gain = onWatch(port.g, port.f, natl) - onWatch(port.g, port.f, wapp);
+    expect(gain).toBeGreaterThan(0);
+    expect(gain).toBeLessThan((onWatch(port.g, port.f, port.f.zone) * D.passage! * passageSeas(port.g, { nat: 'GER', base: -1, home: port.f.zone }, natl)) / 30);
+    expect(gain).toBeLessThan((onWatch(port.g, port.f, wapp) * D.passage! * 1) / 30);
+    const out = set(false);
+    expect(atSea(out.f)).toBe(true);
+    expect(quieterBeat(out.g, out.f)).toBe(-1);
+  });
+
+  it('a move of base goes ahead where its gain, read from the port the boats would be based at, covers the month in harbour; read from their own port it would not', () => {
+    // (June, long-range patrol aircraft, and heavy patrols over the Western Approaches and the Irish Sea: the boats at
+    // Bordeaux keep under half their time up on their beat. The North Atlantic is unwatched, and the boats' staff would
+    // base them at Bergen to raid it, a sea nearer than Bordeaux.)
+    lay({ ...STRONG, a0: 8 });
+    const g = open(), wapp = zoneOf(g, 'wapp'), natl = zoneOf(g, 'natl');
+    while (turnToDate(g.turn).month !== 5) g.turn++;
+    grantTech(g, 'UK', 'patrolaircraft');
+    const f = raider(g, ['Bordeaux', 'Bergen'], 'Bordeaux');
+    patrolWith(g, 'No. 1 Group', 'wapp', 400);
+    patrolWith(g, 'No. 2 Group', 'irish', 300);
+    expect(portFor(g, f, wapp)).toBeUndefined();
+    expect(portFor(g, f, natl)).toBe('Bergen');
+    // (The month in harbour: the month's whole time up on the beat, given up.)
+    const up = onWatch(g, f, wapp);
+    expect(upFrom(g, 'Bergen', natl) - up).toBeGreaterThan(up);
+    expect(onWatch(g, f, natl) - up).toBeLessThan(up);
+    expect(quieterBeat(g, f)).toBe(natl);
+    navalAI(g, 'GER');
+    expect(f.station).toBe(natl);
+    expect(f.port).toBe('Bergen');
+    expect(f.stance).toBe('port');
+  });
+
+  it('where keeping the beat would move the boats\' base too, a move of base is charged nothing for the month in harbour, which comes either way', () => {
+    // (A German landing in Scotland: Germany holds the Highlands as well as Brittany. Kept on the Western Approaches, the
+    // boats would be based in Brittany; moved to the North Atlantic, in the Highlands, on its coast.)
+    lay({ ...STRONG, a0: 8 });
+    const g = open(), wapp = zoneOf(g, 'wapp'), natl = zoneOf(g, 'natl');
+    const f = raider(g, ['Brittany', 'Highlands']);
+    patrolWith(g, 'No. 1 Group', 'wapp', 20);
+    expect(portFor(g, f, wapp)).toBe('Brittany');
+    expect(portFor(g, f, natl)).toBe('Highlands');
+    // (The gain is less than the month in harbour, but that month is lost whichever the staff does.)
+    const gain = upFrom(g, 'Highlands', natl) - upFrom(g, 'Brittany', wapp);
+    expect(gain).toBeGreaterThan(0);
+    expect(gain).toBeLessThan(onWatch(g, f, wapp));
+    expect(quieterBeat(g, f)).toBe(natl);
+    navalAI(g, 'GER');
+    expect(f.station).toBe(natl);
+    expect(f.port).toBe('Highlands');
+  });
+
+  it('the boats\' own beat is weighed as the staff would keep it, from the port it would base them at', () => {
+    // (Germany holds Brittany and the Highlands, as above; the North Atlantic and the Irish Sea are watched harder than the
+    // Western Approaches, the Irish Sea by the French air force's bombers from Wales. From the Highlands the North
+    // Atlantic keeps the boats up longer than the Western Approaches from Wilhelmshaven, but not longer than from
+    // Brittany, where the staff would base them to keep their beat: so they keep it.)
+    lay({ ...STRONG, a0: 8 });
+    const g = open(), wapp = zoneOf(g, 'wapp'), irish = zoneOf(g, 'irish'), natl = zoneOf(g, 'natl');
+    grantTech(g, 'UK', 'patrolaircraft');
+    grantTech(g, 'FRA', 'patrolaircraft');
+    const f = raider(g, ['Brittany', 'Highlands']);
+    patrolWith(g, 'No. 1 Group', 'wapp', 10);
+    patrolWith(g, 'No. 2 Group', 'natl', 120);
+    patrolWith(g, '1st Bomber Group', 'irish', 30, 'Wales');
+    expect(portFor(g, f, wapp)).toBe('Brittany');
+    expect(portFor(g, f, natl)).toBe('Highlands');
+    expect(portFor(g, f, irish)).toBe('Highlands');
+    const kept = upFrom(g, 'Brittany', wapp);
+    expect(upFrom(g, 'Highlands', natl)).toBeGreaterThan(onWatch(g, f, wapp));
+    expect(upFrom(g, 'Highlands', natl)).toBeLessThan(kept);
+    expect(upFrom(g, 'Highlands', irish)).toBeLessThan(kept);
+    expect(quieterBeat(g, f)).toBe(-1);
+    navalAI(g, 'GER');
+    expect(f.station).toBe(wapp);
+    expect(f.port).toBe('Brittany');
   });
 });
 

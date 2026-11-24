@@ -364,7 +364,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   return out;
 }
 
-/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on), 'sea:<sea id>' (a sea patrol against submarines, where laid) or 'rest'. */
+/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on), 'sea:<sea id>' (a sea patrol against submarines, once the patrol is live) or 'rest'. */
 export function setGroupJob(g: Game, id: number, key: string, nat: string | null = g.human): boolean {
   const f = mine(g, id, nat);
   const job = f ? groupJobs(g, id, nat).find((j) => j.key === key) : undefined;
