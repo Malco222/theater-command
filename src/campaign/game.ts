@@ -41,7 +41,7 @@ import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
 import pursuitData from '../../data/campaign/pursuit.json';
-import { armyTraining, attackCommand, blitzGate, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
+import { armyTraining, attackCommand, blitzGate, causeLines, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -1329,7 +1329,17 @@ export interface Assessment {
    * share of that side's strength, its air strikes and the groups that fly them. Unset where nobody is on call.
    */
   air?: CloseAir;
+  /**
+   * Units decide only: what the attacking staff reads the card through at its sight (units.ts seenOdds; DD 24 Nov
+   * 15:53Z, #2 form Part 1 section 5). 'nat' the staff's nation; 'q' the attack's per-man attack worth over the
+   * defence's per-man defence worth (corpsBase over men, the attack's with its command and doctrine); 'wk' the works'
+   * multiplier on the defence (dug in, and the works' share of the machine guns). Unset off, and for guns overrun.
+   */
+  read?: StaffRead;
 }
+
+/** What a staff that counts men leaves out of the card (Units decide): see Assessment.read. */
+export interface StaffRead { nat: string; q: number; wk: number }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
 export interface AttackOpts {
@@ -1512,6 +1522,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // An assault the month the army comes up to the town goes in off the march, with nothing made ready.
   const rushed = town && g.flags[`siege:${target.id}`] === g.turn ? SIEGE.assault.hasty[townSize(g, target)] : 1;
   const hasty = rushed < 1;
+  // (Units decide: what a staff that counts men leaves out of the card, read at its sight by seenOdds: the per-man worth
+  // of each side, worth over men, and the works' share of the defence. DD 24 Nov 15:53Z, #2 form Part 1 section 5.)
+  const eye = unitsDecide(g);
+  let worthA = 0, menA = 0, worthD = 0, menD = 0, worksIn = 0, worksOut = 0;
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
     if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
@@ -1585,6 +1599,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     rawA += p;
     cmdA += p * lead;
     A += p * lead;
+    // (Per-man attack worth: corpsBase over men, with the command and the doctrine the attack carries, the form's q.)
+    if (eye) { worthA += corpsBase(g, c) * led * techMul(g, c.nat, 'doctrine'); menA += men(c); }
   }
   // A relieving army (the grand campaign): the garrison of the town it has come to free sallies out to meet it.
   const sally = town || opts.sally ? { power: 0, corps: 0 } : sortiePower(g, target, attNat);
@@ -1607,17 +1623,23 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const behind = !town ? TERRAIN_DEF[target.terrain] : crew ? crewWalls : walls;
     if (town) { const b = corpsBase(g, d) * KIND[d.kind].def; townP += b; if (crew) crewP += b; }
     let p = corpsBase(g, d) * KIND[d.kind].def * behind;
+    // (Units decide: the works' multiplier on this corps, which a staff that counts men does not see: seenOdds.)
+    let inWorks = 1;
     if (wide && !town) {
       const suits = groundDefence(g, d.kind, target);
       if (suits !== 1) p *= suits;
       if (armsD) p *= d.kind === 'arm' ? armsD.armour : isFoot(d, true) ? armsD.infantry : 1;
     }
     // Trenches worn under a month's worth by attack after attack give less cover (the grand campaign).
-    if (d.dug) { const dug = wide ? 1 + (DUG_IN - 1) * Math.min(1, Math.max(0, (d.dugFor ?? 1) - wornBy)) : DUG_IN; const left = (1 - soften) * (1 - mortar); p *= left < 1 ? 1 + (dug - 1) * left : dug; dugIn++; }
+    if (d.dug) { const dug = wide ? 1 + (DUG_IN - 1) * Math.min(1, Math.max(0, (d.dugFor ?? 1) - wornBy)) : DUG_IN; const left = (1 - soften) * (1 - mortar); const m = left < 1 ? 1 + (dug - 1) * left : dug; p *= m; dugIn++; if (eye) inWorks *= m; }
     // Machine guns tell against men on foot, most from finished fieldworks (the grand campaign).
-    if (facing) p *= machineGuns(g, d, onFoot, facing.works(d));
+    if (facing) { const mg = machineGuns(g, d, onFoot, facing.works(d)); p *= mg; if (eye) inWorks *= mg / machineGuns(g, d, onFoot, 0); }
     // The machine-gun brigades stiffen the line they stand behind (release 2): its corps that fight, not themselves.
-    if (facing && mgUp && fights(d)) p *= 1 + mgUp * onFoot * (SUPPORT.machineGuns.open + (1 - SUPPORT.machineGuns.open) * facing.works(d));
+    if (facing && mgUp && fights(d)) {
+      const mg = 1 + mgUp * onFoot * (SUPPORT.machineGuns.open + (1 - SUPPORT.machineGuns.open) * facing.works(d));
+      p *= mg;
+      if (eye) inWorks *= mg / (1 + mgUp * onFoot * SUPPORT.machineGuns.open);
+    }
     // Men who have stood off an attack already this month meet the next one tired (the grand campaign).
     const blows = wide && !town ? Math.min(DEFENCE.tired.most, (d.blows ?? 0) + (opts.after?.blows ?? 0)) : 0;
     if (blows > 0) p *= 1 - DEFENCE.tired.per * blows;
@@ -1649,6 +1671,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     rawD += p;
     cmdD += p * lead;
     D += p * lead;
+    // (Per-man defence worth: corpsBase over men, the form's q; and the defence with and without its works.)
+    if (eye) { worthD += corpsBase(g, d); menD += men(d); worksIn += p * lead; worksOut += (p * lead) / inWorks; }
     // Works grow with the months spent on them: a line held since the spring is not one occupied last month.
     if (d.dug && (d.supplied || fortRow(g, d)) && !unboxed) readyD += p * lead * worksShare(worksNow(d));
     if (d.dug) { dugD += p * lead; worksD += p * lead * worksNow(d); }
@@ -1672,6 +1696,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const guardWalls = guarded > 0 ? fieldWalls(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
   const watch = town ? guardPower(g, target) * walls : guarded > 0 ? guardPower(g, target) * guardWalls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
+  // (Units decide: the works' multiplier on the whole defence, the town guard's walls being no fieldworks, and the
+  // attack's per-man worth over the defence's: what seenOdds leaves out at a staff's sight.)
+  const wk = eye && worksIn > 0 && D - worksIn + worksOut > 0 ? D / (D - worksIn + worksOut) : 1;
+  const q = eye && worthA > 0 && menA > 0 && worthD > 0 && menD > 0 ? worthA / menA / (worthD / menD) : 1;
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
   let airEdge = (aAir - dAir) / (aAir + dAir + 1);
   // Whoever has won the sky over this ground in the air war has it in the land battle too. In the grand campaign's air
@@ -1744,27 +1772,37 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   if (wide && defenders.length) {
     // Training and experience decide as many fights as numbers do: said in words, division for division.
-    const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {
-      let w = 0, worth = 0, army = 0, xp = 0;
+    // (Units decide: the attack's command as well, x(0.85 + 0.15c), which prices the attack alone, so that the line can
+    // say which army is the better led apart from the better trained: DD 24 Nov 15:53Z, #2 form 'On the card'.)
+    const grade = (cs: Corps[], att: boolean): { worth: number; army: number; led: number; xp: number } => {
+      let w = 0, worth = 0, army = 0, led = 0, xp = 0;
       // (Units decide: the army's training ladder in place of the nation's quality: DD 24 Nov 15:53Z (4).)
-      for (const c of cs) { const k = c.divs * c.str, t = armyTraining(g, c.nat); w += k; worth += k * t * (0.85 + 0.4 * c.xp); army += k * t; xp += k * c.xp; }
-      return w > 0 ? { worth: worth / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
+      for (const c of cs) {
+        const k = c.divs * c.str, t = armyTraining(g, c.nat);
+        w += k; army += k * t; xp += k * c.xp;
+        if (eye) { const l = att ? attackCommand(g, c.nat) : 1; worth += k * t * (0.85 + 0.4 * c.xp) * l; led += k * l; }
+        else worth += k * t * (0.85 + 0.4 * c.xp);
+      }
+      return w > 0 ? { worth: worth / w, army: army / w, led: eye ? led / w : 1, xp: xp / w } : { worth: 1, army: 1, led: 1, xp: 0 };
     };
-    const ours = grade(attackers), theirs = grade(defenders);
+    const ours = grade(attackers, true), theirs = grade(defenders, false);
     const ratio = theirs.worth / Math.max(0.01, ours.worth);
     const word = (xp: number): string => (xp < 0.2 ? 'green' : xp < 0.45 ? 'trained' : xp < 0.7 ? 'seasoned' : 'veteran');
     if (ratio >= 1.1 || ratio <= 1 / 1.1) {
       const better = ratio > 1 ? 'defending' : 'attacking', worse = ratio > 1 ? 'attacking' : 'defending';
       const k = ratio > 1 ? ratio : 1 / ratio;
-      const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army, xpK = k / armyK;
-      // (Units decide: the army's figure here is its training alone, its command being priced on the attack, so the
-      // line says trained: DD 24 Nov 15:53Z, #2 form 'On the card'.)
-      const why = [armyK >= 1.04 ? (unitsDecide(g) ? 'the better trained army' : 'the better trained and led army') : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
+      const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army;
+      const ledK = ratio > 1 ? theirs.led / ours.led : ours.led / theirs.led, xpK = eye ? k / (armyK * ledK) : k / armyK;
+      // (Units decide: 'the better trained and led army' splits into the better trained army, by training alone, and
+      // the better led, by the attack's command: DD 24 Nov 15:53Z, #2 form 'On the card'.)
+      const why = [armyK >= 1.04 ? (eye ? 'the better trained army' : 'the better trained and led army') : '', eye && ledK >= 1.04 ? 'the better led army' : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
       lines.push({
         label: 'Troops', value: `${word(ours.xp)[0].toUpperCase() + word(ours.xp).slice(1)} attackers against ${word(theirs.xp)} defenders`,
         effect: `Division for division the ${better} side is the stronger${why.length ? `, as ${listAnd(why)}` : ''}: each ${better} division counts for about ${k.toFixed(1)} ${worse} ones`,
       });
     }
+    // (Units decide: the causes each side's staff reads, never a flag or a date: DD 24 Nov 15:53Z, #2 form 'On the card'.)
+    if (eye) lines.push(...causeLines(g, attNat, defenders[0].nat));
   }
   if (wide) {
     const a = groundLine(g, attackers.filter((c) => !barred(g, c, target)), target, false), d = town ? '' : groundLine(g, defenders, target, true);
@@ -2033,7 +2071,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art' || isTeam(c)) && defenders.every((c) => c.kind === 'art' || c.kind === 'eng' || isTeam(c));
   if (overrun) lines.push(GUNS_OVERRUN);
   if (overrun) dice = today;
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(eye && !overrun ? { read: { nat: attNat, q, wk } } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {

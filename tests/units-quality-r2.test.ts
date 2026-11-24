@@ -9,7 +9,9 @@
 // and history's reforms of an army not applied, their texts told by causes. Then experience, schools, titles and kit
 // (Part 1 2d and section 1; Part 2 sections 2 and 4): experience by result, drafts that dilute every nation's corps at
 // its schools' level (land.school), the Guards title earned as a name only, the heavy corps by its research row, the
-// infantry's anti-tank guns by the defender's own rows, and winter kit in place of the hardy list.
+// infantry's anti-tank guns by the defender's own rows, and winter kit in place of the hardy list. Then the staff's
+// sight and way, and the card (DD 24 Nov 15:53Z, #2 form): a staff reads the card's odds at the sight its command
+// gives, a staff by orders asks odds of its own, and the player's card shows his own staff's reading with its cause.
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -48,6 +50,14 @@ import traitsSource from '../src/campaign/traits.ts?raw';
 import gameSource from '../src/campaign/game.ts?raw';
 import foldSource from '../src/campaign/fold.ts?raw';
 import economySource from '../src/campaign/economy.ts?raw';
+import aiSource from '../src/campaign/ai.ts?raw';
+import staffSource from '../src/campaign/staff.ts?raw';
+import { offensive } from '../src/campaign/ai';
+import { attackOutlook, type Outlook } from '../src/campaign/turn';
+import { chanceOn, men } from '../src/campaign/game';
+import { oddsBand } from '../src/campaign/intel';
+import { landTicket } from '../src/battle/land/ticket';
+import { commandWords, needAt, seenOdds, staffSight, stopAt, trainingWords, wayWords } from '../src/campaign/units';
 
 const ROWS = ['radios', 'nco', 'battledrill', 'officers'];
 
@@ -1350,5 +1360,329 @@ describe('the slice\'s new code names no nation', () => {
     const L = UNITS.land;
     expect(L.guards).toEqual({ xp: 0.5, taken: 3, elite: ['guards'] });
     expect(L.raisedBy).toEqual({ heavy: 'heavies' });
+  });
+});
+
+// ---- The staff's sight and way, and the card (DD 24 Nov 15:53Z, #2 form Part 1 section 5 and 'On the card'; rulings
+// (1) and (14) amended) --------------------------------------------------------------------------------------------------
+
+/**
+ * September 1939: a Soviet attack on Volhynia from Zhitomir and Vinnitsa, the Soviet Union at war with Poland, with
+ * nobody else beside Volhynia: `sov` Soviet rifle corps of one division, every other one from each side, against `pol`
+ * Polish infantry corps of two divisions, every corps in supply and with its moves. With the switch unless `on` is false.
+ */
+function volhynia(sov: number, pol: number, on = true): { g: Game; t: Region; att: Corps[]; def: Corps[] } {
+  const g = open(on, 3);
+  setWar(g, 'SOV', 'POL');
+  const t = g.byName['Volhynia'], from = [g.byName['Zhitomir'], g.byName['Vinnitsa']];
+  for (const j of t.nb) for (const u of [...g.regions[j].units]) if (u.nat === 'SOV') removeCorps(g, u);
+  for (const u of [...t.units]) removeCorps(g, u);
+  const def = Array.from({ length: pol }, (_, i) => addCorps(g, 'POL', `Line ${i + 1}`, 'inf', 2, t.id, {}));
+  const att = Array.from({ length: sov }, (_, i) => addCorps(g, 'SOV', `Rifle ${i + 1}`, 'inf', 1, from[i % 2].id, {}));
+  for (const c of [...def, ...att]) { c.supplied = true; c.ap = c.apMax; }
+  return { g, t, att, def };
+}
+/** Digs every defender in, its works finished. */
+const dig = (cs: Corps[]): void => { for (const d of cs) { d.dug = true; d.dugFor = 3; } };
+
+describe('the staff\'s sight (DD 24 Nov 15:53Z, #2 form Part 1 section 5)', () => {
+  it('is clamp((c - 0.6) / 0.4, 0, 1) from command, for every nation; off, 1', () => {
+    const g = open(true), off = open(false);
+    expect(staffSight(g, 'GER')).toBe(1);
+    // Every army seeded under c 0.6 at the start counts men (DD 16:06Z's seeds), and every unread army at 0.5.
+    for (const nat of ['SOV', 'FRA', 'POL', 'ITA', 'UK', 'USA', 'ROM']) expect(staffSight(g, nat), nat).toBe(0);
+    earn(g, 'SOV', 0.8);
+    expect(staffSight(g, 'SOV')).toBeCloseTo(0.5, 12);
+    give(g, 'SOV', 'radios');
+    expect(staffSight(g, 'SOV')).toBeCloseTo(0.875, 12);
+    earn(g, 'SOV', 0.85);
+    expect(staffSight(g, 'SOV')).toBe(1);
+    // The same rule for Germany: radios and 0.3 earned is c 0.45, and its staff counts men.
+    earn(g, 'GER', 0.3);
+    expect(staffSight(g, 'GER')).toBe(0);
+    for (const nat of ['GER', 'SOV', 'UK']) expect(staffSight(off, nat), nat).toBe(1);
+  });
+
+  it('at sight 0 counts men, kinds and ground, not worth or works', () => {
+    const { g, t, att, def } = volhynia(4, 2);
+    expect(staffSight(g, 'SOV')).toBe(0);
+    const a = assess(g, att, t), seen = seenOdds(g, a);
+    // q: the attack's per-man attack worth (corpsBase over men, with its command and doctrine) over the defence's.
+    const per = (cs: Corps[], attack: boolean): number =>
+      cs.reduce((s, c) => s + corpsBase(g, c) * (attack ? attackCommand(g, c.nat) * techMul(g, c.nat, 'doctrine') : 1), 0) / cs.reduce((s, c) => s + men(c), 0);
+    expect(a.read).toEqual({ nat: 'SOV', q: expect.any(Number), wk: 1 });
+    expect(a.read!.q).toBeCloseTo(per(att, true) / per(def, false), 12);
+    expect(a.read!.q).toBeLessThan(0.8);
+    expect(seen).toBeCloseTo(a.odds / a.read!.q, 12);
+    // Worth: the defenders seasoned, and the attack better trained, move the card and not what the staff sees.
+    for (const d of def) d.xp = 0.8;
+    const b = assess(g, att, t);
+    expect(b.odds).toBeLessThan(a.odds * 0.8);
+    expect(seenOdds(g, b)).toBeCloseTo(seen, 9);
+    give(g, 'SOV', 'nco', 'battledrill');
+    const c = assess(g, att, t);
+    expect(c.odds / b.odds).toBeCloseTo(1.05 / 0.7, 9);
+    expect(seenOdds(g, c)).toBeCloseTo(seen, 9);
+    // Works: the defenders dug in, finished works, and the card falls by a quarter; the staff sees none of it.
+    dig(def);
+    const w = assess(g, att, t);
+    expect(w.read!.wk).toBeCloseTo(1.25, 9);
+    expect(w.odds).toBeCloseTo(c.odds / 1.25, 9);
+    expect(seenOdds(g, w)).toBeCloseTo(seen, 9);
+    // Men: twice the divisions in the defence, and the staff sees half the odds.
+    for (const d of def) d.divs = 4;
+    expect(seenOdds(g, assess(g, att, t)) / seen).toBeCloseTo(0.5, 2);
+  });
+
+  it('at sight 1 reads the card\'s odds exactly; off, and for guns overrun, there is nothing to read', () => {
+    const { g, t, att, def } = volhynia(4, 2);
+    dig(def);
+    earn(g, 'SOV', 1);
+    const a = assess(g, att, t);
+    expect(staffSight(g, 'SOV')).toBe(1);
+    expect(a.read!.q).toBeLessThan(0.8);
+    expect(a.read!.wk).toBeCloseTo(1.25, 9);
+    expect(seenOdds(g, a)).toBe(a.odds);
+    // Germany's staff at the start, c 1.
+    const f = poznan(true, 0.3, 0.2);
+    const p = assess(f.g, f.att, f.target);
+    expect(seenOdds(f.g, p)).toBe(p.odds);
+    // Off: no reading at all, and the card's odds.
+    const o = volhynia(4, 2, false);
+    dig(o.def);
+    const x = assess(o.g, o.att, o.t);
+    expect('read' in x).toBe(false);
+    expect(seenOdds(o.g, x)).toBe(x.odds);
+  });
+
+  it('between, reads part of the way: the card x (q / wk)^(s - 1)', () => {
+    const { g, t, att, def } = volhynia(4, 2);
+    dig(def);
+    earn(g, 'SOV', 0.8);
+    const a = assess(g, att, t);
+    expect(seenOdds(g, a)).toBeCloseTo(a.odds * Math.pow(a.read!.q / a.read!.wk, -0.5), 12);
+    expect(seenOdds(g, a)).toBeGreaterThan(a.odds);
+  });
+});
+
+describe('the way by orders (#2 form Part 1 section 5; ruling (1))', () => {
+  it('asks 0.9 and stops at 1.3 for an ordinary attack and 2.6 in the main effort\'s sector, each rising to today\'s with sight', () => {
+    const g = open(true), off = open(false);
+    expect(armsOf(g, 'SOV')!.land.way.att.id).toBe('mass');
+    expect(stopAt(g, 'SOV', 2.6, false)).toBe(1.3);
+    expect(stopAt(g, 'SOV', 2.6, true)).toBe(2.6);
+    expect(needAt(g, 'SOV', 1.45)).toBe(0.9);
+    earn(g, 'SOV', 0.8);
+    expect(stopAt(g, 'SOV', 2.6, false)).toBeCloseTo(1.95, 12);
+    expect(stopAt(g, 'SOV', 2.6, true)).toBe(2.6);
+    expect(needAt(g, 'SOV', 1.45)).toBeCloseTo((0.9 + 1.45) / 2, 12);
+    earn(g, 'SOV', 1);
+    expect(stopAt(g, 'SOV', 2.6, false)).toBe(2.6);
+    expect(needAt(g, 'SOV', 1.45)).toBe(1.45);
+    // Methodical, bold and night keep today's at any sight. The way decides, not the nation: a German staff by orders
+    // at c 0.45 asks what the Soviet one does.
+    for (const nat of ['GER', 'UK', 'FRA', 'JAP']) {
+      expect(stopAt(g, nat, 2.6, false), nat).toBe(2.6);
+      expect(needAt(g, nat, 1.3), nat).toBe(1.3);
+    }
+    armsOf(g, 'GER')!.land.way.att.id = 'mass';
+    earn(g, 'GER', 0.3);
+    expect(stopAt(g, 'GER', 2.6, false)).toBe(1.3);
+    expect(needAt(g, 'GER', 1.3)).toBe(0.9);
+    // Off, today's.
+    expect(stopAt(off, 'SOV', 2.6, false)).toBe(2.6);
+    expect(needAt(off, 'SOV', 1.45)).toBe(1.45);
+  });
+
+  /** A Soviet month of attacks on Volhynia: the odds the staff saw for each force it weighed, and the corps it sent first. */
+  const sent = (f: ReturnType<typeof volhynia>, sector: Set<string> | null, minOdds = 1.2): { seen: number[]; card: number[]; k: number; rep?: BattleReport } => {
+    const pool = limitAttackers(f.g, f.att, f.t);
+    const weighed = pool.map((_, k) => assess(f.g, pool.slice(0, k + 1), f.t));
+    offensive(f.g, 'SOV', [], new Set(['POL']), minOdds, [], true, false, new Set(), new Set([f.t.name]), {}, sector);
+    const rep = f.g.reports.find((r) => r.turn === f.g.turn && r.attNat === 'SOV' && r.region === f.t.id);
+    return { seen: weighed.map((a) => seenOdds(f.g, a)), card: weighed.map((a) => a.odds), k: rep ? rep.attackers.length : 0, rep };
+  };
+
+  it('sends an ordinary attack in once it sees 1.3, and an attack in its main effort\'s sector once it sees 2.6', () => {
+    const o = sent(volhynia(8, 1), null);
+    expect(o.k).toBeGreaterThan(1);
+    expect(o.seen[o.k - 1]).toBeGreaterThanOrEqual(1.3);
+    expect(o.seen[o.k - 2]).toBeLessThan(1.3);
+    const m = sent(volhynia(8, 1), new Set(['Volhynia']));
+    expect(m.seen[m.k - 1]).toBeGreaterThanOrEqual(2.6);
+    expect(m.seen[m.k - 2]).toBeLessThan(2.6);
+    expect(m.k).toBeGreaterThan(o.k);
+    // At sight 1 the same staff stops where today's does: 2.6 on the card.
+    const f = volhynia(8, 1);
+    earn(f.g, 'SOV', 1);
+    const s1 = sent(f, null);
+    expect(s1.card[s1.k - 1]).toBeGreaterThanOrEqual(2.6);
+    expect(s1.card[s1.k - 2]).toBeLessThan(2.6);
+    expect(s1.k).toBeGreaterThan(o.k);
+  });
+
+  it('sends an ordinary attack in at seen 0.9 and under 1.3, where a methodical staff waits for its own odds', () => {
+    // Three Polish corps: everyone the roads carry sees about 1.2, under the stop.
+    const a = sent(volhynia(8, 3), null, 1.4);
+    expect(a.k).toBe(a.seen.length);
+    expect(a.seen[a.k - 1]).toBeGreaterThanOrEqual(0.9);
+    expect(a.seen[a.k - 1]).toBeLessThan(1.3);
+    const f = volhynia(8, 3);
+    armsOf(f.g, 'SOV')!.land.way.att.id = 'methodical';
+    expect(sent(f, null, 1.4).k).toBe(0);
+  });
+
+  it('reads the card through seenOdds wherever the staff weighs a field attack, and asks the way\'s odds', () => {
+    const strip = (t: string): string => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const ai = strip(aiSource), st = strip(staffSource);
+    // offensive (each force weighed, the force sent), twoWaves (both waves) and localAttacks (the same two).
+    expect(ai.match(/seenOdds\(g, /g)?.length).toBe(6);
+    expect(ai.match(/stopAt\(g, nat, 2\.6, /g)?.length).toBe(2);
+    expect(ai.match(/needAt\(g, nat, /g)?.length).toBe(2);
+    // No stop at 2.6 is read that the way does not set.
+    expect(ai).not.toMatch(/odds >= 2\.6/);
+    // The staff's choice of where to name a main effort.
+    expect(st).toContain('const odds = seenOdds(g, assess(g, force, t));');
+  });
+});
+
+describe('the attack card at the player\'s own sight (ruling (14) amended; #2 form \'On the card\')', () => {
+  /** The Volhynia attack as the Soviet player's card shows it, every Polish corps identified this month unless `fog`. */
+  const card = (f: ReturnType<typeof volhynia>, fog = false): Outlook => {
+    f.g.human = 'SOV';
+    f.g.phase = f.g.order.indexOf('SOV');
+    f.g.intel.known ??= {};
+    for (const d of f.def) if (fog) delete f.g.intel.known[d.id]; else f.g.intel.known[d.id] = f.g.turn;
+    return attackOutlook(f.g, f.att, f.t)!;
+  };
+
+  it('at sight 0 shows the odds as the player\'s own staff sees them, and names the cause', () => {
+    const f = volhynia(4, 2);
+    dig(f.def);
+    const look = card(f), a = assess(f.g, f.att, f.t);
+    expect(look.exact).toBe(true);
+    expect(look.odds).toBe(seenOdds(f.g, a));
+    expect(look.odds).toBeGreaterThan(a.odds * 1.5);
+    expect(look.chance).toBe(chanceOn(look.odds, a.dice));
+    expect(look.sight).toBe('Your staff counts men, kinds and ground. Its command, slow (no field radios; no offensive carried through), cannot weigh the troops\' worth or the enemy\'s works, and these odds leave both out.');
+    // Part of the way: c 0.8.
+    earn(f.g, 'SOV', 0.8);
+    const half = card(f);
+    expect(half.odds).toBe(seenOdds(f.g, assess(f.g, f.att, f.t)));
+    expect(half.sight).toBe('Your staff weighs the troops\' worth and the enemy\'s works only in part, its command being quick (no field radios; no offensive carried through): these odds are its own reckoning.');
+    // Where the defence is not known, the staff's band is drawn round the odds it sees.
+    earn(f.g, 'SOV', 0);
+    const band = card(f, true), b = assess(f.g, f.att, f.t);
+    expect(band.exact).toBe(false);
+    expect(band.odds).toBe(oddsBand(f.g, b.defenders, seenOdds(f.g, b), f.t.id, 'SOV').mid);
+    expect(band.sight).toBe(look.sight);
+  });
+
+  it('at sight 1 is today\'s card exactly, with no word of the staff\'s reckoning; off, the same', () => {
+    const f = volhynia(4, 2);
+    dig(f.def);
+    earn(f.g, 'SOV', 1);
+    const look = card(f), a = assess(f.g, f.att, f.t);
+    expect(look.odds).toBe(a.odds);
+    expect(look.chance).toBe(chanceOn(a.odds, a.dice));
+    expect('sight' in look).toBe(false);
+    const o = volhynia(4, 2, false);
+    dig(o.def);
+    const ol = card(o), oa = assess(o.g, o.att, o.t);
+    expect(ol.odds).toBe(oa.odds);
+    expect('sight' in ol).toBe(false);
+    expect(ol.lines.map((l) => l.label)).not.toContain('Command');
+  });
+
+  it('carries the staff\'s figure, never the card\'s own, to the field\'s ticket and to the page', () => {
+    const f = volhynia(4, 2);
+    dig(f.def);
+    const look = card(f);
+    const t = landTicket(f.g, f.att, f.t)!;
+    expect(t.reckoning.odds).toBe(assess(f.g, f.att, f.t).odds);
+    expect(t.reckoning.seen).toBe(look.odds);
+    // The page prints the staff's odds and its sentence, and hands the field its figure as a band.
+    expect(page).toContain('const odds = look?.sight ? look.odds : a.odds;');
+    expect(page).toContain("${look?.sight ? `<div class=\"note\" style=\"margin:10px 0 2px\"><b>Your staff's reckoning.</b> ${esc(look.sight)}</div>` : ''}");
+    expect(page).toContain('const band = look && (!look.exact || look.sight) ?');
+    // At sight 1 the ticket is today's: no staff's figure where the card knew the defence.
+    earn(f.g, 'SOV', 1);
+    card(f);
+    expect('seen' in landTicket(f.g, f.att, f.t)!.reckoning).toBe(false);
+  });
+
+  it('never shows a computer staff\'s misread: the report of its attack gives the card\'s odds', () => {
+    const f = volhynia(8, 1);
+    f.g.human = 'POL';
+    const pool = limitAttackers(f.g, f.att, f.t);
+    const weighed = pool.map((_, k) => assess(f.g, pool.slice(0, k + 1), f.t));
+    offensive(f.g, 'SOV', [], new Set(['POL']), 1.2, [], true, false, new Set(), new Set([f.t.name]), {}, null);
+    const rep = f.g.reports.find((r) => r.turn === f.g.turn && r.attNat === 'SOV')!;
+    const k = rep.attackers.length, a = weighed[k - 1];
+    expect(seenOdds(f.g, a)).toBeGreaterThan(a.odds * 1.2);
+    // The strengths are the card's, and the final odds the day's luck on the card's odds.
+    expect(rep.aPower / rep.dPower).toBeCloseTo(a.odds, 9);
+    expect(rep.odds).toBeGreaterThanOrEqual(a.odds * a.dice[0] - 1e-9);
+    expect(rep.odds).toBeLessThanOrEqual(a.odds * a.dice[1] + 1e-9);
+    expect(JSON.stringify(rep)).not.toMatch(/reckoning|counts men/);
+  });
+
+  it('names the causes each side\'s staff reads: training, command and staff doctrine, in units.json\'s words', () => {
+    const f = volhynia(4, 2);
+    const line = (label: string) => assess(f.g, f.att, f.t).lines.find((l) => l.label === label);
+    const pol = trainingWords(f.g, 'POL');
+    expect(pol).toMatch(/^(poor|fair|good|excellent) \(as it went to war\)$/);
+    expect(line('Training')).toEqual({ label: 'Training', value: `Poor (as it went to war) against ${pol}` });
+    expect(line('Command')).toEqual({ label: 'Command', value: 'Slow (no field radios; no offensive carried through)', effect: 'Attack down 15%; at most 8 corps in one battle. It grows with each offensive carried through and falls with each corps taken whole' });
+    expect(line('Staff doctrine')).toEqual({ label: 'Staff doctrine', value: 'By orders against methodical' });
+    // The rows held, the radios and the offensives carried through, as they come.
+    give(f.g, 'SOV', 'nco', 'battledrill', 'radios');
+    armsOf(f.g, 'SOV')!.land.carried = 3;
+    earn(f.g, 'SOV', 0.03);
+    expect(line('Training')!.value).toBe(`Good (NCO schools, battle drill) against ${pol}`);
+    expect(line('Command')!.value).toBe('Slow (field radios; 3 offensives carried through)');
+    expect(line('Command')!.effect).toMatch(/^Attack down 12%; at most 10 corps in one battle\./);
+    // Germany's start: its own schooling, and whole command.
+    const p = poznan(true, 0.3, 0.2);
+    give(p.g, 'GER', 'nco');
+    const lines = assess(p.g, p.att, p.target).lines;
+    expect(lines.find((l) => l.label === 'Training')!.value).toMatch(/^Excellent \(as it went to war, NCO schools\) against /);
+    expect(lines.find((l) => l.label === 'Command')).toEqual({ label: 'Command', value: 'Sure (no field radios; no offensive carried through)', effect: 'The attack goes in at full weight; at most 20 corps in one battle. It grows with each offensive carried through and falls with each corps taken whole' });
+    expect(lines.find((l) => l.label === 'Staff doctrine')!.value).toBe('Bold against methodical');
+    // The words are units.json's, for the UI director to change.
+    const was = UNITS.land.card.ways.mass;
+    UNITS.land.card.ways.mass = 'as the front orders';
+    try { expect(line('Staff doctrine')!.value).toBe('As the front orders against methodical'); } finally { UNITS.land.card.ways.mass = was; }
+  });
+
+  it('splits the better trained and led army into the better trained army and the better led army', () => {
+    const f = volhynia(4, 2);
+    const troops = () => assess(f.g, f.att, f.t).lines.find((l) => l.label === 'Troops')!.effect;
+    expect(armyTraining(f.g, 'POL')).toBeGreaterThan(0.7 * 1.04);
+    expect(troops()).toMatch(/^Division for division the defending side is the stronger, as the better trained army and the better led army: /);
+    // Trained alike, the Polish army is still the better led: the Soviet command takes 15% off the attack.
+    armsOf(f.g, 'SOV')!.land.train = armyTraining(f.g, 'POL');
+    expect(troops()).toMatch(/^Division for division the defending side is the stronger, as the better led army: each defending division counts for about 1\.2 attacking ones$/);
+    // Command at 1: led alike, and the line goes.
+    earn(f.g, 'SOV', 1);
+    expect(assess(f.g, f.att, f.t).lines.find((l) => l.label === 'Troops')).toBeUndefined();
+  });
+
+  it('counts the months an army carries an offensive through, by the earned test, for the player\'s nation and every computer\'s', () => {
+    const g = open(true);
+    const [a, b] = g.regions.filter((r) => r.ctrl !== 'SOV').slice(0, 2);
+    g.reports.push(report(g, 'SOV', a.id), report(g, 'SOV', b.id), report(g, 'UK', a.id));
+    commandMonth(g);
+    expect(armsOf(g, 'SOV')!.land.carried).toBe(1);
+    expect(armsOf(g, 'UK')!.land.carried).toBeUndefined();
+    expect(commandWords(g, 'SOV')).toBe('slow (no field radios; one offensive carried through)');
+    g.reports.push(report(g, 'SOV', a.id));
+    commandMonth(g);
+    expect(armsOf(g, 'SOV')!.land.carried).toBe(2);
+    expect(commandWords(g, 'SOV')).toBe('slow (no field radios; 2 offensives carried through)');
+    // Every way has its words: a night attack and a last stand (the Japanese army's, seeded when it comes in).
+    armsOf(g, 'UK')!.land.way = { att: { id: 'night', by: 'start' }, def: { id: 'last-stand', by: 'start' } };
+    expect(wayWords(g, 'UK', 'att')).toBe('by night');
+    expect(wayWords(g, 'UK', 'def')).toBe('to the last man');
   });
 });

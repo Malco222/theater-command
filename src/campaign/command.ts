@@ -82,7 +82,8 @@ function reformNews(g: Game): void {
 /**
  * The month's end under Units decide (turn.ts, before the month turns): each army's earned command moves by the month's
  * own battles, +0.01 for a month in which its attacks took at least two provinces and -0.01 for each corps taken
- * whole, the month's change kept between 0 and 1 (#2 form Part 1 2b). The same test for the player's nation and every
+ * whole, the month's change kept between 0 and 1 (#2 form Part 1 2b); such a month is counted in the store as one more
+ * offensive carried through, which the attack card's command line names. The same test for the player's nation and every
  * computer's: the staff's phase is not the test, since the player's nation has none. Then the reforms' news. Off,
  * nothing.
  */
@@ -90,8 +91,11 @@ export function commandMonth(g: Game): void {
   if (!qualityStore(g)) return;
   const E = UNITS.land.earned;
   for (const n of Object.values(g.nations)) {
-    const by = (provincesTaken(g, n.id) >= E.provinces ? E.month : 0) + E.corps * corpsTakenWhole(g, n.id);
+    const carried = provincesTaken(g, n.id) >= E.provinces;
+    const by = (carried ? E.month : 0) + E.corps * corpsTakenWhole(g, n.id);
     if (by && armsOf(g, n.id)) earnCommand(g, n.id, by);
+    // (The months carried through, for the attack card's command line alone: DD 24 Nov 15:53Z, #2 form 'On the card'.)
+    if (carried) { const land = armsOf(g, n.id)?.land; if (land) land.carried = (land.carried ?? 0) + 1; }
   }
   reformNews(g);
 }

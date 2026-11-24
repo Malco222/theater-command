@@ -34,6 +34,19 @@
     "sight": { "from": 0.6, "span": 0.4 },
     "_byOrders": "The way 'mass', by orders (Part 1 section 5; ruling 15:53Z (1)): ordinary attacks go in at seen odds 'need' and stop adding corps at 'stop'; attacks in the main effort's sector keep today's stop, 'main' (ai.ts). As sight rises, need blends to the temper's minOdds and stop to 'main'. The doctrine's own content, never refit to Lawrence's 1.42, which is a check. Methodical, bold and night keep today's thresholds. G.",
     "byOrders": { "need": 0.9, "stop": 1.3, "main": 2.6 },
+    "_card": "The words of the attack card's lines on the causes each side's staff reads (#2 form 'On the card'; Part 2 section 5; ruling 15:53Z (14) amended), for the UI director to change: never a flag or a date. training: the army's training level's word, the first whose 'below' it is under, else 'top'; 'seed' names an army whose level is its own start (no training row lifts it); the rows held are named as the research tree names them. command: the same for command c; 'radios' the radios row held and not held; 'carried' the months the army has carried an offensive through, for none, one and more ({n} the count). 'commandEffect': what the attacker's command does to this attack ({attack}, from 'attackDown' with {pct} or 'attackWhole') and the most corps it brings ({most}). ways: each land way's name on the card. sight: the sentence the player's card says where the player's own staff reads the odds at a sight under 1, 'none' at 0 and 'part' between, {command} the command line's words. The marks between the words are G: they wait on the UI director.",
+    "card": {
+      "training": { "below": [[0.8, "poor"], [1.0, "fair"], [1.2, "good"]], "top": "excellent", "seed": "as it went to war" },
+      "command": { "below": [[0.3, "slow"], [0.6, "steady"], [1, "quick"]], "top": "sure", "radios": ["field radios", "no field radios"], "carried": ["no offensive carried through", "one offensive carried through", "{n} offensives carried through"] },
+      "commandEffect": "{attack}; at most {most} corps in one battle. It grows with each offensive carried through and falls with each corps taken whole",
+      "attackDown": "Attack down {pct}%",
+      "attackWhole": "The attack goes in at full weight",
+      "ways": { "mass": "by orders", "methodical": "methodical", "bold": "bold", "night": "by night", "last-stand": "to the last man" },
+      "sight": {
+        "none": "Your staff counts men, kinds and ground. Its command, {command}, cannot weigh the troops' worth or the enemy's works, and these odds leave both out.",
+        "part": "Your staff weighs the troops' worth and the enemy's works only in part, its command being {command}: these odds are its own reckoning."
+      }
+    },
     "_xp": "Corps experience by result, each times (1 - xp) (Part 1 2d), in place of today's flat +0.05 attacking and +0.04 defending, win or lose: the attacker that wins, the attacker repulsed, the defender that holds, the defender beaten. Drafts dilute every nation's corps. G.",
     "xp": { "won": 0.05, "repulsed": 0.02, "held": 0.04, "beaten": 0.02 },
     "_label": "Captured: of the defender's men lost, share x (attacker's per-man attack worth / defender's per-man defence worth) are booked as prisoners, at most 'cap' (Part 1 section 7). A split of men already lost; it adds none and goes in its own report field. D: fit to the record's fail-or-advance pair at Kursk (F, p. 34), 0.147 and 0.149.",

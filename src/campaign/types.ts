@@ -1465,6 +1465,11 @@ export interface Land {
   school: number;
   /** The staff's way, attacking and defending. */
   way: { att: Way<LandWay>; def: Way<LandWay> };
+  /**
+   * The months in which the army carried an offensive through (command.ts commandMonth), counted for the attack card's
+   * command line only: what it earned is 'earned'. Absent until the first (DD 24 Nov 15:53Z, #2 form 'On the card').
+   */
+  carried?: number;
 }
 
 /** What a nation's air arm knows. Nothing reads these slots yet: they wait on the air thread's build. */

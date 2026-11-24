@@ -89,6 +89,7 @@ import { airWarMonth } from './aircampaigns';
 import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
 import { legionsMonth, recallLegion, sendLegion } from './legions';
 import { commandMonth } from './command';
+import { seenOdds, sightWords } from './units';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -501,6 +502,12 @@ export interface Outlook {
   lines: TicketLine[];
   /** WHAT YOU FACE, as his reports know it (the grand campaign; null in a history campaign): a sign and a sentence a line, four at most. */
   face: FaceLine[] | null;
+  /**
+   * Units decide only: where the player's own staff reads the card at a sight under 1, the odds above are its reading
+   * of them, and this sentence names the cause, its command (DD 24 Nov 15:53Z, ruling (14) amended). Absent at sight 1,
+   * where the card is today's, and off.
+   */
+  sight?: string;
 }
 /** One result's bill as the player's staff can state it before the fight. */
 export interface CostSeen { ours: number; theirs: number | null; share: number }
@@ -510,7 +517,11 @@ export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook 
   if (!a) return null;
   // The same force the battle will count: the bill is reckoned on it.
   const going = jointForce(g, limitAttackers(g, jointForce(g, corps, target), target), target);
-  return outlookOf(g, a, target, going);
+  // (Units decide: the odds as the player's own staff reads them, at the player's own sight, with the cause named; at
+  // sight 1 the card's odds, today's card exactly: DD 24 Nov 15:53Z, ruling (14) amended. Off, the card's odds.)
+  const card = seenOdds(g, a), why = card !== a.odds && a.read ? sightWords(g, a.read.nat) : null;
+  const look = outlookOf(g, a, target, going, card);
+  return why ? { ...look, sight: why } : look;
 }
 
 /**
@@ -522,28 +533,32 @@ export function openingForce(g: Game, picked: Corps[], target: Region): { corps:
   const all = candidates(g, target);
   if (all.length <= picked.length) return { corps: picked, widened: false };
   const mine = previewAttack(g, picked, target), full = previewAttack(g, all, target);
-  if (full && (!mine || full.odds > mine.odds * 1.02)) return { corps: all, widened: true };
+  // (Units decide: the player's staff weighs the two at the odds it sees: DD 24 Nov 15:53Z, ruling (14) amended.)
+  if (full && (!mine || seenOdds(g, full) > seenOdds(g, mine) * 1.02)) return { corps: all, widened: true };
   return { corps: picked, widened: false };
 }
 
-/** An assessment as the player's staff can report it: exact where every defender is identified, a band where not. */
-function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []): Outlook {
+/**
+ * An assessment as the player's staff can report it: exact where every defender is identified, a band where not.
+ * `card`: the odds the staff reads, the card's own unless its sight is under 1 (Units decide: attackOutlook).
+ */
+function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = [], card = a.odds): Outlook {
   // The run of the day's luck comes with the assessment: wider in the streets of a town, and on a line that is dug in and fed.
   const dice = a.dice;
   const chanceAt = (odds: number): number => chanceOn(odds, dice);
   const even = evenOdds(dice);
-  const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
+  const band = oddsBand(g, a.defenders, card, target.id, g.human);
   const k = sortKnown(g, a.defenders, g.human);
   // The bill: in men for both sides where the defence is known, and the defenders' as a share of their men where it is not.
   // (Where the staff's own estimate rules a result out but the band does not, that result is billed at the end of the band that allows it.)
   const billAt = (odds: number): { won: CostOf | null; lost: CostOf | null } => (going.length ? battleCost(g, a, going, target, {}, odds) : { won: null, lost: null });
-  const bill = billAt(band.exact ? a.odds : band.mid);
+  const bill = billAt(band.exact ? card : band.mid);
   if (!band.exact && !bill.won) bill.won = billAt(band.hi).won;
   if (!band.exact && !bill.lost) bill.lost = billAt(band.lo).lost;
   const seen = (c: CostOf | null): CostSeen | null => (c ? { ours: c.ours, theirs: band.exact ? c.theirs : null, share: c.share } : null);
   const cost = { won: seen(bill.won), lost: seen(bill.lost) };
   const face = whatYouFace(g, a, target, g.human);
-  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines, face };
+  if (band.exact) return { exact: true, odds: card, lo: card, hi: card, chance: chanceAt(card), chanceLo: chanceAt(card), chanceHi: chanceAt(card), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(card), narrow: '', cost, lines: a.lines, face };
   const n = a.defenders.length;
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.

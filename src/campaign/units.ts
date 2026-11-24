@@ -20,6 +20,7 @@ import leanData from '../../data/battle/lean.json';
 import airData from '../../data/campaign/air.json';
 import carrierData from '../../data/campaign/carriers.json';
 import navyData from '../../data/campaign/navy.json';
+import techData from '../../data/campaign/tech.json';
 
 /** True where this campaign was opened with Units decide: a grand campaign whose start set the flag. */
 export const unitsDecide = (g: Game): boolean => g.flags.open === 1 && g.flags.unitsDecide === 1;
@@ -86,6 +87,7 @@ export interface UnitsData {
     reforms: { land: string[]; news: ReformNews[] };
     sight: { from: number; span: number };
     byOrders: { need: number; stop: number; main: number };
+    card: CardWords;
     xp: { won: number; repulsed: number; held: number; beaten: number };
     label: { share: number; cap: number };
     guards: { xp: number; taken: number; elite: string[] };
@@ -390,3 +392,131 @@ export const titleEarned = (g: Game, id: string | undefined): boolean => !!id &&
  * none: the year, as today.
  */
 export const raisedBy = (g: Game, id: string): string | undefined => (unitsDecide(g) ? UNITS.land.raisedBy[id] : undefined);
+
+// ---- The staff's sight and way, and the card (DD 24 Nov 15:53Z, #2 form Part 1 section 5 and 'On the card'; rulings
+// (1) and (14) amended) -------------------------------------------------------------------------------------------------
+// A staff reads the card's odds through its sight, which comes from its command: at sight 1 it reads the card, as
+// today's staff does; at 0 it counts men, kinds and ground, and leaves out the troops' worth and the enemy's works,
+// since reading the enemy takes reconnaissance and signals, the same cause as command. The way 'mass', by orders, sets
+// the odds a staff asks: ordinary attacks go in at seen 0.9 and stop adding corps at seen 1.3, the main effort's at 2.6.
+// The player's card shows the odds as the player's own staff reads them, with the cause named; a computer staff's
+// misread is never shown. Off, every staff reads the card and asks today's odds, and the card is today's.
+
+/**
+ * A nation's staff's sight, 0 to 1, from its command c: clamp((c - 0.6) / 0.4, 0, 1) (units.json land.sight; #2 form
+ * Part 1 section 5), for every nation. Off, 1: every staff reads the card.
+ */
+export function staffSight(g: Game, nat: string): number {
+  if (!unitsDecide(g)) return 1;
+  const S = UNITS.land.sight, s = (commandOf(g, nat) - S.from) / S.span;
+  return s >= 1 - EPS ? 1 : s <= EPS ? 0 : s;
+}
+
+/**
+ * The odds a staff believes an attack has (#2 form Part 1 section 5): the card's odds x (q / wk)^(s - 1), s the
+ * attacking staff's sight, q the attack's per-man attack worth over the defence's per-man defence worth and wk the
+ * works' multiplier on the defence (game.ts assess, Assessment.read). At sight 1 they are the card's odds exactly; at
+ * 0 the staff counts men, kinds and ground, not worth or works. The one helper every reading of the card's odds by a
+ * computer staff goes through (ai.ts offensive, twoWaves and localAttacks; staff.ts sector), and the player's card
+ * (turn.ts attackOutlook). Off, or for guns overrun, the card's odds.
+ */
+export function seenOdds(g: Game, a: { odds: number; read?: { nat: string; q: number; wk: number } }): number {
+  const r = a.read;
+  if (!r || !unitsDecide(g)) return a.odds;
+  const s = staffSight(g, r.nat);
+  return s >= 1 ? a.odds : a.odds * Math.pow(r.q / r.wk, s - 1);
+}
+
+/** A staff of the way 'mass', by orders (units.json land.byOrders), as its attacking way: the rest keep today's odds. */
+const byOrders = (g: Game, nat: string): boolean => armsOf(g, nat)?.land.way.att.id === 'mass';
+
+/**
+ * Where a computer staff stops adding corps to an attack, in the odds it sees. Off, and for the ways methodical, bold
+ * and night, `today` (the staff's 2.6). By orders (#2 form Part 1 section 5; ruling (1)): 1.3 for an ordinary attack,
+ * blending to 2.6 as its sight rises; 2.6 in the main effort's sector (`main`), whatever its sight.
+ */
+export function stopAt(g: Game, nat: string, today: number, main: boolean): number {
+  if (!unitsDecide(g) || !byOrders(g, nat)) return today;
+  const B = UNITS.land.byOrders, s = staffSight(g, nat);
+  return main ? B.main : s >= 1 ? today : B.stop + (B.main - B.stop) * s;
+}
+
+/**
+ * The odds a computer staff asks before an attack goes in, in the odds it sees. Off, and for the ways methodical, bold
+ * and night, `today` (the temper's minOdds as the plan gives it, with what today's staff adds for a line dug in and
+ * fed). By orders (#2 form Part 1 section 5): 0.9, blending to `today` as its sight rises, so at sight 1 it is today's.
+ */
+export function needAt(g: Game, nat: string, today: number): number {
+  if (!unitsDecide(g) || !byOrders(g, nat)) return today;
+  const B = UNITS.land.byOrders, s = staffSight(g, nat);
+  return s >= 1 ? today : B.need + (today - B.need) * s;
+}
+
+// The attack card's lines on the causes (#2 form 'On the card'; Part 2 section 5): words from units.json land.card.
+
+/** The words of the card's cause lines (units.json land.card). */
+export interface CardWords {
+  training: { below: [number, string][]; top: string; seed: string };
+  command: { below: [number, string][]; top: string; radios: [string, string]; carried: [string, string, string] };
+  commandEffect: string; attackDown: string; attackWhole: string;
+  ways: Record<LandWay, string>;
+  sight: { none: string; part: string };
+}
+const CARD = UNITS.land.card;
+const TREE = (techData as unknown as { techs: { id: string; name: string }[] }).techs;
+/** A research row's name as running text: 'Battle drill' is 'battle drill', 'NCO schools' keeps its capitals. */
+const rowName = (id: string): string => {
+  const n = TREE.find((t) => t.id === id)?.name ?? id;
+  return n.length > 1 && n[1] === n[1].toLowerCase() ? n[0].toLowerCase() + n.slice(1) : n;
+};
+const wordAt = (x: number, w: { below: [number, string][]; top: string }): string => w.below.find(([m]) => x < m - EPS)?.[1] ?? w.top;
+const fill = (t: string, by: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(by[k] ?? ''));
+const upFirst = (t: string): string => t[0].toUpperCase() + t.slice(1);
+
+/**
+ * An army's training as the card says it: its word, then its cause: the army as it went to war where its own start
+ * sets the level, and the training rows it holds. Under Units decide only.
+ */
+export function trainingWords(g: Game, nat: string): string {
+  const L = UNITS.land, land = armsOf(g, nat)!.land, n = g.nations[nat];
+  const rows = L.trainRows.filter((id) => holdsRow(n, id));
+  const rung = rows.length ? L.ladder[Math.min(rows.length, L.ladder.length) - 1] : -Infinity;
+  const why = [...(land.train >= rung ? [CARD.training.seed] : []), ...rows.map(rowName)];
+  return `${wordAt(armyTraining(g, nat), CARD.training)} (${why.join(', ')})`;
+}
+
+/** An army's command as the card says it: its word, then Field radios held or not and the offensives carried through. Under Units decide only. */
+export function commandWords(g: Game, nat: string): string {
+  const C = CARD.command, land = armsOf(g, nat)!.land, k = land.carried ?? 0;
+  const radios = C.radios[holdsRow(g.nations[nat], UNITS.land.radiosRow) ? 0 : 1];
+  return `${wordAt(commandOf(g, nat), C)} (${radios}; ${fill(C.carried[Math.min(k, 2)], { n: k })})`;
+}
+
+/** A staff's way, attacking or defending, as the card names it. Under Units decide only. */
+export const wayWords = (g: Game, nat: string, side: 'att' | 'def'): string => CARD.ways[armsOf(g, nat)!.land.way[side].id];
+
+/**
+ * The attack card's lines on the causes each side's staff reads (#2 form 'On the card'; Part 2 section 5): training,
+ * each side's; command, the attacker's, which prices the attack alone, with what it does to this attack and what moves
+ * it; and each side's staff doctrine, the attacker's attacking way against the defender's defending one. Never a flag
+ * or a date, and never a computer staff's misread. Under Units decide only; off, none.
+ */
+export function causeLines(g: Game, att: string, def: string): { label: string; value: string; effect?: string }[] {
+  if (!armsOf(g, att) || !armsOf(g, def)) return [];
+  const pct = Math.round((1 - attackCommand(g, att)) * 100);
+  return [
+    { label: 'Training', value: `${upFirst(trainingWords(g, att))} against ${trainingWords(g, def)}` },
+    { label: 'Command', value: upFirst(commandWords(g, att)), effect: fill(CARD.commandEffect, { attack: pct > 0 ? fill(CARD.attackDown, { pct }) : CARD.attackWhole, most: mostCorps(g, att) }) },
+    { label: 'Staff doctrine', value: `${upFirst(wayWords(g, att, 'att'))} against ${wayWords(g, def, 'def')}` },
+  ];
+}
+
+/**
+ * What the player's card says where the player's own staff reads the odds at a sight under 1, naming the cause, its
+ * command (ruling (14) amended); null at sight 1, where the card is today's, and off.
+ */
+export function sightWords(g: Game, nat: string): string | null {
+  if (!armsOf(g, nat)) return null;
+  const s = staffSight(g, nat);
+  return s >= 1 ? null : fill(s > 0 ? CARD.sight.part : CARD.sight.none, { command: commandWords(g, nat) });
+}

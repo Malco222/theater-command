@@ -25,7 +25,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { slowHabits } from './units';
+import { needAt, seenOdds, slowHabits, stopAt, unitsDecide } from './units';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -566,7 +566,7 @@ function overseas(g: Game, nat: string): void {
         // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)
         if (!ph.massing) {
           softenLine(g, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
-          offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
+          offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor, effortSector(g, ph));
         }
         // With the month's fighting done the rest of the army closes up to wherever the enemy now stands.
         if (n.alive) { advance(g, nat, enemies, 0, null, edge); mass(g, nat, ph); defend(g, nat, false); }
@@ -703,6 +703,14 @@ function fight(g: Game, nat: string, ph: PlanPhase | null, posture: string): voi
   try { fightOn(g, nat, ph, posture); } finally { if (n.alive) sieges(g, nat, true); }
 }
 
+/**
+ * The places of a staff's main effort while the phase in force is one (staff.ts effortOrders: the target and the enemy
+ * provinces beside it that the same jump-off ground touches), where a staff by orders keeps today's stop of 2.6 (Units
+ * decide only; DD 24 Nov 15:53Z, #2 form Part 1 section 5). Null off, and in any other phase.
+ */
+const effortSector = (g: Game, ph: PlanPhase | null | undefined): Set<string> | null =>
+  unitsDecide(g) && ph?.effort !== undefined ? new Set(ph.targets ?? []) : null;
+
 function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): void {
   const n = g.nations[nat];
   hold(g, nat, ph);
@@ -730,7 +738,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)
   if (!ph?.massing) {
     softenLine(g, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
-    offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
+    offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor, effortSector(g, ph));
   }
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
@@ -1931,12 +1939,19 @@ export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region,
   const first = cut.length ? footBeside(g, cut, spare, target) : null;
   if (!first?.length) return null;
   const a1 = assess(g, first, target);
-  if (a1.odds < H.first) return null;
+  // (Units decide: each wave's odds as the staff sees them at its sight, the need being in those: DD 24 Nov 15:53Z, #2
+  // form Part 1 section 5.)
+  if (seenOdds(g, a1) < H.first) return null;
   const a2 = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear } });
-  return a2.odds >= need * H.second ? { corps: first, then: a2.odds } : null;
+  const then = seenOdds(g, a2);
+  return then >= need * H.second ? { corps: first, then } : null;
 }
 
-function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
+/**
+ * The month's attacks of an army on the attack. `sector` (Units decide only): the places of the staff's main effort,
+ * where a staff by orders keeps today's stop (DD 24 Nov 15:53Z, #2 form Part 1 section 5); null elsewhere.
+ */
+export function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}, sector: Set<string> | null = null): void {
   const failed = new Set<number>();
   // Places a first wave has gone in at this month, and how many: the main body follows, and nobody sends a third
   // (a staff pressing a won war sends one more where it has the corps).
@@ -2009,17 +2024,23 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           pool.sort((a, b) => gun(b) - gun(a) || (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g, b) - atkPower(g, a));
           const least = main ? Math.max(1, pool.filter((c) => fast(c)).length) : 1;
           let pick: Corps[] | null = null, odds = 0, ready = 0;
+          // (Units decide: the staff reads the card at its sight, and a staff by orders stops adding corps at 1.3,
+          // rising to 2.6 with its sight, and at 2.6 in its main effort's sector: DD 24 Nov 15:53Z, #2 form Part 1
+          // section 5. Off, the card's odds and 2.6.)
+          const stop = stopAt(g, nat, 2.6, !!sector?.has(target.name));
           for (let k = least; k <= pool.length; k++) {
             const a = assess(g, pool.slice(0, k), target);
-            odds = a.odds; ready = a.prepared;
-            if (odds >= 2.6) { pick = pool.slice(0, k); break; }
+            odds = seenOdds(g, a); ready = a.prepared;
+            if (odds >= stop) { pick = pool.slice(0, k); break; }
           }
           // Against a line that is dug in and fed the staff asks for longer odds (the grand campaign), and it does
           // not come straight back at a town whose siege has just been raised unless it has much the stronger force.
           let wave = false;
           if (!pick) {
             const sore = g.flags.open === 1 && g.turn - (g.flags[`relieved:${j}`] ?? -99) <= SIEGE.ai.relieved.months ? SIEGE.ai.relieved.odds : 0;
-            const need = (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore;
+            // (Units decide: a staff by orders asks 0.9, rising to these odds with its sight: DD 24 Nov 15:53Z, #2 form
+            // Part 1 section 5.)
+            const need = needAt(g, nat, (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore);
             if (odds >= need) pick = pool;
             else {
               // Not at these odds in one blow: in two, if there are the corps for it.
@@ -2032,7 +2053,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           if (!wave) {
             const sent = notTanksAlone(g, pick, pool, target);
             if (!sent) continue;
-            if (sent !== pick) { pick = sent; odds = assess(g, pick, target).odds; }
+            if (sent !== pick) { pick = sent; odds = seenOdds(g, assess(g, pick, target)); }
           }
           // (A place that needs two waves is a dearer prize than one that falls to one.)
           const score = value + Math.min(odds, 4) - (wave ? 0.5 : 0);
@@ -2095,14 +2116,18 @@ function localAttacks(g: Game, nat: string): void {
       const pool = limitAttackers(g, avail, target).sort((a, b) => atkPower(g, b) - atkPower(g, a));
       if (!pool.length) continue;
       let pick: Corps[] = pool, odds = 0;
+      // (Units decide: the card read at the staff's sight; by orders an ordinary attack, stopping at 1.3 and asking 0.9,
+      // each rising to today's with its sight: DD 24 Nov 15:53Z, #2 form Part 1 section 5. Off, the card's odds, 2.6 and
+      // the staff's own odds.)
+      const stop = stopAt(g, nat, 2.6, false);
       for (let k = 1; k <= pool.length; k++) {
-        odds = assess(g, pool.slice(0, k), target).odds;
-        if (odds >= 2.6) { pick = pool.slice(0, k); break; }
+        odds = seenOdds(g, assess(g, pool.slice(0, k), target));
+        if (odds >= stop) { pick = pool.slice(0, k); break; }
       }
-      if (odds < P.odds) continue;
+      if (odds < needAt(g, nat, P.odds)) continue;
       const sent = notTanksAlone(g, pick, pool, target);
       if (!sent) continue;
-      if (sent !== pick) { pick = sent; odds = assess(g, pick, target).odds; }
+      if (sent !== pick) { pick = sent; odds = seenOdds(g, assess(g, pick, target)); }
       const score = Math.min(odds, 4) + value;
       if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
     }

@@ -49,7 +49,7 @@ import { COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
-import { attackCommand, blitzGate, openQuality, unitsDecide } from './units';
+import { attackCommand, blitzGate, openQuality, seenOdds, unitsDecide } from './units';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -760,7 +760,8 @@ function sector(g: Game, nat: string, f: Front, least: number, beside?: Region):
     back.sort((a, b) => atkP(g, b) - atkP(g, a) || a.id - b.id);
     const force = limitAttackers(g, [...front, ...back.slice(0, room)], t);
     if (!force.length) continue;
-    const odds = assess(g, force, t).odds;
+    // (Units decide: the place is weighed at the odds the staff sees at its sight: DD 24 Nov 15:53Z, #2 form Part 1 section 5.)
+    const odds = seenOdds(g, assess(g, force, t));
     if (odds < least) continue;
     const score = Math.min(odds, 3) + t.vp * 2 + (t.cap ? 8 : 0) + (prize.includes(t.name) ? 2 : 0);
     if (!best || score > best.score || (score === best.score && t.id < best.target.id)) best = { target: t, odds, score };

@@ -7944,10 +7944,13 @@ function attackCard(): string {
     if (!look.face?.length) fog = `<div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${look.wide ? ` <b>${esc(look.narrow)}</b>` : ''}</div>`;
     lines = briefTicket(look.lines, look.face);
   } else if (a) {
-    const p = chanceOn(a.odds, a.dice);
-    const share = a.A / (a.A + a.D);
+    // (Units decide: where the player's own staff reads the card at a sight under 1, its odds, and the sentence that
+    // names the cause: DD 24 Nov 15:53Z, ruling (14) amended. Otherwise the card's own odds, as always.)
+    const odds = look?.sight ? look.odds : a.odds;
+    const p = chanceOn(odds, a.dice);
+    const share = look?.sight ? odds / (1 + odds) : a.A / (a.A + a.D);
     const say = verdictAt(p);
-    verdict = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · ${chanceSaid(p, p, `to take ${esc(target.name)}`)}</span></div>
+    verdict = `<div class="balance"><div class="bhead"><span class="verdict ${say.tone}">${say.word}</span><span class="sub">Odds ${odds.toFixed(2)} to 1 · ${chanceSaid(p, p, `to take ${esc(target.name)}`)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * evenOdds(a.dice) / (1 + evenOdds(a.dice))).toFixed(1)}%" title="An even chance: roughly ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       </div>
       ${look ? costBlock(look) : ''}`;
@@ -7973,7 +7976,7 @@ function attackCard(): string {
   const fieldOn = !!fieldT && !staff;
   const field = fieldShown() && (fieldT || !a) ? `<button class="btn" data-act="field" ${fieldOn ? '' : 'disabled'} title="${esc(fieldOn ? FIELD_HOVER : off || staff)}">Fight it yourself</button>` : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The attack · ${date(g.turn)}</div><h2>The attack on ${esc(target.name)}</h2></header>
-    <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
+    <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${look?.sight ? `<div class="note" style="margin:10px 0 2px"><b>Your staff's reckoning.</b> ${esc(look.sight)}</div>` : ''}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
     <footer${field ? ' class="atkfoot"' : ''}>${whyOff(off || staff)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button>${field}<button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
 }
 
@@ -10106,7 +10109,9 @@ function onClick(e: MouseEvent): void {
       // and the after card's staff gives the card's own best guess (b464(6)).
       // The after card speaks the chance as this card printed it, never a figure it did not show (b476(4)).
       const look = m.look ?? null;
-      const band = look && !look.exact ? { lo: look.lo, hi: look.hi, guess: look.guess, said: { end: chanceEndOf(look), lo: oddsPct(look.chanceLo), hi: oddsPct(look.chanceHi), guess: look.wide ? oddsPct(look.guess) : null } } : undefined;
+      // (Units decide: so does a card whose odds were the player's own staff's reading at a sight under 1, DD 24 Nov 15:53Z,
+      // ruling (14) amended: the field shows the staff's figure, never the card's own, until the fight ends.)
+      const band = look && (!look.exact || look.sight) ? { lo: look.lo, hi: look.hi, guess: look.guess, said: { end: chanceEndOf(look), lo: oddsPct(look.chanceLo), hi: oddsPct(look.chanceHi), guess: look.wide ? oddsPct(look.guess) : null } } : undefined;
       // The field's result, once booked, is kept at once in place of the staff's: a page closed on the after card comes
       // back to what that card said, with no word of the staff.
       const keep = (): void => {

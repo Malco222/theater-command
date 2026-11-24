@@ -15,6 +15,7 @@ import { stopOf } from '../../campaign/history';
 import { techRules } from '../../campaign/tech';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { corpsKnown, oddsBand } from '../../campaign/intel';
+import { seenOdds } from '../../campaign/units';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
 import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import { streetsOf, type LandPlace } from './field';
@@ -126,8 +127,11 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
   }
   const date = turnToDate(g.turn);
   // The odds as the attack card put them to the player (attackOutlook in turn.ts): a band where it did not know the
-  // defence, its bar at the middle. The safety net reads the card (offered.ts), never the truth behind it.
-  const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
+  // defence, its bar at the middle. The safety net reads the card (offered.ts), never the truth behind it. (Units
+  // decide: the card's odds are those the player's own staff reads at its sight, units.ts seenOdds: DD 24 Nov 15:53Z,
+  // ruling (14) amended. Off, and at sight 1, the card's own.)
+  const card = seenOdds(g, a);
+  const band = oddsBand(g, a.defenders, card, target.id, g.human);
   const cardAir = (a as { air?: CardAir }).air;
   const weighDef = (c: Corps): number => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)));
   return {
@@ -137,7 +141,7 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // game.ts): the field lays the river before those, and no others.
     att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
     def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
-    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact ? {} : { seen: band.mid }) },
+    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact && card === a.odds ? {} : { seen: band.mid }) },
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
     attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,
