@@ -58,7 +58,7 @@ import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, frien
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderShadowFleet, stopShadowFleet, whyNotShadowFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
@@ -110,7 +110,9 @@ import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
 import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwhy';
-import { REARGUARD, isRearguard, rearguardOn, setRearguard } from '../../../src/campaign/rearguard';
+import { REARGUARD, isRearguard, rearBridgesOn, rearguardOn, setRearBridges, setRearguard } from '../../../src/campaign/rearguard';
+import { setShadow, shadowLine, shadowOn } from '../../../src/campaign/shadow';
+import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -130,7 +132,7 @@ import { chanceOn } from '../../../src/campaign/game';
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
-import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
+import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
@@ -964,6 +966,12 @@ function drawView() {
     fleetWhy: fleetWhyOn(s),
     // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
     rearguard: rearguardOn(s),
+    // (Release 2, rearguard.ts) Whether a rearguard's engineers lay charges on the bridges behind it (the switch as set: it works only with rearguards on).
+    rearBridges: s.flags.open === 1 && s.flags.rearBridges === 1,
+    // (Release 2, shadow.ts) Whether a fleet of cruisers can be set to shadow an enemy fleet.
+    shadow: shadowOn(s),
+    // (Release 2, voyage.ts) Whether each fleet keeps a voyage log on its page.
+    voyageLog: voyageOn(s),
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
@@ -4278,7 +4286,9 @@ function force(kind: string, id: number) {
     const who = mine ? whoSails(s, id) : '';
     const task = mine ? taskLine(s, f) : '';
     const why = mine ? fleetWhy(s, f) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
+    // (Release 2, shadow.ts) What it shadows and where that is.
+    const shadow = mine ? shadowLine(s, f) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(shadow ? [shadow] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -5174,6 +5184,16 @@ function fleetPage(s: Game, id: number): Page | null {
       buttons: [{ label: 'ATTACK', act: `open:fleetattack:${id}:${t}`, ok: up, tip: 'Shows the odds first. Or drop the fleet on theirs on the map.' }],
     };
   });
+  // (Release 2, shadow.ts) The enemy fleets it can be set to shadow: it follows one and reports where it goes.
+  const shadows: PageRow[] = (o?.shadow ?? []).map((t) => {
+    const them = s.fleets.find((x) => x.id === t);
+    const seen = fleetsSeen(s).find((x) => x.id === t);
+    return {
+      nat: them?.nat ?? '', title: seen?.name ?? 'An enemy fleet',
+      lines: [them ? (them.stance === 'port' ? `In harbour at ${them.port}.` : `At sea, ${seaWhere(s.seas[them.zone]?.name ?? 'sea')}.`) : ''].filter(Boolean),
+      buttons: [{ label: 'SHADOW IT', act: `fleetshadow:${id}:${t}`, ok: up, tip: 'It follows that fleet wherever it goes in its reach, keeps it identified for you, and reports where it is each month. It seeks no battle, and is mostly fast enough to keep its distance if found.' }],
+    };
+  });
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
@@ -5184,6 +5204,9 @@ function fleetPage(s: Game, id: number): Page | null {
   const task = fl ? taskLine(s, fl) : '';
   const why = fl ? fleetWhy(s, fl) : '';
   const whyTask = taskForceOn(s) && fl && !fl.task ? whyNotTaskForce(s, id) : null;
+  // (Release 2, shadow.ts and voyage.ts) What it shadows, and its voyage log, newest first.
+  const shadowing = fl ? shadowLine(s, fl) : '';
+  const voyage = fl ? voyageLines(s, fl) : [];
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
     note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
@@ -5193,15 +5216,19 @@ function fleetPage(s: Game, id: number): Page | null {
       ...(taskForceOn(s) && fl ? [fl.task
         ? { label: 'RELEASE TASK FORCE', act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP }
         : { label: 'MAKE IT A TASK FORCE', act: `taskforce:${id}:on`, ok: up && !whyTask, tip: whyTask ?? TASK_TIP }] : []),
+      ...(shadowing ? [{ label: 'STOP SHADOWING', act: `fleetshadow:${id}:off`, ok: up, tip: 'It stays where it is, under your orders, and no longer follows the enemy fleet.' }] : []),
       ...(wingsOfFleet(s, id).length ? [{ label: 'CARRIER AIRCRAFT', act: `open:wings:${id}`, ok: true, tip: 'The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour.' }] : []),
     ],
     sections: [
       { heading: 'ITS SHIPS', text: '', rows: ships },
       { heading: 'ENEMY FLEETS TO ATTACK', text: '', rows: targets },
+      { heading: 'SHADOWING', text: shadowing, rows: [] },
+      { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
       { heading: 'FLEETS TO JOIN', text: '', rows: joins },
+      { heading: 'VOYAGE LOG', text: voyage.join('\n'), rows: [] },
     ].filter((x) => x.rows.length || x.text),
   };
 }
@@ -6419,9 +6446,38 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     } else {
       const why = whyNotRearguardOf(s, id);
       ok = !why && orderHoldRear(s, id);
-      note = ok ? `${name} holds as a rearguard until your next month: it marches no further, and an enemy who attacks it loses time.` : why ?? 'It cannot be ordered to hold now.';
+      note = ok ? `${name} holds as a rearguard until your next month: it marches no further, and an enemy who attacks it loses time.${rearBridgesOn(s) ? ' Its engineers lay charges on the bridges behind it: if it is driven out, they go up.' : ''}` : why ?? 'It cannot be ordered to hold now.';
     }
     return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'shadowrule' || part[0] === 'voyagelogrule' || part[0] === 'rearbridgesrule') {
+    // (Release 2: shadow.ts, voyage.ts, rearguard.ts) Shadowing, the voyage log and the rearguards' bridges, each switched in any month.
+    const on = part[1] === 'on';
+    if (part[0] === 'shadowrule') setShadow(s, on);
+    else if (part[0] === 'voyagelogrule') setVoyageLog(s, on);
+    else setRearBridges(s, on);
+    ok = true;
+    note = part[0] === 'shadowrule'
+      ? (shadowOn(s) ? 'Shadowing is on: a fleet of cruisers can be set on an enemy fleet from its page. It follows it, keeps it identified for you and reports where it goes each month.' : 'Shadowing is off: every shadow ends where it stands.')
+      : part[0] === 'voyagelogrule'
+        ? (voyageOn(s) ? 'The voyage log is on: each fleet writes where it was and what it fought at every month\'s end, on its page.' : 'The voyage log is off: nothing more is written, and the logs are kept for when it is back on.')
+        : (rearBridgesOn(s) ? 'Rearguards blow the bridges: a rearguard lays charges on the bridges behind it, and if its province is lost they go up almost every time.' : on ? 'Rearguards will blow the bridges once rearguards are on.' : 'Rearguards no longer lay charges: bridges behind them go up on the usual chance.');
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'fleetshadow') {
+    // (Release 2, shadow.ts) 'fleetshadow:<fleet>:<enemy fleet>' sets it to shadow that fleet; 'fleetshadow:<fleet>:off' ends it.
+    const id = Number(part[1]);
+    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    if (part[2] === 'off') {
+      ok = stopShadowFleet(s, id);
+      note = ok ? `${name} stops shadowing: it stays where it is, under your orders.` : 'It is not shadowing anything.';
+    } else {
+      const why = whyNotShadowFleet(s, id, Number(part[2]));
+      ok = !why && orderShadowFleet(s, id, Number(part[2]));
+      const f = s.fleets.find((x) => x.id === id);
+      note = ok && f ? `${name}: ${shadowLine(s, f)}` : why ?? 'It cannot shadow that fleet now.';
+    }
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
   }
   if (part[0] === 'fleetwhyrule') {
     // (Release 2, fleetwhy.ts) The admirals' reasons, switched by the player in any month.
@@ -7590,6 +7646,11 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
 // (Release 2, rearguard.ts) Rearguards: TC.rearguard(on) at any time; the options page uses act('rearguardrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).rearguard = (on: boolean) => { const s = game(); setRearguard(s, !!on); return { on: rearguardOn(s) }; };
+// (Release 2: shadow.ts, voyage.ts, rearguard.ts) TC.shadow(on), TC.voyageLog(on), TC.rearBridges(on) at any time; the
+// options page uses act('shadowrule:on' / 'voyagelogrule:on' / 'rearbridgesrule:on', or ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadow = (on: boolean) => { const s = game(); setShadow(s, !!on); return { on: shadowOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).voyageLog = (on: boolean) => { const s = game(); setVoyageLog(s, !!on); return { on: voyageOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).rearBridges = (on: boolean) => { const s = game(); setRearBridges(s, !!on); return { on: rearBridgesOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').

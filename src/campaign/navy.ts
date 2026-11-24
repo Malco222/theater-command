@@ -28,6 +28,8 @@ import { storyConvoy, storyEdge, storySea } from './stories';
 import { bookSeaAction, loseStars, mendStars } from './stars';
 import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
 import { fleetWhyOn } from './fleetwhy';
+import { SHADOW, allShadows } from './shadow';
+import { noteFight } from './voyage';
 import { techMul, techNotes } from './research';
 import { dcOf, hasTech, techTraits } from './tech';
 import { PLANS } from './plans';
@@ -3168,7 +3170,8 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const z = zone.id;
     const foes = g.fleets.filter((f) => f.zone === z && atSea(f) && atWar(g, f.nat, nat) && shipCount(f.ships) > 0);
     if (!foes.length) continue;
-    const mine = g.fleets.filter((f) => f.zone === z && f.stance === 'patrol' && surfaceShips(f) > 0 && (f.nat === nat || (allied(g, f.nat, nat) && foes.some((e) => atWar(g, f.nat, e.nat)))));
+    // (A shadow seeks no battle: release 2, shadow.ts. No fleet carries one with that switch off.)
+    const mine = g.fleets.filter((f) => f.zone === z && f.stance === 'patrol' && f.shadow === undefined && surfaceShips(f) > 0 && (f.nat === nat || (allied(g, f.nat, nat) && foes.some((e) => atWar(g, f.nat, e.nat)))));
     if (!mine.some((f) => f.nat === nat)) continue;
     const rng = seaRng(g, `battle:${z}:${nat}`);
     // A patrolling enemy stands and fights. Raiding surface ships have to be found first; submarines are the escorts' business.
@@ -3178,6 +3181,11 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const A = sum(mine) + airA, D = Math.max(1, sum(met) + airD);
     if (A < NAVY.battle.seek * D) continue;
     const names = (fs: Fleet[]): string => { const l = fs.map(fleetName); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
+    // (Release 2, shadow.ts) Shadows found alone are faster than what they follow: they keep their distance, most times.
+    if (allShadows(g, met) && rng.chance(SHADOW.slip)) {
+      headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'keeps its' : 'keep their'} distance from ${names(mine)} ${seaWhere(zone.name)}, too fast to be brought to battle.`, met[0].nat, undefined, { arm: 'sea' });
+      continue;
+    }
     if (A >= NAVY.battle.evadeAt * D && rng.chance(NAVY.battle.evade)) {
       for (const f of met) sail(g, f, f.home, 'port');
       headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'declines' : 'decline'} battle ${seaWhere(zone.name)} and ${met.length === 1 ? 'makes' : 'make'} for port.`, met[0].nat, undefined, { arm: 'sea', won: nat, lost: met[0].nat });
@@ -3262,6 +3270,10 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   // (Ruling 240: the ships damage control kept afloat, a line for each fleet that has any.)
   const afloat = [...mine.map((f, i) => keptAfloat(f, keptA[i])), ...met.map((f, i) => keptAfloat(f, keptD[i]))].filter(Boolean);
   headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} ${where}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.${afloat.length ? ` ${afloat.join(' ')}` : ''}`, win[0].nat, undefined, { arm: 'sea', won: win[0].nat, lost: lose[0].nat });
+  // (Release 2, voyage.ts) Each fleet's log has the action, from its own side: a record only, nothing with that switch off.
+  const sankA = total(def), sankD = total(att);
+  mine.forEach((f, i) => noteFight(g, f, `${won ? 'Won' : 'Lost'} a fleet action ${where} against ${names(met)}: sank ${shipList(sankA)}, lost ${shipList(att[i].sunk)}.`));
+  met.forEach((f, i) => noteFight(g, f, `${won ? 'Lost' : 'Won'} a fleet action ${where} against ${names(mine)}: sank ${shipList(sankD)}, lost ${shipList(def[i].sunk)}.`));
   return rep;
 }
 
@@ -3367,6 +3379,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   for (const f of fleetsOf(g, nat)) {
     // A fleet the player has ordered himself stays where he sent it (1.5.1).
     if (keptByHand(g, f)) continue;
+    // A computer's shadow keeps to its quarry (release 2, shadow.ts aiShadows: it brings the worn home itself).
+    if (f.shadow !== undefined) continue;
     const say = (why: string): void => { if (says) f.why = [g.turn, why]; };
     const where = (z: number): string => seaWhere(g.seas[z]?.name ?? 'sea');
     const what = (z: number): string => seaWhat(g.seas[z]?.name ?? 'sea');
