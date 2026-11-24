@@ -5841,6 +5841,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		GeneralViewMs += GenFrameMs;
 	}
 	WalkPan(Real);
+	LorryPan(Real);
 	ReadDark(Real);
 	LandFell::Phase("tick: the dispatches");
 	if (!bNight)
@@ -6132,6 +6133,118 @@ void ALandBattle::WalkPan(double Real)
 		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), bTankPan ? TEXT("LandTankPan") : TEXT("LandWalkPan")) : ShotFolder;
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-%s-%02d.png"), *Key, bTankPan ? TEXT("tankpan") : TEXT("walkpan"), WalkPanStills)), true, false);
 		++WalkPanStills;
+	}
+}
+
+void ALandBattle::LorryPan(double Real)
+{
+	LAND_SCOPE(LorryPan);
+	if (LorryPanAt < 0.0 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	if (S.Battle < LorryPanAt || !S.Armour || !S.Men)
+	{
+		return;
+	}
+	std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	bool bSnap = false;
+	if (LorryPanVehicle < 0)
+	{
+		// (the drawn lorry with the most men seated on her now, of the block asked for if one was, as RideLorries finds
+		// a man's lorry: by her block and her track's k; none, asked again 5 s on)
+		std::map<std::pair<int, int>, int> Aboard;
+		const int Men = S.Men->Count();
+		for (int Man = 0; Man < Men; ++Man)
+		{
+			int Block = -1, SeatOn = -1, Seat = -1;
+			double Down = -1.0;
+			if (!S.Men->IsRider(Man) && S.Men->AboardOf(Man, Block, SeatOn, Seat, Down) && Down < 0.0 && (LorryPanBlock < 0 || Block == LorryPanBlock))
+			{
+				++Aboard[{ Block, SeatOn }];
+			}
+		}
+		int Best = -1, BestMen = 0;
+		for (size_t V = 0; V < All.size(); ++V)
+		{
+			const LandKit::Vehicle& Her = All[V];
+			if (Her.Words().Role != "lorry" || Her.Look().SocketIndex("rider.1") < 0 || Her.Fade < 0.5 || HiddenVehicle(static_cast<int32>(V)))
+			{
+				continue;
+			}
+			const auto Found = Aboard.find({ Her.Words().Block, Her.Words().K });
+			if (Found != Aboard.end() && Found->second > BestMen)
+			{
+				Best = static_cast<int>(V);
+				BestMen = Found->second;
+			}
+		}
+		if (Best < 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan: no drawn lorry with men seated on her at %.0f s%s"), S.Battle,
+				LorryPanTries > 0 ? TEXT("; asked again 5 s on") : TEXT("; none taken"));
+			LorryPanAt = LorryPanTries-- > 0 ? S.Battle + 5.0 : -1.0;
+			return;
+		}
+		LorryPanVehicle = Best;
+		LorryPanHeading = All[static_cast<size_t>(Best)].Heading;
+		LorryPanStillAt = RealT + 0.5;
+		LorryPanStills = 0;
+		// (the side of her with the ground free for the eye, her right first)
+		LorryPanSide = 1;
+		if (S.EyeWorld.Free)
+		{
+			const LandKit::Vehicle& Her = All[static_cast<size_t>(Best)];
+			const double Sn = std::sin(Her.Heading), Cs = std::cos(Her.Heading);
+			const double Rx = Her.Root.At.X - Sn * 12.0 + Cs * 7.0, Ry = Her.Root.At.Y - Cs * 12.0 - Sn * 7.0;
+			const double Rz = (S.EyeWorld.Height ? S.EyeWorld.Height(Rx, Ry) : Her.Root.At.Z) + 3.5;
+			if (!S.EyeWorld.Free(LandPlay::Vec(Rx, Ry, Rz)))
+			{
+				LorryPanSide = -1;
+			}
+		}
+		bSnap = true;
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan from %.0f s for %.0f s: the lorry of block %d, k %d (vehicle %d), %d men seated on her, at %.0f, %.0f; the eye off her %s rear quarter"),
+			S.Battle, LorryPanFor, All[static_cast<size_t>(Best)].Words().Block, All[static_cast<size_t>(Best)].Words().K, Best, BestMen,
+			All[static_cast<size_t>(Best)].Root.At.X, All[static_cast<size_t>(Best)].Root.At.Y, LorryPanSide > 0 ? TEXT("right") : TEXT("left"));
+		// (its length from the moment she is found)
+		LorryPanAt = S.Battle;
+	}
+	if (S.Battle >= LorryPanAt + LorryPanFor || static_cast<size_t>(LorryPanVehicle) >= All.size())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan done at %.0f s: %d stills"), S.Battle, LorryPanStills);
+		LorryPanAt = -1.0;
+		LorryPanVehicle = -1;
+		// (the film's own shot again, laid round as on a cut)
+		S.Pose.bCut = true;
+		return;
+	}
+	const LandKit::Vehicle& Her = All[static_cast<size_t>(LorryPanVehicle)];
+	// Her heading eased over about a second (a lorry turning on a lane does not swing the eye round at once); the eye
+	// off her rear quarter, looking into her bed a metre behind her middle, at a man's chest over her floor.
+	const double Turn = FMath::UnwindRadians(Her.Heading - LorryPanHeading);
+	LorryPanHeading += bSnap ? Turn : Turn * (1.0 - FMath::Exp(-FMath::Max(0.0, Real) / 1.0));
+	const double Sn = std::sin(LorryPanHeading), Cs = std::cos(LorryPanHeading);
+	const double Aside = 7.0 * static_cast<double>(LorryPanSide);
+	const double Ex = Her.Root.At.X - Sn * 12.0 + Cs * Aside, Ey = Her.Root.At.Y - Cs * 12.0 - Sn * Aside;
+	const double Ground = S.EyeWorld.Height ? S.EyeWorld.Height(Ex, Ey) : Her.Root.At.Z;
+	S.Pose.Eye = LandPlay::Vec(Ex, Ey, FMath::Max(Ground, Her.Root.At.Z) + 3.5);
+	S.Pose.Look = LandPlay::Vec(Her.Root.At.X - Sn * 1.0, Her.Root.At.Y - Cs * 1.0, Her.Root.At.Z + 1.6);
+	S.Pose.Fov = 40.0;
+	S.Pose.Roll = 0.0;
+	// (sharp through: the low shot's stop, not the watch shot's shallow focus)
+	S.Pose.Shot = LandEye::Kind::Low;
+	S.Pose.Subject = -1;
+	S.Pose.Focus = 0.0;
+	S.Pose.bCut = bSnap;
+	if (RealT >= LorryPanStillAt)
+	{
+		LorryPanStillAt = RealT + 1.0;
+		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LandLorryPan")) : ShotFolder;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-lorrypan-%02d.png"), *Key, LorryPanStills)), true, false);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan's still %02d at %.1f s"), LorryPanStills, S.Battle);
+		++LorryPanStills;
 	}
 }
 

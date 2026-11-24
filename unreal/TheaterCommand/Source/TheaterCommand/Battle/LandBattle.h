@@ -622,6 +622,17 @@ private:
 	bool bWalkPanOn = false, bTankPan = false;
 	FVector WalkPanLook = FVector::ZeroVector;
 	void WalkPan(double Real);
+	/** The lorry pan ("-TheaterLandLorryPan=<battle s>[,<seconds>[,<block>]]", release 1.5: the Mac's stills of the men
+	 * in lorries, which the film's own cuts never come near): from that battle second the eye rides beside the drawn
+	 * lorry with the most men seated on her benches (of that block, if one is given), off her rear quarter some 12 m
+	 * back, 7 m aside and 3.5 m up, looking into her bed and over her tailboard, a still each real second for that long
+	 * (40 s unless said). A live battle's only: the rules seat the men (Men in lorries on). No lorry carrying men then:
+	 * asked again 5 s on, up to twelve times. Battle second it starts at (-1 none), how long, the block (-1 any), the
+	 * lorry ridden beside (-1 none yet), the side of her the eye is on (1 her right, -1 her left), the stills' next real
+	 * time and count, the tries left, and her heading as the eye follows it, eased. */
+	double LorryPanAt = -1.0, LorryPanFor = 40.0, LorryPanStillAt = -1.0, LorryPanHeading = 0.0;
+	int32 LorryPanBlock = -1, LorryPanVehicle = -1, LorryPanSide = 1, LorryPanStills = 0, LorryPanTries = 12;
+	void LorryPan(double Real);
 	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
 	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes

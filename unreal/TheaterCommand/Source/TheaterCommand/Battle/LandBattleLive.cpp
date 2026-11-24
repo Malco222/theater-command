@@ -175,6 +175,29 @@ bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString&
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle (script): his steps will be pressed in code, stills into %s"), *ScriptFolder);
 	}
+	// (the lorry pan, the Mac's stills of the men in lorries: "-TheaterLandLorryPan=<battle s>[,<seconds>[,<block>]]",
+	// read past its commas; LorryPan in LandBattle.cpp)
+	LorryPanAt = -1.0;
+	LorryPanVehicle = -1;
+	LorryPanStills = 0;
+	LorryPanTries = 12;
+	FString LorryPanAsked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandLorryPan="), LorryPanAsked, false))
+	{
+		TArray<FString> Parts;
+		LorryPanAsked.ParseIntoArray(Parts, TEXT(","), false);
+		LorryPanAt = Parts.Num() > 0 && !Parts[0].TrimStartAndEnd().IsEmpty() ? FMath::Max(0.0, FCString::Atod(*Parts[0])) : 80.0;
+		if (Parts.Num() > 1 && !Parts[1].TrimStartAndEnd().IsEmpty())
+		{
+			LorryPanFor = FMath::Clamp(FCString::Atod(*Parts[1]), 4.0, 180.0);
+		}
+		if (Parts.Num() > 2 && !Parts[2].TrimStartAndEnd().IsEmpty())
+		{
+			LorryPanBlock = FCString::Atoi(*Parts[2]);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): the lorry pan asked: from %.0f s for %.0f s, beside a lorry with men aboard%s"),
+			LorryPanAt, LorryPanFor, LorryPanBlock >= 0 ? *FString::Printf(TEXT(" of block %d"), LorryPanBlock) : TEXT(""));
+	}
 	// The crash locator (LandFell): on for the walk, or by -TheaterLandFell=<folder> for any live battle; a crash then
 	// leaves fell-over.txt (where it fell, its stack as library and offset) and fell-over-ring.txt (the frame's last
 	// parts, kept as it goes) in that folder.
