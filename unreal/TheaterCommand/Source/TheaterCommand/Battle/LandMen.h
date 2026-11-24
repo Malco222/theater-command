@@ -210,11 +210,13 @@ namespace LandMen
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
 		/** deaths_gore[stance][kind] = clip names: a gore twin's falls (soldier_<ARMY>_gore.json: the same bones, its skin
 		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
-		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
+		 * its own bone's move track; the kinds a file's deaths' (back, forward, side, thrown) and "under" (the burst
+		 * within a metre, under his feet or his knee: a lower leg off). Empty but in a twin (Crowd::AddGore). */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
 		/** gore_from[clip] = where a gore fall's burst was against him: "front", "behind", "left", "right" or "under"
-		 * (lying on it). The twin's file-level map, each gore fall's own blast_from where the map does not name it; only
-		 * clips the file has. Empty but in a twin: the crowd weighs a gored man's falls by it (Crowd::SetGore). */
+		 * (within a metre: under his feet or his knee, or a man lying on it). The twin's file-level map, each gore fall's
+		 * own blast_from where the map does not name it; only clips the file has. Empty but in a twin: the crowd weighs a
+		 * gored man's falls by it (Crowd::SetGore). */
 		std::map<std::string, std::string> GoreFrom;
 		/** A gore twin's cuts (its gore.cuts, in order: bit k of a joined point's mask), each by its bone, and its
 		 * caps' points per level ([first, count], the stump's and the limb's). Empty but in a twin. A cut is off where
@@ -367,7 +369,7 @@ namespace LandMen
 		float Jitter = 1.f;             // his own play rate on still loops and turns of pose
 		std::string FallClip;           // the fall he took ("settle": a prone man going limp)
 		std::string FallStance, FallKind, FallFrom; // stand|run|kneel|prone|cover; the kind; front|back|side
-		std::string GoreFrom;           // a gored man's burst (or its gun) against him: front|behind|left|right|under (empty: not gored)
+		std::string GoreFrom;           // the side a gored man's falls are read from: front|behind|left|right (the burst's, or his gun's where it burst on him and his stance has no fall from under he may take), under (empty: not gored)
 		double FallStarted = -1.0;      // when his fall began, as played
 		double Rested = -1.0;           // when he came to rest and froze
 	};
@@ -394,9 +396,10 @@ namespace LandMen
 	/**
 	 * Effects (R2): how the round that killed a gored man struck him, for his gore fall (Crowd::SetGore). Stance: his
 	 * fall's (stand, run, kneel, cover, prone). Side: where its burst was against his facing, in the gore falls' own
-	 * words (front, behind, left, right, under; a burst within 1 m of a man not lying, his gun's side). bAway: he is
-	 * thrown away from a point, the burst or (where it burst on him) the gun, at X, Y in his own axes as struck (x
-	 * forward, y right, metres). bBig: a field gun's, a howitzer's or a heavy gun's shell, which may throw him.
+	 * words (front, behind, left, right; under, a burst within 1 m of him, whatever his stance). bAway: he is thrown
+	 * away from a point at X, Y in his own axes as struck (x forward, y right, metres): the burst, or where it burst
+	 * under him the gun that fired it (Gun: that gun's side, front, behind, left or right; empty where it is not known,
+	 * and bAway false). bBig: a field gun's, a howitzer's or a heavy gun's shell, which may throw him.
 	 */
 	struct GoreStrike
 	{
@@ -404,6 +407,7 @@ namespace LandMen
 		bool bAway = false;
 		double X = 0.0, Y = 0.0;
 		bool bBig = false;
+		std::string Gun;
 	};
 	/**
 	 * Effects (R2): the gore falls a man of that twin so struck may be given (the crowd weighs these by kind and the
@@ -414,9 +418,18 @@ namespace LandMen
 	 * from the fall's first frame and its last), and where none from his side does, the same of all he may take but
 	 * those from the side opposite his (front and behind, left and right; under opposite none), which would throw him
 	 * toward it (the art director, 23 Nov: the limb flies away from the blast); failing any, the one whose limbs move
-	 * farthest so. Where his stance's gore falls hold none from his side he may take, all he may take.
+	 * farthest so. Where his stance's gore falls hold none from his side he may take, all he may take. A burst under
+	 * him (Side under; the deaths thread, 24 Nov: on his feet or a knee, a lower leg off): the falls from under he may
+	 * take (a throw from under, the prone one, only where bBig), none measured (a burst under him is no point to be
+	 * thrown away from), and where bBig the throw his gun's side would give him (the falls from Gun as above, of them
+	 * the throws: from that side alone, his limbs away from the gun); where his stance's gore falls hold none from under
+	 * he may take, the falls from Gun as above, or where it is not known all he may take.
 	 */
 	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Twin, const GoreStrike& Strike);
+	/** Effects (R2): the side a man of that twin so struck is given his gore falls by (GoreFalls): Side, but for a burst
+	 * under him whose stance's gore falls hold none from under he may take, Gun where it is known. Empty where his
+	 * stance's gore falls hold none he may take at all (no gore fall for him: Crowd::SetGore gores him not). */
+	std::string GoreSide(const Soldier& Twin, const GoreStrike& Strike);
 
 	class Crowd
 	{
@@ -441,17 +454,22 @@ namespace LandMen
 		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
 		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (within 2 m a field
 		 * gun's 0.55, a tank's or a mortar's 0.35, a grenade's 0.25) and fall away to none at its reach (8, 6, 6 and 2 m);
-		 * a man lying or in cover half that; none whose stance's gore falls hold none he may take (a man lying: only a
-		 * gun's shell bursting on him). His fall is one whose gore_from is where the burst was against him (front or
-		 * behind within 45 degrees of his nose or his back, left or right between; one within 1 m by the gun's side as
-		 * it fired, or under for a man lying or where the gun is not known), of those the ones whose limbs move half a
-		 * metre or more away from it (or the gun) along the line from it, so he and his limb are thrown away from it;
-		 * the big throw (die_blast_*) only from a field gun's, a howitzer's or a heavy gun's shell (the round's w "gun",
-		 * its block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side
-		 * he may take, all he may take, the limbs away again; where none of those from it moves its limbs half a metre
-		 * away, all he may take but those from the side opposite, which would throw him toward it (GoreFalls). The
-		 * same battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he
-		 * falls changes. Off unless set: every man falls as before.
+		 * a man lying or in cover half that; none whose stance's gore falls hold none he may take (GoreSide). His fall
+		 * is one whose gore_from is where the burst was against him (front or behind within 45 degrees of his nose or
+		 * his back, left or right between; under within 1 m, whatever his stance), of those the ones whose limbs move
+		 * half a metre or more away from it along the line from it, so he and his limb are thrown away from it; the big
+		 * throw (die_blast_*) only from a field gun's, a howitzer's or a heavy gun's shell (the round's w "gun", its
+		 * block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side he
+		 * may take, all he may take, the limbs away again; where none of those from it moves its limbs half a metre
+		 * away, all he may take but those from the side opposite, which would throw him toward it. A burst under him:
+		 * his stance's falls from under (a lower leg off; lying, the throw from under, a gun's alone), or from such a
+		 * shell the throw from the side of the gun that fired it (its track as it fired), his limbs away from the gun;
+		 * where his stance's gore falls hold none from under he may take, by the gun's side as for a burst there, or
+		 * where the gun is not known all he may take (GoreFalls). The kinds weighed as for any man, the kind from under
+		 * three times where the burst was under him, as the kind matching the burst is (so a field gun's shell bursting
+		 * on him throws him as often as it did when he was read by his gun's side). The same battle gores the same men
+		 * every time (his own dice). Who dies and when are the battle's; only how he falls changes. Off unless set:
+		 * every man falls as before.
 		 */
 		void SetGore(bool bOn);
 		/** Men who fell as their file's gore twin so far in this play. */
