@@ -153,3 +153,8 @@ export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
 export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
 /** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
 export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');
+
+// Carrier strikes on harbours by the player's own hand (release 2; Brian 24 November 2026 21:45Z, "Resume the Pacific
+// for release 2"; harbourstrike.ts): the grand campaigns opened while it is true carry its flag. Forced by TC_CARRIERSTRIKE.
+/** True where new grand campaigns open with the carrier strike on a harbour on a carrier fleet's page (stage.json 'carrierStrike'). */
+export const CARRIERSTRIKE_STAGE: boolean = staged('TC_CARRIERSTRIKE', 'carrierStrike');

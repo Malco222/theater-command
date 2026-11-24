@@ -1551,6 +1551,18 @@ export function airTargets(g: Game, f: AirFleet, m: AirMission): number[] {
   return all.filter((t) => whyNotMission(g, f, m, t) === null);
 }
 
+/**
+ * Whether a harbour lies within an air group's raid by distance alone, from where the group is now: the test
+ * whyNotMission makes of a harbour raid, without the war, the sky or the ships there (release 2, harbourstrike.ts:
+ * the page that tells a carrier fleet's commander which harbours his aircraft reach, at peace too).
+ */
+export function harbourInReach(g: Game, f: AirFleet, target: number): boolean {
+  if (!g.regions[target]) return false;
+  const R = reach(f, g, raidJob('harbour'));
+  const escort = f.kind === 'ftr' && f.ftr > 0;
+  return kmTo(g, f, target) <= (escort ? R.ftrRange : R.bmrRange);
+}
+
 export function setMission(g: Game, f: AirFleet, m: AirMission, target = -1): boolean {
   if (whyNotMission(g, f, m, target)) return false;
   f.mission = m;

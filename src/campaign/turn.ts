@@ -87,6 +87,7 @@ import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './ta
 import { aiShadows, orderShadow, shadowOn, shadowTargets, shadowsFollow, stopShadow, whyNotShadow } from './shadow';
 import { logVoyages } from './voyage';
 import { aiMines, mineSeas, minesMonth, minesStrike, orderMines, seaMinesOn, whyNotMines } from './mines';
+import { orderCarrierStrike, type CarrierStrikeResult } from './harbourstrike';
 import { galeNews } from './heavyseas';
 import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
@@ -1607,6 +1608,19 @@ export function orderMinesFleet(g: Game, id: number, zone: number): boolean {
   const ok = orderMines(g, id, zone);
   if (ok) { delete f.task; stopShadow(f); }
   return ok;
+}
+
+/**
+ * One of the player's carrier fleets sails to strike an enemy harbour from the air (release 2, harbourstrike.ts): to the
+ * nearest sea from which its aircraft reach it, its wings sent at the harbour to fly with the month's air war. A new
+ * order of his own: the fleet is his from then on, and it ends a shadow and a task force's standing job.
+ */
+export function orderCarrierStrikeFleet(g: Game, id: number, region: number): CarrierStrikeResult | null {
+  const f = myFleet(g, id);
+  if (!f || heldAfterAttack(g, f)) return null;
+  const done = orderCarrierStrike(g, id, region);
+  if (done) { hisOrder(f, true); delete f.task; stopShadow(f); }
+  return done;
 }
 
 /** Ends one of the player's fleets' shadow: it stays where it is, under his orders (release 2, shadow.ts). */

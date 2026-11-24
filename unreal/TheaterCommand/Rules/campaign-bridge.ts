@@ -113,6 +113,8 @@ import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwh
 import { REARGUARD, isRearguard, rearBridgesOn, rearguardOn, setRearBridges, setRearguard } from '../../../src/campaign/rearguard';
 import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '../../../src/campaign/shadow';
 import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
+import { anchorLine, carrierStrikeOn, setCarrierStrike, strikeHarbours } from '../../../src/campaign/harbourstrike';
+import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
@@ -980,6 +982,8 @@ function drawView() {
     // (Release 2, heavyseas.ts) Whether gales blow at sea, and the seas in a gale this month.
     heavySeas: heavySeasOn(s),
     gales: [...galeSeas(s)],
+    // (Release 2, harbourstrike.ts) Whether a carrier fleet's page offers a strike on an enemy harbour from the air.
+    carrierStrike: carrierStrikeOn(s),
     // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
     shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
@@ -5221,6 +5225,21 @@ function fleetPage(s: Game, id: number): Page | null {
     ].filter(Boolean);
     return { nat: card.nat, title: cap1(seaWhat(name)), lines, buttons: [{ label: 'LAY MINES', act: `fleetmines:${id}:${z}`, ok: up, tip: 'It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months.' }] };
   });
+  // (Release 2, harbourstrike.ts) The enemy harbours its carriers' aircraft reach, or would from another base, with what lies there.
+  const may = new Set(s.human && up ? declarable(s) : []);
+  const harbours: PageRow[] = (card.ships > 0 ? strikeHarbours(s, id, (nat) => may.has(nat)) : []).map((h) => {
+    const who = s.nations[h.holder];
+    const base = h.forward >= 0 ? s.regions[h.forward] : undefined;
+    const lines = [
+      `At anchor: ${h.fleets.join(', ')}${anchorLine(h) ? ` (${anchorLine(h)})` : ''}.`,
+      h.launch >= 0 ? `Its aircraft reach it from ${seaWhat(s.seas[h.launch]?.name ?? 'sea')}.` : base ? `Beyond its aircraft from ${s.fleets.find((x) => x.id === id)?.port ?? 'its base'}: from ${base.name} they reach it.` : '',
+      h.atWar ? '' : `${who ? upFirst(theName(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`,
+    ].filter(Boolean);
+    const buttons = h.launch >= 0
+      ? [{ label: 'STRIKE FROM THE AIR', act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? 'It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month\'s air war. Ships at anchor cannot manoeuvre.' }]
+      : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
+    return { nat: h.holder, title: `${h.name}${who ? ` (${who.adj ?? who.name})` : ''}`, lines, buttons };
+  });
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
@@ -5252,6 +5271,7 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'SHADOWING', text: shadowing, rows: [] },
       { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
       { heading: 'SEAS TO MINE', text: '', rows: minable },
+      { heading: 'ENEMY HARBOURS TO STRIKE', text: '', rows: harbours },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
@@ -6492,6 +6512,31 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : (shadowRelayOn(s) ? 'The shadow relay is on: a shadow\'s fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact.' : on ? 'The shadow relay will work once shadowing is on.' : 'The shadow relay is off: shadows stay on station as long as they keep contact.');
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'carrierstrikerule') {
+    // (Release 2, harbourstrike.ts) Carrier strikes on harbours from a fleet's page, switched in any month.
+    setCarrierStrike(s, part[1] === 'on');
+    ok = true;
+    note = carrierStrikeOn(s) ? 'Carrier strikes on harbours are on: a carrier fleet\'s page lists the enemy harbours its aircraft reach, and one order sails it there and sends its wings in.' : 'Carrier strikes on harbours are off.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'fleetstrike') {
+    // (Release 2, harbourstrike.ts) 'fleetstrike:<fleet>:<harbour>' sails it into reach and sends its wings at the harbour.
+    const id = Number(part[1]), r = Number(part[2]);
+    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    const done = orderCarrierStrikeFleet(s, id, r);
+    ok = !!done;
+    note = done
+      ? `The ${name} sails ${seaWhere(s.seas[done.zone]?.name ?? 'sea')}, and its aircraft will strike ${s.regions[r]?.name ?? 'the harbour'} with this month's air war.`
+      : (strikeHarbours(s, id, () => true).find((h) => h.region === r)?.why ?? 'It cannot strike that harbour now.');
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
+  if (part[0] === 'fleetstrikebase') {
+    // (Release 2, harbourstrike.ts) 'fleetstrikebase:<fleet>:<port>' moves its base forward, to where its aircraft reach the harbour.
+    const id = Number(part[1]), r = Number(part[2]);
+    ok = orderRebase(s, id, r);
+    note = ok ? `Its new home port is ${s.regions[r]?.name ?? 'there'}.` : 'It cannot move its base there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
   if (part[0] === 'fleetmines') {
     // (Release 2, mines.ts) 'fleetmines:<fleet>:<sea>' sails it there and lays a field.
     const id = Number(part[1]), z = Number(part[2]);
@@ -7707,6 +7752,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heavySeas = (on: boolean) => { const s = game(); setHeavySeas(s, !!on); return { on: heavySeasOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
+// (Release 2, harbourstrike.ts) TC.carrierStrike(on) at any time; the options page uses act('carrierstrikerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).carrierStrike = (on: boolean) => { const s = game(); setCarrierStrike(s, !!on); return { on: carrierStrikeOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').

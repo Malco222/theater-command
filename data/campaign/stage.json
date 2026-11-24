@@ -48,5 +48,7 @@
   "_heavySeas": "Heavy seas (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts, data/campaign/heavyseas.json). Gales blow under a closed sky at sea, mostly in winter: ships can sail into a sea in a gale but not on through it that month, convoys through one are late, and a shadow may lose its quarry in one. The same for every country. Switchable in any month from OPTIONS.",
   "heavySeas": false,
   "_shadowRelay": "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
-  "shadowRelay": false
+  "shadowRelay": false,
+  "_carrierStrike": "Carrier strikes on harbours by the player's own hand (release 2; Brian 24 November 2026 21:45Z, 'Resume the Pacific for release 2', and the 19 November Pacific playtest's first finding: a player who runs his navy himself had no order to gather a striking force and fly it, and nothing told him why a strike did not fly; src/campaign/harbourstrike.ts). A carrier fleet's page lists the enemy harbours with warships at anchor that its strike aircraft can reach from a sea in its reach, and one order sails it there and sends its wings in. A harbour beyond them names a base from which they reach it; a harbour of a country at peace says to declare war first. The player's order only: no staff reads it, so every computer war is the war without it.",
+  "carrierStrike": false
 }
