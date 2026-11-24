@@ -18,14 +18,15 @@
 // nothing here is read (the design director's mark of 15:14Z: never remove a working cause before its replacement is
 // laid): no order is offered, the staffs send no group, and the flat air term and the cover from coasts held stand.
 // Off (no Units decide) none of it exists. Nothing in it reads the flag or the date.
-import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, onWatch, quieterBeat, seaRoutes, seaSquares, zoneOf } from './navy';
+import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, onWatch, quieterBeat, seaLatitude, seaRoutes, seaSquares, zoneOf } from './navy';
 import { AIR, AIRWAR, CARRIERS, airRange, assessAir, cover, deckBred, forecastAir, kmToSea, setMission, whyNotMission } from './air';
 import { mapDist } from './wrap';
 import { allied, atWar } from './game';
 import { railsAt } from './rails';
 import { bombingFor } from './difficulty';
 import { unitsDecide } from './units';
-import { grounded, skyAtSea, skySupport, weatherOn } from './weather';
+import { dayShare, grounded, skyAtSea, skySupport, weatherOn } from './weather';
+import { turnToDate } from '../core/ticket';
 import type { AirFleet, Game } from './types';
 
 type ConvoyRoute = (typeof NAVY.convoys)[number];
@@ -90,13 +91,14 @@ export function patrolAircraft(g: Game, f: AirFleet, z: number, at = patrolReach
 }
 
 /**
- * The watch the aircraft on patrol keep over a sea, for one side: s, the share of its waters they watch; 'kit' and
- * 'none', the parts of it watched by aircraft with anti-submarine kit (depth charges and sea-search radar) and without;
+ * The watch the aircraft on patrol keep over a sea, for one side: s, the share of its waters they watch by day; 'kit'
+ * and 'none', the parts of a boat's time watched by aircraft with anti-submarine kit (depth charges and sea-search
+ * radar) and without, s x the day's share ('day') split between them;
  * A and R; 'attacks', the attacks on a boat a month in watched waters and 'kills' the boats sunk a boat-month there,
  * each the patrols' own by their aircraft; and each nation's aircraft, for whose aircraft sank what. Null where no
  * group of the side patrols it, or the patrol is not laid.
  */
-export interface Watch { s: number; kit: number; none: number; A: number; R: number; attacks: number; kills: number; by: Record<string, number> }
+export interface Watch { s: number; kit: number; none: number; day: number; A: number; R: number; attacks: number; kills: number; by: Record<string, number> }
 
 function watch(g: Game, z: number, side: (nat: string) => boolean): Watch | null {
   const F = patrolFigures();
@@ -120,7 +122,12 @@ function watch(g: Game, z: number, side: (nat: string) => boolean): Watch | null
   // miles; or, as ruled, by the share reached over the sea's air share, the only scale the old map had.)
   const AR = CAUSE.patrol.reach === 'map' ? (F.a0 * nm2) / 1e4 : (F.a0 * R) / g.seas[z].air;
   const s = R * (1 - Math.exp(-A / AR));
-  return { s, kit: (s * Ak) / A, none: (s * (A - Ak)) / A, A, R, attacks: attacks / A, kills: kills / A, by };
+  // (A patrol watches by day only: without a searchlight, which no tree has yet, radar and eye find nothing to attack by
+  // night (the design director's rulings of 24 November 2026 17:06Z and 17:10Z). So the boats are kept down, and the
+  // kit's cut acts, for the day's share of their time: the sun's day over the sea's mean latitude this month. The
+  // attacks are the record's per boat-month watched, which already held its nights.)
+  const day = dayShare(seaLatitude(g, z), turnToDate(g.turn).month);
+  return { s, kit: (s * day * Ak) / A, none: (s * day * (A - Ak)) / A, day, A, R, attacks: attacks / A, kills: kills / A, by };
 }
 
 /** The watch kept over a sea against the boats of this nation: every patrol of a nation at war with it. */

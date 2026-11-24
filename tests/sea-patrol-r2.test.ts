@@ -7,14 +7,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { allied } from '../src/campaign/game';
-import { CAUSE, NAVY, airKit, aswKit, convoyCount, huntersIn, navalUpkeep, onStation, onWatch, quieterBeat, seaCover, seaRoutes, seaSquares, zoneOf } from '../src/campaign/navy';
+import { CAUSE, NAVY, airKit, aswKit, convoyCount, huntersIn, navalUpkeep, onStation, onWatch, quieterBeat, seaCover, seaLatitude, seaRoutes, seaSquares, zoneOf } from '../src/campaign/navy';
 import { AIR, airRange, airfieldsHold, assessAir, fieldClass, setMission, whyNotMission } from '../src/campaign/air';
 import { groupJobs, groupRow } from '../src/campaign/airwar';
 import { patrolAircraft, patrolOn, patrolReach, patrolSeas, patrolStaff, watchAgainst, watchFor } from '../src/campaign/seapatrol';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { grantTech } from '../src/campaign/tech';
-import { skyAtSea } from '../src/campaign/weather';
+import { dayShare, skyAtSea } from '../src/campaign/weather';
+import { turnToDate } from '../src/core/ticket';
 import type { AirFleet, Fleet, Game, Ships } from '../src/campaign/types';
 
 const atlantic = NAVY.convoys.find((r) => r.id === 'atlantic')!;
@@ -44,9 +45,11 @@ const ukSide = (g: Game) => (n: string): boolean => allied(g, n, 'UK');
 
 afterEach(() => { Object.assign(CAUSE.patrol, structuredClone(UNREAD)); });
 
-describe('as shipped: every figure unread', () => {
-  it('lays none of the figures', () => {
-    expect(CAUSE.patrol).toEqual({ reach: 'map', a0: null, intensity: null, attacks: { kit: null, none: null }, kill: { kit: null, none: null }, lost: null });
+describe('as shipped: the interim figures laid, the air fighting\'s row unread, so the patrol is dormant', () => {
+  it('lays the design director\'s interim figures and leaves intensity unread', () => {
+    // (a0 8 read through the game; attacks from the record, 8 a month over about 5 boats on station x 0.60 inside reach,
+    // radar 1.1 times by day; kill 0.025 for every air force; 0.04 lost a month to weather and accident.)
+    expect(CAUSE.patrol).toEqual({ reach: 'map', a0: 8, intensity: null, attacks: { kit: 2.92, none: 2.65 }, kill: { kit: 0.025, none: 0.025 }, lost: 0.04 });
   });
 
   it('offers no patrol, reads none of it, and keeps the flat air term and the coasts\' cover (never remove a working cause before its replacement is laid)', () => {
@@ -199,10 +202,12 @@ describe('what the watch does to the boats (Q4, Q5)', () => {
     const before = convoyCount(g, atlantic)!.boats;
     setMission(g, group(g, 'No. 1 Group'), 'seapatrol', wapp);
     const w = watchAgainst(g, wapp, 'GER')!;
-    expect(w.none).toBeCloseTo(w.s, 12);
+    // (By day only: the boats are kept down for the day's share of their time.)
+    expect(w.day).toBeCloseTo(dayShare(seaLatitude(g, wapp), turnToDate(g.turn).month), 12);
+    expect(w.none).toBeCloseTo(w.s * w.day, 12);
     expect(w.kit).toBe(0);
-    expect(onWatch(g, boats, wapp)).toBeCloseTo(onStation(g, boats, wapp) * (1 - w.s), 12);
-    expect(convoyCount(g, atlantic)!.boats).toBeCloseTo(before * (1 - w.s), 9);
+    expect(onWatch(g, boats, wapp)).toBeCloseTo(onStation(g, boats, wapp) * (1 - w.s * w.day), 12);
+    expect(convoyCount(g, atlantic)!.boats).toBeCloseTo(before * (1 - w.s * w.day), 9);
     // (Aircraft without kit cut no raid: no cover where they fly.)
     expect(seaCover(g, 'UK', wapp).kind).toBe('none');
   });
@@ -214,9 +219,9 @@ describe('what the watch does to the boats (Q4, Q5)', () => {
     const boats = sea(g, 'U-boat Fleet', 'wapp', { ss: 40 }, 'raid');
     setMission(g, group(g, 'No. 1 Group'), 'seapatrol', wapp);
     const w = watchAgainst(g, wapp, 'GER')!;
-    expect(w.kit).toBeCloseTo(w.s, 12);
+    expect(w.kit).toBeCloseTo(w.s * w.day, 12);
     expect(onWatch(g, boats, wapp)).toBeCloseTo(onStation(g, boats, wapp), 12);
-    expect(seaCover(g, 'UK', wapp)).toEqual({ kind: 'patrol', share: w.s });
+    expect(seaCover(g, 'UK', wapp)).toEqual({ kind: 'patrol', share: w.s * w.day });
     expect(w.attacks).toBe(FIG.attacks.kit);
     expect(w.kills).toBeCloseTo(FIG.attacks.kit * FIG.kill.kit, 12);
   });
@@ -355,5 +360,35 @@ describe('the staff follows the boats\' best answer, not last month\'s boats', (
     expect(new Set(sent.map((x) => x.target)).size).toBe(sent.length);
     expect(sent.length).toBeGreaterThan(1);
     expect(best()).toBeLessThan(before);
+  });
+});
+
+describe('the day\'s length (one function for every system that needs daylight)', () => {
+  it('is astronomy: the sunrise equation over latitude and month', () => {
+    // (About 12 hours and a few minutes at the equator all year; 50 N about 16.3 hours in June and 8.1 in December;
+    // the midnight sun and the polar night at 70 N.)
+    for (let m = 0; m < 12; m++) expect(Math.abs(dayShare(0, m) * 24 - 12.1)).toBeLessThan(0.1);
+    expect(dayShare(50, 5) * 24).toBeCloseTo(16.3, 0);
+    expect(dayShare(50, 11) * 24).toBeCloseTo(8.1, 0);
+    expect(dayShare(70, 5)).toBe(1);
+    expect(dayShare(70, 11)).toBe(0);
+    expect(dayShare(-50, 11)).toBeCloseTo(dayShare(50, 5), 1);
+  });
+
+  it('reads each sea at its own mean latitude on the chart', () => {
+    const g = open();
+    expect(seaLatitude(g, zoneOf(g, 'wapp'))).toBeGreaterThan(47);
+    expect(seaLatitude(g, zoneOf(g, 'wapp'))).toBeLessThan(51);
+    expect(seaLatitude(g, zoneOf(g, 'natl'))).toBeGreaterThan(59);
+    expect(seaLatitude(g, zoneOf(g, 'natl'))).toBeLessThan(64);
+  });
+
+  it('keeps the boats down longer in summer than in winter, the same aircraft over the same sea', () => {
+    lay();
+    const g = open(), natl = zoneOf(g, 'natl');
+    sea(g, 'U-boat Fleet', 'natl', { ss: 40 }, 'raid');
+    setMission(g, group(g, 'No. 1 Group'), 'seapatrol', natl);
+    const at = (month: number): number => { const keep = g.turn; while (turnToDate(g.turn).month !== month) g.turn++; try { return watchAgainst(g, natl, 'GER')!.none; } finally { g.turn = keep; } };
+    expect(at(5)).toBeGreaterThan(at(11) * 2);
   });
 });

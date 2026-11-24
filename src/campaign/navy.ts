@@ -281,6 +281,23 @@ export function seaSquares(g: Game): { at: Map<number, { x: number; y: number }[
   return s;
 }
 
+/** The chart's top edge and scale (tools/build-geo-campaign.mjs; the world chart shares both): latitude = north - y / scale. */
+const CHART = { north: 71.4, scale: 40 };
+const latOf = new Map<string, Map<number, number>>();
+/** A sea's mean latitude on the chart, over its squares (degrees north; release 2, for the day's length over it). */
+export function seaLatitude(g: Game, z: number): number {
+  const key = g.flags.world === 1 ? 'world' : 'europe';
+  let m = latOf.get(key);
+  if (!m) latOf.set(key, (m = new Map()));
+  let v = m.get(z);
+  if (v === undefined) {
+    const at = seaSquares(g).at.get(z) ?? [];
+    v = at.length ? CHART.north - at.reduce((a, p) => a + p.y, 0) / at.length / CHART.scale : 50;
+    m.set(z, v);
+  }
+  return v;
+}
+
 // ---- Setting up ---------------------------------------------------------------------------
 
 /** Lays a chart's seas and straits into a game: the map of Europe's when it is made, the wider world's when that is attached (world.ts). */
