@@ -66,7 +66,7 @@ import {
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
-  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, reachOutOfTown, apForOrders, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
+  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent, orderArrest, whyNotArrestAgent, orderTurn, whyNotTurnAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -1446,6 +1446,82 @@ function orderLine(s: Game, b: Build, book: CityBook[] = ordersBookOf(s)) {
 const corpsById = (s: Game, ids: number[]): Corps[] =>
   ids.map((id) => s.corps.find((c) => c.id === id)).filter((c): c is Corps => !!c && !c.dead);
 
+// ---- A garrison sent somewhere comes out of its town on the way (release 2, and the 1.5.1 patch) ----------------
+// (Brian, 24 November 2026: "if a unit is dug in and i click them to attack and move I want them to over ride their
+// orders insted of me having to press a button".) The corps of the player's hand that are inside a town come out as
+// part of the order's own call, as TAKE THE FIELD would bring them (one move), and each stays out only if it went: a
+// corps that after the call has not moved, spent a move, fallen or been given a march to keep (a refusal, or one left
+// behind by the order, as one that went in this month and has no move once out) is put back inside, with nothing
+// spent. The calls that only look (the reach, the march's plan, the odds, the march onto empty ground, guns alone, the
+// general's battle) see them as if out and always put them back, so the 3D game can show and ask about an order
+// before anything is carried out (the 1.5 release lead, 18:42Z: a No at a card, the war question's No or a refusal
+// must leave them inside). The corps inside are judged together: where they cannot all come out (room outside for one
+// of two), none does, and the call is made with them inside, as before, so that it says the rules' own sentence (the
+// city glance thread's pre-check, 18:42Z). Putting one back touches that corps and nothing else (the release lead,
+// 18:56Z): it is taken out of its province's field by identity and set back at its old place in the town, its town and
+// moves as they were, and the corps' and the province's keys in their old order, so that a look leaves the save the
+// same to the byte and an order leaves whatever else it did as it did it.
+/** A corps of the garrison as it stood before it came out. */
+type Inside = { c: Corps; r: Region; at: number; town: number; ap: number; keys: string[]; regionKeys: string[]; march: unknown };
+const marchKey = (c: Corps): string => `march:${c.id}`;
+const insideNow = (s: Game, c: Corps): Inside => {
+  const r = s.regions[c.reg];
+  return { c, r, at: r.garr ? r.garr.indexOf(c) : -1, town: c.town!, ap: c.ap, keys: Object.keys(c), regionKeys: Object.keys(r), march: s.flags[marchKey(c)] };
+};
+/** An object's keys set back in an earlier order (keys since gone stay gone, new ones come after), its values as they are now. */
+const keysInOrder = (o: object, keys: string[]): void => {
+  const r = o as Record<string, unknown>, now = { ...r };
+  for (const k of Object.keys(r)) delete r[k];
+  for (const k of keys) if (k in now) r[k] = now[k];
+  for (const k of Object.keys(now)) if (!(k in r)) r[k] = now[k];
+};
+/** Puts corps that came out back inside their towns, each at its old place, touching nothing else. */
+const backInside = (xs: Inside[]): void => {
+  for (const x of [...xs].sort((p, q) => p.at - q.at)) {
+    const { c, r } = x;
+    const k = r.units.indexOf(c);
+    if (k >= 0) r.units.splice(k, 1);
+    const garr = (r.garr ??= []);
+    if (!garr.includes(c)) garr.splice(Math.min(Math.max(x.at, 0), garr.length), 0, c);
+    c.reg = r.id;
+    c.town = x.town;
+    c.ap = x.ap;
+    keysInOrder(c, x.keys);
+    keysInOrder(r, x.regionKeys);
+  }
+};
+/** True where a corps that came out went with the order: it moved, spent a move, fell, went back in, or was given a march to keep. */
+const wentOut = (s: Game, x: Inside, out: { reg: number; ap: number }): boolean =>
+  x.c.dead || x.c.reg !== out.reg || x.c.ap !== out.ap || x.c.town !== undefined || s.flags[marchKey(x.c)] !== x.march;
+/** The player's corps among these ids that stand inside a town. */
+const insideOf = (s: Game, ids: unknown): Corps[] => {
+  try { return Array.isArray(ids) && s.human ? corpsById(s, ids as number[]).filter((c) => c.town !== undefined && c.nat === s.human) : []; } catch { return []; }
+};
+/**
+ * Makes a call with the garrison in hand out of its town. 'looks' calls always put it back; after an order, each corps
+ * that did not go is put back. Anything not a garrison, or a garrison that cannot all come out, is called as it stands.
+ */
+function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
+  const s = game();
+  const inside = insideOf(s, ids).map((c) => insideNow(s, c));
+  if (!inside.length) return call();
+  const done: Inside[] = [];
+  for (const x of inside) {
+    if (!orderTakeField(s, x.c)) { backInside(done); return call(); }
+    done.push(x);
+  }
+  const out = inside.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
+  const settle = (): void => backInside(looks ? inside : inside.filter((x, i) => !wentOut(s, x, out[i])));
+  let result: R;
+  try { result = call(); } catch (e) { settle(); throw e; }
+  settle();
+  return result;
+}
+/** A call that only looks, made with the garrison in hand as if out: put back after. */
+const lookOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => comeOut(a[0], () => fn(...a), true);
+/** An order, made with the garrison in hand out of its town: it stays out if the order went. */
+const goOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => comeOut(a[0], () => fn(...a), false);
+
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
 interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean }
@@ -2155,9 +2231,7 @@ function reachOf(ids: number[]) {
   if (humanUp(s)) {
     const cs = corpsById(s, ids);
     for (const c of cs) {
-      // (release 2, Brian 24 November: a garrison sent somewhere comes out of its town first, so it is shown where it
-      // could go from the open country, with the move coming out costs; the 3D game brings it out as the order goes)
-      for (const [id, r] of c.town !== undefined ? reachOutOfTown(s, c) : reach(s, c)) {
+      for (const [id, r] of reach(s, c)) {
         if (id === c.reg) continue;
         const old = merged.get(id);
         if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
@@ -2195,7 +2269,7 @@ function reachOf(ids: number[]) {
     if (humanUp(s) && !onEve(s)) {
       const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
       const lead = cs[0];
-      spent = cs.length > 0 && cs.every((c) => apForOrders(s, c) <= 0);
+      spent = cs.length > 0 && cs.every((c) => c.ap <= 0);
       if (lead) {
         for (const [id, g] of farGround(s, lead)) {
           // (a province next door that cannot be entered this month is full: that is a matter of changing places, not of a long march)
@@ -7306,16 +7380,19 @@ function find(name: string) {
   };
 }
 
+const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) });
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's
   // own order, his attack or his raid, with what the field reports in place of the dice. Taken as his own deeds, as the
   // same orders given from the map are.
-  ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
+  ...battleTable,
+  // (release 2 and the 1.5.1 patch: the general's battle of a garrison in hand is looked at, and settled, with it out of its town)
+  battleLook: lookOut(battleTable.battleLook), battleSettleLand: goOut(battleTable.battleSettleLand),
 };
 // D1 (ruling 241), the viewing setting `subScene`: TC.subSceneOn(on) turns the rules' record of each month at sea on or off
 // (navy.ts subScene; g.subLook, this month and last, read by no rule). On, the sea scene's stager reads the record; off, nothing
