@@ -17,6 +17,7 @@ import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, fortRow, headline, relocate, weather, roomless } from './game';
 import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, keptByName, muster, thePlace, theUnit, type ToursDone } from './bombers';
 import { FORT_XP } from './fortrows';
+import { aceSchool, schoolPilots, unitsDecide } from './units';
 import { gainXp, generalOf } from './commanders';
 import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
@@ -941,8 +942,13 @@ export function cashHonour(g: Game, id: number, how: Cash): boolean {
     n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C.bondsPc * fame);
     gain = `The bond drive brings in ${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and ${C.bondsPc * fame} political capital.`;
   } else {
-    g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
-    if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
+    // Under Units decide an air ace trains pilots: the flying school takes his step, not the land drafts' schools, and
+    // the pilots he trains join the reserve at its hours (#2 form Part 2 section 6).
+    if (a.kind === 'air' && unitsDecide(g)) { aceSchool(g, a.nat); schoolPilots(g, a.nat, C.pilots * fame); }
+    else {
+      g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
+      if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
+    }
     gain = 'From now on every draft reaches the front better trained.';
   }
   if (a.kind === 'corps') {

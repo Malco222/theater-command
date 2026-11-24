@@ -17,7 +17,7 @@
 import { byHand } from './depth';
 import { Rng, hashString } from '../core/rng';
 import {
-  AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fieldRoom, fly, forecastAir, homeOf, isOffensive,
+  AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fieldRoom, fly, forecastAir, homeOf, isOffensive, joinPilots, poolIn,
   kmToSea, shipsInPort, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline } from './game';
@@ -111,7 +111,7 @@ export function syncWings(g: Game): void {
     const home = Math.round(w[kind] * saved);
     loseAboard(g, w, kind, w[kind] - home);
     const p = airPool(g, w.nat);
-    if (kind === 'ftr') { p.ftr += home; p.pilots += home; } else p.bmr += home;
+    if (kind === 'ftr') { p.ftr += home; poolIn(g, w.nat, home, w); } else p.bmr += home;
     g.airFleets.splice(g.airFleets.indexOf(w), 1);
   }
   for (const c of g.fleets) {
@@ -123,15 +123,16 @@ export function syncWings(g: Game): void {
       if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
       const est = full - bareOf(c, kind);
       let w = wingOf(g, c.id, kind);
-      if (!w) { if (est > 0) { w = newWing(g, c, kind); w.est[kind] = w[kind] = est; } continue; }
+      // (Under Units decide a new wing's and new deck room's pilots come from the deck school, with no experience.)
+      if (!w) { if (est > 0) { w = newWing(g, c, kind); joinPilots(g, w, est, kind, 'school'); w.est[kind] = w[kind] = est; } continue; }
       const was = w.est[kind];
-      if (est > was) w[kind] += est - was;
+      if (est > was) { joinPilots(g, w, est - was, kind, 'school'); w[kind] += est - was; }
       if (est < was && was > 0) {
         const aboard = w[kind] * (1 - est / was);
         loseAboard(g, w, kind, Math.min(w[kind], Math.round(aboard * (1 - saved))));
         // What is over for the decks that are left flies ashore to the reserve.
         const over = Math.max(0, w[kind] - est);
-        if (over > 0) { const p = airPool(g, w.nat); w[kind] -= over; if (kind === 'ftr') { p.ftr += over; p.pilots += over; } else p.bmr += over; }
+        if (over > 0) { const p = airPool(g, w.nat); w[kind] -= over; if (kind === 'ftr') { p.ftr += over; poolIn(g, w.nat, over, w); } else p.bmr += over; }
       }
       w.est[kind] = est;
       w.base = portOf(g, c);
@@ -309,7 +310,7 @@ export function flyAboard(g: Game, f: AirFleet, c: Fleet): boolean {
   const take = Math.min(bareOf(c, kind), f.est[kind]);
   // More aircraft than the deck room left for them (a carrier was lost meanwhile): the rest stay ashore in the reserve.
   const over = Math.max(0, f[kind] - take);
-  if (over > 0) { const p = airPool(g, f.nat); f[kind] -= over; if (kind === 'ftr') { p.ftr += over; p.pilots += over; } else p.bmr += over; }
+  if (over > 0) { const p = airPool(g, f.nat); f[kind] -= over; if (kind === 'ftr') { p.ftr += over; poolIn(g, f.nat, over, f); } else p.bmr += over; }
   c.bare![kind] -= take;
   trimBare(c);
   const ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);

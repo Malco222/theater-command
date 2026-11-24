@@ -48,7 +48,11 @@
     "deck": { "1": { "JAP": 500 } },
     "_fighter": "Fighter doctrines (fighters.ts) and escort doctrines (plan D). No start row is read, so every nation's slot is null (Part 2 section 2).",
     "fighter": ["turn", "dive-zoom"],
-    "escort": ["tied", "free"]
+    "escort": ["tied", "free"],
+    "_aceStep": "An air ace home to train pilots raises his nation's flying school by this many hours (stories.ts cashHonour, valour.ts sendHero), never the land drafts' schools (Part 2 section 6). U: not read; until it is, the school stands.",
+    "aceStep": null,
+    "_head": "A new bomber crew's head start in missions for each hour of its nation's flying school (bombers.ts headStart), the same for every nation, in place of the player's instructors alone (Part 2 section 6). U: not laid; until it is, every crew starts at none.",
+    "head": null
   },
 
   "sea": {

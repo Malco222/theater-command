@@ -88,7 +88,7 @@ export interface UnitsData {
     school: number;
   };
   trainIn: number;
-  air: { scale: unknown; school: ByStart<number>; deck: ByStart<number>; fighter: string[]; escort: string[] };
+  air: { scale: unknown; school: ByStart<number>; deck: ByStart<number>; fighter: string[]; escort: string[]; aceStep: number | null; head: number | null };
   sea: { ways: Sea['way']['id'][]; packs: Sea['pack']['id'][]; pack: ByStart<Sea['pack']['id']>; targets: Sea['target']['id'][]; target: ByStart<Sea['target']['id']> };
 }
 export const UNITS = unitsData as unknown as UnitsData;
@@ -199,3 +199,41 @@ export function armsOf(g: Game, nat: string): Arms | undefined {
 export function openQuality(g: Game): void {
   qualityStore(g);
 }
+
+// ---- The air arm's school and reserve (the air thread's readers, #2 form Part 2 sections 2 and 6) -----------------
+
+/**
+ * Takes `n` pilots into a nation's reserve in the store: its mean hours (null while the school is) and mean experience
+ * blend by count with the `was` already there. `hours` null brings no hours (a pilot from a school not laid).
+ */
+export function intoPool(A: Air, was: number, n: number, hours: number | null, fxp: number): void {
+  if (n <= 0) return;
+  const all = Math.max(0, was) + n, w = Math.max(0, was);
+  A.pool = A.school === null ? null : w <= 0 || A.pool === null ? hours : hours === null ? null : (A.pool * w + hours * n) / all;
+  A.poolXp = (A.poolXp * w + fxp * n) / all;
+}
+
+/**
+ * New pilots straight from school into a nation's reserve, by count (the count is AirPool.pilots, which exists once
+ * the nation has an air force). Under the switch they come at the school's hours with no experience.
+ */
+export function schoolPilots(g: Game, nat: string, n: number): void {
+  const p = g.airPool[nat];
+  if (!p || n <= 0) return;
+  const A = armsOf(g, nat)?.air;
+  if (A) intoPool(A, p.pilots, n, A.school, 0);
+  p.pilots += n;
+}
+
+/**
+ * An air ace home to train pilots (stories.ts cashHonour, valour.ts sendHero): under the switch it raises the nation's
+ * flying school by one step, units.json air.aceStep, and not the land drafts' schools (#2 form Part 2 section 6). The
+ * step is U: until it is read, the school stands. A school not laid stays not laid.
+ */
+export function aceSchool(g: Game, nat: string): void {
+  const A = armsOf(g, nat)?.air, step = UNITS.air.aceStep;
+  if (A && A.school !== null && step) A.school += step;
+}
+
+/** The way an arm fights now: a change ordered trains in until its month, then is the way (#2 form Part 2 section 3). */
+export const wayNow = <T extends string>(g: Game, w: Way<T>): T => (w.next !== undefined && w.ready !== undefined && g.turn >= w.ready ? w.next : w.id);

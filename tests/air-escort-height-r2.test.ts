@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { planRaid, raidTargets } from '../src/campaign/airwar';
 import { AIR, UD_ROLES, assessAir, forecastAir, udRole } from '../src/campaign/air';
 import { techMul } from '../src/campaign/research';
+import { FIGHTERS } from '../src/campaign/fighters';
 import { loadGame } from '../src/campaign/save';
 import type { AirMission, Game } from '../src/campaign/types';
 import { AirSim } from '../src/battle/air/sim';
@@ -16,6 +17,12 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TC = (globalThis as Record<string, unknown>).TC as any;
+/**
+ * Units decide flies each nation's fighter types (the dogfight switch folds into it), so the off game flies them too.
+ * The tests that pin the height alone set k to 0: then the types give no edge on either side but the research lead
+ * taken off on both, and only the height differs.
+ */
+const heightAlone = <T>(run: () => T): T => { const was = FIGHTERS.law.k; FIGHTERS.law.k = 0; try { return run(); } finally { FIGHTERS.law.k = was; } };
 
 /** A grand save of `nat` from `from`, as a fresh copy each call, with Units decide on or off (a fixture: set directly). */
 function saved(nat: string, from: number, seed: number): (on: boolean) => Game {
@@ -23,7 +30,10 @@ function saved(nat: string, from: number, seed: number): (on: boolean) => Game {
   const text = TC.save().text;
   return (on) => {
     const g = loadGame(text)!;
-    if (on) { g.flags.open = 1; g.flags.unitsDecide = 1; } else delete g.flags.unitsDecide;
+    if (on) { g.flags.open = 1; g.flags.unitsDecide = 1; } else { delete g.flags.unitsDecide; g.flags.ftrtypes = 1; }
+    // Honours are the player's own edge (storyEdge), which Units decide leaves out of a group's worth: cleared, so the
+    // two weigh the groups alike and only the height differs.
+    for (const f of g.airFleets) delete f.hon;
     return g;
   };
 }
@@ -57,7 +67,7 @@ function raid(make: (on: boolean) => Game, nat: string, name: string, parts: num
 describe('an escorted raid under Units decide: height by the escort\'s roles (release 2)', () => {
   const ger = saved('GER', 33, 11), uk = saved('UK', 29, 11);
 
-  it('over England, warned: defenders above the close escort and the bombers, no escort share, the radar priced once', () => {
+  it('over England, warned: defenders above the close escort and the bombers, no escort share, the radar priced once', () => heightAlone(() => {
     const { on, off, t, m } = raid(ger, 'GER', 'Hampshire', 1);
     const a = on.a, o = off.a;
     expect(o.height).toBeUndefined();
@@ -77,7 +87,7 @@ describe('an escorted raid under Units decide: height by the escort\'s roles (re
     const line = a.lines.find((l) => l.label === 'Height')!;
     expect(line.value).toBe('The defenders will be above your escort');
     expect(line.effect).toContain('dive on your bombers');
-  });
+  }));
 
   it('three groups: two close, then top cover, weighed by their fighters; the field flies those roles from those bands', () => {
     expect([0, 1, 2, 3, 4].map(udRole)).toEqual(['close', 'close', 'top', 'close', 'top']);
@@ -99,15 +109,15 @@ describe('an escorted raid under Units decide: height by the escort\'s roles (re
     for (const f of tk.def.forces) expect(tk.place.starts[f.corps]).toMatchObject({ band: 2, wait: false });
   });
 
-  it('over Holland, watched by observers (rule C): the defenders meet the bombers level; the bombers as before', () => {
+  it('over Holland, watched by observers (rule C): the defenders meet the bombers level; the bombers as before', () => heightAlone(() => {
     const { on, off } = raid(uk, 'UK', 'Holland', 1);
     expect(on.a.height).toMatchObject({ W: AIR.height.observers, x: AIR.height.escort.close[1] });
     expect(on.a.height!.plain).toBeUndefined();
     expect(on.a.bomberLoss).toBeCloseTo(off.a.bomberLoss, 9);
     expect(on.a.lines.find((l) => l.label === 'Height')?.value).toBe('Level');
-  });
+  }));
 
-  it('over the Channel with no chain on its coast, unwarned: the defenders come up from below and meet the close escort about level', () => {
+  it('over the Channel with no chain on its coast, unwarned: the defenders come up from below and meet the close escort about level', () => heightAlone(() => {
     const make = uk, g0 = make(true);
     const sea = g0.seas.find((z) => z.name === 'English Channel') ?? g0.seas.find((z) => /Channel/.test(z.name))!;
     const plan = planRaid(g0, 'strike', sea.id, undefined, 'UK');
@@ -120,7 +130,7 @@ describe('an escorted raid under Units decide: height by the escort\'s roles (re
     expect(a.height!.plain).toBeUndefined();
     expect(a.bomberLoss).toBeCloseTo(o.bomberLoss, 9);
     expect(a.lines.find((l) => l.label === 'Height')?.effect).toContain('Unwarned');
-  });
+  }));
 
   it('the field lands near the card: the fighter exchange and the bombers lost, warned and unwarned', () => {
     for (const c of [{ make: ger, nat: 'GER', name: 'Hampshire', parts: 3 }, { make: uk, nat: 'UK', name: 'Holland', parts: 3 }]) {
