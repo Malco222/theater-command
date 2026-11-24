@@ -13,6 +13,7 @@ import { techTraits } from './tech';
 import { beyondEurope } from './world';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND, MEN_PER_DIV } from './types';
+import { UNITS, blitzGate, unitsDecide } from './units';
 
 /** When a trait counts in a battle. Everything listed must hold. */
 export interface When {
@@ -138,11 +139,38 @@ function holds(g: Game, w: When | undefined, c: Corps, target: Region, landing: 
   return true;
 }
 
+/**
+ * Units decide: the trait rows the blitz gate stands in for (units.json land.blitzTraits: the tempo and the armoured
+ * spearheads), as traits.json gives them, wherever they are listed. Under the switch no nation's own row of them is
+ * read; their effects go to any nation through the gate, at the rows' own figures (DD 24 Nov 15:53Z, #2 form Part 1
+ * section 1; Part 2 section 4 'Inert').
+ */
+let gated: Trait[] | null = null;
+function gatedTraits(): Trait[] {
+  if (gated) return gated;
+  const seen = new Set<string>();
+  gated = [];
+  for (const row of Object.values(TRAITS.nations)) for (const t of row.traits) {
+    if (!UNITS.land.blitzTraits.includes(t.id) || seen.has(t.id)) continue;
+    seen.add(t.id);
+    gated.push(t);
+  }
+  return gated;
+}
+
 function edge(g: Game, c: Corps, target: Region, landing: boolean, side: 'attack' | 'defence', names?: Set<string>): number {
   if (!traitRules(g)) return 1;
   const row = TRAITS.nations[c.nat];
+  const units = unitsDecide(g);
   let m = 1;
   if (row) for (const t of row.traits) {
+    const x = t[side];
+    if (x === undefined || t.builtin || (units && UNITS.land.blitzTraits.includes(t.id)) || !holds(g, t.when, c, target, landing)) continue;
+    m *= x;
+    names?.add(t.name);
+  }
+  // (Units decide: the armoured spearheads' x1.15, Germany's row today, for any army through the blitz gate.)
+  if (units && blitzGate(g, c.nat)) for (const t of gatedTraits()) {
     const x = t[side];
     if (x === undefined || t.builtin || !holds(g, t.when, c, target, landing)) continue;
     m *= x;

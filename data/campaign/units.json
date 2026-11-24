@@ -20,6 +20,16 @@
     "mostCorps": { "base": 8, "perC": 12 },
     "_gates": "Command gates (Part 1 section 1): below 'renewal' a staff renews no failed attack and counter-attacks late (today's slowCommand habits); from 'blitz', with Field radios held, the tempo x1.2, the +1 move, the opening thrust and the armoured spearheads' x1.15, for any nation. G.",
     "gates": { "renewal": 0.3, "blitz": 0.6 },
+    "_blitzTraits": "The national trait rows the blitz gate stands in for (Part 1 section 1; Part 2 section 4 'Inert'): under the switch no nation's own row of them is read (traits.json). Their effects go instead to any nation through the gate: the tempo's x1.2 and +1 move by the fresh offensive, and the armoured spearheads' attack at the trait's own figure in traits.json, so each is priced once. Ids, no figure.",
+    "blitzTraits": ["tempo", "panzer"],
+    "_reforms": "History's reforms of an army (diplomacy.json 'reform'; Part 1 section 1; choice 8): under the switch no reform writes the parts listed in 'land' (training, a slow command, the most corps), which are the army's own causes. Their other parts (the air) are applied on history's calendar as before, for the air thread to rule on. 'news': the reforms whose text is told once, as news, when a cause of the army each names passes a mark, never on the calendar: red-army-1943 when that army's command c reaches 0.5, german-army-1944 when that army's mean corps experience, having stood at 0.5 or more at a month's end, falls under 0.5 (the event's own conditions must hold). A mark is passed only from the other side of it, so an army that starts past one is not told it. Each is recorded in the store's news so it is told once. The other two (allied-armies-1944, italy-loses-heart) keep their calendar and tell their text there, without their land parts. G.",
+    "reforms": {
+      "land": ["quality", "slowCommand", "maxAttack"],
+      "news": [
+        { "event": "red-army-1943", "cause": "command", "above": 0.5 },
+        { "event": "german-army-1944", "cause": "xp", "below": 0.5 }
+      ]
+    },
     "_sight": "A staff's sight s = clamp((c - from) / span, 0, 1) (Part 1 section 5). Seen odds = card odds x (q / wk)^(s - 1): at s 0 a staff counts men, kinds and ground, at s 1 it reads the card as today's staff does. The player's card shows the odds as the player's own staff reads them at the player's own sight (ruling 15:53Z (14)). G.",
     "sight": { "from": 0.6, "span": 0.4 },
     "_byOrders": "The way 'mass', by orders (Part 1 section 5; ruling 15:53Z (1)): ordinary attacks go in at seen odds 'need' and stop adding corps at 'stop'; attacks in the main effort's sector keep today's stop, 'main' (ai.ts). As sight rises, need blends to the temper's minOdds and stop to 'main'. The doctrine's own content, never refit to Lawrence's 1.42, which is a check. Methodical, bold and night keep today's thresholds. G.",

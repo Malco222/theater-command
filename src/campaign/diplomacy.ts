@@ -25,6 +25,7 @@ import { mapDist2 } from './wrap';
 import { footingMonth } from './footing';
 import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
+import { reformLeft, toldByCause, unitsDecide } from './units';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -872,14 +873,22 @@ function fire(g: Game, e: DiploEvent): boolean {
     did = true;
   }
   if (e.reform) {
+    // Units decide (DD 24 Nov 15:53Z, #2 form Part 1 section 1 and choice 8): no reform remakes an army. Its training, a
+    // slow command and the most corps it brings to a battle are its own causes, read from the quality store, so those
+    // parts are not applied. What else a reform carries (the air) is applied on the calendar as before. A reform whose
+    // text is told by a cause passing its mark (units.json land.reforms.news; command.ts) is not told here, and with
+    // nothing left to apply it does not fire at all.
+    const units = unitsDecide(g), byCause = units && toldByCause(e.id);
     let any = false;
     for (const [id, to] of Object.entries(e.reform)) {
       const n = g.nations[id];
       if (!n?.alive) continue;
-      Object.assign(n, to);
-      any = true;
+      const left = units ? reformLeft(to) : to;
+      if (left) Object.assign(n, left);
+      if (left || !byCause) any = true;
     }
     if (!any) return false;
+    if (byCause) told = true;
   }
   for (const row of e.spawn ?? []) {
     const r = g.byName[row[4]];

@@ -67,6 +67,9 @@ type ByNat<T> = Record<string, T>;
 /** Seeds by the month a campaign opened (grand.json's starts: 1, 5, 17, 29); a later start takes the row of the latest start at or before it. */
 type ByStart<T> = Record<string, ByNat<T>>;
 
+/** A reform whose text is told when a cause of the army it names passes a mark (units.json land.reforms.news). */
+export interface ReformNews { event: string; cause: 'command' | 'xp'; above?: number; below?: number }
+
 /** data/campaign/units.json: the store's seeds and every figure the land rules of the #2 form read. */
 export interface UnitsData {
   startRows: Record<string, string[]>;
@@ -79,6 +82,8 @@ export interface UnitsData {
     attack: { base: number; perC: number };
     mostCorps: { base: number; perC: number };
     gates: { renewal: number; blitz: number };
+    blitzTraits: string[];
+    reforms: { land: string[]; news: ReformNews[] };
     sight: { from: number; span: number };
     byOrders: { need: number; stop: number; main: number };
     xp: { won: number; repulsed: number; held: number; beaten: number };
@@ -199,3 +204,114 @@ export function armsOf(g: Game, nat: string): Arms | undefined {
 export function openQuality(g: Game): void {
   qualityStore(g);
 }
+
+// ---- Training and command (DD 24 Nov 15:53Z, #2 form Part 1 2a, 2b and section 1) ----------------------------------
+// Each is worked out from the store and the rows the nation holds, never stored. With the switch off every reader
+// below gives today's figure from the nation's own row (quality, slowCommand, maxAttack, blitz); with it on, none of
+// those is read past the seed, and one rule holds for every nation.
+
+/** Numbers built up by steps of 0.01 are read against a mark with this much room, so 0.5 reached by fifty steps is 0.5. */
+const EPS = 1e-9;
+
+const holdsRow = (n: Nation | undefined, id: string): boolean => !!n?.tech?.done.includes(id);
+
+/**
+ * The training a nation's troops fight with, read at corpsBase, the card's Troops line and the town guard. Off, its
+ * quality, as today. Under Units decide, training is the ladder (DD 24 Nov 15:53Z (4)): the higher of the army's
+ * start seed (land.train) and the ladder's rung for one, two or three of the training rows held (0.85, 1.05, 1.25),
+ * the same ladder for every nation. A start never fixes a ceiling, and an army that began better trained keeps its
+ * own level.
+ */
+export function armyTraining(g: Game, nat: string): number {
+  if (!unitsDecide(g)) return g.nations[nat].quality;
+  const L = UNITS.land, n = g.nations[nat], land = armsOf(g, nat)!.land;
+  let rows = 0;
+  for (const id of L.trainRows) if (holdsRow(n, id)) rows++;
+  return rows ? Math.max(land.train, L.ladder[Math.min(rows, L.ladder.length) - 1]) : land.train;
+}
+
+/**
+ * An army's command c, 0 to 1, under Units decide only (#2 form Part 1 2b): Field radios' share if the row is held, plus
+ * the command it has earned in war, at most 1. Off there is none: 1, and nothing reads it there.
+ */
+export function commandOf(g: Game, nat: string): number {
+  const land = armsOf(g, nat)?.land;
+  if (!land) return 1;
+  const L = UNITS.land;
+  return Math.min(1, (holdsRow(g.nations[nat], L.radiosRow) ? L.radios : 0) + land.earned);
+}
+
+/**
+ * What its command does to an army's attack. Off, a slow command's x0.85 (nations.json slowCommand), as today. Under
+ * Units decide, x(0.85 + 0.15c) for every nation (#2 form Part 1 2b): today's slow command at c 0, nothing at c 1.
+ */
+export function attackCommand(g: Game, nat: string): number {
+  if (!unitsDecide(g)) return g.nations[nat].slowCommand ? 0.85 : 1;
+  const A = UNITS.land.attack;
+  return A.base + A.perC * commandOf(g, nat);
+}
+
+/**
+ * The most corps a nation's staffs bring into one battle, or 0 for no limit. Off, nations.json maxAttack, as today.
+ * Under Units decide, 8 + 12c rounded down for every nation (#2 form Part 1 2b; choice 11): 8 at c 0, 14 at c 0.5, 20
+ * at c 1.
+ */
+export function mostCorps(g: Game, nat: string): number {
+  if (!unitsDecide(g)) return g.nations[nat].maxAttack;
+  const M = UNITS.land.mostCorps;
+  return Math.floor(M.base + M.perC * commandOf(g, nat) + EPS);
+}
+
+/**
+ * True where a nation's staffs keep a slow command's habits: no failed attack renewed the same month, a month to answer
+ * ground just lost, no gap in the line seen in time, no troops sent by rail. Off, nations.json slowCommand, as today.
+ * Under Units decide, while command c is under 0.3 (#2 form Part 1 2b), for every nation.
+ */
+export function slowHabits(g: Game, nat: string): boolean {
+  if (!unitsDecide(g)) return g.nations[nat].slowCommand;
+  return commandOf(g, nat) < UNITS.land.gates.renewal - EPS;
+}
+
+/**
+ * The blitz gate: the fresh offensive's tempo (x1.2 for fast troops and one more move), the deeper opening thrust, the
+ * surprise of a new offensive and the armoured spearheads' attack. Off, nations.json blitz (Germany's), as today.
+ * Under Units decide, a nation that holds Field radios at command c 0.6 or more (#2 form Part 1 section 1), whoever it
+ * is: no nation's own tempo or spearheads row is read (Part 2 section 4 'Inert'). Surprise reads this gate until the
+ * field spread form replaces it.
+ */
+export function blitzGate(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  if (!unitsDecide(g)) return !!n?.blitz;
+  if (!n || !holdsRow(n, UNITS.land.radiosRow)) return false;
+  return commandOf(g, nat) >= UNITS.land.gates.blitz - EPS;
+}
+
+/**
+ * Moves an army's earned command by `by`, kept between 0 and 1 and on a clean step of a millionth, under Units decide
+ * only (#2 form Part 1 2b). Returns the new figure, or undefined off.
+ */
+export function earnCommand(g: Game, nat: string, by: number): number | undefined {
+  const land = armsOf(g, nat)?.land;
+  if (!land) return undefined;
+  land.earned = Math.min(1, Math.max(0, Math.round((land.earned + by) * 1e6) / 1e6));
+  return land.earned;
+}
+
+/**
+ * Under Units decide, what a reform on history's calendar (diplomacy.json 'reform') still does to a nation: every part
+ * but the army's own (units.json land.reforms.land: training, a slow command, the most corps), or null where nothing
+ * is left (#2 form Part 1 section 1; choice 8). The air parts stay as they are, for the air thread.
+ */
+export function reformLeft<T extends object>(to: T): Partial<T> | null {
+  const out: Partial<T> = {};
+  let any = false;
+  for (const [k, v] of Object.entries(to)) {
+    if (UNITS.land.reforms.land.includes(k)) continue;
+    (out as Record<string, unknown>)[k] = v;
+    any = true;
+  }
+  return any ? out : null;
+}
+
+/** True where a reform's text is told by a cause passing its mark under Units decide, never by the calendar (units.json land.reforms.news). */
+export const toldByCause = (id: string): boolean => UNITS.land.reforms.news.some((r) => r.event === id);

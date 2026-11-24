@@ -25,6 +25,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
+import { slowHabits } from './units';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -2045,7 +2046,9 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
         // A slow command does not get a second assault organised in the same month, and some plans allow only one.
         // (Two waves laid on beforehand are one operation: the main body goes in behind the first wave.)
         if (best.wave) waved.set(best.target.id, (waved.get(best.target.id) ?? 0) + 1);
-        else if (!taken && (g.nations[nat].slowCommand || single)) failed.add(best.target.id);
+        // (Units decide: a command under 0.3, for every nation, in place of the nation's own slow command: DD 24 Nov
+        // 15:53Z, #2 form Part 1 2b.)
+        else if (!taken && (slowHabits(g, nat) || single)) failed.add(best.target.id);
       }
       else { taken = moveCorps(g, best.corps[0], best.target); if (!taken) failed.add(best.target.id); }
       if (taken && g.nations[nat].alive) support(g, nat, best.target);
@@ -2409,8 +2412,10 @@ function defend(g: Game, nat: string, line = true): void {
 
   // Ground worth fighting to get back: the nation's own, its allies', and what it held until the enemy took it.
   const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
-  // A slow command needs a month to organise any answer to ground it has just lost.
-  const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
+  // A slow command needs a month to organise any answer to ground it has just lost. (Units decide: a command under 0.3,
+  // for every nation, in place of the nation's own slow command: DD 24 Nov 15:53Z, #2 form Part 1 2b.)
+  const slow = slowHabits(g, nat);
+  const late = (r: Region): boolean => slow && r.since >= g.turn;
   const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
   for (const c of movers) {
     if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
@@ -2427,7 +2432,7 @@ function defend(g: Game, nat: string, line = true): void {
     // An army standing on the defensive keeps a continuous line: an empty place in it is an open door, and a
     // neighbour with three corps or more sends one to shut it. A slow command does not see the gap in time,
     // and an army on the attack accepts gaps behind its spearheads.
-    if (line && !n.slowCommand && friendlyUnits(g, here, nat).length >= 3) {
+    if (line && !slow && friendlyUnits(g, here, nat).length >= 3) {
       const door = here.nb.map((j) => g.regions[j]).find((r) => mine(r) && !given.has(r.id) && threat[r.id] > 0 && !friendlyUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
       if (door) {
         const was = defPower(g, c, here);
@@ -2457,7 +2462,7 @@ function defend(g: Game, nat: string, line = true): void {
     if (!to) continue;
     const before = c.reg;
     // There are no railways in the desert: overseas, everything marches.
-    if (!scope && !n.slowCommand && d[to.id] > 2 && c.ap >= 4) railToward(g, c, to);
+    if (!scope && !slow && d[to.id] > 2 && c.ap >= 4) railToward(g, c, to);
     else walkToward(g, c, to);
     if (c.reg !== before) { held[here.id] -= spared; held[to.id] += defPower(g, c, to); }
   }

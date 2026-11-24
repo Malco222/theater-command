@@ -41,7 +41,7 @@ import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
 import pursuitData from '../../data/campaign/pursuit.json';
-import { unitsDecide } from './units';
+import { armyTraining, attackCommand, blitzGate, mostCorps, unitsDecide } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -427,7 +427,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   clientWar(g, a, b, tied); // the far side: war on a client is war on its patron, and a tie broken parts the two
   // A guarantee the card names is kept (ruling 229, part 3): its computer-run guarantors declare war the same day.
   honour(g, a, b, sideWas);
-  if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
+  // (Units decide: the blitz gate in place of the nation's own blitz, for any nation: DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
+  if (blitzGate(g, a) && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }
   }
@@ -650,7 +651,9 @@ export function industry(g: Game, nat: string): number {
 
 export function freshOffensive(g: Game, nat: string, enemy?: string): boolean {
   const n = g.nations[nat];
-  if (!n.blitz) return false;
+  // Off, an army trained to it (Germany's, nations.json blitz). Units decide: any army through the blitz gate, field
+  // radios and command 0.6 or more (DD 24 Nov 15:53Z, #2 form Part 1 section 1).
+  if (!blitzGate(g, nat)) return false;
   const list = enemy ? [enemy] : n.atWar;
   return list.some((e) => n.offStart[e] !== undefined && g.turn - n.offStart[e] <= 1);
 }
@@ -1127,8 +1130,9 @@ export const gunsMayFollow = (g: Game, c: Corps, to: Region): boolean => to.unit
 /** Trims an attacking force to what the roads into the target can carry, strongest first. */
 export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[] {
   let cap = frontage(target);
-  // A staff that cannot yet run a big battle brings fewer corps into it, however many stand ready.
-  const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
+  // A staff that cannot yet run a big battle brings fewer corps into it, however many stand ready. (Units decide: 8 +
+  // 12 x its command, for every nation, in place of the nation's own limit: DD 24 Nov 15:53Z, #2 form Part 1 2b.)
+  const most = corps.length ? mostCorps(g, corps[0].nat) || 99 : 99;
   const ranked = [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
   const guns: Corps[] = [];
   // Support teams (release 2) fire from behind the line: a few ride in beside the corps that fight, as guns do.
@@ -1175,7 +1179,8 @@ export function weekOf(c: Corps, cost: number): number {
 export function corpsBase(g: Game, c: Corps): number {
   // Tanks and lorries, or rifles and guns: a corps is as good as the designs it has been issued.
   const kit = techMul(g, c.nat, c.kind === 'arm' || c.kind === 'mot' ? 'armour' : 'infantry');
-  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied || fortRow(g, c) ? 1 : cmdCutOff(g, c)) * kit;
+  // (Units decide: the army's training is the ladder, in place of the nation's quality: DD 24 Nov 15:53Z (4).)
+  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * armyTraining(g, c.nat) * (0.85 + 0.4 * c.xp) * (c.supplied || fortRow(g, c) ? 1 : cmdCutOff(g, c)) * kit;
 }
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
@@ -1244,7 +1249,9 @@ export function worksShare(months: number): number {
  */
 function surprised(g: Game, nat: string, foes: Iterable<string>): boolean {
   const n = g.nations[nat];
-  if (!n?.blitz) return false;
+  // (Units decide: the blitz gate, for any nation, until the field spread form replaces it: DD 24 Nov 15:53Z, #2 form
+  // Part 1 section 1.)
+  if (!n || !blitzGate(g, nat)) return false;
   for (const d of foes) {
     const last = n.lastFight[d], start = n.offStart[d];
     // The first blow ever struck at them, or the first after a lull: the offensive begins with this battle.
@@ -1549,7 +1556,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; if (spy.foe) { if (!watched || (watched.by !== spy.foe && c.nat === spy.foe)) watched = { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul }; } else spied = spy.agent; } }
     // Troops in good heart hit harder, and shaken ones do not (the grand campaign: nobody else carries morale).
     p *= heart(c);
-    if (g.nations[c.nat].slowCommand) p *= 0.85;
+    // A slow command's attacks go in late and piecemeal. (Units decide: x(0.85 + 0.15 x its command) for every nation, in
+    // place of the nation's own slow command: DD 24 Nov 15:53Z, #2 form Part 1 2b.)
+    const led = attackCommand(g, c.nat);
+    if (led !== 1) p *= led;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
     const line = lineStrength(g, c);
@@ -1734,7 +1744,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // Training and experience decide as many fights as numbers do: said in words, division for division.
     const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {
       let w = 0, worth = 0, army = 0, xp = 0;
-      for (const c of cs) { const k = c.divs * c.str; w += k; worth += k * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp); army += k * g.nations[c.nat].quality; xp += k * c.xp; }
+      // (Units decide: the army's training ladder in place of the nation's quality: DD 24 Nov 15:53Z (4).)
+      for (const c of cs) { const k = c.divs * c.str, t = armyTraining(g, c.nat); w += k; worth += k * t * (0.85 + 0.4 * c.xp); army += k * t; xp += k * c.xp; }
       return w > 0 ? { worth: worth / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
     };
     const ours = grade(attackers), theirs = grade(defenders);
@@ -1744,7 +1755,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       const better = ratio > 1 ? 'defending' : 'attacking', worse = ratio > 1 ? 'attacking' : 'defending';
       const k = ratio > 1 ? ratio : 1 / ratio;
       const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army, xpK = k / armyK;
-      const why = [armyK >= 1.04 ? 'the better trained and led army' : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
+      // (Units decide: the army's figure here is its training alone, its command being priced on the attack, so the
+      // line says trained: DD 24 Nov 15:53Z, #2 form 'On the card'.)
+      const why = [armyK >= 1.04 ? (unitsDecide(g) ? 'the better trained army' : 'the better trained and led army') : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
       lines.push({
         label: 'Troops', value: `${word(ours.xp)[0].toUpperCase() + word(ours.xp).slice(1)} attackers against ${word(theirs.xp)} defenders`,
         effect: `Division for division the ${better} side is the stronger${why.length ? `, as ${listAnd(why)}` : ''}: each ${better} division counts for about ${k.toFixed(1)} ${worse} ones`,

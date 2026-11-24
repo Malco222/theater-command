@@ -69,7 +69,7 @@ import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
-import { unitsDecide } from '../units';
+import { mostCorps, unitsDecide } from '../units';
 import { columnsView } from '../columns';
 import { dumpsView } from '../logistics';
 import { nicknamesOn } from '../nicknames';
@@ -7906,7 +7906,7 @@ function attackCard(): string {
   // What is known of the defence: everything, or the staff's estimate of it.
   const sure = allKnown(foes);
   const foeEst = sure ? null : armyAt(g, target.id, foes[0]?.nat ?? target.ctrl)?.est ?? null;
-  const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (!chosen.length && whyNotLead(g, [c], target.id) ? whyNotLead(g, [c], target.id)!.split('.')[0] : g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
+  const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (!chosen.length && whyNotLead(g, [c], target.id) ? whyNotLead(g, [c], target.id)!.split('.')[0] : mostCorps(g, c.nat) && chosen.length >= mostCorps(g, c.nat) ? 'Staff at its limit' : 'No room on the roads') : '');
   // (Guns or engineers picked with no infantry or tanks: the box gives ruling 211(a)'s reason, the foot's own words, never the roads.)
   const ours: Side = {
     nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),

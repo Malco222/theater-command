@@ -34,6 +34,7 @@ import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
 import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
+import { armyTraining, mostCorps } from './units';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -175,7 +176,8 @@ export function guardOf(g: Game, r: Region): number {
 /** What the guard is worth in a fight for the town, before the town's bonus. */
 export const guardPower = (g: Game, r: Region): number => {
   const d = guardOf(g, r);
-  return d > 0 ? d * KIND.inf.def * g.nations[r.owner].quality * Math.sqrt(0.15 + 0.85 * SIEGE.guardOrg) : 0;
+  // (Units decide: the army's training ladder in place of the nation's quality: DD 24 Nov 15:53Z (4).)
+  return d > 0 ? d * KIND.inf.def * armyTraining(g, r.owner) * Math.sqrt(0.15 + 0.85 * SIEGE.guardOrg) : 0;
 };
 
 /**
@@ -811,7 +813,8 @@ export function stormForce(g: Game, corps: Corps[], r: Region, lead?: string): C
   const line = fit.filter((c) => c.kind !== 'eng').sort((x, y) => own(y) - own(x) || corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
   // (Guns go in behind a fighting corps or not at all: ruling 211(a).)
   if (!line.some(fights)) return [];
-  const most = g.nations[lead ?? line[0].nat].maxAttack || 99;
+  // (Units decide: 8 + 12 x the army's command, in place of the nation's own limit: DD 24 Nov 15:53Z, #2 form Part 1 2b.)
+  const most = mostCorps(g, lead ?? line[0].nat) || 99;
   const first = line.slice(0, most);
   if (!first.some(fights)) first[first.length - 1] = line.find(fights)!;
   return [...first, ...fit.filter((c) => c.kind === 'eng')];

@@ -49,7 +49,7 @@ import { COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
-import { openQuality } from './units';
+import { attackCommand, blitzGate, openQuality } from './units';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -283,7 +283,8 @@ export interface Front {
   near: number; defNear: number;
 }
 
-const atkP = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk * (g.nations[c.nat].slowCommand ? 0.85 : 1);
+// (A slow command's x0.85; Units decide: x(0.85 + 0.15 x its command) for every nation, DD 24 Nov 15:53Z, #2 form Part 1 2b.)
+const atkP = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk * attackCommand(g, c.nat);
 const defP = (g: Game, c: Corps, r: Region): number => corpsBase(g, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
 
 export interface FrontOpts {
@@ -508,7 +509,8 @@ function axis(g: Game, nat: string, f: Front, placed = false): string[] {
  */
 function bound(g: Game, nat: string, f: Front, way: string[], opening: boolean, reach = OPEN.bound): string[] {
   const out = new Set<string>();
-  const thrust = way.slice(0, opening && g.nations[nat].blitz ? OPEN.thrust[0] : OPEN.thrust[1]).map((nm) => g.byName[nm]).filter(Boolean);
+  // (Units decide: the deeper opening thrust goes to any army through the blitz gate, DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
+  const thrust = way.slice(0, opening && blitzGate(g, nat) ? OPEN.thrust[0] : OPEN.thrust[1]).map((nm) => g.byName[nm]).filter(Boolean);
   // An army with overwhelming strength does not wait on one road: it presses the whole of the enemy's front.
   if (thrust.length && f.ratio >= OPEN.general) for (const id of f.edge) out.add(g.regions[id].name);
   if (!thrust.length) {
@@ -1199,7 +1201,7 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     phase.from = onSince(g, nat, main) || g.turn;
     const way = axis(g, nat, main, true);
     const opening = phase.from === g.turn;
-    phase.axis = way.slice(0, opening && n.blitz ? OPEN.thrust[0] : OPEN.thrust[1]);
+    phase.axis = way.slice(0, opening && blitzGate(g, nat) ? OPEN.thrust[0] : OPEN.thrust[1]);
     const blow = bound(g, nat, main, way, opening);
     phase.targets = [...new Set(live.flatMap((f) => (f === main ? blow : bound(g, nat, f, [], opening))))];
     phase.main = blow;

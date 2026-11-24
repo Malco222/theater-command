@@ -37,6 +37,7 @@ import { armyOf } from './joint';
 import { prizeOf, prizesInReach, townName, townSize, type Prize, type TownSize } from './towns';
 import { dealsOf, whyNoTrade } from './trade';
 import { LADDER_GONE, footTrust, replacesLadder } from './footing';
+import { mostCorps } from './units';
 
 export type FormId = 'democracy' | 'oneparty' | 'authoritarian';
 /** What a minister or a decree can change: multipliers on income, replacements, the price of new corps, research, trade and the class of men that comes of age each month. */
@@ -461,7 +462,8 @@ function cardOdds(g: Game, nat: string, r: Region, reach: number, deep?: Map<num
   else {
     if (!atWar(g, nat, r.ctrl)) return 0;
     const line = force.inside.filter((c) => c.kind !== 'eng');
-    const most = line.length ? Math.min(STACK, g.nations[line[0].nat].maxAttack || 99) : 0;
+    // (Units decide: 8 + 12 x the army's command, in place of the nation's own limit: DD 24 Nov 15:53Z, #2 form Part 1 2b.)
+    const most = line.length ? Math.min(STACK, mostCorps(g, line[0].nat) || 99) : 0;
     going = [...line.slice(0, most), ...(most ? force.inside.filter((c) => c.kind === 'eng').slice(0, 1) : [])];
     town = true;
     if (going.length && !townHeld(g, r)) return ODDS_MOST;

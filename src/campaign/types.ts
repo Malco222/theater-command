@@ -1501,7 +1501,10 @@ export interface QualityStore {
   from: number;
   /** Every nation in g.nations, seeded by one rule. */
   nat: Record<string, Arms>;
-  /** News fired once when a cause passes a mark: '<nat>:<field>:<mark>' to the month it fired. */
+  /**
+   * News fired once when a cause passes a mark: '<nat>:<field>:<mark>' to the month it fired. A mark is passed only
+   * from its other side, so '<nat>:<field>:<mark>:near' holds the first month's end the cause stood there (command.ts).
+   */
   news: Record<string, number>;
 }
 

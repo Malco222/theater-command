@@ -88,6 +88,7 @@ import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
 import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
 import { legionsMonth, recallLegion, sendLegion } from './legions';
+import { commandMonth } from './command';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -115,6 +116,9 @@ function closePhase(g: Game, nat: string): void {
     sidesAtPeace(g);
     // Works held outright from one month's end to the next are taken over by the side that holds them.
     worksMonth(g);
+    // Units decide: each army's command earned in the month's own battles, and the reforms a cause tells (command.ts;
+    // DD 24 Nov 15:53Z, #2 form Part 1 2b). Off, nothing.
+    commandMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
     // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
     fieldsMonth(g);
