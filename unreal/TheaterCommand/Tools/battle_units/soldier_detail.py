@@ -16,7 +16,11 @@ soldier.py's own builders (soldier.py itself is not changed, so every other army
 - helmet: 72 sides and twelve rings, a rolled rim, the two vent lugs and three liner rivets, the chin strap's buckle;
 - rifle: the stock at 1,400 triangles with finger grooves and the butt's disc and sling slot; a stepped barrel, the
   cleaning rod, the bayonet lug, a hooded front sight, a leaf rear sight, the bolt's cocking piece and safety;
-- hands at 900 triangles a hand; the middle level of detail at 2,700 triangles (under the 2,048-point cap).
+- hands at 900 triangles a hand; the middle level of detail at 2,700 triangles (under the 2,048-point cap);
+- the skirt: soldier.py's shell fields are exact only 3.2 cm from the shell, and the skirt flares 2.6 to 4.6 cm out,
+  so its lower half was made on the coarse grid's jump, a 5 mm staircase that read as crumpling (on every army's
+  tunic); here the fields are exact to 6.2 cm and the flare past 2.6 cm is halved (the silhouette the art director
+  passed), and the pockets, strip and flaps are walked onto the cloth by its first change of sign (`march`).
 
 The same skeleton and bones, so every clip plays as it is. Pictures for the art director: the game's man today beside
 this one at 1 m, 4 m (front and back) and 10 m beside the Kubelwagen and the Panzer IV.
@@ -122,20 +126,74 @@ def buckle(g, c, nrm, along, w, h, t=0.0022, paint="steel"):
 
 # ================================================================================================ the uniform
 _uniform_layers = S.uniform_layers
+_ShellField = S.ShellField
 
 
-def land(L, start, way, step=0.004, n=400):
-    """Walk from `start` along `way` onto the layer's surface in short steps (on_surface's sphere tracing can step
-    through a thin skirt where the field is not a true distance). Returns (point, outward normal)."""
-    p, w = np.array(start, float), _n(np.asarray(way, float))
+class ShellField(_ShellField):
+    """soldier.py's shell field, exact to 6.2 cm from the shell, not 3.2: the skirt flares 2.6 to 5 cm out from its
+    shell, so below the middle of the skirt its cloth lay beyond the exact band, where the field is read from the
+    coarse grid and jumps; the cloth was made at that jump, a 5 mm staircase that read as crumpling."""
+
+    def __init__(self, ob, h=0.005, band=0.062, levels=2):
+        super().__init__(ob, h, band, levels)
+
+    def cloth(self, loose, lo=None, hi=None, default=0.0, more=None):
+        # (the flare past 2.6 cm halved: the staircase had held the skirt near 3.2 cm, the silhouette the art director
+        # passed; the full 4.6 cm, now that it is met, stands out like a bell)
+        if more is not None:
+            m0 = more
+            more = lambda P: (lambda x: np.where(x > 0.026, 0.026 + 0.5 * (x - 0.026), x))(np.asarray(m0(P)))
+        return super().cloth(loose, lo, hi, default, more)
+
+
+S.ShellField = ShellField
+
+
+def march(L, P, way, step=0.003, n=400):
+    """Walk each of the points P (outside the cloth) along `way` to where the layer's field first turns negative, in
+    short steps, then halve the last step until it is found to a hundredth of a millimetre. soldier.py's skirt is
+    not a true distance below the belt (its shell's field is exact only within 3.2 cm of the shell, and the flared
+    skirt stands further out than that, so the field jumps there): a walk that waits for the field to reach nought
+    rocks about the jump, or steps through it, where the first change of sign is the cloth the mesh is made at.
+    Returns (points, found)."""
+    P = np.array(P, float).reshape(-1, 3)
+    w = _n(np.asarray(way, float))
+    d = L.at_points(P)
+    out = d > 0
+    lo, hi = P.copy(), P.copy()
+    live = out.copy()
     for _ in range(n):
-        d = float(L.at_points(p[None, :])[0])
-        if abs(d) < 2e-5:
+        if not live.any():
             break
-        p = p + w * float(np.clip(d, -step, step))
-    e = 1e-4
-    g = np.array([(L.at_points((p + np.eye(3)[i] * e)[None, :])[0] - L.at_points((p - np.eye(3)[i] * e)[None, :])[0]) for i in range(3)])
-    return p, g / np.linalg.norm(g)
+        Q = P[live] + w[None, :] * np.clip(d[live], 3e-4, step)[:, None]
+        dq = L.at_points(Q)
+        idx = np.flatnonzero(live)
+        hit = dq <= 0
+        lo[idx[hit]], hi[idx[hit]] = P[idx[hit]], Q[hit]
+        P[idx], d[idx] = Q, dq
+        live[idx[hit]] = False
+    found = out & ~live
+    for _ in range(14):
+        M = 0.5 * (lo + hi)
+        dm = L.at_points(M)
+        neg = dm <= 0
+        hi[neg], lo[~neg] = M[neg], M[~neg]
+    P = np.where(found[:, None], hi, P)
+    return P, found
+
+
+def land(L, start, way, step=0.003, n=400, span=0.02):
+    """`march` from `start` along `way` onto the layer's surface; the outward normal from four more walks `span`
+    to either side (the field's own slope is ragged where the skirt's field jumps). Returns (point, outward normal)."""
+    w = _n(np.asarray(way, float))
+    R = frame_from(-w, (0.0, 0.0, 1.0))
+    a, b = R[:, 1] * span, R[:, 2] * span
+    st = np.asarray(start, float)
+    P, ok = march(L, np.array([st, st + a, st - a, st + b, st - b]), w, step, n)
+    nrm = _n(np.cross(P[1] - P[2], P[3] - P[4]))
+    if nrm @ w > 0:
+        nrm = -nrm
+    return P[0], nrm
 
 
 class Patch(RoundBox):
@@ -152,13 +210,16 @@ class Patch(RoundBox):
         U, W = np.meshgrid(self.us, self.ws, indexing="ij")
         loc = np.stack([np.full(U.size, 0.06), U.ravel(), W.ravel()], axis=1)
         P = self.c + loc @ self.R.T
-        way = -self.R[:, 0]
-        for _ in range(200):                         # (short steps: a thin skirt is stepped through by long ones)
-            d = base.at_points(P)
-            if np.abs(d).max() < 2e-5:
-                break
-            P = P + way[None, :] * np.clip(d, -0.004, 0.004)[:, None]
+        P, ok = march(base, P, -self.R[:, 0])
         self.h = ((P - self.c) @ self.R[:, 0]).reshape(U.shape)
+        if not ok.all():                             # (any walk that found nothing takes its neighbours' mean)
+            good = ok.reshape(U.shape)
+            self.h[~good] = self.h[good].mean() if good.any() else 0.0
+        if os.environ.get("DETAIL_PATCH_DEBUG"):
+            print(f"    PATCH c={np.round(self.c, 3)} half={half} t={t}: {int((~ok).sum())} not found,"
+                  f" h {self.h.min():+.4f}..{self.h.max():+.4f}")
+            np.set_printoptions(precision=3, suppress=True, linewidth=200)
+            print(np.round(self.h * 1000, 1))
 
     def height(self, y, z):
         iy = np.clip((y - self.us[0]) / (self.us[1] - self.us[0]), 0, len(self.us) - 1.001)
@@ -270,7 +331,7 @@ def uniform_layers(man, J, spec, LM):
         tunic.add(Patch(base, tip, (0.0105, 0.0105), 0.003, R @ rot_euler(45.0, 0, 0), half[0] + 0.0035), 0.0008)
         tunic.add(Patch(base, p + R @ np.array((0.0, 0.0, -0.016)), (0.0115, half[2] - 0.022), 0.0015, R,
                         half[0] + 0.0018), 0.0008)
-        q, nq = on_surface(tunic, tip + R[:, 0] * 0.05 + R @ np.array((0.0, 0.0, -0.006)), -R[:, 0])
+        q, nq = land(tunic, tip + R[:, 0] * 0.05 + R @ np.array((0.0, 0.0, -0.006)), -R[:, 0])
         LM["flap_points"].append((q, nq))
     print(f"  detail: folds, pleats and points laid in {time.time() - t0:.0f} s")
     return ls
