@@ -2427,7 +2427,10 @@ function staffRules(g: Game, nat: string) {
   const base = B ? { ...R, ...B } : { ...R, share: R.share * raidsMul(g, nat) };
   // (A country with the enemy on its own soil takes 'invaded' times the risk: it throws in what it has.)
   const risk = FB ? FB.risk * (invaded(g, nat) ? FB.invaded : 1) : 0;
-  return { FB, R, B, rules: FB ? { ...base, share: Math.min(1, base.share * FB.more), loss: base.loss + risk, least: Math.min(base.least, FB.least) } : base };
+  // (A rival at a level that gives its air staff rules of its own, General and up, keeps the level's share and least:
+  // the level the player chose sets how often and how heavily it comes. The fight back adds only its risk.)
+  const more = FB && !B ? { share: Math.min(1, base.share * FB.more), least: Math.min(base.least, FB.least) } : {};
+  return { FB, R, B, rules: FB ? { ...base, ...more, loss: base.loss + risk } : base };
 }
 
 function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null): void {
