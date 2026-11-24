@@ -217,11 +217,12 @@ namespace LandHulk
 	/**
 	 * What a point of a dressed wreck shows (round 2 of her look, the art director's patchwork of 24 November): soot,
 	 * scorched paint gone chalky, bare steel, flash rust, old rust, her own paint left, charred rubber, wood or glass, a
-	 * track's links or a rim black-grey through the fire (not yet rusted), or the snow fallen on her since. The cloud test
-	 * measures each in its pictures.
+	 * track's links or a rim black-grey through the fire (not yet rusted), the snow fallen on her since, the open hole of
+	 * her turret ring (her turret thrown: the dark of her inside, not soot), or a run of rust down her side from a rusted
+	 * patch above (flash or old as the patch is). The cloud test measures each in its pictures.
 	 */
-	enum class Coat : uint8_t { Soot, Scorched, Bare, Flash, OldRust, Paint, Charred, Links, Snow };
-	constexpr int Coats = 9;
+	enum class Coat : uint8_t { Soot, Scorched, Bare, Flash, OldRust, Paint, Charred, Links, Snow, Hole, Run };
+	constexpr int Coats = 11;
 	const char* CoatName(Coat C);
 	/** What a point of her scorched patch shows: the field's own, ash black at her engine's end, burnt grass, its brown
 	 * rim, her fuel's stain, the brown of the months after, the weeds coming up lusher. */
@@ -239,8 +240,14 @@ namespace LandHulk
 		/** Points burnt away (canvas, leather, rope, cloth), of glass gone or blackened, and left standing just under where
 		 * the burnt cloth's top was (a lorry's tilt: its hoops). */
 		int Burnt = 0, Glass = 0, Hoops = 0;
-		/** A lorry's wooden bed: its planks, and how many burnt through and gone. */
+		/** A lorry's wooden bed: its planks, and how many burnt through and gone; the old floor's top and the planks' (model
+		 * metres up, at rest), the floor's footprint (square metres) and how much of it, and of the rest of her wood facing
+		 * up (her benches, her sides' tops), was taken off and kept. */
 		int Planks = 0, PlanksGone = 0;
+		double BedTop = 0.0, PlankTop = 0.0, BedArea = 0.0, BedDropped = 0.0, WoodKept = 0.0;
+		/** Points dressed as wood (charred), and as her turret ring's open hole (her turret thrown), and its radius. */
+		int Wood = 0, Hole = 0;
+		double RingR = 0.0;
 		/** Tyres burnt off to their rims. */
 		int Rims = 0;
 	};

@@ -232,6 +232,9 @@ namespace LandHulk
 			bool bTurret = false;
 			V3 TurretPivot;
 			double TurretR = 1.0, Muzzle = 0.0;
+			/** Her turret ring's open hole, its radius about TurretPivot (the turret's own base, the collar it sat in, less
+			 * the hull's ring round it: some 0.75 m on a Panzer IV, 0.88 on a Tiger), and the hull's roof height there. */
+			double RingR = 0.0;
 			V3 MuzzleAt;
 			bool bMuzzle = false;
 			/** A track side's links: each near point's link (-1 none), each link's middle and its way round the run and
@@ -289,6 +292,7 @@ namespace LandHulk
 			K.HalfWide = std::max(0.5, 0.5 * (M.HullHi.Y - M.HullLo.Y));
 			K.MidX = 0.5 * (M.HullHi.X + M.HullLo.X);
 			size_t TurretPoints = 0;
+			const LandKit::Body* TurretBody = nullptr;
 			for (size_t B = 0; B < Bodies; ++B)
 			{
 				const LandKit::Body& Bo = M.Bodies[B];
@@ -297,7 +301,11 @@ namespace LandHulk
 				if (Under(M, Bo.Part, M.Turret))
 				{
 					K.OnTurret[B] = 1;
-					if (Bo.Part == M.Turret) TurretPoints = Bo.Near.Count();
+					if (Bo.Part == M.Turret)
+					{
+						TurretPoints = Bo.Near.Count();
+						TurretBody = &Bo;
+					}
 				}
 				if (Under(M, Bo.Part, M.Gun)) K.OnGun[B] = 1;
 				const LandKit::Part& P = M.Parts[static_cast<size_t>(Bo.Part)];
@@ -323,10 +331,27 @@ namespace LandHulk
 				// (a turret proper: one that turns about her up, not the StuG's gun mount in its casemate)
 				K.bTurret = T.Kind == LandKit::PartKind::Turn && std::fabs(T.Axis.Z) > 0.9 && !T.bLimits && TurretPoints >= 1000;
 				K.TurretR = 0.5 * std::hypot(M.TurretHi.X - M.TurretLo.X, M.TurretHi.Y - M.TurretLo.Y) + 0.2;
+				// (the ring: the turret's own base, its lowest points within 4 cm, reaches out to the collar it turns in;
+				// the hull's ring round it some 9 cm inside that. Round 2 blacked a disc of 0.8 of her turret box's half
+				// diagonal, 1.1 m on a Panzer IV, over the roof round the ring too)
+				if (TurretBody && TurretBody->Near.Count() > 0)
+				{
+					const LandKit::Mesh& Me = TurretBody->Near;
+					double Low = 1e9, Reach = 0.0;
+					for (size_t I = 0; I < Me.Count(); ++I) Low = std::min(Low, TurretBody->Pivot.Z + Me.Points[I * 3 + 2]);
+					for (size_t I = 0; I < Me.Count(); ++I)
+					{
+						if (TurretBody->Pivot.Z + Me.Points[I * 3 + 2] > Low + 0.04) continue;
+						Reach = std::max(Reach, std::hypot(TurretBody->Pivot.X + Me.Points[I * 3] - T.Pivot.X, TurretBody->Pivot.Y + Me.Points[I * 3 + 1] - T.Pivot.Y));
+					}
+					K.RingR = std::clamp(Reach - 0.09, 0.35, std::max(0.35, K.TurretR - 0.3));
+				}
 			}
-			// What the fire made of each paint, by its name.
-			for (const std::string& Name : M.PaintNames)
+			// What the fire made of each paint, by its name before any dot (a half-track's "canvas.seat", a T-34's unditching
+			// log's "wood.end": round 2 matched the whole name, and dressed the M3's seats and the T-34's logs as steel).
+			for (const std::string& Whole : M.PaintNames)
 			{
+				const std::string Name = Whole.substr(0, Whole.find('.'));
 				Kit::Matter Is = Kit::Matter::Coat;
 				if (Name == "canvas" || Name == "leather" || Name == "rope" || Name == "cloth" || Name == "torn" || Name == "skin") Is = Kit::Matter::Gone;
 				else if (Name == "glass" || Name == "lamp") Is = Kit::Matter::Glass;
@@ -522,6 +547,11 @@ namespace LandHulk
 		 * November): soot over about half of what faces the sun a week on, some 20 in 100 scorched grey-buff and 10 bare
 		 * grey steel beside it, her own paint a few in 100; the bare steel rusted some 15 to 25 in 100 of her a month on. */
 		constexpr double BareAt = 0.555, ScorchAt = 0.22, SootAt = 0.59;
+		/** Her coat's plates halved down to these (metres) before she is dressed (Halve): the near level so her patches have
+		 * edges where the camera sees her close (round 2 halved to a quarter metre: 57 in 100 more triangles than round 1;
+		 * at 0.35 some 22 in 100 more, her measured look the same), the far one so its few big plates carry the same
+		 * patchwork at a coarser grain (the patches are a stride across). */
+		constexpr double NearHalve = 0.35, FarHalve = 0.7;
 
 		/** What dressing one wreck reads for every point: her, her age, the fire's places (at rest) and her height, her
 		 * burnt colour, the earth under her, the snow fallen on her since. */
@@ -529,6 +559,8 @@ namespace LandHulk
 		{
 			const Hulk* H = nullptr;
 			double Months = 0.0, Snowed = 0.0, Top = 2.0;
+			/** Her own bare threshold (BareAt, moved for her by BareFor). */
+			double Bare = BareAt;
 			std::vector<V3> At;
 			Tone Burnt, Earth;
 		};
@@ -538,7 +570,7 @@ namespace LandHulk
 		 * it, and the steel showing rusted. */
 		struct Fate
 		{
-			double Heat = 0.0;
+			double Heat = 0.0, Score = 0.0;
 			bool bBare = false, bScorched = false, bSoot = false, bSootLeft = false, bFlaked = false, bSteel = false, bRusted = false;
 		};
 
@@ -560,8 +592,9 @@ namespace LandHulk
 			const double Heat0 = 0.25 * Near + 0.15 * Clamp01(At.Z / W.Top) + 0.08 * Clamp01(RestUp) + 0.07 * Clamp01((SootW - 0.5) / 0.5);
 			F.Heat = Heat0 * (0.92 + 0.4 * (W.H->Fire - 0.8)) + 1.2 * (Fbm(At, 1.1, S ^ 0x11ull) - 0.5);
 			const double Na = Fbm(At, 2.0, S ^ 0x22ull);
-			F.bBare = F.Heat + 0.3 * (Na - 0.5) > BareAt;
-			F.bScorched = !F.bBare && F.Heat + 0.3 * (Na - 0.5) > ScorchAt;
+			F.Score = F.Heat + 0.3 * (Na - 0.5);
+			F.bBare = F.Score > W.Bare;
+			F.bScorched = !F.bBare && F.Score > ScorchAt;
 			// The soot: in sheets round where the flames came out and on what faces up, by its own patches (not the heat's:
 			// it lies over the scorched paint and the bare steel alike, so the months wash it off either).
 			F.bSoot = 0.4 * Near + 0.25 * Clamp01(RestUp) + 1.2 * (Fbm(At, 1.6, S ^ 0x33ull) - 0.5) > SootAt;
@@ -569,14 +602,118 @@ namespace LandHulk
 			// from under her)...
 			const double Face = 0.1 + 0.3 * Smooth(-0.5, 0.0, UpZ) + 0.55 * Smooth(0.3, 0.7, UpZ);
 			const double Washed = Smooth(0.7, 7.0, M) * Face;
-			F.bSootLeft = F.bSoot && Even(Noise3(At.X * 3.0, At.Y * 3.0, At.Z * 3.0, S ^ 0x44ull)) >= Washed;
+			// (each noise read only where it can tip the answer: a point's fate as before, fewer noises read)
+			F.bSootLeft = F.bSoot && (Washed <= 0.0 || Even(Noise3(At.X * 3.0, At.Y * 3.0, At.Z * 3.0, S ^ 0x44ull)) >= Washed);
 			// ...the scorched paint flakes off from the first months, some 20 in 100 of it by half a year, 60 by a year and a
 			// half, the rest staying...
-			F.bFlaked = F.bScorched && Even(Noise3(At.X * 2.6, At.Y * 2.6, At.Z * 2.6, S ^ 0x55ull)) < 0.6 * Smooth(0.5, 15.0, M);
+			const double Flakes = 0.6 * Smooth(0.5, 15.0, M);
+			F.bFlaked = F.bScorched && Flakes > 0.0 && Even(Noise3(At.X * 2.6, At.Y * 2.6, At.Z * 2.6, S ^ 0x55ull)) < Flakes;
 			// ...and the steel showing (burnt bare, the paint flaked or the soot washed off it) rusts within a month.
 			F.bSteel = (F.bBare || F.bFlaked) && !F.bSootLeft;
-			F.bRusted = F.bSteel && Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, S ^ 0x66ull)) < Smooth(0.3, 0.95, M);
+			const double Rusts = Smooth(0.3, 0.95, M);
+			F.bRusted = F.bSteel && Rusts > 0.0 && Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, S ^ 0x66ull)) < Rusts;
 			return F;
+		}
+
+		/** FateOf's bRusted alone, its noises read in the order that settles it soonest (a run of rust down her side asks
+		 * it of up to three points above each point of her sides). */
+		bool RustedAt(const Fire& W, const V3& At, double RestUp, double SootW, double UpZ)
+		{
+			const uint64_t S = W.H->Seed;
+			const double M = W.Months;
+			const double Rusts = Smooth(0.3, 0.95, M);
+			if (!(Rusts > 0.0)) return false;
+			double Near = 0.5;
+			if (!W.At.empty())
+			{
+				double D = 1e9;
+				for (const V3& P : W.At) D = std::min(D, (At - P).Length());
+				Near = Smooth(3.4, 0.5, D);
+			}
+			const double Heat0 = 0.25 * Near + 0.15 * Clamp01(At.Z / W.Top) + 0.08 * Clamp01(RestUp) + 0.07 * Clamp01((SootW - 0.5) / 0.5);
+			const double Heat = Heat0 * (0.92 + 0.4 * (W.H->Fire - 0.8)) + 1.2 * (Fbm(At, 1.1, S ^ 0x11ull) - 0.5);
+			const double Score = Heat + 0.3 * (Fbm(At, 2.0, S ^ 0x22ull) - 0.5);
+			const bool bBare = Score > W.Bare;
+			if (!bBare)
+			{
+				const double Flakes = 0.6 * Smooth(0.5, 15.0, M);
+				if (!(Score > ScorchAt) || !(Flakes > 0.0) || !(Even(Noise3(At.X * 2.6, At.Y * 2.6, At.Z * 2.6, S ^ 0x55ull)) < Flakes)) return false;
+			}
+			if (0.4 * Near + 0.25 * Clamp01(RestUp) + 1.2 * (Fbm(At, 1.6, S ^ 0x33ull) - 0.5) > SootAt)
+			{
+				const double Face = 0.1 + 0.3 * Smooth(-0.5, 0.0, UpZ) + 0.55 * Smooth(0.3, 0.7, UpZ);
+				const double Washed = Smooth(0.7, 7.0, M) * Face;
+				if (Washed <= 0.0 || Even(Noise3(At.X * 3.0, At.Y * 3.0, At.Z * 3.0, S ^ 0x44ull)) >= Washed) return false;
+			}
+			return Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, S ^ 0x66ull)) < Rusts;
+		}
+
+		/**
+		 * Her own bare threshold, so each wreck (not only the look sheet's four together) comes to the art director's flash
+		 * rust a month on, some 15 to 25 in 100 of her (round 2: its Tiger 37 in 100, its Panzer IV 6, the Soviet lorry 7,
+		 * at the one threshold for all): the share of what faces up on her coat (her near level at rest, by area: a big
+		 * plate's triangle read at points a hand or so apart over it, a small one's every third) burnt bare and not under
+		 * soot a month on, held within 12 to 20 in 100 (the edges' orange, the runs and a thrown track's links come on top)
+		 * by moving BareAt for her, at most 0.15 either way. The same for her near and far levels.
+		 */
+		double BareFor(const LandKit::Model& M, const Kit& Ki, const Hulk& H, Fire W)
+		{
+			W.Months = 1.0;
+			W.Bare = BareAt;
+			std::vector<std::pair<double, double>> Open;
+			double All = 0.0, Over = 0.0;
+			const int OffBody = H.TrackOff != 0 ? M.TrackBody[H.TrackOff < 0 ? 0 : 1] : -1;
+			for (size_t B = 0; B < M.Bodies.size(); ++B)
+			{
+				const LandKit::Body& Bo = M.Bodies[B];
+				if (Ki.Drop[B] || static_cast<int>(B) == OffBody || Bo.bTrack || Ki.Tyre[B] != 0) continue;
+				const LandKit::Mesh& Me = Bo.Near;
+				const size_t N = Me.Count();
+				if (Me.Points.size() < N * 3 || Me.Normals.size() < N * 3) continue;
+				const auto IsCoat = [&](uint32_t I) { return I >= Me.Paints.size() || Me.Paints[I] >= Ki.PaintIs.size() || Ki.PaintIs[Me.Paints[I]] == Kit::Matter::Coat; };
+				for (size_t T = 0; T + 2 < Me.Triangles.size(); T += 3)
+				{
+					const uint32_t A = Me.Triangles[T], Bv = Me.Triangles[T + 1], C = Me.Triangles[T + 2];
+					if (A >= N || Bv >= N || C >= N || !IsCoat(A) || !IsCoat(Bv) || !IsCoat(C)) continue;
+					const double Up = (static_cast<double>(Me.Normals[A * 3 + 2]) + Me.Normals[Bv * 3 + 2] + Me.Normals[C * 3 + 2]) / 3.0;
+					if (Up < 0.5) continue;
+					const V3 Pa(Me.Points[A * 3], Me.Points[A * 3 + 1], Me.Points[A * 3 + 2]), Pb(Me.Points[Bv * 3], Me.Points[Bv * 3 + 1], Me.Points[Bv * 3 + 2]);
+					const V3 Pc(Me.Points[C * 3], Me.Points[C * 3 + 1], Me.Points[C * 3 + 2]);
+					const double Area = 0.5 * (Pb - Pa).Cross(Pc - Pa).Length();
+					if (!(Area > 0.0)) continue;
+					// (a small triangle every third, standing for three; a big one at points over it)
+					const bool bSmall = Area < 0.02;
+					if (bSmall && (T / 3) % 3 != 0) continue;
+					const int Cut = bSmall ? 1 : std::min(12, static_cast<int>(std::ceil(std::sqrt(Area / 0.02))));
+					const double Each = (bSmall ? 3.0 * Area : Area) / (0.5 * Cut * (Cut + 1));
+					const double SootW = (static_cast<double>(Me.Soot[A]) + Me.Soot[Bv] + Me.Soot[C]) / 3.0;
+					for (int I = 0; I < Cut; ++I)
+					{
+						for (int J = 0; I + J < Cut; ++J)
+						{
+							const V3 At = Bo.Pivot + Pa + (Pb - Pa) * ((I + 1.0 / 3.0) / Cut) + (Pc - Pa) * ((J + 1.0 / 3.0) / Cut);
+							const Fate F = FateOf(W, At, Up, SootW, Up);
+							All += Each;
+							if (F.bSootLeft) continue;
+							Open.emplace_back(F.Score, Each);
+							Over += F.Score > BareAt ? Each : 0.0;
+						}
+					}
+				}
+			}
+			if (!(All > 0.0)) return BareAt;
+			const double Share = Over / All, Want = std::clamp(Share, 0.12, 0.2);
+			if (Want == Share) return BareAt;
+			// (the score above which the wanted share of her lies)
+			std::sort(Open.begin(), Open.end(), [](const std::pair<double, double>& P, const std::pair<double, double>& Q) { return P.first > Q.first; });
+			double Sum = 0.0, To = BareAt;
+			for (const auto& [Score, Area] : Open)
+			{
+				Sum += Area;
+				To = Score;
+				if (Sum >= Want * All) break;
+			}
+			return std::clamp(To, BareAt - 0.15, BareAt + 0.15);
 		}
 
 		/** A point burnt: its colour and what it shows. */
@@ -601,12 +738,14 @@ namespace LandHulk
 		 *   under her; the scorched paint flaking, some of it staying.
 		 * - Rubber (a road wheel's ring) charred black with grey ash, greying; wood charred, ember brown and ash grey in
 		 *   its grain, silvering; glass blackened in its port (a lorry's is gone: Dress). A track's links and a lorry's
-		 *   rims: steel through the fire, rusting within weeks.
+		 *   rims: steel through the fire, rusting within weeks, some of them still black-grey from the fire at a month.
+		 * - Her turret ring's open hole (Ring 1, her turret thrown): the dark of her burnt-out inside, its own tag (not her
+		 *   soot); its lip (Ring 2), the bare steel the turret turned on, rusting as her bare steel does.
 		 * - Low on her: the field's own earth splashed up, and after half a year a green stain where the weeds stand.
 		 * - Snowed: the snow fallen on her since she burnt (SnowSince): white on what faces up, the steel showing through
 		 *   where it lies thin; the earth and the weeds' stain under it.
 		 */
-		Burnt Burn(const Fire& W, const uint8_t* Paint, double Soot, const V3& At, double RestUp, double UpZ, double High, bool bEdge, Stuff What, bool bRing)
+		Burnt Burn(const Fire& W, const uint8_t* Paint, double Soot, const V3& At, double RestUp, double UpZ, double High, bool bEdge, Stuff What, int Ring)
 		{
 			const Hulk& H = *W.H;
 			const double M = W.Months;
@@ -617,10 +756,29 @@ namespace LandHulk
 			const auto Toned = [Vary](const Tone& T) { return Tone(T.R * Vary, T.G * Vary, T.B * Vary); };
 			// Rust: flash orange in its first weeks, old and dull brown by half a year, darker where it is deep.
 			const double Age = Smooth(1.2, 6.0, M);
-			Tone Rust = Mixed(Tone(155, 80, 42), Tone(97, 61, 45), Age);
-			Rust = Mixed(Rust, Tone(84, 54, 42), 0.5 * Smooth(0.55, 0.8, Noise3(At.X * 1.4, At.Y * 1.4, At.Z * 1.4, S ^ 0x88ull)));
+			// (rust's and bare steel's tones made only where a point shows them)
+			Tone RustTone, SteelTone;
+			bool bRustTone = false, bSteelTone = false;
+			const auto Rust = [&]() -> const Tone&
+			{
+				if (!bRustTone)
+				{
+					RustTone = Mixed(Mixed(Tone(155, 80, 42), Tone(97, 61, 45), Age), Tone(84, 54, 42),
+						0.5 * Smooth(0.55, 0.8, Noise3(At.X * 1.4, At.Y * 1.4, At.Z * 1.4, S ^ 0x88ull)));
+					bRustTone = true;
+				}
+				return RustTone;
+			};
 			const Coat RustIs = Age < 0.5 ? Coat::Flash : Coat::OldRust;
-			const Tone Steel = Mixed(Tone(104, 101, 97), Tone(94, 97, 104), 0.5 * Noise3(At.X * 0.9, At.Y * 0.9, At.Z * 0.9, S ^ 0xABull));
+			const auto Steel = [&]() -> const Tone&
+			{
+				if (!bSteelTone)
+				{
+					SteelTone = Mixed(Tone(104, 101, 97), Tone(94, 97, 104), 0.5 * Noise3(At.X * 0.9, At.Y * 0.9, At.Z * 0.9, S ^ 0xABull));
+					bSteelTone = true;
+				}
+				return SteelTone;
+			};
 			Tone Out;
 			Coat Is = Coat::Paint;
 			if (What == Stuff::Rubber)
@@ -646,9 +804,11 @@ namespace LandHulk
 			}
 			else if (What == Stuff::Link || What == Stuff::Rim)
 			{
-				// (steel through the fire, black-grey at first, rusting within weeks)
-				const bool bRust = Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, S ^ 0x66ull)) < Smooth(0.15, 0.8, M);
-				Out = Toned(bRust ? Rust : Mixed(Steel, W.Burnt, 0.35));
+				// (steel through the fire, black-grey at first, rusting within weeks: some one in five by a month, every one
+				// by half a year; round 2 rusted every link by a month, and a thrown track went wholly orange, its links a
+				// fifth of a Tiger's lit faces)
+				const bool bRust = Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, S ^ 0x66ull)) < 0.2 * Smooth(0.15, 0.8, M) + 0.8 * Smooth(1.2, 6.0, M);
+				Out = Toned(bRust ? Rust() : Mixed(Steel(), W.Burnt, 0.35));
 				Is = bRust ? RustIs : Coat::Links;
 			}
 			else
@@ -663,7 +823,7 @@ namespace LandHulk
 				}
 				else if (F.bSteel)
 				{
-					Out = Toned(F.bRusted ? Rust : Steel);
+					Out = Toned(F.bRusted ? Rust() : Steel());
 					Is = F.bRusted ? RustIs : Coat::Bare;
 				}
 				else if (F.bScorched)
@@ -681,33 +841,42 @@ namespace LandHulk
 				// The first orange: along a plate's edge where the paint burnt off (a week on, the only orange on her).
 				if (bEdge && !F.bSootLeft && (F.bBare || F.bScorched))
 				{
-					Out = Mixed(Out, Toned(Rust), 0.85);
+					Out = Mixed(Out, Toned(Rust()), 0.85);
 					Is = RustIs;
 				}
 				// Runs of rust down her sides from a rusted patch above (from a few weeks on).
-				if (M > 0.4 && std::fabs(UpZ) < 0.6 && Is != RustIs && Is != Coat::Soot)
+				// (streaks a hand to a stride wide and long down her, at her near level's grain: round 2's, a few centimetres
+				// wide, fell between its points and showed a month on in 1 in 100 of her sunlit sides)
+				if (M > 0.3 && std::fabs(UpZ) < 0.6 && Is != RustIs && Is != Coat::Soot)
 				{
-					const double Streak = Noise3(At.X * 8.0, At.Y * 8.0, At.Z * 0.6, S ^ 0x99ull);
-					if (Streak > 0.52)
+					const double Streak = Noise3(At.X * 2.8, At.Y * 2.8, At.Z * 0.45, S ^ 0x99ull);
+					if (Streak > 0.5)
 					{
-						for (const double Dz : { 0.15, 0.35, 0.6 })
+						for (const double Dz : { 0.2, 0.45, 0.75 })
 						{
-							if (FateOf(W, At + V3(0.0, 0.0, Dz), RestUp, Soot, UpZ).bRusted)
+							if (RustedAt(W, At + V3(0.0, 0.0, Dz), RestUp, Soot, UpZ))
 							{
-								const double Run = 0.85 * Smooth(0.4, 1.5, M) * Smooth(0.52, 0.62, Streak) * (1.0 - 0.4 * Dz);
-								Out = Mixed(Out, Toned(Rust), Run);
-								if (Run > 0.45) Is = RustIs;
+								const double Run = 0.9 * Smooth(0.3, 1.0, M) * Smooth(0.5, 0.58, Streak) * (1.0 - 0.35 * Dz);
+								Out = Mixed(Out, Toned(Rust()), Run);
+								if (Run > 0.45) Is = Coat::Run;
 								break;
 							}
 						}
 					}
 				}
 			}
-			// her open turret ring (her turret thrown): black, the fire's own chimney
-			if (bRing)
+			// her open turret ring (her turret thrown): the dark of her burnt-out inside, the fire's own chimney; its lip the
+			// bare steel the turret turned on, black-grey from the fire, then rusting as her bare steel does
+			if (Ring == 1)
 			{
 				Out = Mixed(Out, W.Burnt, 0.8);
-				Is = Coat::Soot;
+				Is = Coat::Hole;
+			}
+			else if (Ring == 2)
+			{
+				const bool bRust = Even(Noise3(At.X * 3.4, At.Y * 3.4, At.Z * 3.4, S ^ 0x6Bull)) < Smooth(0.3, 0.95, M);
+				Out = Toned(bRust ? Rust() : Mixed(Steel(), W.Burnt, 0.3));
+				Is = bRust ? RustIs : Coat::Bare;
 			}
 			// low on her: the field's earth splashed up, and the weeds' stain once they stand (both under the snow where it
 			// has fallen since she burnt: on a winter field she would otherwise stand brown- and green-footed in clean snow)
@@ -867,8 +1036,11 @@ namespace LandHulk
 			return Out;
 		}
 
-		/** A lorry's wooden bed in a body's mesh (Wood: each point's wood or not): the box of its floor (the biggest flat
-		 * of wood facing up, a square metre and more), body metres from its pivot; bOk false where it has none. */
+		/** A lorry's wooden bed in a body's mesh (Wood: each point's wood or not): the box of its floor, body metres from its
+		 * pivot; bOk false where it has none. The floor is the biggest flat of wood facing up (a square metre and more; on
+		 * the lorry her bed's floor, 7 square metres at 1.10 m: round 2 took the highest, her two side benches at 1.55 m,
+		 * and laid her planks over the middle of her bed half a metre up, her floor left whole), its underside the flat of
+		 * wood facing down within 15 cm under it. */
 		struct Bed
 		{
 			bool bOk = false;
@@ -877,41 +1049,48 @@ namespace LandHulk
 		Bed BedOf(const LandKit::Mesh& Me, const std::vector<uint8_t>& Wood)
 		{
 			Bed B;
-			std::map<int64_t, double> Area;
-			std::map<int64_t, std::pair<V3, V3>> Box;
+			// (each flat by its height to the centimetre, facing up and down apart: its area and its box)
+			std::map<int64_t, double> Area[2];
+			std::map<int64_t, std::pair<V3, V3>> Box[2];
 			const auto P = [&Me](uint32_t I) { return V3(Me.Points[I * 3], Me.Points[I * 3 + 1], Me.Points[I * 3 + 2]); };
 			for (size_t T = 0; T + 2 < Me.Triangles.size(); T += 3)
 			{
 				const uint32_t A = Me.Triangles[T], Bv = Me.Triangles[T + 1], C = Me.Triangles[T + 2];
 				if (A >= Wood.size() || Bv >= Wood.size() || C >= Wood.size() || !Wood[A] || !Wood[Bv] || !Wood[C]) continue;
 				const V3 Pa = P(A), Pb = P(Bv), Pc = P(C);
-				const V3 Nm = (Pb - Pa).Cross(Pc - Pa);
-				const double Twice = Nm.Length();
-				if (Twice < 1e-9 || std::fabs(Nm.Z) < 0.95 * Twice) continue;
+				const double Twice = (Pb - Pa).Cross(Pc - Pa).Length();
+				// (which way it faces by its points' own facings, not its winding)
+				const double Nz = static_cast<double>(Me.Normals[A * 3 + 2]) + Me.Normals[Bv * 3 + 2] + Me.Normals[C * 3 + 2];
+				if (Twice < 1e-9 || std::fabs(Nz) < 2.85 || std::fabs(Pa.Z - Pb.Z) > 0.005 || std::fabs(Pa.Z - Pc.Z) > 0.005) continue;
+				const int Up = Nz > 0.0 ? 1 : 0;
 				const int64_t Key = std::llround((Pa.Z + Pb.Z + Pc.Z) / 3.0 * 100.0);
-				Area[Key] += 0.5 * Twice;
-				auto Found = Box.find(Key);
-				if (Found == Box.end()) Found = Box.emplace(Key, std::make_pair(V3(1e9, 1e9, 1e9), V3(-1e9, -1e9, -1e9))).first;
+				Area[Up][Key] += 0.5 * Twice;
+				auto Found = Box[Up].find(Key);
+				if (Found == Box[Up].end()) Found = Box[Up].emplace(Key, std::make_pair(V3(1e9, 1e9, 1e9), V3(-1e9, -1e9, -1e9))).first;
 				for (const V3& Q : { Pa, Pb, Pc })
 				{
 					Found->second.first = V3(std::min(Found->second.first.X, Q.X), std::min(Found->second.first.Y, Q.Y), std::min(Found->second.first.Z, Q.Z));
 					Found->second.second = V3(std::max(Found->second.second.X, Q.X), std::max(Found->second.second.Y, Q.Y), std::max(Found->second.second.Z, Q.Z));
 				}
 			}
-			// (the floor's top: the highest flat of a square metre and more; its underside the next below it within 15 cm)
 			int64_t Top = INT64_MIN;
-			for (const auto& [Key, A] : Area)
+			double Most = 1.0;
+			for (const auto& [Key, A] : Area[1])
 			{
-				if (A >= 1.0) Top = std::max(Top, Key);
+				if (A >= Most)
+				{
+					Most = A;
+					Top = Key;
+				}
 			}
 			if (Top == INT64_MIN) return B;
 			B.bOk = true;
-			B.Lo = Box[Top].first;
-			B.Hi = Box[Top].second;
+			B.Lo = Box[1][Top].first;
+			B.Hi = Box[1][Top].second;
 			double Under = B.Hi.Z - 0.05;
-			for (const auto& [Key, A] : Area)
+			for (const auto& [Key, A] : Area[0])
 			{
-				if (Key < Top && Key >= Top - 15 && A >= 0.8 * Area[Top]) Under = std::min(Under, Box[Key].first.Z);
+				if (Key <= Top && Key >= Top - 15 && A >= 0.8 * Most) Under = std::min(Under, Box[0][Key].first.Z);
 			}
 			B.Lo.Z = Under;
 			return B;
@@ -946,22 +1125,25 @@ namespace LandHulk
 		}
 
 		/** Her run-off track as it lies (the art director's carry, 24 November: a thrown track lay dead straight like a
-		 * ladder): the placement's strip (Shape's, which every clearance and the thrown turret's place read) snaking a
-		 * little from side to side, 10 to 15 cm either way past her tail, beside her only outward (off her wheels), and
-		 * folded back on itself once: its last quarter or third turned over and lying doubled back on top of the rest,
-		 * upside down. Beside her hull its links' inner edges are kept 3 cm off her footprint (Shape's strip ran up to 20 cm
-		 * under her outer road wheels), its snaking there on top of that: up to some 25 cm past the strip's rings, so each
-		 * flat link's edges are read against Clear (open ground, and off her thrown turret) and the snaking beside her
-		 * halved, then dropped, then the wheels' room too, until they are clear. Its own dice (her look's seed), so no
-		 * throw of the laying moves. Sets Strip, Fold and Curl. */
+		 * ladder): the placement's strip (Shape's, which every clearance and the thrown turret's place read) snaking from
+		 * side to side from where it starts, a wave of 2.6 to 4.2 m, 14 to 22 cm either way past her tail and beside her
+		 * the same wave all outward (off her wheels: 0 to 28 to 44 cm out), and folded back on itself once: its last
+		 * quarter or third turned over and lying doubled back on top of the rest, upside down, its free end angled out off
+		 * the links under it by a third of its width or so, so the fold shows from above. (Round 2 began the snake only past
+		 * her hull's length, and a half-track's short track, which never passes her tail, lay straight; it laid the doubled
+		 * links exactly over the flat ones.) Beside her hull its links' inner edges are kept 3 cm off her footprint (Shape's
+		 * strip ran up to 20 cm under her outer road wheels), its snaking there on top of that: up to some 45 cm past the
+		 * strip's rings, so each flat link's edges are read against Clear (open ground, and off her thrown turret) and the
+		 * snaking beside her eased, then dropped, then the wheels' room too, until they are clear; the doubled end's angle
+		 * likewise. Its own dice (her look's seed), so no throw of the laying moves. Sets Strip, Fold and Curl. */
 		void LieTrack(Hulk& H, const Kit::Track& Tr, const LandKit::Model& M, const std::function<bool(double X, double Y)>& Clear)
 		{
 			const int N = static_cast<int>(H.Strip.size());
 			H.Fold = H.Curl = 0;
 			if (N < 16 || !Tr.bOk) return;
 			Dice D(Mix(H.Seed, 0x7EAC0FFull));
-			const double Swing = D.U(0.10, 0.15);
-			const double Wave = D.U(3.2, 5.5);
+			const double Swing = D.U(0.14, 0.22);
+			const double Wave = D.U(2.6, 4.2);
 			const double Phase = D.U(0.0, 2.0 * Pi);
 			const double Share = D.U(0.62, 0.78);
 			const double Thick = std::max(0.02, Tr.BMax - Tr.BMin);
@@ -994,7 +1176,7 @@ namespace LandHulk
 					const double A = (Was[static_cast<size_t>(L)].first - H.X) * Fx + (Was[static_cast<size_t>(L)].second - H.Y) * Fy;
 					const double B = (Was[static_cast<size_t>(L)].first - H.X) * Rx + (Was[static_cast<size_t>(L)].second - H.Y) * Ry;
 					const double Need = std::max(0.0, HalfW + 0.03 - (std::fabs(B) - HalfY)) * Smooth(M.HullLo.X - HalfW - 1.0, M.HullLo.X - HalfW, A);
-					const double Off = Out * (Room * Need + Swing * (Beside * (1.0 - Past) * 0.5 * (1.0 + Wavy) + Past * Wavy));
+					const double Off = Out * (Room * Need + Swing * (Beside * (1.0 - Past) * (1.0 + Wavy) + Past * Wavy));
 					const double Px = Was[static_cast<size_t>(L)].first - Uy * Off, Py = Was[static_cast<size_t>(L)].second + Ux * Off;
 					Now[static_cast<size_t>(L)] = { Px, Py };
 					const double Edge = HalfW + 0.05;
@@ -1002,7 +1184,7 @@ namespace LandHulk
 				}
 				return bClear;
 			};
-			if (!LayFlat(1.0, 1.0) && !LayFlat(0.5, 1.0) && !LayFlat(0.0, 1.0)) LayFlat(0.0, 0.0);
+			if (!LayFlat(1.0, 1.0) && !LayFlat(0.7, 1.0) && !LayFlat(0.4, 1.0) && !LayFlat(0.0, 1.0)) LayFlat(0.0, 0.0);
 			const auto& E = Now[static_cast<size_t>(Fold - 1)];
 			const auto& E0 = Now[static_cast<size_t>(Fold - 2)];
 			const double Ex = E.first - E0.first, Ey = E.second - E0.second, El = std::max(1e-9, std::hypot(Ex, Ey));
@@ -1012,24 +1194,57 @@ namespace LandHulk
 				const double Ahead = 0.5 * Tr.Pitch + Thick * std::sin(Phi);
 				Now[static_cast<size_t>(Fold + J)] = { E.first + Ex / El * Ahead, E.second + Ey / El * Ahead };
 			}
-			for (int L = Fold + Curl; L < N; ++L)
+			// The doubled end: over the flat links it lies on, angled out from them toward its free end (Angle: a share of
+			// her track's width at its end), eased where its outer edge would leave open ground.
+			const int Doubled = N - Fold - Curl;
+			const auto LayDoubled = [&](double Angle)
 			{
-				Now[static_cast<size_t>(L)] = Now[static_cast<size_t>(std::max(0, Fold - 1 - (L - Fold - Curl)))];
-			}
+				bool bClear = true;
+				for (int L = Fold + Curl; L < N; ++L)
+				{
+					const int U = std::max(0, Fold - 1 - (L - Fold - Curl));
+					const auto& Under = Now[static_cast<size_t>(U)];
+					const auto& Before = Now[static_cast<size_t>(std::max(0, U - 1))];
+					const auto& After = Now[static_cast<size_t>(std::min(Fold - 1, U + 1))];
+					const double Dx = After.first - Before.first, Dy = After.second - Before.second, Long = std::max(1e-9, std::hypot(Dx, Dy));
+					const double T = Doubled > 0 ? static_cast<double>(L - Fold - Curl + 1) / Doubled : 0.0;
+					const double Off = Out * 2.0 * HalfW * Angle * (0.15 + 0.85 * T);
+					const double Px = Under.first - Dy / Long * Off, Py = Under.second + Dx / Long * Off;
+					Now[static_cast<size_t>(L)] = { Px, Py };
+					const double Edge = Out * (HalfW + 0.05);
+					if (Clear && bClear && !Clear(Px - Dy / Long * Edge, Py + Dx / Long * Edge)) bClear = false;
+				}
+				return bClear;
+			};
+			if (!LayDoubled(0.4) && !LayDoubled(0.2)) LayDoubled(0.0);
 			H.Strip = Now;
 			H.Fold = Fold;
 			H.Curl = Curl;
 		}
 
-		/** Her bed's floor burnt through (a lorry's): laid again as planks along her, about a third burnt through and gone,
-		 * some burnt short at an end or through the middle, all charred; each plank a box of its own points. Floor in her
-		 * body's metres from Pivot; X her body's place, Hull her turn on the field. */
+		/** Her bed's floor burnt through (a lorry's): laid again as planks along her, at the floor's own height and thickness,
+		 * a quarter to two fifths of them burnt through and gone (round 2 drew each plank's fate alone, and every lorry it
+		 * logged lost seven of ten), some burnt short at an end or through the middle, all charred; each plank a box of its
+		 * own points. Floor in her body's metres from Pivot; X her body's place, Hull her turn on the field. */
 		void LayPlanks(LandField::Mesh& Out, Dressing* Note, const Bed& Floor, const V3& Pivot, const LandKit::Xf& X, const Quat& Hull, const Fire& W)
 		{
 			const double Wide = Floor.Hi.Y - Floor.Lo.Y, Long = Floor.Hi.X - Floor.Lo.X;
 			if (Wide <= 0.1 || Long <= 0.1) return;
 			const int N = std::max(4, static_cast<int>(std::lround(Wide / 0.2)));
 			const double Each = Wide / N, Z0 = Floor.Lo.Z, Z1 = Floor.Hi.Z;
+			// (how many burnt through, her own throw; which, those whose own fate came lowest)
+			Dice Share(Mix(W.H->Seed, 0xBED0ull));
+			const int GoneN = std::clamp(static_cast<int>(std::lround(N * Share.U(0.25, 0.4))), 1, N - 1);
+			std::vector<double> Fates(static_cast<size_t>(N));
+			for (int K = 0; K < N; ++K)
+			{
+				Dice D(Mix(W.H->Seed, 0xBED5ull + static_cast<uint64_t>(K)));
+				Fates[static_cast<size_t>(K)] = D.U();
+			}
+			std::vector<double> Ranked = Fates;
+			std::nth_element(Ranked.begin(), Ranked.begin() + (GoneN - 1), Ranked.end());
+			const double GoneTo = Ranked[static_cast<size_t>(GoneN - 1)];
+			if (Note) Note->PlankTop = Pivot.Z + Z1;
 			const uint8_t None[4] = { 0, 0, 0, 255 };
 			const auto Box = [&](double X0, double X1, double Y0, double Y1)
 			{
@@ -1055,7 +1270,7 @@ namespace LandHulk
 						const V3 Rest = Pivot + C[Order[K]];
 						const V3 At = ToField(Hull.Rotate(X.Apply(Rest)));
 						const V3 Up = ToField(Hull.Rotate(X.Q.Rotate(Nm)));
-						const Burnt B = Burn(W, None, 1.0, Rest, Nm.Z, Up.Z, Rest.Z, false, Stuff::Wood, false);
+						const Burnt B = Burn(W, None, 1.0, Rest, Nm.Z, Up.Z, Rest.Z, false, Stuff::Wood, 0);
 						I[K] = Point(Out, At, Up, B.C);
 						if (Note) Note->Coats.push_back(static_cast<uint8_t>(B.Is));
 					}
@@ -1072,7 +1287,7 @@ namespace LandHulk
 				const double CutTo = D.U();
 				const double Break = D.U(0.3, 0.7);
 				const double Hole = D.U(0.12, 0.3);
-				const bool bGone = Fate < 0.36;
+				const bool bGone = Fate <= GoneTo;
 				if (Note)
 				{
 					++Note->Planks;
@@ -2145,13 +2360,15 @@ namespace LandHulk
 		if (Note)
 		{
 			Note->Coats.clear();
-			Note->Burnt = Note->Glass = Note->Hoops = Note->Planks = Note->PlanksGone = Note->Rims = 0;
+			Note->Burnt = Note->Glass = Note->Hoops = Note->Planks = Note->PlanksGone = Note->Rims = Note->Wood = Note->Hole = 0;
+			Note->BedTop = Note->PlankTop = Note->BedArea = Note->BedDropped = Note->WoodKept = Note->RingR = 0.0;
 		}
 		const LandKit::Model* Mp = ModelOf(K);
 		if (!Mp || !Ground) return;
 		const LandKit::Model& M = *Mp;
 		const Hulk& H = List[K];
 		const Kit Ki = KitOf(M);
+		if (Note && H.bTurretOff) Note->RingR = Ki.RingR;
 		std::vector<LandKit::PartState> S;
 		PoseOf(M, Ki, H, S);
 		std::vector<LandKit::Xf> Xf;
@@ -2175,6 +2392,7 @@ namespace LandHulk
 			const Rgb8 E = Colour(H.X, H.Y);
 			W.Earth = Mixed(Tone(E.R, E.G, E.B), Tone(104, 88, 66), 0.5);
 		}
+		W.Bare = BareFor(M, Ki, H, W);
 		// (a lorry's and a half-track's glass gone, its frames left empty; a tank's vision blocks blackened in their ports)
 		const bool bSoft = M.Kind != "tank";
 		const int OffBody = H.TrackOff != 0 ? M.TrackBody[H.TrackOff < 0 ? 0 : 1] : -1;
@@ -2193,13 +2411,16 @@ namespace LandHulk
 			{
 				if (Drawn.Paints[I] < Ki.PaintIs.size()) Made[I] = Ki.PaintIs[Drawn.Paints[I]];
 			}
-			// (near, her coat's big plates halved down to a quarter metre, so her patches show on them)
+			// (her coat's big plates halved, so her patches show on them: near down to NearHalve, far to FarHalve. Round 2
+			// halved only the near level, and the far one, seen beyond 140 m where the strategy camera mostly sits, turned
+			// one coat again: its few big plates took one fate a corner, and nearly every corner, on a hard crease, the
+			// edges' orange)
 			LandKit::Mesh Fine;
 			bool bFine = false;
-			if (bNear && !Bo.bTrack)
+			if (!Bo.bTrack)
 			{
 				Fine = Drawn;
-				bFine = Halve(Fine, Made, 0.25);
+				bFine = Halve(Fine, Made, bNear ? NearHalve : FarHalve);
 			}
 			const LandKit::Mesh& Me = bFine ? Fine : Drawn;
 			const size_t Count = Me.Count();
@@ -2212,6 +2433,11 @@ namespace LandHulk
 			}
 			// (a lorry's wooden bed: its floor laid again as burnt planks, LayPlanks)
 			const Bed Floor = bWood && bSoft ? BedOf(Me, Wood) : Bed();
+			if (Note && Floor.bOk)
+			{
+				Note->BedTop = Bo.Pivot.Z + Floor.Hi.Z;
+				Note->BedArea = (Floor.Hi.X - Floor.Lo.X) * (Floor.Hi.Y - Floor.Lo.Y);
+			}
 			const auto InBed = [&Me, &Floor](uint32_t I)
 			{
 				const double Px = Me.Points[I * 3], Py = Me.Points[I * 3 + 1], Pz = Me.Points[I * 3 + 2];
@@ -2232,7 +2458,17 @@ namespace LandHulk
 				{
 					bDrop = bDrop || Made[V] == Kit::Matter::Gone || (bSoft && Made[V] == Kit::Matter::Glass);
 				}
-				if (!bDrop && Floor.bOk && Wood[A] && Wood[B2] && Wood[C] && InBed(A) && InBed(B2) && InBed(C)) bDrop = true;
+				const bool bAllWood = Wood[A] && Wood[B2] && Wood[C];
+				const bool bFloor = !bDrop && Floor.bOk && bAllWood && InBed(A) && InBed(B2) && InBed(C);
+				if (Note && bAllWood && !bDrop)
+				{
+					// (the wood facing up taken off as her floor, and kept: her benches, her sides' tops)
+					const V3 Pa(Me.Points[A * 3], Me.Points[A * 3 + 1], Me.Points[A * 3 + 2]), Pb(Me.Points[B2 * 3], Me.Points[B2 * 3 + 1], Me.Points[B2 * 3 + 2]);
+					const V3 Pc(Me.Points[C * 3], Me.Points[C * 3 + 1], Me.Points[C * 3 + 2]);
+					const double Nz = static_cast<double>(Me.Normals[A * 3 + 2]) + Me.Normals[B2 * 3 + 2] + Me.Normals[C * 3 + 2];
+					if (Nz > 2.85) (bFloor ? Note->BedDropped : Note->WoodKept) += 0.5 * (Pb - Pa).Cross(Pc - Pa).Length();
+				}
+				if (bFloor) bDrop = true;
 				if (bDrop) continue;
 				Keep.insert(Keep.end(), { A, B2, C });
 				Used[A] = Used[B2] = Used[C] = 1;
@@ -2250,11 +2486,13 @@ namespace LandHulk
 				{
 					Note->Burnt += Made[I] == Kit::Matter::Gone ? 1 : 0;
 					Note->Glass += Made[I] == Kit::Matter::Glass ? 1 : 0;
+					Note->Wood += Made[I] == Kit::Matter::Wood && Used[I] ? 1 : 0;
 					Note->Hoops += Ki.Tilt >= 0 && ClothTop > -1e8 && Used[I] && Me.Points[I * 3 + 2] > ClothTop - 0.3 ? 1 : 0;
 				}
 				Note->Rims += Ki.Tyre[B] == 2 ? 1 : 0;
 			}
-			const std::vector<uint8_t> Edge = EdgesOf(Me);
+			// (a plate's edge only on the near level: the far level's few big plates have nearly every corner on a crease)
+			const std::vector<uint8_t> Edge = bNear ? EdgesOf(Me) : std::vector<uint8_t>(Count, 0);
 			std::vector<uint32_t> Index(Count, UINT32_MAX);
 			for (size_t I = 0; I < Count; ++I)
 			{
@@ -2289,11 +2527,16 @@ namespace LandHulk
 					At = ToField(Hull.Rotate(Posed));
 					Up = ToField(Hull.Rotate(Way));
 				}
-				// (her open ring, where the turret sat: the hull's roof inside its ring)
-				const bool bRing = H.bTurretOff && !bThrown && Posed.Z > M.TurretLo.Z - 0.3
-					&& std::hypot(Posed.X - Ki.TurretPivot.X, Posed.Y - Ki.TurretPivot.Y) < 0.8 * (Ki.TurretR - 0.2);
+				// (her open ring, where the turret sat: the hull's roof inside its ring, and its lip)
+				int Ring = 0;
+				if (H.bTurretOff && !bThrown && Ki.RingR > 0.0 && Posed.Z > M.TurretLo.Z - 0.3)
+				{
+					const double From = std::hypot(Posed.X - Ki.TurretPivot.X, Posed.Y - Ki.TurretPivot.Y);
+					Ring = From < Ki.RingR ? 1 : From < Ki.RingR + 0.08 ? 2 : 0;
+				}
 				const double Soot = I < Me.Soot.size() ? Me.Soot[I] : 0.8;
-				const Burnt Bu = Burn(W, &Me.Colours[I * 4], Soot, Rest, Me.Normals[I * 3 + 2], Up.Unit().Z, bThrown ? 1.0 : Rest.Z, Edge[I] != 0, Is, bRing);
+				const Burnt Bu = Burn(W, &Me.Colours[I * 4], Soot, Rest, Me.Normals[I * 3 + 2], Up.Unit().Z, bThrown ? 1.0 : Rest.Z, Edge[I] != 0, Is, Ring);
+				if (Note && Ring == 1) ++Note->Hole;
 				Index[I] = Point(Out, At, Up, Bu.C);
 				if (Note) Note->Coats.push_back(static_cast<uint8_t>(Bu.Is));
 			}
@@ -2359,7 +2602,9 @@ namespace LandHulk
 				for (size_t L = Fold + Curl; L < Links; ++L)
 				{
 					const size_t U = Fold - 1 - std::min(Fold - 1, L - Fold - Curl);
-					Base[L] = Base[U] + In[U] * (2.0 * Thick);
+					// (angled out off the link it lies on as LieTrack laid it, so the fold shows from above)
+					const V3 Aside(H.Strip[L].first - H.Strip[U].first, H.Strip[L].second - H.Strip[U].second, 0.0);
+					Base[L] = Base[U] + In[U] * (2.0 * Thick) + Xa[U] * Aside.Dot(Xa[U]);
 					Al[L] = -Al[U];
 					In[L] = -In[U];
 					Xa[L] = Xa[U];
@@ -2382,7 +2627,7 @@ namespace LandHulk
 					const V3 Laid = Base[Li] + Al[Li] * Dp.Dot(Tr.Along[Li]) + In[Li] * (Tr.BMax - Dp.Dot(Tr.Out[Li])) + Xa[Li] * Dp.Dot(Side);
 					const V3 Facing = Al[Li] * N.Dot(Tr.Along[Li]) - In[Li] * N.Dot(Tr.Out[Li]) + Xa[Li] * N.Dot(Side);
 					const double Soot = I < Me.Soot.size() ? Me.Soot[I] : 0.8;
-					const Burnt Bu = Burn(W, &Me.Colours[I * 4], Soot, Bo.Pivot + P, N.Z, Facing.Unit().Z, 0.1, false, Stuff::Link, false);
+					const Burnt Bu = Burn(W, &Me.Colours[I * 4], Soot, Bo.Pivot + P, N.Z, Facing.Unit().Z, 0.1, false, Stuff::Link, 0);
 					Index[I] = Point(Out, Laid, Facing, Bu.C);
 					if (Note) Note->Coats.push_back(static_cast<uint8_t>(Bu.Is));
 				}
@@ -2406,7 +2651,7 @@ namespace LandHulk
 					for (int E = 0; E < 2; ++E)
 					{
 						const V3 P = Lie[L] + Xa[L] * (E == 0 ? -Half : Half);
-						const Burnt Bu = Burn(W, Steel, 0.9, V3(static_cast<double>(L) * 0.15, E * 0.4, 0.0), 1.0, Face.Z, 0.1, false, Stuff::Link, false);
+						const Burnt Bu = Burn(W, Steel, 0.9, V3(static_cast<double>(L) * 0.15, E * 0.4, 0.0), 1.0, Face.Z, 0.1, false, Stuff::Link, 0);
 						Now[E] = Point(Out, P, Face, Bu.C);
 						if (Note) Note->Coats.push_back(static_cast<uint8_t>(Bu.Is));
 					}
@@ -2455,15 +2700,15 @@ namespace LandHulk
 		Dice Fd(Mix(H.Seed, 0xF0E1ull));
 		const double FuelSide = Fd.U() < 0.5 ? -1.0 : 1.0;
 		const double FuelAlong = Fd.U(0.0, 0.6);
-		const double FuelOut = Fd.U(0.3, 1.0);
-		const double FuelLong = Fd.U(1.0, 1.7);
-		const double FuelWide = Fd.U(0.6, 1.0);
+		const double FuelOut = Fd.U(0.7, 1.4);
+		const double FuelLong = Fd.U(0.8, 1.3);
+		const double FuelWide = Fd.U(0.45, 0.75);
 		const double FuelTurn = Fd.U(-0.7, 0.7);
 		const double FuelA = MidX + EngineEnd * FuelAlong * HalfLong, FuelB = MidY + FuelSide * (HalfWide + FuelOut);
 		const double Ct = std::cos(FuelTurn), St = std::sin(FuelTurn);
-		// The mesh: round 1's outline (the spokes' reach PatchClear read), four spokes to each of its and 20 rings, fine
-		// enough to carry a ragged edge.
-		constexpr int Sub = 4, Spokes = PatchSpokes * Sub, RingCount = 21;
+		// The mesh: round 1's outline (the spokes' reach PatchClear read), three spokes to each of its and 15 rings, fine
+		// enough to carry a ragged edge and the fuel's crisp one (round 2's four and 20 made 4,400 triangles a patch).
+		constexpr int Sub = 3, Spokes = PatchSpokes * Sub, RingCount = 16;
 		double Reach[PatchSpokes];
 		for (int S = 0; S < PatchSpokes; ++S)
 		{
@@ -2502,19 +2747,25 @@ namespace LandHulk
 				const double RimW = 0.3 + 0.4 * Noise3(X * 1.1, Y * 1.1, 0.7, Seed ^ 0x5A3ull);
 				const double Core = (1.0 - Smooth(-RimW - 0.07, -RimW + 0.07, U)) * Keep;
 				const double Rim = Smooth(-RimW - 0.07, -RimW + 0.07, U) * (1.0 - Smooth(-0.04, 0.1, U)) * Keep;
-				// (ash at her engine's end, grey in it)
+				// Three zones told apart in value and hue (round 2's ash, burnt grass and fuel all came within 5 of one another
+				// in the picture, about 41,35,26, and read as one drop shadow): ash at her engine's end grey-black with lighter
+				// ash through it in soft drifts (some 55 to 65 grey in the picture, no hue; round 2's small pale flecks read as
+				// puffs of smoke); the burnt grass inside the rim a dark brown (some 65,53,36), not black; her fuel's stain a
+				// cool near-black, oily, a little green-blue (some 22,23,23).
 				const double Ash = Core * Smooth(-0.3, 0.4, Along + 0.7 * (Noise3(X * 0.9, Y * 0.9, 1.3, Seed ^ 0x5A4ull) - 0.5));
-				const Tone AshTone = Mixed(Tone(31, 30, 28), Tone(76, 74, 70), 0.7 * Smooth(0.6, 0.78, Noise3(X * 4.0, Y * 4.0, 2.1, Seed ^ 0x5A5ull)));
-				// (her fuel's stain: soaked in beside her, darkest in its middle, its edge ragged)
+				const Tone AshTone = Mixed(Tone(58, 58, 56), Tone(102, 100, 96), 0.65 * Smooth(0.45, 0.8, Noise3(X * 1.5, Y * 1.5, 2.1, Seed ^ 0x5A5ull)));
+				// (her fuel's stain: soaked in beside her, a pool with a crisp lobed edge, not a soft blot: a soft dark blot
+				// beside her reads as her shadow)
 				const double Fa = (A - FuelA) * Ct + (B - FuelB) * St, Fb = -(A - FuelA) * St + (B - FuelB) * Ct;
-				const double Q = std::hypot(Fa / FuelLong, Fb / FuelWide) + 0.5 * (Noise3(X * 1.8, Y * 1.8, 3.7, Seed ^ 0x5A6ull) - 0.5);
-				const double Fuel = (1.0 - Smooth(0.78, 0.92, Q)) * Keep;
-				const Tone FuelTone = Mixed(Tone(38, 33, 24), Tone(25, 22, 17), 1.0 - Smooth(0.0, 0.7, Q));
+				const double Q = std::hypot(Fa / FuelLong, Fb / FuelWide) + 0.55 * (Noise3(X * 2.2, Y * 2.2, 3.7, Seed ^ 0x5A6ull) - 0.5)
+					+ 0.2 * (Noise3(X * 5.0, Y * 5.0, 4.1, Seed ^ 0x5A7ull) - 0.5);
+				const double Fuel = (1.0 - Smooth(0.8, 0.88, Q)) * Keep;
+				const Tone FuelTone = Mixed(Tone(30, 31, 29), Tone(21, 23, 23), 1.0 - Smooth(0.1, 0.8, Q));
 				Tone C = Own;
-				const double RimBy = 0.9 * Rim * Fresh, CoreBy = (Core - Ash) * Fresh, AshBy = Ash * Fresh, FuelBy = 0.94 * Fuel * FuelLeft;
+				const double RimBy = 0.9 * Rim * Fresh, CoreBy = (Core - Ash) * Fresh, AshBy = Ash * Fresh, FuelBy = 0.96 * Fuel * FuelLeft;
 				// (the rim's grass browned and yellowed outward, burnt darker inward)
 				C = Mixed(C, Mixed(Tone(112, 92, 56), Tone(88, 68, 44), Smooth(-0.04, -RimW, U)), RimBy);
-				C = Mixed(C, Tone(46, 39, 30), CoreBy);
+				C = Mixed(C, Tone(74, 60, 40), CoreBy);
 				C = Mixed(C, AshTone, AshBy);
 				C = Mixed(C, FuelTone, FuelBy);
 				// (the months: washed into a burnt brown where it burnt, then the weeds lusher, round 1's halo)
@@ -2529,7 +2780,11 @@ namespace LandHulk
 				Index[static_cast<size_t>(Ri * Spokes + S)] = Point(Out, V3(X - H.X, Y - H.Y, Z), V3(Nx, Ny, Nz), ToRgb(C));
 				if (Note)
 				{
-					const double By[Scorches] = { 0.25, AshBy, CoreBy, RimBy, FuelBy, BrownBy, LushBy };
+					// (each zone by what it shows through the ones laid over it: the rim first, then the burnt grass, the
+					// ash, the fuel, the brown and the weeds, so her fuel soaked into the burnt grass is her fuel's)
+					const double After = (1.0 - BrownBy) * (1.0 - LushBy);
+					const double By[Scorches] = { 0.25, AshBy * (1.0 - FuelBy) * After, CoreBy * (1.0 - AshBy) * (1.0 - FuelBy) * After,
+						RimBy * (1.0 - CoreBy) * (1.0 - AshBy) * (1.0 - FuelBy) * After, FuelBy * After, BrownBy * (1.0 - LushBy), LushBy };
 					int Chief = 0;
 					for (int I = 1; I < Scorches; ++I) Chief = By[I] > By[Chief] ? I : Chief;
 					Note->Coats.push_back(static_cast<uint8_t>(Chief));
@@ -2564,7 +2819,9 @@ namespace LandHulk
 		case Coat::Paint: return "paint";
 		case Coat::Charred: return "charred";
 		case Coat::Links: return "links";
-		default: return "snow";
+		case Coat::Snow: return "snow";
+		case Coat::Hole: return "ring hole";
+		default: return "runs";
 		}
 	}
 
