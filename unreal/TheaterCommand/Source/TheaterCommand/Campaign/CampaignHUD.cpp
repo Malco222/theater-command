@@ -15757,7 +15757,7 @@ namespace
 				const FTownPlot& Plot = Bar.Plots[Index];
 				const bool bOn = Index == Picked, bOpen = State == TEXT("lot") || State == TEXT("going");
 				const FString Word = State == TEXT("lot") ? FString(TEXT("FREE")) : State == TEXT("going") ? FString(TEXT("GOING UP")) : (Plot.Level > 0 ? Plot.Label : Plot.Name).ToUpper();
-				const FString Text = FString::Printf(TEXT("PLOT %d  ·  %s"), Index + 1, *Word);
+				const FString Text = FString::Printf(TEXT("PLOT %d  \u00B7  %s"), Index + 1, *Word);
 				if (bOpen && Spot.Ground.Num() >= 3)
 				{
 					STownPlotMarks::FMark Outline;
@@ -15881,7 +15881,7 @@ namespace
 					+ SVerticalBox::Slot().AutoHeight()
 					[
 						SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
-						.Text(FText::FromString(Province.IsEmpty() ? FString(TEXT("THE TOWN")) : FString::Printf(TEXT("THE TOWN  ·  %s"), *Province.ToUpper())))
+						.Text(FText::FromString(Province.IsEmpty() ? FString(TEXT("THE TOWN")) : FString::Printf(TEXT("THE TOWN  \u00B7  %s"), *Province.ToUpper())))
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 					[
@@ -15908,7 +15908,7 @@ namespace
 						.ToolTipText(FText::FromString(TEXT("Close the town (Esc).")))
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseTownCard(); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(FText::FromString(TEXT("×"))).Font(Serif(TEXT("Regular"), 15.0f)).ColorAndOpacity(Brass)
+							SNew(STextBlock).Text(FText::FromString(TEXT("\u00D7"))).Font(Serif(TEXT("Regular"), 15.0f)).ColorAndOpacity(Brass)
 						]
 					]
 				]
