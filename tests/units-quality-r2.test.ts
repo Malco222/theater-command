@@ -29,7 +29,7 @@ import { traitAttack, traitCardRule, traitNames, traitRule, traitsOf } from '../
 import page from '../src/campaign/ui/main.ts?raw';
 import { DIPLOMACY, fireEvent } from '../src/campaign/diplomacy';
 import { storyFallen } from '../src/campaign/stories';
-import { guardPower, stormForce } from '../src/campaign/siege';
+import { SIEGE, guardPower, stormForce } from '../src/campaign/siege';
 import { techMul } from '../src/campaign/research';
 import { runTurnAI } from '../src/campaign/turn';
 import { commandMonth, corpsTakenWhole, provincesTaken } from '../src/campaign/command';
@@ -52,7 +52,7 @@ import foldSource from '../src/campaign/fold.ts?raw';
 import economySource from '../src/campaign/economy.ts?raw';
 import aiSource from '../src/campaign/ai.ts?raw';
 import staffSource from '../src/campaign/staff.ts?raw';
-import { offensive } from '../src/campaign/ai';
+import { offensive, softenLine } from '../src/campaign/ai';
 import { attackOutlook, type Outlook } from '../src/campaign/turn';
 import { chanceOn, men } from '../src/campaign/game';
 import { oddsBand } from '../src/campaign/intel';
@@ -1536,14 +1536,61 @@ describe('the way by orders (#2 form Part 1 section 5; ruling (1))', () => {
   it('reads the card through seenOdds wherever the staff weighs a field attack, and asks the way\'s odds', () => {
     const strip = (t: string): string => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     const ai = strip(aiSource), st = strip(staffSource);
-    // offensive (each force weighed, the force sent), twoWaves (both waves) and localAttacks (the same two).
-    expect(ai.match(/seenOdds\(g, /g)?.length).toBe(6);
+    // offensive (each force weighed, the force sent), twoWaves (both waves), localAttacks (the same two) and
+    // softenLine (the attack a probe would help); the odds asked in offensive, localAttacks and softenLine.
+    expect(ai.match(/seenOdds\(g, /g)?.length).toBe(7);
     expect(ai.match(/stopAt\(g, nat, 2\.6, /g)?.length).toBe(2);
-    expect(ai.match(/needAt\(g, nat, /g)?.length).toBe(2);
+    expect(ai.match(/needAt\(g, nat, /g)?.length).toBe(3);
     // No stop at 2.6 is read that the way does not set.
     expect(ai).not.toMatch(/odds >= 2\.6/);
     // The staff's choice of where to name a main effort.
     expect(st).toContain('const odds = seenOdds(g, assess(g, force, t));');
+  });
+
+  it('weighs a probe at the fieldworks against the odds it sees and asks, as it weighs the attack the probe would help', () => {
+    /** Four Soviet rifle corps on one Polish corps in finished works: whether the staff probes the line first. */
+    const probes = (earned: number | null, on = true): { probed: boolean; works: number; card: number; seen: number } => {
+      const f = volhynia(4, 1, on);
+      dig(f.def);
+      if (earned !== null) earn(f.g, 'SOV', earned);
+      const a = assess(f.g, limitAttackers(f.g, f.att, f.t), f.t);
+      softenLine(f.g, 'SOV', new Set(['POL']), new Set(), new Set([f.t.name]), 1.2, {});
+      return { probed: f.g.flags[`probed:${f.t.id}`] === f.g.turn, works: f.def[0].dugFor ?? 0, card: a.odds, seen: seenOdds(f.g, a) };
+    };
+    // At sight 0 the card reads just under the 1.2 asked, where today's staff probes; but a staff that counts men
+    // sees over the 0.9 it asks, attacks without help, and leaves the works alone.
+    const blind = probes(null);
+    expect(blind.card).toBeLessThan(1.2);
+    expect(blind.card).toBeGreaterThan(0.9);
+    expect(blind.seen).toBeGreaterThan(1.3);
+    expect(blind.probed).toBe(false);
+    expect(blind.works).toBe(3);
+    // At sight 1 it reads the card and probes as today's staff does.
+    const sighted = probes(1);
+    expect(sighted.seen).toBe(sighted.card);
+    expect(sighted.card).toBeLessThan(1.2);
+    expect(sighted.probed).toBe(true);
+    expect(sighted.works).toBeLessThan(3);
+    // Off, today's staff probes on the card.
+    const off = probes(null, false);
+    expect(off.seen).toBe(off.card);
+    expect(off.probed).toBe(true);
+  });
+
+  it('asks the extra odds at a town whose siege was just raised on top of the way\'s, at every sight', () => {
+    // Two Soviet rifle corps on one Polish corps: a staff that counts men sees 0.93, over the 0.9 it asks, under
+    // 0.9 and the 0.6 a just-relieved town asks besides (siege.json ai.relieved).
+    const go = (relieved: boolean): ReturnType<typeof sent> => {
+      const f = volhynia(2, 1);
+      if (relieved) f.g.flags[`relieved:${f.t.id}`] = f.g.turn;
+      return sent(f, null);
+    };
+    const plain = go(false);
+    expect(staffSight(volhynia(2, 1).g, 'SOV')).toBe(0);
+    expect(plain.seen[plain.seen.length - 1]).toBeGreaterThanOrEqual(0.9);
+    expect(plain.seen[plain.seen.length - 1]).toBeLessThan(0.9 + SIEGE.ai.relieved.odds);
+    expect(plain.k).toBeGreaterThan(0);
+    expect(go(true).k).toBe(0);
   });
 });
 

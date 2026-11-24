@@ -2039,8 +2039,9 @@ export function offensive(g: Game, nat: string, objs: string[], enemies: Set<str
           if (!pick) {
             const sore = g.flags.open === 1 && g.turn - (g.flags[`relieved:${j}`] ?? -99) <= SIEGE.ai.relieved.months ? SIEGE.ai.relieved.odds : 0;
             // (Units decide: a staff by orders asks 0.9, rising to these odds with its sight: DD 24 Nov 15:53Z, #2 form
-            // Part 1 section 5.)
-            const need = needAt(g, nat, (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore);
+            // Part 1 section 5. What it asks for works is in the blend, since a staff that counts men does not see
+            // them; the raised siege is not a reading of the enemy, so it is asked on top at every sight.)
+            const need = needAt(g, nat, (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready) + sore;
             if (odds >= need) pick = pool;
             else {
               // Not at these odds in one blow: in two, if there are the corps for it.
@@ -2168,8 +2169,10 @@ export function softenLine(g: Game, nat: string, enemies: Set<string>, halt: Set
     if (!foes.length || Math.max(...foes.map(worksOf)) < S.works) continue;
     const pool = limitAttackers(g, avail.filter((c) => c.org >= 0.35), target);
     if (!pool.length) continue;
-    const odds = assess(g, pool, target).odds;
-    const need = oddsFor[target.name] ?? minOdds;
+    // (Units decide: the probe is weighed against the odds the staff sees and the odds it asks, as the attack it
+    // prepares is: DD 24 Nov 15:53Z, #2 form Part 1 section 5. Off, the card's odds and the plan's.)
+    const odds = seenOdds(g, assess(g, pool, target));
+    const need = needAt(g, nat, oddsFor[target.name] ?? minOdds);
     if (odds >= need || odds < S.from * need) continue;
     // Who probes: a corps beside the line that is not going in with the main body, or one of them where everyone is:
     // the one with the weight for a full probe, and of those the weakest in the attack.
