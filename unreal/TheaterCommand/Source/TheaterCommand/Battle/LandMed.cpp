@@ -500,12 +500,14 @@ namespace LandScape
 				const double Red = Smooth(-0.2, 0.3, MotRead(X, Y, 3) + 0.15 * N1 + (bSouth ? -0.12 : 0.05));
 				const Tone Pale = Mixed(Rgb(176, 162, 134), Rgb(192, 184, 164), Smooth(-0.4, 0.9, N1));
 				const Tone T = Mixed(Pale, Rgb(162, 96, 64), Red);
-				return Mixed(T, Rgb(100, 82, 62), 0.58 * Wet);
+				// (the winter's rain darkens it to a damp red-brown, never toward black: the art director on Algiers in
+				// December, 24 Nov, where it measured 58,49,39 against a damp terra rossa's ~130,95,70)
+				return Mixed(T, Rgb(150, 100, 70), 0.35 * Wet);
 			}
 			/** Ploughed earth (M the soft mottle): the furrows' shade and the clods' lit tops, darker and browner wet. */
 			Tone Ploughed(const Tone& Earth, double M) const
 			{
-				return Varied(Mixed(Earth, Rgb(112, 92, 72), 0.4 + 0.12 * Wet), 0.92 + 0.08 * M - 0.1 * Wet, 0.0);
+				return Varied(Mixed(Earth, Mixed(Rgb(112, 92, 72), Rgb(140, 98, 70), Wet), 0.4 + 0.04 * Wet), 0.92 + 0.08 * M, 0.0);
 			}
 			/** Grass by the month: dead straw in the summer, wet green-brown in the winter, green in the spring. */
 			Tone Grass(double N1, double M) const
@@ -704,7 +706,7 @@ namespace LandScape
 				if (Wet > 0.4)
 				{
 					const double Churned = std::max(0.75 * Smooth(7.0, 0.5, S.Lane), 0.35 * Smooth(2.5, 0.3, S.Edge));
-					T = Mixed(T, Rgb(90, 76, 60), Wet * std::max(Churned, 0.6 * Smooth(0.5, 0.85, -M)));
+					T = Mixed(T, Rgb(122, 88, 64), Wet * std::max(Churned, 0.6 * Smooth(0.5, 0.85, -M)));
 					// (the rain lying in the plough's furrows, grey with the sky, where the ground is lowest: from afar a
 					// sheen in drifts across the field)
 					if (C == Plough || (C == Grain && Stage == 3)) T = Mixed(T, Rgb(124, 130, 136), 0.4 * Wet * Smooth(0.2, 0.75, -Mo.Mid));
@@ -991,10 +993,17 @@ namespace LandScape
 				}
 				case CStone:
 				{
-					// a few pieces of pale limestone, one bigger
-					W.Rock(0.0, 0.0, 0.16, 0.1, 31, Rgb(214, 206, 188), Rgb(150, 140, 122));
-					W.Rock(0.24, 0.1, 0.07, 0.05, 32, Rgb(206, 198, 180), Rgb(144, 134, 118));
-					W.Rock(-0.18, 0.16, 0.06, 0.04, 33, Rgb(196, 188, 170), Rgb(138, 128, 112));
+					// a few pieces of weathered limestone, one bigger, each half sunk in the earth (the art director, 24 Nov:
+					// built white and whole they read as popcorn; lit about 150-175 on the screen)
+					const auto Sunk = [&W, &M](double CX, double CY, double Rad, double Ht, uint64_t Sd, const Tone& Lit, const Tone& Under)
+					{
+						const size_t From = M.Near.Positions.size();
+						W.Rock(CX, CY, Rad, Ht, Sd, Lit, Under);
+						for (size_t I = From + 2; I < M.Near.Positions.size(); I += 3) M.Near.Positions[I] -= static_cast<float>(0.45 * Ht);
+					};
+					Sunk(0.0, 0.0, 0.16, 0.1, 31, Rgb(164, 156, 138), Rgb(118, 110, 96));
+					Sunk(0.24, 0.1, 0.07, 0.05, 32, Rgb(158, 150, 134), Rgb(114, 106, 92));
+					Sunk(-0.18, 0.16, 0.06, 0.04, 33, Rgb(152, 144, 128), Rgb(110, 102, 88));
 					M.FarFrom = 40.0f;
 					break;
 				}
@@ -1056,22 +1065,39 @@ namespace LandScape
 				{
 					if (Wet > 0.6)
 					{
-						// the winter's: the furrows' ridges in dark wet clods, the rain standing in the furrows between them,
-						// grey with the sky (laid along the parcel's grain)
-						const Tone Sky = Rgb(122, 130, 138), SkyEdge = Rgb(84, 84, 80);
+						// the winter's: the furrows' ridges in wet clods, the rain standing in the furrows between them, grey
+						// with the sky (laid along the parcel's grain). Each pool lies in its rut: banks of wet earth a little
+						// proud of it either side, its edges silted, its ends drawn in and fading out (the art director, 24
+						// Nov: drawn flat and hard-edged they read as grey slabs laid on the field; the clods red-brown, not
+						// near-black)
+						const Tone Sky = Rgb(122, 130, 138), Silt = Rgb(104, 90, 76), Crest = Rgb(128, 92, 66), Foot = Rgb(118, 86, 64);
+						constexpr int Steps = 4;
 						for (int F = -1; F <= 1; ++F)
 						{
-							const double Y0 = 0.62 * F, Half = R.Range(0.035, 0.06), Long = R.Range(0.7, 1.0);
-							const uint32_t A = W.Vert(-Long, Y0 - Half, 0.015, 0.0, 0.0, 1.0, SkyEdge);
-							const uint32_t B = W.Vert(Long, Y0 - Half, 0.015, 0.0, 0.0, 1.0, SkyEdge);
-							const uint32_t C = W.Vert(Long, Y0 + Half, 0.015, 0.0, 0.0, 1.0, Sky);
-							const uint32_t D = W.Vert(-Long, Y0 + Half, 0.015, 0.0, 0.0, 1.0, Sky);
-							W.Tri(A, B, C);
-							W.Tri(A, C, D);
+							const double Y0 = 0.62 * F + R.Range(-0.04, 0.04), Half = R.Range(0.035, 0.06), Long = R.Range(0.7, 1.0);
+							const double Rim = R.Range(0.05, 0.08), Bend = R.Range(-0.02, 0.02);
+							uint32_t Row[Steps + 1][6];
+							for (int St = 0; St <= Steps; ++St)
+							{
+								const double T = static_cast<double>(St) / Steps, X = -Long + 2.0 * Long * T;
+								const double Wide = 0.3 + 0.7 * std::sin(Pi * T), YM = Y0 + Bend * std::sin(2.0 * Pi * T);
+								const bool bEnd = St == 0 || St == Steps;
+								const double At[6] = { -(Half + Rim), -(Half + 0.35 * Rim), -Half, Half, Half + 0.35 * Rim, Half + Rim };
+								const double Up[6] = { -0.01, 0.028, 0.01, 0.01, 0.028, -0.01 };
+								const Tone Water = bEnd ? Silt : Mixed(Sky, Silt, 0.3);
+								const Tone Col[6] = { Foot, Crest, Water, Water, Crest, Foot };
+								for (int J = 0; J < 6; ++J) Row[St][J] = W.Vert(X, YM + Wide * At[J], Up[J], 0.0, 0.0, 1.0, Col[J]);
+							}
+							for (int St = 0; St < Steps; ++St)
+								for (int J = 0; J < 5; ++J)
+								{
+									W.Tri(Row[St][J], Row[St + 1][J], Row[St + 1][J + 1]);
+									W.Tri(Row[St][J], Row[St + 1][J + 1], Row[St][J + 1]);
+								}
 						}
-						W.Rock(0.1, 0.31, 0.13, 0.08, 41, Rgb(98, 82, 66), Rgb(58, 48, 40));
-						W.Rock(-0.35, -0.31, 0.1, 0.07, 42, Rgb(94, 78, 62), Rgb(56, 46, 38));
-						W.Rock(0.5, -0.3, 0.08, 0.05, 43, Rgb(100, 84, 68), Rgb(60, 50, 42));
+						W.Rock(0.1, 0.31, 0.13, 0.08, 41, Rgb(146, 104, 74), Rgb(100, 72, 52));
+						W.Rock(-0.35, -0.31, 0.1, 0.07, 42, Rgb(140, 100, 72), Rgb(96, 68, 50));
+						W.Rock(0.5, -0.3, 0.08, 0.05, 43, Rgb(150, 108, 78), Rgb(104, 74, 54));
 						M.FarFrom = 35.0f;
 						break;
 					}
