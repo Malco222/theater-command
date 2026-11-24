@@ -15,13 +15,16 @@ the pieces' paint is (the sun's light, and on the side turned from the sun the s
 back, its glow): side-on in the sun through a long lens (the art director's verdict of 24 November 14:34Z, (c): its hem
 pulled in toward its lines), from under it 100 m off with the sun behind it with its glow and without, and falling in
 a quarter at a time across the wind; and lying on the field (her verdict, (b)): from 40 m at a man's eye height, and
-from above, his and a second pilot's. Each down view draws him lying (a dark bar) and his lines back to him.
+from above, his and a second pilot's (her note of 24 November 17:40Z: its folds across it, its uneven outline and
+its hem; each pixel of the silk lit by its facing there, as the scene lights it). Each down view draws him lying (a
+dark bar) and his lines back to him.
 It measures in the picture what she asked for, from the pixels it drew, and prints it (and writes it under each view).
 Usage: chutes.py <air_paths.txt> <chute_silk.txt> <out.png>"""
 import math
 import sys
 from collections import defaultdict
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 SRC, SILK, DST = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -302,22 +305,24 @@ class View:
 
 
 def silk_polys(mesh, view, sun, fill):
-    """Each triangle of the silk's face toward the eye, projected and shaded, far first."""
+    """Each triangle of the silk's face toward the eye, projected, far first, with each corner's facing and colour: the
+    scene lights each pixel by its points' facings across the triangle, not one light a triangle (the art director's
+    note of 24 November 17:40Z: a fold across the silk is a darker band and a lighter one between two rings)."""
     L = norm(sun)
     tris = []
-    P = mesh['p']
+    P, N, C = mesh['p'], mesh['n'], mesh['c']
     for t in mesh['t']:
         a, b, c = (P[i] for i in t)
         mid = [(a[k] + b[k] + c[k]) / 3.0 for k in range(3)]
-        n = norm([sum(mesh['n'][i][k] for i in t) for k in range(3)])
+        n = norm([sum(N[i][k] for i in t) for k in range(3)])
         if dot(n, [e - m for e, m in zip(view.eye, mid)]) <= 0.0:
             continue   # (the face of the silk turned from the eye: its other face, on the other side, is drawn)
-        col = [sum(mesh['c'][i][k] for i in t) / 3.0 for k in range(3)]
+        col = [sum(C[i][k] for i in t) / 3.0 for k in range(3)]
         lit = dot(n, L)
         shade = 0.22 + 0.78 * max(0.0, lit) + (fill * min(1.0, -lit * 1.4) if lit < 0.0 else 0.0)
-        tris.append((view.depth(mid), [view.at(v) for v in (a, b, c)], srgb([col[k] * shade for k in range(3)])))
+        tris.append((view.depth(mid), [view.at(v) for v in (a, b, c)], srgb([col[k] * shade for k in range(3)]), [norm(N[i]) for i in t], [C[i] for i in t]))
     tris.sort(key=lambda e: -e[0])
-    return tris
+    return tris, L, fill
 
 
 def panel(box, title, ground=None):
@@ -328,17 +333,50 @@ def panel(box, title, ground=None):
     d.text((x0 + 6, y0 + 4), title, fill=INK)
 
 
-def paint(tris, box, onto=None):
-    """Draws the triangles clipped to the box (onto: an image of their own, for a layer); returns the silk's mask."""
+def paint(drawn, box, onto=None):
+    """Draws the triangles far first, clipped to the box (onto: an image of their own, for a layer), lit much as the
+    pieces' paint is: the sun's light, and on the side turned from the sun the share of its own colour the scene gives
+    back, its glow (fill). Each is drawn whole in one light (its corners' facings' mean, as before), and then each pixel
+    inside it lit by its facing there, its corners' between them, as the scene lights it (the art director's note of 24
+    November 17:40Z: a fold across the silk is a darker band and a lighter one between two rings, which one light a
+    triangle had shown as one shade). Returns the silk's mask (the whole triangles')."""
+    tris, sun, fill = drawn
     x0, y0, x1, y1 = box
+    target = onto if onto is not None else im
     mask = Image.new('L', (W, H), 0)
     md = ImageDraw.Draw(mask)
-    dd = ImageDraw.Draw(onto) if onto is not None else d
-    for _, poly, rgb in tris:
+    dd = ImageDraw.Draw(target)
+    for _, poly, rgb, _, _ in tris:
         md.polygon(poly, fill=255)
         dd.polygon(poly, fill=rgb + ((255,) if onto is not None else ()))
     clip = Image.new('L', (W, H), 0)
     ImageDraw.Draw(clip).rectangle((x0 + 1, y0 + 22, x1 - 1, y1 - 1), fill=255)
+    cx0, cy0, cx1, cy1 = x0 + 1, y0 + 22, x1 - 1, y1 - 1
+    pix = np.array(target)
+    L = np.array(sun)
+    for _, poly, _, facings, colours in tris:
+        (ax, ay), (bx, by), (qx, qy) = poly
+        lx, hx = max(cx0, int(math.floor(min(ax, bx, qx)))), min(cx1, int(math.ceil(max(ax, bx, qx))))
+        ly, hy = max(cy0, int(math.floor(min(ay, by, qy)))), min(cy1, int(math.ceil(max(ay, by, qy))))
+        den = (by - qy) * (ax - qx) + (qx - bx) * (ay - qy)
+        if lx > hx or ly > hy or abs(den) < 1e-12:
+            continue
+        X, Y = np.meshgrid(np.arange(lx, hx + 1, dtype=float), np.arange(ly, hy + 1, dtype=float))
+        w0 = ((by - qy) * (X - qx) + (qx - bx) * (Y - qy)) / den
+        w1 = ((qy - ay) * (X - qx) + (ax - qx) * (Y - qy)) / den
+        w2 = 1.0 - w0 - w1
+        inside = (w0 >= -1e-7) & (w1 >= -1e-7) & (w2 >= -1e-7)
+        if not inside.any():
+            continue
+        w = np.stack([w0[inside], w1[inside], w2[inside]], axis=1)
+        n = w @ np.array(facings)
+        n /= np.maximum(1e-12, np.linalg.norm(n, axis=1))[:, None]
+        lit = n @ L
+        shade = 0.22 + 0.78 * np.maximum(0.0, lit) + np.where(lit < 0.0, fill * np.minimum(1.0, -lit * 1.4), 0.0)
+        rgb = (255.0 * np.clip((w @ np.array(colours)) * shade[:, None], 0.0, 1.0) ** (1 / 2.2)).astype(np.uint8)
+        ys, xs = np.nonzero(inside)
+        pix[ys + ly, xs + lx, 0:3] = rgb
+    target.paste(Image.fromarray(pix))
     return Image.composite(mask, Image.new('L', (W, H), 0), clip)
 
 

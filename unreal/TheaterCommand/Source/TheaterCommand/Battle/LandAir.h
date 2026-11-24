@@ -212,7 +212,13 @@ namespace LandAir
 	 * metres off (the art director's verdict of 24 November 14:34Z: it had lain a flat oval with even scallops, "a
 	 * doily"): two to three times as long as it is wide, in a few long loose folds running mostly downwind, uneven and
 	 * his own (Chute::Folds), its far end lifted a little on the air it still holds and coming round and down to the
-	 * ground, its near end gathered 2 to 3.5 m past his harness, where its lines run back to him across the grass.
+	 * ground, its near end gathered 2 to 3.5 m past his harness, where its lines run back to him across the grass. And
+	 * (her note of 24 November 17:40Z: from above it had read as a smooth cocoon or a gourd) uneven from above: three or
+	 * four folds across it where it bunched, one side wider than the other, its edges jagged, a gore or two flipped
+	 * over and lying flat out beyond its wide side and one tucked under the other, its hem a wavy edge in a scallop
+	 * between each two lines with two or three of its gores flipped back over its top (their lines running across
+	 * them), and its lifted far end slumped a little to one side. Each point's facing is the way its silk runs on to
+	 * the next ring, so that a fold across it shades as a darker band and a lighter one.
 	 * Ground (board metres, as Sky's; none: a flat field) is the ground it lies on, read once on a grid a quarter of a
 	 * metre square under it: each point laid on it, and every edge of its silk kept over the ground the grid reads (a
 	 * bank, a ditch, a crater's rim; HeapShape lifts both ends of an edge that would cut through one). The mesh is placed

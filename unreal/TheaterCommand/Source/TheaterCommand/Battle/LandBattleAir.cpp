@@ -285,7 +285,7 @@ namespace
 
 	/** A chute mesh's makings, kept from frame to frame so that their storage is used again (the game thread's alone;
 	 * a review of 24 November: each build had made new storage for its silk's points, 2,018 in the air on 28 gores and
-	 * 2,466 lying, 4,704 triangles; LandAir::HeapShape). Mid: its silk half-way through its step, to wind it by;
+	 * 2,914 lying, 5,600 triangles; LandAir::HeapShape). Mid: its silk half-way through its step, to wind it by;
 	 * Points and Normals: its silk's, moved in place between makes. */
 	struct FChuteScratch
 	{

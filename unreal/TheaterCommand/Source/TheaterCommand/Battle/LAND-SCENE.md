@@ -818,18 +818,19 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     makes it is moved in place every frame toward the next step's shape (`LandAir::SilkStep`: each make is the step it
     is in, the last make's next, and the next one; `At` moves its points and facings between them, and it is made
     again as its slump reaches the next, `Due`), and its triangles are wound by where their points are half-way
-    through the step (`Wound`), so a triangle turning over shows its inside for at most half a step (0.08% of its
+    through the step (`Wound`), so a triangle turning over shows its inside for at most half a step (0.12% of its
     triangles' frames here). A second review of 24 November found it held still between makes and jumping up to 1.3 m
     at a make some eleven times a second, and a smooth torpedo half fallen in. His part (him going over, by 0.05, and
     his lines) is moved in place with it every frame. At 45 fps a pilot's mesh is now made 24 times (21 of them as his
     canopy falls in) and moved in place 151 to 167; its silk moves 0.22 m in a frame at most (10 m/s), as much at a
-    make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,290 points and 4,368 triangles
-    on 26 gores, 2,466 and 4,704 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048,
-    on 14 rings: it is now on 11); a make (one `HeapShape`, its next step's: the step it is in is the last make's) 0.13
-    ms on a flat field and about 0.3 ms on hummocks on the cloud box, its ground read once on a grid (not twice a
-    point). The log tells each pilot's count once his canopy lies flat, for the 45 fps reading: his mesh's makes and
-    moves in place, his silk's points and triangles lying, its makes as it fell in and their time (ms a make, and the
-    longest), and the most its points moved in a frame (metres).
+    make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,706 points and 5,200 triangles
+    on 26 gores, 2,914 and 5,600 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048 on
+    14 rings, then 2,466 and 4,704 on 11: it is now on 13, for its folds across it); a make (one `HeapShape`, its next
+    step's: the step it is in is the last make's) 0.14 ms on a flat field (0.13 on 11 rings) and about 0.3 ms on
+    hummocks on the cloud box, its ground read once on a grid (not twice a point). The log tells each pilot's count
+    once his canopy lies flat, for the 45 fps reading: his mesh's makes and moves in place, his silk's points and
+    triangles lying, its makes as it fell in and their time (ms a make, and the longest), and the most its points
+    moved in a frame (metres).
   - *Down* (her third, fourth and fifth notes). Seconds are real seconds from his landing. His chute's mesh draws him
     going over flat (0.5 s; 0.35 after a hard landing) under his falling canopy; 0.4 s later, as he lies there, the
     scene swaps him for a man of the crowd: in his army's tank crews' file where it has one (`USA_tanker`,
@@ -865,15 +866,15 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     billowing along it until each part of it is down (its near end and its front first), and streaming out along the
     wind ahead of coming down, so that its middle only ever moves away from him and its top only ever comes down (half
     fallen in it is already 1.3 to 3.7 m longer along the wind than as he landed, its middle 6.3 to 7.4 m on). It lies
-    stretched along the wind, 2.05 to 2.9 times as long as it is wide (6.3 to 8.5 m long, a stronger wind stretching
+    stretched along the wind, 2.2 to 2.8 times as long as it is wide (6.3 to 8.5 m long, a stronger wind stretching
     it), its near end gathered 2.1 to 3.5 m past his harness, where its lines run back to him across the grass (2.1 to
-    3.4 m of his 4.1 m lines, a little slack; a review of 24 November found 0.6 to 1.2 m stubs), its far end standing
-    0.38 to 0.75 m up on the air it still holds (more in a stronger wind) and swelling a little there, and coming round
+    3.5 m of his 4.1 m lines, a little slack; a review of 24 November found 0.6 to 1.2 m stubs), its far end standing
+    0.37 to 0.72 m up on the air it still holds (more in a stronger wind) and swelling a little there, and coming round
     and down to the ground over its last fifth: its last ring (0.975 along it) about half as high as its far quarter
     and its crown, its tip, on the ground (0.03 m up; the review found a beak hanging 0.23 m off it; at 40 m in the
-    picture its top is 0.48 m up 0.9 along it, 0.37 at 0.95, 0.22 at 0.98 and 0.05 at its tip, falling faster toward
+    picture its top is 0.47 m up 0.9 along it, 0.35 at 0.95, 0.22 at 0.98 and 0.04 at its tip, falling faster toward
     it). Along it run four or five long loose folds, one big and the rest smaller in no order, each wandering across
-    as it goes, with two creases across where it bunched; its edges waver and its far end lies a little to one side.
+    as it goes; its edges waver and its far end lies a little to one side.
     The gaps between the folds are graded (the widest three times the narrowest, 2.6 times with five), the wider going
     where two folds need more room to stand apart (a big one beside a small one: 1.4 times their widths, and the big
     one's flank half-way between them under a third of the small one's height), and all of them spread together until
@@ -884,13 +885,45 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     The scene gives `HeapShape` the ground as it is now, as a wire is laid (`WireAt`): the field's (`HeightAt`: its
     terrain, its lanes, its banks and its floors) raised to a hole's face or a breach's floor where one is torn under
     it (`Holes.TopAt`). `HeapShape` reads it once a make on a grid a quarter of a metre square under the silk (coarser
-    over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,233 points a face), lays each point on it,
+    over one still high in the air: 2,500 heights at most, 390 to 1,550 here, 750 on average, against 1,457 points a face), lays each point on it,
     and keeps every edge of the silk over it (a bank's, a ditch's side, a crest's or a crater's rim between two points
     lifts both), the grid raised by how sharply the ground bends about each cell (a step narrower than a cell). The
     review found its points on the ground but its triangles cutting 0.2 m into a bank, a ditch's sides, a sharp crest
     and a crater's rim, and the scene's ground blind to holes.
+  - *How it looks from above* (the art director's note of 24 November 17:40Z: from above both pilots' silk read as "a
+    smooth cocoon or a gourd", an even outline and only lengthwise ridges). `HeapShape` lies on 13 rings now (it was
+    11), a little over half a metre apart where it folds across, and on dice of their own (the pilot's number with
+    `0xC47E7` above it, so that all its other draws fall as they did and no pilot's heap is another's mirrored). Three
+    or four folds across it, where it bunched as it fell in, each on a ring of its own from 0.15 to 0.64 along it (no
+    two side by side), 8 to 20 cm high in no order (lower toward its gathered near end, so that its near quarter stays
+    under its far end), the whole of its top lifted alike (its long folds keep their rises, and so their unevenness),
+    slanted across it by up to 16 cm and bunched 40 to 55% of the way up to the ring before or after it; the two creases
+    across it it had are gone (their dice are still drawn, so the rest fall as they did). Its outline uneven: one side 8
+    to 16% wider than the other and its hem more so (14% wider, 10% narrower), each ring's edge jagged a few centimetres
+    either side, one or two gores flipped over and lying flat out 20 to 30 cm beyond its wide side and one tucked 15 to
+    24 cm under its other side, about its third ring to its seventh of 13 (none on its far end). Only the outermost
+    eighth of its half-width moves for them, so that its long folds lie where they were laid (the folds' unevenness test
+    sits at a fifth, and on half its half-width the tucks had squeezed the outer gaps even); and bent across the wind or
+    with gores flipped out it has no more silk, so its widths are cut back (a quarter at most) until all told it lies no
+    wider than its length over 2.12. Its hem a wavy edge: its near end opens to 0.44 of its width (it was 0.3), each
+    gore's hem between two lines lying back toward him and out in a scallop (10 to 16 cm at its deepest, more in some
+    gores than others), its lines' seams where they were; and two or three of its gores flipped back over its top, their
+    fold pulled back past its hem toward him and their hem carried on over its silk, so that the lines to them run
+    across it. Its lifted far end slumped a little to one side: its air's crest 0.3 to 0.42 of its half-width off its
+    middle, its top leaning over that way, and the whole of it a little over. Each point's facing is now the way its
+    silk runs on from it to the next ring (it had been from the ring before to the ring after, which shades a fold on
+    one ring flat: a crest's and a trough's alike), so that a fold across it is a darker band and a lighter one;
+    chutes.py lights each pixel of the silk by its facing there, as the scene does (it had lit each triangle once).
+    land_air_test measures it from above (`FromAbove`: its silk drawn straight down on a 2 cm grid and lit as chutes.py
+    lights it) and checks it over the verdict's four pilots and 300 others: its outline's unevenness about its own
+    middle line (0.13 on the mean over the 300, from 0.04; his 0.18 and the second's 0.11, from 0.04 and 0.05), its
+    edges' waviness (2.5 cm off a smooth line on the mean, from 1.4) and its hem's turns (3 to 13, from 1), its folds
+    across it (three or four for 293 of the 300; his 3, the second's 4, from 1) and the light bands along it, its far
+    end's lift to one side (5 to 20 cm, from 0 to 4; his 8, the second's 17), its lines across its silk (one to six, 25
+    to 42 cm of each; none had been), and its luma across its middle (his 129 to 222 in chutes.py, the second's 121 to
+    213; her 126 to 221).
   - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`; its lying folds on `0xC47E5`, drawn after all
-    the rest): the planes fly as before, frame for frame.
+    the rest; its look from above on `0xC47E7`, the pilot's number's own): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
   has only its heavy row).
 - **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
