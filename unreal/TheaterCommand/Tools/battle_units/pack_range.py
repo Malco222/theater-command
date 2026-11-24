@@ -50,6 +50,10 @@ SEWN_BONES = ("neck", "clavicle_l", "clavicle_r", "upperarm_l", "upperarm_r")   
 BADGE, BADGE_ON = 0.05, 0.015         # (a flat badge on the breast: at most 5 cm across, under 0.5 mm thick (rms),
                                        #  lying within 1.5 cm of his body's cloth (on the lapel))
 BUTTON, BUTTON_ON = 0.017, 0.003       # (a button: at most 17 mm across, within 3 mm of the cloth)
+BUTTON_MID, RIGID = 0.007, 0.05       # (and lying on it: half its points within 7 mm; and moving as one piece:
+                                      #  its points' bone weights at most 0.05 apart. The American shoulder buttons
+                                      #  were weighted 0.17-0.65 apart, across the neck, chest and arm, and tore
+                                      #  13-74 mm across in the clips: under the straps it does not show)
 ABOUT = ("pack_tris (pack_range.py): his pack and all his webbing (belt, straps, pouches, bags, canteen, shovel, "
          "bayonet, gas-mask can, rolls, a radio or aid bags), one run of triangles at each level [first, count], as "
          "helmet_tris: leave it out for a man with no pack (a downed pilot, a crew out of a tank) and draw nothing in its "
@@ -88,8 +92,10 @@ def classify(d, lod):
     #  paratrooper's leg bag)
     #  A flat badge on the breast in another paint is sewn on too (the desert Italian's lapel patches, in the straps'
     #  paint). And a button (a hardware paint: steel, the American jacket's brown `leather`, a file's own `button`)
-    #  on his front or shoulders, sewn on the cloth, stays though a strap lies against it: the Chinese tunic's buttons
-    #  under his bandolier, the American's shoulder-strap buttons under his suspenders, the paratrooper's pocket snap.
+    #  on his front or shoulders, sewn on the cloth, stays though a strap lies against it, if it lies on the cloth and
+    #  moves as one piece (and its fellow on the other side stays too): the Chinese tunic's buttons under his
+    #  bandolier, the paratrooper's pocket snap, the medic's shoulder buttons. Not one weighted across the neck, chest
+    #  and arm (most Americans' shoulder buttons: they would tear in the clips) or standing off the tunic.
     buttons = {v for k, v in d.get("new_paints", {}).items() if k == "button"}
     cloth = set(BODY) | buttons
     hardware = {9, 12} | buttons
@@ -181,22 +187,49 @@ def classify(d, lod):
     groups = {}
     for i, r in enumerate(small):
         groups.setdefault(f(i), []).append(r)
+    part2, w2 = np.array(m["part2"]), np.array(m["w2"], float)
+
+    def spread(v):                                # (how far apart its points' bone weights are: 0 moves as one piece)
+        Wt = np.zeros((len(v), len(names)))
+        np.add.at(Wt, (np.arange(len(v)), part[v]), 1 - w2[v])
+        np.add.at(Wt, (np.arange(len(v)), part2[v]), w2[v])
+        return float(np.abs(Wt - Wt.mean(0)).sum(1).max() / 2)
+    look = []
     for g in groups.values():
         pts = np.concatenate([X[r["v"]] for r in g])
         dk = float(kit_tree.query(pts, k=1)[0].min()) if kit_tree is not None else 1.0
-        dc = float(cloth_tree.query(pts, k=1)[0].min())
+        dd = cloth_tree.query(pts, k=1)[0]
+        dc = float(dd.min())
         # with his kit: touching a bag, strap or set (a buckle, a snap, the radio's whip); or not lying on the cloth
         # that stays, so it would hang in the air without the kit it is fixed to
         near = dk < NEAR or dc > OFF_CLOTH
         x_ = float(pts[:, 0].mean())
-        if (near and dc <= BUTTON_ON and all(r["paint"] in hardware for r in g)
-                and float((pts.max(0) - pts.min(0)).max()) <= BUTTON and x_ > chest_x
-                and all(front(r["bone"], x_, ("chest", "spine_02", "spine_01")) for r in g)):
-            near = False                          # (a button sewn on his front or shoulder, a strap against it: stays;
-            #                                        never one behind the chest's middle: kit hardware on his back)
-        for r in g:
-            r["near"] = near
-            r["dk"], r["dc"] = dk, dc
+        hw = all(r["paint"] in hardware for r in g) and float((pts.max(0) - pts.min(0)).max()) <= BUTTON
+        face = x_ > chest_x and all(front(r["bone"], x_, ("chest", "spine_02", "spine_01")) for r in g)
+        sewn = (near and hw and dc <= BUTTON_ON and float(np.median(dd)) <= BUTTON_MID and face
+                and spread(np.unique(np.concatenate([r["v"] for r in g]))) <= RIGID)
+        look.append({"g": g, "near": near, "hw": hw, "sewn": sewn, "face": face, "c": pts.mean(0), "dk": dk, "dc": dc})
+
+    def fellows(a):                               # (the buttons in its place on his other side)
+        if not (a["hw"] and abs(a["c"][1]) > 0.01):
+            return []
+        return [b for b in look if b is not a and b["hw"] and np.linalg.norm(b["c"] - a["c"] * (1, -1, 1)) < 0.015]
+    # a button sewn on his front or shoulder, a strap against it, stays (never one behind the chest's middle: kit
+    # hardware on his back), and so does its fellow on the other side, or neither: one shoulder bare and one buttoned
+    # would read as a fault
+    keep = [a["sewn"] and not any(b["near"] and not b["sewn"] for b in fellows(a)) for a in look]
+    for a, k in zip(look, keep):
+        a["run"] = a["near"] and not k
+    # and for that, a button on his front or shoulder lying clear of the kit goes with the pack when its fellow does
+    # (the mid level's shoulder buttons: one under a strap, one clear of it)
+    gone = [a for a in look if a["run"] and a["face"]]
+    for a in look:
+        if not a["run"] and a["face"] and any(b is f for b in gone for f in fellows(a)):
+            a["run"] = a["fellow"] = True
+    for a in look:
+        for r in a["g"]:
+            r["near"], r["fellow"] = a["run"], a.get("fellow", False)
+            r["dk"], r["dc"] = a["dk"], a["dc"]
     pack, notes = [], Counter()
     for r in rows:
         if not r["kit"]:
@@ -206,7 +239,9 @@ def classify(d, lod):
             continue
         if r["size"] > SMALL or r["near"]:
             pack.extend(r["tr"].tolist())
-            if r["size"] <= SMALL and r["dk"] >= NEAR:
+            if r.get("fellow"):
+                notes["buttons gone with their fellow on the other side"] += len(r["tr"])
+            elif r["size"] <= SMALL and r["dk"] >= NEAR:
                 notes["small pieces off the cloth, with the kit"] += len(r["tr"])
         else:
             notes["buttons and badges"] += len(r["tr"])
@@ -270,7 +305,9 @@ def process(path, dest, backup=None, log=print):
     log(f"  {os.path.basename(path)}: pack {d['pack_tris']}" + (" (as before)" if before == d["pack_tris"] else "")
         + "; kept " + "; ".join(f"{k} {v.get('buttons and badges', 0)}+{v.get('head (the chin strap) or cloth', 0)}"
                                 f" (buttons <= {v.get('buttons: furthest off the cloth (mm)', 0)} mm; "
-                                f"{v.get('small pieces off the cloth, with the kit', 0)} off it, taken)"
+                                f"{v.get('small pieces off the cloth, with the kit', 0)} off it, taken"
+                                + (f"; {v['buttons gone with their fellow on the other side']} with their fellow"
+                                   if v.get('buttons gone with their fellow on the other side') else "") + ")"
                                 for k, v in notes.items()))
     return d["pack_tris"]
 
