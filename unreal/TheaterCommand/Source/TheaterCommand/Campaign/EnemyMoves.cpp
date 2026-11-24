@@ -47,6 +47,9 @@ namespace TheaterEnemyMoves
 		const FInk HeldInk = MovesInk(224, 184, 114);
 		const FInk OwnInk = MovesInk(238, 230, 208);
 		const FInk EdgeInk = MovesInk(22, 16, 12, 215);
+		// (his allies' battles near him: a blue arrow where his side attacked, a steel ring round the place)
+		const FInk AllyInk = MovesInk(70, 118, 184);
+		const FInk AllyRingInk = MovesInk(150, 172, 200);
 
 		FInk MovesFaded(FInk Ink, double Share)
 		{
@@ -78,7 +81,7 @@ namespace TheaterEnemyMoves
 			switch (Arrow.Kind)
 			{
 			case EKind::Attack:
-				return 1.35 + 0.1 * Size;
+				return Arrow.bAlly ? 1.05 + 0.09 * Size : 1.35 + 0.1 * Size;
 			case EKind::Fell:
 				return 0.8;
 			default:
@@ -91,7 +94,7 @@ namespace TheaterEnemyMoves
 			switch (Arrow.Kind)
 			{
 			case EKind::Attack:
-				return AttackInk;
+				return Arrow.bAlly && Arrow.bOurs ? AllyInk : AttackInk;
 			case EKind::Fell:
 				return OwnInk;
 			default:
@@ -225,9 +228,11 @@ namespace TheaterEnemyMoves
 			{
 				return;
 			}
-			const double Radius = MarkRadius * (1.0 + 0.35 * (1.0 - Show));
-			const FInk Ring = Arrow.bTaken ? AttackInk : HeldInk;
-			const FInk Blades = Arrow.bTaken || Arrow.bSiege ? AttackInk : HeldInk;
+			const double Radius = MarkRadius * (Arrow.bAlly ? 0.82 : 1.0) * (1.0 + 0.35 * (1.0 - Show));
+			// (an allies' battle: a steel ring; its sabres in the colour of whoever won the place, steel where it held)
+			const FInk Winner = Arrow.bAlly && Arrow.bOurs ? AllyInk : AttackInk;
+			const FInk Ring = Arrow.bAlly ? AllyRingInk : Arrow.bTaken ? AttackInk : HeldInk;
+			const FInk Blades = Arrow.bTaken || Arrow.bSiege ? Winner : Arrow.bAlly ? AllyRingInk : HeldInk;
 			MovesShadow(Out.Under, MovesRing(Arrow.To, Radius, 28), 0.75 + EdgeOver, Show, true);
 			MovesStroke(Out.Under, MovesRing(Arrow.To, Radius, 28), 0.75 + EdgeOver, MarkEdgeLift, MovesFaded(EdgeInk, Show), true);
 			MovesStroke(Out.Over, MovesRing(Arrow.To, Radius, 28), 0.75, MarkLift, MovesFaded(Ring, Show), true);
@@ -243,7 +248,7 @@ namespace TheaterEnemyMoves
 				const std::vector<FPoint> Rim = MovesRing(Arrow.To, Radius - 0.4, 28);
 				for (size_t K = 0; K < Rim.size(); ++K)
 				{
-					MovesTriangle(Out.Under, Arrow.To, Rim[K], Rim[(K + 1) % Rim.size()], MarkEdgeLift - 0.02, MovesFaded(AttackInk, 0.2 * Show));
+					MovesTriangle(Out.Under, Arrow.To, Rim[K], Rim[(K + 1) % Rim.size()], MarkEdgeLift - 0.02, MovesFaded(Winner, 0.2 * Show));
 				}
 			}
 		}
@@ -265,12 +270,25 @@ namespace TheaterEnemyMoves
 		}
 		// (each arrow bows a little, the next one the other way, so two roads between the same places do not lie on one
 		// another; his own fall-back, where an attack or a move runs the same road, bows away from it and keeps aside)
-		auto HasShaft = [](const FArrow& Arrow) { return Arrow.bFrom && MovesDistance(Arrow.From, Arrow.To) > StartGap + EndGap + HeadLong; };
+		// (art director, 24 Nov: his corps' fall-back from a place that was attacked starts at the battle ring's rim, not
+		// inside it among the sabres)
+		std::vector<double> Gaps(Arrows.size(), StartGap);
+		for (size_t K = 0; K < Arrows.size(); ++K)
+		{
+			for (const FArrow& Other : Arrows)
+			{
+				if (Arrows[K].Kind == EKind::Fell && Other.Kind == EKind::Attack && MovesDistance(Other.To, Arrows[K].From) < 1.0)
+				{
+					Gaps[K] = std::max(Gaps[K], MarkRadius * (Other.bAlly ? 0.82 : 1.0) + 1.2);
+				}
+			}
+		}
+		auto HasShaft = [&Gaps, &Arrows](size_t K) { return Arrows[K].bFrom && MovesDistance(Arrows[K].From, Arrows[K].To) > Gaps[K] + EndGap + HeadLong; };
 		std::vector<double> Bows(Arrows.size(), 0.0);
 		int Bend = 0;
 		for (size_t K = 0; K < Arrows.size(); ++K)
 		{
-			Bows[K] = HasShaft(Arrows[K]) ? ((Bend++ % 2) == 0 ? 1.0 : -1.0) : 0.0;
+			Bows[K] = HasShaft(K) ? ((Bend++ % 2) == 0 ? 1.0 : -1.0) : 0.0;
 		}
 		std::vector<bool> Aside(Arrows.size(), false);
 		for (size_t K = 0; K < Arrows.size(); ++K)
@@ -300,7 +318,7 @@ namespace TheaterEnemyMoves
 				const FPoint Side{ -Along.Y, Along.X };
 				const double Bow = Long * 0.12 * Bows[Index];
 				const double Off = Aside[Index] ? FellAside * Bows[Index] : 0.0;
-				const FPoint Start{ Arrow.From.X + Along.X * StartGap + Side.X * Off, Arrow.From.Y + Along.Y * StartGap + Side.Y * Off };
+				const FPoint Start{ Arrow.From.X + Along.X * Gaps[Index] + Side.X * Off, Arrow.From.Y + Along.Y * Gaps[Index] + Side.Y * Off };
 				const FPoint End{ Arrow.To.X - Along.X * EndGap + Side.X * Off, Arrow.To.Y - Along.Y * EndGap + Side.Y * Off };
 				const FPoint Middle = MovesLerp(Start, End, 0.5);
 				const FPoint Bent{ Middle.X + Side.X * Bow, Middle.Y + Side.Y * Bow };

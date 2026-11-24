@@ -13002,6 +13002,8 @@ namespace
 		Out.bAway = Arrow.bAway;
 		Out.bTaken = Arrow.bTaken;
 		Out.bSiege = Arrow.bSiege;
+		Out.bAlly = Arrow.bAlly;
+		Out.bOurs = Arrow.bOurs;
 		Out.Corps = FMath::Max(Arrow.Corps, 1);
 		return true;
 	}

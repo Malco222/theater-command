@@ -12,6 +12,8 @@
  * at war with him, amber for one at peace, fainter where it went away), a brighter arrow and a battle mark (a ring with
  * two crossed strokes) where his troops were attacked (red where the place was lost, brass where it held), and a
  * dashed cream arrow where his own corps fell back. Arrows grow from their start over a little more than half a second.
+ * His allies' battles near him (Brian, 24 November 2026 18:01Z, "yes to all") are drawn too, with a smaller steel ring:
+ * a red arrow where an ally was attacked, a blue one where an ally attacked.
  *
  * Plain C++, no engine, so that it can be built and checked alone (Tools/enemy_moves/run.sh). The table
  * (ACampaignMapActor::ShowStepArrows) hands in the arrows' ends in map units and lays what comes out on the ground
@@ -46,6 +48,8 @@ namespace TheaterEnemyMoves
 		bool bAway = false; // (a move) it went away from his ground
 		bool bTaken = false; // (an attack) the place was lost
 		bool bSiege = false; // (an attack) the field was lost, the town holds
+		bool bAlly = false; // (an attack) a battle of his allies near him, not his own (Brian, 24 Nov 18:01Z): their colours, a smaller mark
+		bool bOurs = false; // (an allies' battle) his side attacked
 		int Corps = 1;
 	};
 

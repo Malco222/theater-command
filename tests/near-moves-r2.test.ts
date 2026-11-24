@@ -130,6 +130,36 @@ describe('what one enemy month did near the player', () => {
     expect(nearMoves(g, 'GER', stood, ctrl0, [report({ siege: true, taken: true, attLost: 900, defLost: 400 })], seeAll(g)).nearNote).toContain('the town holds out under siege');
   });
 
+  it('tells his allies\' battles near him apart, in their own sentence (Brian 18:01Z, "yes to all")', () => {
+    const g = open('FRA');
+    const c = germanAtTheBorder(g);
+    const corps = g.corps.find((x) => x.id === c.id)!;
+    const stood = stoodNow(g);
+    // British troops attacked by the Germans in a province next to French ground (c.to: the German corps' own, for the test)
+    const report = (over: Partial<BattleReport>): BattleReport => ({
+      id: 1, turn: g.turn, week: 1, region: c.to, regionName: g.regions[c.to].name, attNat: 'GER', defNat: 'UK',
+      attackers: [{ name: corps.name, nat: 'GER', kind: corps.kind, divs: corps.divs, men: 1, lost: 0, fate: '' }],
+      defenders: [{ name: 'I Corps', nat: 'UK', kind: 'inf', divs: 2, men: 1, lost: 0, fate: '' }],
+      lines: [], aPower: 1, dPower: 1, odds: 0.5, level: 'marginal' as BattleReport['level'], taken: false, attLost: 900, defLost: 400, prisoners: 0, ...over,
+    }) as BattleReport;
+    stood.set(c.id, c.from);
+    const held = nearMoves(g, 'GER', stood, ctrlOf(g), [report({})], seeAll(g));
+    const ally = held.arrows.find((a) => a.ally)!;
+    expect(ally).toMatchObject({ kind: 'attack', to: c.to, nat: 'GER', def: 'UK', taken: false });
+    expect(ally.ours).toBeUndefined();
+    expect(held.nearAllies).toBe(true);
+    expect(held.allyNote).toBe(`British troops at ${g.regions[c.to].name} throw back a German attack.`);
+    expect(held.nearNote).not.toContain('British');
+    // the British attacking, in their own month: told, but the watch stops for it only as an allies' battle
+    const theirs = nearMoves(g, 'UK', stood, ctrlOf(g), [report({ attNat: 'UK', defNat: 'GER', attackers: [{ name: 'I Corps', nat: 'UK', kind: 'inf', divs: 2, men: 1, lost: 0, fate: '' }], defenders: [{ name: corps.name, nat: 'GER', kind: corps.kind, divs: corps.divs, men: 1, lost: 0, fate: '' }], taken: true })], seeAll(g));
+    expect(theirs.near).toBe(false);
+    expect(theirs.nearAllies).toBe(true);
+    expect(theirs.arrows).toEqual([expect.objectContaining({ ally: true, ours: true, nat: 'UK', taken: true })]);
+    expect(theirs.allyNote).toBe(`British troops attack ${g.regions[c.to].name} and take it.`);
+    // nothing his reports cannot see
+    expect(nearMoves(g, 'UK', stood, ctrlOf(g), [report({ attNat: 'UK', defNat: 'GER' })], seeAll(g, 0)).nearAllies).toBeUndefined();
+  });
+
   it('keeps no more than eight arrows, and reads the war without changing it', () => {
     const g = open('FRA');
     const before = saveGame(g);

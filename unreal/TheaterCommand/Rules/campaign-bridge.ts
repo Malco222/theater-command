@@ -1579,7 +1579,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     // ---- (release 2, the enemy's month near you: Brian, 24 November 2026) The moves near his ground and the attacks on his
     // troops, drawn as arrows while the 3D table watches this nation's month; 'near' marks the steps the watch stops at.
     const close = nearMoves(s, nat, stood, ctrl, reps, sight(s), foes0);
-    const nearOf = (mine: boolean): { near: boolean; arrows: NearArrow[]; nearNote: string } => ({ near: close.near || mine, arrows: close.arrows, nearNote: close.nearNote });
+    const nearOf = (mine: boolean): { near: boolean; arrows: NearArrow[]; nearNote: string; nearAllies?: boolean; allyNote?: string } => ({ near: close.near || mine, arrows: close.arrows, nearNote: close.nearNote, ...(close.nearAllies ? { nearAllies: true, allyNote: close.allyNote ?? '' } : {}) });
     // ---- (end release 2)
     if (!taken.length && !reps.length) {
       // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
@@ -1587,7 +1587,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
       if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air.mine || sea.mine || shore.mine), view: view() });
       else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view() });
-      else if (to.length || close.near) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view() });
+      else if (to.length || close.near || close.nearAllies) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view() });
       return;
     }
     const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);

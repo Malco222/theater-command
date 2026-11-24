@@ -5,6 +5,9 @@
 // table's watch of the enemy's month, the moves the player would want to see drawn: every foreign army that came up
 // to his ground or left it, every attack on his troops (from where it came, and how it ended), and his own corps that
 // fell back. Only what his reports can see is told (the fog of war). Nothing here changes the war: it only reads it.
+//
+// (Brian, 24 November 2026 18:01Z, "yes to all": his allies' battles near him are shown too, in their own colours and
+// in a sentence of their own, which the table shows only with its switch "Allies' battles near you" on.)
 import { allied, atWar } from '../../../src/campaign/game';
 import type { BattleReport, Game } from '../../../src/campaign/types';
 
@@ -28,6 +31,12 @@ export interface NearArrow {
   lost?: [number, number];
   /** (move) The army went away from his ground: drawn fainter. */
   away?: boolean;
+  /** (attack) A battle of his allies near him, not his own: drawn in their colours, told in allyNote. */
+  ally?: boolean;
+  /** (ally) His side attacked (an ally's attack); otherwise an ally was attacked. */
+  ours?: boolean;
+  /** (ally, attacked) The ally that was attacked. */
+  def?: string;
 }
 
 export interface NearSight {
@@ -35,13 +44,21 @@ export interface NearSight {
   arrows: NearArrow[];
   /** A sentence or two of what happened near him, his side's words: the attacks first, then the moves. Empty when nothing did. */
   nearNote: string;
+  /** (allies' battles near him) There were some: the watch stops here when its switch is on. */
+  nearAllies?: boolean;
+  /** What they were, in a sentence or two of their own. */
+  allyNote?: string;
 }
 
 const NONE: NearSight = { near: false, arrows: [], nearNote: '' };
 /** No more arrows than this on the table at once: the attacks first, then the biggest moves. */
 export const NEAR_ARROWS = 8;
+/** And no more than this of his allies' battles, besides. */
+export const NEAR_ALLY_ARROWS = 4;
 
 const num = (n: number): string => n.toLocaleString('en');
+/** "A" or "An" before a word ("An Italian attack"). */
+const an = (word: string): string => (/^[AEIOU]/i.test(word) ? 'An' : 'A');
 const some = (names: string[]): string => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`);
 
 /**
@@ -54,9 +71,11 @@ const some = (names: string[]): string => (names.length <= 2 ? names.join(' and 
  */
 export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl0: string[], reps: BattleReport[], seen: Uint8Array, foes0: ReadonlySet<string> = new Set()): NearSight {
   const me = s.human;
-  if (!me || !s.nations[me] || nat === me || allied(s, nat, me)) return NONE;
+  if (!me || !s.nations[me] || nat === me) return NONE;
   try {
     const ours = (n: string): boolean => n === me || allied(s, n, me);
+    // (an ally's month: only its battles near him are told, in their own sentence)
+    const friend = ours(nat);
     // His ground: what he held before the step and holds now, and wherever his own corps stood or stand.
     const his = new Set<number>();
     s.regions.forEach((r, i) => { if (ctrl0[i] === me || r.ctrl === me) his.add(r.id); });
@@ -85,10 +104,10 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
     };
 
     const arrows: NearArrow[] = [];
-    // The attacks on his troops (or on any troops holding his ground): from where the attackers stood, and how it ended.
-    const attacked = reps.filter((r) => r.defNat === me || r.defenders.some((u) => u.nat === me) || ctrl0[r.region] === me);
     const arrived = new Set<string>(); // "corps id" of attackers already drawn as an attack, so that their advance is not drawn again as a move
-    for (const r of attacked) {
+    // An attack, from where the attackers stood, and how it ended; two fights for one place in a month (the field, then
+    // the town's assault) are one arrow: the last word on how it ended, the men lost in both.
+    const attackOn = (into: NearArrow[], r: BattleReport, extra: Partial<NearArrow>): void => {
       const names = new Set(r.attackers.filter((u) => !u.guard).map((u) => `${u.nat}:${u.name}`));
       const counts = new Map<number, number>();
       let corps = 0;
@@ -106,12 +125,10 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
       const divs = r.attackers.filter((u) => !u.guard).reduce((t, u) => t + u.divs, 0);
       const fresh: NearArrow = {
         kind: 'attack', from, to: r.region, nat: r.attNat, war: true, corps: Math.max(corps, r.attackers.filter((u) => !u.guard).length), divs,
-        taken: !!r.taken && !r.siege, ...(r.siege ? { siege: true } : {}), ...(r.yielded ? { yielded: true } : {}), lost: [r.attLost, r.defLost],
+        taken: !!r.taken && !r.siege, ...(r.siege ? { siege: true } : {}), ...(r.yielded ? { yielded: true } : {}), lost: [r.attLost, r.defLost], ...extra,
       };
-      // Two fights for one place in a month (the field, then the town's assault) are one arrow: the last word on how it
-      // ended, the men lost in both.
-      const again = arrows.find((a) => a.kind === 'attack' && a.to === r.region && a.nat === r.attNat);
-      if (!again) { arrows.push(fresh); continue; }
+      const again = into.find((a) => a.kind === 'attack' && a.to === r.region && a.nat === r.attNat);
+      if (!again) { into.push(fresh); return; }
       again.from = again.from >= 0 ? again.from : fresh.from;
       again.corps = Math.max(again.corps, fresh.corps);
       again.divs = Math.max(again.divs ?? 0, fresh.divs ?? 0);
@@ -119,6 +136,18 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
       again.taken = fresh.taken;
       if (fresh.siege) again.siege = true; else delete again.siege;
       if (fresh.yielded) again.yielded = true; else delete again.yielded;
+    };
+    // The attacks on his troops (or on any troops holding his ground).
+    const attacked = friend ? [] : reps.filter((r) => r.defNat === me || r.defenders.some((u) => u.nat === me) || ctrl0[r.region] === me);
+    for (const r of attacked) attackOn(arrows, r, {});
+    // His allies' battles near his ground, that his reports see: an ally attacked, or an ally attacking.
+    const allies: NearArrow[] = [];
+    for (const r of reps) {
+      if (attacked.includes(r) || !nearTo(r.region) || !sees(r.region)) continue;
+      const allyDef = r.defNat !== me && (ours(r.defNat) || r.defenders.some((u) => u.nat !== me && ours(u.nat)));
+      const allyAtt = r.attNat !== me && ours(r.attNat);
+      if (allyAtt === allyDef) continue; // (neither side his, or a quarrel among his own)
+      attackOn(allies, r, allyAtt ? { ally: true, ours: true, war: false } : { ally: true, def: ours(r.defNat) ? r.defNat : r.defenders.find((u) => ours(u.nat))!.nat });
     }
     // Foreign armies that came up to his ground, into it, or away from it: grouped by nation and road, seen ones only.
     const moves = new Map<string, NearArrow>();
@@ -136,7 +165,7 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
         fell.set(key, a);
         continue;
       }
-      if (ours(c.nat) || arrived.has(String(c.id))) continue;
+      if (friend || ours(c.nat) || arrived.has(String(c.id))) continue;
       if (!(sees(from) || sees(c.reg)) || !(nearTo(from) || nearTo(c.reg))) continue;
       const away = !nearTo(c.reg);
       const [a0, a1] = away ? [from, toward(from, c.reg, c.nat)] : [toward(c.reg, from, c.nat), c.reg];
@@ -152,9 +181,14 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
     // (toward him before away from him, and the armies at war with him before those at peace)
     arrows.push(...pushed.sort(byWeight), ...[...moves.values()].sort((a, b) => Number(!!a.away) - Number(!!b.away) || Number(b.war) - Number(a.war) || byWeight(a, b)));
     const kept = arrows.slice(0, NEAR_ARROWS);
-    if (!kept.length) return NONE;
+    // (his allies' battles: an ally's losses first, then its holds, then its own attacks)
+    const allyWorst = (a: NearArrow): number => (a.ours ? (a.taken ? 4 : 3) : a.taken ? 0 : a.siege ? 1 : 2);
+    const told = allies.sort((a, b) => allyWorst(a) - allyWorst(b) || b.corps - a.corps).slice(0, NEAR_ALLY_ARROWS);
+    if (!kept.length && !told.length) return NONE;
     // (armies only going away from him are drawn where the month is watched anyway, but the watch does not stop for them)
-    return { near: kept.some((a) => !a.away), arrows: kept, nearNote: noteOf(s, me, kept) };
+    const own: NearSight = { near: kept.some((a) => !a.away), arrows: kept, nearNote: kept.length ? noteOf(s, me, kept) : '' };
+    // (after a sentence of his own attacks, the allies' get one battle told and a count of the rest)
+    return told.length ? { ...own, arrows: [...kept, ...told], nearAllies: true, allyNote: allyNoteOf(s, told, kept.some((a) => a.kind === 'attack') ? 1 : 2) } : own;
   } catch {
     return NONE; // (the war goes on whatever: a watch that cannot be read is not shown)
   }
@@ -175,7 +209,7 @@ function noteOf(s: Game, me: string, arrows: NearArrow[]): string {
     if (a.yielded) said.push(`Your troops at ${where} fall back before a ${adj(a.nat)} attack, as ordered.`);
     else if (a.taken) said.push(`The ${adj(a.nat)} army attacks ${where} and takes it.${cost}`);
     else if (a.siege) said.push(`The ${adj(a.nat)} army wins the field at ${where}; the town holds out under siege.${cost}`);
-    else said.push(`A ${adj(a.nat)} attack on ${where} is thrown back.${cost}`);
+    else said.push(`${an(adj(a.nat))} ${adj(a.nat)} attack on ${where} is thrown back.${cost}`);
   }
   if (attacks.length > 2) said.push(attacks.length === 3 ? 'One more of your positions was attacked.' : `${attacks.length - 2} more of your positions were attacked.`);
   const moves = arrows.filter((a) => a.kind === 'move');
@@ -190,11 +224,35 @@ function noteOf(s: Game, me: string, arrows: NearArrow[]): string {
     const corps = told.reduce((t, a) => t + a.corps, 0);
     const where = some([...new Set(told.map((a) => place(told === away ? a.from : a.to)))]);
     const one = corps === 1;
-    const army = one ? `${/^[AEIOU]/.test(adj(n)) ? 'An' : 'A'} ${adj(n)} corps` : `${adj(n)} armies (${corps} corps)`;
+    const army = one ? `${an(adj(n))} ${adj(n)} corps` : `${adj(n)} armies (${corps} corps)`;
     const peace = told[0].war ? '' : ', at peace with you,';
     if (told === into) said.push(`${army}${peace} ${one ? 'marches' : 'march'} into ${where}.`);
     else if (told === up) said.push(`${army}${peace} ${one ? 'moves' : 'move'} up to ${where}, next to your land.`);
     else said.push(`${army}${peace} ${one ? 'pulls' : 'pull'} back from ${where}.`);
   }
+  return said.join(' ');
+}
+
+/** His allies' battles near him, in a sentence or two of their own: an ally's losses first, then its holds, then its attacks. */
+function allyNoteOf(s: Game, arrows: NearArrow[], told = 2): string {
+  const adj = (n: string): string => s.nations[n]?.adj ?? n;
+  const place = (id: number): string => s.regions[id]?.name ?? '';
+  const said: string[] = [];
+  for (const a of arrows.slice(0, told)) {
+    const where = place(a.to);
+    if (a.ours) {
+      if (a.taken) said.push(`${adj(a.nat)} troops attack ${where} and take it.`);
+      else if (a.siege) said.push(`${adj(a.nat)} troops win the field at ${where}; the town holds out under siege.`);
+      else said.push(`${an(adj(a.nat))} ${adj(a.nat)} attack on ${where} is thrown back.`);
+    } else {
+      const def = adj(a.def ?? '');
+      if (a.taken) said.push(`The ${adj(a.nat)} army attacks ${def} troops at ${where} and takes it.`);
+      else if (a.siege) said.push(`The ${adj(a.nat)} army wins the field at ${where}; the ${def} garrison holds out under siege.`);
+      else if (a.yielded) said.push(`${def} troops at ${where} fall back before ${an(adj(a.nat)).toLowerCase()} ${adj(a.nat)} attack.`);
+      else said.push(`${def} troops at ${where} throw back ${an(adj(a.nat)).toLowerCase()} ${adj(a.nat)} attack.`);
+    }
+  }
+  const rest = arrows.length - Math.min(told, arrows.length);
+  if (rest > 0) said.push(rest === 1 ? 'One more allied battle near you.' : `${rest} more allied battles near you.`);
   return said.join(' ');
 }

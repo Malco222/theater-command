@@ -1371,6 +1371,8 @@ struct FStepArrow
 	bool bTaken = false; // (an attack) the place was lost
 	bool bSiege = false; // (an attack) the field was lost, the town holds
 	bool bYielded = false; // (an attack) his troops gave ground without a fight, as ordered
+	bool bAlly = false; // (an attack) a battle of his allies near him, not his own (Brian, 24 Nov 18:01Z): shown with its switch on
+	bool bOurs = false; // (an allies' battle) his side attacked
 	int32 Corps = 1;
 	int32 Divs = -1; // where seen whole; -1 where only glimpsed
 };
@@ -1392,6 +1394,8 @@ struct FMonthStep
 	bool bNear = false; // it came near his ground, or touched him: the watch of the enemy's month stops here
 	FString NearNote; // what it did near him, in his side's words
 	TArray<FStepArrow> Arrows;
+	bool bNearAllies = false; // his allies fought near him in it (OPTIONS "Allies' battles near you")
+	FString AllyNote; // what those battles were
 	// ---- (end release 2)
 	FCampaignView View; // the war as it stood when that nation had finished
 };

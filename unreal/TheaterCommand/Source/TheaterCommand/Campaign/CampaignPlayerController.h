@@ -1477,6 +1477,7 @@ private:
 	// watch of only the months that came near him: how many there are, how many have been shown, whose is up, and the
 	// arrows of the one up as they grow (from ArrowsSince).
 	bool bEnemyMoves = true;
+	bool bAlliesNear = true; // (round 2, Brian 18:01Z) his allies' battles near him stop the watch too
 	bool bWatchNear = false;
 	int32 NearCount = 0, NearShown = 0;
 	FString WatchNation;

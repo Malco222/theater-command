@@ -366,6 +366,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("The game's voice: it reads the newsreels and the opening flight aloud, speaks for the adviser, and lets your armies answer."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
 	// (Release 2, the enemy's month near you; Brian, 24 November 2026)
 	Add(TEXT("enemymoves"), TEXT("Enemy moves near you"), TEXT("On: when you end the month, the eye goes to each place where another country's army came up to your land or attacked your troops, draws the moves as arrows (red at war with you, amber at peace, a ring where your troops were attacked) and says what happened, then the month's news comes. Space or SKIP ends it. Off: nothing plays before the news, and the whole tour of the map is a press away on the month's card."), bEnemyMoves ? TEXT("ON") : TEXT("OFF"), bEnemyMoves);
+	// (Release 2, the enemy's month near you, round 2; Brian, 24 November 2026 18:01Z: "yes to all")
+	Add(TEXT("alliesnear"), TEXT("Allies' battles near you"), TEXT("On: the watch of the enemy's month near you also stops where your allies fought next to your land: a smaller steel ring round the place, a red arrow where an ally was attacked, a blue one where an ally attacked, and a sentence of their own. Off: only what touched you is shown."), bAlliesNear ? TEXT("ON") : TEXT("OFF"), bAlliesNear);
 	Add(TEXT("showsfirst"), TEXT("Play the month before its card"), TEXT("Off: the month's news comes first when a month ends (as seals along the map's edge, or its card if 'Month report: open by itself' is on), and the tour of the map and the newsreel are a press away on the card. On: the other countries' moves, the newsreel and the great moments play first."), bShowsFirst ? TEXT("ON") : TEXT("OFF"), bShowsFirst);
 	// (Release 2, news at the map's edge; ruling 131: merge by hand)
 	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
@@ -434,6 +436,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("enemymoves")) // (release 2, the enemy's month near you)
 	{
 		bEnemyMoves = !bEnemyMoves;
+	}
+	else if (Id == TEXT("alliesnear")) // (release 2, the enemy's month near you, round 2)
+	{
+		bAlliesNear = !bAlliesNear;
 	}
 	else if (Id == TEXT("cardself")) // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	{
@@ -623,7 +629,7 @@ void ACampaignPlayerController::SaveOptions() const
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
 	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves)), *OptionsFile());
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -669,6 +675,7 @@ void ACampaignPlayerController::LoadOptions()
 	bShowsFirst = Yes(TEXT("showsFirst"), false);
 	bMonthReportOpens = Yes(TEXT("reportOpens"), false); // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	bEnemyMoves = Yes(TEXT("enemyMoves"), true); // (Release 2, the enemy's month near you)
+	bAlliesNear = Yes(TEXT("alliesNear"), true); // (Release 2, the enemy's month near you, round 2)
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -11540,6 +11547,10 @@ void ACampaignPlayerController::WatchNextStep()
 	if (bEnemyMoves && Step.Arrows.Num() > 0 && Map.IsValid())
 	{
 		ArrowsShown = Step.Arrows;
+		if (!bAlliesNear) // (round 2: his allies' battles only with their switch on)
+		{
+			ArrowsShown.RemoveAll([](const FStepArrow& Arrow) { return Arrow.bAlly; });
+		}
 		ArrowsSince = FPlatformTime::Seconds() + 0.3; // (the eye sets off first)
 		bArrowsGrowing = true;
 	}
@@ -11679,13 +11690,23 @@ void ACampaignPlayerController::WatchNextStep()
 		int32 Attacks = 0, Lost = 0, Moves = 0;
 		for (const FStepArrow& Arrow : Step.Arrows)
 		{
+			if (Arrow.bAlly && !bAlliesNear)
+			{
+				continue;
+			}
 			Attacks += Arrow.Kind == 1 ? 1 : 0;
-			Lost += Arrow.Kind == 1 && Arrow.bTaken ? 1 : 0;
+			Lost += Arrow.Kind == 1 && Arrow.bTaken && !Arrow.bAlly ? 1 : 0;
 			Moves += Arrow.Kind == 0 ? 1 : 0;
 		}
 		Pause = TheaterEnemyMoves::Pause(Attacks, Lost, Moves, Step.Raids.Num() > 0 ? Pause : 0.0, Step.Sinkings.Num() > 0 ? Pause : 0.0);
 	}
-	Notify(bWatchNear && !Step.NearNote.IsEmpty() ? Step.NearNote : Step.Note, Pause + 0.3);
+	// (round 2: his allies' battles have a sentence of their own, after his)
+	FString NearSaid = Step.NearNote;
+	if (bAlliesNear && !Step.AllyNote.IsEmpty())
+	{
+		NearSaid = NearSaid.IsEmpty() ? Step.AllyNote : NearSaid + TEXT(" ") + Step.AllyNote;
+	}
+	Notify(bWatchNear && !NearSaid.IsEmpty() ? NearSaid : Step.Note, Pause + 0.3);
 	// ---- (end release 2)
 	WatchNext = FPlatformTime::Seconds() + Pause;
 	// ---- (release 2, the front you can read: the ink of this step's ground runs within the step, so the next step never cuts it short)
@@ -11701,7 +11722,7 @@ bool ACampaignPlayerController::IsNearStep(const FMonthStep& Step) const
 {
 	const FCampaignSession* Session = GetSession();
 	const FString Human = Session ? Session->GetView().Human : FString();
-	return Step.bNear && !Human.IsEmpty() && Step.Nation != Human;
+	return (Step.bNear || (bAlliesNear && Step.bNearAllies)) && !Human.IsEmpty() && Step.Nation != Human;
 }
 
 void ACampaignPlayerController::ClearStepArrows()

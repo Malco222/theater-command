@@ -25281,8 +25281,8 @@
   }
   var monthOf = (t) => turnToDate(t).label;
   var aAn = (word3, start2 = false) => {
-    const an3 = /^[AEIOU]/i.test(word3) && !/^(Uru|Ukr|Uni|Eu|Use|Usu)/i.test(word3);
-    return start2 ? an3 ? "An" : "A" : an3 ? "an" : "a";
+    const an4 = /^[AEIOU]/i.test(word3) && !/^(Uru|Ukr|Uni|Eu|Use|Usu)/i.test(word3);
+    return start2 ? an4 ? "An" : "A" : an4 ? "an" : "a";
   };
   var capital = (s) => s[0].toUpperCase() + s.slice(1);
   function cutSays(g2, region, viewer = g2.human, seen2) {
@@ -52694,8 +52694,8 @@
     if (spied) lines2.push({ label: "Intelligence", value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
     if (watched2) {
       const adj = g2.nations[watched2.nat]?.adj ?? "enemy", by2 = g2.nations[watched2.by]?.adj ?? "enemy", own = watched2.by === watched2.nat;
-      const an3 = /^[AEIOU]/.test(adj) && !/^(Uru|Ukr|Uni|Eu)/.test(adj) ? "an" : "a";
-      const value = watched2.found ? `The ${adj} agent uncovered at ${target.name} has mapped its defences${own ? "" : ` for the ${by2} army`}` : `The ${by2} army knew the defences of ${target.name}: ${own ? "one of its agents" : `${an3} ${adj} agent`} is at work there`;
+      const an4 = /^[AEIOU]/.test(adj) && !/^(Uru|Ukr|Uni|Eu)/.test(adj) ? "an" : "a";
+      const value = watched2.found ? `The ${adj} agent uncovered at ${target.name} has mapped its defences${own ? "" : ` for the ${by2} army`}` : `The ${by2} army knew the defences of ${target.name}: ${own ? "one of its agents" : `${an4} ${adj} agent`} is at work there`;
       lines2.push({ label: "Enemy intelligence", value, effect: `Attack up ${Math.round((watched2.mul - 1) * 100)}%` });
     }
     if (sneaked) lines2.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
@@ -85962,13 +85962,16 @@
   // Rules/near-moves.ts
   var NONE5 = { near: false, arrows: [], nearNote: "" };
   var NEAR_ARROWS = 8;
+  var NEAR_ALLY_ARROWS = 4;
   var num5 = (n) => n.toLocaleString("en");
+  var an2 = (word3) => /^[AEIOU]/i.test(word3) ? "An" : "A";
   var some2 = (names) => names.length <= 2 ? names.join(" and ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
   function nearMoves(s, nat, stood, ctrl0, reps, seen2, foes0 = /* @__PURE__ */ new Set()) {
     const me = s.human;
-    if (!me || !s.nations[me] || nat === me || allied(s, nat, me)) return NONE5;
+    if (!me || !s.nations[me] || nat === me) return NONE5;
     try {
       const ours = (n) => n === me || allied(s, n, me);
+      const friend2 = ours(nat);
       const his = /* @__PURE__ */ new Set();
       s.regions.forEach((r, i) => {
         if (ctrl0[i] === me || r.ctrl === me) his.add(r.id);
@@ -85996,9 +85999,8 @@
         return best;
       };
       const arrows = [];
-      const attacked = reps.filter((r) => r.defNat === me || r.defenders.some((u) => u.nat === me) || ctrl0[r.region] === me);
       const arrived = /* @__PURE__ */ new Set();
-      for (const r of attacked) {
+      const attackOn = (into, r, extra) => {
         const names = new Set(r.attackers.filter((u) => !u.guard).map((u) => `${u.nat}:${u.name}`));
         const counts = /* @__PURE__ */ new Map();
         let corps = 0;
@@ -86028,12 +86030,13 @@
           taken: !!r.taken && !r.siege,
           ...r.siege ? { siege: true } : {},
           ...r.yielded ? { yielded: true } : {},
-          lost: [r.attLost, r.defLost]
+          lost: [r.attLost, r.defLost],
+          ...extra
         };
-        const again = arrows.find((a) => a.kind === "attack" && a.to === r.region && a.nat === r.attNat);
+        const again = into.find((a) => a.kind === "attack" && a.to === r.region && a.nat === r.attNat);
         if (!again) {
-          arrows.push(fresh5);
-          continue;
+          into.push(fresh5);
+          return;
         }
         again.from = again.from >= 0 ? again.from : fresh5.from;
         again.corps = Math.max(again.corps, fresh5.corps);
@@ -86044,6 +86047,16 @@
         else delete again.siege;
         if (fresh5.yielded) again.yielded = true;
         else delete again.yielded;
+      };
+      const attacked = friend2 ? [] : reps.filter((r) => r.defNat === me || r.defenders.some((u) => u.nat === me) || ctrl0[r.region] === me);
+      for (const r of attacked) attackOn(arrows, r, {});
+      const allies = [];
+      for (const r of reps) {
+        if (attacked.includes(r) || !nearTo(r.region) || !sees(r.region)) continue;
+        const allyDef = r.defNat !== me && (ours(r.defNat) || r.defenders.some((u) => u.nat !== me && ours(u.nat)));
+        const allyAtt = r.attNat !== me && ours(r.attNat);
+        if (allyAtt === allyDef) continue;
+        attackOn(allies, r, allyAtt ? { ally: true, ours: true, war: false } : { ally: true, def: ours(r.defNat) ? r.defNat : r.defenders.find((u) => ours(u.nat)).nat });
       }
       const moves = /* @__PURE__ */ new Map();
       const fell = /* @__PURE__ */ new Map();
@@ -86060,7 +86073,7 @@
           fell.set(key8, a2);
           continue;
         }
-        if (ours(c.nat) || arrived.has(String(c.id))) continue;
+        if (friend2 || ours(c.nat) || arrived.has(String(c.id))) continue;
         if (!(sees(from2) || sees(c.reg)) || !(nearTo(from2) || nearTo(c.reg))) continue;
         const away2 = !nearTo(c.reg);
         const [a0, a1] = away2 ? [from2, toward(from2, c.reg, c.nat)] : [toward(c.reg, from2, c.nat), c.reg];
@@ -86074,8 +86087,11 @@
       const byWeight = (a, b) => b.corps - a.corps || a.to - b.to || a.from - b.from;
       arrows.push(...pushed.sort(byWeight), ...[...moves.values()].sort((a, b) => Number(!!a.away) - Number(!!b.away) || Number(b.war) - Number(a.war) || byWeight(a, b)));
       const kept2 = arrows.slice(0, NEAR_ARROWS);
-      if (!kept2.length) return NONE5;
-      return { near: kept2.some((a) => !a.away), arrows: kept2, nearNote: noteOf(s, me, kept2) };
+      const allyWorst = (a) => a.ours ? a.taken ? 4 : 3 : a.taken ? 0 : a.siege ? 1 : 2;
+      const told2 = allies.sort((a, b) => allyWorst(a) - allyWorst(b) || b.corps - a.corps).slice(0, NEAR_ALLY_ARROWS);
+      if (!kept2.length && !told2.length) return NONE5;
+      const own = { near: kept2.some((a) => !a.away), arrows: kept2, nearNote: kept2.length ? noteOf(s, me, kept2) : "" };
+      return told2.length ? { ...own, arrows: [...kept2, ...told2], nearAllies: true, allyNote: allyNoteOf(s, told2, kept2.some((a) => a.kind === "attack") ? 1 : 2) } : own;
     } catch {
       return NONE5;
     }
@@ -86093,7 +86109,7 @@
       if (a.yielded) said.push(`Your troops at ${where} fall back before a ${adj(a.nat)} attack, as ordered.`);
       else if (a.taken) said.push(`The ${adj(a.nat)} army attacks ${where} and takes it.${cost}`);
       else if (a.siege) said.push(`The ${adj(a.nat)} army wins the field at ${where}; the town holds out under siege.${cost}`);
-      else said.push(`A ${adj(a.nat)} attack on ${where} is thrown back.${cost}`);
+      else said.push(`${an2(adj(a.nat))} ${adj(a.nat)} attack on ${where} is thrown back.${cost}`);
     }
     if (attacks.length > 2) said.push(attacks.length === 3 ? "One more of your positions was attacked." : `${attacks.length - 2} more of your positions were attacked.`);
     const moves = arrows.filter((a) => a.kind === "move");
@@ -86107,12 +86123,34 @@
       const corps = told2.reduce((t, a) => t + a.corps, 0);
       const where = some2([...new Set(told2.map((a) => place2(told2 === away2 ? a.from : a.to)))]);
       const one = corps === 1;
-      const army2 = one ? `${/^[AEIOU]/.test(adj(n)) ? "An" : "A"} ${adj(n)} corps` : `${adj(n)} armies (${corps} corps)`;
+      const army2 = one ? `${an2(adj(n))} ${adj(n)} corps` : `${adj(n)} armies (${corps} corps)`;
       const peace = told2[0].war ? "" : ", at peace with you,";
       if (told2 === into) said.push(`${army2}${peace} ${one ? "marches" : "march"} into ${where}.`);
       else if (told2 === up) said.push(`${army2}${peace} ${one ? "moves" : "move"} up to ${where}, next to your land.`);
       else said.push(`${army2}${peace} ${one ? "pulls" : "pull"} back from ${where}.`);
     }
+    return said.join(" ");
+  }
+  function allyNoteOf(s, arrows, told2 = 2) {
+    const adj = (n) => s.nations[n]?.adj ?? n;
+    const place2 = (id) => s.regions[id]?.name ?? "";
+    const said = [];
+    for (const a of arrows.slice(0, told2)) {
+      const where = place2(a.to);
+      if (a.ours) {
+        if (a.taken) said.push(`${adj(a.nat)} troops attack ${where} and take it.`);
+        else if (a.siege) said.push(`${adj(a.nat)} troops win the field at ${where}; the town holds out under siege.`);
+        else said.push(`${an2(adj(a.nat))} ${adj(a.nat)} attack on ${where} is thrown back.`);
+      } else {
+        const def = adj(a.def ?? "");
+        if (a.taken) said.push(`The ${adj(a.nat)} army attacks ${def} troops at ${where} and takes it.`);
+        else if (a.siege) said.push(`The ${adj(a.nat)} army wins the field at ${where}; the ${def} garrison holds out under siege.`);
+        else if (a.yielded) said.push(`${def} troops at ${where} fall back before ${an2(adj(a.nat)).toLowerCase()} ${adj(a.nat)} attack.`);
+        else said.push(`${def} troops at ${where} throw back ${an2(adj(a.nat)).toLowerCase()} ${adj(a.nat)} attack.`);
+      }
+    }
+    const rest = arrows.length - Math.min(told2, arrows.length);
+    if (rest > 0) said.push(rest === 1 ? "One more allied battle near you." : `${rest} more allied battles near you.`);
     return said.join(" ");
   }
 
@@ -86263,7 +86301,7 @@
   var midName = (s) => s.replace(/^The /, "the ");
   var CLASS_WORD = /\b(?:sinks?|torpedoes) (\d+) ([A-Z][a-z]+) (submarines?|destroyers?|cruisers?|battleships?|carriers?|ships?|transports?)/;
   var the4 = (name) => /^the /i.test(name) ? name.replace(/^The /, "the ") : `the ${name}`;
-  var an2 = (adj) => `${/^[AEIOU]/i.test(adj) ? "An" : "A"} ${adj}`;
+  var an3 = (adj) => `${/^[AEIOU]/i.test(adj) ? "An" : "A"} ${adj}`;
   var SIGNS = /* @__PURE__ */ new Set(["inf", "arm", "mot", "cav", "mtn", "art", "eng"]);
   var DESK_SIGN = { research: "star", build: "inf", diplomacy: "star", spies: "star", air: "ftr", navy: "hull" };
   function buildSign(text) {
@@ -86460,7 +86498,7 @@
       } else {
         row2.tag = r.taken ? "LOST" : "HELD";
         row2.tone = r.taken ? "bad" : "good";
-        row2.line = r.taken ? r.gates ? "The town opened its gates to them." : forTown ? "The town fell to assault." : r.prisoners >= 1e3 ? `The line broke: ${num6(r.prisoners)} men taken prisoner.` : "The line broke and the province is lost." : forTown ? "An assault on the town was thrown back." : `${an2(g2.nations[r.attNat]?.adj ?? "enemy")} attack was thrown back.`;
+        row2.line = r.taken ? r.gates ? "The town opened its gates to them." : forTown ? "The town fell to assault." : r.prisoners >= 1e3 ? `The line broke: ${num6(r.prisoners)} men taken prisoner.` : "The line broke and the province is lost." : forTown ? "An assault on the town was thrown back." : `${an3(g2.nations[r.attNat]?.adj ?? "enemy")} attack was thrown back.`;
         row2.head = r.taken ? `${place2} is lost` : `${place2} holds`;
         row2.follows = r.taken ? worth3(true) || "The front falls back." : "The line holds where it stood.";
       }
@@ -89241,13 +89279,13 @@
       const taken2 = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
       const reps = s.reports.slice(r0);
       const close3 = nearMoves(s, nat, stood, ctrl, reps, sight(s), foes0);
-      const nearOf = (mine4) => ({ near: close3.near || mine4, arrows: close3.arrows, nearNote: close3.nearNote });
+      const nearOf = (mine4) => ({ near: close3.near || mine4, arrows: close3.arrows, nearNote: close3.nearNote, ...close3.nearAllies ? { nearAllies: true, allyNote: close3.allyNote ?? "" } : {} });
       if (!taken2.length && !reps.length) {
         const seen2 = sight(s);
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen2[c.reg] > 0 || seen2[stood.get(c.id)] > 0)).map((c) => c.reg))];
         if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air2.mine || sea.mine || shore.mine), view: view2() });
         else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view2() });
-        else if (to.length || close3.near) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close3.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view2() });
+        else if (to.length || close3.near || close3.nearAllies) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close3.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view2() });
         return;
       }
       const some3 = (names) => names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;

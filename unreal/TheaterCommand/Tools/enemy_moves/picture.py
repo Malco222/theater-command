@@ -62,7 +62,8 @@ def lay(arrows, regions):
                 has_from = a['from'] >= 0 and a['from'] != a['to']
                 fr = regions[a['from']] if has_from else to
                 f.write(f"{kind} {fr['x']} {fr['y']} {to['x']} {to['y']} {int(a.get('war', True))} {int(bool(a.get('away')))} "
-                        f"{int(bool(a.get('taken')))} {int(bool(a.get('siege')))} {max(1, a.get('corps', 1))} {int(has_from)}\n")
+                        f"{int(bool(a.get('taken')))} {int(bool(a.get('siege')))} {max(1, a.get('corps', 1))} {int(has_from)} "
+                        f"{int(bool(a.get('ally')))} {int(bool(a.get('ours')))}\n")
         subprocess.run(['bash', os.path.join(HERE, 'run.sh'), src, out], check=True, stdout=subprocess.DEVNULL,
                        env={**os.environ, 'MOVES_OUT': os.path.join(tmp, 'build')})
         with open(out) as f:
@@ -104,24 +105,6 @@ def picture(step, count, shown, regions, nations, path):
     img = img.filter(ImageFilter.GaussianBlur(0.6 * SS))
     d = ImageDraw.Draw(img)
 
-    # the armies as the step leaves them: a small counter per nation and province, how many corps
-    stacks = {}
-    for c in step.get('corps', []):
-        if c.get('reg') is None:
-            continue
-        stacks[(c['reg'], c['nat'])] = stacks.get((c['reg'], c['nat']), 0) + 1
-    small = font(11 * SS, True)
-    slot = {}
-    for (reg, nat), n in sorted(stacks.items()):
-        r = regions[reg]
-        k = slot.get(reg, 0)
-        slot[reg] = k + 1
-        x, y = px(r['x'] + 9 + 13 * k, r['y'] - 10)
-        colour = hexrgb(nations.get(nat, {}).get('color', '#888888'))
-        s = 8 * SS
-        d.rectangle([x - s, y - s * 0.75, x + s, y + s * 0.75], fill=mix(colour, (0, 0, 0), 0.15), outline=(20, 16, 12), width=SS)
-        d.text((x, y), str(n), font=small, fill=CREAM, anchor='mm')
-
     # the arrows and marks: the game's own drawing, the dark edges first, then the inks
     drawing = lay(arrows, regions)
     for layer in ('under', 'over'):
@@ -139,6 +122,24 @@ def picture(step, count, shown, regions, nations, path):
         img = Image.alpha_composite(img.convert('RGBA'), over).convert('RGB')
     d = ImageDraw.Draw(img)
 
+    # the armies as the step leaves them (over the arrows, as the pieces stand over them on the table): a small counter per nation and province, how many corps
+    stacks = {}
+    for c in step.get('corps', []):
+        if c.get('reg') is None:
+            continue
+        stacks[(c['reg'], c['nat'])] = stacks.get((c['reg'], c['nat']), 0) + 1
+    small = font(11 * SS, True)
+    slot = {}
+    for (reg, nat), n in sorted(stacks.items()):
+        r = regions[reg]
+        k = slot.get(reg, 0)
+        slot[reg] = k + 1
+        x, y = px(r['x'] + 9 + 13 * k, r['y'] - 10)
+        colour = hexrgb(nations.get(nat, {}).get('color', '#888888'))
+        s = 8 * SS
+        d.rectangle([x - s, y - s * 0.75, x + s, y + s * 0.75], fill=mix(colour, (0, 0, 0), 0.15), outline=(20, 16, 12), width=SS)
+        d.text((x, y), str(n), font=small, fill=CREAM, anchor='mm')
+
     # the names of the places the arrows reach
     label = font(15 * SS)
     named = []
@@ -154,7 +155,7 @@ def picture(step, count, shown, regions, nations, path):
     d = ImageDraw.Draw(img, 'RGBA')
 
     # the plate: whose month, how far through them, and what happened, in his side's words
-    note = step['nearNote'] or step['note']
+    note = ' '.join(x for x in (step.get('nearNote', ''), step.get('allyNote', '')) if x) or step['note']
     body = font(21)
     lines = textwrap.wrap(note, 86)
     head = f"MOVES NEAR YOU  ·  {nations.get(step['nat'], {}).get('name', step['nat']).upper()}  ·  {shown} OF {count}"

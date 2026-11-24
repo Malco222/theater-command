@@ -2699,6 +2699,8 @@ FMonthResult FCampaignSession::EndMonth()
 			// ---- (release 2, the enemy's month near you: Rules/near-moves.ts)
 			Entry->TryGetBoolField(TEXT("near"), Step.bNear);
 			Entry->TryGetStringField(TEXT("nearNote"), Step.NearNote);
+			Entry->TryGetBoolField(TEXT("nearAllies"), Step.bNearAllies);
+			Entry->TryGetStringField(TEXT("allyNote"), Step.AllyNote);
 			const TArray<TSharedPtr<FJsonValue>>* Arrows = nullptr;
 			if (Entry->TryGetArrayField(TEXT("arrows"), Arrows))
 			{
@@ -2722,6 +2724,8 @@ FMonthResult FCampaignSession::EndMonth()
 					(*Arrow)->TryGetBoolField(TEXT("taken"), Drawn.bTaken);
 					(*Arrow)->TryGetBoolField(TEXT("siege"), Drawn.bSiege);
 					(*Arrow)->TryGetBoolField(TEXT("yielded"), Drawn.bYielded);
+					(*Arrow)->TryGetBoolField(TEXT("ally"), Drawn.bAlly);
+					(*Arrow)->TryGetBoolField(TEXT("ours"), Drawn.bOurs);
 					Drawn.Corps = (*Arrow)->TryGetNumberField(TEXT("corps"), Number) ? FMath::RoundToInt32(Number) : 1;
 					Drawn.Divs = (*Arrow)->TryGetNumberField(TEXT("divs"), Number) ? FMath::RoundToInt32(Number) : -1; // (null: only glimpsed)
 					if (Drawn.To >= 0) // (an arrow to nowhere is not drawn)

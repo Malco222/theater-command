@@ -226,6 +226,54 @@ int main(int Count, char** Args)
 		Lay({ Landing }, 1.0, D);
 		Check(Farthest(D, Landing.To) < 10.0, "where it came from is not known: the mark alone, round the place");
 	}
+	// (Brian, 24 Nov 18:01Z) His allies' battles: a smaller steel ring; a blue arrow where his side attacked, red where an ally was attacked.
+	{
+		FArrow Own = Make(EKind::Attack, 0.0, 0.0, 70.0, 0.0), Hit = Own, Strike = Own;
+		Hit.bAlly = true;
+		Strike.bAlly = Strike.bOurs = true;
+		FDrawing D;
+		auto RingOf = [](const FDrawing& Drawing, FInk& Ink, double& Radius)
+		{
+			for (const FStroke& S : Drawing.Over.Strokes)
+			{
+				if (S.bClosed)
+				{
+					Ink = S.Ink;
+					Radius = std::hypot(S.Points[0].X - 70.0, S.Points[0].Y);
+					return;
+				}
+			}
+		};
+		FInk OwnRing, AllyRing, Unused;
+		double OwnRadius = 0.0, AllyRadius = 0.0, Unused2 = 0.0;
+		Lay({ Own }, 1.0, D);
+		RingOf(D, OwnRing, OwnRadius);
+		Lay({ Hit }, 1.0, D);
+		RingOf(D, AllyRing, AllyRadius);
+		Check(AllyRadius < OwnRadius && AllyRing.B > 180 && AllyRing.B > AllyRing.R, "an allies' battle: a smaller steel ring than his own");
+		Check(D.Over.Strokes[0].Ink.R > 200 && D.Over.Strokes[0].Ink.B < 60, "an ally attacked: a red arrow");
+		Lay({ Strike }, 1.0, D);
+		RingOf(D, Unused, Unused2);
+		Check(D.Over.Strokes[0].Ink.B > 150 && D.Over.Strokes[0].Ink.R < 100, "his side attacking: a blue arrow");
+	}
+	// (art director, 24 Nov) His corps' fall-back from a place attacked starts at the ring's rim, not among the sabres.
+	{
+		const std::vector<FArrow> Back{ Make(EKind::Attack, -70.0, 0.0, 0.0, 0.0), Make(EKind::Fell, 0.0, 0.0, 60.0, 0.0) };
+		FDrawing D;
+		Lay(Back, 1.0, D);
+		double Nearest = 1e18;
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			if (S.Ink.R == 238 && S.Ink.G == 230)
+			{
+				for (const FPoint& P : S.Points)
+				{
+					Nearest = std::min(Nearest, std::hypot(P.X, P.Y));
+				}
+			}
+		}
+		Check(Nearest > 6.2 + 0.75, "a fall-back from a place attacked starts outside the battle ring");
+	}
 	// (art director, 24 Nov) His own corps' fall-back on the same road as an attack keeps clear of it.
 	{
 		const std::vector<FArrow> Road{ Make(EKind::Attack, 0.0, 0.0, 70.0, 0.0), Make(EKind::Fell, 0.0, 0.0, 70.0, 0.0) };
@@ -307,6 +355,12 @@ int main(int Count, char** Args)
 				Arrow.bSiege = Siege != 0;
 				Arrow.Corps = Corps;
 				Arrow.bFrom = HasFrom != 0;
+				int Ally = 0, Ours = 0; // (optional: an allies' battle, and whether his side attacked)
+				if (Words >> Ally >> Ours)
+				{
+					Arrow.bAlly = Ally != 0;
+					Arrow.bOurs = Ours != 0;
+				}
 				Arrows.push_back(Arrow);
 			}
 		}
