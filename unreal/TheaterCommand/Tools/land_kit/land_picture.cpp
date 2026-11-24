@@ -240,6 +240,7 @@ namespace
 		// level (0 near, 1 middle, 2 far), roof and look; the sun's own bearing where given; a close look aimed at a point
 		// from a way (bAim).
 		int House = -1, HouseLevel = 0, HouseRoof = 0;
+		int HouseKind = 0; // (0 the farmhouse, 1 its barn, 2 its byre: LAND_KIT_HOUSE=farm)
 		uint64_t HouseKey = 1;
 		double SunBearing = -1000.0;
 		bool bAim = false;
@@ -741,14 +742,18 @@ int main(int argc, char** argv)
 		P.CloseAmong = K.CloseAmong;
 		Panels.push_back(P);
 	}
-	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses)
+	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses; LAND_KIT_HOUSE=farm
+	// its barn's and byre's)
 	const bool bHouseSheet = std::getenv("LAND_KIT_HOUSE") != nullptr;
+	const bool bFarmSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "farm";
 	auto HouseSpec = [](const Panel& P)
 	{
 		LandHouse::Spec H;
-		H.Long = 14.0;
-		H.Deep = 7.2;
-		H.Storeys = 2;
+		// (the bocage's farmstead's three, as LandField lays them)
+		H.Kind = P.HouseKind;
+		H.Long = P.HouseKind == 1 ? 15.0 : P.HouseKind == 2 ? 13.0 : 14.0;
+		H.Deep = P.HouseKind == 1 ? 8.4 : P.HouseKind == 2 ? 6.8 : 7.2;
+		H.Storeys = P.HouseKind == 0 ? 2 : 1;
 		H.Roof = P.HouseRoof;
 		H.Hurt = P.House;
 		H.Key = P.HouseKey;
@@ -766,37 +771,72 @@ int main(int argc, char** argv)
 			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them)
 			double AimDistance;
 			const char* Caption;
+			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre
 		};
-		const HouseLook Looks[] = {
-			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate" },
-			{ "house_slate_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: gutter, downpipe, water butt" },
-			{ "house_tile", 0, 0, 1, 2, 34.0, 12.0, 110.0, -1, 0.0, "another: cream limestone, flat clay tiles" },
-			{ "house_window", 0, 0, 0, 7, -24.0, 4.0, 62.0, 0, 3.6, "close: quoins, sill, casements, shutters" },
-			{ "house_door", 0, 0, 0, 7, 20.0, 6.0, 80.0, 1, 5.6, "close: the door, its keystone, fanlight and step" },
-			{ "house_eaves", 0, 0, 0, 7, -30.0, 6.0, 60.0, 2, 7.5, "close: chimney, ridge tiles, eaves' kick" },
-			{ "house_roofhole", 1, 0, 0, 7, -38.0, 24.0, 62.0, -1, 0.0, "damage 1: a shell through the roof" },
-			{ "house_gable", 2, 0, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down" },
-			{ "house_shell", 3, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell" },
-			{ "house_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (drawn from about 90 m)" },
-			{ "house_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (drawn from 300 m)" },
-			{ "house_gable_far", 2, 2, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "a gable down, far level" },
+		const HouseLook HouseLooks[] = {
+			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate", 0 },
+			{ "house_slate_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: gutter, downpipe, water butt", 0 },
+			{ "house_tile", 0, 0, 1, 2, 34.0, 12.0, 110.0, -1, 0.0, "another: cream limestone, flat clay tiles", 0 },
+			{ "house_window", 0, 0, 0, 7, -24.0, 4.0, 62.0, 0, 3.6, "close: quoins, sill, casements, shutters", 0 },
+			{ "house_door", 0, 0, 0, 7, 20.0, 6.0, 80.0, 1, 5.6, "close: the door, its keystone, fanlight and step", 0 },
+			{ "house_eaves", 0, 0, 0, 7, -30.0, 6.0, 60.0, 2, 7.5, "close: chimney, ridge tiles, eaves' kick", 0 },
+			{ "house_roofhole", 1, 0, 0, 7, -38.0, 24.0, 62.0, -1, 0.0, "damage 1: a shell through the roof", 0 },
+			{ "house_gable", 2, 0, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down", 0 },
+			{ "house_shell", 3, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell", 0 },
+			{ "house_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (drawn from about 90 m)", 0 },
+			{ "house_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (drawn from 300 m)", 0 },
+			{ "house_gable_far", 2, 2, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "a gable down, far level", 0 },
 			// (the level switches as the game shows them: the land battle's 70 degree lens on a screen 1,920 wide sees at 90 m
 			// what this painter's 28 degree one, 560 wide, sees at 55 m, and at 300 m what it sees at 184 m; laid in pairs below)
-			{ "switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
-			{ "switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
-			{ "switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "" },
-			{ "switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "" },
-			{ "switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "" }, // (not laid out: for measuring the far against it)
-			{ "switch90_shell_near", 3, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
-			{ "switch90_shell_mid", 3, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
+			{ "switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 0 },
+			{ "switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 0 },
+			{ "switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 0 }, // (not laid out: for measuring the far against it)
+			{ "switch90_shell_near", 3, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "switch90_shell_mid", 3, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
 			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
-			{ "zz_shell_close", 3, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "" },
-			{ "zz_shell_mid", 3, 1, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "" },
-			{ "zz_gable_close", 2, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "" },
-			{ "zz_shell_inner", 3, 0, 0, 7, -12.0, 28.0, 62.0, 3, 11.0, "" },
+			{ "zz_shell_close", 3, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "", 0 },
+			{ "zz_shell_mid", 3, 1, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "", 0 },
+			{ "zz_gable_close", 2, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "", 0 },
+			{ "zz_shell_inner", 3, 0, 0, 7, -12.0, 28.0, 62.0, 3, 11.0, "", 0 },
+			{ "zz_house_verge", 0, 0, 0, 8, 70.0, 8.0, 62.0, 3, 16.0, "", 0 },
+		};
+		// (the farm's barn and byre: LAND_KIT_HOUSE=farm)
+		const HouseLook FarmLooks[] = {
+			{ "barn_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman barn: cart doors under an oak lintel, slits", 1 },
+			{ "barn_open", 0, 0, 1, 4, 26.0, 10.0, 100.0, -1, 0.0, "another, flat tile: a leaf open on the dark", 1 },
+			{ "barn_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: slits, no gutter, the loft's door", 1 },
+			{ "barn_door", 0, 0, 0, 7, 18.0, 6.0, 80.0, 1, 7.5, "close: the cart doors, ledged, on strap hinges", 1 },
+			{ "barn_door_open", 0, 0, 1, 8, -30.0, 8.0, 100.0, 1, 9.0, "close: both leaves open, the barn's dark and straw", 1 },
+			{ "barn_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage 1: roof holed, hay on the loft", 1 },
+			{ "barn_gable", 2, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 2: a gable down", 1 },
+			{ "barn_shell", 3, 0, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "damage 3: burnt out, the bare rubble inside", 1 },
+			{ "barn_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 1 },
+			{ "barn_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (from 300 m)", 1 },
+			{ "byre_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the byre: stable doors, barred windows", 2 },
+			{ "byre_tile", 0, 0, 1, 2, 30.0, 12.0, 110.0, -1, 0.0, "another, flat tile, limestone", 2 },
+			{ "byre_door", 0, 0, 0, 7, 22.0, 5.0, 80.0, 1, 5.0, "close: a stable door, its window", 2 },
+			{ "byre_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage 1: roof holed", 2 },
+			{ "byre_gable", 2, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 2: a gable down", 2 },
+			{ "byre_shell", 3, 0, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "damage 3: burnt out", 2 },
+			{ "byre_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 2 },
+			{ "byre_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (from 300 m)", 2 },
+			{ "barn_shell_mid", 3, 1, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "barn burnt out, middle level", 1 },
+			// (the level switches as the game shows them, as the farmhouse's)
+			{ "barn_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "barn at 90 m: near level", 1 },
+			{ "barn_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "barn at 90 m: middle level", 1 },
+			{ "barn_switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "barn at 300 m: far level", 1 },
+			{ "byre_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "byre at 90 m: near level", 2 },
+			{ "byre_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "byre at 90 m: middle level", 2 },
+			{ "barn_switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "barn at 300 m: middle level", 1 },
+			// (close looks for working on them, painted only when LAND_KIT_ONLY names them)
+			{ "zz_barn_inside", 3, 0, 0, 7, -12.0, 30.0, 62.0, 3, 13.0, "", 1 },
+			{ "zz_barn_pitch", 0, 0, 0, 8, 70.0, 8.0, 62.0, 3, 16.0, "", 1 },
 		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
+		const std::vector<HouseLook> Looks = bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
 		for (const HouseLook& K : Looks)
 		{
 			if (!Only && K.File[0] == 'z') continue;
@@ -811,6 +851,7 @@ int main(int argc, char** argv)
 			P.HouseLevel = K.Level;
 			P.HouseRoof = K.Roof;
 			P.HouseKey = K.Key;
+			P.HouseKind = K.Kind;
 			P.CameraBearing = K.Bearing;
 			P.CameraUp = K.Up;
 			P.SunBearing = K.Sun;
@@ -822,7 +863,8 @@ int main(int argc, char** argv)
 				V3 At(0.0, 0.0, 0.0);
 				for (const LandHouse::Hole& H : Holes)
 				{
-					if (H.Face == 0 && ((K.Aim == 0 && H.What == 0 && H.Z0 < 2.0) || (K.Aim == 1 && H.What == 1)))
+					// (a window low in the front, or its door: a barn's cart doors, a byre's stable door)
+					if (H.Face == 0 && ((K.Aim == 0 && (H.What == 0 || H.What == 7) && H.Z0 < 2.0) || (K.Aim == 1 && (H.What == 1 || H.What == 3 || H.What == 6))))
 					{
 						At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
 						break;
@@ -936,7 +978,10 @@ int main(int argc, char** argv)
 			const LandField::Mesh& M = P.HouseLevel == 0 ? L.Near : P.HouseLevel == 1 ? L.Mid : L.Far;
 			Scene S;
 			AddHouse(M, 0.15, S);
-			S.Feet.push_back({ -7.0, -3.6, 7.0, 3.6 });
+			{
+				const LandHouse::Spec Hs = HouseSpec(P);
+				S.Feet.push_back({ -0.5 * Hs.Long, -0.5 * Hs.Deep, 0.5 * Hs.Long, 0.5 * Hs.Deep });
+			}
 			const std::string Path = OutDir + "/" + P.File + ".ppm";
 			Vehicle None;
 			if (!Paint(S, P, None, Path))

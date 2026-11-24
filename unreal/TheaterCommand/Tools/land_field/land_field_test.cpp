@@ -1052,25 +1052,29 @@ int main(int Argc, char** Argv)
 		std::printf("  digest: tiles %016llx, ring %016llx, bases %016llx, instances %016llx\n", static_cast<unsigned long long>(Tiles), static_cast<unsigned long long>(Ring),
 		            static_cast<unsigned long long>(Bases), static_cast<unsigned long long>(Things));
 	}
-	// The bocage's farmhouses built to the vehicles' detail (release 2, the trial "houses", LandHouse): each kind a kit
-	// slot drawn as a building, near, its middle level from 90 m and plain from 300 m; every one standing on its house's
-	// floor, its levels within their triangle budgets (the near some 25 to 35 thousand, as a vehicle's), every point a
-	// number and within the house's reach, and its normals of unit length.
+	// The bocage's farmhouses built to the vehicles' detail (release 2, the trial "houses", LandHouse), and their barns and
+	// byres: each kind a kit slot drawn as a building, near, its middle level from 90 m and plain from 300 m; every one
+	// standing on its house's floor, its levels within their triangle budgets (a farmhouse's or a barn's near some 25 to 40
+	// thousand, as a vehicle's; a byre's from 18 thousand), every point a number and within the house's reach, and its
+	// normals of unit length.
 	if (F.Tried("houses") && LookLaid == "bocage")
 	{
-		int Kinds = 0;
+		int Kinds = 0, Barns = 0, Byres = 0;
 		size_t Standing = 0, NearFew = static_cast<size_t>(-1), NearMost = 0, MidMost = 0, FarMost = 0;
 		std::string Bad;
 		for (int K = 0; K < LandField::KitSlots; ++K)
 		{
 			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
 			const LandField::BaseMesh& Bm = G.BaseOf(B);
-			if (Bm.Class != LandField::BaseMesh::Draw::House || Bm.Name.rfind("Farmhouse", 0) != 0) continue;
+			const bool bByre = Bm.Name.rfind("Byre", 0) == 0;
+			if (Bm.Class != LandField::BaseMesh::Draw::House || (Bm.Name.rfind("Farmhouse", 0) != 0 && Bm.Name.rfind("Barn", 0) != 0 && !bByre)) continue;
 			++Kinds;
+			Barns += Bm.Name.rfind("Barn", 0) == 0 ? static_cast<int>(G.Instances(B).size()) : 0;
+			Byres += bByre ? static_cast<int>(G.Instances(B).size()) : 0;
 			Standing += G.Instances(B).size();
-			// (a burnt-out shell has no roof: its near level some 13 thousand)
-			if (Bm.Name.find("Shell") == std::string::npos) NearFew = std::min(NearFew, Bm.Near.Tris());
-			else if (Bm.Near.Tris() < 8000) Bad += " " + Bm.Name + " (too few)";
+			// (a burnt-out shell has no roof: its near level some 13 thousand; a byre, low, some 21 thousand whole)
+			if (Bm.Name.find("Shell") == std::string::npos && !bByre) NearFew = std::min(NearFew, Bm.Near.Tris());
+			else if (Bm.Near.Tris() < (bByre && Bm.Name.find("Shell") == std::string::npos ? 18000u : 8000u)) Bad += " " + Bm.Name + " (too few)";
 			NearMost = std::max(NearMost, Bm.Near.Tris());
 			MidMost = std::max(MidMost, Bm.Mid.Tris());
 			FarMost = std::max(FarMost, Bm.Far.Tris());
@@ -1097,10 +1101,10 @@ int main(int Argc, char** Argv)
 				if (What != LandField::Drawn::Floor || std::fabs(Z - P.Z) > 0.02) Bad += Fmt(" %.0f", P.X) + Fmt(",%.0f (off its floor)", P.Y);
 			}
 		}
-		std::printf("  farmhouses at the vehicles' detail: %zu standing in %d kinds; near %zu to %zu triangles, middle at most %zu, far at most %zu; the tiles' built %zu\n", Standing, Kinds,
+		std::printf("  farmhouses, barns and byres at the vehicles' detail: %zu standing (%d barns, %d byres) in %d kinds; near %zu to %zu triangles, middle at most %zu, far at most %zu; the tiles' built %zu\n", Standing, Barns, Byres, Kinds,
 		            NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost, T.BuiltTris);
-		Check(Kinds > 0 && Standing > 0 && Bad.empty() && (NearFew == static_cast<size_t>(-1) || NearFew >= 15000) && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
-		      "the trial \"houses\": each bocage farmhouse at the vehicles' detail, on its floor, three levels within budget", Fmt("%.0f standing, ", static_cast<double>(Standing)) + "bad:" + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+		Check(Kinds > 0 && Standing > 0 && Barns > 0 && Byres > 0 && Bad.empty() && (NearFew == static_cast<size_t>(-1) || NearFew >= 15000) && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
+		      "the trial \"houses\": each bocage farmhouse, barn and byre at the vehicles' detail, on its floor, three levels within budget", Fmt("%.0f standing, ", static_cast<double>(Standing)) + "bad:" + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
 	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
 	// point's normal turned out, its underside darker than its top.

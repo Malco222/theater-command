@@ -36,6 +36,13 @@
  * black plume of soot licked up over every opening, the inside's plaster sooted and fallen away in patches to the
  * stone, charred joist stubs, fallen beams, one gable left standing, ragged along its rake, with its chimney.
  *
+ * The farm's barn and byre (release 2, the same trial; Brian 24 November, "then the other houses"), built of the same
+ * stone, roof and hand as its house, their footprints, eaves and pitch as LandField lays them: the barn's tall walls with
+ * its cart doors under an oak lintel, two ledged and braced plank leaves on their pintles (one now and then standing
+ * open on the dark), slits for its air, a pitching door to the hay loft in each gable, no chimney and no gutter; the
+ * byre low, its two stable doors (the upper leaf open on one), a small barred window beside each, a pitching door to its
+ * loft in a gable. Inside where they are hurt, bare rubble, unplastered, sooted where they burnt.
+ *
  * Its own frame: metres, x along its length, y across it (its door on the +y side), z up from its floor (the floor
  * LandField's FloorOf gives it); the origin at the middle of its footprint. Placed at a house's middle, turned by the
  * house's yaw (and a half turn where its door faces -V). Colours 8-bit sRGB, as the field's; triangles wound
@@ -51,6 +58,7 @@ namespace LandHouse
 		int Hurt = 0;     // 0 whole, 1 its roof holed, 2 a gable fallen, 3 burnt out to a shell
 		uint64_t Key = 1; // its look: the stone's tone, the shutters' paint and which stand open, the chimneys, the damage's side
 		double Below = 2.2; // how far its plinth runs down below its floor (the ground falls away under it on a slope)
+		int Kind = 0;     // 0 the farmhouse, 1 its barn, 2 its byre (LandField's HtFarmhouse, HtBarn, HtByre; Storeys unread for these)
 	};
 
 	struct Levels
@@ -62,8 +70,9 @@ namespace LandHouse
 	double EavesOf(const Spec& S);
 	double RidgeOf(const Spec& S);
 
-	/** Where its windows and door are, for the pictures and the tests: each opening's middle on the wall's outer face
-	 * (its own frame), its sill and head heights, its width, and what it is (0 a window, 1 the door, 2 an attic window). */
+	/** Where its windows and doors are, for the pictures and the tests: each opening's middle on the wall's outer face
+	 * (its own frame), its sill and head heights, its width, and what it is (0 a window, 1 the door, 2 an attic window; the
+	 * barn's and byre's: 3 the cart doors, 4 a slit, 5 a loft's pitching door, 6 a stable door, 7 a byre's barred window). */
 	struct Hole
 	{
 		int Face = 0; // 0 the front (+y), 1 the gable at -x, 2 the back, 3 the gable at +x

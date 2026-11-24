@@ -3555,24 +3555,29 @@ namespace LandField
 		}
 		// The bocage's farmhouses built to the vehicles' detail (release 2, the trial "houses", LandHouse): each kind of
 		// farmhouse (its size, roof and damage, and one of two looks) a kit slot, planted on its floor, turned so its door
-		// faces as LandField laid it; its plain built box left out of the tiles. Where the slots run out, as before.
+		// faces as LandField laid it; its plain built box left out of the tiles. Its farm's barn and byre the same (LandHouse's
+		// Kind 1 and 2), after every farmhouse has its slot. Where the slots run out, as before.
 		if (!Sp && Fd.Tried("houses"))
+			for (int Pass = 0; Pass < 3; ++Pass)
 			for (House& H : Houses)
 			{
-				if (H.bKit || H.bWhite || H.Type != HtFarmhouse) continue;
+				const int Want[3] = { HtFarmhouse, HtBarn, HtByre };
+				if (H.bKit || H.bWhite || H.Type != Want[Pass]) continue;
 				LandHouse::Spec S;
+				S.Kind = Pass;
 				S.Long = H.Long;
 				S.Deep = H.Deep;
 				S.Storeys = H.Storeys;
 				S.Roof = H.Roof;
 				S.Hurt = H.Hurt;
-				S.Key = Hash(0xFA4A0ull, static_cast<uint64_t>(H.Roof * 8 + H.Hurt), H.Key & 1);
+				// (a farmhouse's two looks by its roof and damage, as before; a barn's and a byre's their own)
+				S.Key = Pass == 0 ? Hash(0xFA4A0ull, static_cast<uint64_t>(H.Roof * 8 + H.Hurt), H.Key & 1) : Hash(0xFA4A0ull + static_cast<uint64_t>(Pass), static_cast<uint64_t>(H.Roof * 8 + H.Hurt), H.Key & 1);
 				S.Below = std::max(1.0, H.Floor - H.Foot); // (its plinth down past the lowest ground under it, as BuildHouse's walls)
 				int Slot = -1;
 				for (size_t K = 0; K < HouseModels.size(); ++K)
 				{
 					const LandHouse::Spec& O = HouseModels[K];
-					if (O.Long == S.Long && O.Deep == S.Deep && O.Storeys == S.Storeys && O.Roof == S.Roof && O.Hurt == S.Hurt && O.Key == S.Key) Slot = static_cast<int>(K);
+					if (O.Kind == S.Kind && O.Long == S.Long && O.Deep == S.Deep && O.Storeys == S.Storeys && O.Roof == S.Roof && O.Hurt == S.Hurt && O.Key == S.Key) Slot = static_cast<int>(K);
 				}
 				if (Slot < 0 && static_cast<int>(HouseModels.size()) < KitSlots)
 				{
@@ -6920,7 +6925,8 @@ namespace LandField
 			M.FarFrom = 300.0f;
 			M.Class = BaseMesh::Draw::House;
 			static const char* const Hurts[4] = { "Whole", "RoofHole", "Gable", "Shell" };
-			M.Name = std::string("Farmhouse") + (HouseModels[K].Roof == 1 ? "Tile" : "Slate") + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
+			static const char* const Kinds[3] = { "Farmhouse", "Barn", "Byre" };
+			M.Name = std::string(Kinds[std::clamp(HouseModels[K].Kind, 0, 2)]) + (HouseModels[K].Roof == 1 ? "Tile" : "Slate") + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
 		}
 		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not
 		// reach, dropped: its near level is drawn to its far one).
