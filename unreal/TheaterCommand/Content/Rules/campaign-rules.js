@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c190e71f 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 95e10d4b 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40594,9 +40594,9 @@
     kinTechs(g2, n);
     s.work = workOf(s);
     const due = [];
-    const pace = researchSpeed(g2, n.id) * govMul(g2, n.id, "research");
+    const pace2 = researchSpeed(g2, n.id) * govMul(g2, n.id, "research");
     for (const w of s.work) {
-      w.left -= pace;
+      w.left -= pace2;
       if (w.left <= 1e-9) due.push(w.id);
     }
     if (due.length) {
@@ -49330,6 +49330,13 @@
     prepared: 0.15
   };
 
+  // ../../data/campaign/pursuit.json
+  var pursuit_default = {
+    _about: "The pursuit of a beaten army (Units decide, #7 step 4(b); the design director's rulings of 24 November 2026, 12:41Z and 12:43Z; the historian's historian/prisoner-share-1124.md). Off unless Units decide is on. Who is faster comes from the ground's own march costs (ground.json and moveCost, without the march road): a faster enemy that gets across a road out first takes the men on foot who can go no other way; a faster pursuit with the road open takes a share of the men on foot who do not ride.",
+    share: 0.25,
+    _share: "D: about a quarter of a mostly-foot army taken as it fell back with its road open and a faster enemy behind (Second Alamein, about 30,000 of 116,000: the total L, the split U). Taken of each corps' men on foot who do not ride, as a share of men, never a draw on whole corps. Refit once the split is read."
+  };
+
   // ../../data/campaign/columns.json
   var columns_default = {
     _about: "Supply columns (release 2; Brian's yes of 23 November 2026 12:05Z, idea 3: 'lorry convoys crawl along the campaign map's roads, and enemy planes or partisans can ambush them'). The grand campaign's flag 'columns' (stage.json), set as a campaign opens; off, nothing here is read and every war is the war without it. Each month every nation at war sends a column of lorries from its railhead (rails.ts railheads: the nearest province on working track to a depot or a supplied port) along the road, province by province, to each province where its corps stand beyond it: 'lorries.perDiv' lorries for every division fed and every province of road. On each stretch the column can be caught by enemy aircraft or by partisans, and what is lost on the way never reaches the front. Nothing is keyed to a nation or a date: the outcome comes from what is on the ground and in the air (the core theme, Brian 23 November 07:13Z).",
@@ -51110,6 +51117,7 @@
   var listAnd2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var evenOdds = (dice2) => 2.4 / (dice2[0] + dice2[1]);
   var WIN = winchance_default;
+  var PURSUIT = pursuit_default;
   var winChanceOn = (g2) => unitsDecide(g2) && g2.flags.winChance === 1;
   var sureWords = (dice2) => dice2[0] > 0 ? `nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1` : "no odds make it sure";
   var luckOf = (prepared) => {
@@ -51687,6 +51695,40 @@
     });
     if (opts.sea !== void 0) lines2.push(opts.air ? { label: "Airborne assault", value: "By parachute and glider, without heavy weapons", effect: `Attack cut to ${Math.round(opts.sea * 100)}%` } : opts.surprise ? { label: "Landing", value: "From the sea, on the day war is declared", effect: "The defenders are caught unready: the landing fights at full strength" } : { label: "Landing", value: "From the sea, against a defended shore", effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
     if (trap) lines2.push({ label: "Encirclement", value: "The defenders have no line of retreat", effect: "A general who knows how to close a pocket hits 15% harder" });
+    if (unitsDecide(g2) && !town && !opts.breakout && defenders.some(fights)) {
+      const ours = g2.human !== null && dN.has(g2.human);
+      const banned = new Set(attackers2.map((c) => c.reg)), blocks = /* @__PURE__ */ new Map(), cutAt = /* @__PURE__ */ new Set();
+      let chasedBy = null;
+      for (const c of defenders) {
+        if (c.str < 0.15 || !afoot(c)) continue;
+        for (const j of roadsCut(g2, c, target, attNat, banned, blocks, false)) cutAt.add(j);
+        for (const j of target.nb) {
+          const r = g2.regions[j];
+          if (!fallsOn(g2, c, r, banned)) continue;
+          const by2 = attackers2.find((u) => chaser(u) && pace(g2, u, r) < pace(g2, c, r));
+          if (by2 && (!chasedBy || KIND[by2.kind].mobile && !KIND[chasedBy.kind].mobile)) chasedBy = by2;
+        }
+      }
+      const arm2 = (u) => u?.kind === "arm" ? "armour" : u?.kind === "mot" ? "lorried troops" : u?.kind === "cav" ? "cavalry" : "troops";
+      if (cutAt.size) {
+        const at5 = listAnd2([...cutAt].map((j) => g2.regions[j].name));
+        lines2.push({ label: "Pursuit", value: `${ours ? "Our" : "Their"} road out is cut at ${at5}`, effect: `If the line breaks, ${ours ? "our" : "their"} men on foot who can go no other way are taken whole by the ${arm2(blocks.get([...cutAt][0]))} already there` });
+        const breakers = defenders.filter((c) => c.str >= 0.15 && c.kind !== "fort");
+        let road = null, worst = Infinity;
+        for (const j of cutAt) {
+          const u = blocks.get(j), r = g2.regions[j];
+          if (!u) continue;
+          const D3 = onTheRoad(g2, u, r, () => assess(g2, breakers, r, { breakout: true }).D);
+          if (D3 < worst) {
+            worst = D3;
+            road = r;
+          }
+        }
+        if (road) lines2.push({ label: "Breakout", value: `Breaking out at ${road.name}`, effect: `If the line breaks, ${ours ? "our" : "their"} beaten army first attacks the enemy on its road out there; if that fails, ${ours ? "our" : "their"} men on foot who can go no other way are taken whole` });
+      } else if (chasedBy) {
+        lines2.push({ label: "Pursuit", value: `${ours ? "Our foot cannot outrun their" : "Their foot cannot outrun our"} ${arm2(chasedBy)}`, effect: `If the line breaks, about ${Math.round(PURSUIT.share * 100)}% of ${ours ? "our" : "their"} men on foot are taken as they fall back` });
+      }
+    }
     if (lineMul < 1) lines2.push(attackers2.some((c) => inDesert(g2.regions[c.reg])) ? { label: "Supply line", value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` } : { label: "Supply line", value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
     if (railA < 1) lines2.push({ label: "Railhead", value: `Attackers as far as ${roadA} provinces by road beyond their nearest working railway`, effect: `Attack cut to as little as ${Math.round(railA * 100)}% until engineers bring the line forward` });
     if (railD < 1) lines2.push({ label: "Railhead", value: `Defenders as far as ${roadD} provinces by road beyond their nearest working railway`, effect: `Defence cut to as little as ${Math.round(railD * 100)}% until their line is relaid` });
@@ -51937,6 +51979,100 @@
     }
     return best;
   }
+  function pace(g2, c, to) {
+    let cost = KIND[c.kind].move + groundMarch(g2, c.kind, to);
+    if (to.terrain === "mountain" && c.kind !== "mtn") cost += 1;
+    if (to.terrain === "marsh") cost += 1;
+    if (weather(g2).mud && EAST.has(to.owner)) cost += 1;
+    if (frozen(g2, c.nat, to) && cmdWinter(g2, c) >= 1) cost += 1;
+    return cost;
+  }
+  var lifted = (c) => c.kind === "mot" || c.kind === "arm" ? 1 : 0;
+  var afoot = (c) => !KIND[c.kind].mobile && c.kind !== "fort";
+  var chaser = (c) => fights(c) && c.supplied && c.str >= 0.15;
+  function roadsCut(g2, c, from2, winner, banned, blocks, pay = true, open2) {
+    const cut2 = /* @__PURE__ */ new Set();
+    if (!unitsDecide(g2) || !afoot(c) && lifted(c) >= 1) return cut2;
+    for (const j of from2.nb) {
+      const r = g2.regions[j];
+      if (open2?.has(j) || !fallsOn(g2, c, r, banned) || r.units.some((u) => allied(g2, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g2, u.nat, c.nat))) continue;
+      const mine4 = pace(g2, c, r);
+      const held3 = blocks.get(j);
+      if (held3) {
+        if (pace(g2, held3, r) < mine4) cut2.add(j);
+        continue;
+      }
+      const taken2 = new Set([...blocks.values()].map((u) => u.id));
+      let by2 = null;
+      for (const k of r.nb) {
+        if (k === from2.id) continue;
+        for (const u of g2.regions[k].units) {
+          if (taken2.has(u.id) || u.kind !== "mot" && u.kind !== "arm" || !allied(g2, u.nat, winner) || !atWar(g2, u.nat, c.nat) || !chaser(u)) continue;
+          const cost = pace(g2, u, r);
+          if (cost < mine4 && u.ap >= cost && (!by2 || cost < pace(g2, by2, r))) by2 = u;
+        }
+      }
+      if (by2) {
+        blocks.set(j, by2);
+        if (pay) by2.ap -= pace(g2, by2, r);
+        cut2.add(j);
+      }
+    }
+    return cut2;
+  }
+  function pursuitTakes(g2, c, to, chasers) {
+    if (!unitsDecide(g2) || !afoot(c)) return 0;
+    const mine4 = pace(g2, c, to);
+    if (!chasers.some((u) => chaser(u) && pace(g2, u, to) < mine4)) return 0;
+    return PURSUIT.share * (1 - lifted(c));
+  }
+  function onTheRoad(g2, u, road, fight2) {
+    const home = g2.regions[u.reg], at4 = home.units.indexOf(u), dug = u.dug;
+    home.units.splice(at4, 1);
+    road.units.push(u);
+    u.reg = road.id;
+    if (dug !== void 0) u.dug = false;
+    try {
+      return fight2();
+    } finally {
+      if (!u.dead && u.reg === road.id && road.units.includes(u)) {
+        road.units.splice(road.units.indexOf(u), 1);
+        home.units.splice(Math.min(at4, home.units.length), 0, u);
+        u.reg = home.id;
+        if (dug !== void 0) u.dug = dug;
+      }
+    }
+  }
+  function breakOut(g2, stack, from2, winner, banned, open2) {
+    const dry = /* @__PURE__ */ new Map();
+    let doomed = false;
+    for (const c of stack) {
+      if (c.dead || c.reg !== from2.id || c.str < 0.15 || !afoot(c)) continue;
+      const outs = from2.nb.filter((j) => fallsOn(g2, c, g2.regions[j], banned));
+      if (!outs.length) continue;
+      const cut2 = roadsCut(g2, c, from2, winner, banned, dry, false, open2);
+      if (outs.every((j) => cut2.has(j))) doomed = true;
+    }
+    if (!doomed) return null;
+    const breakers = stack.filter((c) => !c.dead && c.reg === from2.id && c.str >= 0.15 && c.kind !== "fort");
+    if (!breakers.some(fights)) return null;
+    let road = null, block = null, worst = Infinity;
+    for (const [j, u] of dry) {
+      const r = g2.regions[j];
+      const D2 = onTheRoad(g2, u, r, () => assess(g2, breakers, r, { breakout: true }).D);
+      if (D2 < worst) {
+        worst = D2;
+        road = r;
+        block = u;
+      }
+    }
+    if (!road || !block) return null;
+    const at4 = road;
+    const goers = limitAttackers(g2, breakers, at4);
+    const rep = onTheRoad(g2, block, at4, () => resolveBattle(g2, goers.length ? goers : breakers, at4, { breakout: true }));
+    if (rep.taken) open2.add(at4.id);
+    return rep;
+  }
   function closeRound(g2, r, corps) {
     for (const c of corps) if (!c.dead && c.reg === r.id && !c.town) c.ap = 0;
   }
@@ -52042,7 +52178,7 @@
       const attFrac = attackLoss(R2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
       const defFrac = defenceLoss(R2);
       const stood = win ? 1 : HELD_LOSS;
-      const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R2 >= 2 ? 1 : 0] : 1;
+      const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g2) ? DESERT.retreat[R2 >= 2 ? 1 : 0] : 1;
       let ours = 0, theirs = 0;
       for (const c of attackers2) ours += men(c) * Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g2, c));
       for (const c of a.defenders) theirs += men(c) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * weight6;
@@ -52142,9 +52278,9 @@
     });
     const win = R2 >= 1.2;
     const stood = win ? 1 : HELD_LOSS;
-    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
+    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g2) ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
     const defPart = (c, i, w = defW[i]) => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
-    const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
+    const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g2) ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
     const defPlain = (c) => defenceLoss(billed) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
     const defOut = pulled("def");
     const defK = !opts.field ? 1 : opts.field.broke === "def" && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def) : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut) : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
@@ -52174,7 +52310,27 @@
       const banned = new Set(attackers2.map((c) => c.reg));
       let intoWorks = false;
       let back = null;
+      const blocks = /* @__PURE__ */ new Map();
+      const chased = (c, to, i) => {
+        const share = opts.breakout ? 0 : pursuitTakes(g2, c, to, attackers2);
+        if (share <= 0) return;
+        const before = men(c);
+        c.str *= 1 - share;
+        const took = before - men(c);
+        defU[i].lost += took;
+        defU[i].chased = took;
+        prisoners += took;
+      };
+      const reopened = /* @__PURE__ */ new Set();
+      const breakout = !opts.breakout && unitsDecide(g2) && !town && !overrun2 ? breakOut(g2, defenders, target, attNat, banned, reopened) : null;
       defenders.forEach((c, i) => {
+        if (breakout && !c.dead && c.reg !== target.id) {
+          defU[i].fate = "retreated";
+          if (driveOut(g2)) defU[i].to = c.reg;
+          c.ap = 0;
+          chased(c, g2.regions[c.reg], i);
+          return;
+        }
         if (!town && sieges2 && fortRow(g2, c) && allied(g2, c.nat, target.ctrl) && c.str >= 0.15 * (c.full ?? 1)) {
           target.units.splice(target.units.indexOf(c), 1);
           c.org = Math.max(c.org, orgAt.get(c.id) ?? c.org);
@@ -52184,7 +52340,10 @@
           intoWorks = true;
           return;
         }
-        const to = town || overrun2 || c.str < 0.15 ? null : retreatTarget(g2, c, target, banned);
+        const cut2 = town || overrun2 || c.str < 0.15 || opts.breakout ? null : roadsCut(g2, c, target, attNat, banned, blocks, true, reopened);
+        if (cut2?.size) defU[i].roadsCut = [...cut2];
+        const outs = cut2?.size ? /* @__PURE__ */ new Set([...banned, ...cut2]) : banned;
+        const to = town || overrun2 || c.str < 0.15 ? null : retreatTarget(g2, c, target, outs);
         const N = g2.nations[c.nat];
         const away2 = !overrun2 && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g2, c.nat, target);
         if (!town && !overrun2 && sieges2 && !driveOut(g2) && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away2) && canShelter(g2, c, target)) {
@@ -52197,6 +52356,7 @@
           c.ap = 0;
           defU[i].fate = "retreated";
           if (driveOut(g2)) defU[i].to = to.id;
+          chased(c, to, i);
         } else if (away2) {
           const dest = refuge(g2, c, target);
           place(g2, c, dest);
@@ -52209,11 +52369,12 @@
             g2.flags[`evac:${g2.turn}`] = 1;
             headline(g2, "event", `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? "" : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: "land", lost: c.nat });
           }
-        } else if (back = !town && !overrun2 && c.str >= 0.15 ? fallThrough(g2, c, target, banned) : null) {
+        } else if (back = !town && !overrun2 && c.str >= 0.15 ? fallThrough(g2, c, target, outs) : null) {
           place(g2, c, back);
           c.ap = 0;
           defU[i].fate = "retreated";
           if (driveOut(g2)) defU[i].to = back.id;
+          chased(c, back, i);
         } else {
           const left = men(c);
           const shattered = c.str < 0.15 * (fortRow(g2, c) ? c.full ?? 1 : 1);
@@ -52283,6 +52444,7 @@
     if (gates) rep.gates = true;
     if (relief) rep.relief = true;
     if (opts.sally) rep.sally = true;
+    if (opts.breakout) rep.breakout = true;
     if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
     if (!win && !town && a.wear > 0) {
       rep.worn = Math.round(a.wear * 10) / 10;
@@ -56112,7 +56274,7 @@
     hold(g2, nat, ph);
     keepWards(g2, nat, ph);
     mass(g2, nat, ph, true);
-    breakOut(g2, nat);
+    breakOut2(g2, nat);
     if (!n.alive) return;
     stepBack(g2, nat);
     fallBack2(g2, nat);
@@ -56291,7 +56453,7 @@
       }
     });
   }
-  function breakOut(g2, nat) {
+  function breakOut2(g2, nat) {
     const R2 = RIVALS.ring;
     const n = g2.nations[nat];
     if (!R2 || scope || !rivalRules(g2) || nat === g2.human || !R2.staffs.includes(nat) || n.capital < 0) return;
@@ -66621,7 +66783,7 @@
       const f = this.b.field, u = sq.u;
       const R2 = reach3 ?? DR.xp.seek[this.band(u)] * (u.kind === "arm" || u.kind === "art" ? 2 : 1);
       const going = m.role === "tank" ? "tracks" : m.role === "gun" ? "guns" : m.role === "lorry" ? "wheels" : "foot";
-      const pace = LAND2.pace[going];
+      const pace2 = LAND2.pace[going];
       const sep = m.role === "tank" ? 16 : m.role === "gun" ? 18 : m.role === "lorry" ? 10 : CREWED.has(m.role) ? DR.teams.sep : 3.5;
       const cand = [p];
       const a0 = roll(this.seed, u.id, m.n, 7) * Math.PI * 2;
@@ -66648,7 +66810,7 @@
         const [qx, qy] = this.leash(sq, [cx, cy], m.role === "lorry" ? 116 : -2);
         if (qx !== cx || qy !== cy) continue;
         const g2 = groundOf3(f, cx, cy);
-        if (pace[g2] <= (going === "foot" ? 0 : 0.12)) continue;
+        if (pace2[g2] <= (going === "foot" ? 0 : 0.12)) continue;
         const c = this.shelter(cx, cy, g2, dir, going === "foot", m.role === "tank");
         let s = c.v - (settle2 ? 8e-3 : 0.015) * Math.hypot(cx - p[0], cy - p[1]);
         for (const o of near2) if (Math.hypot(o.spot[0] - cx, o.spot[1] - cy) < sep) s -= 0.3;
@@ -66776,14 +66938,14 @@
       }
     }
     /** Sends a man to a place near p (the best shelter there unless 'open'), at a pace, in a pose. */
-    go(sq, m, p, pose, pace, until, dir, reach3) {
+    go(sq, m, p, pose, pace2, until, dir, reach3) {
       p = this.leash(sq, p, -4);
       const best = this.seek(sq, m, p, dir ?? this.threatDir(sq), sq.men, reach3);
       m.spot = [best.x, best.y];
       m.cover = best.kind;
       m.slotAt = p;
       m.pose = pose;
-      m.v = pace;
+      m.v = pace2;
       m.until = until;
     }
     /** The firing pose for where he lies: standing in fieldworks or at a window, kneeling in woods or behind rocks or a crest, lying in the open. */
@@ -67002,8 +67164,8 @@
               const across = clamp6(a + sq.flank * (6 + 6 * roll(this.seed, u.id, m.n, t, 3)), -u.w / 2 - 20, u.w / 2 + 20);
               const p = [u.x + across * rx + reach3 * fx, u.y + across * ry + reach3 * fy];
               const pose = sq.harm > DR.pin.harm * 0.6 ? "crawl" : wavering ? "advance" : roll(this.seed, u.id, m.n, t, 5) < 0.3 ? "creep" : "advance";
-              const pace = pose === "crawl" ? 1.2 : pose === "creep" ? 2.5 : 5;
-              this.go(sq, m, p, pose, pace, t + N.rush + 1, dir, 8);
+              const pace2 = pose === "crawl" ? 1.2 : pose === "creep" ? 2.5 : 5;
+              this.go(sq, m, p, pose, pace2, t + N.rush + 1, dir, 8);
               m.aim = void 0;
             } else {
               const aim2 = this.aimAt(m, e), near3 = aim2 ? Math.hypot(aim2[0] - m.x, aim2[1] - m.y) : 999;
@@ -67320,8 +67482,8 @@
         const F = BOOK2.flank.rush, swing = F[0] + (F[1] - F[0]) * roll(this.seed, u.id, m.n, n, 3), step2 = 10 + 10 * roll(this.seed, u.id, m.n, n, 4);
         const sa = clamp6(da, -swing, swing), sl = clamp6(dl, 0, Math.max(3, step2 - Math.abs(sa) * 0.5));
         const heavy = lv > BOOK2.suppress.heavy, slow = heavy || roll(this.seed, u.id, m.n, n, 93) < crawl;
-        const d = Math.hypot(sa, sl), pace = heavy ? 1.2 : slow ? 2.6 : clamp6(d / (bk.rush * 0.85), 3.5, CATCH_UP);
-        this.go(sq, m, [m.x + rx * sa + fx * sl, m.y + ry * sa + fy * sl], heavy ? "crawl" : slow ? "creep" : "advance", pace, t + (slow ? d / pace : bk.rush), dir, 6);
+        const d = Math.hypot(sa, sl), pace2 = heavy ? 1.2 : slow ? 2.6 : clamp6(d / (bk.rush * 0.85), 3.5, CATCH_UP);
+        this.go(sq, m, [m.x + rx * sa + fx * sl, m.y + ry * sa + fy * sl], heavy ? "crawl" : slow ? "creep" : "advance", pace2, t + (slow ? d / pace2 : bk.rush), dir, 6);
         m.rushed = n;
         m.aim = void 0;
         return;
@@ -67624,7 +67786,7 @@
       const u = sq.u, t = this.b.t;
       const men2 = sq.men.filter((m) => this.stands(sq, m));
       const run = sq.phase === "flee" ? "flee" : "run";
-      const afoot = (m, to) => {
+      const afoot2 = (m, to) => {
         const dx = to.x - m.x, dy = to.y - m.y, at4 = this.mountAt(sq, m);
         m.aim = void 0;
         m.hidden = void 0;
@@ -67665,7 +67827,7 @@
             v.v = 0;
           }
         });
-        for (const m of men2) if (m.pose !== "mounted") afoot(m, this.lorryOf(sq, m));
+        for (const m of men2) if (m.pose !== "mounted") afoot2(m, this.lorryOf(sq, m));
       } else {
         const slotOf = (m) => {
           const [a, l] = this.slot(sq, m, sq.phase === "column" ? "column" : "line");
@@ -67689,7 +67851,7 @@
             continue;
           }
           all = false;
-          afoot(m, men2.find((h) => h.k === m.bus && h.j === void 0));
+          afoot2(m, men2.find((h) => h.k === m.bus && h.j === void 0));
         }
         for (const h of men2) {
           if (h.role !== "holder" || h.pr) continue;
@@ -68802,17 +68964,17 @@
      * Numbered k 300 on by the mend's man (the spotter's pair are 200 and 201).
      */
     linemen(id) {
-      const b = this.b, t = b.t, out = [], pace = LAND2.speed.inf;
+      const b = this.b, t = b.t, out = [], pace2 = LAND2.speed.inf;
       const r12 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
       for (const m of b.wireMends) {
         const w = b.wires[m.wire - 1];
         if (!w || w.unit !== id || t < m.t0) continue;
-        const [hx, hy] = w.hq, d = Math.hypot(m.x - hx, m.y - hy), home = m.t + d / pace;
+        const [hx, hy] = w.hq, d = Math.hypot(m.x - hx, m.y - hy), home = m.t + d / pace2;
         if (t >= home) continue;
         const out1 = bearing2(hx, hy, m.x, m.y);
-        const k = t < m.t1 ? m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1 : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - (t - m.t) * pace / d) : 0;
+        const k = t < m.t1 ? m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1 : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - (t - m.t) * pace2 / d) : 0;
         const p = t < m.t1 ? "reel" : t < m.t ? "splice" : "walk";
-        out.push({ k: 300 + m.man, r: "rifle", x: r12(hx + (m.x - hx) * k), y: r12(hy + (m.y - hy) * k), f: r22(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace, c: "none", ln: 1 });
+        out.push({ k: 300 + m.man, r: "rifle", x: r12(hx + (m.x - hx) * k), y: r12(hy + (m.y - hy) * k), f: r22(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace2, c: "none", ln: 1 });
       }
       return out;
     }
@@ -70613,8 +70775,8 @@
      * Nothing where it stands on ground it can enter.
      */
     exit(m, x, y) {
-      const f = this.field, C4 = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y), bar = m === "hedged" ? this.barrier() : null;
-      const go = (i) => pace[GROUNDS[f.ground[i]]] > 0 && !(bar && bar[i]);
+      const f = this.field, C4 = f.cols, pace2 = this.paceOf(m), s = this.cellAt(x, y), bar = m === "hedged" ? this.barrier() : null;
+      const go = (i) => pace2[GROUNDS[f.ground[i]]] > 0 && !(bar && bar[i]);
       const mine4 = (i) => !bar || !this.barredCross(x, y, i % C4 * f.cell + f.cell / 2, Math.floor(i / C4) * f.cell + f.cell / 2);
       if (go(s)) return null;
       const wet = (i) => GROUNDS[f.ground[i]] === "water" || GROUNDS[f.ground[i]] === "blown";
@@ -70651,9 +70813,9 @@
      * walk straight between. Where the place cannot be reached, the way ends at the nearest cell that can, and says so.
      */
     findWay(m, sx, sy, x, y) {
-      const f = this.field, C4 = f.cols, n = f.ground.length, pace = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
-      const top = Math.max(...Object.values(pace)), s = this.cellAt(sx, sy), g2 = this.cellAt(x, y), gc = g2 % C4, gr = Math.floor(g2 / C4);
-      const go = (i) => bar && bar[i] ? 0 : pace[GROUNDS[f.ground[i]]];
+      const f = this.field, C4 = f.cols, n = f.ground.length, pace2 = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
+      const top = Math.max(...Object.values(pace2)), s = this.cellAt(sx, sy), g2 = this.cellAt(x, y), gc = g2 % C4, gr = Math.floor(g2 / C4);
+      const go = (i) => bar && bar[i] ? 0 : pace2[GROUNDS[f.ground[i]]];
       const h = (i) => {
         const dc = Math.abs(i % C4 - gc), dr = Math.abs(Math.floor(i / C4) - gr);
         return (Math.max(dc, dr) + (Math.SQRT2 - 1) * Math.min(dc, dr)) / top;
@@ -70747,7 +70909,7 @@
       const stepX = dx ? cs / Math.abs(dx) : Infinity, stepY = dy ? cs / Math.abs(dy) : Infinity;
       let tx = dx ? (sx > 0 ? (c + 1) * cs - x0 : x0 - c * cs) / Math.abs(dx) : Infinity;
       let ty = dy ? (sy > 0 ? (r + 1) * cs - y0 : y0 - r * cs) / Math.abs(dy) : Infinity;
-      const pace = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
+      const pace2 = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
       for (let n = Math.abs(c1 - c) + Math.abs(r12 - r); n > 0 && (c !== c1 || r !== r12); n--) {
         if (Math.abs(tx - ty) < 1e-9) {
           tx += stepX;
@@ -70763,7 +70925,7 @@
           r += sy;
         }
         if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) return true;
-        if (pace[GROUNDS[f.ground[r * f.cols + c]]] <= 0) return false;
+        if (pace2[GROUNDS[f.ground[r * f.cols + c]]] <= 0) return false;
         if (bar && bar[r * f.cols + c]) return false;
       }
       return true;
@@ -71344,12 +71506,12 @@
     spread() {
       const us = this.units.filter((u) => fighting2(u) && u.kind !== "fort");
       const can2 = (u, ux, uy, push) => {
-        const x = clamp5(u.x + ux * push, 5, this.field.w - 5), y = clamp5(u.y + uy * push, 5, this.field.h - 5), pace = LAND2.pace[MOTION[u.kind]];
+        const x = clamp5(u.x + ux * push, 5, this.field.w - 5), y = clamp5(u.y + uy * push, 5, this.field.h - 5), pace2 = LAND2.pace[MOTION[u.kind]];
         const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
         if (inRiver(there) && !inRiver(here)) return false;
-        const to = pace[there];
+        const to = pace2[there];
         if (this.bocage && this.going(u) === "hedged" && this.barredCross(u.x, u.y, x, y)) return false;
-        return to > LAND2.queue.hard || to > 0 && to >= pace[here];
+        return to > LAND2.queue.hard || to > 0 && to >= pace2[here];
       };
       const go = (u, ux, uy, push) => {
         if (can2(u, ux, uy, push)) {
@@ -71801,14 +71963,14 @@
       else this.turnTo(u, head);
       const m = MOTION[k];
       const g2 = groundAt(this.field, u.x, u.y);
-      let pace = LAND2.pace[m][g2];
-      if (k === "mtn" && (g2 === "rough" || g2 === "rock")) pace = Math.min(1, pace * LAND2.mountainFoot);
+      let pace2 = LAND2.pace[m][g2];
+      if (k === "mtn" && (g2 === "rough" || g2 === "rock")) pace2 = Math.min(1, pace2 * LAND2.mountainFoot);
       const up = inRiver(g2) ? 0 : heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
-      pace *= up > 0 ? Math.max(0.4, 1 - up / 20 * 1.5) : 1;
+      pace2 *= up > 0 ? Math.max(0.4, 1 - up / 20 * 1.5) : 1;
       const top = u.team ? LAND2.teams[u.team].speed : LAND2.speed[k];
       const double = !run && u.order?.kind === "move" && !!u.order.run;
       if (double) u.winded = this.t + LAND2.double.winded;
-      let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (double ? LAND2.double.pace[m] : 1) * (u.state === "wavering" ? 0.85 : 1);
+      let v = top * Math.max(0.12, pace2) * (run ? 1.15 : 1) * (double ? LAND2.double.pace[m] : 1) * (u.state === "wavering" ? 0.85 : 1);
       const d = dist(u.x, u.y, to[0], to[1]);
       const stepLen = Math.min(d, v * DT);
       const [ax, ay] = ahead(head);
@@ -71867,9 +72029,9 @@
       let near2 = this.hardNear[m];
       if (!near2) {
         near2 = this.hardNear[m] = new Uint8Array(C4 * R2);
-        const n = Math.round(LAND2.queue.near / f.cell), pace = this.paceOf(m);
+        const n = Math.round(LAND2.queue.near / f.cell), pace2 = this.paceOf(m);
         for (let i = 0; i < C4 * R2; i++) {
-          if (pace[GROUNDS[f.ground[i]]] > LAND2.queue.hard) continue;
+          if (pace2[GROUNDS[f.ground[i]]] > LAND2.queue.hard) continue;
           const c0 = i % C4, r0 = Math.floor(i / C4);
           for (let r = Math.max(0, r0 - n); r <= Math.min(R2 - 1, r0 + n); r++) for (let c = Math.max(0, c0 - n); c <= Math.min(C4 - 1, c0 + n); c++) near2[r * C4 + c] = 1;
         }
@@ -71998,10 +72160,10 @@
      * wades, none once the battle is over, so it is set down on the nearest bank). Where it stands already, that point.
      */
     shore(u, perTurn = 30) {
-      const pace = LAND2.pace[MOTION[u.kind]], f = this.field;
+      const pace2 = LAND2.pace[MOTION[u.kind]], f = this.field;
       const ok2 = (x, y) => {
         const g2 = groundAt(f, x, y);
-        return !inRiver(g2) && pace[g2] > 0;
+        return !inRiver(g2) && pace2[g2] > 0;
       };
       if (ok2(u.x, u.y)) return [u.x, u.y];
       let best = [u.x, u.y], score = Infinity;
@@ -78698,7 +78860,7 @@
         if (foes(u, "ftr").length) on.ftr += k;
         if (foes(u, "bmr").length) on.bmr += k;
       }
-      const pace = (u, k) => on[k] > 0 && pool?.has(u.id) ? 1 / on[k] : 1;
+      const pace2 = (u, k) => on[k] > 0 && pool?.has(u.id) ? 1 / on[k] : 1;
       for (const f of live5) if (f.side === "att" && f.air === "ftr" && f.job.do === "escort" && f.contacts.some((i) => byId.get(i)?.side === "def")) this.foughtFor.set(f.id, f.job.on);
       const covers2 = /* @__PURE__ */ new Map();
       this.owedBy.clear();
@@ -78714,7 +78876,7 @@
         if (u.air !== "ftr" || !u.contacts.length || u.kit0 <= 0 || away(u)) continue;
         const F = foes(u, "ftr"), Bs = foes(u, "bmr");
         if (F.length && u.kit.ftr > 0) {
-          const spend = u.kit.ftr * burn * pace(u, "ftr");
+          const spend = u.kit.ftr * burn * pace2(u, "ftr");
           u.kit.ftr -= spend;
           const nF = sum3(F);
           for (const v of F) {
@@ -78724,7 +78886,7 @@
           }
         }
         if (Bs.length && u.kit.bmr > 0) {
-          const spend = u.kit.bmr * burn * pace(u, "bmr");
+          const spend = u.kit.bmr * burn * pace2(u, "bmr");
           u.kit.bmr -= spend;
           const nB = sum3(Bs);
           for (const b of Bs) {
@@ -84234,8 +84396,8 @@
       for (const f of this.units) {
         if (f.side !== side5 || !live4(f) || f.state === "routing" || f.extra.cls !== "cv" && f.extra.cls !== "bb") continue;
         if (f.extra.cls === "cv") {
-          const pace = this.onStation.has(f.id) ? Math.max(f.extra.way, SEA.classes.cv.speed * SEA.speeds.cruise) : f.extra.way;
-          for (const e of theirs) if (e.extra.way > pace && aheadOfBeam(e, f) && closing(e, f)) out.add(e);
+          const pace2 = this.onStation.has(f.id) ? Math.max(f.extra.way, SEA.classes.cv.speed * SEA.speeds.cruise) : f.extra.way;
+          for (const e of theirs) if (e.extra.way > pace2 && aheadOfBeam(e, f) && closing(e, f)) out.add(e);
           continue;
         }
         const on = theirs.filter((e) => inReach(e, f));
@@ -89457,8 +89619,8 @@
     const took = x.worn >= 0.95 && x.worn < 1.05 ? "a month" : `${x.worn} months`;
     const now = left < 0.05 ? "nothing is left of them" : `they stand at ${left} of ${full} months`;
     const regrow = DEFENCE.wear.regrow;
-    const pace = regrow <= 0 ? "do no digging" : regrow >= 1 ? "dig as usual" : regrow === 0.5 ? "dig at half pace" : `get ${Math.round(regrow * 100)}% of their digging done`;
-    return r.defNat === s.human ? ` The line held, but its works are worn: the attack took ${took} off them, and ${now}. Your troops there ${pace} this month. A quiet month builds the works up again.` : ` Thrown back, but not for nothing: the attack took ${took} off the defenders' works, and ${now}. The defenders ${pace} this month, so the next blow meets less. Guns in the attack wear works down faster.`;
+    const pace2 = regrow <= 0 ? "do no digging" : regrow >= 1 ? "dig as usual" : regrow === 0.5 ? "dig at half pace" : `get ${Math.round(regrow * 100)}% of their digging done`;
+    return r.defNat === s.human ? ` The line held, but its works are worn: the attack took ${took} off them, and ${now}. Your troops there ${pace2} this month. A quiet month builds the works up again.` : ` Thrown back, but not for nothing: the attack took ${took} off the defenders' works, and ${now}. The defenders ${pace2} this month, so the next blow meets less. Guns in the attack wear works down faster.`;
   }
   var noArmy = (lines2) => lines2.map((l) => l.label === "Forces" ? { ...l, value: l.value.replace("against 0 corps, 0 men: ", "against no army: ") } : l);
   var approachRule = rulesByName["approaches"];
