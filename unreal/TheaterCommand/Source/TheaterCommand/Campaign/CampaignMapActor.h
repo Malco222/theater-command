@@ -1725,7 +1725,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> WakeMesh;
 	UPROPERTY()
-	TObjectPtr<UMaterialInstanceDynamic> WakeInk;
+	TObjectPtr<UMaterialInstanceDynamic> WakeTrailInk; // the fading wakes' own ink (not WakeInk, every ship's wake foam)
 	/** Lays the foam of the wakes still to be seen in this month, fading with their age and back along their way. */
 	void LayWakes(int32 Turn);
 
