@@ -59,6 +59,28 @@ namespace
 		}
 		return Next;
 	}
+
+	/**
+	 * (The 1.5.1 pre-check, 24 November 20:24Z.) A fleet the player's fleet in hand may be set on: one of a nation at war with
+	 * his, as an army is set only on an army he is at war with (WhyNoAttackOn). An ally's or a neutral's fleet under the
+	 * pointer is only sea: a drop or a right-click there sails his fleet to it, as before the patch.
+	 */
+	bool IsEnemyFleet(const AArmyPiece* Piece, const FCampaignView& View)
+	{
+		if (!Piece || !Piece->IsFleet() || Piece->GetForceId() == INDEX_NONE || Piece->GetNationTag() == View.Human)
+		{
+			return false;
+		}
+		const FString& Tag = Piece->GetNationTag();
+		for (int32 Index = 0; Index + 1 < View.Wars.Num(); Index += 2)
+		{
+			if ((View.Wars[Index] == View.Human && View.Wars[Index + 1] == Tag) || (View.Wars[Index + 1] == View.Human && View.Wars[Index] == Tag))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 }
 
 ACampaignPlayerController::ACampaignPlayerController()
@@ -5808,7 +5830,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			// (The 1.5.1 patch, fleetattack.ts) A right-click on an enemy fleet with a fleet in hand is the order to attack it, as on
 			// an enemy army with an army in hand: the card, odds first. Where fleet attacks are off it is a sea order, as before.
 			const FCampaignSession* Now = GetSession();
-			const bool bOnEnemyFleet = FleetInHand != INDEX_NONE && AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE && Now && AimedPiece->GetNationTag() != Now->GetView().Human;
+			const bool bOnEnemyFleet = FleetInHand != INDEX_NONE && Now && IsEnemyFleet(AimedPiece, Now->GetView());
 			if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())))
 			{
 				// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
@@ -5962,7 +5984,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				// once the order is given.)
 				HeldFleetPiece->ReturnToRest();
 				const FCampaignSession* Now = GetSession();
-				const bool bOnEnemyFleet = AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE && Now && AimedPiece->GetNationTag() != Now->GetView().Human;
+				const bool bOnEnemyFleet = Now && IsEnemyFleet(AimedPiece, Now->GetView());
 				if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())) && bOnTable && bPointerOnWater)
 				{
 					OrderFleetTo(SeaNear(PointerMap));
@@ -6066,9 +6088,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			const FCampaignSession* Now = GetSession();
 			const FViewFleet* Held = Now ? Now->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
-			if (Held && FleetHand.bFleetAttack && AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetNationTag() != Now->GetView().Human)
+			if (Held && FleetHand.bFleetAttack && IsEnemyFleet(AimedPiece, Now->GetView()))
 			{
-				// (The 1.5.1 patch) Over an enemy fleet it can be sent at: the sights. Over one out of reach: the bar.
+				// (The 1.5.1 patch) Over a fleet of a nation at war with his that it can be sent at: the sights. Over one out of reach: the bar.
 				Pointer = FleetHand.Attack.Contains(AimedPiece->GetForceId()) ? EMouseCursor::Crosshairs : EMouseCursor::SlashedCircle;
 			}
 			else if (Held && bPointerOnWater)
@@ -7302,7 +7324,7 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 		if (Piece->IsFleet())
 		{
 			// (The 1.5.1 patch) With a fleet in hand, a click on an enemy fleet is the order to attack it: the card, odds first.
-			if (FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() && GetSession() && Piece->GetNationTag() != GetSession()->GetView().Human
+			if (FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() && GetSession() && IsEnemyFleet(Piece, GetSession()->GetView())
 				&& AttackFleetWith(Piece->GetForceId()))
 			{
 				return;
