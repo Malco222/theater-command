@@ -6786,6 +6786,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 		const double EyeMark = LandParts::Seconds();
 		const long StepsWere = S.Eye.Steps();
 		S.Pose = bNight ? S.NightNow.Pose : S.Eye.Update(S.Battle, S.Real, Real);
+		// (kept for the film in a corner: his own view takes S.Pose below)
+		S.FilmPose = S.Pose;
 		const double EyeFrameMs = (LandParts::Seconds() - EyeMark) * 1000.0;
 		EyeMs += EyeFrameMs;
 		EyeMostMs = FMath::Max(EyeMostMs, EyeFrameMs);
@@ -6825,6 +6827,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The picture: the camera, the ground round it, the men and the tanks.
 	LandFell::Phase("tick: the lens aimed");
 	AimEye(static_cast<float>(Real));
+	LandFell::Phase("tick: the film in a corner");
+	FilmCorner();
 	if (Live.IsValid())
 	{
 		LandFell::Phase("tick: the general's screen");

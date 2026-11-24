@@ -2458,10 +2458,15 @@ int main(int argc, char** argv)
 	// with his tilt kept, tilted back to the automatic tilt, a tank and his section followed from above, then a wander
 	// that also tilts and presses the top view. The same rules hold; the top view must look down from about 100 m, his
 	// tilt be kept through the zoom, and the view tilt with the zoom again once tilted all the way back.
-	for (int GenRun = 0; GenRun < 2; ++GenRun)
+	// And a third time with his kept views (Brian, 24 November 20:38Z, release 2: saved views): three kept (the opening
+	// one from high up, one low and turned, one in the top view), each called back and reached; a number never kept is
+	// kept by its first press and does not move the view; calls on each other's heels, a call while following a tank,
+	// then a wander that also keeps and calls. The same rules hold, and a called view must be reached as it was kept.
+	for (int GenRun = 0; GenRun < 3; ++GenRun)
 	{
-		const bool bTiltRun = GenRun == 1;
-		if (bTiltRun && std::getenv("LAND_PLAY_NO_TILT")) break;
+		const bool bTiltRun = GenRun == 1, bViewRun = GenRun == 2;
+		if (bTiltRun && std::getenv("LAND_PLAY_NO_TILT")) continue;
+		if (bViewRun && std::getenv("LAND_PLAY_NO_VIEWS")) continue;
 		LandGeneralEye::Eye Gen;
 		const double* Za = Rec.Ground.ZoneAtt;
 		const double* Zd = Rec.Ground.ZoneDef;
@@ -2490,7 +2495,15 @@ int main(int argc, char** argv)
 		double ZWas = 0.0, ZWas2 = 0.0, WorstRise = 0.0, WorstRiseAt = 0.0;
 		int GCuts = 0;
 		bool CutWas = false;
-		const double End = 260.0;
+		const double End = bViewRun ? 200.0 : 260.0;
+		// (the kept views' own checks: each view as it stood when kept, the call being timed, and the worst a called view
+		// was missed by once it should have been reached)
+		struct KeptAs { bool bKept = false, bOwn = false; double X = 0.0, Y = 0.0, H = 0.0, S = 0.0, Tilt = 0.0; };
+		KeptAs Kept[LandGeneralEye::ViewCount];
+		int Called = -1, Calls = 0, Reached = 0, Keeps = 0, FlyFrames = 0;
+		double CalledAt = 0.0, CheckAt = -1.0, MissPlace = 0.0, MissZoom = 0.0, MissTurn = 0.0, MissTilt = 0.0, LongestFlight = 0.0, FirstPressMoved = 0.0;
+		Vec FirstPressAt;
+		double FirstPressUntil = -1.0;
 		// (the tilted run's own checks: the top view's steepest and highest, his tilt after the zoom out, the view back to
 		// tilting with the zoom, and how often the top view and his tilt were on)
 		double TopTiltBest = 0.0, TopUpBest = 0.0, KeptTilt = -1.0, NearTilt = 0.0;
@@ -2551,6 +2564,58 @@ int main(int argc, char** argv)
 					Wander.bTopView = false;
 				}
 			}
+			else if (bViewRun)
+			{
+				if (R < 2.0) {}
+				else if (R < 6.0) { if (Once(2.0)) In.KeepView = 0; Notch(1.0, 0.25); }
+				else if (R < 12.0) In.PanAhead = 1.0;
+				else if (R < 15.0) In.Turn = 45.0 * Dt;
+				else if (R < 16.0) { if (Once(15.5)) In.KeepView = 1; }
+				else if (R < 17.0) In.bTopView = Once(16.0);
+				else if (R < 22.0) In.PanRight = 1.0;
+				else if (R < 24.0) { if (Once(22.5)) In.KeepView = 2; }
+				else if (R < 32.0) { if (Once(24.0)) In.CallView = 0; }
+				else if (R < 40.0) { if (Once(32.0)) In.CallView = 1; }
+				else if (R < 48.0) { if (Once(40.0)) In.CallView = 2; }
+				else if (R < 49.0) { if (Once(48.0)) In.CallView = 3; }
+				else if (R < 52.0) In.PanAhead = 1.0;
+				else if (R < 62.0)
+				{
+					// (calls on each other's heels: the last one stands)
+					if (Once(52.0)) In.CallView = 1;
+					if (Once(53.0)) In.CallView = 0;
+					if (Once(53.5)) In.CallView = 2;
+					if (Once(54.2)) In.CallView = 1;
+				}
+				else if (R < 90.0)
+				{
+					if (Once(62.0)) In.GoBlock = TankBlock;
+					In.bFollow = R < 75.0;
+					if (R < 66.0) Notch(1.0, 0.25);
+					if (Once(75.0)) In.CallView = 0;
+				}
+				else
+				{
+					if (R >= NextWander)
+					{
+						NextWander = R + 1.5 + 3.0 * Roll();
+						Wander = LandGeneralEye::Input();
+						const double Pick = Roll();
+						if (Pick < 0.3) { Wander.PanRight = Roll() * 2.0 - 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.4) Wander.Turn = (Roll() * 2.0 - 1.0) * 60.0 * Dt;
+						else if (Pick < 0.52) Wander.Zoom = Roll() < 0.5 ? 1.0 : -1.0;
+						else if (Pick < 0.6) Wander.Tilt = (Roll() * 2.0 - 1.0) * 50.0 * Dt;
+						else if (Pick < 0.65) Wander.bTopView = true;
+						else if (Pick < 0.92) Wander.CallView = static_cast<int>(Roll() * 4.0) % 4;
+						else Wander.KeepView = static_cast<int>(Roll() * 4.0) % 4;
+					}
+					In = Wander;
+					if (In.Zoom != 0.0) { if (R < NextNotch) In.Zoom = 0.0; else NextNotch = R + 0.3; }
+					// (a press is one frame's)
+					Wander.bTopView = false;
+					Wander.CallView = Wander.KeepView = -1;
+				}
+			}
 			else if (R < 2.0) {}
 			else if (R < 8.0) Notch(1.0, 0.25);
 			else if (R < 28.0) In.PanAhead = 1.0;
@@ -2592,9 +2657,85 @@ int main(int argc, char** argv)
 			B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
 			R += Dt;
 			PlaceMovers(B);
+			if (bViewRun)
+			{
+				// (a view as it stands when kept: by Shift's press, or by the first press of a number never kept)
+				const int Keeping = In.KeepView >= 0 ? In.KeepView : In.CallView >= 0 && !Gen.ViewKept(In.CallView) ? In.CallView : -1;
+				if (Keeping >= 0)
+				{
+					KeptAs& K = Kept[Keeping];
+					const Vec La = Gen.LookAt();
+					K.bKept = true;
+					K.X = La.X;
+					K.Y = La.Y;
+					K.H = Gen.Heading();
+					K.S = Gen.Zoom();
+					K.bOwn = Gen.OwnTilt();
+					K.Tilt = Gen.TiltDegrees();
+					++Keeps;
+					if (In.KeepView < 0)
+					{
+						FirstPressAt = La;
+						FirstPressUntil = R + 1.0;
+					}
+					// (kept anew while a call to it was being timed: the call is no longer the test's to judge)
+					if (Keeping == Called) Called = -1;
+				}
+				else if (In.CallView >= 0)
+				{
+					Called = In.CallView;
+					CalledAt = R;
+					CheckAt = R + 7.9;
+					++Calls;
+				}
+				// (his own hand on the view: the call is over)
+				if (In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.SlideRight != 0.0 || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.GoBlock >= 0) Called = -1;
+			}
 			const auto GT0 = std::chrono::steady_clock::now();
 			const LandEye::Pose P = Gen.Update(In, Dt, B);
 			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GT0).count();
+			if (bViewRun)
+			{
+				FlyFrames += Gen.Flying() ? 1 : 0;
+				if (R < FirstPressUntil)
+				{
+					const Vec La = Gen.LookAt();
+					FirstPressMoved = std::max(FirstPressMoved, std::hypot(La.X - FirstPressAt.X, La.Y - FirstPressAt.Y));
+				}
+				if (Called >= 0)
+				{
+					const KeptAs& K = Kept[Called];
+					const Vec La = Gen.LookAt();
+					double Turned = (Gen.Heading() - K.H) * 180.0 / 3.14159265358979;
+					while (Turned > 180.0) Turned -= 360.0;
+					while (Turned < -180.0) Turned += 360.0;
+					const double Place = std::hypot(La.X - K.X, La.Y - K.Y), Zoomed = std::abs(Gen.Zoom() - K.S), Tilted = std::abs(Gen.TiltDegrees() - K.Tilt);
+					const bool bThere = Place < 1.5 && Zoomed < 0.01 && std::abs(Turned) < 1.0 && Tilted < 1.5;
+					if (std::getenv("LAND_PLAY_VIEWS") && static_cast<int>((R + Dt) * 2.0) != static_cast<int>(R * 2.0))
+					{
+						std::printf("  view %d called at %.1f, now %.2f: %.1f m off, zoom %.3f off, turn %+.1f off, tilt %.1f off, flying %d at %d own %d top %d\n", Called, CalledAt, R + Dt, Place, Zoomed, Turned, Tilted,
+							Gen.Flying() ? 1 : 0, Gen.ViewAt(), Gen.OwnTilt() ? 1 : 0, Gen.TopView() ? 1 : 0);
+					}
+					if (bThere || R >= CheckAt)
+					{
+						if (bThere)
+						{
+							++Reached;
+							LongestFlight = std::max(LongestFlight, R - CalledAt);
+						}
+						else
+						{
+							MissPlace = std::max(MissPlace, Place);
+							MissZoom = std::max(MissZoom, Zoomed);
+							MissTurn = std::max(MissTurn, std::abs(Turned));
+							MissTilt = std::max(MissTilt, Tilted);
+							std::printf("  view %d called at real %.1f not reached by %.1f: %.1f m off, zoom %.3f off, turn %+.1f off, tilt %.1f off (waited %d, braked %d)\n", Called, CalledAt, R, Place, Zoomed, Turned, Tilted,
+								Gen.WaitedFrames(), Gen.BrakedFrames());
+						}
+						Called = -1;
+					}
+				}
+			}
 			if (bTiltRun)
 			{
 				TopPresses += In.bTopView ? 1 : 0;
@@ -2677,16 +2818,25 @@ int main(int argc, char** argv)
 			Pitch = Pt;
 		}
 		std::printf("\ngeneral's view%s: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
-			bTiltRun ? ", tilted by hand" : "", GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
+			bTiltRun ? ", tilted by hand" : bViewRun ? ", kept views" : "", GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear < 1e8 ? LowestNear : 0.0, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
 		if (Under > 0) Fault("the general's view went under the ground");
 		if (InThing > 0) Fault("the general's view stood in a thing or a man");
 		if (InCorn > 0) Fault("the general's view stood among the stalks");
 		if (OffField > 0) Fault("the general's view looked off the field past its margin");
 		if (Kicks > 0) Fault("the general's view jolted (a look kick over 1200 deg/s/s)");
 		if (Lifted > 0) Fault("the general's view jolted up or down (over 1200 deg/s/s as the picture sees it)");
-		if (LowestNear > 2.5 && !bTiltRun) Fault("the general's view never came down to a man's shoulder");
+		if (LowestNear > 2.5 && !bTiltRun && !bViewRun) Fault("the general's view never came down to a man's shoulder");
 		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
 		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
+		if (bViewRun)
+		{
+			std::printf("\ngeneral's view, kept views: %d kept, %d called, %d reached as kept before his hand took the view again (the longest flight %.1f s); the worst miss %.1f m, zoom %.3f, turn %.1f degrees, tilt %.1f degrees; a first press moved the view %.2f m; flying %.0f s",
+				Keeps, Calls, Reached, LongestFlight, MissPlace, MissZoom, MissTurn, MissTilt, FirstPressMoved, FlyFrames * Dt);
+			if (MissPlace > 0.0 || MissZoom > 0.0 || MissTurn > 0.0 || MissTilt > 0.0) Fault("a kept view called back was not reached as it was kept");
+			if (Reached < 5) Fault("the general's kept views were hardly called (under 5 reached)");
+			if (FirstPressMoved > 0.5) Fault("the first press of a view never kept moved the view");
+			if (!Gen.ViewKept(0) || !Gen.ViewKept(1) || !Gen.ViewKept(2) || !Gen.ViewKept(3)) Fault("a kept view was lost");
+		}
 		if (bTiltRun)
 		{
 			std::printf("\ngeneral's view, tilted by hand: the top view looked down %.1f degrees from %.0f m over the look-at; his tilt %.1f degrees after the zoom to the shoulder and out; at the nearest zoom tilted %.1f degrees once settled; back to tilting with the zoom at %.1f s; top view on %.0f s (%d presses), his own tilt %.0f s",
