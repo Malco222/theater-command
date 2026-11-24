@@ -45,7 +45,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, LORRYSHIFT_STAGE, NICKNAMES_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
+import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, LORRYSHIFT_STAGE, NICKNAMES_STAGE, REARGUARD_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -153,6 +153,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (TASKFORCE_STAGE) g.flags.taskForce = 1;
   // The admirals' reasons for each fleet they order (release 2, fleetwhy.ts).
   if (FLEETWHY_STAGE) g.flags.fleetWhy = 1;
+  // Rearguards: a small corps holds a province a month to slow the enemy (release 2, rearguard.ts).
+  if (REARGUARD_STAGE) g.flags.rearguard = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);

@@ -121,3 +121,8 @@ export const TASKFORCE_STAGE: boolean = staged('TC_TASKFORCE', 'taskForce');
 // 'fleetWhy'. Forced by TC_FLEETWHY.
 /** True where new grand campaigns open with the admirals giving a reason for each fleet they order (stage.json 'fleetWhy'). */
 export const FLEETWHY_STAGE: boolean = staged('TC_FLEETWHY', 'fleetWhy');
+
+// Rearguards (release 2; Brian 24 November 2026 18:24Z, rearguard.ts): the grand campaigns opened while this is true
+// carry the flag 'rearguard'. Forced by TC_REARGUARD.
+/** True where new grand campaigns open with the player able to order rearguards (stage.json 'rearguard'). */
+export const REARGUARD_STAGE: boolean = staged('TC_REARGUARD', 'rearguard');

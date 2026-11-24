@@ -345,6 +345,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			Add(TEXT("taskforcerule"), TEXT("Task forces"), TEXT("Send a fleet out on a job (a patrol, a raid, a submarine hunt or a convoy escort) and press MAKE IT A TASK FORCE on its page: that job becomes its standing order. Each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order. It can be switched in any month."),
 				Now.bTaskForce ? TEXT("ON") : TEXT("OFF"), Now.bTaskForce);
 			// (Release 2, fleetwhy.ts) The admirals say why each fleet is where it is.
+			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.
+			Add(TEXT("rearguardrule"), TEXT("Rearguards"), TEXT("A corps of two divisions or fewer (split one off a bigger corps) can be told to HOLD AS REARGUARD from its card: it stays where it stands until your next month while the rest of the army pulls back. An enemy army that attacks it there loses a week or two of its month, so it cannot follow as far, and with Units decide on it shields the troops falling back behind it from the pursuit. It can be switched in any month."),
+				Now.bRearguard ? TEXT("ON") : TEXT("OFF"), Now.bRearguard);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
@@ -558,14 +561,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Now.bColumnsOn;
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -8380,6 +8383,26 @@ void ACampaignPlayerController::SplitOffDivisions(int32 CorpsId)
 	RefreshOrders();
 }
 
+void ACampaignPlayerController::HoldAsRearguard(int32 CorpsId, bool bHold)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || CorpsId == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	if (Session->Act(FString::Printf(TEXT("rearguard:%d:%s"), CorpsId, bHold ? TEXT("on") : TEXT("off")), INDEX_NONE, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+	RefreshOrders();
+}
+
 void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
 {
 	FCampaignSession* Session = GetSession();
@@ -8686,6 +8709,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.BreakWhy = Unit.BreakWhy;
 		Card.RejoinId = Unit.RejoinId;
 		Card.RejoinName = Unit.RejoinName;
+		// (Release 2, rearguard.ts) HOLD AS REARGUARD where it can be ordered now, STAND DOWN where it holds.
+		Card.bCanRear = Unit.bRearKnown && Unit.RearWhy.IsEmpty() && !Unit.bRear;
+		Card.bRear = Unit.bRearKnown && Unit.bRear;
 		Card.Carry = Unit.Carry; // (Version 84)
 		Card.bDigging = Unit.bDigging;
 		Card.Experience = Unit.Experience;

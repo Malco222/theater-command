@@ -99,6 +99,9 @@ struct FTrayCard
 	FString BreakWhy;
 	int32 RejoinId = INDEX_NONE;
 	FString RejoinName;
+	// (Release 2, rearguard.ts) It can be ordered to hold as a rearguard now (bCanRear), or it holds as one (bRear).
+	bool bCanRear = false;
+	bool bRear = false;
 };
 
 /** One ship of the fleet in hand, as a card. */
@@ -668,6 +671,8 @@ public:
 	int32 DivisionsPicked(int32 CorpsId) const { const TSet<int32>* Set = PickedDivisions.Find(CorpsId); return Set ? Set->Num() : 0; }
 	void SplitOffDivisions(int32 CorpsId);
 	void RejoinCorps(int32 CorpsId, int32 IntoId);
+	/** (Release 2, rearguard.ts) Orders one of his corps to hold as a rearguard until his next month, or stands it down. */
+	void HoldAsRearguard(int32 CorpsId, bool bHold);
 
 	/** The standing order for the army in hand on the day the enemy comes: "stand", "dig" or "back". */
 	void SetStance(const FString& Posture);

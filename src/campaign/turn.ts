@@ -82,6 +82,7 @@ import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
 import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
+import { orderRearguard, rearguardsLapse, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -169,6 +170,8 @@ export function beginHuman(g: Game): void {
   crowdedNews(g);
   // His task forces come in to refit or go back to their jobs (release 2, taskforce.ts): before his admirals' month.
   taskForcesMonth(g, current(g));
+  // His rearguards of last month stand down (release 2, rearguard.ts).
+  rearguardsLapse(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }
@@ -1528,6 +1531,21 @@ export function handBackFleet(g: Game, id: number): boolean {
   delete f.ordered;
   delete f.task;
   return true;
+}
+
+/** Why one of the player's corps cannot be ordered to hold as a rearguard now, or null (release 2, rearguard.ts). */
+export const whyNotRearguardOf = (g: Game, id: number): string | null => whyNotRearguard(g, g.corps.find((c) => c.id === id && !c.dead));
+
+/** Orders one of the player's corps to hold where it stands as a rearguard until his next month (release 2, rearguard.ts). */
+export function orderHoldRear(g: Game, id: number): boolean {
+  const c = g.corps.find((x) => x.id === id && !x.dead);
+  return !!c && orderRearguard(g, c);
+}
+
+/** Stands one of the player's rearguards down: in the month it was ordered, it has its marching back (release 2). */
+export function orderStandDown(g: Game, id: number): boolean {
+  const c = g.corps.find((x) => x.id === id && !x.dead && x.nat === g.human);
+  return !!c && current(g) === c.nat && standRearDown(g, c);
 }
 
 /** Why one of the player's fleets cannot be made a task force now, or null (release 2, taskforce.ts). */

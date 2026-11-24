@@ -58,7 +58,7 @@ import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, frien
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
@@ -110,6 +110,7 @@ import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
 import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwhy';
+import { REARGUARD, isRearguard, rearguardOn, setRearguard } from '../../../src/campaign/rearguard';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -681,6 +682,9 @@ function drawView() {
         const to = up ? rejoinTargets(s, c)[0] : undefined;
         return { breakWhy: up ? whyNotBreakUp(s, c, [0]) ?? '' : 'It is not your month.', rejoinId: to?.id ?? -1, rejoinName: to?.name ?? '' };
       })() : {}),
+      // (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) Where rearguards are on: whether it holds as one now,
+      // and why it cannot be ordered to ('' if it can).
+      ...(c.nat === s.human && rearguardOn(s) ? { rear: isRearguard(s, c), rearWhy: c.rear ? '' : up ? whyNotRearguardOf(s, c.id) ?? '' : 'It is not your month.' } : {}),
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
@@ -905,6 +909,8 @@ function drawView() {
     taskForce: taskForceOn(s),
     // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
     fleetWhy: fleetWhyOn(s),
+    // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
+    rearguard: rearguardOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -6235,6 +6241,29 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : 'The secret war is off: you recruit and send agents as before, and the enemy\'s saboteurs are only a chance each month.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'rearguardrule') {
+    // (Release 2, rearguard.ts) Rearguards, switched by the player in any month.
+    setRearguard(s, part[1] === 'on');
+    ok = true;
+    note = rearguardOn(s)
+      ? `Rearguards are on: a corps of ${REARGUARD.most} divisions or fewer can be ordered to HOLD AS REARGUARD from its card. It holds where it stands until your next month, and an enemy who attacks it loses time.`
+      : 'Rearguards are off: every rearguard stands down.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'rearguard') {
+    // (Release 2, rearguard.ts) 'rearguard:<corps>:on|off': hold where it stands until next month, or stand down.
+    const id = Number(part[1]);
+    const name = s.corps.find((c) => c.id === id)?.name ?? 'The corps';
+    if (part[2] === 'off') {
+      ok = orderStandDown(s, id);
+      note = ok ? `${name} stands down: it is free to march again.` : 'It is not a rearguard.';
+    } else {
+      const why = whyNotRearguardOf(s, id);
+      ok = !why && orderHoldRear(s, id);
+      note = ok ? `${name} holds as a rearguard until your next month: it marches no further, and an enemy who attacks it loses time.` : why ?? 'It cannot be ordered to hold now.';
+    }
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetwhyrule') {
     // (Release 2, fleetwhy.ts) The admirals' reasons, switched by the player in any month.
     setFleetWhy(s, part[1] === 'on');
@@ -7384,6 +7413,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
 // (Release 2, fleetattack.ts) Fleets sent straight at the enemy: TC.fleetAttack(on) at any time; the options page uses act('fleetattackrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
+// (Release 2, rearguard.ts) Rearguards: TC.rearguard(on) at any time; the options page uses act('rearguardrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).rearguard = (on: boolean) => { const s = game(); setRearguard(s, !!on); return { on: rearguardOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').

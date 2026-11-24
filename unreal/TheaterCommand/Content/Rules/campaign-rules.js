@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c41f0571 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0b183719 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -899,7 +899,9 @@
     _taskForce: "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these'; src/campaign/taskforce.ts, data/campaign/taskforce.json). One of the player's fleets at sea on a job is made a task force: each month it comes in to refit when worn and goes back to its job when fit, until he changes it. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'taskForce' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_TASKFORCE=1 or TC_TASKFORCE=0.",
     taskForce: false,
     _fleetWhy: "The admirals' reasons (release 2; Brian 24 November 2026 18:32Z, 'the navy needs a lot of work and attention', and the plan sent to him: 'the admirals don't explain themselves'; src/campaign/fleetwhy.ts). Where the player's admirals run the navy for him, each fleet they order carries one sentence saying why it is where it is, on its page and its panel. It changes nothing in the war. Off: nothing is written. On: the grand campaigns opened from now on carry the flag 'fleetWhy' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_FLEETWHY=1 or TC_FLEETWHY=0.",
-    fleetWhy: false
+    fleetWhy: false,
+    _rearguard: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', of the idea 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'; src/campaign/rearguard.ts, data/campaign/rearguard.json). A small corps of the player's is ordered to hold where it stands until his next month; an enemy army that attacks it loses weeks of its month, and under Units decide it screens the corps falling back behind it from the pursuit. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'rearguard' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_REARGUARD=1 or TC_REARGUARD=0.",
+    rearguard: false
   };
 
   // ../../src/campaign/stage.ts
@@ -940,6 +942,7 @@
   var BREAKUP_STAGE = staged("TC_BREAKUP", "breakUp");
   var TASKFORCE_STAGE = staged("TC_TASKFORCE", "taskForce");
   var FLEETWHY_STAGE = staged("TC_FLEETWHY", "fleetWhy");
+  var REARGUARD_STAGE = staged("TC_REARGUARD", "rearguard");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -32563,6 +32566,7 @@
     if (BREAKUP_STAGE) g2.flags.breakUp = 1;
     if (TASKFORCE_STAGE) g2.flags.taskForce = 1;
     if (FLEETWHY_STAGE) g2.flags.fleetWhy = 1;
+    if (REARGUARD_STAGE) g2.flags.rearguard = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -51343,6 +51347,72 @@
     }
   };
 
+  // ../../data/campaign/rearguard.json
+  var rearguard_default = {
+    _about: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps of the player's ('most' divisions at most) is ordered to hold where it stands until his next month: it marches no further this month. Any enemy army that attacks its province before then loses 'weeksPerDiv' weeks of its month for each division of the rearguards there, 'weeks' at most, after the fight (whether it carries the ground or not): it cannot press on as far. Under Units decide, corps of the rearguard's side falling back into its province are screened: the pursuit takes none of their men. The combat itself is untouched. PROPOSAL figures for the design director's ruling.",
+    most: 2,
+    weeksPerDiv: 1,
+    weeks: 2,
+    screen: true
+  };
+
+  // ../../src/campaign/rearguard.ts
+  var REARGUARD = rearguard_default;
+  var rearguardOn = (g2) => g2.flags.open === 1 && g2.flags.rearguard === 1;
+  function setRearguard(g2, on) {
+    if (on) g2.flags.rearguard = 1;
+    else {
+      delete g2.flags.rearguard;
+      for (const c of g2.corps) if (c.rear) standDown2(g2, c);
+    }
+  }
+  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  var isRearguard = (g2, c) => rearguardOn(g2) && !!c.rear && !c.dead;
+  function whyNotRearguard(g2, c) {
+    if (!rearguardOn(g2)) return "Rearguards are ordered only where that is switched on.";
+    if (!c || c.dead) return "There is no such corps.";
+    if (c.nat !== g2.human || !hisMonth(g2)) return "Only your own corps, in your own month.";
+    if (c.rear) return "It holds as a rearguard already.";
+    if (c.kind === "fort") return "Fortress troops hold their works already.";
+    if (c.town !== void 0) return "A garrison holds its town already.";
+    if (c.joint !== void 0) return "It marches with an ally's army, and takes that army's orders.";
+    if (c.leave !== void 0) return "It is at home, out of the line.";
+    if (c.divs > REARGUARD.most) return `A rearguard is a small force: ${REARGUARD.most} divisions at most. Split some off first.`;
+    return null;
+  }
+  function orderRearguard(g2, c) {
+    if (whyNotRearguard(g2, c) !== null) return false;
+    c.rear = [g2.turn, c.ap];
+    c.ap = 0;
+    return true;
+  }
+  function standDown2(g2, c) {
+    if (!c.rear) return false;
+    if (c.rear[0] === g2.turn && hisMonth(g2) && c.nat === g2.human) c.ap = Math.max(c.ap, c.rear[1]);
+    delete c.rear;
+    return true;
+  }
+  function rearguardsLapse(g2, nat) {
+    for (const c of g2.corps) if (c.nat === nat && c.rear && c.rear[0] < g2.turn) delete c.rear;
+  }
+  function rearguardsAt(g2, r, foe) {
+    if (!rearguardOn(g2)) return [];
+    return r.units.filter((c) => isRearguard(g2, c) && c.reg === r.id && c.town === void 0 && foe(c.nat));
+  }
+  function rearguardWeeks(rears) {
+    const divs = rears.reduce((n, c) => n + c.divs, 0);
+    return Math.min(REARGUARD.weeks, divs * REARGUARD.weeksPerDiv);
+  }
+  function chargeDelay(attackers2, weeks) {
+    if (weeks <= 0) return 0;
+    for (const c of attackers2) if (!c.dead) c.ap = Math.max(0, c.ap - weeks);
+    return weeks;
+  }
+  function screened(g2, c, to, friend2) {
+    if (!rearguardOn(g2) || !REARGUARD.screen) return false;
+    return to.units.some((u) => u !== c && !u.dead && isRearguard(g2, u) && u.town === void 0 && friend2(u.nat));
+  }
+
   // ../../src/campaign/game.ts
   var EASTERN = east_default;
   var DESERT = desert_default;
@@ -53118,6 +53188,7 @@
   }
   function pursuitTakes(g2, c, to, chasers) {
     if (!unitsDecide(g2) || !afoot(c)) return 0;
+    if (screened(g2, c, to, (nat) => nat === c.nat || allied(g2, nat, c.nat))) return 0;
     const mine4 = pace(g2, c, to);
     if (!chasers.some((u) => chaser(u) && chasePace(g2, u, c, to) < mine4)) return 0;
     return PURSUIT.share * (1 - lifted(c));
@@ -53202,7 +53273,7 @@
     if (target.cap && a.defenders.some((c) => c.nat === target.owner)) return gone;
     const banned = new Set(attackers2.map((c) => c.reg));
     for (const c of [...a.defenders]) {
-      if (!c.yields || c.gaveWay) continue;
+      if (!c.yields || c.gaveWay || isRearguard(g2, c)) continue;
       const to = retreatTarget(g2, c, target, banned);
       if (!to) continue;
       const unit = reportUnit(c);
@@ -53305,6 +53376,7 @@
   function resolveBattle(g2, attackers2, target, opts = {}) {
     let a = assess(g2, attackers2, target, opts);
     const town = !!opts.town, sieges2 = siegeRules(g2);
+    const rears = town || opts.breakout ? [] : rearguardsAt(g2, target, (nat) => atWar(g2, nat, armyOf(attackers2[0])));
     const gone = town ? [] : giveWay(g2, a, attackers2, target);
     if (gone.length) {
       if (!hostileUnits(g2, target, armyOf(attackers2[0])).length) return walkIn(g2, attackers2, target, opts, a, gone);
@@ -53576,6 +53648,15 @@
     const fight2 = town ? win ? "storm" : "repulsed" : inField2 || relief || opts.sally ? "streets" : "field";
     const hurt2 = battleHit(g2, target, fight2, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === "art" ? u.divs : 0), 0));
     if (hurt2) rep.city = { region: hurt2.region, added: hurt2.added, now: hurt2.now };
+    if (rears.length) {
+      const weeks = chargeDelay(attackers2, rearguardWeeks(rears));
+      if (weeks > 0) {
+        const who = rears.map((c) => c.name).join(" and ");
+        rep.lines.push({ label: "Rearguard", value: `${who} held the attack up`, effect: `Every attacking corps lost ${weeks} week${weeks === 1 ? "" : "s"} of its month` });
+        rep.rearguard = weeks;
+        headline(g2, "info", `The rearguard at ${target.name} held the enemy up: every corps of his that attacked there lost ${weeks} week${weeks === 1 ? "" : "s"} of its month.`, rears[0].nat, target.id);
+      }
+    }
     g2.reports.push(rep);
     const scar = (g2.scars ?? (g2.scars = {}))[target.id];
     const muddy = groundWeather(g2, target) === "mud";
@@ -55073,6 +55154,7 @@
     orderGroupJob: () => orderGroupJob,
     orderHero: () => orderHero,
     orderHistory: () => orderHistory,
+    orderHoldRear: () => orderHoldRear,
     orderJoin: () => orderJoin,
     orderJoinAll: () => orderJoinAll,
     orderKeepPeace: () => orderKeepPeace,
@@ -55114,6 +55196,7 @@
     orderStaffCap: () => orderStaffCap,
     orderStance: () => orderStance,
     orderStandBy: () => orderStandBy,
+    orderStandDown: () => orderStandDown,
     orderStopResearch: () => orderStopResearch,
     orderStopWork: () => orderStopWork,
     orderStorm: () => orderStorm,
@@ -55216,6 +55299,7 @@
     whyNotOrderPromise: () => whyNotOrderPromise,
     whyNotOrderResearch: () => whyNotOrderResearch,
     whyNotOrderWinterPeace: () => whyNotOrderWinterPeace,
+    whyNotRearguardOf: () => whyNotRearguardOf,
     whyNotRecruitAgent: () => whyNotRecruitAgent,
     whyNotSallyOut: () => whyNotSallyOut,
     whyNotSendAgent: () => whyNotSendAgent,
@@ -60547,7 +60631,7 @@
       for (const f of g2.fleets) delete f.task;
     }
   }
-  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  var hisMonth2 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
   function jobNow(f) {
     if (!atSea(f)) return null;
     if (f.stance === "escort") return f.lane !== void 0 ? { zone: f.zone, stance: "escort", lane: f.lane } : null;
@@ -60561,7 +60645,7 @@
   function whyNotTask(g2, f) {
     if (!taskForceOn(g2)) return "Task forces are made only where that is switched on.";
     if (!f || !shipCount(f.ships)) return "There is no such fleet.";
-    if (f.nat !== g2.human || !hisMonth(g2)) return "Only your own fleets, in your own month.";
+    if (f.nat !== g2.human || !hisMonth2(g2)) return "Only your own fleets, in your own month.";
     if (f.task) return "It is a task force already.";
     if (!g2.nations[f.nat].atWar.length) return "In peace a fleet keeps to harbour: a task force is made in a war.";
     if (!jobNow(f)) return "Send it out on a job first: a patrol, a raid, a submarine hunt or a convoy escort. That job becomes its standing order.";
@@ -60725,6 +60809,7 @@
     quietNews(g2);
     crowdedNews(g2);
     taskForcesMonth(g2, current(g2));
+    rearguardsLapse(g2, current(g2));
     staffMonth(g2);
   }
   function endHuman(g2) {
@@ -61518,6 +61603,15 @@
     delete f.ordered;
     delete f.task;
     return true;
+  }
+  var whyNotRearguardOf = (g2, id) => whyNotRearguard(g2, g2.corps.find((c) => c.id === id && !c.dead));
+  function orderHoldRear(g2, id) {
+    const c = g2.corps.find((x) => x.id === id && !x.dead);
+    return !!c && orderRearguard(g2, c);
+  }
+  function orderStandDown(g2, id) {
+    const c = g2.corps.find((x) => x.id === id && !x.dead && x.nat === g2.human);
+    return !!c && current(g2) === c.nat && standDown2(g2, c);
   }
   var whyNotTaskForce = (g2, id) => whyNotTask(g2, g2.fleets.find((f) => f.id === id));
   function orderTaskForce(g2, id) {
@@ -86485,11 +86579,11 @@
     if (on) g2.flags.breakUp = 1;
     else delete g2.flags.breakUp;
   }
-  var hisMonth2 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  var hisMonth3 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
   function whyNotBreakUp(g2, c, slots) {
     if (!breakUpOn(g2)) return "Corps are broken up only where that is switched on.";
     if (!c || c.dead) return "There is no such corps.";
-    if (c.nat !== g2.human || !hisMonth2(g2)) return "Only your own corps can be broken up, in your own month.";
+    if (c.nat !== g2.human || !hisMonth3(g2)) return "Only your own corps can be broken up, in your own month.";
     if (c.kind === "fort") return "Fortress troops stay together in their works.";
     if (c.divs < 2) return "A single division cannot be broken up any further.";
     if (c.town !== void 0) return "A garrison is broken up in the field: order it out of the town first.";
@@ -86567,7 +86661,7 @@
   function whyNotRejoin(g2, part, into) {
     if (!breakUpOn(g2)) return "Corps are put back together only where that is switched on.";
     if (!part || !into || part.dead || into.dead || part === into) return "There is nothing to put back together.";
-    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth2(g2)) return "Only your own corps, in your own month.";
+    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth3(g2)) return "Only your own corps, in your own month.";
     const root = part.part ?? part.id;
     if (!(into.id === root || into.part === root || (into.part ?? into.id) === root)) return "A part rejoins only the corps it was split from, or another part of it.";
     if (part.reg !== into.reg || part.town !== void 0 || into.town !== void 0) return "The two must stand together in the field, in the same province.";
@@ -88752,6 +88846,9 @@
             const to = up ? rejoinTargets(s, c)[0] : void 0;
             return { breakWhy: up ? whyNotBreakUp(s, c, [0]) ?? "" : "It is not your month.", rejoinId: to?.id ?? -1, rejoinName: to?.name ?? "" };
           })() : {},
+          // (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) Where rearguards are on: whether it holds as one now,
+          // and why it cannot be ordered to ('' if it can).
+          ...c.nat === s.human && rearguardOn(s) ? { rear: isRearguard(s, c), rearWhy: c.rear ? "" : up ? whyNotRearguardOf(s, c.id) ?? "" : "It is not your month." } : {},
           ...c.nat === s.human || s.human && c.joint === s.human ? cardOf(s, c) : {}
         };
       }),
@@ -89052,6 +89149,8 @@
       taskForce: taskForceOn(s),
       // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
       fleetWhy: fleetWhyOn(s),
+      // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
+      rearguard: rearguardOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -94355,6 +94454,25 @@ ${standing5}`,
       note4 = !ok2 ? "The secret war can be switched only in the campaign's first month." : secretWarOn(s) ? "The secret war is on: your service opens the war with agents at work on the map, hunts the enemy's agents on your ground, steals orders and can turn enemy agents, and every country at war with you spies on you." : "The secret war is off: you recruit and send agents as before, and the enemy's saboteurs are only a chance each month.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "rearguardrule") {
+      setRearguard(s, part[1] === "on");
+      ok2 = true;
+      note4 = rearguardOn(s) ? `Rearguards are on: a corps of ${REARGUARD.most} divisions or fewer can be ordered to HOLD AS REARGUARD from its card. It holds where it stands until your next month, and an enemy who attacks it loses time.` : "Rearguards are off: every rearguard stands down.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "rearguard") {
+      const id = Number(part[1]);
+      const name = s.corps.find((c) => c.id === id)?.name ?? "The corps";
+      if (part[2] === "off") {
+        ok2 = orderStandDown(s, id);
+        note4 = ok2 ? `${name} stands down: it is free to march again.` : "It is not a rearguard.";
+      } else {
+        const why = whyNotRearguardOf(s, id);
+        ok2 = !why && orderHoldRear(s, id);
+        note4 = ok2 ? `${name} holds as a rearguard until your next month: it marches no further, and an enemy who attacks it loses time.` : why ?? "It cannot be ordered to hold now.";
+      }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
     if (part[0] === "fleetwhyrule") {
       setFleetWhy(s, part[1] === "on");
       ok2 = true;
@@ -95583,6 +95701,11 @@ ${standing5}`,
     const s = game();
     setFleetAttack(s, !!on);
     return { on: fleetAttackOn(s) };
+  };
+  globalThis.TC.rearguard = (on) => {
+    const s = game();
+    setRearguard(s, !!on);
+    return { on: rearguardOn(s) };
   };
   globalThis.TC.fleetWhy = (on) => {
     const s = game();
