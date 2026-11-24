@@ -25,7 +25,7 @@ import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
 import { TECH, shelved, spyOf, techById, workOf } from './tech';
 import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
-import { DOUBLES, NETWORK, SECRET_PARTS, SMALLER, WATCHERS, doublesOn, everyoneOn, huntersOn, networkOn, ordersKnown, ordersOn, pruneOrders, secretWarSettable, setSecretWar, watchersOn, type DoublesRules, type WatchersRules } from './secretwar';
+import { DOUBLES, NETWORK, SECRET_PARTS, SMALLER, WATCHERS, doublesOn, everyoneOn, huntersOn, networkOn, ordersKnown, ordersOn, pruneOrders, secretWarSettable, setSecretWar, watchersOn, type DoublesRules, type NetworkRules, type WatchersRules } from './secretwar';
 import { fieldOrder } from './air';
 
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
@@ -42,7 +42,7 @@ export const INTEL = data as unknown as {
   estimate: { round: number };
   reports: { fresh: number; keep: number; drift: number; widest: number; contact: number; unknown: number };
   names: string[];
-  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number }; watchers: WatchersRules; doubles: DoublesRules };
+  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number }; watchers: WatchersRules; doubles: DoublesRules; network: NetworkRules };
 };
 
 /** True when spies and the fog of war are in the game. That is the grand campaign: a historical scenario shows the whole map. */
