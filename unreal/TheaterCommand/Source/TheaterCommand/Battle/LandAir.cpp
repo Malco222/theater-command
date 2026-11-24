@@ -972,28 +972,32 @@ namespace LandAir
 		 * How a pilot's canopy lies once down (the art director's verdict of 24 November 14:34Z: "Stretch it 2-3x
 		 * downwind in loose folds, the far end lifting a little, lines running back to him"), drawn from his own number
 		 * (Chute::Folds) and the wind: its length along the wind (a canopy 5 to 5.5 m across lies 6.3 to 8.5 m long, a
-		 * stronger wind stretching it), its width (2.7 to 3.05 times shorter: its edges' folds below widen it), how far
+		 * stronger wind stretching it), its width (2.55 to 2.9 times shorter: its edges' folds below widen it), how far
 		 * past his harness its near end is gathered (2 to 3.5 m: its 4.1 m lines a little slack, less so in a stronger
 		 * wind), how high its far end stands on the air it still holds (0.3 to 0.62 m, more in a stronger wind) and how
-		 * much that swells it; its axis's bend and where its far end lies across; its four or five long folds, each along it from near its near end to some way
-		 * on, its place across, its drift and wander across as it goes, its width and its height (one big fold and the
-		 * rest smaller, in no order); the gaps between them (graded, the widest three times the narrowest, the wider where
-		 * two folds need more room, and all spread together where need be so that no two run into one: a review of 24
-		 * November found the narrowest gaps held up to a floor alone, which left half of them alike); and each edge's
-		 * waver and swell. (Two creases across it are drawn as before, so that the rest of its dice fall as they did, but
-		 * its folds across it are now its own: below.)
+		 * much that swells it; its axis's bend and where its far end lies across; its four or five long folds, each along
+		 * it from near its near end to some way on, its place across, its drift and wander across as it goes, its width
+		 * and its height (one big fold and the rest smaller, in no order); the gaps between them (graded, the widest 3.5
+		 * times the narrowest, three times with five, the wider where two folds need more room, and all spread together
+		 * where need be so that no two run into one: a review of 24 November found the narrowest gaps held up to a floor
+		 * alone, which left half of them alike); and each edge's waver and swell. (Two creases across it were drawn here
+		 * once: their dice are thrown still, so that the rest fall as they did.)
 		 *
 		 * And (the art director's note of 24 November 17:40Z: from above both pilots' silk had read as "a smooth cocoon or
 		 * a gourd", an even outline and only lengthwise ridges), on dice of their own: three or four folds across it,
-		 * where it bunched as it collapsed, each on a ring of its own (no two side by side), one higher than the rest in
-		 * no order, slanted across it and bunched up toward the ring before it or the one after; its outline uneven, one
-		 * side wider than the other (its hem more so), each ring's edge jagged a little either side, and its gores folded
-		 * at its edges: one or two flipped over and lying flat out beyond its wide side, one tucked under its other side,
-		 * none on its far end; two or three of its hem's gores flipped back over its top near its near end, their fold
-		 * pulled back past its hem toward him and their hem carried on over its silk, so that the lines to them run
-		 * across it (less far on where its lines have less slack); the rest of its hem in a scallop between each two of
-		 * its lines, deeper in some gores than others, so that it shows a wavy edge; and its lifted far end slumped a
-		 * little to one side, its crest off its middle and its top leaning over that way.
+		 * where it bunched as it collapsed, each on a ring of its own from 0.15 to 0.64 along it (no two side by side),
+		 * graded in height and dealt out in no order, each highest somewhere across it and fading either way (most across
+		 * part of its width), slanted and bowed across it, and bunched up toward the ring before it or the one after
+		 * (away from a fold two rings on); its outline uneven: one side wider than the other, each ring's edge jagged a
+		 * little either side (each like its neighbours a little), and its gores folded at its edges, one or two flipped
+		 * over and lying flat out beyond its wide side and one tucked under its other side, from its fourth ring to its
+		 * eighth; two or three of its hem's gores flipped back over its top at its near end, their fold pulled back past
+		 * its hem toward him, a roll of silk on the ground under his lines, so that the lines to them and beside them run
+		 * across it (as far as its gathering lets them: no more than about 0.3 m past their seams' last 10 cm), and a gore
+		 * or two tucked under on the other side of its top's middle; the rest of its hem in a wave round its skirt, back
+		 * toward him in some gores and on in others; its gores wandering across it as they go; and its lifted far end
+		 * slumped to one side (HeapShape's: away from its wider side), its crest off its middle, its top leaning over that
+		 * way, and buckled on the other.
 		 */
 		constexpr int LyingRings = 13;
 		struct Lay
@@ -1001,30 +1005,44 @@ namespace LandAir
 			double Long = 7.0, Wide = 2.8, Gap = 2.5, Lift = 0.5, Bulb = 0.0, Bend = 0.0, FarSide = 0.0;
 			int Ridges = 4;
 			double At[5] = {}, Drift[5] = {}, Wave[5] = {}, Phase[5] = {}, Width[5] = {}, High[5] = {}, From[5] = {}, To[5] = {};
-			double EdgeWave[2] = {}, EdgePhase[2] = {}, EdgeSwell[2] = {}, Crease[2] = {}, CreaseHigh[2] = {};
+			double EdgeWave[2] = {}, EdgePhase[2] = {}, EdgeSwell[2] = {};
 			double Loose = 0.0;
-			// (her note of 17:40Z) Its folds across it, ring by ring (none: 0 high): how high (metres), slanted how far
-			// (metres along it at its edge, from its middle), and bunched toward the ring before it (less than nothing) or
-			// the one after (a share of the gap)
+			// (her note of 17:40Z) Its folds across it, ring by ring (none: 0 high): how high (metres) at its highest, where
+			// across it that is (a share of its half-width from its middle, to its right more than nothing) and how far
+			// either way it reaches before it fades (a share of its half-width), slanted and bowed how far (metres along it
+			// at its edge), and bunched toward the ring before it (less than nothing) or the one after (a share of the gap),
+			// its crest rounded over onto that ring and the ring on its other side let down a little (HeapShape)
 			int Crosses = 0;
-			double Cross[LyingRings] = {}, CrossSkew[LyingRings] = {}, CrossBunch[LyingRings] = {};
-			// Its outline: its wider side (0 its right), by how much (a share of its half-width), each ring's jag either side
-			// (-1 to 1); its gores folded at its edges (on which side, about which ring, how far: out, flipped over, more
-			// than nothing; in, tucked under, less)
-			int WideSide = 0, Lobes = 0;
+			double Cross[LyingRings] = {}, CrossAt[LyingRings] = {}, CrossReach[LyingRings] = {}, CrossSkew[LyingRings] = {}, CrossBow[LyingRings] = {},
+				CrossBunch[LyingRings] = {};
+			// Its outline: by how much its wider side is wider (a share of its half-width; which side is HeapShape's: its
+			// axis's bend's outer side, so that it is the wider about the wind line), each ring's jag either side (-1 to 1,
+			// each ring's a little like its neighbours'); its gores folded at its edges (on which side, 0 its wider; the ring
+			// it is about, its fourth to its eighth, whole on it and the next and rounded off over the one before and the
+			// one after those; how far out, flipped over and lying flat, more than nothing; in, tucked under, less: metres)
+			int Lobes = 0;
 			double Wider = 0.0, Jag[2][LyingRings] = {};
 			int LobeSide[3] = {}, LobeRing[3] = {};
 			double LobeOut[3] = {};
-			// Its hem's gores flipped back over its top: round its skirt where (radians from the way it falls), how far
-			// either way flipped whole (radians), its fold pulled back past its hem toward him and its hem carried on over
-			// its top (metres)
-			double FlipAt = 3.14, FlipCore = 0.3, FlipBack = 0.15, FlipOn = 0.3;
-			// Its far end's slump: its crest's place across (a share of its half-width, to its right more than nothing),
-			// how far its top leans over that way, and how far the whole of it lies over that way (metres)
-			double Lean = 0.0, LeanOver = 0.0, Kink = 0.0;
-			// Its hem's scallops: each gore's hem between two lines lying back from them toward him and out (metres at its
-			// deepest), and how that wanders round it (waves round, and where)
-			double Scallop = 0.0, ScallopWaves = 2.5, ScallopPhase = 0.0;
+			// Its skirt's gores flipped over at its near end: round its skirt where (radians from the way it falls), how
+			// far either way flipped whole (radians); their fold pulled back toward him past where their hem was (metres
+			// at most: HeapShape's gathering may let it less), and their hem drawn in toward its middle (a share of how far
+			// off its middle it was, taken from 0.7 of that: what is left of their spread across); and on the other side of
+			// its top's middle a gore or two tucked under (where round it, how far either way whole, and how far on under it
+			// at most)
+			double FlipAt = 3.14, FlipCore = 0.3, FlipBack = 0.35, FlipOver = 0.5, TuckAt = 3.14, TuckCore = 0.1, TuckOn = 0.12;
+			// The rest of its hem: how far each gore's hem lies back toward him or on from where it is gathered (metres), in
+			// a wave round its skirt (waves round, and where), so that its near edge is uneven
+			double HemWave = 0.0, HemWaves = 2.5, HemPhase = 0.0;
+			// Its far end's slump (each how much: HeapShape gives it its side, away from its wider side): its crest's place
+			// across (a share of its half-width), how far its top leans over that way and how far the whole of it lies over
+			// that way (metres), and how deep the buckle across its lifted top on the side it slumps from (a share of its
+			// lift)
+			double Lean = 0.0, LeanOver = 0.0, Kink = 0.0, Buckle = 0.0;
+			// Its gores' wander across it as it goes (so that its seams and its long folds' crests do not run straight
+			// and even from end to end, as a melon's ribs): in two waves round it, each how far (metres), how many times
+			// along it and from where, and from where round it
+			double Wander[2] = {}, WanderAlong[2] = {}, WanderFrom[2] = {}, WanderRound[2] = {};
 		};
 		Lay LayOf(uint32_t Folds, double Across, double Wind)
 		{
@@ -1032,7 +1050,7 @@ namespace LandAir
 			Dice D(Folds);
 			const double Blow = std::clamp(Wind / 6.0, 0.0, 1.0);
 			L.Long = Across * (1.25 + 0.15 * Blow + D.U(0.0, 0.15));
-			L.Wide = L.Long / D.U(2.7, 3.05);
+			L.Wide = L.Long / D.U(2.55, 2.9);
 			L.Gap = 2.0 + 0.5 * Blow + D.U(0.0, 1.0);
 			L.Lift = std::min(0.62, 0.3 + 0.25 * Blow + D.U(0.0, 0.12));
 			L.Bulb = D.U(0.0, 0.12);
@@ -1054,7 +1072,7 @@ namespace LandAir
 				L.From[K] = D.U(0.0, 0.08);
 				L.To[K] = D.U(0.55, 1.0);
 			}
-			// (the gaps between them graded, the widest three times the narrowest (2.6 times with five), the wider going
+			// (the gaps between them graded, the widest 3.5 times the narrowest (three times with five), the wider going
 			// where two folds need more room to stand apart: 1.4 times their widths, and the bigger one's flank half-way
 			// between them under a third of the smaller's height, and a little for their wander. All spread together,
 			// never one alone, to span Wide in all or more until each two stand apart, so that the grading holds: a review
@@ -1068,7 +1086,7 @@ namespace LandAir
 				Need[K] = 0.08 + std::max(1.4 * (L.Width[K] + L.Width[K + 1]), Flank);
 			}
 			std::stable_sort(ByNeed, ByNeed + (L.Ridges - 1), [&Need](int A, int B) { return Need[A] < Need[B]; });
-			const double Most = L.Ridges == 5 ? 1.6 : 2.0;
+			const double Most = L.Ridges == 5 ? 2.0 : 2.5;
 			for (int R = 0; R + 1 < L.Ridges; ++R)
 			{
 				const int K = ByNeed[R];
@@ -1092,16 +1110,19 @@ namespace LandAir
 				L.EdgeWave[K] = D.U(0.8, 2.0);
 				L.EdgePhase[K] = D.U();
 				L.EdgeSwell[K] = D.U(-0.08, 0.08);
-				L.Crease[K] = D.U(0.25, 0.75);
-				L.CreaseHigh[K] = D.U(0.03, 0.08);
+				// (two creases across it were drawn here: its folds across it are its own now, below, but their dice are
+				// thrown still, so that the rest fall as they did)
+				D.U();
+				D.U();
 			}
 			L.Loose = D.U();
 			// (her note of 24 November 17:40Z, on dice of their own, the same seed's: so that all the above fall as they did,
 			// and each pilot's heap is his own, not another's mirrored)
 			Dice E(static_cast<uint64_t>(Folds) | (0xC47E7ull << 32));
 			// (its folds across it: three or four of the rings from 0.15 to 0.64 along it, no two side by side; their
-			// heights graded and dealt out in no order)
-			const int Want = E.U() < 0.55 ? 3 : 4;
+			// heights graded and dealt out in no order; each highest somewhere across it and fading either way, some all
+			// the way across and most part of it; slanted, bowed, and bunched up toward one side)
+			const int Want = E.U() < 0.45 ? 3 : 4;
 			int Cand[7] = { 2, 3, 4, 5, 6, 7, 8 };
 			for (int K = 6; K > 0; --K) std::swap(Cand[K], Cand[std::min(K, static_cast<int>(E.U() * (K + 1)))]);
 			bool bTaken[LyingRings] = {};
@@ -1114,50 +1135,71 @@ namespace LandAir
 			}
 			int Graded[4] = { 0, 1, 2, 3 };
 			for (int K = L.Crosses - 1; K > 0; --K) std::swap(Graded[K], Graded[std::min(K, static_cast<int>(E.U() * (K + 1)))]);
-			constexpr double CrossHeights[4] = { 0.18, 0.15, 0.12, 0.09 };
+			constexpr double CrossHeights[4] = { 0.23, 0.19, 0.155, 0.125 };
 			for (int R = 0, N = 0; R < LyingRings; ++R)
 			{
 				if (!bTaken[R]) continue;
 				L.Cross[R] = CrossHeights[Graded[N++]] * E.U(0.9, 1.1);
-				L.CrossSkew[R] = E.U(-0.16, 0.16);
-				const double Toward = E.U() < 0.5 ? -1.0 : 1.0;
-				L.CrossBunch[R] = Toward * E.U(0.4, 0.55);
+				L.CrossAt[R] = E.U(-0.6, 0.6);
+				L.CrossReach[R] = E.U(0.7, 1.3);
+				L.CrossSkew[R] = E.U(-0.18, 0.18);
+				const double BowWay = E.U() < 0.5 ? -1.0 : 1.0;
+				L.CrossBow[R] = BowWay * E.U(0.06, 0.14);
+				// (bunched toward one side, away from a fold two rings on, so that the two do not run together into one)
+				double Toward = E.U() < 0.5 ? -1.0 : 1.0;
+				const bool bBefore = R >= 2 && bTaken[R - 2], bAfter = R + 2 < LyingRings && bTaken[R + 2];
+				if (bBefore != bAfter) Toward = bAfter ? -1.0 : 1.0;
+				L.CrossBunch[R] = Toward * E.U(0.3, 0.45);
 			}
-			// (its outline: its wider side, each ring's jag, one or two gores flipped over on its wide side, about rings
-			// three or more apart, and one tucked under on the other; all from its third ring to its eighth, none on its
-			// far end, whose slump is its own)
-			L.WideSide = E.U() < 0.5 ? 0 : 1;
-			L.Wider = E.U(0.04, 0.08);
+			// (its outline: its wider side wider, each ring's jag (each a little like its neighbours', so that its edge
+			// wavers rather than zigzags), one or two gores flipped over and lying flat on its wide side, about three
+			// rings apart, and one tucked under on the other; all from its third ring to its eighth, none on its far end,
+			// whose slump is its own)
+			L.Wider = E.U(0.07, 0.11);
+			double Raw[2][LyingRings] = {};
 			for (int S = 0; S < 2; ++S)
-				for (int R = 0; R < LyingRings; ++R) L.Jag[S][R] = E.U(-1.0, 1.0);
+				for (int R = 0; R < LyingRings; ++R) Raw[S][R] = E.U(-1.0, 1.0);
+			for (int S = 0; S < 2; ++S)
+				for (int R = 0; R < LyingRings; ++R) L.Jag[S][R] = 0.6 * Raw[S][R] + 0.2 * (Raw[S][std::max(0, R - 1)] + Raw[S][std::min(LyingRings - 1, R + 1)]);
 			const int Flips = E.U() < 0.5 ? 1 : 2;
 			const int FirstLobe = 3 + static_cast<int>(E.U() * (Flips == 1 ? 5.0 : 2.0));
 			for (int K = 0; K < Flips; ++K)
 			{
-				L.LobeSide[K] = L.WideSide;
+				L.LobeSide[K] = 0;
 				L.LobeRing[K] = K == 0 ? FirstLobe : std::min(7, FirstLobe + 3 + static_cast<int>(E.U() * 2.0));
-				L.LobeOut[K] = E.U(0.2, 0.3);
+				L.LobeOut[K] = E.U(0.3, 0.45);
 			}
-			L.LobeSide[Flips] = 1 - L.WideSide;
+			L.LobeSide[Flips] = 1;
 			L.LobeRing[Flips] = 3 + static_cast<int>(E.U() * 5.0);
-			L.LobeOut[Flips] = -E.U(0.15, 0.24);
+			L.LobeOut[Flips] = -E.U(0.22, 0.32);
 			L.Lobes = Flips + 1;
-			// (its hem's gores flipped back over its top: on one side of its top's middle, two or three gores whole; carried
-			// on less far where its lines have less slack)
+			// (its skirt's gores flipped over at its near end: on one side of its top's middle, two or three gores whole,
+			// their fold pulled back toward him and their hem over toward its other side; a gore or two tucked under on
+			// the other side; and the rest of its hem's waver)
 			const double FlipWay = E.U() < 0.5 ? -1.0 : 1.0;
-			L.FlipAt = Pi + FlipWay * E.U(0.35, 0.8);
-			L.FlipCore = E.U(0.2, 0.3);
-			L.FlipBack = E.U(0.16, 0.24);
-			L.FlipOn = E.U(0.22, 0.36) * std::clamp((3.6 - L.Gap) / 0.6, 0.35, 1.0);
+			L.FlipAt = Pi + FlipWay * E.U(0.35, 0.7);
+			L.FlipCore = E.U(0.24, 0.32);
+			L.FlipBack = E.U(0.38, 0.46);
+			L.FlipOver = E.U(0.0, 0.2);
+			L.TuckAt = Pi - FlipWay * E.U(0.3, 0.6);
+			L.TuckCore = E.U(0.08, 0.16);
+			L.TuckOn = E.U(0.1, 0.16);
+			L.HemWave = E.U(0.05, 0.09);
+			L.HemWaves = E.U(3.0, 5.0);
+			L.HemPhase = E.U(0.0, 2.0 * Pi);
 			// (its far end's slump to one side)
-			const double LeanWay = E.U() < 0.5 ? -1.0 : 1.0;
-			L.Lean = LeanWay * E.U(0.3, 0.42);
-			L.LeanOver = LeanWay * E.U(0.2, 0.32);
-			L.Kink = LeanWay * E.U(0.12, 0.24);
-			// (its hem's scallops)
-			L.Scallop = E.U(0.1, 0.16);
-			L.ScallopWaves = E.U(2.0, 3.5);
-			L.ScallopPhase = E.U(0.0, 2.0 * Pi);
+			L.Lean = E.U(0.42, 0.55);
+			L.LeanOver = E.U(0.25, 0.38);
+			L.Kink = E.U(0.04, 0.1);
+			L.Buckle = E.U(0.4, 0.6);
+			// (its gores' wander)
+			for (int K = 0; K < 2; ++K)
+			{
+				L.Wander[K] = E.U(0.05, 0.09);
+				L.WanderAlong[K] = E.U(0.9, 1.7);
+				L.WanderFrom[K] = E.U();
+				L.WanderRound[K] = E.U(0.0, 2.0 * Pi);
+			}
 			return L;
 		}
 
@@ -1270,20 +1312,36 @@ namespace LandAir
 		const double Clear = 0.03, Pivot = HangFeet;
 		const double TipC = std::cos(Tip), TipS = std::sin(Tip);
 		// (what each column round it and each ring along it share, worked out once: a make is 1,457 points a face on 28
-		// gores, and the scene makes it some twenty times as it falls in)
+		// gores (13 rings of 112 and its crown), and the scene makes it some twenty times as it falls in)
 		struct Column
 		{
-			double Theta, Cs, Sn, Back, Top, Arch, Over, Rim, Flip, Bil, Late, S3, C3, S5, C5, S7, C7, Loose;
+			double Theta, Cs, Sn, Back, Top, Arch, Over, Rim, Flip, Tuck, Bil, Late, S3, C3, S5, C5, S7, C7, Loose, Round2, Round3;
 			int Edge;
 		};
 		struct Ring
 		{
-			double U, Gr, Gz, Blown, Slack, Billow, X, Fore, Axis, Half[2], Rim[2], Bunch, Loose, Pocket, End, Cross, Skew, A1S, A1C, A2S, A2C, A5S, A5C;
+			double U, Gr, Gz, Blown, Slack, Billow, X, Fore, Axis, Half[2], Rim[2], Bunch, Loose, Pocket, End, Cross, CrossAt, CrossReach, Skew, Bow, Bunched,
+				Buckle, Wander2, Wander3, A1S, A1C, A2S, A2C, A5S, A5C;
 			double Fold[5], Mid[5];
 		};
-		// (its far end's crest across, a share of its half-width; and its edges' folds' rings: each lobe whole on its
-		// ring and the next, half on the rings either side of those)
-		const double Lean = L.Lean;
+		// (its axis as it lies: from his lines' end of it, its bend, where its far end lies across and its slump; and its
+		// wider side, the outer side of that bend over its middle, so that about the wind line through where its lines
+		// gather it is wider on that side still (a review of 24 November: drawn either way, about that line one side had
+		// come out no wider than the other in half of them); and its far end slumped the other way, so that it is uneven
+		// about the line from where its lines gather to its tip as well, not only aslant)
+		double Bowed = 0.0;
+		for (int R = 3; R <= 9; ++R) Bowed += Ny * (1.0 - Smooth(Along[R] / 0.5)) + L.FarSide * Along[R] + L.Bend * std::sin(Pi * Along[R]) - Ny;
+		const int WideSide = Bowed >= 0.0 ? 0 : 1;
+		const double LeanWay = WideSide == 0 ? -1.0 : 1.0, Lean = LeanWay * L.Lean, LeanOver = LeanWay * L.LeanOver, Kink = LeanWay * L.Kink;
+		// (and bowed that way 0.12 m over its middle at the least, so that one lying all but straight along its wind
+		// line is still wider one side of it)
+		const double Bows = -LeanWay * std::max(0.0, 0.12 - std::fabs(Bowed) / 7.0);
+		const auto AxisAt = [&L, Ny, Kink, Bows](double U)
+		{
+			const double Pocket = Smooth((U - 0.5) / 0.3);
+			return Ny * (1.0 - Smooth(U / 0.5)) + L.FarSide * U + (L.Bend + Bows) * std::sin(Pi * U) + Kink * Pocket * Pocket;
+		};
+		// (its far end's crest across, a share of its half-width, to its right more than nothing: Lean)
 		std::vector<Column> Cl(static_cast<size_t>(Cols));
 		for (int Col = 0; Col < Cols; ++Col)
 		{
@@ -1301,9 +1359,11 @@ namespace LandAir
 			// (its edges' share of their folds and jags: none within 0.88 of its half-width of its middle, so that its long
 			// folds lie where they were laid, all at its edge)
 			Q.Rim = (Q.Sn >= 0.0 ? 1.0 : -1.0) * Smooth((std::fabs(Q.Sn) - 0.88) / 0.12);
-			// (its hem's gores flipped back over its top: whole within FlipCore of FlipAt round it, none 0.2 rad on)
+			// (its skirt's gores flipped over: whole within FlipCore of FlipAt round it, none 0.16 rad on; and those tucked
+			// under, within TuckCore of TuckAt, none 0.12 rad on)
 			const double Off2 = std::fabs(std::remainder(Q.Theta - L.FlipAt, 2.0 * Pi));
-			Q.Flip = 1.0 - Smooth((Off2 - L.FlipCore) / 0.2);
+			Q.Flip = 1.0 - Smooth((Off2 - L.FlipCore) / 0.16);
+			Q.Tuck = (1.0 - Q.Flip) * (1.0 - Smooth((std::fabs(std::remainder(Q.Theta - L.TuckAt, 2.0 * Pi)) - L.TuckCore) / 0.12));
 			Q.Bil = Billow(Col);
 			Q.Late = 0.06 * (1.0 - Q.Cs);
 			Q.S3 = std::sin(3.0 * Q.Theta);
@@ -1313,6 +1373,8 @@ namespace LandAir
 			Q.S5 = std::sin(5.0 * Q.Theta);
 			Q.C5 = std::cos(5.0 * Q.Theta);
 			Q.Loose = std::cos(1.5 * Pi * Q.Sn + L.Loose * 5.0);
+			Q.Round2 = std::sin(2.0 * Q.Theta + L.WanderRound[0]);
+			Q.Round3 = std::sin(3.0 * Q.Theta + L.WanderRound[1]);
 			Q.Edge = Q.Sn >= 0.0 ? 0 : 1;
 		}
 		std::vector<Ring> Rg(static_cast<size_t>(Ringed));
@@ -1327,9 +1389,10 @@ namespace LandAir
 			G.Slack = Smooth(K / (0.5 - 0.2 * U));
 			G.Billow = 0.3 * std::sin(2.0 * Pi * (1.6 * U - 1.1 * K + L.Loose));
 			// (as it lies: its far end rounding off, narrower and lower over its last fifth, down to the ground at its
-			// crown; its near end gathered, its hem wider on its wide side; its edges' waver, its wider side, and its
-			// edges' jags and folds; its far end swelling more on the side it slumps to; its axis's bend; its folds' share
-			// here, along it and across it, a fold across it lower toward its near end, which stands lower)
+			// crown; its near end gathered; its edges' waver, its wider side wider, and its edges' jags and folds; its far
+			// end swelling on the side it slumps to and drawn in on the other, its silk drawn up over its crest; its axis;
+			// its folds' share here, along it and across it, a fold across it lower toward its near end, which stands
+			// lower; and its far end's buckle)
 			G.End = U > 0.78 ? std::sqrt(std::max(0.0, 1.0 - std::pow((U - 0.78) / 0.22, 2.0))) : 1.0;
 			G.Pocket = Smooth((U - 0.5) / 0.3);
 			const double Open2 = Smooth(U / 0.3);
@@ -1337,22 +1400,30 @@ namespace LandAir
 			{
 				const double Waver = 1.0 + L.EdgeSwell[E] * std::sin(Pi * U) + 0.08 * std::sin(2.0 * Pi * (L.EdgeWave[E] * U + L.EdgePhase[E]))
 					+ 0.04 * std::sin(2.0 * Pi * (2.7 * L.EdgeWave[E] * U + L.Loose));
-				const double Side = (E == L.WideSide ? 1.0 : -1.0) * L.Wider * Open2 + 0.1 * G.Pocket * ((E == 0) == (Lean > 0.0) ? 1.0 : -0.5)
-					+ (E == L.WideSide ? 0.14 : -0.1) * (1.0 - Smooth(U / 0.22));
-				G.Half[E] = 0.5 * L.Wide * (0.44 + 0.56 * Smooth(U / 0.28)) * (1.0 + L.Bulb * G.Pocket) * G.End * Waver * (1.0 + Side);
-				G.Rim[E] = L.Jag[E][R] * (R < 2 ? 0.02 : R > 10 ? 0.04 : 0.07) * G.End;
+				const double Side = (E == WideSide ? 1.0 : -1.0) * L.Wider * Open2 + G.Pocket * G.Pocket * ((E == 0) == (Lean > 0.0) ? 0.08 : -0.06);
+				// (its far end lopsided: rounding off later on the side it slumps to, sooner on the other)
+				const double Ends = U > 0.78 ? std::sqrt(std::max(0.0, 1.0 - std::pow((U - 0.78) / (0.22 * ((E == 0) == (Lean > 0.0) ? 1.08 : 0.93)), 2.0))) : 1.0;
+				G.Half[E] = 0.5 * L.Wide * (0.3 + 0.7 * Smooth(U / 0.3)) * (1.0 + L.Bulb * G.Pocket) * Ends * Waver * (1.0 + Side);
+				G.Rim[E] = L.Jag[E][R] * (R < 2 ? 0.015 : R > 10 ? 0.025 : 0.045) * G.End;
 			}
 			for (int Lb = 0; Lb < L.Lobes; ++Lb)
 			{
+				// (each lobe rounded along it: about whole on its ring and the next, less on the rings either side)
+				constexpr double Shape[5] = { 0.35, 0.85, 1.0, 0.55, 0.15 };
 				const int Past = R - L.LobeRing[Lb];
-				if (Past >= -1 && Past <= 2) G.Rim[L.LobeSide[Lb]] += L.LobeOut[Lb] * (Past == 0 || Past == 1 ? 1.0 : 0.5);
+				if (Past >= -1 && Past <= 3) G.Rim[L.LobeSide[Lb] == 0 ? WideSide : 1 - WideSide] += L.LobeOut[Lb] * Shape[Past + 1];
 			}
-			G.Axis = Ny * (1.0 - Smooth(U / 0.5)) + L.FarSide * U + L.Bend * std::sin(Pi * U) + L.Kink * G.Pocket * G.Pocket;
-			// (its folds across it: its ring bunched up toward the one before it or after it, and slanted)
-			G.Cross = L.Cross[R] * (U < 0.18 ? 0.35 : U < 0.25 ? 0.6 : 1.0) * (1.0 - 0.6 * G.Pocket);
+			G.Axis = AxisAt(U);
+			G.X = Nx + L.Long * U;
+			G.Cross = L.Cross[R] * (U < 0.18 ? 0.45 : U < 0.25 ? 0.7 : 1.0) * (U < 0.25 ? std::min(1.0, L.Lift / 0.5) : 1.0) * (1.0 - 0.6 * G.Pocket);
+			G.CrossAt = L.CrossAt[R];
+			G.CrossReach = std::max(0.1, L.CrossReach[R]);
 			G.Skew = L.CrossSkew[R];
-			const double Bunched = L.CrossBunch[R] < 0.0 ? (R > 0 ? U - Along[R - 1] : 0.0) : (R + 1 < Ringed ? Along[R + 1] - U : 0.0);
-			G.X = Nx + L.Long * (U + L.CrossBunch[R] * Bunched);
+			G.Bow = L.CrossBow[R];
+			G.Bunched = L.Long * L.CrossBunch[R] * (L.CrossBunch[R] < 0.0 ? (R > 0 ? U - Along[R - 1] : 0.0) : (R + 1 < Ringed ? Along[R + 1] - U : 0.0));
+			G.Buckle = L.Buckle * (R == 10 ? 1.0 : R == 9 ? 0.35 : R == 11 ? 0.45 : 0.0);
+			G.Wander2 = L.Wander[0] * std::sin(2.0 * Pi * (L.WanderAlong[0] * U + L.WanderFrom[0])) * Smooth(U / 0.15) * G.End;
+			G.Wander3 = L.Wander[1] * std::sin(2.0 * Pi * (L.WanderAlong[1] * U + L.WanderFrom[1])) * Smooth(U / 0.15) * G.End;
 			G.Fore = 0.05 + 0.15 * (1.0 - U);
 			for (int F = 0; F < L.Ridges; ++F)
 			{
@@ -1398,13 +1469,30 @@ namespace LandAir
 		}
 		// Each point: as it falls (Was, from its skirt's middle as it was, its side toward him blown in, its crown sinking,
 		// tipped over), as it lies (Lies: its two layers of silk, a few long folds in its top one running along it and
-		// three or four across it, its edges jagged and folded, its far end standing on the air it holds and slumped to one
-		// side; over the ground, which is added once read), how far down it is (Settled), how it flaps (Flap: up and
-		// across, until it is down), and where it is now across.
+		// three or four across it, its edges jagged and folded, its far end standing on the air it holds, slumped to one
+		// side and buckled; over the ground, which is added once read), the lowest its top may be pressed to under a line
+		// lying over it (Floor: never through its under layer, nor below a flipped hem's own height less 1 cm), how far
+		// down it is (Settled), how it flaps (Flap: up and across, until it is down), and how much of a fold across it is
+		// there (Crossing: 0 to 1, for its facing).
 		const size_t Each = static_cast<size_t>(Ringed * Cols + 1);
 		std::vector<V3> Was(Each), Lies(Each);
-		std::vector<double> Settled(Each), Flap(Each);
+		std::vector<double> Settled(Each), Flap(Each), Floor(Each, Clear), Crossing(Each, 0.0);
 		Out.Points.resize(Each);
+		const double Slumps = Lean > 0.0 ? 1.0 : -1.0;
+		// (each fold across it: how much of it there is round each ring, highest at CrossAt across it and fading either
+		// way; none on a ring with none, worked out once)
+		std::vector<double> Envs(static_cast<size_t>(Ringed * Cols), 0.0);
+		for (int R = 0; R < Ringed; ++R)
+		{
+			const Ring& G = Rg[static_cast<size_t>(R)];
+			if (G.Cross <= 0.0) continue;
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const double Aslant = (Cl[static_cast<size_t>(Col)].Sn - G.CrossAt) / G.CrossReach;
+				Envs[static_cast<size_t>(R * Cols + Col)] = std::exp(-Aslant * Aslant);
+			}
+		}
+		const auto EnvAt = [&Envs, Cols](int R, int Col) { return R >= 0 && R < Ringed ? Envs[static_cast<size_t>(R * Cols + Col)] : 0.0; };
 		for (int R = 0; R < Ringed; ++R)
 		{
 			const Ring& G = Rg[static_cast<size_t>(R)];
@@ -1418,56 +1506,177 @@ namespace LandAir
 				const double Rx = Out1 * Q.Cs * (1.0 + 0.1 * Sag) + Blown * Ax, Ry = Out1 * Q.Sn * (1.0 + 0.1 * Sag) * (1.0 - 0.25 * Blown);
 				const double Rz = Skirt - Pivot + Dz * G.Gz * (1.0 - 0.6 * Sag) - 0.35 * Blown * Dz;
 				Was[P] = { Rx * TipC + Rz * TipS, Ry, Pivot - Rx * TipS * (1.0 - 0.8 * G.Slack) + Rz * TipC };
+				// (its folds across it: each highest somewhere across it and fading either way; and where one is, on its ring
+				// and those either side, its long folds a little flattened, bunched across)
+				const double Env = EnvAt(R, Col), Before = EnvAt(R - 1, Col), After = EnvAt(R + 1, Col);
+				const double Crossed = std::max({ Env, Before, After });
 				double F = 0.0;
 				for (int Fd = 0; Fd < L.Ridges; ++Fd)
 				{
 					const double Aside = (Q.Sn - G.Mid[Fd]) / L.Width[Fd];
 					if (std::fabs(Aside) < 3.5) F += G.Fold[Fd] * std::exp(-Aside * Aside);
 				}
-				const double High = 0.045 + G.Bunch + F * G.End + std::max(0.0, G.Loose * Q.Loose) + L.Lift * G.Pocket * Q.Arch * G.End;
-				double Low = Clear + (0.3 * F + 0.05 * G.Pocket * Q.Arch) * G.End;
-				// (a fold across it lifts its long folds and the troughs between them alike, the whole of its top; its
-				// underside a little)
-				const double Crossed = G.Cross * G.End;
-				double Z = Low + (High - Low) * Q.Top + Crossed * (0.12 + 0.88 * std::min(1.0, Q.Top / 0.6));
-				// (its edges' folds: a gore flipped over outward lies flat on the ground)
+				F *= 1.0 - 0.3 * Crossed * (1.0 - Smooth((G.U - 0.15) / 0.15));
+				// (its far end's air, buckled across its top on the side it slumps from)
+				const double Air = L.Lift * G.Pocket * Q.Arch * G.End * (1.0 - G.Buckle * Smooth((0.4 - Slumps * Q.Sn) / 0.6));
+				const double High = 0.045 + G.Bunch + F * G.End + std::max(0.0, G.Loose * Q.Loose) + Air;
+				const double Low = Clear + (0.3 * F + 0.05 * G.Pocket * Q.Arch) * G.End;
+				// (a fold across it, highest somewhere across it and fading either way, lifts its long folds and the troughs
+				// between them alike, the whole of its top there, and its underside a little; and bunches it up toward the
+				// ring before it or after it, the more where it stands higher, slanted and bowed)
+				Crossing[P] = Env;
+				// (and its crest rounded over onto the ring it is bunched toward, its other flank steep, the ring there a
+				// little let down)
+				double Shoulder = 0.0, Dip = 0.0;
+				if (Before > 0.0)
+				{
+					const double Was2 = Rg[static_cast<size_t>(R - 1)].Cross * Before;
+					(L.CrossBunch[R - 1] > 0.0 ? Shoulder : Dip) = Was2;
+				}
+				if (After > 0.0)
+				{
+					const double Next2 = Rg[static_cast<size_t>(R + 1)].Cross * After;
+					double& Into = L.CrossBunch[R + 1] < 0.0 ? Shoulder : Dip;
+					Into = std::max(Into, Next2);
+				}
+				double Z = Low + (High - Low) * Q.Top * (1.0 - 0.8 * Dip) + (G.Cross * Env + 0.5 * Shoulder) * G.End * (0.12 + 0.88 * std::min(1.0, Q.Top / 0.6));
+				// (its edges' folds: a gore flipped over outward lies flat on the ground, its two layers one on the other)
 				const double Rim = G.Rim[Q.Edge] * Q.Rim;
-				if (Rim * Q.Sn > 0.0) Z += (Clear + 0.012 - Z) * std::min(1.0, std::fabs(Rim) / 0.15) * Q.Rim * Q.Rim;
-				Lies[P] = { G.X + G.Fore * Q.Cs + G.Skew * Q.Sn, G.Axis + G.Half[Q.Edge] * Q.Sn + Rim + L.LeanOver * G.Pocket * G.End * Q.Over * Q.Top, Z };
+				if (Rim * Q.Sn > 0.0) Z += (Clear + 0.004 + 0.022 * Q.Top - Z) * std::min(1.0, std::fabs(Rim) / 0.15) * Q.Rim * Q.Rim;
+				const double X = G.X + G.Fore * Q.Cs + G.Skew * Q.Sn + G.Bow * (Q.Sn * Q.Sn - 0.5) + G.Bunched * (0.35 + 0.65 * Env);
+				const double Wandered = G.Wander2 * Q.Round2 + G.Wander3 * Q.Round3;
+				Lies[P] = { X, G.Axis + G.Half[Q.Edge] * Q.Sn + Rim + Wandered + LeanOver * G.Pocket * G.End * Q.Over * Q.Top, Z };
+				Floor[P] = Low + 0.012 * Q.Top;
 				Settled[P] = Smooth((K - Early - Q.Late) / 0.6);
 				const double Flapping = 0.6 * (Q.S3 * G.A1C + Q.C3 * G.A1S) + 0.4 * (Q.S7 * G.A2C + Q.C7 * G.A2S);
 				Flap[P] = Sag * (1.0 - Settled[P]) * (0.55 * std::min(1.0, 0.3 + G.Gr) * Flapping + G.Billow);
 			}
 		}
+		const int Seams = Cols / 4;
+		const V3 Hn{ Hx, Hy, H.Z };
 		{
-			// (its hem's gores flipped back over its top: their fold, its second ring, pulled back past its hem toward
-			// him and laid down on the ground; their hem carried on over the silk beyond, a little toward its middle, and
-			// laid over it)
-			const Ring& G1 = Rg[1];
+			// (its hem as it lies where not flipped: each gore's a little back toward him or on, in a wave round it, so that
+			// its near edge wavers)
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const Column& Q = Cl[static_cast<size_t>(Col)];
+				Lies[static_cast<size_t>(Col)].X -= L.HemWave * std::sin(L.HemWaves * Q.Theta + L.HemPhase) * Q.Back * (1.0 - Q.Flip) * (1.0 - Q.Tuck);
+			}
+			// (its skirt's gores flipped over at its near end (the art director's note of 24 November 17:40Z: two or three
+			// gores flipped over at its hem, and a few of its lines across its silk): their fold, its second ring, pulled
+			// back toward him past its near edge and laid on the ground there along their lines, a roll of silk under his
+			// lines; their hem carried on toward where its seams gather and drawn in toward its middle (keeping some of its
+			// spread across, so that they lie as a flap, not a point), and laid on its silk there; so that their lines, and
+			// those beside them, run over their silk. As far as its gathering lets them (a review of 24
+			// November): their seams still behind the middle of its hem's (5 cm or more, its lines running back from the
+			// same half of its skirt all the while it falls in), and no silk more than 0.46 m nearer him than that middle.
+			// And one or two gores on the other side of its top's middle tucked under, their hem lying a little on under it)
+			V3 Gather;
+			for (int Sm = 0; Sm < Seams; ++Sm) Gather = Plus(Gather, Times(Lies[static_cast<size_t>(4 * Sm)], 1.0 / Seams));
+			const std::vector<V3> Laid(Lies.begin(), Lies.begin() + 3 * Cols);
+			// (the top of its silk as laid, under a point: its top layer's highest there, each column's along it between its
+			// first three rings)
+			const auto TopAt = [&Laid, &Cl, Cols](double X, double Y, double Else)
+			{
+				double Best = -1e9;
+				for (int Col = 0; Col < Cols; ++Col)
+				{
+					if (Cl[static_cast<size_t>(Col)].Cs > -0.2) continue;
+					for (int R = 0; R < 2; ++R)
+					{
+						const V3& A = Laid[static_cast<size_t>(R * Cols + Col)];
+						const V3& B = Laid[static_cast<size_t>((R + 1) * Cols + Col)];
+						if ((X - A.X) * (X - B.X) > 0.0) continue;
+						const double T = (X - A.X) / std::max(1e-9, B.X - A.X);
+						if (std::fabs(A.Y + (B.Y - A.Y) * T - Y) < 0.04) Best = std::max(Best, A.Z + (B.Z - A.Z) * T);
+					}
+				}
+				return Best > -1e8 ? Best : Else;
+			};
+			double Moved = 0.0;
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const Column& Q = Cl[static_cast<size_t>(Col)];
+				V3& Hem0 = Lies[static_cast<size_t>(Col)];
+				const V3 Was0 = Hem0;
+				if (Q.Flip > 0.0)
+				{
+					const double W = Q.Flip;
+					const double Tx = std::max(Was0.X, Gather.X - 0.06), Ty = Rg[0].Axis + (0.7 - L.FlipOver) * (Was0.Y - Rg[0].Axis);
+					const double HemX = Was0.X + W * (Tx - Was0.X), HemY = Was0.Y + W * (Ty - Was0.Y);
+					Hem0 = { HemX, HemY, Was0.Z + W * (TopAt(HemX, HemY, Was0.Z) + 0.022 - Was0.Z) };
+					Floor[static_cast<size_t>(Col)] = Hem0.Z - 0.01;
+				}
+				else if (Q.Tuck > 0.0)
+				{
+					const double W = Q.Tuck;
+					Hem0 = { Was0.X + W * std::max(0.0, std::min(L.TuckOn, Gather.X - 0.06 - Was0.X)), Was0.Y, Was0.Z - 0.015 * W };
+				}
+				if (Col % 4 == 0) Moved += (Hem0.X - Was0.X) / Seams;
+			}
+			// (their fold back toward him along their lines, as far as it may go)
+			const double Back = Gather.X + Moved - 0.46;
 			for (int Col = 0; Col < Cols; ++Col)
 			{
 				const double W = Cl[static_cast<size_t>(Col)].Flip;
 				if (W <= 0.0) continue;
-				V3& Hem0 = Lies[static_cast<size_t>(Col)];
 				V3& Fold = Lies[static_cast<size_t>(Cols + Col)];
-				const V3& Beyond = Lies[static_cast<size_t>(2 * Cols + Col)];
-				const double FoldX = Fold.X + W * (Hem0.X - L.FlipBack - Fold.X);
-				Fold = { FoldX, Fold.Y, Fold.Z + W * (Clear + 0.015 - Fold.Z) };
-				const double HemX = Hem0.X + W * std::min(L.FlipOn, std::max(0.0, Nx - 0.05 - Hem0.X)), HemY = Hem0.Y + W * 0.25 * (G1.Axis - Hem0.Y);
-				const double Share = std::clamp((HemX - Fold.X) / std::max(0.05, Beyond.X - Fold.X), 0.0, 1.0);
-				const double OnTop = Fold.Z + (Beyond.Z - Fold.Z) * Share + 0.03;
-				Hem0 = { HemX, HemY, Hem0.Z + W * (OnTop - Hem0.Z) };
+				const V3& Hem0 = Lies[static_cast<size_t>(Col)];
+				const double FoldX = std::max(Back, Laid[static_cast<size_t>(Col)].X - L.FlipBack);
+				const double FoldY = Hem0.Y + (Hn.Y - Hem0.Y) * (Hem0.X - FoldX) / std::max(0.5, Hem0.X - Hn.X);
+				Fold = { Fold.X + W * (FoldX - Fold.X), Fold.Y + W * (FoldY - Fold.Y), Fold.Z + W * (Clear + 0.02 - Fold.Z) };
+				Floor[static_cast<size_t>(Cols + Col)] = Clear;
 			}
-			// (and each gore's hem not flipped lying back toward him and out between its two lines in a scallop, its lines'
-			// seams where they were: deepest at its gore's middle, more in some gores than others)
-			for (int Col = 0; Col < Cols; ++Col)
+		}
+		{
+			// (his lines as they lie (LandBattleAir's DownShape, slack): from his harness, each in two lengths, its middle
+			// let down to the lower end's height and bowed aside by 0.06 of its length, every other line the other way.
+			// Where one runs over its silk (its flipped gores' lines, over their own silk and any beside it), the silk under
+			// it is pressed down under it, so that the line lies on it and not in it (a review of 24 November: lines had
+			// gone 7 cm into it), never lower than the silk under that; its seams, where the lines end, where they are)
+			double Furthest = -1e9;
+			std::vector<V3> Ends(static_cast<size_t>(Seams));
+			for (int Sm = 0; Sm < Seams; ++Sm)
 			{
-				const Column& Q = Cl[static_cast<size_t>(Col)];
-				const double Dip = Col % 4 == 0 ? 0.0 : Col % 4 == 2 ? 1.0 : 0.345;
-				const double S = L.Scallop * (0.6 + 0.4 * std::sin(L.ScallopWaves * Q.Theta + L.ScallopPhase)) * Dip * (1.0 - Q.Flip);
-				V3& Hem0 = Lies[static_cast<size_t>(Col)];
-				Hem0.X -= S * Q.Back;
-				Hem0.Y += 0.5 * S * Q.Sn;
+				Ends[static_cast<size_t>(Sm)] = Lies[static_cast<size_t>(4 * Sm)];
+				Furthest = std::max(Furthest, Ends[static_cast<size_t>(Sm)].X);
+			}
+			int Near = 1;
+			while (Near < Ringed && Nx + L.Long * Along[Near] - 0.6 < Furthest + 0.3) ++Near;
+			// (the points a line may lie over: its top layer's, and a little round its edges, short of its seams' ends
+			// on its hem)
+			std::vector<size_t> Beneath;
+			Beneath.reserve(static_cast<size_t>(std::min(Ringed, Near + 1) * Cols));
+			for (int R = 0; R < std::min(Ringed, Near + 1); ++R)
+				for (int Col = 0; Col < Cols; ++Col)
+					if (Cl[static_cast<size_t>(Col)].Cs < 0.2 && (R > 0 || Col % 4 != 0)) Beneath.push_back(static_cast<size_t>(R * Cols + Col));
+			for (int Sm = 0; Sm < Seams; ++Sm)
+			{
+				if (!LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams))) continue;
+				const V3 E = Ends[static_cast<size_t>(Sm)];
+				const V3 Way = Minus(E, Hn);
+				const double Size = Length(Way), Flat = std::max(1e-9, std::hypot(Way.X, Way.Y));
+				const double Bow = (Sm % 2 == 0 ? 1.0 : -1.0) * 0.06 * Size;
+				const V3 Mid{ 0.5 * (Hn.X + E.X) - Way.Y / Flat * Bow, 0.5 * (Hn.Y + E.Y) + Way.X / Flat * Bow, std::min(Hn.Z, E.Z) };
+				for (int Seg = 0; Seg < 2; ++Seg)
+				{
+					const V3& A = Seg == 0 ? Hn : Mid;
+					const V3& B = Seg == 0 ? Mid : E;
+					const double Dx = B.X - A.X, Dy = B.Y - A.Y, Dd = std::max(1e-12, Dx * Dx + Dy * Dy);
+					const double X0 = std::min(A.X, B.X) - 0.25, X1 = std::max(A.X, B.X) + 0.25;
+					for (const size_t P : Beneath)
+					{
+						V3& Q = Lies[P];
+						if (Q.X < X0 || Q.X > X1) continue;
+						const double Ex = Q.X - E.X, Ey = Q.Y - E.Y;
+						if (Ex * Ex + Ey * Ey < 0.0016) continue;
+						const double T = std::clamp(((Q.X - A.X) * Dx + (Q.Y - A.Y) * Dy) / Dd, 0.0, 1.0);
+						const double Ax2 = Q.X - A.X - T * Dx, Ay2 = Q.Y - A.Y - T * Dy, D2 = Ax2 * Ax2 + Ay2 * Ay2;
+						if (D2 > 0.0625) continue;
+						const double Cap = A.Z + T * (B.Z - A.Z) - 0.018 + 0.3 * std::max(0.0, std::sqrt(D2) - 0.025);
+						if (Q.Z > Cap) Q.Z = std::max(Cap, Floor[P]);
+					}
+				}
 			}
 		}
 		for (int R = 0; R < Ringed; ++R)
@@ -1481,12 +1690,12 @@ namespace LandAir
 		}
 		{
 			// (its crown: as it falls, the top of its gores; as it lies, at its far end's tip, on the ground, its round
-			// coming down to it, a little to the side its far end slumps to; coming down and billowing as its last ring
-			// does on the whole)
+			// coming down to it, toward the side its far end slumps to; coming down and billowing as its last ring does on
+			// the whole)
 			const size_t P = Each - 1;
 			const double Rz = Skirt - Pivot + Dz * (1.0 - 0.6 * Sag);
 			Was[P] = { Rz * TipS, 0.0, Pivot + Rz * TipC };
-			Lies[P] = { Nx + L.Long, L.FarSide + L.Kink + 0.3 * L.LeanOver, Clear };
+			Lies[P] = { Nx + L.Long, L.FarSide + Kink + 0.5 * LeanOver, Clear };
 			Settled[P] = Smooth((K - 0.06 - 0.14 - 0.06) / 0.6);
 			Flap[P] = Sag * (1.0 - Settled[P]) * 0.3 * std::sin(2.0 * Pi * (1.6 - 1.1 * K + L.Loose));
 			Out.Points[P] = { Was[P].X + (Lies[P].X - Was[P].X) * Stream, Was[P].Y + (Lies[P].Y - Was[P].Y) * Stream, 0.0 };
@@ -1552,21 +1761,32 @@ namespace LandAir
 			for (int Col = 0; Col < Cols; ++Col)
 				for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch] * Hemmed(R, Col));
 		for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch]);
-		// (each point's facing from where the points about it are: round its ring by up it toward its crown, up it as
-		// the silk runs on from it to the next ring (the art director's note of 24 November 17:40Z: its folds across it
-		// stand on every other ring, and by the rings either side of each, a crest's and a trough's alike, they had
-		// shaded flat: so a trough faces up its fold's near side and a crest down its far side, each fold a darker band
-		// and a lighter one)
+		// (each point's facing from where the points about it are: round its ring by up it toward its crown, by the rings
+		// either side of it. Where a fold across it is (the art director's note of 24 November 17:40Z), once it streams
+		// out, up it as the silk runs on from it to the next ring: those folds stand two rings apart or more, and by the
+		// rings either side of each, a crest's and a trough's alike, they shade flat; so there a trough faces up its
+		// fold's near side and a crest down its far side, each fold a darker band and a lighter one. And its flipped
+		// gores' fold, a roll of silk at its near edge, faces out of the roll, back toward him, so that its silk either
+		// side of it, one layer turned over onto the other, is each wound its own way)
 		const auto Pt = [&Out, Cols](int R, int Col) -> const V3& { return Out.Points[static_cast<size_t>(R * Cols + (Col + Cols) % Cols)]; };
 		const V3 Tip2 = Out.Points[Each - 1];
 		for (int R = 0; R < Ringed; ++R)
 		{
 			for (int Col = 0; Col < Cols; ++Col)
 			{
+				const Column& Q = Cl[static_cast<size_t>(Col)];
+				const size_t P = static_cast<size_t>(R * Cols + Col);
+				double Ahead = Crossing[P];
+				if (R > 0) Ahead = std::max(Ahead, Crossing[P - static_cast<size_t>(Cols)]);
+				if (R + 1 < Ringed) Ahead = std::max(Ahead, Crossing[P + static_cast<size_t>(Cols)]);
+				Ahead *= Stream;
 				const V3& Here = Pt(R, Col);
 				const V3 Way = Minus(Pt(R, Col + 1), Pt(R, Col - 1));
-				const V3 Up = Minus(R + 1 < Ringed ? Pt(R + 1, Col) : Tip2, Here);
-				Out.Facings[static_cast<size_t>(R * Cols + Col)] = Unit(Cross(Way, Up), { 0.0, 0.0, 1.0 });
+				const V3 Up = Plus(Minus(R + 1 < Ringed ? Pt(R + 1, Col) : Tip2, Here), Times(Minus(Here, Pt(R > 0 ? R - 1 : R, Col)), 1.0 - Ahead));
+				V3 Facing = Unit(Cross(Way, Up), { 0.0, 0.0, 1.0 });
+				const double Rolled = R == 1 ? Q.Flip * Stream : 0.0;
+				if (Rolled > 0.0) Facing = Unit(Plus(Times(Facing, 1.0 - Rolled), Times(V3{ -0.97, 0.0, 0.25 }, Rolled)), Facing);
+				Out.Facings[P] = Facing;
 			}
 		}
 		V3 Sum;

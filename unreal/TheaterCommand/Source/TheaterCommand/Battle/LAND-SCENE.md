@@ -826,8 +826,9 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     make, and is drawn within 0.07 m of its true shape. Its cost: lying, his silk is 2,706 points and 5,200 triangles
     on 26 gores, 2,914 and 5,600 on 28 (in the air 1,874 and 3,536, 2,018 and 3,808; it had been 3,138 and 6,048 on
     14 rings, then 2,466 and 4,704 on 11: it is now on 13, for its folds across it); a make (one `HeapShape`, its next
-    step's: the step it is in is the last make's) 0.14 ms on a flat field (0.13 on 11 rings) and about 0.3 ms on
-    hummocks on the cloud box, its ground read once on a grid (not twice a point). The log tells each pilot's count
+    step's: the step it is in is the last make's) 0.16 ms on a flat field (0.13 on 11 rings, and on 13 before its look
+    from above was reworked; its instructions a fifth more) and about 0.3 ms on hummocks on the cloud box, its ground
+    read once on a grid (not twice a point). The log tells each pilot's count
     once his canopy lies flat, for the 45 fps reading: his mesh's makes and moves in place, his silk's points and
     triangles lying, its makes as it fell in and their time (ms a make, and the longest), and the most its points
     moved in a frame (metres).
@@ -893,35 +894,57 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   - *How it looks from above* (the art director's note of 24 November 17:40Z: from above both pilots' silk read as "a
     smooth cocoon or a gourd", an even outline and only lengthwise ridges). `HeapShape` lies on 13 rings now (it was
     11), a little over half a metre apart where it folds across, and on dice of their own (the pilot's number with
-    `0xC47E7` above it, so that all its other draws fall as they did and no pilot's heap is another's mirrored). Three
-    or four folds across it, where it bunched as it fell in, each on a ring of its own from 0.15 to 0.64 along it (no
-    two side by side), 8 to 20 cm high in no order (lower toward its gathered near end, so that its near quarter stays
-    under its far end), the whole of its top lifted alike (its long folds keep their rises, and so their unevenness),
-    slanted across it by up to 16 cm and bunched 40 to 55% of the way up to the ring before or after it; the two creases
-    across it it had are gone (their dice are still drawn, so the rest fall as they did). Its outline uneven: one side 8
-    to 16% wider than the other and its hem more so (14% wider, 10% narrower), each ring's edge jagged a few centimetres
-    either side, one or two gores flipped over and lying flat out 20 to 30 cm beyond its wide side and one tucked 15 to
-    24 cm under its other side, about its third ring to its seventh of 13 (none on its far end). Only the outermost
-    eighth of its half-width moves for them, so that its long folds lie where they were laid (the folds' unevenness test
-    sits at a fifth, and on half its half-width the tucks had squeezed the outer gaps even); and bent across the wind or
-    with gores flipped out it has no more silk, so its widths are cut back (a quarter at most) until all told it lies no
-    wider than its length over 2.12. Its hem a wavy edge: its near end opens to 0.44 of its width (it was 0.3), each
-    gore's hem between two lines lying back toward him and out in a scallop (10 to 16 cm at its deepest, more in some
-    gores than others), its lines' seams where they were; and two or three of its gores flipped back over its top, their
-    fold pulled back past its hem toward him and their hem carried on over its silk, so that the lines to them run
-    across it. Its lifted far end slumped a little to one side: its air's crest 0.3 to 0.42 of its half-width off its
-    middle, its top leaning over that way, and the whole of it a little over. Each point's facing is now the way its
-    silk runs on from it to the next ring (it had been from the ring before to the ring after, which shades a fold on
-    one ring flat: a crest's and a trough's alike), so that a fold across it is a darker band and a lighter one;
-    chutes.py lights each pixel of the silk by its facing there, as the scene does (it had lit each triangle once).
-    land_air_test measures it from above (`FromAbove`: its silk drawn straight down on a 2 cm grid and lit as chutes.py
-    lights it) and checks it over the verdict's four pilots and 300 others: its outline's unevenness about its own
-    middle line (0.13 on the mean over the 300, from 0.04; his 0.18 and the second's 0.11, from 0.04 and 0.05), its
-    edges' waviness (2.5 cm off a smooth line on the mean, from 1.4) and its hem's turns (3 to 13, from 1), its folds
-    across it (three or four for 293 of the 300; his 3, the second's 4, from 1) and the light bands along it, its far
-    end's lift to one side (5 to 20 cm, from 0 to 4; his 8, the second's 17), its lines across its silk (one to six, 25
-    to 42 cm of each; none had been), and its luma across its middle (his 129 to 222 in chutes.py, the second's 121 to
-    213; her 126 to 221).
+    `0xC47E7` above it, so that all its other draws fall as they did and no pilot's heap is another's mirrored).
+    - *Folds across it*: three or four, where it bunched as it fell in, each on a ring of its own from 0.15 to 0.64
+      along it (no two side by side), graded in height (12 to 23 cm, lower toward its gathered near end and lower still
+      when its far end holds little air, so that its near quarter stays under its far end) and dealt out in no order;
+      each highest somewhere across it and fading either way (most across part of its width, not all of it), slanted
+      and bowed across it, and bunched up toward the ring before or after it (away from a fold two rings on, so that
+      two do not run into one): its crest rounded over onto that ring (side-on a hump, not a tent's peak) and the ring
+      on its other side let down a little, so that one flank is steep. Near them, toward its near end, its long folds
+      stand a little lower. The two creases across it it had are gone (their dice are still drawn).
+    - *Its outline*: one side wider than the other, 7 to 11% of its half-width, and that side the outer side of its
+      axis's bend (bowed 0.12 m at the least), so that more of its silk lies on one side of the wind line through where
+      its lines gather; its far end slumped the other way, so that it is uneven about the line from there to its tip too;
+      each ring's edge jagged a few centimetres either side (each like its neighbours a little, so it wavers rather than
+      zigzags); one or two gores flipped over and lying flat out 0.3 to 0.45 m beyond its wide side, and one tucked 0.22
+      to 0.32 m under its other side, about its fourth ring to its eighth (none on its far end). Only the outermost eighth
+      of its half-width moves for them, so its long folds lie where they were laid; bent across the wind or with gores
+      flipped out it has no more silk, so its widths are cut back (a quarter at most) until it lies no wider than its
+      length over 2.12. Its gores wander across it as they go, so its seams and its long folds' crests do not run
+      straight and even end to end like a melon's ribs.
+    - *Its hem*: its near end tapers as before; two or three of its gores flipped back over its top, their fold pulled
+      back past its hem toward him (as far as its gathering lets it: no silk more than 0.46 m nearer him than its seams'
+      middle, the near-end check's 0.5) and laid on the ground there along their lines, a roll of silk under them, and
+      their hem drawn in on its silk keeping some of its spread, so that they lie as a flap; the lines to them and some
+      beside them run over it (0.2 to 0.3 m of each past its seam's last 10 cm, never under it: where a line lies over
+      the silk the silk under it is pressed down under the line, never through its under layer). A gore or two on the
+      other side of its top's middle are tucked under a little, and the rest of its hem lies back toward him in some
+      gores and on in others, in a wave round its skirt (5 to 9 cm). Its lines' seams stay behind the middle of its
+      hem's, so that its lines run back to him from the same half of its skirt all the while it falls in.
+    - *Its far end*: slumped to one side (away from its wider side): its air's crest 0.42 to 0.55 of its half-width off
+      its middle, its top leaning over that way, its round wider and later on that side and sooner on the other, its tip
+      that way, and its lifted top buckled across on the side it slumps from.
+    - Each point's facing, where a fold across it is, is the way its silk runs on from it to the next ring (from the
+      ring before to the ring after shades a fold on one ring flat), so that a fold across it is a darker band and a
+      lighter one; chutes.py lights each pixel of the silk by its facing there, as the scene does.
+    - land_air_test measures it from above (`FromAbove`: its silk drawn straight down on a 2 cm grid and lit as chutes.py
+      lights it; its luma across its middle reads within 2 of chutes.py's for his and the second pilot's) and checks it
+      over the verdict's four pilots and 300 others. Over the 300, against the code before her note and this round's
+      first answer to it: (a) its silk more on one side of its wind line 0.09 to 0.74 (0.33 on the mean; it was 0.00 to
+      0.62, 0.21, then 0.00 to 0.63, 0.22), and about the line to its tip 0.09 at the least (0.31 on the mean; it was 0.00
+      and 0.12, then 0.00 and 0.15); (b) its edges 4.1 cm off a smooth line on the mean (2.6, then 4.1) and its hem 0.28 m
+      off a smooth curve at the least (0.37 on the mean; 0.11 and 0.22, then 0.19 and 0.36); (c) three or four folds
+      across it for 244 (2 for 2, then 293), two light bands or more for 216 (none, then 217); (d) its far end's lift 0.18
+      to 0.41 m to one side (0.29 on the mean; 0 to 0.04, then 0.05 to 0.20); (e) one to four of its lines across its silk
+      (2.3 on the mean; none, then 0 to 5, 1.9), none under it by more than 6 mm (the first answer's went 7 cm in); and
+      its luma across its middle 116 to 231 at the most. His: 0.38 more on one side of the wind line (0.29, then 0.09),
+      three folds across and two light bands (one and none, then three and one), his far end 0.29 m to one side (0.03,
+      then 0.08), three lines across (none, then two, one of them 1.6 cm under the silk), luma 160 to 217 in chutes.py
+      (126 to 221, then 129 to 222: his middle now falls on a fold's light band; 0.9 m either side of it its troughs
+      read 119 and 123, a pixel's own). The second pilot's: 0.19 to one side (0.04, then 0.11), three folds and two bands (one and none, then four
+      and two), its far end 0.34 m over (0.01, then 0.17), two lines across (none, then three), luma 124 to 217 in
+      chutes.py (127 to 217, then 121 to 213).
   - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`; its lying folds on `0xC47E5`, drawn after all
     the rest; its look from above on `0xC47E7`, the pilot's number's own): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit

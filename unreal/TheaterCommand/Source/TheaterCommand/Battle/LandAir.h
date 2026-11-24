@@ -214,11 +214,14 @@ namespace LandAir
 	 * his own (Chute::Folds), its far end lifted a little on the air it still holds and coming round and down to the
 	 * ground, its near end gathered 2 to 3.5 m past his harness, where its lines run back to him across the grass. And
 	 * (her note of 24 November 17:40Z: from above it had read as a smooth cocoon or a gourd) uneven from above: three or
-	 * four folds across it where it bunched, one side wider than the other, its edges jagged, a gore or two flipped
-	 * over and lying flat out beyond its wide side and one tucked under the other, its hem a wavy edge in a scallop
-	 * between each two lines with two or three of its gores flipped back over its top (their lines running across
-	 * them), and its lifted far end slumped a little to one side. Each point's facing is the way its silk runs on to
-	 * the next ring, so that a fold across it shades as a darker band and a lighter one.
+	 * four folds across it where it bunched, most across part of its width, slanted and bowed; one side wider than the
+	 * other (about the wind line through where its lines gather, and about the line from there to its tip), its edges
+	 * jagged, a gore or two flipped over and lying flat out beyond its wide side and one tucked under the other; its
+	 * hem wavering, two or three of its gores flipped back over its top at its near end (the lines to them, and some
+	 * beside them, running across them: as far as its gathering lets them, about 0.3 m) and one or two tucked under;
+	 * its gores wandering across it as they go; and its lifted far end slumped a little to the side away from its wider
+	 * one and buckled on the other. Where a fold across it is, each point's facing is the way its silk runs on to the
+	 * next ring, so that the fold shades as a darker band and a lighter one.
 	 * Ground (board metres, as Sky's; none: a flat field) is the ground it lies on, read once on a grid a quarter of a
 	 * metre square under it: each point laid on it, and every edge of its silk kept over the ground the grid reads (a
 	 * bank, a ditch, a crater's rim; HeapShape lifts both ends of an edge that would cut through one). The mesh is placed
