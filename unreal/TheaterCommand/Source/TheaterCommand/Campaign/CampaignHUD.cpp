@@ -12783,13 +12783,13 @@ namespace
 
 		/**
 		 * (Release 2, tc.UI.MonthCard) The rules' note, as the line under the card's flag: bWho, the nation the player
-		 * leads ("United States"); otherwise the rest of the note after a dot ("·  Colonel"), or the whole note when it
+		 * leads ("United States"); otherwise the rest of the note after a dot (".  Colonel"), or the whole note when it
 		 * names nobody led (a war watched, a country fallen).
 		 */
 		FText McLeads(bool bWho) const
 		{
 			const FString Note = Controller.IsValid() ? Controller->GetRulesNote().ToString() : FString();
-			static const FString Leads(TEXT("You lead ")), Dot(TEXT("  ·  "));
+			static const FString Leads(TEXT("You lead ")), Dot(TEXT("  \u00B7  "));
 			if (!Note.StartsWith(Leads))
 			{
 				return bWho ? FText::GetEmpty() : FText::FromString(Note);
@@ -12798,7 +12798,7 @@ namespace
 			FString Nation = Who;
 			if (Who.Split(Dot, &Nation, &Rest))
 			{
-				Rest = TEXT("·  ") + Rest;
+				Rest = TEXT("\u00B7  ") + Rest;
 			}
 			if (Nation.StartsWith(TEXT("the ")))
 			{
@@ -13263,7 +13263,7 @@ namespace
 												.Text_Lambda([this]()
 												{
 													const FCampaignView* View = McView();
-													return View ? FText::FromString(FString::Printf(TEXT("%s in  ·  %s upkeep"), *Cash(View->Treasury.Gross), *Cash(View->Treasury.Upkeep))) : FText::GetEmpty();
+													return View ? FText::FromString(FString::Printf(TEXT("%s in  \u00B7  %s upkeep"), *Cash(View->Treasury.Gross), *Cash(View->Treasury.Upkeep))) : FText::GetEmpty();
 												})
 											]
 										]
