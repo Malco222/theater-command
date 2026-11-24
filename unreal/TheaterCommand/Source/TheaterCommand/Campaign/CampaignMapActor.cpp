@@ -7938,13 +7938,67 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 		const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
 		Site.Look = Latitude < 37.5 || (Latitude < 42.0 && Longitude > 26.0) ? 4 : Latitude < 45.5 ? 2
 			: (Latitude > 55.0 && Longitude > 4.0) || Longitude > 22.0 ? 3 : Longitude < 7.5 ? 1 : 0;
-		if (Data.bWorld && Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond && Longitude < -40.0)
+		// (Release 2: the wider chart counts the Pacific's longitudes eastward past 180. East of Greenwich, -180 to 180.)
+		const double East = FMath::Fmod(Longitude + 540.0, 360.0) - 180.0;
+		const bool bBeyond = Data.bWorld && Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond;
+		if (bBeyond && Latitude > 45.0 && (East < -150.0 || East > 165.0))
+		{
+			// (Release 2: Alaska's west and the Aleutians, the New World's kit)
+			Site.Look = 5;
+		}
+		else if (bBeyond && East < -40.0 && East > -169.0 && !(Latitude < 30.0 && East < -125.0))
 		{
 			// (The art director's brief 3.4 and her round 30: in the Americas a town takes the kit of the land it
 			// stands in. North of Mexico, the New World's brick and cream under tar; from Mexico south, the plaza
 			// town's white and ochre under red tile. The islands of the eastern Atlantic keep Europe's rule.)
 			const bool bNorth = Latitude > 33.0 || ((Region.Home == TEXT("USA") || Region.Home == TEXT("CAN")) && Latitude > 24.5);
 			Site.Look = bNorth ? 5 : 6;
+		}
+		else if (bBeyond)
+		{
+			// (Release 2, the far side, by the same brief, 3.4: the kit of the land a town stands in, whoever holds it.
+			// Home is whose it was when the chart was drawn; the lines are the brief's, a degree or two wide of the coasts.)
+			const FString& Home = Region.Home;
+			const bool bJapan = Home == TEXT("JAP") && ((East >= 129.5 && East <= 156.5 && Latitude >= 30.0 && Latitude <= 50.0 && !(East < 131.0 && Latitude > 34.5) && !(East < 141.0 && Latitude > 46.0))
+				|| (Latitude >= 24.0 && Latitude < 30.0 && ((East >= 122.9 && East <= 131.5) || (East >= 139.0 && East <= 143.0))));
+			const bool bChinaCoast = East >= 102.0 && East <= 131.0 && Latitude >= 18.0 && Latitude <= 43.5;
+			const bool bWalled = ((Home == TEXT("CHN") || Home == TEXT("MAN")) && East >= 102.0)
+				|| ((Home == TEXT("JAP") || Home == TEXT("UK") || Home == TEXT("POR")) && bChinaCoast) || (Home == TEXT("FRA") && bChinaCoast && East >= 109.5);
+			const bool bIndia = (Home == TEXT("UK") || Home == TEXT("NEP") || Home == TEXT("POR") || Home == TEXT("FRA")) && East >= 60.0 && East <= 101.0
+				&& Latitude >= 5.5 && Latitude <= 37.0 && !(East > 99.5 && Latitude < 7.0);
+			const bool bNewWorld = (Home == TEXT("AUS") && Latitude <= -10.5) || (Home == TEXT("NZL") && Latitude <= -30.0) || Home == TEXT("SAF");
+			if (bNewWorld)
+			{
+				Site.Look = 5; // Australia, New Zealand, South Africa: the New World grid
+			}
+			else if (bJapan)
+			{
+				Site.Look = 8; // the timber town
+			}
+			else if (bWalled)
+			{
+				Site.Look = 7; // the walled town: China, Manchuria, Korea, Formosa, the treaty ports
+			}
+			else if (bIndia)
+			{
+				Site.Look = 10; // the Indian town: India, Ceylon, Burma, Nepal
+			}
+			else if (Home == TEXT("SOV") && !(Latitude < 46.0 && East < 87.0))
+			{
+				Site.Look = 11; // the railway town: Siberia and the Soviet Far East
+			}
+			else if ((Latitude < 24.0 && (East > 92.0 || East < -125.0)) || (Latitude < 12.0 && East > -18.0 && East < 92.0))
+			{
+				Site.Look = 9; // thatch and tin: Siam, Indochina, Malaya, the Indies, the Philippines, the islands, Africa's middle
+			}
+			else if (Latitude >= 12.0 && East > -18.0 && East < 122.0)
+			{
+				Site.Look = 4; // the flat-roofed town: the Sahara, Arabia, Persia, Afghanistan, Central Asia, Tibet, Mongolia
+			}
+			else if (East > 102.0 || East < -125.0)
+			{
+				Site.Look = Latitude < 30.0 ? 9 : 5; // what is left of the Pacific's shores and islands
+			}
 		}
 		// A capital's own great building: the great capitals have theirs, the rest one of four by turns.
 		static const TPair<const TCHAR*, int32> Named[] = {
