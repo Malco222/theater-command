@@ -427,29 +427,39 @@ namespace LandHouse
 		/** A shell's last gable, its top ragged along its rake. */
 		bool KeptGable(const Plan& P, const Face& Fc) { return P.Hurt == 3 && Fc.bGable && Fc.End == P.Keep; }
 
+		/** The wall's top at a place, and whether it is a line its stones are cut to there (a shell's ragged rake, or a
+		 * stone broken off at a slant or part way through its course), not a course's line. */
+		struct TopHere
+		{
+			double Z = 0.0;
+			bool bRag = false;
+		};
+
 		/**
 		 * The wall's top where it stands: whole; or broken down stone by stone where it was hit or burnt, piece by piece
-		 * along it, each piece's top a course's line, a stone more or less than its neighbours' here and there; a shell's
-		 * last gable ragged along its rake, straight from piece's edge to piece's edge, the stones under its chimney whole.
+		 * along it, each piece's top a course's line, the stones at the steps' edges fallen or knocked off at a slant, now
+		 * and then one broken part way (the art director's round 2: no stone standing alone like a merlon; round 3: not a
+		 * staircase of flat treads and square risers); a shell's last gable ragged along its rake, straight from piece's
+		 * edge to piece's edge, the stones under its chimney whole.
 		 */
-		double TopOf(const Plan& P, const Face& Fc, int F, double A, double Scale = 1.0)
+		TopHere TopAt(const Plan& P, const Face& Fc, int F, double A, double Scale = 1.0)
 		{
 			const double Intact = IntactTop(P, Fc, A);
-			if (P.Hurt < 2) return Intact;
+			if (P.Hurt < 2) return { Intact, false };
 			const uint64_t K = P.Key;
 			double PA0 = 0.0, PA1 = 1.0;
 			uint64_t Kp = 0;
 			PieceOf(P, F, A, Scale, PA0, PA1, &Kp);
+			const double T = std::clamp((A - PA0) / (PA1 - PA0), 0.0, 1.0);
 			if (KeptGable(P, Fc))
 			{
 				auto RagAt = [&](double E) {
 					const double U = Unit(Hash(K ^ 0x9A6, static_cast<uint64_t>(F), static_cast<uint64_t>(std::llround(E * 1000.0))));
 					return 0.1 + 0.42 * U + 1.0 * Smooth(0.58, 0.9, Noise01(E / 0.9, 37.0, K ^ 0x9A));
 				};
-				const double T = std::clamp((A - PA0) / (PA1 - PA0), 0.0, 1.0);
 				const double Rag = RagAt(PA0) + (RagAt(PA1) - RagAt(PA0)) * T;
 				const V3 W = At(Fc, A, 0.0, 0.0);
-				return Intact - Rag * Smooth(0.45, 1.1, std::fabs(W.Y));
+				return { Intact - Rag * Smooth(0.45, 1.1, std::fabs(W.Y)), true };
 			}
 			// (a piece's line: the course its top comes down to, or the wall's own line where it stands whole)
 			auto Line = [&](double Aq, bool& bWhole) {
@@ -479,24 +489,57 @@ namespace LandHouse
 			};
 			bool bWhole = false, bWL = false, bWR = false;
 			const double Q = Line(0.5 * (PA0 + PA1), bWhole);
-			if (bWhole) return Intact;
+			if (bWhole) return { Intact, false };
 			const double QL = Kp > 0 ? Line(PA0 - 0.5 * PieceLen(P, F, Kp - 1, Scale), bWL) : Q;
 			const double QR = Line(PA1 + 0.5 * PieceLen(P, F, Kp + 1, Scale), bWR);
-			// (the stones at a step's edge loosen and fall first: a piece standing above a neighbour has more often than not
-			// lost a stone more, one standing above both nearly always; so no stone stands alone like a merlon)
+			const double Lo = Quant(P, Q - 0.05); // (the course line below its own)
 			const int Above = (Q > QL + 1e-6 ? 1 : 0) + (Q > QR + 1e-6 ? 1 : 0);
 			const double U = Unit(Hash(K ^ 0x7A6, static_cast<uint64_t>(F), Kp));
-			const bool bDrop = Above == 2 ? U < 0.85 : Above == 1 ? U < 0.45 : U < 0.04;
-			return std::min(Intact, bDrop ? Quant(P, Q - 0.05) : Q);
+			const double V = Unit(Hash(K ^ 0x7A7, static_cast<uint64_t>(F), Kp));
+			// (a piece standing above both its neighbours has nearly always lost its stone)
+			if (Above == 2) return { std::min(Intact, U < 0.85 ? Lo : Q), false };
+			if (Above == 1)
+			{
+				// (a step's edge: its stone fallen, or knocked off at a slant down toward the lower side, or still whole)
+				if (U < 0.3) return { std::min(Intact, Lo), false };
+				if (U < 0.78)
+				{
+					const bool bRight = Q > QR + 1e-6;
+					const double Down = std::max(bRight ? QR : QL, Q - 0.35 - 0.3 * V);
+					return { std::min(Intact, Q + (Down - Q) * (bRight ? T : 1.0 - T)), true };
+				}
+				return { std::min(Intact, Q), false };
+			}
+			// (in a flat run, now and then a stone broken off at a slant, or part way through its course)
+			if (U < 0.14)
+			{
+				const double Low = Lo + (0.25 + 0.45 * V) * (Q - Lo);
+				return { std::min(Intact, Q + (Low - Q) * (Unit(Mix(Hash(K ^ 0x7A8, static_cast<uint64_t>(F), Kp))) < 0.5 ? T : 1.0 - T)), true };
+			}
+			if (U < 0.22) return { std::min(Intact, Lo + (0.4 + 0.3 * V) * (Q - Lo)), true };
+			return { std::min(Intact, Q), false };
 		}
+		double TopOf(const Plan& P, const Face& Fc, int F, double A, double Scale = 1.0) { return TopAt(P, Fc, F, A, Scale).Z; }
 		bool Damaged(const Plan& P, const Face& Fc, int F, double A, double Scale = 1.0) { return TopOf(P, Fc, F, A, Scale) < IntactTop(P, Fc, A) - 1e-6; }
-		/** Whether the wall's top at a place is a slope its stones are cut to (a gable's rake, whole, or a shell's last one
-		 * ragged), not a broken top stepping by the courses. */
+		/** Whether the wall's top at a place is a line its stones are cut to (a gable's rake, whole; a shell's last one
+		 * ragged; a stone broken at a slant or part way), not a broken top's course line. */
 		bool Sloped(const Plan& P, const Face& Fc, int F, double A, double Scale = 1.0)
 		{
-			if (!Fc.bGable) return false;
-			if (P.Hurt == 3) return Fc.End == P.Keep;
-			return !Damaged(P, Fc, F, A, Scale);
+			if (KeptGable(P, Fc)) return true;
+			if (P.Hurt >= 2)
+			{
+				const TopHere H = TopAt(P, Fc, F, A, Scale);
+				if (H.Z < IntactTop(P, Fc, A) - 1e-6) return H.bRag;
+			}
+			return Fc.bGable;
+		}
+		/** A broken top's slant on a side of a piece's edge (where the stones' tops are cut to its line). */
+		bool RagAt(const Plan& P, const Face& Fc, int F, double A, double Scale = 1.0) { return P.Hurt >= 2 && TopAt(P, Fc, F, A, Scale).bRag; }
+		/** Whether a piece's edge breaks the wall's top: a step there, or a slant on either side of it. */
+		bool EdgeBreaks(const Plan& P, const Face& Fc, int F, double E, double Scale = 1.0)
+		{
+			const TopHere L = TopAt(P, Fc, F, E - 0.005, Scale), R = TopAt(P, Fc, F, E + 0.005, Scale);
+			return L.bRag || R.bRag || std::fabs(L.Z - R.Z) > 1e-6;
 		}
 
 		// ------------------------------------------------------------------ the plan from the spec
@@ -777,11 +820,22 @@ namespace LandHouse
 
 		// ------------------------------------------------------------------ colour of the walls
 
+		/** How much of a burnt opening's soot plume is at a place on its face: all of it at the opening's head, fanning
+		 * as it rises and mostly gone a metre and a half up. */
+		double Plume(const Opening& O, double A, double Z)
+		{
+			if (Z < O.Z1 - 0.3) return 0.0;
+			const double Rise = std::max(0.0, Z - O.Z1);
+			const double Wide = 0.5 * (O.A1 - O.A0) + 0.18 + 0.3 * Rise;
+			return std::exp(-Sq((A - 0.5 * (O.A0 + O.A1)) / Wide)) * std::exp(-std::max(0.0, Rise - 0.3) / 0.8) * Smooth(O.Z1 - 0.3, O.Z1, Z);
+		}
+
 		/** The weather on a wall at a place: damp and green at its foot, streaks from the sills and the gutters' ends,
 		 * lichen, a fire's soot above the openings and over the inside. */
 		Col Weathered(const Plan& P, const Face& Fc, int F, double A, double Z, Col C, bool bFine = false)
 		{
 			const uint64_t K = P.Key;
+			if (P.Hurt == 3) C = Scaled(C, 0.86); // (a shell's stone darkened all over by the fire)
 			C = Mixed(C, Rgb(96, 98, 78), 0.55 * Smooth(1.1, 0.0, Z));
 			if (bFine) C = Scaled(C, 1.0 - 0.07 * Smooth(0.2, 0.75, Noise01(A / 0.22, Z / 2.6, K ^ (0x57 + F)))); // rain streaks down the face
 			else C = Scaled(C, 0.975);
@@ -794,14 +848,9 @@ namespace LandHouse
 				if (O.What != 1 && Z < O.Z0)
 					for (double S : { O.A0 + 0.06, O.A1 - 0.06 })
 						C = Scaled(C, 1.0 - 0.22 * std::exp(-Sq((A - S) / 0.07)) * Smooth(O.Z0 - 2.2, O.Z0 - 0.1, Z));
-				// (the fire's soot licked up the wall from each opening, black over its head and fanning as it rose)
-				if (O.bCharred && Z > O.Z1 - 0.25)
-				{
-					const double Rise = Z - O.Z1;
-					const double Wide = 0.5 * (O.A1 - O.A0) + 0.12 + 0.45 * std::max(0.0, Rise);
-					const double S = std::exp(-Sq((A - 0.5 * (O.A0 + O.A1)) / Wide)) * std::exp(-std::max(0.0, Rise) / 3.2);
-					C = Mixed(C, P.K.Soot, 0.94 * S);
-				}
+				// (the fire's soot licked up the wall from each opening, black over its head and fanning as it rose, fading
+				// over a metre or so: the art director's round 3)
+				if (O.bCharred) C = Mixed(C, P.K.Soot, 0.95 * Plume(O, A, Z));
 			}
 			// (the gutters' ends spill down the long walls' corners)
 			if (!Fc.bGable)
@@ -997,7 +1046,6 @@ namespace LandHouse
 			const Face Fc = FaceOf(P, F);
 			const int CornerStart = (F + 3) % 4, CornerEnd = F;
 			auto Top = [&](double A) { return TopOf(P, Fc, F, A); };
-			const bool bKeptFace = KeptGable(P, Fc);
 			// (where the piece of the broken top a place is in ends)
 			auto NextEdge = [&](double X) {
 				double E0 = 0.0, E1 = 0.0;
@@ -1063,7 +1111,7 @@ namespace LandHouse
 						if (Ln > 1.0) Ln = 0.5 * (F1 - A);
 						// (nor across a step down in it, nor, under a ragged rake, across a piece's edge: the stone ends there)
 						for (double Bd = NextEdge(A); Bd < A + Ln - 0.03; Bd = NextEdge(Bd))
-							if ((!Sloped(P, Fc, F, Bd + 0.01) && Top(Bd + 0.01) < Z1 - 1e-6) || (bKeptFace && Bd > A + 0.1 && Z1 > LowTop(A, A + Ln) - 1e-6))
+							if ((!Sloped(P, Fc, F, Bd + 0.01) && Top(Bd + 0.01) < Z1 - 1e-6) || (Bd > A + 0.1 && (RagAt(P, Fc, F, Bd - 0.01) || RagAt(P, Fc, F, Bd + 0.01)) && Z1 > LowTop(A, A + Ln) - 1e-6))
 							{
 								Ln = Bd - A;
 								break;
@@ -1211,16 +1259,23 @@ namespace LandHouse
 					ZB.push_back(O.Z0);
 					ZB.push_back(O.Z1);
 				}
-			// (a broken top's steps, at its pieces' edges; a shell's last gable cut to its ragged rake piece by piece)
+			// (a broken top's steps and slants, at its pieces' edges; a shell's last gable cut to its ragged rake piece by piece)
 			const bool bKept = KeptGable(P, Fc);
 			if (P.Hurt >= 2)
 				for (double E : PieceEdges(P, F, Fc.Len, 1.0))
-					if (bKept || std::fabs(Top(E - 0.005) - Top(E + 0.005)) > 1e-6) AB.push_back(E);
+					if (EdgeBreaks(P, Fc, F, E)) AB.push_back(E);
 			std::sort(AB.begin(), AB.end());
 			AB.erase(std::unique(AB.begin(), AB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.012; }), AB.end());
 			std::sort(ZB.begin(), ZB.end());
 			ZB.erase(std::unique(ZB.begin(), ZB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.012; }), ZB.end());
 			const bool bInnerAll = bInside && P.Hurt >= 2;
+			// (a shell's: more rows, for its inside face's soot to vary up it)
+			if (bInside && P.Hurt == 3)
+			{
+				for (double Z = 1.2; Z < P.EW - 0.3; Z += 1.2) ZB.push_back(Z);
+				std::sort(ZB.begin(), ZB.end());
+				ZB.erase(std::unique(ZB.begin(), ZB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.012; }), ZB.end());
+			}
 			const double InnerFrom = P.Hurt == 1 ? std::max(1, P.S.Storeys) * 2.75 + 0.1 : 0.0;
 			for (size_t I = 0; I + 1 < AB.size(); ++I)
 			{
@@ -1228,6 +1283,7 @@ namespace LandHouse
 				const double TM = Top(AM);
 				const bool bSlope = Sloped(P, Fc, F, AM);
 				const bool bCut = !bSlope && Damaged(P, Fc, F, AM);
+				const bool bBrokeSlope = bSlope && (bKept || Damaged(P, Fc, F, AM));
 				for (size_t J = 0; J + 1 < ZB.size(); ++J)
 				{
 					const double Z0 = ZB[J], Z1 = ZB[J + 1], ZM = 0.5 * (Z0 + Z1);
@@ -1246,7 +1302,7 @@ namespace LandHouse
 					if (std::max(L0, L1) <= Z0 + 1e-6) continue;
 					const double T0 = std::clamp(L0, Z0, Z1), T1 = std::clamp(L1, Z0, Z1);
 					// (a shell's last gable: its ragged rake's top, the wall's core showing, sooted)
-					if (bKept && bSlope)
+					if (bBrokeSlope)
 						SlopeCap(B, Fc, A0, A1, L0, L1, Z0, Z1, P.Thick, Mixed(Mixed(P.K.Mortar, Rgb(120, 110, 96), 0.5 + 0.3 * Noise01(AM / 0.3, 2.0, P.Key ^ 0xC0F)), P.K.Soot, 0.6));
 					auto MC = [&](double A, double Z) { return Weathered(P, Fc, F, A, Z, Varied(P.K.Mortar, 0.96 + 0.06 * Noise(A / 0.7, Z / 0.7, P.Key ^ 0x30), 0.0), true); };
 					Cut(B, Fc, A0, A1, Z0, Z1, L0, L1, 0.0, Fc.N, MC);
@@ -1256,7 +1312,12 @@ namespace LandHouse
 					{
 						auto PC = [&](double A, double Z) {
 							Col C = Varied(P.K.Plaster, 0.95 + 0.08 * Noise(A / 1.3, Z / 1.1, P.Key ^ 0x9A), 0.0);
-							if (P.Hurt == 3) C = Mixed(C, P.K.Soot, 0.45 + 0.45 * Smooth(0.3, 3.5, Z) * (0.35 + 0.65 * Noise01(A / 0.8, Z / 0.6, P.Key ^ 0x9B)));
+							if (P.Hurt == 3)
+							{
+								C = Mixed(C, P.K.Soot, 0.5 + 0.42 * Smooth(0.3, 3.0, Z) * (0.3 + 0.7 * Noise01(A / 0.7, Z / 0.5, P.Key ^ 0x9B)));
+								for (const Opening& O : P.Ops)
+									if (O.Face == F) C = Mixed(C, P.K.Soot, 0.9 * Plume(O, A, Z));
+							}
 							else if (P.Hurt == 2) C = Mixed(C, P.K.Soot, 0.25 * Noise01(A / 0.8, Z / 0.6, P.Key ^ 0x9C));
 							return Mixed(C, Rgb(70, 66, 58), 0.4 * Smooth(0.8, 0.0, Z));
 						};
@@ -1278,6 +1339,68 @@ namespace LandHouse
 						const double Lo = std::min(TN, TL), Hi = std::max(TN, TL);
 						const Col Core = Mixed(P.K.Mortar, Rgb(118, 108, 94), 0.5);
 						B.Quad1(At(Fc, A1, Lo, 0.0), At(Fc, A1, Hi, 0.0), At(Fc, A1, Hi, -P.Thick), At(Fc, A1, Lo, -P.Thick), Scaled(Core, 0.9), Fc.T * (TN < TL ? 1.0 : -1.0));
+					}
+				}
+			}
+			// A shell's inside: its plaster fallen away in patches, the rubble behind it showing, sooted (the art director's
+			// round 3: not flat, clean plaster like card).
+			if (bInside && P.Hurt == 3)
+			{
+				Rng R(Hash(P.Key ^ 0x9A7C, static_cast<uint64_t>(F)));
+				const int N = static_cast<int>(Fc.Len * 1.3);
+				for (int K = 0; K < N; ++K)
+				{
+					const double W = R.Range(0.45, 1.8), Hh = R.Range(0.35, 1.2);
+					const double PA = R.Range(0.35 + 0.5 * W, std::max(0.36 + 0.5 * W, Fc.Len - 0.35 - 0.5 * W)), PZ = R.Range(0.6, 4.6);
+					const uint64_t H = Hash(P.Key ^ 0x9A7D, static_cast<uint64_t>(F * 64 + K));
+					if (PZ + 0.5 * Hh > LowTop(PA - 0.5 * W, PA + 0.5 * W) - 0.1) continue;
+					bool bHit = false;
+					for (const Opening& O : P.Ops)
+						if (O.Face == F && PA + 0.5 * W > O.A0 - 0.12 && PA - 0.5 * W < O.A1 + 0.12 && PZ + 0.5 * Hh > O.Z0 - 0.12 && PZ - 0.5 * Hh < O.Z1 + 0.12) bHit = true;
+					if (bHit) continue;
+					auto RC = [&](double Z, uint64_t Hs) {
+						const Col C = Varied(Mixed(StoneOwn(P, Hs), P.K.Soot, 0.15 + 0.25 * Smooth(0.5, 3.5, Z)), 0.85 + 0.3 * Unit(Mix(Hs ^ 0x5A)), 0.0);
+						return Mixed(C, Rgb(70, 66, 58), 0.3 * Smooth(0.8, 0.0, Z));
+					};
+					// (the plaster's broken edge, paler than its sooted face, round a hollow of dark mortar with the rubble's
+					// stones standing in it, less sooted than the plaster that covered them)
+					constexpr int NV = 13;
+					double Rr[NV];
+					for (int J = 0; J < NV; ++J) Rr[J] = J % 2 ? 0.62 + 0.3 * R.Next() : 0.85 + 0.15 * R.Next(); // (ragged: in and out)
+					auto Ring = [&](double D, double Grow, Col C) {
+						const uint32_t IM = B.Vert(At(Fc, PA, PZ, D), Fc.N * -1.0, C);
+						uint32_t Ix[NV];
+						for (int J = 0; J < NV; ++J)
+						{
+							const double Ang = 2.0 * Pi * J / NV;
+							Ix[J] = B.Vert(At(Fc, PA + (0.5 * W * Rr[J] + Grow) * std::cos(Ang), PZ + (0.5 * Hh * Rr[J] + Grow) * std::sin(Ang), D), Fc.N * -1.0, C);
+						}
+						for (int J = 0; J < NV; ++J) B.Tri(IM, Ix[J], Ix[(J + 1) % NV], Fc.N * -1.0);
+					};
+					Ring(-P.Thick - 0.006, 0.035, Mixed(P.K.Plaster, P.K.Soot, 0.42 + 0.2 * Smooth(0.5, 3.5, PZ)));
+					Ring(-P.Thick - 0.014, 0.0, Mixed(Mixed(P.K.Mortar, P.K.Soot, 0.72), Rgb(70, 66, 58), 0.3 * Smooth(0.8, 0.0, PZ)));
+					const double SD = -P.Thick - 0.024;
+					for (double SZ = PZ - 0.5 * Hh; SZ < PZ + 0.5 * Hh; )
+					{
+						const double CH = R.Range(0.11, 0.2);
+						for (double SA = PA - 0.5 * W - R.Range(0.0, 0.2); SA < PA + 0.5 * W; )
+						{
+							const double SL = R.Range(0.16, 0.4);
+							double A0 = SA + 0.015, A1 = SA + SL - 0.015;
+							const double Z0 = SZ + 0.015, Z1 = SZ + CH - 0.015;
+							SA += SL;
+							// (cut to the hollow, the stones at its edge going in under the plaster's broken lip)
+							const double FZ = std::max(std::fabs(Z0 - PZ), std::fabs(Z1 - PZ)) / (0.5 * Hh * 0.7);
+							if (FZ >= 1.0) continue;
+							const double HW = 0.5 * W * 0.7 * std::sqrt(1.0 - FZ * FZ);
+							A0 = std::max(A0, PA - HW);
+							A1 = std::min(A1, PA + HW);
+							if (A1 - A0 < 0.05) continue;
+							const uint64_t Hs = Hash(H, static_cast<uint64_t>(std::llround(SA * 100.0) * 1000 + std::llround(SZ * 100.0)));
+							const Col C = RC(0.5 * (Z0 + Z1), Hs);
+							B.Quad1(At(Fc, A1, Z0, SD), At(Fc, A0, Z0, SD), At(Fc, A0, Z1, SD), At(Fc, A1, Z1, SD), C, Fc.N * -1.0);
+						}
+						SZ += CH;
 					}
 				}
 			}
@@ -1947,9 +2070,9 @@ namespace LandHouse
 					const double X = RX * T * std::cos(Ang) * Lump, Y = RY * T * std::sin(Ang) * Lump;
 					const double Z = High * (1.0 - T * T) * (0.78 + 0.32 * Noise01(A * 1.7, R * 0.7, Seed ^ 9)) - (R == NR ? 0.9 : 0.0);
 					Pt.push_back({ O.X + X * C - Y * S, O.Y + X * S + Y * C, O.Z + Z });
-					Col K = Varied(Mixed(P.K.Stone, Rgb(104, 92, 76), 0.3 + 0.35 * Noise01(A * 2.1, R * 1.9, Seed ^ 3)), (bBlocks ? 0.8 : 1.0) + 0.25 * Unit(Hash(Seed, static_cast<uint64_t>(R * NA + A))), 0.0);
-					// (a plain level's heap a little lighter: it stands for the lit faces of the stones the near one lays on it)
-					if (P.Hurt == 3) K = Mixed(K, P.K.Soot, 0.35);
+					// (the wall's own stone, broken, its mortar's dust over it: the art director's round 3)
+					Col K = Varied(Mixed(P.K.StoneMean, Rgb(158, 148, 130), 0.18 + 0.32 * Noise01(A * 2.1, R * 1.9, Seed ^ 3)), (bBlocks ? 0.9 : 1.0) + 0.2 * Unit(Hash(Seed, static_cast<uint64_t>(R * NA + A))), 0.0);
+					if (P.Hurt == 3) K = Mixed(K, P.K.Soot, 0.12);
 					Cl.push_back(K);
 				}
 			for (int R = 0; R < NR; ++R)
@@ -2137,11 +2260,10 @@ namespace LandHouse
 				for (double E : { 0.5 * Fc.Len, 0.5 * Fc.Len - P.Vb, 0.5 * Fc.Len + P.Vb }) Hard.push_back({ E, -1e9 });
 			if (P.Hurt >= 2)
 			{
-				const bool bKept = KeptGable(P, Fc);
 				for (double E : PieceEdges(P, F, Fc.Len, 1.0))
 				{
 					const double Lo = std::min(Top(E - 0.005), Top(E + 0.005));
-					if (bKept) Hard.push_back({ E, Lo - 0.6 });
+					if (RagAt(P, Fc, F, E - 0.005) || RagAt(P, Fc, F, E + 0.005)) Hard.push_back({ E, Lo - 0.6 });
 					else if (std::fabs(Top(E - 0.005) - Top(E + 0.005)) > 1e-6) Hard.push_back({ E, Lo });
 				}
 			}
@@ -2255,7 +2377,7 @@ namespace LandHouse
 			const bool bKept = KeptGable(P, Fc);
 			if (P.Hurt >= 2)
 				for (double E : PieceEdges(P, F, Fc.Len, Sc))
-					if (bKept || std::fabs(Top(E - 0.005) - Top(E + 0.005)) > 1e-6) AB.push_back(E);
+					if (EdgeBreaks(P, Fc, F, E, Sc)) AB.push_back(E);
 			std::sort(AB.begin(), AB.end());
 			AB.erase(std::unique(AB.begin(), AB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.012; }), AB.end());
 			std::sort(ZB.begin(), ZB.end());
@@ -2268,6 +2390,7 @@ namespace LandHouse
 				const double TM = Top(AM);
 				const bool bSlope = Sloped(P, Fc, F, AM, Sc);
 				const bool bCut = !bSlope && Damaged(P, Fc, F, AM, Sc);
+				const bool bBrokeSlope = bSlope && (bKept || Damaged(P, Fc, F, AM, Sc));
 				double L0 = 1e9, L1 = 1e9;
 				if (bCut) L0 = L1 = TM;
 				else if (bSlope)
@@ -2312,7 +2435,7 @@ namespace LandHouse
 					}
 					if (bCut && TM < Z1 - 1e-6 && TM > Z0 + 1e-6)
 						B.Quad1(At(Fc, A0, TM, 0.0), At(Fc, A1, TM, 0.0), At(Fc, A1, TM, -P.Thick), At(Fc, A0, TM, -P.Thick), P.Hurt == 3 ? Mixed(Core, P.K.Soot, 0.3) : Core, Up);
-					if (bKept && bSlope) SlopeCap(B, Fc, A0, A1, L0, L1, Z0, Z1, P.Thick, Mixed(Core, P.K.Soot, 0.6));
+					if (bBrokeSlope) SlopeCap(B, Fc, A0, A1, L0, L1, Z0, Z1, P.Thick, P.Hurt == 3 ? Mixed(Core, P.K.Soot, 0.6) : Core);
 				}
 				// (the step between this cell's top and the next one's; none along a slope)
 				if (I + 2 < AB.size() && !(bSlope && Sloped(P, Fc, F, A1 + 0.005, Sc)))
@@ -2443,6 +2566,7 @@ namespace LandHouse
 						if (!DeckThere(P, Side, XM, SM)) continue;
 						const uint64_t H = Hash(P.Key, 0xBA4D, static_cast<uint64_t>(K * 256 + I * 2 + (Side > 0)));
 						Col C = Varied(P.K.Roof, (bMid ? 0.95 : 0.8) + 0.08 * Unit(H), 0.0);
+						if (!bMid && P.S.Roof == 0) C = Rgb(C.R, C.G * 1.01, C.B * 1.085); // (the far slate keeps its blue: the art director's round 3)
 						C = Mixed(C, P.S.Roof == 1 ? Rgb(96, 92, 62) : Rgb(138, 140, 118), 0.2 * Smooth(2.2, 0.0, S0));
 						if (P.Hurt == 1) C = Mixed(C, P.K.Soot, 0.7 * Smooth(1.8, 1.0, HoleDist(P, Side, XM, SM)));
 						if (P.Hurt == 2) C = Mixed(C, P.K.Soot, 0.6 * Smooth(CutAt(P, Side, SM) - 1.4, CutAt(P, Side, SM), P.Broken * XM));

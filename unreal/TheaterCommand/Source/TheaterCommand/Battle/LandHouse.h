@@ -31,8 +31,10 @@
  * showing, slates slipped round it and fallen below, the attic open; a gable fallen, the walls broken down to it stone by
  * stone, the roof's end broken off over protruding rafters and purlins, the upper floor's joists sticking out over a
  * heap of rubble, the chimney gone; a burnt-out shell, roofless, its walls' tops broken stone by stone along a ragged
- * line (their steps' edges worn away, so none stands up alone), rubble heaped at their feet, soot licked up above every
- * opening, charred joist stubs, fallen beams, one gable left standing, ragged along its rake, with its chimney.
+ * line (their steps' edges worn away, so none stands up alone; here and there a break slanting where the stones came off
+ * at an angle), rubble of the walls' own stone heaped at their feet under its dust, the stone darkened by the fire, a
+ * black plume of soot licked up over every opening, the inside's plaster sooted and fallen away in patches to the
+ * stone, charred joist stubs, fallen beams, one gable left standing, ragged along its rake, with its chimney.
  *
  * Its own frame: metres, x along its length, y across it (its door on the +y side), z up from its floor (the floor
  * LandField's FloorOf gives it); the origin at the middle of its footprint. Placed at a house's middle, turned by the
