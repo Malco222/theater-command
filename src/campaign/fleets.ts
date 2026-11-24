@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptByHand, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -557,8 +557,9 @@ export function shoreAI(g: Game, nat: string): void {
       continue;
     }
     // A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast, but only into
-    // a sea where its side would be much the stronger with it there. Raiders keep to their own work.
-    if (f.duty === 'raid' || !(FLEETS.ai.sortie > 0)) continue;
+    // a sea where its side would be much the stronger with it there. Raiders keep to their own work, and a fleet the
+    // player keeps in harbour by his own order stays there (1.5.1).
+    if (f.duty === 'raid' || !(FLEETS.ai.sortie > 0) || keptByHand(g, f)) continue;
     const mine = fleetPower(g, f);
     let at = -1, best: Region | null = null, bv = 0;
     for (const z of fleetReach(g, f)) {

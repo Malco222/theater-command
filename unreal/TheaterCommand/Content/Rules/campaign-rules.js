@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1a46fa65 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a81fba89 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -21548,7 +21548,7 @@
         send(here);
         continue;
       }
-      if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready) continue;
+      if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready || keptByHand(g2, c)) continue;
       const power = fleetPower(g2, c);
       const keep = { zone: c.zone, stance: c.stance };
       let at4 = -1, plan = null;
@@ -23641,7 +23641,7 @@
         if (best2) bombard(g2, f, best2, aim(best2));
         continue;
       }
-      if (f.duty === "raid" || !(FLEETS.ai.sortie > 0)) continue;
+      if (f.duty === "raid" || !(FLEETS.ai.sortie > 0) || keptByHand(g2, f)) continue;
       const mine4 = fleetPower(g2, f);
       let at4 = -1, best = null, bv = 0;
       for (const z of fleetReach(g2, f)) {
@@ -33928,12 +33928,14 @@
     const ev = FLEETS.harbour?.[nat];
     return !!ev && g2.flags.open === 1 && nat !== g2.human && !!g2.flags[ev];
   }
+  var keptByHand = (g2, f) => f.ordered === true && f.nat === g2.human;
   function navalAI(g2, nat, orders) {
     if (byHand(g2, nat, "navy")) return;
     const n = g2.nations[nat];
     let cross = null;
     let theirs = null;
     for (const f of fleetsOf(g2, nat)) {
+      if (keptByHand(g2, f)) continue;
       const home = () => {
         sail(g2, f, f.home, "port");
       };
@@ -39708,6 +39710,7 @@
     fallenCapitalAt: () => fallenCapitalAt,
     favoured: () => favoured,
     fieldworksLeft: () => fieldworksLeft,
+    fleetKeptByHand: () => fleetKeptByHand,
     fleetOptions: () => fleetOptions,
     fleetView: () => fleetView,
     fleetsInSight: () => fleetsInSight,
@@ -39722,6 +39725,7 @@
     governmentOf: () => governmentOf,
     guardOnly: () => guardOnly,
     gunsLeftAlone: () => gunsLeftAlone,
+    handBackFleet: () => handBackFleet,
     headWantedOf: () => headWantedOf,
     historyStops: () => historyStops,
     humanUp: () => humanUp,
@@ -44049,6 +44053,7 @@
   function handOver(g2, desk, staff, now = false) {
     if (!setDesk(g2, desk, staff)) return false;
     const nat = g2.human;
+    if (desk === "navy" && staff) for (const f of g2.fleets) delete f.ordered;
     if (staff && now && nat !== null && g2.nations[nat]?.alive && !deskRan(g2, desk)) runDesk(g2, nat, desk);
     return true;
   }
@@ -45123,13 +45128,24 @@
     const f = g2.fleets.find((x) => x.id === id);
     return f && f.nat === g2.human && current(g2) === f.nat ? f : null;
   };
+  var hisOrder = (f, ok) => {
+    if (ok) f.ordered = true;
+    return ok;
+  };
   function orderFleet(g2, id, zone, stance2) {
     const f = myFleet(g2, id);
-    return !!f && sail(g2, f, zone, stance2);
+    return !!f && hisOrder(f, sail(g2, f, zone, stance2));
   }
   function orderRebase(g2, id, region) {
     const f = myFleet(g2, id);
-    return !!f && rebase(g2, f, g2.regions[region]);
+    return !!f && hisOrder(f, rebase(g2, f, g2.regions[region]));
+  }
+  var fleetKeptByHand = (g2, id) => g2.fleets.some((f) => f.id === id && f.nat === g2.human && f.ordered === true);
+  function handBackFleet(g2, id) {
+    const f = myFleet(g2, id);
+    if (!f || !f.ordered) return false;
+    delete f.ordered;
+    return true;
   }
   var capitalPlans = (g2) => plansView(g2);
   function fleetView(g2, id) {
@@ -45162,7 +45178,7 @@
   }
   function orderEscort(g2, id, lane) {
     const f = myFleet(g2, id);
-    return !!f && escortLane(g2, f, lane);
+    return !!f && hisOrder(f, escortLane(g2, f, lane));
   }
   function previewBombard(g2, id, region, what) {
     const f = myFleet(g2, id);
@@ -45178,7 +45194,9 @@
   }
   function orderSplit(g2, id, ships, name) {
     const f = myFleet(g2, id);
-    return f && detach(g2, f, ships, name)?.id || -1;
+    const sq = f ? detach(g2, f, ships, name) : null;
+    if (sq) sq.ordered = true;
+    return sq?.id || -1;
   }
   function orderMerge(g2, id, into) {
     const a = myFleet(g2, id), b = myFleet(g2, into);
@@ -61681,8 +61699,10 @@ ${next.text}` : ""}` : next ? next.also : "";
           options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: "Goes for merchant ships and avoids a fight with the enemy fleet.", ok: up && !here, why: here ? "It is doing so now." : notNow });
         }
         options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port", why: f2.stance === "port" ? "It is in harbour now." : notNow });
+        if (staffRunsDesk(s, "navy") && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: "Hand it back to your admirals", detail: HAND_BACK_TIP, ok: up, why: notNow });
       }
-      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2], options };
+      const who = mine5 ? whoSails(s, id) : "";
+      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2, ...who ? [who] : []], options };
     }
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
@@ -61718,11 +61738,17 @@ ${next.text}` : ""}` : next ? next.also : "";
       options
     };
   }
+  function whoSails(s, id) {
+    if (!staffRunsDesk(s, "navy")) return "";
+    return fleetKeptByHand(s, id) ? "Under your own orders: your admirals leave it where you send it." : "Your admirals sail it each month. Give it an order yourself and it stays where you send it.";
+  }
+  var HAND_BACK_TIP = "Your admirals sail it again from next month, with the rest of the navy.";
   function forceOrder(key6) {
     const s = game();
     const [what, id, a, b] = key6.split(":");
     let ok = false;
-    if (what === "fleet") ok = orderFleet(s, Number(id), Number(a), b);
+    if (what === "fleet" && a === "staff") ok = handBackFleet(s, Number(id));
+    else if (what === "fleet") ok = orderFleet(s, Number(id), Number(a), b);
     else if (what === "fleetbase") ok = orderRebase(s, Number(id), Number(a));
     else if (what === "air") ok = orderAir(s, Number(id), a, Number(b));
     else if (what === "airbase") ok = orderAirBase(s, Number(id), Number(a));
@@ -62417,13 +62443,15 @@ ${next.text}` : ""}` : next ? next.also : "";
       return { nat: card.nat, title: f?.name ?? "A fleet", lines: [f ? `${f.ships} ships. ${f.doing}.` : ""], buttons: [{ label: "JOIN IT", act: `fleetmerge:${id}:${other2}`, ok: up, tip: "The two become one fleet under the other's flag and orders." }] };
     });
     const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : "";
+    const who = whoSails(s, id);
     return {
       id: `fleet:${id}`,
       title: card.name.toUpperCase(),
       headline: `${card.doing}`,
-      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.`,
+      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ""}`,
       top: [
         { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: "Safe from the enemy fleet, and takes no part at sea." },
+        ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
         ...wingsOfFleet(s, id).length ? [{ label: "CARRIER AIRCRAFT", act: `open:wings:${id}`, ok: true, tip: "The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour." }] : []
       ],
       sections: [
@@ -63704,6 +63732,10 @@ ${standing5}`,
     } else if (part[0] === "fleet") {
       ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3]);
       note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The order is given"}.` : "That order cannot be given now.";
+      return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
+    } else if (part[0] === "fleetstaff") {
+      ok = handBackFleet(s, Number(part[1]));
+      note4 = ok ? `${fleetView(s, Number(part[1]))?.name ?? "The fleet"} is your admirals' to sail again from next month.` : "It cannot be handed back now.";
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetescort") {
       ok = orderEscort(s, Number(part[1]), part.slice(2).join(":"));

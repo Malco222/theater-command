@@ -1479,16 +1479,37 @@ const myFleet = (g: Game, id: number): Fleet | null => {
   return f && f.nat === g.human && current(g) === f.nat ? f : null;
 };
 
+/**
+ * A fleet the player has given an order himself is his from then on: where his admirals run the navy for him they
+ * leave it where he sent it, and do not order it back to its old beat next month (1.5.1; Brian, 24 November 2026
+ * 18:32Z: "when i move my navy they go right back to where they were before the next turn").
+ */
+const hisOrder = (f: Fleet, ok: boolean): boolean => {
+  if (ok) f.ordered = true;
+  return ok;
+};
+
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  return !!f && sail(g, f, zone, stance);
+  return !!f && hisOrder(f, sail(g, f, zone, stance));
 }
 
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  return !!f && rebase(g, f, g.regions[region]);
+  return !!f && hisOrder(f, rebase(g, f, g.regions[region]));
+}
+
+/** True for one of the player's fleets that he has ordered himself, which his admirals leave where he sent it. */
+export const fleetKeptByHand = (g: Game, id: number): boolean => g.fleets.some((f) => f.id === id && f.nat === g.human && f.ordered === true);
+
+/** Hands one of the player's fleets back to his admirals: they sail it again from their next month's orders. */
+export function handBackFleet(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  if (!f || !f.ordered) return false;
+  delete f.ordered;
+  return true;
 }
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
@@ -1559,7 +1580,7 @@ export function previewEscort(g: Game, id: number, lane: string): EscortPlan | n
 /** Binds one of the player's fleets to a shipping lane as its escort. */
 export function orderEscort(g: Game, id: number, lane: string): boolean {
   const f = myFleet(g, id);
-  return !!f && escortLane(g, f, lane);
+  return !!f && hisOrder(f, escortLane(g, f, lane));
 }
 
 /** What shelling a coast with one of the player's fleets would do: the troops there, or the works of its city. */
@@ -1583,7 +1604,10 @@ export function whyNotSplit(g: Game, id: number, ships: Partial<Ships>): string 
 /** Splits ships off from one of the player's fleets as a squadron of their own. Returns the new fleet's id, or -1. */
 export function orderSplit(g: Game, id: number, ships: Partial<Ships>, name?: string): number {
   const f = myFleet(g, id);
-  return (f && detach(g, f, ships, name)?.id) || -1;
+  const sq = f ? detach(g, f, ships, name) : null;
+  // The squadron is of his own making: it stays where it was split off until he orders it (1.5.1).
+  if (sq) sq.ordered = true;
+  return sq?.id || -1;
 }
 
 /** Joins one of the player's fleets to another in the same harbour or the same sea. */

@@ -2328,6 +2328,12 @@ export function keepsHarbour(g: Game, nat: string): boolean {
   return !!ev && g.flags.open === 1 && nat !== g.human && !!g.flags[ev];
 }
 
+/**
+ * True for a fleet of the player's that he has given an order himself: his admirals, when they run the navy for him,
+ * leave it where he sent it (1.5.1; Brian, 24 November 2026 18:32Z). They neither move it nor take it out of harbour.
+ */
+export const keptByHand = (g: Game, f: Fleet): boolean => f.ordered === true && f.nat === g.human;
+
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
   // The player's fleets are his own to order, unless he has handed the navy to his admirals (depth.ts).
@@ -2336,6 +2342,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   let cross: { off: Set<number>; way: Set<number> } | null = null;
   let theirs: { off: Set<number>; way: Set<number> } | null = null;
   for (const f of fleetsOf(g, nat)) {
+    // A fleet the player has ordered himself stays where he sent it (1.5.1).
+    if (keptByHand(g, f)) continue;
     const home = (): void => { sail(g, f, f.home, 'port'); };
     if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home(); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
