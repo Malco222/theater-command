@@ -4,6 +4,7 @@
 
 #include "Campaign/EnemyMoves.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -39,6 +40,46 @@ namespace
 	size_t Pieces(const FLayer& Layer)
 	{
 		return Layer.Strokes.size() + Layer.Triangles.size();
+	}
+
+	/** The dark edges in Under (the contact shadows lie lower, under them). */
+	std::vector<FStroke> EdgeStrokes(const FLayer& Under, bool bShadows = false)
+	{
+		std::vector<FStroke> Out;
+		for (const FStroke& S : Under.Strokes)
+		{
+			if ((S.Lift < 0.43) == bShadows)
+			{
+				Out.push_back(S);
+			}
+		}
+		return Out;
+	}
+
+	size_t EdgeTriangles(const FLayer& Under, bool bShadows = false)
+	{
+		size_t Count = 0;
+		for (const FTriangle& T : Under.Triangles)
+		{
+			Count += (T.Lift < 0.43) == bShadows ? 1 : 0;
+		}
+		return Count;
+	}
+
+	/** How near P comes to a line of points. */
+	double NearestOnLine(const std::vector<FPoint>& Line, const FPoint& P)
+	{
+		double Best = 1e18;
+		for (size_t K = 1; K < Line.size(); ++K)
+		{
+			const FPoint& A = Line[K - 1];
+			const FPoint& B = Line[K];
+			const double Dx = B.X - A.X, Dy = B.Y - A.Y;
+			const double Length2 = Dx * Dx + Dy * Dy;
+			const double Share = Length2 > 0.0 ? std::clamp(((P.X - A.X) * Dx + (P.Y - A.Y) * Dy) / Length2, 0.0, 1.0) : 0.0;
+			Best = std::min(Best, std::hypot(P.X - (A.X + Dx * Share), P.Y - (A.Y + Dy * Share)));
+		}
+		return Best;
 	}
 
 	/** The farthest any laid point lies from P. */
@@ -129,9 +170,11 @@ int main(int Count, char** Args)
 		Check(HeadTip(D, Whole), "whole, the head is laid");
 		Check(Whole.X > Early.X + 20.0, "the head's point moves out as the arrow grows");
 		Check(std::fabs(Whole.X - (65.0 - 4.5)) < 0.5 && std::fabs(Whole.Y) < 0.5, "whole, the point stops short of the place it came to, on its line");
-		Check(D.Under.Strokes.size() == D.Over.Strokes.size() && D.Under.Triangles.size() == D.Over.Triangles.size(), "every ink has its dark edge under it");
-		Check(D.Under.Strokes[0].Half > D.Over.Strokes[0].Half, "the edge shows round the ink");
-		Check(D.Under.Strokes[0].Lift < D.Over.Strokes[0].Lift, "the edge lies under the ink");
+		const std::vector<FStroke> Edges = EdgeStrokes(D.Under), Shadows = EdgeStrokes(D.Under, true);
+		Check(Edges.size() == D.Over.Strokes.size() && EdgeTriangles(D.Under) == D.Over.Triangles.size(), "every ink has its dark edge under it");
+		Check(Edges[0].Half > D.Over.Strokes[0].Half, "the edge shows round the ink");
+		Check(Edges[0].Lift < D.Over.Strokes[0].Lift, "the edge lies under the ink");
+		Check(!Shadows.empty() && EdgeTriangles(D.Under, true) == D.Over.Triangles.size() && Shadows[0].Half > Edges[0].Half && Shadows[0].Ink.A < 80, "a soft contact shadow lies under the arrow and its head, wider than its edge and faint");
 		Check(Grown(0.0) == 0.0 && Grown(GrowSeconds) == 1.0 && Grown(GrowSeconds * 0.5) > 0.5, "the growth is eased: fast at first, whole at its time");
 	}
 	// Two arrows on one road bow apart.
@@ -162,6 +205,14 @@ int main(int Count, char** Args)
 			bRed = bRed || (S.bClosed && S.Ink.R > 200 && S.Ink.G < 60);
 		}
 		Check(bFilled && bRed, "a place lost: a red ring, faintly filled");
+		// (art director, 24 Nov) crossed sabres in the ring, not an X: blades laid as triangles inside it, red where it was lost
+		size_t Blades = 0;
+		for (const FTriangle& T : D.Over.Triangles)
+		{
+			const bool bInside = std::hypot(T.A.X - Hit.To.X, T.A.Y - Hit.To.Y) < 6.2 && std::hypot(T.C.X - Hit.To.X, T.C.Y - Hit.To.Y) < 6.2;
+			Blades += bInside && T.Ink.R > 200 && T.Ink.G < 60 ? 1 : 0;
+		}
+		Check(Blades >= 40, "the battle mark holds two crossed sabres, red where the place was lost");
 		Hit.bTaken = false;
 		Lay({ Hit }, 1.0, D);
 		bool bBrass = false;
@@ -173,7 +224,33 @@ int main(int Count, char** Args)
 		FArrow Landing = Hit;
 		Landing.bFrom = false;
 		Lay({ Landing }, 1.0, D);
-		Check(D.Over.Triangles.empty() && Farthest(D, Landing.To) < 10.0, "where it came from is not known: the mark alone, round the place");
+		Check(Farthest(D, Landing.To) < 10.0, "where it came from is not known: the mark alone, round the place");
+	}
+	// (art director, 24 Nov) His own corps' fall-back on the same road as an attack keeps clear of it.
+	{
+		const std::vector<FArrow> Road{ Make(EKind::Attack, 0.0, 0.0, 70.0, 0.0), Make(EKind::Fell, 0.0, 0.0, 70.0, 0.0) };
+		FDrawing D;
+		Lay(Road, 1.0, D);
+		std::vector<FPoint> Shaft;
+		double Clear = 1e18;
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			if (!S.bClosed && S.Ink.R == 214 && S.Points.size() > 4 && Shaft.empty())
+			{
+				Shaft = S.Points;
+			}
+		}
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			if (S.Ink.R == 238 && S.Ink.G == 230)
+			{
+				for (const FPoint& P : S.Points)
+				{
+					Clear = std::min(Clear, NearestOnLine(Shaft, P));
+				}
+			}
+		}
+		Check(!Shaft.empty() && Clear > 2.2, "a fall-back on an attack's road keeps to the other side of it, both reading");
 	}
 	// A move away from him is fainter; his own retreat is dashed; a peace-time army is amber.
 	{

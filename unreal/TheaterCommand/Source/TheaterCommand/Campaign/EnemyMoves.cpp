@@ -63,6 +63,13 @@ namespace TheaterEnemyMoves
 		constexpr double EdgeOver = 0.55; // how far the dark edge shows round the ink
 		constexpr double MarkRadius = 6.2; // the battle mark's ring
 		constexpr int CurveSteps = 24;
+		// (art director, 24 Nov) His own corps' fall-back, where it shares its road with an attack or a move, keeps to the
+		// other side of it, and this far off its line, so that both read.
+		constexpr double FellAside = 2.6;
+		// (art director, 24 Nov) A soft contact shadow under every arrow and mark, so that it lies on the table and not in
+		// the light: two dark ribbons a little down and to the side of it, under its edge.
+		constexpr double ShadowLift = 0.42;
+		const FPoint ShadowShift{ 0.7, 0.7 };
 
 		/** Half the width of an arrow's shaft: more corps, a little wider; an attack wider still; his own retreat narrower. */
 		double MovesHalf(const FArrow& Arrow)
@@ -118,6 +125,83 @@ namespace TheaterEnemyMoves
 			Out.Strokes.push_back(std::move(Stroke));
 		}
 
+		/** The soft shadow under a ribbon of this half-width (its dark edge's), faded with it by Share. */
+		void MovesShadow(FLayer& Out, const std::vector<FPoint>& Points, double Half, double Share, bool bClosed = false)
+		{
+			std::vector<FPoint> Moved;
+			Moved.reserve(Points.size());
+			for (const FPoint& Point : Points)
+			{
+				Moved.push_back(FPoint{ Point.X + ShadowShift.X, Point.Y + ShadowShift.Y });
+			}
+			MovesStroke(Out, Moved, Half + 0.9, ShadowLift, MovesInk(0, 0, 0, static_cast<unsigned char>(34 * Share)), bClosed);
+			MovesStroke(Out, std::move(Moved), Half + 0.35, ShadowLift + 0.005, MovesInk(0, 0, 0, static_cast<unsigned char>(46 * Share)), bClosed);
+		}
+
+		/** The shadow of a triangle (an arrowhead), a little down and to the side. */
+		void MovesShadowTriangle(FLayer& Out, const FTriangle& Face, double Share)
+		{
+			FTriangle Shade = Face;
+			for (FPoint* Corner : { &Shade.A, &Shade.B, &Shade.C })
+			{
+				Corner->X += ShadowShift.X;
+				Corner->Y += ShadowShift.Y;
+			}
+			Shade.Lift = ShadowLift;
+			Shade.Ink = MovesInk(0, 0, 0, static_cast<unsigned char>(70 * Share));
+			Out.Triangles.push_back(Shade);
+		}
+
+		/**
+		 * One sabre for the battle mark (art director, 24 Nov: crossed sabres are the plain map mark for a battle; an X in
+		 * a ring reads as "no"). Its hilt at Hilt, its point Long further along Along, its blade bowing a little to Bow's
+		 * side and narrowing to the point; a guard across it and a grip below. Laid as triangles: the dark edge in Under,
+		 * the ink in Over.
+		 */
+		void MovesSabre(const FPoint& Hilt, const FPoint& Along, const FPoint& Bow, double Long, const FInk& Ink, double Show, FDrawing& Out)
+		{
+			const FPoint Side{ -Along.Y, Along.X };
+			const double Grip = Long * 0.2;
+			const FPoint Guard{ Hilt.X + Along.X * Grip, Hilt.Y + Along.Y * Grip };
+			const FPoint Point{ Hilt.X + Along.X * Long, Hilt.Y + Along.Y * Long };
+			const FPoint Bent{ (Guard.X + Point.X) * 0.5 + Bow.X * Long * 0.09, (Guard.Y + Point.Y) * 0.5 + Bow.Y * Long * 0.09 };
+			constexpr int Steps = 10;
+			auto Blade = [&](double Wider, double Longer, FLayer& Layer, double Lift, const FInk& Colour)
+			{
+				std::vector<FPoint> Left, Right;
+				for (int K = 0; K <= Steps; ++K)
+				{
+					const double Share = static_cast<double>(K) / Steps;
+					const FPoint At = MovesCurve(Guard, Bent, Point, Share);
+					const FPoint Ahead = MovesCurve(Guard, Bent, Point, std::min(Share + 0.05, 1.0));
+					const FPoint Behind = MovesCurve(Guard, Bent, Point, std::max(Share - 0.05, 0.0));
+					double Dx = Ahead.X - Behind.X, Dy = Ahead.Y - Behind.Y;
+					const double Dl = std::max(std::hypot(Dx, Dy), 1e-9);
+					Dx /= Dl;
+					Dy /= Dl;
+					const double Wide = 0.9 * (1.0 - 0.8 * Share * Share) + Wider;
+					Left.push_back(FPoint{ At.X - Dy * Wide, At.Y + Dx * Wide });
+					Right.push_back(FPoint{ At.X + Dy * Wide, At.Y - Dx * Wide });
+				}
+				const FPoint Tip{ Point.X + Along.X * Longer, Point.Y + Along.Y * Longer };
+				for (size_t K = 0; K + 1 < Left.size(); ++K)
+				{
+					MovesTriangle(Layer, Left[K], Right[K], Right[K + 1], Lift, Colour);
+					MovesTriangle(Layer, Left[K], Right[K + 1], Left[K + 1], Lift, Colour);
+				}
+				MovesTriangle(Layer, Left.back(), Right.back(), Tip, Lift, Colour);
+			};
+			Blade(EdgeOver, EdgeOver * 1.4, Out.Under, MarkEdgeLift, MovesFaded(EdgeInk, Show));
+			Blade(0.0, 0.0, Out.Over, MarkLift, MovesFaded(Ink, Show));
+			const double GuardHalf = Long * 0.19;
+			const std::vector<FPoint> Across{ FPoint{ Guard.X - Side.X * GuardHalf, Guard.Y - Side.Y * GuardHalf }, FPoint{ Guard.X + Side.X * GuardHalf, Guard.Y + Side.Y * GuardHalf } };
+			const std::vector<FPoint> Handle{ Hilt, Guard };
+			MovesStroke(Out.Under, Across, 0.5 + EdgeOver, MarkEdgeLift, MovesFaded(EdgeInk, Show));
+			MovesStroke(Out.Under, Handle, 0.5 + EdgeOver, MarkEdgeLift, MovesFaded(EdgeInk, Show));
+			MovesStroke(Out.Over, Across, 0.5, MarkLift, MovesFaded(Ink, Show));
+			MovesStroke(Out.Over, Handle, 0.5, MarkLift, MovesFaded(Ink, Show));
+		}
+
 		/** A ring of so many points round Middle. */
 		std::vector<FPoint> MovesRing(const FPoint& Middle, double Radius, int Count)
 		{
@@ -131,9 +215,9 @@ namespace TheaterEnemyMoves
 		}
 
 		/**
-		 * The battle mark where his troops were attacked: a ring with two crossed strokes in it, as a situation map marks
-		 * a fight. Red where the place was lost (and the ring filled faintly), brass where it held, red and brass where
-		 * the field was lost and the town holds. Show grows it in from a little larger, so that it is seen to land.
+		 * The battle mark where his troops were attacked: a ring with two crossed sabres in it, as a situation map marks
+		 * a fight. Red where the place was lost (and the ring filled faintly), brass where it held, a brass ring with red
+		 * sabres where the field was lost and the town holds. Show grows it in from a little larger, so that it is seen to land.
 		 */
 		void MovesMark(const FArrow& Arrow, double Show, FDrawing& Out)
 		{
@@ -143,24 +227,23 @@ namespace TheaterEnemyMoves
 			}
 			const double Radius = MarkRadius * (1.0 + 0.35 * (1.0 - Show));
 			const FInk Ring = Arrow.bTaken ? AttackInk : HeldInk;
-			const FInk Cross = Arrow.bTaken || Arrow.bSiege ? AttackInk : HeldInk;
+			const FInk Blades = Arrow.bTaken || Arrow.bSiege ? AttackInk : HeldInk;
+			MovesShadow(Out.Under, MovesRing(Arrow.To, Radius, 28), 0.75 + EdgeOver, Show, true);
 			MovesStroke(Out.Under, MovesRing(Arrow.To, Radius, 28), 0.75 + EdgeOver, MarkEdgeLift, MovesFaded(EdgeInk, Show), true);
 			MovesStroke(Out.Over, MovesRing(Arrow.To, Radius, 28), 0.75, MarkLift, MovesFaded(Ring, Show), true);
-			const double Arm = Radius * 0.62;
-			for (const double Turn : { MovesPi * 0.25, MovesPi * 0.75 })
-			{
-				const FPoint Off{ std::cos(Turn) * Arm, std::sin(Turn) * Arm };
-				std::vector<FPoint> Line{ FPoint{ Arrow.To.X - Off.X, Arrow.To.Y - Off.Y }, FPoint{ Arrow.To.X + Off.X, Arrow.To.Y + Off.Y } };
-				MovesStroke(Out.Under, Line, 0.6 + EdgeOver, MarkEdgeLift, MovesFaded(EdgeInk, Show));
-				MovesStroke(Out.Over, Line, 0.6, MarkLift, MovesFaded(Cross, Show));
-			}
+			// (two sabres, hilts low, points high, crossing at the ring's middle; each bows outward, as a pair is drawn)
+			const double Long = Radius * 1.36;
+			const double Root = std::sqrt(0.5);
+			const FPoint UpRight{ Root, -Root }, UpLeft{ -Root, -Root };
+			MovesSabre(FPoint{ Arrow.To.X - UpRight.X * Long * 0.5, Arrow.To.Y - UpRight.Y * Long * 0.5 }, UpRight, FPoint{ Root, Root }, Long, Blades, Show, Out);
+			MovesSabre(FPoint{ Arrow.To.X - UpLeft.X * Long * 0.5, Arrow.To.Y - UpLeft.Y * Long * 0.5 }, UpLeft, FPoint{ -Root, Root }, Long, Blades, Show, Out);
 			if (Arrow.bTaken)
 			{
 				// (a place lost: the ring is filled faintly, a fan of triangles from its middle)
 				const std::vector<FPoint> Rim = MovesRing(Arrow.To, Radius - 0.4, 28);
 				for (size_t K = 0; K < Rim.size(); ++K)
 				{
-					MovesTriangle(Out.Under, Arrow.To, Rim[K], Rim[(K + 1) % Rim.size()], MarkEdgeLift - 0.02, MovesFaded(AttackInk, 0.28 * Show));
+					MovesTriangle(Out.Under, Arrow.To, Rim[K], Rim[(K + 1) % Rim.size()], MarkEdgeLift - 0.02, MovesFaded(AttackInk, 0.2 * Show));
 				}
 			}
 		}
@@ -180,19 +263,45 @@ namespace TheaterEnemyMoves
 		{
 			return;
 		}
+		// (each arrow bows a little, the next one the other way, so two roads between the same places do not lie on one
+		// another; his own fall-back, where an attack or a move runs the same road, bows away from it and keeps aside)
+		auto HasShaft = [](const FArrow& Arrow) { return Arrow.bFrom && MovesDistance(Arrow.From, Arrow.To) > StartGap + EndGap + HeadLong; };
+		std::vector<double> Bows(Arrows.size(), 0.0);
 		int Bend = 0;
-		for (const FArrow& Arrow : Arrows)
+		for (size_t K = 0; K < Arrows.size(); ++K)
 		{
-			const bool bShaft = Arrow.bFrom && MovesDistance(Arrow.From, Arrow.To) > StartGap + EndGap + HeadLong;
+			Bows[K] = HasShaft(Arrows[K]) ? ((Bend++ % 2) == 0 ? 1.0 : -1.0) : 0.0;
+		}
+		std::vector<bool> Aside(Arrows.size(), false);
+		for (size_t K = 0; K < Arrows.size(); ++K)
+		{
+			if (Arrows[K].Kind != EKind::Fell || Bows[K] == 0.0)
+			{
+				continue;
+			}
+			for (size_t J = 0; J < Arrows.size(); ++J)
+			{
+				if (J != K && Arrows[J].Kind != EKind::Fell && Bows[J] != 0.0 && MovesDistance(Arrows[J].From, Arrows[K].From) < 1.0 && MovesDistance(Arrows[J].To, Arrows[K].To) < 1.0)
+				{
+					Bows[K] = -Bows[J];
+					Aside[K] = true;
+					break;
+				}
+			}
+		}
+		for (size_t Index = 0; Index < Arrows.size(); ++Index)
+		{
+			const FArrow& Arrow = Arrows[Index];
+			const bool bShaft = Bows[Index] != 0.0;
 			if (bShaft)
 			{
 				const double Long = MovesDistance(Arrow.From, Arrow.To);
 				const FPoint Along{ (Arrow.To.X - Arrow.From.X) / Long, (Arrow.To.Y - Arrow.From.Y) / Long };
 				const FPoint Side{ -Along.Y, Along.X };
-				// (each arrow bows a little, the next one the other way, so two roads between the same places do not lie on one another)
-				const double Bow = Long * 0.12 * ((Bend++ % 2) == 0 ? 1.0 : -1.0);
-				const FPoint Start{ Arrow.From.X + Along.X * StartGap, Arrow.From.Y + Along.Y * StartGap };
-				const FPoint End{ Arrow.To.X - Along.X * EndGap, Arrow.To.Y - Along.Y * EndGap };
+				const double Bow = Long * 0.12 * Bows[Index];
+				const double Off = Aside[Index] ? FellAside * Bows[Index] : 0.0;
+				const FPoint Start{ Arrow.From.X + Along.X * StartGap + Side.X * Off, Arrow.From.Y + Along.Y * StartGap + Side.Y * Off };
+				const FPoint End{ Arrow.To.X - Along.X * EndGap + Side.X * Off, Arrow.To.Y - Along.Y * EndGap + Side.Y * Off };
 				const FPoint Middle = MovesLerp(Start, End, 0.5);
 				const FPoint Bent{ Middle.X + Side.X * Bow, Middle.Y + Side.Y * Bow };
 				// The shaft runs to where the head's base will be; the head is laid at the curve's end as it grows.
@@ -236,6 +345,7 @@ namespace TheaterEnemyMoves
 						Run += Step;
 						if (bDrawn)
 						{
+							MovesShadow(Out.Under, { Line[K - 1], Line[K] }, Half + EdgeOver, 1.0);
 							MovesStroke(Out.Under, { Line[K - 1], Line[K] }, Half + EdgeOver, EdgeLift, EdgeInk);
 							MovesStroke(Out.Over, { Line[K - 1], Line[K] }, Half, InkLift, Ink);
 						}
@@ -243,6 +353,7 @@ namespace TheaterEnemyMoves
 				}
 				else
 				{
+					MovesShadow(Out.Under, Line, Half + EdgeOver, Arrow.bAway ? 0.6 : 1.0);
 					MovesStroke(Out.Under, Line, Half + EdgeOver, EdgeLift, MovesFaded(EdgeInk, Arrow.bAway ? 0.6 : 1.0));
 					MovesStroke(Out.Over, Line, Half, InkLift, Ink);
 				}
@@ -255,6 +366,7 @@ namespace TheaterEnemyMoves
 				Edge.C = FPoint{ Right.X + Dy * Over - Dx * Over * 0.5, Right.Y - Dx * Over - Dy * Over * 0.5 };
 				Edge.Lift = EdgeLift;
 				Edge.Ink = MovesFaded(EdgeInk, Arrow.bAway ? 0.6 : 1.0);
+				MovesShadowTriangle(Out.Under, Edge, Arrow.bAway ? 0.6 : 1.0);
 				Out.Under.Triangles.push_back(Edge);
 				FTriangle Head;
 				Head.A = Tip;
