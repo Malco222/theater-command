@@ -292,7 +292,16 @@ public:
 	 */
 	void SetShipsSail(bool bSail) { bShipsSail = bSail; }
 	bool GetShipsSail() const { return bShipsSail; }
-	void ForgetFleetPlaces() { FleetPlaces.Reset(); FleetSpots.Reset(); }
+	void ForgetFleetPlaces() { FleetPlaces.Reset(); FleetSpots.Reset(); ForgetWakes(); }
+	/**
+	 * (Release 2: fading wakes; Brian 24 November 2026 18:24Z, "i like these".) An enemy fleet seen to move leaves a
+	 * faint trail of foam on the sea, the way it went by water, for a month: brightest where it is now and fading back
+	 * to where it came from, fainter again the month after, then gone. OPTIONS "Fading wakes" (the options key "wakes").
+	 * Off, none is laid. A fleet only reported, not seen, leaves none; nor do the player's own fleets or his allies'.
+	 */
+	void SetWakes(bool bOn);
+	bool GetWakes() const { return bWakes; }
+	void ForgetWakes();
 	/**
 	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
 	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
@@ -1684,6 +1693,23 @@ private:
 	bool bShipsSail = false;
 	TMap<int32, FIntPoint> FleetPlaces;
 	TMap<int32, FVector2D> FleetSpots;
+	// (Release 2: fading wakes.) Each wake laid: whose fleet, the month it was seen to move, and its way on the map.
+	struct FWakeTrail
+	{
+		int32 Fleet = INDEX_NONE;
+		int32 Turn = 0;
+		TArray<FVector2D> Points;
+	};
+	bool bWakes = false;
+	TArray<FWakeTrail> Wakes;
+	int32 WakesLaidFor = INDEX_NONE; // the month the foam was last laid for
+	bool bWakesDirty = false;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WakeMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WakeInk;
+	/** Lays the foam of the wakes still to be seen in this month, fading with their age and back along their way. */
+	void LayWakes(int32 Turn);
 
 	/** The same pieces by "region|nation". */
 	UPROPERTY(Transient)

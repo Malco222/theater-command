@@ -8748,6 +8748,12 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			SeaFillInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaFillNight.R, SeaFillNight.G, SeaFillNight.B), Moon));
 			SeaFillInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaFillNight.A, Moon));
 		}
+		if (WakeInk)
+		{
+			// (release 2: the foam of enemy wakes, kept faint by night with the sea's own lines)
+			WakeInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaLineNight.R, SeaLineNight.G, SeaLineNight.B), Moon));
+			WakeInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaLineNight.A, Moon));
+		}
 		if (SightingInk)
 		{
 			// (a place where the enemy was last seen: red crayon, kept findable by night at about 0.35)
@@ -10901,6 +10907,24 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		const FVector2D* WasSpot = FleetSpots.Find(Fleet.Id);
 		const bool bSail = bShipsSail && bWasLaid && WasPlace && WasSpot && *WasPlace != Place && !Fleet.bReport
 			&& FVector2D::DistSquared(*WasSpot, At) > 4.0;
+		// (Release 2: fading wakes.) An enemy fleet seen to change its sea or harbour leaves its wake behind it, the
+		// way it went by water, whether or not ships sail on the map. Not the player's own fleets, nor his allies'.
+		const bool bFriend = Fleet.Nation == View.Human || (View.RegionStanding.IsValidIndex(Fleet.Base)
+			&& (View.RegionStanding[Fleet.Base] == TEXT("own") || View.RegionStanding[Fleet.Base] == TEXT("ally")));
+		if (bWakes && bWasLaid && WasPlace && WasSpot && *WasPlace != Place && !Fleet.bReport && !bFriend
+			&& FVector2D::DistSquared(*WasSpot, At) > 4.0)
+		{
+			TArray<FVector2D> Wake = WaterWay(*WasSpot, At);
+			if (Wake.Num() >= 2)
+			{
+				Wakes.RemoveAll([&Fleet, &View](const FWakeTrail& Old) { return Old.Fleet == Fleet.Id && Old.Turn == View.Turn; });
+				FWakeTrail& Trail = Wakes.AddDefaulted_GetRef();
+				Trail.Fleet = Fleet.Id;
+				Trail.Turn = View.Turn;
+				Trail.Points = MoveTemp(Wake);
+				bWakesDirty = true;
+			}
+		}
 		// (A fleet just let go after being carried by hand is gliding back to where it lay: it sails on from where it is.)
 		const bool bCarried = bWasLaid && Piece && Piece->IsMarching() && !Piece->IsSailing();
 		const FVector2D From = bCarried ? WorldToMap(Piece->GetActorLocation()) : WasSpot ? *WasSpot : At;
@@ -10945,6 +10969,11 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			FleetSpots.Remove(It.Key());
 			It.RemoveCurrent();
 		}
+	}
+	// (Release 2: fading wakes) laid again only when one is added or a month has passed.
+	if (bWakesDirty || WakesLaidFor != View.Turn)
+	{
+		LayWakes(View.Turn);
 	}
 
 	// ---- Air fleets, each over its airfields: to the south-west of the town, where the army does not stand.
@@ -10995,6 +11024,95 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			It.RemoveCurrent();
 		}
 	}
+}
+
+void ACampaignMapActor::SetWakes(bool bOn)
+{
+	bWakes = bOn;
+	if (!bOn)
+	{
+		ForgetWakes();
+	}
+}
+
+void ACampaignMapActor::ForgetWakes()
+{
+	Wakes.Reset();
+	bWakesDirty = false;
+	WakesLaidFor = INDEX_NONE;
+	if (WakeMesh)
+	{
+		WakeMesh->ClearAllMeshSections();
+	}
+}
+
+void ACampaignMapActor::LayWakes(int32 Turn)
+{
+	// (Release 2: fading wakes.) A wake seen this month, and last month's fainter; older ones are gone.
+	Wakes.RemoveAll([Turn](const FWakeTrail& Old) { return Turn - Old.Turn > 1 || Old.Turn > Turn; });
+	WakesLaidFor = Turn;
+	bWakesDirty = false;
+	if (!WakeMesh)
+	{
+		if (!bWakes || Wakes.Num() == 0)
+		{
+			return;
+		}
+		WakeMesh = NewObject<UProceduralMeshComponent>(this);
+		WakeMesh->SetupAttachment(Root);
+		WakeMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WakeMesh->RegisterComponent();
+		WakeMesh->SetCastShadow(false);
+	}
+	WakeMesh->ClearAllMeshSections();
+	if (!bWakes || Wakes.Num() == 0 || !HighlightMaterial)
+	{
+		return;
+	}
+	if (!WakeInk)
+	{
+		WakeInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		ShownNight = -1.0f; // (laid by night as the other inks of the sea are)
+		SetNight(NightNow, bLamplightNow);
+	}
+	// Foam in short dashes along the way, as a wake breaks up behind a ship: widest and brightest at the head, where
+	// the fleet now lies, thinning back to where it came from. Last month's at half the strength.
+	const double Dash = 2.6, Gap = 1.9;
+	FCampaignMeshBuffers Foam;
+	for (const FWakeTrail& Trail : Wakes)
+	{
+		const float Strength = Turn == Trail.Turn ? 0.42f : 0.2f;
+		TArray<double> Marks = { 0.0 };
+		for (int32 K = 1; K < Trail.Points.Num(); ++K)
+		{
+			Marks.Add(Marks.Last() + FVector2D::Distance(Trail.Points[K - 1], Trail.Points[K]));
+		}
+		const double Length = Marks.Last();
+		if (Length < 1.0)
+		{
+			continue;
+		}
+		auto PointAt = [&](double D) -> FVector2D
+		{
+			int32 K = 1;
+			while (K < Marks.Num() - 1 && Marks[K] < D)
+			{
+				++K;
+			}
+			const double Span = FMath::Max(Marks[K] - Marks[K - 1], 1.0e-6);
+			return FMath::Lerp(Trail.Points[K - 1], Trail.Points[K], FMath::Clamp((D - Marks[K - 1]) / Span, 0.0, 1.0));
+		};
+		// (stopping short of the head, so that the foam does not run under the fleet's own piece)
+		const double End = FMath::Max(0.0, Length - 4.0);
+		for (double D = 0.0; D < End; D += Dash + Gap)
+		{
+			const double To = FMath::Min(D + Dash, End);
+			const double Head = (D + To) * 0.5 / Length; // 0 at the old end, 1 at the fleet
+			const FColor Ink = FLinearColor(0.86f, 0.92f, 0.96f, Strength * static_cast<float>(0.2 + 0.8 * Head)).ToFColor(false);
+			AppendRibbon(Foam, { PointAt(D), PointAt(D + (To - D) * 0.5), PointAt(To) }, 0.18 + 0.22 * Head, 0.16, Ink, false);
+		}
+	}
+	Foam.Commit(WakeMesh, 0, WakeInk ? static_cast<UMaterialInterface*>(WakeInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 }
 
 TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& To) const

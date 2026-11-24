@@ -1628,6 +1628,7 @@ private:
 	double FrameHintUntil = 0.0;
 	bool bMoments = true; // the eye drops to the front for a few seconds when a capital falls or a great battle is decided
 	bool bShipsSail = false; // (release 2) a fleet that moves sails there on the map (ACampaignMapActor::SetShipsSail)
+	bool bWakes = false; // (release 2) an enemy fleet seen to move leaves a fading wake (ACampaignMapActor::SetWakes)
 	bool bMomentDue = false; // such a thing has just happened: the moment begins when its result has been read
 	bool bMomentOn = false;
 	double MomentUntil = 0.0;

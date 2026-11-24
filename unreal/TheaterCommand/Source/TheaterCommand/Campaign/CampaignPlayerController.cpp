@@ -384,6 +384,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
 	// (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".)
 	Add(TEXT("sail"), TEXT("Ships sail on the map"), TEXT("A fleet sent to another sea, into harbour or out of it sails there by water, round the land, its bows the way it goes, in two or three seconds. Off, it is simply found where it now is. Fleets only reported, not seen, are never shown sailing."), bShipsSail ? TEXT("ON") : TEXT("OFF"), bShipsSail);
+	// (Release 2: fading wakes; Brian 24 November 2026 18:24Z)
+	Add(TEXT("wakes"), TEXT("Fading wakes"), TEXT("An enemy fleet you see move leaves a faint trail of foam on the sea, the way it went: brightest where it is now, fading back to where it came from, fainter again the month after, then gone. Your own fleets and your allies' leave none, nor does a fleet only reported."), bWakes ? TEXT("ON") : TEXT("OFF"), bWakes);
 	// (Release 2, D1: ruling 241) The month at sea: the month's war at sea staged as it opens. The viewer's own, kept in
 	// its own file by the session (Saved/Campaign/subscene.json), not with these options nor in the save. A run that
 	// has it "off" reads as NEVER here.
@@ -470,6 +472,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		if (Map.IsValid())
 		{
 			Map->SetShipsSail(bShipsSail);
+		}
+	}
+	else if (Id == TEXT("wakes")) // (release 2: fading wakes)
+	{
+		bWakes = !bWakes;
+		if (Map.IsValid())
+		{
+			Map->SetWakes(bWakes);
 		}
 	}
 	else if (Id == TEXT("askend"))
@@ -649,7 +659,7 @@ void ACampaignPlayerController::SaveOptions() const
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
 	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest; (release 2) "Ships sail on the map" too.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"sail\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bShipsSail)), *OptionsFile());
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"sail\":%s,\"wakes\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bShipsSail), Word(bWakes)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -697,9 +707,11 @@ void ACampaignPlayerController::LoadOptions()
 	bEnemyMoves = Yes(TEXT("enemyMoves"), true); // (Release 2, the enemy's month near you)
 	bAlliesNear = Yes(TEXT("alliesNear"), true); // (Release 2, the enemy's month near you, round 2)
 	bShipsSail = Yes(TEXT("sail"), false); // (release 2: ships that sail)
+	bWakes = Yes(TEXT("wakes"), false); // (release 2: fading wakes)
 	if (Map.IsValid())
 	{
 		Map->SetShipsSail(bShipsSail);
+		Map->SetWakes(bWakes);
 	}
 	if (UWorld* World = GetWorld())
 	{
