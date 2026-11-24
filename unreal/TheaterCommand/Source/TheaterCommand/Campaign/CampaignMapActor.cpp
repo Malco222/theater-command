@@ -12017,7 +12017,7 @@ float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)
 	return 1.0f - static_cast<float>(FMath::SmoothStep(Line - 170.0, Line + 60.0, P.Y + Ragged));
 }
 
-void ACampaignMapActor::SetSeason(int32 Turn)
+void ACampaignMapActor::SetSeason(int32 Turn, TArray<TFunction<void()>>* OutParts)
 {
 	THEATER_SPEED_SCOPE(SetSeason);
 	// ("-TheaterSeason=5" on the command line holds the table at one month of the war, for a picture)
@@ -12035,7 +12035,29 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	ShownMonth = Month;
 	// How hard the winter lies in each month of the year.
 	const float Hard = WinterHardInMonth(Month);
+	// ---- (Map speed, 22 November 2026: tc.Speed.MonthInSteps; Campaign/MonthLaying.cpp.) The season's work is in five
+	// parts: the snow on the provinces (their stripes painted again where it has moved), the snow on the land, the woods,
+	// the rivers, and the light. Without OutParts each is done here and now, in this order, as before. With it each is
+	// handed back to be done a frame or so apart, in the same order; and the month is marked shown only once the last is
+	// done, so that a season left half laid (a new war laid over it) is laid again whole by the next call.
+	auto Part = [OutParts](TFunction<void()>&& Work)
 	{
+		if (OutParts)
+		{
+			OutParts->Add(MoveTemp(Work));
+		}
+		else
+		{
+			Work();
+		}
+	};
+	if (OutParts)
+	{
+		ShownMonth = INDEX_NONE;
+	}
+	Part([this, Hard]()
+	{
+		THEATER_SPEED_SCOPE(SeasonSnowPaint);
 		// (The stripes of occupied ground are laid stronger where snow lies, so that they show as well in January as
 		// in July: the painter is told how far the snow takes each province toward white, and occupied ground is
 		// painted again when that has changed.)
@@ -12066,38 +12088,48 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 			CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
 			CampaignTextures::Update(ReliefPicture, Paint.Relief);
 		}
-	}
-	TArray<FColor> Pixels = Paint.Masks;
-	if (Hard > 0.0f)
+	});
+	Part([this, Hard]()
 	{
-		const int32 NX = Terrain.NX, NY = Terrain.NY;
-		ParallelFor(NY, [&](int32 J)
+		THEATER_SPEED_SCOPE(SeasonMasks);
+		if (!MasksPicture || Paint.Masks.Num() != Terrain.Height.Num())
 		{
-			for (int32 I = 0; I < NX; ++I)
+			return; // (a part left over from a table laid again since: the next call lays the season whole)
+		}
+		TArray<FColor> Pixels = Paint.Masks;
+		if (Hard > 0.0f)
+		{
+			const int32 NX = Terrain.NX, NY = Terrain.NY;
+			ParallelFor(NY, [&](int32 J)
 			{
-				const int32 Idx = Terrain.Index(I, J);
-				if (Terrain.Coverage[Idx] < 0.4f)
+				for (int32 I = 0; I < NX; ++I)
 				{
-					continue; // the sea does not lie under snow
+					const int32 Idx = Terrain.Index(I, J);
+					if (Terrain.Coverage[Idx] < 0.4f)
+					{
+						continue; // the sea does not lie under snow
+					}
+					const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+					const float Lying = SnowLying(P, Hard);
+					// It lies thinner than on the crests, so that each country's colour still shows through it: under
+					// the stained paint a dusting is enough to turn the country white, so it is a thin one.
+					const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
+					// And the snow line on the mountains comes down.
+					const float H = Terrain.Height[Idx];
+					const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
+					const float Rock = Pixels[Idx].R / 255.0f;
+					const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
+					Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
 				}
-				const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
-				const float Lying = SnowLying(P, Hard);
-				// It lies thinner than on the crests, so that each country's colour still shows through it: under
-				// the stained paint a dusting is enough to turn the country white, so it is a thin one.
-				const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
-				// And the snow line on the mountains comes down.
-				const float H = Terrain.Height[Idx];
-				const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
-				const float Rock = Pixels[Idx].R / 255.0f;
-				const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
-				Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
-			}
-		});
-	}
-	CampaignTextures::Update(MasksPicture, Pixels);
+			});
+		}
+		CampaignTextures::Update(MasksPicture, Pixels);
+	});
 	// The year turns on the table. The woods: fresh green in spring, gold and russet through the autumn, bare in
 	// winter where they are not fir. The cloth of the woods seen from far off takes the same turn.
+	Part([this, Hard, Month]()
 	{
+		THEATER_SPEED_SCOPE(SeasonWoods);
 		static const int32 Looks[12] = { 4, 4, 5, 6, 0, 0, 0, 0, 1, 2, 3, 4 };
 		static const FLinearColor Cloth[7] =
 		{
@@ -12119,21 +12151,30 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 			BuildTrees();
 			UE_LOG(LogTheater, Log, TEXT("The woods turned for the month in %.2f s"), FPlatformTime::Seconds() - Began);
 		}
+	});
+	Part([this, Hard]()
+	{
+		THEATER_SPEED_SCOPE(SeasonRivers);
 		// The rivers of the east freeze where the snow lies, and run again in the thaw.
 		if (FMath::Abs(Hard - RiversDrawnFor) > 0.01f && RiverMesh)
 		{
 			BuildWaterways();
 		}
-	}
-	// The light of the season: colder and a little weaker in winter, warm in high summer.
-	static const float Summer[12] = { 0.0f, 0.0f, 0.1f, 0.3f, 0.6f, 0.9f, 1.0f, 0.95f, 0.6f, 0.3f, 0.1f, 0.0f };
-	if (UWorld* World = GetWorld())
+	});
+	Part([this, Hard, Month]()
 	{
-		for (TActorIterator<ACampaignEnvironment> It(World); It; ++It)
+		// The light of the season: colder and a little weaker in winter, warm in high summer.
+		static const float Summer[12] = { 0.0f, 0.0f, 0.1f, 0.3f, 0.6f, 0.9f, 1.0f, 0.95f, 0.6f, 0.3f, 0.1f, 0.0f };
+		if (UWorld* World = GetWorld())
 		{
-			It->SetSeason(Hard, Summer[Month]);
+			for (TActorIterator<ACampaignEnvironment> It(World); It; ++It)
+			{
+				It->SetSeason(Hard, Summer[Month]);
+			}
 		}
-	}
+		ShownMonth = Month; // (the season laid whole: see above)
+	});
+	// ---- (end map speed)
 }
 
 void ACampaignMapActor::SetTowns(const TArray<FTownInfo>& InTowns)

@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Campaign/CampaignView.h"
 #include "Campaign/EdgeNews.h" // (Release 2, news at the map's edge: merge by hand)
+#include "Campaign/MonthSteps.h" // (Map speed, 22 November 2026: the month laid in steps, tc.Speed.MonthInSteps)
 #include "CampaignPlayerController.generated.h"
 
 class ACampaignMapActor;
@@ -1230,6 +1231,33 @@ private:
 	void DropArmy(int32 RegionId, bool bOnTable);
 	void WatchNextStep();
 	void FinishMonth();
+	// ---- (Map speed, 22 November 2026; the production lead's lane "Map smoothness". Campaign/MonthLaying.cpp.)
+	// The month's change laid a few parts a frame (tc.Speed.MonthInSteps): the same calls in the same order as the one
+	// frame, split at their seams. ShowWar is ShowWarGround, the season and ShowWarArmies, then ShowWarRest as ever;
+	// FinishMonth is ShowWar, FinishMonthOrders and FinishMonthNews.
+	/** ShowWar's first part: the land and towns the first time, the town plots, the ink allowed, the ground's holders. */
+	void ShowWarGround(const FCampaignView& View);
+	/** ShowWar's third part, after the season: the armies, the agents, and the agent in hand put down if he is gone. */
+	void ShowWarArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom);
+	/** FinishMonth after the table: the eye back where it was after the tour, the orders, the province's card. */
+	void FinishMonthOrders();
+	/** FinishMonth's last: the card back after a tour seen again; or the campaign kept (bKeep) and the month's news. */
+	void FinishMonthNews(bool bKeep = true);
+	/** Lays the month in steps where tc.Speed.MonthInSteps asks for it (and no script drives): true if it is so laid. */
+	bool LayMonthInSteps();
+	/** Once a frame from Afterwards while the month is being laid: runs a few of its steps within tc.Speed.MonthStepMs. */
+	void RunMonthSteps();
+	/** The month laid whole, by whichever mode: the speed log's line and the "-TheaterMonthDump=" line. */
+	void MonthLaid(int32 Mode);
+	/** The month being laid, its steps left. */
+	MonthSteps::FQueue MonthLaying;
+	/** The frame the laying was begun in: its first steps wait for the next frame, which the rules' own frame is not. */
+	uint64 MonthLayingFrame = 0;
+	int32 MonthLayingMode = 0;
+	/** When END THE MONTH was pressed, by the machine's clock, and what the rules took: for the speed log's line. */
+	double MonthPressedAt = 0.0;
+	double MonthRulesTook = 0.0;
+	// ---- (end map speed)
 	void SpaceBar();
 	void ToggleMusic();
 	void ToggleEffects();

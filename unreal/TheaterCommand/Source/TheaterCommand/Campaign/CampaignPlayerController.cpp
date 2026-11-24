@@ -799,6 +799,7 @@ void ACampaignPlayerController::EnterCampaign()
 	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
 	Afterwards.Reset(); // (what was left of an order's answer belonged to the war before; the session dropped its own)
+	MonthLaying.Reset(); // (map speed: and so did what was left of the last month's laying)
 	PendingEnemyReach.Reset();
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
@@ -8976,6 +8977,11 @@ void ACampaignPlayerController::FinishAnswer()
 	{
 		Session->Deliver(true);
 	}
+	// (Map speed: a month still being laid is laid whole first; its step in Afterwards then finds nothing left.)
+	if (!MonthLaying.Empty())
+	{
+		MonthLaying.RunAll([]() { return FPlatformTime::Seconds(); });
+	}
 	while (Afterwards.Num() > 0)
 	{
 		const TFunction<void()> Step = MoveTemp(Afterwards[0]);
@@ -9434,6 +9440,35 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 {
 	StormFavourKey.Reset(); // (something was ordered: the staff's forecast of a storm is asked afresh for the army in hand)
 	THEATER_SPEED_SCOPE(ShowWar);
+	// (Map speed, 22 November 2026: in three parts, so that the month's change can lay them a frame or so apart;
+	// here they follow one another as before.)
+	ShowWarGround(View);
+	if (Map.IsValid())
+	{
+		Map->SetSeason(View.Turn);
+	}
+	ShowWarArmies(View, Marches, CarriedFrom);
+	// (Speed, b414 mark 1; the speed detective's "change the picture first".) After an order, the ground's new holders
+	// and the armies where they now stand are the press's own picture; the works, the scars, the front line, the haze
+	// and the rest follow a frame later.
+	if (bPictureFirst)
+	{
+		Later([this]()
+		{
+			if (const FCampaignSession* Now = GetSession())
+			{
+				ShowWarRest(Now->GetView());
+			}
+		});
+	}
+	else
+	{
+		ShowWarRest(View);
+	}
+}
+
+void ACampaignPlayerController::ShowWarGround(const FCampaignView& View)
+{
 	if (Map.IsValid())
 	{
 		if (!Map->HasLand())
@@ -9473,30 +9508,19 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		}
 		HumanLaid = View.Human;
 		Map->SetHolders(View.RegionHolder, View.League, View.RegionOwner, View.SiegePaint);
-		Map->SetSeason(View.Turn);
+	}
+}
+
+void ACampaignPlayerController::ShowWarArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
+{
+	if (Map.IsValid())
+	{
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowAgents(View); // (ruling 153: after the armies, whose bases an agent stands clear of)
 		if (AgentInHand != INDEX_NONE && !GetAgentInHand())
 		{
 			PutDownAgent(); // (caught, or retired, while in hand)
 		}
-	}
-	// (Speed, b414 mark 1; the speed detective's "change the picture first".) After an order, the ground's new holders
-	// and the armies where they now stand are the press's own picture; the works, the scars, the front line, the haze
-	// and the rest follow a frame later.
-	if (bPictureFirst)
-	{
-		Later([this]()
-		{
-			if (const FCampaignSession* Now = GetSession())
-			{
-				ShowWarRest(Now->GetView());
-			}
-		});
-	}
-	else
-	{
-		ShowWarRest(View);
 	}
 }
 
@@ -10421,6 +10445,12 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
+	// (Map speed, 22 November 2026: tc.Speed.MonthInSteps.) While the month just ended is still being laid on the table,
+	// a second press is not another month's end: the card and the seals come in a moment.
+	if (!MonthLaying.Empty() && !bScripted)
+	{
+		return;
+	}
 	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
 	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
 	FinishAnswer();
@@ -10565,7 +10595,9 @@ void ACampaignPlayerController::EndMonth()
 	{
 		WatchStood.Add(Unit.Id, Unit.Region);
 	}
+	MonthPressedAt = FPlatformTime::Seconds(); // (map speed: from the press to the news, for the speed log)
 	Month = Session->EndMonth();
+	MonthRulesTook = FPlatformTime::Seconds() - MonthPressedAt;
 	if (!bHelpSeen)
 	{
 		bHelpSeen = true; // a month has been played: the reminder of the keys folds away into its mark
@@ -10765,6 +10797,11 @@ void ACampaignPlayerController::WatchAgain()
 	{
 		return;
 	}
+	// (Map speed: the month still being laid under its seals is laid whole before the tour takes the table.)
+	if (!MonthLaying.Empty())
+	{
+		MonthLaying.RunAll([]() { return FPlatformTime::Seconds(); });
+	}
 	ClosePage();
 	bRewatching = true;
 	WatchStood.Reset();
@@ -10821,9 +10858,26 @@ void ACampaignPlayerController::FinishMonth()
 	{
 		return;
 	}
+	// ---- (Map speed, 22 November 2026: tc.Speed.MonthInSteps. The same parts as below, a few a frame; Campaign/MonthLaying.cpp.)
+	if (LayMonthInSteps())
+	{
+		return;
+	}
+	// ---- (end map speed)
 	const FCampaignView& View = Session->GetView();
 	RoundSeen.Reset(); // (the code checker, 17 November: a new month, and Tab's round of the armies begins again)
 	ShowWar(View, TArray<FCorpsMove>());
+	FinishMonthOrders();
+	FinishMonthNews();
+	MonthLaid(0); // (map speed: the speed log's line and the state check, where asked)
+}
+
+void ACampaignPlayerController::FinishMonthOrders()
+{
+	if (!GetSession() || !Map.IsValid())
+	{
+		return;
+	}
 	if (Month.Steps.Num() > 0)
 	{
 		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -10833,6 +10887,16 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	RefreshOrders();
 	RefreshRegionPanel(Map->GetSelectedRegion());
+}
+
+void ACampaignPlayerController::FinishMonthNews(bool bKeep)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	const FCampaignView& View = Session->GetView();
 	if (bRewatching)
 	{
 		// (watched again from the month's card: nothing is kept or told twice, and the card comes back)
@@ -10842,7 +10906,7 @@ void ACampaignPlayerController::FinishMonth()
 	}
 
 	// The campaign is kept every month, so it can be continued another day.
-	if (ACampaignGameMode* Mode = GetMode())
+	if (ACampaignGameMode* Mode = bKeep ? GetMode() : nullptr)
 	{
 		Mode->SaveCampaign();
 	}

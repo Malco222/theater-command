@@ -210,7 +210,10 @@ public:
 	void ShowEnemyReach(const TArray<int32>& Danger);
 	void FindSharedEdges();
 	/** The time of year, from the month of the war (1 is September 1939): snow lies over the north and the high ground in winter. */
-	void SetSeason(int32 Turn);
+	/** (Map speed, tc.Speed.MonthInSteps.) With OutParts, the season's five parts of work are handed back in their order, to be done a frame or so apart, where without it they are done at once, as before. */
+	void SetSeason(int32 Turn, TArray<TFunction<void()>>* OutParts = nullptr);
+	/** (Map speed, tc.Speed.MonthInSteps; Campaign/MonthLaying.cpp.) The table's state after a month's change, as one line of numbers, for "-TheaterMonthDump=": the same month laid in one frame or in steps must give the same line. */
+	FString MonthDump() const;
 	/** The chief town of each province with what it pays, from the rules: the labels are written again to say so. */
 	void SetTowns(const TArray<FTownInfo>& InTowns);
 	bool HasTowns() const { return Towns.Num() > 0; }
