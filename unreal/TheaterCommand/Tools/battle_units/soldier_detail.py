@@ -247,8 +247,10 @@ def arc(centre, R, rx, ry, a0, a1, n, z=0.0):
     return np.array(out)
 
 
-def dome(g, p, nrm, r, h, paint="steel", sides=10, up=(0.0, 0.0, 1.0)):
-    """A domed button or rivet head standing on a surface at p (outward normal nrm)."""
+def dome(g, p, nrm, r, h, paint="steel", sides=10, up=(0.0, 0.0, 1.0), outward=False):
+    """A domed button or rivet head standing on a surface at p (outward normal nrm). Geo.shell winds these rings
+    inward, which an object built with recalc (the default) puts right; `outward` winds them outward here, for an
+    object built without it (the shoulder straps': their two buttons had gone into the file inside out)."""
     R = frame_from(_n(nrm), up)
     x, y, z = R[:, 0], R[:, 1], R[:, 2]
     rings = [[p + x * h]]
@@ -259,7 +261,7 @@ def dome(g, p, nrm, r, h, paint="steel", sides=10, up=(0.0, 0.0, 1.0)):
             ring.append(p + x * h * hh + (y * math.cos(t) + z * math.sin(t)) * r * rr)
         rings.append(ring)
     rings.append([p - x * 0.0015])
-    g.shell(rings, paint)
+    g.shell([list(reversed(rg)) for rg in rings] if outward else rings, paint)
 
 
 def ring(g, c, axis, rmaj, rmin, paint="steel", n=14, sides=6, up=None):
@@ -1087,7 +1089,7 @@ def build_kit(J, spec, body_ls, Z=None):
         g = Geo()
         for c, R, length in LM_["shoulder_straps"]:
             q, nq = shoulder_strap(g, tunic, c, R, length, ystraps)
-            dome(g, q - nq * 0.0004, nq, 0.0075, 0.0038, up=tuple(R[:, 0]))
+            dome(g, q - nq * 0.0004, nq, 0.0075, 0.0038, up=tuple(R[:, 0]), outward=True)
         out["shoulder_straps"] = (g.build("shoulder_straps", sharp=40.0, recalc=False), None)
     print(f"  detail: kit's hardware made in {time.time() - t0:.0f} s")
     return out

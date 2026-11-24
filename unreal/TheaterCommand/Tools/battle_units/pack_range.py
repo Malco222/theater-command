@@ -31,7 +31,6 @@ no kit, nor the tank crews).
 import glob
 import json
 import os
-import shutil
 import sys
 import time
 from collections import Counter
@@ -47,6 +46,10 @@ SMALL = 0.026
 NEAR = 0.004
 OFF_CLOTH = 0.02                       # (a button or badge lies on the cloth: within 2 cm of it, as over the breastbone)
 NOT_KIT_BONES = ("head", "weapon", "bolt", "bipod")
+SEWN_BONES = ("neck", "clavicle_l", "clavicle_r", "upperarm_l", "upperarm_r")   # (the helmet's paint here is cloth)
+BADGE, BADGE_ON = 0.05, 0.015         # (a flat badge on the breast: at most 5 cm across, under 0.5 mm thick (rms),
+                                       #  lying within 1.5 cm of his body's cloth (on the lapel))
+BUTTON, BUTTON_ON = 0.017, 0.003       # (a button: at most 17 mm across, within 3 mm of the cloth)
 ABOUT = ("pack_tris (pack_range.py): his pack and all his webbing (belt, straps, pouches, bags, canteen, shovel, "
          "bayonet, gas-mask can, rolls, a radio or aid bags), one run of triangles at each level [first, count], as "
          "helmet_tris: leave it out for a man with no pack (a downed pilot, a crew out of a tank) and draw nothing in its "
@@ -78,13 +81,37 @@ def pieces(T, n):
 def classify(d, lod):
     """(B, W, pack: the triangle indices in [B, W) that are webbing, notes)."""
     names = [b["name"] for b in d["bones"]]
-    # (a file may name more of his cloth, {paint: [bones] or [] for any}: the detailed rifleman's shoulder straps and
-    #  collar patches wear the helmet's paint on the neck and arm bones, his buttons a paint of their own; all sewn
-    #  on the tunic, not webbing. The gas-mask can wears the helmet's paint too, on the pelvis: still kit)
-    cloth = {int(k): set(v) for k, v in d.get("pack_cloth", {}).items()}
+    # (his cloth: BODY, and the buttons' own paint where a file has one (the detailed rifleman's `button`); and the
+    #  helmet's paint where it is sewn on him: the collar tabs and patches, the shoulder straps, the snow suit's hood
+    #  hem, on the neck, collarbones and upper arms, or on the chest bone in front of it (the Italian's lapel patches).
+    #  On his back or hips the helmet's paint is kit: the German's gas-mask can, the American's back pieces, the
+    #  paratrooper's leg bag)
+    #  A flat badge on the breast in another paint is sewn on too (the desert Italian's lapel patches, in the straps'
+    #  paint). And a button (a hardware paint: steel, the American jacket's brown `leather`, a file's own `button`)
+    #  on his front or shoulders, sewn on the cloth, stays though a strap lies against it: the Chinese tunic's buttons
+    #  under his bandolier, the American's shoulder-strap buttons under his suspenders, the paratrooper's pocket snap.
+    buttons = {v for k, v in d.get("new_paints", {}).items() if k == "button"}
+    cloth = set(BODY) | buttons
+    hardware = {9, 12} | buttons
+    heads = {b["name"]: b.get("head") for b in d["bones"]}
+    chest_x = heads["chest"][0] if heads.get("chest") else 0.0
 
-    def body(paint, bone):
-        return paint in BODY or (paint in cloth and (not cloth[paint] or bone in cloth[paint]))
+    def front(bone, x, trunk=("chest",)):
+        return bone in SEWN_BONES or (bone in trunk and x > chest_x)
+
+    def body(paint, bone, P):
+        if paint in cloth:
+            return True
+        x = float(P[:, 0].mean())
+        if paint == 5 and front(bone, x):
+            return True
+        if bone == "chest" and x > chest_x and paint not in hardware and len(P) >= 3:    # (not a facet of a ring)
+            ext = P.max(0) - P.min(0)
+            flat = np.linalg.svd(P - P.mean(0), compute_uv=False)[-1] / np.sqrt(len(P))
+            return (float(ext.max()) <= BADGE and float(flat) <= 0.0005
+                    and float(body_tree[0].query(P, k=1)[0].max()) <= BADGE_ON)
+        return False
+    body_tree = []                                # (his body's surface, once its run's end B is known below)
     m = d[lod]
     T = np.array(m["triangles"]).reshape(-1, 3)
     pa = np.array(m["paints"])
@@ -97,6 +124,14 @@ def classify(d, lod):
     # (the body's run ends with his hands: the skin on the hand and finger bones)
     hb = [i for i, nm in enumerate(names) if nm.startswith(("hand_", "fingers_", "thumb_"))]
     B = int(np.where((idx < hf) & (first == 7) & np.isin(tri_bone, hb))[0].max()) + 1
+    from scipy.spatial import cKDTree               # (run with scipy: the bpy environment's python has it)
+    # each surface read as points over its triangles (a 7 x 7 grid in each): the distance to a surface, not to its
+    # corners (a snap on a bag's broad face had stood 5 mm from the bag's nearest corner and was kept, left floating)
+    bc = np.array([(i / 7, j / 7, 1 - i / 7 - j / 7) for i in range(8) for j in range(8 - i)])
+
+    def surface(tris):
+        tris = np.asarray(tris, dtype=np.int64)
+        return cKDTree(np.einsum("kb,tbc->tkc", bc, X[T[tris]]).reshape(-1, 3)) if len(tris) else None
     P = pieces(T, len(pa))
     while True:                                   # (and runs on to the end of every piece begun before it)
         B2 = max([B] + [int(tr[tr < hf].max()) + 1 for tr in P if tr.min() < B and (tr < hf).any()])
@@ -106,34 +141,28 @@ def classify(d, lod):
     # (the radio man's handset and the bazooka loader's rocket ride the bolt bone, their carbines having none that
     # moves: the handset goes with the set, the rocket with its bag)
     own = ("bolt",) if "whip_1" in names or "bazooka loader" in d.get("name", "") else ()
+    body_tree.append(surface(np.arange(B)))
     W = hf                                        # (the run from his hands to his helmet: kit, gun, and what was
     rows = []                                     #  added after the gun: the NCO's chin strap, the radio's whip)
     for tr in P:
         inside = (tr >= B) & (tr < W)
         if not inside.any():
             continue
-        bone_ = names[np.bincount(part[np.unique(T[tr].ravel())]).argmax()]
+        v = np.unique(T[tr].ravel())
+        bone_ = names[np.bincount(part[v]).argmax()]
         paint_ = Counter(first[tr].tolist()).most_common(1)[0][0]
-        if not inside.all() and (bone_ in NOT_KIT_BONES or body(paint_, bone_) or paint_ == 5):
+        if not inside.all() and (bone_ in NOT_KIT_BONES or body(paint_, bone_, X[v]) or paint_ == 5):
             continue                              # (the snow suit's hood, run on into the helmet's: not his kit, kept)
         if not inside.all():
             raise SystemExit(f"{lod}: a piece runs across the kit's edge at {B} or {W} "
                              f"({tr.min()}-{tr.max()}, paint {Counter(first[tr].tolist()).most_common(1)})")
-        v = np.unique(T[tr].ravel())
         rows.append({"tr": tr, "v": v, "paint": Counter(first[tr].tolist()).most_common(1)[0][0],
                      "bone": names[np.bincount(part[v]).argmax()], "lo": X[v].min(0), "hi": X[v].max(0)})
     for r in rows:
         r["size"] = float((r["hi"] - r["lo"]).max())
-        r["kit"] = (r["bone"] not in NOT_KIT_BONES or r["bone"] in own) and not body(r["paint"], r["bone"])
+        r["kit"] = ((r["bone"] not in NOT_KIT_BONES or r["bone"] in own)
+                    and not body(r["paint"], r["bone"], X[r["v"]]))
     big = [r for r in rows if r["kit"] and r["size"] > SMALL]
-    from scipy.spatial import cKDTree               # (run with scipy: the bpy environment's python has it)
-    # each surface read as points over its triangles (a 7 x 7 grid in each): the distance to a surface, not to its
-    # corners (a snap on a bag's broad face had stood 5 mm from the bag's nearest corner and was kept, left floating)
-    bc = np.array([(i / 7, j / 7, 1 - i / 7 - j / 7) for i in range(8) for j in range(8 - i)])
-
-    def surface(tris):
-        tris = np.asarray(tris, dtype=np.int64)
-        return cKDTree(np.einsum("kb,tbc->tkc", bc, X[T[tris]]).reshape(-1, 3)) if len(tris) else None
     kit_tree = surface(np.concatenate([r["tr"] for r in big])) if big else None
     stay = [np.arange(B)] + [r["tr"] for r in rows if not r["kit"] and r["bone"] not in ("weapon", "bolt", "bipod")]
     cloth_tree = surface(np.concatenate(stay))
@@ -159,6 +188,12 @@ def classify(d, lod):
         # with his kit: touching a bag, strap or set (a buckle, a snap, the radio's whip); or not lying on the cloth
         # that stays, so it would hang in the air without the kit it is fixed to
         near = dk < NEAR or dc > OFF_CLOTH
+        x_ = float(pts[:, 0].mean())
+        if (near and dc <= BUTTON_ON and all(r["paint"] in hardware for r in g)
+                and float((pts.max(0) - pts.min(0)).max()) <= BUTTON and x_ > chest_x
+                and all(front(r["bone"], x_, ("chest", "spine_02", "spine_01")) for r in g)):
+            near = False                          # (a button sewn on his front or shoulder, a strap against it: stays;
+            #                                        never one behind the chest's middle: kit hardware on his back)
         for r in g:
             r["near"] = near
             r["dk"], r["dc"] = dk, dc
@@ -213,17 +248,21 @@ def targets(names, folder=SHARED):
 
 
 def process(path, dest, backup=None, log=print):
-    d = json.load(open(path))
+    raw = open(path, "rb").read()
+    d = json.loads(raw)
     if "helmet_tris" not in d:
         log(f"  {os.path.basename(path)}: no helmet range, left as it is")
         return None
     before = d.get("pack_tris")
     d = with_range(d)
     notes = d.pop("_pack_notes")
-    if backup:
+    if backup:                                # (the file as it was read)
         os.makedirs(backup, exist_ok=True)
-        shutil.copy2(path, os.path.join(backup, os.path.basename(path) + time.strftime(".%m%d_%H%M%S")))
+        with open(os.path.join(backup, os.path.basename(path) + time.strftime(".%m%d_%H%M%S")), "wb") as f:
+            f.write(raw)
     text = json.dumps(d, separators=(",", ":"), allow_nan=False)
+    if os.path.abspath(dest) == os.path.abspath(path) and open(path, "rb").read() != raw:
+        raise SystemExit(f"{path} changed while its pack range was made: not written; run it again")
     tmp = dest + ".tmp"
     with open(tmp, "w") as f:
         f.write(text)
