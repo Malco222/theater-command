@@ -26,7 +26,8 @@ namespace Fates
  * now and then the first man out of a burning tank is on fire himself, runs a few steps and falls, burning on.
  *
  * The art director's notes of 23 November: tankers get out (the scene draws them in their tankers' files, no
- * rifle; an army with no tankers' file, for now, in its infantry figure, no rifle); a man first runs or crawls straight back in her lee, 8 to
+ * rifle; an army with no tankers' file, for now, in its infantry figure, no rifle, and no pack where the file marks it,
+ * pack_tris: LandMen's Crowd::CrewDress); a man first runs or crawls straight back in her lee, 8 to
  * 12 m (a crawler 3 to 5), keeping her hull between him and the enemy, then breaks for his cover; her ammunition
  * going throws a man on her deck 2 to 5 m, and anyone on the ground within 15 m of her flinches flat for a second or
  * two, then goes on; his odds in the open are by the enemy who can see him (Wreck::Threat: 1 in 6 running with the
@@ -183,7 +184,7 @@ namespace LandBail
 			int Vehicle = -1;
 			size_t K = 0;           // his place in her crew
 			int Man = -1;           // the crowd's man
-			std::string File;       // his soldier file (USA_tanker, GER_panzer, the army's own)
+			std::string File;       // his soldier file (USA_tanker, GER_panzer, the army's own: Crowd::CrewDress)
 			std::string Clip, WasClip;
 			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0;
 			bool bLit = false, bOut = false;

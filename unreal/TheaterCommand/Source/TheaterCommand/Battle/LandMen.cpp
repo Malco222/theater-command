@@ -889,6 +889,7 @@ namespace LandMen
 		const char* LodNames[LodCount] = { "near", "mid", "far" };
 		for (int L = 0; L < LodCount; ++L)
 		{
+			PackFirst[L] = PackCount[L] = 0;
 			const J& Src = Root[LodNames[L]];
 			if (Src.IsNull())
 			{
@@ -900,6 +901,16 @@ namespace LandMen
 			const J& Ht = Root["helmet_tris"][LodNames[L]];
 			HelmetFirst[L] = static_cast<int>(Ht.Number(0, 0.0));
 			HelmetCount[L] = static_cast<int>(Ht.Number(1, 0.0));
+			// (Effects (R2): his pack and webbing's run, pack_tris, as helmet_tris; one that is not two whole numbers
+			// lying within the level's triangles is left alone, so a man without his pack is drawn whole)
+			const J& Pk = Root["pack_tris"][LodNames[L]];
+			const double First = Pk.Number(0, -1.0), Count = Pk.Number(1, 0.0);
+			const double Tris = static_cast<double>(Meshes[L].Triangles.size() / 3);
+			if (Pk.Size() == 2 && First >= 0.0 && Count >= 1.0 && First == std::floor(First) && Count == std::floor(Count) && First + Count <= Tris)
+			{
+				PackFirst[L] = static_cast<int>(First);
+				PackCount[L] = static_cast<int>(Count);
+			}
 		}
 		if (Meshes[Near].Points == 0)
 		{
@@ -1507,10 +1518,18 @@ namespace LandMen
 
 		struct Variant
 		{
-			// A soldier's mesh at one level, with his own helmet or without it (a finish drawn instead): the points only
-			// that helmet uses are left out, so they are neither skinned nor sent.
+			// A soldier's mesh at one level, with his own helmet or without it (a finish drawn instead), and (Effects, R2)
+			// with his pack and webbing or without them (a man out of his machine, AddRider's bNoPack): the runs left out
+			// (VariantCuts) and the points only they use, so those are neither skinned nor sent.
 			Mesh M;
 			std::vector<int> ToCompact;     // the file's point -> this mesh's, or -1
+		};
+		/** The runs of a soldier file's triangles a variant leaves out (bits): his own helmet's (helmet_tris), and his pack
+		 * and webbing's (pack_tris; Effects, R2). */
+		enum VariantCuts : int
+		{
+			CutHelmet = 1,
+			CutPack = 2,
 		};
 
 		struct FaceRest
@@ -1712,6 +1731,9 @@ namespace LandMen
 			// Effects (R2): a rider drawn bareheaded, his file's own helmet left off and no finish drawn in its place (a
 			// downed pilot in an infantry file: AddRider's bBareHead).
 			bool bBareHead = false;
+			// Effects (R2): a rider drawn without his pack and webbing, his file's pack_tris left off and nothing drawn in
+			// their place (a downed pilot, or a tank's crewman bailing out, in an infantry file: AddRider's bNoPack).
+			bool bNoPack = false;
 		};
 
 		std::map<std::string, std::shared_ptr<const Soldier>> Soldiers;
@@ -1778,8 +1800,8 @@ namespace LandMen
 		FallMemory Falls;
 		std::string RecordingText;  // kept for a replay from the start (Update going back)
 		Crowd::Options With;
-		std::map<std::tuple<const Soldier*, int, int>, Variant> Variants;           // soldier, own helmet, level
-		std::map<std::tuple<const Soldier*, int, int, int>, FaceRest> FaceRests;   // soldier, own helmet, level, face
+		std::map<std::tuple<const Soldier*, int, int>, Variant> Variants;           // soldier, runs cut (VariantCuts), level
+		std::map<std::tuple<const Soldier*, int, int, int>, FaceRest> FaceRests;   // soldier, runs cut, level, face
 
 		// The pose bank (SO1): as read (ReadPoseBank), and each far variant's bake.
 		struct BankEntry
@@ -2274,26 +2296,44 @@ namespace LandMen
 			}
 		}
 
-		const Variant& VariantOf(const Soldier* S, bool bOwnHelmet, int L)
+		/** His file's mesh at level L with those runs of its triangles left out (VariantCuts), made once: the points only
+		 * the runs use left out (a point a kept triangle uses stays), the rest in the file's order, and the triangles in
+		 * the file's order without the runs'. A run the file has not at that level is no cut (CutsOf leaves a pack cut
+		 * off there, so such a man shares the mesh of the man with his pack). */
+		const Variant& VariantOf(const Soldier* S, int Cuts, int L)
 		{
-			const auto Key = std::make_tuple(S, bOwnHelmet ? 1 : 0, L);
+			const auto Key = std::make_tuple(S, Cuts, L);
 			auto Found = Variants.find(Key);
 			if (Found != Variants.end()) return Found->second;
 			Variant& V = Variants[Key];
 			const Mesh& Full = S->Meshes[L];
 			const size_t N = static_cast<size_t>(Full.Points);
+			const size_t Tris = Full.Triangles.size() / 3;
 			std::vector<bool> Keep(N, true);
-			size_t TriFirst = Full.Triangles.size() / 3, TriCount = 0;
-			if (!bOwnHelmet && S->HelmetCount[L] > 0)
+			// (the runs left out, [first, first + count) each: his own helmet's, then (Effects, R2) his pack's)
+			size_t RunFirst[2] = { Tris, Tris }, RunCount[2] = { 0, 0 };
+			if ((Cuts & CutHelmet) != 0 && S->HelmetCount[L] > 0)
 			{
-				TriFirst = static_cast<size_t>(S->HelmetFirst[L]);
-				TriCount = static_cast<size_t>(S->HelmetCount[L]);
-				// The points only his own helmet's triangles use (in the snow files a few are shared with the hood: kept).
+				RunFirst[0] = static_cast<size_t>(S->HelmetFirst[L]);
+				RunCount[0] = static_cast<size_t>(S->HelmetCount[L]);
+			}
+			if ((Cuts & CutPack) != 0 && S->PackCount[L] > 0)
+			{
+				RunFirst[1] = static_cast<size_t>(S->PackFirst[L]);
+				RunCount[1] = static_cast<size_t>(S->PackCount[L]);
+			}
+			const auto Cut = [&RunFirst, &RunCount](size_t T) {
+				return (T >= RunFirst[0] && T < RunFirst[0] + RunCount[0]) || (T >= RunFirst[1] && T < RunFirst[1] + RunCount[1]);
+			};
+			if (RunCount[0] > 0 || RunCount[1] > 0)
+			{
+				// The points only the runs' triangles use (in the snow files a few of the helmet's are shared with the hood,
+				// and a strap's may be the cloth's: kept).
 				std::vector<uint8_t> Use(N, 0);
-				for (size_t T = 0; T < Full.Triangles.size() / 3; ++T)
+				for (size_t T = 0; T < Tris; ++T)
 				{
-					const bool bHelmet = T >= TriFirst && T < TriFirst + TriCount;
-					for (int C = 0; C < 3; ++C) Use[Full.Triangles[T * 3 + static_cast<size_t>(C)]] |= bHelmet ? 1 : 2;
+					const bool bCut = Cut(T);
+					for (int C = 0; C < 3; ++C) Use[Full.Triangles[T * 3 + static_cast<size_t>(C)]] |= bCut ? 1 : 2;
 				}
 				for (size_t I = 0; I < N; ++I) Keep[I] = Use[I] != 1;
 			}
@@ -2316,20 +2356,20 @@ namespace LandMen
 				if (!Full.Tint.empty())
 					for (size_t C = 0; C < 3; ++C) M.Tint.push_back(Full.Tint[I * 3 + C]);
 			}
-			for (size_t T = 0; T < Full.Triangles.size() / 3; ++T)
+			for (size_t T = 0; T < Tris; ++T)
 			{
-				if (T >= TriFirst && T < TriFirst + TriCount) continue;
+				if (Cut(T)) continue;
 				for (int C = 0; C < 3; ++C) M.Triangles.push_back(static_cast<uint32_t>(V.ToCompact[Full.Triangles[T * 3 + static_cast<size_t>(C)]]));
 			}
 			return V;
 		}
 
-		const FaceRest& FaceRestOf(const Soldier* S, bool bOwnHelmet, int L, int FaceIx)
+		const FaceRest& FaceRestOf(const Soldier* S, int Cuts, int L, int FaceIx)
 		{
-			const auto Key = std::make_tuple(S, bOwnHelmet ? 1 : 0, L, FaceIx);
+			const auto Key = std::make_tuple(S, Cuts, L, FaceIx);
 			auto Found = FaceRests.find(Key);
 			if (Found != FaceRests.end()) return Found->second;
-			const Variant& V = VariantOf(S, bOwnHelmet, L);
+			const Variant& V = VariantOf(S, Cuts, L);
 			FaceRest& R = FaceRests[Key];
 			R.At = V.M.At;
 			R.Facing = V.M.Facing;
@@ -2351,6 +2391,12 @@ namespace LandMen
 		}
 
 		bool OwnHelmet(const Man& M) const { return M.Info.Finish < 0 && !M.bBareHead; }
+		/** The runs his mesh at level L leaves out (VariantCuts): his own helmet where a finish is drawn over him or he is
+		 * bareheaded; his pack where he goes without it (Effects, R2) and his file marks it at that level. */
+		int CutsOf(const Man& M, int L) const
+		{
+			return (OwnHelmet(M) ? 0 : CutHelmet) | (M.bNoPack && M.S->PackCount[L] > 0 ? CutPack : 0);
+		}
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Poses of the rules, drawn.
@@ -3749,8 +3795,8 @@ namespace LandMen
 		{
 			for (int L = 0; L < LodCount; ++L)
 			{
-				M.FaceAt[L] = &FaceRestOf(M.S, OwnHelmet(M), L, M.Info.Face);
-				M.Var[L] = &VariantOf(M.S, OwnHelmet(M), L);
+				M.FaceAt[L] = &FaceRestOf(M.S, CutsOf(M, L), L, M.Info.Face);
+				M.Var[L] = &VariantOf(M.S, CutsOf(M, L), L);
 				M.bLook[L] = false;
 				M.bSkinned[L] = false;
 				M.RestAt[L].clear();
@@ -3960,8 +4006,8 @@ namespace LandMen
 			// the frame he first comes into view (a few milliseconds each the first time).
 			for (int L = 0; L < LodCount; ++L)
 			{
-				Mn.FaceAt[L] = &FaceRestOf(Mn.S, OwnHelmet(Mn), L, Mn.Info.Face);
-				Mn.Var[L] = &VariantOf(Mn.S, OwnHelmet(Mn), L);
+				Mn.FaceAt[L] = &FaceRestOf(Mn.S, CutsOf(Mn, L), L, Mn.Info.Face);
+				Mn.Var[L] = &VariantOf(Mn.S, CutsOf(Mn, L), L);
 			}
 			AttachBank(Mn);
 			Tr.Man = static_cast<int>(Men.size()) - 1;
@@ -5227,7 +5273,40 @@ namespace LandMen
 		return File;
 	}
 
-	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row, bool bBareHead)
+	Crowd::Dress Crowd::PilotDress(const std::string& Nation) const
+	{
+		Dress D;
+		const std::string Crew = Nation == "USA" ? "USA_tanker" : Nation == "GER" ? "GER_panzer" : std::string();
+		if (!Crew.empty() && SoldierFile(Crew))
+		{
+			// (his tankers' file: his own head and kit, as it is drawn)
+			D.File = Crew;
+			D.bTankers = true;
+			return D;
+		}
+		D.File = RiderFileOf(Nation, D.Row);
+		D.bBareHead = true;
+		D.bNoPack = true;
+		return D;
+	}
+
+	Crowd::Dress Crowd::CrewDress(const std::string& Nation) const
+	{
+		Dress D;
+		const std::string Crew = Nation == "USA" ? "USA_tanker" : Nation == "GER" ? "GER_panzer" : std::string();
+		D.bTankers = !Crew.empty() && SoldierFile(Crew);
+		if (D.bTankers)
+		{
+			D.File = Crew;
+			return D;
+		}
+		// (his army's own infantry figure, his helmet on, his pack and webbing off)
+		D.File = SoldierFile(Nation) ? Nation : std::string();
+		D.bNoPack = true;
+		return D;
+	}
+
+	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row, bool bBareHead, bool bNoPack)
 	{
 		Impl& I = *Inner;
 		const auto Sol = I.Soldiers.find(FileArmy);
@@ -5265,14 +5344,16 @@ namespace LandMen
 		// Bareheaded, not even his file's own: a downed pilot in his army's infantry file, who wears no steel helmet)
 		Mn.Info.Finish = -1;
 		Mn.bBareHead = bBareHead;
+		// (Effects (R2): no pack, his file's pack and webbing left off where it marks them: a man out of his machine)
+		Mn.bNoPack = bNoPack;
 		Mn.PhaseSeed = static_cast<float>(Unit01(Seed ^ 0x57E9ull));
 		Mn.StylePick = static_cast<float>(Unit01(Seed ^ 0x5717E5ull));
 		Mn.bVisible = false;
 		RestPose(Mn.Now);
 		for (int L = 0; L < LodCount; ++L)
 		{
-			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, !bBareHead, L, Mn.Info.Face);
-			Mn.Var[L] = &I.VariantOf(Mn.S, !bBareHead, L);
+			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, I.CutsOf(Mn, L), L, Mn.Info.Face);
+			Mn.Var[L] = &I.VariantOf(Mn.S, I.CutsOf(Mn, L), L);
 		}
 		return static_cast<int>(I.Men.size()) - 1;
 	}
