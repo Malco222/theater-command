@@ -809,6 +809,7 @@ int main(int Argc, char** Argv)
 	if (const char* V = std::getenv("LAND_FIELD_WEATHER")) F.Weather = V; // (the campaign's weather word: "mud")
 	if (const char* V = std::getenv("LAND_FIELD_MONTH")) F.Month = std::atoi(V);
 	if (const char* V = std::getenv("LAND_FIELD_TERRAIN")) F.Terrain = V;
+	if (std::getenv("LAND_FIELD_OLD_RIVER_BED")) F.bOldRiverBed = true; // (the game's -TheaterLandOldRiverBed: Field::bOldRiverBed)
 	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings
 	// (Content/Models/East: the recording's folder's ../../Models/East), as the game reads them.
 	if (const Json* St = Fj->Get("steppe"); St && St->K == Json::Object)
