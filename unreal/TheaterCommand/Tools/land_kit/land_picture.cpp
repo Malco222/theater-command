@@ -856,6 +856,10 @@ int main(int argc, char** argv)
 			// (close looks for working on them, painted only when LAND_KIT_ONLY names them)
 			{ "zz_barn_inside", 3, 0, 0, 7, -12.0, 30.0, 62.0, 3, 13.0, "", 1 },
 			{ "zz_barn_pitch", 0, 0, 0, 8, 70.0, 8.0, 62.0, 3, 16.0, "", 1 },
+			{ "zz_barn_gable90_near", 2, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 1 },
+			{ "zz_barn_gable90_mid", 2, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 1 },
+			{ "zz_gable90_back_near", 2, 0, 0, 7, 140.0, 4.0, 210.0, 3, 55.0, "", 0 },
+			{ "zz_gable90_back_mid", 2, 1, 0, 7, 140.0, 4.0, 210.0, 3, 55.0, "", 0 },
 		};
 		// (the village's church: LAND_KIT_HOUSE=church)
 		const HouseLook ChurchLooks[] = {

@@ -5228,6 +5228,14 @@ namespace LandHouse
 			// slates gone down each column of them, as far as the blast tore them, so they step down the slope; the cut
 			// edges dark, the slates near it sooted; a charred rafter or two across it.
 			const bool bRagged = P.Kind >= 3 && P.Hurt == 1;
+			// A gable down at the middle level (the art director's village round 2 carry: one slope's dark underside stood
+			// past the other's end as a closed black gable): both slopes' deck back to the last whole truss, straight
+			// across; past it the purlins run on as the near's do, the last sagging, and a rafter or two broken short.
+			const bool bTruss = bMid && P.Hurt == 2;
+			double Truss = 1e9;
+			if (bTruss)
+				for (int Side = -1; Side <= 1; Side += 2)
+					for (double Sd = 0.0; Sd <= P.Ls + 1e-6; Sd += 0.25) Truss = std::min(Truss, CutAt(P, Side, Sd) + 0.14);
 			auto Gone = [&](int Side, double X, double Sd) {
 				if (Side != P.HoleSide) return false;
 				const double DX = (X - P.HoleX) / P.HoleRX;
@@ -5271,13 +5279,25 @@ namespace LandHouse
 					const double S0 = SB[static_cast<size_t>(K)], S1 = SB[static_cast<size_t>(K) + 1], SM = 0.5 * (S0 + S1);
 					for (int I = 0; I < NX; ++I)
 					{
-						const double XA = X0 + (X1 - X0) * I / NX, XB = X0 + (X1 - X0) * (I + 1) / NX, XM = 0.5 * (XA + XB);
+						double XA = X0 + (X1 - X0) * I / NX, XB = X0 + (X1 - X0) * (I + 1) / NX;
+						bool bCutL = false, bCutR = false;
+						if (bTruss && P.Broken > 0)
+						{
+							if (XA >= Truss - 0.05) continue;
+							if (XB > Truss - 0.05) { XB = Truss; bCutR = true; }
+						}
+						else if (bTruss)
+						{
+							if (XB <= -Truss + 0.05) continue;
+							if (XA < -Truss + 0.05) { XA = -Truss; bCutL = true; }
+						}
+						const double XM = 0.5 * (XA + XB);
 						if (bRagged && Side == P.HoleSide && std::fabs(XM - P.HoleX) < 1.4 * P.HoleRX + 0.5 * (XB - XA) && SM - 0.5 * (S1 - S0) < P.HoleS + 1.4 * P.HoleRS && SM + 0.5 * (S1 - S0) > P.HoleS - 2.6 * P.HoleRS)
 						{
 							Ragged(Side, K, I, XA, XB, S0, S1);
 							continue;
 						}
-						if (!DeckThere(P, Side, XM, SM)) continue;
+						if (!bTruss && !DeckThere(P, Side, XM, SM)) continue;
 						const uint64_t H = Hash(P.Key, 0xBA4D, static_cast<uint64_t>(K * 256 + I * 2 + (Side > 0)));
 						Col C = Varied(P.K.Roof, (bMid ? 0.95 : P.Kind >= 3 ? 0.7 : 0.8) + 0.08 * Unit(H), 0.0); // (a church's steep slates darker far off, as near)
 						if (!bMid && P.S.Roof == 0) C = Rgb(C.R, C.G * 1.01, C.B * 1.085); // (the far slate keeps its blue: the art director's round 3)
@@ -5290,10 +5310,10 @@ namespace LandHouse
 						const RoofPt U0 = RoofAt(P, Side, XA, S0, -0.04), U1 = RoofAt(P, Side, XB, S0, -0.04), U2 = RoofAt(P, Side, XB, S1, -0.04), U3 = RoofAt(P, Side, XA, S1, -0.04);
 						if (K == 0 || P.Hurt >= 1) B.Quad1(U0.P, U1.P, U2.P, U3.P, P.K.Boards, U0.N * -1.0);
 						if (bMid || K == 0) B.Quad1(RoofAt(P, Side, XA, S0, -0.04).P, RoofAt(P, Side, XB, S0, -0.04).P, A1.P, A0.P, Scaled(C, 0.5), Norm(A0.P - A3.P));
-						if (I == 0) B.Quad1(A0.P, A3.P, U3.P, U0.P, Scaled(C, 0.6), V3{ -1.0, 0.0, 0.0 });
-						if (I == NX - 1) B.Quad1(A1.P, A2.P, U2.P, U1.P, Scaled(C, 0.6), V3{ 1.0, 0.0, 0.0 });
-						if (I > 0 && !DeckThere(P, Side, XM - (XB - XA), SM)) B.Quad1(A0.P, A3.P, U3.P, U0.P, Rgb(40, 32, 28), V3{ -1.0, 0.0, 0.0 });
-						if (I < NX - 1 && !DeckThere(P, Side, XM + (XB - XA), SM)) B.Quad1(A1.P, A2.P, U2.P, U1.P, Rgb(40, 32, 28), V3{ 1.0, 0.0, 0.0 });
+						if (I == 0 || bCutL) B.Quad1(A0.P, A3.P, U3.P, U0.P, bCutL ? Rgb(40, 32, 28) : Scaled(C, 0.6), V3{ -1.0, 0.0, 0.0 });
+						if (I == NX - 1 || bCutR) B.Quad1(A1.P, A2.P, U2.P, U1.P, bCutR ? Rgb(40, 32, 28) : Scaled(C, 0.6), V3{ 1.0, 0.0, 0.0 });
+						if (!bTruss && I > 0 && !DeckThere(P, Side, XM - (XB - XA), SM)) B.Quad1(A0.P, A3.P, U3.P, U0.P, Rgb(40, 32, 28), V3{ -1.0, 0.0, 0.0 });
+						if (!bTruss && I < NX - 1 && !DeckThere(P, Side, XM + (XB - XA), SM)) B.Quad1(A1.P, A2.P, U2.P, U1.P, Rgb(40, 32, 28), V3{ 1.0, 0.0, 0.0 });
 					}
 				}
 			// (the church's hole: its charred rafters across it, the middle's two, one broken and hanging into the dark; the
@@ -5314,12 +5334,42 @@ namespace LandHouse
 					B.Beam(Hang, Down, 0.08, 0.12, Scaled(Burnt, 0.85), T0.N);
 				}
 			}
+			if (bTruss)
+			{
+				const Col Wood = Mixed(Rgb(92, 72, 54), P.K.Char, 0.5), Burnt = Mixed(Wood, P.K.Char, 0.6);
+				for (int Side = -1; Side <= 1; Side += 2)
+				{
+					// (the purlins, from under the deck to where the near's end, the upper one sagging)
+					for (int K = 0; K < 2; ++K)
+					{
+						const double S = P.Lk + P.Lm * (K == 0 ? 0.32 : 0.66);
+						const double End = CutAt(P, Side, S) + 0.7 + 0.6 * Unit(Hash(P.Key, 0x9A1, static_cast<uint64_t>(K * 2 + (Side > 0))));
+						// (their ends under the deck and at the sag's joint hidden, so not drawn)
+						const RoofPt A = RoofAt(P, Side, P.Broken * (Truss - 0.3), S, -0.25);
+						RoofPt Bp = RoofAt(P, Side, P.Broken * End, S, -0.25);
+						if (K == 0)
+						{
+							B.Beam(A.P, Bp.P, 0.16, 0.2, Mixed(Wood, P.K.Char, 0.3), A.N, 1);
+							continue;
+						}
+						const RoofPt M = RoofAt(P, Side, P.Broken * std::max(Truss + 0.1, End - 1.2), S, -0.25);
+						Bp.P = Bp.P - Up * 0.45;
+						B.Beam(A.P, M.P, 0.16, 0.2, Wood, A.N, 1);
+						B.Beam(M.P, Bp.P, 0.16, 0.2, Burnt, A.N, 1);
+					}
+					// (a rafter broken short past the truss, from the eaves up)
+					const double XR = Truss + 0.35 + 0.3 * Unit(Hash(P.Key, 0x9A7, static_cast<uint64_t>(Side > 0)));
+					const double To = P.Ls * (0.35 + 0.35 * Unit(Hash(P.Key, 0x9A8, static_cast<uint64_t>(Side > 0))));
+					const RoofPt R0 = RoofAt(P, Side, P.Broken * XR, SlopeAt(P, 0.5 * P.D - P.Thick), -0.1), R1 = RoofAt(P, Side, P.Broken * XR, To, -0.1);
+					B.Beam(R0.P, R1.P, 0.075, 0.13, Burnt, R0.N, 1);
+				}
+			}
 			// the ridge, a rounded cap
 			const double RX0 = ChimneyAt(P, -1) ? -0.5 * P.L + 0.6 : X0, RX1 = ChimneyAt(P, 1) ? 0.5 * P.L - 0.6 : X1;
 			double CX0 = RX0, CX1 = RX1;
 			if (P.Hurt == 2)
 			{
-				const double Cut = std::min(CutAt(P, 1, P.Ls), CutAt(P, -1, P.Ls)) - 0.2;
+				const double Cut = bTruss ? Truss : std::min(CutAt(P, 1, P.Ls), CutAt(P, -1, P.Ls)) - 0.2;
 				if (P.Broken > 0) CX1 = std::min(CX1, Cut);
 				else CX0 = std::max(CX0, -Cut);
 			}
@@ -5340,8 +5390,8 @@ namespace LandHouse
 					double GX0 = X0 + 0.06, GX1 = X1 - 0.06;
 					if (P.Hurt == 2)
 					{
-						if (P.Broken > 0) GX1 = std::min(GX1, CutAt(P, Side, 0.2) - 0.3);
-						else GX0 = std::max(GX0, -(CutAt(P, Side, 0.2) - 0.3));
+						if (P.Broken > 0) GX1 = std::min({ GX1, CutAt(P, Side, 0.2) - 0.3, Truss - 0.1 });
+						else GX0 = std::max({ GX0, -(CutAt(P, Side, 0.2) - 0.3), -(Truss - 0.1) });
 					}
 					B.Box(V3{ 0.5 * (GX0 + GX1), Side * GV, GZ }, V3{ 0.5 * (GX1 - GX0), 0.0, 0.0 }, V3{ 0.0, 0.06, 0.0 }, V3{ 0.0, 0.0, 0.05 }, P.K.Zinc, 0);
 				}
