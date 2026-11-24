@@ -118,6 +118,12 @@ public:
 	 * presses CONTINUE on the after card, with LiveResult's answer (empty where there is none), after the table is back.
 	 */
 	TFunction<void(const FString&)> HandBack;
+	/**
+	 * (release 2, camera specials) The names corps have earned (nicknames.ts), by the campaign's corps id, where the map
+	 * shows them on the flags: given by the campaign before the battle opens. With -TheaterLandNickCard the film cards a
+	 * corps' name on its first kill it can show (LandEye World::Nickname, by the block's corps). Empty: no card.
+	 */
+	TMap<int32, FString> CorpsNicknames;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time

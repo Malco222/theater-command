@@ -39,6 +39,11 @@ struct FLandBattleState
 	LandPlay::Replay Play;
 	LandSound::Mixer Mix;
 	LandEye::Director Eye;
+	/** (Camera specials, release 2) -TheaterLandWhistle: the attack's officer blows his whistle as he steps off, the
+	 * film opening on him (LandEye WhistleAt, WhistleMan); and whether it has sounded. */
+	bool bWhistleOn = false, bWhistleBlown = false;
+	/** The earned names by block id, for the film's card (-TheaterLandNickCard): empty strings where none. */
+	TMap<int32, FString> NickOfBlock;
 	/** The walk pan's plan once chosen (-TheaterLandWalkPan, the Mac recipe's look 7; it asks EyeWorld below). */
 	LandWalkPan::Plan Pan;
 	LandDesk::Desk Desk;

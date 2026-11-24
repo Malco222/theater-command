@@ -1915,6 +1915,48 @@ bool ALandBattle::Open()
 		{
 			Set.MassFrom = 0.0;
 		}
+		// (Camera specials, release 2, Brian's yes of 23 November 19:52Z: each its own switch, OFF until the art director
+		// passes its stills and the Mac holds 45 fps. Off, the film is the same frame for frame.
+		// -TheaterLandWhistle: the attack opens on its officer blowing his whistle as the first men step off, then the
+		// opening aerial. -TheaterLandLastStand: once a battle, a cut-off section down to a handful, still firing, held
+		// 4 to 9 s from where two of them are seen. -TheaterLandNickCard: a corps' earned name carded on the first kill of
+		// its men the film can go to, about 3 s, once a name; "-TheaterLandNickCard=The Iron Ravens" gives that name to
+		// the attacker's foot and tanks on a set piece, for the stills and the Mac's A/B.)
+		Set.bWhistle = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandWhistle"));
+		Set.bLastStand = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandLastStand"));
+		S.bWhistleOn = Set.bWhistle;
+		S.bWhistleBlown = false;
+		S.NickOfBlock.Reset();
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNickCard")) || FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandNickCard=")) != nullptr)
+		{
+			FString TestName;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandNickCard="), TestName);
+			for (const LandFeed::Block& B : Rec.Blocks)
+			{
+				if (B.Kind != "inf" && B.Kind != "arm")
+				{
+					continue;
+				}
+				if (const FString* Earned = CorpsNicknames.Find(B.Corps))
+				{
+					S.NickOfBlock.Add(B.Id, *Earned);
+				}
+				else if (!TestName.IsEmpty() && B.Side == 0)
+				{
+					S.NickOfBlock.Add(B.Id, TestName);
+				}
+			}
+			if (S.NickOfBlock.Num() > 0)
+			{
+				EyeWorld.Nickname = [Weak](int Block)
+				{
+					const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+					const FString* Name = Pinned.IsValid() ? Pinned->NickOfBlock.Find(Block) : nullptr;
+					return Name ? std::string(TCHAR_TO_UTF8(**Name)) : std::string();
+				};
+			}
+			UE_LOG(LogTheater, Log, TEXT("Land battle: the film cards earned names (-TheaterLandNickCard): %d blocks carry one"), S.NickOfBlock.Num());
+		}
 		// (the dark rule's reading of the drawn frame, when the game has its viewport to read)
 		StartDarkRead();
 		if (DarkGrab.IsValid())
@@ -6679,6 +6721,27 @@ void ALandBattle::Tick(float DeltaSeconds)
 	{
 		LAND_SCOPE(Rules);
 		S.Play.Step(From, S.Battle, S.Fx, S.Noises, S.Losses);
+	}
+	// (Camera specials, release 2, -TheaterLandWhistle: the officer the film opens on blows as he steps off, the attack's
+	// whistle (LandSound's contact list, side 0) where he stands; the recording's own contact whistle still comes later)
+	if (S.bWhistleOn && !S.bWhistleBlown && !bNight && S.Eye.WhistleAt() >= 0.0 && S.Battle >= S.Eye.WhistleAt())
+	{
+		S.bWhistleBlown = true;
+		const int32 Man = S.Eye.WhistleMan();
+		if (Man >= 0 && Man < static_cast<int32>(S.Rec.Tracks.size()))
+		{
+			const LandFeed::Track& Officer = S.Rec.Tracks[static_cast<size_t>(Man)];
+			const LandFeed::Spot Here = LandFeed::SpotAt(Officer, S.Battle);
+			const LandFeed::Block* Unit = S.Rec.BlockOf(Officer.Block);
+			LandPlay::Noise N;
+			N.T = S.Battle;
+			N.Kind = LandPlay::NoiseKind::Contact;
+			N.At = LandPlay::Vec(Here.X, Here.Y, (S.EyeWorld.Height ? S.EyeWorld.Height(Here.X, Here.Y) : 0.0) + 1.6);
+			N.Army = Unit ? Unit->Army : std::string();
+			N.Side = 0;
+			N.Track = Man;
+			S.Noises.push_back(N);
+		}
 	}
 	if (bShotHeld)
 	{
