@@ -575,6 +575,8 @@ describe('the Libya convoys', () => {
     expect(fed).toBeGreaterThan(0.05);
     expect(fed).toBeLessThan(0.5);
     // A starved island sinks less.
+    // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+    g.supply.UK = Uint8Array.from(g.supply.UK);
     g.supply.UK[g.byName['Malta'].id] = 0;
     convoyWar(g, 'ITA');
     const starved = g.convoys.libya.loss!;
