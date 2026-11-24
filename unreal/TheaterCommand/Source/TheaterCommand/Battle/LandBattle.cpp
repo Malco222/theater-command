@@ -4954,9 +4954,16 @@ void ALandBattle::HideTheTable()
 			double SnowBelow = 0.85;
 			LandLook::Asked(TEXT("TheaterLandSnowBelow="), { &SnowBelow });
 			const FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
-			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 1.0));
+			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 4.0));
 			const FLinearColor Field = FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
-			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f)"), Field.R, Field.G, Field.B, Snowed);
+			// (the engine lays this colour over the sky's lower half only when the lower half is a solid colour, which
+			// the flag the engine still calls "black" says: with it off, as it was, the colour was ignored and the lower
+			// half was the table's cubemap's dark ground, so the hull's shaded side stayed 18-22 on the Mac at Valdai,
+			// 9ebf1fcc. Turned on where snow lies; elsewhere the lower half stays the cubemap's, as every other look
+			// passed with. "-TheaterLandSnowBelowOld" keeps the cubemap's on snow too, to set the two side by side)
+			const bool bSolidBelow = Snowed > 0.0 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld"));
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f; snow's strength %.2f, -TheaterLandSnowBelow=), %s"), Field.R, Field.G, Field.B, Snowed, SnowBelow,
+				bSolidBelow ? TEXT("laid as a solid colour") : Snowed > 0.0 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (no snow)"));
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
@@ -4967,8 +4974,8 @@ void ALandBattle::HideTheTable()
 				Kept.Lower = Sky->LowerHemisphereColor;
 				if (Below > 0.0)
 				{
-					Sky->bLowerHemisphereIsBlack = false;
-					Sky->LowerHemisphereColor = Field;
+					Sky->bLowerHemisphereIsBlack = bSolidBelow;
+					Sky->SetLowerHemisphereColor(Field);
 					Sky->RecaptureSky();
 				}
 			}
