@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8e519456 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7c92c852 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -81398,6 +81398,15 @@
       const [bx, by2] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
       starts2[x.f.id] = H ? { x: bx, y: by2, band: defBand, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by2, band: a.radar ? 1 : 0, fuel: SKY.fuel.home, wait: !a.radar };
       def.push(force(x.f, "ftr", n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+    }
+    if (sweep && H.W >= 0.5 && raidAt.length) {
+      const ex = SKY.target.x + rax, ey = SKY.target.y + ray;
+      const at4 = [...new Set(def.map((f) => starts2[f.corps]))].filter((p) => p && !p.over);
+      const far = Math.max(0, ...at4.map((p) => Math.hypot(p.x - ex, p.y - ey)));
+      for (const p of at4) {
+        const r = Math.hypot(p.x - ex, p.y - ey);
+        if (r > 0 && r < far) [p.x, p.y] = clampBoard(ex + (p.x - ex) * far / r, ey + (p.y - ey) * far / r);
+      }
     }
     const side5 = (n, forces, human) => ({
       nat: n,
