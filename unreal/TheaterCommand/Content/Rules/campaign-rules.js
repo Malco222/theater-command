@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6b11ce72 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of af89ade8 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40392,10 +40392,10 @@
     radar: 0,
     _seaLoss: "The tree's flat cuts to convoy losses that stay: the convoy system that comes with 'sonar'. Escort groups act through their incidents instead, and no nation's own trait (Britain's signals) is read.",
     seaLoss: ["sonar"],
-    _station: "The share of a month a raiding fleet's boats are on station in the sea they raid (the design director's one-pass ruling of 24 November 2026 13:23Z, Q3(a)(i), and the days of 13:31Z; naval-battles/convoy-r2/one-pass-form.md). A cause, not a scale: a patrol's days on station ('patrol') over its whole cycle, which adds the passage out from the fleet's port and back ('passage' days for each sea crossed by the sea graph, through the straits open to it) and the refit in port before the next patrol ('refit'). Share = patrol / (patrol + 2 x passage x seas + refit). It acts wherever boats raiding are counted: the raid strength that sinks tons and the incidents with the convoys' escorts. By class: 'ss' alone has rows; a class without rows is on station all month. The days are laid, never the shares (historian/convoy-build-reads-1124.md): patrol 20, a Biscay boat's days on station of about 40 out (D from L: U-96's 11 patrols averaged 38.6 days out; McCue, NDU 1990); refit 40, its days in port before the next (D from L: U-96's 38.2); passage 5, fitted so the Bay of Biscay to the North Atlantic, two seas on the chart, is McCue's 10 days each way ('20 or more days on the trip to port and back', D). German and Norwegian ports take the same days a sea. Checks, not figures: about 0.25 of boats in commission on station, 0.5 of boats at sea (D), and the record's third (about 104 boats at sea of 240-300 in 1943). Tankers at sea are a cause not yet laid. 'raid': a boat's raid weight while on station (navy.json classes.ss.raid is 1, a boat there all month), refit once at OEG T2's window (Oct 1942 to May 1943) so the window keeps its tons with the share: 3.5 (D, the six-war reading of 24 November, naval-battles/convoy-r2/onepass-reading-1124.md; it comes to 1 / 0.286, the window's own share, all raiders then a sea from the Western Approaches). The lanes' ocean term, the ruling's first choice, cannot carry it: it would have to be -328, below zero, since the escorts' worth is twelve times the raiders' there. Null: a weight of 1.",
+    _station: "The share of a month a raiding fleet's boats are on station in the sea they raid (the design director's one-pass ruling of 24 November 2026 13:23Z, Q3(a)(i), and the days of 13:31Z; naval-battles/convoy-r2/one-pass-form.md). A cause, not a scale: a patrol's days on station ('patrol') over its whole cycle, which adds the passage out from the fleet's port and back ('passage' days for each sea crossed by the sea graph, through the straits open to it) and the refit in port before the next patrol ('refit'). Share = patrol / (patrol + 2 x passage x seas + refit). It acts wherever boats raiding are counted: the raid strength that sinks tons and the incidents with the convoys' escorts. By class: 'ss' alone has rows; a class without rows is on station all month. The days are laid, never the shares (historian/convoy-build-reads-1124.md): patrol 20, a Biscay boat's days on station of about 40 out (D from L: U-96's 11 patrols averaged 38.6 days out; McCue, NDU 1990); refit 40, its days in port before the next (D from L: U-96's 38.2); passage 5, fitted so the Bay of Biscay to the North Atlantic, two seas on the chart, is McCue's 10 days each way ('20 or more days on the trip to port and back', D). German and Norwegian ports take the same days a sea. Checks, not figures: about 0.25 of boats in commission on station, 0.5 of boats at sea (D), and the record's third (about 104 boats at sea of 240-300 in 1943). Tankers at sea are a cause not yet laid. 'raid': a boat's raid weight while on station in the lanes' form (navy.json classes.ss.raid is 1, a boat there all month), refit once at OEG T2's window so the window keeps its tons with the share: 3.5 (D, the six-war reading of 24 November, naval-battles/convoy-r2/onepass-reading-1124.md; it comes to 1 / 0.286, the window's own share). The lanes' ocean term could not carry it (it would have to be -328). Where the tons are counted from the convoys' side (count.sink below; the tons ruling of 24 November 14:04Z) the boats on station that find and attack carry the share, so the convoys' side counts a boat on station at 1. The 3.5 stays wherever the lanes' form still counts boats: the oil and supply lanes (laneLoss, the ruling's Q4), the escorts' destroyers lost to the boats, and a route whose sinking figure is unread. Null: a weight of 1.",
     station: { ss: { patrol: 20, passage: 5, refit: 40 }, raid: 3.5 },
-    _count: "The convoy-side count (one-pass ruling Q1(a), Q2(a), Q4, and the reading ruling of 24 November 13:50Z): a route's convoys attacked a month = convoys sailed x the share attacked. attacked 0.42 and sighted 0.68: OEG ch. 10 Table 2, northern routes, Oct 1942 to May 1943, 80 convoys (F; historian/convoy-reads-1124.md); a contact is a convoy sighted. The share attacked is 1 - exp(-phi x F x B), B the boats on station on the route's seas (station above), F finding from kit (none laid: 1), one phi for every route, fitted so the share is 0.42 at boatsT2. boatsT2 40: the boats at sea in the northwest Atlantic over T2's window, 22 to 60 (D from F, the middle). perAttack 2: boats a convoy attacked (F, OEG's own estimate). Convoys sailed a month = ways x the route's tons / (ships a convoy x GRT a ship). ways 2: T2's 0.42 is over its convoys both ways, so the count takes the return sailings as well as the loaded ones (D, the ruling of 13:50Z: about 10.4 a month on the Atlantic route). The incidents with the escort are counted from the boats' side, at T2's own rate: t2 80 convoys over 8 months (F, OEG T2's window) x 0.42 x 2 boats / 40 on station = 0.21 a boat on station a month (D). The pack, the boats a convoy attacked, follows from the two (incidents / attacked), and the card shows it. ships: atlantic 44 (D from L, historian/convoy-size-1124.md); libya 2 (D from L: Bragadin's 883 escorted convoys, the usual operation 2 ships, O'Hara; 1 to 7). grt: atlantic 5,200 (D: every pair read gives 4,400-5,800; ruling 241 Q8); libya 3,800 (D from L: 342 Axis freighters lost, 1,299,777 tons). historian/convoy-build-reads-1124.md. A route whose count is not laid (a null) keeps the per-boat share above ('find').",
-    count: { attacked: 0.42, sighted: 0.68, boatsT2: 40, perAttack: 2, ways: 2, t2: { convoys: 80, months: 8 }, ships: { atlantic: 44, libya: 2 }, grt: { atlantic: 5200, libya: 3800 } }
+    _count: "The convoy-side count (one-pass ruling Q1(a), Q2(a), Q4, and the reading ruling of 24 November 13:50Z): a route's convoys attacked a month = convoys sailed x the share attacked. attacked 0.42 and sighted 0.68: OEG ch. 10 Table 2, northern routes, Oct 1942 to May 1943, 80 convoys (F; historian/convoy-reads-1124.md); a contact is a convoy sighted. The share attacked is 1 - exp(-phi x F x B), B the boats on station on the route's seas (station above), F finding from kit (none laid: 1), one phi for every route, fitted so the share is 0.42 at boatsT2. boatsT2 40: the boats at sea in the northwest Atlantic over T2's window, 22 to 60 (D from F, the middle). perAttack 2: boats a convoy attacked (F, OEG's own estimate). Convoys sailed a month = ways x the route's tons / (ships a convoy x GRT a ship). ways 2: T2's 0.42 is over its convoys both ways, so the count takes the return sailings as well as the loaded ones (D, the ruling of 13:50Z: about 10.4 a month on the Atlantic route). The incidents with the escort are counted from the boats' side, at T2's own rate: t2 80 convoys over 8 months (F, OEG T2's window) x 0.42 x 2 boats / 40 on station = 0.21 a boat on station a month (D). The pack, the boats a convoy attacked, follows from the two (incidents / attacked), and the card shows it. ships: atlantic 44 (D from L, historian/convoy-size-1124.md); libya 2 (D from L: Bragadin's 883 escorted convoys, the usual operation 2 ships, O'Hara; 1 to 7). grt: atlantic 5,200 (D: every pair read gives 4,400-5,800; ruling 241 Q8); libya 3,800 (D from L: 342 Axis freighters lost, 1,299,777 tons). historian/convoy-build-reads-1124.md. sink (k): the tons ruling (naval-battles/convoy-r2/tons-form.md): a convoy the boats attack loses its ships x P / (P + k x E), P the pack's raid strength (the pack x a boat's raid strength on station, its kit, fit and the air over it), E the convoy's share of the route's escort worth (G / convoys sailed); tons = convoys attacked x ships sunk x GRT, both ways, and the share of cargo lost is the share of ships sunk. k is refit once at OEG T2's window so that 2 boats sink 3.75 ships a convoy attacked (D: T2's 80 convoys, 125.6 ships sunk over 33.5 convoys attacked; SC/ONS 4.4, HX/ONF 3.2): 0.137 (D, six AI wars Oct 1942 to May 1943, 48 months: a boat's raid strength on station 0.298, a convoy's escort worth 46.5; the months' median 0.136). Never fitted to a battle; the battle table (wolfpack-r2/history.md, P) is a check only. The month's swing and a fought night act on the ships sunk a convoy attacked, never past its ships (Q3(a)). A surface raider or a fortress astride the route keeps the lanes' form beside it, its tons of the loaded sailings as before; the two shares together at most the lanes' cap (0.95). Null: the boats keep the lanes' form. A route whose count is not laid (a null) keeps the per-boat share above ('find').",
+    count: { attacked: 0.42, sighted: 0.68, boatsT2: 40, perAttack: 2, ways: 2, t2: { convoys: 80, months: 8 }, sink: 0.137, ships: { atlantic: 44, libya: 2 }, grt: { atlantic: 5200, libya: 3800 } }
   };
 
   // ../../src/campaign/tech.ts
@@ -45119,10 +45119,13 @@
     return D2.patrol / (D2.patrol + 2 * D2.passage * passageSeas(g2, f, z) + D2.refit);
   }
   function raidPower(g2, f, cause) {
-    const st = cause && stationDays("ss") ? onStation(g2, f, f.zone) * (CAUSE2.station.raid ?? 1) : 1;
     let p = 0;
-    for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid * (c === "ss" ? st : 1);
+    for (const c of CLASSES) p += c === "ss" ? boatRaid(g2, f, cause) : f.ships[c] * NAVY.classes[c].raid;
     return p;
+  }
+  function boatRaid(g2, f, cause, weighed = true) {
+    const st = cause && stationDays("ss") ? onStation(g2, f, f.zone) * (weighed ? CAUSE2.station.raid ?? 1 : 1) : 1;
+    return f.ships.ss * NAVY.classes.ss.raid * st;
   }
   function nearerPort(g2, f) {
     if (!unitsDecide(g2) || f.tied || f.duty !== "raid" || f.ships.ss <= 0 || !stationDays("ss")) return null;
@@ -45412,20 +45415,37 @@
     return f.stance !== "raid" && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
   }
   var LANE_CAP = 0.95;
+  function convoySide(route, count4, boats, G5) {
+    const K2 = CAUSE2.count, ships = K2.ships[route.id] ?? 0, k = K2.sink;
+    const P = count4.boats > 0 ? count4.pack * boats / count4.boats : 0;
+    const E = count4.sailed > 0 ? G5 / count4.sailed : 0;
+    const sunk = P > 0 ? ships * P / (P + k * E) : 0;
+    return { P, E, sunk, L: count4.sailed > 0 && ships > 0 ? count4.attacked * sunk / (count4.sailed * ships) : 0 };
+  }
+  function sideLoss(route, side5, Lo, w) {
+    const ships = CAUSE2.count.ships[route.id] ?? 0;
+    const sunk = Math.min(ships, side5.sunk * w);
+    const Lb = side5.sunk > 0 ? side5.L * (sunk / side5.sunk) : 0;
+    const lo = Lo * w, sum3 = Lb + lo, L2 = Math.min(LANE_CAP, sum3);
+    const cut2 = sum3 > 0 ? L2 / sum3 : 1;
+    return { L: L2, tons: Math.round((CAUSE2.count.ways * route.tons * Lb + route.tons * lo) * cut2 / 1e3) * 1e3, sunk: sunk * cut2 };
+  }
   function routeForces(g2, nat, route) {
     const zones = route.zones.map((k) => zoneOf(g2, k));
-    let raid2 = 0, guard = 0;
+    let raid2 = 0, guard = 0, boats = 0, weighed = 0;
     const raiders = [], escorts = [];
     const cover3 = unitsDecide(g2) ? zones.map((z) => seaCover(g2, nat, z, route.id)) : void 0;
     for (const f of g2.fleets) {
       if (!atSea(f)) continue;
       if (atWar(g2, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
-        let p = raidPower(g2, f, !!cover3);
-        p *= quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? coverCut(cover3[zones.indexOf(f.zone)]) : 1);
+        const m = quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? coverCut(cover3[zones.indexOf(f.zone)]) : 1);
+        const p = raidPower(g2, f, !!cover3) * m;
         if (p > 0) {
           raid2 += p;
           raiders.push(f);
+          boats += boatRaid(g2, f, !!cover3, false) * m;
+          weighed += boatRaid(g2, f, !!cover3) * m;
         }
       } else if (allied(g2, f.nat, nat)) {
         const w = guardShare(g2, f, zones, route.id);
@@ -45445,6 +45465,13 @@
     }
     if (cover3) {
       const G6 = guard * NAVY.convoy.escortWorth;
+      const count4 = (CAUSE2.count.sink ?? null) === null ? null : convoyCount(g2, route);
+      if (count4) {
+        const side5 = convoySide(route, count4, boats, G6);
+        const rest = raid2 - weighed;
+        const Lo = rest > 1e-12 ? rest / (rest + G6 + NAVY.convoy.ocean) : 0;
+        return { zones, raid: raid2, guard, raiders, escorts, G: G6, L: sideLoss(route, side5, Lo, 1).L, cover: cover3, side: side5, Lo };
+      }
       return { zones, raid: raid2, guard, raiders, escorts, G: G6, L: raid2 > 0 ? raid2 / (raid2 + G6 + NAVY.convoy.ocean) : 0, cover: cover3 };
     }
     for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
@@ -45454,11 +45481,11 @@
   }
   var CONVOY_BATTLE = convoybattle_default;
   var convoyRules = (g2) => g2.flags.open === 1 && g2.flags.convoyBattle === 1;
-  var countRecord = (c) => ({ boats: r22(c.boats), sailed: r22(c.sailed), sighted: r22(c.sighted), attacked: r22(c.attacked), incidents: r22(c.incidents), pack: r22(c.pack) });
+  var countRecord = (c, sunk) => ({ boats: r22(c.boats), sailed: r22(c.sailed), sighted: r22(c.sighted), attacked: r22(c.attacked), incidents: r22(c.incidents), pack: r22(c.pack), ...sunk !== void 0 ? { sunk: r22(sunk) } : {} });
   var r22 = (x) => Math.round(x * 100) / 100;
   var convoyField = {};
   function convoyMeeting(g2, nat, route) {
-    const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L2 } = routeForces(g2, nat, route);
+    const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L2, side: side5, Lo } = routeForces(g2, nat, route);
     const hunt2 = /* @__PURE__ */ new Map();
     const cause = unitsDecide(g2) && seaWar(g2);
     if (cause) {
@@ -45473,10 +45500,10 @@
         guard,
         G: G5,
         L: L2,
-        tons: Math.round(route.tons * L2 / 1e3) * 1e3,
+        tons: side5 ? sideLoss(route, side5, Lo ?? 0, 1).tons : Math.round(route.tons * L2 / 1e3) * 1e3,
         raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * incidentsPerBoat(g2, f, count4) * (p.get(f.zone) ?? 0), roomLeft(g2, f)) })),
         escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid2 > 0 ? raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 })),
-        ...count4 ? { count: countRecord(count4) } : {}
+        ...count4 ? { count: countRecord(count4, side5?.sunk) } : {}
       };
     }
     if (seaWar(g2) && g2.nations[nat].atWar.length) {
@@ -45607,11 +45634,12 @@
         continue;
       }
       const rng = seaRng(g2, `convoy:${route.id}`);
-      const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L0, cover: cover3 } = routeForces(g2, nat, route);
+      const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L0, cover: cover3, side: side5, Lo } = routeForces(g2, nat, route);
       const night = nights?.get(route.id);
       const swing = convoyRules(g2) ? swingOf(g2, route.id, night) : void 0;
-      const L2 = swing === void 0 ? L0 : Math.min(LANE_CAP, L0 * swing);
-      const tons = Math.round(route.tons * L2 / 1e3) * 1e3;
+      const month3 = side5 ? sideLoss(route, side5, Lo ?? 0, swing ?? 1) : void 0;
+      const L2 = month3 ? month3.L : swing === void 0 ? L0 : Math.min(LANE_CAP, L0 * swing);
+      const tons = month3 ? month3.tons : Math.round(route.tons * L2 / 1e3) * 1e3;
       let subsLost = 0, escortsLost = 0;
       let byEscorts;
       let count4 = null;
@@ -45662,7 +45690,7 @@
       if (swing !== void 0) g2.convoys[route.id].swing = swing;
       if (night) g2.convoys[route.id].fought = night.clamped ? "clamped" : "field";
       if (cover3) g2.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
-      if (count4) g2.convoys[route.id].count = countRecord(count4);
+      if (count4) g2.convoys[route.id].count = countRecord(count4, month3?.sunk);
       if (at4) lookConvoy(g2, nat, route.id, zones, raiders, escorts, at4, tons, cover3 && { cover: cover3, lost: byEscorts ?? {} });
       storyConvoy(g2, raiders, escorts, tons, raid2 > 0);
       if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat))) {
