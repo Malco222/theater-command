@@ -23,7 +23,11 @@ weapon triangles, and every clip's `weapon` is "none" (the weapon bone rides 2 m
   water), under and up again into tread's first pose; fall_loop (the fall alone, in place, for any other height) and
   enter_water (from the splash on: the root at the surface); tread, wave, swim_breast, cling, float_dead;
   climb_net (up a scrambling net, the net 0.3 m ahead of his root; `climb` metres a loop); row and sit_raft (the
-  root on the thwart's or the raft's top).
+  root on the thwart's or the raft's top);
+- on deck at a gun and giving up (release 2, the sea scene), keyed on his rig: hands_up, gun_layer, gun_trainer,
+  gun_loader (a round about every 5 s) and ammo_passer (root `hatch`), with their wheel, sight, round and pair
+  blocks. `--only gun` draws them (stills); `--only graft` adds just these five to the delivered file (backed up
+  first), leaving every other clip and key in it as it is, as run_styles.py added the runs.
 """
 
 import json
@@ -565,9 +569,11 @@ def uniform_layers(man, J, spec, LM):
     shirt.ops = [(how, p, k) for how, p, k in shirt.ops if not (how == "add" and isinstance(p, S.Blend))]
     print(f"  sailor: {before - len(shirt.ops)} pieces of the jacket's skirt taken off")
     # ---- nor its pockets, buttons, placket, folds and yoke: all under the vest (and the buttons that were below the
-    # shorter shirt's hem would find no cloth to sit on)
+    # shorter shirt's hem would find no cloth to sit on). Not the American's: he was made before this, and his kit (built
+    # and then taken off) is laid on those shapes
     before = len(shirt.ops)
-    shirt.ops = [(how, p, k) for how, p, k in shirt.ops if not (how == "add" and isinstance(p, (RoundBox, RoundCone, Sphere, Torus)))]
+    if WHO != "usa":
+        shirt.ops = [(how, p, k) for how, p, k in shirt.ops if not (how == "add" and isinstance(p, (RoundBox, RoundCone, Sphere, Torus)))]
     print(f"  sailor: {before - len(shirt.ops)} of the jacket's pockets, buttons and folds taken off (under the vest)")
     for L in layers:
         bad = [o for o in L.ops if not _placed(o[1])]
@@ -1334,6 +1340,317 @@ def c_sit_raft(t):
     return S.breathe(P, t, RAFT_LONG / 2, 1.2)
 
 
+# ------------------------------------------------------------------------------------- hands up, and a deck gun's crew
+# (the sea scene, 24 November: a U-boat's crew surrendering on its casing, and a surfaced boat's deck gun served)
+def eased(keys, t, long):
+    """Values keyed [(t, tuple)] round a loop, eased in and out at each key (a man stops at each: a grip, a lay, a ram)."""
+    ts = [k[0] for k in keys]
+    n = len(keys)
+    t = t % long
+    i = max(j for j in range(n) if ts[j] <= t)
+    t1 = ts[i + 1] if i + 1 < n else long
+    u = sm((t - ts[i]) / (t1 - ts[i]))
+    a, b = np.asarray(keys[i][1], float), np.asarray(keys[(i + 1) % n][1], float)
+    return a + (b - a) * u
+
+
+def planted(P, l, r, l_yaw=8.0, r_yaw=-8.0, pole=None):
+    """Both feet flat on the deck at (x, y) l and r (the root's frame), the knees bending toward `pole`."""
+    for s, (x, y), yaw in (("l", l, l_yaw), ("r", r, r_yaw)):
+        f = {"at": (x, y, MAN["ankle"]), "yaw": yaw}
+        if pole is not None:
+            side = 1.0 if s == "l" else -1.0
+            f["pole"] = (pole[0], pole[1] * side, pole[2])
+        P["foot_" + s] = f
+    P["shin_feet"] = 0.0
+    return P
+
+
+UP_LONG = 4.0
+
+
+@water_clip("hands_up", UP_LONG, loop=True, root="deck",
+            about="Surrendering, standing (on a deck or a surfaced boat's casing; the root under his feet): both hands "
+                  "raised open above his head, the palms forward; a slow small sway from foot to foot, the head turning a "
+                  "little as he watches. For the crew of a boat that gives up.")
+def c_hands_up(t):
+    a = 2 * math.pi * t / UP_LONG
+    w = math.sin(a)
+    look = math.sin(0.5 * a + 0.6)
+    P = body(MAN["pz"] - 0.014 - 0.005 * abs(w), y=0.012 * w, roll=-1.5 * w, yaw=1.5 * w, bend=(-2.5, 1.0 * w, 0.0),
+             neck=(-3.0, 0.0, 6.0 * look), head=(-3.0, -1.0 * w, 8.0 * look))
+    planted(P, (0.03, 0.13), (-0.02, -0.13))
+    P["clavicle_l"] = P["clavicle_r"] = (0.0, 16.0)
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        at = (0.07 + 0.008 * math.cos(a), side * 0.245 + 0.008 * w, MAN["shoulder"] + 0.52 + 0.006 * math.cos(a + side))
+        P["hand_" + s] = world_hand(at, (0.1, side * 0.12, 1.0), (1.0, 0.0, -0.08), (0.3, side * 1.0, -0.15))
+        P["fingers_" + s] = 6.0
+        P["thumb_" + s] = 8.0
+    return S.breathe(P, t, UP_LONG / 2, 1.3)
+
+
+# ---- the gun: each man's own frame (the root on the deck under his feet, facing his clip's forward, the gun's way)
+WHEEL_HUB = (0.40, -0.06, 1.00)   # (m: the handwheel's hub for the layer, the gun on his right; the trainer's mirrored)
+WHEEL_R = 0.10                    # (m: its rim's radius; the wheel stands upright across his front, its axis along x)
+LAY_LONG = 4.0
+TRAIN_LONG = 4.8
+
+
+def lay_turn(t):
+    a = 2 * math.pi * t / LAY_LONG
+    return 26.0 * math.sin(a) + 7.0 * math.sin(2 * a + 0.7)
+
+
+def train_turn(t):
+    a = 2 * math.pi * t / TRAIN_LONG
+    return 34.0 * math.sin(a + 1.1) + 5.0 * math.sin(3 * a)
+
+
+def wheel_hub(s):
+    return np.array((WHEEL_HUB[0], s * WHEEL_HUB[1], WHEEL_HUB[2]))
+
+
+def wheel_man(t, long, s, turn):
+    """At a deck gun's sight, braced and crouched a little, leaning in, both hands on the handwheel ahead of him, which
+    he turns to and fro as the boat rolls (s = 1: the layer, the gun on his right; s = -1: the trainer, on its other
+    side, mirrored)."""
+    a = 2 * math.pi * t / long
+    th = math.radians(turn(t))
+    sway = math.sin(a + 0.4)
+    P = body(MAN["pz"] - 0.075, x=-0.045, y=-s * 0.012 + 0.006 * sway, pitch=9.0 + 1.0 * sway, roll=-s * 1.5,
+             yaw=-s * 5.0, bend=(15.0 + 1.5 * math.sin(a), -s * 1.5, -s * 3.0 + 0.04 * math.degrees(th) * 0.3),
+             neck=(-9.0, 0.0, -s * 3.0), head=(-9.0, -s * 1.5, -s * 2.0))
+    if s > 0:
+        planted(P, (0.17, 0.16), (-0.12, -0.15), 6.0, -16.0, pole=(1.0, 0.3, 0.2))
+    else:
+        planted(P, (-0.12, 0.15), (0.17, -0.16), 16.0, -6.0, pole=(1.0, 0.3, 0.2))
+    hub = wheel_hub(s)
+    u, v, fx = np.array((0.0, -1.0, 0.0)), np.array((0.0, 0.0, 1.0)), np.array((1.0, 0.0, 0.0))
+    for hs, ph in (("r", 0.0), ("l", math.pi)):
+        phi = ph + th
+        rad = math.cos(phi) * u + math.sin(phi) * v
+        tan = -math.sin(phi) * u + math.cos(phi) * v
+        if tan[2] < 0.0:
+            tan = -tan
+        side = 1.0 if hs == "l" else -1.0
+        P["hand_" + hs] = world_hand(hub + WHEEL_R * rad, _n(tan + 0.35 * fx), _n(0.75 * fx - 0.65 * rad),
+                                     (-0.2, side * 1.0, -0.8))
+        P["fingers_" + hs] = 68.0
+        P["thumb_" + hs] = 45.0
+    return S.breathe(P, t, long / 2, 0.8)
+
+
+@water_clip("gun_layer", LAY_LONG, loop=True, root="deck",
+            about="A deck gun's layer, at the gun's left side (the gun on his right): braced and crouched a little, "
+                  "his eye at the sight, both hands on the elevating handwheel ahead of him, turning it to and fro as "
+                  "the boat rolls. The `wheel` block gives the wheel's hub, rim and turn, and `sight` where his eye is, "
+                  "in the root's frame, so the gun's wheel and eyepiece can be put there.")
+def c_gun_layer(t):
+    return wheel_man(t, LAY_LONG, 1.0, lay_turn)
+
+
+@water_clip("gun_trainer", TRAIN_LONG, loop=True, root="deck",
+            about="A deck gun's trainer, at the gun's right side (the gun on his left): the layer's stance mirrored, "
+                  "his eye at his own sight, both hands on the training handwheel ahead of him, turning it in longer "
+                  "sweeps. `wheel` and `sight` as gun_layer's.")
+def c_gun_trainer(t):
+    return wheel_man(t, TRAIN_LONG, -1.0, train_turn)
+
+
+# ---- the loader: takes a round from the man behind him on his left, lays it in the tray and rams it home
+ROUND_LONG = 0.72                  # (m: a fixed round, the shell and its case, nose to base)
+ROUND_R = 0.05                     # (m: its case's radius, for the pictures)
+BREECH = (1.02, -0.08, 1.12)       # (m: the chamber's mouth in the loader's frame)
+BORE = (1.0, 0.0, 0.05)            # (the bore's line at the gun's resting elevation)
+LOAD_LONG = 5.0
+TAKE_T = 0.75                      # (s: he has it; the passer lets go)
+TAKE_AT = (0.0, 0.25, 0.95)        # (m: the round's base when he takes it, at his left front)
+TAKE_WAY = (0.95, -0.3, 0.05)      # (its nose's way then)
+
+
+def loader_keys():
+    """The round's keys: (t, its base's point, its nose's way); shown from the take until it is home."""
+    d_b = _n(BORE)
+    tray = np.array(BREECH) - ROUND_LONG * d_b
+    pushed = np.array(BREECH) - 0.25 * d_b
+    home = np.array(BREECH)
+    tk, d0 = np.array(TAKE_AT), _n(TAKE_WAY)
+    return [(0.0, tk, d0), (TAKE_T, tk, d0), (1.65, np.array((0.08, 0.03, 1.1)), _n((1.0, -0.06, 0.05))),
+            (2.45, tray, d_b), (2.75, tray, d_b), (3.02, pushed, d_b), (3.18, home, d_b), (3.5, home, d_b)]
+
+
+def loader_round(t):
+    """The round's base point, its nose's way, and whether it is shown (in his hands, or sliding home)."""
+    K = loader_keys()
+    t = t % LOAD_LONG
+    v = eased([(k[0], tuple(k[1]) + tuple(k[2])) for k in K], t, LOAD_LONG)
+    return v[:3], _n(v[3:]), (1.0 if TAKE_T <= t < 3.18 else 0.0)
+
+
+def round_hands(base, d, under=0.45):
+    """The right hand cupping the round's base, the left under its case (palm up)."""
+    z = np.array((0.0, 0.0, 1.0))
+    ar = _n(z - (z @ d) * d)
+    al = _n(np.cross(d, z))
+    r = world_hand(base - 0.03 * d + 0.01 * ar, ar, d, (-0.2, -1.0, -0.9))
+    l = world_hand(base + under * ROUND_LONG * d - 0.045 * z, al, z, (-0.1, 1.0, -0.9))
+    return l, r
+
+
+def _mix(a, b, u):
+    if u <= 1e-4:
+        return a
+    if u >= 1.0 - 1e-4:
+        return b
+    return {"blend": [(1.0 - u, a), (u, b)]}
+
+
+@water_clip("gun_loader", LOAD_LONG, loop=True, root="deck",
+            events=[sev(TAKE_T, "round_taken", "round_handoff"), sev(3.0, "ram", "shell_ram"),
+                    sev(3.3, "breech_close", "breech_close")],
+            about="A deck gun's loader, behind the breech: turned to his left he takes a round from the man behind "
+                  "him (ammo_passer), swings it round to his chest, lays it in the tray nose first and rams it home "
+                  "with his right fist, lunging after it; the breech closes and he turns back for the next, one round "
+                  "about every 5 s. The `round` block gives the round's base, its nose's way and when it is shown (in "
+                  "his hands, then sliding into the chamber), and the chamber's mouth, in the root's frame.")
+def c_gun_loader(t):
+    tt = t % LOAD_LONG
+    # his trunk: turned to the left to take it, square to the gun to lay it, lunging in on the ram
+    turn, lean, lunge = eased([(0.0, (38.0, 6.0, 0.0)), (TAKE_T, (38.0, 9.0, 0.0)), (1.65, (4.0, 8.0, 0.0)),
+                               (2.45, (-2.0, 20.0, 0.03)), (2.75, (-2.0, 21.0, 0.03)), (3.05, (-3.0, 27.0, 0.12)),
+                               (3.5, (-2.0, 18.0, 0.08)), (4.4, (34.0, 6.0, 0.0))], tt, LOAD_LONG)
+    P = body(MAN["pz"] - 0.05 - 0.25 * lunge, x=-0.03 + lunge, pitch=0.35 * lean, yaw=0.4 * turn,
+             bend=(0.65 * lean, 0.0, 0.6 * turn), neck=(-0.3 * lean, 0.0, 0.25 * turn), head=(-0.25 * lean, 0.0, 0.15 * turn))
+    planted(P, (0.2, 0.17), (-0.2, -0.14), 14.0, -20.0, pole=(1.0, 0.3, 0.15))
+    base, d, _ = loader_round(min(tt, 2.75))
+    l_path, r_path = round_hands(base, d)
+    l_take, r_take = round_hands(np.array(TAKE_AT), _n(TAKE_WAY))
+    rest = world_hand((0.55, 0.24, 1.08), (1.0, 0.0, -0.2), (0.0, -1.0, 0.0), (-0.2, 1.0, -0.9))
+    b2, d2, _ = loader_round(min(max(tt, 2.75), 3.02))
+    dn = np.array((0.0, 0.0, -1.0))
+    fist = world_hand(b2 - 0.06 * d2, d2, _n(dn - (dn @ d2) * d2), (-0.2, -1.0, -0.9))
+    if tt < 2.6:
+        l, r, k = l_path, r_path, 0.0
+    elif tt < 3.4:
+        l = _mix(l_path, rest, ramp(tt, 2.6, 2.75))
+        k = ramp(tt, 2.6, 2.8)
+        r = _mix(r_path, fist, k)
+    else:
+        u = ramp(tt, 3.45, 4.4)
+        l = _mix(rest, l_take, u)
+        r = _mix(fist, r_take, ramp(tt, 3.4, 4.3))
+        k = 1.0 - ramp(tt, 3.4, 3.8)
+    P["fingers_r"] = 40.0 + 50.0 * k
+    P["thumb_r"] = 30.0 + 30.0 * k
+    P["fingers_l"], P["thumb_l"] = 40.0, 30.0
+    P["hand_l"], P["hand_r"] = l, r
+    return S.breathe(P, t, LOAD_LONG / 2, 1.2)
+
+
+# ---- the passer: up through the hatch behind the gun, handing the rounds up from below
+PASS_LONG = LOAD_LONG
+HATCH_DOWN = 0.90                  # (m: the rung he stands on, under the deck)
+PASSER_AT = (-0.32, 0.30, 0.0)     # (m: his root from the loader's, so the round passes from hand to hand)
+PASS_HOLD = (0.05, 0.22)           # (along the round from its base: his right hand, his left, under it)
+
+
+def passer_round(t):
+    """The round he holds up (its base, its nose's way, shown), in his own frame: at the loader's take, moved by
+    PASSER_AT; low, he takes the next from a man below."""
+    give = np.array(TAKE_AT) - np.array(PASSER_AT)
+    d0 = _n(TAKE_WAY)
+    low, dl = np.array((0.04, 0.0, -0.42)), _n((0.3, -0.1, 0.95))     # (nose up, out of the hatch's mouth)
+    keys = [(0.0, tuple(give) + tuple(d0)), (TAKE_T, tuple(give) + tuple(d0)), (1.1, tuple(give + (0.0, 0.0, -0.05)) + tuple(d0)),
+            (2.3, tuple(low) + tuple(dl)), (2.6, tuple(low) + tuple(dl)), (3.9, tuple(give) + tuple(d0))]
+    tt = t % PASS_LONG
+    v = eased(keys, tt, PASS_LONG)
+    return v[:3], _n(v[3:]), (1.0 if (tt < TAKE_T or tt >= 2.45) else 0.0)
+
+
+@water_clip("ammo_passer", PASS_LONG, loop=True, root="hatch",
+            events=[sev(2.45, "round_up", "round_lift")],
+            about="Handing the rounds up through a hatch behind a deck gun: stood on a rung 0.9 m under the deck (the "
+                  "root at the hatch's middle on the deck, facing the gun's way), the deck at his waist, he holds a round "
+                  "up for the loader, lets it go as the loader takes it, stoops to take the next from below and lifts it "
+                  "up again, one about every 5 s. Played beside gun_loader from the same moment: `pair` gives the "
+                  "loader's root from his, so the round passes from hand to hand; `round` as the loader's.")
+def c_ammo_passer(t):
+    tt = t % PASS_LONG
+    base, d, sh = passer_round(tt)
+    stoop = eased([(0.0, (12.0, 0.0)), (TAKE_T, (12.0, 0.0)), (2.3, (34.0, 0.04)), (2.6, (34.0, 0.04)), (3.9, (12.0, 0.0))],
+                  tt, PASS_LONG)
+    P = body(MAN["pz"] - HATCH_DOWN - 0.02 - stoop[1], x=-0.02, pitch=0.3 * stoop[0], yaw=-14.0,
+             bend=(0.7 * stoop[0], 0.0, -10.0), neck=(-0.4 * stoop[0] - 4.0, 0.0, 4.0), head=(-0.3 * stoop[0] - 4.0, 0.0, 4.0))
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        P["foot_" + s] = {"at": (0.02, side * 0.12, -HATCH_DOWN + MAN["ankle"]), "yaw": side * 6.0, "pole": (1.0, side * 0.2, 0.1)}
+    P["shin_feet"] = 0.0
+    z = np.array((0.0, 0.0, 1.0))
+    al = _n(np.cross(d, z))
+    let_go = ramp(tt, TAKE_T, TAKE_T + 0.3) * (1.0 - ramp(tt, 1.9, 2.3))
+    for s, side, f in (("l", 1.0, PASS_HOLD[1]), ("r", -1.0, PASS_HOLD[0])):
+        at = base + f * ROUND_LONG * d - 0.045 * z
+        hold = world_hand(at, al, z, (-0.2, side * 1.0, -0.9))
+        free = world_hand(at - np.array((0.14, 0.0, 0.16)), al, z, (-0.2, side * 1.0, -0.9))
+        P["hand_" + s] = _mix(hold, free, let_go)
+        P["fingers_" + s] = 45.0
+        P["thumb_" + s] = 30.0
+    return S.breathe(P, t, PASS_LONG / 2, 1.2)
+
+
+GUN_CLIPS = ("hands_up", "gun_layer", "gun_trainer", "gun_loader", "ammo_passer")
+
+
+def gun_json(data, rig):
+    """The gun crew's blocks: the wheel and sight of gun_layer and gun_trainer, the round of gun_loader and ammo_passer
+    (in the root's frame, the game's axes: y to his right)."""
+    g = lambda p: [round(float(p[0]), 4), round(float(-p[1]), 4), round(float(p[2]), 4)]  # noqa: E731
+    for name, s, long, turn in (("gun_layer", 1.0, LAY_LONG, lay_turn), ("gun_trainer", -1.0, TRAIN_LONG, train_turn)):
+        d = data["clips"].get(name)
+        if d is None:
+            continue
+        eyes = []
+        for k in range(int(round(long * 15)) + 1):
+            st = clip_state(rig, name, k / 15.0, "rifle")
+            eyes.append((rig.eye(st, "r") + rig.eye(st, "l")) / 2.0)
+        eyes = np.array(eyes)
+        d["wheel"] = {"hub": g(wheel_hub(s)), "radius": WHEEL_R, "axis": [1.0, 0.0, 0.0],
+                      "turn_fields": ["t", "degrees"],
+                      "turn": [[round(k / 15.0, 4), round(turn(k / 15.0), 2)] for k in range(int(round(long * 15)) + 1)],
+                      "about": "the handwheel he turns: its hub here, upright across his front (its axis along x, toward "
+                               "him), his hands on its rim either side; turn it by `turn` (degrees, + his right hand up)"}
+        d["sight"] = {"eye": g(eyes.mean(axis=0)), "moves": round(float(np.linalg.norm(eyes - eyes.mean(axis=0), axis=1).max()), 3),
+                      "about": "where his eyes are (the mean between them; they move this little): put the sight's "
+                               "eyepiece just ahead of it, along x"}
+    ld = data["clips"].get("gun_loader")
+    if ld is not None:
+        tr = []
+        for k in range(int(round(LOAD_LONG * 15)) + 1):
+            t = k / 15.0
+            b, dd, sh = loader_round(t)
+            tr.append([round(t, 4), sh] + g(b) + g(dd))
+        ld["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "breech": g(BREECH), "bore": g(_n(BORE)),
+                       "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"], "track": tr,
+                       "about": "the round he loads: its base's middle (x, y, z) and its nose's way (dx, dy, dz) through "
+                                "the loop, drawn while shown (from the take until it is home in the chamber); "
+                                "`breech` is the chamber's mouth and `bore` the barrel's line, in the root's frame: put "
+                                "the gun's breech there"}
+    ps = data["clips"].get("ammo_passer")
+    if ps is not None:
+        tr = []
+        for k in range(int(round(PASS_LONG * 15)) + 1):
+            t = k / 15.0
+            b, dd, sh = passer_round(t)
+            tr.append([round(t, 4), sh] + g(b) + g(dd))
+        ps["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"],
+                       "track": tr, "about": "the round he passes up, as gun_loader's (shown from when he lifts it from "
+                                             "below until the loader takes it)"}
+        ps["pair"] = {"loader_root": g(-np.array(PASSER_AT)), "same_facing": True, "same_time": True,
+                      "about": "the loader's root from his (the game's axes), both facing the same way, both clips "
+                               "played from the same moment: the round then passes from his hands to the loader's at "
+                               "t = %.2f s" % TAKE_T}
+    return data
+
+
 # ================================================================================================ the files
 NAME = {"usa": "American sailor (soldier_USA_sailor)", "jap": "Japanese sailor (soldier_JAP_sailor)",
         "uk": "British sailor (soldier_UK_sailor)", "ger": "German sailor (soldier_GER_sailor)",
@@ -1404,6 +1721,7 @@ ROOTS = {
     "net": "the root where his feet would stand at the net's foot, the net hanging upright 0.30 m ahead of him; move "
            "the root up the net at climb / long metres a second",
     "seat": "the root on the top of the thwart or the raft's deck he sits on, facing the clip's forward",
+    "hatch": "the root on the deck at the hatch's middle (he stands on a rung under it), facing the clip's forward",
 }
 
 
@@ -1460,6 +1778,7 @@ def water_json(data, rig):
                      "about": "the oar's handle (between his hands) through the stroke, and its rowlock (fixed, on "
                               "his right), in the root's frame, the game's axes: draw the oar from the handle through "
                               "the rowlock and on, its blade in the water at the catch (event oar_catch)"}
+    gun_json(data, rig)
     data["water"] = {
         "sea_level": "z = 0 in each water clip's root frame is the sea's surface (root `surface`)",
         "roots": ROOTS,
@@ -1469,11 +1788,21 @@ def water_json(data, rig):
                  "float_dead. Picked up: climb_net up the side, or into a boat (row, sit_raft)",
         "events": "splash (splash_body: his feet into the water; height is the drop), surface (surface_gasp: his "
                   "head out again), water_stroke and water_kick (swim_breast), net_grab (climb_net, the hand), "
-                  "oar_catch (row: the blade in); the deck clips' footsteps as the soldiers'",
+                  "oar_catch (row: the blade in), round_taken, ram and breech_close (gun_loader), round_up "
+                  "(ammo_passer); the deck clips' footsteps as the soldiers'",
+        "gun_crew": GUN_CREW,
         "no_weapon": "he has no weapon: the file has no weapon triangles; the weapon bone rides 2 m under his root "
                      "in the water clips",
     }
     return data
+
+
+GUN_CREW = ("on deck, keyed on his rig (the root on the deck under his feet): hands_up (surrendering, hands raised open "
+            "above the head, a slow sway); a deck gun's crew: gun_layer (the gun's left, the elevating handwheel and the "
+            "sight), gun_trainer (its right, the training handwheel, mirrored), gun_loader (takes a round from the "
+            "passer on his left, lays it in the tray and rams it, about one every 5 s) and ammo_passer (in a hatch "
+            "behind, the root at its middle: hands the rounds up, in step with the loader; `pair` gives the loader's "
+            "root from his). Each clip's wheel, sight and round blocks say where the gun's parts go in its root's frame")
 
 
 def paints_json(data):
@@ -1643,6 +1972,22 @@ WATER_LABELS = {"jump_step": "jump_feet_first (4 m): the step off, arms crossed"
                 "cling": "cling: forearms over a spar", "climb_net": "climb_net: up the ship's side",
                 "row": "row: pulling an oar on a thwart", "sit_raft": "sit_raft: knees up, looking about",
                 "cower": "cower (on deck): aircraft coming in"}
+GUN_SHOTS = [
+    ("hands_up", "hands_up", 1.0, (0.0, 0.0, 1.05), 4.2, 6.0, 25.0, ("gun",)),
+    ("layer", "gun_layer", 1.0, (0.2, 0.0, 1.0), 3.0, 12.0, 55.0, ("gun",)),
+    ("trainer", "gun_trainer", 1.2, (0.2, 0.0, 1.0), 3.0, 12.0, 305.0, ("gun",)),
+    ("loader_take", "gun_loader", 0.8, (0.3, 0.0, 1.0), 3.6, 12.0, 60.0, ("gun",)),
+    ("loader_lay", "gun_loader", 2.6, (0.4, 0.0, 1.0), 3.6, 12.0, 300.0, ("gun",)),
+    ("loader_ram", "gun_loader", 3.02, (0.4, 0.0, 1.0), 3.6, 12.0, 300.0, ("gun",)),
+    ("passer_give", "ammo_passer", 0.4, (0.15, 0.0, 0.4), 3.2, 14.0, 40.0, ("gun",)),
+    ("passer_low", "ammo_passer", 2.45, (0.15, 0.0, 0.1), 3.2, 20.0, 40.0, ("gun",)),
+    ("hands_up_back", "hands_up", 3.0, (0.0, 0.0, 1.05), 4.2, 6.0, 200.0, ("gun",)),
+]
+GUN_LABELS = {"hands_up": "hands_up: surrendering, a slow sway", "layer": "gun_layer: eye at the sight, elevating wheel",
+              "trainer": "gun_trainer: the other side, training wheel", "loader_take": "gun_loader: takes the round",
+              "loader_lay": "lays it in the tray", "loader_ram": "rams it home (event ram)",
+              "passer_give": "ammo_passer: holds it up from the hatch", "passer_low": "stoops for the next",
+              "hands_up_back": "hands_up from behind"}
 LABELS = {
     "usa": ["American sailor: chambray shirt, dungarees, kapok vest, white hat",
             "From behind: the vest's back, its channels",
@@ -1665,10 +2010,74 @@ LABELS = {
 }[WHO]
 
 
-def _sets(kind):
+def rod(a, b, r, mat, name="rod"):
+    """A cylinder from a to b (the pictures' props)."""
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    d = b - a
+    L = float(np.linalg.norm(d))
+    bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=L, vertices=20, location=tuple((a + b) / 2.0))
+    o = bpy.context.object
+    o.name = name
+    o.rotation_mode = "QUATERNION"
+    o.rotation_quaternion = Vector((0.0, 0.0, 1.0)).rotation_difference(Vector(tuple(d / L)))
+    o.data.materials.append(mat)
+    return o
+
+
+def slab(c, size, mat, name="slab"):
+    bpy.ops.mesh.primitive_cube_add(size=1.0, location=tuple(c))
+    o = bpy.context.object
+    o.name = name
+    o.scale = tuple(size)
+    o.data.materials.append(mat)
+    return o
+
+
+def gun_props(name, t):
+    """The deck, and the gun's parts where the clip's blocks put them (each man in his own root's frame)."""
+    steel = kit.material("gunsteel", kit.hex_rgb("5E6469"), rough=0.5)
+    deck = kit.material("hull", kit.hex_rgb("6F757A"), rough=0.6)
+    brass = kit.material("brass", kit.hex_rgb("B08A3E"), rough=0.35)
+    made = []
+    if name == "ammo_passer":
+        for c, sz in (((0.0, 0.95, -0.03), (2.6, 1.3, 0.06)), ((0.0, -0.95, -0.03), (2.6, 1.3, 0.06)),
+                      ((0.95, 0.0, -0.03), (1.3, 0.6, 0.06)), ((-0.95, 0.0, -0.03), (1.3, 0.6, 0.06))):
+            made.append(slab(c, sz, deck, "deck"))
+        b, d, sh = passer_round(t)
+    else:
+        made.append(slab((0.3, 0.0, -0.03), (3.0, 2.4, 0.06), deck, "deck"))
+        sh = 0.0
+    if name in ("gun_layer", "gun_trainer"):
+        sd = 1.0 if name == "gun_layer" else -1.0
+        hub = wheel_hub(sd)
+        bpy.ops.mesh.primitive_torus_add(major_radius=WHEEL_R, minor_radius=0.009, location=tuple(hub), rotation=(0.0, math.radians(90), 0.0))
+        w = bpy.context.object
+        w.data.materials.append(steel)
+        made.append(w)
+        made.append(rod(hub, hub + (0.06, 0.0, 0.0), 0.012, steel, "shaft"))
+        made.append(slab((0.55, -sd * 0.38, 1.05), (1.2, 0.36, 0.5), steel, "gun"))
+        made.append(rod(hub + (0.06, 0.0, 0.0), (hub[0] + 0.06, -sd * 0.2, hub[2]), 0.012, steel, "shaft"))
+        made.append(rod((0.3, -sd * 0.38, 1.36), (2.6, -sd * 0.38, 1.36), 0.055, steel, "barrel"))
+    if name == "gun_loader":
+        d_b = _n(BORE)
+        B = np.array(BREECH)
+        made.append(slab(B + 0.2 * d_b, (0.4, 0.34, 0.34), steel, "breech"))
+        made.append(rod(B + 0.4 * d_b, B + 2.8 * d_b, 0.06, steel, "barrel"))
+        tray = B - ROUND_LONG * d_b
+        made.append(rod(tray - (0.0, 0.0, 0.06), B - (0.0, 0.0, 0.06), 0.03, steel, "tray"))
+        b, d, sh = loader_round(t)
+    if sh > 0.5:
+        made.append(rod(b, b + (ROUND_LONG - 0.28) * d, ROUND_R, brass, "case"))
+        made.append(rod(b + (ROUND_LONG - 0.28) * d, b + ROUND_LONG * d, ROUND_R * 0.82, steel, "shell"))
+    return made
+
+
+def _sets(kind, clip=None, t=0.0):
     made = []
     if not kind:
         return made
+    if kind[0] == "gun":
+        return gun_props(clip, t)
     if kind[0] in ("sea", "spar", "deck"):
         made.append(water_plane())
     if kind[0] == "deck":
@@ -1704,8 +2113,10 @@ def picture(info, fast=False, shots=None, out_name=None, labels=None, title=None
         kind = shot[7] if len(shot) > 7 else ()
         for o in made:
             bpy.data.objects.remove(o)
-        made = _sets(kind)
-        bd.location.z = -6.0 if kind and kind[0] in ("sea", "spar", "deck") else (-0.4 if kind and kind[0] == "seat" else 0.0)
+        made = _sets(kind, name, t)
+        bd.location.z = -6.0 if kind and kind[0] in ("sea", "spar", "deck") else (-0.4 if kind and kind[0] == "seat" else
+                                                                               (-1.6 if name == "ammo_passer" else
+                                                                                (-0.1 if kind and kind[0] == "gun" else 0.0)))
         if t is None:
             J = JUMPS[name]
             t = J["TE"] + 0.35
@@ -1717,6 +2128,64 @@ def picture(info, fast=False, shots=None, out_name=None, labels=None, title=None
     kit.sheet(ims, out, cols=3, labels=labels or [os.path.basename(p) for p in ims], title=title or f"{NAME}: soldier_sailors.py")
     info["picture" if not water else "water_picture"] = out
     return out
+
+
+SHARED = "/mnt/project-files/battle-models/land/soldier/"
+BACKUP = "/home/user/art/sailors/backup/"
+GUN_ABOUT = (" Also keyed on his rig, on deck: hands_up (surrendering) and a deck gun's crew, gun_layer, gun_trainer, "
+             "gun_loader and ammo_passer (water: gun_crew).")
+
+
+def graft(info, folder=SHARED):
+    """The new deck clips (GUN_CLIPS) made on his rig and added to the delivered file, nothing else in it touched but
+    those clips, a line of its about and of its water block (read fresh, backed up, written whole)."""
+    import shutil
+    t0 = time.time()
+    kit.fresh(S.FPS)
+    m = assemble()
+    rig = m["rig"]
+    keep = dict(S.CLIPS)
+    S.CLIPS.clear()
+    S.CLIPS.update({k: keep[k] for k in GUN_CLIPS})
+    try:
+        new = S.clips_json(rig)
+    finally:
+        S.CLIPS.clear()
+        S.CLIPS.update(keep)
+    mini = water_json({"clips": new}, rig)
+    path = os.path.join(folder, f"{BASE}.json")
+    D = json.load(open(path))
+    worst = 0.0
+    for b in D["bones"]:
+        h = rig.H0.get(b["name"])
+        if h is not None:
+            worst = max(worst, float(np.linalg.norm(np.array(b["head"]) - np.array((h[0], -h[1], h[2])))))
+    if worst > 0.002:
+        raise SystemExit(f"{BASE}: his rig is not the file's (a bone {worst * 1000:.1f} mm off): export him whole instead")
+    os.makedirs(BACKUP, exist_ok=True)
+    shutil.copy2(path, os.path.join(BACKUP, f"{BASE}.json.{time.strftime('%m%d_%H%M%S')}"))
+    before = set(D["clips"])
+    for k in GUN_CLIPS:
+        D["clips"][k] = mini["clips"][k]
+    D["water"]["roots"]["hatch"] = ROOTS["hatch"]
+    D["water"]["events"] = mini["water"]["events"]
+    D["water"]["gun_crew"] = GUN_CREW
+    if GUN_ABOUT not in D["about"]:
+        D["about"] += GUN_ABOUT
+    text = json.dumps(D, separators=(",", ":"), allow_nan=False)      # (a NaN anywhere stops it here, the file untouched)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    time.sleep(10)
+    D2 = json.load(open(path))
+    lost = sorted(before - set(D2["clips"]))
+    missing = [k for k in GUN_CLIPS if k not in D2["clips"]]
+    if lost or missing:
+        raise SystemExit(f"{BASE}: clips lost {lost}, not written {missing}")
+    info["graft"] = {"file": path, "rig_off_mm": round(worst * 1000, 2), "clips": sorted(D2["clips"]),
+                     "new": {k: [new[k]["long"], len(new[k]["tracks"])] for k in GUN_CLIPS}, "s": round(time.time() - t0)}
+    print(f"  {BASE}: {len(GUN_CLIPS)} clips added ({len(D2['clips'])} in all; the rig {worst * 1000:.2f} mm off the file's)", flush=True)
 
 
 def main():
@@ -1734,6 +2203,14 @@ def main():
             export(info)
         elif step == "picture":
             picture(info, fast, labels=LABELS)
+        elif step == "gun":
+            want = os.environ.get("GUN_SHOTS")
+            shots = [x for x in GUN_SHOTS if not want or x[0] in want.split(",")]
+            picture(info, fast, shots=shots, water=True, labels=[GUN_LABELS[x[0]] for x in shots],
+                    title=f"{NAME}: hands up, and a deck gun's crew (the gun drawn where the clips' blocks put it)",
+                    out_name=(os.path.join(S.SCRATCH, "look", "gun.png") if fast else S.stage_path("pictures", f"{BASE}_gun.png")))
+        elif step == "graft":
+            graft(info)
         elif step == "water":
             want = os.environ.get("WATER_SHOTS")
             shots = [s for s in WATER_SHOTS if not want or s[0] in want.split(",")]
