@@ -2541,8 +2541,10 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
   const P = count.boats > 0 ? (count.pack * boats) / count.boats : 0;
   const E = count.sailed > 0 ? G / count.sailed : 0;
   const contest = P > 0 ? (ships * P) / (P + k * E) : 0;
-  // (The boat ceiling: never more than the pack's torpedoes sink on an average night, each boat's at most 'each'.)
-  const torps = each === null ? undefined : count.pack * each;
+  // (The boat ceiling: never more than the pack's torpedoes sink on an average night, each boat's at most 'each'. A convoy
+  // attacked has at least one boat on it, so the pack counts as one where the count's falls under one: on a short route
+  // of many convoys, as Libya's, its incidents a convoy attacked are fewer than one. Builder's choice, review of 24 Nov.)
+  const torps = each === null ? undefined : Math.max(1, count.pack) * each;
   const sunk = torps === undefined ? contest : Math.min(contest, torps);
   return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0, ...(torps !== undefined ? { torps } : {}) };
 }

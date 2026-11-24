@@ -117,7 +117,21 @@ describe('the figures', () => {
     sea(g, 'Mediterranean Fleet', 'central', { ss: 12 }, 'raid');
     const l = convoySideOf(g, 'ITA', libya)!, cl = convoyCount(g, libya)!;
     expect(cl.pack).toBeGreaterThan(0);
-    expect(l.torps! / cl.pack).toBeCloseTo(ROUGH, 12);
+    expect(l.torps! / Math.max(1, cl.pack)).toBeCloseTo(ROUGH, 12);
+  });
+
+  it('a convoy attacked has at least one boat on it: where the count\'s pack is under one, the ceiling is one boat\'s', () => {
+    const g = open(true);
+    const ita = g.nations.ITA, uk = g.nations.UK;
+    if (!ita.atWar.includes('UK')) ita.atWar.push('UK');
+    if (!uk.atWar.includes('ITA')) uk.atWar.push('ITA');
+    sea(g, '1st Fleet', 'central', { dd: 0 }, 'escort', 'libya');
+    sea(g, 'Mediterranean Fleet', 'central', { ss: 4 }, 'raid');
+    const l = convoySideOf(g, 'ITA', libya)!, cl = convoyCount(g, libya)!;
+    expect(cl.pack).toBeGreaterThan(0);
+    expect(cl.pack).toBeLessThan(1);
+    expect(l.torps).toBeCloseTo(ROUGH, 12);
+    expect(l.sunk).toBeGreaterThan(cl.pack * ROUGH);
   });
 });
 
