@@ -10,17 +10,25 @@
 // in bail_climb_out, walks over her turret's roof and steps down onto her deck in bail_step_down (or walks from a hatch
 // on her deck), walks to her hull's edge and jumps down in bail_jump_down, their roots landing him where the ground game
 // takes him on, his body never jumping between them; a man on fire runs in burning_run, his stride the clip's, and falls
-// in burning_fall_roll.
+// in burning_fall_roll. With a soldiers folder as its second argument (run.sh gives it on the first run) it also builds the
+// crowd's man a crewman becomes (Effects, R2: LandMen's Crowd::CrewDress and AddRider, as ALandBattle::BailOut makes
+// him): a USA or GER crew in the tankers' file as it is; a SOV or UK crew (an army without one) in its own infantry file,
+// his helmet on and his pack and webbing left off (the art director, 23 November: "other armies own men, no rifle/pack"),
+// at every level his file's triangles less the pack's run (pack_tris; a file without it keeps his pack, as before).
 #include "Battle/Fates.h"
 #include "Battle/LandBail.h"
+#include "Battle/LandMen.h"
+#include "pack_cut.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
 
 int main(int Argc, char** Argv)
 {
@@ -419,6 +427,79 @@ int main(int Argc, char** Argv)
 	{
 		std::printf("FAIL: the odds in the open are not the enemy's in sight\n");
 		++Bad;
+	}
+	// The crowd's man a crewman becomes (Effects, R2): dressed as ALandBattle::BailOut dresses him (Crowd::CrewDress) and
+	// made as it makes him (AddRider), each level of his look his file's triangles without his pack's run (where his file
+	// marks it), nothing in its place, every kept point as the whole man's; his helmet on.
+	if (Argc > 2)
+	{
+		const std::string Dir = Argv[2];
+		LandMen::Crowd Crowd;
+		std::string Why;
+		int Files = 0;
+		for (const char* Name : { "USA", "USA_tanker", "GER", "GER_panzer", "SOV", "UK" })
+		{
+			std::ifstream F(Dir + "/soldier_" + Name + ".json", std::ios::binary);
+			std::stringstream Sol;
+			Sol << F.rdbuf();
+			auto S = std::make_shared<LandMen::Soldier>();
+			if (Sol.str().empty() || !S->Load(Sol.str(), Why)) continue;
+			Crowd.AddSoldier(Name, S);
+			++Files;
+		}
+		std::ifstream A(Content + "/Data/LandBattles/armies.json", std::ios::binary);
+		std::stringstream Armies;
+		Armies << A.rdbuf();
+		const std::string Day = "{\"seed\": 23, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.12, -1.09]}, \"blocks\": [], \"men\": [], \"rounds\": []}";
+		const LandMen::GroundFn Flat = [](double, double) { return LandMen::Ground(); };
+		const bool bBuilt = Crowd.ReadArmies(Armies.str(), Why) && Crowd.Build(Day, Flat, Why);
+		int Dressed = 0, Undressed = 0;
+		bool bPackCut = false;
+		for (const char* Nat : { "USA", "GER", "SOV", "UK", "FIN" })
+		{
+			const LandMen::Crowd::Dress D = Crowd.CrewDress(Nat);
+			const std::string Crew = std::string(Nat) == "USA" ? "USA_tanker" : std::string(Nat) == "GER" ? "GER_panzer" : std::string();
+			const bool bCrewHere = !Crew.empty() && Crowd.SoldierFile(Crew) != nullptr;
+			const bool bDress = bCrewHere ? D.bTankers && D.File == Crew && !D.bBareHead && !D.bNoPack
+				: !D.bTankers && !D.bBareHead && D.bNoPack && D.File == (Crowd.SoldierFile(Nat) ? std::string(Nat) : std::string());
+			const LandMen::Soldier* Sol = bBuilt ? Crowd.SoldierFile(D.File) : nullptr;
+			if (!Sol)
+			{
+				std::printf("  a %s crewman out of her: no file here draws him (%s)\n", Nat, bDress ? "none drawn, as before" : "FAIL: dressed otherwise");
+				Undressed += bDress ? 0 : 1;
+				continue;
+			}
+			const uint64_t Seed = 0xBA11ull * 0x9E3779B97F4A7C15ull;
+			const int Man = Crowd.AddRider(D.File, Nat, Seed, D.Row, D.bBareHead, D.bNoPack), Whole = Crowd.AddRider(D.File, Nat, Seed, D.Row);
+			if (Man < 0 || Whole < 0) { ++Undressed; continue; }
+			const int Clip = Sol->ClipIndex("run") >= 0 ? Sol->ClipIndex("run") : 0;
+			Crowd.SetRide(Man, PackCut::Standing(Clip, 0.2f));
+			Crowd.SetRide(Whole, PackCut::Standing(Clip, 0.2f));
+			Crowd.Update(1.0 + 0.1 * Dressed);
+			std::string Line, Fault;
+			for (int L = 0; L < LandMen::LodCount; ++L)
+			{
+				const LandMen::Lod Lv = static_cast<LandMen::Lod>(L);
+				std::vector<PackCut::Run> Runs;
+				if (D.bBareHead) Runs.push_back(PackCut::HelmetRun(*Sol, Lv));
+				if (D.bNoPack) Runs.push_back(PackCut::PackRun(*Sol, Lv));
+				const PackCut::Cut Want = PackCut::CutOf(Sol->Meshes[L], Runs);
+				const std::string Off = PackCut::Compare(Crowd, Man, Whole, Lv, Want);
+				if (!Off.empty() && Fault.empty()) Fault = Off;
+				bPackCut = bPackCut || (D.bNoPack && Sol->PackCount[L] > 0);
+				char Buf[96];
+				std::snprintf(Buf, sizeof(Buf), "%s%d/%zu", L ? ", " : "", static_cast<int>(Want.Triangles.size() / 3), Sol->Meshes[L].Triangles.size() / 3);
+				Line += Buf;
+			}
+			Undressed += !bDress || !Fault.empty() ? 1 : 0;
+			++Dressed;
+			std::printf("  a %s crewman out of her: soldier_%s%s%s, near/mid/far %s triangles drawn%s%s\n", Nat, D.File.c_str(), D.bTankers ? " (the tankers')" : "",
+				D.bNoPack ? (Sol->PackCount[LandMen::Near] > 0 ? ", his helmet on, no pack" : ", his helmet on, no pack asked (his file marks none: his pack on)") : "",
+				Line.c_str(), Fault.empty() ? "" : ": FAIL: ", Fault.c_str());
+		}
+		std::printf("  the crews' men of the crowd (CrewDress, AddRider): %d from %d files, %s%s\n", Dressed, Files,
+			bBuilt && Files >= 2 && Dressed >= 2 && Undressed == 0 ? "ok" : "FAIL", bPackCut ? " (the pack's run left out, nothing in its place)" : " (no file here marks its pack: drawn with it, as before)");
+		if (!bBuilt || Files < 2 || Dressed < 2 || Undressed > 0) ++Bad;
 	}
 	std::printf("\n%d wrecks, %d men: %s (%d faults)\n", Wrecks, Men, Bad ? "FAIL" : "ok", Bad);
 	return Bad ? 1 : 0;
