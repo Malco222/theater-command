@@ -143,6 +143,10 @@ namespace
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
 
+	TAutoConsoleVariable<int32> CVarFrameCap(
+		TEXT("tc.Speed.FrameCap"), 0,
+		TEXT("0 leaves the frames free, as before (a cool Mac draws 80 to 97 pictures a second for a screen that shows 60, and the chip's work for the rest is only heat). 20 to 240 holds the game to that many frames a second (t.MaxFPS, set by code: a value set by hand or by -TheaterSet stays); -1 has each frame wait for the screen's refresh (r.VSync 1). Seen at once; set back to 0, both are put back as they stood. The same picture either way. A capped game sleeps between frames, and macOS stretches the sleeps when the screen is dark or the window hidden: time it on a lit screen, the window in front."));
+
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
 	thread_local int32 QuietHere = 0; // (tc.Speed.QuietModel: this thread is modelling a fine sheet quietly, and how)
@@ -239,6 +243,12 @@ namespace
 	double WindowWorst = 0.0;
 	double WindowGame = 0.0, WindowDraw = 0.0, WindowChip = 0.0;
 	double WindowRHI = 0.0; // (the RHI thread's, where there is one: none, and its work is the draw thread's)
+	double WindowIdle = 0.0, WindowOverslept = 0.0; // (ms the engine waited to keep to a cap, and by how much its waits overran what it asked)
+	int32 WindowInFront = 0; // (frames in which the game's window was the one in front)
+	int32 CapInForce = 0; // (tc.Speed.FrameCap: what this file last put in force: 0 nothing, N frames a second, -1 the screen's refresh)
+	bool bCapSetMax = false, bCapSetSync = false; // (...whether it set t.MaxFPS or r.VSync itself, and so has them to put back)
+	float CapMaxWas = 0.0f; // (...t.MaxFPS as it stood before)
+	int32 CapSyncWas = 0; // (...and r.VSync)
 	int32 Summaries = 0;
 
 	double Ms(uint64 Cycles)
@@ -946,9 +956,69 @@ namespace TheaterSpeed
 		}
 	}
 
+	/**
+	 * tc.Speed.FrameCap: puts the cap asked for in force when the switch changes, and takes it off again. With the switch
+	 * at 0 from the start nothing is touched. (Capture 4, 19 November: nothing in the game's code or settings limited its
+	 * frames, and run Q's cap was asked for by -TheaterSet=t.MaxFPS=60. Set here by code, a value set by hand or by
+	 * -TheaterSet outranks it and stays: what is read back says which.)
+	 */
+	static void ApplyFrameCap()
+	{
+		const int32 Asked = CVarFrameCap.GetValueOnGameThread();
+		const int32 Want = Asked < 0 ? -1 : Asked == 0 ? 0 : FMath::Clamp(Asked, 20, 240);
+		if (Want == CapInForce)
+		{
+			return;
+		}
+		static const TCHAR* const MaxName = TEXT("t.MaxFPS");
+		static const TCHAR* const SyncName = TEXT("r.VSync");
+		IConsoleVariable* MaxFPS = IConsoleManager::Get().FindConsoleVariable(MaxName);
+		IConsoleVariable* Sync = IConsoleManager::Get().FindConsoleVariable(SyncName);
+		// What was put in force before goes back to how it stood (a value set by hand since stays: it outranks code).
+		if (bCapSetMax && MaxFPS)
+		{
+			MaxFPS->Set(CapMaxWas, ECVF_SetByCode);
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %.0f (tc.Speed.FrameCap)"), MaxName, MaxFPS->GetFloat());
+		}
+		if (bCapSetSync && Sync)
+		{
+			Sync->Set(CapSyncWas, ECVF_SetByCode);
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %d (tc.Speed.FrameCap)"), SyncName, Sync->GetInt());
+		}
+		bCapSetMax = bCapSetSync = false;
+		CapInForce = Want;
+		if (Want > 0)
+		{
+			if (!MaxFPS)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FrameCap found no console variable called %s"), MaxName);
+				return;
+			}
+			CapMaxWas = MaxFPS->GetFloat();
+			MaxFPS->Set(static_cast<float>(Want), ECVF_SetByCode);
+			bCapSetMax = FMath::IsNearlyEqual(MaxFPS->GetFloat(), static_cast<float>(Want), 0.5f);
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %.0f%s (tc.Speed.FrameCap)"), MaxName, bCapSetMax ? TEXT("set to") : TEXT("left at"), MaxFPS->GetFloat(),
+				bCapSetMax ? TEXT("") : TEXT(", set by hand or by -TheaterSet"));
+		}
+		else if (Want < 0)
+		{
+			if (!Sync)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FrameCap found no console variable called %s"), SyncName);
+				return;
+			}
+			CapSyncWas = Sync->GetInt();
+			Sync->Set(1, ECVF_SetByCode);
+			bCapSetSync = Sync->GetInt() == 1;
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %d%s (tc.Speed.FrameCap)"), SyncName, bCapSetSync ? TEXT("set to") : TEXT("left at"), Sync->GetInt(),
+				bCapSetSync ? TEXT("") : TEXT(", set by hand or by -TheaterSet"));
+		}
+	}
+
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
 		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
+		ApplyFrameCap(); // (after the command line's sets, so that -TheaterSet=tc.Speed.FrameCap=60 is in force from the first frame)
 		// (Speed: tc.Speed.TidyAside, the second half. The frame just ended by the machine's own clock, which the game's
 		// speed and its pauses do not stretch; and when the engine last cleared out, whoever asked.)
 		const double SeenNow = FPlatformTime::Seconds();
@@ -995,6 +1065,8 @@ namespace TheaterSpeed
 			RulesTallies().Reset();
 			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 			WindowFrames = WindowSlow = WindowSlowBeside = 0;
+			WindowIdle = WindowOverslept = 0.0;
+			WindowInFront = 0;
 			for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
 			{
 				MadeNow[Index].store(0, std::memory_order_relaxed);
@@ -1143,6 +1215,13 @@ namespace TheaterSpeed
 		WindowDraw += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 		WindowRHI += FPlatformTime::ToMilliseconds(GRHIThreadTime);
 		WindowChip += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+		{
+			// (the engine's own wait to keep to a cap, in the frame just ended, and by how much the system's sleep overran it)
+			const double Idle = FApp::GetIdleTime();
+			WindowIdle += Idle * 1000.0;
+			WindowOverslept += Idle > 0.0 ? FMath::Max(FApp::GetIdleTimeOvershoot(), 0.0) * 1000.0 : 0.0;
+			WindowInFront += FSlateApplication::IsInitialized() && FSlateApplication::Get().IsActive() ? 1 : 0;
+		}
 		if (WindowClock < 5.0 || WindowFrames < 2)
 		{
 			return;
@@ -1175,6 +1254,25 @@ namespace TheaterSpeed
 				UE_LOG(LogTheater, Display, TEXT("Speed: the machine: heat %s"), *HeatWord);
 			}
 			MachineWas = Machine;
+		}
+		{
+			// (Speed: tc.Speed.FrameCap. The held frames' line, a line of its own as the machine's is. A capped game sleeps
+			// between frames, and macOS stretches those sleeps when the screen is dark or the window hidden: capture 4's
+			// run Q fell to 21 to 26 frames a second at nominal heat with 0.7 cores busy. This says whether a run had the
+			// lit screen and the window in front that a timing with a cap wants.)
+			const IConsoleVariable* MaxFPS = IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS"));
+			const IConsoleVariable* Sync = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VSync"));
+			const float MaxNow = MaxFPS ? MaxFPS->GetFloat() : 0.0f;
+			const int32 SyncNow = Sync ? Sync->GetInt() : 0;
+			const FString Cap = CapInForce > 0 ? FString::Printf(TEXT("%d a second"), CapInForce) : CapInForce < 0 ? FString(TEXT("the screen's refresh")) : FString(TEXT("none"));
+			UE_LOG(LogTheater, Display, TEXT("Speed: held frames: tc.Speed.FrameCap %s (t.MaxFPS %.0f, r.VSync %d); the engine waited %.1f ms a frame to keep to it, its waits overran by %.1f; the game's window in front in %d of %d frames"),
+				*Cap, MaxNow, SyncNow, WindowIdle / Frames, WindowOverslept / Frames, WindowInFront, WindowFrames);
+			const double Rate = Frames / WindowClock;
+			if (MaxNow > 0.0f && Rate < 0.8 * MaxNow && WindowIdle / Frames > 5.0)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: %.1f frames a second under a cap of %.0f while the engine waited %.1f ms a frame: held longer than the cap asks. Is the screen dark or the game's window hidden? A timing with a cap wants a lit screen and the window in front."),
+					Rate, MaxNow, WindowIdle / Frames);
+			}
 		}
 		TArray<const FSlot*> Busy;
 		for (const FSlot& Slot : Each)
@@ -1223,6 +1321,8 @@ namespace TheaterSpeed
 		RulesTallies().Reset();
 		WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 		WindowFrames = WindowSlow = WindowSlowBeside = 0;
+		WindowIdle = WindowOverslept = 0.0;
+		WindowInFront = 0;
 		for (int32 Index = 0; Index < static_cast<int32>(EMade::Count); ++Index)
 		{
 			MadeWindow[Index] = 0;

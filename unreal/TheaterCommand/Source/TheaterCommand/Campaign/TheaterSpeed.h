@@ -186,6 +186,18 @@ class APlayerController;
  *                         the pictures are taken one a frame after it (PortraitOwed in the log), each appearing in its
  *                         place. A run that takes pictures takes them at once. 0: all in the press's frame, as before.
  *                         The same pictures either way, a few frames later.
+ * And one that is off until a run on the Mac says otherwise:
+ *   tc.Speed.FrameCap     0 (default): the frames are free, as before. A cool Mac draws 80 to 97 pictures a second
+ *                         for a screen that shows 60 (capture 4, runs K to N), and the chip's work for the rest is only
+ *                         heat, on a Mac with no fan. 20 to 240: the game holds itself to that many frames a second
+ *                         (t.MaxFPS, set by code: a value set by hand or by -TheaterSet stays as it is). -1: each frame
+ *                         waits for the screen's own refresh instead (r.VSync 1). Seen at once; set back to 0, both are
+ *                         put back as they stood. The same picture either way. A capped game sleeps between frames, and
+ *                         macOS stretches those sleeps when the screen is dark or the window hidden (capture 4's void
+ *                         run Q, 21 to 26 frames a second): so a timing with a cap wants a lit screen and the window in
+ *                         front, and the log's line on held frames (below) says whether it had them.
+ * And the log's line on held frames, each five seconds: the cap in force, how long the engine waited each frame to
+ * keep to it and by how much its waits overran what it asked, and in how many frames the game's window was in front.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
