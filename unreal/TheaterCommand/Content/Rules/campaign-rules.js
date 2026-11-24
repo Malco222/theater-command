@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a81fba89 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cbc17c98 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -59141,6 +59141,51 @@
     };
   }
   var corpsById = (s, ids2) => ids2.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
+  var keepOf = (o) => {
+    const r = o;
+    const keys = Object.keys(r), vals = keys.map((k) => r[k]);
+    return { o: r, keys, vals, lists: vals.filter((v) => Array.isArray(v)).map((a) => [a, [...a]]) };
+  };
+  var putBack = (k) => {
+    for (const [list4, was] of k.lists) list4.splice(0, list4.length, ...was);
+    for (const key6 of Object.keys(k.o)) delete k.o[key6];
+    k.keys.forEach((key6, i) => {
+      k.o[key6] = k.vals[i];
+    });
+  };
+  var insideOf = (s, ids2) => {
+    try {
+      return Array.isArray(ids2) && s.human ? corpsById(s, ids2).filter((c) => c.town !== void 0 && c.nat === s.human) : [];
+    } catch {
+      return [];
+    }
+  };
+  function comeOut(ids2, call, looks) {
+    const s = game();
+    const inside2 = insideOf(s, ids2);
+    if (!inside2.length) return call();
+    const regions = [...new Set(inside2.map((c) => c.reg))].map((id) => s.regions[id]);
+    const kept2 = [...regions.map(keepOf), ...inside2.map(keepOf)];
+    const marchKey = (c) => `march:${c.id}`;
+    const before = inside2.map((c) => ({ c, flag: s.flags[marchKey(c)] }));
+    if (!inside2.every((c) => orderTakeField(s, c))) {
+      kept2.forEach(putBack);
+      return call();
+    }
+    const out = inside2.map((c) => ({ c, reg: c.reg, ap: c.ap }));
+    let result;
+    try {
+      result = call();
+    } catch (e) {
+      if (looks) kept2.forEach(putBack);
+      throw e;
+    }
+    const went = !looks && (out.some(({ c, reg, ap }) => c.dead || c.reg !== reg || c.ap !== ap || c.town !== void 0) || before.some(({ c, flag: flag3 }) => s.flags[marchKey(c)] !== flag3));
+    if (!went) kept2.forEach(putBack);
+    return result;
+  }
+  var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);
+  var goOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), false);
   var lastAirReport = (s) => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
   function raidsSince(s, since, turns, skipNat = null) {
     const flights = [], notes = [], focus = [];
@@ -59785,7 +59830,7 @@
     if (humanUp(s)) {
       const cs = corpsById(s, ids2);
       for (const c of cs) {
-        for (const [id, r] of c.town !== void 0 ? reachOutOfTown(s, c) : reach2(s, c)) {
+        for (const [id, r] of reach2(s, c)) {
           if (id === c.reg) continue;
           const old = merged.get(id);
           if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
@@ -59823,7 +59868,7 @@
       if (humanUp(s) && !onEve(s)) {
         const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
         const lead2 = cs[0];
-        spent = cs.length > 0 && cs.every((c) => apForOrders(s, c) <= 0);
+        spent = cs.length > 0 && cs.every((c) => c.ap <= 0);
         if (lead2) {
           for (const [id, g2] of farGround2(s, lead2)) {
             if (id === lead2.reg || merged.has(id) || lead2.ap > 0 && s.regions[lead2.reg].nb.includes(id) || far.length >= 1200) continue;
@@ -64572,6 +64617,7 @@ ${standing5}`,
       groupBase: group ? group.base : -1
     };
   }
+  var battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids2, f) => playerOrder(act)(`raid:${k}:${t}:${ids2.join(".")}`, -1, f) });
   globalThis.TC = {
     digest,
     find: find2,
@@ -64641,8 +64687,8 @@ ${standing5}`,
     peek,
     load,
     view: view2,
-    reach: reachOf,
-    marchPlan: marchPlanOf,
+    reach: lookOut(reachOf),
+    marchPlan: lookOut(marchPlanOf),
     nextArmy: nextArmyOf,
     stand: standOf,
     stands: standsOf,
@@ -64652,11 +64698,11 @@ ${standing5}`,
     stageAgent,
     stageCaught,
     agentWhy,
-    move: playerOrder(move, "march"),
-    previewAttack: preview,
-    attack: playerOrder(attack),
-    takeOutlook,
-    take: playerOrder(take, "march"),
+    move: playerOrder(goOut(move), "march"),
+    previewAttack: lookOut(preview),
+    attack: playerOrder(goOut(attack)),
+    takeOutlook: lookOut(takeOutlook),
+    take: playerOrder(goOut(take), "march"),
     stormLook,
     storm: playerOrder(storm2),
     gateAsk,
@@ -64667,7 +64713,7 @@ ${standing5}`,
     sallyLook,
     sally: playerOrder(sally2),
     endMonth: endMonthWithLessons,
-    lead: leadOf,
+    lead: lookOut(leadOf),
     // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
     lessonNow,
     lessonDeed: lessonDeedOf,
@@ -64676,7 +64722,10 @@ ${standing5}`,
     guide: lessonGuide,
     openingCard,
     // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
-    ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids2, f) => playerOrder(act)(`raid:${k}:${t}:${ids2.join(".")}`, -1, f) })
+    ...battleTable,
+    // (release 2 and the 1.5.1 patch: the general's battle of a garrison in hand is looked at, and settled, with it out of its town)
+    battleLook: lookOut(battleTable.battleLook),
+    battleSettleLand: goOut(battleTable.battleSettleLand)
   };
   globalThis.TC.breakUp = (on) => {
     const s = game();
