@@ -100,9 +100,11 @@ namespace
 		// (Men in lorries, release 1.5: Brian, 23 November 14:10Z, "troops are stuck under the truck", and 15:50Z "yes" to the
 		// ride and the hop out in 1.5 if it passes the pre-check and his Mac in time. The drill seats each lorried man on
 		// her benches and has them get down one at a time (sim.trucks); the 3D seats a man dressed as each on her bench,
-		// her tilt stowed, and walks him to the tailboard and down. Off until the Mac's shots and 45 fps pass it;
-		// -TheaterLandRuleTrucks turns it on for a run.)
-		{ TEXT("trucks"), TEXT("Men in lorries"), TEXT("Lorried infantry ride on the benches in the back of their lorries, the canvas rolled away, and get down over the tailboard one at a time. Off: they ride out of sight under the canvas and all get down at once."), TEXT("TheaterLandNoTrucks"), false, TEXT("TheaterLandRuleTrucks") },
+		// her tilt stowed, and walks him to the tailboard and down.
+		// (release 1.5, 24 November: ON. The Mac held 62-64 fps while the men got down (Poznan, 88-145 s, 58-68 the whole
+		// battle) on d40cc95d. The art director judges the close stills (-TheaterLandLorryPan) on the launch candidate;
+		// should they fail, this row goes back to false. -TheaterLandNoTrucks turns it off for a run.)
+		{ TEXT("trucks"), TEXT("Men in lorries"), TEXT("Lorried infantry ride on the benches in the back of their lorries, the canvas rolled away, and get down over the tailboard one at a time. Off: they ride out of sight under the canvas and all get down at once."), TEXT("TheaterLandNoTrucks"), true, TEXT("TheaterLandRuleTrucks") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
 		// (release 1.5, Brian 23 Nov 06:35Z "yes 1 and 2 for 1.5": the campaign's weather word on the field, off until the art
 		// director's stills and 45 fps pass it; -TheaterLandRuleWetMud turns it on for a run. The 3D's -TheaterLandWeatherWord=
