@@ -137,3 +137,14 @@ def build(name, fine=True, tag=None, whole=False, **choice):
     if whole:
         choice = {**WHOLE.get(name, {}), **choice}
     return fn(fine, tag, **choice) if tag else fn(fine, **choice)
+
+
+# ---- The Eastern Front's additions (appended here so no other thread's lines move) ------------------------------
+import tanks_kv  # noqa: E402
+
+BUILDERS["KV1"] = tanks_kv.kv1
+ABOUT["KV1"] = {"nation": "SOV", "role": "heavy tank", "years": "1939-43",
+                "units": "armor (Soviet Union, 1941-42, beside the T-34: one tank in four of a block, the unit table's call); the Soviet heavy tank wherever a heavy kind is drawn"}
+WHOLE["KV1"] = {"turret": "all"}
+FACES["KV1"] = [("1941: the welded turret", {"turret": "welded"}),
+                ("1942 on: the cast turret (beside the welded one through 1942)", {"turret": "cast"})]

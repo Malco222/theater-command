@@ -1,0 +1,144 @@
+"""One still for the Eastern Front: a KV-1, washed white, coming up the street of a burnt village in the snow with
+riflemen beside her. Everything in it is the game's own models (the KV-1, soldier_SOV.glb, the eastern scenery).
+
+    python hero_east.py <png> [--fast]
+"""
+import math
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "land")))
+
+import sets_east  # noqa: E402
+
+SOLDIER = "/mnt/project-files/battle-models/land/soldier/soldier_SOV{}.glb"
+# (the glb carries paint names only, the game colours by them; these are soldier_sov.py's picture colours)
+SOV_LOOK = {"tunic": "7B7748", "trousers": "6C6943", "boots": "26211D", "straps": "5B4A33", "helmet": "4E5A3A",
+            "pack": "7A7154", "skin": "BDA08E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "3A2E25",
+            "blanket": "675D4E"}
+# (where each rifleman walks, his clip and how far into it, his dress: beside and behind the tank, on the verges;
+#  padded jackets and fur caps, a few in white snow suits)
+MEN = [(17.0, -3.6, "walk", 0.1, "_winter"), (13.5, -4.4, "walk", 0.55, "_snow"), (10.0, -3.4, "walk", 0.3, "_winter"),
+       (6.5, -4.6, "advance", 0.2, "_winter"), (15.0, 3.7, "walk", 0.8, "_snow"), (11.0, 4.3, "advance", 0.5, "_winter"),
+       (7.0, 3.6, "walk", 0.9, "_winter"), (2.5, -4.0, "walk", 0.45, "_snow")]
+
+
+def colours_of(dress):
+    """A dress's own colours (its json's "colours"), else the summer man's."""
+    import json
+    if not dress:
+        return SOV_LOOK
+    try:
+        with open(SOLDIER.format(dress)[:-4] + ".json") as f:
+            return json.load(f).get("colours") or SOV_LOOK
+    except OSError:
+        return SOV_LOOK
+
+
+def extra(put):
+    import bpy
+    import ground
+    import vehicles
+    import works
+    from kit import hex_rgb
+    v = vehicles.build("KV1", True, turret="cast")
+    ob, arm = works.to_scene(v.m, dust_hex=ground.KINDS["winter"][3])
+    arm.location = (21.0, 0.4, 0.0)
+    arm.rotation_euler = (0.0, 0.0, math.radians(4.0))
+    for x, y, clip, at, dress in MEN:
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=SOLDIER.format(dress))
+        look = colours_of(dress)
+        new = [o for o in bpy.data.objects if o not in before]
+        a = next(o for o in new if o.type == "ARMATURE")
+        for o in new:
+            for slot in getattr(o, "material_slots", []):
+                m = slot.material
+                hexc = look.get(m.name.split(".")[0]) if m else None
+                if hexc and m.node_tree and not m.node_tree.nodes.get("look_done"):
+                    nt = m.node_tree
+                    b = nt.nodes.get("Principled BSDF")
+                    base = b.inputs["Base Color"]
+                    if base.is_linked:
+                        # (a winter dress's near model carries COLOR_0, its seams' and wear's darkening, which the
+                        #  importer wires in as the base colour: the paint's colour times it)
+                        src = base.links[0].from_socket
+                        rgb = nt.nodes.new("ShaderNodeRGB")
+                        rgb.outputs[0].default_value = (*hex_rgb(hexc), 1.0)
+                        mul = nt.nodes.new("ShaderNodeMix")
+                        mul.data_type = "RGBA"
+                        mul.blend_type = "MULTIPLY"
+                        mul.inputs["Factor"].default_value = 1.0
+                        nt.links.new(rgb.outputs[0], mul.inputs["A"])
+                        nt.links.new(src, mul.inputs["B"])
+                        nt.links.new(mul.outputs["Result"], base)
+                    else:
+                        base.default_value = (*hex_rgb(hexc), 1.0)
+                    b.inputs["Roughness"].default_value = 0.4 if m.name.startswith(("steel", "eye")) else 0.85
+                    nt.nodes.new("NodeFrame").name = "look_done"
+        a.location = (x, y, 0.0)
+        a.rotation_euler = (0.0, 0.0, math.radians(2.0 * (x % 3)))
+        act = bpy.data.actions.get(clip) or next(ac for ac in bpy.data.actions if ac.name.startswith(clip))
+        a.animation_data_create()
+        a.animation_data.action = None
+        tr = a.animation_data.nla_tracks.new()
+        long = act.frame_range[1] - act.frame_range[0]
+        tr.strips.new("pose", int(-at * long), act)
+    tracks(21.0 - 3.6, 0.4)
+    bpy.context.scene.frame_set(0)
+
+
+def tracks(x_end, y_end, gauge=1.32, width=0.72, back=110.0, step=0.5):
+    """The KV's own track marks behind her: two bands of churned slush, each crossed by the prints of her grousers,
+    swinging in from the middle of the road to where she is (she turns a little to the verge)."""
+    import bpy
+    import numpy as np
+    from kit import hex_rgb
+    xs = np.arange(x_end - back, x_end + 0.01, step)
+    t = np.clip((xs - (x_end - 14.0)) / 14.0, 0.0, 1.0)
+    mid = -0.4 + (y_end + 0.4) * t * t
+    m = bpy.data.materials.new("track_print")
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    b.inputs["Roughness"].default_value = 0.55
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    w = nt.nodes.new("ShaderNodeTexWave")
+    w.wave_type = "BANDS"
+    w.bands_direction = "X"
+    w.inputs["Scale"].default_value = 2.0                         # (a grouser's print every 0.3 m or so)
+    w.inputs["Distortion"].default_value = 1.5
+    w.inputs["Detail"].default_value = 3.0
+    nt.links.new(tc.outputs["Object"], w.inputs["Vector"])
+    r = nt.nodes.new("ShaderNodeValToRGB")
+    r.color_ramp.elements[0].position = 0.35
+    r.color_ramp.elements[0].color = (*hex_rgb("332D27"), 1.0)
+    r.color_ramp.elements[1].position = 0.7
+    r.color_ramp.elements[1].color = (*hex_rgb("6A6257"), 1.0)
+    nt.links.new(w.outputs["Fac"], r.inputs["Fac"])
+    nt.links.new(r.outputs["Color"], b.inputs["Base Color"])
+    bp = nt.nodes.new("ShaderNodeBump")
+    bp.inputs["Strength"].default_value = 0.8
+    bp.inputs["Distance"].default_value = 0.05
+    nt.links.new(w.outputs["Fac"], bp.inputs["Height"])
+    nt.links.new(bp.outputs["Normal"], b.inputs["Normal"])
+    for side in (-1.0, 1.0):
+        P, F = [], []
+        for i, (x, c) in enumerate(zip(xs, mid)):
+            y = c + side * gauge
+            P += [(float(x), float(y - width / 2), 0.046), (float(x), float(y + width / 2), 0.046)]
+            if i:
+                F.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
+        sets_east._mesh("track_print", P, F, m)
+
+
+def main():
+    out = sys.argv[1]
+    fast = "--fast" in sys.argv
+    sets_east.village("winter", out, fast, extra=extra, eye=(37.0, -7.2, 2.4), target=(0.0, 1.0, 2.2), lens=32.0, wash=0.85,
+                      spp=12 if fast else 64, size=(960, 540) if fast else (1920, 1080))
+
+
+if __name__ == "__main__":
+    main()
