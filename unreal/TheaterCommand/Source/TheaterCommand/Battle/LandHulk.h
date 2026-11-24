@@ -40,10 +40,12 @@
  *   and her tyres burnt off to the rims; her aerial and roof gun gone. A burn laid by where the fire was (the art
  *   director's last round, 24 November: round 2's patchwork read as camouflage), each coat blending into the next:
  *   a week on soot black over about half of what faces the sky, densest round where the flames came out and
- *   streaking downwind, feathered grey; round it by her heat bare grey steel in the hottest centres, her paint
- *   scorched to a chalky grey-buff round that, a brown fringe, her own paint low on her cooler sides, orange only
- *   along the edges; a month on the bare steel flash-rusted orange, soft-edged, in runs; by half a year the soot
- *   washed off what faces the sky, the rust old and brown, the scorched paint flaking and weathering; settled
+ *   streaking downwind, feathered grey and grained along the wind; round it by her heat bare grey steel in the
+ *   hottest centres, her paint scorched to a chalky grey-buff round that, a brown fringe, her own paint low on her
+ *   cooler sides, orange only along the edges; a thrown turret burnt from its own hatches only; a month on the bare
+ *   steel flash-rusted, mottled orange and brown, soft-edged, in runs and a softer wash down her sides; by half a
+ *   year the soot washed off what faces the sky (a dark stain of it fading), the rust old and brown, mottled deep and
+ *   lighter, the scorched paint flaking and weathered to faded paint on the rust, her own paint flaking; settled
  *   into the ground; a ragged scorched patch under her, ash black at her engine's end with a brown rim of burnt grass
  *   and her fuel's stain, that greens again, lusher than the field round it. No fire and no smoke: they burnt out long
  *   ago.
