@@ -8750,11 +8750,11 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			SeaFillInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaFillNight.R, SeaFillNight.G, SeaFillNight.B), Moon));
 			SeaFillInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaFillNight.A, Moon));
 		}
-		if (WakeInk)
+		if (WakeTrailInk)
 		{
 			// (release 2: the foam of enemy wakes, kept faint by night with the sea's own lines)
-			WakeInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaLineNight.R, SeaLineNight.G, SeaLineNight.B), Moon));
-			WakeInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaLineNight.A, Moon));
+			WakeTrailInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaLineNight.R, SeaLineNight.G, SeaLineNight.B), Moon));
+			WakeTrailInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaLineNight.A, Moon));
 		}
 		if (SightingInk)
 		{
@@ -11071,9 +11071,9 @@ void ACampaignMapActor::LayWakes(int32 Turn)
 	{
 		return;
 	}
-	if (!WakeInk)
+	if (!WakeTrailInk)
 	{
-		WakeInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		WakeTrailInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
 		ShownNight = -1.0f; // (laid by night as the other inks of the sea are)
 		SetNight(NightNow, bLamplightNow);
 	}
@@ -11114,7 +11114,7 @@ void ACampaignMapActor::LayWakes(int32 Turn)
 			AppendRibbon(Foam, { PointAt(D), PointAt(D + (To - D) * 0.5), PointAt(To) }, 0.18 + 0.22 * Head, 0.16, Ink, false);
 		}
 	}
-	Foam.Commit(WakeMesh, 0, WakeInk ? static_cast<UMaterialInterface*>(WakeInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	Foam.Commit(WakeMesh, 0, WakeTrailInk ? static_cast<UMaterialInterface*>(WakeTrailInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 }
 
 TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& To) const
