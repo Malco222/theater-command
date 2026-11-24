@@ -16,7 +16,7 @@ function germany(on = true): Game {
   const g = startOpen(createGame(3, 'GER'));
   let guard = 0;
   while (!humanUp(g) && guard++ < 50) stepAI(g);
-  if (on) setBreakUp(g, true);
+  setBreakUp(g, on); // (on unless switched off since the 1.5.1 patch shipped it on)
   return g;
 }
 /** One of his corps of three divisions or more, in the field. */
@@ -25,7 +25,7 @@ const menOf = (cs: Corps[]): number => cs.reduce((n, c) => n + c.str * c.divs, 0
 const xpMen = (cs: Corps[]): number => cs.reduce((n, c) => n + c.xp * c.str * c.divs, 0);
 
 describe('the switch', () => {
-  it('ships off, and off nothing of it is read', () => {
+  it('switched off, nothing of it is read (the 1.5.1 patch ships it on: the flag 0 turns it off)', () => {
     expect((stage as { breakUp?: boolean }).breakUp).toBe(false);
     expect(BREAKUP_STAGE).toBe(false);
     const g = germany(false);

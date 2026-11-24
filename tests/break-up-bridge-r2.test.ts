@@ -20,7 +20,7 @@ function germany(on: boolean): { g: Game; id: number } {
   let guard = 0;
   while (!humanUp(g) && guard++ < 200) stepAI(g);
   beginHuman(g);
-  if (on) setBreakUp(g, true);
+  setBreakUp(g, on); // (on unless switched off since the 1.5.1 patch shipped it on)
   const c = g.corps.find((x) => x.nat === 'GER' && !x.dead && x.divs >= 3 && x.kind !== 'fort' && x.town === undefined && !x.joint)!;
   return { g, id: c.id };
 }

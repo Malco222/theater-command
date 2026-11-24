@@ -158,8 +158,9 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
-	// (Release 2, new units ready) -TheaterR2Ready opens his month with an infantry corps on order at his capital, due next month (for the pictures)
-	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("release 2 new units ready"), OutError))
+	// (Release 2, new units ready) -TheaterR2Ready opens his month with an infantry corps on order at his capital, due next month (for the pictures).
+	// (1.5.1's own word for the same, -TheaterReadyDemo, does the same here, development builds only.)
+	if (bReal && (FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterReadyDemo"))) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("release 2 new units ready"), OutError))
 	{
 		return false;
 	}
@@ -178,12 +179,6 @@ bool FCampaignSession::Prepare(FString& OutError)
 	}
 #endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
-	{
-		return false;
-	}
-	// (Release 1.5.1, new units ready; development only) "-TheaterReadyDemo": a campaign begun opens his month with an
-	// infantry corps on order at his capital, due next month, so that the Mac's check sees one handed over.
-	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterReadyDemo")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("new units ready demo"), OutError))
 	{
 		return false;
 	}

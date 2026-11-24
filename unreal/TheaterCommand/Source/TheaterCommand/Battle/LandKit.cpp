@@ -5641,7 +5641,10 @@ namespace LandKit
 				Across = Dx * Best->Right.X + Dy * Best->Right.Y;
 			}
 		}
-		if (!Best) for (const Benches& B : All)
+		// (Release 2 assembly) Only a man with no named seat is put on the nearest carrier: a man the rules seat on a
+		// named vehicle that is not among the carriers (a lorry RideLorries draws, with Men in lorries on, or a vehicle
+		// hidden or faded) is never moved onto another one.
+		if (!Best && (SeatOn < 0 || Seat < 0)) for (const Benches& B : All)
 		{
 			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
 			if (D > 36.0 || D >= BestD)

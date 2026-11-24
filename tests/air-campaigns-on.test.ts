@@ -57,20 +57,21 @@ describe('air campaigns are on in a new grand campaign as shipped (b623, b636)',
     }
   });
 
-  it("the bridge's start sets them for a grand campaign and an open one; a history campaign and an old save keep theirs", () => {
+  it("the bridge's start sets them for a grand campaign and an open one; a history campaign keeps them off; an old grand save gets them once loaded", () => {
     TC.start({ view: 'grand', human: 'GER', seed: 7 });
     expect(flagsOf(TC.save().text).ac).toBe(1);
     TC.start({ view: 'open', human: 'GER', seed: 7 });
     expect(flagsOf(TC.save().text).ac).toBe(1);
     TC.start({ human: 'GER', seed: 7 });
     expect(flagsOf(TC.save().text).ac).toBeUndefined();
-    // A grand campaign saved before the switch (no flag) plays on with air campaigns off, in the bridge and the browser.
+    // A grand campaign saved before the switch (no flag) flies them from the month it is loaded in the 3D game (1.5's
+    // 83a0a8c4, kept in release 2); the browser still plays it on as saved.
     TC.start({ view: 'grand', human: 'GER', seed: 7 });
     const old = JSON.parse(TC.save().text);
     delete old.flags.ac;
     const text = JSON.stringify(old);
     TC.load(text);
-    expect(flagsOf(TC.save().text).ac).toBeUndefined();
+    expect(flagsOf(TC.save().text).ac).toBe(1);
     const g = loadGame(text)!;
     expect(g.flags.open).toBe(1);
     expect(acOn(g)).toBe(false);

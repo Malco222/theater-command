@@ -8,6 +8,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
 import { hashString } from '../src/core/rng';
+import { airfieldTargetsShipped, setAirfieldTargets, setCityDamage } from '../src/campaign/turn';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 interface Bridge { start(o: Record<string, unknown>): unknown; save(): { text: string }; load(text: string): unknown }
@@ -60,12 +61,15 @@ describe("the 3D game's start: air campaigns on in a new grand campaign as shipp
     expect(Object.keys(after.ac.stock).length).toBeGreaterThan(0);
   });
 
-  it("the grand start for nobody, on the wider world, is the gate runner's start with TC_AC=1 (seed 17, stop 3), to the byte", () => {
+  it("the grand start for nobody, on the wider world, is the gate runner's start with TC_AC=1 and TC_DMG=1 and airfield targets (seed 17, stop 3), to the byte", () => {
     TC.start({ view: 'grand', human: null, seed: 17, world: true });
     const bridge = TC.save().text;
-    // (par6h.ts lines 19 to 22: startOpen(createGame(seed, null)), then g.flags.ac = 1.)
+    // (par6h.ts lines 19 to 22: startOpen(createGame(seed, null)), then g.flags.ac = 1. In release 2 the bridge's grand
+    // start also switches damaged cities on and airfields as targets, as tests/air-campaigns-on.test.ts's runner does.)
     const runner = startOpen(createGame(17, null));
     runner.flags.ac = 1;
+    if (!setCityDamage(runner, true)) throw new Error('no city damage');
+    if (airfieldTargetsShipped()) setAirfieldTargets(runner, true);
     expect(hashString(bridge).toString(16)).toBe(fp(runner));
     expect(flagsOf(bridge).ac).toBe(1);
   });
