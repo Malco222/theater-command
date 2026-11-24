@@ -3079,8 +3079,10 @@ export function escortWork(g: Game, nat: string, route: ConvoyRoute, count: Conv
  * for an incident in any of them, so the chance is the same in all the route's seas. A support group is in one place at
  * a time, so its ships are shared over the route's convoys at sea at once (w.convoys, the count the screen shares the
  * escorts over; the design director's ruling of 24 November 2026 22:24Z, 3 (b)), and never more than whole with one
- * convoy where fewer than one is at sea at once (a builder's reading; no route the game ships has fewer than about 3.3
- * at sea at once, so it never binds in play); with no convoy at sea the groups add nothing. The escorts are counted at
+ * convoy where fewer than one is at sea at once (the one-place-at-a-time rule: a group's share is its ships over the
+ * larger of 1 and the convoys at sea, so no ship counts twice; kept by the design director, 24 November 2026 23:57Z, 3;
+ * no route the game ships has fewer than about 3.3 at sea at once, so it never binds in play today); with no convoy at
+ * sea the groups add nothing. The escorts are counted at
  * the escorts' cycle's share at sea over the convoys at sea at once (onStations), a group's ships in full over the same
  * count, for the game holds a fleet on hunting duty at sea all month and the ruling names no share at sea for a group:
  * so for one convoy a destroyer on hunting duty in the route's seas counts about 2.85 times one bound to the route's

@@ -398,7 +398,7 @@ describe('the support groups shared over the route\'s convoys at sea at once (th
     expect((loose * atSea) / n).toBeCloseTo(0.029, 3);
   });
 
-  it('the builder\'s reading binds on no route the game ships: each has more than one convoy at sea at once, from its own figures', () => {
+  it('the one-place-at-a-time rule (a group never counts more than whole with one convoy) binds on no route the game ships: each has more than one convoy at sea at once, from its own figures', () => {
     const g = open(true);
     for (const route of NAVY.convoys) expect(work(g, route, route.to).convoys, route.id).toBeGreaterThan(1);
     // (The route's tons, its convoy's ships and their GRT alone: about 3.3 on the Atlantic, 10 on Libya, whatever the fleets.)
