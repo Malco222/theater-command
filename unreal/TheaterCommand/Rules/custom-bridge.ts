@@ -40,6 +40,8 @@ import { landTicket } from '../../../src/battle/land/ticket';
 import { staffOnly } from '../../../src/battle/land/offered';
 import { foundAirFleet } from '../../../src/campaign/air';
 import { riverBetween } from '../../../src/campaign/rivers';
+import { airAct } from '../../../src/campaign/airpages';
+import { afterCard, type FoughtAir } from '../../../src/campaign/airfought';
 import techData from '../../../data/campaign/tech.json';
 import nationsData from '../../../data/campaign/nations.json';
 import grandData from '../../../data/campaign/grand.json';
@@ -87,7 +89,7 @@ const LAND_KINDS: Kind[] = ['inf', 'mtn', 'mot', 'arm', 'art', 'eng'];
 type Buy = { kind: string; label: string; divs: number; cost: number; blurb: string; fights: boolean; count?: number };
 function landBuys(): Buy[] {
   const builds = PRODUCTION.builds as Record<string, { label: string; divs: number; cost: number; blurb: string }>;
-  const arsenal = ARSENAL.land as Record<string, { label: string; divs: number; cost: number; blurb: string }>;
+  const arsenal = (ARSENAL as unknown as { land: Record<string, { label: string; divs: number; cost: number; blurb: string }> }).land;
   return LAND_KINDS.map((k) => {
     const b = builds[k] ?? arsenal[k];
     return { kind: k, label: b.label, divs: b.divs, cost: b.cost, blurb: b.blurb, fights: k !== 'art' && k !== 'eng' };
@@ -247,7 +249,7 @@ function readTerrain(): void {
  */
 function pickLand(budget: number, room: number, roads: number, attacking: boolean, terrain: string, foeWorks: boolean): { buys: Record<string, number>; works: number } {
   const shares: Record<string, number> =
-    terrain === 'mountain' ? { mtn: 0.45, inf: 0.25, art: 0.2, eng: 0.1 }
+    terrain === 'mountain' ? { mtn: 0.55, inf: 0.25, art: 0.2 }
       : terrain === 'plains' || terrain === 'desert' ? { inf: 0.35, arm: 0.35, mot: 0.2, art: 0.1 }
         : terrain === 'urban' ? { inf: 0.5, art: 0.25, eng: 0.1, arm: 0.15 }
           : { inf: 0.45, arm: 0.2, mot: 0.1, art: 0.25 };
@@ -266,7 +268,9 @@ function pickLand(budget: number, room: number, roads: number, attacking: boolea
     const roadsFull = count - (spent.art ?? 0) / landCost('art') >= roads;
     const can = Object.keys(shares).filter((k) => landCost(k) <= left && (!lastRoom || (k !== 'art' && k !== 'eng')) && (!roadsFull || k === 'art'));
     if (!can.length) break;
-    can.sort((a, b) => (spent[b] ?? 0) - shares[b] * (total + landCost(b)) - ((spent[a] ?? 0) - shares[a] * (total + landCost(a))) || landCost(a) - landCost(b));
+    // (how far each kind would stand over its share with one more corps of it: the least over first)
+    const over = (k: string) => ((spent[k] ?? 0) + landCost(k)) / (total + landCost(k)) - shares[k];
+    can.sort((a, b) => over(a) - over(b) || landCost(a) - landCost(b));
     // (the first corps always fights)
     const k = fighting === 0 ? (can.find((x) => x !== 'art' && x !== 'eng') ?? can[0]) : can[0];
     buys[k] = (buys[k] ?? 0) + 1;
@@ -539,7 +543,8 @@ export function airSandbox(raw: CustomSpec): { g: Game; kind: string; target: nu
       for (let i = 0; i < n; i++) {
         const f = foundAirFleet(g, nat, r, `${g.nations[nat].adj} ${k === 'ftr' ? 'Fighter' : 'Bomber'} Wing ${i + 1}`, k, count);
         if (k === 'ftr') { f.ftr = count; f.est = { ftr: count, bmr: 0 }; } else { f.bmr = count; f.est = { ftr: 0, bmr: count }; }
-        f.mission = 'defend' as typeof f.mission;
+        // (the defence's fighters rise against raids in reach on 'support', as a defending air force's do)
+        f.mission = (out ? 'defend' : 'support') as typeof f.mission;
         f.ready = 1;
         out?.push(f.id);
       }
@@ -554,7 +559,20 @@ export function airSandbox(raw: CustomSpec): { g: Game; kind: string; target: nu
   return { g, kind: spec.kind === 'superiority' ? 'superiority' : 'bomb', target: target.id, ids };
 }
 
-export function customCalls(h: { airStartOn?: (g: Game, kind: string, target: number, ids: number[], me: Role) => unknown }) {
+/**
+ * The raid paid on the war of your own (the raider's order, airAct), its after card told from his side: when he defends,
+ * the card is made again with him as the defender ('your fighters', the raiders' losses as the enemy's).
+ */
+export function customAirSettle(g: Game, kind: string, target: number, ids: number[], me: Role, fought?: FoughtAir): unknown {
+  const out = airAct(g, `raid:${kind}:${target}:${ids.join('.')}`, fought);
+  if (!out || !out.ok || me !== 'def' || !fought) return out;
+  const rep = g.airReports.find((r) => r.id === out.report);
+  if (!rep) return out;
+  const was = g.human;
+  g.human = rep.defNat;
+  try { return { ...out, after: afterCard(g, rep, fought) }; } finally { g.human = was; }
+}
+export function customCalls(h: { airStartOn?: (g: Game, kind: string, target: number, ids: number[], nat: string, me: Role, settle?: (fought?: FoughtAir) => unknown) => unknown }) {
   return {
     customOffer,
     customArmy: (spec: CustomSpec, who?: 'me' | 'them') => customArmy(spec, who === 'me' ? 'me' : 'them'),
@@ -564,7 +582,9 @@ export function customCalls(h: { airStartOn?: (g: Game, kind: string, target: nu
     customAirStart(spec: CustomSpec) {
       const box = airSandbox(spec);
       if (!box || !h.airStartOn) return null;
-      return h.airStartOn(box.g, box.kind, box.target, box.ids, spec.role === 'def' ? 'def' : 'att');
+      // (the raid is the attacker's: his when he attacks, the computer's when he defends)
+      const me: Role = spec.role === 'def' ? 'def' : 'att';
+      return h.airStartOn(box.g, box.kind, box.target, box.ids, box.g.human ?? '', me, (f) => customAirSettle(box.g, box.kind, box.target, box.ids, me, f));
     },
   };
 }

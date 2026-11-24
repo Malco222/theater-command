@@ -1,7 +1,8 @@
 // A battle of your own (release 2, Rules/custom-bridge.ts): two armies bought from one price list, on a battlefield of
 // the real map, fought by the campaign's own rules and the 3D game's land rules, with no campaign touched.
 import { describe, expect, it } from 'vitest';
-import { AIR_PLACES, LAND_PLACES, customArmy, customCheck, customLook, customOffer, type CustomSpec } from '../unreal/TheaterCommand/Rules/custom-bridge';
+import { AIR_PLACES, LAND_PLACES, customArmy, customCalls, customCheck, customLook, customOffer, type CustomSpec } from '../unreal/TheaterCommand/Rules/custom-bridge';
+import { battleCalls } from '../unreal/TheaterCommand/Rules/battle-bridge';
 import { liveTicket } from '../src/battle/land/live';
 import type { FieldResult } from '../src/battle/core/types';
 
@@ -42,6 +43,13 @@ describe('a battle of your own: the computer\'s army', () => {
       expect(n).toBeGreaterThan(0);
       expect(n).toBeLessThanOrEqual(a.room);
       expect(Object.entries(a.buys).some(([k, x]) => x > 0 && k !== 'art' && k !== 'eng')).toBe(true);
+    }
+  });
+  it('brings a mix of corps for the ground, not one kind over and over', () => {
+    for (const p of LAND_PLACES) for (const role of ['att', 'def'] as const) {
+      const a = customArmy(base({ place: p.id, size: 'battle', role }), 'them');
+      expect(Object.keys(a.buys).length, `${p.id} ${role} ${JSON.stringify(a.buys)}`).toBeGreaterThanOrEqual(2);
+      expect(Object.values(a.buys).every((n) => n <= 3), `${p.id} ${role} ${JSON.stringify(a.buys)}`).toBe(true);
     }
   });
   it('digs in when it defends', () => {
@@ -111,3 +119,38 @@ describe('a battle of your own: the land battle', () => {
 });
 
 void AIR_PLACES;
+
+describe('a battle of your own: the air battle', () => {
+  const air = (o: Partial<CustomSpec> = {}): CustomSpec => ({
+    domain: 'air', place: AIR_PLACES[0].id, size: 'battle', role: 'att', kind: 'bomb',
+    me: { nat: 'GER', kit: 3, train: 2, buys: null }, them: { nat: 'UK', kit: 3, train: 2, buys: null }, ...o,
+  });
+  const fly = (spec: CustomSpec) => {
+    const TC = battleCalls({ game: () => { throw new Error('no grand campaign in a battle of your own'); }, attack: () => null });
+    const C = customCalls({ airStartOn: TC.airStartOn });
+    const me = customArmy(spec, 'me'), them = customArmy(spec, 'them');
+    const full = { ...spec, me: { ...spec.me, buys: me.buys, works: me.works }, them: { ...spec.them, buys: them.buys, works: them.works } };
+    expect(customCheck(full).ok).toBe(true);
+    const st = C.customAirStart(full) as { sky: { att: { human: boolean }; def: { human: boolean } }; view: { units: unknown[] } } | null;
+    return { TC, st, why: C.customWhy() };
+  };
+  it('flies on every air battlefield, either side his, the raid or the fight for the sky, to its after card', () => {
+    for (const p of AIR_PLACES) for (const role of ['att', 'def'] as const) for (const kind of ['bomb', 'superiority']) {
+      const { TC, st, why } = fly(air({ place: p.id, role, kind }));
+      expect(st, `${p.id} ${role} ${kind}: ${why}`).toBeTruthy();
+      expect(st!.sky.att.human).toBe(role === 'att');
+      expect(st!.sky.def.human).toBe(role === 'def');
+      TC.battleSpeed(4);
+      let v: any = null;
+      for (let k = 0; k < 4000 && !(v && v.over); k++) v = TC.battleTick(5);
+      expect(v.over).toBeTruthy();
+      const out: any = TC.battleEnd();
+      expect(out?.ok, `${p.id} ${role} ${kind}: ${out?.note}`).toBe(true);
+      expect(out.after.lost).toBeTruthy();
+      expect(out.after.groups.some((x: any) => x.side === 'att') && out.after.groups.some((x: any) => x.side === 'def')).toBe(true);
+      // (the card is told from his side: 'your' bombers when he raids, 'your' fighters when he defends)
+      const words = out.after.lines.join(' ');
+      if (role === 'def') expect(words, words).not.toMatch(/your \d+ bombers/);
+    }
+  }, 300_000);
+});

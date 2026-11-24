@@ -79,6 +79,7 @@ import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 // (release 1.5) The general's ground battle: the campaign half of FIGHT IT YOURSELF (battle-bridge.ts).
 import { battleCalls } from './battle-bridge';
+import { customCalls } from './custom-bridge';
 import type { FoughtAir } from '../../../src/campaign/airfought';
 import type { FieldBill } from '../../../src/campaign/game';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
@@ -6340,6 +6341,9 @@ function find(name: string) {
   };
 }
 
+// (release 1.5) The general's ground battle and the air battle on the shared clock (battle-bridge.ts).
+const battles = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) });
+
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
@@ -6347,4 +6351,6 @@ function find(name: string) {
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
-  ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }) };
+  ...battles,
+  // (release 2) A battle of your own (custom-bridge.ts): two sides, a treasury each, fought on a war of their own.
+  ...customCalls({ airStartOn: battles.airStartOn }) };
