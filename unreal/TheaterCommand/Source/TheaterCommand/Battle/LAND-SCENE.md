@@ -975,9 +975,12 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   to 95), smudged darker, in the hottest centres, the paint scorched to a chalky grey-buff (100 to 110) round that, a
   narrow fringe of it heat-tinted brown, and her own paint low on her cooler sides; orange only along the plates'
   edges where the paint burnt off, a few in 100 (not on a lorry's hoops, thin tube creased all over, that went wholly
-  orange). A month on: the bare steel flash-rusted (some 130,72,38 in the picture), mottled bright orange and brown at
-  a hand and darker in patches (not one sheet of orange paint), about 15 to 25 in 100 of her, coming on across a
-  soft edge, in runs soft at their edges and fading as they go, and a softer wash between them, down her sides under
+  orange). A month on: the bare steel flash-rusted (some 125,70,36 in the picture), a dull orange-brown mottled a
+  little and darker in patches (not one sheet of orange paint), its brightest on a sunlit top no brighter than some
+  150,85,45 (the art director's carry of 24 November 21:01Z: round 3's read hot, almost glowing, on a sunlit turret
+  top, its brightest some 188,94,42 there), about 15 to 25 in 100 of her, coming on across a soft edge and staining
+  the paint round it rust-brown (not a bright orange against the pale grey-buff), in runs soft at their edges and
+  fading as they go, and a softer wash between them, down her sides under
   the rusted steel above them: her own plate sampled as itself up to her top there, then her top over the edge
   (`Tops`, her height over each spot of her at rest; the first pass sampled every point above a side as a deck). Each
   wreck's thresholds are set by her own file (`ThresholdsFor`: what faces up on her upper works, her deck and
@@ -997,7 +1000,13 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   what is left of it weathered duller and darker within half a year (some 100,88,75 at six months to 97,83,72 by a
   year and a half; the first pass left it pale, 105,97,83, at six months: a cow pattern) and stained by the rust
   round it, so it reads as faded paint on the rust; her own paint flaking in flecks to the rust, some one in eight
-  of it by a year and a half. Her coat is halved where the file's plates are bigger (`Halve`, as LandKit halves a
+  of it by a year and a half. And, from some three months (the art director's second carry of 24 November 21:01Z:
+  from half a year her old rust read as one even brown), a little of her own paint left where the weather reaches
+  least (`ShelterOf`: somewhat on a side turned from the sky, more low on her, under 0.4 m to a metre over her
+  tracks, and under her track guards or whatever of her stands out a hand or so over the face, wholly on what turns
+  down), in soft patches a stride or so across that her runs of rust pass by; and a few darker runs (`WeepFrom`)
+  weeping from the seam where her top meets her side, from under a ledge of her and from under the hatches and
+  grilles the flames came out of, narrow, a stride or more apart and fading out within about a metre. Her coat is halved where the file's plates are bigger (`Halve`, as LandKit halves a
   camouflaged one's), so her coats' soft edges lie where her heat puts them on a lorry's, a half-track's or a
   Sherman's big plates too (round 1's M3
   showed one colour smeared from corner to corner): the near level down to 0.35 m (`NearHalve`; round 2's quarter metre
@@ -1098,6 +1107,25 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   4.8, 5.0, 4.1, 3.8), after it 0.6, 0.5, 0.2, 0.1, 0.0 (3.1, 3.1, 2.0, 1.7, 1.5) and now 0.6, 0.4, 0.2, 0.1, 0.0
   (3.5, 3.4, 2.0, 1.7, 1.7). Pictures: `/tmp/claude-0/ad-round/wrecks/final2/` (the round before in
   `/tmp/claude-0/ad-round/wrecks/soft1/`, round 2's with the same measure in `/tmp/claude-0/ad-round/wrecks/before_soft/`).
+  Since the art director's pass (24 November 21:01Z) and its two carries, each measured (the log and
+  `look_<recording>.csv`): a month on, her flash rust lit and facing up on the first sheet, near and far, by its
+  brightest (the 2 in 100 of its pixels brightest by value, their median colour; each channel's own 98th in 100
+  printed beside it, its green and blue set by her plates' edges, rusting points among the scorched paint that the
+  picture draws pale round them), within 5 of 150,85,45 in each channel for each of the four with 30 such pixels
+  and more, and for all four: Normandy's all four 189,93,42 at 1e56500d, now 148,78,37 (the Sherman's 155,82,39 the
+  most), Prokhorovka's 188,94,42, now 150,79,38. And from half a year, on the side sheet, every pixel of hers lit or
+  in shade: her own paint on her faces turned from the sky in her upper half (10 in 100 and more, and more than on
+  her sky faces, all four), low on her (her lower half) and on her sky faces; and her runs on her lit sides, with
+  those whose luma lies 10 and more under her old rust's median there (1.5 in 100 of her lit sides and more, all
+  four). All four at six months, a year and a year and a half: on Normandy her paint turned from the sky 5, 5 and 4
+  in 100 at 1e56500d, now 20, 20 and 20 (some 76,58,35), low on her 50, 43 and 40, now 52, 48 and 46, on her sky
+  faces 9, 8 and 8 both; her darker runs 0.0, 0.1 and 0.1 in 100, now 2.4, 2.9 and 2.7 (all her runs 6.7, 8.3 and
+  9.1, now 9.5, 11.1 and 12.0); on Prokhorovka her paint turned from the sky 5, 5 and 4, now 24, 24 and 23 (some
+  65,53,39), on her sky faces 5 to 6 both; her darker runs 0.1, 0.0 and 0.0, now 2.5, 2.2 and 2.1. The hard edges
+  as they were: Normandy near 0.23, 0.19, 0.20, 0.06 and 0.05 in 100 (1e56500d's 0.23, 0.22, 0.16, 0.05, 0.03),
+  Prokhorovka 0.53, 0.45, 0.21, 0.03 and 0.03 (0.55, 0.43, 0.23, 0.06, 0.03). Pictures:
+  `/tmp/claude-0/ad-round/wrecks/carries1/` (1e56500d's with the same measures in
+  `/tmp/claude-0/ad-round/wrecks/before_carries/`).
 - **Not yet.** Wrecks on a live battle (none: no tracks at its open); the guns' and soft vehicles' own wrecks beyond the
   half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
 - **Owed.** The Mac compile (the names to check: `LayOldWrecks`, `ShowOldWrecks`, `OldWreckNear`, `OldWreckFar`,
@@ -1106,7 +1134,8 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   review of 24 November, `LandHulk::Ask::bAsLaid`, `LandHulk::Hulk`'s `TurretYaw`, `TurretBoxLo`, `TurretBoxHi`,
   `TurretMuzzle` and `bTurretGun`, and `LandSight::Machine`'s `Root`, `Heading`, `HullLo`, `HullHi`, `bTurret`,
   `bMuzzle` and `Muzzle` for the thrown turret; and `LandHulk::Ask::Per` with `Recording::OldWreckPer` for the battle's
-  scale), the art director's look, and the 45 fps gate with twenty wrecks
+  scale), the art director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
+  gate with twenty wrecks
   laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
   `=6` and `=18` months (the same twenty, aged): from 300 m up over the old lines; a group from 40 m and from a man's
   height; a thrown turret and a run-off track close to; a wreck as the eye crosses 140 m (her near and far levels
@@ -1127,7 +1156,10 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   56 ms (1.57 to 1.60 million, 20 to 27 in 100 over round 1; the coat halved to 0.35 m, and the fire's noises read
   only where they decide anything), since the last round some 55 to 60 ms (the same runs back to back, 49 to 52
   before it, 10 to 17 in 100 over: the fire's places' reaches read for each point, the soot's streaks and grain, the
-  flaking's rag, the rust's mottles and runs, her height map's tops read once a cell), the far level some 7.5 to 9.5 ms
+  flaking's rag, the rust's mottles and runs, her height map's tops read once a cell), and since the art director's
+  carries some 57 to 59 ms on Normandy and 52.5 to 54 on Prokhorovka (six runs back to back, fastest and middle;
+  1e56500d's 54 to 56 and 51 to 52, 5 and 3 in 100 over: the rust's stain round the steel, her paint left in her
+  shelter and the darker runs, each read only where it could show), the far level some 7.5 to 9.5 ms
   (7 to 8 before it; 170,000 to 176,000 triangles for twenty, round 2's
   107,000 to 113,000: it is halved to 0.7 m now) and the patches 48,720 triangles. So `LayOldWrecks` with twenty
   makes their meshes in some 1.2 to 1.4 s here (round 1 0.5, round 2 1.5 to 2.1): the Mac to time it at the battle's

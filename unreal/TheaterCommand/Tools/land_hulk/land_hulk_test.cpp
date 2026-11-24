@@ -137,15 +137,16 @@ namespace
 		std::vector<uint8_t> Rgb;
 		std::vector<float> Depth;
 		/** What each pixel shows, for the measure (0 untagged; 1 + a wreck's Coat; 32 + her patch's Scorch), how lit it is
-		 * (the sun's light on it, 0.42 to 1), and how much its face looks up (its facing's z, toward the eye). */
+		 * (the sun's light on it, 0.42 to 1), how much its face looks up (its facing's z, toward the eye), and how high it
+		 * stands over the mesh's origin (a wreck's anchor: her height over the ground under her middle, metres). */
 		std::vector<uint8_t> Tag;
-		std::vector<float> Lit, Up;
+		std::vector<float> Lit, Up, Hgt;
 		/** The box lines and rings are drawn in (the map's, not its key's). */
 		int ClipW = 0, ClipH = 0;
 		Image(int InW, int InH)
 			: W(InW), H(InH), Rgb(static_cast<size_t>(InW) * static_cast<size_t>(InH) * 3, 0), Depth(static_cast<size_t>(InW) * static_cast<size_t>(InH), 1e30f),
 			  Tag(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0), Lit(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0.0f),
-			  Up(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0.0f), ClipW(InW), ClipH(InH)
+			  Up(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0.0f), Hgt(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0.0f), ClipW(InW), ClipH(InH)
 		{
 		}
 		void Put(int X, int Y, double R, double G, double B)
@@ -271,6 +272,7 @@ namespace
 					const size_t Px0 = static_cast<size_t>(J) * static_cast<size_t>(Img.W) + static_cast<size_t>(I);
 					Img.Lit[Px0] = static_cast<float>(Light);
 					Img.Up[Px0] = static_cast<float>(Nm.Z);
+					Img.Hgt[Px0] = static_cast<float>(W0 * M.Positions[A * 3 + 2] + W1 * M.Positions[B * 3 + 2] + W2 * M.Positions[C * 3 + 2]);
 					Img.Tag[Px0] = bTags ? static_cast<uint8_t>(TagBase + (*Tags)[W0 >= W1 && W0 >= W2 ? A : W1 >= W2 ? B : C]) : 0;
 					const LandField::Rgb8 &Ca = M.Colours[A], &Cb = M.Colours[B], &Cc = M.Colours[C];
 					Img.Put(I, J, Light * (W0 * Ca.R + W1 * Cb.R + W2 * Cc.R), Light * (W0 * Ca.G + W1 * Cb.G + W2 * Cc.G), Light * (W0 * Ca.B + W1 * Cb.B + W2 * Cc.B));
@@ -1027,6 +1029,17 @@ int main(int Argc, char** Argv)
 				 * shade or another plate counts too, so it is read against another build's, not against none. */
 				size_t EdgeN = 0, EdgeHardN = 0;
 				double EdgeSum = 0.0;
+				/** Her flash rust on her sunlit tops (the art director's carry of 24 November 21:01Z: a month on, the flash rust on a
+				 * sunlit turret top read hot, almost glowing): the pixels shown flash rust, lit, facing up (their facing's z 0.5 and
+				 * over), for their brightest (the 2 in 100 brightest by value), not only their median. */
+				std::vector<uint8_t> FlashTop;
+				/** Her faces by shelter (the same carry: from half a year the old rust read as one even brown; a little of her own
+				 * paint wanted low and on her sheltered faces): every pixel of hers shown, lit or in shade, on her faces turned
+				 * away from the sky (facing z under 0.5) in her upper half and in her lower half (under half her height over her
+				 * anchor), and on her sky faces (0.5 and over); how many, her paint among them, and her old rust on her faces
+				 * turned away in her upper half. */
+				size_t AwayN = 0, LowN = 0, SkyN = 0;
+				std::vector<uint8_t> AwayPaint, LowPaint, SkyPaint, AwayRust;
 				double HardShare() const { return EdgeN > 0 ? 100.0 * static_cast<double>(EdgeHardN) / static_cast<double>(EdgeN) : 0.0; }
 				double MeanStep() const { return EdgeN > 0 ? EdgeSum / static_cast<double>(EdgeN) : 0.0; }
 			};
@@ -1050,7 +1063,7 @@ int main(int Argc, char** Argv)
 				Image Sheet(CellW * 5, Head + CellH * static_cast<int>(std::max<size_t>(1, Pick.size())));
 				Sheet.Fill(0, 0, Sheet.W, Sheet.H, 34, 34, 36);
 				std::string Labels;
-				const auto Count = [&](Tally& T, Tally& P, int X0, int Y0)
+				const auto Count = [&](Tally& T, Tally& P, int X0, int Y0, double Tall)
 				{
 					for (int J = Y0; J < Y0 + CellH; ++J)
 						for (int I = X0; I < X0 + CellW; ++I)
@@ -1074,7 +1087,14 @@ int main(int Argc, char** Argv)
 											++Into->SideN;
 											Into->Side[Tag - 1].insert(Into->Side[Tag - 1].end(), { C[0], C[1], C[2] });
 										}
+										if (Tag - 1 == static_cast<int>(LandHulk::Coat::Flash) && Sheet.Up[Px] >= 0.5f) Into->FlashTop.insert(Into->FlashTop.end(), { C[0], C[1], C[2] });
 									}
+									// (her faces by shelter, lit or in shade)
+									const int Zone = Sheet.Up[Px] >= 0.5f ? 2 : Sheet.Hgt[Px] < 0.5 * Tall ? 1 : 0;
+									++(Zone == 2 ? Into->SkyN : Zone == 1 ? Into->LowN : Into->AwayN);
+									std::vector<uint8_t>& PaintOf = Zone == 2 ? Into->SkyPaint : Zone == 1 ? Into->LowPaint : Into->AwayPaint;
+									if (Tag - 1 == static_cast<int>(LandHulk::Coat::Paint)) PaintOf.insert(PaintOf.end(), { C[0], C[1], C[2] });
+									if (Zone == 0 && Tag - 1 == static_cast<int>(LandHulk::Coat::OldRust)) Into->AwayRust.insert(Into->AwayRust.end(), { C[0], C[1], C[2] });
 								}
 								// (her lit faces' step to the pixel across and to the one down, both in the cell, hers and lit)
 								if (Sheet.Lit[Px] >= LitFrom)
@@ -1131,7 +1151,10 @@ int main(int Argc, char** Argv)
 						Draw(Sheet, V, M, Anchor, Light, &Nd.Coats, 1);
 						for (int E = 0; E < CellW; ++E) Sheet.Put(X0 + E, Y0, 34, 34, 36);
 						for (int E = 0; E < CellH; ++E) Sheet.Put(X0, Y0 + E, 34, 34, 36);
-						Count(Cells[R][static_cast<size_t>(I)], Pooled[static_cast<size_t>(I)], X0, Y0);
+						// (her height over her anchor, for her lower half)
+						double Tall = 0.0;
+						for (size_t P = 2; P < M.Positions.size(); P += 3) Tall = std::max(Tall, static_cast<double>(M.Positions[P]));
+						Count(Cells[R][static_cast<size_t>(I)], Pooled[static_cast<size_t>(I)], X0, Y0, Tall);
 						if (R == 0) Labels += std::to_string(X0 + 8) + " 8 " + AgeWords[I] + (I == 4 ? "   " + Title : std::string()) + "\n";
 						if (I == 0)
 						{
@@ -1383,6 +1406,125 @@ int main(int Argc, char** Argv)
 				const double MonthSideRust = SideShare(SidePooled[1], LandHulk::Coat::Flash) + MonthRuns;
 				std::printf("  her sides: her own paint a week on %.0f%%; a month on flash rust %.0f%% of them, %.0f%% in runs\n", 100 * WeekPaint, 100 * MonthSideRust, 100 * MonthRuns);
 				if (WeekPaint < 0.1 || MonthRuns < 0.02) Fault(Name + ": her sides show no paint kept a week on, or no runs a month on");
+			}
+			// The art director's carries (24 November 21:01Z, the look passed), measured. (1) A month on, the flash rust on a sunlit
+			// turret top read hot, almost glowing: its brightest held at about 150, 85, 45 in the picture (her flash rust lit and
+			// facing up on the first sheet, near and far: the 2 in 100 of its pixels brightest by value, their median colour, within
+			// 5 of it in each channel, for each of the four with 30 such pixels and more and for all four). (2) From half a year her
+			// old rust read as one even brown: a little of her own paint left on her faces turned from the sky, more low on her,
+			// against her sky faces (the side sheet, every pixel of hers on them, lit or in shade: on her faces turned from the sky
+			// in her upper half 10 in 100 and more, and more than on her sky faces, all four); and a few runs down her sides darker
+			// than her old rust (the side sheet's lit sides: her runs, and those whose luma lies 10 and more under her old rust's
+			// median there, 1.5 in 100 of her lit sides and more, all four).
+			{
+				const auto Pct = [](const std::vector<uint8_t>& V, int Channel, double Q)
+				{
+					std::vector<uint8_t> One;
+					for (size_t K = static_cast<size_t>(Channel); K < V.size(); K += 3) One.push_back(V[K]);
+					if (One.empty()) return -1;
+					const size_t At = std::min(One.size() - 1, static_cast<size_t>(Q * static_cast<double>(One.size())));
+					std::nth_element(One.begin(), One.begin() + static_cast<std::ptrdiff_t>(At), One.end());
+					return static_cast<int>(One[At]);
+				};
+				const int Hot[3] = { 150, 85, 45 };
+				constexpr int HotBy = 5;
+				constexpr size_t HotFew = 30;
+				std::string Hottest;
+				bool bHot = false;
+				// (the brightest: the 2 in 100 of them brightest by their value, their highest channel, as the eye finds the hot
+				// ones; their median colour. And each channel's own 98th in 100 beside it, its blue and green set by her plates'
+				// edges, rusting points among the scorched paint that the picture draws pale round them)
+				const auto Top2 = [&Median](const std::vector<uint8_t>& V, int Out[3])
+				{
+					std::vector<std::pair<int, size_t>> ByValue;
+					for (size_t K = 0; K + 2 < V.size(); K += 3) ByValue.emplace_back(std::max({ V[K], V[K + 1], V[K + 2] }), K);
+					Out[0] = Out[1] = Out[2] = -1;
+					if (ByValue.empty()) return;
+					std::sort(ByValue.begin(), ByValue.end(), [](const std::pair<int, size_t>& P, const std::pair<int, size_t>& Q) { return P.first > Q.first || (P.first == Q.first && P.second < Q.second); });
+					const size_t Many = std::max<size_t>(1, ByValue.size() / 50);
+					std::vector<uint8_t> Hottest2;
+					for (size_t K = 0; K < Many; ++K) Hottest2.insert(Hottest2.end(), { V[ByValue[K].second], V[ByValue[K].second + 1], V[ByValue[K].second + 2] });
+					for (int C = 0; C < 3; ++C) Out[C] = Median(Hottest2, C);
+				};
+				const auto Brightest = [&](const Tally& T, const Tally& Far, const std::string& Who)
+				{
+					const size_t N = T.FlashTop.size() / 3, Nf = Far.FlashTop.size() / 3;
+					int Near2[3], Far2[3];
+					Top2(T.FlashTop, Near2);
+					Top2(Far.FlashTop, Far2);
+					char Buf[260];
+					std::snprintf(Buf, sizeof(Buf), "%s%s (%d,%d,%d) of %zu px [each channel's 98th (%d,%d,%d)], median (%d,%d,%d); far (%d,%d,%d) of %zu px [(%d,%d,%d)]", Hottest.empty() ? "" : "; ",
+						Who.c_str(), Near2[0], Near2[1], Near2[2], N, Pct(T.FlashTop, 0, 0.98), Pct(T.FlashTop, 1, 0.98), Pct(T.FlashTop, 2, 0.98), Median(T.FlashTop, 0), Median(T.FlashTop, 1),
+						Median(T.FlashTop, 2), Far2[0], Far2[1], Far2[2], Nf, Pct(Far.FlashTop, 0, 0.98), Pct(Far.FlashTop, 1, 0.98), Pct(Far.FlashTop, 2, 0.98));
+					Hottest += Buf;
+					Csv << Name << ",near," << Who << "," << AgeWords[1] << ",flash on sunlit tops,brightest (2 in 100 by value)," << N << ",," << Near2[0] << "," << Near2[1] << "," << Near2[2] << "\n";
+					Csv << Name << ",near," << Who << "," << AgeWords[1] << ",flash on sunlit tops,each channel's 98th in 100," << N << ",," << Pct(T.FlashTop, 0, 0.98) << "," << Pct(T.FlashTop, 1, 0.98) << ","
+						<< Pct(T.FlashTop, 2, 0.98) << "\n";
+					Csv << Name << ",far," << Who << "," << AgeWords[1] << ",flash on sunlit tops,brightest (2 in 100 by value)," << Nf << ",," << Far2[0] << "," << Far2[1] << "," << Far2[2] << "\n";
+					Csv << Name << ",far," << Who << "," << AgeWords[1] << ",flash on sunlit tops,each channel's 98th in 100," << Nf << ",," << Pct(Far.FlashTop, 0, 0.98) << "," << Pct(Far.FlashTop, 1, 0.98) << ","
+						<< Pct(Far.FlashTop, 2, 0.98) << "\n";
+					if (N >= HotFew) bHot = bHot || Near2[0] > Hot[0] + HotBy || Near2[1] > Hot[1] + HotBy || Near2[2] > Hot[2] + HotBy;
+					if (Nf >= HotFew) bHot = bHot || Far2[0] > Hot[0] + HotBy || Far2[1] > Hot[1] + HotBy || Far2[2] > Hot[2] + HotBy;
+				};
+				for (size_t R = 0; R < Pick.size(); ++R) Brightest(Cells[R][1], FarCells[R][1], std::to_string(R + 1) + " " + Aged[0].Hulks()[Pick[R]].Model);
+				Brightest(Pooled[1], FarPooled[1], "all four");
+				std::printf("  a month on, her flash rust's brightest on her sunlit tops (the 2 in 100 brightest by value, their median; wanted about 150,85,45 at most): %s\n", Hottest.c_str());
+				if (bHot) Fault(Name + ": a month on, her flash rust's brightest on her sunlit tops over about 150,85,45 (" + Hottest + ")");
+				// (her paint left on her sheltered and low faces and on her sky faces; her runs on her lit sides, and the darker ones)
+				const auto Luma3 = [&Luma](int R, int Gm, int B)
+				{
+					const uint8_t C[3] = { static_cast<uint8_t>(std::clamp(R, 0, 255)), static_cast<uint8_t>(std::clamp(Gm, 0, 255)), static_cast<uint8_t>(std::clamp(B, 0, 255)) };
+					return Luma(C);
+				};
+				struct Old
+				{
+					double Away = 0.0, Low = 0.0, Sky = 0.0, Runs = 0.0, Darker = 0.0;
+				};
+				const auto OldOf = [&](const Tally& T, const std::string& Who, int I, std::string& Said)
+				{
+					Old O;
+					O.Away = T.AwayN > 0 ? static_cast<double>(T.AwayPaint.size() / 3) / static_cast<double>(T.AwayN) : 0.0;
+					O.Low = T.LowN > 0 ? static_cast<double>(T.LowPaint.size() / 3) / static_cast<double>(T.LowN) : 0.0;
+					O.Sky = T.SkyN > 0 ? static_cast<double>(T.SkyPaint.size() / 3) / static_cast<double>(T.SkyN) : 0.0;
+					const std::vector<uint8_t>& Runs = T.Side[static_cast<int>(LandHulk::Coat::Run)];
+					const std::vector<uint8_t>& Rust = T.Side[static_cast<int>(LandHulk::Coat::OldRust)];
+					O.Runs = T.SideN > 0 ? static_cast<double>(Runs.size() / 3) / static_cast<double>(T.SideN) : 0.0;
+					const double RustLuma = Rust.empty() ? -1.0 : Luma3(Median(Rust, 0), Median(Rust, 1), Median(Rust, 2));
+					size_t NDark = 0;
+					for (size_t K = 0; K + 2 < Runs.size(); K += 3) NDark += RustLuma >= 0.0 && Luma(&Runs[K]) <= RustLuma - 10.0 ? 1 : 0;
+					O.Darker = T.SideN > 0 ? static_cast<double>(NDark) / static_cast<double>(T.SideN) : 0.0;
+					char Buf[500];
+					std::snprintf(Buf, sizeof(Buf), "%s%s: her paint on her faces turned from the sky %.0f%% (%d,%d,%d) of %zu px, low on her %.0f%% (%d,%d,%d) of %zu px, on her sky faces %.0f%% (%d,%d,%d) of %zu px; her old rust turned from the sky (%d,%d,%d); runs %.1f%% of her lit sides (%d,%d,%d), darker %.1f%% (her old rust there (%d,%d,%d))",
+						Said.empty() ? "" : "\n      ", AgeWords[I], 100.0 * O.Away, Median(T.AwayPaint, 0), Median(T.AwayPaint, 1), Median(T.AwayPaint, 2), T.AwayN, 100.0 * O.Low, Median(T.LowPaint, 0),
+						Median(T.LowPaint, 1), Median(T.LowPaint, 2), T.LowN, 100.0 * O.Sky, Median(T.SkyPaint, 0), Median(T.SkyPaint, 1), Median(T.SkyPaint, 2), T.SkyN, Median(T.AwayRust, 0),
+						Median(T.AwayRust, 1), Median(T.AwayRust, 2), 100.0 * O.Runs, Median(Runs, 0), Median(Runs, 1), Median(Runs, 2), 100.0 * O.Darker, Median(Rust, 0), Median(Rust, 1), Median(Rust, 2));
+					Said += Buf;
+					Csv << Name << ",side," << Who << "," << AgeWords[I] << ",paint left,faces turned from the sky (upper half)," << 100.0 * O.Away << "," << T.AwayN << "," << Median(T.AwayPaint, 0) << ","
+						<< Median(T.AwayPaint, 1) << "," << Median(T.AwayPaint, 2) << "\n";
+					Csv << Name << ",side," << Who << "," << AgeWords[I] << ",paint left,low on her (lower half)," << 100.0 * O.Low << "," << T.LowN << "," << Median(T.LowPaint, 0) << "," << Median(T.LowPaint, 1) << ","
+						<< Median(T.LowPaint, 2) << "\n";
+					Csv << Name << ",side," << Who << "," << AgeWords[I] << ",paint left,sky faces," << 100.0 * O.Sky << "," << T.SkyN << "," << Median(T.SkyPaint, 0) << "," << Median(T.SkyPaint, 1) << ","
+						<< Median(T.SkyPaint, 2) << "\n";
+					Csv << Name << ",side," << Who << "," << AgeWords[I] << ",runs on lit sides,darker than her old rust (luma 10 under)," << 100.0 * O.Darker << "," << 100.0 * O.Runs << "," << Median(Runs, 0) << ","
+						<< Median(Runs, 1) << "," << Median(Runs, 2) << "\n";
+					return O;
+				};
+				std::printf("  from half a year, her own paint left and her darker runs (the side sheet):\n");
+				for (size_t R = 0; R < Pick.size(); ++R)
+				{
+					std::string Said;
+					for (int I = 2; I < 5; ++I) OldOf(SideCells[R][static_cast<size_t>(I)], std::to_string(R + 1) + " " + Aged[0].Hulks()[Pick[R]].Model, I, Said);
+					std::printf("    %s:\n      %s\n", Aged[0].Hulks()[Pick[R]].Model.c_str(), Said.c_str());
+				}
+				std::string Said;
+				bool bEven = false;
+				for (int I = 0; I < 5; ++I)
+				{
+					const Old O = OldOf(SidePooled[static_cast<size_t>(I)], "all four", I, Said);
+					if (I >= 2) bEven = bEven || O.Away < 0.1 || !(O.Away > O.Sky) || O.Darker < 0.015;
+				}
+				std::printf("    all four:\n      %s\n", Said.c_str());
+				if (bEven) Fault(Name + ": from half a year, too little of her own paint left on her faces turned from the sky (10 in 100 at least, and more than on her sky faces), or too few darker runs down her sides (1.5 in 100 of them at least)");
 			}
 			// And every one of the twenty (not only the sheet's four), by area: what faces up on her near and far levels a
 			// week on, each corner's coat a third of its triangle's area. (The near level's orange is its plates' edges, a
