@@ -548,7 +548,7 @@ namespace LandField
 		SegGrid BGrid;
 		std::vector<WallRun> Walls;
 		std::vector<House> Houses;
-		/** The farmhouses, barns, byres and church built to the vehicles' detail (the trial "houses"), one a kind: kit slot K is HouseModels[K]. */
+		/** The farmhouses, barns, byres, church and village houses built to the vehicles' detail (the trial "houses"), one a kind: kit slot K is HouseModels[K]. */
 		std::vector<LandHouse::Spec> HouseModels;
 		std::vector<V2> WayA, WayB;
 		std::vector<double> WayHalf;
@@ -3557,13 +3557,14 @@ namespace LandField
 		// farmhouse (its size, roof and damage, and one of two looks) a kit slot, planted on its floor, turned so its door
 		// faces as LandField laid it; its plain built box left out of the tiles. Then the village church whole (LandHouse's
 		// Kind 3: its nave, chancel and tower one model, planted at the nave; all three parts leave the tiles), then its
-		// farm's barn and byre (Kind 1 and 2). Where the slots run out, as before.
+		// farm's barn and byre (Kind 1 and 2), then the village's houses (Kind 6), each its own (no two of the same size).
+		// Where the slots run out, as before.
 		if (!Sp && Fd.Tried("houses"))
-			for (int Pass = 0; Pass < 4; ++Pass)
+			for (int Pass = 0; Pass < 5; ++Pass)
 			for (size_t I = 0; I < Houses.size(); ++I)
 			{
 				House& H = Houses[I];
-				const int Want[4] = { HtFarmhouse, HtChurch, HtBarn, HtByre }, KindOf[4] = { 0, 3, 1, 2 };
+				const int Want[5] = { HtFarmhouse, HtChurch, HtBarn, HtByre, HtHouse }, KindOf[5] = { 0, 3, 1, 2, 6 };
 				if (H.bKit || H.bWhite || H.Type != Want[Pass]) continue;
 				// (a church's chancel and tower stand on as LayChurch put them, after its nave)
 				const bool bChurch = H.Type == HtChurch;
@@ -3576,7 +3577,9 @@ namespace LandField
 				S.Roof = H.Roof;
 				S.Hurt = bChurch ? std::min(H.Hurt, static_cast<int>(DmRoofHole)) : H.Hurt;
 				// (a farmhouse's two looks by its roof and damage, as before; a barn's, a byre's and a church's their own)
-				S.Key = Pass == 0 ? Hash(0xFA4A0ull, static_cast<uint64_t>(H.Roof * 8 + H.Hurt), H.Key & 1) : Hash(0xFA4A0ull + static_cast<uint64_t>(S.Kind), static_cast<uint64_t>(S.Roof * 8 + S.Hurt), H.Key & 1);
+				S.Key = Pass == 0 ? Hash(0xFA4A0ull, static_cast<uint64_t>(H.Roof * 8 + H.Hurt), H.Key & 1)
+				        : Pass == 4 ? Hash(0xFA4A6ull, H.Key, static_cast<uint64_t>(S.Roof * 8 + S.Hurt)) // (a village house's look its own)
+				                    : Hash(0xFA4A0ull + static_cast<uint64_t>(S.Kind), static_cast<uint64_t>(S.Roof * 8 + S.Hurt), H.Key & 1);
 				S.Below = std::max(1.0, H.Floor - H.Foot); // (its plinth down past the lowest ground under it, as BuildHouse's walls)
 				if (bChurch)
 					for (size_t J = I + 1; J <= I + 2; ++J) S.Below = std::max(S.Below, Houses[I].Floor - Houses[J].Foot);
@@ -6232,7 +6235,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Kit20", "Kit21", "Kit22", "Kit23", "Kit24", "Kit25", "Kit26", "Kit27", "Kit28", "Kit29", "Kit30", "Kit31", "Kit32", "Kit33", "Kit34", "Kit35", "Kit36", "Kit37", "Kit38", "Kit39", "Kit40", "Kit41", "Kit42", "Kit43", "Kit44", "Kit45", "Kit46", "Kit47", "Kit48", "Kit49", "Kit50", "Kit51", "Kit52", "Kit53", "Kit54", "Kit55", "Kit56", "Kit57", "Kit58", "Kit59", "Kit60", "Kit61", "Kit62", "Kit63", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -6919,7 +6922,7 @@ namespace LandField
 			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
 			for (int K = static_cast<int>(Base::Tuft); K < static_cast<int>(Base::Clut0); ++K) Rg->OwnClutter(static_cast<Base>(K), At(static_cast<Base>(K)));
 		}
-		// The farmhouses built to the vehicles' detail (the trial "houses"): their three levels in the kit's slots, drawn as
+		// The farmhouses, barns, byres, church and village houses built to the vehicles' detail (the trial "houses"): their three levels in the kit's slots, drawn as
 		// buildings (near, the middle from 90 m, plain from 300 m).
 		for (size_t K = 0; K < HouseModels.size(); ++K)
 		{
@@ -6933,8 +6936,8 @@ namespace LandField
 			M.FarFrom = 300.0f;
 			M.Class = BaseMesh::Draw::House;
 			static const char* const Hurts[4] = { "Whole", "RoofHole", "Gable", "Shell" };
-			static const char* const Kinds[4] = { "Farmhouse", "Barn", "Byre", "Church" };
-			M.Name = std::string(Kinds[std::clamp(HouseModels[K].Kind, 0, 3)]) + (HouseModels[K].Roof == 1 ? "Tile" : "Slate") + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
+			static const char* const Kinds[7] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House" };
+			M.Name = std::string(Kinds[std::clamp(HouseModels[K].Kind, 0, 6)]) + (HouseModels[K].Roof == 1 ? "Tile" : "Slate") + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
 		}
 		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not
 		// reach, dropped: its near level is drawn to its far one).

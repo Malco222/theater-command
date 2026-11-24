@@ -7,7 +7,9 @@
 # LAND_KIT_HOUSE=1 paints the farmhouse's own sheet instead (release 2, -TheaterLandTrial=houses: the bocage's farmhouse built
 # to the vehicles' detail, whole and in its three hurts, near, middle and far, and stills across its 90 m and 300 m
 # switches as the game's lens shows them); LAND_KIT_HOUSE=farm the barn's and the byre's; LAND_KIT_HOUSE=church the
-# village church's (nave, chancel and tower, close looks at its door, window, belfry and cross, its levels and switches).
+# village church's (nave, chancel and tower, close looks at its door, window, belfry and cross, its levels and switches);
+# LAND_KIT_HOUSE=village the village's houses (render, cream limestone and rubble, a shop, a cottage, close looks at the
+# shopfront, the render come away and the splinters' strikes, its hurts, its levels and switches).
 # LAND_KIT_ONLY=<panel,panel> paints only those panels (and the zz_ close looks
 # for working on it); LAND_KIT_CAMERA=1 writes each panel's camera beside it, for measuring.
 set -euo pipefail

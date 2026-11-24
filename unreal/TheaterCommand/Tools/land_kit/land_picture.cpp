@@ -240,7 +240,9 @@ namespace
 		// level (0 near, 1 middle, 2 far), roof and look; the sun's own bearing where given; a close look aimed at a point
 		// from a way (bAim).
 		int House = -1, HouseLevel = 0, HouseRoof = 0;
-		int HouseKind = 0; // (0 the farmhouse, 1 its barn, 2 its byre: LAND_KIT_HOUSE=farm)
+		int HouseKind = 0; // (0 the farmhouse, 1 its barn, 2 its byre: LAND_KIT_HOUSE=farm; 3 the church; 6 a village house)
+		double HouseLong = 12.4, HouseDeep = 6.8; // (a village house's footprint, LAND_KIT_HOUSE=village)
+		int HouseStoreys = 2;
 		uint64_t HouseKey = 1;
 		double SunBearing = -1000.0;
 		bool bAim = false;
@@ -750,6 +752,7 @@ int main(int argc, char** argv)
 	const bool bHouseSheet = std::getenv("LAND_KIT_HOUSE") != nullptr;
 	const bool bFarmSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "farm";
 	const bool bChurchSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "church";
+	const bool bVillageSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "village";
 	auto HouseSpec = [](const Panel& P)
 	{
 		LandHouse::Spec H;
@@ -759,6 +762,13 @@ int main(int argc, char** argv)
 		H.Long = P.HouseKind == 1 ? 15.0 : P.HouseKind == 2 ? 13.0 : P.HouseKind == 3 ? 18.0 : 14.0;
 		H.Deep = P.HouseKind == 1 ? 8.4 : P.HouseKind == 2 ? 6.8 : P.HouseKind == 3 ? 8.6 : 7.2;
 		H.Storeys = P.HouseKind == 0 ? 2 : 1;
+		// (a village house: its own footprint and storeys, as LandField lays them along the village's lanes)
+		if (P.HouseKind == 6)
+		{
+			H.Long = P.HouseLong;
+			H.Deep = P.HouseDeep;
+			H.Storeys = P.HouseStoreys;
+		}
 		H.Roof = P.HouseRoof;
 		H.Hurt = P.House;
 		H.Key = P.HouseKey;
@@ -775,10 +785,13 @@ int main(int argc, char** argv)
 			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves;
 			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them); the
 			         // church's: 4 its belfry and spire's foot, 5 the tower's west door, 6 the cross, 7 where tower and nave meet,
-			         // 8 the tower's south face under its lower string course
+			         // 8 the tower's south face under its lower string course; a village house's: 9 its shop, 13 the biggest
+			         // place up its front where its render has come away, 14 its strikes there at their thickest
 			double AimDistance;
 			const char* Caption;
-			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church
+			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house
+			double Long = 12.4, Deep = 6.8; // (a village house's)
+			int Storeys = 2;
 		};
 		const HouseLook HouseLooks[] = {
 			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate", 0 },
@@ -870,9 +883,36 @@ int main(int argc, char** argv)
 			{ "zz_church_junction", 0, 0, 0, 7, -55.0, 28.0, 62.0, 7, 14.0, "", 3 },
 			{ "zz_church_chancel", 0, 0, 0, 7, 60.0, 22.0, 62.0, 3, 24.0, "", 3 },
 		};
+		// (the village's houses: LAND_KIT_HOUSE=village; aim 9 its shop's front, 13 a place its render came away, 14 its
+		// strikes, 15 the front's broken end where a gable fell (to the house's +x), 16 the -x gable's attic)
+		const HouseLook VillageLooks[] = {
+			{ "village_render_shop", 0, 0, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "village house: lime render, its shop below", 6, 12.4, 6.8, 2 },
+			{ "village_shop", 0, 0, 0, 10, -20.0, 4.0, 62.0, 9, 7.5, "close: the shop's front, fascia, glass, door", 6, 12.4, 6.8, 2 },
+			{ "village_render_spall", 0, 0, 0, 3, 18.0, 4.0, 100.0, 13, 3.4, "close: the render come away to the rubble, its cracks", 6, 12.4, 6.8, 2 },
+			{ "village_lime_shop", 0, 0, 1, 11, 30.0, 10.0, 110.0, -1, 0.0, "another: cream limestone, flat tile, its shop boarded", 6, 11.4, 6.6, 2 },
+			{ "village_rubble", 0, 0, 0, 5, -40.0, 11.0, 62.0, -1, 0.0, "another: the bocage's rubble, slate", 6, 13.6, 7.0, 2 },
+			{ "village_cottage", 0, 0, 1, 12, 34.0, 12.0, 110.0, -1, 0.0, "a cottage of one storey, rendered, tile", 6, 9.4, 6.4, 1 },
+			{ "village_pocks", 1, 0, 0, 36, -16.0, 4.0, 62.0, 14, 3.0, "close: a burst's splinters in the render", 6, 12.4, 6.8, 2 },
+			{ "village_roofhole", 1, 0, 0, 10, 150.0, 22.0, 62.0, -1, 0.0, "damage 1: a shell through the roof (from behind)", 6, 12.4, 6.8, 2 },
+			{ "village_gable", 2, 0, 0, 10, -36.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down", 6, 12.4, 6.8, 2 },
+			{ "village_broken_top", 2, 0, 0, 10, -30.0, 10.0, 62.0, 15, 6.5, "close: its broken top, the render gone in a band", 6, 12.4, 6.8, 2 },
+			{ "village_shell", 3, 0, 0, 10, -36.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell", 6, 12.4, 6.8, 2 },
+			{ "village_mid", 0, 1, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 6, 12.4, 6.8, 2 },
+			{ "village_far", 0, 2, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 6, 12.4, 6.8, 2 },
+			{ "village_shell_mid", 3, 1, 0, 10, -36.0, 18.0, 62.0, -1, 0.0, "burnt out, middle level", 6, 12.4, 6.8, 2 },
+			{ "village_switch90_near", 0, 0, 0, 10, -36.0, 4.0, 62.0, 3, 55.0, "house at 90 m: near level", 6, 12.4, 6.8, 2 },
+			{ "village_switch90_mid", 0, 1, 0, 10, -36.0, 4.0, 62.0, 3, 55.0, "house at 90 m: middle level", 6, 12.4, 6.8, 2 },
+			{ "village_switch300_near", 0, 0, 0, 10, -36.0, 4.0, 62.0, 3, 184.0, "", 6, 12.4, 6.8, 2 }, // (not laid out: for measuring)
+			{ "village_switch300_mid", 0, 1, 0, 10, -36.0, 4.0, 62.0, 3, 184.0, "house at 300 m: middle level", 6, 12.4, 6.8, 2 },
+			{ "village_switch300_far", 0, 2, 0, 10, -36.0, 4.0, 62.0, 3, 184.0, "house at 300 m: far level", 6, 12.4, 6.8, 2 },
+			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
+			{ "zz_roof_front", 1, 0, 0, 10, -36.0, 22.0, 62.0, -1, 0.0, "", 6, 12.4, 6.8, 2 },
+			{ "zz_attic", 1, 0, 0, 10, -120.0, 25.0, 62.0, 16, 9.0, "", 6, 12.4, 6.8, 2 },
+		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
-		const std::vector<HouseLook> Looks = bChurchSheet ? std::vector<HouseLook>(std::begin(ChurchLooks), std::end(ChurchLooks))
+		const std::vector<HouseLook> Looks = bVillageSheet ? std::vector<HouseLook>(std::begin(VillageLooks), std::end(VillageLooks))
+			: bChurchSheet ? std::vector<HouseLook>(std::begin(ChurchLooks), std::end(ChurchLooks))
 			: bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
 		for (const HouseLook& K : Looks)
 		{
@@ -889,6 +929,9 @@ int main(int argc, char** argv)
 			P.HouseRoof = K.Roof;
 			P.HouseKey = K.Key;
 			P.HouseKind = K.Kind;
+			P.HouseLong = K.Long;
+			P.HouseDeep = K.Deep;
+			P.HouseStoreys = K.Storeys;
 			P.CameraBearing = K.Bearing;
 			P.CameraUp = K.Up;
 			P.SunBearing = K.Sun;
@@ -901,12 +944,42 @@ int main(int argc, char** argv)
 				for (const LandHouse::Hole& H : Holes)
 				{
 					// (a window low in the front, or its door: a barn's cart doors, a byre's stable door)
-					if (H.Face == 0 && ((K.Aim == 0 && (((H.What == 0 || H.What == 7) && H.Z0 < 2.0) || H.What == 9)) || (K.Aim == 1 && (H.What == 1 || H.What == 3 || H.What == 6 || H.What == 10))))
+					if (H.Face == 0 && ((K.Aim == 0 && (((H.What == 0 || H.What == 7) && H.Z0 < 2.0) || H.What == 9)) || (K.Aim == 1 && (H.What == 1 || H.What == 3 || H.What == 6 || H.What == 10)) || (K.Aim == 9 && H.What == 12)))
 					{
 						At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
 						break;
 					}
 				}
+				// (a village house's render: the biggest place up its front where it has come away, 13; or the thickest of its
+				// strikes there, 14, the one with most others within half a metre)
+				if (K.Aim == 13)
+				{
+					double Most = 0.0;
+					for (const LandHouse::Hole& H : Holes)
+						if (H.What == 13 && H.Face == 0 && H.Z0 > 1.0 && H.Wide * (H.Z1 - H.Z0) > Most)
+						{
+							Most = H.Wide * (H.Z1 - H.Z0);
+							At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
+						}
+				}
+				if (K.Aim == 14)
+				{
+					int Most = -1;
+					for (const LandHouse::Hole& H : Holes)
+					{
+						if (H.What != 14 || H.Face != 0) continue;
+						int N = 0;
+						for (const LandHouse::Hole& O : Holes)
+							N += O.What == 14 && O.Face == 0 && std::hypot(O.X - H.X, O.Z0 - H.Z0) < 0.5;
+						if (N > Most)
+						{
+							Most = N;
+							At = V3(H.X, H.Y, 0.15 + H.Z0);
+						}
+					}
+				}
+				if (K.Aim == 15) At = V3(0.5 * K.Long - 1.2, 0.5 * K.Deep, 0.15 + 4.2);
+				if (K.Aim == 16) At = V3(-0.5 * K.Long, 0.0, 0.15 + 6.9);
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);

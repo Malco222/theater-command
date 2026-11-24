@@ -287,7 +287,52 @@ namespace LandField
 		Kit16,
 		Kit17,
 		Kit18,
-		Kit19,   // (the last kit slot: KitSlots in all, one after another from Kit0, before Haycock and the clutter)
+		Kit19,
+		Kit20,
+		Kit21,
+		Kit22,
+		Kit23,
+		Kit24,
+		Kit25,
+		Kit26,
+		Kit27,
+		Kit28,
+		Kit29,
+		Kit30,
+		Kit31,
+		Kit32,
+		Kit33,
+		Kit34,
+		Kit35,
+		Kit36,
+		Kit37,
+		Kit38,
+		Kit39,
+		Kit40,
+		Kit41,
+		Kit42,
+		Kit43,
+		Kit44,
+		Kit45,
+		Kit46,
+		Kit47,
+		Kit48,
+		Kit49,
+		Kit50,
+		Kit51,
+		Kit52,
+		Kit53,
+		Kit54,
+		Kit55,
+		Kit56,
+		Kit57,
+		Kit58,
+		Kit59,
+		Kit60,
+		Kit61,
+		Kit62,
+		Kit63,   // (the last kit slot: KitSlots in all, one after another from Kit0, before Haycock and the clutter; a region
+		         // names Kit0 to Kit19, the bocage's houses built to the vehicles' detail (the trial "houses") take any of them)
 		Haycock, // a mown meadow's hay forked into cocks to make, 1.2 to 1.6 m, in loose rows (the bocage's July)
 		Tuft,    // clutter: grass tuft (every base from here on is clutter, laid round the eye)
 		TallGrass,
@@ -313,8 +358,10 @@ namespace LandField
 		Clut5,
 		Count
 	};
-	/** A region's kit slots, Kit0 to Kit19 one after another (a region names its slot K as Kit0 + K). */
-	constexpr int KitSlots = 20;
+	/** The kit's slots, Kit0 to Kit63 one after another (a region names its slot K as Kit0 + K, from its first twenty; the
+	 * bocage's farmhouses, barns, byres, church and village houses built to the vehicles' detail, the trial "houses", one a
+	 * slot, from the first). */
+	constexpr int KitSlots = 64;
 	static_assert(static_cast<int>(Base::Kit0) + KitSlots == static_cast<int>(Base::Haycock), "the kit's slots run on from Kit0 to the haycock");
 	/** The tallest a region's low kit stands, metres (Region::KitLow: a balk's ridge, a bund): a man steps over it and a
 	 * tank rolls over it, so it may lie across a recorded men's way. */

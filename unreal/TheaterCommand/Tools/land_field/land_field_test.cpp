@@ -208,7 +208,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Kit20", "Kit21", "Kit22", "Kit23", "Kit24", "Kit25", "Kit26", "Kit27", "Kit28", "Kit29", "Kit30", "Kit31", "Kit32", "Kit33", "Kit34", "Kit35", "Kit36", "Kit37", "Kit38", "Kit39", "Kit40", "Kit41", "Kit42", "Kit43", "Kit44", "Kit45", "Kit46", "Kit47", "Kit48", "Kit49", "Kit50", "Kit51", "Kit52", "Kit53", "Kit54", "Kit55", "Kit56", "Kit57", "Kit58", "Kit59", "Kit60", "Kit61", "Kit62", "Kit63", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 	static_assert(sizeof(BaseNames) / sizeof(BaseNames[0]) == static_cast<size_t>(LandField::Base::Count), "a name for every base");
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
@@ -1058,10 +1058,13 @@ int main(int Argc, char** Argv)
 	// thousand, as a vehicle's; a byre's from 18 thousand), every point a number and within the house's reach, and its
 	// normals of unit length. The village church the same, whole in one slot (nave, chancel and tower; its near some 75 to
 	// 90 thousand, three buildings' worth, its middle at most 14 thousand, its far 1.5), standing once where the village has one.
+	// The village's houses the same, each its own (their near some 6 to 45 thousand: a rendered cottage's few stones, a
+	// rubble house of three storeys).
 	if (F.Tried("houses") && LookLaid == "bocage")
 	{
-		int Kinds = 0, Barns = 0, Byres = 0, Churches = 0;
+		int Kinds = 0, Barns = 0, Byres = 0, Churches = 0, Village = 0;
 		size_t Standing = 0, NearFew = static_cast<size_t>(-1), NearMost = 0, MidMost = 0, FarMost = 0;
+		size_t VNearFew = static_cast<size_t>(-1), VNearMost = 0, VMidMost = 0, VFarMost = 0, VNear = 0;
 		std::string Bad;
 		for (int K = 0; K < LandField::KitSlots; ++K)
 		{
@@ -1096,10 +1099,24 @@ int main(int Argc, char** Argv)
 				}
 				continue;
 			}
-			if (Bm.Class != LandField::BaseMesh::Draw::House || (Bm.Name.rfind("Farmhouse", 0) != 0 && Bm.Name.rfind("Barn", 0) != 0 && !bByre)) continue;
-			++Kinds;
+			const bool bVillage = Bm.Name.rfind("House", 0) == 0;
+			if (Bm.Class != LandField::BaseMesh::Draw::House || (Bm.Name.rfind("Farmhouse", 0) != 0 && Bm.Name.rfind("Barn", 0) != 0 && !bByre && !bVillage)) continue;
+			if (bVillage)
+			{
+				Village += static_cast<int>(G.Instances(B).size());
+				VNearFew = std::min(VNearFew, Bm.Near.Tris());
+				VNearMost = std::max(VNearMost, Bm.Near.Tris());
+				VMidMost = std::max(VMidMost, Bm.Mid.Tris());
+				VFarMost = std::max(VFarMost, Bm.Far.Tris());
+				VNear += Bm.Near.Tris();
+				if (std::getenv("LAND_FIELD_HOUSES"))
+					std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(), Bm.MidFrom, Bm.FarFrom);
+			}
+			else ++Kinds;
 			Barns += Bm.Name.rfind("Barn", 0) == 0 ? static_cast<int>(G.Instances(B).size()) : 0;
 			Byres += bByre ? static_cast<int>(G.Instances(B).size()) : 0;
+			if (!bVillage)
+			{
 			Standing += G.Instances(B).size();
 			// (a burnt-out shell has no roof: its near level some 13 thousand; a byre, low, some 21 thousand whole)
 			if (Bm.Name.find("Shell") == std::string::npos && !bByre) NearFew = std::min(NearFew, Bm.Near.Tris());
@@ -1109,6 +1126,7 @@ int main(int Argc, char** Argv)
 			FarMost = std::max(FarMost, Bm.Far.Tris());
 			std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(),
 			            Bm.MidFrom, Bm.FarFrom);
+			}
 			if (Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight) Bad += " " + Bm.Name + " (its levels)";
 			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
 			{
@@ -1132,8 +1150,11 @@ int main(int Argc, char** Argv)
 		}
 		std::printf("  farmhouses, barns and byres at the vehicles' detail: %zu standing (%d barns, %d byres) in %d kinds; near %zu to %zu triangles, middle at most %zu, far at most %zu; the church %d; the tiles' built %zu\n", Standing, Barns,
 		            Byres, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost, Churches, T.BuiltTris);
+		std::printf("  the village's houses at the vehicles' detail: %d standing; near %zu to %zu triangles (%zu in all), middle at most %zu, far at most %zu\n", Village, VNearFew == static_cast<size_t>(-1) ? 0 : VNearFew, VNearMost, VNear, VMidMost, VFarMost);
 		Check(Kinds > 0 && Standing > 0 && Barns > 0 && Byres > 0 && Bad.empty() && (NearFew == static_cast<size_t>(-1) || NearFew >= 15000) && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200 && Churches == (T.bChurch ? 1 : 0),
 		      "the trial \"houses\": each bocage farmhouse, barn, byre and the church at the vehicles' detail, on its floor, three levels within budget", Fmt("%.0f standing, ", static_cast<double>(Standing)) + Fmt("church %.0f, ", static_cast<double>(Churches)) + "bad:" + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+		Check(Village > 0 && (VNearFew == static_cast<size_t>(-1) || VNearFew >= 6000) && VNearMost <= 45000 && VMidMost <= 6000 && VFarMost <= 1200,
+		      "the trial \"houses\": the village's houses at the vehicles' detail, each its own, three levels within budget", Fmt("%.0f standing", static_cast<double>(Village)));
 	}
 	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
 	// point's normal turned out, its underside darker than its top.

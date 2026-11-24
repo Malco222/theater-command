@@ -49,6 +49,17 @@
  * a louvred belfry, a parapet with four pinnacles, a stone spire with four lucarnes, its cross and gilt cock. Only the
  * nave is ever hurt (its roof holed).
  *
+ * The village's houses (Kind 6, LandField's HtHouse; release 2, the same trial: "then the other houses"), each to its own
+ * footprint, storeys (one to three), roof and hurt as LandField lays it, in the farmhouse's hand: its bays, its windows
+ * and shutters, its door, its chimneys, its damage. Their walls the bourg's: the bocage's rubble, the cream limestone,
+ * or (about half) a lime render over the rubble, off-white, cream, grey, buff or a faded ochre, its quoins and its
+ * openings' dressed stone left bare, the render come away to the stones in patches, low along the foot where the damp
+ * lifts it and here and there up the walls (more on a house that was hit, most on a shell; along a broken top a band of
+ * it gone), and the pits of shell splinters and bullets in it, a spray round a burst or a line along a burst of fire. Now
+ * and then a shop on the ground floor of a house of two storeys: pilasters and a fascia under its cornice applied to the
+ * wall round it, its display windows over a stall riser, its glazed door set back; its boards up or down; its glass
+ * broken by a blast, gone in a wreck; burnt, charred, its fascia half gone.
+ *
  * Its own frame: metres, x along its length, y across it (its door on the +y side), z up from its floor (the floor
  * LandField's FloorOf gives it); the origin at the middle of its footprint. Placed at a house's middle, turned by the
  * house's yaw (and a half turn where its door faces -V). Colours 8-bit sRGB, as the field's; triangles wound
@@ -65,7 +76,7 @@ namespace LandHouse
 		uint64_t Key = 1; // its look: the stone's tone, the shutters' paint and which stand open, the chimneys, the damage's side
 		double Below = 2.2; // how far its plinth runs down below its floor (the ground falls away under it on a slope)
 		int Kind = 0;     // 0 the farmhouse, 1 its barn, 2 its byre (LandField's HtFarmhouse, HtBarn, HtByre; Storeys unread for these),
-		                  // 3 the church whole (its nave's Long and Deep; Roof, Storeys unread; Hurt 0 or 1)
+		                  // 3 the church whole (its nave's Long and Deep; Roof, Storeys unread; Hurt 0 or 1), 6 a village house (HtHouse)
 	};
 
 	struct Levels
@@ -80,7 +91,8 @@ namespace LandHouse
 	/** Where its windows and doors are, for the pictures and the tests: each opening's middle on the wall's outer face
 	 * (its own frame), its sill and head heights, its width, and what it is (0 a window, 1 the door, 2 an attic window; the
 	 * barn's and byre's: 3 the cart doors, 4 a slit, 5 a loft's pitching door, 6 a stable door, 7 a byre's barred window;
- * a church's, its nave's only: 9 a round-headed window, 10 its door). */
+ * a church's, its nave's only: 9 a round-headed window, 10 its door; a village house's shop: 12 its front; and on a
+ * village house's render, 13 where it has come away to the rubble, 14 a strike in it). */
 	struct Hole
 	{
 		int Face = 0; // 0 the front (+y), 1 the gable at -x, 2 the back, 3 the gable at +x
