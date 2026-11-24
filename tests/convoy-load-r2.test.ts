@@ -48,6 +48,7 @@ function withFigure<T>(set: () => () => void, f: () => T): T {
 const regainAt = (x: number | null) => (): (() => void) => { const keep = CAUSE.load!.regain; CAUSE.load!.regain = x; return () => { CAUSE.load!.regain = keep; }; };
 const eyeUnread = (): (() => void) => { const keep = CAUSE.firing.eye!.effective41; CAUSE.firing.eye!.effective41 = null; return () => { CAUSE.firing.eye!.effective41 = keep; }; };
 const loadUnread = (): (() => void) => { const keep = CAUSE.load!.reload; CAUSE.load!.reload = null; return () => { CAUSE.load!.reload = keep; }; };
+const nextUnread = (): (() => void) => { const keep = CAUSE.load!.next!.boat; CAUSE.load!.next!.boat = null; return () => { CAUSE.load!.next!.boat = keep; }; };
 const patrolDays = (d: number) => (): (() => void) => { const keep = CAUSE.station.ss!.patrol; CAUSE.station.ss!.patrol = d; return () => { CAUSE.station.ss!.patrol = keep; }; };
 
 afterEach(() => { expect(CAUSE.load!.regain).toBeNull(); });
@@ -55,7 +56,7 @@ afterEach(() => { expect(CAUSE.load!.regain).toBeNull(); });
 describe('the figures', () => {
   it('lays 5 ready tubes, 1.25 hours to reload them, the share that regain contact unread, and the eye term\'s two record points', () => {
     expect(CAUSE.ceiling.tubes).toBe(5);
-    expect(CAUSE.load).toEqual({ reload: 1.25, regain: null });
+    expect({ reload: CAUSE.load!.reload, regain: CAUSE.load!.regain }).toEqual({ reload: 1.25, regain: null });
     expect(CAUSE.firing.eye).toEqual({ effective41: 0.62, n41: 4.8, e41: 1.07, r41: 0.07, effectiveT2: 0.3, nT2: 5.8, eT2: 0.97, rT2: 0.97 });
   });
 
@@ -147,7 +148,7 @@ describe('the load', () => {
     expect(salvosInto(0.9, 0)).toBe(0);
   });
 
-  it('with the share that regain contact unread, a boat that fires makes one approach: 5 torpedoes, 1.28 ships at most, whatever the sea', () => {
+  it('with the share that regain contact unread (and the next night unread too), a boat that fires makes one approach: 5 torpedoes, 1.28 ships at most, whatever the sea', () => {
     const g = open(true);
     for (const k of ['natl', 'wapp']) {
       const z = zoneOf(g, k);
@@ -155,8 +156,11 @@ describe('the load', () => {
       expect(boatCeiling(g, z)).toBeCloseTo(5 * HIT * SINK, 12);
     }
     meet(g, 60, 6);
-    const s = convoySideOf(g, 'UK', atlantic)!;
-    expect(s.torps).toBeCloseTo(Math.max(1, s.fired!) * 5 * HIT * SINK, 12);
+    // (The next night, laid since (tests/convoy-regain-r2), is the route's further approach: unread here, one approach.)
+    withFigure(nextUnread, () => {
+      const s = convoySideOf(g, 'UK', atlantic)!;
+      expect(s.torps).toBeCloseTo(Math.max(1, s.fired!) * 5 * HIT * SINK, 12);
+    });
   });
 
   it('with it laid, a further approach goes ahead with the firing share x the night a reload fits in x the share that regain', () => {
@@ -193,8 +197,10 @@ describe('the load', () => {
     const g = open(true);
     meet(g, 60, 6);
     const shipped = convoySideOf(g, 'UK', atlantic)!;
-    // (At 20 days on station it does not bind here.)
-    expect(shipped.torps).toBeCloseTo(Math.max(1, shipped.fired!) * 5 * HIT * SINK, 12);
+    // (At 20 days on station it does not bind here: each firing boat's torpedoes, with the next night as laid.)
+    const z0 = zoneOf(g, 'natl'), each = torpedoesInto(g, z0, shipped.fire!, { route: 'atlantic', nat: 'GER' });
+    expect(each).toBeGreaterThan(5);
+    expect(shipped.torps).toBeCloseTo(Math.max(1, shipped.fired!) * each * HIT * SINK, 12);
     // (A boat that held one load for 4,000 days on station: the month's torpedoes are what the boats on station hold.)
     withFigure(patrolDays(4000), () => {
       const s = convoySideOf(g, 'UK', atlantic)!, c = convoyCount(g, atlantic)!;

@@ -2100,10 +2100,17 @@ export const CAUSE = causeData as unknown as {
   /** The escort's radar before a boat fires: the share of the boats that try which fire at T2's ratio of radar-fitted escorts a convoy to boats trying, and that ratio. A null in either: the pack fires as counted. 'eye': the eye term's two record points (every escort finds, radar-fitted ones again); a null in it: radar alone. */
   firing: { t2: number | null; rT2: number | null; screen?: { stations: number | null; columnsAStation: number | null; shipsAColumn: number | null; maxColumns: number | null }; eye?: EyeRow };
   /** What a boat that fires puts into one convoy (the load form): hours to reload its ready tubes, and the share of boats that regain contact after an attack. A null in reload: the whole load into one convoy, as first built; a null in regain: one approach. */
-  load?: { reload: number | null; regain: number | null };
+  load?: { reload: number | null; regain: number | null; next?: NextNightRow };
   /** The sea patrol against submarines (seapatrol.ts): 'live' its switch; the aircraft that watch a sea's waters reached, attacks on a boat a month in watched waters and the share of them that sink it, by kit, and aircraft lost a month; 'intensity' the air fighting's own row for a patrol met by enemy fighters (the air thread's Q6), which gates only the fighters (null: none meets a patrol). With live false, or a null in a0, attacks or kill, none of it is read (the design director's ruling of 24 November 2026 17:49Z, 5 (a)). */
   patrol: { live: boolean; reach: 'map' | 'air'; a0: number | null; intensity: number | null; attacks: { kit: number | null; none: number | null }; kill: { kit: number | null; none: number | null }; lost: number | null };
 };
+
+/**
+ * The next night's contact (convoycause.json load.next): the boats' surface speed in knots, and for each route its
+ * convoys by class, each class's speed in knots and its share of the route's sailings. A null speed or share, or a route
+ * left null: unread, and its boats have no next night.
+ */
+interface NextNightRow { boat: number | null; convoys: Record<string, { class: string; speed: number | null; share: number | null }[] | null> }
 
 /** The eye term's record points (convoycause.json firing.eye): for 1941's sample and T2, the share of boats trying that torpedoed a ship, the torpedoes a boat that fired put in (n), and the escorts on stations and the radar-fitted ones for each boat trying. A null: unread. */
 interface EyeRow { effective41: number | null; n41: number | null; e41: number | null; r41: number | null; effectiveT2: number | null; nT2: number | null; eT2: number | null; rT2: number | null }
@@ -2902,11 +2909,14 @@ export function calmShare(g: Game, z: number): number {
  * boat that fires (the escort's radar acts before a boat fires, not on its hits), x the ships sunk a hit. Nothing in it
  * reads the flag or the date. Null where a figure is not laid.
  */
-export function boatCeiling(g: Game, z: number, fire = 1): number | null {
+export function boatCeiling(g: Game, z: number, fire = 1, at?: ConvoyAt): number | null {
   if (!ceilingLaid()) return null;
   const C = CAUSE.ceiling;
-  return torpedoesInto(g, z, fire) * C.hit! * C.sinkHit!;
+  return torpedoesInto(g, z, fire, at) * C.hit! * C.sinkHit!;
 }
+
+/** The convoy route a boat fires on and the boats' nation, where its next night is read. */
+export interface ConvoyAt { route: string; nat: string }
 
 /** True where the load form is laid on the ceiling: the ready tubes and the hours to reload them. */
 const loadLaid = (): boolean => ceilingLaid() && CAUSE.ceiling.tubes != null && CAUSE.ceiling.tubes > 0 && CAUSE.load?.reload != null;
@@ -2945,12 +2955,38 @@ export function salvosInto(q: number, salvos: number): number {
  * a further approach going ahead with q = the firing share x the share of the night it fits in x the share of boats that
  * regain contact after an attack (contact is lost running in, F). With that share unread, one approach.
  */
-export function torpedoesInto(g: Game, z: number, fire = 1): number {
+export function torpedoesInto(g: Game, z: number, fire = 1, at?: ConvoyAt): number {
   const load = loadIn(g, z);
   if (!loadLaid()) return load;
   const C = CAUSE.ceiling, regain = CAUSE.load!.regain;
-  const q = regain == null ? 0 : fire * nightFits(g, z) * regain;
+  // (A further approach the same night: a reload in the dark left and the share that regain contact, unread. Failing that,
+  // the next night: contact held through the day (nextNight). Either way it meets the screen again and fires at the share.)
+  const w = regain == null ? 0 : nightFits(g, z) * regain;
+  const h = at ? nextNight(g, z, at.route, at.nat) : 0;
+  const q = fire * (w + (1 - w) * h);
   return C.tubes! * salvosInto(q, load / C.tubes!);
+}
+
+/**
+ * The share of the boats that fired on a convoy one night that hold or regain contact for the next night (the load
+ * form's Q2 (a), the design director's ruling of 24 November 2026 18:00Z: the next-night part from its causes; the
+ * second run within one night stays unread). By day a boat runs on the surface after the convoy, and what its speed has
+ * over the convoy's (1 - the convoy's speed / its own, none where the convoy is as fast) is its margin to work round
+ * ahead of it for the next night, weighed over the route's convoys by class (load.next). Two things break contact: the
+ * aircraft that keep boats down by day, as the sea patrol keeps them down (keptUp, as built: one cause acting once, and
+ * nothing while the patrol is dormant), and a rough sea (the complement of calmShare, as built). 0 where a speed is unread.
+ */
+export function nextNight(g: Game, z: number, route: string, nat: string): number {
+  const N = CAUSE.load?.next;
+  const boat = N?.boat ?? null, classes = N?.convoys[route] ?? null;
+  if (boat === null || boat <= 0 || !classes || !classes.length) return 0;
+  let margin = 0, all = 0;
+  for (const c of classes) {
+    if (c.speed === null || c.share === null) return 0;
+    margin += c.share * Math.max(0, 1 - c.speed / boat);
+    all += c.share;
+  }
+  return all > 0 ? (margin / all) * keptUp(g, nat, z) * calmShare(g, z) : 0;
 }
 
 /** A route's boat ceiling: the ships a boat that fires sinks in one convoy at most; with the load form, the torpedoes it puts in and those the route's boats on station hold this month (the per-patrol cap). */
@@ -2965,8 +3001,9 @@ function routeCeiling(g: Game, route: ConvoyRoute, fire = 1): RouteCeiling | nul
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.ss <= 0 || !zones.includes(f.zone) || !atWar(g, f.nat, route.to)) continue;
     const b = f.ships.ss * raidShare(f) * onWatch(g, f, f.zone);
-    w += b; c += b * boatCeiling(g, f.zone, fire)!;
-    if (load) { t += b * torpedoesInto(g, f.zone, fire); held += b * loadIn(g, f.zone); }
+    const at = { route: route.id, nat: f.nat };
+    w += b; c += b * boatCeiling(g, f.zone, fire, at)!;
+    if (load) { t += b * torpedoesInto(g, f.zone, fire, at); held += b * loadIn(g, f.zone); }
   }
   if (w <= 0) return null;
   if (!load) return { each: c / w };

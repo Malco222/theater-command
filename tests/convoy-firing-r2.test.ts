@@ -38,6 +38,8 @@ function meet(g: Game, ss: number, dd: number): Fleet {
 const eyeKept = CAUSE.firing.eye!.effective41;
 beforeAll(() => { CAUSE.firing.eye!.effective41 = null; });
 afterAll(() => { CAUSE.firing.eye!.effective41 = eyeKept; });
+/** A firing boat's ceiling in the North Atlantic at the route's firing share, the next night read as laid (tests/convoy-regain-r2). */
+const ceil = (g: Game, fire?: number): number => boatCeiling(g, zoneOf(g, 'natl'), fire ?? 1, { route: 'atlantic', nat: 'GER' })!;
 function unread<T>(f: () => T): T {
   const keep = CAUSE.firing.t2;
   CAUSE.firing.t2 = null;
@@ -75,7 +77,7 @@ describe('a convoy attacked', () => {
     expect(s.fire).toBe(1);
     expect(s.fired).toBeCloseTo(c.pack / 0.3, 12);
     expect(s.P).toBeCloseTo(was.P / 0.3, 12);
-    expect(s.torps).toBeCloseTo(Math.max(1, c.pack / 0.3) * boatCeiling(g, zoneOf(g, 'natl'))!, 12);
+    expect(s.torps).toBeCloseTo(Math.max(1, c.pack / 0.3) * ceil(g, s.fire), 12);
     expect(s.sunk).toBeGreaterThan(was.sunk);
   });
 
@@ -116,7 +118,7 @@ describe('a convoy attacked', () => {
     expect(s.fire!).toBeLessThan(1);
     expect(s.fired).toBeCloseTo((c.pack / 0.3) * s.fire!, 12);
     expect(s.P).toBeCloseTo((was.P * s.fired!) / c.pack, 12);
-    expect(s.torps).toBeCloseTo(Math.max(1, s.fired!) * boatCeiling(g, zoneOf(g, 'natl'))!, 12);
+    expect(s.torps).toBeCloseTo(Math.max(1, s.fired!) * ceil(g, s.fire), 12);
   });
 
   it('the card says the boats that fire, so its boats each and its torpedoes agree', () => {
@@ -125,7 +127,7 @@ describe('a convoy attacked', () => {
     meet(g, 60, 80);
     const s = convoySideOf(g, 'UK', atlantic)!, k = convoyMeeting(g, 'UK', atlantic).count!;
     expect(k.fired).toBeCloseTo(s.fired!, 2);
-    expect(k.torps).toBeCloseTo(Math.max(1, k.fired!) * boatCeiling(g, zoneOf(g, 'natl'))!, 1);
+    expect(k.torps).toBeCloseTo(Math.max(1, k.fired!) * ceil(g, s.fire), 1);
     // (Unread, the card carries the count's pack and no fired, as before.)
     expect(unread(() => convoyMeeting(g, 'UK', atlantic).count!.fired)).toBeUndefined();
   });
@@ -163,7 +165,7 @@ describe('what it leaves alone', () => {
       const s = convoySideOf(g, 'UK', atlantic)!, c = convoyCount(g, atlantic)!;
       expect(s.fire).toBeUndefined();
       expect(s.fired).toBeUndefined();
-      expect(s.torps).toBeCloseTo(Math.max(1, c.pack) * boatCeiling(g, zoneOf(g, 'natl'))!, 12);
+      expect(s.torps).toBeCloseTo(Math.max(1, c.pack) * ceil(g, s.fire), 12);
     });
   });
 
