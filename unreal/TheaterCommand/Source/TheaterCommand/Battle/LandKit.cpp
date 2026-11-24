@@ -1327,7 +1327,7 @@ namespace LandKit
 		// (sRGB, as the files' own colours: the white the captured kit's stars wear, the black of its crosses, the tank
 		// files' own red, A82020; the Japanese star a period ochre, the art director's mend of 24 November: lemon read
 		// too bright)
-		constexpr MarkPaint MarkWhite{ 214, 211, 196 }, MarkBlack{ 24, 24, 24 }, MarkRed{ 168, 32, 32 }, MarkYellow{ 172, 134, 58 },
+		constexpr MarkPaint MarkWhite{ 214, 211, 196 }, MarkBlack{ 20, 20, 20 }, MarkRed{ 168, 32, 32 }, MarkYellow{ 172, 134, 58 },
 			MarkBlue{ 40, 58, 120 };
 
 		void MarkBox(std::vector<MarkPiece>& Out, double A0, double U0, double A1, double U1, const MarkPaint& C, int Layer)
@@ -1736,7 +1736,10 @@ namespace LandKit
 			std::vector<uint8_t> Missed;
 			const bool bDirt = Skin.Raw && Skin.Dirt && !Skin.Dirt->empty();
 			// One point of the mark: carried onto the skin, coloured, kept.
-			auto Point = [&](double A0, double U0, int Layer, const MarkPiece& P)
+			// (her dirt's colour as a picture's: the track's dust, and the darker grime a rain streak carries down)
+			const double DustPic[3] = { static_cast<double>(ToPicture(Skin.DustColour.R)), static_cast<double>(ToPicture(Skin.DustColour.G)),
+				static_cast<double>(ToPicture(Skin.DustColour.B)) };
+			auto Point = [&](double A0, double U0, int Layer, const MarkPiece& P, double Streak = 0.0)
 			{
 				// (a hand-painted mark's edges wander a little, a few hundredths of its size, as a brush leaves them: every
 				// point is moved by the same smooth noise of its place on the mark, so pieces side by side still meet point
@@ -1750,11 +1753,10 @@ namespace LandKit
 				}
 				const V3 Flat = Middle + Across * (A * Size) + Up * (U * Size);
 				const Hit H = Cast(Flat);
-				const double Raise = Lift * (1.0 + 0.75 * Layer);
+				const double Raise = Lift * (1.0 + 0.4 * Layer);
 				V3 Where = Flat + F * Raise, Normal = F;
 				double R = P.R, G = P.G, B = P.B;
 				float Soot = 0.7f;
-				const double Grime = Clamp(DustShare + 0.14 * (Noise(Flat * 9.0, Seed) - 0.5) + 0.1 * (Noise(Flat * 31.0, Seed + 1) - 0.5), 0.0, 0.6);
 				if (H.T)
 				{
 					const uint32_t Ix[3] = { H.T->I0, H.T->I1, H.T->I2 };
@@ -1781,9 +1783,6 @@ namespace LandKit
 					// coat of paint would, and none pokes through it)
 					double Behind = H.Behind;
 					const double Half = std::min(0.5 * Step, 0.2 * Size);
-					// (how rough her skin is here: a plate's edge, a bolt's head or a weld under the grid's step, where the
-					// paint chips first)
-					double Rough = Clamp((0.97 - Normal.Dot(F)) / 0.12, 0.0, 1.0);
 					for (const V3& Off : { Across * Half, Across * -Half, Up * Half, Up * -Half })
 					{
 						const Hit Round = Cast(Flat + Off);
@@ -1791,52 +1790,60 @@ namespace LandKit
 						{
 							Behind = Round.Behind;
 						}
-						Rough = std::max(Rough, Round.T ? Clamp((std::fabs(Round.Behind - H.Behind) - 0.002) / 0.006, 0.0, 1.0) : 1.0);
 					}
 					Where = Flat - F * Behind + Normal * Raise;
 					if (bDirt)
 					{
-						// Her own dirt over the mark's paint, as over hers: the skin's scale and what was added, at the point.
-						const Lin Paint = FromPicture(R, G, B);
-						double Sc[3] = { 0.0, 0.0, 0.0 }, Ad[3] = { 0.0, 0.0, 0.0 };
-						Lin Under;
+						// Her own dirt over the mark's paint, as over hers (dust, haze, chips to the metal, her creases' shade,
+						// soot), as a share of the way to the dirt's own colour, mixed as the eye mixes paint: never her paint's
+						// own colours, so no camouflage shows through a mark, and a black stays black (the art director's
+						// mends of 24 November, rounds 1 and 2).
+						double Kept = 0.0, Ad[3] = { 0.0, 0.0, 0.0 };
 						for (int K = 0; K < 3; ++K)
 						{
 							const size_t RawK = Ix[K] < Skin.Raw->size() ? (*Skin.Raw)[Ix[K]] : 0;
 							for (int Ch = 0; Ch < 3; ++Ch)
 							{
-								Sc[Ch] += (*Skin.Dirt)[RawK * 6 + static_cast<size_t>(Ch)] * Wt[K];
+								Kept += (*Skin.Dirt)[RawK * 6 + static_cast<size_t>(Ch)] * Wt[K] / 3.0;
 								Ad[Ch] += (*Skin.Dirt)[RawK * 6 + 3 + static_cast<size_t>(Ch)] * Wt[K];
 							}
-							Under = Under + FromPicture(Out.Colours[Ix[K] * 4], Out.Colours[Ix[K] * 4 + 1], Out.Colours[Ix[K] * 4 + 2]) * Wt[K];
 						}
-						Lin C(Paint.R * Sc[0] + Ad[0], Paint.G * Sc[1] + Ad[1], Paint.B * Sc[2] + Ad[2]);
-						// (the lower third: the track's dust and mud thrown up the plate, in splashes)
-						const double Low = Smooth(-0.3, -1.0, U0) * (0.45 + 0.55 * Noise(V3(Flat.X * 7.0, Flat.Y * 7.0, Flat.Z * 2.5), Seed + 17));
-						C = Mix(C, Mix(Under, Skin.DustColour, 0.5), 0.55 * Low);
-						// (scuffed: a stencilled mark in level streaks, a brushed one less)
-						const V3 OnMark(A0 * Size, U0 * Size, 0.0);
-						const double Scuff = Smooth(0.58, 0.82, Noise(V3(OnMark.X * 5.0, OnMark.Y * 30.0, 7.5), Seed + 19)) * (bHand ? 0.2 : 0.4);
-						C = Mix(C, Under, Scuff);
-						// (chipped back to her paint: a few small flakes anywhere, many at an edge or a bolt)
-						const double Chip = Smooth(0.0, 0.05, Noise(Flat * 45.0, Seed + 21) - (0.8 - 0.22 * Rough));
-						C = Mix(C, Under, Chip);
-						R = ToPicture(C.R);
-						G = ToPicture(C.G);
-						B = ToPicture(C.B);
-					}
-					// (and a share of the skin's colour over it all, as the eye mixes them: a thin coat, dulled)
-					R = Lerp(R, Sk[0], Grime);
-					G = Lerp(G, Sk[1], Grime);
-					B = Lerp(B, Sk[2], Grime);
-					if (bDirt)
-					{
+						// (at most six tenths of the way: a mark under a caked hull still reads as hers)
+						const double Share = Clamp(1.0 - Kept, 0.0, 0.6);
+						if (Share > 0.002)
+						{
+							R = Lerp(R, ToPicture(Ad[0] / Share), Share);
+							G = Lerp(G, ToPicture(Ad[1] / Share), Share);
+							B = Lerp(B, ToPicture(Ad[2] / Share), Share);
+						}
+						// Its own dust, fine and even, graded up from its foot (the track's dust thrown up the plate), a
+						// little by her file's word for the mark.
+						const double Low = Smooth(-0.15, -1.0, U0);
+						const double Dusted = Clamp(0.03 + 0.1 * Clamp(Dust / 100.0, 0.0, 1.0) + 0.25 * Low + 0.04 * (Noise(Flat * 70.0, Seed + 17) - 0.5), 0.0, 0.5);
+						R = Lerp(R, DustPic[0], Dusted);
+						G = Lerp(G, DustPic[1], Dusted);
+						B = Lerp(B, DustPic[2], Dusted);
+						// (a rain streak: grime carried down, weaker on a dark paint)
+						if (Streak > 0.0)
+						{
+							const double By = Streak * (0.1 + 0.22 * (R + G + B) / 765.0);
+							R = Lerp(R, 0.66 * DustPic[0], By);
+							G = Lerp(G, 0.66 * DustPic[1], By);
+							B = Lerp(B, 0.66 * DustPic[2], By);
+						}
 						// (no mark brighter than the Sherman's star, 184, 177, 157 at its brightest, the art director's mend of
 						// 24 November: the British flash on a clean light tank read the brightest thing on her)
 						const double Down = std::min({ 1.0, 184.0 / std::max(R, 1.0), 177.0 / std::max(G, 1.0), 157.0 / std::max(B, 1.0) });
 						R *= Down;
 						G *= Down;
 						B *= Down;
+					}
+					else
+					{
+						const double Grime = Clamp(DustShare + 0.14 * (Noise(Flat * 9.0, Seed) - 0.5) + 0.1 * (Noise(Flat * 31.0, Seed + 1) - 0.5), 0.0, 0.6);
+						R = Lerp(R, Sk[0], Grime);
+						G = Lerp(G, Sk[1], Grime);
+						B = Lerp(B, Sk[2], Grime);
 					}
 					Soot = static_cast<float>(Burnt);
 				}
@@ -1956,6 +1963,132 @@ namespace LandKit
 							}
 						}
 						Last.swap(Row);
+					}
+				}
+			}
+			// Wear laid over the paint, on the near level (the art director's mends of 24 November, round 2): small chips with
+			// hard edges, one to three centimetres across, back to the primer and the metal (most at a plate's edge, a bolt
+			// or a weld and along the mark's own edges), and a few rain streaks run down from its top. (None on a mark under
+			// ten centimetres across its middle, a motorcycle's: a flake would take a whole arm of it.)
+			if (bDirt && Step < 0.06 && Size >= 0.1)
+			{
+				auto PaintAt = [&Pieces](double A, double U) -> const MarkPiece*
+				{
+					for (const MarkPiece& Pc : Pieces)
+					{
+						bool bInside = true;
+						for (size_t K = 0; K < Pc.Outline.size() && bInside; ++K)
+						{
+							const auto& C0 = Pc.Outline[K];
+							const auto& C1 = Pc.Outline[(K + 1) % Pc.Outline.size()];
+							bInside = (C1.first - C0.first) * (U - C0.second) - (C1.second - C0.second) * (A - C0.first) >= -1e-9;
+						}
+						if (bInside)
+						{
+							return &Pc;
+						}
+					}
+					return nullptr;
+				};
+				auto Rough = [&](double A, double U)
+				{
+					const V3 Flat = Middle + Across * (A * Size) + Up * (U * Size);
+					const Hit H = Cast(Flat);
+					// (a plate's edge or a bend: the skin there turned from the mark's facing; a bolt or a weld: a step in it)
+					double Most = H.T ? Clamp((0.97 - std::fabs(H.T->E1.Cross(H.T->E2).Unit(F).Dot(F))) / 0.12, 0.0, 1.0) : 1.0;
+					for (const V3& Off : { Across * 0.012, Across * -0.012, Up * 0.012, Up * -0.012 })
+					{
+						const Hit Round = Cast(Flat + Off);
+						Most = std::max(Most, Round.T && H.T ? Clamp((std::fabs(Round.Behind - H.Behind) - 0.002) / 0.006, 0.0, 1.0) : 1.0);
+					}
+					return Most;
+				};
+				uint64_t Roll = Mix(Seed, 0xC41Bull);
+				auto Next = [&Roll]()
+				{
+					Roll = Mix(Roll, 0x9E37ull);
+					return Unit01(Roll);
+				};
+				MarkPiece Primer;
+				Primer.R = 86;
+				Primer.G = 72;
+				Primer.B = 62;
+				const double Edge = 0.06;
+				// (by the mark's area: some sixteen on a Sherman's star, one on a motorcycle's cross)
+				const int Wanted = static_cast<int>(std::lround((bHand ? 12.0 : 16.0) * (Size / 0.2) * (Size / 0.2)));
+				int Chips = 0;
+				for (int Try = 0; Try < 12 * Wanted && Chips < Wanted; ++Try)
+				{
+					const double A = Next() * 2.0 - 1.0, U = Next() * 2.0 - 1.0;
+					if (!PaintAt(A, U))
+					{
+						continue;
+					}
+					const bool bEdge = !PaintAt(A + Edge, U) || !PaintAt(A - Edge, U) || !PaintAt(A, U + Edge) || !PaintAt(A, U - Edge);
+					if (Next() > 0.15 + (bEdge ? 0.45 : 0.0) + 0.5 * Rough(A, U))
+					{
+						continue;
+					}
+					// (an irregular six-sided flake, half a centimetre to one and a half from its middle, all of it on the mark)
+					const double Across1 = std::min(0.005 + 0.01 * Next(), 0.12 * Size) / Size, Squash = 0.6 + 0.4 * Next();
+					std::array<std::pair<double, double>, 6> Corner;
+					bool bOn = true;
+					for (int K = 0; K < 6; ++K)
+					{
+						const double Ang = (K + 0.35 * Next()) * Pi / 3.0, Spoke = Across1 * (0.55 + 0.6 * Next());
+						Corner[static_cast<size_t>(K)] = { A + Spoke * std::cos(Ang), U + Spoke * std::sin(Ang) * Squash };
+						bOn = bOn && PaintAt(Corner[static_cast<size_t>(K)].first, Corner[static_cast<size_t>(K)].second);
+					}
+					if (!bOn)
+					{
+						continue;
+					}
+					const uint32_t Mid = Point(A, U, 2, Primer);
+					uint32_t Ring[6];
+					for (int K = 0; K < 6; ++K)
+					{
+						Ring[K] = Point(Corner[static_cast<size_t>(K)].first, Corner[static_cast<size_t>(K)].second, 2, Primer);
+					}
+					for (int K = 0; K < 6; ++K)
+					{
+						Face(Mid, Ring[K], Ring[(K + 1) % 6]);
+					}
+					++Chips;
+				}
+				const int Streaks = 2 + static_cast<int>(Next() * 3.0);
+				for (int K = 0; K < Streaks; ++K)
+				{
+					const double A = Next() * 1.6 - 0.8;
+					double Top = 1.0;
+					while (Top > -1.0 && !PaintAt(A, Top))
+					{
+						Top -= 0.02;
+					}
+					if (Top <= -1.0)
+					{
+						continue;
+					}
+					// (a centimetre or so wide, narrowing as it runs down a third to four fifths of the mark, fading out)
+					const double Long = 0.3 + 0.5 * Next(), Wide = (0.004 + 0.004 * Next()) / Size;
+					const int Rows = std::max(2, static_cast<int>(std::ceil(Long * Size / Step)));
+					std::vector<uint32_t> Last;
+					for (int J = 0; J <= Rows; ++J)
+					{
+						const double T = static_cast<double>(J) / Rows, U = Top - 0.01 - Long * T, W = Wide * (1.0 - 0.5 * T);
+						const MarkPiece* Under = PaintAt(A, U);
+						if (!Under || !PaintAt(A - W, U) || !PaintAt(A + W, U))
+						{
+							break;
+						}
+						const double Strength = 0.9 * (1.0 - T) * (0.7 + 0.3 * Next());
+						const std::vector<uint32_t> Row = { Point(A - W, U, 1, *Under, Strength), Point(A + W, U, 1, *Under, Strength) };
+						if (!Last.empty())
+						{
+							// (the row below is lower: across, then up, as the grid's triangles)
+							Face(Row[0], Row[1], Last[1]);
+							Face(Row[0], Last[1], Last[0]);
+						}
+						Last = Row;
 					}
 				}
 			}
