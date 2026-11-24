@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8ddab648 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7ec111e2 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -48992,6 +48992,9 @@
     ]
   };
 
+  // ../../src/battle/land/wrecks.ts
+  var AFV_PER_DIV = { arm: 150, mot: 40 };
+
   // ../../data/campaign/nations.json
   var nations_default = {
     _about: "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late, and a failed assault is not renewed the same month. maxAttack is the most corps a nation's staffs can bring into one battle. seaSupply lets an army be supplied through any friendly port. sealift is how many corps a nation's shipping can carry across the sea in a month; a nation with sea lift can also be supplied through any friendly port its ships can still reach. dormant marks a nation that takes no part until an event in diplomacy.json brings it in. offmap is for a country whose homeland is off the map: 'sea' is the sea its convoys come in by, which counts as its home port, and 'industry' is the factories it has at home, which no enemy can reach. Its armies arrive as expeditions in setup-1939.json; it raises nothing on the map.",
@@ -50828,7 +50831,7 @@
     const book3 = g2.captured ?? (g2.captured = {});
     book3[winner] = [...(book3[winner] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-2), { from: from2, n, turn: g2.turn }];
   }
-  var WRECKS = { per: { arm: 150, mot: 40 }, towed: 0.5, most: 60 };
+  var WRECKS = { per: AFV_PER_DIV, towed: 0.5, most: 60 };
   function wreckBump(g2, rep) {
     if (rep.yielded) return;
     const attHolds = rep.level.endsWith("victory");
