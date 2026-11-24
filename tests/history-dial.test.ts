@@ -77,7 +77,12 @@ describe('the dial', () => {
 
   it('changes nothing at the middle stop', () => {
     const g = grand(7);
-    for (const [nat, list] of Object.entries(OPS)) for (const op of list) expect(leash(g, nat, op.id)).toEqual({ kind: 'free', chance: 1, nerve: 1, early: 0 });
+    for (const [nat, list] of Object.entries(OPS)) for (const op of list) {
+      // (A choice that is the book's alone, Operation Torch, is on no staff's menu off the book: history.json 'bookOnly'.
+      // The middle stop keeps no book, so there it is never taken, and the staffs choose as they always did.)
+      if (HISTORY.bookOnly?.ops.includes(`${nat}:${op.id}`)) expect(leash(g, nat, op.id).kind).toBe('never');
+      else expect(leash(g, nat, op.id)).toEqual({ kind: 'free', chance: 1, nerve: 1, early: 0 });
+    }
     expect(moodMul(g)).toBe(1);
     expect(leagueMul(g)).toBe(1);
     const w = RIVALS.lean.GER;
@@ -288,7 +293,8 @@ describe('neutrals with ambitions', () => {
     }
     expect(new Set(HISTORY.ambitions.map((a) => a.id)).size).toBe(HISTORY.ambitions.length);
     // Brian's example: countries that were never in the war with a claim on Italian ground.
-    expect(HISTORY.ambitions.filter((a) => a.on === 'ITA').map((a) => a.nat).sort()).toEqual(['GRE', 'TUR', 'YUG']);
+    // (Greece twice since the historian's pool was laid, thresholds part 8: Northern Epirus and the Dodecanese.)
+    expect(HISTORY.ambitions.filter((a) => a.on === 'ITA').map((a) => a.nat).sort()).toEqual(['GRE', 'GRE', 'TUR', 'YUG']);
   });
 
   it('can be read beforehand, are pressed with a warning when the holder is weakened, and are marched for with a reason', () => {
@@ -349,11 +355,18 @@ describe('neutrals with ambitions', () => {
     expect(moment(any, amb('julian'))).toBeTruthy();
   });
 
-  it('keep a great power out of the great war: the Soviet Union does not march on a country that has taken a side', () => {
+  it('keep a great power out of the great war at stop 4: the Soviet Union does not march on a country that has taken a side', () => {
+    // (Restated for the sandbox's lock sweep, finding 4: where anything goes the rule is lifted, tests/sandbox-claims.test.ts.)
     const a = amb('kars');
     let g: Game | null = null;
     for (let s = 1; s < 60 && !g; s++) { const x = grand(s, null, 5); x.turn = 40; if (readable(x, a) && moment(x, a)) g = x; }
     expect(g).not.toBeNull();
+    // Turkey hard pressed by another war: the moment a claimant waits for at stop 4.
+    setStop(g!, 4);
+    setWar(g!, 'TUR', 'BUL');
+    g!.nations.TUR.armyPeak = 1e6;
+    g!.nations.TUR.resilience = 0.01;
+    expect(moment(g!, a)).toMatch(/hard pressed/);
     g!.nations.TUR.align = 'allies_cobelligerent';
     expect(moment(g!, a)).toBeNull();
   });

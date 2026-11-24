@@ -30,7 +30,10 @@ export interface Stop {
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
 /** A claim on named ground: who claims it, from whom, and why. 'op': the staff's own war for it (open.json): the claim is not pressed while that war may still come, and is put away once it has come (ruling 228). */
-export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string; /** A great power's claim for a neutral that feeds its enemy (bargains.ts feedClaims, release 2). */ feeds?: boolean }
+/**
+ * 'set': claims dealt to a great power together, as one war aim (aims.ts; the set's name is in claims.deal.sets).
+ */
+export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string; set?: string; /** A great power's claim for a neutral that feeds its enemy (bargains.ts feedClaims, release 2). */ feeds?: boolean }
 
 export const HISTORY = data as unknown as {
   start: number;
@@ -39,6 +42,8 @@ export const HISTORY = data as unknown as {
   /** The conditions that stand in for a dated choice's own while the book dates it. */
   bookIf?: Record<string, string[] | string>;
   unhistoric: string[];
+  /** Choices that are the book's alone: on a staff's menu only where the book dates them and their own switch is on (Operation Torch). */
+  bookOnly?: { ops: string[]; with?: Record<string, string> };
   joined: { axis: string[]; allies: string[] };
   theatre: Record<string, string>;
   /**
@@ -56,7 +61,14 @@ export const HISTORY = data as unknown as {
     /** Off the book, at the stops where history's dates hold, the month before which nobody lands here (ruling 233(b)). */
     usual?: number;
   }[];
-  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
+  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number;
+    /** The stops at which a great power may march for a claim on a member of an alliance not its own (the sandbox's lock sweep, finding 4). */
+    inBloc?: number[];
+    /**
+     * The great powers' war aims (aims.ts; the sandbox's finding 4): at these stops a computer-run great power holds
+     * 'count' of its claims (the fewest and the most, by the war's seed), and its staff takes them up as great choices.
+     */
+    deal?: { stops: number[]; count: [number, number]; sets?: Record<string, string> } };
   ambitions: Ambition[];
   /** The book's restraints (b509(c), b512): towns a computer staff does not storm, and ground it does not enter, at the stops named. */
   restraint?: { stops: number[]; front?: string[]; storm: { nat: string; town: string; why: string }[]; enter: { nat: string; ground: string[]; why: string }[]; fed?: { nat: string; town: string; by: string; why: string }[] };
@@ -169,6 +181,9 @@ export interface Leash {
 
 /** The month the book gives one of the great choices in this war: history's, give or take the stop's slack by the war's seed. */
 export function bookDate(g: Game, nat: string, opId: string): number | null {
+  // (An operation two countries mount together has one month, the first-named's: Operation Torch.)
+  const lead = HISTORY.bookOnly?.with?.[`${nat}:${opId}`]?.split(':');
+  if (lead && lead.length === 2 && `${lead[0]}:${lead[1]}` !== `${nat}:${opId}`) return bookDate(g, lead[0], lead[1]);
   const date = HISTORY.dates[nat]?.[opId];
   if (date === undefined) return null;
   const slack = stopDef(g).slack ?? 0;
@@ -181,8 +196,17 @@ export function bookIf(nat: string, opId: string): string[] | null {
   return Array.isArray(c) ? c : null;
 }
 
+/**
+ * Asked of a choice that is the book's alone ('bookOnly'): is its own switch on in this game? The switch lives with
+ * the rule it belongs to (strategy.ts sets the test for Operation Torch); with nobody to ask, it is off.
+ */
+export const bookOnlyOn: { test: ((g: Game, nat: string, opId: string) => boolean) | null } = { test: null };
+
 export function leash(g: Game, nat: string, opId: string): Leash {
   const S = stopDef(g);
+  // A choice that is the book's alone (Operation Torch) is on no staff's menu off the book, at a stop that keeps none,
+  // or where its own switch is off.
+  if (HISTORY.bookOnly?.ops.includes(`${nat}:${opId}`) && !(S.book && onBook(g, theatreOf(nat, opId)) && bookOnlyOn.test?.(g, nat, opId))) return { kind: 'never', chance: 0, nerve: 1, early: 0 };
   const un = HISTORY.unhistoric.includes(`${nat}:${opId}`);
   // Off the book, or at a stop that keeps none: the staff decides, and a choice history never took is weighed by the stop.
   if (!S.book) return { kind: 'free', chance: un ? S.other : 1, nerve: 1, early: S.early ?? 0 };

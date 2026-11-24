@@ -21,6 +21,7 @@ import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
 import { UNITS, unitsDecide } from './units';
 import causeData from '../../data/campaign/convoycause.json';
+import { needFirst, needKeeps, needOrder, needPull, needStop, needWatch } from './need';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -305,6 +306,30 @@ export function monthsFor(t: Tech, turn: number): number {
   return Math.ceil(base * (1 + TECH.early * Math.max(0, t.year - yearOf(turn))) - 1e-9);
 }
 
+/**
+ * True for a technology ahead of its year that would be in service sooner if the staff waited for its price to fall.
+ * The months of work come down each January until the technology's year (monthsFor), so a project begun late in a
+ * year at the hurried price can be finished after the same project begun that January at the lower one: escort
+ * fighters begun in September 1940 at 22 months serve from July 1942, begun in January 1941 at 17 from June. A
+ * staff that researches by need does not begin such a project: that month its team takes the next thing on its
+ * list, and the project comes back when waiting no longer helps (the design director's sandbox ruling of 21
+ * November 2026, on the read of finding B's ranking). It compares two months of service at the staff's present
+ * pace and sets no number; the price itself is the rules', the same for every side and the player.
+ */
+export function servesSoonerLater(g: Game, nat: string, id: string, turn = g.turn): boolean {
+  const t = BY_ID[id], year = yearOf(turn);
+  if (!t || t.year <= year) return false;
+  const pace = Math.max(1e-6, researchSpeed(g, nat) * govMul(g, nat, 'research'));
+  const serves = (at: number): number => at + Math.ceil(monthsFor(t, at) / pace - 1e-9);
+  const now = serves(turn);
+  for (let at = turn + 1, y = year; y < t.year; at++) {
+    if (yearOf(at) === y) continue;
+    y = yearOf(at);
+    if (serves(at) < now) return true;
+  }
+  return false;
+}
+
 const and = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /** Why this nation cannot begin this technology now, or null when it can. */
@@ -381,10 +406,14 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
   // With the air campaigns on, a staff bombed by night takes Fighter control first (b569(2)).
   const first = controlFirst(g, nat);
   if (first && !s.done.includes(first) && !s.work.some((w) => w.id === first) && BY_ID[first].needs.every((x) => s.done.includes(x))) return first;
-  const A = TECH.ai, order = A.order[nat] ?? A.order._default, year = yearOf(turn);
-  const skip = (id: string): boolean => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
-  let best: Tech | null = null, low = Infinity;
-  const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
+  // (Where a staff researches by need, need.ts: its order of branches may be dealt from the war's seed, a navy with
+  // a battle fleet takes carriers in their turn, each threat it has met cancels a year of the calendar's pull on
+  // its answers, a threat met with nothing yet to show for it takes the next free team, and nothing is begun at a
+  // hurried price that would serve sooner if the staff waited for the price to fall.)
+  const A = TECH.ai, order = needOrder(g, nat, A.order[nat] ?? A.order._default), year = yearOf(turn);
+  const skip = (id: string): boolean => (A.skip._all.includes(id) || !!A.skip[nat]?.includes(id)) && !needKeeps(g, nat, id);
+  let best: Tech | null = null, low = Infinity, lead = false;
+  const thirsty = oilMonths(g, nat) < RES.ai.synthAt, waits = needStop(g, nat);
   for (const t of TECH.techs) {
     if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
     // (Ruling 240: no staff takes up a row whose switch is off.)
@@ -392,6 +421,8 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     // (Rider b542: the spy team works the Intelligence branch alone, in its order; the other teams never do, and
     // nobody's staff begins what only a great power's plans can give it.)
     if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
+    // (A staff that researches by need does not begin at a hurried price what would serve sooner if it waited.)
+    if (waits && servesSoonerLater(g, nat, t.id, turn)) continue;
     const place = order.indexOf(t.branch);
     // A staff watching its oil run down puts the fuel chemists first.
     const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
@@ -401,8 +432,15 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
     // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
     const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns;
-    if (score < low) { low = score; best = t; }
+    const early = Math.max(0, t.year - year) * A.early, pull = needPull(g, nat, t.id);
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns - pull;
+    // Where a staff researches by need, a lesson with nothing yet to show for it comes before all else (need.ts,
+    // needFirst), so long as the threats met cancel every year it would be hurried: beyond that the calendar's
+    // price stands and it takes its turn by its score. Among such lessons, and among the rest, the score decides.
+    // A lesson lifts nothing the staff's own list leaves for last: a navy with no battle fleet is not sent to
+    // carriers by the enemy's decks, for its yards would lay none down (the design director, 21 November 2026).
+    const unanswered = early <= pull && !skip(t.id) && needFirst(g, nat, t.id);
+    if (unanswered !== lead ? unanswered : score < low) { low = score; best = t; lead = unanswered; }
   }
   return best ? best.id : null;
 }
@@ -422,6 +460,8 @@ function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolea
     for (const id of due) finish(g, n, id, quiet);
   }
   if (!staffed) return;
+  // (A staff that researches by need reads what has come against it before it sets its free teams to work.)
+  needWatch(g, n.id);
   fill(g, n, turn);
 }
 

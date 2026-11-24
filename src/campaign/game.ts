@@ -17,7 +17,7 @@ import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare
 import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, leavingThreat, majorsOf, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
-import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
+import { AIR, airOnFall, airUpkeep, bookCloseAir, foundAirFleet, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
@@ -33,7 +33,7 @@ import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps, crossStrait, strait, straitCut, straitShare, straitWave } from './navy';
 import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -49,9 +49,10 @@ import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, sniped
 import { isTeam, TEAMS, teamsIn } from './teams';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
-import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, noTrain, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { STRATEGY, straitsOn, torchBook, torchWeek } from './strategy';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -849,7 +850,7 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
 /** The eastern railways as they stand this call: what each Soviet-owned step of the line costs, and whose home it is. */
 interface RailNow { step: Float64Array; home: Uint8Array }
 interface SupplyDrawn { pass: Uint8Array; from: string; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
-interface SupplyBook { size: number; wide: boolean; long: string; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn> }
+interface SupplyBook { size: number; wide: boolean; water: boolean; long: string; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn> }
 const supplyBooks = new WeakMap<Game, SupplyBook>();
 const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
 const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
@@ -860,7 +861,7 @@ const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
 };
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
-function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
+function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow, water = false): { ok: Uint8Array; reach: Float32Array; east: boolean } {
   const size = g.regions.length;
   const ok = new Uint8Array(size);
   const q: number[] = [];
@@ -873,7 +874,8 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
   }
   for (let i = 0; i < q.length; i++) {
     for (const j of g.regions[q[i]].nb) {
-      if (ok[j] || !pass[j]) continue;
+      // (The strait rule: no supply runs over a border it cuts as open sea.)
+      if (ok[j] || !pass[j] || (water && straitCut(g, q[i], j))) continue;
       ok[j] = 1; q.push(j);
       if (deep[j]) east = true;
       if (sand[j]) desert = true;
@@ -902,6 +904,8 @@ export function computeSupply(g: Game): void {
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
   const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
   const wide = groundRules(g);
+  // (The strait rule: no supply runs over a border it cuts as open sea.)
+  const water = straitsOn(g);
   // The grand campaign: where an army stands round a town it has not taken, the roads are that army's. Its supply
   // passes through; the town's holder draws none there and sends none on.
   const field = siegeRules(g) ? g.regions.map((r) => fieldCtrl(g, r)) : null;
@@ -939,8 +943,8 @@ export function computeSupply(g: Game): void {
   // same; those reaching into the east hold only while every eastern step costs what it did when they were drawn.
   let book = supplyBooks.get(g);
   const longKey = `${long.join('|')}/${DESERT.step}`;
-  if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
-    book = { size, wide, long: longKey, deep, sand, rail: { step, home }, drawn: new Map() };
+  if (!book || book.size !== size || book.wide !== wide || book.water !== water || book.long !== longKey || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
+    book = { size, wide, water, long: longKey, deep, sand, rail: { step, home }, drawn: new Map() };
     supplyBooks.set(g, book);
   }
   // The railways now: the same object as the last call's while nothing on them has changed, so most checks are one look.
@@ -990,14 +994,14 @@ export function computeSupply(g: Game): void {
     const kept = book.drawn.get(id);
     if (kept && kept.from === from && railHolds(kept.rail) && sameBytes(kept.pass, pass)) {
       if (supplyCheck) {
-        const fresh = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
+        const fresh = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail, water);
         if (!sameBytes(fresh.ok, kept.ok) || !sameBytes(fresh.reach, kept.reach)) throw new Error(`supply picture kept for ${id} in month ${g.turn} differs from a fresh one`);
       }
       g.supply[id] = kept.ok;
       g.reach[id] = kept.reach;
       continue;
     }
-    const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
+    const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail, water);
     g.supply[id] = drawn.ok;
     g.reach[id] = drawn.reach;
     book.drawn.set(id, { pass, from, ...drawn, rail: drawn.east ? rail : null });
@@ -1346,6 +1350,16 @@ export interface AttackOpts {
    */
   closeSorties?: Record<number, number>;
   /**
+   * The fight is cut short after this many weeks of its month (Operation Torch by the book: the French turn ends a
+   * landing's fight in its first week). Both sides lose that share of the month's toll in men. Unset, a month's.
+   */
+  weeks?: number;
+  /**
+   * The strait (strategy.json 'straits'): the corps of this attack already put over a short crossing by ship for it,
+   * by id. Set by the battle itself once they have crossed; unset, the reckoning works out who can cross.
+   */
+  over?: Set<number>;
+  /**
    * The battle was fought out on the field by the player (src/battle): the ratio it came to stands in for the day's
    * luck, and the rules apply their own losses, retreats and prisoners from it. Absent, the dice roll as always.
    */
@@ -1471,8 +1485,13 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // worth more together than apart. A historical scenario has none of this and is worked out as it always was.
   const wide = groundRules(g);
   const land = opts.sea === undefined;
+  // The strait (strategy.json 'straits'): corps that reach this fight over a short crossing come by ship, as a
+  // landing does. Those their nation has no shipping left for take no part; the rest fight at a landing's share.
+  const wave = land && !town && !opts.sally && !opts.over && straitsOn(g) ? straitWave(g, attackers, target) : null;
+  const overIds = opts.over ?? (wave && wave.over.length ? new Set(wave.over.map((c) => c.id)) : null), leftIds = wave && wave.left.size ? wave.left : null, cutIds = wave && wave.cut.size ? wave.cut : null;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
-  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
+  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id) && !leftIds?.has(c.id) && !cutIds?.has(c.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
+  let noBoats = 0, overWater = 0, waterShare = 1, openSea = 0;
   let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = '', streets = false;
   // (Brian, 22 November, release 2: 'Busier, mostly watchers'.) An enemy watcher on the player's ground that mapped its defences.
   let watched: { nat: string; by: string; found: boolean; mul: number } | null = null;
@@ -1480,7 +1499,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
   // Engineers in the assault breach the works, clear lanes through the mines and put the infantry over a bridgeless river.
-  const sap = wide ? sappers(attackers.filter((c) => !land || !blocked(g, c, target))) : 0;
+  const sap = wide ? sappers(attackers.filter((c) => !land || overIds?.has(c.id) || !blocked(g, c, target))) : 0;
   const breach = sap ? Math.min(ENGINEERING.breach.most, ENGINEERING.breach.perDiv * sap) : 0;
   const mineLv = wide ? minesAt(g, target) : 0;
   const mined = mineLv ? 1 - ENGINEERING.mines.attack * mineLv * (1 - Math.min(1, sap)) : 1;
@@ -1507,8 +1526,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
     if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
+    if (leftIds?.has(c.id)) { noBoats++; continue; }
+    if (cutIds?.has(c.id)) { openSea++; continue; }
     let p = corpsBase(g, c) * KIND[c.kind].atk;
     if (hasty) p *= rushed;
+    if (overIds?.has(c.id)) { const share = straitShare(g, c, target); p *= share; overWater++; waterShare = Math.min(waterShare, share); }
     if (wide) {
       const suits = groundAttack(g, c.kind, target);
       if (suits !== 1) p *= suits;
@@ -1790,6 +1812,14 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       value: inBoats || noBridge ? `The bridges over the ${name} are down` : crossing < all ? `${crossing} of the ${all} attacking corps cross the ${name}` : `The attack crosses the ${name}`,
       effect: fx[0].toUpperCase() + fx.slice(1),
     });
+  }
+  if (openSea) lines.push({ label: 'Open sea', value: 'The sea lies between, too wide for anything but a landing', effect: `${openSea === 1 ? 'One corps cannot come over it and takes' : `${openSea} corps cannot come over it and take`} no part` });
+  if (overWater || noBoats) {
+    const fx = [
+      overWater ? (waterShare < 1 ? `${overWater === 1 ? 'the corps that crosses fights' : `the ${overWater} corps that cross fight`} at ${Math.round(waterShare * 100)}%, as a landing does` : `${overWater === 1 ? 'the corps that crosses' : `the ${overWater} corps that cross`} catch the defenders unready and fight at full strength`) : '',
+      noBoats ? `${noBoats === 1 ? 'one corps has' : `${noBoats} corps have`} no shipping left this month and ${noBoats === 1 ? 'takes' : 'take'} no part` : '',
+    ].filter(Boolean).join('; ');
+    lines.push({ label: 'The crossing', value: 'Over the water by ship, onto a shore the enemy holds', effect: fx[0].toUpperCase() + fx.slice(1) });
   }
   if (mineLv) lines.push({
     label: 'Minefields', value: mineLv > 1 ? 'Two belts of minefields and booby traps on every road in' : 'Minefields and booby traps on every road in',
@@ -2340,8 +2370,10 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
     if (c.reg === target.id) continue;
     if (lead && !fights(c) && !gunsMayFollow(g, c, target)) { c.ap = Math.max(0, c.ap - 1); continue; }
     // A force that came by sea all goes ashore together.
-    const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
+    // (And so does a corps that came over a short crossing by ship for this fight: the strait.)
+    const byShip = opts.sea !== undefined || !!opts.over?.has(c.id);
+    const cost = byShip ? 0 : moveCost(g, c, target);
+    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (byShip ? barred(g, c, target) : blocked(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
     leaveWorks(g, c);
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
@@ -2477,7 +2509,24 @@ function ticketAfter(lines: TicketLine[]): TicketLine[] {
   } : l));
 }
 
+/**
+ * Fights a battle. Where every short crossing is water (strategy.json 'straits'), the corps that reach a land attack
+ * over one go by ship first: each takes one of its nation's lifts and the sea's dangers, those there is no shipping
+ * left for stay out of the fight, and the crossing is the month of every corps that makes it, won or lost.
+ */
 export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
+  const wave = opts.sea === undefined && !opts.town && !opts.sally && !opts.over && straitsOn(g) ? straitWave(g, attackers, target) : null;
+  if (!wave || (!wave.over.length && !wave.left.size && !wave.cut.size)) return fightBattle(g, attackers, target, opts);
+  const going = attackers.filter((c) => !wave.left.has(c.id) && !wave.cut.has(c.id));
+  // (Nobody can cross and nobody comes by land: the reckoning gives the attack no weight, as with a river nobody can cross.)
+  if (!going.length) return fightBattle(g, attackers, target, opts);
+  crossStrait(g, wave.over, target);
+  const rep = fightBattle(g, going, target, { ...opts, over: new Set(wave.over.map((c) => c.id)) });
+  for (const c of wave.over) if (!c.dead) c.ap = 0;
+  return rep;
+}
+
+function fightBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
@@ -2546,6 +2595,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Men who go at trenches pay for it, and the men in them are harder to hit (the grand campaign).
   const ready = town ? 0 : a.prepared;
   const attFrac = attackLoss(RL) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+  // (A fight cut short takes the share of the month's toll its weeks are of the month: Operation Torch by the book.)
+  const cut = opts.weeks !== undefined ? clamp(opts.weeks / 4, 0, 1) : 1;
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
@@ -2567,7 +2618,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       : fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole);
   attackers.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
+    c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c)) * cut;
     c.org = clamp(c.org - (0.1 + 0.08 / RL) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
@@ -2592,7 +2643,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   defenders.forEach((c, i) => {
     const before = men(c);
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
-    c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+    c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight * cut;
     c.org = clamp(c.org - clamp(0.18 + 0.14 * RL, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -2790,6 +2841,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   }
   // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
   if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
+  if (cut < 1) rep.lines.push({ label: 'Cut short', value: `The fight ends in week ${opts.weeks} of the month`, effect: `Both sides lose ${Math.round(cut * 100)}% of the men a month's fighting would cost` });
   // Damaged cities (the grand campaign with its switch): a battle in the province leaves its town damaged, the more so
   // when it is fought for the town itself or at its gates, and the attackers' guns add to it.
   const fight = town ? (win ? 'storm' : 'repulsed') : inField || relief || opts.sally ? 'streets' : 'field';
@@ -3023,6 +3075,9 @@ export function hasRoom(g: Game, to: Region, c: Corps): boolean {
 }
 
 /** Moves one corps one region. Returns false if the move is not allowed. */
+/** A listener for every march made (the test runs read it; the game sets none): told before the corps moves, with the weeks the march takes. */
+export const moveWatch: { tell: ((e: { c: Corps; from: Region; to: Region; cost: number }) => void) | null } = { tell: null };
+
 export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   const from = g.regions[c.reg];
   if (!from.nb.includes(to.id) || c.kind === 'fort' || blocked(g, c, to)) return false;
@@ -3034,10 +3089,15 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   // Guns and engineers follow onto enemy-held ground, they never lead (the grand campaign, ruling 211(a)).
   if (!friendly && gunsRule(g) && !fights(c) && !gunsMayFollow(g, c, to)) return false;
   if (!hasRoom(g, to, c)) return false;
+  moveWatch.tell?.({ c, from, to, cost });
   g.week = weekOf(c, cost);
   leaveWorks(g, c);
+  // The strait (strategy.json 'straits'): over a short crossing the corps goes by ship. It takes a lift and the sea's
+  // dangers, and the crossing is its month (`blocked` above has asked whether it can cross at all).
+  const over = strait(g, from.id, to.id);
+  if (over) crossStrait(g, [c], to);
   place(g, c, to);
-  c.ap = Math.max(0, c.ap - cost);
+  c.ap = over ? 0 : Math.max(0, c.ap - cost);
   // A relief in place: works standing empty on ground its side holds are its own from the moment it marches in.
   if (friendly) takeWorks(g, c, to);
   // Ground a corps walks into is taken for the army it marches with: the province too, unless its town is held
@@ -3061,6 +3121,7 @@ export function whyNoSwap(g: Game, a: Corps, b: Corps): string | null {
   if (ra === rb || !ra.nb.includes(rb.id)) return 'They do not stand in neighbouring provinces.';
   if (!allied(g, a.nat, ra.ctrl) || !allied(g, a.nat, rb.ctrl) || hostileUnits(g, ra, a.nat).length || hostileUnits(g, rb, a.nat).length) return 'Both provinces must be in your side\'s hands, with no enemy in them.';
   if (blocked(g, a, rb) || blocked(g, b, ra)) return 'The way between them is closed to one of them.';
+  if (strait(g, ra.id, rb.id)) return 'They are joined by water: each crosses by ship in an order of its own.';
   if ((a.kind === 'eng') !== (b.kind === 'eng')) return 'Engineers change places only with engineers.';
   for (const [c, to] of [[a, rb], [b, ra]] as [Corps, Region][]) { const cost = moveCost(g, c, to); if (c.ap < Math.min(cost, 4) || c.ap <= 0) return `${c.name} has not the moves left for the march.`; }
   return null;
@@ -3112,7 +3173,7 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
       const r = g.regions[j];
       if (seen[j] || sandRules(r)) continue;
       if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
-      if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
+      if (noTrain(g, q[i], j)) continue; // no train crosses a river whose bridges are down, or a border that is open sea
       if (net && railCut(g, j)) {
         // Engineers alone ride the works train to the break itself. Nothing goes on through it.
         if (c.kind === 'eng') { seen[j] = 1; out.add(j); ends.push(j); }
@@ -3140,13 +3201,46 @@ export function litTracks(g: Game, corps: Corps[]): [number, number][] {
     const w = railWalk(g, c), through = new Set(w.through), ends = new Set(w.ends);
     const mine = new Map<number, Track>(), was: Map<number, Track> | null = lit;
     for (const a of w.through) for (const b of railsAt(a)) {
-      if (!(through.has(b) ? a < b : ends.has(b)) || downBetween(g, a, b)) continue;
+      if (!(through.has(b) ? a < b : ends.has(b)) || noTrain(g, a, b)) continue;
       const lo = Math.min(a, b), hi = Math.max(a, b);
       mine.set(lo * g.regions.length + hi, [lo, hi]);
     }
     lit = was ? new Map([...was].filter((e: [number, Track]) => mine.has(e[0]))) : mine;
   }
   return [...(lit?.values() ?? [])];
+}
+
+/**
+ * Every province from which a train could bring a corps of this nation's side to one of the provinces named within
+ * the month: the walk railReach makes, from many ends at once and for no corps in particular (staff.ts, a front's
+ * month of moves). No train runs in the desert, through ground that is not friendly or is under siege, through a
+ * cut line, or over a river whose bridges are down.
+ */
+export function railInto(g: Game, nat: string, ends: number[]): Uint8Array {
+  const seen = new Uint8Array(g.regions.length);
+  const net = groundRules(g);
+  const open = (r: Region): boolean => !sandRules(r) && ((allied(g, nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, nat, r)) && !(net && railCut(g, r.id));
+  const q: number[] = [];
+  for (const id of ends) if (!seen[id] && open(g.regions[id])) { seen[id] = 1; q.push(id); }
+  for (let i = 0; i < q.length; i++) for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
+    if (seen[j] || !open(g.regions[j]) || noTrain(g, q[i], j)) continue;
+    seen[j] = 1; q.push(j);
+  }
+  return seen;
+}
+
+/**
+ * The weeks a corps of this nation's side takes to march into a province by the roads, whatever its arm: `moveCost`
+ * without the terms that are a corps's own (its arm off the roads, its commander, its supply line). For a front's
+ * month of moves (staff.ts); `mud` is the season's, asked once by the caller.
+ */
+export function marchWeeks(g: Game, nat: string, to: Region, from: number, mud: boolean): number {
+  let cost = allied(g, nat, to.ctrl) && to.since < g.turn ? 1 : 2;
+  if (groundRules(g) && downBetween(g, from, to.id)) cost += ENGINEERING.blown.march;
+  if (to.terrain === 'mountain') cost += 1;
+  if (to.terrain === 'marsh') cost += 1;
+  if (mud && EAST.has(to.owner)) cost += 1;
+  return cost;
 }
 
 /** Rail move: anywhere through friendly territory, for the whole month. */
@@ -3224,7 +3318,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   // so he is told of the cut on his own line before he is told of a way round through another country.
   const INF = 1e9;
   const cost = new Int32Array(g.regions.length).fill(INF), prev = new Int32Array(g.regions.length).fill(-1);
-  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || downBetween(g, a, b) ? 1 : 0; };
+  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || noTrain(g, a, b) ? 1 : 0; };
   cost[c.reg] = 0;
   const dq: number[] = [c.reg];
   while (dq.length) {
@@ -3358,7 +3452,7 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
       seen.add(j);
       const r = g.regions[j];
       if (sandRules(r)) continue;
-      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
+      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !noTrain(g, q[i], j) && !(net && railCut(g, j));
       if (open) { q.push(j); continue; }
       if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;
       const why = whyNoTrain(g, c, j);
@@ -4122,9 +4216,192 @@ function landVoyages(g: Game, nat: string): void {
   if (!g.atSea.length) delete g.atSea;
 }
 
-function expeditions(g: Game, nat: string): void {
+/**
+ * Operation Torch by the book, behind a key of its own that ships off (strategy.json 'torch.ceasefire'; struck by the
+ * design director on 22 November 2026, since it hides a throw-back the record never had, and kept only so that the
+ * wars read with it can be run again): the ceasefire lets in the forces its defenders threw back. A landing of the book's
+ * beaten off on its day is noted with its shore (ai.ts, `landings`); at the turn, a force so noted this month or last
+ * that still waits in a harbour of its side goes ashore at that shore, if the turn gave the place to its side and it
+ * has room: the record's convoys lay off Casablanca and Algiers and entered both ports when the firing stopped. No
+ * lift and no crossing is reckoned (the convoy made its crossing on the day), and the force is as the fight left it.
+ * Called by the turn (diplomacy.ts) and by nobody else; never the player's, whose landings are his own.
+ */
+export function turnedShores(g: Game): void {
+  if (!torchBook(g) || !(STRATEGY.torch!.ceasefire || torchWeek(g))) return;
+  for (const key of Object.keys(g.flags).filter((k) => k.startsWith('torch:off:'))) {
+    const [, , at, id] = key.split(':');
+    const to: Region | undefined = g.regions[g.flags[key] - 1], c = g.corps.find((x) => x.id === +id && !x.dead);
+    delete g.flags[key];
+    if (!c || !to || c.nat === g.human || g.turn - +at > 1) continue;
+    const from: Region | undefined = g.regions[c.reg];
+    if (!from || from.id === to.id || !from.port || !allied(g, c.nat, from.ctrl) || !allied(g, c.nat, to.ctrl) || hostileUnits(g, to, c.nat).length) continue;
+    if (friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    place(g, c, to);
+    c.hold = false;
+    g.flags[`exp:${c.id}`] = +at + 6;
+    g.supplyDirty = true;
+  }
+}
+
+/**
+ * Operation Torch by the book: a row made from the French army that came over at the turn ('turned') forms at the turn
+ * itself, where the largest of that army stood (`stood`, largest first), else at its own place or second quays. The
+ * ports the French held are then not left empty for the month between. Called by the turn (diplomacy.ts) and by
+ * nobody else; a row it cannot place comes in its own month like any other. Never the player's: his rows are the roster's.
+ */
+export function turnedRows(g: Game, stood: number[]): void {
+  if (!TORCH || !torchBook(g) || !((g.flags['torch:turned'] ?? 0) > 0)) return;
+  TORCH.rows.forEach((row, k) => {
+    const o = row[6] ?? {}, nat = row[1] as string, key = `sent:t${k}`;
+    if (!o.turned || g.flags[key] || nat === g.human || !g.nations[nat]?.alive || shipsItsOwn(g, nat) || (o.war && !warOn(g, o.war))) return;
+    const ok = (r: Region | undefined): r is Region => !!r && allied(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length < STACK;
+    const places = [...stood.map((id) => g.regions[id]), g.byName[row[5]], ...((o.or as string[] | undefined) ?? []).map((nm) => g.byName[nm])];
+    // (Its own country's ground before an ally's.)
+    const reg = places.find((r) => ok(r) && r.ctrl === nat) ?? places.find(ok);
+    if (!reg) return;
+    g.flags[key] = 1;
+    const c = addCorps(g, nat, row[2], row[3], Math.min(row[4], g.flags['torch:turned']), reg.id, o);
+    if (o.str !== undefined) c.str = o.str;
+    g.supplyDirty = true;
+  });
+}
+
+/**
+ * Operation Torch by the book: Vichy's air rows are struck at the French turn with the rest of its air force (the
+ * design director, 22 November 2026, 14:23Z: the record's aircraft did not fly on for the Allies; its re-equipped
+ * units come as dated rows of their own). Only the marks that kept the rows at their seats are cleared here.
+ * Called by the turn (diplomacy.ts) and by nobody else.
+ */
+export function wingsStruck(g: Game): void {
+  for (const k of Object.keys(g.flags)) if (k.startsWith('torch:wing:')) delete g.flags[k];
+}
+
+/**
+ * Operation Torch by the book (strategy.json 'torch'; the design director's rulings of 22 November 2026, on the
+ * historian's rows): where it is the book's, a computer's staff is sent the roster's Torch and Tunisia rows as the
+ * record corrects them ('torch' in setup-1939.json). 'rows' are dated rows read like any others, kept apart from the
+ * roster's list so that no row of that list changes its number; a row of the roster named under 'instead' is not
+ * sent where these are (its corrected form is among them, or the record gives its men to another row: the Pistoia
+ * and La Spezia Divisions came into Tunisia with the army from Libya). Nothing is sent twice: a row of either list
+ * whose namesake in the other has already come never comes. 'or' names a second quay for a row whose first is full;
+ * 'turned' marks the row made from the French army that came over at the turn, which comes only where that army
+ * still stood and with no more divisions than it had (diplomacy.ts).
+ */
+type TorchRows = { instead: string[]; rows: any[]; vichy?: { nat: string; from: number; ground: string[]; places: [string, number, string][]; bare?: string[]; air?: [string, number, number][]; airName?: string }; harbours?: { rowsOnly: boolean } };
+const TORCH = (setup as unknown as { torch?: TorchRows }).torch;
+
+/**
+ * Operation Torch by the book: Vichy's army of Africa stands where the record had it on the day ('torch.vichy' in
+ * setup-1939.json; the design director, 22 November 2026). The 1939 setup's three French rows never move, so in
+ * November 1942 the game had three divisions at Algiers, two at Casablanca and three on the Mareth line, with Oran,
+ * Constantine, Fez, Marrakech and Tunis empty; the record had a division in each command. Once, at the opening of the
+ * month the data names, where Vichy still stands at peace on that ground: its infantry there is formed again into the
+ * record's places, in their order, each up to its count. No division is added and none struck. A corps already at
+ * its place stays, works and all; a corps with no place left gives its men to the new ones, which take the whole's
+ * strength, order and experience. Called as the month opens (turn.ts); nothing with the switch off, at a stop that is
+ * not the book's, or where the player is France's heir in Africa.
+ */
+export function vichyPlaced(g: Game): void {
+  const V = TORCH?.vichy;
+  if (!V || !torchBook(g) || g.flags['torch:vichy'] || g.turn < V.from) return;
+  const n = g.nations[V.nat];
+  if (!n?.alive || n.atWar.length || V.nat === g.human) return;
+  g.flags['torch:vichy'] = g.turn;
+  // (Its air force in Africa, the book's air rows by seat: a group of fighters and one of bombers at each seat that is
+  // still Vichy's. The 1939 air chart has no French group in Africa, so none is counted twice.)
+  for (const [at, ftr, bmr] of V.air ?? []) {
+    const r = g.byName[at];
+    if (!r || r.ctrl !== V.nat) continue;
+    for (const [kind, n] of [['ftr', ftr], ['bmr', bmr]] as const) {
+      if (!(n > 0)) continue;
+      const f = foundAirFleet(g, V.nat, r, V.airName ?? 'Air Force of Africa', kind, n);
+      f[kind] = n; f.est[kind] = n;
+      g.flags[`torch:wing:${f.id}`] = 1;
+    }
+  }
+  const ground = new Set(V.ground.map((nm) => g.byName[nm]?.id ?? -1));
+  const army = g.corps.filter((c) => c.nat === V.nat && !c.dead && c.kind === 'inf' && c.town === undefined && ground.has(c.reg) && g.regions[c.reg].ctrl === V.nat);
+  let left = army.reduce((s, c) => s + c.divs, 0);
+  if (left <= 0) return;
+  const w = army.reduce((s, c) => s + c.divs * c.str, 0);
+  const mean = (f: (c: Corps) => number): number => army.reduce((s, c) => s + f(c) * c.divs, 0) / left;
+  const str = w / left, org = mean((c) => c.org), xp = mean((c) => c.xp);
+  const spare = new Set(army);
+  const put: { c: Corps | null; to: Region; divs: number; name: string }[] = [];
+  for (const [at, most, name] of V.places) {
+    const to = g.byName[at];
+    if (!to || to.ctrl !== V.nat || left <= 0) continue;
+    const divs = Math.min(most, left);
+    left -= divs;
+    // (The corps that stands there already keeps the place, and its works.)
+    const c = army.find((x) => spare.has(x) && x.reg === to.id) ?? null;
+    if (c) spare.delete(c);
+    put.push({ c, to, divs, name });
+  }
+  // (Divisions the places do not ask for stay with the first corps placed: none is struck.)
+  if (left > 0 && put.length) put[0].divs += left;
+  for (const x of put) {
+    if (x.c) { x.c.divs = x.divs; x.c.name = x.name; x.c.hold = true; continue; }
+    // A corps with no place of its own moves to this one; with none left, the place is a new corps of the same men.
+    const old = [...spare][0];
+    if (old) {
+      spare.delete(old);
+      leaveWorks(g, old);
+      place(g, old, x.to);
+      old.divs = x.divs; old.name = x.name; old.str = str; old.org = org; old.xp = xp; old.hold = true;
+      delete old.dug; delete old.dugFor;
+    } else {
+      const c = addCorps(g, V.nat, x.name, 'inf', x.divs, x.to.id, { hold: 1, xp });
+      c.str = str; c.org = org;
+    }
+  }
+  for (const c of spare) removeCorps(g, c);
+  // (No fieldworks at the ports the record shows with coast batteries only: the corps' own and those left standing.)
+  for (const c of g.corps) if (bareShore(g, c)) { noWorks(c); clearWorks(g, c.reg); }
+  g.supplyDirty = true;
+}
+
+/**
+ * Operation Torch by the book: Vichy's divisions at the ports the data names 'bare' have no fieldworks and dig none
+ * (the design director, 22 November 2026, 13:17Z: the record shows coast batteries there and no field fortification).
+ * From the placing (`vichyPlaced`) for as long as the corps is Vichy's; nothing with the switch off, at a stop
+ * without a book, or where the placing was never laid.
+ */
+export const bareShore = (g: Game, c: Corps): boolean => !!TORCH?.vichy?.bare && c.nat === TORCH.vichy.nat && !c.dead && !!g.flags['torch:vichy'] && torchBook(g) && TORCH.vichy.bare.includes(g.regions[c.reg].name);
+const noWorks = (c: Corps): void => { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; if (c.relief) delete c.relief; };
+
+/**
+ * True for a harbour of the ground Torch lands on, where the armies there are the book's rows (setup-1939.json
+ * 'torch.harbours'; every nation's, the design director, 22 November 2026, 18:08Z): no computer staff's own shipping
+ * sails a corps into one of them.
+ */
+export const torchRowsOnly = (g: Game, nat: string, r: Region): boolean => !!TORCH?.harbours?.rowsOnly && nat !== g.human && torchBook(g) && !!TORCH.vichy?.ground.includes(r.name);
+
+/**
+ * Operation Torch by the book: the rows that arrive by the week (setup-1939.json 'torch.rows', 'week'; the
+ * historian's torch-8c-weekly-1122.md; the design director, 22 November 2026, 17:58Z and 18:29Z). A row's 'week' is
+ * the week of its month by which the record has it ashore. No clock runs between the nations' months, so a week
+ * rounds to the nearest month's opening: a row of week 1 or 2 goes down when its month opens for its nation, or at
+ * the French turn where the place meant for it is not its side's until then (Tunis is Vichy's when Germany's
+ * November opens); a row of week 3 or 4 goes down when its nation's next month opens, and is in no fight of its own
+ * month. Called by the turn (diplomacy.ts) and by nobody else: it puts down the rows of weeks 1 and 2 that are due.
+ */
+export function weekRows(g: Game): void {
+  if (!TORCH || !torchBook(g)) return;
+  const nats = new Set(TORCH.rows.filter((r) => r[6]?.week !== undefined && r[0] <= g.turn).map((r) => r[1] as string));
+  for (const nat of nats) if (nat !== g.human && g.nations[nat]?.alive) expeditions(g, nat, true);
+}
+
+function expeditions(g: Game, nat: string, atTurn = false): void {
   const gone: Corps[] = [];
-  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+  const roster = (setup as any).expeditions as any[] ?? [];
+  const torch = !!TORCH && nat !== g.human && torchBook(g);
+  const one = (row: any, i: number | string): void => {
+    if (torch && row[1] === nat) {
+      // (The record's form of a roster row stands in for it; and whichever of the two came first, the other never comes.)
+      if (typeof i === 'number') { if (TORCH!.instead.includes(row[2])) return; }
+      else if (!g.flags[`sent:${i}`] && roster.some((r, k) => r[1] === nat && r[2] === row[2] && g.flags[`sent:${k}`] === 1)) { g.flags[`sent:${i}`] = 2; return; }
+    }
     const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
     // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
     // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
@@ -4133,6 +4410,8 @@ function expeditions(g: Game, nat: string): void {
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
     if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
+    // (Torch's rows that arrive by the week: one of week 3 or 4 comes when its nation's next month opens.)
+    if (torch && typeof i === 'string' && (o.week ?? 1) >= 3 && g.turn <= row[0]) return;
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
     if (g.flags[`sent:${i}`]) {
@@ -4150,7 +4429,11 @@ function expeditions(g: Game, nat: string): void {
     let fell = false;
     // The wider world: a computer-run country that ships its own army across the ocean (world.ts, 'overseas') is sent
     // none of history's dated formations as well: the corps it raises and ships take their place.
-    if (shipsItsOwn(g, nat)) return;
+    // (Operation Torch's follow-up rows are the one exception, 'reserve': the book's own divisions, found from the
+    // reserve of men its staff raises from, and waited for while that reserve is short of them.)
+    const reserve = torch && typeof i === 'string' && !!o.reserve;
+    if (shipsItsOwn(g, nat) && !reserve) return;
+    if (reserve && menLeft(g, nat) < row[4] * (o.str ?? 1)) return;
     if (g.flags.open === 1) {
       // Free play. An invasion force history put together for a landing of its own planning is nobody's to send.
       // A formation raised for a war waits for that war, however late it comes, and then has its half year.
@@ -4173,6 +4456,12 @@ function expeditions(g: Game, nat: string): void {
       if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
       // Nor is it put down in a friendly country that is at peace: it forms at home instead.
       if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
+      // (A row with second quays, Operation Torch's: where the first is lost to the enemy or full, the next its side
+      // holds with room. It is asked before the fall-back harbour: these rows name their own.)
+      if (reg && Array.isArray(o.or) && (allied(g, nat, reg.ctrl) ? friendlyUnits(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK : atWar(g, nat, reg.ctrl))) {
+        const alt = (o.or as string[]).map((nm) => g.byName[nm]).find((r) => !!r && allied(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length < STACK);
+        if (alt) reg = alt;
+      }
       // A place its side has lost to the enemy: it lands at the nearest harbour its side holds on that front, and is
       // not cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
       // (A place held by a country it is not at war with, Vichy's or a neutral's, is waited for as before.)
@@ -4193,6 +4482,8 @@ function expeditions(g: Game, nat: string): void {
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
     // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
     if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; return; }
+    // (The row made from the French army that came over at the turn waits for the turn: no army, no row.)
+    if (o.turned && !((g.flags['torch:turned'] ?? 0) > 0)) return;
     const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
     if (old) {
       g.flags[`sent:${i}`] = 1;
@@ -4216,7 +4507,10 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    // (A Torch row marked to stay holds the place its row names, or a second quay it names: one that a full quay
+    // sends on to other ground holds nothing there, as one whose place has fallen holds nothing where it lands.)
+    const astray = !fell && torch && typeof i === 'string' && !!o.stay && reg.name !== row[5] && !((o.or as string[] | undefined) ?? []).includes(reg.name);
+    const c = addCorps(g, nat, row[2], row[3], o.turned ? Math.min(row[4], g.flags['torch:turned']) : g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, astray ? { ...o, hold: undefined, stay: undefined } : fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
     // (A row that takes part of a division already landed leaves that division the weaker by it, in the grand campaign:
     // W Force's 1st Armoured Brigade came out of the 2nd Armoured Division in Egypt, and was counted in both. A
@@ -4230,6 +4524,7 @@ function expeditions(g: Game, nat: string): void {
         if (nat === g.human && o.takes.leaves) headline(g, 'event', o.takes.leaves.replace('{place}', g.regions[x.reg].name), nat, reg.id);
       } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`cut:${j}`] = o.takes.share;
     }
+    if (reserve) drawMen(g, nat, c.divs * c.str);
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
       // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
@@ -4259,7 +4554,14 @@ function expeditions(g: Game, nat: string): void {
     if (o.news) headline(g, 'event', o.news, nat, reg.id);
     else if (o.gen) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
+  };
+  // (At the French turn only Torch's own rows that arrive by the week are looked at: `weekRows`.)
+  if (!atTurn) roster.forEach((row, i) => {
+    // (A roster row whose record's form has already come, in a month when Torch was the book's, never comes as well.)
+    if (TORCH && row[1] === nat && !g.flags[`sent:${i}`] && TORCH.rows.some((r, k) => r[1] === nat && r[2] === row[2] && g.flags[`sent:t${k}`] === 1)) { g.flags[`sent:${i}`] = 2; return; }
+    one(row, i);
   });
+  if (torch) TORCH!.rows.forEach((row, k) => { if (!atTurn || row[6]?.week !== undefined) one(row, `t${k}`); });
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);
     const names = gone.map((c) => c.name);
@@ -4335,6 +4637,8 @@ function digIn(g: Game, nat: string): void {
   if (g.flags.open !== 1 || !DEFENCE.entrench.auto) return;
   for (const c of g.corps) {
     if (c.dead || c.kind === 'fort' || armyOf(c) !== nat) continue;
+    // (Operation Torch by the book: Vichy's divisions at the landing ports dig no fieldworks. `bareShore`.)
+    if (bareShore(g, c)) { noWorks(c); if (c.pressed) delete c.pressed; continue; }
     // A corps that took works over this month keeps them as it found them: it marched, so it dug nothing of its own.
     if (c.relief) {
       delete c.relief;

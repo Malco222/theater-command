@@ -933,6 +933,8 @@ export const seedClass = (g: Game, r: Region): number =>
 export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): string | null {
   if (f.ship !== undefined) return 'It flies from the carriers of its fleet, and goes where they go.';
   if (r.id === f.base) return 'It is already based there.';
+  // (Operation Torch by the book: an air row of the book's keeps its seat for as long as it is Vichy's. game.ts, `vichyPlaced`.)
+  if (g.flags[`torch:wing:${f.id}`] === 1) return 'It is kept at its station.';
   if (thornGround(g, r, f.nat)) return `${g.nations[r.owner].name} keeps its own air force: no group of its allies is based there.`;
   // An airfield lies outside the town, and goes with the country round it (prizes.ts): an army that holds the
   // field of an enemy province has the use of its airfield after a month, and a wrecked one serves nobody.

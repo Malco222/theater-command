@@ -9,6 +9,8 @@ import data from '../../data/campaign/research.json';
 import type { Field, Game, Lab, Nation } from './types';
 import { headline } from './game';
 import { treeLevel, treeNotes } from './tech';
+import setup from '../../data/campaign/setup-1939.json';
+import { torchBook } from './strategy';
 
 export interface Step { at: number; name: string }
 interface FieldSpec { label: string; noun: string; per: number; who: string; news: string }
@@ -60,12 +62,28 @@ const count = (steps: Step[], clock: number): number => {
 };
 
 /**
+ * Operation Torch by the book (setup-1939.json 'torch.vichy.designs'; the design director, 22 November 2026, 13:27Z,
+ * on the historian's torch-army-of-africa-1942.md): the armistice commissions froze Vichy's army at the designs of
+ * 1940. From the month its record placing is laid, its infantry weapons read as far behind as the clock of the nation
+ * the data names ('of', France) has run since the month named ('to'): the designs that clock holds by now, less
+ * those it held then. By the game's own rule each is worth the field's 'per'. Nothing with the switch off, at a stop
+ * without a book, or where the placing was never laid; a nation with design teams of its own is never read here.
+ */
+const FROZEN = (setup as unknown as { torch?: { vichy?: { nat: string; designs?: { field: Field; of: string; to: string } } } }).torch?.vichy;
+function frozenLead(g: Game, nat: string, f: Field): number {
+  const D = FROZEN?.designs;
+  if (!D || nat !== FROZEN!.nat || f !== D.field || !g.flags['torch:vichy'] || !torchBook(g)) return 0;
+  const steps = stepsOf(D.of, f);
+  return Math.max(-RESEARCH.maxLead, Math.min(0, count(steps, turnOf(D.to)) - count(steps, g.turn)));
+}
+
+/**
  * How many designs a branch is ahead of its own history (or behind, when negative): the designs in
  * service against the ones history had by now.
  */
 export function lead(g: Game, nat: string, f: Field): number {
   const lab = g.nations[nat]?.lab;
-  if (!lab) return 0;
+  if (!lab) return frozenLead(g, nat, f);
   const steps = stepsOf(nat, f);
   return Math.max(-RESEARCH.maxLead, Math.min(RESEARCH.maxLead, count(steps, lab.clock[f]) - count(steps, lab.months)));
 }

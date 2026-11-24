@@ -7,9 +7,14 @@
 //   ambitions (stops 4 and 5): a computer-run country with a claim on ground a neighbour holds presses it when that
 //     neighbour is weakened, and may march for it. No surprise without a reason and a warning: a claim can be read
 //     beforehand (claimsView, the Powers tab), pressing it is news, and so is the march, with its reason.
+//     (A small country's claim on ground across the sea waits for a holder hard pressed: acrossSea, moment.)
+//     (A great power's claims are its war aims where they are dealt, aims.ts: it holds two or three in a war, and its
+//     staff takes one up as a great choice. Here they are read, the warning is given while the army comes up, and
+//     the war that follows is ended or widened as any claim's.)
 // A claim is stored as named ground (data/campaign/history.json, 'ambitions'), so that diplomacy can read the same
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
+import { aimHolders, aimOf, inDeal, isDealt } from './aims';
 import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
 import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
@@ -152,10 +157,21 @@ export function readable(g: Game, a: Ambition): boolean {
     const op = ops(a.nat).find((o) => o.id === a.op), done = g.flags[`st:done:${a.nat}:${a.op}`] ?? 0;
     if (done > 0 || (!done && op && g.turn <= (op.to ?? 999))) return false;
   }
+  // A great power's claims are its war aims where they are dealt: it holds the two or three the war's seed gave it.
+  if (!a.feeds && inDeal(g, a)) { if (!isDealt(g, a)) return false; }
   // Where anything goes, not every claim is alive in every war: who holds which is dealt from the war's seed.
   // (A claim for patience spent is the war's own, not dealt: release 2's bargains.)
-  if (!a.feeds && S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
+  else if (!a.feeds && S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
   return stillHeld(g, a).length > 0;
+}
+
+/**
+ * True for a small country's claim on ground across the sea: the claimant is no great power, and either it has no
+ * land front to the ground (`sails`: it must cross the sea for it), or all of the ground still held lies overseas
+ * from its holder's own country, so that the holder must bring help by sea however the claimant travels.
+ */
+export function acrossSea(g: Game, a: Ambition, held: Region[], sails: boolean): boolean {
+  return !majorsOf(g).includes(a.nat) && held.length > 0 && (sails || held.every((r) => r.overseas));
 }
 
 /** Why a claimant thinks the moment has come, or null if it has not. */
@@ -165,8 +181,10 @@ export function moment(g: Game, a: Ambition): string | null {
   const n = g.nations[a.nat], H = g.nations[a.on];
   // A claimant marches from peace: a country already at war has its hands full. Nor does it march on an ally or from inside the League.
   if (n.atWar.length || n.league || allied(g, a.nat, a.on)) return null;
-  // A great power does not walk into the great war over a border claim: it marches only on a country outside both alliances.
-  if (majorsOf(g).includes(a.nat) && bloc(H)) return null;
+  // A great power does not walk into the great war over a border claim: it marches only on a country outside both
+  // alliances. Not where the claims' table lifts that ('inBloc', the sandbox's lock sweep, finding 4: where anything
+  // goes): there it may march on a member of an alliance that is not its own, and take what follows.
+  if (majorsOf(g).includes(a.nat) && bloc(H) && !(C.inBloc ?? []).includes(S.stop)) return null;
   const held = stillHeld(g, a);
   if (!held.length) return null;
   const lost = collapseScore(g, a.on) / H.resilience;
@@ -179,17 +197,24 @@ export function moment(g: Game, a: Ambition): string | null {
   const good = f ? f.near >= C.odds : thin;
   // Where anything goes each claimant bides its own time, some for years: the month is dealt from the war's seed.
   const waited = g.turn >= 3 + Math.floor(dialDraw(g, 'wait', a.id) * (S.wait ?? 0));
+  // A small country's claim on ground across the sea (the design director's sandbox ruling of 20 November 2026,
+  // finding D, with the historian's record: historian/claims-across-the-sea-hard-pressed.md): ground the claimant
+  // must sail to, or ground its holder must reinforce by sea however the claimant travels. It is gone for only when
+  // the holder is hard pressed. A holder merely at war, a thin garrison or a quiet month is no reason: in the record
+  // no small power marched for such ground while its holder could still send a ship.
+  const far = acrossSea(g, a, held, !f);
   if (busy.length) {
     // A great power of the holder's alliance on the claimant's own border deters it, until that power is hard pressed
     // itself (not asked where anything goes).
     if (!S.bold && guarded(g, a)) return null;
     if (lost >= C.weak) return `${H.name} is hard pressed by ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
+    if (far) return null;
     // (Ground across the sea is not gone for on a thin garrison alone, except where anything goes and its month has come.)
     if (good && (f || (S.bold && waited))) return f ? `${theName(H, true)}'s armies are away fighting ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
     return null;
   }
   // Where anything goes a claimant needs no war to hide behind, only the odds and its month.
-  if (!S.bold || !good || !waited) return null;
+  if (far || !S.bold || !good || !waited) return null;
   return f ? 'the frontier is thinly held' : 'it is held by a handful of troops';
 }
 
@@ -263,6 +288,29 @@ function treaty(g: Game, a: Ambition): boolean {
   return true;
 }
 
+/**
+ * A great power's dealt war aim, in the months before it marches (aims.ts). Its staff decides (staff.ts): here the
+ * holder is warned while the army is coming up for it, and the warning is dropped if the staff stands the army down.
+ */
+function aimMonth(g: Game, a: Ambition, warned: number | undefined): void {
+  const n = g.nations[a.nat], H = g.nations[a.on];
+  const key = aimOf(a)?.key ?? '';
+  const k = ops(a.nat).findIndex((o) => o.aim === key);
+  const coming = k >= 0 && g.flags[`st:op:${a.nat}`] === k + 1 && aimHolders(g, a.nat, key).includes(a.on);
+  if (coming) {
+    g.flags[`amb:last:${a.id}`] = g.turn;
+    if (warned) return;
+    g.flags[`amb:${a.id}`] = g.turn;
+    const told = `${n.name} presses its claim to ${a.name}: its army is coming up to the frontier. ${cap(a.why)}. ${theName(H, true)} is warned that it may march.`;
+    if (a.on === g.human) warning(g, 'A claim on your ground', `${told} It will not march this month, and what it weighs is the troops you keep there.`, a.on, groundOf(g, a)[0]?.id, a.nat);
+    else headline(g, 'event', told, a.nat);
+  } else if (warned) {
+    delete g.flags[`amb:${a.id}`];
+    delete g.flags[`amb:last:${a.id}`];
+    if (g.human === a.on) headline(g, 'event', `${n.name} lets its claim to ${a.name} rest for now.`, a.nat);
+  }
+}
+
 /** The month's ambitions: claims are pressed, dropped or marched for, allies stand by, and private wars end in treaties. */
 export function claimsMonth(g: Game): void {
   // (A neutral's bargains, release 2: a warning for a feed claim no longer listed lapses first.)
@@ -281,6 +329,8 @@ export function claimsMonth(g: Game): void {
     }
     const warned = g.flags[`amb:${a.id}`];
     if (!readable(g, a)) { if (warned) { delete g.flags[`amb:${a.id}`]; delete g.flags[`amb:last:${a.id}`]; } continue; }
+    // (A great power's dealt aim is its staff's to take up: no moment is weighed here.)
+    if (inDeal(g, a)) { aimMonth(g, a, warned); continue; }
     const n = g.nations[a.nat], H = g.nations[a.on];
     const why = moment(g, a);
     if (why) {
