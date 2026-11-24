@@ -34,6 +34,7 @@ import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
 import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
+import { flagName } from './flagnames';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -384,7 +385,7 @@ export function pocketNat(g: Game, r: Region): string | null {
 export const inPocket = (g: Game, c: Corps): boolean => g.flags[`pkt:${c.reg}`] !== undefined && pocketNat(g, g.regions[c.reg]) === c.nat;
 
 /** True where a pocket's stores are spent: the province feeds nobody of the nation cut off in it (game.ts, the supply). */
-export const pocketDry = (g: Game, r: Region, nat: string): boolean => g.flags[`pktx:${r.id}`] === 1 && pocketNat(g, r) === nat;
+export const pocketDry = (g: Game, r: Region, nat: string): boolean => g.flags[flagName('pktx:', r.id)] === 1 && pocketNat(g, r) === nat;
 
 function clearPocket(g: Game, r: Region): void {
   delete g.flags[`pkt:${r.id}`];
