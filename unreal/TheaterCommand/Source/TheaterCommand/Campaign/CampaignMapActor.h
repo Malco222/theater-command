@@ -1477,6 +1477,14 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> PointerMesh;
 
+	/**
+	 * (Release 2, the enemy's month near you.) The arrows of the watch near him: a mesh of their own, small, laid again each
+	 * frame while they grow (the 3D pre-check, 24 Nov 18:14Z: laid in a section of the orders' mesh they made the
+	 * whole of that mesh's render copy again each frame).
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Campaign")
+	TObjectPtr<UProceduralMeshComponent> MovesMesh;
+
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UInstancedStaticMeshComponent> TownMarkers;
 

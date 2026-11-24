@@ -95,6 +95,8 @@ const staged = (env: string, key: string): boolean => {
   const v = forcedBy(env);
   return v !== undefined ? !!v && v !== '0' : (stage as Record<string, unknown>)[key] === true;
 };
+/** True where new grand campaigns open with the marked army (release 2, marked.ts; stage.json 'marked'). Forced by TC_MARKED. */
+export const MARKED_STAGE: boolean = staged('TC_MARKED', 'marked');
 /** True where new grand campaigns open with the lorries moved to the front named first (stage.json 'lorryShift'). */
 export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
 /** True where new grand campaigns open with horse-drawn wagons where lorries are short (stage.json 'wagons'). */

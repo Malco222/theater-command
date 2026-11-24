@@ -238,6 +238,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextRenderComponent> NameLabel;
 	FString EarnedName; // the name lettered there; empty for none
+	/** (Release 2, the marked army; marked.ts) An enemy army that took one of his towns: the town, lettered on a red tag on its pole. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> MarkLabel;
+	FString MarkedTown; // empty for none
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
 	bool bSelected = false;

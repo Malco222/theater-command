@@ -120,6 +120,7 @@ struct FViewCorps
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
+	FString Marked; // (release 2, the marked army; marked.ts) an enemy corps that took one of his towns: that town ("Paris"); empty otherwise
 	TArray<FHonourRibbon> Honours;
 	// The player's own corps, where the rules keep them (the grand campaign): morale and rest with their words, and its divisions.
 	float Morale = -1.0f; // 0 to 1, or -1 where no morale is kept
@@ -1186,6 +1187,7 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	bool bMarkedOn = false; // (release 2, marked.ts) the armies that took his towns are marked in red
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.

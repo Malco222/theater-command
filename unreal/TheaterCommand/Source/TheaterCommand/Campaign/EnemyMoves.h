@@ -117,4 +117,34 @@ namespace TheaterEnemyMoves
 	 * going down keeps the time those take to be seen (Raids, Sinkings: the watch's own pause for them, or 0).
 	 */
 	double Pause(int Attacks, int Lost, int Moves, double Raids, double Sinkings);
+
+	/**
+	 * (Round 2, Brian 18:01Z: TAKE ME THERE and the corner pings.) The arrow that says where a stop happened: the first
+	 * attack on his own troops, else the first army that came at him, else the first arrow drawn. -1 when there is none.
+	 */
+	int Worst(const std::vector<FArrow>& Arrows);
+
+	/**
+	 * (Round 2, corner pings.) While the watch near him runs, the small map in the corner of the table marks each of its
+	 * stops: the ones still to come pulse (a dot, and a ring that swells and fades, each a little after the one before),
+	 * the one on screen stands still in a brass ring, the ones seen are a faint dot. Sizes in the small map's pixels.
+	 */
+	enum class EPing : unsigned char
+	{
+		Seen,
+		Now,
+		ToCome
+	};
+
+	struct FPingLook
+	{
+		double Dot = 0.0, DotAlpha = 0.0; // the dot at the place: its radius and how solid it is
+		double Ring = 0.0, RingAlpha = 0.0, RingThick = 0.0; // the ring round it (no ring where RingAlpha is 0)
+		bool bBrassRing = false; // the ring is brass (the stop on screen), not the stop's own ink
+	};
+	constexpr double PingSeconds = 1.4; // one swell of a ring
+	FPingLook Ping(EPing State, double Seconds, int Order);
+
+	/** The ink of a stop's ping, from its worst arrow: the attack red, the war red, amber at peace, steel for his allies, cream for his own falling back. */
+	FInk PingInk(const FArrow& Arrow);
 }

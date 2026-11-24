@@ -153,6 +153,11 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2, the marked army) -TheaterR2Marked opens them with the armies that take his towns marked
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Marked")) && !Host->Evaluate(TEXT("globalThis.TC_MARKED = 1;"), TEXT("release 2 marked army"), OutError))
+	{
+		return false;
+	}
 	// -TheaterR2Supply opens them with the columns and all three supply orders: the lorries moved, wagons, dumps
 	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Supply")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1; globalThis.TC_LORRYSHIFT = 1; globalThis.TC_WAGONS = 1; globalThis.TC_DUMPS = 1;"), TEXT("release 2 supply"), OutError))
 	{
@@ -1248,6 +1253,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("markedOn"), Out.bMarkedOn); // (release 2, the marked army)
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
@@ -1832,6 +1838,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				Unit->TryGetBoolField(TEXT("digging"), C.bDigging);
 			}
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
+			Unit->TryGetStringField(TEXT("mark"), C.Marked); // (release 2, the marked army) absent unless it took one of his towns
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{
 				double Morale = -1.0, Rest = -1.0;
