@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of af89ade8 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e54fe064 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12288,6 +12288,7 @@
         { nat: "GER", from: 24, name: "the Kammhuber Line", by: "Josef Kammhuber", ground: 0.5 }
       ]
     },
+    height: { _about: "Units decide (the design director, 24 Nov 2026 02:28Z and 15:20Z; air-battles/dogfight/sweep-height-form-1124.md): in a day fight of fighters alone, height in place of the attacker's flat escortShare. The sweep flies high; the defenders' warning in time W (1 a chain over the place, an agent's read order or carriers with radar; 0.5 ground observers over their own home ground or a carrier's lookouts; 0 none) puts them above it (W 1), level (0.5) or under it (0). 'h' is the field's own edge a band, measured, never chosen: the fighter exchange moved 1.53 to 1.66 (mean 1.58) toward the side a band above, 40 seeds on each of 7 real sweeps (GER over England 1942, UK over Germany 1942); measure again whenever the field's edges change. 'observers' and 'lookouts' are the range middle (none 0, full 1), laid so until the historian reads warning lead times.", h: 1.58, observers: 0.5, lookouts: 0.5 },
     production: {
       GER: [[1, 180, 280], [9, 250, 300], [16, 300, 320], [22, 360, 350], [40, 450, 380], [46, 800, 300], [52, 1200, 250], [56, 1800, 200]],
       UK: [[1, 110, 150], [6, 180, 200], [9, 320, 250], [10, 450, 300], [16, 450, 350], [28, 600, 450], [40, 820, 520], [52, 890, 650]],
@@ -42361,6 +42362,13 @@
   }
   var clashOf = (g2, m) => airWar(g2) && m !== "superiority" ? AIRWAR.losses.clash : 1;
   var mostBomberLoss = (g2, night = false) => airWar(g2) ? night ? AIRWAR.losses.most : AIRWAR.losses.day : AIR.combat.maxBomberLoss;
+  function warnedIn(g2, a, sea, amb, target) {
+    if (amb || a.radar) return 1;
+    if (a.def.length && a.def.every((x) => x.f.ship !== void 0)) return a.def.every((x) => hasTech(g2, x.f.nat, AIRWAR.sky.radar)) ? 1 : AIR.height.lookouts;
+    if (sea) return 0;
+    const r = g2.regions[target];
+    return r && r.owner === r.ctrl ? AIR.height.observers : 0;
+  }
   function assessAir(g2, fleets, m, target) {
     const C4 = AIR.combat;
     const quarry = m === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
@@ -42413,6 +42421,7 @@
       out.why = "No bombers can reach the target.";
       return out;
     }
+    const sweep = unitsDecide(g2) && !night && out.B <= 0;
     if (sea) {
       for (const id of g2.seas[zone].coast) {
         const c = radarAt(g2, g2.regions[id]);
@@ -42438,13 +42447,19 @@
       if (w <= 0) continue;
       out.def.push({ f, d, w });
       out.D += f.ftr * w;
-      out.Dpow += f.ftr * w * worth2(g2, f) * techMul(g2, f.nat, "radar");
+      out.Dpow += f.ftr * w * worth2(g2, f) * (sweep ? 1 : techMul(g2, f.nat, "radar"));
     }
     if (fighterTypesOn(g2) && !night && out.Epow > 0 && out.Dpow > 0) {
       const E = typeEdge(g2, out.att.map((x) => ({ f: x.f, w: x.ftr * worth2(g2, x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth2(g2, x.f) })), m);
       out.typeEdge = E;
       out.Epow *= Math.exp(E / 2);
       out.Dpow *= Math.exp(-E / 2);
+    }
+    if (sweep && out.Epow > 0 && out.Dpow > 0) {
+      const W2 = warnedIn(g2, out, sea, amb, target), x = 1 - 2 * W2, h = AIR.height.h;
+      out.height = { W: W2, x, h };
+      out.Epow *= Math.pow(h, x);
+      out.Dpow *= Math.pow(h, -x);
     }
     out.defence = bomberDefence(g2, nat, night);
     const guns2 = out.B * out.defence;
@@ -42504,6 +42519,10 @@
         effect: `From ${list2(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString("en-US")} fighters can meet the raid.`
       });
     } else out.lines.push({ label: "In range to intercept", value: "No enemy fighters" });
+    if (out.height) {
+      const hx = out.height.h.toFixed(1);
+      out.lines.push(out.height.x < 0 ? { label: "Height", value: "The defenders will be above you", effect: `They are warned in time to climb above your fighters and dive on them: about ${hx} to 1 their way on height alone.` } : out.height.x > 0 ? { label: "Height", value: "You will be above them", effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` } : { label: "Height", value: "Level", effect: "Ground observers warn them in time to climb to your height, not above it: neither side has the height." });
+    }
     if (out.guns.all) {
       out.lines.push({
         label: "Flak",
@@ -42629,7 +42648,7 @@
     const share = se + sd > 0 ? se / (se + sd) : 0;
     const clash = Math.min(a.E, a.D) * clashOf(g2, m);
     const dLoss = C4.fighters * I * clash * 2 * share * luck();
-    const eLoss = C4.fighters * I * clash * 2 * (1 - share) * C4.escortShare * luck();
+    const eLoss = C4.fighters * I * clash * 2 * (1 - share) * (a.height ? 1 : C4.escortShare) * luck();
     const bLoss = a.B * Math.min(mostBomberLoss(g2, night), a.bomberLoss * luck());
     const gunKills = gunsDown(g2, a, night, bLoss, m, target);
     const fix = battle && !staff ? settleFought(battle, a.B) : null;
@@ -42896,10 +42915,11 @@
         const can2 = Math.min(p.ftr + (built ? built[1] : 0), p.pilots + (trained ? trained[1] : 0));
         const lost = lostBy[x.f.nat] ?? 0;
         const back = lost > 0 ? Math.min(lost, can2) * (def[i].lostFtr / lost) : 0;
-        Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth2(g2, x.f) * techMul(g2, x.f.nat, "radar");
+        Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth2(g2, x.f) * (a.height ? 1 : techMul(g2, x.f.nat, "radar"));
       });
       const te = a.typeEdge;
       hold2 = Dnext > 0 ? te ? EpowAfter * Math.exp(te / 2) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext : 99;
+      if (a.height && Dnext > 0) hold2 *= Math.pow(a.height.h, 2 * a.height.x);
       sky = Eafter >= AIR.sky.least && hold2 >= AIR.sky.win;
       if (sky) g2.sky[target] = { nat, turn: g2.turn };
       if (acOn(g2)) held3 = skyFought(g2, nat, target, sky) === "held";
@@ -43576,7 +43596,7 @@
     const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
     const share = se + sd > 0 ? se / (se + sd) : 0;
     const clash = Math.min(a.E, a.D) * clashOf(g2, m);
-    let ftrLoss = C4.fighters * I * clash * 2 * (1 - share) * C4.escortShare;
+    let ftrLoss = C4.fighters * I * clash * 2 * (1 - share) * (a.height ? 1 : C4.escortShare);
     const bmrLoss = a.B * a.bomberLoss;
     const foeGuns = gunsDown(g2, a, m === "night", bmrLoss, m, target);
     const foeLoss = C4.fighters * I * clash * 2 * share + foeGuns;
@@ -81282,12 +81302,16 @@
     const att = [], def = [];
     const share = (pow, all) => all > 0 ? pow / all : 0;
     const Atot = a.Epow + a.B * C4.bomberDefence, Dtot = a.Dpow;
+    const H = a.height;
+    const attBand = H ? H.x > 0 ? 2 : 1 : 1;
+    const hx = H ? Math.pow(H.h, H.x) : 1;
+    const armed = H ? forecastAir(g2, { ...a, Epow: a.Epow / hx, Dpow: a.Dpow * hx }, m, target) : fc;
     a.att.forEach((x) => {
       const [rx] = rot(vec(x.f));
       const sx = clampTo(SKY.target.x + rx * 0.25, 2e4, 8e4);
       const ftr = Math.round(x.f.ftr * x.crowd), bmr = Math.round(x.bmr);
       if (x.esc > 0 && ftr > 0) {
-        starts2[x.f.id] = { x: sx, y: 1e3, band: 1, fuel: SKY.fuel.full * x.esc, wait: false };
+        starts2[x.f.id] = { x: sx, y: 1e3, band: attBand, fuel: SKY.fuel.full * x.esc, wait: false };
         att.push(force(x.f, "ftr", ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
       }
       if (bmr > 0) {
@@ -81311,7 +81335,7 @@
       const real = Math.hypot(rx, ry), d = SKY.fields.near + Math.min(SKY.fields.far - SKY.fields.near, real * SKY.fields.squeeze);
       const ux = real > 0 ? rx / real : 0, uy = real > 0 ? ry / real : 1;
       const [bx, by2] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
-      starts2[x.f.id] = { x: bx, y: by2, band: a.radar ? 1 : 0, fuel: SKY.fuel.home, wait: !a.radar };
+      starts2[x.f.id] = H ? { x: bx, y: by2, band: H.x < 0 ? 2 : 1, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by2, band: a.radar ? 1 : 0, fuel: SKY.fuel.home, wait: !a.radar };
       def.push(force(x.f, "ftr", n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
     }
     const side5 = (n, forces, human) => ({
@@ -81347,8 +81371,8 @@
       bomberDefence: C4.bomberDefence,
       gunLoss: a.gunLoss,
       flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
-      worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
-      forecast: { foe: fc.foeLoss, foeGuns: fc.foeGuns, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
+      worth: { att: a.E > 0 ? a.Epow / a.E / hx : 1, def: a.D > 0 ? a.Dpow / a.D * hx : 1 },
+      forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
       chance: fc.success,
       reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
       bombs: bombLaw(g2, a, m, target),
