@@ -58,7 +58,7 @@ import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, frien
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
@@ -4106,8 +4106,10 @@ function force(kind: string, id: number) {
         options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: 'Goes for merchant ships and avoids a fight with the enemy fleet.', ok: up && !here, why: here ? 'It is doing so now.' : notNow });
       }
       options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${f.port}`, detail: 'Safe from the enemy fleet, and takes no part at sea.', ok: up && f.stance !== 'port', why: f.stance === 'port' ? 'It is in harbour now.' : notNow });
+      if (staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: 'Hand it back to your admirals', detail: HAND_BACK_TIP, ok: up, why: notNow });
     }
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing], options };
+    const who = mine ? whoSails(s, id) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -4142,12 +4144,27 @@ function force(kind: string, id: number) {
   };
 }
 
+/**
+ * (1.5.1; Brian, 24 November 2026 18:32Z: "when i move my navy they go right back to where they were before the next
+ * turn") Who sails one of the player's fleets while his admirals run the navy: a line for its panel and its page. Empty
+ * where he runs the navy himself, when every fleet is his anyway.
+ */
+function whoSails(s: Game, id: number): string {
+  if (!staffRunsDesk(s, 'navy')) return '';
+  return fleetKeptByHand(s, id)
+    ? 'Under your own orders: your admirals leave it where you send it.'
+    : 'Your admirals sail it each month. Give it an order yourself and it stays where you send it.';
+}
+const HAND_BACK_TIP = 'Your admirals sail it again from next month, with the rest of the navy.';
+
 /** Gives a fleet or an air fleet one of the orders its panel offered. */
 function forceOrder(key: string) {
   const s = game();
   const [what, id, a, b] = key.split(':');
   let ok = false;
-  if (what === 'fleet') ok = orderFleet(s, Number(id), Number(a), b as Stance);
+  // (The panel's 'fleet:<id>:staff' hands a fleet back to the admirals: the map sends every 'fleet:' key here.)
+  if (what === 'fleet' && a === 'staff') ok = handBackFleet(s, Number(id));
+  else if (what === 'fleet') ok = orderFleet(s, Number(id), Number(a), b as Stance);
   else if (what === 'fleetbase') ok = orderRebase(s, Number(id), Number(a));
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
   else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
@@ -4987,11 +5004,13 @@ function fleetPage(s: Game, id: number): Page | null {
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
   });
   const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : '';
+  const who = whoSails(s, id);
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.`,
+    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
     top: [
       { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
+      ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
       ...(wingsOfFleet(s, id).length ? [{ label: 'CARRIER AIRCRAFT', act: `open:wings:${id}`, ok: true, tip: 'The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour.' }] : []),
     ],
     sections: [
@@ -6398,6 +6417,10 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   } else if (part[0] === 'fleet') {
     ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3] as Stance);
     note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : 'That order cannot be given now.';
+    return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
+  } else if (part[0] === 'fleetstaff') {
+    ok = handBackFleet(s, Number(part[1]));
+    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month.` : 'It cannot be handed back now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetescort') {
     ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));

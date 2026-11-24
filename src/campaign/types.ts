@@ -720,6 +720,12 @@ export interface Fleet extends Storied {
    * back with none are left off, and a fleet with none has no record. Kept in step with the counts by stars.ts.
    */
   stars?: Partial<Record<ShipClass, number[][]>>;
+  /**
+   * The player gave this fleet an order himself (1.5.1; Brian, 24 November 2026 18:32Z: "when i move my navy they go
+   * right back to where they were before the next turn"). While his admirals run the navy for him (depth.ts) they leave
+   * it where he sent it, until he hands it back to them or hands them the navy afresh. Never set on a computer's fleet.
+   */
+  ordered?: true;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
