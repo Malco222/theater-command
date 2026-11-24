@@ -104,6 +104,7 @@ import { airAct, airPage } from '../../../src/campaign/airpages';
 import type { FoughtAir } from '../../../src/campaign/airfought';
 import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
+import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the enemy's month near you)
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
@@ -1562,6 +1563,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const month = s.turn;
     const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg] as const));
     const air0 = lastAirReport(s), sea0 = lastSeaReport(s), shore0 = lastShoreReport(s);
+    const foes0 = new Set(steps && s.human && s.nations[s.human] ? s.nations[s.human].atWar : []); // (release 2, the enemy's month near you)
     const nat = stepAI(s);
     if (s.human && s.turn !== month) judgeGoals(s, s.human);
     if (!steps) return;
@@ -1574,13 +1576,18 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const seaNote = [...sea.notes.slice(0, 2), ...shore.notes.slice(0, 1)].join(' ');
     const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = s.reports.slice(r0);
+    // ---- (release 2, the enemy's month near you: Brian, 24 November 2026) The moves near his ground and the attacks on his
+    // troops, drawn as arrows while the 3D table watches this nation's month; 'near' marks the steps the watch stops at.
+    const close = nearMoves(s, nat, stood, ctrl, reps, sight(s), foes0);
+    const nearOf = (mine: boolean): { near: boolean; arrows: NearArrow[]; nearNote: string } => ({ near: close.near || mine, arrows: close.arrows, nearNote: close.nearNote });
+    // ---- (end release 2)
     if (!taken.length && !reps.length) {
       // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
       const seen = sight(s);
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
-      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk, shelled: shore.regions, view: view() });
-      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
-      else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
+      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air.mine || sea.mine || shore.mine), view: view() });
+      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view() });
+      else if (to.length || close.near) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view() });
       return;
     }
     const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
@@ -1608,6 +1615,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       focus: [...new Set([...taken, ...reps.map((r) => r.region)])],
       // The player's own ground or troops were involved.
       mine: reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken.some((id) => ctrl[id] === s.human),
+      ...nearOf(reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken.some((id) => ctrl[id] === s.human) || air.mine || sea.mine || shore.mine),
       view: view(),
     });
   }
