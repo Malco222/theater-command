@@ -113,6 +113,7 @@ describe('a beaten stack chased off the field', () => {
     const out = breakouts(f);
     expect(out.length).toBe(1);
     expect(out[0].taken).toBe(false);
+    expect(out[0].breakout).toBe(true);
     expect(fates(rep)).toEqual(['surrendered', 'surrendered', 'surrendered', 'surrendered', 'retreated']);
     expect(f.def[4].reg).toBe(f.rear.id);
     expect(rep.defenders[0].roadsCut).toEqual([f.rear.id]);

@@ -7751,8 +7751,8 @@ function reportCard(r: BattleReport): string {
   const spoils = won && (won.kind === 'yours' || won.kind === 'ally') ? `<div class="prizeline won">${townIcon(townIn(g, r.region)!, 30)}<span class="grow"><b>${won.kind === 'yours' ? 'The prize is yours.' : 'Freed.'}</b> ${esc(won.line)}</span></div>` : '';
   // The grand campaign: a fight for a town, or for the country round one, says which it was and what follows.
   const place = g.regions[r.region], town = esc(townName(place));
-  const kick = r.yielded ? 'Ground given up' : r.town ? 'Assault on a town' : r.sally ? 'Sortie' : r.relief ? 'Relief of a siege' : 'Battle result';
-  const title = r.yielded ? `${esc(r.regionName)} given up` : r.town ? `Assault on ${town}` : r.sally ? `Sortie from ${town}` : r.relief ? `Relief of ${town}` : `Battle of ${esc(r.regionName)}`;
+  const kick = r.yielded ? 'Ground given up' : r.breakout ? 'Breakout' : r.town ? 'Assault on a town' : r.sally ? 'Sortie' : r.relief ? 'Relief of a siege' : 'Battle result';
+  const title = r.yielded ? `${esc(r.regionName)} given up` : r.breakout ? `Breakout at ${esc(r.regionName)}` : r.town ? `Assault on ${town}` : r.sally ? `Sortie from ${town}` : r.relief ? `Relief of ${town}` : `Battle of ${esc(r.regionName)}`;
   // (Where the town and its province share a name, the name is said once: "Vancouver was stormed and has fallen.")
   const one = townName(place) === r.regionName;
   const told = r.town ? (r.taken ? (one ? `${town} was stormed and has fallen.` : `${town} was stormed: ${esc(r.regionName)} has fallen.`) : `The assault on ${town} was thrown back. The siege goes on.`)

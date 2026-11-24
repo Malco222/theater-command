@@ -2597,6 +2597,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (gates) rep.gates = true;
   if (relief) rep.relief = true;
   if (opts.sally) rep.sally = true;
+  if (opts.breakout) rep.breakout = true;
   if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
   if (!win && !town && a.wear > 0) { rep.worn = Math.round(a.wear * 10) / 10; rep.works = Math.round(Math.max(0, a.works - a.wear) * 10) / 10; }
   // Who paid, and to what (the grand campaign): the result's line, as the attacker reads it and as the defender does.

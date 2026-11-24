@@ -579,6 +579,8 @@ export interface BattleReport {
   works?: number;
   /** The fight was for the town itself: an assault on its garrison (the grand campaign). */
   town?: boolean;
+  /** Units decide (#7 4(b)): a beaten army attacking the enemy on its road out, before a cut road takes it whole. */
+  breakout?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
   siege?: boolean;
   /**
