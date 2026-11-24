@@ -6398,6 +6398,29 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection);
 			AimedPiece = (PointedPiece && (PointedPiece == HeldPiece.Get() || PointedPiece == HeldFleetPiece.Get())) ? Map->PieceAtRay(RayOrigin, RayDirection, nullptr, PointedPiece) : PointedPiece;
+			// (Brian, 24 November 2026 21:53Z: "i cant click on the london airfield".) Where another country's corps stands on
+			// or beside a field, as an ally's do at London, its pole and counters took the pointer from the field. With nothing
+			// in hand, inside an airfield's ring (on the town's turn of an overlap too, so that the next click there is the
+			// field's), another country's army keeps the pointer only on its colours; its pole, counters and guns leave it to
+			// the field. (A click on another country's flag only looks at the ground it stands on.) The player's own pieces
+			// still win, one that stands behind the army giving way too. Fleets are left alone: a fleet at anchor shows no
+			// colours. With no nation of his own (his country fallen, a war watched) nothing changes: the airfield's page
+			// would not open. And it is judged before the agent is, so that an agent beside such an army is not passed over.
+			if (PointedPiece && (PointedField != INDEX_NONE || bPointerInOverlap) && bHandsFree && bFieldsKept && GetSession()
+				&& !GetSession()->GetView().Human.IsEmpty())
+			{
+				const FString& Leads = GetSession()->GetView().Human;
+				auto GivesWay = [&Leads, &RayOrigin, &RayDirection](const AArmyPiece* Stander)
+				{
+					return Stander->IsArmy() && Stander->GetNationTag() != Leads && !Stander->ColoursHitByRay(RayOrigin, RayDirection);
+				};
+				if (GivesWay(PointedPiece))
+				{
+					AArmyPiece* Behind = Map->PieceAtRay(RayOrigin, RayDirection, nullptr, PointedPiece);
+					PointedPiece = (Behind && !GivesWay(Behind)) ? Behind : nullptr;
+					AimedPiece = (PointedPiece == HeldPiece.Get() || PointedPiece == HeldFleetPiece.Get()) ? nullptr : PointedPiece; // (never the flag that is being carried)
+				}
+			}
 			// (Ruling 153; the art director's ruling of 17 November.) An agent's piece: a small thing among large ones.
 			// He is taken hold of from a little way round him; but over an army's flag or base the army wins, unless
 			// the pointer is on his own body.
@@ -6410,17 +6433,6 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			else if (PointedAgent != INDEX_NONE)
 			{
 				PointedPiece = nullptr;
-			}
-			// (Brian, 24 November 2026 21:53Z: "i cant click on the london airfield".) Where another country's corps stands on
-			// or beside a field, as an ally's do at London, its pole and counters took the pointer from the field. With nothing
-			// in hand, inside an airfield's ring, another country's piece keeps it only on its colours; its pole, counters and
-			// guns leave it to the field. (A click on another country's flag only looks at the ground it stands on.) The
-			// player's own pieces still win.
-			if (PointedPiece && PointedField != INDEX_NONE && bHandsFree && bFieldsKept && GetSession()
-				&& PointedPiece->GetNationTag() != GetSession()->GetView().Human && !PointedPiece->ColoursHitByRay(RayOrigin, RayDirection))
-			{
-				PointedPiece = nullptr;
-				AimedPiece = nullptr;
 			}
 		}
 	}
