@@ -8445,9 +8445,10 @@ void ALandBattle::LayOldWrecks()
 {
 	// Old wrecks (release 2; Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next
 	// battle there; looks only, as the scars and the old ruts: nothing the rules fight reads them): the recording's
-	// "oldWrecks" {count, months, nats}, which the campaign writes only while the player's Battle rules row "Old wrecks"
-	// is on; -TheaterLandOldWrecks=N (N laid) and -TheaterLandOldWreckMonths=M (how long since they burnt) stand in for
-	// it on any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
+	// "oldWrecks" {count, months, nats, per}, which the campaign writes only while the player's Battle rules row "Old
+	// wrecks" is on (count / per of them drawn: one wreck for as many real machines as a tank in the battle);
+	// -TheaterLandOldWrecks=N (N laid) and -TheaterLandOldWreckMonths=M (how long since they burnt) stand in for it on
+	// any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
 	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said.
 	FLandBattleState& S = *State;
 	if (!S.Field)
@@ -8499,6 +8500,8 @@ void ALandBattle::LayOldWrecks()
 	}
 	Asked.Seed = S.Rec.Seed ? S.Rec.Seed : 1;
 	Asked.bAsLaid = bStandIn;
+	// (the battle's scale: the key's count is real machines burnt out, a drawn wreck as many of them as a drawn tank)
+	Asked.Per = bStandIn ? 1.0 : S.Rec.OldWreckPer;
 	// (each machine from the battle's own models where it has her and they burnt this month, else read as MakeArmour
 	// reads them and dressed for their own month)
 	const FString Folder = FPaths::ProjectContentDir() / TEXT("Models/Battle");

@@ -416,18 +416,26 @@ int main(int Argc, char** Argv)
 			int Count;
 			double Months;
 			const char* Nats;
+			double Per;
 		};
 		const Case Cases[] = {
-			{ "", 0, 0.0, "" },
-			{ "\"oldWrecks\": {\"count\": 12, \"months\": 7.5, \"nats\": {\"GER\": 8, \"SOV\": 4}}, ", 12, 7.5, "GER 8,SOV 4," },
-			{ "\"oldWrecks\": {\"count\": 200, \"months\": 2}, ", 60, 2.0, "" },
-			{ "\"oldWrecks\": {\"count\": -3, \"months\": -2}, ", 0, 0.0, "" },
-			{ "\"oldWrecks\": {\"months\": 5}, ", 0, 5.0, "" },
-			{ "\"oldWrecks\": {\"count\": \"12\", \"months\": \"x\", \"nats\": [1, 2]}, ", 0, 0.0, "" },
-			{ "\"oldWrecks\": {\"count\": 9, \"nats\": {\"GER\": 0, \"USA\": -1, \"\": 4, \"SOV\": 2.6, \"ITA\": \"3\", \"GBR\": null}}, ", 9, 0.0, "SOV 3," },
-			{ "\"oldWrecks\": 5, ", 0, 0.0, "" },
-			{ "\"oldWrecks\": null, ", 0, 0.0, "" },
-			{ "\"oldWrecks\": {}, ", 0, 0.0, "" },
+			{ "", 0, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 12, \"months\": 7.5, \"nats\": {\"GER\": 8, \"SOV\": 4}}, ", 12, 7.5, "GER 8,SOV 4,", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 200, \"months\": 2}, ", 60, 2.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": -3, \"months\": -2}, ", 0, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"months\": 5}, ", 0, 5.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": \"12\", \"months\": \"x\", \"nats\": [1, 2]}, ", 0, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 9, \"nats\": {\"GER\": 0, \"USA\": -1, \"\": 4, \"SOV\": 2.6, \"ITA\": \"3\", \"GBR\": null}}, ", 9, 0.0, "SOV 3,", 1.0 },
+			{ "\"oldWrecks\": 5, ", 0, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": null, ", 0, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {}, ", 0, 0.0, "", 1.0 },
+			// (the battle's scale, "per": the campaign's real armoured vehicles to a drawn tank, a tenth at most)
+			{ "\"oldWrecks\": {\"count\": 60, \"months\": 1, \"per\": 7.5}, ", 60, 1.0, "", 7.5 },
+			{ "\"oldWrecks\": {\"count\": 40, \"per\": 0.4}, ", 40, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 40, \"per\": -3}, ", 40, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 40, \"per\": \"10\"}, ", 40, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 40, \"per\": null}, ", 40, 0.0, "", 1.0 },
+			{ "\"oldWrecks\": {\"count\": 40, \"per\": 5000}, ", 40, 0.0, "", 1000.0 },
 		};
 		std::string Base;
 		ReadText(Argv[3], Base);
@@ -447,9 +455,10 @@ int main(int Argc, char** Argv)
 			}
 			std::string Nats;
 			for (const auto& P : R.OldWreckNats) Nats += P.first + " " + std::to_string(P.second) + ",";
-			if (R.OldWreckCount != C.Count || std::fabs(R.OldWreckMonths - C.Months) > 1e-9 || Nats != C.Nats)
+			if (R.OldWreckCount != C.Count || std::fabs(R.OldWreckMonths - C.Months) > 1e-9 || Nats != C.Nats || std::fabs(R.OldWreckPer - C.Per) > 1e-9)
 			{
-				Fault(std::string("oldWrecks read as ") + std::to_string(R.OldWreckCount) + ", " + std::to_string(R.OldWreckMonths) + ", [" + Nats + "] from " + C.Key);
+				Fault(std::string("oldWrecks read as ") + std::to_string(R.OldWreckCount) + ", " + std::to_string(R.OldWreckMonths) + ", [" + Nats + "], per " +
+					std::to_string(R.OldWreckPer) + " from " + C.Key);
 			}
 			if (Read == 0)
 			{
@@ -462,7 +471,49 @@ int main(int Argc, char** Argv)
 			}
 			++Read;
 		}
-		std::printf("LandFeed: the oldWrecks key read %d ways (absent, whole, over the cap, below nothing, a part missing, wrong kinds, odd nations, not an object, null, empty)\n", Read);
+		std::printf("LandFeed: the oldWrecks key read %d ways (absent, whole, over the cap, below nothing, a part missing, wrong kinds, odd nations, not an object, null, empty; the scale per whole, under 1, below nothing, a string, null, over 1000)\n", Read);
+	}
+
+	// The battle's scale (Brian's rule: one model stands for as many real things in every part of a battle): the key's
+	// count is real machines burnt out, drawn Per to a wreck, at least one where any burnt, before the scrap men's share.
+	{
+		struct Scale
+		{
+			int Count;
+			double Per;
+			double Months;
+			int Drawn;
+			int Kept;
+		};
+		const Scale Scales[] = {
+			{ 60, 1.0, 1.0, 60, 20 },      // one to one: as before (and at most 20 on a field)
+			{ 40, 1.0, 18.0, 40, 13 },     // one to one, 18 months on: as before (Kept(40, 18))
+			{ 60, 7.5, 1.0, 8, 8 },        // an armoured division's 150 drawn as 20 tanks: 60 burnt out (the cap) is 8
+			{ 60, 3.0, 12.0, 20, 10 },     // 20 drawn, half left at a year
+			{ 150, 10.0, 1.0, 6, 6 },      // over the cap: 60 burnt out, a tenth of them drawn
+			{ 3, 10.0, 1.0, 1, 1 },        // fewer than a drawn tank stands for: still one
+			{ 3, 10.0, 48.0, 1, 0 },       // and the scrap men take her in time
+			{ 0, 10.0, 1.0, 0, 0 },        // none burnt: none
+			{ 40, 0.5, 1.0, 40, 20 },      // under one: one to one
+			{ 40, std::nan(""), 1.0, 40, 20 }, // not a number: one to one
+			{ 40, 1e9, 1.0, 1, 1 },        // a thousand at most: still one
+		};
+		int Checked = 0;
+		for (const Scale& C : Scales)
+		{
+			const int Drawn = LandHulk::Models(C.Count, C.Per);
+			const int Kept = LandHulk::Kept(C.Count, C.Months, C.Per);
+			if (Drawn != C.Drawn || Kept != C.Kept)
+			{
+				Fault("the battle's scale: " + std::to_string(C.Count) + " burnt out at " + std::to_string(C.Per) + " to a wreck, " + std::to_string(C.Months) +
+					" months on: " + std::to_string(Drawn) + " drawn and " + std::to_string(Kept) + " kept, not " + std::to_string(C.Drawn) + " and " +
+					std::to_string(C.Kept));
+			}
+			++Checked;
+		}
+		if (LandHulk::Kept(40, 6.0) != LandHulk::Kept(40, 6.0, 1.0)) Fault("the battle's scale: Kept's one to one not its default");
+		std::printf("the battle's scale: %d counts drawn at their per (60 at 7.5 to a wreck: %d drawn; 3 at 10: %d; none: %d; per under 1 or odd: one to one)\n", Checked,
+			LandHulk::Models(60, 7.5), LandHulk::Models(3, 10.0), LandHulk::Models(0, 10.0));
 	}
 
 	for (int A = 3; A < Argc; ++A)
@@ -950,6 +1001,22 @@ int main(int Argc, char** Argv)
 				Said.substr(0, Said.find("field)") + 6).c_str());
 			if ((Twelve != 12 && Stand.NoRoom == 0) || Stand.Wanted != 12 || Capped > LandHulk::Most || (Capped != LandHulk::Most && Forty.NoRoom == 0))
 				Fault(Name + ": the stand-in not laying as many as it asks");
+
+			// (the key at the battle's scale: 60 burnt out at 7.5 real machines to a drawn tank lays 8, and says so; the
+			// stand-in reads no scale, so =12 still lays 12)
+			LandHulk::Ask Scaled = AskOf(60, 1.0);
+			Scaled.Per = 7.5;
+			LandHulk::Yard Eight;
+			const int AtScale = Eight.Lay(F, Scaled, ReadModel, Have);
+			Q.Count = 12;
+			Q.Per = 10.0;
+			LandHulk::Yard StandScaled;
+			StandScaled.Lay(F, Q, ReadModel, Have);
+			const std::string SaidScaled = Eight.Said();
+			std::printf("the battle's scale on the field: 60 burnt out at 7.5 to a wreck lays %d of %d; the stand-in =12 with a scale wants %d: \"%s\"\n", AtScale, Eight.Wanted,
+				StandScaled.Wanted, SaidScaled.substr(0, SaidScaled.find("field)") + 6).c_str());
+			if (Eight.Wanted != 8 || (AtScale != 8 && Eight.NoRoom == 0) || StandScaled.Wanted != 12 || SaidScaled.find("one for every 7.5") == std::string::npos)
+				Fault(Name + ": the battle's scale not drawn, or the stand-in scaled");
 		}
 
 		// 6. The field telephones' wires (release 2; as the scene's -TheaterLandPhones makes them from the battle, before

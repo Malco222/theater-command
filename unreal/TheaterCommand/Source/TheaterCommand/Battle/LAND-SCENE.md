@@ -78,8 +78,8 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      pale under three months, then a lusher green line fading; puddled with `-TheaterLandWeatherWord=mud`.
    - `-TheaterLandOldWrecks=N`, `-TheaterLandOldWreckMonths=M`, `-TheaterLandNoOldWrecks` (release 2, old wrecks):
      the burnt-out armour of battles fought here before (N laid, at most 20, burnt M months ago, the nations the
-     battle's two sides'), standing in for a recording's root `"oldWrecks": {"count", "months", "nats"}`. See "Old
-     wrecks" below.
+     battle's two sides'), standing in for a recording's root `"oldWrecks": {"count", "months", "nats", "per"}`. See
+     "Old wrecks" below.
    - `-TheaterLandCraterOldEdge`: the shell holes' edge as before the art director's 23 November seam (no feather);
      `-TheaterLandMenFieldFrame`: the near men's meshes left at the field's corner (no motion vector), for the A/B.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
@@ -799,10 +799,13 @@ as the scars and the old ruts are: nothing the rules fight reads them, no round 
 one, and they are kept off every way the recording's men and vehicles go, so nothing the battle shows is moved by them.
 
 - **What asks for them.** The campaign writes the recording's root `"oldWrecks": {"count": n, "months": m, "nats":
-  {"GER": n1, "SOV": n2, ...}}`: the armoured vehicles burnt out here before (60 at most), the months since the last of
-  those battles, and whose they were. It leaves the key out where none burnt here, or where the player's Battle rules
-  row "Old wrecks" is off. `LandFeed` reads it with any part missing or odd (a count over 60 is 60, below nothing is
-  none, a nation's count must be a number over 0; `Recording::OldWreckCount`, `OldWreckMonths`, `OldWreckNats`). On the
+  {"GER": n1, "SOV": n2, ...}, "per": p}`: the real armoured vehicles burnt out here before (60 at most), the months
+  since the last of those battles, whose they were, and this battle's scale (the real armoured vehicles each tank
+  model drawn in it stands for, to a tenth; left out where no tank is drawn). It leaves the key out where none burnt
+  here, or where the player's Battle rules row "Old wrecks" is off (sgfei1 b0a47250, src/battle/land/wrecks.ts).
+  `LandFeed` reads it with any part missing or odd (a count over 60 is 60, below nothing is none, a nation's count
+  must be a number over 0, a per missing, not a number or under 1 is 1 and over 1000 is 1000;
+  `Recording::OldWreckCount`, `OldWreckMonths`, `OldWreckNats`, `OldWreckPer`). On the
   Mac `-TheaterLandOldWrecks=N` and `-TheaterLandOldWreckMonths=M` stand in for it on any field (the nations then the
   battle's two sides', the attacker's the odd one), and `-TheaterLandNoOldWrecks` lays none. The stand-in's N is how
   many are laid (at most 20; `Ask::bAsLaid`), not how many burnt out: its months age their look and the scrap men take
@@ -812,7 +815,11 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   `ShowOldWrecks` find an empty yard, and no die of the battle, the scars or the ruts is moved (the wrecks throw their
   own, seeded on their own constants). A live battle lays none (it opens with no tracks: nothing fought over yet), and
   says so.
-- **How many** (`LandHulk::Left`, `Kept`). The recovery companies took what could be mended within weeks and the scrap
+- **How many** (`LandHulk::Models`, `Left`, `Kept`). First the battle's scale (Brian's rule: one model stands for as
+  many real things in every part of a battle): the count's real machines are drawn `per` to a wreck, `Models(count,
+  per)` = count / per rounded, at least one where any burnt (an armoured division's 150 drawn as 20 tanks is 7.5 to a
+  tank, so the 60 a campaign can carry are 8 wrecks; 3 burnt out at 10 to a tank are still one). The stand-in's N is
+  laid as it is and reads no scale. Then the recovery companies took what could be mended within weeks and the scrap
   men the rest over a year or two: all of them lie there within three months, half at a year, 15% at two years, 6% from
   four years on, in straight lines between. At most 20 on a field (each a static mesh of some 70,000 to 95,000 points
   at its near level, so twenty are about as many points as the dry run's own armour; the Mac's 45 fps gate judges it).
@@ -893,7 +900,8 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   `UStaticMeshComponent`'s `SetRelativeLocation` and `SetVisibility`, `FParse::Value` and `Param`; and since the
   review of 24 November, `LandHulk::Ask::bAsLaid`, `LandHulk::Hulk`'s `TurretYaw`, `TurretBoxLo`, `TurretBoxHi`,
   `TurretMuzzle` and `bTurretGun`, and `LandSight::Machine`'s `Root`, `Heading`, `HullLo`, `HullHi`, `bTurret`,
-  `bMuzzle` and `Muzzle` for the thrown turret), the art director's look, and the 45 fps gate with twenty wrecks
+  `bMuzzle` and `Muzzle` for the thrown turret; and `LandHulk::Ask::Per` with `Recording::OldWreckPer` for the battle's
+  scale), the art director's look, and the 45 fps gate with twenty wrecks
   laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
   `=6` and `=18` months (the same twenty, aged): from 300 m up over the old lines; a group from 40 m and from a man's
   height; a thrown turret and a run-off track close to; a wreck as the eye crosses 140 m (her near and far levels
@@ -903,7 +911,9 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   -TheaterLandOldWreckMonths=6` (the patches lost under the snow, snow on the decks) and `=0.2` months (a fresh one
   black through it); the grass round a wreck's corners from a man's height (it should stand round her and not through
   her); a thrown turret on its side, from the camera at a man's height (the camera kept out of it and its gun); and
-  with `-TheaterLandPhones` on, the wires laid round the wrecks.
+  with `-TheaterLandPhones` on, the wires laid round the wrecks. And once the campaign's row is on (sgfei1 b0a47250,
+  "Old wrecks" off by default), one campaign battle on a field fought over before, its log line saying how many were
+  drawn for how many burnt out at the battle's scale ("one for every 7.5").
 
 ## Packaging
 

@@ -601,10 +601,24 @@ namespace LandHulk
 		return 0.06;
 	}
 
-	int Kept(int Count, double Months)
+	namespace
+	{
+		/** Per as Models reads it: not a number or under 1 is 1, over 1000 is 1000. */
+		double PerOf(double Per)
+		{
+			return Per == Per && Per > 1.0 ? std::min(Per, 1000.0) : 1.0;
+		}
+	}
+
+	int Models(int Count, double Per)
 	{
 		const int Burnt = std::clamp(Count, 0, MostCount);
-		return std::min(Most, static_cast<int>(std::lround(Burnt * Left(Months))));
+		return Burnt > 0 ? std::max(1, static_cast<int>(std::lround(Burnt / PerOf(Per)))) : 0;
+	}
+
+	int Kept(int Count, double Months, double Per)
+	{
+		return std::min(Most, static_cast<int>(std::lround(Models(Count, Per) * Left(Months))));
 	}
 
 	std::string ModelFor(const std::string& Nation, int Year, int N, bool bSoft)
@@ -805,8 +819,9 @@ namespace LandHulk
 		Snow = F.Snow;
 		const int Burnt = std::clamp(A.Count, 0, MostCount);
 		const double Months = std::max(0.0, A.Months);
-		// (the Mac's stand-in lays as many as it is asked, at most Most: its months age their look and take none away)
-		Wanted = A.bAsLaid ? Burnt : static_cast<int>(std::lround(Burnt * Left(Months)));
+		// (the Mac's stand-in lays as many as it is asked, at most Most: its months age their look and take none away;
+		// the key's count is burnt-out machines, drawn at the battle's scale, Per to a wreck, before the scrap men's)
+		Wanted = A.bAsLaid ? Burnt : static_cast<int>(std::lround(LandHulk::Models(A.Count, A.Per) * Left(Months)));
 		const int Target = std::min(Wanted, Most);
 		if (Target <= 0 || F.Fought.empty() || !F.Ground || !F.Open)
 		{
@@ -1837,6 +1852,13 @@ namespace LandHulk
 			// (the Mac's stand-in: as many as it asked, their months their look's alone)
 			std::snprintf(Head, sizeof(Head), "%d laid of %d asked (the stand-in: none taken by the scrap men), %s since they burnt (at most %d on a field)",
 				static_cast<int>(List.size()), Wanted, When.c_str(), Most);
+		}
+		else if (PerOf(Asked.Per) > 1.0)
+		{
+			// (the battle's scale: each drawn wreck as many real machines as a drawn tank)
+			std::snprintf(Head, sizeof(Head), "%d laid of %d the scrap men left of %d drawn for %d burnt out here (one for every %.1f, the battle's scale), %s since the last (%.0f%% left; at most %d on a field)",
+				static_cast<int>(List.size()), Wanted, LandHulk::Models(Asked.Count, Asked.Per), std::clamp(Asked.Count, 0, MostCount), PerOf(Asked.Per), When.c_str(),
+				100.0 * Left(Asked.Months), Most);
 		}
 		else
 		{

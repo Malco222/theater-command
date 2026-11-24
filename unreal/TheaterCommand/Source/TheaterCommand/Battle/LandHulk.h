@@ -67,8 +67,15 @@ namespace LandHulk
 	 * months, half at a year, 15% at two years, 6% from four on, in straight lines between.
 	 */
 	double Left(double Months);
-	/** How many of Count (capped at MostCount) are left after Months, rounded, at most Most. */
-	int Kept(int Count, double Months);
+	/**
+	 * How many wrecks are drawn for Count burnt out (capped at MostCount) at Per real machines to a drawn one: the
+	 * battle's own scale (the recording's oldWrecks "per"), so a wreck stands for as many as a tank in the battle does
+	 * (Brian's battle-scale rule). Count / Per rounded, at least one where any burnt; Per not a number or under 1 is 1,
+	 * over 1000 is 1000.
+	 */
+	int Models(int Count, double Per);
+	/** How many of those (Models of Count at Per) are left after Months, rounded, at most Most. */
+	int Kept(int Count, double Months, double Per = 1.0);
 
 	/**
 	 * A nation's burnt-out machine in Year as the game draws that nation's armour (src/battle/land/live.ts's
@@ -203,6 +210,10 @@ namespace LandHulk
 		/** Whose they were, as the recording's nats give them, in its order (empty: the battle's two sides, the
 		 * attacker's the odd one). */
 		std::vector<std::pair<std::string, int>> Nats;
+		/** The real machines each drawn wreck stands for (the recording's "per", the battle's scale; 1: one to one).
+		 * Count is burnt-out machines, so Models(Count, Per) are drawn before the scrap men's share. Not read by the
+		 * stand-in (bAsLaid). */
+		double Per = 1.0;
 		/** This battle's month: the wrecks' own is Months before it, and their machines and coats that month's (the
 		 * battle's own models, Have, taken only where that is this month: else each read and dressed for hers). */
 		int Year = 1944, Month = 7;

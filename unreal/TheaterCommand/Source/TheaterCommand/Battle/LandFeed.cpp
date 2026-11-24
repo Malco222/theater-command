@@ -429,6 +429,10 @@ namespace LandFeed
 						if (!Nats.Keys[K].empty() && N > 0) R.OldWreckNats.emplace_back(Nats.Keys[K], N);
 					}
 				}
+				// (the battle's scale, the real armoured vehicles a drawn tank stands for: missing where no tank is
+				// drawn, and then, or when not a number or under 1, one to one)
+				const double Per = W["per"].IsNumber() ? W["per"].Num(1.0) : 1.0;
+				R.OldWreckPer = Per == Per && Per > 1.0 ? std::min(Per, 1000.0) : 1.0;
 			}
 		}
 
