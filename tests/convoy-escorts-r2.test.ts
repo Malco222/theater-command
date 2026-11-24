@@ -367,7 +367,7 @@ describe('the support groups shared over the route\'s convoys at sea at once (th
     expect(ch.chance).toBeCloseTo((w.on * w.onRate + w.beyond * w.beyondRate + (20 / n) * 0.17 * fit(g, group)) / (w.on + w.beyond + 20 / n), 12);
     // (Counted whole with each convoy, as built before, it would be priced n times over.)
     expect(ch.coordinated).toBeLessThan((w.beyond + 20) / (w.on + w.beyond + 20));
-    // (The screen's loose share of the group among the escorts with each convoy stays as it was: the small overlap.)
+    // (The screen's loose share of the group among the escorts with each convoy stays as it was: the overlap, named.)
     expect(w.on + w.beyond).toBeCloseTo(((300 + 20 * FLEETS.escort.loose) * escortsAtSea()!) / n, 9);
     timesTons(2, () => {
       const w2 = work(g), c2 = escortChance(g, 'UK', w2);
@@ -375,6 +375,37 @@ describe('the support groups shared over the route\'s convoys at sea at once (th
       expect(spareOf(c2, w2) - w2.beyond).toBeCloseTo(20 / (2 * n), 9);
       expect(spareOf(c2, w2) - w2.beyond).toBeCloseTo((spareOf(ch, w) - w.beyond) / 2, 9);
     });
+  });
+
+  it('the escorts carry the cycle\'s share at sea and the groups none: a hunting destroyer counts about 2.85 escorts a convoy, named', () => {
+    const g = open(true);
+    // (A thin screen, so the stations are not full: 10 destroyers bound to the route and a 10-destroyer group.)
+    const { esc } = meet(g, 60, 10);
+    sea(g, 'UK', 'natl', { dd: 10 }, 'hunt', undefined, [esc]);
+    const w = work(g), n = w.convoys, ch = escortChance(g, 'UK', w), atSea = escortsAtSea()!, loose = FLEETS.escort.loose;
+    // (19 of 33 days with a convoy, times 1 - 0.333 in service.)
+    expect(atSea).toBeCloseTo(0.384, 3);
+    expect(w.beyond).toBe(0);
+    // Each escort bound to the route counts atSea / n; each of the group's ships 1 / n spare and loose x atSea / n on the screen.
+    expect(w.on).toBeCloseTo(((10 + 10 * loose) * atSea) / n, 9);
+    expect(spareOf(ch, w)).toBeCloseTo(10 / n, 9);
+    expect((1 + loose * atSea) / atSea).toBeCloseTo(2.85, 2);
+    // Where the stations are not full the convoys at sea cancel: the coordinated share is that ratio alone.
+    expect(ch.coordinated).toBeCloseTo(10 / (10 + (10 + 10 * loose) * atSea), 12);
+    timesTons(2, () => expect(escortChance(g, 'UK', work(g)).coordinated).toBeCloseTo(ch.coordinated, 12));
+    // The overlap beside the group's own part: about a tenth now; about 3% on the Atlantic route with the groups whole.
+    expect(loose * atSea).toBeCloseTo(0.096, 3);
+    expect((loose * atSea) / n).toBeCloseTo(0.029, 3);
+  });
+
+  it('the builder\'s reading binds on no route the game ships: each has more than one convoy at sea at once, from its own figures', () => {
+    const g = open(true);
+    for (const route of NAVY.convoys) expect(work(g, route, route.to).convoys, route.id).toBeGreaterThan(1);
+    // (The route's tons, its convoy's ships and their GRT alone: about 3.3 on the Atlantic, 10 on Libya, whatever the fleets.)
+    expect(work(g, atlantic, 'UK').convoys).toBeCloseTo(3.32, 2);
+    expect(work(g, libya, 'ITA').convoys).toBeCloseTo(10, 9);
+    meet(g, 60, 300);
+    expect(work(g, atlantic, 'UK').convoys).toBeCloseTo(3.32, 2);
   });
 
   it('with no group the split is unchanged, whatever the convoys at sea', () => {

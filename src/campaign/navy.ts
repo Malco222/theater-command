@@ -3079,11 +3079,18 @@ export function escortWork(g: Game, nat: string, route: ConvoyRoute, count: Conv
  * for an incident in any of them, so the chance is the same in all the route's seas. A support group is in one place at
  * a time, so its ships are shared over the route's convoys at sea at once (w.convoys, the count the screen shares the
  * escorts over; the design director's ruling of 24 November 2026 22:24Z, 3 (b)), and never more than whole with one
- * convoy where fewer than one is at sea at once; with no convoy at sea the groups add nothing. A group hunting in one of
- * the route's seas also counts at the loose share among the escorts with each convoy (escortWork), as the screen has
- * always counted it: that small overlap remains, as before. On stations is the escorts filling the close screen. No new
- * figure: each ship at its own navy's column and kit steps (incidentRate) and its readiness. The chance that an
- * incident ends with the boat sunk is the mean over them.
+ * convoy where fewer than one is at sea at once (a builder's reading; no route the game ships has fewer than about 3.3
+ * at sea at once, so it never binds in play); with no convoy at sea the groups add nothing. The escorts are counted at
+ * the escorts' cycle's share at sea over the convoys at sea at once (onStations), a group's ships in full over the same
+ * count, for the game holds a fleet on hunting duty at sea all month and the ruling names no share at sea for a group:
+ * so for one convoy a destroyer on hunting duty in the route's seas counts about 2.85 times one bound to the route's
+ * escort ((1 + 0.25 x 0.384) against 0.384), and where the stations are not full that ratio alone sets the coordinated
+ * share. Built as ruled, named, never tuned. In the grand campaign a group hunting in one of the route's seas also
+ * counts at the loose share among the escorts with each convoy (escortWork), as the screen has always counted it: that
+ * count is unchanged, but beside the group's own part, now shared, it is about a tenth of it (0.096), where with the
+ * groups whole it was about 3% on the Atlantic route. Named and left as built. On stations is the escorts filling the
+ * close screen. No new figure: each ship at its own navy's column and kit steps (incidentRate) and its readiness. The
+ * chance that an incident ends with the boat sunk is the mean over them.
  */
 export function escortChance(g: Game, nat: string, w: EscortWork): { coordinated: number; chance: number } {
   let H = 0, h = 0;
