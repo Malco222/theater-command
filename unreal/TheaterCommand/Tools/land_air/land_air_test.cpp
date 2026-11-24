@@ -13,8 +13,13 @@
 //            dive, a spinning one steep, one blown up gone at once; a wreck where each struck; no other plane falls
 //   ground   only the other side's blocks fire, at a plane in reach, their streams ending in the air near it
 //   same     built twice, or grown note by note as a live battle grows, the same planes; rounds the same however the
-//            frames fall; no NaN
-// With an out folder it writes air_paths.txt for paths.py (the picture: each strike side-on and from above).
+//            frames fall; no NaN; the planes' hash printed against release 1's
+//   chutes   the downed pilots (-TheaterLandChutes): out of the right planes, down, up and away; and the art director's
+//            notes of 24 November (02:26Z) on them, on this field's pilots and a second, windy field's (5.7 m/s; its
+//            Il-2 loses her pilot under 60 m): falling free, filling, the wind, the swap, the harness and the drag, the
+//            hard landing and the limp, the swing, the canopy's shape, seams, silk and glow
+// With an out folder it writes air_paths.txt for paths.py (the picture: each strike side-on and from above), and the
+// pilots' frames and chute_silk.txt (his canopy's mesh, full and fallen in) for chutes.py.
 // Usage: Tools/land_air/run.sh [out folder]
 #include "Battle/LandAir.h"
 
@@ -56,11 +61,20 @@ namespace
 		{ 4, "att", "SOV", 1943, 2, { 1000.0, 680.0, 1300.0, 860.0 }, 120.0, "" },
 	};
 
-	/** The recording: a 2 km field, the attacker's blocks to the south, the defender's to the north, and the strikes. */
-	std::string Recording(bool bAll, size_t Upto = 100, bool bOwnOnStrip = false)
+	/** The chutes' second field (the art director's notes, 24 November 02:26Z): an Il-2 spinning in low, its pilot out
+	 * under 60 m, and a Mustang burning, in a wind of over 4 m/s (sky.wind, 5.73 m/s east-south-east). */
+	const Strike Windy[] = {
+		{ 5, "att", "SOV", 1943, 2, { 600.0, 700.0, 600.0, 900.0 }, 60.0, "spin" },
+		{ 6, "att", "USA", 1944, 4, { 700.0, 760.0, 1100.0, 760.0 }, 90.0, "burn" },
+	};
+	constexpr double WindyX = 5.2, WindyY = -2.4;
+
+	/** The recording: a 2 km field, the attacker's blocks to the south, the defender's to the north, and the strikes
+	 * (Strikes; or List's Count, with Sky's words at its root). */
+	std::string Recording(bool bAll, size_t Upto = 100, bool bOwnOnStrip = false, const Strike* List = Strikes, size_t Count = 4, const char* Sky = "")
 	{
 		std::ostringstream R;
-		R << "{\"key\": \"air-test\", \"date\": \"July 1944\", \"field\": {\"w\": 2000, \"h\": 2000}, \"men\": [], \"views\": [";
+		R << "{\"key\": \"air-test\", \"date\": \"July 1944\", " << Sky << "\"field\": {\"w\": 2000, \"h\": 2000}, \"men\": [], \"views\": [";
 		for (int V = 0; V < 2; ++V)
 		{
 			R << (V ? "," : "") << "{\"t\": " << (V ? 100 : 0) << ", \"units\": [";
@@ -75,8 +89,9 @@ namespace
 		size_t N = 0;
 		bool bFirst = true;
 		auto Add = [&](const std::string& E) { if (N++ >= Upto) return; R << (bFirst ? "" : ",") << E; bFirst = false; };
-		for (const Strike& S : Strikes)
+		for (size_t Si = 0; Si < Count; ++Si)
 		{
+			const Strike& S = List[Si];
 			const double Len = std::hypot(S.Run[2] - S.Run[0], S.Run[3] - S.Run[1]), Secs = Len / 120.0;
 			std::ostringstream In, Sf, Lo;
 			In << "{\"t\": " << S.T << ", \"what\": \"land:air-in\", \"side\": \"" << S.Side << "\", \"text\": \"\", \"x\": " << S.Run[0] << ", \"y\": " << S.Run[1]
@@ -392,6 +407,7 @@ int main(int Argc, char** Argv)
 		B.Build(Rec, Flat, Life);
 		uint64_t H2 = 1469598103934665603ull;
 		for (double T = T0; T <= T1; T += Dt) { B.At(T, Ps, Gs); H2 = Hash(Ps, Gs, H2); }
+		std::printf("     planes hash %016llx (as before the chutes' notes: e258eaf3320235ff)\n", static_cast<unsigned long long>(H1));
 		Check(H2 == H1, "same: built twice, the same planes and guns frame for frame");
 		// (a live battle's notes come a few at a time: the first leg flown the same whatever came after)
 		LandFeed::Recording Part;
@@ -419,78 +435,181 @@ int main(int Argc, char** Argv)
 		Check(Nans == 0, "same: no NaN");
 	}
 	// ---- chutes (-TheaterLandChutes): the burning plane's and the spinning plane's pilots get out (the rules' chutes),
-	// the blown-up one's not
+	// the blown-up one's not; and the art director's notes of 24 November, 02:26Z, on them and on a second field (an
+	// Il-2's pilot out low, a Mustang's, in a wind over 4 m/s)
 	{
 		Check(S.ChutesPlanned() == 2, "chutes: a pilot out of each plane the rules say he got out of, none out of the one blown apart");
+		LandFeed::Recording WindyRec;
+		const std::string WindySky = "\"sky\": {\"wind\": [" + std::to_string(WindyX) + ", " + std::to_string(WindyY) + "]}, ";
+		LandFeed::ReadRecording(Recording(true, 100, false, Windy, 2, WindySky.c_str()), WindyRec, Err);
+		Sky S2;
+		S2.Build(WindyRec, Flat, Life);
+		struct Watched
+		{
+			double First = -1.0, OutHigh = 0.0, OpenHigh = -1.0, LandT = -1.0, MostStep = 0.0, MinSink = 1e9, MaxSink = 0.0;
+			V3 Was, FirstAt, LandAt;
+			bool bWas = false;
+			std::string Clips;
+			double FirstFromPlane = 1e9;
+			int Under = 0;
+			double HeapOff = 0.0, SlumpEnd = 0.0, EnemyAtLand = 0.0, EnemyAtEnd = 0.0;
+			// (the art director's notes: falling free, above where he left her or not half g t squared under it; his
+			// canopy full (real seconds after the first frame) and how far he had dropped by then, and by the time he
+			// was first within 1 m/s of the wind; his way through the air growing again, or off the wind's 3 s after his
+			// canopy was full; as he lands, his canopy's open share;
+			// the swap (his going over and his canopy's slump then); the clips' times; how far he was dragged and how
+			// nearly with the wind (the cosine); his run's speed; his swing's crossings and its most early and late)
+			int Rose = 0, Shallow = 0, Grew = 0, OffWind = 0, Swapped = 0, BadSwap = 0;
+			double FullT = -1.0, DropToFull = 0.0, LastRel = 1e18, OpenDown = -1.0, WithAir = -1.0, LandRel = -1.0;
+			bool bHard = false, bInMeshWas = false;
+			double FallenWas = 0.0, SwapSlump = -1.0;
+			double KneelFrom = -1.0, KneelTo = -1.0, BackFrom = -1.0, RiseT = -1.0, DragMost = 0.0, DragWay = 0.0, DragDone = -1.0;
+			double RunFrom = -1.0, RunTo = -1.0, RunDist = 0.0;
+			V3 RunStart, RunLast;
+			std::vector<double> Crossings;
+			double SwingEarly = 0.0, SwingLate = 0.0, SwingLateLeast = 1e9, LastSwing = 0.0, SwingT0 = -1.0;
+			Chute Look;
+		};
+		auto Play = [&](const Sky& Sk, const LandFeed::Recording& R, double Wx, double Wy, std::map<int, Watched>& Sn, std::ofstream* To, int Tag)
+		{
+			// (for chutes.py: the field's wind and life, and each pilot's frames under his plane's key, Tag over it)
+			if (To && To->is_open()) *To << "w " << Tag << " " << Wx << " " << Wy << " " << Life << "\n";
+			std::vector<Happen> Hc;
+			Sk.Between(0.0, 400.0, Hc);
+			std::map<int, double> Hits;
+			for (const Happen& H : Hc) if (H.Kind == Happen::What::Hit) Hits[H.Key] = H.T;
+			const double Dc = 1.0 / 60.0;
+			auto NearestEnemy = [&](const V3& At, int Side)
+			{
+				double Best = 1e18;
+				const LandFeed::View* V = R.ViewAt(200.0);
+				if (V) for (const LandFeed::Unit& U : V->Units) if (U.Side >= 0 && U.Side != Side && U.Str > 0.05) Best = std::min(Best, std::hypot(U.X - At.X, U.Y - At.Y));
+				return Best;
+			};
+			std::vector<Chute> Cs;
+			std::vector<Plane> Pl;
+			std::vector<Gunner> Gn;
+			for (double T = T0; T <= 400.0; T += Dc)
+			{
+				Sk.Chutes(T, Cs);
+				Sk.At(T, Pl, Gn);
+				for (const Chute& C : Cs)
+				{
+					if (To && To->is_open() && std::fmod(T, 0.05) < Dc)
+						*To << "c " << C.Key + Tag << " " << T << " " << C.At.X << " " << C.At.Y << " " << C.At.Z << " " << C.Open << " " << C.Swing << " " << (C.bDown ? 1 : 0) << " " << (C.Clip.empty() ? "-" : C.Clip)
+							<< " " << C.Heap.X << " " << C.Heap.Y << " " << C.Slump << " " << (C.bInMesh ? 1 : 0) << " " << C.Fallen << " " << C.Rate << " " << (C.bHard ? 1 : 0) << " " << C.Dragged
+							<< " " << C.Time << " " << C.Vel.X << " " << C.Vel.Y << " " << C.Vel.Z << "\n";
+					Watched& W = Sn[C.Key];
+					const double Over = C.At.Z - Flat(C.At.X, C.At.Y);
+					if (W.First < 0.0)
+					{
+						W.First = T;
+						W.OutHigh = Over;
+						W.FirstAt = C.At;
+						W.Look = C;
+						for (const Plane& P : Pl) if (P.Key == C.Key) W.FirstFromPlane = Length(Plus(P.At, Mul(C.At, -1.0)));
+						if (Hits.count(C.Key)) W.SwingT0 = Hits[C.Key];
+					}
+					if (!std::isfinite(C.At.X) || !std::isfinite(C.At.Z) || !std::isfinite(C.Swing) || !std::isfinite(C.Time) || !std::isfinite(C.Rate)) ++Nans;
+					W.Under += Over < -0.01;
+					if (W.bWas) W.MostStep = std::max(W.MostStep, Length(Plus(C.At, Mul(W.Was, -1.0))) / (Dc * Life));
+					W.Was = C.At;
+					W.bWas = true;
+					if (!C.bDown)
+					{
+						const double Since0 = (T - W.First) * Life;
+						// (her first note: falling free he is never above where he left her, and at least half g t squared under)
+						if (C.Open <= 0.0)
+						{
+							W.Rose += C.At.Z > W.FirstAt.Z + 1e-9;
+							W.Shallow += C.At.Z > W.FirstAt.Z - 0.5 * 9.81 * Since0 * Since0 + 1e-6;
+						}
+						// (her second: his way through the air only ever dies away, and he is with the wind 3 s after his canopy
+						// is full)
+						const double Rel = std::hypot(C.Vel.X - Wx, C.Vel.Y - Wy);
+						W.Grew += Rel > W.LastRel * (1.0 + 1e-9) + 1e-9;
+						W.LastRel = Rel;
+						if (W.WithAir < 0.0 && Rel < 1.0) W.WithAir = W.FirstAt.Z - C.At.Z;
+						if (C.Open >= 1.0 && W.FullT < 0.0) { W.FullT = Since0; W.DropToFull = W.FirstAt.Z - C.At.Z; }
+						if (W.FullT >= 0.0 && Since0 >= W.FullT + 3.0 && Over > 2.0) W.OffWind += Rel > 1.0;
+						if (C.Open >= 1.0) W.OpenHigh = W.OpenHigh < 0.0 ? Over : W.OpenHigh;
+						if (C.Open >= 1.0 && T > W.First + 8.0 / Life && Over > 3.0) { W.MinSink = std::min(W.MinSink, -C.Vel.Z); W.MaxSink = std::max(W.MaxSink, -C.Vel.Z); }
+						// (the swing: its crossings, its most in its first 2.5 s and after 25 s, and its least over each 4 s then)
+						if (W.FullT >= 0.0)
+						{
+							const double After = Since0 - W.FullT;
+							if (W.LastSwing * C.Swing < 0.0) W.Crossings.push_back(After);
+							W.LastSwing = C.Swing != 0.0 ? C.Swing : W.LastSwing;
+							if (After < 2.5) W.SwingEarly = std::max(W.SwingEarly, std::fabs(C.Swing));
+							if (After > 25.0) W.SwingLate = std::max(W.SwingLate, std::fabs(C.Swing));
+						}
+						continue;
+					}
+					if (W.LandT < 0.0)
+					{
+						W.LandT = T;
+						W.LandAt = C.Landed;
+						W.EnemyAtLand = NearestEnemy(C.At, C.Side);
+						W.HeapOff = std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y);
+						W.OpenDown = C.Open;
+						W.LandRel = W.LastRel;
+						W.bHard = C.bHard;
+						W.bInMeshWas = true;
+					}
+					const double Down = (T - W.LandT) * Life;
+					// (her third note: swapped for the crowd's man as he lies flat under his falling canopy)
+					if (W.bInMeshWas && !C.bInMesh)
+					{
+						++W.Swapped;
+						W.SwapSlump = C.Slump;
+						W.BadSwap += W.FallenWas < 0.999 || C.Slump < 0.1 || C.Slump > 0.7;
+					}
+					W.bInMeshWas = C.bInMesh;
+					W.FallenWas = C.Fallen;
+					if (C.bInMesh) continue;
+					if (W.Clips.empty() || W.Clips.substr(W.Clips.rfind(' ') + 1) != C.Clip) W.Clips += " " + C.Clip;
+					// (her fourth: dragged, then back up onto his knees, his harness worked free, up)
+					if (C.Dragged > W.DragMost)
+					{
+						W.DragMost = C.Dragged;
+						const double Dx = C.Landed.X - W.LandAt.X, Dy = C.Landed.Y - W.LandAt.Y;
+						W.DragWay = (Dx * Wx + Dy * Wy) / std::max(1e-9, std::hypot(Dx, Dy) * std::hypot(Wx, Wy));
+						W.DragDone = Down;
+					}
+					if (C.Clip == "go_prone" && C.Rate < 0.0 && W.BackFrom < 0.0) W.BackFrom = Down;
+					if (C.Clip == "go_prone" && W.RiseT < 0.0 && (C.Rate < 0.0 || C.Time < 1.9 - 1e-9) && W.KneelFrom < 0.0) W.RiseT = Down;
+					if (C.Clip == "kneel_down") { if (W.KneelFrom < 0.0) W.KneelFrom = Down; W.KneelTo = Down; }
+					if (C.Clip == "run")
+					{
+						if (W.RunFrom < 0.0) { W.RunFrom = Down; W.RunStart = C.At; }
+						W.RunTo = Down;
+						W.RunLast = C.At;
+					}
+					W.SlumpEnd = C.Slump;
+					W.EnemyAtEnd = NearestEnemy(C.At, C.Side);
+				}
+			}
+		};
+		std::map<int, Watched> Sn, Sw;
+		Play(S, Rec, 2.6, 1.2, Sn, Out.is_open() ? &Out : nullptr, 0);
+		Play(S2, WindyRec, WindyX, WindyY, Sw, Out.is_open() ? &Out : nullptr, 100);
 		std::map<int, double> HitT, CrashT;
-		std::map<int, V3> HitAt;
 		std::vector<Happen> Hc;
 		S.Between(0.0, 400.0, Hc);
-		for (const Happen& H : Hc) { if (H.Kind == Happen::What::Hit) { HitT[H.Key] = H.T; HitAt[H.Key] = H.At; } else CrashT[H.Key] = H.T; }
-		struct Seen { double First = -1.0, OutHigh = 0.0, OpenHigh = -1.0, LandT = -1.0, MostStep = 0.0, MinSink = 1e9, MaxSink = 0.0; V3 Was, FirstAt; bool bWas = false; std::string Clips; double FirstFromPlane = 1e9; int Under = 0; double HeapOff = 0.0, SlumpEnd = 0.0, EnemyAtLand = 0.0, EnemyAtEnd = 0.0; };
-		std::map<int, Seen> Sn;
-		const double Dc = 1.0 / 60.0;
-		auto NearestEnemy = [&](const V3& At, int Side)
-		{
-			double Best = 1e18;
-			const LandFeed::View* V = Rec.ViewAt(200.0);
-			if (V) for (const LandFeed::Unit& U : V->Units) if (U.Side >= 0 && U.Side != Side && U.Str > 0.05) Best = std::min(Best, std::hypot(U.X - At.X, U.Y - At.Y));
-			return Best;
-		};
-		std::vector<Chute> Cs;
-		std::vector<Plane> Pl;
-		std::vector<Gunner> Gn;
-		for (double T = T0; T <= 400.0; T += Dc)
-		{
-			S.Chutes(T, Cs);
-			S.At(T, Pl, Gn);
-			for (const Chute& C : Cs)
-			{
-				if (Out.is_open() && std::fmod(T, 0.25) < Dc) Out << "c " << C.Key << " " << T << " " << C.At.X << " " << C.At.Y << " " << C.At.Z << " " << C.Open << " " << C.Swing << " " << (C.bDown ? 1 : 0) << " " << (C.Clip.empty() ? "-" : C.Clip) << " " << C.Heap.X << " " << C.Heap.Y << " " << C.Slump << "\n";
-				Seen& W = Sn[C.Key];
-				const double Over = C.At.Z - Flat(C.At.X, C.At.Y);
-				if (W.First < 0.0)
-				{
-					W.First = T;
-					W.OutHigh = Over;
-					W.FirstAt = C.At;
-					for (const Plane& P : Pl) if (P.Key == C.Key) W.FirstFromPlane = Length(Plus(P.At, Mul(C.At, -1.0)));
-				}
-				if (!std::isfinite(C.At.X) || !std::isfinite(C.At.Z) || !std::isfinite(C.Swing) || !std::isfinite(C.Time)) ++Nans;
-				W.Under += Over < -0.01;
-				if (W.bWas) W.MostStep = std::max(W.MostStep, Length(Plus(C.At, Mul(W.Was, -1.0))) / (Dc * Life));
-				W.Was = C.At;
-				W.bWas = true;
-				if (!C.bDown)
-				{
-					if (C.Open >= 1.0 && W.OpenHigh < 0.0) W.OpenHigh = Over;
-					if (C.Open >= 1.0 && T > W.First + 8.0 / Life && Over > 3.0) { W.MinSink = std::min(W.MinSink, -C.Vel.Z); W.MaxSink = std::max(W.MaxSink, -C.Vel.Z); }
-					continue;
-				}
-				if (W.LandT < 0.0)
-				{
-					W.LandT = T;
-					W.EnemyAtLand = NearestEnemy(C.At, C.Side);
-					W.HeapOff = std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y);
-				}
-				if (W.Clips.empty() || W.Clips.substr(W.Clips.rfind(' ') + 1) != C.Clip) W.Clips += " " + C.Clip;
-				W.SlumpEnd = C.Slump;
-				W.EnemyAtEnd = NearestEnemy(C.At, C.Side);
-			}
-		}
+		for (const Happen& H : Hc) { if (H.Kind == Happen::What::Hit) HitT[H.Key] = H.T; else CrashT[H.Key] = H.T; }
 		int Bad = 0;
 		for (const auto& Pair : Sn)
 		{
-			const Seen& W = Pair.second;
+			const Watched& W = Pair.second;
 			const double HitAtT = HitT.count(Pair.first) ? HitT[Pair.first] : -1.0, CrashAtT = CrashT.count(Pair.first) ? CrashT[Pair.first] : -1.0;
 			std::printf("     pilot of plane %d: out %.2f s after the hit (%.0f m up, %.1f m from her), canopy full %.0f m up, down at %.1f m/s to %.1f, landed %.0f s after he left;%s; canopy %.1f m downwind, fallen in %.2f; %.0f m from the nearest enemy, then %.0f; step %.0f m/s, under %d\n",
 				Pair.first, (W.First - HitAtT) * Life, W.OutHigh, W.FirstFromPlane, W.OpenHigh, W.MinSink, W.MaxSink, (W.LandT - W.First) * Life, W.Clips.c_str(), W.HeapOff, W.SlumpEnd, W.EnemyAtLand, W.EnemyAtEnd, W.MostStep, W.Under);
 			const bool bOk = HitAtT >= 0.0 && W.First > HitAtT && W.First < CrashAtT && W.FirstFromPlane < 6.0 && W.OutHigh >= 30.0 && W.OpenHigh > 15.0
 				&& W.MinSink >= 4.5 && W.MaxSink <= 7.0 && W.LandT > W.First && W.Under == 0 && W.MostStep < 170.0
-				&& W.Clips == " go_prone stand_up run go_prone" && std::abs(W.HeapOff - 4.0) < 0.01 && W.SlumpEnd > 0.999 && W.EnemyAtEnd > W.EnemyAtLand + 15.0;
+				&& W.Clips == " go_prone kneel_down stand_up run go_prone" && std::abs(W.HeapOff - 4.0) < 0.01 && W.SlumpEnd > 0.999 && W.EnemyAtEnd > W.EnemyAtLand + 15.0;
 			Bad += !bOk;
 		}
-		Check(Sn.size() == 2 && Bad == 0, "chutes: out of her just after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; down, flat, up, running from the enemy, flat; his canopy fallen in 4 m downwind");
+		Check(Sn.size() == 2 && Bad == 0, "chutes: out of her just after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; down, flat, up onto his knees, his harness, up, running from the enemy, flat; his canopy fallen in 4 m downwind");
 		Sky B2;
 		B2.Build(Rec, Flat, Life);
 		bool bSameChutes = true;
@@ -504,6 +623,95 @@ int main(int Argc, char** Argv)
 		}
 		Check(bSameChutes, "chutes: the same twice");
 		Check(Nans == 0, "chutes: no NaN");
+
+		// The art director's notes (24 November, 02:26Z), on both fields' pilots.
+		std::vector<std::pair<int, const Watched*>> All;
+		for (const auto& Pair : Sn) All.emplace_back(Pair.first, &Pair.second);
+		for (const auto& Pair : Sw) All.emplace_back(100 + Pair.first, &Pair.second);
+		int Rose = 0, Shallow = 0, Grew = 0, OffWind = 0, FarOff = 0, BadSwap = 0, Swapped = 0, Low = 0, HardBad = 0, KneelBad = 0, DragBad = 0, SwingBad = 0, LookBad = 0;
+		for (const auto& Each : All)
+		{
+			const Watched& W = *Each.second;
+			const bool bWindy = Each.first >= 100, bLow = W.OutHigh < 60.0;
+			const double Lie = W.RiseT, Kneeled = W.KneelTo - W.KneelFrom, RunSpeed = W.RunTo > W.RunFrom ? std::hypot(W.RunLast.X - W.RunStart.X, W.RunLast.Y - W.RunStart.Y) / (W.RunTo - W.RunFrom) : 0.0;
+			double Period = 0.0;
+			if (W.Crossings.size() >= 5) Period = 2.0 * (W.Crossings.back() - W.Crossings.front()) / static_cast<double>(W.Crossings.size() - 1);
+			std::printf("     %s pilot of plane %d: out %.0f m up%s; free fall rose %d, under half g t^2 %d; canopy full %.1f s out, %.0f m down; with the wind %.0f m down; way grew %d, off the wind %d; landed %s (canopy %.2f open, %.1f m/s through the air); swapped %d at slump %.2f; lay %.1f s, back up from %.1f s, kneeling %.2f s; dragged %.2f m (%.2f with the wind); run %.1f m/s; swing %.2f s a swing, %.1f deg at first, %.1f late\n",
+				bWindy ? "windy:" : "calm: ", Each.first % 100, W.OutHigh, bLow ? " (low)" : "", W.Rose, W.Shallow, W.FullT, W.DropToFull, W.WithAir, W.Grew, W.OffWind, W.bHard ? "hard" : "soft", W.OpenDown, W.LandRel,
+				W.Swapped, W.SwapSlump, Lie, W.BackFrom, Kneeled, W.DragMost, W.DragWay, RunSpeed, Period, W.SwingEarly, W.SwingLate);
+			Rose += W.Rose;
+			Shallow += W.Shallow;
+			Grew += W.Grew;
+			OffWind += W.OffWind;
+			if (!bLow) FarOff += W.FullT < 0.0 || W.DropToFull < 40.0 || W.DropToFull > 75.0 || W.WithAir < 40.0 || W.WithAir > 75.0;
+			BadSwap += W.BadSwap;
+			Swapped += W.Swapped == 1;
+			KneelBad += Kneeled < 1.0 - 0.03 || Kneeled > 1.5 + 0.03 || W.BackFrom < 0.0 || W.BackFrom >= W.KneelFrom || W.Clips.find(" kneel_down stand_up ") == std::string::npos;
+			if (bLow)
+			{
+				++Low;
+				HardBad += !W.bHard || W.OpenDown >= 1.0 || W.LandRel > 8.0 || Lie < 3.0 - 0.03 || Lie > 5.0 + 0.03 || RunSpeed < 1.2 || RunSpeed > 0.7 * 4.2 || W.EnemyAtEnd < W.EnemyAtLand + 6.0;
+			}
+			else
+			{
+				HardBad += W.bHard || W.OpenDown < 1.0 || RunSpeed < 4.1;
+				Period = Period > 0.0 ? Period : -1.0;
+				SwingBad += Period < 3.8 || Period > 4.4 || W.SwingEarly > 14.5 || W.SwingEarly < 10.0 || (W.SwingLate > 0.0 && (W.SwingLate < 3.0 || W.SwingLate > 6.5));
+			}
+			DragBad += bWindy ? W.DragMost < 1.0 - 1e-6 || W.DragMost > 2.0 + 1e-6 || W.DragDone < 0.0 || W.DragDone > W.BackFrom || W.DragWay < 0.99 : W.DragMost > 0.0;
+			// (her sixth note: his canopy's look, full)
+			SilkMesh M;
+			CanopyShape(W.Look, 1.0, M);
+			double MinX = 1e9, MaxX = -1e9, MinZ = 1e9, MaxZ = -1e9, Seam = 1e9, Panel = 0.0;
+			for (size_t K = 0; K < M.Points.size(); ++K)
+			{
+				MinX = std::min(MinX, M.Points[K].X); MaxX = std::max(MaxX, M.Points[K].X);
+				MinZ = std::min(MinZ, M.Points[K].Z); MaxZ = std::max(MaxZ, M.Points[K].Z);
+				Seam = std::min(Seam, M.Colours[K * 3 + 1]);
+				Panel = std::max(Panel, M.Colours[K * 3 + 1]);
+			}
+			int Up = 0, DownFacing = 0;
+			for (const V3& O : M.Outward) { Up += O.Z > 0.2; DownFacing += O.Z < -0.2; }
+			// (its lines' ends: one at each seam, on its skirt, its lowest)
+			double SeamLow = -1e9;
+			for (const int K : M.Seams) SeamLow = std::max(SeamLow, M.Points[static_cast<size_t>(K)].Z);
+			const double Across = MaxX - MinX, Deep = MaxZ - MinZ, Warm = W.Look.Silk[0] / 0.86 - 1.0, Cool = 1.0 - W.Look.Silk[2] / 0.80;
+			std::printf("        his canopy: %.2f m across, %.2f deep, %d gores (%zu points, %zu triangles, %d facing up and %d down), seams %.0f%% darker, silk %.3f %.3f %.3f\n",
+				Across, Deep, W.Look.Gores, M.Points.size(), M.Triangles.size() / 3, Up, DownFacing, (1.0 - Seam / Panel) * 100.0, W.Look.Silk[0], W.Look.Silk[1], W.Look.Silk[2]);
+			LookBad += Across < 4.9 || Across > 5.6 || Deep < 0.42 * Across || Deep > 0.55 * Across || W.Look.Gores < 24 || W.Look.Gores > 28 || W.Look.Gores % 2
+				|| (1.0 - Seam / Panel) < 0.05 || (1.0 - Seam / Panel) > 0.2 || std::fabs(Warm) > 0.0401 || std::fabs(Cool) > 0.0401 || W.Look.Silk[1] != 0.85
+				|| static_cast<int>(M.Triangles.size() / 3) != static_cast<int>(M.Outward.size()) || Up < 100 || DownFacing < 100
+				|| static_cast<int>(M.Seams.size()) != W.Look.Gores || SeamLow > MinZ + 1e-9;
+		}
+		Check(Rose == 0 && Shallow == 0, "chutes: falling free he is never above where he left her, and at least half g t squared under it (the art director's first note)");
+		Check(FarOff == 0 && Grew == 0 && OffWind == 0, "chutes: about 50 m down before his canopy is full and the wind takes him (within 1 m/s of it; 40 to 75 m), his way through the air only dying away (the wind no push from rest), and with the wind still 3 s after his canopy is full (her second)");
+		Check(BadSwap == 0 && Swapped == static_cast<int>(All.size()), "chutes: drawn in his chute's mesh until he lies flat under his falling canopy, then the crowd's man (her third)");
+		Check(KneelBad == 0, "chutes: up onto his knees (go_prone played back), his harness worked free kneeling 1 to 1.5 s (kneel_down's last pose), then stand_up (her fourth)");
+		Check(DragBad == 0, "chutes: in a wind over 4 m/s his canopy drags him 1 to 2 m before he gets up; in a lighter one not at all (her fourth)");
+		Check(Low >= 1 && HardBad == 0, "chutes: out under 60 m his canopy is still filling as he lands, hard (but its way spent: 8 m/s through the air at most); he lies 3 to 5 s and limps off slower; the rest land soft and run (her fifth)");
+		Check(SwingBad == 0, "chutes: his swing about 4 s a swing, from 14 degrees settling to about 5 and never dead still (her answers)");
+		Check(LookBad == 0, "chutes: his canopy a dome 5 to 5.5 m across and about half as deep, on 24 to 28 gores with faint darker seams, a line at each, both its faces; its silk her off-white within 4% (her sixth)");
+		// (the glow: looking up into it a little, against the sun most, the sun behind the eye or under the field none)
+		const double Below = Glow({ 0.0, 0.0, 0.0 }, { 0.0, 100.0, 100.0 }, { 0.0, -0.6, 0.8 }), Against = Glow({ 0.0, 0.0, 0.0 }, { 0.0, 60.0, 80.0 }, { 0.0, 0.6, 0.8 });
+		const double Behind = Glow({ 0.0, 0.0, 300.0 }, { 0.0, 100.0, 100.0 }, { 0.0, -0.6, 0.8 }), Night = Glow({ 0.0, 0.0, 0.0 }, { 0.0, 60.0, 80.0 }, { 0.0, 0.6, -0.1 });
+		std::printf("     glow: seen from under it %.2f, against the sun %.2f, the sun behind the eye %.2f, at night %.2f\n", Below, Against, Behind, Night);
+		Check(Below > 0.05 && Below < 0.3 && Against > 0.8 && Behind < 1e-9 && Night == 0.0, "chutes: his canopy glows against the sun, a little seen from under it, not with the sun behind the eye nor at night (her sixth)");
+		if (Out.is_open())
+		{
+			// (his canopy for chutes.py's look: the first pilot's, full, and on the field fallen half in)
+			std::ofstream Silk(std::string(Argv[1]) + "/chute_silk.txt");
+			const Watched& W = Sn.begin()->second;
+			for (int Which = 0; Which < 2; ++Which)
+			{
+				SilkMesh M;
+				if (Which == 0) CanopyShape(W.Look, 1.0, M);
+				else HeapShape(W.Look, 1.0, 4.0, M);
+				Silk << "mesh " << Which << " " << W.Look.Gores << "\n";
+				for (size_t K = 0; K < M.Points.size(); ++K)
+					Silk << "p " << M.Points[K].X << " " << M.Points[K].Y << " " << M.Points[K].Z << " " << M.Facings[K].X << " " << M.Facings[K].Y << " " << M.Facings[K].Z << " " << M.Colours[K * 3] << " " << M.Colours[K * 3 + 1] << " " << M.Colours[K * 3 + 2] << "\n";
+				for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3) Silk << "t " << M.Triangles[K] << " " << M.Triangles[K + 1] << " " << M.Triangles[K + 2] << "\n";
+			}
+		}
 	}
 	std::printf("land_air_test: %s\n", Failed ? "FAILED" : "all passed");
 	return Failed ? 1 : 0;

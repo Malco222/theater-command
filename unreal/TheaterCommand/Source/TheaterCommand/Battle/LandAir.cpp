@@ -20,10 +20,22 @@ namespace LandAir
 		// how far they reach (metres), and their tracers' speed (the kit's tracer.speed_mps).
 		constexpr double PostsWithin = 800.0, Reach = 900.0, TracerMps = 760.0;
 		constexpr int PostBlocks = 4, PostGuns = 2;
-		// A downed pilot (-TheaterLandChutes): his army's infantry clips' lengths (go_prone, stand_up) and the run's
-		// stride (metres a loop of run, its loop's seconds), his canopy's blossoming (seconds), and how far his lines hold
-		// it over his harness (metres).
-		constexpr double ProneS = 1.9, StandS = 0.6, RunStride = 2.451, RunLoop = 0.8, BlossomS = 1.0;
+		// A downed pilot (-TheaterLandChutes): his army's infantry clips' lengths (go_prone, stand_up, kneel_down) and the
+		// run's stride (metres a loop of run, its loop's seconds); go_prone's time where, played back, he is up on his
+		// knees.
+		constexpr double ProneS = 1.9, StandS = 0.6, KneelS = 0.5, RunStride = 2.451, RunLoop = 0.8, KneeT = 0.95;
+		// The art director's notes on them (24 November, 02:26Z): out under LowExit (metres over the ground) he pulls
+		// at once and lands before his canopy has filled; else it fills over 45 to 50 m of his fall from his pull. His
+		// way through the air dies away as a falling man's does (BodyDrag, a metre's: g over the square of the 55 m/s a
+		// man falls at), and at once as his canopy fills (its drag as it holds him up, his sink's, and CanopyHolds, a
+		// second's at full, so that its last few metres a second go too). A man 4.1 m under his canopy swings about 4 s
+		// a swing (SwingS), from 14 degrees to a gentle 5, settling over SwingSettle (seconds). A wind over DragWind
+		// (metres a second) drags him on the ground. A heavy man (one in five) comes down at 6 to 7 m/s.
+		constexpr double LowExit = 60.0, FillLeast = 45.0, FillMost = 50.0, BodyDrag = 9.81 / (55.0 * 55.0), CanopyHolds = 2.0;
+		constexpr double SwingS = 4.1, SwingFirst = 14.0, SwingLast = 5.0, SwingSettle = 7.0, DragWind = 4.0, HeavyShare = 0.2;
+		// After a hard landing he limps: his run clip at this share of its pace, hurried off his hurt leg by Hitch (a
+		// share of the loop's pace either way), and only so far as this share of a sound man's run.
+		constexpr double LimpPace = 0.65, Hitch = 0.45, LimpFar = 0.6;
 
 		struct Dice
 		{
@@ -228,7 +240,9 @@ namespace LandAir
 				const V3 Wind = Rec.Weather.bWind ? V3{ Rec.Weather.WindX, Rec.Weather.WindY, 0.0 } : V3{ 2.6, 1.2, 0.0 };
 				PlanChute(*P, Slot, Wind);
 				Down& D = P->Falls[static_cast<size_t>(Slot)];
-				// (down, he runs from the nearest enemy block as he lands: the other side's, by the view then)
+				// (down, he runs from the nearest enemy block from where he gets up: the other side's, by the view as he
+				// landed)
+				const V3 UpAt = D.DragTo;
 				const LandFeed::View* V = Rec.ViewAt(P->Tin + D.Landed / Life);
 				double Best = 1e18, Ex = 0.0, Ey = 0.0;
 				if (V)
@@ -236,16 +250,19 @@ namespace LandAir
 					for (const LandFeed::Unit& U : V->Units)
 					{
 						if (U.Side < 0 || U.Side == P->Side || U.Str <= 0.05) continue;
-						const double Dd = std::hypot(U.X - D.LandAt.X, U.Y - D.LandAt.Y);
+						const double Dd = std::hypot(U.X - UpAt.X, U.Y - UpAt.Y);
 						if (Dd < Best) { Best = Dd; Ex = U.X; Ey = U.Y; }
 					}
 				}
-				D.RunHeading = Best < 1e17 && Best > 1.0 ? std::atan2(D.LandAt.X - Ex, D.LandAt.Y - Ey) / Rad : D.Face;
+				D.RunHeading = Best < 1e17 && Best > 1.0 ? std::atan2(UpAt.X - Ex, UpAt.Y - Ey) / Rad : D.Face;
 				Dice Dr(static_cast<uint64_t>(P->Flight) * 92821ull + static_cast<uint64_t>(Slot) * 7193ull + 0xC47E0ull);
 				const double Far = Dr.U(20.0, 40.0), Speed = Dr.U(4.2, 5.0);
-				D.RunTo = Plus(D.LandAt, Times(Ahead(D.RunHeading), Far));
+				// (after a hard landing he limps, on his run clip slowed: not so far, his feet keeping to its stride, and
+				// ending on a half loop, where its hitch has caught up)
+				const double Goes = D.bLimp ? std::max(0.5, std::round(2.0 * Far * LimpFar / RunStride) * 0.5) * RunStride : Far;
+				D.RunTo = Plus(UpAt, Times(Ahead(D.RunHeading), Goes));
 				D.RunTo.Z = GroundZ(D.RunTo.X, D.RunTo.Y);
-				D.RunS = Far / Speed;
+				D.RunS = D.bLimp ? Goes / (D.Pace * RunStride / RunLoop) : Far / Speed;
 			}
 		}
 		// The ground's guns: the other side's blocks nearest the run's middle as the leg comes, two guns a block, each
@@ -527,29 +544,62 @@ namespace LandAir
 		D.bChute = true;
 		D.Out = Leave;
 		D.Drop.clear();
-		// Free a second or so (pulling at once when under 70 m), his way off her dying fast; then his canopy blossoms
-		// over BlossomS and he comes down at 5 to 6.5 m/s, drifting with the wind.
-		const double Delay = Dc.U(1.0, 1.6), Sink = Dc.U(5.0, 6.5), Dt = 1.0 / 30.0;
-		const V3 Drift = Times(Wind, 0.95);
-		double Deploy = -1.0, T = 0.0, Heading = std::atan2(Vel.X, Vel.Y) / Rad;
+		// (the draws as they were and in their order: how long he falls free, how fast he comes down; how long he lies is
+		// drawn after his way down)
+		const double Delay = Dc.U(1.0, 1.6), Sink0 = Dc.U(5.0, 6.5), Dt = 1.0 / 30.0;
+		// The art director's notes (24 November, 02:26Z), on dice of their own so that the rest is drawn as it was: one
+		// man in five heavy (6 to 7 m/s); his silk a little warmer or cooler; his canopy's gores and its size in the air;
+		// how far it takes to fill from his pull (out too low, how far under the ground it would have); how long he works
+		// at his harness; how far a wind drags him, and how fast; which way his swing starts.
+		Dice Dn(static_cast<uint64_t>(P.Flight) * 49157ull + static_cast<uint64_t>(Slot) * 6151ull + 0xC47E3ull);
+		const bool bHeavy = Dn.U() < HeavyShare;
+		const double Warm = Dn.U(-1.0, 1.0);
+		D.Gores = 24 + 2 * std::min(2, static_cast<int>(Dn.U() * 3.0));
+		D.Across = Dn.U(5.0, 5.5);
+		D.Deep = D.Across * Dn.U(0.46, 0.5);
+		const double FillAt = Dn.U(FillLeast, FillMost), Past = Dn.U(6.0, 14.0);
+		D.ReleaseS = Dn.U(1.0, 1.5);
+		const double DragM = Dn.U(1.0, 2.0), DragMps = Dn.U(1.0, 1.5);
+		D.SwingSide = Dn.U() < 0.5 ? -1.0 : 1.0;
+		const double Sink = bHeavy ? 6.0 + (Sink0 - 5.0) / 1.5 : Sink0;
+		// (her off-white for every nation, aircrew's silk: about 4% warmer or cooler a chute)
+		D.Silk[0] = 0.86 * (1.0 + 0.04 * Warm);
+		D.Silk[1] = 0.85;
+		D.Silk[2] = 0.80 * (1.0 - 0.04 * Warm);
+		// He leaves her with her way across but none of her climb: a man never goes up out of a plane unless she is
+		// zooming, and these are going down (her first note). Falling free nothing holds him up (his own drag is a few
+		// per cent at these speeds), so he is at least half g t squared under where he left her. His way through the air
+		// (across: her way, less the wind's) dies away as a falling man's does, toward the wind's, which he is in from the
+		// first (her second: the wind is not a push that builds from rest), and at once as his canopy fills. He pulls
+		// after Delay, or sooner once he has fallen as far as a man from rest falls in it (out of a plane already going
+		// down fast), and his canopy fills over FillAt of his fall from there, its hold growing as its mouth does: so that
+		// he drops about 50 m before the wind takes him (his way spent, he is within 1 m/s of it).
+		// Out under LowExit he pulls at once, and it would fill only Past metres under the ground: he lands before it has.
+		const double Have = At.Z - GroundZ(At.X, At.Y);
+		const bool bLow = Have < LowExit;
+		const double Pull = bLow ? 0.3 : Delay, Fill = bLow ? Have + Past : FillAt;
+		Vel.Z = std::min(Vel.Z, 0.0);
+		double T = 0.0, Heading = std::atan2(Vel.X, Vel.Y) / Rad, PullZ = 0.0, Open = 0.0;
+		bool bPulled = false;
 		V3 Pos = At;
 		D.Opened = -1.0;
 		while (T < 400.0)
 		{
-			const double G = GroundZ(Pos.X, Pos.Y);
-			if (Deploy < 0.0 && (T >= Delay || Pos.Z - G < 70.0)) Deploy = T;
-			const double Open = Deploy < 0.0 ? 0.0 : std::clamp((T - Deploy) / BlossomS, 0.0, 1.0);
-			if (Open >= 1.0 && D.Opened < 0.0) D.Opened = D.Out + T;
-			if (Open <= 0.0)
+			if (!bPulled && (T >= Pull - 1e-9 || At.Z - Pos.Z >= 4.905 * Pull * Pull))
 			{
-				Vel.X *= std::exp(-Dt / 1.5);
-				Vel.Y *= std::exp(-Dt / 1.5);
-				Vel.Z = std::max(Vel.Z - 9.81 * Dt, -50.0);
+				bPulled = true;
+				PullZ = Pos.Z;
 			}
-			else
+			Open = bPulled ? std::clamp((PullZ - Pos.Z) / Fill, 0.0, 1.0) : 0.0;
+			if (Open >= 1.0 && D.Opened < 0.0) D.Opened = D.Out + T;
+			const double Rx = Vel.X - Wind.X, Ry = Vel.Y - Wind.Y;
+			const double Keep = std::exp(-((BodyDrag + 9.81 * Open * Open / (Sink * Sink)) * std::hypot(Rx, Ry) + CanopyHolds * Open * Open) * Dt);
+			Vel.X = Wind.X + Rx * Keep;
+			Vel.Y = Wind.Y + Ry * Keep;
+			for (int K = 0; K < 4; ++K)
 			{
-				const double K = std::min(1.0, Dt * 3.0 * Open);
-				Vel = Plus(Vel, Times(Plus(V3{ Drift.X, Drift.Y, -Sink }, Times(Vel, -1.0)), K));
+				const double Hold = 9.81 * Vel.Z * Vel.Z * Open * Open / (Sink * Sink);
+				Vel.Z = std::min(0.0, std::max(Vel.Z + (Hold - 9.81) * Dt * 0.25, -55.0));
 			}
 			if (Vel.X * Vel.X + Vel.Y * Vel.Y > 0.04) Heading = std::atan2(Vel.X, Vel.Y) / Rad;
 			D.Drop.push_back({ D.Out + T, Pos, Heading, Open, 0.0 });
@@ -559,6 +609,7 @@ namespace LandAir
 			if (Pos.Z <= Gn)
 			{
 				Pos.Z = Gn;
+				Open = bPulled ? std::clamp((PullZ - Pos.Z) / Fill, 0.0, 1.0) : 0.0;
 				D.Drop.push_back({ D.Out + T, Pos, Heading, Open, 0.0 });
 				break;
 			}
@@ -568,10 +619,28 @@ namespace LandAir
 		D.LandAt = Pos;
 		D.Face = Heading;
 		D.Lie = Dc.U(1.5, 3.5);
+		D.OpenDown = Open;
+		D.bHard = Open < 1.0;
 		// (his canopy falls in downwind of him, its lines run out: about 4 m off, the way the wind goes, or his own)
 		const double Wh = Wind.X * Wind.X + Wind.Y * Wind.Y > 0.04 ? std::atan2(Wind.X, Wind.Y) / Rad : Heading;
 		D.Heap = Plus(Pos, Times(Ahead(Wh), 4.0));
 		D.Heap.Z = GroundZ(D.Heap.X, D.Heap.Y);
+		// Down, real seconds from his landing. He goes over flat (sooner after a hard landing), and the scene swaps him
+		// for the crowd's man as he lies under his falling canopy (her third note: so that nobody sees him pop). In a wind
+		// over DragWind his canopy drags him a metre or two downwind (her fourth). He lies a moment, as he did (after a
+		// hard landing 3 to 5 s: her fifth), gets up onto his knees (go_prone played back, slower after a hard landing)
+		// and works his harness free, kneeling, his hands at his chest, for 1 to 1.5 s before he stands; after a hard
+		// landing he limps.
+		D.FallS = D.bHard ? 0.35 : 0.5;
+		D.SwapS = D.FallS + 0.4;
+		const bool bDrag = std::hypot(Wind.X, Wind.Y) > DragWind;
+		D.DragS = bDrag ? DragM / DragMps : 0.0;
+		D.DragTo = bDrag ? Plus(Pos, Times(Ahead(Wh), DragM)) : Pos;
+		D.DragTo.Z = GroundZ(D.DragTo.X, D.DragTo.Y);
+		D.Rise = D.bHard ? D.Lie + 1.5 : std::max(D.FallS + D.Lie, D.SwapS + D.DragS + 0.4);
+		D.UpS = D.bHard ? 1.4 : 1.0;
+		D.bLimp = D.bHard;
+		D.Pace = D.bLimp ? LimpPace : 1.0;
 	}
 
 	size_t Sky::ChutesPlanned() const
@@ -602,6 +671,11 @@ namespace LandAir
 				C.Landed = D.LandAt;
 				C.Heap = D.Heap;
 				C.HeapHeading = std::atan2(D.Heap.X - D.LandAt.X, D.Heap.Y - D.LandAt.Y) / Rad;
+				for (int K = 0; K < 3; ++K) C.Silk[K] = D.Silk[K];
+				C.Gores = D.Gores;
+				C.Across = D.Across;
+				C.Deep = D.Deep;
+				C.bHard = D.bHard;
 				if (Tau < D.Landed)
 				{
 					auto It = std::upper_bound(D.Drop.begin(), D.Drop.end(), Tau, [](double Tm, const Sample& S) { return Tm < S.T; });
@@ -612,29 +686,63 @@ namespace LandAir
 					C.Vel = Times(Plus(B.At, Times(A.At, -1.0)), 1.0 / std::max(1e-3, B.T - A.T));
 					C.Open = A.Pitch + (B.Pitch - A.Pitch) * K;
 					C.Heading = A.Heading;
-					// (his swing under it once it is full: a long pendulum, about 3.2 s a swing, dying away)
+					// (his swing under it once it is full: a long pendulum, about 4 s a swing for a man 4.1 m under it, from
+					// 14 degrees settling to a gentle 5 that never quite dies, the air moving him: the art director)
 					const double Since = Tau - D.Opened;
-					C.Swing = Since > 0.0 ? 14.0 * std::exp(-Since / 6.0) * std::sin(2.0 * Pi * Since / 3.2) : 0.0;
+					const double Most = SwingLast * (1.0 + 0.2 * std::sin(2.0 * Pi * Since / 17.0)) + (SwingFirst - SwingLast) * std::exp(-Since / SwingSettle);
+					C.Swing = Since > 0.0 ? D.SwingSide * Most * std::sin(2.0 * Pi * Since / SwingS) : 0.0;
 					Out.push_back(C);
 					continue;
 				}
-				// Down: flat as he lands, lying a moment, up, running from the enemy, flat again where he goes to ground.
+				// Down: over flat as he lands, in his chute's mesh, and swapped for the crowd's man as he lies under his
+				// falling canopy; dragged with it in a wind; lying a moment; up onto his knees, his harness worked free,
+				// up, running from the enemy (limping after a hard landing), flat again where he goes to ground.
 				C.bDown = true;
-				C.Open = 1.0;
+				C.Open = D.OpenDown;
 				C.Slump = Smooth((Tau - D.Landed) / 2.5);
 				const double S = Tau - D.Landed;
-				const double Up = ProneS + D.Lie, Off = Up + StandS, Gone = Off + D.RunS;
-				C.At = D.LandAt;
+				const double Kneel = D.Rise + D.UpS, Up = Kneel + D.ReleaseS, Off = Up + StandS, Gone = Off + D.RunS;
+				const double Drag = D.DragS > 0.0 ? Smooth((S - D.SwapS) / D.DragS) : 0.0;
+				const V3 Lies = Plus(D.LandAt, Times(Plus(D.DragTo, Times(D.LandAt, -1.0)), Drag));
+				C.Dragged = std::hypot(Lies.X - D.LandAt.X, Lies.Y - D.LandAt.Y);
+				C.Landed = { Lies.X, Lies.Y, GroundAt ? GroundAt(Lies.X, Lies.Y) : Lies.Z };
+				C.Heap = Plus(C.Landed, Plus(D.Heap, Times(D.LandAt, -1.0)));
+				C.Heap.Z = GroundAt ? GroundAt(C.Heap.X, C.Heap.Y) : D.Heap.Z;
+				C.At = C.Landed;
 				C.Heading = D.Face;
-				if (S < Up)
+				C.Rate = 0.0;
+				C.bInMesh = S < D.SwapS;
+				C.Fallen = Smooth(S / D.FallS);
+				if (C.bInMesh)
+				{
+					Out.push_back(C);
+					continue;
+				}
+				const V3 UpAt = D.DragTo;
+				if (S < D.Rise)
 				{
 					C.Clip = "go_prone";
-					C.Time = std::min(S, ProneS);
+					C.Time = ProneS;
+				}
+				else if (S < Kneel)
+				{
+					// (up onto his knees: go_prone played back from lying to where he is on them)
+					C.Clip = "go_prone";
+					C.Rate = -(ProneS - KneeT) / D.UpS;
+					C.Time = ProneS + C.Rate * (S - D.Rise);
+				}
+				else if (S < Up)
+				{
+					// (his harness worked free, kneeling, his hands at his chest: kneel_down's last pose, which is stand_up's
+					// first, so that he rises from it without a slide)
+					C.Clip = "kneel_down";
+					C.Time = KneelS;
 				}
 				else if (S < Off)
 				{
 					C.Clip = "stand_up";
 					C.Time = S - Up;
+					C.Rate = 1.0;
 					// (turning to the way he will run as he gets up)
 					double Turn = std::fmod(D.RunHeading - D.Face, 360.0);
 					if (Turn > 180.0) Turn -= 360.0;
@@ -643,25 +751,192 @@ namespace LandAir
 				}
 				else if (S < Gone)
 				{
-					const double K = (S - Off) / std::max(1e-3, D.RunS);
-					const double Far = Length(Plus(D.RunTo, Times(D.LandAt, -1.0)));
+					const V3 Way = Plus(D.RunTo, Times(UpAt, -1.0));
+					const double Far = Length(Way);
+					double Along = 0.0, Speed = 0.0;
 					C.Clip = "run";
-					C.Time = std::fmod(K * Far / RunStride * RunLoop, RunLoop);
-					C.At = Plus(D.LandAt, Times(Plus(D.RunTo, Times(D.LandAt, -1.0)), K));
+					if (D.bLimp)
+					{
+						// (limping: his run clip at a share of its pace, hurried off his hurt leg (the right, whose foot is down
+						// at the loop's start) and lingering on his good one, his feet keeping to its stride)
+						const double Loops = (S - Off) * D.Pace / RunLoop, Whole = std::floor(Loops), F = Loops - Whole;
+						const double Warped = F + Hitch / (2.0 * Pi) * std::sin(2.0 * Pi * F), Ends = std::max(0.5, D.RunS * D.Pace / RunLoop);
+						Along = std::min(1.0, (Whole + Warped) / Ends);
+						C.Rate = D.Pace * (1.0 + Hitch * std::cos(2.0 * Pi * F));
+						C.Time = Warped * RunLoop;
+						Speed = Far / Ends * C.Rate / RunLoop;
+					}
+					else
+					{
+						Along = (S - Off) / std::max(1e-3, D.RunS);
+						C.Time = std::fmod(Along * Far / RunStride * RunLoop, RunLoop);
+						C.Rate = Far / RunStride * RunLoop / std::max(1e-3, D.RunS);
+						Speed = Far / std::max(1e-3, D.RunS);
+					}
+					C.At = Plus(UpAt, Times(Way, Along));
 					C.At.Z = GroundAt ? GroundAt(C.At.X, C.At.Y) : D.RunTo.Z;
 					C.Heading = D.RunHeading;
-					C.Vel = Times(Plus(D.RunTo, Times(D.LandAt, -1.0)), 1.0 / std::max(1e-3, D.RunS));
+					C.Vel = Times(Ahead(D.RunHeading), Speed);
 				}
 				else
 				{
 					C.Clip = "go_prone";
 					C.Time = std::min(S - Gone, ProneS);
+					C.Rate = S - Gone < ProneS ? 1.0 : 0.0;
 					C.At = D.RunTo;
 					C.Heading = D.RunHeading;
 				}
 				Out.push_back(C);
 			}
 		}
+	}
+
+	void SilkMesh::Clear()
+	{
+		Points.clear();
+		Facings.clear();
+		Colours.clear();
+		Triangles.clear();
+		Outward.clear();
+		Seams.clear();
+	}
+
+	namespace
+	{
+		/** A canopy's radius and depth as it fills (Open 0, a streamer of silk 2.6 m long; 1, full), and how far under
+		 * the mesh's origin its skirt is (its lines not yet taut while it is a streamer). */
+		void Filling(const Chute& C, double Open, double& Radius, double& Deep, double& Under)
+		{
+			const double K = Smooth(Open / 0.3), O = std::clamp(Open, 0.0, 1.0);
+			Radius = C.Across * 0.5 * (0.06 + 0.94 * std::pow(O, 1.4));
+			Deep = 2.6 + (C.Deep - 2.6) * K;
+			Under = (LinesLong - 0.8) * (1.0 - K);
+		}
+
+		/** How far out a dome's widest is, its gores' billow and all, for a radius of 1 (so that a canopy's across is
+		 * the art director's across at its widest, not its seams'). */
+		double Widest()
+		{
+			return std::cos(0.1) * (1.0 + 0.035 * std::cos(0.1));
+		}
+
+		/** A number from 0 to 1 for a point of a heap's rumple, the same each time it is built. */
+		double Crumple(int Ring, int Column)
+		{
+			uint64_t Z = (static_cast<uint64_t>(Ring) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(Column) * 0xC2B2AE3D27D4EB4Full);
+			Z = (Z ^ (Z >> 30)) * 0xBF58476D1CE4E5B9ull;
+			Z = (Z ^ (Z >> 27)) * 0x94D049BB133111EBull;
+			return static_cast<double>((Z ^ (Z >> 31)) >> 11) * (1.0 / 9007199254740992.0);
+		}
+
+		/**
+		 * A dome of silk on its gores (the art director's sixth note: 24 to 28 panels, their seams faint): its skirt's
+		 * middle at Base, Rx along x and Ry across (radii at its widest), Deep from its skirt to its crown, its skirt
+		 * drawn in a little under its widest. Each gore billows out a little between its seams, which are faint darker
+		 * lines (the silk doubled there, which is what shows most against the sun), its hem a little darker too. Rumple
+		 * (metres) crumples it, silk lying on the field. Both its faces, each facing out of the silk on its own side.
+		 */
+		void Dome(SilkMesh& Out, const V3& Base, double Rx, double Ry, double Deep, double Rumple, int Gores, const double Silk[3])
+		{
+			static const double Rings[] = { -0.18, 0.1, 0.4, 0.7, 0.98, 1.22, 1.42 };
+			constexpr int Ringed = 7;
+			const int Cols = std::max(8, Gores) * 4;
+			const double Lift = std::sin(0.18), Dz = std::max(0.05, Deep) / (1.0 + Lift), Ax = std::max(0.02, Rx), Ay = std::max(0.02, Ry);
+			for (int Side = 0; Side < 2; ++Side)
+			{
+				const int First = static_cast<int>(Out.Points.size());
+				const double Way = Side == 0 ? 1.0 : -1.0;
+				for (int R = 0; R < Ringed; ++R)
+				{
+					const double Phi = Rings[R];
+					for (int Col = 0; Col < Cols; ++Col)
+					{
+						// (four to a gore: its seam, beside it, its middle, beside the next)
+						const int Q = Col % 4;
+						const double Theta = 2.0 * Pi * (Col / 4 + (Q == 0 ? 0.0 : Q == 1 ? 0.2 : Q == 2 ? 0.5 : 0.8)) / (Cols / 4);
+						const double Billow = (Q == 2 ? 0.035 : Q == 0 ? 0.0 : 0.02) * std::cos(Phi);
+						const double Out1 = std::cos(Phi) * (1.0 + Billow) * (R == 0 ? 0.97 : 1.0) / Widest();
+						V3 At{ Base.X + Ax * Out1 * std::cos(Theta), Base.Y + Ay * Out1 * std::sin(Theta), Base.Z + Dz * (std::sin(Phi) + Lift) };
+						if (Rumple > 0.0)
+						{
+							At.Z += Rumple * Crumple(R, Col);
+							At.X += Rumple * 0.6 * (Crumple(R + 17, Col) - 0.5);
+							At.Y += Rumple * 0.6 * (Crumple(R + 31, Col) - 0.5);
+						}
+						V3 N{ std::cos(Phi) * std::cos(Theta) / Ax, std::cos(Phi) * std::sin(Theta) / Ay, std::sin(Phi) / Dz };
+						N = Times(N, Way / std::max(1e-9, Length(N)));
+						const double Shade = (Q == 0 ? 0.88 : 1.0) * (R == 0 ? 0.93 : 1.0);
+						if (Side == 0 && R == 0 && Q == 0) Out.Seams.push_back(static_cast<int>(Out.Points.size()));
+						Out.Points.push_back(At);
+						Out.Facings.push_back(N);
+						for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K] * Shade);
+					}
+				}
+				const int Crown = static_cast<int>(Out.Points.size());
+				Out.Points.push_back({ Base.X, Base.Y, Base.Z + Dz * (1.0 + Lift) + (Rumple > 0.0 ? Rumple * 0.5 : 0.0) });
+				Out.Facings.push_back({ 0.0, 0.0, Way });
+				for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K]);
+				auto Facing = [&Out](int A, int B, int C2)
+				{
+					const V3 Sum = Plus(Plus(Out.Facings[static_cast<size_t>(A)], Out.Facings[static_cast<size_t>(B)]), Out.Facings[static_cast<size_t>(C2)]);
+					return Times(Sum, 1.0 / std::max(1e-9, Length(Sum)));
+				};
+				auto Tri = [&Out, &Facing](int A, int B, int C2)
+				{
+					Out.Triangles.insert(Out.Triangles.end(), { A, B, C2 });
+					Out.Outward.push_back(Facing(A, B, C2));
+				};
+				for (int R = 0; R + 1 < Ringed; ++R)
+				{
+					for (int Col = 0; Col < Cols; ++Col)
+					{
+						const int A = First + R * Cols + Col, B = First + R * Cols + (Col + 1) % Cols;
+						Tri(A, B, B + Cols);
+						Tri(A, B + Cols, A + Cols);
+					}
+				}
+				for (int Col = 0; Col < Cols; ++Col)
+				{
+					Tri(First + (Ringed - 1) * Cols + Col, First + (Ringed - 1) * Cols + (Col + 1) % Cols, Crown);
+				}
+			}
+		}
+	}
+
+	void CanopyShape(const Chute& C, double Open, SilkMesh& Out)
+	{
+		Out.Clear();
+		double Radius = 0.0, Deep = 0.0, Under = 0.0;
+		Filling(C, Open, Radius, Deep, Under);
+		Dome(Out, { 0.0, 0.0, -Under }, Radius, Radius, Deep, 0.0, C.Gores, C.Silk);
+	}
+
+	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out)
+	{
+		Out.Clear();
+		// (from as it was as he landed, over him on its lines, falling in downwind: spread out long the way it falls,
+		// its 7 m of silk lying in a low crumpled heap Off metres off)
+		const double K = std::clamp(Slump, 0.0, 1.0);
+		double Radius = 0.0, Deep = 0.0, Under = 0.0;
+		Filling(C, C.Open, Radius, Deep, Under);
+		const V3 Base{ Off * K, 0.0, (LinesLong + HangFeet - Under) * (1.0 - K) };
+		const double Lying = std::max(Radius, C.Across * 0.5);
+		const double Rx = Radius + (Lying * 1.35 - Radius) * K, Ry = Radius + (Lying * 0.7 - Radius) * K;
+		Dome(Out, Base, Rx, Ry, Deep * (1.0 - K) + 0.35 * K, 0.25 * K, C.Gores, C.Silk);
+	}
+
+	double Glow(const V3& Eye, const V3& Canopy, const V3& TowardSun)
+	{
+		const V3 Look = Plus(Canopy, Times(Eye, -1.0));
+		const double Far = Length(Look), SunLong = Length(TowardSun);
+		if (Far < 1e-9 || SunLong < 1e-9) return 0.0;
+		const V3 Way = Times(Look, 1.0 / Far), Sun = Times(TowardSun, 1.0 / SunLong);
+		if (Sun.Z <= 0.0) return 0.0;
+		// (a low sun's light fades in; looking up into it, a little always; against the sun, most)
+		const double Day = std::clamp(Sun.Z / 0.1, 0.0, 1.0);
+		const double Against = Way.X * Sun.X + Way.Y * Sun.Y + Way.Z * Sun.Z;
+		const double Under = std::clamp(Way.Z * 2.0, 0.0, 1.0);
+		return Day * (0.15 * Under + 0.75 * Smooth((Against - 0.3) / 0.65));
 	}
 
 	void Sky::At(double T, std::vector<Plane>& OutPlanes, std::vector<Gunner>& OutGuns) const

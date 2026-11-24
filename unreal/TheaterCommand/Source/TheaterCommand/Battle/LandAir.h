@@ -101,10 +101,17 @@ namespace LandAir
 	 * A downed pilot under his parachute, then down on the field (Effects, release 2: -TheaterLandChutes with
 	 * -TheaterLandAirSupport; Brian, 23 November 20:09Z). The rules say whether he got out (air:lost's chutes: never
 	 * from a plane blown apart); here only how. He goes over the side a second or two after the hit (a spinning plane's
-	 * pilot sooner), falls free a second or so (sooner when low), his canopy blossoms over a second and he comes down at
-	 * 5 to 6.5 m/s drifting with the battle's wind, swinging under it; down, he goes flat as he lands, lies a moment,
-	 * gets up and runs 20 to 40 m away from the nearest enemy, and goes to ground there for the rest of the battle; his
-	 * canopy falls in downwind of where he landed and lies there.
+	 * pilot sooner) and falls free a second or so, never rising (only a zooming plane throws a man up), his way off her
+	 * dying as a falling man's does; then he pulls, and his canopy fills over the next 45 to 50 m of his fall and takes
+	 * the rest of his way, so that he drops about 50 m before the wind takes him. He comes down at 5 to 6.5 m/s (a
+	 * heavy man 6 to 7) drifting with the battle's wind, swinging under it about 4 s a swing, from 14 degrees down to a
+	 * gentle 5. Out under 60 m he pulls at once and his canopy is still filling when he hits: a hard landing. Down, he
+	 * goes over flat under his falling canopy, and the scene swaps him there for a man of the crowd (in his army's tank
+	 * crews' file where it has one, else its infantry's, bareheaded); in a wind over 4 m/s his canopy drags him a metre
+	 * or two; he lies a moment (after a hard landing 3 to 5 s), gets up onto his knees and works his harness free (1 to
+	 * 1.5 s), stands and runs 20 to 40 m from the nearest enemy (after a hard landing limping, slower and not so far),
+	 * and goes to ground there for the rest of the battle; his canopy falls in downwind of him and lies there. (The art
+	 * director's notes of 24 November, 02:26Z.)
 	 */
 	struct Chute
 	{
@@ -112,20 +119,67 @@ namespace LandAir
 		int Side = -1;
 		std::string Nat;                // his air force's (his army's soldier file, on the ground)
 		bool bDown = false;             // on the ground
-		V3 At;                          // in the air: the middle of his harness; down: his feet
+		V3 At;                          // his feet (in the air, as he hangs in his harness 1.1 m over them)
 		V3 Vel;                         // metres a real second
-		double Open = 0.0;              // his canopy: 0 still packed (falling free), 1 full
+		double Open = 0.0;              // his canopy: 0 still packed (falling free), 1 full; down, as it was as he landed
 		double Swing = 0.0;             // degrees: his swing under it, nose of his drift up
 		double Heading = 0.0;           // degrees: the way he drifts (in the air), the way he faces (down)
-		// Down: his army's infantry clip and how far into it (real seconds): go_prone as he lands, held as he lies,
-		// stand_up, run, go_prone where he goes to ground, held
+		// Down: his army's clip, how far into it (real seconds) and how fast it goes on now (its seconds a real second;
+		// less than nothing, played back): go_prone held as he lies (and is dragged), go_prone played back as he gets up
+		// onto his knees, kneel_down held at its end as he works his harness free, stand_up, run (after a hard landing
+		// slowed, with a hitch), go_prone where he goes to ground, held. Empty while his chute's mesh draws him.
 		std::string Clip;
-		double Time = 0.0;
+		double Time = 0.0, Rate = 1.0;
 		// His canopy: up over him (Slump 0) to fallen in and flat on the ground (1), where it lies then (Heap, its
-		// middle) and the way it lies from where he landed (degrees); Landed, where he landed
+		// middle) and the way it lies from where its lines end (degrees); Landed, where they end: him as he lies, dragged
+		// with it in a wind, else where he landed
 		V3 Heap, Landed;
 		double HeapHeading = 0.0, Slump = 0.0;
+		// (the art director's notes, 24 November 02:26Z) Whether his chute's mesh draws him: in the air, and down until
+		// he is swapped for the crowd's man as he lies under his falling canopy; there, how far he has gone over from his
+		// feet to flat (0 to 1). A hard landing (out too low for his canopy to fill); how far his canopy has dragged him
+		// (metres). His canopy's silk (linear red, green and blue: her off-white, each a little warmer or cooler), its
+		// gores (24 to 28), and its size in the air (metres across its skirt, and how deep).
+		bool bInMesh = true, bHard = false;
+		double Fallen = 0.0, Dragged = 0.0;
+		double Silk[3] = { 0.86, 0.85, 0.80 };
+		int Gores = 26;
+		double Across = 5.2, Deep = 2.5;
 	};
+
+	/** A pilot's lines: his harness hangs this far under his canopy's skirt, and his feet HangFeet under that (metres;
+	 * the scene's mesh hangs on it, so that his feet are At). */
+	constexpr double LinesLong = 4.1, HangFeet = 1.1;
+
+	/**
+	 * A canopy's silk as the scene draws it (Effects, R2; the art director's sixth note, 24 November 02:26Z), in the
+	 * chute mesh's own space: metres, x the way he drifts, y to his right, z up. Each point has its facing and its
+	 * colour (linear red, green and blue); each triangle three points and the way it faces out (the scene winds it by
+	 * that). Both faces of the silk are drawn, so that it is seen from under it.
+	 */
+	struct SilkMesh
+	{
+		std::vector<V3> Points, Facings;
+		std::vector<double> Colours;    // three a point
+		std::vector<int> Triangles;     // three a triangle
+		std::vector<V3> Outward;        // one a triangle
+		std::vector<int> Seams;         // its skirt's point at each gore's seam (its outer face's): where a line ends
+		void Clear();
+	};
+	/** His canopy in the air, its origin the middle of its skirt: Open 0 a streamer of silk over him, to 1 a full dome
+	 * Across wide and Deep deep, its gores' seams faint darker lines. */
+	void CanopyShape(const Chute& C, double Open, SilkMesh& Out);
+	/** His canopy once he is down, its origin where its lines end (his feet), x the way it falls (the wind's): from as it
+	 * was as he landed (Slump 0) it falls in downwind and settles into a low rumpled heap Off metres off (1), its 7 m of
+	 * silk lying on the field. */
+	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out);
+	/**
+	 * How much a canopy at Canopy glows seen from Eye, the sun the way TowardSun goes (all three in one frame, any
+	 * units): its silk lets the light through, so its side turned from the sun gives back a share of its own colour, a
+	 * little always (seen from under it) and most when it stands against the sun; none at night. The scene gives it to
+	 * the silk's own ink as the pieces' FigureFill, by its key light against a clear day's.
+	 */
+	double Glow(const V3& Eye, const V3& Canopy, const V3& TowardSun);
 
 	/** The kit's numbers for a plane's guns (Shots), a ground gun's, and a plane's trail, fall and fire (one each). */
 	inline int GunIdOf(int Key, int Wing) { return 90000 + (Key % 2400) * 2 + (Wing & 1); }
@@ -176,6 +230,17 @@ namespace LandAir
 			std::vector<Sample> Drop;
 			double Lie = 2.0, RunS = 0.0, Face = 0.0, RunHeading = 0.0;
 			V3 LandAt, RunTo, Heap;
+			// (the art director's notes, 24 November 02:26Z: his canopy's look, as Chute's, and which way its swing starts;
+			// its open share as he landed, and whether he landed hard; on the ground, real seconds from his landing: his
+			// going over flat, his swap for the crowd's man, his being dragged (and where to), his getting up (when, and
+			// how long onto his knees) and his harness's release; whether he limps, and his run's clip's pace)
+			double Silk[3] = { 0.86, 0.85, 0.80 };
+			int Gores = 26;
+			double Across = 5.2, Deep = 2.5, SwingSide = 1.0;
+			double OpenDown = 1.0;
+			bool bHard = false, bLimp = false;
+			double FallS = 0.5, SwapS = 0.9, DragS = 0.0, Rise = 0.0, UpS = 1.0, ReleaseS = 1.2, Pace = 1.0;
+			V3 DragTo;
 		};
 		struct Burst
 		{
