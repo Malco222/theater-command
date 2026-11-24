@@ -65,7 +65,7 @@ import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } fr
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
-import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, screened } from './rearguard';
+import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse, screenWeeks, weeksWords } from './rearguard';
 import { clientWar, tiedPair } from './far';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -2254,10 +2254,11 @@ function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<n
 /** The men a faster pursuit takes from a corps falling back into this province: its foot that does not ride, a share. */
 function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[]): number {
   if (!unitsDecide(g) || !afoot(c)) return 0;
-  // (Release 2, rearguard.ts) A rearguard of its own side holding the province it falls back into screens it.
-  if (screened(g, c, to, (nat) => nat === c.nat || allied(g, nat, c.nat))) return 0;
   const mine = pace(g, c, to);
-  if (!chasers.some((u) => chaser(u) && chasePace(g, u, c, to) < mine)) return 0;
+  // (Release 2, rearguard.ts; the design director's 19:14Z) A rearguard of its own side holding the province it falls
+  // back into acts on the race through time only: each pursuer loses the rearguard's weeks first.
+  const held = screenWeeks(g, c, to, (nat) => nat === c.nat || allied(g, nat, c.nat));
+  if (!chasers.some((u) => chaser(u) && chasePace(g, u, c, to) + held < mine)) return 0;
   return PURSUIT.share * (1 - lifted(c));
 }
 
@@ -2608,6 +2609,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // (Who carried the ground is the throw's; how far, today's run's. Off, they are one and the same.)
   const level: VictoryLevel = win ? (RL >= 3 ? 'Heroic victory' : RL >= 2 ? 'Decisive victory' : attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : RL >= 0.8 ? 'Close defeat' : 'Decisive defeat';
   const affected = new Set(defenders.map((c) => c.nat));
+  // (Release 2, rearguard.ts; the design director's 19:18Z) The attackers fought the rearguards in one fight and share
+  // its delay, each losing it once: in full where the rearguards held, half where they were broken. The time is lost
+  // here, before the pursuit is run.
+  const rearWeeks = rears.length ? chargeDelay(attackers, rearguardWeeks(rears, win)) : 0;
   if (win) {
     const banned = new Set(attackers.map((c) => c.reg));
     let intoWorks = false;
@@ -2779,16 +2784,15 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const fight = town ? (win ? 'storm' : 'repulsed') : inField || relief || opts.sally ? 'streets' : 'field';
   const hurt = battleHit(g, target, fight, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === 'art' ? u.divs : 0), 0));
   if (hurt) rep.city = { region: hurt.region, added: hurt.added, now: hurt.now };
-  // (Release 2, rearguard.ts) Held up by a rearguard, win or lose: every attacking corps loses weeks of its month,
-  // and cannot press on as far behind the army that pulled back.
-  if (rears.length) {
-    const weeks = chargeDelay(attackers, rearguardWeeks(rears));
-    if (weeks > 0) {
-      const who = rears.map((c) => c.name).join(' and ');
-      rep.lines.push({ label: 'Rearguard', value: `${who} held the attack up`, effect: `Every attacking corps lost ${weeks} week${weeks === 1 ? '' : 's'} of its month` });
-      rep.rearguard = weeks;
-      headline(g, 'info', `The rearguard at ${target.name} held the enemy up: every corps of his that attacked there lost ${weeks} week${weeks === 1 ? '' : 's'} of its month.`, rears[0].nat, target.id);
-    }
+  // (Release 2, rearguard.ts) Held up by a rearguard, held or broken: each attacking corps lost time of its month
+  // (charged before the pursuit above), and cannot press on as far behind the army that pulled back.
+  if (rearWeeks > 0) {
+    const who = rears.map((c) => c.name).join(' and '), lost = weeksWords(rearWeeks);
+    const how = win ? 'was broken, but held the attack up' : 'held the attack up';
+    rep.lines.push({ label: 'Rearguard', value: `${who} ${how}`, effect: `Each attacking corps lost ${lost} of its month` });
+    rep.rearguard = rearWeeks;
+    headline(g, 'info', `The rearguard at ${target.name} ${win ? 'was broken, but held the enemy up' : 'held the enemy up'}: each corps of his that attacked there lost ${lost} of its month.`, rears[0].nat, target.id);
+    headline(g, 'info', `An enemy rearguard at ${target.name} held our attack up${win ? ' before it broke' : ''}: each corps that attacked there lost ${lost} of its month.`, armyOf(attackers[0]), target.id);
   }
   g.reports.push(rep);
   // (scarred ground: one more battle fought over this region, this month; a walk-in where the defenders gave ground
@@ -4365,6 +4369,8 @@ export function endPhase(g: Game, nat: string): void {
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
+  // (Release 2, rearguard.ts) The nation's rearguards of last month stand down, the player's and the staffs' alike.
+  rearguardsLapse(g, nat);
   if (!n.alive) return;
   // Shipping by the record's dates (ruling 234, rider b630).
   liftDates(g, nat);

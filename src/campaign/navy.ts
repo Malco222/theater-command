@@ -21,7 +21,7 @@ const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
-import { capOver, deckWorth, syncWings, wingShare } from './carriers';
+import { capOver, deckWorth, fleetKnown, syncWings, wingShare } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -3370,6 +3370,9 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     const say = (why: string): void => { if (says) f.why = [g.turn, why]; };
     const where = (z: number): string => seaWhere(g.seas[z]?.name ?? 'sea');
     const what = (z: number): string => seaWhat(g.seas[z]?.name ?? 'sea');
+    // (Release 2, fleetwhy.ts) Whether his own side has found an enemy surface fleet, or submarines, at sea there.
+    const found = (z: number, subs: boolean): boolean => g.fleets.some((x) => x.zone === z && atSea(x) && atWar(g, x.nat, nat) && (subs ? x.ships.ss > 0 : surfaceShips(x) > 0) && fleetKnown(g, x, nat) !== 'none');
+    const sighted = (z: number): boolean => found(z, false), subsFound = (z: number): boolean => found(z, true);
     const home = (why?: string): void => { sail(g, f, f.home, 'port'); if (why) say(why); };
     if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home('At peace, it lies in harbour.'); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
@@ -3421,7 +3424,9 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       let top = 0, why = '';
       const sea = says ? what(z) : '', at = says ? where(z) : '';
       const add = (w: number, words: () => string): void => { v += w; if (says && w > top) { top = w; why = words(); } };
-      if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.`); // an enemy fleet that can be beaten
+      // (The admirals' words use only what their own side has found, the design director's 19:14Z: an enemy fleet nobody
+      // has sighted there is never named, and the note says only where it patrols.)
+      if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => (sighted(z) ? `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.` : `It patrols ${sea}.`)); // an enemy fleet that can be beaten
       if (landedLately(g, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`); // cut the sea lane behind an enemy landing
       // Its own staff's second front: stand off the beach the army means to land on, and on the way to it.
       if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at}, off the beach your army means to land on.` : () => `It patrols ${sea}, on the way to your army's landing.`);
@@ -3443,7 +3448,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       const bare = FLEETS.ai.guard ? laneUnguarded(g, f, reach.filter(clear)) : null;
       if (bare && escort(g, f, bare.id)) { say(`It guards ${bare.name}: raiders are sinking its cargoes and no other ship of your side guards it.`); continue; }
       const z = FLEETS.ai.hunt ? huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x))) : -1;
-      if (z >= 0 && sail(g, f, z, 'hunt')) { say(`Its destroyers hunt the submarines at work ${where(z)}, on its beat.`); continue; }
+      if (z >= 0 && sail(g, f, z, 'hunt')) { say(says && subsFound(z) ? `Its destroyers hunt the submarines at work ${where(z)}, on its beat.` : `Its destroyers sweep ${where(z)} for submarines, on its beat.`); continue; }
     }
     if (best >= 0 && sail(g, f, best, 'patrol')) say(bestWhy || `It patrols ${what(best)}.`);
     else home(shy > 0 ? 'Enemy bombers command the seas in its reach, so it waits in harbour.' : 'Nothing in its reach is worth the risk this month, so it waits in harbour.');

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e6366a45 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 359d163b 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -27259,8 +27259,8 @@
   var dealt = /* @__PURE__ */ new WeakMap();
   function skiesOf(g2, turn2) {
     const key7 = `${g2.seed}:${turn2}:${stopDef(g2).book ? 1 : 0}`;
-    const hold2 = turn2 === g2.turn ? dealt.get(g2) : void 0;
-    if (hold2 && hold2.key === key7) return hold2.skies;
+    const hold3 = turn2 === g2.turn ? dealt.get(g2) : void 0;
+    if (hold3 && hold3.key === key7) return hold3.skies;
     const skies = WEATHER.zones.map((z, i) => {
       const b = bookSky(g2, i, turn2);
       if (b) return b.sky;
@@ -33508,8 +33508,8 @@
       }
     }
     if (!front) return null;
-    const hold2 = keepsDoor(g2, nat) && beyondEurope(at4.id) ? 0 : D2.hold ?? 15;
-    return { at: at4, ports: q.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g2, nat, r.ctrl)), short: mine4 < Math.max(hold2, (D2.feed ?? 2) * foes) };
+    const hold3 = keepsDoor(g2, nat) && beyondEurope(at4.id) ? 0 : D2.hold ?? 15;
+    return { at: at4, ports: q.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g2, nat, r.ctrl)), short: mine4 < Math.max(hold3, (D2.feed ?? 2) * foes) };
   }
   function lanes(g2, nat, from2, shut) {
     const d = new Int16Array(g2.seas.length).fill(-1);
@@ -34658,8 +34658,8 @@
     if (!footingOn(g2)) return 0;
     const n = g2.nations[nat], s = stepIn(n);
     if (!s) return 0;
-    const hold2 = FOOTING[s].hold;
-    if (n.pc + net - hold2 >= -1e-9) return -hold2;
+    const hold3 = FOOTING[s].hold;
+    if (n.pc + net - hold3 >= -1e-9) return -hold3;
     stepDown(g2, nat, "capital");
     return 0;
   }
@@ -43659,7 +43659,7 @@
       value += shipCount(sunk) * 30 + (worst ? worst[1] * 3e3 : 0);
       result = [shipCount(sunk) ? `${cap7(shipList(sunk))} sunk.` : "", ...afloat2, worst ? `Merchant shipping losses cost ${g2.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ""].filter(Boolean).join(" ") || "The bombers found little to hit.";
     }
-    let sky = false, hold2 = 0, held3 = false;
+    let sky = false, hold3 = 0, held3 = false;
     if (m === "superiority") {
       const Eafter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
       const EpowAfter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd * worth2(g2, x.f), 0);
@@ -43677,9 +43677,9 @@
         Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth2(g2, x.f) * (a.height ? 1 : techMul(g2, x.f.nat, "radar"));
       });
       const te = a.typeEdge;
-      hold2 = Dnext > 0 ? te ? EpowAfter * Math.exp(te / 2) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext : 99;
-      if (a.height && Dnext > 0) hold2 *= Math.pow(a.height.h, 2 * a.height.x);
-      sky = Eafter >= AIR.sky.least && hold2 >= AIR.sky.win;
+      hold3 = Dnext > 0 ? te ? EpowAfter * Math.exp(te / 2) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext : 99;
+      if (a.height && Dnext > 0) hold3 *= Math.pow(a.height.h, 2 * a.height.x);
+      sky = Eafter >= AIR.sky.least && hold3 >= AIR.sky.win;
       if (sky) g2.sky[target] = { nat, turn: g2.turn };
       if (acOn(g2)) held3 = skyFought(g2, nat, target, sky) === "held";
     }
@@ -43718,7 +43718,7 @@
       level,
       won,
       sky,
-      hold: hold2,
+      hold: hold3,
       result
     };
     if (struck) {
@@ -46814,6 +46814,8 @@
       };
       const where = (z) => seaWhere(g2.seas[z]?.name ?? "sea");
       const what = (z) => seaWhat(g2.seas[z]?.name ?? "sea");
+      const found2 = (z, subs) => g2.fleets.some((x) => x.zone === z && atSea(x) && atWar(g2, x.nat, nat) && (subs ? x.ships.ss > 0 : surfaceShips(x) > 0) && fleetKnown(g2, x, nat) !== "none");
+      const sighted = (z) => found2(z, false), subsFound = (z) => found2(z, true);
       const home = (why) => {
         sail(g2, f, f.home, "port");
         if (why) say(why);
@@ -46879,7 +46881,7 @@
             why = words();
           }
         };
-        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.`);
+        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => sighted(z) ? `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.` : `It patrols ${sea}.`);
         if (landedLately(g2, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`);
         if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at4}, off the beach your army means to land on.` : () => `It patrols ${sea}, on the way to your army's landing.`);
         if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) add(theirs.off.has(z) ? 40 : 25, () => `It patrols ${sea} to cover an ally's landing.`);
@@ -46905,7 +46907,7 @@
         }
         const z = FLEETS.ai.hunt ? huntingGround(g2, f, [...beat].filter((x) => reach3.includes(x) && clear(x))) : -1;
         if (z >= 0 && sail(g2, f, z, "hunt")) {
-          say(`Its destroyers hunt the submarines at work ${where(z)}, on its beat.`);
+          say(says && subsFound(z) ? `Its destroyers hunt the submarines at work ${where(z)}, on its beat.` : `Its destroyers sweep ${where(z)} for submarines, on its beat.`);
           continue;
         }
       }
@@ -51401,11 +51403,16 @@
 
   // ../../data/campaign/rearguard.json
   var rearguard_default = {
-    _about: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps of the player's ('most' divisions at most) is ordered to hold where it stands until his next month: it marches no further this month. Any enemy army that attacks its province before then loses 'weeksPerDiv' weeks of its month for each division of the rearguards there, 'weeks' at most, after the fight (whether it carries the ground or not): it cannot press on as far. Under Units decide, corps of the rearguard's side falling back into its province are screened: the pursuit takes none of their men. The combat itself is untouched. PROPOSAL figures for the design director's ruling.",
+    _about: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps ('most' divisions at most) is ordered to hold where it stands until its side's next month: it marches no further this month. The design director's ruling (24 November 19:18Z, on the historian's read, historian/rearguard-delay-1124.md: no direct relationship between advance rates and force ratios, so the odds act only through the rearguard's own fight): all the attackers in the province fight the rearguard in one fight and share its delay, each losing it once. If the rearguard holds, the delay is 'weeksPerDiv' weeks a division, 'weeks' at most (FM 100-5's delay on a position until nightfall, a position a day; Luzon, five delaying lines in about 14 days); if it is broken, 'broken' of that (a penetrated defender gave way at about twice the rate of one merely pushed back). The time is lost before the pursuit is run. Under Units decide ('screen') a rearguard standing in the province a beaten corps of its side falls back into acts on the pursuit's race only through time: each pursuer loses the rearguard's full delay first; it is never a blanket exemption. The rearguard itself fights as any corps and is chased and cut off by the same pursuit; driven out of its province it is a rearguard no longer. The computer staffs order rearguards by the same rule ('ai'): after their month's moves, a small corps of theirs with no bigger corps of its side beside it, the enemy next door at 'odds' times its side's defence there or more, and a bigger corps of its side in a province next door that no enemy stands in, holds; 'perMonth' at most for each staff. Figures G (the design director's).",
     most: 2,
     weeksPerDiv: 1,
     weeks: 2,
-    screen: true
+    broken: 0.5,
+    screen: true,
+    ai: {
+      odds: 1.5,
+      perMonth: 2
+    }
   };
 
   // ../../src/campaign/rearguard.ts
@@ -51419,11 +51426,14 @@
     }
   }
   var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
-  var isRearguard = (g2, c) => rearguardOn(g2) && !!c.rear && !c.dead;
+  var isRearguard = (g2, c) => rearguardOn(g2) && !!c.rear && !c.dead && c.reg === c.rear[2] && c.town === void 0;
   function whyNotRearguard(g2, c) {
     if (!rearguardOn(g2)) return "Rearguards are ordered only where that is switched on.";
     if (!c || c.dead) return "There is no such corps.";
     if (c.nat !== g2.human || !hisMonth(g2)) return "Only your own corps, in your own month.";
+    return ruleOut(c);
+  }
+  function ruleOut(c) {
     if (c.rear) return "It holds as a rearguard already.";
     if (c.kind === "fort") return "Fortress troops hold their works already.";
     if (c.town !== void 0) return "A garrison holds its town already.";
@@ -51434,9 +51444,17 @@
   }
   function orderRearguard(g2, c) {
     if (whyNotRearguard(g2, c) !== null) return false;
-    c.rear = [g2.turn, c.ap];
-    c.ap = 0;
+    hold(g2, c);
     return true;
+  }
+  function staffRearguard(g2, c) {
+    if (!rearguardOn(g2) || c.dead || c.nat === g2.human || g2.order[g2.phase] !== c.nat || ruleOut(c) !== null) return false;
+    hold(g2, c);
+    return true;
+  }
+  function hold(g2, c) {
+    c.rear = [g2.turn, c.ap, c.reg];
+    c.ap = 0;
   }
   function standDown2(g2, c) {
     if (!c.rear) return false;
@@ -51451,18 +51469,25 @@
     if (!rearguardOn(g2)) return [];
     return r.units.filter((c) => isRearguard(g2, c) && c.reg === r.id && c.town === void 0 && foe(c.nat));
   }
-  function rearguardWeeks(rears) {
+  function rearguardWeeks(rears, broken) {
     const divs = rears.reduce((n, c) => n + c.divs, 0);
-    return Math.min(REARGUARD.weeks, divs * REARGUARD.weeksPerDiv);
+    if (divs <= 0) return 0;
+    return Math.min(REARGUARD.weeks, divs * REARGUARD.weeksPerDiv) * (broken ? REARGUARD.broken : 1);
+  }
+  function weeksWords(w) {
+    const days = Math.round(w * 7);
+    if (days <= 0) return "less than a day";
+    if (days % 7 === 0) return `${days / 7} week${days === 7 ? "" : "s"}`;
+    return `${days} day${days === 1 ? "" : "s"}`;
   }
   function chargeDelay(attackers2, weeks) {
     if (weeks <= 0) return 0;
     for (const c of attackers2) if (!c.dead) c.ap = Math.max(0, c.ap - weeks);
     return weeks;
   }
-  function screened(g2, c, to, friend2) {
-    if (!rearguardOn(g2) || !REARGUARD.screen) return false;
-    return to.units.some((u) => u !== c && !u.dead && isRearguard(g2, u) && u.town === void 0 && friend2(u.nat));
+  function screenWeeks(g2, c, to, friend2) {
+    if (!rearguardOn(g2) || !REARGUARD.screen) return 0;
+    return rearguardWeeks(to.units.filter((u) => u !== c && isRearguard(g2, u) && friend2(u.nat)), false);
   }
 
   // ../../src/campaign/game.ts
@@ -53240,9 +53265,9 @@
   }
   function pursuitTakes(g2, c, to, chasers) {
     if (!unitsDecide(g2) || !afoot(c)) return 0;
-    if (screened(g2, c, to, (nat) => nat === c.nat || allied(g2, nat, c.nat))) return 0;
     const mine4 = pace(g2, c, to);
-    if (!chasers.some((u) => chaser(u) && chasePace(g2, u, c, to) < mine4)) return 0;
+    const held3 = screenWeeks(g2, c, to, (nat) => nat === c.nat || allied(g2, nat, c.nat));
+    if (!chasers.some((u) => chaser(u) && chasePace(g2, u, c, to) + held3 < mine4)) return 0;
     return PURSUIT.share * (1 - lifted(c));
   }
   function onTheRoad(g2, u, road, fight2) {
@@ -53526,6 +53551,7 @@
     for (const nat of new Set(defenders.map((c) => c.nat))) identify(g2, attackers2, nat);
     const level = win ? RL >= 3 ? "Heroic victory" : RL >= 2 ? "Decisive victory" : attLost > defLost ? "Pyrrhic victory" : "Close victory" : RL >= 0.8 ? "Close defeat" : "Decisive defeat";
     const affected = new Set(defenders.map((c) => c.nat));
+    const rearWeeks = rears.length ? chargeDelay(attackers2, rearguardWeeks(rears, win)) : 0;
     if (win) {
       const banned = new Set(attackers2.map((c) => c.reg));
       let intoWorks = false;
@@ -53700,14 +53726,13 @@
     const fight2 = town ? win ? "storm" : "repulsed" : inField2 || relief || opts.sally ? "streets" : "field";
     const hurt2 = battleHit(g2, target, fight2, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === "art" ? u.divs : 0), 0));
     if (hurt2) rep.city = { region: hurt2.region, added: hurt2.added, now: hurt2.now };
-    if (rears.length) {
-      const weeks = chargeDelay(attackers2, rearguardWeeks(rears));
-      if (weeks > 0) {
-        const who = rears.map((c) => c.name).join(" and ");
-        rep.lines.push({ label: "Rearguard", value: `${who} held the attack up`, effect: `Every attacking corps lost ${weeks} week${weeks === 1 ? "" : "s"} of its month` });
-        rep.rearguard = weeks;
-        headline(g2, "info", `The rearguard at ${target.name} held the enemy up: every corps of his that attacked there lost ${weeks} week${weeks === 1 ? "" : "s"} of its month.`, rears[0].nat, target.id);
-      }
+    if (rearWeeks > 0) {
+      const who = rears.map((c) => c.name).join(" and "), lost = weeksWords(rearWeeks);
+      const how = win ? "was broken, but held the attack up" : "held the attack up";
+      rep.lines.push({ label: "Rearguard", value: `${who} ${how}`, effect: `Each attacking corps lost ${lost} of its month` });
+      rep.rearguard = rearWeeks;
+      headline(g2, "info", `The rearguard at ${target.name} ${win ? "was broken, but held the enemy up" : "held the enemy up"}: each corps of his that attacked there lost ${lost} of its month.`, rears[0].nat, target.id);
+      headline(g2, "info", `An enemy rearguard at ${target.name} held our attack up${win ? " before it broke" : ""}: each corps that attacked there lost ${lost} of its month.`, armyOf(attackers2[0]), target.id);
     }
     g2.reports.push(rep);
     const scar = (g2.scars ?? (g2.scars = {}))[target.id];
@@ -54182,8 +54207,8 @@
     const since = g2.flags[`siege:${seat5.id}`];
     const sat = (since === void 0 ? 0 : Math.max(0, g2.turn - since)) + ahead2;
     const after = SIEGE.capitalAfter;
-    const hold2 = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
-    return !allied(g2, nat, seat5.ctrl) ? 1 : shut ? Math.min(1, hold2) : 0;
+    const hold3 = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
+    return !allied(g2, nat, seat5.ctrl) ? 1 : shut ? Math.min(1, hold3) : 0;
   }
   function collapseScore(g2, nat) {
     const n = g2.nations[nat];
@@ -54392,9 +54417,9 @@
     return g2.flags.open === 1 && t && t.cut > 0 && t.stops.includes(stopOf(g2)) && g2.turn >= (t.from ?? 0) ? Math.min(1, t.cut) : 0;
   }
   var heldDrafts = (g2, nat) => callUpHeld(g2, nat) ? g2.flags[`mphw:${nat}`] ?? 0 : 0;
-  function holdCallUp(g2, nat, hold2) {
-    if (nat !== g2.human || !standingCallUp(g2, nat) || callUpHeld(g2, nat) === hold2) return false;
-    if (hold2) g2.flags[`mph:${nat}`] = 1;
+  function holdCallUp(g2, nat, hold3) {
+    if (nat !== g2.human || !standingCallUp(g2, nat) || callUpHeld(g2, nat) === hold3) return false;
+    if (hold3) g2.flags[`mph:${nat}`] = 1;
     else {
       delete g2.flags[`mph:${nat}`];
       delete g2.flags[`mphw:${nat}`];
@@ -54870,6 +54895,7 @@
   function startPhase(g2, nat) {
     const n = g2.nations[nat];
     fadeWorks(g2, nat);
+    rearguardsLapse(g2, nat);
     if (!n.alive) return;
     liftDates(g2, nat);
     for (const row2 of [...setup_1939_default.reinforcements, ...setup_1939_default.formations ?? []]) {
@@ -57023,6 +57049,7 @@
   function runAI(g2, nat) {
     aiEngineers(g2, nat);
     campaign(g2, nat);
+    aiRearguards(g2, nat);
     aiBridges(g2, nat, (x, from2) => blowBridges(g2, nat, x, from2));
     aiRepair(g2, nat);
     aiFieldRepair(g2, nat, (x) => allied(g2, nat, x));
@@ -57032,6 +57059,31 @@
     aiFortify(g2, nat, Object.keys(coastWatch(g2, nat)), coastRules());
     aiProgramme(g2, nat);
     civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat) || armyWorn(g2, nat));
+  }
+  function aiRearguards(g2, nat) {
+    if (!rearguardOn(g2) || nat === g2.human || !g2.nations[nat].alive) return;
+    const picks = [];
+    for (const c of g2.corps) {
+      if (c.nat !== nat || c.dead || c.rear || c.town !== void 0 || c.divs > REARGUARD.most || !fights(c)) continue;
+      const r = g2.regions[c.reg];
+      const side5 = friendlyUnits(g2, r, nat).filter((u) => !u.dead && u.town === void 0);
+      if (side5.some((u) => u.divs > REARGUARD.most)) continue;
+      let threat2 = 0;
+      for (const j of r.nb) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (!u.dead && u.kind !== "fort" && u.town === void 0) threat2 += atkPower(g2, u);
+      const own = side5.reduce((t, u) => t + defPower(g2, u, r), 0);
+      if (threat2 <= 0 || threat2 < REARGUARD.ai.odds * own) continue;
+      const behind2 = r.nb.some((j) => {
+        const q = g2.regions[j];
+        return !hostileUnits(g2, q, nat).length && friendlyUnits(g2, q, nat).some((u) => !u.dead && u.divs > c.divs && fights(u));
+      });
+      if (behind2) picks.push({ c, odds: threat2 / Math.max(1e-9, own) });
+    }
+    picks.sort((x, y) => y.odds - x.odds || x.c.id - y.c.id);
+    let held3 = 0;
+    for (const p of picks) {
+      if (held3 >= REARGUARD.ai.perMonth) break;
+      if (staffRearguard(g2, p.c)) held3++;
+    }
   }
   function campaign(g2, nat) {
     const n = g2.nations[nat];
@@ -57347,7 +57399,7 @@
         sorties(g2, nat);
         sieges(g2, nat);
         overrun(g2, nat);
-        hold(g2, nat, ph);
+        hold2(g2, nat, ph);
         const base = g2.byName[ph?.base ?? T.bases?.[nat] ?? ""];
         if (base) fallBack2(g2, nat, base.id);
         const enemies = /* @__PURE__ */ new Set();
@@ -57509,7 +57561,7 @@
   }
   function fightOn(g2, nat, ph, posture) {
     const n = g2.nations[nat];
-    hold(g2, nat, ph);
+    hold2(g2, nat, ph);
     keepWards(g2, nat, ph);
     mass(g2, nat, ph, true);
     breakOut2(g2, nat);
@@ -57551,7 +57603,7 @@
     const fast = (c) => KIND[c.kind].mobile ? 1 : 0;
     return r.units.filter((u) => u.nat === nat && u.kind !== "fort").sort((a, b) => fast(a) - fast(b));
   }
-  function hold(g2, nat, ph) {
+  function hold2(g2, nat, ph) {
     if (!ph?.staging || ph.posture === "redeploy") return;
     for (const [name, count4] of Object.entries(ph.staging)) {
       const r = g2.byName[name];
@@ -60861,7 +60913,6 @@
     quietNews(g2);
     crowdedNews(g2);
     taskForcesMonth(g2, current(g2));
-    rearguardsLapse(g2, current(g2));
     staffMonth(g2);
   }
   function endHuman(g2) {
@@ -61245,9 +61296,9 @@
     headline(g2, "info", `The next class is called up early: ${menWords(come * MEN_PER_DIV)} men join the reserve. No class comes of age for the next ${gap === 1 ? "month" : `${gap} months`}.`, g2.human);
     return true;
   }
-  function orderCallUp(g2, hold2) {
-    if (g2.human === null || !holdCallUp(g2, g2.human, hold2)) return false;
-    headline(g2, "info", hold2 ? "The standing call-up is held: no new corps are raised until you let it run again, and the men of each wave go to the corps in the field as drafts instead." : "The standing call-up runs again: new corps are raised from the reserve each month.", g2.human);
+  function orderCallUp(g2, hold3) {
+    if (g2.human === null || !holdCallUp(g2, g2.human, hold3)) return false;
+    headline(g2, "info", hold3 ? "The standing call-up is held: no new corps are raised until you let it run again, and the men of each wave go to the corps in the field as drafts instead." : "The standing call-up runs again: new corps are raised from the reserve each month.", g2.human);
     return true;
   }
   var cabinetIsOff = (g2) => cabinetOff(g2);
@@ -73428,17 +73479,17 @@
       const lone = o.lane === void 0 || o.axis === void 0;
       const axis2 = lone ? bearing(u.x, u.y, t.x, t.y) : o.axis, lane = lone ? 0 : o.lane;
       const key7 = lone ? `${t.id}` : `${t.id}/${lane}/${axis2}`;
-      const hold2 = want + (reachOf(u) - want) / 2;
+      const hold3 = want + (reachOf(u) - want) / 2;
       const off2 = (x, y) => dist(x, y, t.x, t.y) - (Math.max(u.w, u.d) + Math.max(t.w, t.d)) / 4;
       const there = (s) => {
         if (dist(u.x, u.y, s[0], s[1]) >= 12) return s;
-        if (this.gap(u, t) <= hold2 && !this.wet(u, u.x, u.y)) return null;
+        if (this.gap(u, t) <= hold3 && !this.wet(u, u.x, u.y)) return null;
         u.closing = true;
         return [t.x, t.y];
       };
       const old = u.stand && u.standFor === key7 ? u.stand : null;
       if (old && u.closing) return [t.x, t.y];
-      const kept2 = !!old && off2(old[0], old[1]) <= hold2 && !this.wet(u, old[0], old[1]);
+      const kept2 = !!old && off2(old[0], old[1]) <= hold3 && !this.wet(u, old[0], old[1]);
       if (old && kept2 && !this.claimed(u, old[0], old[1], u.standFace ?? bearing(old[0], old[1], t.x, t.y))) return there(old);
       const [fx, fy] = ahead(axis2), [rx, ry] = ahead(axis2 + Math.PI / 2);
       const lim = t.w / 2 + u.w / 2;
@@ -73459,7 +73510,7 @@
         if (dry) p = dry;
       }
       const face = bearing(p[0], p[1], t.x, t.y), [sx, sy] = ahead(face + Math.PI / 2);
-      const fit3 = (q) => off2(q[0], q[1]) <= hold2 && !this.wet(u, q[0], q[1]) && !this.units.some((e) => e.side !== u.side && live3(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2);
+      const fit3 = (q) => off2(q[0], q[1]) <= hold3 && !this.wet(u, q[0], q[1]) && !this.units.some((e) => e.side !== u.side && live3(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2);
       for (let k = 0; k < 4; k++) {
         const f = this.claimed(u, p[0], p[1], face);
         if (!f) break;
@@ -91858,10 +91909,10 @@ ${next.text}` : ""}` : next ? next.also : "";
       lines2.push(p.defended ? `The coast is defended: the troops must fight their way ashore${p.assess ? `, at odds of ${p.assess.odds.toFixed(1)} to 1` : ""}.` : "The coast is undefended: they land unopposed.");
       const reckoning = accountLines(p.account);
       if (reckoning.length) lines2.push("", "THE RECKONING", ...reckoning.map((l) => l.endsWith(":") ? l : `· ${l}`));
-      const hold2 = p.hold;
-      const holding = holdLines(hold2);
+      const hold3 = p.hold;
+      const holding = holdLines(hold3);
       if (holding.length) lines2.push("", ...holding);
-      if (hold2 && hold2.open && !p.air) lines2.push("", `As things stand the enemy cannot close the ${s.seas[hold2.sea]?.name ?? "sea"} behind it.`);
+      if (hold3 && hold3.open && !p.air) lines2.push("", `As things stand the enemy cannot close the ${s.seas[hold3.sea]?.name ?? "sea"} behind it.`);
       return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines: lines2, warn: "", verdict, tone, under, underTone, ashore: said ? { head: said.head, line: said.line, tone: said.tone } : null };
     }
     return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines: lines2, warn: "", verdict: "", tone: "", under: "", underTone: "", ashore: null };
@@ -94435,9 +94486,9 @@ ${standing5}`,
         ok2 = !why && orderEarlyClass(s);
         note4 = ok2 ? "The next class is called up early." : why ?? "They cannot be called up now.";
       } else if (part[1] === "hold") {
-        const hold2 = part[2] === "1";
-        ok2 = orderCallUp(s, hold2);
-        note4 = ok2 ? hold2 ? "The standing call-up is held: no new corps are raised from the reserve until you let it run again." : "The standing call-up runs again." : "That cannot be changed now.";
+        const hold3 = part[2] === "1";
+        ok2 = orderCallUp(s, hold3);
+        note4 = ok2 ? hold3 ? "The standing call-up is held: no new corps are raised from the reserve until you let it run again." : "The standing call-up runs again." : "That cannot be changed now.";
       }
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }

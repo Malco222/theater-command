@@ -82,7 +82,7 @@ import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
 import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
-import { orderRearguard, rearguardsLapse, standDown as standRearDown, whyNotRearguard } from './rearguard';
+import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -170,8 +170,6 @@ export function beginHuman(g: Game): void {
   crowdedNews(g);
   // His task forces come in to refit or go back to their jobs (release 2, taskforce.ts): before his admirals' month.
   taskForcesMonth(g, current(g));
-  // His rearguards of last month stand down (release 2, rearguard.ts).
-  rearguardsLapse(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }
