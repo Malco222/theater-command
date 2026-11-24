@@ -114,6 +114,9 @@ public:
 	/** True if a line from Origin along Direction passes through the piece: its counters, its pole or its colours. */
 	bool HitByRay(const FVector& Origin, const FVector& Direction, double& OutDistance) const;
 
+	/** True if that line passes through the piece's colours (its flag) alone. */
+	bool ColoursHitByRay(const FVector& Origin, const FVector& Direction) const;
+
 	/** Carries the piece in the hand: it hangs over this point of the table. */
 	void Carry(const FVector& GroundPoint);
 

@@ -847,6 +847,10 @@ struct FViewAirfield
 	int32 Holds = 0; // how many aircraft it serves
 	int32 Groups = 0, Aircraft = 0; // -1 where the fog of war hides what flies from it
 	bool bCrowded = false;
+	// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) The player's
+	// own groups among them, on a field another country holds: how many, their aircraft, and his nation (empty where none).
+	int32 YourGroups = 0, YourAircraft = 0;
+	FString YourNation;
 };
 
 struct FViewAirFleet

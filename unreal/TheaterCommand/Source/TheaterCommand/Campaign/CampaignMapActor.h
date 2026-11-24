@@ -1353,8 +1353,10 @@ private:
 	{
 		FVector2D Spot = FVector2D::ZeroVector;
 		FString Nation;
+		FString YourNation; // (the player's, where his own groups stand on a field another country holds)
 		double Turn = 0.0, Wide = 1.5;
 		int32 Parked = 0, Mesh = INDEX_NONE;
+		int32 Yours = 0; // how many of the row are his, at its head
 		bool bShown = false;
 		float Up = 0.0f; // how far its aircraft have come up out of the ground, 0 to 1
 	};

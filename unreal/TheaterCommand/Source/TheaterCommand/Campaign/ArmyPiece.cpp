@@ -967,6 +967,17 @@ bool AArmyPiece::HitByRay(const FVector& Origin, const FVector& Direction, doubl
 		|| Near(Place.TransformPosition(FVector::ZeroVector), Place.TransformPosition(FVector(0.0, 0.0, BodyTop)), BaseRadius);
 }
 
+bool AArmyPiece::ColoursHitByRay(const FVector& Origin, const FVector& Direction) const
+{
+	// (1.5.1 and release 2; Brian, 24 November 2026: "i cant click on the london airfield".) The colours alone, as HitByRay
+	// measures them: inside an airfield's ring another country's piece keeps the pointer only on its flag.
+	const FVector End = Origin + Direction * 200000.0;
+	const FVector Flag = GetActorTransform().TransformPosition(OnStandard(FlagCenter));
+	FVector OnRay, OnPart;
+	FMath::SegmentDistToSegmentSafe(Origin, End, Flag, Flag, OnRay, OnPart);
+	return FVector::DistSquared(OnRay, OnPart) <= FMath::Square(FlagRadius * StandardScale);
+}
+
 void AArmyPiece::Carry(const FVector& GroundPoint)
 {
 	bMarching = false;
