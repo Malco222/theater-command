@@ -333,6 +333,7 @@ namespace LandScape
 			break;
 		case Look::Farmland:
 			A.bSet = true;
+			A.SkyLift = 3.2; // (the art director on 849c1bc1: Voronezh's zenith 63,71,85 under a sun 52 degrees up)
 			break;
 		case Look::Dry:
 			// (the high continental air of Mongolia in summer: clear and dry, a pale blue-grey haze and a little dust, the
@@ -344,6 +345,7 @@ namespace LandScape
 			A.HazeDensity = 0.0028;
 			A.SkyDust = 0.8;
 			Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
+			A.SkyLift = 3.2; // (the art director on 849c1bc1: Baghdad's zenith 50,59,74 under a sun 61 degrees up)
 			break;
 		default: break;
 		}
