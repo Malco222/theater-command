@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cd29bd81 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 76ecd5ed 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -88949,6 +88949,65 @@
     };
   }
   var corpsById = (s, ids2) => ids2.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
+  var marchKey = (c) => `march:${c.id}`;
+  var insideNow = (s, c) => {
+    const r = s.regions[c.reg];
+    return { c, r, at: r.garr ? r.garr.indexOf(c) : -1, town: c.town, ap: c.ap, keys: Object.keys(c), regionKeys: Object.keys(r), march: s.flags[marchKey(c)] };
+  };
+  var keysInOrder = (o, keys) => {
+    const r = o, now = { ...r };
+    for (const k of Object.keys(r)) delete r[k];
+    for (const k of keys) if (k in now) r[k] = now[k];
+    for (const k of Object.keys(now)) if (!(k in r)) r[k] = now[k];
+  };
+  var backInside = (xs) => {
+    for (const x of [...xs].sort((p, q) => p.at - q.at)) {
+      const { c, r } = x;
+      const k = r.units.indexOf(c);
+      if (k >= 0) r.units.splice(k, 1);
+      const garr = r.garr ?? (r.garr = []);
+      if (!garr.includes(c)) garr.splice(Math.min(Math.max(x.at, 0), garr.length), 0, c);
+      c.reg = r.id;
+      c.town = x.town;
+      c.ap = x.ap;
+      keysInOrder(c, x.keys);
+      keysInOrder(r, x.regionKeys);
+    }
+  };
+  var wentOut = (s, x, out) => x.c.dead || x.c.reg !== out.reg || x.c.ap !== out.ap || x.c.town !== void 0 || s.flags[marchKey(x.c)] !== x.march;
+  var insideOf = (s, ids2) => {
+    try {
+      return Array.isArray(ids2) && s.human ? corpsById(s, ids2).filter((c) => c.town !== void 0 && c.nat === s.human) : [];
+    } catch {
+      return [];
+    }
+  };
+  function comeOut(ids2, call, looks) {
+    const s = game();
+    const inside2 = insideOf(s, ids2).map((c) => insideNow(s, c));
+    if (!inside2.length) return call();
+    const done = [];
+    for (const x of inside2) {
+      if (!orderTakeField(s, x.c)) {
+        backInside(done);
+        return call();
+      }
+      done.push(x);
+    }
+    const out = inside2.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
+    const settle2 = () => backInside(looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i])));
+    let result;
+    try {
+      result = call();
+    } catch (e) {
+      settle2();
+      throw e;
+    }
+    settle2();
+    return result;
+  }
+  var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);
+  var goOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), false);
   var lastAirReport = (s) => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
   function raidsSince(s, since, turns2, skipNat = null) {
     const flights = [], notes = [], focus = [];
@@ -89601,7 +89660,7 @@
     if (humanUp(s)) {
       const cs = corpsById(s, ids2);
       for (const c of cs) {
-        for (const [id, r] of c.town !== void 0 ? reachOutOfTown(s, c) : reach2(s, c)) {
+        for (const [id, r] of reach2(s, c)) {
           if (id === c.reg) continue;
           const old = merged.get(id);
           if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
@@ -89639,7 +89698,7 @@
       if (humanUp(s) && !onEve(s)) {
         const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
         const lead2 = cs[0];
-        spent = cs.length > 0 && cs.every((c) => apForOrders(s, c) <= 0);
+        spent = cs.length > 0 && cs.every((c) => c.ap <= 0);
         if (lead2) {
           for (const [id, g2] of farGround2(s, lead2)) {
             if (id === lead2.reg || merged.has(id) || lead2.ap > 0 && s.regions[lead2.reg].nb.includes(id) || far.length >= 1200) continue;
@@ -94715,6 +94774,7 @@ ${standing5}`,
       groupBase: group ? group.base : -1
     };
   }
+  var battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids2, f) => playerOrder(act)(`raid:${k}:${t}:${ids2.join(".")}`, -1, f) });
   globalThis.TC = {
     digest,
     find: find2,
@@ -94785,8 +94845,8 @@ ${standing5}`,
     peek,
     load,
     view: view2,
-    reach: reachOf2,
-    marchPlan: marchPlanOf,
+    reach: lookOut(reachOf2),
+    marchPlan: lookOut(marchPlanOf),
     nextArmy: nextArmyOf,
     stand: standOf,
     stands: standsOf,
@@ -94796,11 +94856,11 @@ ${standing5}`,
     stageAgent,
     stageCaught,
     agentWhy,
-    move: playerOrder(move, "march"),
-    previewAttack: preview,
-    attack: playerOrder(attack),
-    takeOutlook,
-    take: playerOrder(take, "march"),
+    move: playerOrder(goOut(move), "march"),
+    previewAttack: lookOut(preview),
+    attack: playerOrder(goOut(attack)),
+    takeOutlook: lookOut(takeOutlook),
+    take: playerOrder(goOut(take), "march"),
     stormLook,
     storm: playerOrder(storm2),
     gateAsk,
@@ -94811,7 +94871,7 @@ ${standing5}`,
     sallyLook,
     sally: playerOrder(sally2),
     endMonth: endMonthWithLessons,
-    lead: leadOf,
+    lead: lookOut(leadOf),
     // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
     lessonNow,
     lessonDeed: lessonDeedOf,
@@ -94822,7 +94882,10 @@ ${standing5}`,
     // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's
     // own order, his attack or his raid, with what the field reports in place of the dice. Taken as his own deeds, as the
     // same orders given from the map are.
-    ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids2, f) => playerOrder(act)(`raid:${k}:${t}:${ids2.join(".")}`, -1, f) })
+    ...battleTable,
+    // (release 2 and the 1.5.1 patch: the general's battle of a garrison in hand is looked at, and settled, with it out of its town)
+    battleLook: lookOut(battleTable.battleLook),
+    battleSettleLand: goOut(battleTable.battleSettleLand)
   };
   globalThis.TC.subSceneOn = (on) => {
     subScene.on = !!on;

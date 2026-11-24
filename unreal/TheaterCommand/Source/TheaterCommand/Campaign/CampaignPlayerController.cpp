@@ -6674,21 +6674,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			// With an army in hand: what a right-click here would do, and what it would cost.
 			FString TipMarked;
 			const FString GarrisonTip = (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion) ? GarrisonSays() : FString();
-			if (!GarrisonTip.IsEmpty() && ComesOutTo(TipRegion))
-			{
-				// (release 2: a garrison that can come out and get here is promised exactly that; the odds and the
-				// march's cost are the attack card's and the march's own, once it is out)
-				const FReachRegion* There = FindReach(TipRegion);
-				Line += There->IsWar() ? FString(TEXT("\nRight-click: they come out of the town and march in, which means war. You are asked first."))
-					: There->bAttack ? FString(TEXT("\nRight-click: they come out of the town and attack. You are shown the odds first."))
-					: FString::Printf(TEXT("\nRight-click: they come out of the town and march here, %d week%s of the month."), FMath::Max(There->Cost, 1), There->Cost == 1 ? TEXT("") : TEXT("s"));
-			}
-			else if (!GarrisonTip.IsEmpty())
+			// (release 2 and the 1.5.1 patch: a garrison that could come out and get here is told what a right-click would
+			// do as an army in the field is, the rules looking at it as if out; it comes out only as the order goes)
+			const bool bComesOut = !GarrisonTip.IsEmpty() && ComesOutTo(TipRegion);
+			if (!GarrisonTip.IsEmpty() && !bComesOut)
 			{
 				Line += TEXT("\n") + GarrisonTip + GarrisonWhere(); // (a garrison in hand is promised no march)
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
+				if (bComesOut)
+				{
+					Line += TEXT("\nThey are inside the town, and come out of it as the order goes.");
+				}
 				// (Rules 84.2.5; ruling 211(a); the code checker, 17 November.) Guns and engineers sent forward alone: the
 				// refusal is asked as OrderTo asks it, after the question of war and before anything else is promised.
 				const FString Alone = (!bByRail && !bBySea) ? Session->WhyNotLead(PickedCorps, TipRegion) : FString();
@@ -8068,7 +8066,7 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 	}
 	{
 		const FString Garrison = GarrisonSays();
-		// (a garrison's flag set down where it can go this month: it comes out of the town on the way, as OrderTo has it)
+		// (a garrison's flag set down where it could go this month once out: the order goes on, as OrderTo has it)
 		if (!Garrison.IsEmpty() && !(bOnTable && ComesOutTo(RegionId)))
 		{
 			// (a garrison's flag set down somewhere: it goes back, and is told how it can be moved)
@@ -8186,7 +8184,7 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 		if (!Garrison.IsEmpty() && ComesOut())
 		{
 			// (release 2, Brian, 24 November 2026: no press first; an order to march or attack brings them out)
-			Notify(TEXT("They are inside the town. Send them anywhere they can go this month and they come out of it first."), 8.0);
+			Notify(TEXT("They are inside the town. Send them anywhere they can go this month: they come out of it as the order goes."), 8.0);
 		}
 		else if (!Garrison.IsEmpty())
 		{
@@ -9147,32 +9145,6 @@ bool ACampaignPlayerController::ComesOutTo(int32 RegionId) const
 	return RegionId != INDEX_NONE && RegionId != ArmyRegion && FindReach(RegionId) != nullptr && ComesOut();
 }
 
-bool ACampaignPlayerController::BringOutOfTown()
-{
-	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || ArmyRegion == INDEX_NONE || Tray.FieldActions.Num() == 0)
-	{
-		return false;
-	}
-	// (as TRAY's TAKE THE FIELD carries it out, without its note: the order he gave says what happens next)
-	const TArray<FString> Actions = Tray.FieldActions; // (a copy: the tray is set out again as the hand is)
-	const int32 Here = ArmyRegion;
-	bool bAny = false;
-	for (const FString& Action : Actions)
-	{
-		FString Note;
-		bAny |= Session->OrderInProvince(Action, Here, Note);
-	}
-	if (!bAny)
-	{
-		return false;
-	}
-	ShowWar(Session->GetView(), TArray<FCorpsMove>());
-	RefreshOrders();
-	RefreshRegionPanel(Here);
-	return GarrisonSays().IsEmpty();
-}
-
 FString ACampaignPlayerController::GarrisonWhere() const
 {
 	// (The design director, 17 November: no hint sends him to a press that does nothing. The sortie and the order to
@@ -9339,10 +9311,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 	{
 		const FString Garrison = GarrisonSays();
-		// (Release 2, Brian, 24 November 2026: a garrison sent where it can go this month comes out of its town first,
-		// as TAKE THE FIELD would bring it, and the order goes on as for any army in the field.)
-		const bool bOut = !Garrison.IsEmpty() && ComesOutTo(RegionId) && BringOutOfTown();
-		if (!Garrison.IsEmpty() && !bOut)
+		// (Release 2 and the 1.5.1 patch, Brian, 24 November 2026: a garrison sent where it could go this month once out
+		// is ordered as an army in the field is. The rules bring it out of its town inside the order's own call, and
+		// only if the order goes: a card's No, the war question's No or a refusal leaves it inside, nothing spent.)
+		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId))
 		{
 			Notify(Garrison + GarrisonWhere(), 10.0); // (a garrison in hand: it is told how it can be moved, and promised no march)
 			return;
