@@ -85780,6 +85780,18 @@
       const nearTo = (id) => id >= 0 && !!s.regions[id] && (his.has(id) || s.regions[id].nb.some((j) => his.has(j)));
       const sees = (id) => id >= 0 && (seen2[id] ?? 0) > 0;
       const whole2 = (id) => id >= 0 && (seen2[id] ?? 0) >= 2;
+      const dist2 = (a, b) => (s.regions[a].x - s.regions[b].x) ** 2 + (s.regions[a].y - s.regions[b].y) ** 2;
+      const toward = (at4, far, side5) => {
+        if (far < 0 || at4 < 0 || far === at4 || !s.regions[at4] || !s.regions[far] || s.regions[at4].nb.includes(far)) return far;
+        const all = s.regions[at4].nb.filter((j) => !!s.regions[j]);
+        const held3 = all.filter((j) => s.regions[j].ctrl === side5 || allied(s, s.regions[j].ctrl, side5));
+        let best = far, d = Infinity;
+        for (const j of held3.length ? held3 : all) if (dist2(j, far) < d) {
+          d = dist2(j, far);
+          best = j;
+        }
+        return best;
+      };
       const arrows = [];
       const attacked = reps.filter((r) => r.defNat === me || r.defenders.some((u) => u.nat === me) || ctrl0[r.region] === me);
       const arrived = /* @__PURE__ */ new Set();
@@ -85800,6 +85812,7 @@
           from2 = reg;
           best = n;
         }
+        from2 = toward(r.region, from2, r.attNat);
         const divs = r.attackers.filter((u) => !u.guard).reduce((t, u) => t + u.divs, 0);
         const fresh5 = {
           kind: "attack",
@@ -85836,8 +85849,9 @@
         const from2 = stood.get(c.id);
         if (from2 === void 0 || from2 === c.reg) continue;
         if (c.nat === me) {
-          const key8 = `${from2}>${c.reg}`;
-          const a2 = fell.get(key8) ?? { kind: "fell", from: from2, to: c.reg, nat: me, war: false, corps: 0, divs: 0 };
+          const to = toward(from2, c.reg, me);
+          const key8 = `${from2}>${to}`;
+          const a2 = fell.get(key8) ?? { kind: "fell", from: from2, to, nat: me, war: false, corps: 0, divs: 0 };
           a2.corps++;
           a2.divs = (a2.divs ?? 0) + c.divs;
           fell.set(key8, a2);
@@ -85845,8 +85859,10 @@
         }
         if (ours(c.nat) || arrived.has(String(c.id))) continue;
         if (!(sees(from2) || sees(c.reg)) || !(nearTo(from2) || nearTo(c.reg))) continue;
-        const key7 = `${c.nat}:${from2}>${c.reg}`;
-        const a = moves.get(key7) ?? { kind: "move", from: from2, to: c.reg, nat: c.nat, war: foes0.has(c.nat) || atWar(s, c.nat, me), corps: 0, divs: whole2(c.reg) ? 0 : null, ...nearTo(c.reg) ? {} : { away: true } };
+        const away2 = !nearTo(c.reg);
+        const [a0, a1] = away2 ? [from2, toward(from2, c.reg, c.nat)] : [toward(c.reg, from2, c.nat), c.reg];
+        const key7 = `${c.nat}:${a0}>${a1}`;
+        const a = moves.get(key7) ?? { kind: "move", from: a0, to: a1, nat: c.nat, war: foes0.has(c.nat) || atWar(s, c.nat, me), corps: 0, divs: whole2(c.reg) ? 0 : null, ...away2 ? { away: true } : {} };
         a.corps++;
         if (a.divs !== null) a.divs += c.divs;
         moves.set(key7, a);
@@ -85881,15 +85897,18 @@
     const nats = [...new Set(moves.map((a) => a.nat))];
     for (const n of nats.slice(0, attacks.length ? 1 : 2)) {
       const mine4 = moves.filter((a) => a.nat === n);
-      const corps = mine4.reduce((t, a) => t + a.corps, 0);
-      const into = [...new Set(mine4.filter((a) => !a.away && s.regions[a.to]?.ctrl === me).map((a) => place2(a.to)))];
-      const up = [...new Set(mine4.filter((a) => !a.away && s.regions[a.to]?.ctrl !== me).map((a) => place2(a.to)))];
-      const away2 = [...new Set(mine4.filter((a) => a.away).map((a) => place2(a.from)))];
-      const army2 = `${adj(n)} ${corps === 1 ? "corps" : `armies (${corps} corps)`}`;
-      const peace = mine4[0].war ? "" : ", at peace with you,";
-      if (into.length) said.push(`${army2}${peace} march into ${some2(into)}.`);
-      else if (up.length) said.push(`${army2}${peace} move up to ${some2(up)}, next to your land.`);
-      else if (away2.length) said.push(`${army2}${peace} pull back from ${some2(away2)}.`);
+      const into = mine4.filter((a) => !a.away && s.regions[a.to]?.ctrl === me);
+      const up = mine4.filter((a) => !a.away && s.regions[a.to]?.ctrl !== me);
+      const away2 = mine4.filter((a) => a.away);
+      const told2 = into.length ? into : up.length ? up : away2;
+      const corps = told2.reduce((t, a) => t + a.corps, 0);
+      const where = some2([...new Set(told2.map((a) => place2(told2 === away2 ? a.from : a.to)))]);
+      const one = corps === 1;
+      const army2 = one ? `${/^[AEIOU]/.test(adj(n)) ? "An" : "A"} ${adj(n)} corps` : `${adj(n)} armies (${corps} corps)`;
+      const peace = told2[0].war ? "" : ", at peace with you,";
+      if (told2 === into) said.push(`${army2}${peace} ${one ? "marches" : "march"} into ${where}.`);
+      else if (told2 === up) said.push(`${army2}${peace} ${one ? "moves" : "move"} up to ${where}, next to your land.`);
+      else said.push(`${army2}${peace} ${one ? "pulls" : "pull"} back from ${where}.`);
     }
     return said.join(" ");
   }

@@ -70,6 +70,19 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
     const nearTo = (id: number): boolean => id >= 0 && !!s.regions[id] && (his.has(id) || s.regions[id].nb.some((j) => his.has(j)));
     const sees = (id: number): boolean => id >= 0 && (seen[id] ?? 0) > 0;
     const whole = (id: number): boolean => id >= 0 && (seen[id] ?? 0) >= 2;
+    // A long road (by rail, or a march of more than one province in the month) is drawn one province long, at the end
+    // that touches him: as a staff officer's arrow shows from which side an army came, not every mile of its road. Far:
+    // the neighbour of At that lies nearest Far (Far itself where they are neighbours already), held by Side or its
+    // allies where one is (an arrow never seems to come out of ground the other side holds).
+    const dist2 = (a: number, b: number): number => (s.regions[a].x - s.regions[b].x) ** 2 + (s.regions[a].y - s.regions[b].y) ** 2;
+    const toward = (at: number, far: number, side: string): number => {
+      if (far < 0 || at < 0 || far === at || !s.regions[at] || !s.regions[far] || s.regions[at].nb.includes(far)) return far;
+      const all = s.regions[at].nb.filter((j) => !!s.regions[j]);
+      const held = all.filter((j) => s.regions[j].ctrl === side || allied(s, s.regions[j].ctrl, side));
+      let best = far, d = Infinity;
+      for (const j of held.length ? held : all) if (dist2(j, far) < d) { d = dist2(j, far); best = j; }
+      return best;
+    };
 
     const arrows: NearArrow[] = [];
     // The attacks on his troops (or on any troops holding his ground): from where the attackers stood, and how it ended.
@@ -89,6 +102,7 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
       }
       let from = -1, best = 0;
       for (const [reg, n] of counts) if (n > best || (n === best && reg < from)) { from = reg; best = n; }
+      from = toward(r.region, from, r.attNat);
       const divs = r.attackers.filter((u) => !u.guard).reduce((t, u) => t + u.divs, 0);
       const fresh: NearArrow = {
         kind: 'attack', from, to: r.region, nat: r.attNat, war: true, corps: Math.max(corps, r.attackers.filter((u) => !u.guard).length), divs,
@@ -114,8 +128,9 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
       const from = stood.get(c.id);
       if (from === undefined || from === c.reg) continue;
       if (c.nat === me) {
-        const key = `${from}>${c.reg}`;
-        const a = fell.get(key) ?? { kind: 'fell' as const, from, to: c.reg, nat: me, war: false, corps: 0, divs: 0 };
+        const to = toward(from, c.reg, me);
+        const key = `${from}>${to}`;
+        const a = fell.get(key) ?? { kind: 'fell' as const, from, to, nat: me, war: false, corps: 0, divs: 0 };
         a.corps++;
         a.divs = (a.divs ?? 0) + c.divs;
         fell.set(key, a);
@@ -123,8 +138,10 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
       }
       if (ours(c.nat) || arrived.has(String(c.id))) continue;
       if (!(sees(from) || sees(c.reg)) || !(nearTo(from) || nearTo(c.reg))) continue;
-      const key = `${c.nat}:${from}>${c.reg}`;
-      const a = moves.get(key) ?? { kind: 'move' as const, from, to: c.reg, nat: c.nat, war: foes0.has(c.nat) || atWar(s, c.nat, me), corps: 0, divs: whole(c.reg) ? 0 : null, ...(nearTo(c.reg) ? {} : { away: true }) };
+      const away = !nearTo(c.reg);
+      const [a0, a1] = away ? [from, toward(from, c.reg, c.nat)] : [toward(c.reg, from, c.nat), c.reg];
+      const key = `${c.nat}:${a0}>${a1}`;
+      const a = moves.get(key) ?? { kind: 'move' as const, from: a0, to: a1, nat: c.nat, war: foes0.has(c.nat) || atWar(s, c.nat, me), corps: 0, divs: whole(c.reg) ? 0 : null, ...(away ? { away: true } : {}) };
       a.corps++;
       if (a.divs !== null) a.divs += c.divs;
       moves.set(key, a);
@@ -165,15 +182,19 @@ function noteOf(s: Game, me: string, arrows: NearArrow[]): string {
   const nats = [...new Set(moves.map((a) => a.nat))];
   for (const n of nats.slice(0, attacks.length ? 1 : 2)) {
     const mine = moves.filter((a) => a.nat === n);
-    const corps = mine.reduce((t, a) => t + a.corps, 0);
-    const into = [...new Set(mine.filter((a) => !a.away && s.regions[a.to]?.ctrl === me).map((a) => place(a.to)))];
-    const up = [...new Set(mine.filter((a) => !a.away && s.regions[a.to]?.ctrl !== me).map((a) => place(a.to)))];
-    const away = [...new Set(mine.filter((a) => a.away).map((a) => place(a.from)))];
-    const army = `${adj(n)} ${corps === 1 ? 'corps' : `armies (${corps} corps)`}`;
-    const peace = mine[0].war ? '' : ', at peace with you,';
-    if (into.length) said.push(`${army}${peace} march into ${some(into)}.`);
-    else if (up.length) said.push(`${army}${peace} move up to ${some(up)}, next to your land.`);
-    else if (away.length) said.push(`${army}${peace} pull back from ${some(away)}.`);
+    // (into his land, else up to it, else away from it: the corps counted are only those the sentence speaks of)
+    const into = mine.filter((a) => !a.away && s.regions[a.to]?.ctrl === me);
+    const up = mine.filter((a) => !a.away && s.regions[a.to]?.ctrl !== me);
+    const away = mine.filter((a) => a.away);
+    const told = into.length ? into : up.length ? up : away;
+    const corps = told.reduce((t, a) => t + a.corps, 0);
+    const where = some([...new Set(told.map((a) => place(told === away ? a.from : a.to)))]);
+    const one = corps === 1;
+    const army = one ? `${/^[AEIOU]/.test(adj(n)) ? 'An' : 'A'} ${adj(n)} corps` : `${adj(n)} armies (${corps} corps)`;
+    const peace = told[0].war ? '' : ', at peace with you,';
+    if (told === into) said.push(`${army}${peace} ${one ? 'marches' : 'march'} into ${where}.`);
+    else if (told === up) said.push(`${army}${peace} ${one ? 'moves' : 'move'} up to ${where}, next to your land.`);
+    else said.push(`${army}${peace} ${one ? 'pulls' : 'pull'} back from ${where}.`);
   }
   return said.join(' ');
 }

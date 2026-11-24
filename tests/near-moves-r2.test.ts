@@ -44,7 +44,7 @@ describe('what one enemy month did near the player', () => {
     expect(a.away).toBeUndefined();
     expect(a.corps).toBeGreaterThanOrEqual(1);
     expect(a.divs).toBeGreaterThanOrEqual(1);
-    expect(out.nearNote).toContain(`move up to ${g.regions[c.to].name}, next to your land`);
+    expect(out.nearNote).toMatch(new RegExp(`moves? up to ${g.regions[c.to].name}, next to your land`));
   });
 
   it('tells nothing his reports cannot see, and no division count where the place is only glimpsed', () => {
@@ -67,7 +67,29 @@ describe('what one enemy month did near the player', () => {
     const out = nearMoves(g, 'GER', stood, ctrlOf(g), [], seeAll(g));
     expect(out.arrows).toEqual([expect.objectContaining({ kind: 'move', from: c.to, to: c.from, away: true })]);
     expect(out.near).toBe(false);
-    expect(out.nearNote).toContain(`pull back from ${g.regions[c.to].name}`);
+    expect(out.nearNote).toMatch(new RegExp(`pulls? back from ${g.regions[c.to].name}`));
+  });
+
+  it('draws a long road one province long, at the end that touches him, and counts only the corps the sentence speaks of', () => {
+    const g = open('FRA');
+    const c = germanAtTheBorder(g);
+    const near = new Set([c.to, ...g.regions[c.to].nb]);
+    const far = g.regions.find((r) => r.ctrl === 'GER' && !near.has(r.id) && Math.hypot(r.x - g.regions[c.to].x, r.y - g.regions[c.to].y) > 150)!;
+    const stood = stoodNow(g);
+    stood.set(c.id, far.id); // (came by rail from far behind)
+    // and another German corps on the border going back the other way, far
+    const other = g.corps.find((x) => !x.dead && x.nat === 'GER' && x.id !== c.id && x.reg !== c.to && g.regions[x.reg].nb.some((j) => g.regions[j].ctrl === 'FRA'))!;
+    stood.set(other.id, other.reg);
+    other.reg = far.id;
+    const out = nearMoves(g, 'GER', stood, ctrlOf(g), [], seeAll(g));
+    const up = out.arrows.find((a) => a.to === c.to)!;
+    expect(g.regions[c.to].nb).toContain(up.from);
+    expect(Math.hypot(g.regions[up.from].x - far.x, g.regions[up.from].y - far.y)).toBeLessThan(Math.hypot(g.regions[c.to].x - far.x, g.regions[c.to].y - far.y));
+    const back = out.arrows.find((a) => a.away)!;
+    expect(back.from).toBe(stood.get(other.id));
+    expect(g.regions[back.from].nb).toContain(back.to);
+    const corpsUp = out.arrows.filter((a) => !a.away && a.kind === 'move').reduce((t, a) => t + a.corps, 0);
+    expect(out.nearNote).toContain(corpsUp === 1 ? `A German corps moves up to ${g.regions[c.to].name}` : `German armies (${corpsUp} corps) move up to`);
   });
 
   it('says nothing of his own month, nor of his allies\'', () => {
