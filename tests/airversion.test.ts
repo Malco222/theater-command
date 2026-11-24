@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AIR, assessAir, fightersOver, gunsAt, whyNotMission as whyNotFly } from '../src/campaign/air';
 import { groupRow } from '../src/campaign/airwar';
-import { AIRV, airPiece, fieldWrecked, layStartGuns, nightGunShare, openAirVersion, setAirPiece, startGunLevel, startGunSites, wrecked } from '../src/campaign/airversion';
+import { AIRV, airPiece, fieldWrecked, layStartGuns, nightGunShare, openAirVersion, setAirPiece, startGunLevel, startGunSites, startGunsOnLoad, wrecked } from '../src/campaign/airversion';
 import { createGame, setWar } from '../src/campaign/game';
 import { majorsOf } from '../src/campaign/diplomacy';
 import { INTEL, MISSIONS, intelTick, setMission, spyRoom, whyNotMission } from '../src/campaign/intel';
@@ -20,9 +20,13 @@ afterEach(() => { Object.assign(AIRV, structuredClone(keep)); Object.assign(INTE
 
 describe('the switches', () => {
   it('are off for a new campaign, keep with the save, and touch nothing outside the grand campaign', () => {
+    // (1.5.1, Brian 24 November 2026 22:11Z: the start guns are on for new grand campaigns; the other two stay off.)
     const g = free();
-    for (const p of ['night', 'start', 'field'] as const) expect(airPiece(g, p)).toBe(false);
-    expect(Object.keys(g.flags).some((k) => k.startsWith('av:'))).toBe(false);
+    for (const p of ['night', 'field'] as const) expect(airPiece(g, p)).toBe(false);
+    expect(airPiece(g, 'start')).toBe(true);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('av:'))).toEqual(['av:start']);
+    AIRV.startGuns.on = false;
+    expect(Object.keys(free().flags).some((k) => k.startsWith('av:'))).toBe(false);
     setAirPiece(g, 'night', true);
     setAirPiece(g, 'field', true);
     const back = loadGame(saveGame(g))!;
@@ -81,6 +85,7 @@ describe('guns at the start (ruling 124)', () => {
     expect(startGunLevel(1)).toBe(1);
     expect(startGunLevel(16)).toBe(1);
     expect(startGunLevel(17)).toBe(2);
+    AIRV.startGuns.on = false; // (laid by hand here, so the campaign opens bare)
     const g = free();
     const berlin = g.nations.GER.capital;
     expect(gunsAt(g, berlin)).toBe(0);
@@ -92,11 +97,62 @@ describe('guns at the start (ruling 124)', () => {
   });
 
   it('a campaign begun with the switch on opens with them, player and computer alike; off, none', () => {
+    AIRV.startGuns.on = false;
     const off = free(7, 'GER');
     expect(off.regions.some((r) => gunsAt(off, r.id) > 0)).toBe(false);
     AIRV.startGuns.on = true;
     const g = free(7, 'GER');
     for (const nat of majorsOf(g)) for (const s of startGunSites(g, nat)) expect(gunsAt(g, s), nat).toBe(1);
+  });
+
+  // (1.5.1; Brian, 24 November 2026 22:31Z: "Yes, when I load a saved war".)
+  it('a grand campaign saved before they were on lays them once as it is loaded, player and computer alike', () => {
+    AIRV.startGuns.on = false;
+    const g = free(7, 'GER');
+    g.turn = 30; // (played on into 1942: the level is the month the war began, 1939's)
+    const back = loadGame(saveGame(g))!;
+    AIRV.startGuns.on = true;
+    expect(airPiece(back, 'start')).toBe(false);
+    expect(back.regions.some((r) => gunsAt(back, r.id) > 0)).toBe(false);
+    expect(startGunsOnLoad(back, majorsOf(back))).toBe(true);
+    expect(airPiece(back, 'start')).toBe(true);
+    for (const nat of majorsOf(back)) for (const s of startGunSites(back, nat)) expect(gunsAt(back, s), nat).toBe(1);
+    // Once: loaded again, nothing more is laid; a war begun with them is never touched.
+    for (const s of startGunSites(back, 'GER')) back.flags[`wk:aa:${s}`] = 0;
+    expect(startGunsOnLoad(back, majorsOf(back))).toBe(false);
+    expect(gunsAt(back, back.nations.GER.capital)).toBe(0);
+    const now = free(7, 'GER');
+    expect(startGunsOnLoad(now, majorsOf(now))).toBe(false);
+  });
+
+  it('on load: the level of the month the war began; the higher level kept; only ground each power still holds', () => {
+    AIRV.startGuns.on = false;
+    const g = free(7, 'UK');
+    g.flags.openFrom = g.turn = 17; // (a war begun in 1941)
+    const london = g.nations.UK.capital;
+    const paris = g.nations.FRA.capital;
+    g.regions[paris].ctrl = 'GER'; // (Paris fallen: neither France's guns nor Germany's)
+    const uk = startGunSites(g, 'UK');
+    g.flags[`wk:aa:${uk[1]}`] = 3;
+    AIRV.startGuns.on = true;
+    expect(startGunsOnLoad(g, majorsOf(g))).toBe(true);
+    expect(gunsAt(g, london)).toBe(2);
+    expect(gunsAt(g, uk[1])).toBe(3);
+    expect(gunsAt(g, uk[2])).toBe(2);
+    expect(gunsAt(g, paris)).toBe(0);
+    expect(startGunSites(g, 'FRA')).not.toContain(paris);
+    for (const s of startGunSites(g, 'FRA')) expect(gunsAt(g, s)).toBe(2);
+  });
+
+  it('on load: never outside the grand campaign, and never with the switch off', () => {
+    const h = createGame(7, 'GER');
+    expect(startGunsOnLoad(h, majorsOf(h))).toBe(false);
+    expect(h.regions.some((r) => gunsAt(h, r.id) > 0)).toBe(false);
+    AIRV.startGuns.on = false;
+    const g = free(7, 'GER');
+    expect(startGunsOnLoad(g, majorsOf(g))).toBe(false);
+    expect(airPiece(g, 'start')).toBe(false);
+    expect(g.regions.some((r) => gunsAt(g, r.id) > 0)).toBe(false);
   });
 });
 

@@ -420,12 +420,13 @@ describe('one war at the history stop, nobody playing', () => {
     // only: the American staff, its rule, the reckoning's bar and its dice are untouched, and so are the assertions.
     // (1) From month 56 Germany holds Corsica, with no corps on it: an island America's reckoning passes, so that "none
     // on an island" is a choice the staff makes. (2) After America's first refusal on France's mainland, Germany's field
-    // corps keep CUT of their strength, once: one fixed amount, never looped to a pass. Seed 40, whose army abroad's
-    // dice allow a landing in June 1944: refused at Calais in May (0.49 against 0.6), 0.83 after the cut, and it lands
-    // at Bordeaux in June with Corsica open every month. Seeds 43, 45, 46 and 49 were tried: their staffs land on Sicily
-    // or Naples, or their dice say no after May.)
+    // corps keep CUT of their strength, once: one fixed amount, never looped to a pass. Seed 46: refused at Calais in
+    // May 1944 (0.33 against 0.6), 0.65 after the cut, and it lands three corps at Bordeaux in July with Corsica open
+    // every month. (Seed 40 until the start guns of 1.5.1, ruling 124: the guns blunt the bombing, so Germany keeps
+    // more in reserve; seed 40's first refused beach fell from 0.49 to 0.32 and its Americans went to Sicily. Seeds 41
+    // to 52 are all refused at 0.32 to 0.40; seed 46 tells the story whole. The design director, 24 Nov 2026 22:58Z.)
     const CUT = 0.25, ISLE = 'Corsica';
-    const g = startOpen(createGame(40, null));
+    const g = startOpen(createGame(46, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();

@@ -332,6 +332,8 @@ describe('anti-aircraft guns', () => {
 
   it('can be built on any ground a nation holds, level by level, and cost upkeep to man', () => {
     const g = grand(3, 'GER');
+    // (1.5.1: the start guns stand at Berlin, the Ruhr and Bohemia, and the ledger's line counts every level Germany holds; this test counts from bare ground)
+    for (const k of Object.keys(g.flags)) if (k.startsWith('wk:aa:')) delete g.flags[k];
     rich(g, 'GER');
     const r = g.byName['Hamburg'];
     const before = upkeepTotal(g, 'GER');
