@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 /**
@@ -54,7 +55,11 @@ namespace LandEye
 	 * or a picture asked for, its subject gone from the field; a shell bursting at the lens (cut on its flash, the
 	 * other cut allowed sooner than Settings::ShotLeast); its own man out of the picture or hidden in the corn. */
 	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone, Burst, Lost, Dark };
+	/** A shot of its own kind of moment (release 2): the first bail-out, the whistle that starts the attack, an earned
+	 * nickname's first kill, a last stand. */
+	enum class Special : unsigned char { None, Bail, Whistle, Nick, Stand };
 	const char* NameOf(Why W);
+	const char* NameOf(Special S);
 
 	/** Where the eye is, what it looks at, the lens (vertical field of view, degrees) and the roll (degrees). */
 	struct Pose
@@ -71,6 +76,12 @@ namespace LandEye
 		 * would; 0 on the wide ones, where all of it is sharp and the scene draws no depth of field at all. Decided at the
 		 * cut, so the scene's depth of field is never switched on or off in the middle of a shot. */
 		double Focus = 0.0;
+		/** The shot's special moment (Special), for the scene: the whistle start, a nickname's first kill, a last stand,
+		 * the first bail-out's watch. */
+		Special Sp = Special::None;
+		/** A nickname's first kill (Settings and World::Nickname): the block, as the recording numbers it, whose earned
+		 * nickname the scene shows on the picture while the shot holds (-1: none). */
+		int Card = -1;
 	};
 
 	/** Whether a point is in a pose's picture (its vertical lens, the picture Aspect wide for 1 high), with a margin. */
@@ -114,6 +125,11 @@ namespace LandEye
 		 * goes to a tank's end 1 to 3 s ahead; Director::BailOut then says at the kill whether anyone did. Unset: none,
 		 * and the film is as it was. */
 		std::function<bool(int Track)> Bails;
+		/** A block's earned nickname (Brian's nicknames, release 2: the campaign gives a unit that has earned one its name,
+		 * which the recording does not carry), empty for none; the block as the recording numbers it. Asked once a block.
+		 * Every block of a corps may carry its corps' name: each name is carded once, on the first of its blocks' kills
+		 * the film can go to. Unset: no nickname shot at all, and the film is as it was. */
+		std::function<std::string(int Block)> Nickname;
 	};
 
 	struct Settings
@@ -254,6 +270,33 @@ namespace LandEye
 		 * Not while a radio call's barrage is owed (the film went to the man calling it): the next crew is watched for. */
 		double BailNear = 22.0, BailFar = 38.0, BailLookBack = 3.0;
 		double BailRun = 8.0, BailBlast = 2.5, BailLeast = 10.0, BailMost = 15.0;
+		/** The whistle start (Brian's yes, 23 November 19:52Z, release 2, -TheaterLandWhistle; off till the art director
+		 * passes it and the Mac holds 45 fps): the attack's step-off (the first move of an attacking infantry block, its
+		 * phase out of its hold, as the recording marks it) is shot on the block's officer from off his side, a little
+		 * ahead of him, 9 to 14 m, at a man's height: he blows his whistle, he and the men about him climb out and go,
+		 * held WhistleHold real seconds after it as firmly as the first bail-out. A step-off within WhistleOpen battle
+		 * seconds of the start opens the film, and the opening aerial follows it; a later one is cut to from WhistleLead
+		 * before it (missed if no cut can come by WhistleLate after it), and the film goes on as ever. */
+		bool bWhistle = false;
+		double WhistleLead = 1.5, WhistleHold = 3.5, WhistleLate = 0.8, WhistleOpen = 8.0;
+		/** A nickname's first kill (Brian's yes, 23 November 19:52Z, release 2, with World::Nickname): a block with an
+		 * earned nickname, about to make its first kill, is cut to: the man or the tank who fires it, close, from off his
+		 * front, the kill landing NickLead real seconds in, held NickAfter after it, the nickname on the picture
+		 * (Pose::Card) all the while. Its first kill the film can go to within NickLate battle seconds of its first; at
+		 * most NickMost in a battle, NickEvery real seconds apart. */
+		double NickLead = 1.0, NickAfter = 2.0, NickLate = 45.0, NickEvery = 25.0;
+		int NickMost = 3;
+		/** The last stand (Brian's yes, 23 November 19:52Z, release 2, -TheaterLandLastStand): once a battle, a section of
+		 * infantry (StandFrom men at least; a platoon of more than 14 split by its squad leaders) down to StandMen
+		 * standing or fewer and StandShare of itself, with no more than StandFriends of its own side within StandAlone
+		 * metres of them, the enemy within StandEnemy and still firing (in the StandFire seconds after), is watched from
+		 * behind their shoulders, the enemy before them (the later tries from over them, nearer), and held StandLeast to
+		 * StandHold real seconds, to its end if it comes sooner (they fall, or go), as firmly as the first bail-out. Only
+		 * from a place two of them are seen from, up and not behind the stalks, as it begins and halfway through: a group
+		 * no place shows is let be, and the third such ends the look. */
+		bool bLastStand = false;
+		int StandMen = 4, StandFrom = 6, StandFriends = 3;
+		double StandShare = 0.4, StandAlone = 30.0, StandEnemy = 250.0, StandFire = 8.0, StandHold = 9.0, StandLeast = 4.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -383,7 +426,25 @@ namespace LandEye
 		/** The bail watches placed (the shot gone to for a crew that may get out), and whether the shot on the screen is
 		 * one, for the test. */
 		int BailWatches() const { return BailWatchCount; }
-		bool BailWatchNow() const { return bShotBail; }
+		bool BailWatchNow() const { return ShotSp == Special::Bail; }
+		/** The whistle start (Settings::bWhistle): the battle time of the attack's step-off and its officer's track (-1:
+		 * none found yet), so the scene can blow his whistle as he steps off. */
+		double WhistleAt() const { return WhistleT; }
+		int WhistleMan() const { return WhistleTrack; }
+		/** The special shots gone for (whistle, nickname, last stand), for the test: which; its man (the officer, the
+		 * shooter, the survivor framed) and block; the battle time of its moment (the step-off, the kill, the stand) and
+		 * of its end (-1 none); the battle time it was cut to (-1: missed, nothing fit or no cut could come); the firm
+		 * hold (real s); the real time it was cut to and left, and why; its shot's kind. */
+		struct SpecialBeat
+		{
+			Special Sp = Special::None;
+			int Who = -1, Block = -1;
+			double At = -1.0, To = -1.0, Cut = -1.0, Hold = 0.0, CutReal = -1.0, Left = -1.0;
+			Why LeftWhy = Why::Asked;
+			Kind Shot = Kind::Open;
+			std::vector<int> Men;
+		};
+		const std::vector<SpecialBeat>& SpecialBeats() const { return SpLog; }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
@@ -486,14 +547,72 @@ namespace LandEye
 		double FellAt = -1.0;
 		/** How long this shot holds on its subject's fall or end (real s; Settings::FallHold, or a bail-out's hold). */
 		double ShotHold = 4.0;
-		/** The first bail-out (Settings::BailNear): bBailWatch while a choice tries the bail watch; bShotBail, this shot is
-		 * one (BailShift: its look's step behind her middle); bBailHold, it holds for her crew (BailOut said so);
+		/** The special shots (the first bail-out, the whistle, a nickname's first kill, a last stand): TrySp while a choice
+		 * tries one, ShotSp the shot's (ShotShift: its look's step from its subject's body, behind a tank's middle or onto
+		 * a last stand's men); HoldUntil, the real time a whistle's, a nickname's or a last stand's shot holds to, no cut
+		 * but a rescue before it (-1 none). The first bail-out: bBailHold, it holds for her crew (BailOut said so);
 		 * bBailDone, the battle's one is held. */
-		bool bBailWatch = false, bShotBail = false, bBailHold = false, bBailDone = false;
-		Vec BailShift;
+		Special TrySp = Special::None, ShotSp = Special::None;
+		double HoldUntil = -1.0;
+		bool bBailHold = false, bBailDone = false;
+		Vec ShotShift;
 		int BailWatchCount = 0;
 		std::vector<BailBeat> BailLog;
 		bool BailWanted(int Track) const;
+		/** The whistle, a nickname's first kill, the last stand (Settings::bWhistle, World::Nickname, bLastStand): the
+		 * special due now (SpecialDue: its man SpWho, block SpBlock, moment SpAt, end SpTo, its men SpMen, where they
+		 * look from and at, SpAim and SpFoe); the choice's (ChoiceSp) and the shot's, held (HeldSp; CardBlock its card).
+		 * bOpenNext: the opening aerial next, the film having opened on the whistle. */
+		Special ChoiceSp = Special::None, HeldSp = Special::None;
+		int SpWho = -1, SpBlock = -1, SpTarget = -1, CardBlock = -1;
+		size_t SpRound = 0;
+		double SpAt = -1.0, SpTo = -1.0;
+		std::vector<int> SpMen;
+		Vec SpAim, SpFoe;
+		bool bOpenNext = false;
+		std::vector<SpecialBeat> SpLog;
+		bool AnySpecial() const { return Set.bWhistle || Set.bLastStand || static_cast<bool>(Here.Nickname); }
+		Special SpecialDue(double Battle, double Real);
+		/** The whistle: its step-off and officer (looked for until found), and whether it is done (taken or missed). */
+		double WhistleT = -1.0, WhistleNextLook = -1.0;
+		int WhistleTrack = -1;
+		bool bWhistleDone = false;
+		void FindWhistle(double Battle);
+		/** The nicknames: each block's (by its place in the recording's blocks: -1 not asked, 0 none, 1 one), the kills of
+		 * blocks with one (landing, round), read up to NickRead of the rounds; each such block's first kill's landing; the
+		 * blocks whose card was shown or missed; how many shown, and when the last. */
+		std::vector<signed char> NickHas;
+		std::vector<std::pair<double, size_t>> NickKills;
+		size_t NickRead = 0, NickFrom = 0;
+		std::vector<double> NickFirst;
+		std::vector<int> NickDone;
+		/** Each block's nickname as World::Nickname gave it, and the names already carded (a name once a battle). */
+		std::vector<std::string> NickName, NickShown;
+		std::vector<size_t> NickTried;
+		int NickCount = 0;
+		double LastNickReal = -1e9;
+		std::unordered_map<uint64_t, int> ManIndex;
+		size_t ManIndexed = 0;
+		int ManOf(int Block, int K, int J);
+		bool FindNick(double Battle, double Real);
+		/** The last stand: the sections weighed (each its men; built afresh as a live battle's tracks grow), the next look
+		 * (battle time), the stand found (its men, look time, end) and whether the battle's one is done. */
+		struct StandGroup
+		{
+			int Block = -1, Side = -1;
+			std::vector<int> Men;
+		};
+		std::vector<StandGroup> StandGroups;
+		size_t StandTracks = 0;
+		double StandNextLook = -1.0, StandFoundAt = -1.0, StandTo = -1.0;
+		int StandWho = -1, StandBlock = -1, StandFirst = -1;
+		std::vector<int> StandMen;
+		/** The groups (their first man) whose stand no place could show: not tried again; the third miss ends the look. */
+		std::vector<int> StandTried;
+		Vec StandAim, StandFoe;
+		bool bStandDone = false;
+		void BuildStandGroups();
+		bool FindStand(double Battle);
 		/** Battle seconds a real second (the scene plays the approach fast and the fight at life's pace, half the rules'
 		 * clock): every rule about what the film shows in the next seconds asks Soon(real seconds) of the battle. */
 		double Pace = 1.0;
@@ -691,7 +810,7 @@ namespace LandEye
 			Kind K = Kind::Wide;
 			int Who = -1;
 			bool bNear = false;
-			bool bBail = false;
+			Special Sp = Special::None;
 		};
 		std::vector<Option> Options;
 		bool bChoosing = false, bChoiceAsked = false;
@@ -779,9 +898,10 @@ namespace LandEye
 			int House = -1;
 			Vec Aim;
 			bool bSalvo = false;
-			bool bBail = false, bBailHold = false;
-			double Hold = 4.0;
-			Vec BailShift;
+			Special Sp = Special::None;
+			bool bBailHold = false;
+			double Hold = 4.0, HoldUntil = -1.0;
+			Vec Shift;
 		};
 		ShotKept KeepShot() const;
 		void PutShot(const ShotKept& K);
@@ -843,6 +963,8 @@ namespace LandEye
 		/** Whether its own man is out of the picture or down in corn taller than he lies, seen from the eye. */
 		bool OwnLost(double Battle) const;
 		bool OwnLostFrom(const Pose& From, double Battle) const;
+		/** The same of another man of the recording (a last stand's men). */
+		bool ManLostFrom(const Pose& From, double Battle, int Who) const;
 		/** Whether anything moves in the picture now (before the armies meet: the advance is the action). */
 		bool MovingIn(double Battle) const;
 
