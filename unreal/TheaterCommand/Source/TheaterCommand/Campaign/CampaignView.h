@@ -1034,6 +1034,10 @@ struct FViewAirfield
 	int32 Holds = 0; // how many aircraft it serves
 	int32 Groups = 0, Aircraft = 0; // -1 where the fog of war hides what flies from it
 	bool bCrowded = false;
+	// (Release 2; the art director's airfield spec of 24 November, item 2.) Where what flies from it is known: its runway
+	// shut, a repair in hand, and "strip" or "full" where airfields are targets (empty where the rules do not say).
+	bool bShut = false, bMending = false;
+	FString Tier;
 };
 
 struct FViewAirFleet
@@ -1222,6 +1226,7 @@ struct FCampaignView
 	TArray<FViewGate> Gates; // (ruling 86) the sea gates
 	FViewRound Round; // (rulings 88, 101, 102) the round of armies
 	TArray<FViewAirFleet> AirFleets;
+	TArray<FViewAirFleet> BasedGroups; // (release 2) every air group as the rules list it, before the table's pieces are made one an airfield
 
 	const FViewCorps* FindCorps(int32 Id) const
 	{

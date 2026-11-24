@@ -13581,6 +13581,42 @@ int32 ACampaignMapActor::AirfieldNear(const FVector2D& MapPoint) const
 	return Best;
 }
 
+void ACampaignMapActor::AirfieldsWithin(const FVector2D& MapPoint, double Reach, TArray<TPair<int32, FVector2D>>& Out) const
+{
+	Out.Reset();
+	const double Far = Reach * Reach;
+	for (const TPair<int32, FVector2D>& Field : AirfieldSpots)
+	{
+		if (FVector2D::DistSquared(Field.Value, MapPoint) <= Far)
+		{
+			Out.Add(Field);
+		}
+	}
+}
+
+bool ACampaignMapActor::GetAirfieldOutline(int32 RegionId, TArray<FVector>& OutCorners) const
+{
+	OutCorners.Reset();
+	const FVector2D* Spot = AirfieldSpots.Find(RegionId);
+	const FVector2D* Lie = AirfieldLie.Find(RegionId);
+	if (!Spot || !Lie)
+	{
+		return false;
+	}
+	// (as ShowBuildings lays the field: the towns' unit, an empty field built smaller, its grass Long by Wide, turned)
+	const double Unit = UnitScale * 2.1;
+	const double Field = Unit * 1.3 * (bAirfieldsKnown && !AirfieldsUsed.Contains(RegionId) ? 0.62 : 1.0);
+	const double Long = (2.9 + 0.45 * Lie->Y) * 0.62 * Field, Wide = (1.5 + 0.3 * Lie->Y) * 0.66 * Field;
+	const double Turn = FMath::DegreesToRadians(Lie->X), C = FMath::Cos(Turn), S = FMath::Sin(Turn);
+	const FVector Middle = SurfacePoint(Spot->X, Spot->Y, 0.3);
+	const double Along[4] = { Long, Long, -Long, -Long }, Across[4] = { -Wide, Wide, Wide, -Wide };
+	for (int32 Each = 0; Each < 4; ++Each)
+	{
+		OutCorners.Add(Middle + FVector(C * Along[Each] - S * Across[Each], S * Along[Each] + C * Across[Each], 0.0));
+	}
+	return true;
+}
+
 void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 {
 	if (!GetWorld() || (!Sortie.bFromSea && !Data.Regions.IsValidIndex(Sortie.From)))

@@ -5583,6 +5583,23 @@ bool ACampaignPlayerController::RayOnTable(const FVector& Origin, const FVector&
 	return true;
 }
 
+namespace
+{
+	// (Release 2; the art director's airfield spec of 24 November.) What an airfield is called on its card and its row: a
+	// strip where the rules say so (or, where they keep no tiers, a landing ground), and an airfield otherwise.
+	FString AirfieldTitle(const FViewAirfield& Field)
+	{
+		return Field.Tier == TEXT("strip") || (Field.Tier.IsEmpty() && Field.Size <= 1) ? FString(TEXT("Strip")) : FString(TEXT("Airfield"));
+	}
+	// And what flies from it, in a few words.
+	FString AirfieldStands(const FViewAirfield& Field)
+	{
+		return Field.Groups < 0 ? FString(TEXT("what flies from it is not known"))
+			: Field.Groups == 0 ? FString(TEXT("no aircraft based here"))
+			: FString::Printf(TEXT("%d air group%s based here"), Field.Groups, Field.Groups == 1 ? TEXT("") : TEXT("s"));
+	}
+}
+
 void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
 	TheaterSpeed::NoteFrame(DeltaTime, GetWorld()); // ("-TheaterSpeedLog": what the frame costs)
@@ -5981,10 +5998,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// ("6 air groups based here") and a click, which opens the airfield. It is drawn over the table, so no piece behind
 	// it is pointed at.
 	const int32 OnFieldBadge = bHaveMouse ? FieldBadgeUnder(Mouse) : INDEX_NONE;
-	const int32 PointedRegion = OnFieldBadge != INDEX_NONE ? OnFieldBadge : bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
+	int32 PointedRegion = OnFieldBadge != INDEX_NONE ? OnFieldBadge : bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
 	PointerMap = bOnTable ? Map->WorldToMap(PointerWorld) : FVector2D::ZeroVector;
 	bPointerOnWater = bOnTable && PointedRegion == INDEX_NONE;
-	PointedField = OnFieldBadge != INDEX_NONE ? OnFieldBadge : bOnTable ? Map->AirfieldNear(PointerMap) : INDEX_NONE;
+	// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 1.) With nothing in hand
+	// an airfield is pointed at from anywhere in a ring 28 of the screen's units across round the middle of its runway,
+	// whatever the height of the eye (FieldInRing). With an army, a fleet or an agent in hand only on the field itself,
+	// as before, so that no order is turned into a look at an airfield.
+	const bool bHandsFree = ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE;
+	PointedField = OnFieldBadge != INDEX_NONE ? OnFieldBadge : !bOnTable ? INDEX_NONE : bHandsFree && !bScripted ? FieldInRing(Mouse, PointedRegion) : Map->AirfieldNear(PointerMap);
 	AArmyPiece* PointedPiece = nullptr;
 	AArmyPiece* AimedPiece = nullptr; // (what an order would go to: never the flag that is being carried)
 	int32 PointedAgent = INDEX_NONE;
@@ -6008,6 +6030,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				PointedPiece = nullptr;
 			}
 		}
+	}
+
+	// (The same spec.) Inside its ring the airfield wins over the province and the town's plate: the pointer points at the
+	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins.
+	if (PointedField != INDEX_NONE && OnFieldBadge == INDEX_NONE && bHandsFree && !PointedPiece && PointedAgent == INDEX_NONE)
+	{
+		PointedRegion = PointedField;
+		bPointerOnWater = false;
 	}
 
 	// (What an order would go to: the army whose figure is under the pointer, or else the ground. See AimedOf.)
@@ -6342,6 +6372,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				LastClickRegion = Ground;
 				LastClickAt = ClickedAt;
 				ClickOnTable(PointedPiece, PointedRegion);
+				// (The art director's airfield spec, item 1.) Where a town's ring and an airfield's overlap, the next click on the
+				// same spot takes the other one, and the one after that this one again.
+				if (bPointerInOverlap && !PointedPiece)
+				{
+					bOverlapSwapped = !bOverlapSwapped;
+					OverlapClickAt = Mouse;
+				}
 			}
 		}
 		bLeftHeld = false;
@@ -6410,8 +6447,35 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Pointer = bShell ? EMouseCursor::Crosshairs : (PointedRegion == Held->Base || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
 			}
 		}
+		else if (bHandsFree && PointedField != INDEX_NONE && !PointedPiece && PointedAgent == INDEX_NONE && GetSession() && GetSession()->GetView().Airfields.Num() > 0)
+		{
+			// (The art director's airfield spec, item 2.) Over an airfield a click would open: the hand.
+			Pointer = EMouseCursor::Hand;
+		}
 	}
 	CurrentMouseCursor = Pointer;
+	// (The same, item 2.) That airfield ringed in brass on the screen (CampaignHUD, under the towns' plates), and the one the
+	// photographer's pointer is staged on.
+	{
+		const int32 Ringed = (StagedHover != INDEX_NONE && bStagedField) ? StagedHover
+			: (Pointer == EMouseCursor::Hand && PointedAgent == INDEX_NONE && !bLeftHeld) ? PointedField : INDEX_NONE;
+		FieldOutline.Reset();
+		TArray<FVector> FieldCorners;
+		if (Ringed != INDEX_NONE && Map->GetAirfieldOutline(Ringed, FieldCorners))
+		{
+			const TheaterSpeed::FEye RingView(this);
+			for (const FVector& Corner : FieldCorners)
+			{
+				FVector2D OnScreen;
+				if (!RingView.Project(Corner, OnScreen))
+				{
+					FieldOutline.Reset();
+					break;
+				}
+				FieldOutline.Add(OnScreen);
+			}
+		}
+	}
 
 	// Whatever the pointer rests on is lit faintly, and with an army in hand the road to it is drawn.
 	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
@@ -6542,6 +6606,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			// is left of the slip is folded into the card's foot (see the end of this), so one tip stands by the pointer.
 			const int32 TipHeadEnds = Line.Len();
 			FString TipCardSaid;
+			bool bFieldCard = false; // (the airfield's paper card: it says everything the slip says)
 			TArray<FString> Worth;
 			// What the place pays a month, where the rules have said; its victory points where they have not.
 			if (const FTownInfo* Town = Map->TownOf(TipRegion))
@@ -6702,6 +6767,60 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					: Field->Groups == 0 ? FString(TEXT("No aircraft are based here."))
 					: FString::Printf(TEXT("%d air group%s based here: %s aircraft%s."), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
 				Line = FString::Printf(TEXT("%s  \u00B7  %s\n%s It has room for %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *Stands, *FText::AsNumber(Field->Holds).ToString());
+				// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 2.) With nothing in
+				// hand the paper card says it: "Airfield" or "Strip", where and whose, the groups based there a line each, and
+				// "shut, repairing" where its runway is out. (The slip is kept whole under it: it is what the steps read.)
+				if (ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE)
+				{
+					bFieldCard = true;
+					HoverGlance.bValid = true;
+					HoverGlance.Title = AirfieldTitle(*Field);
+					const FCampaignNation* FieldHolder = Map->GetData().FindNation(Field->Nation);
+					const FString FieldWhose = Field->Side == TEXT("own") ? FString(TEXT("yours")) : Field->Side == TEXT("ally") ? FString(TEXT("an ally's"))
+						: Field->Side == TEXT("foe") ? FString(TEXT("enemy")) : FieldHolder ? FieldHolder->Name : Field->Nation;
+					const FString FieldWord = Field->Word.ToLower();
+					HoverGlance.Kind = (FieldWord.IsEmpty() || FieldWord == HoverGlance.Title.ToLower() ? FString() : FieldWord + TEXT(" \u00B7 "))
+						+ (Map->GetData().Regions.IsValidIndex(Field->Region) ? Map->GetData().Regions[Field->Region].Name : Region.Name) + TEXT(" \u00B7 ") + FieldWhose;
+					if (Field->bShut || Field->bMending)
+					{
+						FHoverGlanceLine& FieldSaid = HoverGlance.Lines.AddDefaulted_GetRef();
+						FieldSaid.Sign = TEXT("wrench");
+						FieldSaid.Figure = Field->bShut ? TEXT("shut") : TEXT("");
+						FieldSaid.Words = Field->bMending ? TEXT("repairing") : TEXT("no repair in hand");
+						FieldSaid.bAlarm = Field->bShut;
+					}
+					TArray<const FViewAirFleet*> BasedHere;
+					if (Field->Groups > 0)
+					{
+						for (const FViewAirFleet& BasedGroup : View.BasedGroups)
+						{
+							if (BasedGroup.Base == Field->Region)
+							{
+								BasedHere.Add(&BasedGroup);
+							}
+						}
+					}
+					const int32 SlotsLeft = 4 - HoverGlance.Lines.Num();
+					for (int32 Slot = 0; Slot < BasedHere.Num(); ++Slot)
+					{
+						FHoverGlanceLine& FieldSaid = HoverGlance.Lines.AddDefaulted_GetRef();
+						if (Slot == SlotsLeft - 1 && BasedHere.Num() > SlotsLeft)
+						{
+							FieldSaid.Figure = FString::Printf(TEXT("+%d"), BasedHere.Num() - Slot);
+							FieldSaid.Words = TEXT("more groups based here");
+							break;
+						}
+						FieldSaid.bOrderSign = true;
+						FieldSaid.Sign = BasedHere[Slot]->Bombers > BasedHere[Slot]->Fighters ? TEXT("bmr") : TEXT("ftr");
+						FieldSaid.Figure = FText::AsNumber(BasedHere[Slot]->Fighters + BasedHere[Slot]->Bombers).ToString();
+						FieldSaid.Words = BasedHere[Slot]->Name;
+					}
+					if (BasedHere.Num() == 0)
+					{
+						HoverGlance.Lines.AddDefaulted_GetRef().Words = AirfieldStands(*Field);
+					}
+					HoverGlance.Foot = Field->bCrowded ? TEXT("crowded: more aircraft than it has room for\nclick: open the airfield") : TEXT("click: open the airfield");
+				}
 			}
 			// With an army in hand: what a right-click here would do, and what it would cost.
 			FString TipMarked;
@@ -6935,7 +7054,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			// the other armies there, what a right-click would do) go into the card's foot over its own line, and the screen
 			// sets the slip's plain words aside (its marked words, in their colours, stay in the slip). The slip itself is
 			// kept whole here: it is what the steps read.
-			if (HoverGlance.bValid)
+			if (HoverGlance.bValid && !bFieldCard)
 			{
 				FString TipFold = Line.Mid(TipHeadEnds);
 				if (!TipCardSaid.IsEmpty())
@@ -7683,6 +7802,84 @@ void ACampaignPlayerController::FleetToHarbour()
 	{
 		Notify(Note.IsEmpty() ? FString(TEXT("That order cannot be given now.")) : Note, 5.0);
 	}
+}
+
+int32 ACampaignPlayerController::FieldInRing(const FVector2D& Mouse, int32 Ground)
+{
+	THEATER_SPEED_SCOPE(FieldInRing);
+	bPointerInOverlap = false;
+	// (on the field itself, close to, it is that field, as it always was)
+	const int32 OnField = Map->AirfieldNear(PointerMap);
+	if (OnField != INDEX_NONE)
+	{
+		return OnField;
+	}
+	// The ring: 14 of the screen's units round the middle of the runway, in the window's own pixels (GateMarkScale is the
+	// screen's pixels to its unit, as the HUD last painted).
+	const double Ring = 14.0 * GateMarkScale;
+	const TheaterSpeed::FEye OneView(this);
+	FVector2D Here, East, North;
+	if (!OneView.Project(Map->SurfacePointOver(PointerMap.X, PointerMap.Y, 0.0), Here)
+		|| !OneView.Project(Map->SurfacePointOver(PointerMap.X + 1.0, PointerMap.Y, 0.0), East)
+		|| !OneView.Project(Map->SurfacePointOver(PointerMap.X, PointerMap.Y + 1.0, 0.0), North))
+	{
+		return INDEX_NONE;
+	}
+	// How many pixels a step of the map is here, the shorter way: every field that might be inside the ring is taken, and
+	// each is then measured on the screen.
+	const double Step = FMath::Max(FMath::Min(FVector2D::Distance(Here, East), FVector2D::Distance(Here, North)), 0.05);
+	TArray<TPair<int32, FVector2D>> Near;
+	Map->AirfieldsWithin(PointerMap, FMath::Min(Ring / Step * 1.25 + 1.0, 400.0), Near);
+	int32 Best = INDEX_NONE;
+	double BestAway = Ring;
+	for (const TPair<int32, FVector2D>& Candidate : Near)
+	{
+		FVector Runway;
+		FVector2D Seen;
+		if (Map->GetAirfieldWorld(Candidate.Key, Runway) && OneView.Project(Runway, Seen))
+		{
+			const double Away = FVector2D::Distance(Seen, Mouse);
+			if (Away <= BestAway)
+			{
+				BestAway = Away;
+				Best = Candidate.Key;
+			}
+		}
+	}
+	if (Best == INDEX_NONE)
+	{
+		return INDEX_NONE;
+	}
+	// Where the town of the ground under the pointer is in the same ring round its own middle, the rings overlap: the
+	// nearer middle wins, and a click there turns it to the other until the pointer moves off (see the click).
+	if (FVector2D::DistSquared(Mouse, OverlapClickAt) > FMath::Square(6.0 * GateMarkScale))
+	{
+		bOverlapSwapped = false;
+	}
+	const FCampaignMapData& Data = Map->GetData();
+	if (Data.Regions.IsValidIndex(Ground))
+	{
+		const FVector2D Middle = Data.Regions[Ground].Center;
+		FVector2D Town;
+		if (OneView.Project(Map->SurfacePointOver(Middle.X, Middle.Y, 0.0), Town) && FVector2D::Distance(Town, Mouse) <= Ring)
+		{
+			bPointerInOverlap = true;
+			const bool bFieldNearer = BestAway <= FVector2D::Distance(Town, Mouse);
+			return bFieldNearer != bOverlapSwapped ? Best : INDEX_NONE;
+		}
+	}
+	return Best;
+}
+
+void ACampaignPlayerController::OpenSelectedAirfield()
+{
+	if (SelectedRegion == INDEX_NONE || !GetSession() || !GetSession()->GetView().Airfields.ContainsByPredicate([this](const FViewAirfield& Each) { return Each.Region == SelectedRegion; }))
+	{
+		return;
+	}
+	PutDownFleet();
+	OpenPage(TEXT("airfield"));
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
 }
 
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
@@ -12387,6 +12584,17 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.DiplomacyLine = FText::FromString(FString::Printf(
 				TEXT("%s is at peace with you. Drag an army onto its ground, or press the button, and you will be asked whether to declare war."),
 				Owner ? *Owner->Name : *Region.Owner));
+		}
+		// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 3.) The province's
+		// airfield is a row of the panel, and a click on it opens the airfield.
+		if (const FViewAirfield* Field = Session->GetView().Airfields.FindByPredicate([RegionId](const FViewAirfield& Each) { return Each.Region == RegionId; }))
+		{
+			FString Row = AirfieldTitle(*Field) + TEXT("  \u00B7  ") + AirfieldStands(*Field);
+			if (Field->bShut)
+			{
+				Row += Field->bMending ? TEXT("  \u00B7  shut, repairing") : TEXT("  \u00B7  shut");
+			}
+			RegionPanel.FieldRow = FText::FromString(Row);
 		}
 	}
 	if (Region.bCapital)

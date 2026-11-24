@@ -3491,6 +3491,26 @@ namespace
 			{
 				return LayerId;
 			}
+			// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 2.) The airfield a
+			// click would open, ringed round its grass in the warm brass: desk-950 under brass-300, as the lessons' clamps
+			// are, drawn first so that the towns' plates and the badges lie over it.
+			{
+				const TArray<FVector2D>& FieldRing = Controller->GetFieldOutline();
+				if (FieldRing.Num() == 4)
+				{
+					const float RingScale = FMath::Max(Geometry.Scale, 0.01f);
+					TArray<FVector2D> RingLine;
+					for (const FVector2D& RingCorner : FieldRing)
+					{
+						RingLine.Add(RingCorner / RingScale);
+					}
+					RingLine.Add(FieldRing[0] / RingScale);
+					FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), RingLine, ESlateDrawEffect::None,
+						FLinearColor(FColor::FromHex(TEXT("0E0B08"))).CopyWithNewOpacity(0.9f), true, 4.5f);
+					FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), RingLine, ESlateDrawEffect::None,
+						FLinearColor(FColor::FromHex(TEXT("E0B872"))), true, 2.0f);
+				}
+			}
 			TArray<FTownPlate> Plates;
 			Controller->GetTownPlates(Plates);
 			// (ruling 86: where the gates' marks are drawn, for the pointer; and the badges drawn, for them to step clear of)
@@ -8809,6 +8829,42 @@ namespace
 						})
 						[
 							SNew(STextBlock).Text(FText::FromString(TEXT("DECLARE WAR"))).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("E08A6A"))))
+						]
+					];
+				}
+				// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 3.) The province's
+				// airfield, a row of its own over the tabs, so it is there on every one: the aircraft sign, what it is and what
+				// flies from it, and OPEN. A click opens the airfield.
+				if (!Info.FieldRow.IsEmpty())
+				{
+					ProvinceBox->AddSlot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 12.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 6.0f)).IsFocusable(false)
+						.OnClicked_Lambda([this]()
+						{
+							if (Controller.IsValid())
+							{
+								Controller->OpenSelectedAirfield();
+							}
+							return FReply::Handled();
+						})
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(21.0f).HeightOverride(14.0f)
+								[
+									SNew(SImage).Image(OrderSignBrush(TEXT("ftr"))).ColorAndOpacity(Cream)
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(Info.FieldRow).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("OPEN"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+							]
 						]
 					];
 				}
