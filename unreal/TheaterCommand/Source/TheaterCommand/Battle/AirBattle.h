@@ -711,7 +711,9 @@ private:
 	float KeyWarmth = 4900.0f;
 	/** The light thrown up from under the eye (the sky light's lower half): the sunlit cloud tops when the eye is over
 	 * them, so the bombers' bellies are not black over a bright deck (the art director, round 18d); the dark sea or
-	 * ground under the cloud. WeatherAt sets it, LightTheBattle gives it to the sky light when it has moved. */
+	 * ground under the cloud. WeatherAt sets it; SkyLowerOnce gives the first eye's to the sky light, once a raid (each
+	 * capture held the Mac's draw thread 0.65 to 0.9 s), and after that the UnderLight alone follows it;
+	 * "-TheaterAirSkyRecapture" has LightTheBattle give it to the sky light whenever it has moved, as before. */
 	double WeatherBounce = 0.0, BounceShown = -1.0;
 	/** The light thrown up on the aircraft alone (their lighting channel 1, no other thing's): a shadowless lamp shining
 	 * straight up, as bright and as coloured as what lies under the eye, the sunlit deck or the dark sea, by
@@ -788,6 +790,14 @@ private:
 	void ShowTheTable();
 	/** The battle's day light on the table's lamps, said again wherever the room has changed it. */
 	void LightTheBattle();
+	/** The sky light's lower half laid once for the raid, at the end of Open, for the first eye's light from below, its
+	 * capture run and waited for there (inside the press's long frame) instead of on a later frame's draw thread. */
+	void SkyLowerOnce();
+	/** "-TheaterAirSkyRecapture": the sky light captured again at every step of 0.08 of the light from below (before 24
+	 * November); without it SkyLowerOnce lays it once. */
+	static bool SkyEveryStep();
+	/** SkyLowerOnce has laid this battle's lower half. */
+	bool bSkyLowerLaid = false;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with
