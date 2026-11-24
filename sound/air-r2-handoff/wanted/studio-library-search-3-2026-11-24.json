@@ -1,0 +1,792 @@
+[
+ {
+  "group": "jumo",
+  "found": {
+   "leads": [
+    {
+     "sound": "stuka_drone_loop",
+     "title": "Bombing attack on convoy - Charles Gardner, 14 July 1940 (RAF Museum object X003-1795)",
+     "url": "https://collections.rafmuseum.org.uk/collection/object/object-193972/",
+     "site": "RAF Museum collections (collections.rafmuseum.org.uk)",
+     "licence": "unknown",
+     "licence_evidence": "The page gives no copyright or licence statement. The maker is the BBC. A secondary page (spitfiresite.com) mentions 'Crown Copyright' but does not clearly tie it to the audio. Copyright in a 1940 UK recording may have expired, but nothing on the page says so.",
+     "what": "BBC actuality recording made at a real event: Charles Gardner's live commentary as Junkers Ju 87 dive-bombers attack a Channel convoy ('Bread') off Dover on 14 July 1940. The page says Spitfires intercept, anti-aircraft fire can be heard, a Ju 87 crashes, and a dogfight with Bf 109s follows. Spitfiresite says the crew recorded from a house overlooking the port and then from a nearby cliff, and that the report is about 8 minutes long and was sent uncut. The RAF Museum page gives no duration, and no audio player loaded.",
+     "fit": "This is the only real recording of actual Ju 87 formations attacking that I found. Jumo 211 engines from a real Stuka raid would be in the background, so it fits the Ju 87 formation subject better than any substitute engine.",
+     "concerns": "(1) Gardner talks over almost the whole recording, so clean drone sections are probably short or missing. (2) The aircraft are distant and mixed with AA fire, bombs and RAF fighters. (3) It is a BBC recording. It is news actuality, not the BBC Sound Effects library, but check that it fits your rules. (4) The licence is unknown and no download is offered. (5) The RAF Museum and spitfiresite.com give different dates (14 July vs 13 June).",
+     "read": "page read"
+    },
+    {
+     "sound": "stuka_drone_loop",
+     "title": "Spitfires and Bf-109 Flyby by Fight2FlyPhoto (Freesound 142902)",
+     "url": "https://freesound.org/people/Fight2FlyPhoto/sounds/142902/",
+     "site": "freesound.org",
+     "licence": "unknown",
+     "licence_evidence": "The search snippet shows only the title and uploader, not the licence. It comes from the same uploader as the two Fight2FlyPhoto Bf 109 leads already found (142898, 242179), so it may carry the same licence. Check before use.",
+     "what": "The search title says it is a flyby of Spitfires and a Bf 109. The uploader's other Bf 109 items name a Daimler-Benz engine ('Bf-109 - Daimler-Benz Run-Up'), and a Cities and Memory re-post of 242179 describes their 109 as a restored Bf 109E-3 with a DB 601. That suggests this is a DB 601 inverted V12 in flight, but the snippet does not confirm it. Date, place, mic setup and length are not visible.",
+     "fit": "An inverted-V12 German engine in flight. The DB 601 is close in size and layout to the Jumo 211 (both about 34-35 L inverted V12s). It is the airborne counterpart to the ground runs already found.",
+     "concerns": "(1) Merlin-engined Spitfires are mixed in, so a clean 109-only section may be short. (2) It is a flyby rather than a steady drone, and it is one aircraft, not a formation. (3) The licence is not verified from here.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "stuka_drone_loop",
+     "title": "Fw 190 D 13 start up and moreYT (YouTube uf7nyTdwsHU)",
+     "url": "https://www.youtube.com/watch?v=uf7nyTdwsHU",
+     "site": "youtube.com",
+     "licence": "unknown",
+     "licence_evidence": "I could not read the page (rate-limited twice). The snippet shows no licence. Most YouTube videos use the Standard YouTube License, so this is usable only if the page shows 'Creative Commons Attribution'.",
+     "what": "The search title says it is a start-up and more of an Fw 190 D-13. Forum threads say the only original D-13 (ex-Champlin, now Flying Heritage & Combat Armor Museum, 'Yellow 10') has made engine runs with its Jumo 213. The snippet gives no uploader, date, place, length or mic details.",
+     "fit": "The Jumo 213 is the Jumo 211's direct successor (Junkers inverted V12), so it is the closest engine family to the Ju 87 that still runs.",
+     "concerns": "(1) The licence is probably not free. (2) It is a ground run or start-up, not a formation in flight. (3) The title ends in 'YT', so it may be edited, and it may carry music or narration. I could not check either. (4) If it is free, the audio would have to be taken from the video.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "stuka_drone_loop",
+     "title": "Messerschmitt Bf 109 G14 Lowpasses and original Daimler DB605 Engine Sound (YouTube eqAz2GSmqW0)",
+     "url": "https://www.youtube.com/watch?v=eqAz2GSmqW0",
+     "site": "youtube.com",
+     "licence": "unknown",
+     "licence_evidence": "Two fetch attempts were rate-limited. The snippet shows no licence. Usable only if the page shows a Creative Commons Attribution licence.",
+     "what": "The search title says it shows low passes of a Bf 109 G-14 with an original DB 605 engine, apparently filmed at an airshow. The snippet gives no recordist, place, date or length. Related snippets say the only DB 605-powered 109s flying are in Germany (Messerschmitt-Stiftung, Hangar 10 / Zirchow).",
+     "fit": "A real DB 605 inverted V12 in flight, which is what the brief asks for as a Jumo 211 substitute.",
+     "concerns": "(1) The licence is probably standard YouTube (not usable). (2) It is a single aircraft making passes, not a sustained formation drone. (3) There may be crowd or PA noise, or music, which I could not check.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "stuka_drone_loop",
+     "title": "\"Raid on Berlin\": actuality recording of an RAF bombing raid over Berlin, 4 September 1943 (AWM S00199)",
+     "url": "https://www.awm.gov.au/collection/C276375",
+     "site": "Australian War Memorial (awm.gov.au)",
+     "licence": "Public domain (copyright expired)",
+     "licence_evidence": "The AWM page states that copyright has expired and the item is in the public domain, marked with the Public Domain Mark 1.0. The standard copying note also says personal and non-commercial use is permitted, which suits this project.",
+     "what": "A real wartime recording made aboard Lancaster 'F for Freddy' of 207 Squadron RAF during a raid on Berlin on 4 September 1943. Wynford Vaughan Thomas (BBC) narrates and Reginald Pidsley was the sound recordist. It covers the approach, searchlights and bomb release, and an attack by a German night fighter that the crew shoots down. It is 6 min 32 s long, on a 12-inch 78 rpm mono disc.",
+     "fit": "Weak fallback only. It is a verified public-domain WW2 recording made inside a bomber, with a continuous multi-engine drone.",
+     "concerns": "(1) The engines are Merlins (upright V12), not Jumo, heard from inside the aircraft. (2) There is narration and crew intercom over most of it. (3) The AWM also lists permission requirements for commercial use, which does not matter for a non-commercial game. (4) It is not a Ju 87 sound.",
+     "read": "page read"
+    },
+    {
+     "sound": "stuka_drone_loop",
+     "title": "File:Bf109g10.ogv (Wikimedia Commons video)",
+     "url": "https://commons.wikimedia.org/wiki/File:Bf109g10.ogv",
+     "site": "commons.wikimedia.org",
+     "licence": "unknown",
+     "licence_evidence": "Only the title and URL appeared in search results. The description, author and licence were not visible, and Commons is blocked from here.",
+     "what": "A Commons video file named for a Bf 109 G-10. The search showed it in 'Category:Messerschmitt Bf 109 warbirds', which suggests a modern warbird rather than wartime film, but that is not certain. Source, date, length and whether it has sound are unknown.",
+     "fit": "If it is a modern recording with sound of a DB 605 Bf 109 G-10, it would be a useful inverted-V12 in-flight reference.",
+     "concerns": "(1) Everything about it is unverified. (2) It may be wartime film (excluded) or silent. (3) A Commons licence may be CC BY-SA, which does not qualify. (4) The low resolution (a 512x288 category appeared nearby) suggests an old upload.",
+     "read": "search snippet only"
+    }
+   ],
+   "searches": [
+    "Fw 190 D Jumo 213 engine run recording sound",
+    "freesound Bf 109 engine flyby recording airshow",
+    "Jumo 211 engine run museum test stand video",
+    "freesound 161102 Messerschmitt OR Focke-Wulf OR warbird",
+    "\"Messerschmitt\" OR \"Bf109\" OR \"Me109\" site:freesound.org",
+    "Cities and Memory Messerschmitt BF-109 startup recording Creative Commons",
+    "commons.wikimedia.org File Bf 109 G engine webm OR ogg sound flight",
+    "commons wikimedia \"Fw 190\" video engine start webm",
+    "Flying Heritage Fw 190 D-13 engine run Jumo 213 Paine Field video",
+    "first flight Fw 190 D-9 original Jumo 213 engine since war",
+    "Avia S-199 Jumo 211F engine run restored",
+    "\"Jumo 211\" engine run restoration Ju 87 OR Ju 88 OR He 111 2024 OR 2025",
+    "dvidshub Messerschmitt Bf 109 airshow video",
+    "dvidshub \"Focke-Wulf\" OR \"Fw 190\" video flight",
+    "\"ISR tour\" dvidshub audio Bf 109G-10 / Fw 190D-9 (NMUSAF audio tour - narration only)",
+    "awm.gov.au collection sound Stuka dive bombing Tobruk recording 1941",
+    "Charles Gardner BBC 14 July 1940 Dover Stuka convoy commentary recording public domain",
+    "awm.gov.au \"aircraft sound recording\" \"AWM Field Recording\"",
+    "awm.gov.au collection sound recording Messerschmitt OR Junkers OR Stuka actuality",
+    "PK-Bericht Stuka Angriff Tonaufnahme 1940 Rundfunk Originalaufnahme Ju 87",
+    "europeana sound recording Junkers Ju 87 OR Stuka OR Jumo 211",
+    "Wikimedia Commons File Messerschmitt Bf 109 video webm flight display (extended)",
+    "Wikimedia Commons Junkers Jumo 213 OR Jumo 211 engine running video OR audio file",
+    "Freesound Fight2FlyPhoto Fw 190 / Bf-109 / licence (extended)",
+    "Freesound Daimler-Benz OR DB605 OR DB601 aircraft engine recording",
+    "archive.org Messerschmitt Bf 109 engine sound / Jumo 213 engine run",
+    "Jumo 211 Motorlauf Pruefstand Museum Probelauf",
+    "Jumo 213 Probelauf Motor Fw 190 D Restaurierung",
+    "Vintage V-12s Tehachapi Jumo 211 dyno run Stuka engine sound",
+    "Military Aviation Museum Virginia Beach Fw 190 D-9 Jumo 213 flying",
+    "dvidshub Warbirds Over the Beach / Warbirds over Miramar German aircraft",
+    "soundcloud / vimeo / flickr Bf 109 DB605 creative commons",
+    "\"Creative Commons Attribution licence (reuse allowed)\" Bf 109 / Fw 190",
+    "digitaltmuseum DB 605 / Jumo 211 (Sweden, Norway)",
+    "finna.fi Messerschmitt Bf 109 DB 605 aeaenite",
+    "catalog.archives.gov captured German sound recordings Stuka / RG 242",
+    "WWII aircraft sound recognition records Ground Observer Corps German aircraft"
+   ],
+   "gaps": "I still found no free, real recording of a Jumo 211, Jumo 213 or Ju 87 formation. The leads above are weak: the strongest real Ju 87 recording (Gardner, 1940) has an unknown licence and commentary over it, the DB 601/605 and Jumo 213 leads were seen only as snippets with unknown licences, and the only verified public-domain item is a Merlin bomber interior.\n\nWhat I checked and ruled out:\n- **University of Alabama in Huntsville archive** (https://archives.uah.edu/repositories/2/archival_objects/93529). It holds a wartime Fw 190 recording (start-up, taxi, take-off, dive, low-level attack), but its catalogue references are 'BBC Sound Effects EC 500C'. It is a BBC SFX library item with no licence and no digital copy, so it is excluded. Related items 20220025-20220038 are 'all BBC Sounds'.\n- **IL-2 forum Ju 88 clip** (https://forum.il2sturmovik.com/topic/10021-stuka-purring-is-absolutely-not-jumo-211/). A post by BOBC (2014) attaches 'Ju88AJumo211_Genuine_extract.wav', described as a real Jumo 211 Ju 88A start-up, idle and taxi. Its source and licence are not stated, and it is probably from the wartime BBC captured-aircraft recordings, so I did not list it.\n- **ATAG forum thread** 'Actual Jumo 211 and DB601 engine sounds offer of help' (theairtacticalassaultgroup.com t=12636). Robots-blocked, so unread.\n- **Commercial libraries (excluded).** Pole Position Production / Sonniss 'Messerschmitt Bf109 G4' (Max Lachmann).\n- **Cities and Memory.** The Audioboom/Mixcloud 'Messerschmidt BF-109 startup' is a re-post of Fight2FlyPhoto 242179 (already found).\n- **NMUSAF 'ISR Tour' audio on DVIDS** (Bf 109G-10, Fw 190D-9). Narration only; the transcript has no engine sounds.\n- **Fight2FlyPhoto Fw-190 items** (143562, 161104, 161107). The FHC Fw 190 A-5 has a BMW 801 radial, so these do not fit a Stuka.\n- **AWM CC BY-NC field recordings.** The AWM has CC BY-NC 3.0 AU field recordings from 2014 (e.g. Spitfire S05933 at https://www.awm.gov.au/collection/C2093388, Meteor S05926), but no German aircraft.\n\nRestorations and running engines:\n- No Jumo 211 has run publicly yet. FHCAM's Ju 87R-2 moved to The Roost (Bentonville, AR) in June 2025. Mike Nixon / Vintage V-12s overhauled its Jumo 211, and Vintage Aviation News says it will likely be the first operational Jumo 211 to fly in over 50 years.\n- The American Heritage Museum's Ju 87D-5 is being restored in the Czech Republic.\n- When either engine first runs, the owners' own footage is unlikely to be CC-licensed, but a US government (DVIDS) crew at a later airshow might film it. Worth re-checking in 2027.\n- No Flug Werk or other Fw 190 D-9 with a Jumo 213 was confirmed flying. The 2010-era projects (Yagen/MAM, White 1 Foundation, Vormezeele) had no flight reports in what I read.\n\nNot tried or blocked:\n- YouTube pages were rate-limited, so licences for YouTube leads (including Fw 190 D-13 start-ups, Hangar 10 'Schwarze 8' G-6 and Messerschmitt-Stiftung G-4 'Red 7') are unchecked. Most are probably standard YouTube licence.\n- I did not use Freesound-metadata mirrors (Hugging Face datasets, Openverse) or Wikipedia/OSMand copies of Commons pages, because of the no-mirror rule.\n- Wikidata and en.wikipedia File pages would not load.\n- IWM pages would not load, and IWM uses its own non-commercial licence, not CC.\n- NARA's captured German sound recordings (RG 242) are mostly speeches, with almost none online.\n\nSuggestions for a later pass:\n- Read the licences of Freesound 142902 and of the two YouTube leads directly.\n- Ask the RAF Museum or AWM whether they hold a copy of the Gardner 1940 recording, or other BBC/ABC 1940-41 actuality of Stuka raids (Tobruk, Greece, Crete, Malta), marked public domain like AWM S00199."
+  },
+  "check": {
+   "verdicts": [
+    {
+     "url": "https://collections.rafmuseum.org.uk/collection/object/object-193972/",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "Licence must be CC0/PD/CC BY/CC BY-NC: the page has no rights or licence statement, and it offers no audio to download.",
+     "reason": "I read the page. The URL is real and matches the claim: 'Bombing attack on convoy - Charles Gardner, 14 July 1940', object X003-1795, maker British Broadcasting Corporation, production date 14 July 1940. The description names Ju 87s bombing a convoy, Spitfire interception, audible AA fire, a Ju 87 crash and a Bf 109 dogfight. It is BBC news actuality, not the BBC Sound Effects library, so that rule is not broken. But the page has no copyright or licence text, no player, no download and no duration, so as listed it cannot be used. Gardner also gives running commentary, so clean engine passages are likely short. It is the only lead here with real Ju 87s in it, so it is worth finding a copy of the same recording that carries an explicit public-domain or copyright-expired statement (see 'missed'). The 14 July date on the page matches the well-known date of this broadcast. The 13 June date on spitfiresite looks like that site's error.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://freesound.org/people/Fight2FlyPhoto/sounds/142902/",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none found (licence unverified)",
+     "reason": "Kept only as a low-priority hand check under the blocked-site exception. I could not verify it: Freesound is blocked, my web-search budget was used up before I could search the title, and a direct read was refused. The ID sits next to the already-found 142898 from the same uploader, which fits a single upload batch but proves nothing. Concerns when checking by hand: (1) The licence must be CC0, CC BY or CC BY-NC, not Sampling+. (2) The '109' identity is a guess. The DB 601 / Bf 109E-3 detail comes from a different upload (242179), and many airshow '109s' that fly with Spitfires are Merlin-powered Spanish Buchons, which would make this useless as a Jumo substitute. (3) Spitfire Merlins are mixed in. (4) It is a single flyby, not a sustained formation drone. Drop it unless the page names a Daimler-Benz engine and a qualifying licence.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=uf7nyTdwsHU",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "Licence must be CC0/PD/CC BY/CC BY-NC: no Creative Commons licence is shown, so the Standard YouTube Licence must be assumed.",
+     "reason": "I read the page on a second attempt. It is real: 'Fw 190 D 13 start up and more', channel Jerry Crandall Studios (an aviation-art studio), uploaded 27 March 2014. The description says it shows several Luftwaffe pilots, and one pilot's wife, getting into the cockpit of a Bf 109 at the Champlin Fighter Museum, Mesa, Arizona, plus the start-up of an 'ultra rare Fw 190 D-13'. No licence was stated, but YouTube served a bot-protection page, so the absence is not conclusive. Even with a free licence it would be a weak fit: much of the video is veterans and cockpit visits, and the engine content is a single ground start-up of a Jumo 213, not a formation in flight. The length is unknown.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=eqAz2GSmqW0",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "Licence must be CC0/PD/CC BY/CC BY-NC: no Creative Commons licence is shown, so the Standard YouTube Licence must be assumed.",
+     "reason": "I read the page. It is real: 'Messerschmitt Bf 109 G14 Lowpasses and original Daimler DB605 Engine Sound', channel 'Warbirds', uploaded 9 October 2019. The description names Bf 109 G-14 registration D-FMGV, a Daimler-Benz DB 605 A engine and pilot Volker Bau, recorded in 4K with 'HQ sound' on a Rode VideoMic Pro (an on-camera mic). No licence is stated. It is a genuine DB 605 in flight, but it is unusable unless the page shows 'Creative Commons Attribution licence (reuse allowed)', and it is a single aircraft making passes rather than a formation drone. The length could not be read.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.awm.gov.au/collection/C276375",
+     "keep": false,
+     "licence_ok": "yes",
+     "rule_broken": "none (rejected on fit, not on rules)",
+     "reason": "I read the page and every claim checks out: 'Raid on Berlin', AWM S00199, 4 September 1943, made aboard Lancaster 'F for Freddy' of 207 Sqn, narrated by Wynford Vaughan-Thomas with sound recordist Reginald Pidsley. It is 6 min 32 s, a 12-inch 78 rpm mono BBC disc. The page shows 'Copyright expired - public domain' with the Public Domain Mark. The copying note allows personal, non-commercial use, which suits this project. The audio plays on the page in two parts with direct MP4 links. Rejected for stuka_drone_loop because it does not fit: four Merlin (upright V12) engines heard from inside the bomber, with narration and intercom over most of it. It cannot stand in for an exterior Ju 87 formation drone. It could be a valid lead for a bomber-interior sound elsewhere in the game.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://commons.wikimedia.org/wiki/File:Bf109g10.ogv",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "Unverified; possibly CC BY-SA (not allowed) or wartime film (excluded).",
+     "reason": "Nothing about it could be checked. Commons is blocked, my search budget was used up before I could search the file name, and the page-read budget ran out when I tried it. Even if it exists, the evidence is thinner than for the Freesound lead: no author, date, source or licence, and no sign that it has sound at all. Many Commons videos are CC BY-SA, which does not qualify. A file named 'Bf 109 G-10' could be wartime footage (excluded), silent, or a Merlin-powered Buchon conversion rather than a DB 605. Too thin to keep.",
+     "url_real": "not confirmed"
+    }
+   ],
+   "missed": "Limits: the shared web-search budget was used up before I could run any search, and the page-read budget ran out too. So I verified 4 of 6 leads by reading their pages, but could not check the Freesound 142902 and Commons Bf109g10.ogv snippets. A shell fetch of the YouTube pages to look for licence text was denied, and I did not try to work around that. Sources not tried that should be: (1) A public-domain copy of the same Charles Gardner 14 July 1940 Ju 87 convoy recording. The AWM holds many BBC actuality 78s marked 'copyright expired - public domain' (as with S00199), and the IWM sound archive also holds it. This is the only real Ju 87 formation audio found, so a PD-marked copy is the top priority. (2) A YouTube search with the Creative Commons filter for 'Jumo 213', 'Fw 190 D-9 engine run', 'Ta 152', 'Jumo 211 engine run', 'DB 605 engine run' and 'Messerschmitt-Stiftung Bf 109 G-6/G-4' (D-FWME, Hangar 10). (3) Freesound tag searches such as jumo, daimler-benz, db605, db601, bf109 and fw190 (blocked here, so a manual check). (4) Commons categories 'Junkers Jumo 211', 'Junkers Jumo 213' and 'Messerschmitt Bf 109 warbirds' (blocked, manual check). (5) The Avia S-199, the post-war Czech Bf 109 G airframe fitted with a real Jumo 211F, and the Jumo 211-engined early CASA 2.111: look for any museum engine run at the Kbely (Prague) museum, the Israeli Air Force Museum or the Spanish Museo del Aire. (6) Any Ju 87 restoration engine run (Flying Heritage & Combat Armor Museum has been reported to own a Ju 87 under restoration) and FHCAM's own Fly Day media for its Bf 109 E (DB 601) and Fw 190 D-13. (7) Vintage V-12s (Tehachapi) test-stand runs of DB 605 or Jumo engines. Check every one of these for an explicit CC BY, CC BY-NC, CC0 or PD licence before use."
+  }
+ },
+ {
+  "group": "asw",
+  "found": {
+   "leads": [
+    {
+     "sound": "depth_charge_thrower",
+     "title": "HMAS Adelaide, Adelaide class guided missile Frigate - operational sounds (S04691)",
+     "url": "https://www.awm.gov.au/collection/C1240475",
+     "site": "Australian War Memorial (awm.gov.au)",
+     "licence": "CC BY-NC",
+     "licence_evidence": "The page says: 'Item copyright: © Australian War Memorial'. It is licensed under CC BY-NC 3.0 Australia. Copying provisions: 'Only personal, non-commercial, research and study use permitted.'",
+     "what": "A Defence Public Relations (DPR) sound-effect tape recorded aboard the frigate HMAS Adelaide on 29 June 1984. The maker is Ron Townsend. It is on DAT, 48 kHz/16-bit stereo, 1 hr 4 min. The contents are split into exterior and interior segments. They include 'chaff launcher loading and firing', missile loading, the 76 mm gun, the Harpoon launcher, Phalanx firing, engine room, wake, and a replenishment at sea with USS Taluga. No place is given. The page does not state mic placement, but other tapes in the same DPR series are described as 'close perspective'.",
+     "fit": "This is the closest naval match I found in the AWM catalogue. It is a tube launcher on a warship's deck firing a round from close by, recorded at a real event by a service recordist. The same series also holds the 'Mortar - operational sounds' tape that the first search found. It is useful if a shipboard, deck-level launch thump is wanted rather than a land mortar.",
+     "concerns": "A chaff launcher is not a depth-charge projector. Some chaff rounds are rocket-boosted, so there may be a whoosh after the launch thump, and the page does not say which round was fired. The chaff takes are inside a 64-minute tape, and the page gives no track timings. The recording is from the 1980s, not WW2. CC BY-NC is fine only while the game stays non-commercial.",
+     "read": "page read"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "CGC Kimball tests SRBOC system during final sea trials",
+     "url": "https://dvidshub.net/video/708431/cgc-kimball-tests-srboc-system-during-final-sea-trials",
+     "site": "DVIDS (dvidshub.net)",
+     "licence": "public domain (US government work), not checked on the page",
+     "licence_evidence": "DVIDS b-roll filmed by US Coast Guard personnel is a US federal government work. I did not read the page itself, so I could not check for a copyright note or a credit to a civilian photographer.",
+     "what": "From the title: the US Coast Guard cutter Kimball test-firing its Mk 36 SRBOC launcher during final sea trials. The search results also show related DVIDS images of Kimball's final sea trials off the Hawaiian Islands, including Phalanx test firings. Length, mic and camera position are unknown.",
+     "fit": "SRBOC is a fixed mortar-type tube launcher on a ship's deck. A camera-mic recording of a test firing could give a real shipboard 'tube thump' close by, which is near what a K-gun or Y-gun firing would sound like.",
+     "concerns": "I did not read the page, so I don't know whether the audio is the original sync sound or has music added, how close the camera was, or the length. Many SRBOC rounds are rocket-boosted, which adds a whoosh. A DoD mirror of the video exists, but I did not try it, as instructed.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "USS Germantown (LSD 42) launches chaff",
+     "url": "https://dvidshub.net/video/743553/uss-germantown-lsd-42-launches-chaff",
+     "site": "DVIDS (dvidshub.net)",
+     "licence": "public domain (US Navy work), not checked on the page",
+     "licence_evidence": "It is a US Navy DVIDS video, and US Navy-produced material is a federal government work. The page was not read, so there is no direct confirmation.",
+     "what": "From the title: the dock landing ship USS Germantown firing chaff from its deck launchers. Date, length and camera position are unknown.",
+     "fit": "Another real shipboard tube-launcher firing. It gives a second take to choose from alongside the Kimball video.",
+     "concerns": "The page was not read, so it is unknown whether the audio is original or has music or narration over it. The chaff rounds may be rocket-boosted. The camera may be far from the launcher.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "22nd MEU(SOC) 81mm Mortar Live Fire",
+     "url": "https://www.dvidshub.net/video/991664/22nd-meusoc-81mm-mortar-live-fire",
+     "site": "DVIDS (dvidshub.net)",
+     "licence": "public domain (US Marine Corps work), not checked on the page",
+     "licence_evidence": "It is US Marine Corps DVIDS b-roll, which is a federal government work. The page was not read. The search results also list DVIDS stills from the same range day: '22nd MEU(SOC) BLT 3/6 81mm mortar live fire range'.",
+     "what": "From the title: Marines of the 22nd Marine Expeditionary Unit firing 81 mm mortars on a live-fire range. Date, length and mic distance are unknown.",
+     "fit": "The game sound is described as 'a mortar-like thump close by', and mortar b-roll filmed beside the tube gives exactly that real launch thump. It is a proxy for a K-gun's black-powder impulse firing.",
+     "concerns": "It is a land weapon, so there is no deck or sea ambience. The b-roll may include voices, shell impacts, or music. The page was not read, so I could not confirm the sound is original.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "M252A1 81mm Mortar Live Fire",
+     "url": "https://dvidshub.net/video/559793/m252a1-81mm-mortar-live-fire",
+     "site": "DVIDS (dvidshub.net)",
+     "licence": "public domain (US military work), not checked on the page",
+     "licence_evidence": "DVIDS b-roll is US military-produced, which makes it a federal government work. The page was not read.",
+     "what": "From the title: a live fire with the M252A1 81 mm mortar. The unit, date, length and camera position are not known from the snippet.",
+     "fit": "Another real close-range mortar launch, an alternative take to the 22nd MEU video for the thrower thump.",
+     "concerns": "Same as the other DVIDS mortar leads: the page was not read, the audio may be edited or have music over it, and it is a land weapon.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "2024 International Best Mortar Competition 120mm live fire",
+     "url": "https://www.dvidshub.net/video/919069/2024-international-best-mortar-competition-120mm-live-fire",
+     "site": "DVIDS (dvidshub.net)",
+     "licence": "public domain (US Army work), not checked on the page",
+     "licence_evidence": "It is US Army DVIDS b-roll, which is a federal government work. The page was not read.",
+     "what": "From the title: 120 mm mortar live fire at the 2024 International Best Mortar Competition, a US Army event. Length and camera position are unknown.",
+     "fit": "A heavier, deeper 120 mm launch thump. It may be closer in weight to throwing a 300 lb depth charge than an 81 mm round is.",
+     "concerns": "The page was not read. It is a competition video and may carry announcer voices, crowd noise or music. Allied teams may appear in it, but the video is still a US government production.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "Heavy Mortar Artillery System and \"FIRE!\" voice commands (by qubodup)",
+     "url": "https://freesound.org/people/qubodup/sounds/162263/",
+     "site": "Freesound (freesound.org)",
+     "licence": "unknown",
+     "licence_evidence": "Freesound is blocked from here, and the search snippet shows only the title and uploader. The licence was not seen.",
+     "what": "From the title: a heavy mortar system firing, with shouted 'FIRE!' commands. The same uploader also has 'M-327 Mortar Shots.flac' (https://freesound.org/people/qubodup/sounds/187542/). The M327 is a US Marine Corps 120 mm towed mortar. In the same search results the uploader has 'US Soldier War Chant' and 'Iraq Arabic Battle Scene', which suggests audio taken from military video. That is my inference and is not confirmed.",
+     "fit": "If it is the sync sound from a US military video with a CC0 or public-domain licence, it would be a ready-cut real heavy-mortar launch thump. The 187542 'M-327 Mortar Shots' file would be the cleaner one, with no voice commands.",
+     "concerns": "The licence, source and recording details are all unverified. Someone must open both pages to check the licence (CC0 or CC BY would be acceptable; Sampling+ or CC BY-SA would not) and the stated source. If the description says the audio came from a film or a game, discard it.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "depth_charge_thrower",
+     "title": "Sound Gallery - Cannon Fire",
+     "url": "https://www.nps.gov/subjects/sound/sounds-cannon.htm",
+     "site": "US National Park Service (nps.gov)",
+     "licence": "public domain (NPS federal work), with no explicit statement on the page",
+     "licence_evidence": "The audio is credited 'NPS' and was recorded by the NPS Natural Sounds and Night Skies Division. National Park Service-produced media is a US federal government work. The page itself has no public-domain or copyright line. Audio file: https://www.nps.gov/nps-audiovideo/legacy/mp3/nri/avElement/nri-cannon.mp3",
+     "what": "A real recording of a black-powder cannon firing. The transcript reads 'The loud booming sound of a cannon firing'. The photo beside it shows a firing demonstration at Fort McHenry, but the page does not say where the audio was recorded. Date, distance and length are not stated.",
+     "fit": "This is a weak fit. A K-gun or Y-gun threw its charge with a black-powder impulse cartridge, so a black-powder discharge has the right character. A cannon is sharper and more of a boom than a mortar thump. Use it only as a fallback or a layer.",
+     "concerns": "The recording position and distance are unknown. It may be too sharp or too distant for 'a close thump'. The page does not state that the work is public domain.",
+     "read": "page read"
+    }
+   ],
+   "searches": [
+    "awm.gov.au collection operational sounds Limbo anti-submarine mortar HMAS",
+    "Australian War Memorial sound recording \"Limbo\" mortar firing destroyer escort",
+    "awm.gov.au \"operational sounds\" HMAS Torrens OR HMAS Derwent OR HMAS Swan OR HMAS Stuart destroyer escort",
+    "awm.gov.au sound effect \"depth charge\" recording",
+    "awm.gov.au collection sound \"anti-submarine\" mortar firing HMAS recording 1970s",
+    "awm.gov.au \"Ikara\" sound effect operational sounds",
+    "awm.gov.au collection \"Limbo\" firing HMAS Derwent OR Yarra OR Stuart OR Parramatta sound OR film (extended)",
+    "awm.gov.au \"operational sounds\" HMAS \"Townsend\" Defence Public Relations ship frigate destroyer (extended)",
+    "awm.gov.au \"actuality recording\" HMAS firing anti-submarine OR depth charges OR mortar aboard (extended)",
+    "\"Limbo\" mortar firing sound recording frigate HMNZS OR HMCS OR HMS audio archive",
+    "dvidshub depth charge drop Navy video",
+    "Hedgehog anti-submarine projector firing demonstration video Navy",
+    "K-gun depth charge projector firing demonstration museum ship blank",
+    "\"depth charge\" thrower OR projector firing video public domain navy 1950s OR 1960s raw footage sound",
+    "dvidshub \"depth charges\" exercise video CARAT OR Malabar OR RIMPAC navy fires (extended)",
+    "wartime recording made aboard destroyer during depth charge attack 1943 actual sound archive catalog (extended)",
+    "hnsa.org sound depth charge recording historic naval ships association audio",
+    "dvidshub Mk 32 surface vessel torpedo tube fires exercise torpedo b-roll",
+    "dvidshub video \"air slug\" torpedo tube firing",
+    "dvidshub.net/video torpedo launch \"surface vessel torpedo\" OR \"Mk 54\" fires exercise torpedo destroyer",
+    "dvidshub video Mk 36 SRBOC chaff launcher fires live fire ship b-roll",
+    "\"CGC Kimball tests SRBOC system during final sea trials\"",
+    "\"USS Germantown (LSD 42) launches chaff\" dvids",
+    "dvidshub video b-roll 81mm mortar live fire close",
+    "\"81mm mortar live fire\" 22nd MEU SOC dvids video",
+    "dvidshub \"mortar\" live fire b-roll \"120mm\" close-up firing sound Army 2024",
+    "freesound mortar firing field recording CC0 thump launch",
+    "freesound.org \"mortar\" \"firing\" recorded range military field recording (extended)",
+    "qubodup \"M-327 Mortar Shots\" freesound",
+    "qubodup \"Heavy Mortar Artillery System\" freesound dvids",
+    "\"qubodup\" mortar freesound \"public domain\" OR CC0 military video source (extended)",
+    "freesound fireworks mortar tube launch thump close recording display shell lift",
+    "nps.gov sound gallery cannon firing audio mortar demonstration",
+    "nps.gov audio \"Coehorn mortar\" firing demonstration",
+    "acousticatlas.org cannon OR mortar firing demonstration recording",
+    "sonicdictionary.duke.edu mortar OR \"depth charge\" OR artillery items",
+    "commons.wikimedia.org File mortar firing .webm OR .ogv US Army public domain",
+    "commons.wikimedia.org \"depth charge\" OR \"Hedgehog\" OR \"Limbo\" launch video file"
+   ],
+   "gaps": "I found no real recording of an actual depth-charge thrower, Hedgehog, Squid or Limbo firing under an acceptable licence. All the leads above are proxies: shipboard chaff-launcher tubes, land mortars and a black-powder cannon.\n\nWhat I checked at the AWM:\n- No search turned up a Limbo, Ikara or depth-charge sound recording for the River-class destroyer escorts (Yarra, Parramatta, Stuart, Derwent, Swan, Torrens).\n- I read the DPR/Ron Townsend 'operational sounds' tapes for HMAS Adelaide (S04691), HMAS Canberra (S04693, https://www.awm.gov.au/collection/C1240477) and HMAS Launceston (S04701, https://www.awm.gov.au/collection/C1240485). I also read HMAS Brisbane 2001 (S04237, https://www.awm.gov.au/collection/C1169841) and the Brisbane 1971 Vietnam gunline actuality recording (S02857, https://awm.gov.au/collection/C1002469).\n- None of them lists Limbo, Ikara, depth charges or torpedo tubes. The Canberra and Brisbane tapes have only 5-inch and 76 mm guns and missiles.\n- The AWM advanced-search page is blocked to automated access (robots), so I could not browse the full Sound facet. An in-person or browser search of the AWM catalogue for 'Limbo' with the Sound facet is still worth doing.\n- AWM RAN film items such as 'Fleet Bombardment' F11197 (https://www.awm.gov.au/collection/C1171238) are silent, and the 'Navy in Focus' items are film newsreels, which the rules exclude.\n\nPossible but doubtful: AWM S03297, 'Operational sounds of United States military aircraft, armour and weapons used during the war in Vietnam' (https://www.awm.gov.au/collection/C1079277, CC BY-NC, page read). Track 16 is a 'close up of mortar firing'. But the recordist is 'unknown', the source credit is only 'AWM Research Grants Scheme', and the track list includes an out-of-context 'crowd cheering' track. It may be a compilation drawn from an effects library, so I left it out of the leads.\n\nOther notes:\n- Duke Sonic Dictionary has 'Cannon Shots' (https://sonicdictionary.duke.edu/items/cannon-shots.html, CC BY-NC 4.0, page read): an iPhone 5 recording of real cannons at Williamsburg, with a spoken 'fire!'. It is a weaker version of the NPS cannon lead.\n- The USS Sealion 1944 submarine attack recording (https://ussnautilus.org/sealions-sounds/) is real WW2 audio but not a thrower, and no licence is stated.\n- HNSA's historic naval sound page could not be fetched.\n- WW2 and 1950s films of Hedgehog, Limbo and K-guns (IWM film, CriticalPast, NFB stock shots, Smithsonian) are films or newsreels, or under commercial licences, so I excluded them.\n- I found no US Navy public-domain video of a Mk 9, Hedgehog or Mousetrap firing. These weapons left US service long ago, and DVIDS has only stills of museum K-guns and Y-guns.\n- Next steps: someone with access should open the DVIDS and Freesound leads to confirm the sync sound and licence. They could also look for DVIDS video of Mk 32 torpedo-tube 'air slug' firings. Only stills turned up in search, but a video would give a close compressed-air ASW launch thump. Freesound CC0 recordings of fireworks mortar-tube launches (a black-powder lift charge in a tube, mechanically close to a K-gun) are another option, but the search snippets did not show titles or licences."
+  },
+  "check": {
+   "verdicts": [
+    {
+     "url": "https://www.awm.gov.au/collection/C1240475",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "none",
+     "reason": "I read the page. It is S04691, 'HMAS Adelaide, Adelaide class guided missile Frigate - operational sounds', made by Defence Public Relations and Ron Townsend on 29 June 1984. It is on DAT (48 kHz, 16-bit, stereo) and runs 1 hr 4 min. The contents list 'Chaff launcher - firing' under the exterior top bridge area midships. 'Close perspective' appears in entries on this tape itself, not only in other tapes of the series. The page says © Australian War Memorial, CC BY-NC 3.0 AU, 'Only personal, non-commercial, research and study use permitted', which is acceptable while the game stays non-commercial. No place is given and there are no track timings. The page does not show whether the audio can be heard online or must be ordered. The fit is moderate. A chaff launcher (Mk 36 SRBOC type) is not a depth-charge projector, the round type is not stated, and a rocket-boosted round would add a whoosh after the thump. It is still the only naval tube-launcher firing found on the AWM site. No Limbo, depth-charge or destroyer-escort tape turned up.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/708431/cgc-kimball-tests-srboc-system-during-final-sea-trials",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none",
+     "reason": "A search for the exact title returned exactly this URL. It also returned related DVIDS stills of Kimball's final sea trials, including the Close-In Weapon System (Phalanx) test firing and 'final sea trials off Hawaiian Islands', so the title and context are real. DVIDS is blocked and the page was not read. The licence is very likely public domain as a US Coast Guard work, but neither the credit line nor any restriction was seen. Unknown: whether the audio is the original sync sound or has music over it, how close the camera was, the length, and the round type. SRBOC chaff rounds may be rocket-boosted. A shipboard tube launch is a reasonable stand-in for a K-gun or Y-gun.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/743553/uss-germantown-lsd-42-launches-chaff",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none",
+     "reason": "A search for the title returned this URL. It also returned a DoD video page with the same video ID (dover.af.mil/News/Video/videoid/743553), which I did not open under the no-mirror rule, so the video exists. DVIDS is blocked and the page was not read. The licence is very likely public domain as a US Navy work, but the credit was not seen. Unknown: date, length, camera distance, and whether the sound is natural or has music or narration over it. The rounds may be rocket-boosted. It is an alternate take to the Kimball video, not a better one.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.dvidshub.net/video/991664/22nd-meusoc-81mm-mortar-live-fire",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none",
+     "reason": "A search returned this exact URL, plus several DVIDS stills with the same title (for example image 9452764) and '22nd MEU(SOC) BLT 3/6 81mm mortar live fire range', so the event and video exist. The page was not read (blocked). The licence is likely public domain as a US Marine Corps work, but this is unverified. Whether the audio is natural sound, how close the mic was, and the length are all unknown. It is a land 81 mm mortar, a proxy only. It repeats the kind of sound the first search already found (AWM C1240470, 'Mortar - operational sounds'), so it adds a take rather than filling the naval gap.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/559793/m252a1-81mm-mortar-live-fire",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none",
+     "reason": "A search for the exact title returned this URL. A neighbouring DVIDS item, 'mortar video' (559778, tagged M252A1), also exists. The page was not read (blocked). Nothing is known about the unit, date, length, mic distance or whether the audio is edited. The licence is likely public domain as a US military work, but unverified. It is a land-mortar proxy that overlaps both 991664 and the already-found AWM mortar tape, so rank it low, as a spare take.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.dvidshub.net/video/919069/2024-international-best-mortar-competition-120mm-live-fire",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none",
+     "reason": "A search for the exact title returned this URL, along with many DVIDS stills from the 2024 (International) Best Mortar Competition. The page was not read (blocked). The licence is likely public domain as a US Army work, but unverified. There is a higher-than-usual risk of announcer voices, crowd noise or music: the same results show a DVIDS webcast for the event (dvidshub.net/webcast/34170), so commentary-style coverage exists, although this video is a separate item. The 120 mm round gives a heavier launch thump. It is a land proxy only.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://freesound.org/people/qubodup/sounds/162263/",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "licence unknown; source unknown (could be a rip from a film, game or video)",
+     "reason": "I could not back this up. Two targeted searches, one on the title 'Heavy Mortar Artillery System' with qubodup and one on 'M-327 Mortar Shots' (the companion ID 187542), returned no qubodup page at all, only unrelated Freesound uploads and commercial libraries. The licence, recordist and source are all unseen. The searcher's own reading of the uploader's other titles ('US Soldier War Chant', 'Iraq Arabic Battle Scene') suggests audio cut from other media, which may break the no-film/game rule. With no supporting evidence, discard it. Someone with Freesound access could open 162263 and 187542 to check the licence and source note before reconsidering.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://www.nps.gov/subjects/sound/sounds-cannon.htm",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "none",
+     "reason": "I read the page. It says 'Sound recording of cannon fire by the National Park Service Natural Sounds and Night Skies Division', the audio credit is 'NPS', and the MP3 is at https://www.nps.gov/nps-audiovideo/legacy/mp3/nri/avElement/nri-cannon.mp3. As a federal employee work it is public domain, though the page itself has no explicit notice. The Fort McHenry caption belongs to the photo, not the audio. The page gives no recording place, date, distance or length. The fit is weak: a cannon blank is a sharp boom, not a close thrower thump. Keep it only as a black-powder layer or fallback, ranked below every naval lead.",
+     "url_real": "confirmed"
+    }
+   ],
+   "missed": "My web search budget (200 per turn, shared) and WebFetch budget (100 per hour) both ran out, so some checks were not finished.\n\n(1) No AWM tape for an RAN destroyer escort, Limbo or depth charge turned up in web searches for 'Limbo', 'anti-submarine mortar', 'depth charge', 'destroyer escort' or 'Ikara' together with 'operational sounds'. The searches found only Adelaide (C1240475), Brisbane, Oxley, the patrol boats and naval aircraft tapes. HMAS Brisbane operational sounds (https://www.awm.gov.au/collection/C1169841, S04237, Bill Brassell, May 2001, CC BY-NC) I read: it has 5-inch gunfire only and no ASW weapons. The AWM's own collection search with type Sound was not run, and it is the definitive check.\n\n(2) AWM S03297, 'Operational sounds of United States military aircraft, armour and weapons used during the war in Vietnam' (https://www.awm.gov.au/collection/C1079277, CC BY-NC), lists 'close up of mortar firing' as segment 16. The maker is unknown and the only credit is 'AWM Research Grants Scheme', so it could come from a studio or commercial LP. Check its provenance before using it.\n\n(3) An AWM blog post, 'Proactive Collecting with HMAS Parramatta' (https://www.awm.gov.au/articles/blog/proactive-collecting-with-hmas-parramatta), may describe sounds recorded aboard an Anzac frigate. The fetch failed because the budget ran out.\n\n(4) Not tried: US National Archives WW2 field recordings (Marine Corps combat-correspondent disc and wire recordings, and Navy record groups), which are public domain and real.\n\n(5) Not tried: museum ships with K-gun or Hedgehog demonstrations, such as USS Slater and USS Kidd. Licences there are likely unknown.\n\n(6) DVIDS stills 'chaff launch' (https://www.dvidshub.net/image/9061153/chaff-launch and https://www.dvidshub.net/image/9061154/chaff-launch) point to a chaff-launch event that may have a matching video. Not checked.\n\n(7) Not checked: which Mk 36 SRBOC rounds are rocket-propelled and which are mortar-launched. This decides whether the chaff leads give a pure thump or a thump followed by a whoosh."
+  }
+ },
+ {
+  "group": "crash",
+  "found": {
+   "leads": [
+    {
+     "sound": "aircraft_break_up",
+     "title": "NASA Crash Tests eVTOL Concept (Lift+Cruise full-scale drop test, Nov 2022), with highlight video",
+     "url": "https://www.nasa.gov/centers-and-facilities/langley/nasa-crash-tests-evtol-concept/",
+     "site": "nasa.gov (also images.nasa.gov item 2022-H1_V_Lift&CruiseDropTest-5)",
+     "licence": "Public domain (US government work, NASA)",
+     "licence_evidence": "Made by NASA's own staff: the page credits the video to Gary Banziger, and the images.nasa.gov metadata names Gary Banziger as photographer (owner gbanzige, center LRC). The page has no reuse statement of its own and links only to NASA Brand & Usage Guidelines. The metadata has no copyright field.",
+     "what": "A full-scale 'Lift+Cruise' eVTOL test body, with an overhead mass standing in for the wing, rotors and battery, was hoisted at NASA Langley's LandIR gantry. Pyrotechnic cutters released it and it swung down into the ground with crash dummies aboard. The page says 'the overhead structure collapsed' and the vehicle 'was destroyed beyond expectations'. Video is credited to Gary Banziger, filmed around 9 Nov 2022 (date taken from the filename). The direct MP4 on the page is https://www.nasa.gov/wp-content/uploads/2022/12/larc-110922-liftandcruisedroptest-highlights-banziger-1.mp4. images.nasa.gov has a 2:27 version, 1920x1080, with a 2-channel 44.1 kHz audio track: http://images-assets.nasa.gov/video/2022-H1_V_Lift&CruiseDropTest-5/2022-H1_V_Lift&CruiseDropTest-5~orig.mp4 (219 MiB). Mic placement is not stated.",
+     "fit": "The best structural failure found. A real airframe crushes and its overhead structure collapses on impact, and there is a downloadable original from NASA with an audio track. The sound should be crunching, buckling structure rather than an explosion.",
+     "concerns": "It is called a 'highlights' reel, so it may carry music, narration or edits over the field sound; the audio content is not stated anywhere. The airframe is a modern composite test article, not an aluminium warbird. The impact speed and surface are not stated. I could not read the .srt captions to check for narration.",
+     "read": "page read"
+    },
+    {
+     "sound": "aircraft_break_up",
+     "title": "NASA Drop Test Supports Safer Air Taxi Designs (gantry drop test with slate, 24-26 June 2025)",
+     "url": "http://images-assets.nasa.gov/video/LRC-2025-V-06242025-RVLT-Gantry-Drop-Test-With-Slate-V0002050/LRC-2025-V-06242025-RVLT-Gantry-Drop-Test-With-Slate-V0002050~orig.mp4",
+     "site": "images.nasa.gov (NASA Image and Video Library); article at https://www.nasa.gov/centers-and-facilities/armstrong/nasa-drop-test-supports-safer-air-taxi-design-and-certification/ (YouTube f6UVU6AZspU, 127 s)",
+     "licence": "Public domain (US government work, NASA)",
+     "licence_evidence": "The images.nasa.gov metadata.json reads 'Usage terms: Released to the Public'. Creator and photographer are 'NASA LaRC_OCIO_Video Services_Bono_Herrera'. There is no copyright field.",
+     "what": "A full-scale air-taxi-style aircraft body with weighted dummies was hoisted about 35 ft on cables at Langley's LandIR gantry, then released to swing forward into the ground. This test added a 10-degree yaw. The original MP4 runs 2:26, 3840x2160 at 29.97 fps, with a stereo AAC 48 kHz audio track, 56 MiB. It was shot by Langley OCIO Video Services. 'With-Slate' in the ID suggests a documentation edit with a title slate. Mic placement is not stated.",
+     "fit": "A real impact of a full-size airframe, recorded by NASA's own video crew, with a high-quality original and an audio track. It is useful for the impact and crunch part of a break-up.",
+     "concerns": "No page says how much the structure failed. The test is about energy-absorbing subfloors, so the impact may be milder and less 'tearing' than the 2022 test. It is a composite eVTOL body. The audio content (natural sound, narration or music) is unknown, and I could not read the .srt.",
+     "read": "page read"
+    },
+    {
+     "sound": "aircraft_break_up",
+     "title": "FAA & NASA Langley Drop Test (Fokker F-28, 20 June 2019)",
+     "url": "https://www.faa.gov/newsroom/faa-and-nasa-conduct-crash-test-regional-jet",
+     "site": "faa.gov (video on the FAA's YouTube channel: https://youtu.be/rqiGbOWCvWU)",
+     "licence": "Public domain (US government work, FAA)",
+     "licence_evidence": "The video is posted by the 'Federal Aviation Administration' YouTube channel and linked from the FAA newsroom release. Neither the FAA page nor the YouTube page states a licence. Public-domain status rests on it being a federal agency's own release.",
+     "what": "The FAA newsroom release of 21 June 2019 describes a crashworthiness drop test of a Fokker F28 regional jet at NASA Langley's Landing and Impact Research Facility on 20 June 2019. The YouTube video is titled 'FAA & NASA Langley Drop Test' and was uploaded 21 June 2019. Aerospace Testing International and NASA's advisory call it a 33,000 lb airframe, the largest full-sized aircraft ever dropped at LandIR. The video length was not retrievable. Mic placement is not stated.",
+     "fit": "A full-size metal jet airliner hitting the ground: the closest in kind to a WW2 metal airframe crash among the sources found.",
+     "concerns": "It is only on YouTube, and no original download was found on images.nasa.gov (searching 'Fokker' returned 0 hits). Audio content and length are unknown and it may be an edited piece with music. Downloading from YouTube may conflict with YouTube's terms even though the work itself is public domain. It is a vertical/swing drop, so it may sound like an impact and crush more than a mid-air break-up.",
+     "read": "page read"
+    },
+    {
+     "sound": "aircraft_break_up",
+     "title": "Teamwork Makes Chopper Drop a Success (TRACT 1 CH-46E crash test, 28 Aug 2013)",
+     "url": "https://www.nasa.gov/centers-and-facilities/langley/teamwork-makes-chopper-drop-a-success/",
+     "site": "nasa.gov (embedded YouTube mYFeTH0Bp6A, 'Helicopter Drop Test', NASA Langley Research Center channel)",
+     "licence": "Public domain (US government work, NASA)",
+     "licence_evidence": "The video caption credit is 'Credits: NASA' and the photos are credited 'NASA Langley / David C. Bowman'. No explicit usage statement appears on the page, which links to NASA Brand & Usage Guidelines.",
+     "what": "A former Marine CH-46E Sea Knight fuselage, about 45 ft long and 10,300 lb, carried 13 instrumented dummies and 2 manikins. It was swung on cables from about 30 ft and released by pyrotechnics just before impact. It hit a soil bed at about 35 ft/s horizontal and 26 ft/s vertical (about 30 mph) at Langley's LandIR facility on 28 Aug 2013. The video is 41 s per the page metadata and was uploaded 28 Aug 2013. Mic placement is not stated.",
+     "fit": "A real all-metal military airframe slamming into the ground and crumpling: a plausible source for the metal crunch of a crashing aircraft.",
+     "concerns": "It is only an embedded YouTube clip, and no original was found on images.nasa.gov (searching 'helicopter crash' returned 0 hits). At 41 s it is probably an edited piece, and its audio content is unknown. It impacts soft soil, so there may be less tearing metal. Downloading from YouTube is a terms-of-service concern.",
+     "read": "page read"
+    },
+    {
+     "sound": "aircraft_break_up",
+     "title": "Helicopter Drop Test a Smashing Success (TRACT 2 CH-46 crash test, Oct 2014)",
+     "url": "https://www.nasa.gov/larc/helicopter-drop-test-a-smashing-success/",
+     "site": "nasa.gov (embedded YouTube nMa2Txdvo_E, 'NASA Helicopter Crash Test a Smashing Success', NASA Langley Research Center channel)",
+     "licence": "Public domain (US government work, NASA)",
+     "licence_evidence": "The video is credited 'NASA Langley/Gary Banziger', a NASA staff videographer, and the photos 'NASA Langley/David C. Bowman'. The page has no explicit reuse statement and links to NASA Brand & Usage Guidelines.",
+     "what": "TRACT 2: a second CH-46 Sea Knight fuselage of about 10,500 lb, with composite retrofits and 13 instrumented dummies plus 2 manikins. It was hoisted about 30 ft, released just before impact, and hit a bed of dirt at about 30 mph at LandIR. The page says it 'stopped abruptly and slid only a few feet'. About 40 cameras and 350 data channels recorded it. The video is 41 s per the page metadata and was uploaded 1 Oct 2014. Mic placement is not stated.",
+     "fit": "A second take of a real metal helicopter airframe crash. Useful as an alternate or layered impact for aircraft break-up.",
+     "concerns": "Same as TRACT 1: YouTube only, about 41 s, possibly music or narration, audio unknown. It is a dirt impact.",
+     "read": "page read"
+    },
+    {
+     "sound": "aircraft_break_up",
+     "title": "NASA Cessna 172 ELT crash test (NASA Langley video embedded on Boldmethod)",
+     "url": "https://www.youtube.com/watch?v=FsRwlr7RDkk&t=67s",
+     "site": "YouTube (credited to NASA Langley Research Center), found via https://www.boldmethod.com/blog/video/2015/07/NASA-crash-C172-ELT-test/",
+     "licence": "Public domain (US government work, NASA), if the upload is NASA's own",
+     "licence_evidence": "Boldmethod credits the footage 'Images Courtesy: NASA Langley Research Center'. I could not read the YouTube page itself to confirm the channel or licence.",
+     "what": "A Cessna 172 carrying ELTs (emergency locator transmitters), dropped from 100 ft at Langley's Landing and Impact Research Facility in the 2015 ELT test series (three Cessna 172 crash tests, 1 July, 29 July and 26 Aug 2015). The 26 Aug airframe was a 1974 Cessna 172 that hit belly-first and flipped onto its back. Boldmethod says 'watch at 3:49 for some awesome slow motion video', so the video is at least about 4 minutes. Mic placement is not stated.",
+     "fit": "A real light aluminium aircraft hitting concrete or ground and crumpling and flipping. The closest scale match to a fighter or light aircraft crash in this set.",
+     "concerns": "I could not tell which of the three tests this video shows. It has not been confirmed as a NASA-channel upload. Audio is unknown (likely narration in parts). It is YouTube only, with a terms-of-service issue for downloading. Partly slow motion, so some sections may be silent or music. The same tests also appear in a 42 s Air & Space edit (Video: NASA / Edit: Roger Mola), which is not recommended because it is a third-party edit.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "aircraft_break_up",
+     "title": "309th AMARG videos tag page (includes '309th EDMX F-16 Disassembly B-Roll' 1:33 and '309th EDMX Team F-16 Aircraft Disassembly')",
+     "url": "https://www.dover.af.mil/News/Video/dvpTag/309th",
+     "site": "dover.af.mil (US Air Force; DVIDS-hosted video player)",
+     "licence": "Public domain (US government work, US military/DoD)",
+     "licence_evidence": "An official af.mil site with DVIDS/Defense.gov-sourced military video. The page I read gives no explicit licence text.",
+     "what": "An Air Force video listing for the 309th Aerospace Maintenance and Regeneration Group at Davis-Monthan AFB. Titles include '309th EDMX F-16 Disassembly B-Roll' (1:33), '309th EDMX Team F-16 Aircraft Disassembly' (1:23), '309th EDMX Team F-16 Aircraft Disassembly - TV Short' (2:09), and 309th AMARG B-Roll Pt.1 and Pt.2. 'B-roll' usually means unnarrated field footage, but the page does not say. No descriptions, dates or direct URLs were given.",
+     "fit": "Weak. Real metal airframes being taken apart, possibly cut or torn. This is the only government source found in the B-52/AMARG area. It may give metal tearing or cutting sounds, not a crash.",
+     "concerns": "No direct video URL was shown. Disassembly is not a crash and may be mostly tool noise. It is a DVIDS player and dvidshub.net is blocked from here. No B-52 guillotine video was found: a dm.af.mil article says the final B-52G was cut with a rescue-style saw, not a guillotine.",
+     "read": "page read"
+    }
+   ],
+   "searches": [
+    "NASA Langley CH-46E helicopter crash test TRACT video",
+    "images.nasa.gov Cessna 172 crash test Landing and Impact Research Facility 2015 video",
+    "NASA Fokker F-28 fuselage drop test Langley video",
+    "site:images.nasa.gov crash test Langley",
+    "\"Controlled Impact Demonstration\" video nasa.gov Armstrong Boeing 720 crash footage download",
+    "FAA William J. Hughes Technical Center ATR 42 fuselage drop test video",
+    "\"images.nasa.gov/details\" helicopter crash test",
+    "NASA Langley Cessna 172 crash test ELT video nasa.gov 2015 \"Landing and Impact\"",
+    "B-52 guillotine Davis-Monthan video START treaty destruction AMARG",
+    "nasa.gov Langley \"Cessna\" crash test emergency locator transmitter video Barnstorff",
+    "NASA Langley ATR 42 fuselage drop test 2020 video",
+    "NASA Armstrong video \"Controlled Impact Demonstration\" 1984 footage nasa.gov video Boeing 720 \"December 1, 1984\" (extended)",
+    "NASA Langley Fokker F28 crash test June 2019 video YouTube \"NASA Langley\"",
+    "dvidshub video aircraft demilitarization excavator AMARG cut up B-52 final elimination",
+    "FAA Technical Center vertical drop test Boeing 737 fuselage section video",
+    "NASA Langley 2009 MD-500 helicopter crash test deployable energy absorber video",
+    "\"images.nasa.gov\" \"drop test\" Langley video",
+    "NASA Langley \"Gantry\" crash test video natural sound \"b-roll\" helicopter OR Cessna OR Fokker",
+    "\"rqiGbOWCvWU\" OR \"FAA and NASA\" Fokker F28 crash test video FAA YouTube",
+    "\"NASA Langley\" YouTube Cessna crash test 2015 \"ELT\" drop \"100 feet\" video NASA Langley Research Center channel",
+    "nasa.gov Langley Cessna crash test article video \"Emergency Locator Transmitter\" \"Gary Banziger\" OR \"Credits: NASA\" 2015 feature",
+    "\"FsRwlr7RDkk\"",
+    "NASA Langley YouTube \"Cessna 172\" crash test \"ELT\" video title 2015 \"Landing and Impact Research Facility\" slow motion",
+    "Page reads of images-api.nasa.gov search results (plain JSON pages) for: crash test (LARC), drop test, controlled impact demonstration, helicopter crash, crash (LRC), gantry, fuselage, crash test, Cessna, Boeing 720, Fokker, impact (AFRC), LandIR"
+   ],
+   "gaps": "1. I could not confirm the audio content of any lead, i.e. whether it is natural sound, narration or music. The NASA .srt caption files came back as binary through WebFetch, and direct downloads from images-assets.nasa.gov are blocked by the proxy (403). The two images.nasa.gov originals (the 2022 eVTOL test and the 2025 air-taxi test) do carry stereo audio tracks according to their metadata. Someone needs to listen before using any of these.\n2. The 1984 Controlled Impact Demonstration (Boeing 720): nasa.gov has only still images (Armstrong CID gallery, image-detail pages). The images.nasa.gov video API returned nothing for 'controlled impact demonstration' or 'Boeing 720'. The only video copies found were third-party (a military.com clip credited 'MLT Staff', plus Rumble and Dailymotion), with unknown or non-qualifying licences, so I did not list them. The old Dryden movie gallery survives only in web-archive copies, which the rules exclude.\n3. No NASA- or FAA-hosted original was found for the 2013/2014 TRACT helicopter tests, the 2015 Cessna 172 tests or the 2019 F-28 test; they exist only as YouTube uploads by NASA Langley or the FAA. images.nasa.gov returned 0 video hits for 'Fokker', 'helicopter crash' and 'Cessna' (crash-related), and the 2013 and 2014 releases say video was 'available on NASA TV or on request'. The NASA Langley Flickr albums (TRACT 2: flickr.com/photos/nasa_langley/sets/72157647846280249/; 2017: sets/72157682550213812) may hold video but were not checked.\n4. FAA William J. Hughes Technical Center fuselage drop tests (ATR 42, Boeing 737 sections): only technical reports turned up (fire.tc.faa.gov, rosap.ntl.bts.gov, ntrs.nasa.gov); no video was found online.\n5. B-52 guillotine at Davis-Monthan: only still photos ('The final elimination of a B-52G' on dm.af.mil and af.mil) and articles. No government video with sound was found. The DVIDS route is blocked from here, so a direct dvidshub.net search for 'B-52 elimination' or 'AMARG demil' video is still worth doing elsewhere.\n6. The 2017 NASA/FAA regional-jet fuselage drop video (YouTube lD1mdWf_DnY) sits on the already-found 'crash-test-dummies-push-the-limits' page, so I did not list it.\n7. The WebFetch budget (100 per hour, shared) ran out near the end, so I could not read the AOPA, avweb or sciencealert pages for the Cessna videos, or the YouTube page for FsRwlr7RDkk; that lead is marked 'search snippet only'.\n8. No lead captures an actual in-flight break-up; every lead is a ground impact or crush test. A WW2-style mid-air structural failure recorded in real life with a qualifying licence was not found."
+  },
+  "check": {
+   "verdicts": [
+    {
+     "url": "https://www.nasa.gov/centers-and-facilities/langley/nasa-crash-tests-evtol-concept/",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "None confirmed. Risk: a 'highlights' reel may have music, narration or layered sound added. That would make it a layered or edited soundtrack, not a raw field recording.",
+     "reason": "Page read. Its claims match. Title 'NASA Crash Tests eVTOL Concept', published 19 Dec 2022. Video is credited to Gary Banziger, a NASA Langley videographer (the TRACT 2 page credits 'NASA Langley/Gary Banziger'). The direct MP4 https://www.nasa.gov/wp-content/uploads/2022/12/larc-110922-liftandcruisedroptest-highlights-banziger-1.mp4 is listed on the page. The page describes an 'overhead structure collapse' and says 'The vehicle was destroyed beyond expectations'. Licence: made by NASA staff, so a US government work. The page has no explicit reuse or copyright statement. This is the best-backed lead and the only one in the set whose page says the structure failed. Before use, listen for music or narration and keep only the natural-sound impact segment. If the reel has stock music, do not use those parts. I could not check the images.nasa.gov copy (2:27, 44.1 kHz stereo) the searcher cited: the API was unreachable from here. Use the nasa.gov MP4, which the page confirms.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.nasa.gov/larc/helicopter-drop-test-a-smashing-success/",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "None confirmed. The audio of the 41 s YouTube edit is unknown and may have music added.",
+     "reason": "Page read. Title tag 'NASA Helicopter Drop Test a Smashing Success - NASA', published 1 Oct 2014. It describes TRACT 2: a CH-46 Sea Knight fuselage of about 10,500 lb, lifted about 30 ft, which 'plowed into the dirt at about 30 miles an hour' at the LandIR facility. The video credit is 'NASA Langley/Gary Banziger' (NASA staff), and the embed is YouTube nMa2Txdvo_E, 41 s per page metadata. No MP4 is on the page. Public domain as a NASA employee work, though there is no explicit statement. It is a real metal military airframe impact, but into soft dirt, so expect a thud and crunch more than tearing. The only copy is YouTube. Keep as a secondary lead, and look for the original on images.nasa.gov first.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.nasa.gov/centers-and-facilities/langley/teamwork-makes-chopper-drop-a-success/",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "None confirmed. The audio of the 41 s YouTube edit is unknown and may have music added.",
+     "reason": "Page read. Title 'Teamwork Makes Chopper Drop a Success', dated 28 Aug 2013. It describes a CH-46E fuselage of 10,300 lb, about 30 ft, '35 feet per second horizontal and 26 feet per second vertical', about 30 mph, with 13 instrumented dummies and 2 manikins at LandIR. The embed is YouTube mYFeTH0Bp6A, duration 41 per metadata, credit 'Credits: NASA'. There is no MP4 and no explicit usage statement, but it is a NASA work. It is a near-duplicate of TRACT 2 (same kind of airframe, same dirt impact), so keep it only as an alternate take. The only copy is YouTube.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://www.faa.gov/newsroom/faa-and-nasa-conduct-crash-test-regional-jet",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "None confirmed. The video's audio content and length are unknown, and it may be an edited piece with music.",
+     "reason": "Page read. Title 'FAA and NASA Conduct Crash Test on a Regional Jet', dated 21 June 2019. It describes a Fokker F28 crash test on Thursday 20 June 2019 at LandIR, NASA Langley, onto dirt, with 24 dummies, and links YouTube rqiGbOWCvWU. There is no licence text: the only usage line is 'Reports from the test will be available to the public'. Public domain rests on it being a federal (FAA/NASA) release, which is reasonable but not stated. I did not see the YouTube title 'FAA & NASA Langley Drop Test', the video length or the '33,000 lb' figure myself (search budget exhausted). This is the closest airframe type (a metal transport jet), but it is weakly sourced: YouTube only, no original download found, and audio unknown. Keep as a mid-tier lead.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "http://images-assets.nasa.gov/video/LRC-2025-V-06242025-RVLT-Gantry-Drop-Test-With-Slate-V0002050/LRC-2025-V-06242025-RVLT-Gantry-Drop-Test-With-Slate-V0002050~orig.mp4",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "None shown. Not verified.",
+     "reason": "I could not verify this. images-api.nasa.gov and images-assets.nasa.gov refused the connection from here (proxy 403), and my WebFetch and WebSearch budgets ran out before I could read the companion article (nasa.gov/centers-and-facilities/armstrong/nasa-drop-test-supports-safer-air-taxi-design-and-certification/) or search the asset ID. The searcher's detail is specific ('Released to the Public', 3840x2160, 48 kHz stereo, 56 MiB) and the ID pattern looks like NASA's. A 'with slate' documentation clip is more likely to carry natural sound than a highlights reel, so it may be the best lead in the set. But nothing I could reach backs the URL, and no page says the structure failed: the test is about an energy-absorbing subfloor, so the impact may be mild. Re-check this URL before discarding it: if the asset and its metadata.json resolve, it should become a keep.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=FsRwlr7RDkk&t=67s",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "Possibly the licence rule: the uploading channel is unconfirmed, so it may be a third-party re-upload of uncertain status.",
+     "reason": "Search snippet only, by the searcher's own account, and I could not confirm it (budgets exhausted). The video ID is not tied to a NASA channel by any page I read. The only backing is the Boldmethod credit 'Images Courtesy: NASA Langley Research Center'. Boldmethod is a third-party aviation site, so the embed could be a re-upload or an edit with narration or music. It is unclear which of the three 2015 Cessna 172 tests it shows. The test itself (a Cessna 172 dropped about 100 ft at LandIR, 2015) is a good scale match, so search for the NASA-owned original (images.nasa.gov or a nasa.gov story with an MP4) instead of this URL.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://www.dover.af.mil/News/Video/dvpTag/309th",
+     "keep": false,
+     "licence_ok": "yes",
+     "rule_broken": "None technically: it is a US military public-domain work. It fails on fit, and the 'TV Short' item is likely narrated or scored.",
+     "reason": "I could not re-read the page (WebFetch budget exhausted), so it is not confirmed here. A Dover AFB site hosting a 309th AMARG (Davis-Monthan) tag page is plausible, because af.mil sites share the DVIDS pool, but that is unverified. Even if the page exists, it fails as a lead. It is a tag listing with no direct video URL. The playback is on the blocked dvidshub.net. The content is F-16 disassembly (tool and cutting noise), not an airframe crashing or tearing apart, and the 'TV Short' version is almost certainly an edited news piece. The searcher found no B-52 guillotine footage. This does not meet the aircraft_break_up brief.",
+     "url_real": "not confirmed"
+    }
+   ],
+   "missed": "Budget note: my WebFetch budget (100 per hour, shared) and WebSearch budget (200 per turn, shared) both ran out early in this check. I read 4 of the 7 lead pages: eVTOL 2022, FAA F28, TRACT 1, TRACT 2. images-api.nasa.gov and images-assets.nasa.gov were refused by the proxy, so the 2025 gantry MP4, the Cessna YouTube ID and the dover.af.mil tag page are unverified, not disproven. Re-run a check on those three in a follow-up.\n\nObvious sources not tried or not returned:\n(1) NASA's own copy of the 1984 Controlled Impact Demonstration (Boeing 720) on nasa.gov / NASA Armstrong (Dryden) movie collection or images.nasa.gov. This was in the brief, but the searcher returned nothing for it. It is the one test that shows a large metal airliner breaking up and burning.\n(2) FAA William J. Hughes Technical Center fuselage drop tests: Boeing 737 sections, the ATR 42-300 vertical drop, and the 1990s B-707/B-737 drops. The searcher tried none of these.\n(3) The NASA/FAA ATR 42 fuselage test at LandIR (2020 era) and the F28 original on images.nasa.gov. Search the 'LRC-2019' / 'F28' / 'ATR' asset IDs rather than 'Fokker'.\n(4) NASA Langley's 2015 Cessna 172 ELT tests as NASA-hosted originals (the nasa.gov story pages and images.nasa.gov), rather than a third-party YouTube embed.\n(5) The 1964 FAA DC-7 / L-1649 Constellation crash tests at Deer Valley, Phoenix: real piston-era airliners crashed for research. Check carefully whether any surviving film has location sound rather than added sound.\n(6) The Sandia National Laboratories F-4 Phantom rocket-sled impact (1988), a metal fighter disintegrating against a concrete wall. Licence is uncertain: Sandia is contractor-operated, so it is not automatically public domain.\n(7) Davis-Monthan B-52 START elimination footage on af.mil or defense.gov. The searcher says it is not a guillotine, but there may be footage of airframes being cut or dropped.\n(8) DVIDS (blocked) footage of SINKEX ship hulls or aircraft-carrier crash-and-salvage training, listed as 'search snippet only'."
+  }
+ },
+ {
+  "group": "naval",
+  "found": {
+   "leads": [
+    {
+     "sound": "ship_sinking",
+     "title": "RIMPAC 2022 SINKEX #2 (ex-USS Denver, LPD 9)",
+     "url": "https://www.navy.mil/Resources/Videos/videoid/851655",
+     "site": "navy.mil (Commander, U.S. 3rd Fleet)",
+     "licence": "public domain (US government work)",
+     "licence_evidence": "Official US Navy page. It credits Navy Mass Communication Specialists: edited by MC2/MC1 Andre T. Richard, with videographers MC2 Louis Lea, MC2 Maria Llanos and MC2 Aiko Bongolan. The page has no explicit licence line, so this rests on the 17 USC 105 status of work by federal employees.",
+     "what": "A 1:33 video dated 26 Jul 2022. It shows RIMPAC 2022 forces firing on and sinking the decommissioned ex-USS Denver (LPD 9) in the Pacific on 22 Jul 2022. Several Navy videographers shot it and one edited it. The page does not say where the cameras were or whether there is natural sound.",
+     "fit": "A real warship being hit and sinking, filmed by Navy camera crews. Usable if the track carries natural sound of the hits and the hull going under.",
+     "concerns": "It is an edited package, so it may have music or no natural audio. The page says nothing about sound. SINKEX footage is often aerial or long-range, so any explosion is distant. Modern missile hits, not WW2 weapons. It must be checked by ear before use.",
+     "read": "page read"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "RIMPAC 2022 SINKEX - Direct Hits",
+     "url": "https://dvidshub.net/video/852549/rimpac-2022-sinkex-direct-hits",
+     "site": "dvidshub.net",
+     "licence": "public domain (likely; US military DVIDS upload)",
+     "licence_evidence": "Only the search result was seen. DVIDS uploads from US military units are normally US government works, but the page and its credit line were not read.",
+     "what": "Per the search result title only: footage of direct hits on a target ship during the RIMPAC 2022 sinking exercise. Date, length, cameras and sound unknown.",
+     "fit": "Close-in hits on a hull that later sinks. It may have the impact explosions and the break-up if the audio is natural.",
+     "concerns": "Not read (dvidshub is blocked from here). Audio may be absent or music. Probably the same event family as the navy.mil SINKEX #2 lead above, so check for duplicate footage.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "RIMPAC 2016 SINKEX - decommissioned USS Thach (FFG 43)",
+     "url": "https://dvidshub.net/video/475129/rimpac-2016-sinkex-decommissioned-uss-thach-ffg-43",
+     "site": "dvidshub.net",
+     "licence": "public domain (likely; US military DVIDS upload)",
+     "licence_evidence": "Only the search result was seen. A DVIDS US-military upload is normally a US government work, but this was not confirmed on the page.",
+     "what": "Per the title: the sinking exercise against the decommissioned frigate ex-USS Thach during RIMPAC 2016. No description, length or audio information was seen.",
+     "fit": "A frigate-sized hull being struck and sunk, a reasonable WW2 destroyer/escort scale.",
+     "concerns": "Not read. The weapons used and whether there is natural sound are unknown. It may be aerial or long-range.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "VP-47 fires Harpoon, USS Olympia launches torpedo during RIMPAC SINKEX",
+     "url": "https://dvidshub.net/video/614585/vp-47-fires-harpoon-uss-olympia-launches-torpedo-during-rimpac-sinkex",
+     "site": "dvidshub.net",
+     "licence": "public domain (likely; US military DVIDS upload)",
+     "licence_evidence": "Only the search result was seen. A DVIDS US-military upload is normally a US government work, but this was not confirmed.",
+     "what": "Per the title: a P-8/VP-47 Harpoon shot and a torpedo launched by the submarine USS Olympia during a RIMPAC sinking exercise. No date, length, camera position or audio information was seen.",
+     "fit": "It may cover both gaps: the submarine torpedo launch (if any launch audio or footage is included) and a torpedo hit on the target hull, which is the classic WW2 kill (underwater explosion under the keel).",
+     "concerns": "Not read. A submerged launch is rarely filmed with sound, so the 'launches torpedo' part may be graphics or periscope video with no audio. The audio may be music or narration.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "Ex-USS Ogden SINKEX",
+     "url": "https://www.dvidshub.net/video/349029/ex-uss-ogden-sinkex",
+     "site": "dvidshub.net",
+     "licence": "public domain (likely; US military DVIDS upload)",
+     "licence_evidence": "Only the search result was seen. A DVIDS US-military upload is normally a US government work, but this was not confirmed.",
+     "what": "Per the title: the sinking exercise against the decommissioned amphibious ship ex-USS Ogden. No other details were seen.",
+     "fit": "Another real hull sinking. It is worth checking for a track with natural sound of hits or of the ship going under.",
+     "concerns": "Not read. The audio content is unknown. It may be long-range or aerial.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "Navy EOD Sinks USS Oriskany with C-4",
+     "url": "https://military.com/video/logistics-and-supplies/naval-equipment/navy-eod-sinks-uss-oriskany-with-c4/3102218807001",
+     "site": "military.com",
+     "licence": "unknown",
+     "licence_evidence": "military.com hosts many DoD-sourced videos, but the page was not read (the fetch budget ran out), so neither the source credit nor the licence was seen. If it is original US Navy EOD footage it would be public domain, but that is not confirmed. The original DoD/DVIDS source should be found first.",
+     "what": "Per the title: US Navy Explosive Ordnance Disposal sinking the ex-USS Oriskany (aircraft carrier) with C-4 scuttling charges. Search results elsewhere put this off Pensacola, Florida, on 17 May 2006, with roughly 230 kg of C-4 and about 37 minutes to sink. Those details come from secondary news snippets and were not checked.",
+     "fit": "Real scuttling charges (multiple below-waterline detonations) followed by a large warship flooding and going down. Close to the 'ship goes down' brief, and it is a WW2-era Essex-class hull.",
+     "concerns": "Not read. Licence unknown until the original Navy source is found. The audio may be news narration. Most public footage was shot from boats or aircraft some distance away.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "On Board Video of USS Vandenberg Sinking",
+     "url": "https://boattest.com/view-news/3437_on-board-video-of-uss-vandenberg-sinking",
+     "site": "boattest.com",
+     "licence": "unknown",
+     "licence_evidence": "No licence was seen. The page could not be read because the fetch budget ran out. This is a boating news site, and the camera owner is probably a third party (reef project or contractor). Treat it as all rights reserved until shown otherwise.",
+     "what": "Per the title: video from a camera mounted aboard the ex-USNS General Hoyt S. Vandenberg as it was scuttled off Key West, Florida (artificial reef, May 2009 per other search results). Recordist, length and audio were not seen.",
+     "fit": "An on-board camera during a scuttling is the best perspective for the actual sound of a hull flooding and going under: charges, inrushing water, creaking steel. It is the same kind of item as the already-found Radford on-board video.",
+     "concerns": "Licence unknown, and it fails the licence rule unless the original owner (Florida Keys reef project / Monroe County TDC / contractor) releases it under an acceptable licence. The camera's own microphone may be poor or cut out underwater.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "ship_sinking",
+     "title": "Titan submersible: Coast Guard Marine Board of Investigation releases audio recording",
+     "url": "https://dvidshub.net/video/951839/titan-submersible-coast-guard-marine-board-investigation-releases-audio-recording",
+     "site": "dvidshub.net (US Coast Guard)",
+     "licence": "public domain (likely; US Coast Guard / NOAA work)",
+     "licence_evidence": "Only the search result was seen. The item was released by the US Coast Guard. News headlines (eenews.net) say a NOAA acoustic recorder captured the sound. Both are federal agencies, but the DVIDS page itself was not read.",
+     "what": "Per the title and news snippets: the underwater acoustic recording, made by a NOAA passive acoustic recorder, of what is believed to be the implosion of the OceanGate Titan submersible near the Titanic wreck in June 2023. The Coast Guard released it in 2025. Distance, length and processing were not seen. A separate May 2025 USCG video reportedly has the sound as heard aboard the support ship.",
+     "fit": "A real hydrophone recording of a pressure hull collapsing at depth, the underwater 'hull failure' component of a sinking.",
+     "concerns": "It records a fatal accident in which five people died, so using it as a game effect is ethically sensitive. That is the user's call. It is a distant hydrophone recording, likely a low thud, and may have been speed-shifted or filtered for release. It is a small submersible, not a ship.",
+     "read": "search snippet only"
+    },
+    {
+     "sound": "torpedo_launch",
+     "title": "Live Fire Exercise (DVIDS video 647474)",
+     "url": "https://www.dvidshub.net/video/647474/live-fire-exercise",
+     "site": "dvidshub.net",
+     "licence": "public domain (likely; US military DVIDS upload)",
+     "licence_evidence": "Only the search result was seen. A DVIDS US-military upload is normally a US government work, but this was not confirmed.",
+     "what": "It appeared in two searches for surface-ship torpedo launches (Mk 32 SVTT / Mk 46 exercise torpedo / TORPEX), but the snippet shows only the generic title 'Live Fire Exercise'. Nothing confirms that a torpedo tube firing is in it.",
+     "fit": "If it is a Mk 32 surface-vessel torpedo tube shot, the compressed-air 'thump-whoosh' and splash is the closest modern real-world stand-in for a WW2 destroyer tube launch.",
+     "concerns": "A weak lead: the content is unconfirmed and it may be a gun or missile shoot. Not read.",
+     "read": "search snippet only"
+    }
+   ],
+   "searches": [
+    "Oriskany reef sinking 2006 video underwater explosion charges Florida Fish and Wildlife",
+    "NOAA PMEL acoustics ship scuttling recording hydrophone sound clip",
+    "NUWC Keyport torpedo launch video range public domain",
+    "hydrophone recording ship sinking implosion sound NOAA audio clip",
+    "navy.mil video MK 54 torpedo fired surface vessel torpedo tube destroyer",
+    "full ship shock trial video navy.mil underwater explosion USS",
+    "\"torpedo\" launch b-roll video navy.mil Resources Videos submarine fires torpedo",
+    "water slug test torpedo tube submarine video shipyard",
+    "Australian War Memorial sound recording submarine torpedo firing collection",
+    "awm.gov.au collection \"operational sounds\" HMAS frigate torpedo",
+    "awm.gov.au collection sound effect \"torpedo\" operational sounds firing",
+    "HMAS Brisbane scuttling 2005 Mooloolaba explosion video Queensland government",
+    "Vandenberg sinking May 2009 video Key West scuttling charges underwater camera",
+    "Spiegel Grove sinking 2002 video NOAA Florida Keys National Marine Sanctuary",
+    "ex-Radford sinking 2011 video DNREC artificial reef Del-Jersey-Land",
+    "Oriskany sinking video \"U.S. Navy\" EOD Mobile Unit 6 May 17 2006 footage reef Pensacola navy.mil",
+    "dp.la Oriskany sinking video National Archives moving image",
+    "catalog.archives.gov SINKEX video ship sinks hull breaks navy footage",
+    "navy.mil Resources Videos videoid 851655",
+    "\"torpedo\" \"SVTT\" launch video b-roll MK 46 exercise torpedo fired from USS frigate DVIDS",
+    "inside torpedo room submarine firing torpedo video sailors \"torpedo room\" launch navy video natural sound",
+    "museum submarine torpedo tube \"water slug\" demonstration firing sound USS Pampanito OR \"USS Cod\" OR \"USS Bowfin\"",
+    "ex-USS Ingraham SINKEX 2021 Mk 48 torpedo video DVIDS navy.mil",
+    "PMEL hydrophone \"SINKEX\" OR \"ship scuttling\" explosion detection sound recording",
+    "Coast Guard Marine Board of Investigation Titan acoustic recording release February 2025 NOAA passive acoustic recorder source",
+    "news.uscg.mil Titan submersible acoustic recording implosion video release",
+    "dvidshub video \"live fire exercise\" 647474 torpedo",
+    "site:navy.mil Resources Videos torpedo launch exercise destroyer \"torpedo\"",
+    "dvidshub video SINKEX ex-USS ship sinks \"b-roll\" stern rises hull breaks underwater explosion torpedo hit",
+    "dvidshub Oriskany sinking 2006 video artificial reef",
+    "\"Kittiwake\" sinking January 2011 Grand Cayman video explosion charges scuttled"
+   ],
+   "gaps": "The search budget (200 per turn, shared across agents) and the page-fetch budget (100 per hour, shared) both ran out partway through, so several leads could not be followed up. If more is wanted, a follow-up message can continue the search.\n\ntorpedo_launch is still essentially unfilled.\n- NUWC Keyport/Newport searches found only photos (e.g. a mock torpedo tube donated to the Hawthorne museum), DTIC reports and a range brochure. No agency range video with launch audio turned up.\n- No agency 'water slug' tube-test video was found. Results were news sites only: TWZ on a Russian mock launch, and Virginia-class test press releases.\n- navy.mil video 834543 (read) is ICEX 2022 divers recovering a test torpedo, not a launch.\n- DVIDS 'USS McCampbell Mark 46 torpedo launch', 'USS Benfold launches torpedo' and 'USS Shiloh launches torpedo' are still photos, so there is no sound.\n- The Canadian DND 'CAF story: fire torpedo' video (canada.ca) exists, but it is under Canadian Crown terms, not CC or public domain, so it was left out.\n\nAWM: beyond HMAS Oxley, the 'operational sounds' series was checked, and no AWM torpedo-launch recording was found.\n- Two items were read: HMAS Brisbane S04237 (https://www.awm.gov.au/collection/C1169841: 5-inch guns, engine and boiler rooms, sea wake, 2001, recorded by Bill Brassell, CC BY-NC 3.0 AU, 23 MP3s online) and HMAS Adelaide S04691 (https://www.awm.gov.au/collection/C1240475: chaff launcher, Phalanx, collision/general alarms, wake, 1984, CC BY-NC 3.0 AU). Neither has torpedo tubes.\n- Both could serve other game sounds: ship alarms, engine rooms and wake.\n\nNOAA:\n- Two PMEL acoustics pages were read: sounds_enviro.html (Ron Brown ship, airguns, ships) and multimedia.html (whales, ships, volcano, iceberg, earthquake). Neither has scuttling, SINKEX or explosion clips.\n- The NOAA Ocean Explorer 'Sounds in the Sea' page was read: it has 11 clips, of which the nearest to an explosion is seismic airguns. Nothing on sinking or explosions.\n\nArtificial reefs:\n- The searches found only news or tourism pages for Spiegel Grove, Kittiwake and Radford, with no agency video under a usable licence. Pages seen but not read include https://www.nj.gov/dep/fgw/news/2011/radford_deployed.htm (NJ DEP release on the Radford deployment) and https://fla-keys.com/diving/vandenberg (Florida Keys tourism council 'Sinking the Vandenberg' page). Both licences are unknown.\n- No DVIDS or navy.mil original of the Oriskany sinking video was confirmed.\n\nMore DVIDS SINKEX titles appeared in snippets but were not listed as leads, because they look like more of the same with unknown audio: https://dvidshub.net/video/851314/rimpac-2022-sinkex, https://dvidshub.net/video/350457/rimpac-sinkex-2014 and https://dvidshub.net/video/482874/valiant-shield-us-forces-participate-sinkex.\n\nNone of the DVIDS leads could be checked for natural sound against music or narration, because dvidshub is blocked from here."
+  },
+  "check": {
+   "verdicts": [
+    {
+     "url": "https://www.navy.mil/Resources/Videos/videoid/851655",
+     "keep": true,
+     "licence_ok": "yes",
+     "rule_broken": "none found",
+     "reason": "Page read. The claims hold: 'RIMPAC 2022 SINKEX #2', Commander U.S. 3rd Fleet, dated 26 Jul 2022, 1:33 long. It shows RIMPAC forces sinking the decommissioned ex-USS Denver (LPD 9) on 22 Jul. The credit reads 'U.S. Navy video edited by MC2 Andre T. Richard', with Navy videographers MC2 Louis Lea, MC2 Maria Llanos and MC2 Aiko Bongolan. That makes it a federal employee work (17 USC 105). The page has no explicit licence line. Weak points: it is an edited 1:33 package, and the page says nothing about audio. Edited 3rd Fleet highlight videos often carry music or no natural sound, and SINKEX shots are usually long-range. Kept only as an audition lead. Modern missile and ordnance hits, not WW2 weapons.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/852549/rimpac-2022-sinkex-direct-hits",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none found (not verifiable)",
+     "reason": "Search snippet only; not read. The web-search budget was used up before I could search the title again, so I could not check that this search result exists. The ID is consistent with mid-2022 DVIDS numbering, and the slug matches the title. A DVIDS upload from a US military unit would normally be public domain, but the credit line was not seen. RIMPAC 2022 sank more than one hulk, so this may be ex-Denver (overlapping the navy.mil lead) or another target. Audio unknown. Kept under the blocked-site exception, as a low-confidence audition lead.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/475129/rimpac-2016-sinkex-decommissioned-uss-thach-ffg-43",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none found (not verifiable)",
+     "reason": "Search snippet only; not read, and the title could not be searched again. The ID fits mid-2016 DVIDS numbering, and ex-Thach was a RIMPAC 2016 SINKEX target, so the claim is plausible. Licence presumed US government but not seen. Weapons, camera distance and audio are unknown. Kept under the blocked-site exception as a weak lead.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/614585/vp-47-fires-harpoon-uss-olympia-launches-torpedo-during-rimpac-sinkex",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none found (not verifiable)",
+     "reason": "Search snippet only; not read, and the title could not be searched again. The ID fits 2018 DVIDS numbering, and a P-8 Harpoon plus a USS Olympia torpedo fits the RIMPAC 2018 SINKEX, so it is plausible. Keep it for the ship_sinking slot only (a possible under-keel torpedo hit). The 'launches torpedo' part almost certainly cannot fill torpedo_launch: a submerged Mk 48 launch has no usable airborne sound and is usually shown by graphics or not at all. Licence and audio unknown.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://www.dvidshub.net/video/349029/ex-uss-ogden-sinkex",
+     "keep": true,
+     "licence_ok": "unknown",
+     "rule_broken": "none found (not verifiable)",
+     "reason": "Search snippet only; not read, and the title could not be searched again. The ID fits 2014 DVIDS numbering, and ex-USS Ogden (LPD 5) was sunk in a 2014 SINKEX, so it is plausible. Only the title is known: no length, credit, camera position or audio information. This is the thinnest of the DVIDS SINKEX leads. Kept only under the blocked-site exception, lowest priority.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://military.com/video/logistics-and-supplies/naval-equipment/navy-eod-sinks-uss-oriskany-with-c4/3102218807001",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "licence not one of the allowed (unknown; commercial site credit)",
+     "reason": "Page read. The page exists with this title, but it credits 'MLT Staff' (Military.com) as author and video source. It names no Navy unit, DoD component or camera operator. It has no licence statement, only the site's general Terms of Use. It was published 24 Jan 2014, long after the May 2006 sinking. Its description is a truncated text about the transfer to Florida, and it says nothing about what is shown or heard. Without an original Navy/DVIDS source, the licence cannot be shown to be public domain. The original 2006 Navy EOD footage should be looked for instead.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://boattest.com/view-news/3437_on-board-video-of-uss-vandenberg-sinking",
+     "keep": false,
+     "licence_ok": "no",
+     "rule_broken": "licence: site states all rights reserved",
+     "reason": "Page read. It is a BoatTEST.com news item dated 10 Jun 2009. The page does not say who shot the video or where the camera was; 'on board' is only implied by the title and text. The site says copying or re-using its material, including videos, without written permission from BoatTEST.com, LLC is 'strictly forbidden', and the footer reads 'All Rights Reserved'. The original camera owner is unknown, so there is no route to an acceptable licence from this page.",
+     "url_real": "confirmed"
+    },
+    {
+     "url": "https://dvidshub.net/video/951839/titan-submersible-coast-guard-marine-board-investigation-releases-audio-recording",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "none (poor fit and ethically sensitive, not a hard-rule break)",
+     "reason": "Search snippet only; not read, and the title could not be searched again. A USCG/NOAA release would probably be public domain, but that is not seen. The fit is poor for 'a ship goes down'. It is a small submersible imploding at about 3,300 m, picked up by a distant passive acoustic recorder, and such releases are often filtered or speed-shifted to be audible. It records a fatal accident in which five people died, so it is unsuitable as a game effect without the user's explicit choice. Rejected on fit and ethics, not on a hard rule.",
+     "url_real": "not confirmed"
+    },
+    {
+     "url": "https://www.dvidshub.net/video/647474/live-fire-exercise",
+     "keep": false,
+     "licence_ok": "unknown",
+     "rule_broken": "none confirmed; content unverified",
+     "reason": "Search snippet only. The title is the generic 'Live Fire Exercise' and nothing in the snippet, as the searcher admits, shows that a torpedo tube firing is in it. It could just as well be a gun or missile shoot. Too thin to keep, even under the blocked-site exception. That leaves no surviving torpedo_launch lead.",
+     "url_real": "not confirmed"
+    }
+   ],
+   "missed": "The shared web-search budget ran out before this review could search any lead title again. Every dvidshub verdict therefore rests on the searcher's snippet, not on an independent check. The searcher also returned nothing from most of the sources the brief named:\n(1) No agency reef-scuttling pages: Florida FWC / myfwc.com and US Navy (navy.mil) items for ex-USS Oriskany (17 May 2006); Florida Keys / Monroe County items for ex-Vandenberg (2009); ex-Spiegel Grove (2002); Delaware DNREC and NJ DEP reef-program videos of ex-Radford (2011); Cayman Islands Department of Environment / Kittiwake (2011). The original Navy EOD Oriskany footage on navy.mil or DVIDS is the obvious replacement for the rejected military.com lead.\n(2) No NOAA PMEL Acoustics Program sound pages, and no NOAA Ocean Explorer sound clips, were tried for underwater explosions or SINKEX detections.\n(3) For torpedo_launch nothing usable was found. Not tried: NUWC Division Keyport and Newport range or test videos; 'water slug' or impulse-tube test footage; navy.mil or DVIDS items naming 'Mk 32 SVTT' or 'surface vessel torpedo tube' (only the already-found TORPEX B-roll is known); Australian War Memorial / Royal Australian Navy submarine sound items beyond HMAS Oxley C1240481.\n(4) Not tried: navy.mil video pages for other SINKEXes with 'B-roll' in the title. Unedited B-roll is far more likely to carry natural sound than edited packages like 851655."
+  }
+ }
+]

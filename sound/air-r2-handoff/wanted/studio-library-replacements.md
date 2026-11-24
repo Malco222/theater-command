@@ -63,3 +63,13 @@ Glacier Bay hydrophone clips (propeller whine, outboard at 20 knots), a NOAA sma
 SINKEX and the USS Gerald R. Ford shock trial, US military mortar B-roll, NASA crash tests (the 1984 Boeing 720 impact,
 Langley fuselage drops). The cloud can't download any of them (nps.gov and noaa.gov are refused too), so they ride
 the next Mac fetch. Still nothing free and real for a Jumo 211; Bf 109 (DB 601) stand-ins only.
+
+## Round three of leads, 24 Nov 20:25Z
+
+Round two's 29 leads were fetched on the Mac on 22 Nov (`/mnt/project-files/sound-leads-1..4*.zip`; licences read from
+the saved pages in `/mnt/project-files/sound-leads-licences.md`) and are being cut for Brian's listening page as round
+12. A second search for what round two missed: `studio-library-leads-3.md` (kept leads with the skeptic's view, set
+asides, gaps), fetch list `studio-library-urls-3.txt` (13 URLs a Mac can download; YouTube-only and navy.mil items left
+out), raw results `studio-library-search-3-2026-11-24.json`. Still no free, real Jumo 211 or Ju 87, depth-charge
+thrower, or plane breaking up in the air; new stand-ins only (a frigate's chaff launcher, chaff and mortar B-roll, an
+NPS cannon, NASA crash tests onto dirt, more SINKEX videos). A new fetch needs Brian's yes first.

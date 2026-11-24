@@ -1,0 +1,13 @@
+depth_charge_thrower	https://www.awm.gov.au/collection/C1240475
+depth_charge_thrower	https://dvidshub.net/video/708431/cgc-kimball-tests-srboc-system-during-final-sea-trials
+depth_charge_thrower	https://dvidshub.net/video/743553/uss-germantown-lsd-42-launches-chaff
+depth_charge_thrower	https://www.dvidshub.net/video/991664/22nd-meusoc-81mm-mortar-live-fire
+depth_charge_thrower	https://dvidshub.net/video/559793/m252a1-81mm-mortar-live-fire
+depth_charge_thrower	https://www.dvidshub.net/video/919069/2024-international-best-mortar-competition-120mm-live-fire
+depth_charge_thrower	https://www.nps.gov/nps-audiovideo/legacy/mp3/nri/avElement/nri-cannon.mp3
+aircraft_break_up	https://www.nasa.gov/wp-content/uploads/2022/12/larc-110922-liftandcruisedroptest-highlights-banziger-1.mp4
+ship_sinking	https://dvidshub.net/video/852549/rimpac-2022-sinkex-direct-hits
+ship_sinking	https://dvidshub.net/video/475129/rimpac-2016-sinkex-decommissioned-uss-thach-ffg-43
+ship_sinking	https://dvidshub.net/video/614585/vp-47-fires-harpoon-uss-olympia-launches-torpedo-during-rimpac-sinkex
+ship_sinking	https://www.dvidshub.net/video/349029/ex-uss-ogden-sinkex
+stuka_drone_loop	https://freesound.org/people/Fight2FlyPhoto/sounds/142902/
