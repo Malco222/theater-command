@@ -2293,7 +2293,7 @@ namespace LandEye
 		if (!bOpenNow && AnySpecial() && !bAsked && !(Battle > Rec->End + 1.0 && !bClosed) && RadioMany == 0 && RadioStage == 0)
 		{
 			Due = SpecialDue(Battle, Real);
-			if (Due != Special::None && Coming >= 0 && Rec->Tracks[static_cast<size_t>(Coming)].IsVehicle() && !(Due == Special::Nick && SpTarget == Coming)) Due = Special::None;
+			if (Due != Special::None && Coming >= 0 && Rec->Tracks[static_cast<size_t>(Coming)].IsVehicle() && !(Due == Special::Nick && SpTarget == Coming) && !(Due == Special::Whistle && CutCount == 0)) Due = Special::None;
 		}
 		if (bAsked)
 		{
@@ -3890,7 +3890,9 @@ namespace LandEye
 			if (Set.bWhistle && !bWhistleDone && CutCount == 0 && Shot == Kind::Open)
 			{
 				FindWhistle(Battle);
-				if (WhistleT >= 0.0 && WhistleT <= Set.WhistleOpen)
+				// (only with its officer there to film, as the choice will want him: up, not hidden from the player, not off
+				// the ride; else the opening aerial runs as ever, and was lost to an ordinary first choice)
+				if (WhistleT >= 0.0 && WhistleT <= Set.WhistleOpen && SpecialDue(Battle, Real) == Special::Whistle)
 				{
 					bCut = true;
 					Reason = Why::Start;
