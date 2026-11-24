@@ -303,7 +303,7 @@ function agentsOnMap(s: Game, up: boolean) {
     abroad: boolean; atWork: boolean; wait: number; mission: string; doing: string; status: string; caught: number; rest: number; stuck: string; home: string; will: string; work: Work[]; sees: Seen[] };
   const none = { agents: [] as Piece[], agentMarks: [] as { region: number; text: string }[] };
   try {
-    const room = secretService(s);
+    const room = pictureSpies(s);
     if (!room) return none;
     const live = up && !onEve(s);
     const pct100 = (x: number) => Math.round(x * 100);
@@ -341,7 +341,7 @@ function foesOnMap(s: Game) {
   type Foe = { id: number; nat: string; region: number; watch: boolean; text: string };
   const none = { foeAgents: [] as Foe[], spiesWaiting: 0 };
   try {
-    const room = secretService(s);
+    const room = pictureSpies(s);
     if (!room) return none;
     const found = room.found ?? [];
     const fresh = room.agents.filter((a) => a.atWork && s.intel.agents.find((x) => x.id === a.id)?.ready === s.turn).length;
@@ -478,12 +478,47 @@ function pictureCommand(s: Game): ReturnType<typeof commandOf> {
 }
 let pictureBriefKept: { s: Game; brief: ReturnType<typeof workOutCommandBrief> } | null = null;
 
+// (Speed, the far map, 24 November 2026.) Likewise the rules' readings a picture asks for more than once: the cabinet
+// (the seal, the promise's seal, the pages, the alerts and what wants doing), the secret service (his agents, the
+// enemy's uncovered, the pages, what wants doing), the sieges (the paint, the marks, what wants doing), the book of
+// what is on order (the badges, the plates, the treasury), the reserve of men (the plate, the alerts), the damaged
+// towns, the idle teams, the arsenal's offers and his guns left alone (the frame, and what wants doing). Each is a
+// reading only, and nothing it reads changes while a picture is drawn up (the one thing a picture writes is the
+// admiral's old sightings, chartOf's 'sight:' flags, which none of them reads), so each is asked once a picture and
+// handed to every place that shows it, unchanged: none of them changes what it is handed. A reading that fails fails
+// the same way at every place that asks, as it did. Outside a picture each is asked afresh.
+let pictureKept: Map<string, { s: Game; ok: boolean; v: unknown }> | null = null;
+function inPicture<T>(s: Game, key: string, work: () => T): T {
+  if (pictureDepth <= 0) return work();
+  const was = pictureKept?.get(key);
+  if (was && was.s === s) {
+    if (!was.ok) throw was.v;
+    return was.v as T;
+  }
+  let v: T;
+  try { v = work(); } catch (why) {
+    (pictureKept ??= new Map()).set(key, { s, ok: false, v: why });
+    throw why;
+  }
+  (pictureKept ??= new Map()).set(key, { s, ok: true, v });
+  return v;
+}
+const pictureGov = (s: Game): ReturnType<typeof governmentOf> => inPicture(s, 'gov', () => governmentOf(s));
+const pictureSpies = (s: Game): ReturnType<typeof secretService> => inPicture(s, 'spies', () => secretService(s));
+// ('seen' where the caller has the player's sight already: the picture's own, worked out from the same war.)
+const pictureSieges = (s: Game, seen?: Uint8Array): ReturnType<typeof siegesInSight> => inPicture(s, 'sieges', () => siegesInSight(s, seen));
+const pictureMen = (s: Game): ReturnType<typeof manpowerOf> => inPicture(s, 'men', () => manpowerOf(s));
+const pictureIdle = (s: Game, nat: string): number => inPicture(s, `idle:${nat}`, () => idleTeams(s, nat));
+const pictureOffers = (s: Game): ReturnType<typeof arsenalOffers> => inPicture(s, 'offers', () => arsenalOffers(s, -1));
+const pictureDamaged = (s: Game): RepairLike[] => inPicture(s, 'damaged', () => damagedOfMine(s));
+const pictureGunsAlone = (s: Game): ReturnType<typeof gunsAloneOf> => inPicture(s, 'alone', () => gunsAloneOf(s));
+
 function view() {
   pictureDepth++;
   try {
     return drawView();
   } finally {
-    if (--pictureDepth === 0) { pictureTradeKept = null; pictureCommandKept = null; pictureBriefKept = null; }
+    if (--pictureDepth === 0) { pictureTradeKept = null; pictureCommandKept = null; pictureBriefKept = null; pictureKept = null; }
   }
 }
 
@@ -527,7 +562,8 @@ function drawView() {
   // Where air groups are based: each such place is an airfield on the table.
   const based = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
   // The airfields as the player knows them (the grand campaign): the size of each, and which the fog hides.
-  const fields = airfieldsSeen(s);
+  // (the player's sight just worked out: the same airfields.ts would work out again, from the same war)
+  const fields = airfieldsSeen(s, seen);
   const fieldSize = new Map(fields.map((a) => [a.region, a.size] as const));
   const fieldHidden = new Set(fields.filter((a) => a.groups < 0).map((a) => a.region));
   // (Release 2, the marked army; marked.ts) An enemy corps that took one of his towns, where he knows who it is: the town it took.
@@ -536,6 +572,10 @@ function drawView() {
   // (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered") His corps handed over as
   // his month opened, which the table tags NEW for the month they are new in.
   const fresh = readyCorps(s);
+  // (Speed, the far map.) How each country stands with him, asked once a country rather than once a province: nothing
+  // in a picture changes who is at war with whom.
+  const standing = new Map<string, string>();
+  const standOf = (nat: string): string => { let v = standing.get(nat); if (v === undefined) standing.set(nat, (v = standingOf(s, nat))); return v; };
   return {
     rules: 'campaign',
     turn: s.turn,
@@ -612,7 +652,7 @@ function drawView() {
         const me = s.human ? s.nations[s.human] : null;
         if (!me || !me.alive || me.queue.length > 0) return [];
         // (and only where there is an arsenal with something he could order: a game without one has no idle industry to show)
-        if (!arsenalOffers(s, -1).some((o) => !o.why)) return [];
+        if (!pictureOffers(s).some((o) => !o.why)) return [];
         // (the design director's ruling: a new campaign opens on a living map, so not in the player's first month)
         const began = (s.flags as Record<string, number>).began;
         if (began !== undefined && s.turn <= began) return [];
@@ -670,7 +710,7 @@ function drawView() {
       const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), fields.length ? fieldSize.get(r.id) ?? 0 : Math.max(workLevel(s, 'field', r.id), based.has(r.id) ? 1 : 0)];
       // (The ownership paint: where the holder is not the lawful owner, the owner is named too, for the stripes of occupied ground.)
       const own = r.owner && r.owner !== r.ctrl ? { own: r.owner } : {};
-      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w, ...own } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), ...own };
+      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standOf(r.ctrl), w, ...own } : { id: r.id, ctrl: r.ctrl, stand: standOf(r.ctrl), ...own };
     }),
     // (The ownership paint: every siege the player knows of, for the besieger's colour creeping over the field. Who
     // stands round the town, how far the siege has gone (the works broken down, or the stores eaten, whichever is
@@ -678,7 +718,7 @@ function drawView() {
     // neighbouring provinces the besieger's side holds, which are the sides his colour comes in from.)
     siegePaint: (() => {
       try {
-        return siegesInSight(s).filter((v) => v.by).map((v) => {
+        return pictureSieges(s, seen).filter((v) => v.by).map((v) => {
           const from = (s.regions[v.region]?.nb ?? []).filter((n) => { const c = s.regions[n]?.ctrl; return !!c && (c === v.by || allied(s, c, v.by!)); });
           const done = Math.max(v.broken ?? 0, v.stores > 0 ? 1 - v.left / v.stores : 0);
           return { r: v.region, by: v.by, p: Math.max(0, Math.min(1, done)), closed: v.closed ? 1 : 0, from };
@@ -800,7 +840,7 @@ function drawView() {
     // (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the red row first in the tray. Empty until the rules have it.
     alarms: alarmsOf(s),
     // (Rules 84.2.6.) His own guns left alone round an enemy town: the siege's row in the rules' words. Empty until the rules have it.
-    alone: gunsAloneOf(s),
+    alone: pictureGunsAlone(s),
     // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
     // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
     // (release 1) What each arm is, for the bigger unit card.
@@ -844,14 +884,14 @@ function drawView() {
     // outside a town it has not taken ('' if none; an airfield alone does not count), and 1 if something there burns.
     prizes: (() => {
       try {
-        return prizesOnMap(s).map((m) => ({ region: m.region, by: m.by && m.seized.some((k) => k !== 'airfield') ? m.by : '', burning: m.burning.length > 0 ? 1 : 0 }))
+        return prizesOnMap(s, seen).map((m) => ({ region: m.region, by: m.by && m.seized.some((k) => k !== 'airfield') ? m.by : '', burning: m.burning.length > 0 ? 1 : 0 }))
           .filter((m) => m.by || m.burning);
       } catch { return []; }
     })(),
     // (Version 59) The town a directive of the war cabinet names, and the months left: for a small seal on the map.
-    seal: (() => { try { const d = governmentOf(s)?.directive; return d && d.region !== undefined && d.region >= 0 ? { region: d.region, left: d.left } : null; } catch { return null; } })(),
+    seal: (() => { try { const d = pictureGov(s)?.directive; return d && d.region !== undefined && d.region >= 0 ? { region: d.region, left: d.left } : null; } catch { return null; } })(),
     // (Version 60) And the town the player has promised the cabinet, with the months left: a second seal.
-    vow: (() => { try { const pr = (governmentOf(s) as { promise?: { region?: number; left: number } | null } | null)?.promise; return pr && pr.region !== undefined && pr.region >= 0 ? { region: pr.region, left: pr.left } : null; } catch { return null; } })(),
+    vow: (() => { try { const pr = (pictureGov(s) as { promise?: { region?: number; left: number } | null } | null)?.promise; return pr && pr.region !== undefined && pr.region >= 0 ? { region: pr.region, left: pr.left } : null; } catch { return null; } })(),
     // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
     // (Brian's ask of 16 November 2026: a city or target that is bombed stands under black smoke through the next
     // month.) The provinces bombed this month or last, where the player can know of it: his own side's raid, a raid
@@ -872,7 +912,7 @@ function drawView() {
         return [...out].flat();
       } catch { return []; }
     })(),
-    sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
+    sieges: (() => { try { return pictureSieges(s, seen).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
     // (Damaged cities) Each damaged town the player can know: pairs of the region and the percent of it in ruins
     // (to a whole percent), for the table to unroof that share of its houses. Empty in rules without them.
     damaged: (() => {
@@ -926,7 +966,7 @@ function drawView() {
     // (Version 59) The reserve of men: how much of what the war opened with is left, in a word and in a sentence.
     men: (() => {
       try {
-        const m = manpowerOf(s);
+        const m = pictureMen(s);
         if (!m) return null;
         const words = (n: number): string => (n >= 1000000 ? `${(n / 1000000).toFixed(1).replace(/\.0$/, '')} million` : Math.round(n / 1000) * 1000 >= 1000 ? `${(Math.round(n / 1000) * 1000).toLocaleString('en-US')}` : `${Math.round(n)}`);
         return {
@@ -1000,11 +1040,11 @@ function drawView() {
     secretWar: (() => { try { return secretWarOn(s); } catch { return false; } })(),
     secretWarCan: (() => { try { return secretWarSettable(s); } catch { return false; } })(),
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
-    idle: s.human ? idleTeams(s, s.human) : 0,
+    idle: s.human ? pictureIdle(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
     league: leagueMembers(s).map((n) => n.id),
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
-      name: n.name, adj: n.adj, alive: n.alive, standing: standingOf(s, n.id), atWar: n.atWar,
+      name: n.name, adj: n.adj, alive: n.alive, standing: standOf(n.id), atWar: n.atWar,
     }])),
   };
 }
@@ -1074,8 +1114,11 @@ function ledger() {
 
 /** The rules' book of what is on order place by place, as the player may know it. */
 function ordersBookOf(s: Game): CityBook[] {
-  const me = s.human;
-  return me && s.nations[me]?.alive ? ordersBook(s, me) : [];
+  // (asked once a picture: the badges, the plates and the treasury each read it, inPicture above)
+  return inPicture(s, 'book', () => {
+    const me = s.human;
+    return me && s.nations[me]?.alive ? ordersBook(s, me) : [];
+  });
 }
 
 /**
@@ -1104,12 +1147,12 @@ function cityOrdersOf(s: Game) {
 /** How the player knows a town: his own (or an ally's), only through reports, or not at all. */
 type GlanceSight = { own: boolean; ally: boolean; spied: boolean; agent: boolean; known: Corps[]; ago: number };
 
-function glanceSight(s: Game, id: number, seen: Uint8Array): GlanceSight | null {
+function glanceSight(s: Game, id: number, seen: Uint8Array, ally?: (nat: string) => boolean): GlanceSight | null {
   const me = s.human, r = s.regions[id];
   if (!me || !r || !s.nations[me]?.alive) return null;
   const inside = garrisonOf(r).filter((c) => !c.dead);
   if (r.ctrl === me) return { own: true, ally: false, spied: false, agent: false, known: inside, ago: 0 };
-  if (allied(s, r.ctrl, me)) return { own: false, ally: true, spied: false, agent: false, known: inside, ago: 0 };
+  if (ally ? ally(r.ctrl) : allied(s, r.ctrl, me)) return { own: false, ally: true, spied: false, agent: false, known: inside, ago: 0 };
   // (another country's town: only the corps his side has identified, and the newest report's age; an agent of his at
   // work in the very place sees the whole garrison this month. Without one, a corps is named in the town only where
   // the town is in full sight, the rule the map's own pieces keep: a report says who a corps is, not where it stands now.)
@@ -1193,8 +1236,15 @@ function glanceMarks(s: Game, seen: Uint8Array) {
     dmg: number; dmgFig: string; dmgWords: string;
   }[] = [];
   let reach: Set<number> | null = null;
+  // (Speed, the far map.) Asked once a picture, not once a town: whether a country is his ally (as glanceSight asks it,
+  // allied(holder, him)), and how many of his air groups and of his fleets in port each town has, counted as the plate
+  // counts them. Nothing in a picture moves them.
+  const sides = new Map<string, boolean>();
+  const ally = (nat: string): boolean => { let v = sides.get(nat); if (v === undefined) sides.set(nat, (v = allied(s, nat, me))); return v; };
+  let airAt: Map<number, number> | null = null, shipsAt: Map<number, number> | null = null;
+  const countAt = (m: Map<number, number>, at: number): void => { m.set(at, (m.get(at) ?? 0) + 1); };
   for (const r of s.regions) {
-    const see = glanceSight(s, r.id, seen);
+    const see = glanceSight(s, r.id, seen, ally);
     if (!see || see.ally) continue; // (an ally's towns keep their names alone: the plates are for his own and his enemies')
     // Garrison: divisions inside the walls, rounded, and the town's own guard (an enemy's guard only where an agent sees it).
     const divs = see.known.reduce((n, c) => n + c.divs * glanceStr(s, c, see), 0);
@@ -1205,8 +1255,14 @@ function glanceMarks(s: Game, seen: Uint8Array) {
     const names = see.known.map((c) => glanceName(s, c));
     // (his own armies standing in the open country of the province are not inside the walls: said after the garrison)
     const outside = see.own ? r.units.filter((c) => !c.dead && c.nat === me && c.kind !== 'fort').length : 0;
-    const air = see.own ? s.airFleets.filter((f) => f.nat === me && f.base === r.id && f.ship === undefined && f.ftr + f.bmr >= 1).length : 0;
-    const ships = see.own ? s.fleets.filter((f) => f.nat === me && f.base === r.id && f.stance === 'port' && shipsIn(f.ships) > 0).length : 0;
+    if (see.own && !airAt) {
+      airAt = new Map();
+      for (const f of s.airFleets) if (f.nat === me && f.ship === undefined && f.ftr + f.bmr >= 1) countAt(airAt, f.base);
+      shipsAt = new Map();
+      for (const f of s.fleets) if (f.nat === me && f.stance === 'port' && shipsIn(f.ships) > 0) countAt(shipsAt, f.base);
+    }
+    const air = see.own ? airAt!.get(r.id) ?? 0 : 0;
+    const ships = see.own ? shipsAt!.get(r.id) ?? 0 : 0;
     const besides = [outside ? `${outside} corps in the field outside` : '', air ? `${air} air group${air === 1 ? '' : 's'} based here` : '', ships ? `${ships} fleet${ships === 1 ? '' : 's'} in port` : ''].filter(Boolean);
     const who = names.length > 3 ? `${names.length} corps` : joinWords(names);
     const garrWords = garr || guardOnly
@@ -2469,6 +2525,22 @@ const GATE_AT: Record<string, [number, number]> = {
 };
 
 /**
+ * (Speed, the far map, 24 November 2026.) Where gates.ts sets a gate's mark that has no place above: worked out from the
+ * chart alone (the two seas' borders and middles, the province's middle, the land's outlines, the chart's sea squares,
+ * which world it is), none of which changes in a campaign, and it was a twentieth of every picture of the far map.
+ * So it is worked out once a gate and kept beside the gate, and asked again if the gate, its seas, its province, the
+ * list of provinces (the wider world adds to it) or the chart is not the one it was worked out on.
+ */
+const gateSpotKept = new WeakMap<object, { a: number; b: number; region: number; world: unknown; seas: unknown; regions: unknown; n: number; spot: { x: number; y: number } }>();
+function gateSpotOf(s: Game, gt: Game['gates'][number]): { x: number; y: number } {
+  const k = gateSpotKept.get(gt);
+  if (k && k.a === gt.a && k.b === gt.b && k.region === gt.region && k.world === s.flags.world && k.seas === s.seas && k.regions === s.regions && k.n === s.regions.length) return k.spot;
+  const spot = gateSpot(s, gt);
+  gateSpotKept.set(gt, { a: gt.a, b: gt.b, region: gt.region, world: s.flags.world, seas: s.seas, regions: s.regions, n: s.regions.length, spot });
+  return spot;
+}
+
+/**
  * (Rulings 86 and 90b.) The sea gates as the player is shown them. Who holds each, whether his ships may pass and
  * the words for it are the rules' own (gates.ts, which reads canPass and each gate's own rule), so that both builds
  * say the same. The box marks the words that answer the question in a colour of their own, so the line is handed
@@ -2480,7 +2552,7 @@ function gatesOf(s: Game) {
     return gateViews(s, s.human ?? null).map((v) => {
       const gt = s.gates[v.id];
       const at = GATE_AT[gt.name];
-      const spot = at ? { x: (at[1] + 11) * 25.7115, y: (71.4 - at[0]) * 40 } : gateSpot(s, gt);
+      const spot = at ? { x: (at[1] + 11) * 25.7115, y: (71.4 - at[0]) * 40 } : gateSpotOf(s, gt);
       const open = v.open !== false;
       const key = open ? 'Open to your ships' : 'Shut to your ships:';
       const i = v.line.indexOf(key);
@@ -4559,13 +4631,13 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (lastMonth) out.push({ id: 'reports', label: "THE MONTH'S REPORT" });
   if (s.stories.awards.some((a) => a.nat === s.human && !a.old)) out.push({ id: 'heroes', label: 'HEROES AT HOME' });
   if (commandBrief(s)) out.push({ id: 'staff', label: 'YOUR STAFF' });
-  if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
+  if (pictureSpies(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
   // The government and its war cabinet (Version 57, the grand campaign).
-  try { if (governmentOf(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
+  try { if (pictureGov(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
   // Towns to build up and trade agreements (the grand campaign).
   if (pictureTrade(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
-  if (damagedOfMine(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
+  if (pictureDamaged(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
   // (Release 2, columns.ts and logistics.ts) The supply columns, where they run.
   if (columnsAreOn(s) && s.nations[s.human]?.alive) out.push({ id: 'lorries', label: 'SUPPLY COLUMNS' });
   const act = lastAct(s);
@@ -4592,7 +4664,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
     });
   }
   // Design teams with nothing to do: they never choose their own work.
-  const idle = idleTeams(s, me.id);
+  const idle = pictureIdle(s, me.id);
   if (idle > 0) {
     out.push({
       k: 'research', t: idle === 1 ? 'A DESIGN TEAM IS IDLE' : `${idle} DESIGN TEAMS ARE IDLE`,
@@ -4601,7 +4673,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
   }
   // The cabinet (Version 57): a directive newly set or nearly due, or a cabinet about to fall.
   try {
-    const gov = governmentOf(s);
+    const gov = pictureGov(s);
     if (gov?.mine) {
       const d = gov.directive;
       if (gov.low > 0 && gov.trust <= gov.fallsAt) {
@@ -4622,9 +4694,9 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
   } catch { /* no government in this game */ }
   // Sieges: a town of the player's shut in, and towns his armies stand round.
   try {
-    const all = siegesInSight(s).filter((v) => v.by);
+    const all = pictureSieges(s).filter((v) => v.by);
     // (Rules 84.2.6.) A siege whose guns are left alone has its own row, in the rules' words: it is not said twice.
-    const lone = new Set(gunsAloneOf(s).map((a) => a.region));
+    const lone = new Set(pictureGunsAlone(s).map((a) => a.region));
     const mine = all.filter((v) => v.holder === me.id), theirs = all.filter((v) => v.by === me.id && !lone.has(v.region));
     if (mine.length) out.push({ k: `goto:${mine[0].region}`, t: mine.length === 1 ? `${mine[0].town.toUpperCase()} IS BESIEGED` : `${mine.length} OF YOUR TOWNS ARE BESIEGED`, tip: `${mine.map((v) => v.town).slice(0, 4).join(', ')}: ${mine[0].lines[mine[0].lines.length - 1]} Attack the army round it to raise the siege, or let the garrison sally out.` });
     // (Brian, 18 November 2026: he had beaten an army into its town and found no way to attack it again. A press takes the
@@ -4658,7 +4730,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
     }
   } catch { /* rules before Version 86 */ }
   // (Damaged cities) Towns of his in ruins that the treasury can repair now.
-  const ruins = damagedOfMine(s).filter((t) => t.why === null);
+  const ruins = pictureDamaged(s).filter((t) => t.why === null);
   if (ruins.length) {
     const one = `${ruins[0].town.toUpperCase()} IS IN RUINS`;
     out.push({ k: 'page:repairs', t: ruins.length > 1 ? `${ruins.length} TOWNS IN RUINS` : one.length <= 34 ? one : 'A TOWN IS IN RUINS', tip: `${listNames(ruins.map((t) => `${t.town} (${t.pct}%)`))}: ${ruins.length > 1 ? 'they pay' : 'it pays'} that much less until repaired. Open DAMAGED TOWNS to repair them.` });
@@ -4666,7 +4738,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
   // (Release 2, the spies thread of 24 November 2026: Brian played and saw no spies.) The secret service asks for him
   // while an enemy agent his hunters uncovered is still at large, and in the month his network opens the war.
   try {
-    const room = secretService(s);
+    const room = pictureSpies(s);
     const found = room?.found ?? [];
     if (room && found.length) {
       // ('a' or 'an' by the sound: an Italian watcher, a Ukrainian agent)
@@ -4689,7 +4761,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
     }
   } catch { /* rules without the secret war */ }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
-  if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
+  if (me.queue.length === 0 && pictureOffers(s).some((o) => !o.why)) {
     out.push({
       k: 'arsenal', t: 'NOTHING IS ON ORDER',
       tip: `Nothing is being raised or built, and there is ${inHand(me.pp).toLocaleString('en-US')} in the treasury. Open the ARSENAL to order corps, aircraft, ships or works.`,
@@ -4709,9 +4781,9 @@ function alertsOf(s: Game): string[] {
   else if (act?.open && !act.peace) out.push('The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.');
   // (Version 59) The reserve of men running low, and a cabinet that has begun to doubt the player.
   try {
-    const m = manpowerOf(s);
+    const m = pictureMen(s);
     if (m && (m.word === 'Short' || m.word === 'Spent')) out.push(m.word === 'Spent' ? 'The reserve of men is spent: nothing new can be raised until more come of age.' : `The reserve of men is short. ${m.line}`);
-    const gov = governmentOf(s);
+    const gov = pictureGov(s);
     if (gov?.mine && gov.doubts) out.push(`The cabinet doubts you.${gov.withheld ? ` ${gov.withheld}` : ''} Open DIPLOMACY, THE CABINET.`);
     const talk = gov as (typeof gov & { head?: { name: string; left: number } | null; promise?: { town: string; left: number } | null }) | null;
     if (talk?.mine && talk.head) out.push(`The cabinet wants ${talk.head.name} dismissed, and an answer ${talk.head.left <= 1 ? 'this month' : `within ${talk.head.left} months`}. Open DIPLOMACY, THE CABINET.`);
