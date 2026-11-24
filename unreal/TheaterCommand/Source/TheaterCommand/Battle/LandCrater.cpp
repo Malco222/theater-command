@@ -1891,7 +1891,7 @@ namespace LandCrater
 	}
 
 	void Ruts::Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift,
-		uint64_t Salt) const
+		uint64_t Salt, double Rim, double BandGround) const
 	{
 		const double Dx = BX - AX, Dy = BY - AY;
 		const double Long = std::sqrt(Dx * Dx + Dy * Dy);
@@ -1922,13 +1922,14 @@ namespace LandCrater
 				Off[PressK] = Sign * Half * (0.78 + 0.22 * PlaceShare(Cx, Cy, Own ^ 0x9e3ull));
 				const Rgb8 Ground = UnderColour ? UnderColour(Cx + Nx * Off[OuterK], Cy + Ny * Off[OuterK]) : Paint;
 				Colour[OuterK] = Ground;
-				Colour[BandK] = Mixed(Paint, Ground, 0.35 + 0.3 * PlaceShare(Cx, Cy, Own ^ 0x5f4ull));
+				Colour[BandK] = Mixed(Paint, Ground, BandGround < 0.0 ? 0.35 + 0.3 * PlaceShare(Cx, Cy, Own ^ 0x5f4ull) : BandGround + 0.08 * (PlaceShare(Cx, Cy, Own ^ 0x5f4ull) - 0.5));
 				Colour[PressK] = Toned(Paint, 0.88 + 0.18 * PlaceShare(Cx, Cy, Own ^ 0x7c5ull));
 			}
 			for (int K = 0; K < StripAcross; ++K)
 			{
 				const double Px = Cx + Nx * Off[K], Py = Cy + Ny * Off[K];
-				const uint32_t P = Put(Out, Px, Py, Height(Px, Py) + Lift, Colour[K]);
+				const bool bRim = Rim > 0.0 && (K == 1 || K == StripAcross - 2);
+				const uint32_t P = Put(Out, Px, Py, Height(Px, Py) + Lift + (bRim ? Rim * (0.8 + 0.4 * PlaceShare(Px, Py, Salt ^ 0x41full)) : 0.0), Colour[K]);
 				Out.Normals[static_cast<size_t>(P) * 3] = Here.X;
 				Out.Normals[static_cast<size_t>(P) * 3 + 1] = Here.Y;
 				Out.Normals[static_cast<size_t>(P) * 3 + 2] = Here.Z;
@@ -2002,6 +2003,14 @@ namespace LandCrater
 				continue;
 			}
 			const Rgb8 Ground = UnderColour ? UnderColour(0.5 * (AX + BX), 0.5 * (AY + BY)) : Rgb(100, 100, 70);
+			if (Snow >= 0.5 && Here != Under::Corn && Ground.R + Ground.G + Ground.B > 3 * 150)
+			{
+				// (over white snow: a trough some 0.35 to 0.4 m across, its floor the snow's shade, blue-grey, the snow it
+				// pushed aside heaped some 5 cm on its rims and churned there)
+				Strip(Out, AX, AY, BX, BY, std::max(0.36 * Width, 0.2), 0.25, Rgb(128, 134, 146), 0.012 + Own,
+					static_cast<uint64_t>(V) * 3u + 1u + static_cast<uint64_t>(Side), 0.05, 0.8);
+				continue;
+			}
 			const Rgb8 Paint = Here == Under::Grass ? Mixed(Ground, Rgb(80, 74, 48), 0.55)
 				: Here == Under::Corn ? Mixed(Ground, Rgb(108, 92, 64), 0.6)
 				: Mixed(Ground, Rgb(70, 58, 43), 0.55);
