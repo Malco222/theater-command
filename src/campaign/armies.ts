@@ -59,6 +59,24 @@ for (const row of (setup as any).corps as any[]) {
 }
 for (const [nat, arms] of Object.entries(DIVISIONS.record ?? {})) for (const [kind, ns] of Object.entries(arms)) for (const n of ns ?? []) reserve(nat, kind, n);
 
+/**
+ * The numbers a corps' own name gives its divisions in its arm's own words ("15th Panzer Division" is the 15th, "5th
+ * and 11th Panzer Divisions" the 5th and the 11th), by the division's place in the corps: a name of another kind
+ * ("6th Australian Division") gives none. Such a division is that one whenever its formation stands on the map, so no
+ * stand-in may stand beside it under the same name (numberCorps).
+ */
+function ownNumbers(c: Corps): Map<number, number> {
+  const out = new Map<number, number>();
+  const named = c.names ?? DIVISIONS.historic[c.nat]?.[c.name] ?? namedDivisions(c.name, c.nat, c.kind);
+  if (!named.length) return out;
+  const words = divisionWords(c.nat, c.kind).name;
+  named.forEach((nm, i) => {
+    const m = nm && /^(\d+)(?:st|nd|rd|th) (.+)$/.exec(nm[0]);
+    if (m && m[2] === words && i < c.divs) out.set(i, Number(m[1]));
+  });
+  return out;
+}
+
 /** The numbers a numbered corps' divisions carry, in order. */
 const numbersOf = (c: Corps): number[] => c.nos ?? Array.from({ length: c.divs }, (_, i) => c.dn! + i);
 
@@ -79,10 +97,24 @@ export function numberCorps(g: Game, c: Corps, real?: (number | null)[]): void {
   let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
   const held = new Set<number>();
   if (real) for (const o of g.corps) if (o !== c && !o.dead && o.nat === c.nat && o.kind === c.kind && o.dn !== undefined) for (const n of numbersOf(o)) held.add(n);
+  // (No country names a division twice. A formation whose own name is its division, "15th Panzer Division", is that
+  // division while it stands on the map: a stand-in passes over its number, and a stand-in that took the number before
+  // the formation came takes the nation's next free one the day it comes.)
+  const mates = g.corps.filter((o) => o !== c && !o.dead && o.nat === c.nat && o.kind === c.kind);
+  const spoken = new Set<number>();
+  for (const o of mates) for (const n of ownNumbers(o).values()) spoken.add(n);
   const list: number[] = [];
   for (let i = 0; i < c.divs; i++) {
     const n = real?.[i];
-    if (n && !held.has(n)) { held.add(n); list.push(n); } else list.push(++next);
+    if (n && !held.has(n)) { held.add(n); list.push(n); } else { do next++; while (spoken.has(next)); list.push(next); }
+  }
+  const mine = new Set(ownNumbers(c).values());
+  if (mine.size) for (const o of mates) {
+    if (o.dn === undefined) continue;
+    const own = ownNumbers(o), nos = numbersOf(o);
+    let moved = false;
+    nos.forEach((n, i) => { if (mine.has(n) && !own.has(i)) { do next++; while (spoken.has(next) || mine.has(next)); nos[i] = next; moved = true; } });
+    if (moved) keepNumbers(o, nos);
   }
   if (next > (g.flags[key] ?? 0)) g.flags[key] = next;
   keepNumbers(c, list);
