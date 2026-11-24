@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7c92c852 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cd29bd81 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -13821,6 +13821,10 @@
       { id: "combined", branch: "doctrine", tier: 3, year: 1942, needs: ["mobile", "staff"], name: "Battle groups", text: "Tanks, infantry, guns and engineers put together for the task in hand under whoever is on the spot.", field: "doctrine" },
       { id: "amphibious", branch: "doctrine", tier: 3, year: 1943, needs: ["landingcraft"], name: "Amphibious assault", text: "Navy, army and air force rehearsed to one timetable, from the bombardment to the beach.", attack: 1.2, when: { landing: true } },
       { id: "deep", branch: "doctrine", tier: 4, year: 1944, needs: ["combined"], name: "Deep operations", text: "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", field: "doctrine" },
+      { id: "radios", branch: "doctrine", tier: 2, year: 1939, needs: ["staff"], name: "Field radios", units: true, text: "Wireless sets down to the battalion and the tank, and signallers trained to work them, so that orders reach the front in hours and reports come back while they still matter." },
+      { id: "nco", branch: "doctrine", tier: 2, year: 1939, needs: [], name: "NCO schools", units: true, text: "Schools for sergeants and corporals: section leaders who can take over when the officer falls and keep the men moving." },
+      { id: "battledrill", branch: "doctrine", tier: 3, year: 1939, needs: ["nco"], name: "Battle drill", units: true, text: "Every section taught the same few movements for attack and defence until they are done without thinking, under fire and in the dark." },
+      { id: "officers", branch: "doctrine", tier: 4, year: 1939, needs: ["battledrill"], name: "Officer schools", units: true, text: "Long courses for junior officers, with exercises against live opposition, so that a company is led by a man who has fought its battle on paper many times." },
       { id: "agents", branch: "intel", tier: 1, year: 1939, needs: [], name: "Trained agents", text: "Schools for the service's people: tradecraft, wireless and the habits that keep an agent alive.", spy: { caught: 0.85 } },
       { id: "cover", branch: "intel", tier: 2, year: 1940, needs: ["agents"], name: "Cover identities", text: "Papers, trades and histories ready made. After an attempt an agent becomes someone else and is back at work a month sooner.", spy: { rest: 1 } },
       { id: "microfilm", branch: "intel", tier: 2, year: 1941, needs: ["agents"], name: "Microfilm", text: "A drawing office's plans photographed in an hour and carried out in a matchbox.", spy: { theft: 0.1 } },
@@ -32319,6 +32323,154 @@
     return out;
   }
 
+  // ../../data/campaign/units.json
+  var units_default = {
+    _about: "Units decide's quality store and the figures its land rules read (the design director's ruling of 24 November 2026 15:53Z on rules-builder/release2/soviet/form.md, the #2 form, with Part 2's one store for soldiers, pilots and crews). Read only in a grand campaign opened with Units decide (src/campaign/units.ts); off, nothing here is read. One rule for every nation: a nation named here is a seed or a start row, never a rule. Marks as the form uses them: F firm, L likely, D derived from read figures, M from memory, G the rules builder's guess, waiting on the measure, U not laid (the slot exists and nothing reads it).",
+    _startRows: "Rows a nation holds on the first day under Units decide only, never in tech.json 'start' (form, 'Where it goes'): Germany holds Field radios (it holds Staff colleges, tech.json start), and no other nation does; Sweden and Norway hold Winter equipment, so that holding it can stand in for the hardy list (east.json) at its three reads (Part 1 section 1; SOV and FIN already hold it). Applied by startOpen before the opening research (tech.ts openUnitsRows), so a later start's catch-up counts each row once. G.",
+    startRows: { GER: ["radios"], SWE: ["winterkit"], NOR: ["winterkit"] },
+    land: {
+      _ladder: "Training is the ladder (ruling 15:53Z (4)): an army's level is the higher of its start seed (land.train) and this rung for one, two or three of the training rows held, the same ladder for every nation. A start never fixes a ceiling. 1.25 is Germany's level (nations.json). G.",
+      ladder: [0.85, 1.05, 1.25],
+      _trainRows: "The training rows the ladder counts, held live from the tree (Part 1 2a): NCO schools, Battle drill, Officer schools. Each has no other effect. G.",
+      trainRows: ["nco", "battledrill", "officers"],
+      _radios: "Command c = this if the nation holds the row, plus earned, at most 1 (Part 1 2b). Staff colleges, Battle groups and Deep operations keep their one price in techMul and never feed c (choice 15). G.",
+      radios: 0.15,
+      radiosRow: "radios",
+      _earned: "Command earned in war, 0 to 1 (Part 1 2b). seed: the start's c by army, as the design director ruled at 24 Nov 16:06Z (round-2-build-order.md:2159; the form's 'Seeds ruled 16:07Z' under ruling 15:53Z (5)) on the historian's reading of command and signals 1939-41 (historian/prisoners-command-1124.md Part 2, scores D): GER 1, SOV 0 and FRA 0, held (L); POL 0.1 (F/L); ITA 0.25 (L); JAP 0.5 (L); UK 0.5 (F/L); USA 0.5, the range middle, its score leaning on memory until the 1941 manoeuvres are read (M); '_default' 0.5, the range middle, for every army the historian has not read, marked as a stand-in until it is read, never today's 1 (G). No seed is shaved to steer a gate: UK, USA and JAP pass the blitz gate once they research radios (0.5 + 0.15 = 0.65), and that is the cause working. The store holds the seed less 'radios' where the row is held at the start (so GER 0.85), never below 0. The same at every start month: history plays a later start's months with the switch off, and the 1941-42 rises come from the earned test and the radios row in play, never from dates (G). month: added for each month the nation's own attacks take at least 'provinces' provinces from an enemy (one test on the month's battle reports, the player's nation and every computer's alike; sieges, reliefs and sallies left out; a walk-in after the defenders yielded counts; distinct regions). corps: taken off for each corps taken whole (cut off, rule 232, a cut road). All G.",
+      earned: { seed: { _default: 0.5, GER: 1, SOV: 0, FRA: 0, POL: 0.1, ITA: 0.25, JAP: 0.5, UK: 0.5, USA: 0.5 }, month: 0.01, provinces: 2, corps: -0.01 },
+      _attack: "Attack is multiplied by base + perC x c, in place of slowCommand's x0.85 (Part 1 2b): at c 0 today's slow command, at c 1 none. G.",
+      attack: { base: 0.85, perC: 0.15 },
+      _mostCorps: "Most corps one battle can take: base + perC x c, in place of maxAttack (Part 1 2b; choice 11): 8 at c 0 (today's slow command), 20 at c 1. G.",
+      mostCorps: { base: 8, perC: 12 },
+      _gates: "Command gates (Part 1 section 1): below 'renewal' a staff renews no failed attack and counter-attacks late (today's slowCommand habits); from 'blitz', with Field radios held, the tempo x1.2, the +1 move, the opening thrust and the armoured spearheads' x1.15, for any nation. G.",
+      gates: { renewal: 0.3, blitz: 0.6 },
+      _sight: "A staff's sight s = clamp((c - from) / span, 0, 1) (Part 1 section 5). Seen odds = card odds x (q / wk)^(s - 1): at s 0 a staff counts men, kinds and ground, at s 1 it reads the card as today's staff does. The player's card shows the odds as the player's own staff reads them at the player's own sight (ruling 15:53Z (14)). G.",
+      sight: { from: 0.6, span: 0.4 },
+      _byOrders: "The way 'mass', by orders (Part 1 section 5; ruling 15:53Z (1)): ordinary attacks go in at seen odds 'need' and stop adding corps at 'stop'; attacks in the main effort's sector keep today's stop, 'main' (ai.ts). As sight rises, need blends to the temper's minOdds and stop to 'main'. The doctrine's own content, never refit to Lawrence's 1.42, which is a check. Methodical, bold and night keep today's thresholds. G.",
+      byOrders: { need: 0.9, stop: 1.3, main: 2.6 },
+      _xp: "Corps experience by result, each times (1 - xp) (Part 1 2d), in place of today's flat +0.05 attacking and +0.04 defending, win or lose: the attacker that wins, the attacker repulsed, the defender that holds, the defender beaten. Drafts dilute every nation's corps. G.",
+      xp: { won: 0.05, repulsed: 0.02, held: 0.04, beaten: 0.02 },
+      _label: "Captured: of the defender's men lost, share x (attacker's per-man attack worth / defender's per-man defence worth) are booked as prisoners, at most 'cap' (Part 1 section 7). A split of men already lost; it adds none and goes in its own report field. D: fit to the record's fail-or-advance pair at Kursk (F, p. 34), 0.147 and 0.149.",
+      label: { share: 0.148, cap: 0.9 },
+      _guards: "The Guards title, as a name only, in its own corps field (Part 1 section 1; choice 13): a corps of any nation at xp at least 'xp' with at least 'won' attacks won. Never c.elite. G.",
+      guards: { xp: 0.5, won: 3 },
+      _ways: "The land ways a staff may hold (Part 2 section 3; data/battle/lean.json). Night and last-stand are fought as bold (lean.json standIn) until they are built.",
+      ways: ["mass", "methodical", "bold", "night", "last-stand"],
+      _school: "The drafts' schools: 0 for every nation at every start month, as g.stories.schools holds today (Part 2 section 2). G.",
+      school: 0
+    },
+    _trainIn: "Months a change of way takes to train in, one time for every arm (Part 2 section 3). U until the historian reads one; the form's guess is 6 (G).",
+    trainIn: 6,
+    air: {
+      _scale: "One curve from a pilot's hours to a level, the same for every nation (Part 2 section 1). U: not laid; until it is, every group keeps its held level.",
+      scale: null,
+      _school: "Hours before first combat a new pilot leaves school with, by start turn (Part 2 section 2; historian/air-reads-1124.md A). GER about 250 before the cuts (L; the reading dates no cut, so every offered start, 1939-42, takes it: G). RAF and US 350 and 400 are 1944 readings, so null; JAP (land) and SOV not read, null. A nation not listed is null: not laid (no '_default').",
+      school: { "1": { GER: 250 } },
+      _deck: "The same for carrier pilots, kept apart: JAP 500 or more (the navy's carrier school before 1937, F). Others null. By start turn.",
+      deck: { "1": { JAP: 500 } },
+      _fighter: "Fighter doctrines (fighters.ts) and escort doctrines (plan D). No start row is read, so every nation's slot is null (Part 2 section 2).",
+      fighter: ["turn", "dive-zoom"],
+      escort: ["tied", "free"]
+    },
+    sea: {
+      _ways: "The fleet staff's ways (battle/sea/types.ts). No 'night' way: lean.json's night is seeded as its stand-in, bold (Part 2 section 2).",
+      ways: ["methodical", "bold", "mass"],
+      _pack: "Convoy doctrine, by start turn, from the record (Part 2 section 2; naval-battles/wolfpack-r2/form.md:47-49): 1939 and 1940 every navy hunts alone; 1941 GER and ITA homed from ashore; 1942 GER homed; '_default' is every other navy. L.",
+      packs: ["alone", "homed", "led"],
+      pack: { "1": { _default: "alone" }, "5": { _default: "alone" }, "17": { _default: "alone", GER: "homed", ITA: "homed" }, "29": { _default: "alone", GER: "homed" } },
+      _target: "Boats go for warships first: JAP (wolfpack form :47); '_default', every other navy, merchants first. L.",
+      targets: ["merchants", "warships"],
+      target: { "1": { _default: "merchants", JAP: "warships" } }
+    }
+  };
+
+  // ../../data/battle/lean.json
+  var lean_default = {
+    _doc: [
+      "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
+      "Each arm keeps its own style numbers and grows by its own experience and research (land: data/battle/land-styles.json). '_' is every nation not listed.",
+      "A leaning not built yet (night, last-stand: item 6, after release 1) is fought as its stand-in. Japan's land column attacks by night and defends to the last; until item 6 every arm fights those as bold (ruling 239(3)).",
+      "Germany and Britain differ at sea (historian, H): Germany's heavy ships broke off when pressed, the Royal Navy sought action."
+    ],
+    lean: {
+      GER: { land: "bold", sea: "methodical", air: "methodical" },
+      UK: { land: "methodical", sea: "bold", air: "methodical" },
+      USA: { land: "methodical", sea: "methodical", air: "methodical" },
+      ITA: { land: "methodical", sea: "methodical", air: "methodical" },
+      FRA: { land: "methodical", sea: "methodical", air: "methodical" },
+      SOV: { land: "mass", sea: "mass", air: "mass" },
+      JAP: { land: { att: "night", def: "last-stand" }, sea: "night", air: "bold" },
+      _: { land: "methodical", sea: "methodical", air: "methodical" }
+    },
+    standIn: { night: "bold", "last-stand": "bold" }
+  };
+
+  // ../../src/campaign/units.ts
+  var unitsDecide = (g2) => g2.flags.open === 1 && g2.flags.unitsDecide === 1;
+  var UNITS = units_default;
+  var LEAN = lean_default;
+  var AIR_NATIONS = air_default.nations;
+  var DECK_STRIKE = carriers_default.naval.land;
+  var NAVY_QUALITY = navy_default.quality;
+  function atStart(t, from2) {
+    let at4 = -Infinity, out = {};
+    for (const k of Object.keys(t)) if (Number(k) <= from2 && Number(k) > at4) {
+      at4 = Number(k);
+      out = t[k];
+    }
+    return out;
+  }
+  var byNat = (t, nat) => t[nat] ?? t._default;
+  var seeded = (id) => ({ id, by: "start" });
+  function landSeed(n) {
+    const L2 = UNITS.land;
+    const radios = n.tech?.done.includes(L2.radiosRow) ? L2.radios : 0;
+    const lean = (LEAN.lean[n.id] ?? LEAN.lean._).land;
+    const [att, def] = typeof lean === "string" ? [lean, lean] : [lean.att, lean.def];
+    return { train: n.quality, earned: Math.max(0, (byNat(L2.earned.seed, n.id) ?? 0) - radios), school: L2.school, way: { att: seeded(att), def: seeded(def) } };
+  }
+  function airSeed(nat, from2) {
+    const A = UNITS.air;
+    const school = byNat(atStart(A.school, from2), nat) ?? null;
+    return {
+      school,
+      deck: byNat(atStart(A.deck, from2), nat) ?? null,
+      held: (AIR_NATIONS[nat] ?? AIR_NATIONS._default).quality,
+      pool: school,
+      poolXp: 0,
+      strike: DECK_STRIKE[nat] ?? DECK_STRIKE._default,
+      fighter: null,
+      escort: null
+    };
+  }
+  function seaSeed(nat, from2) {
+    const S3 = UNITS.sea;
+    const lean = (LEAN.lean[nat] ?? LEAN.lean._).sea;
+    const way = S3.ways.includes(lean) ? lean : LEAN.standIn[lean];
+    return {
+      crew: NAVY_QUALITY[nat] ?? NAVY_QUALITY._default,
+      night: null,
+      lookout: null,
+      way: seeded(way),
+      pack: seeded(byNat(atStart(S3.pack, from2), nat)),
+      target: seeded(byNat(atStart(S3.target, from2), nat))
+    };
+  }
+  var armsSeed = (n, from2) => ({ land: landSeed(n), air: airSeed(n.id, from2), sea: seaSeed(n.id, from2) });
+  function seedQuality(g2) {
+    const from2 = g2.flags.openFrom ?? 1;
+    const nat = {};
+    for (const n of Object.values(g2.nations)) nat[n.id] = armsSeed(n, from2);
+    return { from: from2, nat, news: {} };
+  }
+  function qualityStore(g2) {
+    if (!unitsDecide(g2)) return void 0;
+    return g2.qs ?? (g2.qs = seedQuality(g2));
+  }
+  function openQuality(g2) {
+    qualityStore(g2);
+  }
+
   // ../../src/campaign/staff.ts
   var OPEN = open_default;
   var FIT_ORG = 0.35;
@@ -32350,12 +32502,14 @@
     }
     startEngineers(g2);
     openTraits(g2);
+    openUnitsRows(g2);
     openTech(g2);
     openWorldAir(g2);
     openStores(g2);
     openAirWar(g2);
     openSmallAir(g2);
     openCarriers(g2);
+    openQuality(g2);
     openSieges(g2);
     openMorale(g2);
     openEscorts(g2);
@@ -40377,9 +40531,6 @@
     g2.nations[nat].sealift += lift2;
   }
 
-  // ../../src/campaign/units.ts
-  var unitsDecide = (g2) => g2.flags.open === 1 && g2.flags.unitsDecide === 1;
-
   // ../../data/campaign/convoycause.json
   var convoycause_default = {
     _about: "The convoy war by cause (audit #5; the design director's ruling of 23 November 2026 07:26Z on the form naval-battles/convoy-r2/form.md). Read only in a grand campaign opened with Units decide (src/campaign/units.ts); off, nothing here is read. One rule for every navy and both sides: the kit a navy holds and the work its ships are given set each figure, never the nation or the month. Every size is OEG Report 51's (naval-battles/wolfpack-r2/history.md, where each is marked).",
@@ -40389,18 +40540,20 @@
     asv: "asvradar",
     _find: "OEG T2: 41-43% of convoys were attacked. The share of the boats raiding a convoy route's seas that find a convoy and attack it in a month; each is one incident with the convoy's escort.",
     find: 0.42,
-    _incident: "OEG T10: the chance that an incident ends with the boat sunk, answered by a support group (destroyers on hunting duty in that sea) or by the convoy's close escort (destroyers bound to its route). With depth charges alone, and with ahead-throwing weapons and escort-group training together. atw: ahead-throwing weapons alone, without escort-group training, multiply the depth-charge rate by this (OEG T9: Hedgehog 7.5% against depth charges 4.0% per attack in its first half-year at sea, H2 1943; historian/convoy-figures-for-r2-1123.md). The weapon's later rise (2.6-4.7 times in 1944) is crews learning it, a cause not yet laid, never the month.",
-    incident: { group: 0.17, lone: 0.05, groupKit: 0.55, loneKit: 0.12, atw: 1.9 },
+    _incident: "OEG 51 ch. 11 Table 10 (F; historian/escort-kill-denominator-1124.md): US escorts' attacks in the Atlantic and Mediterranean, the share of incidents assessed sunk. An incident is a U-boat the escorts actually attacked, all attacks on it in one engagement counted once, before or after it fired. Two columns, independent and coordinated (OEG defines neither beyond its title): the game lays coordinated on a support group (destroyers on hunting duty in that sea) and independent on the convoy's close escort (destroyers bound to its route) (D). The record's two rows split by date, Jan 1943-Feb 1944 (0.05, 0.17: the 0.17 is 3 kills in 18, about 4-41% at 95%, D) and Mar 1944-May 1945 (0.12, 0.55: 21 in 38 for the 0.55); the game credits the step between them to kit, escort-group training and coordinated hunting together (D), laid on ahead-throwing weapons with escort-group training, never the date. Read on the count's incidents, the boats that fired: the interim of the radar ruling's Q3 (a), which under-counts where radar frustrates (the boats found and driven off were the ones attacked); the escorts' losses form sets incidents from the boats that try (the design director, 24 November 2026 16:44Z). atw: ahead-throwing weapons alone, without escort-group training, multiply the depth-charge rate by this (OEG T9: Hedgehog 7.5% against depth charges 4.0% per attack in its first half-year at sea, H2 1943; historian/convoy-figures-for-r2-1123.md). The weapon's later rise (2.6-4.7 times in 1944) is crews learning it, a cause not yet laid, never the month.",
+    incident: { coordinated: 0.17, independent: 0.05, coordinatedKit: 0.55, independentKit: 0.12, atw: 1.9 },
     _radar: "Radar on escorts: what sea-search radar adds to a ship's guard and hunting weight. Not laid (the historian's figure from OEG 10.1.2 and the HF/DF record): 0 until it is read.",
     radar: 0,
     _seaLoss: "The tree's flat cuts to convoy losses that stay: the convoy system that comes with 'sonar'. Escort groups act through their incidents instead, and no nation's own trait (Britain's signals) is read.",
     seaLoss: ["sonar"],
-    _station: "The share of a month a raiding fleet's boats are on station in the sea they raid (the design director's one-pass ruling of 24 November 2026 13:23Z, Q3(a)(i), and the days of 13:31Z; naval-battles/convoy-r2/one-pass-form.md). A cause, not a scale: a patrol's days on station ('patrol') over its whole cycle, which adds the passage out from the fleet's port and back ('passage' days for each sea crossed by the sea graph, through the straits open to it) and the refit in port before the next patrol ('refit'). Share = patrol / (patrol + 2 x passage x seas + refit). It acts wherever boats raiding are counted: the raid strength that sinks tons and the incidents with the convoys' escorts. By class: 'ss' alone has rows; a class without rows is on station all month. The days are laid, never the shares (historian/convoy-build-reads-1124.md): patrol 20, a Biscay boat's days on station of about 40 out (D from L: U-96's 11 patrols averaged 38.6 days out; McCue, NDU 1990); refit 40, its days in port before the next (D from L: U-96's 38.2); passage 5, fitted so the Bay of Biscay to the North Atlantic, two seas on the chart, is McCue's 10 days each way ('20 or more days on the trip to port and back', D). German and Norwegian ports take the same days a sea. Checks, not figures: about 0.25 of boats in commission on station, 0.5 of boats at sea (D), and the record's third (about 104 boats at sea of 240-300 in 1943). Tankers at sea are a cause not yet laid. 'raid': a boat's raid weight while on station in the lanes' form (navy.json classes.ss.raid is 1, a boat there all month), refit once at OEG T2's window so the window keeps its tons with the share: 3.5 (D, the six-war reading of 24 November, naval-battles/convoy-r2/onepass-reading-1124.md; it comes to 1 / 0.286, the window's own share). The lanes' ocean term could not carry it (it would have to be -328). Where the tons are counted from the convoys' side (count.sink below; the tons ruling of 24 November 14:04Z) the boats on station that find and attack carry the share, so the convoys' side counts a boat on station at 1. The 3.5 stays wherever the lanes' form still counts boats: the oil and supply lanes (laneLoss, the ruling's Q4), the escorts' destroyers lost to the boats, and a route whose sinking figure is unread. Null: a weight of 1.",
-    station: { ss: { patrol: 20, passage: 5, refit: 40 }, raid: 3.5 },
+    _station: "The share of a month a raiding fleet's boats are on station in the sea they raid (the design director's one-pass ruling of 24 November 2026 13:23Z, Q3(a)(i), and the days of 13:31Z; naval-battles/convoy-r2/one-pass-form.md). A cause, not a scale: a patrol's days on station ('patrol') over its whole cycle, which adds the passage out from the fleet's port and back ('passage' days for each sea crossed by the sea graph, through the straits open to it) and the refit in port before the next patrol ('refit'). Share = patrol / (patrol + 2 x passage x seas + refit). It acts wherever boats raiding are counted: the raid strength that sinks tons and the incidents with the convoys' escorts. By class: 'ss' alone has rows; a class without rows is on station all month. The days are laid, never the shares (historian/convoy-build-reads-1124.md): patrol 20, a Biscay boat's days on station of about 40 out (D from L: U-96's 11 patrols averaged 38.6 days out; McCue, NDU 1990); refit 40, its days in port before the next (D from L: U-96's 38.2); passage 5, fitted so the Bay of Biscay to the North Atlantic, two seas on the chart, is McCue's 10 days each way ('20 or more days on the trip to port and back', D). German and Norwegian ports take the same days a sea. Checks, not figures: about 0.25 of boats in commission on station, 0.5 of boats at sea (D), and the record's third (about 104 boats at sea of 240-300 in 1943). Tankers at sea are a cause not yet laid. 'raid': a boat's raid weight while on station in the lanes' form (navy.json classes.ss.raid is 1, a boat there all month), refit once at OEG T2's window so the window keeps its tons with the share: 3.5 (D, the six-war reading of 24 November, naval-battles/convoy-r2/onepass-reading-1124.md; it comes to 1 / 0.286, the window's own share). The lanes' ocean term could not carry it (it would have to be -328). Where the tons are counted from the convoys' side (count.sink below; the tons ruling of 24 November 14:04Z) the boats on station that find and attack carry the share, so the convoys' side counts a boat on station at 1. The 3.5 stays wherever the lanes' form still counts boats: the oil and supply lanes (laneLoss, the ruling's Q4), the escorts' destroyers lost to the boats, and a route whose sinking figure is unread. Null: a weight of 1. 'dd': the escorts' cycle on a convoy route, read only by the firing share below (the design director's ruling of 24 November 2026 16:58Z, Q1 (d) of naval-battles/convoy-r2/screen-cycle-form.md; historian/escort-screen-cycle-1124.md). The Mid-Ocean Escort Force's 33 days from February 1942 (L): 19 with a convoy (9.5 with a westbound, 9.5 with an eastbound), 6 turnaround at the western end and 8 at the eastern ('refit'), and about a third of strength out of service at any time ('unavailable', L), so 19 / 33 x (1 - 0.333) = 0.38 of the escorts bound to a route are at sea with a convoy at once (D). Boiler cleaning was not found and is not laid. 'crossing': a convoy's days in the escorts' care, 9.5 (L). The convoys at sea at once are the convoys sailed a month (both ways) x the crossing / 30 days (D: the game's month), and the escorts a convoy are the escorts at sea with the convoys over them. One row for every navy's escorts. A null: escorts bound to the route over convoys sailed a month, as first built.",
+    station: { ss: { patrol: 20, passage: 5, refit: 40 }, raid: 3.5, dd: { convoy: 19, turnaround: 6, refit: 8, unavailable: 0.333, crossing: 9.5 } },
     _count: "The convoy-side count (one-pass ruling Q1(a), Q2(a), Q4, and the reading ruling of 24 November 13:50Z): a route's convoys attacked a month = convoys sailed x the share attacked. attacked 0.42 and sighted 0.68: OEG ch. 10 Table 2, northern routes, Oct 1942 to May 1943, 80 convoys (F; historian/convoy-reads-1124.md); a contact is a convoy sighted. The share attacked is 1 - exp(-phi x F x B), B the boats on station on the route's seas (station above), F finding from kit (none laid: 1), one phi for every route, fitted so the share is 0.42 at boatsT2. boatsT2 40: the boats at sea in the northwest Atlantic over T2's window, 22 to 60 (D from F, the middle). perAttack 2: boats a convoy attacked (F, OEG's own estimate). Convoys sailed a month = ways x the route's tons / (ships a convoy x GRT a ship). ways 2: T2's 0.42 is over its convoys both ways, so the count takes the return sailings as well as the loaded ones (D, the ruling of 13:50Z: about 10.4 a month on the Atlantic route). The incidents with the escort are counted from the boats' side, at T2's own rate: t2 80 convoys over 8 months (F, OEG T2's window) x 0.42 x 2 boats / 40 on station = 0.21 a boat on station a month (D). The pack, the boats a convoy attacked, follows from the two (incidents / attacked), and the card shows it. ships: atlantic 44 (D from L, historian/convoy-size-1124.md); libya 2 (D from L: Bragadin's 883 escorted convoys, the usual operation 2 ships, O'Hara; 1 to 7). grt: atlantic 5,200 (D: every pair read gives 4,400-5,800; ruling 241 Q8); libya 3,800 (D from L: 342 Axis freighters lost, 1,299,777 tons). historian/convoy-build-reads-1124.md. sink (k): the tons ruling (naval-battles/convoy-r2/tons-form.md): a convoy the boats attack loses its ships x P / (P + k x E), P the pack's raid strength (the pack x a boat's raid strength on station, its kit, fit and the air over it), E the convoy's share of the route's escort worth (G / convoys sailed); tons = convoys attacked x ships sunk x GRT, both ways, and the share of cargo lost is the share of ships sunk. k is refit once at OEG T2's window so that 2 boats sink 3.75 ships a convoy attacked (D: T2's 80 convoys, 125.6 ships sunk over 33.5 convoys attacked; SC/ONS 4.4, HX/ONF 3.2): 0.137 (D, six AI wars Oct 1942 to May 1943, 48 months: a boat's raid strength on station 0.298, a convoy's escort worth 46.5; the months' median 0.136). Never fitted to a battle; the battle table (wolfpack-r2/history.md, P) is a check only. The month's swing and a fought night act on the ships sunk a convoy attacked, never past its ships (Q3(a)). A surface raider or a fortress astride the route keeps the lanes' form beside it, its tons of the loaded sailings as before; the two shares together at most the lanes' cap (0.95). Null: the boats keep the lanes' form. A route whose count is not laid (a null) keeps the per-boat share above ('find').",
     count: { attacked: 0.42, sighted: 0.68, boatsT2: 40, perAttack: 2, ways: 2, t2: { convoys: 80, months: 8 }, sink: 0.137, ships: { atlantic: 44, libya: 2 }, grt: { atlantic: 5200, libya: 3800 } },
-    _ceiling: "The boat ceiling (the design director's ruling of 24 November 2026 14:46Z, corrected 14:49Z; naval-battles/convoy-r2/tons-reading-1124.md Finding 3 (a)): the ships one boat sinks in one convoy battle at most on an average night = its torpedoes usable that battle x the share that hit x the ships a hit sinks; a convoy attacked loses at most the pack x that, the pack at least one boat (a convoy attacked has one on it; the count's pack falls under one on Libya, builder's choice of the review). The month's swing and a fought night act around it (mean 1, ruling 241), never past the convoy's ships. inside 12: the torpedoes a VIIC or a IXC carries inside its hull (L, historian/naval-reads-3-1124.md sections 2 and 5: VIIC 5 in the tubes, 6 bow reloads, 1 aft; IXC 6 in the tubes, 6 inside). outside 2: those carried outside the hull in pressure-tight canisters, which a crew can bring inside only in a calm sea and with time on the surface, so they count only where the sea is calm. The game has no sea state; the builder reads the design director's 'calm sea (weather)' as the sky over the boat's sea clear, and with no weather in the campaign no sea is shown calm (the historian's read: they do not count for one convoy night, D). The game builds one boat design; 2 is the VIIC's (L), the type of most boats (M); a IXC carried 10. A boat design or torpedo row would set its own. hit 0.24: the share of torpedoes fired that hit, one figure for every navy, the middle of the US submarines' 0.33 of torpedoes fired (L, claimed, 1941-45) and the British submarines' 39% of attacks at 2.8 torpedoes an attack, about 0.14 (L, Hezlet ch. 33; D) (D, the design director's 14:49Z correction). No German figure was found (U). Torpedo design and a crew's training move it later, never the flag. sinkHit 0.7: the merchant ships a torpedo hit sinks: 183 of 261 hit once sank, 86 of 93 hit twice (Hezlet ch. 33, British and Allied submarines against Axis merchant ships, 1941-45, L; D: 0.7 a hit fits both rows). Counting every hit, overkill too, it is 0.57 (289 ships sunk for 507 or more hits, D); the design director laid 0.7. So a boat sinks at most 12 x 0.24 x 0.7 = 2.0 ships a convoy battle (D), the design director's 'about 2.0, the record's average', and 14 x 0.24 x 0.7 = 2.35 in a calm sea. The record's checks, never fitted: about 1.0 ship sunk a boat a battle, 0.7-1.8 by convoy size (D from OEG T3, F; its row pairs U; wolfpack-r2/history.md), about 2 ships torpedoed in each attack that succeeded (OEG 5.2.1, F), the design director's 2-4 a boat a battle (14:46Z; the historian's 14:50Z read gives 1-3) and the best single boat's 7 (U-100, U-515, L) the tail, against the most a month's swing books, 1.2 x 2.0. Null in inside, hit or sinkHit: no ceiling, the tons ruling as before.",
-    ceiling: { inside: 12, outside: 2, hit: 0.24, sinkHit: 0.7 }
+    _ceiling: "The boat ceiling (the design director's rulings of 24 November 2026 14:46Z, corrected 14:49Z, and 16:27Z and 16:31Z on naval-battles/convoy-r2/ceiling-reading-1124.md): the ships one boat sinks in one convoy battle at most on an average night = its torpedoes usable that battle x the share that hit x the ships a hit sinks; a convoy attacked loses at most the pack x that, the pack at least one boat (a convoy attacked has one on it; the count's pack falls under one on Libya, builder's choice of the review). The month's swing and a fought night act around it (mean 1, ruling 241), never past the convoy's ships. inside 12: the torpedoes a VIIC or a IXC carries inside its hull (L, historian/naval-reads-3-1124.md sections 2 and 5: VIIC 5 in the tubes, 6 bow reloads, 1 aft; IXC 6 in the tubes, 6 inside). outside 2: those carried outside the hull in pressure-tight canisters, which a crew can bring inside only in a calm sea and with time on the surface (L). The game has no sea state; the calm sea is read from the sky: with weather, all of them under a clear sky and none under cloud or a closed sky (the builder's reading of 'calm sea (weather)'); with no weather, the share the weather table expects that month, its chance of a clear sky over the sea's zone, and one of two where the table has no sky for the sea (the design director's 16:27Z ruling: the expected value, neither all calm nor all rough). The game builds one boat design; 2 is the VIIC's (L), the type of most boats (M), laid for every boat until a boat design row sets its own (16:27Z); a IXC carried 10. hit 0.45: the share of torpedoes fired that hit, one figure for every boat that fires, in every year (the design director's 16:31Z ruling; D from F: about 4 ships sunk a boat at sea a month, July 1940 to March 1941, OEG 51 chapters 2-3, at 1.4-1.75 hits a ship sunk from about 14 torpedoes; historian/convoy-gap-1940-41-1124.md). The escort's radar acts before a boat fires, not on its hits (historian/torpedo-hits-radar-1124.md: about 70% of attempted attacks frustrated late in 1942, yet about two ships torpedoed in each attack that succeeded, F); how it does waits for its own form, and is never counted on the hit share. sinkHit 0.57: the ships sunk for every hit, overkill and ships hit that survived counted, since the ceiling multiplies every hit: 289 ships sunk for 507 or more hits (Hezlet ch. 33, British and Allied submarines against Axis merchant ships, 1941-45, L; D; the design director's 16:27Z correction of 0.7, which is the chance a single hit sinks). So a boat that fires sinks at most 12 x 0.45 x 0.57 = 3.1 ships a convoy battle (D), and 14 x 0.45 x 0.57 = 3.6 in a calm sea. The record's checks, never fitted: about 1.0 ship sunk a boat a battle, 0.7-1.8 by convoy size (D from OEG T3, F; its row pairs U; wolfpack-r2/history.md), about 2 ships torpedoed in each attack that succeeded (OEG 5.2.1, F), the design director's 2-4 a boat a battle (14:46Z; the historian's 14:50Z read gives 1-3) and the best single boat's 7 (U-100, U-515, L) the tail, against the most a month's swing books, 1.2 x 3.6. Null in inside, hit or sinkHit: no ceiling, the tons ruling as before.",
+    ceiling: { inside: 12, outside: 2, hit: 0.45, sinkHit: 0.57 },
+    _firing: "The escort's radar before a boat fires (the design director's ruling of 24 November 2026 16:35Z on naval-battles/convoy-r2/radar-firing-form.md, (a) on all three; historian/torpedo-hits-radar-1124.md). Radar worked mostly before a boat fired, not on its hits: late in 1942 'about 70 per cent of the attempted attacks were frustrated by the escorts', yet 'about two ships were torpedoed in each successful attack' (OEG 51 section 5.2.1, F). The count's pack is the boats that fired (OEG's 'U-boats attacking each contact', measured at T2 against escorts with radar), so the boats that try are the pack / t2, and those that fire are the tries x 1 / (1 + c x r): r the radar-fitted escorts a convoy (the route's escort vessels whose navy has sea-search radar, at their share on the route, over the convoys sailed a month) for each boat trying, c = (1/t2 - 1) / rT2. 1 with no radar-fitted escort (D: 1940's about 4 ships a boat at sea a month at 0.45 a torpedo). Applied once, on the pack that the contest and the ceiling both read; the escort's kills keep the count's incidents (Q3 (a), for now). t2 0.3: the share that fired at T2 (D from F, 70% frustrated). rT2 1: T2's ratio, the record's, never the game's (the design director: the game has about 3 times the record's boats there, a gap the work-up pipeline answers): about 6.5 escorts a convoy (F, OEG ch. 10 Table 5), nearly all with radar (M), over about 6.7 boats trying (2 / 0.3, D); so c = 7/3 (D). The check, never fitted: HX 229/SC 122, March 1943, boats about 2:1 over the escorts, r about 0.5, a share of about 0.46; 21-22 ships lost (L). Null in either: every boat counted fires, as before. The radar-fitted escorts a convoy (the design director's ruling of 24 November 2026 16:58Z on naval-battles/convoy-r2/screen-cycle-form.md): the escorts at sea with the convoys at once over the convoys at sea at once (station.dd, Q1 (d)); and where 'screen' is read, the escorts on the close screen's stations, the lesser of the escorts with the convoy and the stations, times the radar-fitted share of them, so a thin screen fills fewer stations (Q2 (b)). Stations = 'stations' + the convoy's columns / 'columnsAStation', the columns its ships (count.ships) / 'shipsAColumn': the US Fleet A/S Instructions' screens of 7 to 11 escorts for 3 to 15 columns, 6 + columns / 3 (F, D; historian/escort-screen-cycle-1124.md). shipsAColumn 3.5 (D from L, historian/naval-reads-4-1124.md: HX 229's 37 ships in 11 columns, SC 122's 50 in 14), the columns at most 'maxColumns' 19 (L: HX 300's 166 ships in 19 columns; past that the columns go deeper): the route's 44-ship convoy has 12.6 columns and 10.2 stations (D). No 1940-42 convoy's columns were read, so the rule is D there (the design director, 17:04Z). A null in any of them: the escorts with the convoy are not capped. Escorts beyond the stations add nothing to frustrating attacks (Q3 (a)) and still count in the escort's strength E (Q4 (a)); the escorts' losses form moves them to pickets and support groups. Screens without radar frustrate too: an eye term, its own form, not laid.",
+    firing: { t2: 0.3, rT2: 1, screen: { stations: 6, columnsAStation: 3, shipsAColumn: 3.5, maxColumns: 19 } }
   };
 
   // ../../src/campaign/tech.ts
@@ -40630,6 +40783,19 @@
     }
     return begun2;
   }
+  function openUnitsRows(g2) {
+    if (!techRules(g2) || !unitsDecide(g2)) return;
+    for (const [nat, ids2] of Object.entries(UNITS.startRows)) {
+      const n = g2.nations[nat];
+      if (!n) continue;
+      const s = n.tech ?? (n.tech = fresh2(nat));
+      for (const id of ids2) {
+        if (!BY_ID[id] || s.done.includes(id)) continue;
+        s.done.push(id);
+        s.work = s.work.filter((w) => w.id !== id);
+      }
+    }
+  }
   function openTech(g2) {
     if (!techRules(g2) || g2.flags["tech:open"]) return;
     g2.flags["tech:open"] = 1;
@@ -40708,15 +40874,22 @@
   }
   var CAUSE = convoycause_default;
   var in100 = (x) => Math.round(x * 100);
+  function unitsWords(id) {
+    const L2 = UNITS.land;
+    if (id === L2.radiosRow) return `Its army's command rises ${in100(L2.radios)} points in 100.`;
+    if (!L2.trainRows.includes(id)) return null;
+    const names = and(L2.trainRows.map((x) => BY_ID[x]?.name ?? x));
+    return `Its army's training is at least ${L2.ladder[0]} with one of ${names}, ${L2.ladder[1]} with two and ${L2.ladder[2]} with all three. An army that began the war better trained keeps its own level.`;
+  }
   function causeWords(id) {
     const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
-    const kills = `a hunting group sinks the submarine in ${in100(I.groupKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.loneKit)}, against ${in100(I.group)} and ${in100(I.lone)} with depth charges alone`;
+    const kills = `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
     const air2 = `submarines in the waters its aircraft reach attack with only ${third} of their strength`;
     if (id === "sonar") return `Its aircraft carry depth charges. With ${BY_ID[CAUSE.asv]?.name.toLowerCase() ?? "sea-search radar"} as well, ${air2}.`;
     if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air2}. Its escorts carry the sets too.`;
     if (id === "patrolaircraft") return "Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.";
     if (id === "escortgroups") return `Destroyers sent hunting work as trained support groups. With ahead-throwing weapons too, ${kills}.`;
-    if (id === "hedgehog") return `A convoy's own escort sinks the submarine in ${in100(I.lone * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.group * I.atw)}, against ${in100(I.lone)} and ${in100(I.group)} with depth charges alone. With escort groups too, ${kills}.`;
+    if (id === "hedgehog") return `A convoy's own escort sinks the submarine in ${in100(I.independent * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
     return null;
   }
   function techRule(t, g2, nat) {
@@ -40735,6 +40908,8 @@
     if (rest) out.push(rest);
     const convoy = cause || t.units ? causeWords(t.id) : null;
     if (convoy) out.push(convoy);
+    const land2 = t.units ? unitsWords(t.id) : null;
+    if (land2) out.push(land2);
     if (t.slots) out.push(t.slots === 1 ? "One more research team." : `${t.slots} more research teams.`);
     if (t.winterKit) out.push("Its troops no longer march and fight worse in the eastern winter.");
     if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
@@ -45534,8 +45709,8 @@
   var airKit = (k) => k.asdic && k.radar;
   function incidentRate(k, group) {
     const I = CAUSE2.incident;
-    if (k.hedgehog && k.groups) return group ? I.groupKit : I.loneKit;
-    return (group ? I.group : I.lone) * (k.hedgehog ? I.atw : 1);
+    if (k.hedgehog && k.groups) return group ? I.coordinatedKit : I.independentKit;
+    return (group ? I.coordinated : I.independent) * (k.hedgehog ? I.atw : 1);
   }
   var kitEdge = (k, group) => incidentRate(k, group) / incidentRate({ ...k, hedgehog: false }, group);
   var radarKit = (k) => 1 + (k.radar ? CAUSE2.radar : 0);
@@ -45892,24 +46067,66 @@
     return f.stance !== "raid" && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
   }
   var LANE_CAP = 0.95;
-  function convoySide(route, count4, boats, G5, each3) {
+  function firingShare(radarEscorts, tries) {
+    const F = CAUSE2.firing;
+    if (!F || F.t2 === null || F.rT2 === null || F.t2 <= 0 || F.rT2 <= 0) return null;
+    const c = (1 / F.t2 - 1) / F.rT2;
+    const r = tries > 0 ? radarEscorts / tries : 0;
+    return 1 / (1 + c * r);
+  }
+  var MONTH_DAYS = 30;
+  function escortsAtSea() {
+    const D2 = CAUSE2.station.dd;
+    if (!D2 || D2.convoy === null || D2.turnaround === null || D2.refit === null || D2.unavailable === null || D2.crossing === null) return null;
+    const cycle = D2.convoy + D2.turnaround + D2.refit;
+    return cycle > 0 && D2.crossing > 0 ? D2.convoy / cycle * (1 - D2.unavailable) : null;
+  }
+  function screenStations(route) {
+    const S3 = CAUSE2.firing.screen, ships = CAUSE2.count.ships[route.id];
+    if (!S3 || S3.stations === null || S3.columnsAStation === null || S3.shipsAColumn === null || S3.maxColumns === null || !ships || S3.columnsAStation <= 0 || S3.shipsAColumn <= 0) return null;
+    return S3.stations + Math.min(ships / S3.shipsAColumn, S3.maxColumns) / S3.columnsAStation;
+  }
+  function radarOnStations(route, count4, radarShips, escortShips) {
+    if (count4.sailed <= 0) return 0;
+    const atSea2 = escortsAtSea(), crossing2 = CAUSE2.station.dd?.crossing ?? 0;
+    const aConvoy = (ships) => atSea2 === null ? ships / count4.sailed : ships * atSea2 * MONTH_DAYS / (count4.sailed * crossing2);
+    const radar = aConvoy(radarShips), stations = screenStations(route);
+    if (stations === null) return radar;
+    const all = aConvoy(escortShips);
+    return all > 0 ? Math.min(all, stations) * (radar / all) : 0;
+  }
+  function convoySide(route, count4, boats, G5, each3, radarShips = 0, escortShips = 0) {
     const K2 = CAUSE2.count, ships = K2.ships[route.id] ?? 0, k = K2.sink;
-    const P = count4.boats > 0 ? count4.pack * boats / count4.boats : 0;
+    const F = CAUSE2.firing;
+    const laid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
+    const tries = laid ? count4.pack / F.t2 : count4.pack;
+    const fire2 = laid ? firingShare(radarOnStations(route, count4, radarShips, escortShips), tries) : null;
+    const pack = fire2 === null ? count4.pack : tries * fire2;
+    const P = count4.boats > 0 ? pack * boats / count4.boats : 0;
     const E = count4.sailed > 0 ? G5 / count4.sailed : 0;
     const contest = P > 0 ? ships * P / (P + k * E) : 0;
-    const torps = each3 === null ? void 0 : Math.max(1, count4.pack) * each3;
+    const torps = each3 === null ? void 0 : Math.max(1, pack) * each3;
     const sunk = torps === void 0 ? contest : Math.min(contest, torps);
-    return { P, E, sunk, L: count4.sailed > 0 && ships > 0 ? count4.attacked * sunk / (count4.sailed * ships) : 0, ...torps !== void 0 ? { torps } : {} };
+    return { P, E, sunk, L: count4.sailed > 0 && ships > 0 ? count4.attacked * sunk / (count4.sailed * ships) : 0, ...torps !== void 0 ? { torps } : {}, ...fire2 !== null ? { fire: fire2, fired: pack } : {} };
+  }
+  var ceilingLaid = () => {
+    const C4 = CAUSE2.ceiling;
+    return !!C4 && C4.inside !== null && C4.hit !== null && C4.sinkHit !== null;
+  };
+  function calmShare(g2, z) {
+    if (weatherOn(g2)) return skyAtSea(g2, z) === "clear" ? 1 : 0;
+    const zone = zoneOfSea(g2, z);
+    const o = zone >= 0 ? oddsOf(zone, g2.turn) : void 0;
+    const all = o ? o[0] + o[1] + o[2] : 0;
+    return o && all > 0 ? o[0] / all : 0.5;
   }
   function boatCeiling(g2, z) {
+    if (!ceilingLaid()) return null;
     const C4 = CAUSE2.ceiling;
-    if (!C4 || C4.inside === null || C4.hit === null || C4.sinkHit === null) return null;
-    const calm = weatherOn(g2) && skyAtSea(g2, z) === "clear";
-    return (C4.inside + (calm ? C4.outside ?? 0 : 0)) * C4.hit * C4.sinkHit;
+    return (C4.inside + calmShare(g2, z) * (C4.outside ?? 0)) * C4.hit * C4.sinkHit;
   }
   function routeCeiling(g2, route) {
-    const C4 = CAUSE2.ceiling;
-    if (!C4 || C4.inside === null || C4.hit === null || C4.sinkHit === null) return null;
+    if (!ceilingLaid()) return null;
     const zones = route.zones.map((k) => zoneOf(g2, k));
     let w = 0, c = 0;
     for (const f of g2.fleets) {
@@ -45930,7 +46147,7 @@
   }
   function routeForces(g2, nat, route) {
     const zones = route.zones.map((k) => zoneOf(g2, k));
-    let raid2 = 0, guard = 0, boats = 0, weighed = 0;
+    let raid2 = 0, guard = 0, boats = 0, weighed = 0, radarShips = 0, escortShips = 0;
     const raiders = [], escorts = [];
     const cover3 = unitsDecide(g2) ? zones.map((z) => seaCover(g2, nat, z, route.id)) : void 0;
     for (const f of g2.fleets) {
@@ -45950,11 +46167,14 @@
         if (w <= 0) continue;
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === "cv" ? deckWorth(g2, f) : 1);
-        p *= quality(g2, f.nat) * fit2(g2, f) * w * (cover3 ? radarKit(aswKit(g2, f.nat)) : 1);
+        const kit = aswKit(g2, f.nat);
+        p *= quality(g2, f.nat) * fit2(g2, f) * w * (cover3 ? radarKit(kit) : 1);
         if (p > 0) {
           guard += p;
           escorts.push(f);
         }
+        escortShips += f.ships.dd * w;
+        if (kit.radar) radarShips += f.ships.dd * w;
       }
     }
     if (route.base) {
@@ -45965,7 +46185,7 @@
       const G6 = guard * NAVY.convoy.escortWorth;
       const count4 = (CAUSE2.count.sink ?? null) === null ? null : convoyCount(g2, route);
       if (count4) {
-        const side5 = convoySide(route, count4, boats, G6, routeCeiling(g2, route));
+        const side5 = convoySide(route, count4, boats, G6, routeCeiling(g2, route), radarShips, escortShips);
         const rest = raid2 - weighed;
         const Lo = rest > 1e-12 ? rest / (rest + G6 + NAVY.convoy.ocean) : 0;
         return { zones, raid: raid2, guard, raiders, escorts, G: G6, L: sideLoss(route, side5, Lo, 1).L, cover: cover3, side: side5, Lo };
@@ -45979,7 +46199,7 @@
   }
   var CONVOY_BATTLE = convoybattle_default;
   var convoyRules = (g2) => g2.flags.open === 1 && g2.flags.convoyBattle === 1;
-  var countRecord = (c, sunk, torps) => ({ boats: r22(c.boats), sailed: r22(c.sailed), sighted: r22(c.sighted), attacked: r22(c.attacked), incidents: r22(c.incidents), pack: r22(c.pack), ...sunk !== void 0 ? { sunk: r22(sunk) } : {}, ...torps !== void 0 ? { torps: r22(torps) } : {} });
+  var countRecord = (c, sunk, torps, fired) => ({ boats: r22(c.boats), sailed: r22(c.sailed), sighted: r22(c.sighted), attacked: r22(c.attacked), incidents: r22(c.incidents), pack: r22(c.pack), ...sunk !== void 0 ? { sunk: r22(sunk) } : {}, ...torps !== void 0 ? { torps: r22(torps) } : {}, ...fired !== void 0 ? { fired: r22(fired) } : {} });
   var r22 = (x) => Math.round(x * 100) / 100;
   var convoyField = {};
   function convoyMeeting(g2, nat, route) {
@@ -46001,7 +46221,7 @@
         tons: side5 ? sideLoss(route, side5, Lo ?? 0, 1).tons : Math.round(route.tons * L2 / 1e3) * 1e3,
         raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * incidentsPerBoat(g2, f, count4) * (p.get(f.zone) ?? 0), roomLeft(g2, f)) })),
         escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid2 > 0 ? raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 })),
-        ...count4 ? { count: countRecord(count4, side5?.sunk, side5?.torps) } : {}
+        ...count4 ? { count: countRecord(count4, side5?.sunk, side5?.torps, side5?.fired) } : {}
       };
     }
     if (seaWar(g2) && g2.nations[nat].atWar.length) {
@@ -46090,8 +46310,8 @@
         }
       }
     }
-    const byNat = by2 === null ? null : could.find((x) => x.id === by2).nat;
-    lookOf(g2, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, sunk, could: could.map((x) => x.id), by: by2, couldNat: could.map((x) => x.nat), byNat });
+    const byNat2 = by2 === null ? null : could.find((x) => x.id === by2).nat;
+    lookOf(g2, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, sunk, could: could.map((x) => x.id), by: by2, couldNat: could.map((x) => x.nat), byNat: byNat2 });
   }
   function lookConvoy(g2, nat, route, zones, raiders, escorts, at4, tons, cause) {
     const power = (f) => raidPower(g2, f, !!cause) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
@@ -46188,7 +46408,7 @@
       if (swing !== void 0) g2.convoys[route.id].swing = swing;
       if (night) g2.convoys[route.id].fought = night.clamped ? "clamped" : "field";
       if (cover3) g2.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
-      if (count4) g2.convoys[route.id].count = countRecord(count4, month3?.sunk, side5?.torps);
+      if (count4) g2.convoys[route.id].count = countRecord(count4, month3?.sunk, side5?.torps, side5?.fired);
       if (at4) lookConvoy(g2, nat, route.id, zones, raiders, escorts, at4, tons, cover3 && { cover: cover3, lost: byEscorts ?? {} });
       storyConvoy(g2, raiders, escorts, tons, raid2 > 0);
       if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat))) {
@@ -59302,6 +59522,9 @@
       bargains: g2.bargains,
       // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
       legions: g2.legions,
+      // Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2 section 4): written only under the switch, so a
+      // store left behind by a flag cleared by hand is never saved, and a save with the switch off is written as it always was.
+      qs: unitsDecide(g2) ? g2.qs : void 0,
       // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
       // its scars back from its reports when loaded.
       scars: g2.flags.open === 1 ? g2.scars : void 0,
@@ -59466,6 +59689,7 @@
     if (d.lorryFirst && typeof d.lorryFirst === "object") g2.lorryFirst = d.lorryFirst;
     if (d.bargains && typeof d.bargains === "object") g2.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
     if (d.legions && typeof d.legions === "object") g2.legions = { abroad: {}, done: {}, ...d.legions };
+    if (d.qs && typeof d.qs === "object") g2.qs = d.qs;
     if (d.captured && typeof d.captured === "object") g2.captured = d.captured;
     if (d.scars && typeof d.scars === "object") g2.scars = d.scars;
     else
@@ -64753,27 +64977,6 @@
     dial: { absent: 3, pickFrom: 4 }
   };
 
-  // ../../data/battle/lean.json
-  var lean_default = {
-    _doc: [
-      "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
-      "Each arm keeps its own style numbers and grows by its own experience and research (land: data/battle/land-styles.json). '_' is every nation not listed.",
-      "A leaning not built yet (night, last-stand: item 6, after release 1) is fought as its stand-in. Japan's land column attacks by night and defends to the last; until item 6 every arm fights those as bold (ruling 239(3)).",
-      "Germany and Britain differ at sea (historian, H): Germany's heavy ships broke off when pressed, the Royal Navy sought action."
-    ],
-    lean: {
-      GER: { land: "bold", sea: "methodical", air: "methodical" },
-      UK: { land: "methodical", sea: "bold", air: "methodical" },
-      USA: { land: "methodical", sea: "methodical", air: "methodical" },
-      ITA: { land: "methodical", sea: "methodical", air: "methodical" },
-      FRA: { land: "methodical", sea: "methodical", air: "methodical" },
-      SOV: { land: "mass", sea: "mass", air: "mass" },
-      JAP: { land: { att: "night", def: "last-stand" }, sea: "night", air: "bold" },
-      _: { land: "methodical", sea: "methodical", air: "methodical" }
-    },
-    standIn: { night: "bold", "last-stand": "bold" }
-  };
-
   // ../../src/battle/land/styles.ts
   var D = land_styles_default;
   var STYLES = Object.fromEntries(
@@ -64782,9 +64985,9 @@
   var STYLE = D.shared;
   var PATH = D.path;
   var L = lean_default;
-  var LEAN = Object.fromEntries(Object.entries(L.lean).map(([n, row2]) => [n, row2.land]));
+  var LEAN2 = Object.fromEntries(Object.entries(L.lean).map(([n, row2]) => [n, row2.land]));
   function leaningOf(nat, side5) {
-    const row2 = LEAN[nat];
+    const row2 = LEAN2[nat];
     if (row2 === void 0) return null;
     const s = typeof row2 === "string" ? row2 : row2[side5];
     const id = isStyle(s) ? s : L.standIn[s];

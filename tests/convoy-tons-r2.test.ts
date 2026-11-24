@@ -53,9 +53,11 @@ function meet(g: Game, ss: number, dd: number, zone = 'natl'): Fleet {
 const night = (swing: number): ConvoyNights => new Map([['atlantic', { fought: { swing, ss: {}, dd: {} }, ss: new Set<number>(), dd: new Set<number>(), clamped: false }]]);
 
 afterEach(() => { convoyField.fought = undefined; });
-const ceilingKept = CAUSE.ceiling.inside;
-beforeAll(() => { CAUSE.ceiling.inside = null; });
-afterAll(() => { CAUSE.ceiling.inside = ceilingKept; });
+// (The contest itself: the boat ceiling and the escort's radar before a boat fires are unread here, and tested in
+// convoy-ceiling-r2 and convoy-firing-r2.)
+const ceilingKept = CAUSE.ceiling.inside, firingKept = CAUSE.firing.t2;
+beforeAll(() => { CAUSE.ceiling.inside = null; CAUSE.firing.t2 = null; });
+afterAll(() => { CAUSE.ceiling.inside = ceilingKept; CAUSE.firing.t2 = firingKept; });
 
 describe('the figures', () => {
   it('lays k at 0.137: at T2\'s window 2 boats sink 3.75 ships a convoy attacked, inside T2\'s 3.2-4.4', () => {

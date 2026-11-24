@@ -11,7 +11,7 @@ import { FORTS_STAGE } from './stage';
 import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
-import { openTech } from './tech';
+import { openTech, openUnitsRows } from './tech';
 import { openStores } from './resources';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
@@ -49,6 +49,7 @@ import { COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
+import { openQuality } from './units';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -163,6 +164,9 @@ export function startOpen(g: Game, wide = true): Game {
   }
   startEngineers(g);
   openTraits(g);
+  // Units decide's start list (units.json startRows; DD 24 Nov 15:53Z, #2 form): rows held on the first day under that
+  // switch only, laid before the opening research so a later start's catch-up counts each once. Off, nothing.
+  openUnitsRows(g);
   openTech(g);
   // America's air commands stand on their fields before the depots are counted: the stores open with what they burn.
   openWorldAir(g);
@@ -170,6 +174,9 @@ export function startOpen(g: Game, wide = true): Game {
   openAirWar(g);
   openSmallAir(g);
   openCarriers(g);
+  // Units decide's quality store (units.ts; DD 24 Nov 15:53Z, #2 form Part 2): seeded once the wider world, the
+  // opening research, the world's air commands and the carriers are in place. Off, nothing.
+  openQuality(g);
   openSieges(g);
   openMorale(g);
   openEscorts(g);

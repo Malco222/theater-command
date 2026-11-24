@@ -22,6 +22,7 @@ import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
 import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
 import { openWinter } from './winter';
+import { unitsDecide } from './units';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -97,6 +98,9 @@ export function saveGame(g: Game): string {
     bargains: g.bargains,
     // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
     legions: g.legions,
+    // Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2 section 4): written only under the switch, so a
+    // store left behind by a flag cleared by hand is never saved, and a save with the switch off is written as it always was.
+    qs: unitsDecide(g) ? g.qs : undefined,
     // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
     // its scars back from its reports when loaded.
     scars: g.flags.open === 1 ? g.scars : undefined,
@@ -263,6 +267,8 @@ export function loadGame(text: string): Game | null {
   if (d.lorryFirst && typeof d.lorryFirst === 'object') g.lorryFirst = d.lorryFirst;
   if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
   if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };
+  // Units decide's quality store: as saved; a save without it loads as before, and under the switch is seeded on first use.
+  if (d.qs && typeof d.qs === 'object') g.qs = d.qs;
   // Scarred ground: as saved, or for a save without it, from the battles its reports still hold.
   if (d.captured && typeof d.captured === 'object') g.captured = d.captured;
   if (d.scars && typeof d.scars === 'object') g.scars = d.scars;

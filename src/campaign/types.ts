@@ -660,6 +660,16 @@ export interface Fleet extends Storied {
   lost: Ships;
   /** Units decide (the convoy war by cause), written only under that switch: the boats it had when it first lost any this month and those lost since, for the hunt's monthly cap. Saved, so a month reloaded part-way plays on as the live one. */
   capBook?: { turn: number; had: number; lost: number };
+  /**
+   * Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2), written only under that switch: its crews' level,
+   * in navy.json's quality units, blended by ship count as ships join and leave. Unset, the fleet reads its navy's
+   * crew (QualityStore sea.crew).
+   */
+  crew?: number;
+  /** Its crews' experience, 0 to 1. Not laid yet: nothing writes or reads it. */
+  sxp?: number;
+  /** Boats working up after joining: how many, and the months each batch still has to go. They do not yet count on station. */
+  workup?: [boats: number, months: number][];
   /** Region of the home port, or -1 when the base is off the map. */
   base: number;
   /** What the base is called: Scapa Flow, Wilhelmshaven. */
@@ -1251,6 +1261,13 @@ export interface AirFleet extends Storied {
    * seller's type, flown by this nation's pilots, and never upgrades with the seller's research. The rest is its own.
    */
   bought?: Record<string, number>;
+  /**
+   * Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2), written only under that switch: its pilots' mean
+   * hours before first combat. None while its nation's school (or deck school, for a carrier wing) is not laid.
+   */
+  hours?: number;
+  /** Its one experience counter, 0 to 1, written only under that switch. */
+  fxp?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1417,6 +1434,77 @@ export interface AirWarMemory {
  */
 export interface Voyage { nat: string; corps: Corps; from: number; to: number; due: number }
 
+// ---- Units decide's quality store (release 2; DD 24 Nov 15:53Z, #2 form Part 2) ---------------------------------
+// The nation holds what its schools and staffs know; the unit holds what its own men have lived through. Every arm has
+// the same three parts: a school level per nation, a doctrine per nation, and the unit's own figure (the corps' xp, an
+// air group's hours and fxp, a fleet's crew). Each cause has one price, in one place. Seeded by units.ts openQuality,
+// from data/campaign/units.json and the tables it names; absent while the switch is off.
+
+/**
+ * A doctrine slot. Readers read `id` only: a change ordered by the player, chosen by a staff or taught by a research row
+ * goes in `next`, and takes over in month `ready`, so the old way holds while the new one trains in.
+ */
+export interface Way<T extends string> { id: T; next?: T; ready?: number; by: 'start' | 'chosen' | 'research' }
+
+/** A land staff's way (data/battle/lean.json): 'mass' attacks by orders; night and last-stand are fought as bold until they are built. */
+export type LandWay = 'mass' | 'methodical' | 'bold' | 'night' | 'last-stand';
+
+/** What a nation's army knows. Training rows, command c and the drafts' level are worked out from it and the tree, never stored. */
+export interface Land {
+  /** The army's training at the start (officers, NCOs, drill): a seed only. The level read is the higher of it and the ladder's rung for the training rows held. */
+  train: number;
+  /** Command earned in war, 0 to 1. Command c = the radios row's share if held, plus this, at most 1. */
+  earned: number;
+  /** The drafts' schools: new men and new corps join at the level they give. */
+  school: number;
+  /** The staff's way, attacking and defending. */
+  way: { att: Way<LandWay>; def: Way<LandWay> };
+}
+
+/** What a nation's air arm knows. Nothing reads these slots yet: they wait on the air thread's build. */
+export interface Air {
+  /** Hours before first combat a new pilot leaves school with; null where not laid. */
+  school: number | null;
+  /** The same for carrier pilots, kept apart; null where not laid. */
+  deck: number | null;
+  /** The level read wherever hours are not priced: today's air quality (air.json). */
+  held: number;
+  /** The reserve's mean hours (null while school is) and mean experience. */
+  pool: number | null;
+  poolXp: number;
+  /** Land bombers' training against ships (carriers.json naval.land). */
+  strike: number;
+  /** Fighter doctrine; null where no row is read. */
+  fighter: Way<'turn' | 'dive-zoom'> | null;
+  /** Escort doctrine; null where not laid. */
+  escort: Way<'tied' | 'free'> | null;
+}
+
+/** What a nation's navy knows. Nothing reads these slots yet: they wait on the naval thread's build. */
+export interface Sea {
+  /** A new crew's level from the navy's schools, in navy.json's quality units. */
+  crew: number;
+  /** Night drill and lookouts' training: null, not laid. */
+  night: number | null;
+  lookout: number | null;
+  /** The fleet staff's way. */
+  way: Way<'methodical' | 'bold' | 'mass'>;
+  /** Convoy doctrine: boats hunt alone, are homed from ashore, or are led at sea; and whether they go for warships first. */
+  pack: Way<'alone' | 'homed' | 'led'>;
+  target: Way<'merchants' | 'warships'>;
+}
+
+export interface Arms { land: Land; air: Air; sea: Sea }
+
+export interface QualityStore {
+  /** The month the campaign opened: 1, or a later start's first month (g.flags.openFrom). */
+  from: number;
+  /** Every nation in g.nations, seeded by one rule. */
+  nat: Record<string, Arms>;
+  /** News fired once when a cause passes a mark: '<nat>:<field>:<mark>' to the month it fired. */
+  news: Record<string, number>;
+}
+
 export interface Game {
   seed: number;
   rng: Rng;
@@ -1491,6 +1579,12 @@ export interface Game {
   bargains?: BargainBook;
   /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
   legions?: LegionBook;
+  /**
+   * Units decide's quality store (release 2; DD 24 Nov 15:53Z, #2 form Part 2): what each nation's schools and staffs
+   * know, for soldiers, pilots and crews. Absent while the switch is off; read and seeded only through units.ts
+   * qualityStore.
+   */
+  qs?: QualityStore;
   /**
    * Scarred ground (release 2): for each region a land battle was fought in, how many have been fought there and the
    * month of the last, and of those how many in the mud and the month of the last of them (mud memory), so a battle
