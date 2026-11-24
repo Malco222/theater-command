@@ -9038,33 +9038,36 @@ namespace LandHouse
 				if (L < 0.05) return;
 				const V3 Al = Ax * (1.0 / L);
 				const V3 E1 = Norm(Cross(std::fabs(Al.Z) < 0.9 ? Up : V3{ 1.0, 0.0, 0.0 }, Al)), E2 = Cross(Al, E1);
-				// (a thick timber's blocks some 8 cm round it and 9 cm along; a pole's fewer)
-				const int Sides = !bFine ? 5 : R >= 0.08 ? 10 : 6;
+				// (a thick timber's char in ten strips round it; a pole's in eight)
+				const bool bThick = R >= 0.08;
+				const int Sides = !bFine ? 5 : bThick ? 10 : 8;
 				const int NS = std::max(2, static_cast<int>(std::ceil(L / (!bFine ? 0.7 : R >= 0.08 ? 0.095 : 0.11))));
-				// (each burnt end: a taper over its last 25 to 45 cm, or a ragged break)
+				// (each burnt end a blunt, ragged break; some burnt down thinner over their last 25 to 45 cm first, to no less
+				// than half their thickness: none to a point)
 				const bool bTaperA = bEndA && Unit(Hash(Seed, 0xE0)) < 0.6, bTaperB = bEndB && Unit(Hash(Seed, 0xE1)) < 0.6;
 				const double La = std::min(0.45 * L, 0.25 + 0.2 * Unit(Hash(Seed, 0xE2))), Lb = std::min(0.45 * L, 0.25 + 0.2 * Unit(Hash(Seed, 0xE3)));
 				const double Sway = 2.0 * Pi * Unit(Hash(Seed, 0xE4));
+				const double ThinA = 0.5 + 0.3 * Unit(Hash(Seed, 0xE5)), ThinB = 0.5 + 0.3 * Unit(Hash(Seed, 0xE6));
 				auto Bite = [&](double Th) { return std::min(0.7 * L / NS, 0.13 * Noise01(Th / 0.9, 0.5, Seed ^ 0x54) + 0.05 * Noise01(Th / 0.25, 1.5, Seed ^ 0x55)); };
 				// (the rings a little unevenly along it, so no two blocks run the same length)
 				auto Ring = [&](int I) { return L * (I + (I == 0 || I == NS ? 0.0 : 0.62 * (Unit(Hash(Seed ^ 0x59, static_cast<uint64_t>(I))) - 0.5))) / NS; };
 				// (where ring I lies along it at an angle round it: a broken end's ring set back by its bite)
 				auto Along = [&](int I, double Th) {
 					const double D = Ring(I);
-					if (I == 0 && bEndA && !bTaperA) return D + Bite(Th);
-					if (I == NS && bEndB && !bTaperB) return D - Bite(Th + 2.0);
+					if (I == 0 && bEndA) return D + Bite(Th);
+					if (I == NS && bEndB) return D - Bite(Th + 2.0);
 					return D;
 				};
 				auto Thin = [&](double D) {
 					double F = 0.94 + 0.08 * Noise(D / 0.35, 0.5, Seed);
-					if (bEndA) F *= bTaperA ? 0.2 + 0.8 * std::pow(Smooth(0.0, La, D), 0.8) : 0.8 + 0.2 * Smooth(0.0, 0.1, D);
-					if (bEndB) F *= bTaperB ? 0.2 + 0.8 * std::pow(Smooth(0.0, Lb, L - D), 0.8) : 0.8 + 0.2 * Smooth(0.0, 0.1, L - D);
+					if (bEndA) F *= bTaperA ? ThinA + (1.0 - ThinA) * std::pow(Smooth(0.0, La, D), 0.8) : 0.8 + 0.2 * Smooth(0.0, 0.1, D);
+					if (bEndB) F *= bTaperB ? ThinB + (1.0 - ThinB) * std::pow(Smooth(0.0, Lb, L - D), 0.8) : 0.8 + 0.2 * Smooth(0.0, 0.1, L - D);
 					return F;
 				};
-				// (a taper burns off its middle: the log's axis drawn aside as it thins)
+				// (an end burnt thinner burns off its middle: the log's axis drawn a little aside as it thins)
 				auto Mid = [&](double D) {
 					const double Off = (bTaperA ? 1.0 - Smooth(0.0, La, D) : 0.0) + (bTaperB ? 1.0 - Smooth(0.0, Lb, L - D) : 0.0);
-					return A + Al * D + (E1 * std::cos(Sway) + E2 * std::sin(Sway)) * (0.45 * R * Off);
+					return A + Al * D + (E1 * std::cos(Sway) + E2 * std::sin(Sway)) * (0.2 * R * Off);
 				};
 				// (its skin: black char; grey-white ash bloomed in patches on what looks up, a block here ashed over, the next
 				// bare; brown wood left on its underside low down)
@@ -9075,7 +9078,8 @@ namespace LandHouse
 					C = Mixed(C, Rgb(166, 162, 154), Smooth(0.2, 0.85, Rd.Z) * (0.05 + 0.75 * Patch * (0.35 + 0.65 * Ashed)));
 					return Mixed(C, Rgb(104, 78, 54), Brown * Smooth(-0.1, -0.7, Rd.Z) * Smooth(0.6, 0.2, Z) * Smooth(0.3, 0.55, Noise01(D / 0.5, 0.5, Seed ^ 0x57)));
 				};
-				// (the core: black, under the blocks; the whole of the middle level's timber, in the skin's colours)
+				// (the core: black, well under the blocks, so the widest of them clears its edges and the cracks between them
+				// are deep, and up to them at its ends; the whole of the middle level's timber, in the skin's colours)
 				const int CoreSides = bFine ? 6 : Sides, CoreEvery = bFine ? 2 : 1;
 				std::vector<uint32_t> Prev, Cur;
 				for (int I = 0; I <= NS; I += (I + CoreEvery > NS && I < NS) ? NS - I : CoreEvery)
@@ -9085,7 +9089,7 @@ namespace LandHouse
 					{
 						const double Th = 2.0 * Pi * K / CoreSides, D = Along(I, Th);
 						const V3 Rd = E1 * std::cos(Th) + E2 * std::sin(Th);
-						const V3 Pt = Mid(D) + Rd * (R * Thin(D) * (bFine ? 0.965 : 1.0));
+						const V3 Pt = Mid(D) + Rd * (R * Thin(D) * (!bFine ? 1.0 : I == 0 || I == NS ? 0.965 : bThick ? 0.87 : 0.82));
 						Cur.push_back(B.Vert(Pt, Rd, bFine ? Rgb(15, 14, 13) : Skin(D, Th, Pt.Z, 0.9 + 0.2 * Unit(Hash(Seed ^ 0x52, static_cast<uint64_t>(I * 16 + K))), 0.5)));
 					}
 					if (!Prev.empty())
@@ -9097,42 +9101,70 @@ namespace LandHouse
 							B.Tri(Prev[static_cast<size_t>(K)], Cur[static_cast<size_t>(K)], Cur[static_cast<size_t>(Kn)], Out);
 							B.Tri(Prev[static_cast<size_t>(K)], Cur[static_cast<size_t>(Kn)], Prev[static_cast<size_t>(Kn)], Out);
 						}
-					// (the ends: a taper's small burnt tip; a break's face hollowed behind its ragged rim; a sawn end flat)
+					// (the ends: a burnt one's face a little hollowed behind its ragged rim; a sawn end flat)
 					if (I == 0 || I == NS)
 					{
-						const bool bBurnt = I == 0 ? bEndA : bEndB, bTaper = I == 0 ? bTaperA : bTaperB;
+						const bool bBurnt = I == 0 ? bEndA : bEndB;
 						const V3 Out = Al * (I == 0 ? -1.0 : 1.0);
 						const double D = Ring(I);
-						const uint32_t Tip = B.Vert(Mid(D) + Out * (bTaper ? 0.02 : bBurnt ? -0.09 : 0.0), Out, bBurnt ? Rgb(20, 18, 17) : Rgb(52, 44, 38));
+						const uint32_t Tip = B.Vert(Mid(D) + Out * (bBurnt ? -0.03 - 0.04 * Unit(Hash(Seed, static_cast<uint64_t>(0xE7 + I))) : 0.0), Out, bBurnt ? Rgb(20, 18, 17) : Rgb(52, 44, 38));
 						for (int K = 0; K < CoreSides; ++K) B.Tri(Tip, Cur[static_cast<size_t>(K)], Cur[static_cast<size_t>((K + 1) % CoreSides)], Out);
 					}
 					Prev = Cur;
 					if (I == NS) break;
 				}
 				if (!bFine) return;
-				// (the blocks: one between each pair of rings and each pair of sides, each ring's turned its own way round and
-				// its blocks of uneven widths, each drawn in from its neighbours by the crack's half width and set at its own
-				// height over the core)
-				auto Bound = [&](int I, int K) { return 2.0 * Pi * (K + Unit(Hash(Seed ^ 0x5A, static_cast<uint64_t>(I))) + 0.5 * (Unit(Hash(Seed ^ 0x5B, static_cast<uint64_t>(I * 32 + K % Sides))) - 0.5)) / Sides; };
-				for (int I = 0; I < NS; ++I)
-					for (int K = 0; K < Sides; ++K)
+				// (the blocks: the char checked along the grain into strips of uneven widths, one to two, their edges wandering
+				// along the log; each strip broken across into blocks of its own lengths, one to two again, so no crack across
+				// runs on from a strip into the next and no two rows lie alike; the cracks across the grain the wider, the
+				// deeper. Each block drawn in from its neighbours by its cracks' half widths and set at its own height over
+				// the core.)
+				const double Lm = bThick ? 0.105 : 0.14;
+				std::vector<double> Edge(static_cast<size_t>(Sides) + 1, 0.0);
+				for (int K = 0; K < Sides; ++K) Edge[static_cast<size_t>(K) + 1] = Edge[static_cast<size_t>(K)] + (bThick ? 0.7 : 0.75) + (bThick ? 0.6 : 0.5) * Unit(Hash(Seed ^ 0x5B, static_cast<uint64_t>(K)));
+				const double Turn = Unit(Hash(Seed ^ 0x5A, 0));
+				auto Bound = [&](int K, double D) {
+					const int Km = K % Sides;
+					return 2.0 * Pi * (K / Sides + Edge[static_cast<size_t>(Km)] / Edge[static_cast<size_t>(Sides)] + Turn + 0.12 * Noise(D / 0.45, 1.7 * Km, Seed ^ 0x5C) / Sides);
+				};
+				// (a burnt end's blocks stop at its ragged rim)
+				auto From = [&](double Th) { return bEndA ? Along(0, Th) : 0.0; };
+				auto Upto = [&](double Th) { return bEndB ? Along(NS, Th) : L; };
+				for (int K = 0; K < Sides; ++K)
+				{
+					double Da = -Lm * Unit(Hash(Seed ^ 0x5D, static_cast<uint64_t>(K)));
+					for (int J = 0; Da < L; ++J)
 					{
-						const uint64_t Kb = Hash(Seed ^ 0x58, static_cast<uint64_t>(I * 32 + K));
+						const uint64_t Kb = Hash(Seed ^ 0x58, static_cast<uint64_t>(K * 256 + J));
+						const double D0 = Da, D1 = Da + Lm * (0.65 + 0.7 * Unit(Hash(Kb, 5)));
+						Da = D1;
 						if (Unit(Kb) < 0.07) continue; // (a block flaked off: the core shows)
-						const double T0 = Bound(I, K), T1 = Bound(I, K + 1), Gap = 0.002 + 0.0025 * Unit(Hash(Kb, 4)), Gt = Gap / R;
-						const double Lift = 1.0 + 0.04 * Unit(Hash(Kb, 1)), Tone = 0.62 + 0.42 * Unit(Hash(Kb, 2)), Ashed = Unit(Hash(Kb, 3));
-						auto Corner = [&](int Ir, double Th, double Gd) {
-							const double D = Along(Ir, Th) + Gd;
-							const V3 Rd = E1 * std::cos(Th) + E2 * std::sin(Th);
-							const V3 Pt = Mid(D) + Rd * (R * Thin(D) * Lift);
-							return B.Vert(Pt, Rd, Skin(D, Th, Pt.Z, Tone, Ashed));
-						};
-						const uint32_t I0 = Corner(I, T0 + Gt, Gap), I1 = Corner(I, T1 - Gt, Gap), I2 = Corner(I + 1, T1 - Gt, -Gap), I3 = Corner(I + 1, T0 + Gt, -Gap);
-						const double Tm = 0.5 * (T0 + T1);
+						const double Gx = 0.003 + 0.003 * Unit(Hash(Kb, 4)), Gt = (0.0015 + 0.0015 * Unit(Hash(Kb, 6))) / R;
+						const double Lift = 1.0 + 0.04 * Unit(Hash(Kb, 1)), Tone = 0.68 + 0.34 * Unit(Hash(Kb, 2)), Ashed = Unit(Hash(Kb, 3));
+						// (its four corners: each end's two on the strip's edges there, kept within the log's ends)
+						double Dc[4], Tc[4];
+						for (int Q = 0; Q < 4; ++Q)
+						{
+							const bool bFar = Q >= 2, bLeft = Q == 0 || Q == 3;
+							const double Dq = bFar ? D1 - Gx : D0 + Gx;
+							const double Th = bLeft ? Bound(K, Dq) + Gt : Bound(K + 1, Dq) - Gt;
+							Tc[Q] = Th;
+							Dc[Q] = std::clamp(Dq, From(Th), std::max(From(Th), Upto(Th)));
+						}
+						if (std::min(Dc[3] - Dc[0], Dc[2] - Dc[1]) < 0.015 || std::min(Tc[1] - Tc[0], Tc[2] - Tc[3]) < 0.02) continue;
+						uint32_t Ix[4];
+						for (int Q = 0; Q < 4; ++Q)
+						{
+							const V3 Rd = E1 * std::cos(Tc[Q]) + E2 * std::sin(Tc[Q]);
+							const V3 Pt = Mid(Dc[Q]) + Rd * (R * Thin(Dc[Q]) * Lift);
+							Ix[Q] = B.Vert(Pt, Rd, Skin(Dc[Q], Tc[Q], Pt.Z, Tone, Ashed));
+						}
+						const double Tm = 0.25 * (Tc[0] + Tc[1] + Tc[2] + Tc[3]);
 						const V3 Out = E1 * std::cos(Tm) + E2 * std::sin(Tm);
-						B.Tri(I0, I1, I2, Out);
-						B.Tri(I0, I2, I3, Out);
+						B.Tri(Ix[0], Ix[1], Ix[2], Out);
+						B.Tri(Ix[0], Ix[2], Ix[3], Out);
 					}
+				}
 				// (a sawn end's face out to the blocks' edge, so its rim is no pipe's)
 				for (int End = 0; End < 2; ++End)
 				{
@@ -9314,9 +9346,14 @@ namespace LandHouse
 				const double Uq = (std::floor(Ul / 0.42 + 0.29 * W) + 0.5) * 0.42;
 				const double Bn = 0.65 * Noise01(U / 2.2 + 9.0 * W, 0.4, P.S.Key ^ 0xB0D1) + 0.35 * Noise01(Uq / 2.2 + 9.0 * W, 0.4, P.S.Key ^ 0xB0D1) + 0.07 * Noise(U / 0.3 + 2.0 * W, 1.7, P.S.Key ^ 0xB0DE);
 				const double Breach = Smooth(0.58, 0.8, Bn) * (1.0 - Cn);
-				const double Lump = std::floor(Ul / 0.32 + 0.37 * W);
+				const double Lump = std::floor(Ul / 0.32 + 0.37 * W), Um = (Lump + 0.5 - 0.37 * W) * 0.32;
+				const uint64_t Kl = Hash(P.S.Key ^ 0xB0D2, static_cast<uint64_t>(Lump + 4096.0 + 512.0 * W));
+				// (no wall's top left straight: a bite out of it here and there, a lump or three wide, and a lump alone fallen
+				// from it; less of both at the corners)
+				const double Bite = 0.3 * Smooth(0.6, 0.8, 0.5 * Noise01(U / 0.85 + 5.0 * W, 2.3, P.S.Key ^ 0xB0E3) + 0.5 * Noise01(Um / 0.85 + 5.0 * W, 2.3, P.S.Key ^ 0xB0E3));
+				const double Gone = Unit(Hash(Kl, 1)) < 0.13 ? 0.07 + 0.13 * Unit(Hash(Kl, 2)) : 0.0;
 				const double V = 2.02 + 0.16 * Noise(U / 1.1 + 4.0 * W, 0.9, P.S.Key ^ 0xB0DA) - 1.5 * Breach
-					+ 0.13 * (Unit(Hash(P.S.Key ^ 0xB0D2, static_cast<uint64_t>(Lump + 4096.0 + 512.0 * W))) - 0.5) + 0.12 * Cn;
+					+ 0.13 * (Unit(Kl) - 0.5) - (Bite + Gone) * (1.0 - 0.7 * Cn) + 0.12 * Cn;
 				return std::clamp(V, 0.3, 2.3);
 			}
 			/** A column of the clay wall's top as it broke, lump by lump: the lump of the wall round Uc (some 0.3 m of it,
@@ -9359,24 +9396,28 @@ namespace LandHouse
 			{
 				const uint64_t Kw = P.S.Key ^ static_cast<uint64_t>(W * 131);
 				if (Face == 2) return Mixed(Scaled(Rgb(128, 112, 92), 0.82 + 0.22 * Noise01(U / 0.21, Z / 0.17, Kw ^ 0xB0D8)), P.Soot, 0.12 + 0.45 * Smooth(0.4, 0.8, Noise01(U / 0.4, Z / 0.3, Kw ^ 0xB0E1)));
-				const double Run = Noise01(U / 0.13 + 3.0 * W, Z / 2.6, P.S.Key ^ 0xB0D5);
 				if (Face == 1)
 				{
+					const double Run = Noise01(U / 0.4 + 3.0 * W, Z / 2.6, P.S.Key ^ 0xB0D5);
 					Col C = Scaled(Mixed(P.Wash, Rgb(140, 136, 128), 0.45), 0.8 + 0.12 * Noise01(U / 0.9, Z / 0.8, Kw ^ 0xB0D3));
 					C = Mixed(C, P.Soot, Clamp01(0.42 + 0.5 * Smooth(0.3, 1.9, Z) + 0.25 * (Run - 0.5)));
 					C = Mixed(C, Mixed(Scaled(P.Clay, 0.75), P.Soot, 0.35), 0.75 * Smooth(0.6, 0.66, Noise01(U / 0.55, Z / 0.45, Kw ^ 0xB0E2)));
 					return Mixed(C, P.Ash, 0.35 * Smooth(0.5, 0.0, Z));
 				}
 				Col C = Scaled(Mixed(P.Wash, Rgb(150, 146, 138), 0.3), 0.93 + 0.07 * Noise01(U / 1.1, Z / 0.9, Kw ^ 0xB0D4));
-				// (the soot from the eaves down: each run its own reach)
-				const double Reach = 0.3 + 1.0 * Noise01(U / 0.8 + 5.0 * W, 0.5, P.S.Key ^ 0xB0DF) * Smooth(0.3, 0.75, Run);
-				double Sk = 0.06 + 0.8 * Smooth(2.2 - Reach, 2.15, Z) * (0.5 + 0.5 * Run);
+				// (the soot from the eaves down: a band under the eaves' line and, here and there along it, a streak run down
+				// from it, each its own width and reach and none wider apart than the wall's columns can draw, all faded out
+				// by the wall's middle; under them the wash plain)
+				const double Wide = 0.7 * Noise01(U / 0.75 + 3.0 * W, Z / 3.0, P.S.Key ^ 0xB0D5) + 0.3 * Noise01(U / 0.33 + 7.0 * W, Z / 3.0, P.S.Key ^ 0xB0E4);
+				const double Streak = Smooth(0.52, 0.68, Wide);
+				const double Reach = 0.4 + 0.75 * Streak * (0.45 + 0.55 * Noise01(U / 1.3 + 5.0 * W, 0.5, P.S.Key ^ 0xB0DF));
+				double Sk = 0.05 + (0.5 + 0.35 * Streak) * Smooth(2.2 - Reach, 2.15, Z);
 				// (the plumes: up from each opening's head, widening as they rise)
 				for (const Opening& O : Ops)
 				{
 					if (O.W != W) continue;
 					const double Rise = Z - O.Z1 + 0.3, Wd = O.Hw + 0.15 + 0.5 * std::max(0.0, Rise);
-					Sk += 1.0 * Smooth(-0.05, 0.25, Rise) * Smooth(Wd, 0.5 * Wd, std::fabs(U - O.U)) * (0.75 + 0.25 * Noise01(U / 0.12, Z / 0.5, P.S.Key ^ 0xB0DB));
+					Sk += 1.0 * Smooth(-0.05, 0.25, Rise) * Smooth(Wd, 0.5 * Wd, std::fabs(U - O.U)) * (0.75 + 0.25 * Noise01(U / 0.3, Z / 0.5, P.S.Key ^ 0xB0DB));
 				}
 				C = Mixed(C, P.Soot, Clamp01(Sk));
 				C = Mixed(C, Mixed(P.Clay, P.Earth, 0.5), 0.5 * Smooth(0.32 + 0.1 * Noise(U / 0.35, 0.5, Kw ^ 0xB0D6), 0.02, Z));
@@ -9408,7 +9449,8 @@ namespace LandHouse
 					}
 					const int NR = std::max(1, static_cast<int>(std::ceil((Most + 0.25) / Rs)));
 					auto Zrow = [&](int R) { return -0.25 + Rs * R; };
-					auto Pt = [&](double U, double Z, double D) { return O + T * U + N * D + V3{ 0.0, 0.0, Z } + N * (0.012 * Noise(U / 0.5, Z / 0.5, P.S.Key ^ 0xB0D7)); };
+					// (the wall's face swells in and out a little, hand-laid; not at its ends, so the corners close)
+					auto Pt = [&](double U, double Z, double D) { return O + T * U + N * D + V3{ 0.0, 0.0, Z } + N * (0.012 * Smooth(Half, Half - 0.35, std::fabs(U)) * Noise(U / 0.5, Z / 0.5, P.S.Key ^ 0xB0D7)); };
 					auto Wc = [&](double U, double Z, int Face) { return ClayWall(P, Ops, W, U, Z, Face); };
 					// (a cell: the wall's (1), an opening's (2, its edges ragged as the clay broke), or over the column's top (0))
 					std::vector<char> Cell(static_cast<size_t>(NC * NR), 0);
@@ -9471,9 +9513,15 @@ namespace LandHouse
 					for (int End = -1; End <= 1; End += 2)
 					{
 						const double U = End * Half, Tt = End < 0 ? Ta.front() : Tb.back();
-						// (a long wall's end is the corner's outside, washed as the gable it meets; a gable's is hidden in the corner)
-						const Col Lo = Wc(U, -0.25, bAlongX ? 0 : 2), Hi = Wc(U, Tt, bAlongX ? 0 : 2);
-						B.Quad(Pt(U, -0.25, Th), Pt(U, -0.25, -Th), Pt(U, Tt, -Th), Pt(U, Tt, Th), Lo, Lo, Hi, Hi, T * static_cast<double>(End));
+						// (a long wall's end is the corner's outside, washed as the gable it meets, row by row as the wall is; a
+						// gable's is hidden in the corner)
+						const int Fe = bAlongX ? 0 : 2;
+						for (int R = 0; R < NR && Zrow(R) < Tt - 1e-6; ++R)
+						{
+							const double Z0 = Zrow(R), Z1 = std::min(Zrow(R + 1), Tt);
+							const Col Lo = Wc(U, Z0, Fe), Hi = Wc(U, Z1, Fe);
+							B.Quad(Pt(U, Z0, Th), Pt(U, Z0, -Th), Pt(U, Z1, -Th), Pt(U, Z1, Th), Lo, Lo, Hi, Hi, T * static_cast<double>(End));
+						}
 					}
 					// (its foot down into the ground, where the ground falls away under it)
 					const double Bot = -std::max(0.25, P.S.Below);
@@ -9527,7 +9575,7 @@ namespace LandHouse
 					for (const Opening& Op : Ops)
 						if (Op.W == W && std::fabs(U - Op.U) < Op.Hw + Rx + 0.07 && Z > Op.Z0 - Rz - 0.08 && Z < Op.Z1 + Rz + 0.07) bClear = false;
 					if (!bClear) continue;
-					auto Pt = [&](double Uq, double Zq, double Off) { return O + T * Uq + N * (Ln.Th + Off) + V3{ 0.0, 0.0, Zq } + N * (0.012 * Noise(Uq / 0.5, Zq / 0.5, P.S.Key ^ 0xB0D7)); };
+					auto Pt = [&](double Uq, double Zq, double Off) { return O + T * Uq + N * (Ln.Th + Off) + V3{ 0.0, 0.0, Zq } + N * (0.012 * Smooth(Ln.Half, Ln.Half - 0.35, std::fabs(Uq)) * Noise(Uq / 0.5, Zq / 0.5, P.S.Key ^ 0xB0D7)); };
 					const Col Cl = Scaled(Mixed(P.Clay, P.Soot, 0.18), Tone);
 					const uint32_t Cn = B.Vert(Pt(U, Z, 0.003), N, Cl);
 					std::vector<uint32_t> Rim, Brk;
