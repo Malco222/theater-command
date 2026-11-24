@@ -1339,6 +1339,13 @@ void AAirBattle::LayGround()
 	}
 }
 
+/** -TheaterAirLoudPaint: the ground's paint spread over every core at the frame's priority, as before 1.5.1. */
+static bool LoudPaint()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirLoudPaint"));
+	return bAsked;
+}
+
 void AAirBattle::PaintLand()
 {
 	// The ground's pictures (Battle/AirLand): the board's land and rivers, the month, true north on the board, the
@@ -1369,7 +1376,13 @@ void AAirBattle::PaintLand()
 	}
 	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
 	LandAsked = FPlatformTime::Seconds();
-	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans]()
+	// The paint's loops at the background's priority, so that they never stand before the frame's own jobs. Spread over
+	// every core at the frame's priority, they did: the render thread waited behind them for its scene's own jobs, a
+	// second at a time, until the paint was done (the Mac's hitch dump on 3e098f1f, 24 Nov 2026 23:44Z, hitch 7:
+	// UpdatePrimitive's wait for its tasks 1005 ms, 8.9 s into the flyover, ending as the ground was painted). The same
+	// ground, perhaps a little later. -TheaterAirLoudPaint: spread at the frame's priority, as before.
+	const EParallelForFlags Loops = LoudPaint() ? EParallelForFlags::None : EParallelForFlags::BackgroundPriority;
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans, Loops]()
 	{
 		const double Began = FPlatformTime::Seconds();
 		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
@@ -1383,10 +1396,10 @@ void AAirBattle::PaintLand()
 			// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
 			const int32 Bands = (F.H + 63) / 64;
 			const AirLand::Painter& Painter = *Made->Painter;
-			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); });
+			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
 			if (AirLand::Painter::Shades(F))
 			{
-				ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); });
+				ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
 			}
 			TArray<FColor> Pixels;
 			Pixels.SetNumUninitialized(F.W * F.H);
@@ -1599,9 +1612,10 @@ void AAirBattle::LayLand()
 	}
 	Ground.Append(Laid);
 	const AirLand::Tally& Count = Made.Painter->Laid();
-	UE_LOG(LogTheater, Log, TEXT("Air battle ground: %s (plan %s), %d villages, %d country roads, %d bridges, %d spires%s; painted aside in %.2f s, laid %.2f s after it was asked for."),
+	UE_LOG(LogTheater, Log, TEXT("Air battle ground: %s (plan %s), %d villages, %d country roads, %d bridges, %d spires%s; painted aside in %.2f s (%s), laid %.2f s after it was asked for."),
 		*AirParts::Wide(S.Board.PlaceName), *AirParts::Wide(Count.Plan), Count.Villages, Count.Links, Count.Bridges, Count.Spires, Count.bCoast ? TEXT(", the coast") : TEXT(""),
-		Made.Seconds, FPlatformTime::Seconds() - LandAsked);
+		Made.Seconds, LoudPaint() ? TEXT("its loops at the frame's priority: -TheaterAirLoudPaint") : TEXT("its loops at the background's priority"),
+		FPlatformTime::Seconds() - LandAsked);
 	// (the pictures are on the drawing thread now: the copies here are let go, all but the near picture's own texels
 	// and the painter, for the craters)
 	if (Made.Levels.Num() > 0 && Made.Levels[0].Each.Num() > 0 && LandPictures.Num() > 0)
@@ -5226,7 +5240,8 @@ void AAirBattle::WarmUp()
 	WarmSlowest = 0.0;
 	bWarmShapes = false;
 	// A sheet of each kind the raid first draws only later, its shaders made ready under the black: the land's paint
-	// (LayLand's sheets, once the pool has painted them: the stall as it first went down, the first raid of a run only),
+	// (LayLand's sheets, once the pool has painted them; the stall that came as they went down was the paint's own loops
+	// crowding the render thread's jobs, now at the background's priority: PaintLand),
 	// and an aircraft on its own mesh (PlaneMesh: those near the eye, first seen at the flyover's later shots). Each as
 	// its own kind is made, the same material, the same points' parts and the same shadow; set before the eye each frame
 	// while the black holds (WarmTick), and taken down with it (WarmDone).
