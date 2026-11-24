@@ -10,6 +10,7 @@
 // (naval-battles/wolfpack-r2/field-side-read.md §3; form.md §5).
 
 import type { FieldTicket, Side, UnitBase } from '../core/types';
+import type { ConvoyCountRecord } from '../../campaign/navy';
 
 /** The kinds on a convoy's night: a boat, an escort, a merchant. A separate table from the fleet action's (form §3). */
 export type ConvoyClass = 'ss' | 'dd' | 'mv';
@@ -62,7 +63,7 @@ export interface ConvoyPlace {
   kit: Record<string, ConvoyKit>;
   habits: Record<string, ConvoyHabits>;
   /** The card's figures (ConvoyMeeting): raid, guard, G, L and the month's tons, for the card and the after card. */
-  card: { raid: number; guard: number; G: number; L: number; tons: number };
+  card: { raid: number; guard: number; G: number; L: number; tons: number; count?: ConvoyCountRecord };
   /** Striking and capture (subSurrender): off until the design director and the historian rule its share. */
   surrender: boolean;
   /** The player's own nation where his side holds allies' pieces too: he commands only his own, the staff the rest (ruling 241 Q4). */

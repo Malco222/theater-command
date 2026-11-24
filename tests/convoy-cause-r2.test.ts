@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import { createGame, declareWar } from '../src/campaign/game';
-import { CAUSE, FLEETS, NAVY, aswKit, convoyField, fit, convoyMeeting, convoyWar, huntExpected, huntShareSunk, huntSubs, huntersIn, incidentRate, laneLoss, navalUpkeep, seaCover, seaLossMul, subScene, zoneOf } from '../src/campaign/navy';
+import { CAUSE, FLEETS, NAVY, aswKit, convoyCount, convoyField, fit, convoyMeeting, convoyWar, huntExpected, huntShareSunk, huntSubs, huntersIn, incidentRate, laneLoss, navalUpkeep, seaCover, seaLossMul, subScene, zoneOf } from '../src/campaign/navy';
 import { carrierRules } from '../src/campaign/air';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -165,12 +165,15 @@ describe('air cover (OEG T7)', () => {
 describe('boats lose where they fight (OEG T2 and T10)', () => {
   /** The boats a raider of 10 is expected to lose to a convoy's escort this month, as the meeting gives it. */
   const expectLoss = (g: Game, route = atlantic, nat = 'UK'): number => convoyMeeting(g, nat, route).raiders[0].expect;
+  /** The month's incidents on a route (the one-pass ruling's count): all of them the lone raider's. */
+  const incidents = (g: Game, route = atlantic): number => convoyCount(g, route)!.incidents;
 
   it('a close escort sinks 5 in 100 boats that attack, 9.5 with ahead-throwing weapons, 12 with escort-group training too', () => {
     const g = open(true);
     sea(g, 'GER', 'natl', { ss: 10 }, 'raid');
     const esc = sea(g, 'UK', 'wapp', { dd: 20 }, 'escort', 'atlantic');
-    expect(expectLoss(g)).toBeCloseTo(10 * CAUSE.find * 0.05 * fit(g, esc), 6);
+    expect(incidents(g)).toBeGreaterThan(0);
+    expect(expectLoss(g)).toBeCloseTo(incidents(g) * 0.05 * fit(g, esc), 9);
     const kit = twin(g);
     give(kit, 'UK', ['sonar', 'hedgehog']);
     // Ahead-throwing weapons alone: OEG T9's first half-year edge over depth charges (7.5% against 4.0%).
@@ -186,9 +189,9 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
     const esc = sea(g, 'UK', 'wapp', { dd: 10 }, 'escort', 'atlantic');
     sea(g, 'UK', 'natl', { dd: 10 }, 'hunt', undefined, [esc]);
     const f = fit(g, esc);
-    expect(expectLoss(g)).toBeCloseTo(10 * CAUSE.find * f * (0.17 + 0.05) / 2, 6);
+    expect(expectLoss(g)).toBeCloseTo(incidents(g) * f * (0.17 + 0.05) / 2, 9);
     give(g, 'UK', ['sonar', 'hedgehog', 'escortgroups']);
-    expect(expectLoss(g)).toBeCloseTo(10 * CAUSE.find * f * (0.55 + 0.12) / 2, 6);
+    expect(expectLoss(g)).toBeCloseTo(incidents(g) * f * (0.55 + 0.12) / 2, 9);
     expect(boats.ships.ss).toBe(10);
   });
 
@@ -213,8 +216,9 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
       const gesc = sea(g, 'GER', 'central', { dd: 20 }, 'escort', 'libya', [ger]);
       const a = convoyMeeting(g, 'UK', atlantic).raiders.find((r) => r.nat === 'GER')!;
       const b = convoyMeeting(g, 'ITA', libya).raiders.find((r) => r.nat === 'UK')!;
-      // (Readiness and fuel are causes too, and each navy's own: the test reads them out.)
-      expect(b.expect / fit(g, gesc), kit.join(',')).toBeCloseTo(a.expect / fit(g, uk), 9);
+      // (Readiness and fuel are causes too, and each navy's own, and each route has its own convoys and its boats their
+      // own passage: the test reads them out, and the escorts' answer to each incident is the same.)
+      expect(b.expect / fit(g, gesc) / incidents(g, libya), kit.join(',')).toBeCloseTo(a.expect / fit(g, uk) / incidents(g, atlantic), 9);
       expect(a.expect).toBeGreaterThan(0);
       // The hunt's edge from kit is the same per weight too (the weight itself still carries the navy's quality: step 1's).
       for (const s of [gesc, uk]) s.stance = 'hunt';
@@ -396,20 +400,22 @@ describe('found in review (23 Nov)', () => {
   });
 
   it('the incidents roll on their own key: the escorts\' losses and the hunt are the same with none found', () => {
-    const month = (find: number): Game => {
-      const keep = CAUSE.find;
-      CAUSE.find = find;
+    // (None found: no convoy attacked at any number of boats, the count's share 0.)
+    const month = (attacked: number): Game => {
+      const keep = CAUSE.count.attacked;
+      CAUSE.count.attacked = attacked;
       try {
         const g = open(true);
         give(g, 'UK', ['sonar', 'hedgehog', 'escortgroups']);
-        sea(g, 'GER', 'natl', { ss: 300 }, 'raid');
+        // (Enough boats that the escorts surely lose a ship: only a quarter or so of them are on station.)
+        sea(g, 'GER', 'natl', { ss: 900 }, 'raid');
         const e = sea(g, 'UK', 'wapp', { dd: 200 }, 'escort', 'atlantic');
         sea(g, 'UK', 'natl', { dd: 60 }, 'hunt', undefined, [e]);
         navalUpkeep(g, 'UK');
         return g;
-      } finally { CAUSE.find = keep; }
+      } finally { CAUSE.count.attacked = keep; }
     };
-    const a = month(CAUSE.find), b = month(0);
+    const a = month(CAUSE.count.attacked), b = month(0);
     expect(a.convoys.atlantic.byEscorts).toBeGreaterThan(0);
     expect(b.convoys.atlantic.byEscorts).toBe(0);
     expect(a.convoys.atlantic.escortsLost).toBeGreaterThan(0);
