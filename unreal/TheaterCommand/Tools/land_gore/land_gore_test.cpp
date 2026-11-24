@@ -121,7 +121,10 @@ namespace
 	 * The widest a whole joint of a gored man stands open (metres; the art director, 18:34Z: no cap seen till his limb
 	 * goes): his twin's seam copies (its near points after his own file's, before the caps) against the points they
 	 * copy, at the same rest place, skinned; only at cuts still whole (a copy and its point skinned alike once joined).
-	 * -1 where it cannot be read.
+	 * His own file can hold several points at one rest place, each side of his own seams, weighted a little apart (the
+	 * German's right knee: four, w2 0.119 and 0.106): a copy carries the weights of the one it copies (gore.py), so it is
+	 * read against the nearest of them as skinned; the others stand off it only as far as his own seam opens, in his own
+	 * file as much as in the twin. -1 where it cannot be read.
 	 */
 	double JointOpen(Crowd& C, int Man, const Soldier& Own)
 	{
@@ -146,7 +149,7 @@ namespace
 		if (C.PointsOf(Man, Near) < Kept) return -1.0;
 		int Caps = All;
 		for (const Soldier::Cut& K : Tw.Cuts) Caps = std::min({ Caps, K.Stump[Near][0], K.Limb[Near][0] });
-		std::map<std::tuple<float, float, float>, int> Orig;
+		std::multimap<std::tuple<float, float, float>, int> Orig;
 		const std::vector<float>& R = Tw.Meshes[Near].At;
 		for (int P = 0; P < N; ++P) Orig.emplace(std::make_tuple(R[static_cast<size_t>(P) * 3], R[static_cast<size_t>(P) * 3 + 1], R[static_cast<size_t>(P) * 3 + 2]), P);
 		std::vector<float> At, Fa;
@@ -178,11 +181,18 @@ namespace
 		for (int P = N; P < Caps; ++P)
 		{
 			const size_t O = static_cast<size_t>(P) * 3;
-			const auto Found = Orig.find(std::make_tuple(R[O], R[O + 1], R[O + 2]));
-			if (Found == Orig.end() || AtOff(P) || AtOff(Found->second)) continue;
-			if (Ix[static_cast<size_t>(P)] < 0 || Ix[static_cast<size_t>(Found->second)] < 0) continue;
-			const size_t A = static_cast<size_t>(Ix[static_cast<size_t>(P)]) * 3, Q = static_cast<size_t>(Ix[static_cast<size_t>(Found->second)]) * 3;
-			Most = std::max(Most, std::sqrt(static_cast<double>((At[A] - At[Q]) * (At[A] - At[Q]) + (At[A + 1] - At[Q + 1]) * (At[A + 1] - At[Q + 1]) + (At[A + 2] - At[Q + 2]) * (At[A + 2] - At[Q + 2]))));
+			if (AtOff(P) || Ix[static_cast<size_t>(P)] < 0) continue;
+			const size_t A = static_cast<size_t>(Ix[static_cast<size_t>(P)]) * 3;
+			double Least = -1.0;
+			const auto Span = Orig.equal_range(std::make_tuple(R[O], R[O + 1], R[O + 2]));
+			for (auto Found = Span.first; Found != Span.second; ++Found)
+			{
+				if (AtOff(Found->second) || Ix[static_cast<size_t>(Found->second)] < 0) continue;
+				const size_t Q = static_cast<size_t>(Ix[static_cast<size_t>(Found->second)]) * 3;
+				const double G = std::sqrt(static_cast<double>((At[A] - At[Q]) * (At[A] - At[Q]) + (At[A + 1] - At[Q + 1]) * (At[A + 1] - At[Q + 1]) + (At[A + 2] - At[Q + 2]) * (At[A + 2] - At[Q + 2])));
+				Least = Least < 0.0 ? G : std::min(Least, G);
+			}
+			if (Least >= 0.0) Most = std::max(Most, Least);
 		}
 		return Most;
 	}
