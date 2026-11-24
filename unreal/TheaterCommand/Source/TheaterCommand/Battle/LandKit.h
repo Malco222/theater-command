@@ -250,6 +250,10 @@ namespace LandKit
 		std::vector<float> Normals;     // x, y, z a point (unit)
 		std::vector<uint8_t> Colours;   // r, g, b, a a point: 8-bit sRGB (FColor wants them as B, G, R, A)
 		std::vector<float> Soot;        // 0 to 1 a point: how far toward BurntColour it goes once the wreck has burnt through
+		/** Each point's paint as the file names it (Model::PaintNames' number: canvas, glass, wood, rubber ...), for an old
+		 * wreck (LandHulk, release 2) to burn each stuff its own way. A point added after the file's (a captor's mark)
+		 * has none: Paints may be shorter than Count(). */
+		std::vector<uint8_t> Paints;
 		std::vector<uint32_t> Triangles;// three point numbers a triangle
 		/** A track body's links (Near): the run of points of each, in the order of Model::Links(Side). */
 		std::vector<uint32_t> LinkFirst, LinkCount;
@@ -317,6 +321,8 @@ namespace LandKit
 		/** The sooty black-brown a burnt-out wreck goes to (8-bit sRGB): lerp each point toward it by its Soot times the
 		 * vehicle's Vehicle::Soot (0 to 1 over 30 s of burning). */
 		uint8_t BurntColour[3] = { 38, 33, 29 };
+		/** The file's paint names, in its order (Mesh::Paints numbers them). */
+		std::vector<std::string> PaintNames;
 
 		// The controls (controls, running): parts by number, -1 where the model has none.
 		int Turret = -1, Gun = -1, Barrel = -1, Traverse = -1, Hull = -1, Breech = -1;

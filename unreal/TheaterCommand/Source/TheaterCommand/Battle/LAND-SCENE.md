@@ -935,25 +935,43 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   lays his round her), 2 m from another wreck. Her scorched patch, which reaches some 2.4 m past her outline, lies on
   open ground too, every point of it (the steppe's first lay had three patches over a trench's works and one over a
   garden).
-- **How each looks** (`Yard::Dress`; the art director's to judge, round 1 below). Her own model, knocked out and burnt
+- **How each looks** (`Yard::Dress`; the art director's to judge, round 2 below). Her own model, knocked out and burnt
   through: her turret turned (mostly within 50 degrees of ahead) and her gun drooped to its stop, or, one in five, her
   turret blown off and lying 1 to 4 m off her side, tail or bow (clear of her hull's corners, its gun turned away from
   her hull, and off the side her track ran off), on its roof, its side or tilted back on its rear edge with its gun in
   the air, its own hatches and doors shut (open, one on its side stood on a door a metre over the grass), and her open
-  ring black; her hatches and doors open; three in ten tanks (one in five half-tracks) with a track run off and lying
-  stretched out flat beside and behind her, link by link from her own track (never under her thrown turret);
-  a lorry's tyres burnt off to the rims, a tank's road wheels' rubber charred; her aerial and roof gun gone. Soot black
-  where the fire was, the paint burnt off to bare steel where it was hottest and scorched and blistered elsewhere; the
-  bare steel rusting within weeks, a bright orange first, browning over a year and more, in patches and runs down her
-  sides; the soot washing off what faces the sky; the scorched paint flaking over two years. Low on her the field's
-  earth splashed up and, after half a year, a green stain where the weeds stand. Settled 4 to 17 cm into the ground
-  (a lorry less). No fire and no smoke. Under her a scorched patch (`Yard::Patch`) that browns within a few months and
-  then greens lusher than the field round it; the grass and corn stand to her sides but not under her (her hull's
-  corners too, which her rings leave), her thrown turret or her track, nor on the patch while it is fresh (`Covers`, in
-  the carpet's `Stands`). On a field with snow lying (`LandField::Ground::SnowLying`, white from 0.45 as `LandSnow`
-  whitens a roof) the snow fallen since she burnt lies over her patch as over the field round it (only a fresh one,
-  under a month, shows black through, its fire having melted the snow round her), over the earth splashed on her low
-  parts and the weeds' stain, and on what faces up on her, the steel showing through where it lies thin.
+  ring black; her hatches and doors open; three in ten tanks (one in five half-tracks) with a track run off beside and
+  behind her, link by link from her own track (never under her thrown turret): flat on the ground (or on her patch,
+  2 cm over it), snaking a little (`LieTrack`: 10 to 15 cm either way past her tail, a wave of 3 to 5.5 m; beside her
+  only outward, its inner edge kept 3 cm off her footprint, where round 1's strip ran up to 20 cm under her outer road
+  wheels), and folded back on itself once, its last quarter or third turned over and lying doubled back on top,
+  upside down; a lorry's canvas tilt, leather, rope and cloth burnt away to the tilt's bare hoops (every nation's: by
+  the file's paint names, `LandKit::Mesh::Paints` and `Model::PaintNames`; round 1 burnt none, and the Soviet lorry
+  was the only lorry on the sheet), her bed's floor laid again as planks along her, charred, about a third burnt
+  through and gone and some burnt short (`LayPlanks`), her glass gone and her tyres burnt off to the rims (the
+  half-tracks' front tyres too); a tank's road wheels' rubber charred; her aerial and roof gun gone. Her coat is a
+  patchwork by the fire's heat and the months (round 2, the art director's notes of 24 November 14:34Z: round 1 read
+  as one even terracotta coat), each point's fate (`FateOf`): her heat from how near the fire's places (her engine,
+  the hatches it came out of, her turret's ring), how high on her and how much it faces up, broken into patches a
+  stride across; the soot in sheets of its own round the fire's places and on what faces up. A week on: soot black
+  over about half of what faces the sky, her paint round it scorched to a chalky grey-buff, burnt off to bare grey
+  steel where hottest, her own paint left low on her cooler sides, and orange only along the plates' edges where the
+  paint burnt off. A month on: the bare steel flash-rusted orange, nothing else, in runs down her sides. Six months to
+  a year and a half: the rust old, darker and duller (red at most 2.2 times blue), the soot washed off what faces the
+  sky (kept on her sides and under her), the scorched paint flaking (some 20 in 100 by half a year, 60 by a year and a
+  half), the rest staying. Her near level's coat is halved down to a quarter metre where the file's plates are bigger
+  (`Halve`, as LandKit halves a camouflaged one's), so the patches show on a lorry's, a half-track's or a Sherman's
+  big plates too (round 1's M3 showed one colour smeared from corner to corner). Low on her the field's earth splashed
+  up and, after half a year, a green stain where the weeds stand. Settled 4 to 17 cm into the ground (a lorry less). No
+  fire and no smoke. Under her a scorched patch (`Yard::Patch`), not a soft round shadow: a week on ragged, ash black
+  at her engine's end, burnt grass round it and a brown rim at its ragged edge, her fuel's dark stain run out to one
+  side; it browns within a few months and then greens lusher than the field round it (the halo as round 1's); the grass
+  and corn stand to her sides but not under her (her hull's corners too, which her rings leave), her thrown turret or
+  her track, nor on the patch while it is fresh (`Covers`, in the carpet's `Stands`). On a field with snow lying
+  (`LandField::Ground::SnowLying`, white from 0.45 as `LandSnow` whitens a roof) the snow fallen since she burnt lies
+  over her patch as over the field round it (only a fresh one, under a month, shows black through, its fire having
+  melted the snow round her), over the earth splashed on her low parts and the weeds' stain, and on what faces up on
+  her, the steel showing through where it lies thin.
 - **The scene** (`ALandBattle::LayOldWrecks`, after `LayOldRuts` as the battle opens; `ShowOldWrecks` each frame after
   `DrawArmour`). Each wreck's near and far levels are static meshes of their own (`LandParts::GroundMesh`) on the
   vehicles' `SteelInk`, casting shadows, the near one shown within 140 m of the eye (`LandHulk::NearTo`, the vehicles'
@@ -984,6 +1002,23 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   `look_<recording>` (four wrecks a week, a month, six months, a year and a year and a half on). Pictures:
   `/mnt/project-files/battle-fx/old-wrecks/` (`placement_r1.png`, `placement_r1_prokhorovka.png`, `look_r1.png`,
   `look_r1_prokhorovka.png`), with the look's rules in `look_rules_r1.txt`.
+  Since round 2 of the look (the art director's notes of 24 November 14:34Z): the look sheet draws each wreck at its
+  column's age (round 1 drew an earlier battle's wreck, 30 in 100 of them, months older than her column), and
+  **measures it as she does, in the picture's own sRGB**: each pixel tagged with what the dressed point nearest it shows
+  (`Dressing::Coats`: soot, scorched, bare, flash rust, old rust, her paint, charred rubber, wood or glass, a track's
+  links, snow; her patch's ash, burnt grass, rim, fuel, brown, lush), and for each wreck at each age, and all four
+  pooled against her numbers, the share of her lit faces (the sun's light on them 0.75 and over) each takes and its
+  median colour, and her patch's (a table in the log and `look_<recording>.csv`). It fails where a week's soot is off
+  a third to two thirds of her lit faces, orange more than a tenth of them a week on, rust less than a tenth a month on,
+  or old rust redder than 2.25 times its blue. Every nation's lorry and half-track (twenty laid of each, GBR, SOV, ITA,
+  JAP, GER, USA) dressed and counted against her own model: every point of canvas, leather, rope, cloth, torn or skin
+  burnt away, every point of glass gone, every tyre to its rim, the tilt's hoops still standing, the lorry's bed's
+  planks laid and some but not all burnt through. Each run-off track folded back on itself once, snaking (off its own
+  smooth line, the mean of 1.5 m either side, at least 4 cm, or turning from one way to the other), its links' inner
+  edges off her footprint by half her own track's width (her road wheels), and none of its points through the ground.
+  It paints `track_<recording>` too: each run-off track of the fresh field from above and from low on its side, a week
+  on. Pictures: `/tmp/claude-0/ad-round/wrecks/` (`look_r2.png`, `look_r2_prokhorovka.png`, `placement_r2.png`,
+  `placement_r2_prokhorovka.png`, `track_r2.png`, `track_r2_prokhorovka.png`).
 - **Not yet.** Wrecks on a live battle (none: no tracks at its open); the guns' and soft vehicles' own wrecks beyond the
   half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
 - **Owed.** The Mac compile (the names to check: `LayOldWrecks`, `ShowOldWrecks`, `OldWreckNear`, `OldWreckFar`,
@@ -1004,7 +1039,18 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   her); a thrown turret on its side, from the camera at a man's height (the camera kept out of it and its gun); and
   with `-TheaterLandPhones` on, the wires laid round the wrecks. And once the campaign's row is on (sgfei1 b0a47250,
   "Old wrecks" off by default), one campaign battle on a field fought over before, its log line saying how many were
-  drawn for how many burnt out at the battle's scale ("one for every 7.5").
+  drawn for how many burnt out at the battle's scale ("one for every 7.5"). Since round 2 of the look: the Mac compile
+  of `LandKit::Mesh::Paints` and `LandKit::Model::PaintNames` (filled in `Model::Load`; the scene's own calls,
+  `Yard::Dress(K, bNear, M)` and `Yard::Patch(K, M)`, are as they were, the new `Dressing` note left out); the near
+  levels' points (the coat halved to a quarter metre: the test's twenty went from some 71,000 to some 92,000 points a
+  wreck, and from 49 to 88 ms each to dress) against the 45 fps gate and the battle's open; and the shots, with
+  `-TheaterLandOldWrecks=20` at `-TheaterLandOldWreckMonths=0.25`, `=1`, `=6` and `=18` on Normandy: a group from 40 m
+  and from a man's height (the patchwork: soot, chalky grey-buff, bare grey steel, orange only on the edges a week
+  on; the flash rust a month on; the old brown rust and the flaking paint at six months and a year and a half); a
+  lorry close to (the Soviet or British lorry on Prokhorovka: bare hoops, charred planks with gaps, no glass, rims);
+  a run-off track close to from above and from a man's height (snaking, folded back once, flat on the ground and the
+  patch, clear of her road wheels); and the patch a week on (ragged, ash black at her engine's end, the brown rim, the
+  fuel's stain) against six months and a year and a half on (the green halo).
 
 ## Packaging
 
