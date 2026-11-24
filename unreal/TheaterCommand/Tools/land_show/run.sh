@@ -4,10 +4,13 @@
 # Usage: Tools/land_show/run.sh [recording.json ...]  (default: every recording in Content/Data/LandBattles)
 # LAND_MEN_PICTURES=1 also paints the picture sheets (the falls, and a moment of the battle) with the crowd's own
 # skinning: LAND_MEN_PICTURES_OUT for where (default: the output folder).
+# LAND_SHOW_SOLDIERS: another soldiers folder to read (default Content/Models/Soldiers), such as the soldiers thread's
+# files before they come into Content.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$ROOT/Source/TheaterCommand"
+SOLDIERS="${LAND_SHOW_SOLDIERS:-$ROOT/Content/Models/Soldiers}"
 OUT="${LAND_SHOW_OUT:-${TMPDIR:-/tmp}/land_show}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
@@ -29,18 +32,26 @@ $CXX $FLAGS -pthread "$HERE/land_bank_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$O
 $CXX $FLAGS -pthread "$HERE/land_vat_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_vat_test"
 # The crowd's poses' picture as LandVat hands it to M_LandCrowd (Battle/LandVatPack.h): layout, lookups, halfs, bounds.
 $CXX $FLAGS -pthread "$HERE/land_vat_pack_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_vat_pack_test"
+# Effects (R2): riders without their packs (AddRider's bNoPack, the files' pack_tris), every soldier file of the folder;
+# against Content's own as the files without pack_tris, which must draw as before. Built with the Mac's strict warnings.
+STRICT="-std=c++20 -O2 -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion -Werror -I$SRC -I$HERE"
+$CXX ${LAND_SHOW_FLAGS:-} $STRICT -pthread "$HERE/land_pack_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_pack_test"
+if command -v clang++ >/dev/null 2>&1; then
+  clang++ ${LAND_SHOW_FLAGS:-} $STRICT -Wunreachable-code-aggressive -pthread "$HERE/land_pack_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_pack_test_clang"
+fi
 STATUS=0
 for F in "$@"; do
-  "$OUT/land_show_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
-  "$OUT/land_bank_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
-  "$OUT/land_vat_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
-  "$OUT/land_vat_pack_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
+  "$OUT/land_show_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
+  "$OUT/land_bank_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$SOLDIERS/pose_bank.json" || STATUS=1
+  "$OUT/land_vat_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$SOLDIERS/pose_bank.json" || STATUS=1
+  "$OUT/land_vat_pack_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$SOLDIERS/pose_bank.json" || STATUS=1
 done
+"$OUT/land_pack_test" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers" || STATUS=1
 if [ "${LAND_MEN_PICTURES:-}" = "1" ]; then
   PICS="${LAND_MEN_PICTURES_OUT:-$OUT}"
   mkdir -p "$PICS"
   $CXX $FLAGS -pthread "$HERE/land_men_picture.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_men_picture"
-  "$OUT/land_men_picture" "$1" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$OUT" || STATUS=1
+  "$OUT/land_men_picture" "$1" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$OUT" || STATUS=1
   python3 "$HERE/land_men_sheet.py" "$OUT" "$PICS" || STATUS=1
 fi
 echo "built in $OUT"

@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -204,6 +205,12 @@ namespace LandMen
 		/** Paints past the army's fifteen that the file names (its new_paints), each with the file's own colour. */
 		std::map<int, uint32_t> OwnPaints;
 		int HelmetFirst[LodCount] = { 0, 0, 0 }, HelmetCount[LodCount] = { 0, 0, 0 };
+		/** Effects (R2): his pack and webbing at each level (pack_tris, the soldiers thread's pack_range.py, in
+		 * helmet_tris's shape: one run of triangles [first, count], ending where his helmet's begins), left out of a man
+		 * with no pack (AddRider's bNoPack) with nothing drawn in its place (the cloth under it is whole). 0 where the
+		 * file has none, or where its run is not whole numbers lying within the level's triangles, or reaches into his
+		 * helmet's run (then ignored: drawn with his pack, and a crewman with his helmet on keeps all of it). */
+		int PackFirst[LodCount] = { 0, 0, 0 }, PackCount[LodCount] = { 0, 0, 0 };
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
@@ -211,6 +218,10 @@ namespace LandMen
 		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
 		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
+		/** gore_from[clip] = where a gore fall's burst was against him: "front", "behind", "left", "right" or "under"
+		 * (lying on it). The twin's file-level map, each gore fall's own blast_from where the map does not name it; only
+		 * clips the file has. Empty but in a twin: the crowd weighs a gored man's falls by it (Crowd::SetGore). */
+		std::map<std::string, std::string> GoreFrom;
 		/** A gore twin's cuts (its gore.cuts, in order: bit k of a joined point's mask), each by its bone, and its
 		 * caps' points per level ([first, count], the stump's and the limb's). Empty but in a twin. A cut is off where
 		 * its bone has left the joint its parent holds (more than a centimetre). */
@@ -362,6 +373,7 @@ namespace LandMen
 		float Jitter = 1.f;             // his own play rate on still loops and turns of pose
 		std::string FallClip;           // the fall he took ("settle": a prone man going limp)
 		std::string FallStance, FallKind, FallFrom; // stand|run|kneel|prone|cover; the kind; front|back|side
+		std::string GoreFrom;           // a gored man's burst (or its gun) against him: front|behind|left|right|under (empty: not gored)
 		double FallStarted = -1.0;      // when his fall began, as played
 		double Rested = -1.0;           // when he came to rest and froze
 	};
@@ -385,6 +397,33 @@ namespace LandMen
 		float Lie = 0.f;
 	};
 
+	/**
+	 * Effects (R2): how the round that killed a gored man struck him, for his gore fall (Crowd::SetGore). Stance: his
+	 * fall's (stand, run, kneel, cover, prone). Side: where its burst was against his facing, in the gore falls' own
+	 * words (front, behind, left, right, under; a burst within 1 m of a man not lying, his gun's side). bAway: he is
+	 * thrown away from a point, the burst or (where it burst on him) the gun, at X, Y in his own axes as struck (x
+	 * forward, y right, metres). bBig: a field gun's, a howitzer's or a heavy gun's shell, which may throw him.
+	 */
+	struct GoreStrike
+	{
+		std::string Stance, Side;
+		bool bAway = false;
+		double X = 0.0, Y = 0.0;
+		bool bBig = false;
+	};
+	/**
+	 * Effects (R2): the gore falls a man of that twin so struck may be given (the crowd weighs these by kind and the
+	 * Fates rule, and no other), each as kind and clip, in his stance's gore falls' order. Those he may take: any that
+	 * is not a throw (kind thrown, or any die_blast_*), a throw only where bBig and (bAway) from his side. Of them the
+	 * ones from his side (gore_from), where any; where he is thrown away from a point, of those the falls whose every
+	 * limb moves half a metre or more away from it (along the line from it to the limb's joint as he was struck, read
+	 * from the fall's first frame and its last), and where none from his side does, the same of all he may take but
+	 * those from the side opposite his (front and behind, left and right; under opposite none), which would throw him
+	 * toward it (the art director, 23 Nov: the limb flies away from the blast); failing any, the one whose limbs move
+	 * farthest so. Where his stance's gore falls hold none from his side he may take, all he may take.
+	 */
+	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Twin, const GoreStrike& Strike);
+
 	class Crowd
 	{
 	public:
@@ -406,10 +445,19 @@ namespace LandMen
 		 * Shell and tank hits throw men and take limbs off (release 2, behind -TheaterLandGore; Brian, 22 November: "make
 		 * more graphic animations if a guy gets shot or blown up", "with limbs coming off"). On: a man killed by a shell,
 		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
-		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (a field gun's 0.55 at
-		 * the burst, a tank's 0.5, a mortar's 0.45, a grenade's 0.3) and fall away to none at its reach (12, 10, 8 and 4
-		 * m); a man lying or in cover half that. The same battle gores the same men every time (his own dice). Who dies
-		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
+		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (within 2 m a field
+		 * gun's 0.55, a tank's or a mortar's 0.35, a grenade's 0.25) and fall away to none at its reach (8, 6, 6 and 2 m);
+		 * a man lying or in cover half that; none whose stance's gore falls hold none he may take (a man lying: only a
+		 * gun's shell bursting on him). His fall is one whose gore_from is where the burst was against him (front or
+		 * behind within 45 degrees of his nose or his back, left or right between; one within 1 m by the gun's side as
+		 * it fired, or under for a man lying or where the gun is not known), of those the ones whose limbs move half a
+		 * metre or more away from it (or the gun) along the line from it, so he and his limb are thrown away from it;
+		 * the big throw (die_blast_*) only from a field gun's, a howitzer's or a heavy gun's shell (the round's w "gun",
+		 * its block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side
+		 * he may take, all he may take, the limbs away again; where none of those from it moves its limbs half a metre
+		 * away, all he may take but those from the side opposite, which would throw him toward it (GoreFalls). The
+		 * same battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he
+		 * falls changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);
 		/** Men who fell as their file's gore twin so far in this play. */
@@ -457,9 +505,34 @@ namespace LandMen
 		 * "none" plays (every tank clip: his gun is put away 2 m under his feet), his gun's bones are not drawn. FileArmy: his soldier file's
 		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Row: armies.json's row he is painted
 		 * by where not his army's own ("UK@desert", "ITA_desert": RiderFileOf's). Appended after the men there are (call
-		 * after Build); -1 where the file was not added.
+		 * after Build); -1 where the file was not added. bBareHead (Effects, R2): his file's own helmet left off and no
+		 * finish drawn over him, for a downed pilot in his army's infantry file (the art director, 02:26Z 24 November:
+		 * a flier wears no steel helmet); false, as before. bNoPack (Effects, R2): his file's pack and webbing left off
+		 * (Soldier::PackFirst, pack_tris) and nothing drawn in their place, for a downed pilot or a tank's crewman
+		 * bailing out in an infantry file (the art director: "no pack"); a file without pack_tris draws him as before.
+		 * False, as before. Left off, only the points nothing else of him uses go (as his helmet's do).
 		 */
-		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string());
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string(), bool bBareHead = false,
+			bool bNoPack = false);
+		/**
+		 * Effects (R2): how a man out of his machine is drawn as a rider (AddRider's FileArmy, Row, bBareHead, bNoPack).
+		 * bTankers: in his army's tankers' file where it is here (soldier_USA_tanker, soldier_GER_panzer: his own head and
+		 * kit, as before); else in an infantry file, his pack and webbing left off (pack_tris). File empty: no file here
+		 * draws him.
+		 */
+		struct Dress
+		{
+			std::string File, Row;
+			bool bTankers = false, bBareHead = false, bNoPack = false;
+		};
+		/** A downed pilot (-TheaterLandChutes; the art director, 02:26Z 24 November: "On the ground: no steel helmet, no
+		 * rifle, no pack. Use the tanker files where they exist (USA, GER) ... Other armies get infantry with the helmet
+		 * hidden"): the tankers' file, else his army's infantry file as RiderFileOf dresses him, bareheaded, no pack. */
+		Dress PilotDress(const std::string& Nation) const;
+		/** A tank's crewman bailing out (-TheaterLandBailOut; the art director, 23 November: "other armies own men, no
+		 * rifle/pack, pistol at most"): the tankers' file, else his army's own infantry file (no stand-in, no other dress;
+		 * none here: File empty), his own helmet on, no pack. His rifle is the ride's to hide (Ride::bUnarmed). */
+		Dress CrewDress(const std::string& Nation) const;
 		/**
 		 * The soldier file a rider of that army wears and the colours row he is painted by (OutRow), as a rifleman of
 		 * the army is dressed (MakeMan): the army's own file, else armies.json's stand-in, else the Pole's; in its desert

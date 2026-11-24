@@ -2233,17 +2233,22 @@ namespace LandKit
 		High = R["high"].Num();
 
 		// The paints: the file's own colours, the coat of the month in place of upper, upper2 and shade.
-		const Json::Value ColourList = R["colours"], PaintNames = R["paint_names"];
+		const Json::Value ColourList = R["colours"], PaintList = R["paint_names"];
+		PaintNames.clear();
+		for (size_t I = 0; I < PaintList.Count(); ++I)
+		{
+			PaintNames.push_back(PaintList.At(I).Str());
+		}
 		std::vector<Lin> Paint(std::max<size_t>(ColourList.Count(), 23), Lin(0.2, 0.2, 0.2));
 		for (size_t I = 0; I < ColourList.Count(); ++I)
 		{
 			Paint[I] = FromHex(ColourList.At(I).Str("808080"));
 		}
-		auto PaintNumber = [&PaintNames](const char* PaintName, int Otherwise)
+		auto PaintNumber = [&PaintList](const char* PaintName, int Otherwise)
 		{
-			for (size_t I = 0; I < PaintNames.Count(); ++I)
+			for (size_t I = 0; I < PaintList.Count(); ++I)
 			{
-				if (PaintNames.At(I).Is(PaintName))
+				if (PaintList.At(I).Is(PaintName))
 				{
 					return static_cast<int>(I);
 				}
@@ -2958,6 +2963,7 @@ namespace LandKit
 				Out.Normals.resize(List.size() * 3);
 				Out.Colours.resize(List.size() * 4);
 				Out.Soot.resize(List.size());
+				Out.Paints.resize(List.size());
 				for (size_t J = 0; J < List.size(); ++J)
 				{
 					const size_t K = List[J];
@@ -2970,6 +2976,7 @@ namespace LandKit
 					Out.Normals[J * 3 + 2] = static_cast<float>(F.Z);
 					std::memcpy(&Out.Colours[J * 4], &Colour[K * 4], 4);
 					Out.Soot[J] = Burn[K];
+					Out.Paints[J] = static_cast<uint8_t>(std::clamp(Raw.Paints[K], 0, 255));
 				}
 			}
 			std::vector<int32_t> BodyOf(N, -1), Local(N, -1);

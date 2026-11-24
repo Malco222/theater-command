@@ -13,6 +13,7 @@
 #include "Battle/LandField.h"
 #include "Battle/LandGeneral.h"
 #include "Battle/LandGeneralEye.h"
+#include "Battle/LandHulk.h"
 #include "Battle/LandKit.h"
 #include "Battle/LandMen.h"
 #include "Battle/LandNight.h"
@@ -57,6 +58,11 @@ struct FLandBattleState
 	LandCrater::Field Holes;
 	/** The tanks' and lorries' track marks so far, and the corn their tracks laid flat (LandCrater), kept the whole battle. */
 	LandCrater::Ruts Ruts;
+	/** Mud memory's old ways as LayOldRuts laid them (none where it laid none): the old wrecks keep off them. */
+	std::vector<std::vector<std::pair<double, double>>> OldRutWays;
+	/** Old wrecks (release 2, -TheaterLandOldWrecks; LandHulk): the burnt-out armour of the battles fought here before,
+	 * laid as the battle opens (none where none is asked: the yard empty, and nothing asks it anything). */
+	LandHulk::Yard OldWrecks;
 	/** The ground drawn, cut over the dug holes' bowls (a tile's near ground split into parts once dug in). */
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
@@ -79,16 +85,30 @@ struct FLandBattleState
 		std::set<int> Firing, Gunning;   // the kit's guns firing now: the planes' (GunIdOf) and the ground's (GunnerIdOf)
 		std::set<int> Falling, Hit, Struck; // planes by key: going down with a trail, hit, into the ground
 		/** Effects (R2): the downed pilots (-TheaterLandChutes): each one now, by his plane's key the shape his mesh was
-		 * last built to (his canopy's open share in the air; 2 and its slump once down), and once down his man in the
-		 * crowd and the clips he is blended between. */
+		 * last built to (his canopy's open share in the air; 2 and its slump once down; and how far over he had gone
+		 * there, his chute's mesh drawing him, else less than nothing), and once down his man in the crowd and the clips
+		 * he is blended between (each one's time and how fast it was going: the art director's notes, 24 November). */
 		bool bChutes = false;
 		std::vector<LandAir::Chute> ChutesNow;
 		struct FChuteMan
 		{
-			double Shape = -1.0;
+			double Shape = -1.0, Lying = -9.0;
+			int Made = 0, Moved = 0;     // his mesh made, and moved in place (for the 45 fps reading; told once, bCounted)
+			bool bCounted = false;
+			// Down, his silk between makes (moved in place toward its next step's shape: LandAir::SilkStep), its points
+			// as last drawn and its slump then; and for the 45 fps reading, the most its points moved in a frame
+			// (metres), its makes' time (ms: the last, the longest, all of them) and how many
+			LandAir::SilkStep Step;
+			std::vector<LandAir::V3> Drawn;
+			double SlumpDrawn = -1.0, MovedMost = 0.0, MakeMs = 0.0, MakeMsMost = 0.0, MakeMsAll = 0.0;
+			int SilkMakes = 0;
 			int Man = -1;
+			/** Whether the crowd has drawn his man yet (the crowd draws a new man only when its frame's rebuilds allow:
+			 * he is kept in his chute's mesh till then, at most LandAir::RiderHoldFrames frames), and those frames. */
+			bool bRiderSeen = false;
+			int HeldFrames = 0;
 			std::string File, Clip, WasClip;
-			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0;
+			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0, WasRate = 1.0, NowRate = 1.0;
 		};
 		std::map<int, FChuteMan> ChuteMen;
 	};
