@@ -342,7 +342,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     }
     if (!bombers.length) out.push({ key: 'escort', label: 'Escort a bomber group', on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: '' });
   }
-  // The sea patrol against submarines (release 2, Units decide, once its figures are laid; seapatrol.ts): a land bomber
+  // The sea patrol against submarines (release 2, Units decide, once it is live; seapatrol.ts): a land bomber
   // group watches one sea of its side's convoys and sea lanes all month, and flies nothing else.
   if (kind === 'bmr' && !deck) for (const z of patrolSeas(g, f)) {
     const w = watchWith(g, f, z), sea = g.seas[z];

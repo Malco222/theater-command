@@ -247,8 +247,9 @@ export function seaAt(x: number, y: number, g?: Game): number {
 
 /**
  * The squares of the chart in play, sea by sea (their centres, in map units), and each square's area in square
- * nautical miles: the map's own measure of a sea's waters (release 2, the sea patrol's reach). Read only by the sea
- * patrol, which nothing reads while its figures are unread.
+ * nautical miles: the map's own measure of a sea's waters (release 2, the sea patrol's reach, ruled for the dormant
+ * interim at 17:49Z). Read only by the sea patrol, which nothing reads while it is dormant (its switch off, or its
+ * figures unread).
  */
 const squaresOf = new Map<string, { at: Map<number, { x: number; y: number }[]>; nm2: number }>();
 export function seaSquares(g: Game): { at: Map<number, { x: number; y: number }[]>; nm2: number } {
@@ -1843,7 +1844,7 @@ export function navalUpkeep(g: Game, nat: string): void {
   // read first, as the fleets stand before the hunt, and booked into the hunt's and the convoy's own rolls.)
   const nights = convoyNights(g, nat);
   const sunk = seaWar(g) && n.atWar.length ? huntSubs(g, nat, nights) : undefined;
-  // (Release 2, Units decide, once laid: the aircraft on patrol hunt too, after the ships, inside the same cap.)
+  // (Release 2, Units decide, once live: the aircraft on patrol hunt too, after the ships, inside the same cap.)
   if (sunk && patrolOn(g)) patrolSubs(g, nat, sunk);
   if (sunk) torpedoes(g, nat);
   convoyWar(g, nat, sunk, nights);
@@ -2100,8 +2101,8 @@ export const CAUSE = causeData as unknown as {
   firing: { t2: number | null; rT2: number | null; screen?: { stations: number | null; columnsAStation: number | null; shipsAColumn: number | null; maxColumns: number | null }; eye?: EyeRow };
   /** What a boat that fires puts into one convoy (the load form): hours to reload its ready tubes, and the share of boats that regain contact after an attack. A null in reload: the whole load into one convoy, as first built; a null in regain: one approach. */
   load?: { reload: number | null; regain: number | null };
-  /** The sea patrol against submarines (seapatrol.ts): the aircraft that watch a sea's waters reached, attacks on a boat a month in watched waters and the share of them that sink it, by kit, and aircraft lost a month; 'intensity' the air fighting's own row for a patrol met by enemy fighters (the air thread's Q6). A null in a0, intensity, attacks or kill: none of it is read. */
-  patrol: { reach: 'map' | 'air'; a0: number | null; intensity: number | null; attacks: { kit: number | null; none: number | null }; kill: { kit: number | null; none: number | null }; lost: number | null };
+  /** The sea patrol against submarines (seapatrol.ts): 'live' its switch; the aircraft that watch a sea's waters reached, attacks on a boat a month in watched waters and the share of them that sink it, by kit, and aircraft lost a month; 'intensity' the air fighting's own row for a patrol met by enemy fighters (the air thread's Q6), which gates only the fighters (null: none meets a patrol). With live false, or a null in a0, attacks or kill, none of it is read (the design director's ruling of 24 November 2026 17:49Z, 5 (a)). */
+  patrol: { live: boolean; reach: 'map' | 'air'; a0: number | null; intensity: number | null; attacks: { kit: number | null; none: number | null }; kill: { kit: number | null; none: number | null }; lost: number | null };
 };
 
 /** The eye term's record points (convoycause.json firing.eye): for 1941's sample and T2, the share of boats trying that torpedoed a ship, the torpedoes a boat that fired put in (n), and the escorts on stations and the radar-fitted ones for each boat trying. A null: unread. */
@@ -2158,7 +2159,7 @@ export function seaCover(g: Game, nat: string, z: number, lane?: string): SeaCov
     // (By the aircraft she has aboard: an empty deck covers nothing.)
     for (const f of g.fleets) if (f.stance === 'escort' && f.lane === lane && f.zone === z && f.ships.cv > 0 && allied(g, f.nat, nat) && airKit(aswKit(g, f.nat))) take('carrier', wx * Math.min(1, wingShare(g, f)));
   }
-  // (Release 2, the sea patrol, once laid: the aircraft its side keeps on patrol there with kit, over the share of the
+  // (Release 2, the sea patrol, once live: the aircraft its side keeps on patrol there with kit, over the share of the
   // sea they watch, in place of the coasts held. The sky is already in the aircraft on patrol.)
   if (patrolOn(g)) {
     const w = watchFor(g, z, (x) => allied(g, x, nat));
@@ -2208,6 +2209,9 @@ export function passageSeas(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z:
   return 0;
 }
 
+/** The days in a month the escorts' cycle and a raider's move of beat are read against (D: the game's month as thirty days). */
+const MONTH_DAYS = 30;
+
 /** A class's on-station days, or null while any of them is unread. */
 function stationDays(c: Exclude<ShipClass, 'dd'>): { patrol: number; passage: number; refit: number } | null {
   const r = CAUSE.station[c];
@@ -2228,7 +2232,7 @@ export function onStation(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z: n
 /**
  * The share of the month a fleet's boats are on station in a sea as the convoys meet them (release 2, the sea patrol;
  * the design director's 02:25Z ruling and Q5 (a)): on station, less the time aircraft without anti-submarine kit keep
- * them down there, 1 - the share of the sea those aircraft watch. onStation itself where none watch, or the patrol is not laid.
+ * them down there, 1 - the share of the sea those aircraft watch. onStation itself where none watch, or the patrol is not live.
  */
 export function onWatch(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z: number): number {
   return onStation(g, f, z) * keptUp(g, f.nat, z);
@@ -2261,14 +2265,13 @@ function boatRaid(g: Game, f: Fleet, cause: boolean, weighed = true): number {
 
 /**
  * The held port a computer-run raiding fleet's staff would base it at: the friendly port, held since before this
- * month and within its reach by sea, from which its boats spend most time on station on its beat, where that is more
- * than from its own port (nearest the beat by the sea graph; on a tie, the nearer on the chart). Null where none is
- * better, for a tied fleet, while its days are unread, and without Units decide. One rule for every navy: the player
- * moves his own fleets' bases himself.
+ * month and within its reach by sea, from which its boats spend most time on station on its beat (or on the beat
+ * given, as its staff weighs a new one: quieterBeat), where that is more than from its own port (nearest the beat by
+ * the sea graph; on a tie, the nearer on the chart). Null where none is better, for a tied fleet, while its days are
+ * unread, and without Units decide. One rule for every navy: the player moves his own fleets' bases himself.
  */
-export function nearerPort(g: Game, f: Fleet): Region | null {
+export function nearerPort(g: Game, f: Fleet, z = f.station): Region | null {
   if (!unitsDecide(g) || f.tied || f.duty !== 'raid' || f.ships.ss <= 0 || !stationDays('ss')) return null;
-  const z = f.station;
   const here = onStation(g, f, z);
   const at = g.seas[z];
   let best: Region | null = null, bv = here, bd = Infinity;
@@ -2282,11 +2285,15 @@ export function nearerPort(g: Game, f: Fleet): Region | null {
 }
 
 /**
- * A computer-run raider's better beat under the sea patrol (release 2, once laid; Q5 (a)): of the seas of the convoy
- * routes its beat lies on, within its reach by sea, the one where its boats spend most of the month up on station
- * (onWatch: the passage there and back by the sea graph, less the time aircraft without kit keep them down), where that
- * is more than on its own beat; -1 where none is, where no aircraft without kit watch its beat, for a tied fleet, and
- * while the patrol is not laid.
+ * A computer-run raider's better beat under the sea patrol (release 2, once live; Q5 (a)): of the seas of the convoy
+ * routes its beat lies on, within its reach by sea, the one where the month's gain in its boats' time up on station
+ * (onWatch: the passage there and back by the sea graph, less the time aircraft without kit keep them down, each beat
+ * from the port its staff would base it at, nearerPort) over their time up on their own beat is most, where that gain
+ * is more than the time the move itself loses (moveLoss); -1 where none is, where no aircraft without kit watch its
+ * beat, for a tied fleet, and while the patrol is not live. A boat keeps its beat unless the move's gain covers the
+ * time it costs (the design director's ruling of 24 November 2026 17:49Z, 1 (a)): without it the boats' staff and the
+ * patrol staff chased each other from sea to sea, and with Atlantic ports held the boats spent every other month in
+ * harbour.
  */
 export function quieterBeat(g: Game, f: Fleet): number {
   if (!patrolOn(g) || f.tied || f.duty !== 'raid' || f.ships.ss <= 0) return -1;
@@ -2299,13 +2306,39 @@ export function quieterBeat(g: Game, f: Fleet): number {
     if (zs.includes(here) && atWar(g, f.nat, r.to)) for (const z of zs) seas.add(z);
   }
   const reach = new Set(fleetReach(g, f));
-  let best = -1, bv = onWatch(g, f, here);
+  const stay = nearerPort(g, f, here);
+  const up = onWatch(g, stay ? portOf(f, stay) : f, here);
+  let best = -1, bv = 0;
   for (const z of [...seas].sort((a, b) => a - b)) {
     if (z === here || !reach.has(z)) continue;
-    const v = onWatch(g, f, z);
-    if (v > bv + 1e-9) { best = z; bv = v; }
+    const to = nearerPort(g, f, z);
+    const gain = onWatch(g, to ? portOf(f, to) : f, z) - up - moveLoss(g, f, z, !!to, !!stay);
+    if (gain > bv + 1e-9) { best = z; bv = gain; }
   }
   return best;
+}
+
+/** A fleet as based at another port: what onWatch and onStation read of it. */
+const portOf = (f: Fleet, r: Region): Pick<Fleet, 'nat' | 'base' | 'home'> => ({ nat: f.nat, base: r.id, home: r.seas[0] });
+
+/**
+ * The time up on station a raider's move of beat to a sea itself loses in the month, as a share of the month (release
+ * 2, the sea patrol; the design director's ruling of 24 November 2026 17:49Z, 1 (a)), read from the way its staff makes
+ * the move (navalAI): the beat is changed, the boats sail to it from where they are, and the staff then bases them at
+ * the held port it would raid the new beat from (nearerPort), which costs the month in harbour (rebase). So: where the
+ * move takes the fleet to another base and staying would not ('rebases' without 'would'), the month's whole time up on
+ * its beat (onWatch there), given up in harbour; where staying would move its base too, nothing, for the month in
+ * harbour comes either way; else, for a fleet at sea, its boats on station crossing from the sea they are in to the
+ * new beat: station.ss.passage days for each sea crossed by the sea graph, through the straits open to it
+ * (passageSeas), at their time up on station there, over the month's days. A fleet in harbour sails to the new beat as
+ * to the old, and loses nothing. Nothing while the boats' days are unread: no tuned figure stands in for them.
+ */
+function moveLoss(g: Game, f: Fleet, z: number, rebases: boolean, would: boolean): number {
+  const D = stationDays('ss');
+  if (!D) return 0;
+  if (rebases) return would ? 0 : onWatch(g, f, f.station);
+  if (!atSea(f)) return 0;
+  return (onWatch(g, f, f.zone) * D.passage * passageSeas(g, { nat: f.nat, base: -1, home: f.zone }, z)) / MONTH_DAYS;
 }
 
 /** A route's convoy count for a month: the boats on station on its seas, the convoys that sail (both ways), those the boats sight and attack, the incidents with the escort, and the boats that meet it for each convoy attacked (the pack), all on average. */
@@ -2420,7 +2453,7 @@ export function huntersIn(g: Game, nat: string, z: number): { weight: number; fl
     if (k) { p *= radarKit(k); kit += p * kitEdge(k, f.stance === 'hunt'); }
     if (p > 0) { w += p; fleets.push(f); }
   }
-  // (Release 2, the sea patrol, once laid: the aircraft hunt on patrol, by their own count and kit (patrolSubs), in place of this flat term.)
+  // (Release 2, the sea patrol, once live: the aircraft hunt on patrol, by their own count and kit (patrolSubs), in place of this flat term.)
   const air = cause && patrolOn(g) ? 0 : ownAirOver(g, z, nat) * H.air;
   w += air;
   return k ? { weight: w, fleets, air, kit } : { weight: w * techMul(g, nat, 'radar'), fleets };
@@ -2513,7 +2546,7 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
 }
 
 /**
- * The sea patrol's month for one nation (release 2, Units decide, once laid; seapatrol.ts, Q4 (a)): in every sea its
+ * The sea patrol's month for one nation (release 2, Units decide, once live; seapatrol.ts, Q4 (a)): in every sea its
  * bomber groups patrol, the enemy boats on station there are attacked as often as the patrols' aircraft watch them,
  * at the attacks a boat-month and the kills an attack of the kit they carry; this nation's aircraft sink their share of
  * those, by their share of the aircraft on patrol, so that allies do not sink the same boats twice. Booked inside the
@@ -2580,7 +2613,7 @@ export function huntExpected(g: Game, nat: string, z: number, quarry: Fleet[]): 
   for (const f of quarry) {
     const raiding = onRouteOf(g, nat, f) ? raidShare(f) : 0;
     let x = h.weight > 0 ? (share * (h.air! + h.kit * (1 - raiding))) / h.weight : 0;
-    // (Release 2, the sea patrol, once laid: what this nation's aircraft on patrol there would sink, as patrolSubs counts it.)
+    // (Release 2, the sea patrol, once live: what this nation's aircraft on patrol there would sink, as patrolSubs counts it.)
     const w = patrolOn(g) ? watchAgainst(g, z, f.nat) : null;
     if (w && (w.by[nat] ?? 0) > 0) x += onStation(g, f, z) * w.s * w.kills * (w.by[nat] / w.A);
     if (raiding > 0) {
@@ -2756,9 +2789,6 @@ export function eyePair(): { ce: number; cr: number; t2: number } | null {
   const ce = (a * E.rT2! - b * E.r41!) / det, cr = (b * E.e41! - a * E.eT2!) / det;
   return ce >= 0 && cr >= 0 ? { ce, cr, t2: fT2 } : null;
 }
-
-/** The days in a month the escorts' cycle is read against (D: the game's month as thirty days). */
-const MONTH_DAYS = 30;
 
 /**
  * The share of the escorts bound to a route that is at sea with a convoy at any one time (the design director's
@@ -3063,13 +3093,15 @@ export interface ConvoyMeeting {
   count?: ConvoyCountRecord;
 }
 
-/** A route's convoy count as the record and the card carry it: boats on station, convoys sailed, sighted and attacked, incidents, the pack, and where the tons are counted from the convoys' side the ships a convoy attacked lost (the card's expected figure; the month's record, after the swing), to two places. Where the escort's radar before a boat fires is laid, 'fired' is the boats that fire a convoy attacked, the pack the contest and the ceiling read (the card's boats each); with the sea patrol laid, 'watched' is the share of the route's waters its aircraft watch. */
+/** A route's convoy count as the record and the card carry it: boats on station, convoys sailed, sighted and attacked, incidents, the pack, and where the tons are counted from the convoys' side the ships a convoy attacked lost (the card's expected figure; the month's record, after the swing), to two places. Where the escort's radar before a boat fires is laid, 'fired' is the boats that fire a convoy attacked, the pack the contest and the ceiling read (the card's boats each); with the sea patrol live, 'watched' is the share of the route's waters its aircraft watch. */
 export type ConvoyCountRecord = ConvoyCount & { sunk?: number; torps?: number; fired?: number; watched?: number };
 const countRecord = (c: ConvoyCount, sunk?: number, torps?: number, fired?: number, watched?: number): ConvoyCountRecord => ({ boats: r2(c.boats), sailed: r2(c.sailed), sighted: r2(c.sighted), attacked: r2(c.attacked), incidents: r2(c.incidents), pack: r2(c.pack), ...(sunk !== undefined ? { sunk: r2(sunk) } : {}), ...(torps !== undefined ? { torps: r2(torps) } : {}), ...(fired !== undefined ? { fired: r2(fired) } : {}), ...(watched !== undefined ? { watched: r2(watched) } : {}) });
 /**
- * The share of a route's waters its side's aircraft on patrol watch this month (release 2, the sea patrol, once laid;
- * Q8's convoy card): each sea's watched share, the seas weighed by their size as the map has it (1 / 'air', the only
- * stand-in for a sea's size). Undefined where the patrol is not laid.
+ * The share of a route's waters its side's aircraft on patrol watch this month (release 2, the sea patrol, once live;
+ * Q8's convoy card): each sea's watched share, the seas weighed by their size as 1 / 'air' stands in for it, the scale
+ * of the reading first ruled at 15:14Z. The interim reading the design director ruled at 17:49Z ('map') measures each
+ * sea's waters on the chart (seaSquares), but the card's weights do not read that measure yet. Undefined where the
+ * patrol is not live.
  */
 function routeWatched(g: Game, nat: string, zones: number[]): number | undefined {
   if (!patrolOn(g)) return undefined;
@@ -3315,7 +3347,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     if (cover) g.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
     // (Record only, with Units decide and the route's count laid: the convoys' side of the month, as the boats stood after the hunt.)
     if (count) g.convoys[route.id].count = countRecord(count, month?.sunk, side?.torps, side?.fired, routeWatched(g, nat, zones));
-    // (Record only, with the sea patrol laid: the boats this nation's aircraft on patrol sank in the route's seas, of subsLost.)
+    // (Record only, with the sea patrol live: the boats this nation's aircraft on patrol sank in the route's seas, of subsLost.)
     if (cover && patrolOn(g)) { const ps = g.patrolSunk?.[nat]; g.convoys[route.id].byAircraft = ps?.turn === g.turn ? zones.reduce((a, z) => a + (ps.seas[z] ?? 0), 0) : 0; }
     if (at) lookConvoy(g, nat, route.id, zones, raiders, escorts, at, tons, cover && { cover, lost: byEscorts ?? {} });
     storyConvoy(g, raiders, escorts, tons, raid > 0);
@@ -3342,7 +3374,7 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
       const c = cover ? cover[zones.indexOf(f.zone)] : 1;
       const p = raidPower(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * c;
       // (Release 2, the sea patrol, as on a convoy route (routeForces): boats kept down by aircraft without kit raid the
-      // lane only for their time up. 1 where none watch, or the patrol is not laid, and then the raid is as before.)
+      // lane only for their time up. 1 where none watch, or the patrol is not live, and then the raid is as before.)
       const up = cover ? keptUp(g, f.nat, f.zone) : 1;
       raid += up === 1 ? p : p - boatRaid(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * c * (1 - up);
     } else if (allied(g, f.nat, nat)) {
@@ -3692,8 +3724,10 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       continue;
     }
     if (f.duty === 'raid') {
-      // (Release 2, the sea patrol, once laid (Q5 (a)): the staff moves its boats to the sea of their routes, within
-      // reach, where they spend most of the month up on station, out of waters aircraft without kit keep them down in.)
+      // (Release 2, the sea patrol, once live (Q5 (a)): the staff moves its boats to the sea of their routes, within
+      // reach, where they spend most of the month up on station, out of waters aircraft without kit keep them down in,
+      // and only where that gain covers the time the move itself loses (the design director's ruling of 24 November
+      // 2026 17:49Z, 1 (a)): quieterBeat.)
       const quiet = quieterBeat(g, f);
       if (quiet >= 0) {
         headline(g, 'info', `${cap(fleetName(f))} shifts its hunting ground from ${seaWhat(g.seas[f.station].name)} to ${seaWhat(g.seas[quiet].name)}, out of the aircraft's way.`, nat);

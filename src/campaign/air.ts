@@ -28,7 +28,7 @@ import { armsOf, intoPool, unitsDecide } from './units';
 import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
-import { patrolFigures, patrolOn, patrolReach, patrolStaff } from './seapatrol';
+import { patrolFigures, patrolMet, patrolOn, patrolReach, patrolStaff } from './seapatrol';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
@@ -517,7 +517,10 @@ export function guardsSea(g: Game, f: AirFleet, zone: number): boolean {
  */
 function comesUp(g: Game, f: AirFleet, m: AirMission, target: number, zone: number): boolean {
   if (m === 'ground' || m === 'line') return true;
-  if (m === 'strike' || m === 'fleet' || m === 'seapatrol') return guardsSea(g, f, zone);
+  // (Release 2, a sea patrol against submarines: met as a strike is, but only once the air fighting's own row for it
+  // is laid. The design director's ruling of 24 November 2026 17:49Z, 5 (a): that row gates only the fighters.)
+  if (m === 'seapatrol') return patrolMet() && guardsSea(g, f, zone);
+  if (m === 'strike' || m === 'fleet') return guardsSea(g, f, zone);
   if (m === 'harbour') return f.ship === undefined || inHarbour(g, f, target);
   return guardsLand(g, f, target, g.regions[target].ctrl);
 }
@@ -1232,7 +1235,7 @@ function shipping(g: Game, nat: string, z: number): boolean {
 
 /** Why a group cannot patrol this sea against submarines (release 2, seapatrol.ts), or null if it can. */
 function whyNotPatrol(g: Game, f: AirFleet, z: number): string | null {
-  if (!patrolOn(g)) return 'Sea patrols against submarines are flown only where units decide, once their figures are laid.';
+  if (!patrolOn(g)) return 'Sea patrols against submarines are flown only where units decide, once the patrol is live.';
   if (!g.seas[z]) return 'Pick a sea.';
   if (deckBred(f)) return 'Carrier aircraft cover their own fleet.';
   if (f.kind === 'ftr' || f.bmr <= 0) return 'Only bombers patrol the sea: fighters do not reach far enough.';
@@ -2483,9 +2486,18 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
   if (!n.alive || !n.atWar.length) return;
   // In the grand campaign history's air plan does not apply: the air groups patrol, and the staff plans raids of its own.
   // Ships come first: the carriers' wings, and a few of the land bombers, go for the fleets the staff has found.
-  // (Release 2, the sea patrol: with Units decide and its figures laid, bomber groups go out over the seas of its side's
-  // convoys first, while the boats there are worth more than the raid each would fly. Nothing is read otherwise.)
-  if (g.flags.open === 1) { flyReadOrders(g, nat, mine); if (patrolOn(g)) patrolStaff(g, nat, mine); seaStaff(g, nat, nat === g.human ? 'land' : 'all'); raidStaff(g, nat, mine, ph); return; }
+  // (Release 2, the sea patrol: with Units decide and the patrol live and laid, the patrol staff runs after the raid
+  // staff and weighs each bomber group's patrol over the seas of its side's convoys against the raid that staff chose
+  // for it, at that raid's own score, before the raid flies; then every group left on support against nothing (the
+  // design director's ruling of 24 November 2026 17:49Z, 2 (a)). Nothing is read otherwise.)
+  if (g.flags.open === 1) {
+    flyReadOrders(g, nat, mine);
+    seaStaff(g, nat, nat === g.human ? 'land' : 'all');
+    const patrol = patrolOn(g);
+    raidStaff(g, nat, mine, ph, patrol ? (f, v) => patrolStaff(g, nat, mine, { f, v }) : undefined);
+    if (patrol) patrolStaff(g, nat, mine);
+    return;
+  }
   for (const ph of AIR.plan) {
     if (ph.nat !== nat || g.turn < ph.from || g.turn > ph.to || !atWar(g, nat, ph.against)) continue;
     for (const o of ph.orders) {
@@ -2726,9 +2738,11 @@ function baseBombers(g: Game, nat: string, mine: AirFleet[], battles: number[]):
  * much, or against the enemy armies that face its own. Its fighters may also fight for the sky over a stretch of
  * front where they expect to win it. A raid is flown only where the forecast says it should pay and the bombers'
  * losses stay within what the staff will bear. A rival on the harder levels sends more, bears more, and goes for
- * the player first; on the easier levels it sends fewer.
+ * the player first; on the easier levels it sends fewer. Where the sea patrol is live and laid, 'patrol' is its staff's
+ * look at each bomber raid chosen, before it flies (seapatrol.ts patrolStaff): true where it takes the raid's bomber
+ * group onto patrol in its stead.
  */
-function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null): void {
+function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null, patrol?: (f: AirFleet, v: number) => boolean): void {
   if (!airWar(g)) return;
   const R = AIRWAR.ai.raids;
   const B = bombingFor(g, nat);
@@ -2873,6 +2887,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   // The fieldworks in front of a main effort come first with the bombers (rivals.json, 'soften'): every bomber group
   // in reach of the province the staff has named goes at the works there, with the fighters on their fields, before
   // the army attacks. The works on a front where a general offensive is under way are weighed with the other raids below.
+  // (This raid is sent by its gates, with no score of its own, so the sea patrol's staff, which weighs a group against
+  // its raid's score, is not asked about it: its groups fly it as the staff sends them.)
   const lineAt = (t: number): void => {
     if (hit.has(t) || !g.regions[t]) return;
     const bombers = leads().filter((f) => whyNotMission(g, f, 'line', t) === null).sort((a, b) => b.bmr - a.bmr || a.id - b.id);
@@ -2951,6 +2967,10 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
       }
     }
     if (!pick.best) break;
+    // (Release 2, the sea patrol, where it is live and laid: before the raid flies the patrol staff weighs its bomber
+    // group's patrol against the raid's own score, and a group it takes onto patrol gives up the raid, which is not
+    // flown (the design director's ruling of 24 November 2026 17:49Z, 2 (a)). The month's count of raids stands.)
+    if (patrol?.(pick.best.fleets[0], pick.best.v)) continue;
     send(pick.best.m, pick.best.t, pick.best.fleets, flown++);
   }
 }

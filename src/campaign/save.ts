@@ -89,7 +89,7 @@ export function saveGame(g: Game): string {
     ac: g.ac,
     // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
     subLook: g.subLook,
-    // The sea patrol's record (release 2, Units decide, once its figures are laid): absent otherwise, so such a save is written as it always was.
+    // The sea patrol's record (release 2, Units decide, once it is live): absent otherwise, so such a save is written as it always was.
     patrolSunk: g.patrolSunk,
     // The month's lorry columns (release 2, columns.ts): absent while the switch is off, so such a save is written as it always was.
     columns: g.columns,

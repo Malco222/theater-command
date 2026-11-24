@@ -864,7 +864,7 @@ export interface ConvoyMonth {
   fought?: 'field' | 'clamped';
   /** Release 2, with Units decide (the convoy war by cause), record only: of subsLost, the boats the convoy's escorts sank in their attacks on it. */
   byEscorts?: number;
-  /** Release 2, with Units decide and the sea patrol laid (seapatrol.ts), record only: of subsLost, the boats the receiving nation's aircraft on patrol sank in the route's seas. */
+  /** Release 2, with Units decide and the sea patrol live (seapatrol.ts), record only: of subsLost, the boats the receiving nation's aircraft on patrol sank in the route's seas. */
   byAircraft?: number;
   /** Release 2, with Units decide and the route's convoy count laid (the one-pass ruling), record only: the boats on station on the route, the convoys that sailed (both ways), those sighted and attacked, the incidents with the escort, the boats a convoy attacked (the pack), and, where the tons are counted from the convoys' side, the ships a convoy attacked lost, on average. */
   count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number; watched?: number };
@@ -1178,7 +1178,7 @@ export interface PlanPhase {
 /** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
 /** 'line' is a raid on the fieldworks of an enemy line (the grand campaign): the bombers take months off the works of the troops dug in there. */
 /** 'airfield' is a raid on one enemy airfield (airfields as targets, behind its switch): its runway, hangars and the aircraft parked there. */
-/** 'seapatrol' is a standing patrol of one sea against submarines (release 2, Units decide, once its figures are laid; seapatrol.ts): its target is the sea. */
+/** 'seapatrol' is a standing patrol of one sea against submarines (release 2, Units decide, once it is live; seapatrol.ts): its target is the sea. */
 export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield' | 'seapatrol';
 
 export interface AirLeader {
@@ -1609,7 +1609,7 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
-  /** Release 2, with Units decide and the sea patrol laid (seapatrol.ts), record only: the boats each nation's aircraft on patrol sank in its month, by the boats' nation. */
+  /** Release 2, with Units decide and the sea patrol live (seapatrol.ts), record only: the boats each nation's aircraft on patrol sank in its month, by the boats' nation. */
   patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number> }>;
   /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
   columns?: Record<string, ColumnRun[]>;
