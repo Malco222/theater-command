@@ -215,6 +215,9 @@ namespace LandAir
 	 * those last built (-1 and -9: none yet).
 	 */
 	constexpr double OpenStep = 0.02, SlumpStep = 0.05, LyingStep = 0.05;
+	/** At the swap his chute's mesh keeps him until the crowd has drawn its man once (the crowd draws a new man only when
+	 * its frame's rebuilds allow), but no more than this many frames: one frame drawn twice, not one drawn nowhere. */
+	constexpr int RiderHoldFrames = 30;
 	bool SilkMoved(double Shape, double WasShape);
 	bool ManMoved(double Lying, double WasLying);
 	/**

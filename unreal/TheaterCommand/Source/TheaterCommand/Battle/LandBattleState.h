@@ -91,6 +91,10 @@ struct FLandBattleState
 			int Made = 0, Moved = 0;     // his mesh made, and moved in place (for the 45 fps reading; told once, bCounted)
 			bool bCounted = false;
 			int Man = -1;
+			/** Whether the crowd has drawn his man yet (the crowd draws a new man only when its frame's rebuilds allow:
+			 * he is kept in his chute's mesh till then, at most LandAir::RiderHoldFrames frames), and those frames. */
+			bool bRiderSeen = false;
+			int HeldFrames = 0;
 			std::string File, Clip, WasClip;
 			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0, WasRate = 1.0, NowRate = 1.0;
 		};

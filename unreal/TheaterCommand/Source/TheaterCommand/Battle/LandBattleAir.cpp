@@ -439,11 +439,17 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 			}
 			FLandBattleState::FAirSupport::FChuteMan& Him = A.ChuteMen[C.Key];
 			const double Shape = C.bDown ? 2.0 + C.Slump : C.Open;
-			// (his chute's mesh lets him go only once the crowd's man has been given his ride and posed with it: the
-			// crowd is posed before FlyOver, so a ride set here shows the frame after; until then, and for good where no
-			// man of the crowd could be made, he lies here flat. A review of 24 November: he had gone for a frame at the
-			// swap)
-			const double Lying = C.bDown && (C.bInMesh || Him.Clip.empty()) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
+			// (his chute's mesh lets him go only once the crowd's man has been given his ride and drawn with it: the crowd
+			// is posed before FlyOver and drawn after it, so a ride set here shows the frame after, and only if that frame's
+			// rebuilds (MenRebuildsMax) let the crowd make his mesh; until it has, and for good where no man of the crowd
+			// could be made, he lies here flat, at most RiderHoldFrames frames. Two reviews of 24 November: he had gone for a
+			// frame at the swap, and could again in a frame whose rebuilds were spent. One frame shows him twice, in place)
+			if (!Him.Clip.empty() && !Him.bRiderSeen)
+			{
+				const bool bDrawn = Him.Man >= 0 && Him.Man < MenDrawn.Num() && MenDrawn[Him.Man].Mesh.IsValid() && MenDrawn[Him.Man].Lod >= 0;
+				Him.bRiderSeen = bDrawn || ++Him.HeldFrames > LandAir::RiderHoldFrames;
+			}
+			const double Lying = C.bDown && (C.bInMesh || Him.Clip.empty() || !Him.bRiderSeen) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
 			const bool bSilk = LandAir::SilkMoved(Shape, Him.Shape), bMan = LandAir::ManMoved(Lying, Him.Lying);
 			if (bSilk || bMan)
 			{
@@ -486,7 +492,9 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 				{
 					Emptied(Make.Canopy);
 					SilkInto(Make.Canopy, Make.Silk, U);
-					bMade = PutSection(Mesh, 1, Make.Canopy, !C.bDown) || bMade;
+					// (in place only from one in the air to another: a heap's windings kept into the air would show its
+					// inside, were the battle ever wound back; a review of 24 November)
+					bMade = PutSection(Mesh, 1, Make.Canopy, !C.bDown && Him.Shape < 2.0) || bMade;
 					Him.Shape = Shape;
 				}
 				if (bMan)

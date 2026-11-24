@@ -725,28 +725,38 @@ int main(int Argc, char** Argv)
 		// again 84 to 101 times a pilot, 54 of them as his canopy fell in). LandAir's steps as the scene takes them: a
 		// section made again when its make changes (him alone; him, his lines and silk; down, with him going over; once
 		// the crowd's man has him), and down its silk each time it moves; else moved in place. With the crowd posed
-		// before the chutes as in the scene (a ride set one frame shows the next), so that the swap shows him in one of
-		// the two every frame, never both and never neither.
-		int MadeMost = 0, AirMade = 0, Gaps = 0, Twice = 0;
-		for (int Field = 0; Field < 2; ++Field)
+		// before the chutes and drawn after them as in the scene (a ride set one frame shows the next, and only once that
+		// frame's rebuilds let the crowd make his mesh: here 0, 3 and 25 frames late), so that the swap shows him every
+		// frame, never neither, and twice in place for one frame at most (the frame the crowd first draws him, before
+		// the chutes have seen it: a second review of 24 November).
+		int MadeMost = 0, AirMade = 0, Gaps = 0, TwiceMost = 0;
+		const int Lates[] = { 0, 3, 25 };
+		for (int Pass = 0; Pass < 6; ++Pass)
 		{
+			const int Field = Pass % 2, Late = Lates[Pass / 2];
 			struct Kept
 			{
 				double Shape = -1.0, Lying = -9.0;
 				int Make0 = -1, Make1 = -1, Made = 0, Moved = 0, SlumpMade = 0, MadeAloft = 0;
-				bool bRide = false;
+				bool bRide = false, bSeen = false;
+				int RideFrame = -1, Held = 0, Twice = 0;
 			};
 			std::map<int, Kept> Ks;
 			std::vector<Chute> Now;
-			for (double Tf = T0; Tf <= 400.0; Tf += 1.0 / (45.0 * Life))
+			int Frame = 0;
+			for (double Tf = T0; Tf <= 400.0; Tf += 1.0 / (45.0 * Life), ++Frame)
 			{
 				(Field ? S2 : S).Chutes(Tf, Now);
 				for (const Chute& C : Now)
 				{
 					Kept& K = Ks[C.Key];
-					const bool bCrowd = K.bRide;
+					// (the crowd draws him this frame, after the chutes: from the frame after his ride was set, Late frames on;
+					// the chutes see last frame's drawing)
+					const auto CrowdDraws = [&](int F) { return K.RideFrame >= 0 && F >= K.RideFrame + 1 + Late; };
+					const bool bCrowd = CrowdDraws(Frame);
+					if (K.bRide && !K.bSeen) K.bSeen = CrowdDraws(Frame - 1) || ++K.Held > LandAir::RiderHoldFrames;
 					const double Shape = C.bDown ? 2.0 + C.Slump : C.Open;
-					const double Lying = C.bDown && (C.bInMesh || !K.bRide) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
+					const double Lying = C.bDown && (C.bInMesh || !K.bRide || !K.bSeen) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
 					const bool bSilk = SilkMoved(Shape, K.Shape), bMan = ManMoved(Lying, K.Lying);
 					if (bSilk || bMan)
 					{
@@ -765,21 +775,27 @@ int main(int Argc, char** Argv)
 					{
 						const bool bMesh = K.Lying >= 0.0;
 						Gaps += !bMesh && !bCrowd;
-						Twice += bMesh && bCrowd;
+						K.Twice += bMesh && bCrowd;
 					}
-					if (!C.bInMesh) K.bRide = true;
+					if (!C.bInMesh && !K.bRide) { K.bRide = true; K.RideFrame = Frame; }
 				}
 			}
 			for (const auto& Each : Ks)
 			{
-				std::printf("     %s pilot of plane %d's mesh at 45 fps: made %d times (%d as his canopy falls in), moved in place %d\n", Field ? "windy:" : "calm: ", Each.first,
-					Each.second.Made, Each.second.SlumpMade, Each.second.Moved);
+				if (Late == 0)
+				{
+					std::printf("     %s pilot of plane %d's mesh at 45 fps: made %d times (%d as his canopy falls in), moved in place %d\n", Field ? "windy:" : "calm: ", Each.first,
+						Each.second.Made, Each.second.SlumpMade, Each.second.Moved);
+				}
 				MadeMost = std::max(MadeMost, Each.second.Made);
 				AirMade += Each.second.MadeAloft;
+				TwiceMost = std::max(TwiceMost, Each.second.Twice);
 			}
 		}
+		std::printf("     the swap with the crowd's mesh 0, 3 and 25 frames late: %d frames with him drawn nowhere, twice in place %d at most a pilot (held at most %d)\n", Gaps, TwiceMost,
+			LandAir::RiderHoldFrames);
 		Check(MadeMost <= 30 && AirMade == 0, "chutes: his mesh made again at most 30 times at 45 fps, never in the air once his canopy is out (moved in place as it fills), down each 0.05 of its falling in (her sixth)");
-		Check(Gaps == 0 && Twice == 0, "chutes: at the swap he is drawn every frame, in his chute's mesh or as the crowd's man, never both (the crowd posed before the chutes)");
+		Check(Gaps == 0 && TwiceMost <= 1, "chutes: at the swap he is drawn every frame, in his chute's mesh or as the crowd's man, both (in place) one frame at most, however late the crowd's rebuilds let it draw him");
 		// (moved in place, a triangle keeps the way round it was first wound, which the scene chooses by where its points
 		// are: so a canopy filling must never fold one over; down it is made again, its rumple folding some)
 		auto Windings = [](const SilkMesh& M, std::vector<int>& Into)

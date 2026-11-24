@@ -854,7 +854,10 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   the rest soft (fifth); his swing about 4 s, 14 degrees settling to about 5; his canopy 5 to 5.5 m across, about half
   as deep, 24 to 28 gores, faint seams, a line at each, both faces, her off-white within 4%, and its glow (sixth). And
   a review's of 24 November: the scene's mesh at 45 fps, made at most 30 times and never in the air once his canopy is
-  out; at the swap he is drawn every frame, in the mesh or as the crowd's man, never both (the crowd posed first); a
+  out; at the swap he is drawn every frame, in the mesh or as the crowd's man, both (in place) one frame at most, the
+  mesh keeping him till the crowd has drawn its man (whose mesh waits when a frame's `MenRebuildsMax` is spent; held
+  at most `LandAir::RiderHoldFrames`, 30, and tested with the crowd 0, 3 and 25 frames late); the silk moved in place
+  only from one shape in the air to another (a heap's windings never carried into the air); a
   canopy filling never folds a triangle over, and his lines run back from the same half of its skirt; flat in the
   mesh his hips lie where the crowd's man's do in every soldier file that has `go_prone`'s end offset (18 of 19; read
   from `Content/Models/Soldiers`, `LAND_AIR_SOLDIERS`); each clip blended into over 0.25 s, the harness's kneel 0.5 s;
