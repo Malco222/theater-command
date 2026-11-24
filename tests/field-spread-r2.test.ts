@@ -332,6 +332,46 @@ describe('the mask (choice 6 A)', () => {
       expect(v.breaking).toEqual({ att: r3(at.att), def: r3(at.def) });
     }
   });
+
+  it("the enemy's 'near breaking' dispatch comes on the bar the player is shown, never on his true bar", () => {
+    const piece = PIECES.find((p) => p.key === 'normandy-1944')!;
+    // The player attacks (set after the battle is built, so the staffs still fight both sides and judge() speaks to him).
+    const run = (k: SpreadReckoning | null): { i: number; worn: number; shown: number; prev: number; bar: number; prevBar: number } | null => {
+      const t = ticketOf(piece, 11, null);
+      if (k) t.reckoning.spread = k;
+      const b = new LandBattle(t);
+      t.att.human = true;
+      let prev = 0, prevBar = 0;
+      for (let i = 0; i < 400000 && !b.over; i++) {
+        b.step();
+        const v = b.view('att');
+        if (v.events.some((e) => e.what === 'nearBreak' && e.side === 'def')) {
+          // Never while the bar he is shown stands short of three quarters.
+          expect(v.breaking!.def).toBeGreaterThanOrEqual(0.75);
+          return { i, worn: b.wornShare('def'), shown: v.breaking!.def, prev, bar: b.breaking('def'), prevBar };
+        }
+        prev = v.breaking!.def; prevBar = b.breaking('def');
+      }
+      return null;
+    };
+    // Without the spread, as today: on the true bar, the step it reaches three quarters.
+    const off = run(null)!;
+    expect(off.prevBar).toBeLessThan(0.75);
+    expect(off.bar).toBeGreaterThanOrEqual(0.75);
+    // With it, on the bar shown (worn against the level his staff reads, 0.08), the same step whatever the enemy drew.
+    const mid = run({ W: { att: 0.4, def: 0.12 } })!, high = run({ W: { att: 0.4, def: 0.4 } })!;
+    for (const x of [mid, high]) {
+      expect(x.prev).toBeLessThan(0.75);
+      expect(x.shown).toBeGreaterThanOrEqual(0.75);
+      expect(x.worn).toBeGreaterThanOrEqual(0.75 * 0.08);
+      expect(x.worn).toBeLessThan(0.75 * 0.08 + 0.002);
+      // His true bar stood well short of it: the moment tells nothing of his draw.
+      expect(x.bar).toBeLessThan(0.75);
+    }
+    expect(high.i).toBe(mid.i);
+    // An enemy that drew low breaks before the bar shown reaches three quarters: no dispatch tells it first.
+    expect(run({ W: { att: 0.4, def: 0.03 } })).toBeNull();
+  });
 });
 
 describe("step 1b's keys", () => {

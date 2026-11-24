@@ -3555,8 +3555,11 @@ export class LandBattle implements BattleSim<LandUnit> {
       // Held at the brink, a small army gives ground with its worn (b496(1)).
       if (b.holding && this.freshHold[s]) this.giveGround(s, left);
       // At three quarters, a line each army's way (the UI director's words for ruling 226(3)): the player's own in amber
-      // on the page, the other's one dispatch. With nobody playing, nothing is said.
-      if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
+      // on the page, the other's one dispatch. With nobody playing, nothing is said. Under the field spread the other's
+      // comes on the bar his player is shown (the mask, choice 6 (A)): on its true bar, the moment it came would tell the
+      // enemy's drawn point (worn / 0.75). Without the spread that bar is the true one.
+      const own = !!this.ticket[s].human;
+      if (!this.warned[s] && (!own && this.ticket.reckoning.spread ? this.shownBar(s, other(s)) : near) >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
         this.warned[s] = true;
         // By what drives the bar (the UI director, 14:44Z); the enemy's stays one plain dispatch, with no fields.
         const own = !!this.ticket[s].human, why = own ? this.breakCause(s) : undefined;
