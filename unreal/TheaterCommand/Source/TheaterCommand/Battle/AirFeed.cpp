@@ -400,6 +400,14 @@ namespace AirFeed
 		const Json& Ground = Place["ground"];
 		Out.Terrain = Ground["terrain"].Str("");
 		for (const Json& R : Ground["land"].Items) Out.Land.push_back(Ring(R));
+		// An inland board (place.ground.inland: no coast within it) comes with no land rings, and every "over land" here
+		// is a board with land: the Rhineland and Dnepropetrovsk raids flew over open sea (the art director, 24 November).
+		// It is one ring of land round the board, wider than anything laid under it (the sea sheet runs 300 km out).
+		if (Out.Land.empty() && Ground["inland"].Truth(false))
+		{
+			const double Wide = 400000.0;
+			Out.Land.push_back({ { -Wide, -Wide }, { Out.W + Wide, -Wide }, { Out.W + Wide, Out.H + Wide }, { -Wide, Out.H + Wide } });
+		}
 		for (const Json& R : Ground["target"].Items) Out.TargetOutline.push_back(Ring(R));
 		for (const Json& R : Ground["rivers"].Items) Out.Rivers.push_back(Ring(R));
 		const Json& North = Ground["north"];

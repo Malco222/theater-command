@@ -314,7 +314,9 @@ namespace AirLand
 				D.assign(Land.size(), 0.0f);
 				if (!bAnySea || !bAnyLand)
 				{
-					// (all one or the other over the whole extent: far from any coast)
+					// (all one or the other over the whole extent: far from any coast; all land, as an inland board's one
+					// ring round it, is a board with no sea, and says so: no ", the coast" in the log)
+					bAllLand = !bAnySea;
 					for (size_t K = 0; K < Land.size(); ++K)
 					{
 						D[K] = Land[K] ? 1.0e6f : -1.0e6f;
