@@ -58,7 +58,7 @@ import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, frien
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderShadowFleet, stopShadowFleet, whyNotShadowFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderShadowFleet, stopShadowFleet, whyNotShadowFleet, orderMinesFleet, whyNotMinesFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
@@ -111,7 +111,9 @@ import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets,
 import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
 import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwhy';
 import { REARGUARD, isRearguard, rearBridgesOn, rearguardOn, setRearBridges, setRearguard } from '../../../src/campaign/rearguard';
-import { setShadow, shadowLine, shadowOn } from '../../../src/campaign/shadow';
+import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '../../../src/campaign/shadow';
+import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
+import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
@@ -149,7 +151,7 @@ import {
 } from '../../../src/campaign/lessons';
 import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
-import { seaWhere } from '../../../src/campaign/sea-words';
+import { seaWhat, seaWhere } from '../../../src/campaign/sea-words';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
@@ -972,6 +974,14 @@ function drawView() {
     shadow: shadowOn(s),
     // (Release 2, voyage.ts) Whether each fleet keeps a voyage log on its page.
     voyageLog: voyageOn(s),
+    // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
+    seaMines: seaMinesOn(s),
+    mines: minesSeen(s),
+    // (Release 2, heavyseas.ts) Whether gales blow at sea, and the seas in a gale this month.
+    heavySeas: heavySeasOn(s),
+    gales: [...galeSeas(s)],
+    // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
+    shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
@@ -4288,7 +4298,10 @@ function force(kind: string, id: number) {
     const why = mine ? fleetWhy(s, f) : '';
     // (Release 2, shadow.ts) What it shadows and where that is.
     const shadow = mine ? shadowLine(s, f) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(shadow ? [shadow] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
+    // (Release 2, mines.ts and heavyseas.ts) Enemy mines where it sails, and a gale over its sea.
+    const mined = mine ? mineLine(s, f) : '';
+    const gale = mine ? galeLine(s, f) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(shadow ? [shadow] : []), ...(mined ? [mined] : []), ...(gale ? [gale] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -5194,6 +5207,20 @@ function fleetPage(s: Game, id: number): Page | null {
       buttons: [{ label: 'SHADOW IT', act: `fleetshadow:${id}:${t}`, ok: up, tip: 'It follows that fleet wherever it goes in its reach, keeps it identified for you, and reports where it is each month. It seeks no battle, and is mostly fast enough to keep its distance if found.' }],
     };
   });
+  // (Release 2, mines.ts) The seas it can lay a field of mines in: narrow seas, and seas off a harbour an enemy fleet sails from.
+  const fields = minesSeen(s);
+  const minable: PageRow[] = (o?.mines ?? []).map((z) => {
+    const name = s.seas[z]?.name ?? 'sea';
+    const here = fields.filter((m) => m.zone === z);
+    const ours = here.find((m) => m.own), theirs = here.filter((m) => !m.own);
+    const off = s.fleets.filter((e) => e.home === z && s.human && Object.values(e.ships).some((n) => n > 0) && s.nations[s.human]?.atWar.includes(e.nat)).map((e) => e.port);
+    const lines = [
+      s.seas[z]?.narrow ? 'A narrow sea.' : `Off ${[...new Set(off)].join(' and ') || 'an enemy harbour'}: enemy ships sailing from there pass through it.`,
+      ours ? `Your side's minefield here is ${ours.word}: laying again makes it whole.` : '',
+      theirs.length ? `There are ${s.nations[theirs[0].nat]?.adj ?? theirs[0].nat} mines here too.` : '',
+    ].filter(Boolean);
+    return { nat: card.nat, title: cap1(seaWhat(name)), lines, buttons: [{ label: 'LAY MINES', act: `fleetmines:${id}:${z}`, ok: up, tip: 'It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months.' }] };
+  });
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
@@ -5224,6 +5251,7 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'ENEMY FLEETS TO ATTACK', text: '', rows: targets },
       { heading: 'SHADOWING', text: shadowing, rows: [] },
       { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
+      { heading: 'SEAS TO MINE', text: '', rows: minable },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
@@ -6450,6 +6478,29 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     }
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'seaminesrule' || part[0] === 'heavyseasrule' || part[0] === 'shadowrelayrule') {
+    // (Release 2: mines.ts, heavyseas.ts, shadow.ts) Mines at sea, heavy seas and the shadow relay, each switched in any month.
+    const on = part[1] === 'on';
+    if (part[0] === 'seaminesrule') setSeaMines(s, on);
+    else if (part[0] === 'heavyseasrule') setHeavySeas(s, on);
+    else setShadowRelay(s, on);
+    ok = true;
+    note = part[0] === 'seaminesrule'
+      ? (seaMinesOn(s) ? 'Mines at sea are on: a fleet with destroyers, cruisers or submarines can lay a field from its page, across a narrow sea or off an enemy harbour.' : 'Mines at sea are off: every field is gone.')
+      : part[0] === 'heavyseasrule'
+        ? (heavySeasOn(s) ? 'Heavy seas are on: gales blow under a closed sky at sea, mostly in winter. Ships can sail into a gale but not on through it, and convoys through one are late.' : 'Heavy seas are off: no gale blows at sea.')
+        : (shadowRelayOn(s) ? 'The shadow relay is on: a shadow\'s fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact.' : on ? 'The shadow relay will work once shadowing is on.' : 'The shadow relay is off: shadows stay on station as long as they keep contact.');
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'fleetmines') {
+    // (Release 2, mines.ts) 'fleetmines:<fleet>:<sea>' sails it there and lays a field.
+    const id = Number(part[1]), z = Number(part[2]);
+    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    const why = whyNotMinesFleet(s, id, z);
+    ok = !why && orderMinesFleet(s, id, z);
+    note = ok ? `${name} sails to lay a minefield ${seaWhere(s.seas[z]?.name ?? 'sea')}. Enemy ships there may lose a ship each month until they sweep it.` : why ?? 'It cannot lay mines there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
   if (part[0] === 'shadowrule' || part[0] === 'voyagelogrule' || part[0] === 'rearbridgesrule') {
     // (Release 2: shadow.ts, voyage.ts, rearguard.ts) Shadowing, the voyage log and the rearguards' bridges, each switched in any month.
     const on = part[1] === 'on';
@@ -7651,6 +7702,11 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadow = (on: boolean) => { const s = game(); setShadow(s, !!on); return { on: shadowOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).voyageLog = (on: boolean) => { const s = game(); setVoyageLog(s, !!on); return { on: voyageOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).rearBridges = (on: boolean) => { const s = game(); setRearBridges(s, !!on); return { on: rearBridgesOn(s) }; };
+// (Release 2: mines.ts, heavyseas.ts, shadow.ts) TC.seaMines(on), TC.heavySeas(on), TC.shadowRelay(on) at any time; the
+// options page uses act('seaminesrule:on' / 'heavyseasrule:on' / 'shadowrelayrule:on', or ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heavySeas = (on: boolean) => { const s = game(); setHeavySeas(s, !!on); return { on: heavySeasOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').

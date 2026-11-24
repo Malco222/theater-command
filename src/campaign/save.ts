@@ -107,6 +107,8 @@ export function saveGame(g: Game): string {
     captured: g.flags.open === 1 ? g.captured : undefined,
     // Old wrecks (release 2): kept as the scars are, and given back from the reports to a save without them.
     wrecks: g.flags.open === 1 ? g.wrecks : undefined,
+    // Mines at sea (release 2, mines.ts): kept only with that switch on, so a save without it is written as it always was.
+    mines: g.flags.open === 1 && g.flags.seaMines === 1 && g.mines?.length ? g.mines : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -279,6 +281,7 @@ export function loadGame(text: string): Game | null {
       g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
     }
   if (d.wrecks && typeof d.wrecks === 'object') g.wrecks = d.wrecks;
+  if (Array.isArray(d.mines)) g.mines = d.mines;
   else for (const r of g.reports ?? []) wreckBump(g, r);
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.

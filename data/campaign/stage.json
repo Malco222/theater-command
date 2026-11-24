@@ -42,5 +42,11 @@
   "_voyageLog": "The voyage log (release 2; Brian 24 November 2026 19:47Z, 'yes to all'; src/campaign/voyage.ts, data/campaign/voyage.json). Each fleet writes where it was and what it fought at every month's end, shown on its page. A record only: no rule reads it. Off: nothing is written or shown. On: the grand campaigns opened from now on carry the flag 'voyageLog' (switchable in any month). Forced by TC_VOYAGELOG=1 or 0.",
   "voyageLog": false,
   "_rearBridges": "Rearguards blow the bridges (release 2; Brian 24 November 2026 19:47Z, 'yes to all'; src/campaign/rearguard.ts rearBridgesOn, rivers.ts bridgesOnCapture, data/campaign/rearguard.json 'bridges'). Read only with rearguards on: a province a rearguard held is lost, and the bridges behind it go up on the rearguard's laid charges instead of the usual chance. Off: the usual chance, as for any province. On: the grand campaigns opened from now on carry the flag 'rearBridges' (switchable in any month). Forced by TC_REARBRIDGES=1 or 0.",
-  "rearBridges": false
+  "rearBridges": false,
+  "_seaMines": "Mines at sea (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/mines.ts, data/campaign/mines.json). A fleet with destroyers, cruisers or submarines lays a field across a narrow sea or off an enemy fleet's harbour; enemy ships sailing there may lose a ship each month until destroyers sweep it. The computer's admirals lay fields too. Switchable in any month from OPTIONS.",
+  "seaMines": false,
+  "_heavySeas": "Heavy seas (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts, data/campaign/heavyseas.json). Gales blow under a closed sky at sea, mostly in winter: ships can sail into a sea in a gale but not on through it that month, convoys through one are late, and a shadow may lose its quarry in one. The same for every country. Switchable in any month from OPTIONS.",
+  "heavySeas": false,
+  "_shadowRelay": "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
+  "shadowRelay": false
 }

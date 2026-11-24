@@ -84,6 +84,8 @@ import { staffRuns, type DeskId } from './depth';
 import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
 import { aiShadows, orderShadow, shadowOn, shadowTargets, shadowsFollow, stopShadow, whyNotShadow } from './shadow';
 import { logVoyages } from './voyage';
+import { aiMines, mineSeas, minesMonth, minesStrike, orderMines, seaMinesOn, whyNotMines } from './mines';
+import { galeNews } from './heavyseas';
 import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
@@ -121,6 +123,8 @@ function closePhase(g: Game, nat: string): void {
     worksMonth(g);
     // Each fleet's voyage log has the month's line (release 2, voyage.ts; nothing with that switch off).
     logVoyages(g);
+    // Minefields wear and are swept (release 2, mines.ts; nothing with that switch off).
+    minesMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
     // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
     fieldsMonth(g);
@@ -152,6 +156,8 @@ export function stepAI(g: Game): string {
   const nat = current(g);
   g.week = 1;
   startPhase(g, nat);
+  // Its fleets at sea in an enemy's minefield may strike a mine (release 2, mines.ts; nothing with that switch off).
+  minesStrike(g, nat);
   // Every shadow follows its quarry as a country's month opens (release 2, shadow.ts; nothing with that switch off).
   shadowsFollow(g, nat);
   // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
@@ -160,6 +166,8 @@ export function stepAI(g: Game): string {
     runAI(g, nat);
     // The computer's admirals set their shadows, after their other orders (release 2, shadow.ts).
     aiShadows(g, nat);
+    // And lay their mines (release 2, mines.ts).
+    aiMines(g, nat);
   }
   closePhase(g, nat);
   return nat;
@@ -169,6 +177,10 @@ export function stepAI(g: Game): string {
 export function beginHuman(g: Game): void {
   g.week = 1;
   startPhase(g, current(g));
+  // His fleets at sea in an enemy's minefield may strike a mine (release 2, mines.ts; nothing with that switch off).
+  minesStrike(g, current(g));
+  // The month's gales over his seas, in a line of news (release 2, heavyseas.ts; nothing with that switch off).
+  galeNews(g, current(g));
   // Every shadow follows its quarry, and his report where it is (release 2, shadow.ts; nothing with that switch off).
   shadowsFollow(g, current(g));
   // (The yield form: the player's country is told the month the cause is met, and yields at the next opening.)
@@ -1575,6 +1587,18 @@ export function orderShadowFleet(g: Game, id: number, target: number): boolean {
   return ok;
 }
 
+/** Why one of the player's fleets cannot lay a field of mines in sea `zone` now, or null (release 2, mines.ts). */
+export const whyNotMinesFleet = (g: Game, id: number, zone: number): string | null => whyNotMines(g, id, zone);
+
+/** One of the player's fleets sails to sea `zone` and lays a field of mines there (release 2, mines.ts). A new order: it ends a shadow. */
+export function orderMinesFleet(g: Game, id: number, zone: number): boolean {
+  const f = myFleet(g, id);
+  if (!f || heldAfterAttack(g, f)) return false;
+  const ok = orderMines(g, id, zone);
+  if (ok) { delete f.task; stopShadow(f); }
+  return ok;
+}
+
 /** Ends one of the player's fleets' shadow: it stays where it is, under his orders (release 2, shadow.ts). */
 export function stopShadowFleet(g: Game, id: number): boolean {
   const f = myFleet(g, id);
@@ -1672,6 +1696,8 @@ export interface FleetOptions {
   held?: string;
   /** Enemy fleets it can be set to shadow now (release 2, shadow.ts): there only where that is switched on. */
   shadow?: number[];
+  /** Seas it can lay a field of mines in now (release 2, mines.ts): there only where that is switched on. */
+  mines?: number[];
 }
 
 /** Everything one of the player's fleets could be told to do this month. Null if it is not theirs to order now. */
@@ -1690,6 +1716,7 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   };
   if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
   if (shadowOn(g)) out.shadow = war ? shadowTargets(g, f.id) : [];
+  if (seaMinesOn(g)) out.mines = war && !held ? mineSeas(g, f.id) : [];
   if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
   return out;
 }
