@@ -1023,14 +1023,16 @@ GORE = [
          cut=[(0.0, "lowerarm_r")], fling=[("lowerarm_r", (2.8, 1.6, 3.0), 1.5)],
          tone={"legs": (0.18, 0.3), "trunk": (0.05, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.06)},
          release=0.0, throw=(2.2, 1.0, 2.0)),
+    # (kneeling, e and f and their mirrors l and m: each limb within 30 degrees of straight away, `aim`, for the
+    # effects thread, 24 November: at 40 to 48 degrees a burst at the edge of the quarter could have it land nearer)
     dict(name="die_arm_off_e", stance="kneel", kind="back", blast_from="front", start=("fire_kneel", 0.3),
-         blast=(-1.8, 0.2, 0.4), spin=(0.0, -2.0, 6.0),
-         cut=[(0.0, "lowerarm_r")], fling=[("lowerarm_r", (-2.0, 2.2, 3.0), 1.5)],
+         mirror="die_arm_off_l", aim=True, blast=(-1.8, 0.2, 0.4), spin=(0.0, -2.0, 6.0),
+         cut=[(0.0, "lowerarm_r")], fling=[("lowerarm_r", (-2.6, 1.3, 3.0), 1.5)],
          tone={"legs": (0.1, 0.25), "trunk": (0.05, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.06)},
          release=0.0, throw=(-1.4, 1.8, 2.0)),
     dict(name="die_arm_off_f", stance="kneel", kind="forward", blast_from="behind", start=("fire_kneel", 0.3),
-         blast=(1.9, 0.0, 0.3), spin=(0.0, 2.0, 11.0),
-         cut=[(0.0, "upperarm_l")], fling=[("upperarm_l", (2.8, -2.2, 3.0), 1.3)],
+         mirror="die_arm_off_m", aim=True, blast=(1.9, 0.0, 0.3), spin=(0.0, 2.0, 11.0),
+         cut=[(0.0, "upperarm_l")], fling=[("upperarm_l", (3.1, -1.5, 3.0), 1.3)],
          tone={"legs": (0.1, 0.25), "trunk": (0.05, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.08)},
          release=0.0, throw=(1.8, 0.6, 1.8)),
     # ---- a leg taken off: the leg flung away from the burst, he drops on the side it went from
@@ -1088,7 +1090,8 @@ GORE = [
 GATE = dict(peak=(1.0, 3.0), dist_blast=(2.0, 8.0), dist_arm=(1.0, 4.0), dist_leg=(1.0, 3.0), from_man=1.0,
             turns=(1.0, 2.0), tilt=30.0, away=0.5, lift=(0.5, 1.5), throw=(2.0, 4.0), slide=0.3, turn=35.0, rifle=0.8,
             high=2.9, gap=1.1,                  # (the effects thread's test: any bone of it 3 m at most; 1 m off its joint)
-            along=0.5)                          # (and its 24 Nov rule: each limb 0.5 m or more farther from the burst)
+            along=0.5,                          # (and its 24 Nov rule: each limb 0.5 m or more farther from the burst)
+            aim=35.0)                           # (a recipe with `aim`: each limb's way within this of straight away)
 GORE_TABLE = {
     "stand": {"thrown": ["die_blast_a", "die_blast_b", "die_blast_e", "die_blast_f"],
               "back": ["die_arm_off_b", "die_leg_off_a"], "forward": ["die_leg_off_b", "die_arm_off_d"],
@@ -1096,10 +1099,12 @@ GORE_TABLE = {
     "run": {"thrown": ["die_blast_a", "die_blast_b"], "back": ["die_arm_off_b", "die_leg_off_a"],
             "forward": ["die_leg_off_b", "die_arm_off_d"], "side": ["die_arm_off_a", "die_arm_off_c"],
             "under": ["die_leg_off_d"]},
-    "kneel": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e"], "forward": ["die_arm_off_f"],
-              "side": ["die_arm_off_g", "die_arm_off_h"], "under": ["die_leg_off_e"]},
-    "cover": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e"], "forward": ["die_arm_off_f"],
-              "side": ["die_arm_off_g", "die_arm_off_h"], "under": ["die_leg_off_e"]},
+    "kneel": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e", "die_arm_off_l"],
+              "forward": ["die_arm_off_f", "die_arm_off_m"], "side": ["die_arm_off_g", "die_arm_off_h"],
+              "under": ["die_leg_off_e"]},
+    "cover": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e", "die_arm_off_l"],
+              "forward": ["die_arm_off_f", "die_arm_off_m"], "side": ["die_arm_off_g", "die_arm_off_h"],
+              "under": ["die_leg_off_e"]},
     "prone": {"thrown": ["die_blast_d"], "back": ["die_arm_off_i"], "forward": ["die_leg_off_c"],
               "side": ["die_arm_off_j", "die_arm_off_k"]},
 }
@@ -1349,12 +1354,13 @@ def refit(rc, fl, sitting=False):
                 n *= 1.25
             elif L["turns"] > G["turns"][1] - 0.05:
                 n *= 0.85
-            if away and (L.get("gap", 9.0) < G["gap"] or L["from_man"] < G["from_man"]) and L["away"] is not None \
-                    and L["away"] > G["away"] + 0.15:
+            if away and not rc.get("aim") and (L.get("gap", 9.0) < G["gap"] or L["from_man"] < G["from_man"]) \
+                    and L["away"] is not None and L["away"] > G["away"] + 0.15:
                 # (he came down on it: send it wider of his way, still away from the burst)
                 a = math.radians(20.0) * (1.0 if away[0] * v[1] - away[1] * v[0] >= 0.0 else -1.0)
                 v[0], v[1] = v[0] * math.cos(a) - v[1] * math.sin(a), v[0] * math.sin(a) + v[1] * math.cos(a)
-            if away and L["away"] is not None and L["away"] < G["away"]:
+            if away and L["away"] is not None and \
+                    L["away"] < (math.cos(math.radians(G["aim"])) if rc.get("aim") else G["away"]):
                 h = math.hypot(v[0], v[1])
                 u = np.array((v[0], v[1])) / max(h, 1e-6) * 0.6 + np.array(away) * 0.4
                 u = u / np.linalg.norm(u) * h
@@ -1422,6 +1428,8 @@ def gate_misses(rc, fl):
             out.append("%s on end %s deg" % (p, L["tilt"]))
         if L["away"] is not None and L["away"] < GATE["away"]:
             out.append("%s not away %s" % (p, L["away"]))
+        if rc.get("aim") and L["away"] is not None and L["away"] < math.cos(math.radians(GATE["aim"])):
+            out.append("%s %.0f deg off straight away" % (p, math.degrees(math.acos(max(-1.0, min(1.0, L["away"]))))))
         if L.get("along") is not None and L["along"] < GATE["along"]:
             out.append("%s only %s m farther from the burst" % (p, L["along"]))
         if not L["came_down"]:
