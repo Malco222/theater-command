@@ -20,6 +20,7 @@
 #include "Campaign/TheaterSpeed.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Effects/BattleEffects.h"
+#include "HAL/PlatformTime.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -137,20 +138,47 @@ namespace
 	FVector Metres(const LandAir::V3& At, double U) { return FVector(At.X * U, At.Y * U, At.Z * U); }
 
 	/** LandAir's silk into a mesh (units): its own colours (her off-white, its seams and hem a little darker) in the
-	 * points' colours, so that the seams cost nothing a frame; each triangle wound to face the way LandAir says. */
-	void SilkInto(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, double U)
+	 * points' colours, so that the seams cost nothing a frame; each triangle wound to face the way LandAir says, by
+	 * where its points are. Or, down (WindBy: its silk half-way through its step, LandAir::SilkStep::Wound), Silk's
+	 * points and facings only (SilkStep::At), with WindBy's colours and triangles, each wound by where its points will
+	 * be half-way through the step it is then moved in place over. */
+	void SilkInto(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, double U, const LandAir::SilkMesh* WindBy = nullptr)
 	{
+		const bool bBy = WindBy && WindBy->Points.size() == Silk.Points.size();
+		const LandAir::SilkMesh& Made = bBy ? *WindBy : Silk;
+		if (Made.Colours.size() < Silk.Points.size() * 3 || Made.Outward.size() * 3 < Made.Triangles.size())
+		{
+			return;
+		}
 		const int32 First = M.Vertices.Num();
 		for (size_t K = 0; K < Silk.Points.size(); ++K)
 		{
 			const LandAir::V3& N = Silk.Facings[K];
-			const FLinearColor Colour(static_cast<float>(Silk.Colours[K * 3]), static_cast<float>(Silk.Colours[K * 3 + 1]), static_cast<float>(Silk.Colours[K * 3 + 2]));
+			const FLinearColor Colour(static_cast<float>(Made.Colours[K * 3]), static_cast<float>(Made.Colours[K * 3 + 1]), static_cast<float>(Made.Colours[K * 3 + 2]));
 			M.Add(Metres(Silk.Points[K], U), FVector(N.X, N.Y, N.Z), Colour.ToFColor(true));
 		}
-		for (size_t T = 0; T + 2 < Silk.Triangles.size(); T += 3)
+		for (size_t T = 0; T + 2 < Made.Triangles.size(); T += 3)
 		{
-			const LandAir::V3& Out = Silk.Outward[T / 3];
-			M.Face(First + Silk.Triangles[T], First + Silk.Triangles[T + 1], First + Silk.Triangles[T + 2], FVector(Out.X, Out.Y, Out.Z));
+			const int32 A = First + Made.Triangles[T], B = First + Made.Triangles[T + 1], C = First + Made.Triangles[T + 2];
+			const LandAir::V3& Out = Made.Outward[T / 3];
+			if (!bBy)
+			{
+				M.Face(A, B, C, FVector(Out.X, Out.Y, Out.Z));
+				continue;
+			}
+			// (as FMiniatureMesh::Face winds it, but by the step's half-way points)
+			const LandAir::V3& Pa = Made.Points[static_cast<size_t>(Made.Triangles[T])];
+			const LandAir::V3& Pb = Made.Points[static_cast<size_t>(Made.Triangles[T + 1])];
+			const LandAir::V3& Pc = Made.Points[static_cast<size_t>(Made.Triangles[T + 2])];
+			const FVector Facing = (FVector(Pb.X, Pb.Y, Pb.Z) - FVector(Pc.X, Pc.Y, Pc.Z)) ^ (FVector(Pa.X, Pa.Y, Pa.Z) - FVector(Pc.X, Pc.Y, Pc.Z));
+			if ((Facing | FVector(Out.X, Out.Y, Out.Z)) >= 0.0)
+			{
+				M.Triangles.Append({ A, B, C });
+			}
+			else
+			{
+				M.Triangles.Append({ A, C, B });
+			}
 		}
 	}
 
@@ -213,9 +241,11 @@ namespace
 	 * EndY to his right) forward of his feet, as a rider is posed. The crowd's man was put 0.7 m on from where this one
 	 * had lain, and jumped there in plain view under the canopy (a review of 24 November). And his lines, from his
 	 * harness to the half of his canopy's skirt toward him (LandAir::LineBack) as it falls in; once the crowd's man has
-	 * him, the lines only, to where his harness lies.
+	 * him, the lines only, to where his harness lies. Each line in two lengths, taut while his canopy is up and a little
+	 * slack lying (Slack 0 to 1: its middle let down toward the lower end's height and bowed a little to one side,
+	 * every other line to the other), so that his part keeps its make all the while.
 	 */
-	void DownShape(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, bool bMan, double Fallen, double Facing, double EndX, double EndY, double U)
+	void DownShape(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, bool bMan, double Fallen, double Facing, double EndX, double EndY, double U, double Slack)
 	{
 		const double F = FMath::Clamp(Fallen, 0.0, 1.0);
 		const FRotator Over(-LandAir::OverPitch * F, Facing, 0.0);
@@ -238,21 +268,30 @@ namespace
 			TurnedInto(M, Him, Over, Shift);
 		}
 		// (the same lines all the while it falls in, so that his part of the mesh keeps its make and is moved in place)
+		const double Sl = FMath::Clamp(Slack, 0.0, 1.0);
 		for (size_t K = 0; K < Silk.Seams.size(); ++K)
 		{
 			if (LandAir::LineBack(K, Silk.Seams.size()))
 			{
-				M.Rod(Harness, Metres(Silk.Points[static_cast<size_t>(Silk.Seams[K])], U), 0.012 * U, ChuteCord, 3);
+				const FVector End = Metres(Silk.Points[static_cast<size_t>(Silk.Seams[K])], U);
+				const FVector Way = End - Harness, Aside = FVector(-Way.Y, Way.X, 0.0).GetSafeNormal();
+				const FVector Mid = (Harness + End) * 0.5 + Aside * ((K % 2 == 0 ? 1.0 : -1.0) * 0.06 * Sl * Way.Size())
+					- FVector(0.0, 0.0, 0.5 * Sl * FMath::Abs(End.Z - Harness.Z));
+				M.Rod(Harness, Mid, 0.012 * U, ChuteCord, 3);
+				M.Rod(Mid, End, 0.012 * U, ChuteCord, 3);
 			}
 		}
 	}
 
 	/** A chute mesh's makings, kept from frame to frame so that their storage is used again (the game thread's alone;
-	 * a review of 24 November: each build had made new storage for some 1,500 points). */
+	 * a review of 24 November: each build had made new storage for its silk's points, 2,018 in the air on 28 gores and
+	 * 2,466 lying, 4,704 triangles; LandAir::HeapShape). Mid: its silk half-way through its step, to wind it by;
+	 * Points and Normals: its silk's, moved in place between makes. */
 	struct FChuteScratch
 	{
-		LandAir::SilkMesh Silk;
+		LandAir::SilkMesh Silk, Mid;
 		FMiniatureMesh Built, Canopy;
+		TArray<FVector> Points, Normals;
 	};
 	FChuteScratch& ChuteScratch()
 	{
@@ -316,6 +355,17 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 	}
 	const LandField::Ground* FieldPtr = S.Field.get();
 	const LandAir::GroundFn Ground = [FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); };
+	// (a downed pilot's silk lies on the ground as it is now: a hole's face or a breach's floor where one is torn under
+	// it, as a wire is laid (WireAt); a review of 24 November found it cut through a crater's rim)
+	const LandAir::GroundFn SilkGround = [&S, FieldPtr](double X, double Y)
+	{
+		double Z = FieldPtr->HeightAt(X, Y), Top = 0.0;
+		if (S.Holes.TopAt(X, Y, Top) && (Top > Z || S.Holes.InCut(X, Y)))
+		{
+			Z = Top;
+		}
+		return Z;
+	};
 	// (planned again whenever the recording has more air notes: a live battle's strikes come as it is fought. The legs
 	// already flown are planned the same; a loss whose note came after its plane was hit begins late, where it is)
 	bool bLate = false;
@@ -396,9 +446,10 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 	// one number a frame and its seams are in its points' colours (the art director's sixth note, 24 November 02:26Z:
 	// cheaply, no mesh made again a frame and no new material). In the air its pivot is his canopy, so that he swings
 	// under it; it is moved in place only as his canopy fills (its open share by 0.02). Down, his canopy tips over and
-	// falls in downwind, lying in long loose folds laid on the ground under it (made again by 0.05 of its slump:
-	// LandAir::SilkMoved says why; the art director's verdict of 24 November 14:34Z), and his chute's mesh draws him
-	// going over flat under it (moved in place); there he is swapped for a man of the crowd (her third note): in his
+	// falls in downwind, lying in long loose folds laid on the ground under it (the art director's verdict of 24
+	// November 14:34Z; made again each 0.05 of its slump, LandAir::SilkMoved says why, and moved in place every frame
+	// between, LandAir::SilkStep), and his chute's mesh draws him going over flat under it (moved in place) and his
+	// lines to it, slack once it lies; there he is swapped for a man of the crowd (her third note): in his
 	// army's tank crews' file where it has one, with its own head, else its infantry's, bareheaded; unarmed, in the
 	// clips LandAir says, at the rates and blends it says.
 	if (A.bChutes)
@@ -445,16 +496,43 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 			// man of the crowd could be made, he lies here flat. A review of 24 November: he had gone for a frame at the
 			// swap)
 			const double Lying = C.bDown && (C.bInMesh || Him.Clip.empty()) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
-			const bool bSilk = LandAir::SilkMoved(Shape, Him.Shape), bMan = LandAir::ManMoved(Lying, Him.Lying);
-			if (bSilk || bMan)
+			// (down, his silk is made again as its slump reaches its next step's (LandAir::SilkStep) and moved in place
+			// toward that step's shape every frame between, his lines with it: a review of 24 November found it held still
+			// between makes and jumping up to 1.3 m at one)
+			const bool bSilk = LandAir::SilkMoved(Shape, Him.Shape) || (C.bDown && Him.Step.Due(C.Slump)), bMan = LandAir::ManMoved(Lying, Him.Lying);
+			const bool bStep = !bSilk && C.bDown && Him.Step.Moving() && FMath::Abs(C.Slump - Him.SlumpDrawn) > 1e-9;
+			if (bSilk || bMan || bStep)
 			{
-				// (his part built against the silk as it is drawn: as it is now if that is built again, else as last built)
+				// (his part built against the silk as it is drawn: as it is now if that is built again or moved, else as last
+				// built)
 				const double SilkAt = bSilk ? Shape : Him.Shape;
 				FChuteScratch& Make = ChuteScratch();
 				Make.Silk.Clear();
 				if (C.bDown)
 				{
-					LandAir::HeapShape(C, SilkAt - 2.0, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), Make.Silk, Ground);
+					if (bSilk)
+					{
+						const double Began = FPlatformTime::Seconds();
+						Him.Step.Make(C, SilkAt - 2.0, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), SilkGround);
+						Him.MakeMs = (FPlatformTime::Seconds() - Began) * 1000.0;
+						Him.MakeMsMost = FMath::Max(Him.MakeMsMost, Him.MakeMs);
+						Him.MakeMsAll += Him.MakeMs;
+						++Him.SilkMakes;
+					}
+					Him.Step.At(C.Slump, Make.Silk);
+					// (how far its points moved since the frame before, metres: for the 45 fps reading; not across a replay's
+					// wind back)
+					if (!bLate && Him.Drawn.size() == Make.Silk.Points.size())
+					{
+						for (size_t K = 0; K < Make.Silk.Points.size(); ++K)
+						{
+							const LandAir::V3& Now = Make.Silk.Points[K];
+							const LandAir::V3& Was = Him.Drawn[K];
+							Him.MovedMost = FMath::Max(Him.MovedMost, std::sqrt((Now.X - Was.X) * (Now.X - Was.X) + (Now.Y - Was.Y) * (Now.Y - Was.Y) + (Now.Z - Was.Z) * (Now.Z - Was.Z)));
+						}
+					}
+					Him.Drawn = Make.Silk.Points;
+					Him.SlumpDrawn = C.Slump;
 				}
 				else if (SilkAt > 0.0)
 				{
@@ -474,33 +552,63 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 							EndY = Own->Clips[static_cast<size_t>(Prone)].EndOffset.Y;
 						}
 					}
-					DownShape(Make.Built, Make.Silk, Lying >= 0.0, Lying >= 0.0 ? Lying : 1.0, C.Face - C.HeapHeading, EndX, EndY, U);
+					// (his lines taut while his canopy is up, a little slack once it lies)
+					const double Slack = FMath::SmoothStep(0.3, 0.8, C.Slump);
+					DownShape(Make.Built, Make.Silk, Lying >= 0.0, Lying >= 0.0 ? Lying : 1.0, C.Face - C.HeapHeading, EndX, EndY, U, Slack);
 				}
 				else
 				{
 					HangingShape(Make.Built, Make.Silk, U);
 				}
-				// (his part moved in place while its make is the same; his silk in the air too, but down made again, its
-				// folds turning some of its triangles over: LandAir::SilkMoved)
+				// (his part moved in place while its make is the same; his silk in the air too, but down made again each
+				// step, its folds turning some of its triangles over (LandAir::SilkMoved), wound by where its points are
+				// half-way through the step, and between moved in place, its points and facings only)
 				bool bMade = PutSection(Mesh, 0, Make.Built, true);
 				if (bSilk)
 				{
 					Emptied(Make.Canopy);
-					SilkInto(Make.Canopy, Make.Silk, U);
+					if (C.bDown)
+					{
+						Him.Step.Wound(Make.Mid);
+						SilkInto(Make.Canopy, Make.Silk, U, &Make.Mid);
+					}
+					else
+					{
+						SilkInto(Make.Canopy, Make.Silk, U);
+					}
 					bMade = PutSection(Mesh, 1, Make.Canopy, !C.bDown) || bMade;
 					Him.Shape = Shape;
+				}
+				else if (bStep)
+				{
+					const FProcMeshSection* Had = Mesh->GetNumSections() > 1 ? Mesh->GetProcMeshSection(1) : nullptr;
+					if (Had && Had->ProcVertexBuffer.Num() == static_cast<int32>(Make.Silk.Points.size()))
+					{
+						Make.Points.Reset();
+						Make.Normals.Reset();
+						for (size_t K = 0; K < Make.Silk.Points.size(); ++K)
+						{
+							const LandAir::V3& N = Make.Silk.Facings[K];
+							Make.Points.Add(Metres(Make.Silk.Points[K], U));
+							Make.Normals.Add(FVector(N.X, N.Y, N.Z));
+						}
+						Mesh->UpdateMeshSection(1, Make.Points, Make.Normals, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+					}
 				}
 				if (bMan)
 				{
 					Him.Lying = Lying;
 				}
-				// (counted for the 45 fps reading: told once his canopy lies flat)
+				// (counted for the 45 fps reading: told once his canopy lies flat, with its silk's points and triangles
+				// lying, its makes' time and how far it moved in a frame at most)
 				Him.Made += bMade ? 1 : 0;
 				Him.Moved += bMade ? 0 : 1;
 				if (Shape >= 3.0 && !Him.bCounted)
 				{
 					Him.bCounted = true;
-					UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d's chute: its mesh made %d times, moved in place %d"), C.Key, Him.Made, Him.Moved);
+					UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d's chute: its mesh made %d times, moved in place %d; its silk lying %d points and %d triangles, made %d times as it fell in at %.2f ms a make (%.2f at most), moving %.2f m in a frame at most"),
+						C.Key, Him.Made, Him.Moved, static_cast<int32>(Him.Step.From.Points.size()), static_cast<int32>(Him.Step.From.Triangles.size() / 3), Him.SilkMakes,
+						Him.MakeMsAll / FMath::Max(1, Him.SilkMakes), Him.MakeMsMost, Him.MovedMost);
 				}
 			}
 			Seen.Add(MeshKey);

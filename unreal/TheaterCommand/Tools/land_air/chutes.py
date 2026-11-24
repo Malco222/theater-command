@@ -53,6 +53,7 @@ for line in open(SILK):
         cur['h'] = [float(a) for a in w[1:5]]
     elif w[0] == 's':
         cur['s'].append(int(w[1]))
+        cur.setdefault('k', []).append(int(w[2]) if len(w) > 2 else len(cur['s']) - 1)
     elif w[0] == 'p':
         v = [float(a) for a in w[1:]]
         cur['p'].append(v[0:3])
@@ -363,7 +364,9 @@ SUIT, CORD = srgb((0.30, 0.26, 0.19)), srgb((0.70, 0.68, 0.62))
 
 
 def man_and_lines(mesh, view, dd=None):
-    """Him lying (his feet at the mesh's origin, the way he faces), and his lines from his harness to the seams."""
+    """Him lying (his feet at the mesh's origin, the way he faces), and his lines from his harness to the seams, a little
+    slack as the scene draws them lying (each in two lengths, its middle let down toward the lower end's height and bowed
+    to one side by 0.06 of its length, every other line to the other)."""
     dd = dd or d
     hx, hy, hz, turn = mesh['h']
     t = math.radians(turn)
@@ -372,10 +375,16 @@ def man_and_lines(mesh, view, dd=None):
     a, b = view.at(feet), view.at(head)
     wide = max(2, int(0.34 * view.scale / max(1.0, view.depth([0.85 * fwd[0], 0.85 * fwd[1], 0.15]))))
     dd.line((a[0], a[1], b[0], b[1]), fill=SUIT, width=wide)
-    for s in mesh['s']:
+    for s, k in zip(mesh['s'], mesh.get('k', range(len(mesh['s'])))):
         p = mesh['p'][s]
-        u, v = view.at([hx, hy, hz]), view.at(p)
-        dd.line((u[0], u[1], v[0], v[1]), fill=CORD, width=1)
+        way = [p[0] - hx, p[1] - hy, p[2] - hz]
+        size = math.sqrt(sum(a * a for a in way))
+        flat = math.hypot(way[0], way[1]) or 1.0
+        bow = (1.0 if k % 2 == 0 else -1.0) * 0.06 * size
+        mid = [0.5 * (hx + p[0]) - way[1] / flat * bow, 0.5 * (hy + p[1]) + way[0] / flat * bow, 0.5 * (hz + p[2]) - 0.5 * abs(p[2] - hz)]
+        u, m, v = view.at([hx, hy, hz]), view.at(mid), view.at(p)
+        dd.line((u[0], u[1], m[0], m[1]), fill=CORD, width=1)
+        dd.line((m[0], m[1], v[0], v[1]), fill=CORD, width=1)
 
 
 def luma(rgb):
@@ -424,7 +433,19 @@ for y in (wide_row, hem_row):
     d.line((r + 3, y, r + 12, y), fill=RED)
 side_words = ["widest %.2f m across, %.2f of its %.2f m depth down from its crown" % (most * mpp, (wide_row - top) / (bottom - top), (bottom - top + 1) * mpp),
               "its hem %.2f m across: %.2f of its widest (her 0.8 to 0.9)" % (hem * mpp, hem / most)]
-say(r1[0], 1, side_words[0])
+
+
+# (her verdict's (c), and a review of 24 November: under its widest it had dropped straight, 0.41 to 0.66 of its depth,
+# under a flat-topped crown. Its silhouette's width a share of the way down its depth from its crown, against its widest)
+def width_at(share):
+    return widths[int(round(top + share * (bottom - top)))] / most
+
+
+side_words.append("%.3f of its widest 0.5 of its depth down, %.3f at 0.6" % (width_at(0.5), width_at(0.6)))
+side_words.append("its crown %.2f of its widest 3%% down, %.2f 11%% down" % (width_at(0.03), width_at(0.11)))
+say(r1[0], 3, side_words[0])
+say(r1[0], 2, side_words[2])
+say(r1[0], 1, side_words[3])
 say(r1[0], 0, side_words[1])
 
 # (2) and (3) from under it 100 m off (60 along, 80 up), the sun just behind it
@@ -440,9 +461,9 @@ paint(silk_polys(meshes[0], v3, sun_behind, 0.0), r1[2])
 # (4) falling in, across the wind 30 m off: as he landed, and a quarter, a half and three quarters fallen in (paler
 # the earlier), and lying
 panel(r1[3], "falling in, across the wind 30 m off (paler earlier)", FIELD)
-v4 = View([4.5, -30.0, 2.0], [4.5, 0.0, 3.0], 1150.0, r1[3])
+v4 = View([5.5, -30.0, 2.0], [5.5, 0.0, 3.5], 1000.0, r1[3])
 x0, y0, x1, y1 = r1[3]
-gy = v4.at([4.5, 0.0, 0.0])[1]
+gy = v4.at([5.5, 0.0, 0.0])[1]
 d.rectangle((x0 + 1, y0 + 22, x1 - 1, int(gy)), fill=SKY)
 layers = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 mids = []
@@ -493,8 +514,21 @@ long5 = span * 40.0 / v5.scale
 pix = im.load()
 silk_px = [pix[x, y] for x in range(bb[0], bb[2]) for y in range(bb[1], bb[3]) if m5.getpixel((x, y))]
 lum = sorted(luma(c) for c in silk_px)
-say(wide_box, 2, "%.1f m long along the wind; its far quarter stands %.2f m up at most (her 0.3 to 0.8), its near quarter %.2f "
+say(wide_box, 3, "%.1f m long along the wind; its far quarter stands %.2f m up at most (her 0.3 to 0.8), its near quarter %.2f "
     "(heights at 40 m, within 4%% for its depth)" % (long5, far_up, near_up))
+
+
+# (a review of 24 November: its far end had come to a beak 0.23 m off the ground. Its top over its last twentieth, at
+# its far end: how high at 90, 95 and 98 hundredths of its length and at its tip, and how much it falls over the first
+# and second halves of its last twentieth: falling faster toward its tip, it comes round and down)
+def top_at(share):
+    x = min(cols, key=lambda c: abs(c - (left + share * span)))
+    return (ground_row - cols[x][0]) * 40.0 / v5.scale
+
+
+ends = [top_at(f) for f in (0.90, 0.95, 0.975, 0.98, 1.0)]
+say(wide_box, 2, "its far end's top %.2f m up 0.9 along it, %.2f at 0.95, %.2f at 0.98 and %.2f at its tip: over its last twentieth "
+    "falling %.2f m, then %.2f" % (ends[0], ends[1], ends[3], ends[4], ends[1] - ends[2], ends[2] - ends[4]))
 say(wide_box, 1, "its silk here sRGB luma %.0f to %.0f (a tenth and nine tenths), median %.0f; his lines and him at its near end (left)" % (
     lum[len(lum) // 10], lum[9 * len(lum) // 10], lum[len(lum) // 2]))
 
