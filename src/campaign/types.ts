@@ -888,8 +888,9 @@ export interface SubLook {
   /** sunk: false where damage control kept her afloat (ruling 240, C3): the same hit, told the same. */
   torpedoes: { fleet: number; zone: number; cls: ShipClass; sunk: boolean; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }[];
   /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
-  /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false), the air cover's kind, and the boats its escorts sank there. */
-  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; lost?: number }[] }[];
+  /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false; groups is its escort-group training), the air cover's kind, and the boats its escorts sank there. */
+  /** Also with Units decide only, kits: each allied navy with destroyers answering attacks in the sea, keyed by its nation, with its own kit; where none answers, the convoy's own nation alone. The scene keys its escorts' looks by it, so each navy's escorts are drawn with their own kit. It is look only: no rule reads it. */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean; groups: boolean }; kits?: Record<string, { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean; groups: boolean }>; cover?: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; lost?: number }[] }[];
 }
 
 export interface Headline {

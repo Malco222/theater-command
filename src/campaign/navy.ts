@@ -2152,8 +2152,11 @@ const kitEdge = (k: AswKit, group: boolean): number => incidentRate(k, group) / 
 /** Radar on escorts: what sea-search radar adds (not laid: 1 until the historian's figure is read). */
 const radarKit = (k: AswKit): number => 1 + (k.radar ? CAUSE.radar : 0);
 
-/** Where an escort's look on the scene comes from: its navy's kit as the sea scene reads it. HF/DF has no rule yet. */
-const kitLook = (k: AswKit): { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean } => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, hfdf: false });
+/** A navy's kit as the submarine scene's record holds it (types.ts SubLook). */
+type KitLook = NonNullable<SubLook['convoys'][number]['seas'][number]['kit']>;
+
+/** Where an escort's look on the scene comes from: its navy's kit as the sea scene reads it, with its escort-group training. HF/DF has no rule yet. */
+const kitLook = (k: AswKit): KitLook => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, hfdf: false, groups: k.groups });
 
 /** The air cover over a convoy's sea: where it flies from, and the share of the sea's waters it reaches. */
 export interface SeaCover { kind: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; share: number }
@@ -3349,9 +3352,9 @@ function lookConvoy(g: Game, nat: string, route: string, zones: number[], raider
     escorts: escorts.filter((f) => f.zone === z || (z === most && !zones.includes(f.zone))).map((f) => lookFleet(f, at.dd.get(f.id) ?? f.ships.dd)),
     air: airOver(g, z, nat) * NAVY.convoy.air,
     tons: Math.round((all > 0 ? tons * (by[i] / all) : tons / zones.length) / 1000) * 1000,
-    // (Units decide only: the kit of the navy with most destroyers answering attacks in the sea, the cover's kind, and
-    // the boats the escorts sank there. Off, none of these is written.)
-    ...(cause ? { kit: kitLook(aswKit(g, answerer(g, nat, route, z))), cover: cause.cover[i].kind, lost: cause.lost[z] ?? 0 } : {}),
+    // (Units decide only: the kit of the navy with most destroyers answering attacks in the sea, each answering navy's
+    // own kit by navy, the cover's kind, and the boats the escorts sank there. Off, none of these is written.)
+    ...(cause ? { ...seaKits(g, nat, route, z), cover: cause.cover[i].kind, lost: cause.lost[z] ?? 0 } : {}),
   }));
   lookOf(g, nat).convoys.push({ route, tons, seas });
 }
@@ -3378,16 +3381,31 @@ function metConvoys(g: Game, count: ConvoyCount | null, side: ConvoySide | undef
   for (const z of Object.keys(incident)) seen.incident[+z] = Math.max(seen.incident[+z] ?? 0, incident[+z]);
 }
 
-/** The navy with most destroyers answering attacks on a route's convoys in one sea (its groups there and the close escort), or the route's own. */
-function answerer(g: Game, nat: string, route: string, z: number): string {
+/** The allied navies answering attacks on a route's convoys in one sea (their groups hunting there and the close escort), each with its destroyers there, in the order of the fleets. */
+function answering(g: Game, nat: string, route: string, z: number): Map<string, number> {
   const by = new Map<string, number>();
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.dd <= 0 || !allied(g, f.nat, nat)) continue;
     if ((f.stance === 'hunt' && f.zone === z) || (f.stance === 'escort' && f.lane === route)) by.set(f.nat, (by.get(f.nat) ?? 0) + f.ships.dd);
   }
+  return by;
+}
+
+/** The navy with most destroyers answering attacks on a route's convoys in one sea, or the route's own. */
+function answerer(g: Game, nat: string, route: string, z: number, by = answering(g, nat, route, z)): string {
   let best = nat, most = 0;
   for (const [k, n] of by) if (n > most) { most = n; best = k; }
   return best;
+}
+
+/**
+ * A convoy sea's kits for the scene's record: each answering navy's own kit, keyed by its nation (the route's own
+ * nation's alone where none answers), and as 'kit', as before, the kit of the navy with most destroyers there.
+ */
+function seaKits(g: Game, nat: string, route: string, z: number): { kit: KitLook; kits: Record<string, KitLook> } {
+  const by = answering(g, nat, route, z);
+  const kits = Object.fromEntries((by.size ? [...by.keys()] : [nat]).map((k) => [k, kitLook(aswKit(g, k))]));
+  return { kit: { ...kits[answerer(g, nat, route, z, by)] }, kits };
 }
 
 /**
