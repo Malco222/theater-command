@@ -101,7 +101,7 @@ import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar'
 import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
-import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, standingGuns, whyNotMission } from '../../../src/campaign/air';
+import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, noneSeen, overOcean, seenAgo, skyOver, standingGuns, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
@@ -6947,13 +6947,19 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (Fog on raids, airfog.ts with its switch on: out of sight the fighters are those known for sure, with more
         // perhaps behind them, and the guns as last seen, or not known.)
         const hid = !!dn.fog && !dn.fog.live;
+        // (The guns, her 20:08Z marks, items 7, 8, 11 and 12 as mended at 20:12Z: the tail holds about 25 characters, so
+        // the card's sentence goes in the tip, ahead of the tip as it was; a bare target says its guns as none built.)
+        const unknown = hid && dn.gunsKnown === false, when = hid && !unknown ? seenAgo(dn.fog!.ago) : '';
+        const S = standingGuns().toLocaleString('en-US'), each = 'Each level stops a share of the bombing and brings down more bombers.';
+        const gunsTip = hid && !unknown && dn.guns <= 0 ? `${noneSeen(dn.fog!.ago)} ${each}`
+          : dn.gunsCount === dn.gunsLabel ? `${dn.gunsLabel} ${each}` : `${dn.gunsCount} ${dn.gunsLabel}. ${each}`;
         return {
           label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
           foes: hid && foes <= 0 ? 'Unknown' : foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: hid ? (foes > 0 ? 'enemy fighters known in reach, more may come' : 'fighters in reach: not scouted') : foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
           // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them; the
-          // tail the count as the browser's card gives it, the built guns first and the light guns every target has
-          // named apart: the UI director's section B, 25 Nov 2026)
-          guns: dn.guns, gunsFigure: hid && dn.gunsKnown === false ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: `\u00B7 ${[dn.gunsTail, dn.gunsCount].filter(Boolean).join(' \u00B7 ')}`, gunsTip: `${dn.gunsLabel.replace(/\.$/, '')}. Each level stops a share of the bombing and brings down more bombers.`,
+          // tail short, the built guns' count in the tip with the light guns every target has named apart)
+          guns: dn.guns, gunsFigure: unknown ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: unknown || dn.guns > 0 ? 'AA guns' : 'AA guns built',
+          gunsTail: unknown ? `\u00B7 ${dn.gunsTail}` : when ? `\u00B7 ${when}` : dn.guns > 0 ? `\u00B7 and ${S} light` : `\u00B7 only ${S} light`, gunsTip,
           day: one(dn.day), night: one(dn.night),
           // (new for the 3D card to draw, where it will: what the side knows, a line each, and the band)
           ...(dn.fog ? { fog: { live: dn.fog.live, fighters: dn.fog.fighters, guns: dn.fog.guns, damage: dn.fog.damage, band: dn.fog.band } } : {}),
