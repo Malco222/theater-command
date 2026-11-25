@@ -581,6 +581,12 @@ namespace LandScape
 		return MakeSnowCover(std::min(1.0, Cover), L, S);
 	}
 
+	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t S, const LandField::Field& F)
+	{
+		if (!(Cover > 0.02)) return nullptr;
+		return MakeSnowCover(std::min(1.0, Cover), L, S, !F.Trial.empty() && F.Tried("wintergrass"));
+	}
+
 	// ------------------------------------------------------------------ the writer
 
 	uint32_t Writer::Vert(double X, double Y, double Z, double NX, double NY, double NZ, const Tone& C)
