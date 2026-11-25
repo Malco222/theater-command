@@ -306,6 +306,15 @@ export interface LiveOpts {
    */
   hatches?: boolean;
   /**
+   * Support teams at work (release 2, looks only; Brian, 25 November 14:15Z: "There should be a machine gun teens that lay
+   * down suppressing fire, such as the German MG 42 and the US machine gun", 15:36Z "yes to all"; Drill.teamwork): each
+   * machine gun and mortar of a support team works as a crew, its men each at his own part and the team's weapons each in
+   * their own time: set up one by one where they see (mortars hidden behind a rise), the machine guns sweeping their own
+   * shares of the target in spells, faster as their own foot go in, shifting and lifting as they close; moved one at a
+   * time when shelled; picked up in turn, the last covering. Off unless true.
+   */
+  teamwork?: boolean;
+  /**
    * Direct command (Brian, 03:09Z "do 1 2 and 3"; the rules' switches, sim.ts perUnit and radio). staff: a block he
    * orders is his, and his staff fights the rest of his side. radio: his orders land a few seconds later, longer where
    * the block is hit. Both on for the player unless turned off.
@@ -537,7 +546,7 @@ export class LiveBattle {
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
     if (opts.light === true && !piece) sim.light = true;
-    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}) });
+    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.teamwork === true ? { teamwork: true } : {}) });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
