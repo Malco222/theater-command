@@ -1,6 +1,8 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Misc/ScopeExit.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "Campaign/StreetLife.h"
+#include "Campaign/GrandCity.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
 #include "Dom/JsonObject.h"
@@ -2826,7 +2828,7 @@ void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool 
 	(void)bTown;
 }
 
-void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters, FVector* OutBeacon, FVector* OutLandmarkTop)
+void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters, FVector* OutBeacon, FVector* OutLandmarkTop, TArray<FVector2D>* OutAvenues)
 {
 	FRandomStream Dice(Site.Seed * 7919 + 13);
 	const double U = Site.Unit * (Site.bPacked ? 0.85 : 1.0); // a house is under one of these long (a little smaller where the town is packed into a small province)
@@ -3483,6 +3485,15 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// and railways and stops short between them.
 	const bool bCapital = Site.Tier >= 3;
 	const bool bPacked = Site.bPacked;
+	// (Release 2, grander great cities: Campaign/GrandCity.h. The same town, every house where it stood, with a fuller
+	// heart, a turret or a dome on some of its blocks, and gardens at its edge. Europe's kits, the Americas' and the
+	// railway town's behind one switch, the far side's four kits behind another; never a packed town, which is built
+	// tall already. Nothing of it is thrown on the dice.)
+	const bool bGrand = !bPacked && (TheaterGrandCity::FarKit(Look) ? Site.bGrandFar : Site.bGrand);
+	// (The far side's kits, behind their own switch: the walled town and the timber town build their accents in tiers
+	// under eaves, the Indian town's are its own white domes, and thatch and tin keeps the heart it has: its grander
+	// form is its edge.)
+	const bool bGrandTall = bGrand && !TheaterGrandCity::LowKit(Look);
 	const double PitchA = 1.95 * Um, PitchB = 1.5 * Um; // a block and its street, along and across
 	const double BlockA = PitchA - 0.3 * Um, BlockB = PitchB - 0.28 * Um; // the block itself
 	// The square: two blocks deep, and four wide before a capital's landmark.
@@ -3537,6 +3548,26 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// The square, its two avenues, and what stands in it.
 	Street(-ReachAt(Yaw0 + 180.0) + 0.3 * Um, 0.0, ReachAt(Yaw0) - 0.3 * Um, 0.0, 0.3);
 	Street(0.0, -ReachAt(Yaw0 + 270.0) + 0.3 * Um, 0.0, ReachAt(Yaw0 + 90.0) - 0.3 * Um, 0.3);
+	if (OutAvenues && !bFar && !bPacked && Look != 9)
+	{
+		// (Release 2, street cars: Campaign/StreetLife.h.) Where a street car may run on each of the four arms of the
+		// two avenues just laid: from just outside the square to just short of where the arm's cobble ends unbroken,
+		// by the same lengths and the same test Street lays them with. Two points of the map an arm. No dice are
+		// thrown and nothing is built: the town is laid out as it was. (None in a packed town, whose avenues are too
+		// short, nor in the thatch and tin town.)
+		const double AvenueRuns[4] = { ReachAt(Yaw0) - 0.3 * Um, ReachAt(Yaw0 + 90.0) - 0.3 * Um, ReachAt(Yaw0 + 180.0) - 0.3 * Um, ReachAt(Yaw0 + 270.0) - 0.3 * Um };
+		for (int32 Spoke = 0; Spoke < 4; ++Spoke)
+		{
+			const double SpokeA = Spoke == 0 ? 1.0 : Spoke == 2 ? -1.0 : 0.0, SpokeB = Spoke == 1 ? 1.0 : Spoke == 3 ? -1.0 : 0.0;
+			double StopAt = 0.0, EndAt = 0.0;
+			if (TheaterStreetLife::Arm(Spoke % 2 == 0 ? SquareHalfA : SquareHalfB, AvenueRuns[Spoke], AvenueRuns[(Spoke + 2) % 4], 1.6 * Um,
+				[&](double OutBy) { return CanBuild(SpokeA * OutBy, SpokeB * OutBy); }, StopAt, EndAt))
+			{
+				OutAvenues->Add(MapAt(SpokeA * StopAt, SpokeB * StopAt));
+				OutAvenues->Add(MapAt(SpokeA * EndAt, SpokeB * EndAt));
+			}
+		}
+	}
 	{
 		// (paved a block at a time, all at the height of its middle, leaving out the corners that are built on)
 		const FVector Mid = Stand(0.0, 0.0, 0.0);
@@ -3599,6 +3630,36 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	}
 	auto AtStation = [&](double A, double B) { return bStation && FMath::Square(A - StationA) + FMath::Square(B - StationB) < FMath::Square(1.3 * Um); };
 	auto InWorksQuarter = [&](double Ring, double Bearing) { return Ring > 0.48 && FMath::Abs(FRotator::NormalizeAxis(Bearing - (Yaw0 + 270.0))) < 30.0; };
+	// (Grander.) A garden about the middle of a block: its lawn, Thick deep and lifted by Lift, where the whole of it
+	// lies on ground the town may build on; and, not from high up, its trees. False where there is none.
+	auto LayGarden = [&](double A, double B, const TheaterGrandCity::FGarden& Garden, double Lift, double Thick)
+	{
+		if (!Garden.bLawn)
+		{
+			return false;
+		}
+		const double LawnA = A + Garden.A * Um, LawnB = B + Garden.B * Um, HalfLong = 0.5 * Garden.Long * Um, HalfWide = 0.5 * Garden.Wide * Um;
+		if (!CanBuild(LawnA, LawnB) || !CanBuild(LawnA - HalfLong, LawnB - HalfWide) || !CanBuild(LawnA - HalfLong, LawnB + HalfWide)
+			|| !CanBuild(LawnA + HalfLong, LawnB - HalfWide) || !CanBuild(LawnA + HalfLong, LawnB + HalfWide))
+		{
+			return false;
+		}
+		// (The walled town: a lawn lies wholly inside its wall or wholly outside it, never under it.)
+		if (Look == 7 && !TheaterGrandCity::ClearOfWall(LawnA - HalfLong, LawnA + HalfLong, LawnB - HalfWide, LawnB + HalfWide, Reach * TheaterGrandCity::WalledRing, TheaterGrandCity::WallClear * Um))
+		{
+			return false;
+		}
+		Box(Stand(LawnA, LawnB, Lift), FVector(Garden.Long, Garden.Wide, Thick) * U, Lawn, Yaw0);
+		if (!bFar)
+		{
+			for (int32 K = 0; K < Garden.Trees; ++K)
+			{
+				const TheaterGrandCity::FTreeSpot& Spot = Garden.Tree[K];
+				Broadleaf(Stand(A + Spot.A * Um, B + Spot.B * Um), Spot.High * U, Spot.Round * U, Spot.bDark ? LeafDark : LeafPale);
+			}
+		}
+		return true;
+	};
 
 	const int32 Span = FMath::CeilToInt32(Reach * 1.1 / FMath::Min(PitchA, PitchB)) + 1;
 	// The parish churches, each in its own quarter of the town and well inside it, so that with the great church
@@ -3692,22 +3753,67 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			// (A town packed into a small province is built tight and tall: closed blocks round its square, half as
 			// tall again, and tall terraces to its edge, with no parks and no houses standing apart.)
 			const bool bClosed = bSquareCorner || (bPacked ? (FMath::Abs(A) < SquareHalfA + PitchA && FMath::Abs(B) < SquareHalfB + PitchB) : (Ring < Heart && Local < 0.86));
-			const double Storeys = bPacked ? 1.3 : 1.0;
+			const double Storeys = bPacked ? 1.3 : bGrandTall ? TheaterGrandCity::Storeys(Ring, Heart, Middle) : 1.0;
 			if (bClosed)
 			{
 				// The heart: a closed block, four wings round a courtyard, taller toward the square.
-				const double Tall = bPacked ? 1.45 : FMath::Lerp(1.25, 0.88, FMath::Min(Ring / Heart, 1.0));
+				// (grander: it keeps its cornice to the heart's edge, under a steeper roof)
+				const double Tall = bPacked ? 1.45 : bGrandTall ? TheaterGrandCity::HeartTall(Ring / Heart) : FMath::Lerp(1.25, 0.88, FMath::Min(Ring / Heart, 1.0));
+				const double BlockRoof = bGrandTall ? TheaterGrandCity::HeartRoof : 0.14;
 				bMute = bFar;
 				for (const double Side : { -1.0, 1.0 })
 				{
-					Dwelling(A + Side * (BlockA * 0.5 - 0.21 * Um), B, BlockB / Um, 0.42, Tall * Dice.FRandRange(0.86f, 1.1f), 0.14, WallPaint(), Leads, 90.0);
-					Dwelling(A, B + Side * (BlockB * 0.5 - 0.21 * Um), BlockA / Um - 0.86, 0.42, Tall * Dice.FRandRange(0.86f, 1.1f), 0.14, WallPaint(), Leads, 0.0);
+					Dwelling(A + Side * (BlockA * 0.5 - 0.21 * Um), B, BlockB / Um, 0.42, Tall * Dice.FRandRange(0.86f, 1.1f), BlockRoof, WallPaint(), Leads, 90.0);
+					Dwelling(A, B + Side * (BlockB * 0.5 - 0.21 * Um), BlockA / Um - 0.86, 0.42, Tall * Dice.FRandRange(0.86f, 1.1f), BlockRoof, WallPaint(), Leads, 0.0);
 				}
 				bMute = false;
 				if (bFar)
 				{
 					// (from high up: the whole block as one piece)
-					House(Stand(A, B), BlockA / Um * U, BlockB / Um * U, Tall * U, (bFlatRoofs ? 0.04 : 0.14) * U, PaintAt(WallsOf, I, J), Leads, Yaw0);
+					House(Stand(A, B), BlockA / Um * U, BlockB / Um * U, Tall * U, (bFlatRoofs ? 0.04 : BlockRoof) * U, PaintAt(WallsOf, I, J), Leads, Yaw0);
+				}
+				else if (bGrandTall && !bSquareCorner)
+				{
+					// (Grander.) Over the roofs of some of the heart's blocks, chosen by where the block stands: a turret
+					// on its corner nearest the square, or a small dome on a drum in its court. Both are lower and
+					// smaller than a capital's own dome, and the blocks that stand in the square before it carry
+					// neither. Under flat roofs every one of them is a dome. (In the walled town and the timber town
+					// the turret is a corner tower under eaves and the dome a hall roof, in the kit's own paints.)
+					const TheaterGrandCity::EAccent Crown = TheaterGrandCity::Accent(I, J, Site.Seed);
+					const bool bEaves = TheaterGrandCity::EavesKit(Look);
+					if (Crown == TheaterGrandCity::EAccent::Turret && !bFlatRoofs)
+					{
+						const double TurretA = A + (A > 0.0 ? -1.0 : 1.0) * (BlockA * 0.5 - 0.21 * Um), TurretB = B + (B > 0.0 ? -1.0 : 1.0) * (BlockB * 0.5 - 0.21 * Um);
+						const double TurretHigh = TheaterGrandCity::TurretTall(Tall) * U;
+						const FVector TurretFoot = Stand(TurretA, TurretB);
+						Box(TurretFoot + FVector(0.0, 0.0, 0.5 * TurretHigh), FVector(TheaterGrandCity::TurretWide * U, TheaterGrandCity::TurretWide * U, TurretHigh), Ashlar, Yaw0);
+						if (bEaves)
+						{
+							const double UpperFoot = TurretHigh + TheaterGrandCity::EaveStep * U;
+							Pillar(TurretFoot + FVector(0.0, 0.0, TurretHigh), (0.5 * TheaterGrandCity::TurretWide + TheaterGrandCity::EaveOut) * U, 0.35 * TheaterGrandCity::TurretWide * U, TheaterGrandCity::EaveDeep * U, Verdigris, 8);
+							Box(TurretFoot + FVector(0.0, 0.0, UpperFoot + 0.5 * TheaterGrandCity::UpperTall * U), FVector(TheaterGrandCity::UpperWide, TheaterGrandCity::UpperWide, TheaterGrandCity::UpperTall) * U, Ashlar, Yaw0);
+							Pillar(TurretFoot + FVector(0.0, 0.0, UpperFoot + TheaterGrandCity::UpperTall * U), TheaterGrandCity::UpperCapWide * U, 0.0, TheaterGrandCity::UpperCap * U, Verdigris, 8);
+						}
+						else
+						{
+							Pillar(TurretFoot + FVector(0.0, 0.0, TurretHigh), TheaterGrandCity::TurretCapWide * U, 0.0, TheaterGrandCity::TurretCap * U, Verdigris, 8);
+						}
+					}
+					else if (Crown != TheaterGrandCity::EAccent::None && bEaves)
+					{
+						const double HallHigh = TheaterGrandCity::DrumTall(Tall) * U;
+						const FVector HallFoot = Stand(A, B);
+						Box(HallFoot + FVector(0.0, 0.0, 0.5 * HallHigh), FVector(TheaterGrandCity::DrumWide * U, TheaterGrandCity::DrumWide * U, HallHigh), Ashlar, Yaw0);
+						Pillar(HallFoot + FVector(0.0, 0.0, HallHigh), (0.5 * TheaterGrandCity::DrumWide + TheaterGrandCity::HallEave) * U, 0.0, TheaterGrandCity::HallRoof * U, Verdigris, 8);
+					}
+					else if (Crown != TheaterGrandCity::EAccent::None)
+					{
+						const double DrumHigh = TheaterGrandCity::DrumTall(Tall) * U;
+						const FVector DrumFoot = Stand(A, B);
+						Pillar(DrumFoot, 0.5 * TheaterGrandCity::DrumWide * U, 0.5 * TheaterGrandCity::DrumWide * U, DrumHigh, Ashlar, 10);
+						Ball(DrumFoot + FVector(0.0, 0.0, DrumHigh), FVector(TheaterGrandCity::DomeWide, TheaterGrandCity::DomeWide, 2.0 * TheaterGrandCity::DomeRise) * U, Verdigris, 4, 10);
+						Pillar(DrumFoot + FVector(0.0, 0.0, DrumHigh + TheaterGrandCity::DomeRise * U), 0.03 * U, 0.0, TheaterGrandCity::DomeSpike * U, Gilding, 4);
+					}
 				}
 				if (Dice.FRand() < 0.34f)
 				{
@@ -3783,6 +3889,75 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 				if (Dice.FRand() < 0.6f)
 				{
 					Tree(A + Dice.FRandRange(-0.7f, 0.7f) * Um, B + Dice.FRandRange(-0.5f, 0.5f) * Um);
+				}
+				if (bGrand)
+				{
+					// (Grander.) Most of the edge's houses stand in a garden: a lawn under them, and two trees at its corners.
+					// (The lawn stands on the ground and through the patch of trodden earth, where the block has one,
+					// to lie a little over it.)
+					LayGarden(A, B, TheaterGrandCity::EdgeGarden(I, J, Site.Seed), 0.0, (Fade < 0.97 ? FMath::Lerp(0.2, 0.06, Fade) : 0.0) + 0.04);
+				}
+			}
+		}
+	}
+	// (Release 2, grander great cities.) The garden suburb: between the roads that leave the town, where its last
+	// houses stop short, one more ring of villas, each on its lawn with trees at its corners. It takes no block the
+	// loop above may lay, stays inside the town's own measure, keeps off the roads out and the way down to the quay,
+	// and thins toward its rim. Chosen by each block's own place: no dice are thrown, and the far town has the same
+	// lawns and the first villa of each.
+	if (bGrand)
+	{
+		const double QuayBearing = Site.bQuay ? FMath::RadiansToDegrees(FMath::Atan2(Site.Quay.X - Site.Centre.X, Site.Centre.Y - Site.Quay.Y)) : 0.0;
+		for (int32 J = -Span; J < Span; ++J)
+		{
+			for (int32 I = -Span; I < Span; ++I)
+			{
+				const double A = (I + 0.5) * PitchA, B = (J + 0.5) * PitchB;
+				if (InSquare(A, B) || InForecourt(A, B))
+				{
+					continue;
+				}
+				const double Far = FMath::Sqrt(A * A + B * B), Bearing = BearingOf(A, B);
+				if (!TheaterGrandCity::InFringe(I, J, Site.Seed, TheaterGrandCity::FringeShare(Far, ReachAt(Bearing), Reach, Um)) || !CanBuild(A, B) || AtStation(A, B))
+				{
+					continue;
+				}
+				bool bKeptClear = Site.bQuay && TheaterGrandCity::NearBearing(Bearing, QuayBearing, 14.0);
+				for (const double Road : Site.Arms)
+				{
+					bKeptClear = bKeptClear || TheaterGrandCity::NearBearing(Bearing, Road, 12.0);
+				}
+				if (bKeptClear)
+				{
+					continue;
+				}
+				const TheaterGrandCity::FPlot Parcel = TheaterGrandCity::Plot(I, J, Site.Seed, Lit);
+				if (!LayGarden(A, B, Parcel.Garden, 0.015, 0.03))
+				{
+					continue; // (its lawn would lie over the water or another province's ground)
+				}
+				for (int32 K = 0; K < Parcel.Villas && (K == 0 || !bFar); ++K)
+				{
+					const TheaterGrandCity::FVilla& Villa = Parcel.Villa[K];
+					const double VillaA = A + Villa.A * Um, VillaB = B + Villa.B * Um;
+					if (FMath::Sqrt(VillaA * VillaA + VillaB * VillaB) > TheaterGrandCity::VillaOut * Reach)
+					{
+						continue;
+					}
+					Windows = Villa.bLit ? AllWindows : nullptr;
+					if (TheaterGrandCity::LowKit(Look))
+					{
+						// (Thatch and tin: the suburb's villas are white bungalows under tin, each with its veranda.)
+						House(Stand(VillaA, VillaB), Villa.Long * U, Villa.Wide * U, Villa.High * U, Villa.Roof * U, Ashlar, Verdigris, Yaw0 + Villa.Turn);
+						Box(Stand(VillaA, VillaB) + FVector(0.0, 0.0, TheaterGrandCity::VerandaAt * Villa.High * U),
+							FVector(Villa.Long + TheaterGrandCity::VerandaOut, Villa.Wide + TheaterGrandCity::VerandaOut, TheaterGrandCity::VerandaThick) * U, Verdigris, Yaw0 + Villa.Turn);
+					}
+					else
+					{
+						House(Stand(VillaA, VillaB), Villa.Long * U, Villa.Wide * U, Villa.High * U, (bFlatRoofs ? 0.04 : Villa.Roof) * U,
+							FLinearColor(FColor::FromHex(WallsOf[Look][Villa.Wall])), FLinearColor(FColor::FromHex(RoofsOf[Look][Villa.Tile])), Yaw0 + Villa.Turn);
+					}
+					Windows = AllWindows;
 				}
 			}
 		}

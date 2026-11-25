@@ -9035,6 +9035,8 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	Site.Factories = Region.Factories;
 	Site.Ruined = FMath::Clamp(WreckedIn.FindRef(Region.Id), 0, Region.Factories); // (bombed-out works: the first of them are wrecks)
 	Site.Seed = Region.Id;
+	Site.bGrand = GrandCitiesWanted(); // (release 2, grander great cities: the builder keeps it to cities and capitals)
+	Site.bGrandFar = GrandCitiesFarWanted(); // (and the far side's own kits, behind their own switch)
 	{
 		// Roofs and walls by where it lies (the map is forty units to the degree of latitude).
 		const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
@@ -9248,6 +9250,7 @@ void ACampaignMapActor::BuildTowns()
 	// mesh for the world. With the switch at 0 there is one square, and it is TownMesh and TownFarMesh as they were.
 	const bool bSquares = TheaterSpeed::TownSquares();
 	TownsCut = bSquares ? 1 : 0;
+	TownsGrand = (GrandCitiesWanted() ? 1 : 0) + (GrandCitiesFarWanted() ? 2 : 0); // (release 2, grander great cities: how the towns are built this time)
 	const double SquareSide = 260.0; // (in map units: twice a square of the woods, a few to the width of the view from playing height)
 	TMap<FIntPoint, int32> SquareOf;
 	TArray<FMiniatureMesh> NearModels, FarModels; // (FarModels: the same towns for the eye high up, see FTownSite::bFar)
@@ -9278,6 +9281,9 @@ void ACampaignMapActor::BuildTowns()
 	TownBeacons.Reset();
 	TownLandmarks.Reset();
 	TownQuays.Reset();
+	bPortRoadsStale = true; // (release 2, busy ports: the quays are found again, and so are the fairways off them)
+	TownAvenues.Reset();
+	bStreetLinesStale = true; // (release 2, street cars: the avenues are laid again, and so are the cars' lines on them)
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -9326,7 +9332,12 @@ void ACampaignMapActor::BuildTowns()
 		}
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
-		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
+		TArray<FVector2D> Avenues; // (release 2, street cars: where a car may run on each arm of a city's avenues)
+		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop, &Avenues);
+		if (Avenues.Num() >= 2)
+		{
+			TownAvenues.Add(Region.Id, MoveTemp(Avenues));
+		}
 		TownChimneyRegion.SetNumZeroed(TownChimneys.Num()); // (the new ones are this town's)
 		for (int32 Stack = TownChimneyRegion.Num() - 1; Stack >= 0 && TownChimneyRegion[Stack] == 0; --Stack)
 		{
@@ -9399,6 +9410,8 @@ void ACampaignMapActor::BuildTowns()
 	}
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up), in %d square%s of country"), Count, NearPoints, FarPoints,
 		bSquares ? NearModels.Num() : 1, bSquares && NearModels.Num() != 1 ? TEXT("s") : TEXT(""));
+	UE_LOG(LogTheater, Log, TEXT("Grander great cities (tc.Map.GrandCities): %s"), (TownsGrand & 1) != 0 ? TEXT("on, the cities and capitals stand in their grander form") : TEXT("off"));
+	UE_LOG(LogTheater, Log, TEXT("Grander great cities, the far side (tc.Map.GrandCitiesFar): %s"), (TownsGrand & 2) != 0 ? TEXT("on, the walled, timber, thatch and Indian towns stand in theirs") : TEXT("off"));
 
 	// The windows, each a small warm pane a hair proud of its wall: dark by day, lit as night comes on.
 	if (!LightsMesh)
@@ -18106,6 +18119,8 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateRailLight(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateColumns(CameraFocus, CameraDistance); // (release 2: supply columns' convoys on the roads, CampaignColumns.cpp)
+	UpdatePortLife(CameraFocus, CameraDistance); // (release 2: the little ships at the ports, CampaignPortLife.cpp; tc.Map.PortLife)
+	UpdateStreetLife(CameraFocus, CameraDistance); // (release 2: the street cars on the cities' avenues, CampaignStreetLife.cpp; tc.Map.StreetLife)
 	UpdateClouds();
 	UpdateFlashes();
 	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)
@@ -18399,6 +18414,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		// (Speed: "tc.Speed.TownSquares" turned the other way since the towns were built: they are built again to match,
 		// as when the cities leave room for a quarter. And "tc.Speed.TownShadows", which is for measuring only.)
 		if (TownMesh && TownsCut != -1 && TownsCut != (TheaterSpeed::TownSquares() ? 1 : 0) && Data.IsLoaded())
+		{
+			BuildTowns();
+			ShownNight = -1.0f;
+			SetNight(NightNow, bLamplightNow);
+		}
+		// (Release 2, grander great cities: "tc.Map.GrandCities" turned since the towns were built: they are built again
+		// to match, in the same way.)
+		if (TownMesh && TownsGrand != -1 && TownsGrand != (GrandCitiesWanted() ? 1 : 0) + (GrandCitiesFarWanted() ? 2 : 0) && Data.IsLoaded())
 		{
 			BuildTowns();
 			ShownNight = -1.0f;
