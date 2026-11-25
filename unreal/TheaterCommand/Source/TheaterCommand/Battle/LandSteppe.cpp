@@ -424,7 +424,8 @@ namespace LandSteppe
 		if (!bMarks) return;
 		// The marks: short dark lenticels lying across the trunk, each a flat lens 1.2 cm proud of its facet, no wider than
 		// a third of the trunk (0.8 of a facet of its eight), 2 to 4 cm high, soft at their ends; two or so to a metre
-		// of each facet, more and bigger in the rough foot, fewer on the thin stem up in the crown.
+		// of each facet (three on her lowest 3 m), more and bigger in the rough foot, fewer on the thin stem up in the
+		// crown; one in five an eyebrow, the scar where a branch was.
 		Writer W(M);
 		const size_t Tris = M.Triangles.size() / 3;
 		for (size_t T = 0; T + 1 < Tris; T += 2)
@@ -466,7 +467,8 @@ namespace LandSteppe
 				Nn[D] /= NL;
 			}
 			const bool bFoot = Foot[2] < 0.15;
-			const double Dense = bFoot ? 3.2 : WB + WT > 0.2 ? 2.2 : 1.2;
+			// (half as many again on the lowest 3 m, where the eye stands beside her: art director, 25 Nov)
+			const double Dense = bFoot ? 3.2 : (WB + WT > 0.2 ? 2.2 : 1.2) * (Foot[2] < 3.0 ? 1.5 : 1.0);
 			const uint64_t Seed = 0xB1C4ull + T * 0x9E3779B97F4A7C15ull;
 			const int Count = static_cast<int>(High * Dense + Unit(Seed));
 			for (int K = 0; K < Count; ++K)
@@ -483,14 +485,17 @@ namespace LandSteppe
 				const double Wide = std::sqrt(Ac[0] * Ac[0] + Ac[1] * Ac[1] + Ac[2] * Ac[2]);
 				if (Wide < 0.03) continue;
 				for (int D = 0; D < 3; ++D) Ac[D] /= Wide;
-				const double Long = Wide * (0.35 + 0.45 * Unit(S ^ 2)), Off = (Unit(S ^ 3) - 0.5) * 0.9 * (Wide - Long);
-				const double Tall = (bFoot ? 0.03 + 0.05 * Unit(S ^ 4) : 0.018 + 0.022 * Unit(S ^ 4)) * (Wide < 0.1 ? 0.7 : 1.0), Skew = (Unit(S ^ 5) - 0.5) * 0.3 * Long;
+				// (one in five an "eyebrow" where a branch was: the whole facet wide, a shallow arch, its ends hanging)
+				const bool bBrow = !bFoot && Wide >= 0.05 && Unit(S ^ 8) < 0.2;
+				const double Long = bBrow ? Wide * (0.86 + 0.1 * Unit(S ^ 2)) : Wide * (0.35 + 0.45 * Unit(S ^ 2)), Off = (Unit(S ^ 3) - 0.5) * 0.9 * (Wide - Long);
+				const double Tall = bBrow ? 0.03 + 0.025 * Unit(S ^ 4) : (bFoot ? 0.03 + 0.05 * Unit(S ^ 4) : 0.018 + 0.022 * Unit(S ^ 4)) * (Wide < 0.1 ? 0.7 : 1.0);
+				const double Skew = (Unit(S ^ 5) - 0.5) * (bBrow ? 0.1 : 0.3) * Long, Drop = bBrow ? Long * (0.2 + 0.12 * Unit(S ^ 9)) : 0.0;
 				const double Shade = 0.85 + 0.3 * Unit(S ^ 6);
 				const Tone Dark = Rgb(58.0 * Shade, 52.0 * Shade, 46.0 * Shade), Soft = Rgb(0.5 * (58.0 * Shade + 212.0), 0.5 * (52.0 * Shade + 209.0), 0.5 * (46.0 * Shade + 197.0));
 				double Cc[3];
 				for (int D = 0; D < 3; ++D) Cc[D] = Mid[D] + Ac[D] * Off + Nn[D] * 0.012;
-				const uint32_t L = W.Vert(Cc[0] - Ac[0] * 0.5 * Long, Cc[1] - Ac[1] * 0.5 * Long, Cc[2] - Ac[2] * 0.5 * Long, Nn[0], Nn[1], Nn[2], Soft);
-				const uint32_t R = W.Vert(Cc[0] + Ac[0] * 0.5 * Long, Cc[1] + Ac[1] * 0.5 * Long, Cc[2] + Ac[2] * 0.5 * Long, Nn[0], Nn[1], Nn[2], Soft);
+				const uint32_t L = W.Vert(Cc[0] - Ac[0] * 0.5 * Long - Up[0] * Drop, Cc[1] - Ac[1] * 0.5 * Long - Up[1] * Drop, Cc[2] - Ac[2] * 0.5 * Long - Up[2] * Drop, Nn[0], Nn[1], Nn[2], Soft);
+				const uint32_t R = W.Vert(Cc[0] + Ac[0] * 0.5 * Long - Up[0] * Drop, Cc[1] + Ac[1] * 0.5 * Long - Up[1] * Drop, Cc[2] + Ac[2] * 0.5 * Long - Up[2] * Drop, Nn[0], Nn[1], Nn[2], Soft);
 				const uint32_t Hi = W.Vert(Cc[0] + Up[0] * 0.5 * Tall + Ac[0] * Skew, Cc[1] + Up[1] * 0.5 * Tall + Ac[1] * Skew, Cc[2] + Up[2] * 0.5 * Tall + Ac[2] * Skew, Nn[0], Nn[1], Nn[2], Dark);
 				const uint32_t Lo = W.Vert(Cc[0] - Up[0] * 0.5 * Tall + Ac[0] * Skew, Cc[1] - Up[1] * 0.5 * Tall + Ac[1] * Skew, Cc[2] - Up[2] * 0.5 * Tall + Ac[2] * Skew, Nn[0], Nn[1], Nn[2], Dark);
 				// (counter-clockwise seen from the front, as the kit's own triangles are wound)
