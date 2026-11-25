@@ -35,6 +35,10 @@
  *   Plain    the dry plains of north China, Manchuria and India: the loess, gaoliang, millet, wheat and soybeans in their
  *            strips, poplar-lined cart tracks sunk in the earth, flat-roofed villages in rows, grave mounds, the towns'
  *            rammed-earth walls; India's monsoon crops and its winter wheat and mustard (release 2, on trial "plain")
+ *   City     a town or city the rules lay with streets (any theatre the climate leaves temperate or dry): its blocks of
+ *            terraces holed, gutted, burnt to a storey or two, rubble heaps in the gaps and the streets, a church or a
+ *            hall standing broken over them, the suburbs' villas and the works' sheds and chimneys (release 2, on
+ *            trial "city")
  *
  * and Snow over any of them (the Ardennes, Moscow, Stalingrad, Karelia, Cassino's mountains).
  *
@@ -59,6 +63,7 @@ namespace LandScape
 		Rice,     // LandAsia: rice country (China, Korea, Japan; release 2, on trial "rice")
 		America,  // LandAmerica: North America's farm country (release 2, on trial "america")
 		Plain,    // LandPlain: the dry plains of north China, Manchuria and India (release 2, on trial "plain")
+		City,     // LandCity: a bombed and shelled town or city, its streets of burnt-out terraces (release 2, on trial "city")
 		Count
 	};
 	const char* NameOf(Look L);
@@ -243,6 +248,10 @@ namespace LandScape
 		/** A building from the region's kit (B one of Kit0..Kit19): its floor levelled, its footprint (Long along Yaw,
 		 * Deep across) kept clear and stood on, planted. False where it does not fit. */
 		virtual bool House(LandField::Base B, double X, double Y, double Yaw, double Long, double Deep) = 0;
+		/** A building of a street's terrace (the city's: B one of the kit's slots), as House but wall to wall with its
+		 * neighbours: no gap kept round it, only its own footprint stood on and kept clear. False where it does not fit.
+		 * (A host without terraces lays it as a House.) */
+		virtual bool Row(LandField::Base B, double X, double Y, double Yaw, double Long, double Deep) { return House(B, X, Y, Yaw, Long, Deep); }
 		/** A building of the ground's own builder (the bocage's stone houses: walls, roof, door and windows; the
 		 * steppe's whitewashed ones where bWhite), for a region with no kit house of its own (the farmland of France,
 		 * Belgium, Germany, the Ardennes): Type 0 house, 1 farmhouse, 2 barn, 3 byre; Storeys 1 or 2; Roof 0 slate, 1 tile;
@@ -427,7 +436,7 @@ namespace LandScape
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
 
 	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
-	// LandAmerica.cpp, LandPlain.cpp, LandSnow.cpp).
+	// LandAmerica.cpp, LandPlain.cpp, LandCity.cpp, LandSnow.cpp).
 	std::unique_ptr<Region> MakeDesert(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeMed(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t Seed, bool bIsland);
@@ -436,6 +445,10 @@ namespace LandScape
 	std::unique_ptr<Region> MakeAsia(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeAmerica(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakePlain(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakeCity(const LandField::Field& F, uint64_t Seed);
+	/** Whether the rules laid a town or a city here big enough to fight in its streets: any suburb, industry or park
+	 * cell, or enough built cells (the city look's test; release 2, on trial "city"). */
+	bool IsCityField(const LandField::Field& F);
 	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */

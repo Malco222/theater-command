@@ -1033,10 +1033,48 @@ namespace LandFieldPicture
 			if (!FindEye(G, F, Eye, Yaw)) Eye = { TX, TY - 500.0, G.At(TX, TY - 500.0).Z + 1.7 };
 			if (const char* E = std::getenv("LAND_FIELD_EYE"))
 			{
-				double X, Y, A;
-				if (std::sscanf(E, "%lf %lf %lf", &X, &Y, &A) == 3)
+				double X, Y, A, Up = 1.7;
+				const int Got = std::sscanf(E, "%lf %lf %lf %lf", &X, &Y, &A, &Up);
+				if (Got >= 3)
 				{
-					Eye = { X, Y, G.At(X, Y).Z + 1.7 };
+					if (Got < 4) Up = 1.7;
+					// How far the ground runs on ahead of a place, before a building or a bank stops it.
+					const double LX = std::cos(A * Pi / 180.0), LY = std::sin(A * Pi / 180.0);
+					auto Ahead = [&G, LX, LY](double QX, double QY) {
+						const LandField::Surface Here = G.At(QX, QY);
+						double Open = 0.0;
+						for (double S = 2.0; S < 300.0; S += 2.0)
+						{
+							const LandField::Surface Q = G.At(QX + LX * S, QY + LY * S);
+							if (Q.What == LandField::Drawn::Floor || Q.Z > Here.Z + 1.2) break;
+							Open = S;
+						}
+						return Open;
+					};
+					// (a place asked for inside a building, or hard up against one, as a city's streets make easy to hit:
+					// the nearest place within 60 m with a street's run ahead of it, so the picture is not a wall)
+					if (G.At(X, Y).What == LandField::Drawn::Floor || Ahead(X, Y) < 25.0)
+					{
+						double Best = Ahead(X, Y) - 0.0, BX = X, BY = Y;
+						for (double R = 3.0; R <= 60.0; R += 3.0)
+							for (int K = 0; K < 48; ++K)
+							{
+								const double Th = 2.0 * Pi * K / 48.0;
+								const double QX = X + R * std::cos(Th), QY = Y + R * std::sin(Th);
+								const LandField::Surface Q = G.At(QX, QY);
+								if (Q.What == LandField::Drawn::Floor || Q.What == LandField::Drawn::Water) continue;
+								const double Score = Ahead(QX, QY) - 0.35 * R;
+								if (Score > Best) { Best = Score; BX = QX; BY = QY; }
+							}
+						if (BX != X || BY != Y)
+						{
+							std::printf("  the eye asked for at %.0f, %.0f had no view: moved %.0f m to %.0f, %.0f, where the ground runs %.0f m ahead\n",
+								X, Y, std::hypot(BX - X, BY - Y), BX, BY, Ahead(BX, BY));
+							X = BX;
+							Y = BY;
+						}
+					}
+					Eye = { X, Y, G.At(X, Y).Z + Up };
 					Yaw = A * Pi / 180.0;
 				}
 			}

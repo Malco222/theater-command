@@ -548,6 +548,11 @@ namespace LandField
 		SegGrid BGrid;
 		std::vector<WallRun> Walls;
 		std::vector<House> Houses;
+		/** The houses filed by 16 m square (the first HGridN of them, in their order), so HouseAt answers a point from its
+		 * square, not from every house (a city's thousands); those after HGridN are looked through one by one. */
+		SegGrid HGrid;
+		size_t HGridN = 0;
+		void FileHouses();
 		std::vector<Footing> Footings;      // the kit houses' (SeatKitHouses)
 		std::vector<Col> FootingPaints;     // and each one's colour
 		/** The farmhouses, barns, byres, church and village houses built to the vehicles' detail (the trial "houses"), one a kind: kit slot HouseSlot0 + K is HouseModels[K]
@@ -698,6 +703,10 @@ namespace LandField
 		void LayChurch(V2 C, double Yaw, int Hurt);
 		void MakeSteppeSites();
 		bool Fits(const House& H, double Margin) const;
+		/** Fits for a terrace's house (the city's): wall to wall with the houses beside it, so only its own footprint kept
+		 * off what is built (less a pixel and a bit at its edges, where a neighbour's stamp reaches) and the men's and
+		 * vehicles' ways. */
+		bool FitsRow(const House& H) const;
 		void Stamp(const House& H, double Margin);
 		void FloorOf(House& H) const;
 		void SeatKitHouses();
@@ -882,6 +891,23 @@ namespace LandField
 			if (!G.Fits(H, 1.2)) return false;
 			G.FloorOf(H);
 			G.Stamp(H, 1.0);
+			G.Houses.push_back(H);
+			return true;
+		}
+		bool Row(Base B, double X, double Y, double Yaw, double Long, double Deep) override
+		{
+			struct House H;
+			H.Type = HtHouse;
+			H.bKit = true;
+			H.KitB = B;
+			H.Long = Long;
+			H.Deep = Deep;
+			H.C = { X, Y };
+			H.Yaw = Yaw;
+			H.Key = Hash(G.Seed ^ 0x40B5E, static_cast<uint64_t>(std::llround(X * 8.0)), static_cast<uint64_t>(std::llround(Y * 8.0)));
+			if (!G.FitsRow(H)) return false;
+			G.FloorOf(H);
+			G.Stamp(H, 0.3);
 			G.Houses.push_back(H);
 			return true;
 		}
@@ -1169,16 +1195,40 @@ namespace LandField
 		return Best;
 	}
 
+	void Ground::Impl::FileHouses()
+	{
+		if (HGridN == Houses.size()) return;
+		HGrid.Init(RX0, RY0, RX0 + NX * Res, RY0 + NY * Res, 16.0);
+		for (size_t K = 0; K < Houses.size(); ++K)
+		{
+			const House& H = Houses[K];
+			HGrid.Add(static_cast<uint32_t>(K), H.C, H.C, 0.5 * std::hypot(H.Long, H.Deep) + 0.05);
+		}
+		HGridN = Houses.size();
+	}
+
 	int Ground::Impl::HouseAt(double X, double Y) const
 	{
 		if (!InRaster(X, Y) || !(OccR[Pix(X, Y)] & OcHouse)) return -1;
-		for (size_t K = 0; K < Houses.size(); ++K)
+		const auto Inside = [this, X, Y](size_t K)
 		{
 			const House& H = Houses[K];
 			const V2 D{ X - H.C.X, Y - H.C.Y };
 			const double U = D.X * std::cos(H.Yaw) + D.Y * std::sin(H.Yaw), V = -D.X * std::sin(H.Yaw) + D.Y * std::cos(H.Yaw);
-			if (std::fabs(U) <= 0.5 * H.Long && std::fabs(V) <= 0.5 * H.Deep) return static_cast<int>(K);
+			return std::fabs(U) <= 0.5 * H.Long && std::fabs(V) <= 0.5 * H.Deep;
+		};
+		// (the filed houses from their square, each square's in their order, so the first found is the first in the list,
+		// as looking through them all finds it; then any built after they were filed)
+		size_t From = 0;
+		if (HGridN > 0)
+		{
+			if (const std::vector<uint32_t>* Near = HGrid.At(X, Y))
+				for (const uint32_t K : *Near)
+					if (Inside(K)) return static_cast<int>(K);
+			From = HGridN;
 		}
+		for (size_t K = From; K < Houses.size(); ++K)
+			if (Inside(K)) return static_cast<int>(K);
 		return -1;
 	}
 
@@ -1988,6 +2038,29 @@ namespace LandField
 				if (G == RgWater || G == RgMarsh || G == RgWoods) return false;
 				const bool bIn = std::fabs(U) <= 0.5 * H.Long + 0.3 && std::fabs(V) <= 0.5 * H.Deep + 0.3;
 				if (LaneD[K] < (bIn ? 0.8f : 0.0f)) return false;
+			}
+		return true;
+	}
+
+	bool Ground::Impl::FitsRow(const House& H) const
+	{
+		const double C = std::cos(H.Yaw), S = std::sin(H.Yaw);
+		const double HU = 0.5 * H.Long + 0.3, HV = 0.5 * H.Deep + 0.3, R = std::hypot(HU, HV);
+		const int I0 = static_cast<int>((H.C.X - R - RX0) / Res) - 1, I1 = static_cast<int>((H.C.X + R - RX0) / Res) + 1;
+		const int J0 = static_cast<int>((H.C.Y - R - RY0) / Res) - 1, J1 = static_cast<int>((H.C.Y + R - RY0) / Res) + 1;
+		if (I0 < 2 || J0 < 2 || I1 >= NX - 2 || J1 >= NY - 2) return false;
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+			{
+				const double DX = RX0 + (I + 0.5) * Res - H.C.X, DY = RY0 + (J + 0.5) * Res - H.C.Y;
+				const double U = std::fabs(DX * C + DY * S), V = std::fabs(-DX * S + DY * C);
+				if (U > HU || V > HV) continue;
+				const size_t K = static_cast<size_t>(J) * NX + I;
+				if (OccR[K] & (OcVehicle | OcMan | OcWall)) return false;
+				if ((OccR[K] & OcHouse) && U <= 0.5 * H.Long - 1.6 && V <= 0.5 * H.Deep - 1.6) return false;
+				const uint8_t G = Rgn[K];
+				if (G == RgWater || G == RgMarsh || G == RgWoods) return false;
+				if (LaneD[K] < 0.8f) return false;
 			}
 		return true;
 	}
@@ -7400,6 +7473,7 @@ namespace LandField
 		MakeWays();
 		MakePlots();
 		MakeSites();
+		FileHouses();
 		MakeParcels();
 		MakeDistances();
 		MakeHedges();
@@ -7409,6 +7483,7 @@ namespace LandField
 		if (RainWet > 0.0)
 			for (const Base B : { Base::Haycock, Base::Haystack })
 				for (Placed& Pl : Inst[static_cast<size_t>(B)]) Pl.Tint = Soaked(Pl.Tint);
+		FileHouses();
 		const auto T1 = Clock::now();
 		MakeBases();
 		SeatKitHouses();

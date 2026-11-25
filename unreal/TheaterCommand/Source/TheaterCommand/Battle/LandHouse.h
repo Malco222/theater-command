@@ -101,8 +101,8 @@ namespace LandHouse
  * village house's render, 13 where it has come away to the rubble, 14 a strike in it; a burnt-out house's, 15 its stove's
  * mouth, 16 its chimney from where its plaster ends to its top, 17 its stove's side to the room; a desert house's: 0 a
 	 * window, 1 a door, 18 its yard's gate, 19 its oven, 20 its stair, 21 a spout, 22 its shade, 23 its water jars, 24 a
-	 * place its plaster has come away, 25 its wing's roof, 26 a wall's top left bare, 27 a wall's foot the damp has
-	 * stripped). */
+	 * place its plaster has come away under a parapet, 25 its wing's roof, 26 a wall's top never plastered, 27 a wall's
+	 * foot the damp has stripped, 31 a niche over its door, 34 the rug over its wing's parapet). */
 	struct Hole
 	{
 		int Face = 0; // 0 the front (+y), 1 the gable at -x, 2 the back, 3 the gable at +x

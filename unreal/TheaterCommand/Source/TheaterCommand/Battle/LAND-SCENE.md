@@ -1797,6 +1797,43 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   thrown track from above (snaking, its fold showing); and the patch from above a week on (the ash, the burnt grass,
   the rim and the fuel's dark pool told apart, as `scorch_<recording>` shows them).
 
+## A town or a city fought over (release 2, off until passed)
+
+The look bible's gap **T4** and the art director's sheet `art-director/battles/city-battle-look.md`: where the rules
+lay a battle in a town's or a capital's streets, the ground is its ruins, not the country round it. Behind the trial
+word **"city"** (the game's `-TheaterLandTrial=city`, the cloud test's `LAND_FIELD_TRIAL=city`). Off, the field takes
+the climate's look exactly as it did, byte for byte.
+
+- **When it is picked** (`LandScape::Pick`): the word is on trial *and* the rules laid a city here
+  (`LandScape::IsCityField`: any suburb, industry or park cell, or enough built cells). A recording may also name it
+  outright (`field.look` "city", "ruins", "urban" or "town"). Its snow and its bare trees are the country's round it.
+- **What lays it** (`LandCity.cpp`, a `LandScape::Region` like the desert's or the jungle's; plain C++, no engine, so
+  the cloud test lays exactly what the game draws). Three street grids over the field (a core, an older quarter turned
+  against it, the suburbs), each block walked round its four sides; terraces built wall to wall along the streets with
+  `Host::Row` (as `Host::House` but with no gap kept round it), the suburbs' villas set back in their gardens, the
+  works' sheds, chimneys and water tower on the industry, and **one landmark** by the heart (a spire, a dome or a
+  station hall) seen from everywhere.
+- **Its kit is built here, not read** (47 slots, every one with a name of its own, `City...`, so no two instanced kinds
+  share an Unreal name): terraces of two to five storeys in five states (holed, gutted, half fallen, a stump, and now
+  and then one untouched, its shutters closed and its glass in, where the city is least broken), villas, sheds, a
+  warehouse, a church with its broken spire, a domed hall, a station, heaps, scatter, lone walls, shelled trees, lamp
+  posts; and the streets' war: barricades of rubble and setts with sandbags and rails across them at the crossings,
+  barbed wire before them, steel hedgehogs, tram lines' poles (one main street in three, some knocked over, their wire
+  down), burnt-out cars, lorries and trams, and shells' strikes in the setts. Each at three levels (near; the middle
+  from 90 m; plain from 300 m) or two (near, then plain).
+- **The damage rule** is the breach clip rule: broken, never cut away. Every wall's top steps by courses (75 mm) and,
+  near, brick by brick (0.24 m: toothed, a stair where it falls steeply, as torn brickwork is), holes
+  are blown through it in rows, floors hang where both walls still carry them, a burnt shell's joists stub out, the
+  rooms inside show plaster off to the brick and soot up from the windows that burnt.
+- **Its ground:** dark setts in the core dusted with masonry, pale dust in the suburbs, ash and trodden earth in the
+  courtyards, worn grass in the parks, gardens and open ground gone wild (tussocks in clumps, bare between), the city's
+  dust over all of it; beyond the field the roofs run on under the haze,
+  so the city never ends in a hard edge in the middle of a field. Its air is smoke and brick dust (sight some 3,300 m).
+- **Trying it in the cloud:** `LAND_FIELD_TRIAL=city Tools/land_field/run.sh <a city field>.json`, with
+  `LAND_FIELD_PICTURES=<folder>` for the pictures and `LAND_FIELD_EYE="x y angle [height]"` to stand the camera in a
+  street (a place inside a building is moved to the nearest ground with a view). `Tools/land_city/city_fields.ts`
+  writes test fields from the rules' own city builder.
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as
