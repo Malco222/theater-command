@@ -2847,13 +2847,16 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     // (Her 20:08Z marks, items 1, 2 and 13: under fog the built guns never scouted are reckoned at the worst, and a none
     // is said as seen or as reckoned; on troops the built guns do not count, and the card says why where it knows of some.)
     const only = `only the ${S} light guns every target has.`, Only = `Only the ${S} light guns every target has.`;
+    const Seen = (ago: number): string => { const w = seenAgo(ago); return `${w.charAt(0).toUpperCase()}${w.slice(1)}`; };
     const seen = known ? known.seen ?? -1 : -1;
     const counts = m === 'bomb' || night || m === 'harbour' || m === 'town';
     const flakWords = (): string => {
       if (!counts) return m === 'ground' && (known ? seen > 0 : gunsAt(g, target) > 0) ? `Only the ${S} light guns every target has: the guns built here guard the town, not troops in the field.` : Only;
       if (!out.guns.all) return !known ? Only : seen === 0 ? noneSeen(known.ago ?? 0) : `None reckoned built: ${only}`;
       if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${place}, ${split}`;
-      return known ? `About ${n(out.guns.all)} guns may stand round ${place}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
+      // (Her 21:22Z marks, case c: a place seen at a level, the month is the hedge, leading the line: "Seen two months
+      // ago: about 720 guns built round Rhineland, ...".)
+      return known ? `${Seen(known.ago ?? 0)}: about ${n(out.guns.all)} guns built round ${place}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
     };
     out.lines.push({
       label: 'Flak',
@@ -2873,17 +2876,23 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? 'its' : 'their'} aircraft from there`,
     });
   }
-  const ring = known ? 'may ring' : 'ring';
+  // (The Anti-aircraft guns line under fog on raids, the UI director's 21:22Z marks, case c: the month is the hedge, as
+  // on the Flak line. Seen at a level: "Level 2 guns ringed the factories of Rhineland when seen two months ago"; never
+  // scouted: "Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland". In sight, as before.
+  // The searchlights' hedge below reads the same `known`.)
+  const aaLine = (round: string): string => !known ? `Level ${out.aa} guns ring ${round}`
+    : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round}`
+      : `Level ${out.aa} guns ringed ${round} when ${seenAgo(known.ago ?? 0)}`;
   // City defences, a night raid with the switch on: how the guns fire in the dark, and what they bring down against
   // what they would by day (the UI director's words, section 3). Empty otherwise.
   const dark = cn ? `By night they fire ${!cn.radar ? 'blind' : cn.lit > 0 ? 'by radar and searchlight' : 'by radar'}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : '';
-  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${harbourOf(place)}`, effect: dark || 'They bring down more of the bombers' });
+  if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(harbourOf(place)), effect: dark || 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
     out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} the factories of ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(place), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${place}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
   // The clauses that rest on the guns' levels (none, some lit, every level lit) read the side's count under fog on raids,
