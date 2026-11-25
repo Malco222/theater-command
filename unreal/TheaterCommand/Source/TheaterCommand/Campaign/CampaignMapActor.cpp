@@ -84,6 +84,12 @@ struct FCampaignMeshBuffers
 		}
 		Mesh->CreateMeshSection(Section, Vertices, Triangles, Normals, UVs, Colors, Tangents, false);
 		Mesh->SetMaterial(Section, Material);
+		// (seam-2: a model of the table that has a twin over the chart's seam has been laid again, and its twin is
+		// to be; the keeper cannot always see it by looking)
+		if (ACampaignMapActor* Table = Cast<ACampaignMapActor>(Mesh->GetOwner()))
+		{
+			Table->SeamLaidAgain(Mesh);
+		}
 		return true;
 	}
 };
@@ -480,6 +486,7 @@ void ACampaignMapActor::LayOverSeam(UProceduralMeshComponent* Of)
 		Slot = SeamLaid.Add(Of);
 		SeamTwins.Add(nullptr);
 		SeamStamps.Add(0);
+		SeamCounts.Add(0);
 	}
 	UProceduralMeshComponent* Twin = SeamTwins[Slot].Get();
 	// (Only a model that lies on the table as it was built: one that has been turned or grown is a thing that moves,
@@ -594,6 +601,15 @@ void ACampaignMapActor::LayOverSeam(UProceduralMeshComponent* Of)
 	}
 }
 
+void ACampaignMapActor::SeamLaidAgain(const UProceduralMeshComponent* Of)
+{
+	const int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+	if (SeamCounts.IsValidIndex(Slot))
+	{
+		++SeamCounts[Slot];
+	}
+}
+
 void ACampaignMapActor::KeepSeamTwins()
 {
 	// The models laid once that are not things that move: the lines and works of the table, and the washes and signs
@@ -638,6 +654,10 @@ void ACampaignMapActor::KeepSeamTwins()
 			}
 		}
 		int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+		// (And how many times its builder has said it was laid again. A model may change and keep every count and
+		// every point looked at: a gun pit that made way by a few degrees, an airfield drawn smaller when nobody
+		// flies from it. A model with no twin yet counts as none, which is what its new twin starts from.)
+		Stamp = HashCombine(Stamp, SeamCounts.IsValidIndex(Slot) ? SeamCounts[Slot] : 0u);
 		if (Slot == INDEX_NONE || SeamStamps[Slot] != Stamp)
 		{
 			if (Slot == INDEX_NONE && !bOverSeam)
@@ -7390,6 +7410,7 @@ void ACampaignMapActor::BuildWorks()
 	{
 		WorksMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		WorksMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(WorksMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	UE_LOG(LogTheater, Log, TEXT("Works: %d crossings (%d bridges down), %d railways cut, %d towns' own bridges"), Land.Crossings.Num(), ShownDown.Num(), ShownCut.Num(), TownBridges);
 }
@@ -7713,6 +7734,7 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 	{
 		CivicMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		CivicMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(CivicMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	if (bPlotsMoved && LastWorks.Num() > 0)
 	{
@@ -7919,6 +7941,7 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 	{
 		WorksLeftMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		WorksLeftMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(WorksLeftMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -7982,6 +8005,7 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 	{
 		PrizesMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		PrizesMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(PrizesMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -8491,11 +8515,13 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		AirSignMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		AirSignMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(AirSignMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	if (Pennants.Vertices.Num() > 0)
 	{
 		AirPennantMesh->CreateMeshSection(0, Pennants.Vertices, Pennants.Triangles, Pennants.Normals, TArray<FVector2D>(), Pennants.Colors, TArray<FProcMeshTangent>(), false);
 		AirPennantMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(AirPennantMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -8699,6 +8725,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 	{
 		ScarsMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		ScarsMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(ScarsMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -11657,6 +11684,7 @@ void ACampaignMapActor::BuildGunLines()
 	{
 		GunLineMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		GunLineMesh->SetMaterial(0, PieceMaterial);
+		SeamLaidAgain(GunLineMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	Earth.Commit(GunLineMesh, 1, GunEarthInk ? static_cast<UMaterialInterface*>(GunEarthInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 	Replant();
@@ -14296,6 +14324,13 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 	{
 		Key += FString::Printf(TEXT("%s%d:%d;"), *Lane.State, Lane.Path.Num(), FMath::RoundToInt32(Lane.Flow * 20.0f));
 	}
+	// (seam-2: the short way over the chart's seam only while both sides of it are drawn, tc.Far.OverSeam: with the
+	// switch off a lane is ruled as it always was, since nothing would lay the part that ran past the chart's frame)
+	const bool bShortWay = OverSeam();
+	if (bShortWay)
+	{
+		Key += TEXT("~");
+	}
 	if (Key == ShownLanes)
 	{
 		return;
@@ -14321,9 +14356,9 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 		// (seam-2, the art director, 25 November 2026: over the chart's seam the lane is ruled the short way. Each
 		// point is counted in the turn of the world nearest the one before it, so the lane from California to
 		// Hawaii is not ruled east across two oceans; what then runs out past the chart's frame is laid on the
-		// other side by the lanes' twin. Without the far side the points are as they were given.)
+		// other side by the lanes' twin. Without the far side, or with the switch off, the points are as they were given.)
 		TArray<FVector2D> Chained = Lane.Path;
-		for (int32 Link = 1; Link < Chained.Num(); ++Link)
+		for (int32 Link = 1; bShortWay && Link < Chained.Num(); ++Link)
 		{
 			Chained[Link].X = NearX(Chained[Link].X, Chained[Link - 1].X);
 		}
@@ -15034,8 +15069,9 @@ void ACampaignMapActor::UpdateSorties()
 		// Out to the target, a turn over it, and home: the airfield is where the air groups stand, south-west of the town.
 		const FVector2D Field = SortieStart(Flight.Sortie);
 		// (seam-2: the target is counted in the turn of the world nearest the airfield, so a raid over the chart's
-		// seam, Alaska to the Yukon, is flown the short way and not across the whole table)
-		const FVector2D Aimed(NearX(Flight.Sortie.To.X, Field.X), Flight.Sortie.To.Y);
+		// seam, Alaska to the Yukon, is flown the short way and not across the whole table. Only while both sides of
+		// the seam are drawn, tc.Far.OverSeam: the town it flies to stands a world on only as a twin.)
+		const FVector2D Aimed(OverSeam() ? NearX(Flight.Sortie.To.X, Field.X) : Flight.Sortie.To.X, Flight.Sortie.To.Y);
 		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Aimed.X, Aimed.Y, 0.3);
 		const FVector Course = (Aim - Field0).GetSafeNormal2D();
 		const FVector Abeam(-Course.Y, Course.X, 0.0);
