@@ -1,0 +1,52 @@
+{
+  "_about": "The stood war rows' counting formations (release 2, the grand campaign; the design director's rulings of 16:42Z, 16:45Z, 16:47Z, 17:11Z and 17:19Z, 25 November 2026, on the historian's read: historian/war-rows-classed-ita-rom-hun-1125.md, war-rows-counting-formations-1125.csv and war-rows-parent-counts-1125.md; the joiner's count in the game's own state, joins/s-rows-count-1125.md). The fault: a dated war row of Italy's or Romania's whose divisions stood on the first day was laid new and whole beside the board's own army that stands for the same men: Italy reached 57 to 63 field divisions against her 43 in six wars nobody plays. The rule (src/campaign/drawn.ts): such a row draws its divisions from the board corps named here, as a move. 'rows' is by nation and the row's own name in setup-1939.json. 'from' lists the corps it draws on, in order: 'divs' of the row's divisions come out of 'corps'. Where that corps has a record count under 'parents' ('of': how many of the record's divisions it stands for) the draw is by share: the row's divisions come with 'record' out of 'of' of the corps as it stands, and the corps keeps its own divisions, the weaker. Elsewhere whole divisions come over, the corps' last ones, each with its even share. 'war' is the war the row waits for in the grand campaign (the setup row keeps its own key, so no historical scenario moves). 'takes' is a share of a corps the row is put together from where it stands (as W Force's, game.ts): 'leaves' the player's line ({place} where that corps stands; the UI director's words of 17:46Z), 'leavesHere' the same where it stands at the row's own place, so the place is said once. Marks: L the historian read it word for word; D derived from L or from the game's own data; M the historian's memory of the order of battle; G a stand-in (every M placement is laid as a flagged G stand-in: her rule 3 of 16:45Z). A row keyed to a war is lent for that war: when it ends its drawn divisions go back to their corps, or stand on where they are (her rule 1 of 16:45Z).",
+  "parents": {
+    "ITA": {
+      "Army of the Po": { "of": 10, "mark": "L", "note": "Two armoured, two motorised, three celere and three motor-transportable divisions (the 1938 corps, L); still ten in June 1940, Littorio in and Centauro in Albania (D). Three on the board." },
+      "1st Army": { "of": 13, "mark": "L", "note": "The order of battle of 10 June 1940: 11 infantry and 2 alpine divisions. Four on the board." },
+      "4th Army": { "of": 9, "mark": "D", "note": "About 9: the French border held 18 infantry and four alpine divisions (L), less the 1st Army's 13. Uncertain whether the 22 count the reserves behind the border. Three on the board." }
+    }
+  },
+  "rows": {
+    "ITA": {
+      "Ciamuria Corps and Julia Alpine Division": {
+        "war": ["ITA", "GRE"],
+        "from": [{ "corps": "Albania Command", "divs": 2, "mark": "L" }, { "corps": "8th Army", "divs": 1, "mark": "G" }],
+        "note": "Centauro and Julia of the Albania Command of April 1939 (L); Ferrara and Siena from Italy (M), on the 8th Army as a stand-in. Activated in Albania for the invasion of Greece (L): the war key."
+      },
+      "XXVI Corps": {
+        "war": ["ITA", "GRE"],
+        "from": [{ "corps": "Albania Command", "divs": 1, "mark": "L" }, { "corps": "3rd Army", "divs": 1, "mark": "G" }],
+        "note": "Venezia of the Albania Command (L); Parma, Piemonte and Arezzo from Italy (M), on the 3rd Army as a stand-in. It held the eastern half of the front with Greece (L): the war key."
+      },
+      "9th Army": {
+        "from": [{ "corps": "1st Army", "divs": 4, "record": 8, "mark": "G" }],
+        "note": "Divisions freed from the western Alps after June 1940, about 8 of the 1st Army's 13 (M): 8/13 of the corps, about 2.5 of the game's divisions for the row's 4."
+      },
+      "11th Army reserves": {
+        "from": [{ "corps": "4th Army", "divs": 2, "record": 4, "mark": "G" }, { "corps": "8th Army", "divs": 2, "mark": "G" }],
+        "note": "The alpine divisions among them (M). The 4th Army's share is 4 of its about 9 (the rows' own rate of two record divisions to one of the game's, D): a stand-in until the divisions are read."
+      },
+      "Ariete Armoured Division": { "from": [{ "corps": "Army of the Po", "divs": 1, "record": 1, "mark": "L" }], "note": "In the Po army's Armoured Corps from 1938 (L)." },
+      "Trento Motorized Division": { "from": [{ "corps": "Army of the Po", "divs": 1, "record": 1, "mark": "L" }], "note": "The same corps, 1938 (L)." },
+      "Trieste Motorized Division": { "from": [{ "corps": "Army of the Po", "divs": 1, "record": 1, "mark": "L" }], "note": "The same corps, 1938 (L)." },
+      "Littorio Armoured Division": { "from": [{ "corps": "Army of the Po", "divs": 1, "record": 1, "mark": "D" }], "note": "Formed at Parma on 6 November 1939; sent to the Aosta valley with Trieste in June 1940 (L)." },
+      "Brescia and Pavia Divisions": { "from": [{ "corps": "5th Army", "divs": 1, "mark": "G" }], "note": "In Tripolitania by June 1940 (M); the 5th Army is the board's Tripolitania row (D)." },
+      "Bologna and Savona Divisions": { "from": [{ "corps": "5th Army", "divs": 1, "mark": "G" }], "note": "As above (M)." },
+      "Pistoia and La Spezia Divisions": {
+        "from": [{ "corps": "1st Army", "divs": 1, "record": 1, "mark": "L" }],
+        "note": "Pistoia stood as reserve of the 1st Army in June 1940, in its order of battle of 13 (L). La Spezia was activated at Pisa on 15 November 1941 (L): new, and raised as it always was."
+      },
+      "6th Army": {
+        "takes": { "name": "Sicily Command", "share": 0.75, "leaves": "The 6th Army is formed in Sicily out of three quarters of your Sicily Command, in {place}. The rest stays on as the Sicily Command.", "leavesHere": "The 6th Army is formed in Sicily out of three quarters of your Sicily Command. The rest stays on as the Sicily Command." },
+        "note": "Its field divisions, 1.5 of the row's 3, had stood in Sicily since 1940 to 1941 (M): 1.5 of the Sicily Command's 2. Its coastal divisions, the other 1.5, were older classes recalled (M): reserve, netted against the call-up by the general's thread, not here."
+      }
+    },
+    "ROM": {
+      "3rd Army: I and II Corps": { "from": [{ "corps": "II Corps", "divs": 3, "mark": "D" }, { "corps": "3rd Army", "divs": 1, "mark": "L" }], "note": "The board's own II Corps (D); the 3rd Army's divisions were the same army's (L)." },
+      "3rd Army: IV and V Corps": { "from": [{ "corps": "3rd Army", "divs": 2, "mark": "L" }, { "corps": "V Corps", "divs": 2, "mark": "D" }], "note": "The IV Corps of June 1941, the 6th and 7th Infantry, on the Don in November 1942 (L); the V Corps by name (D)." },
+      "4th Army: VI Corps": { "from": [{ "corps": "4th Army", "divs": 3, "mark": "G" }], "note": "The board's own army name (D); the divisions by memory (M)." },
+      "4th Army: VII Corps": { "from": [{ "corps": "V Corps", "divs": 1, "mark": "G" }, { "corps": "Cavalry Corps", "divs": 2, "mark": "L" }], "note": "The 5th and 8th Cavalry of the 1941 Cavalry Corps (L), with the 4th Army in November 1942 (M)." }
+    }
+  }
+}
