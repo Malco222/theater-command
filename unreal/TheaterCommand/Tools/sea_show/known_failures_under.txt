@@ -1,0 +1,19 @@
+# The real nights' known failures under the water, kept as known_failures.txt keeps the show's (the same form, the same
+# rule, a list of its own so that each test can tell a line of its own gone stale): the naval rules' side of a failure on
+# one of the convoy battle's real nights (Tools/sea_show/recordings, D2), until its rules fix lands. sea_under_test reads
+# this list (run.sh names it in SEA_UNDER_KNOWN). Each line, tab apart: the recording's file name without .json, the
+# check's name as sea_under_test prints it (with its "watched: " or "staged: "), and the most that check may read on that
+# night (its Measure: for the blows laid off her, how far from her keel the nearest charge of the pattern lay, in metres).
+# Within its bound the failure prints KNOWN and fails nothing; past it, or any check not listed failing, fails the run as
+# ever; a listed check that passes says to take its line off, and so does a line for a night played on which no check of
+# that name ran (its check gone or renamed). Take each line off when its rules fix lands.
+#
+# Blows laid off her (first-pack, naval round 5's recordings of 25 November): the rules lay a depth-charge pattern where the
+# boat was when they drop it; its charges burst about 35 s later, by which time she has moved on about 40 m; and the rules
+# still book the blow on her, as a blow books anywhere within 180 m. So 2 blows land on her with no charge drawn near her:
+# the nearest charge 27.1 m from her keel, against the check's 13.3 m (twice the charge's 6.4 m lethal reach, and half a
+# metre), the same watched and staged. Ruled the rules' fault by the design director at 19:30Z, 25 November; the check stays
+# as it is. Until naval round 6 (the pattern laid ahead on her last-held course and speed; each charge booked by its own
+# distance at the burst). The bound as measured: 27.1 m (it reads 27.09 m on both lines).
+convoy-first-pack	watched: on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)	27.1
+convoy-first-pack	staged: on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)	27.1
