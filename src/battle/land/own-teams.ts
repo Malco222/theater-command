@@ -99,6 +99,22 @@ export function ownTeams(t: FieldTicket<LandPlace>, seen: readonly number[] = []
 }
 
 /**
+ * Each own team block's parent on a ticket that has them: the team force's id to the id of the force it was taken
+ * from, read back from the order ownTeams lays them in (a side's team blocks after its forces, two a parent, the
+ * parents in the forces' order). Empty on a ticket with none; a side whose team blocks are not laid so gives none
+ * (no parent is guessed).
+ */
+export function ownTeamParents(t: { att: SideTicket; def: SideTicket }): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const s of [t.att, t.def]) {
+    const teams = s.forces.filter(isOwnTeam), parents = s.forces.filter((f) => !isOwnTeam(f) && brings(f));
+    if (!teams.length || teams.length !== 2 * parents.length) continue;
+    teams.forEach((f, i) => out.set(f.corps, parents[i >> 1].corps));
+  }
+  return out;
+}
+
+/**
  * The same for what the 3D game hands the live battle: the campaign's battleLook answer ({ ticket, live: { seen } })
  * or a bare ticket, in the shape it came.
  */

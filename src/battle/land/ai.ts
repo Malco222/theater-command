@@ -368,7 +368,10 @@ function makePlan(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: L
   if (!line.length) line = foes.filter((f) => f.kind !== 'art');
   if (!line.length) line = foes;
   line = [...line].sort((a, c) => a.x - c.x || a.id - c.id);
-  const score = line.map((f, i) => (LAND.cover[coverAt(b.field, f.x, f.y)] / Math.max(1e-6, weight(f))) * (i === 0 || i === line.length - 1 ? 1.25 : 1) * (f.dug ? 0.8 : 1));
+  // (Support teams in battle, sim.teamsRule: a division's own teams are still its weight, on the enemy's line as on
+  // one's own in step 2, so the stretch chosen is the one chosen against the same force without them.)
+  const foeWeight = (f: LandUnit): number => weight(f) * (b.teamsRule ? 1 + b.ownTeamsPower(f) / Math.max(1e-9, f.power0) : 1);
+  const score = line.map((f, i) => (LAND.cover[coverAt(b.field, f.x, f.y)] / Math.max(1e-6, foeWeight(f))) * (i === 0 || i === line.length - 1 ? 1.25 : 1) * (f.dug ? 0.8 : 1));
   let k = 0;
   for (let i = 1; i < line.length; i++) if (score[i] > score[k]) k = i;
   P.main = [line[k].id];
@@ -382,9 +385,14 @@ function makePlan(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: L
   // 2. Who goes where: nearest the main stretch first, the main effort until it has its share of the army's weight; the
   // rest pin the line in front of them.
   const order = [...rest].sort((a, c) => Math.abs(a.x - cx) - Math.abs(c.x - cx) || a.id - c.id);
-  const total = rest.reduce((a, u) => a + u.power0, 0);
+  // Support teams in battle (sim.teamsRule; the design director, 25 November 20:03Z, "a team is its own division's,
+  // never a gun"): the sum counts each block's own teams with it, so a force that brings its own teams makes the plan
+  // it makes without them. (Left out, the 8% each infantry division gave its teams tipped the share: Normandy's forces
+  // fell 0.13 short of it, a fourth block joined the main effort and nobody pinned.)
+  const withTeams = (u: LandUnit): number => u.power0 + (b.teamsRule ? b.ownTeamsPower(u) : 0);
+  const total = rest.reduce((a, u) => a + withTeams(u), 0);
   let got = 0, i = 0;
-  for (; i < order.length && (got < s.main * total || i === 0); i++) { P.role[order[i].id] = 'main'; got += order[i].power0; }
+  for (; i < order.length && (got < s.main * total || i === 0); i++) { P.role[order[i].id] = 'main'; got += withTeams(order[i]); }
   for (const u of order.slice(i)) P.role[u.id] = 'pin';
   // The main effort carries foot where the army has any: the nearest foot block swaps in for its furthest block.
   const mainUs = (): LandUnit[] => order.filter((u) => P.role[u.id] === 'main');
@@ -454,7 +462,10 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
   // Guns: fire on the main effort, the next block of its stretch when one breaks, then on whatever is nearest; they stay
   // where they stand unless nothing is in reach (a deep city).
   for (const g of guns) {
-    if (s.plan) { const t = mainNow(b, P); if (t) g.aim = t.id; else delete g.aim; }
+    // (Support teams in battle, sim.teamsRule: a team is never laid on the main effort's target. It fires on what its own
+    // weapon harms most, the sim's targetOf: the design director, 25 November 20:03Z, mend 2.)
+    if (b.teamsRule && g.team) delete g.aim;
+    else if (s.plan) { const t = mainNow(b, P); if (t) g.aim = t.id; else delete g.aim; }
     if (g.order?.kind !== 'withdraw') gunsUp(b, side, g, foes);
   }
   // The main effort: to its start line, wait there under its guns, then in.
@@ -469,10 +480,14 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
     // On its start line when three quarters of its foot by weight are there: a straggler held up by a friend in its way
     // does not hold the rest.
     const there = (u: LandUnit): boolean => !u.order && (!P.spot[u.id] || dist(u.x, u.y, P.spot[u.id][0], P.spot[u.id][1]) <= 25);
-    const all = stood.reduce((a, u) => a + u.power0, 0);
-    if (P.arrived === null && stood.filter(there).reduce((a, u) => a + u.power0, 0) >= 0.75 * all) P.arrived = b.t;
+    // (Support teams in battle, sim.teamsRule: this sum too reads each block with its own teams, as makePlan's step 2.)
+    const withTeams = (u: LandUnit): number => u.power0 + (b.teamsRule ? b.ownTeamsPower(u) : 0);
+    const all = stood.reduce((a, u) => a + withTeams(u), 0);
+    if (P.arrived === null && stood.filter(there).reduce((a, u) => a + withTeams(u), 0) >= 0.75 * all) P.arrived = b.t;
     // It waits under its own guns: an army with none on the field goes in as soon as it is on its start line.
-    const wait = guns.length ? s.wait : 0;
+    // (Support teams in battle, sim.teamsRule: a team is not a gun for the preparation, so an army whose only fire is its
+    // own teams goes in as soon as it is on its start line: the design director, 25 November 20:03Z, mend 3.)
+    const wait = guns.some((g) => !(b.teamsRule && g.team)) ? s.wait : 0;
     if ((P.arrived !== null && b.t >= P.arrived + wait) || b.t >= STYLE.latest * limit || !us.length) { P.went = b.t; P.phase = 'assault'; }
   }
   const going = P.went !== null;

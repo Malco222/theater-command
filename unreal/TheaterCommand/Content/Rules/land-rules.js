@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 6b9421af7 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c9fff9a17 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2295,7 +2295,8 @@
     if (!line.length) line = foes.filter((f) => f.kind !== "art");
     if (!line.length) line = foes;
     line = [...line].sort((a, c) => a.x - c.x || a.id - c.id);
-    const score = line.map((f, i2) => LAND.cover[coverAt(b.field, f.x, f.y)] / Math.max(1e-6, weight(f)) * (i2 === 0 || i2 === line.length - 1 ? 1.25 : 1) * (f.dug ? 0.8 : 1));
+    const foeWeight = (f) => weight(f) * (b.teamsRule ? 1 + b.ownTeamsPower(f) / Math.max(1e-9, f.power0) : 1);
+    const score = line.map((f, i2) => LAND.cover[coverAt(b.field, f.x, f.y)] / Math.max(1e-6, foeWeight(f)) * (i2 === 0 || i2 === line.length - 1 ? 1.25 : 1) * (f.dug ? 0.8 : 1));
     let k = 0;
     for (let i2 = 1; i2 < line.length; i2++) if (score[i2] > score[k]) k = i2;
     P.main = [line[k].id];
@@ -2307,11 +2308,12 @@
     const stretch = P.main.map((id) => b.unit(id));
     const cx = stretch.reduce((a, f) => a + f.x, 0) / stretch.length;
     const order = [...rest].sort((a, c) => Math.abs(a.x - cx) - Math.abs(c.x - cx) || a.id - c.id);
-    const total = rest.reduce((a, u) => a + u.power0, 0);
+    const withTeams2 = (u) => u.power0 + (b.teamsRule ? b.ownTeamsPower(u) : 0);
+    const total = rest.reduce((a, u) => a + withTeams2(u), 0);
     let got = 0, i = 0;
     for (; i < order.length && (got < s.main * total || i === 0); i++) {
       P.role[order[i].id] = "main";
-      got += order[i].power0;
+      got += withTeams2(order[i]);
     }
     for (const u of order.slice(i)) P.role[u.id] = "pin";
     const mainUs = () => order.filter((u) => P.role[u.id] === "main");
@@ -2375,7 +2377,8 @@
     for (const u of mine) if (u.team === "snp") snipersUp(b, side, u, mine, foes);
     const role = (u) => P.role[u.id] ?? "pin";
     for (const g of guns) {
-      if (s.plan) {
+      if (b.teamsRule && g.team) delete g.aim;
+      else if (s.plan) {
         const t2 = mainNow(b, P);
         if (t2) g.aim = t2.id;
         else delete g.aim;
@@ -2391,9 +2394,10 @@
         if (!u.order && dist(u.x, u.y, at[0], at[1]) > 20 && u.engaged === void 0) b.command({ do: "move", units: [u.id], x: at[0], y: at[1], face: side === "att" ? 0 : Math.PI }, side);
       }
       const there = (u) => !u.order && (!P.spot[u.id] || dist(u.x, u.y, P.spot[u.id][0], P.spot[u.id][1]) <= 25);
-      const all = stood.reduce((a, u) => a + u.power0, 0);
-      if (P.arrived === null && stood.filter(there).reduce((a, u) => a + u.power0, 0) >= 0.75 * all) P.arrived = b.t;
-      const wait = guns.length ? s.wait : 0;
+      const withTeams2 = (u) => u.power0 + (b.teamsRule ? b.ownTeamsPower(u) : 0);
+      const all = stood.reduce((a, u) => a + withTeams2(u), 0);
+      if (P.arrived === null && stood.filter(there).reduce((a, u) => a + withTeams2(u), 0) >= 0.75 * all) P.arrived = b.t;
+      const wait = guns.some((g) => !(b.teamsRule && g.team)) ? s.wait : 0;
       if (P.arrived !== null && b.t >= P.arrived + wait || b.t >= STYLE.latest * limit || !us.length) {
         P.went = b.t;
         P.phase = "assault";
@@ -9284,6 +9288,77 @@
   var noTrace = () => ({ loss: 0, flank: 0, rear: 0, fire: 0, ambush: 0, air: 0 });
   var weighsOf = (w, dmg) => ({ flank: w.flank / dmg, rear: w.rear / dmg, fire: w.fire / dmg, ambush: w.ambush / dmg });
 
+  // ../../src/battle/land/own-teams.ts
+  var OWN_TEAM_SHARE = 0.04;
+  var OWN_TEAM_KINDS = ["inf", "mtn", "mot"];
+  var OWN_TEAM_ID = -1000001;
+  var WORD = { mg: ["machine guns", "MGs"], mor: ["mortars", "mortars"] };
+  var isOwnTeam = (f) => f.corps <= OWN_TEAM_ID;
+  var brings = (f) => f.corps >= 0 && OWN_TEAM_KINDS.includes(f.kind) && f.share > 0 && f.men > 0;
+  function sideWith(s, next, parents) {
+    const made = [];
+    const forces = s.forces.map((f) => {
+      if (!brings(f)) return f;
+      const keep = 1 - 2 * OWN_TEAM_SHARE;
+      for (const kind of ["mg", "mor"]) {
+        const id = next - made.length, men = Math.max(1, Math.round(f.men * OWN_TEAM_SHARE));
+        const name = `${f.name} ${WORD[kind][0]}`, short = `${f.name} ${WORD[kind][1]}`;
+        parents.set(id, f.corps);
+        made.push({
+          corps: id,
+          name: f.name,
+          nat: f.nat,
+          kind,
+          divs: 1,
+          men,
+          str: f.str,
+          org: f.org,
+          xp: f.xp,
+          ...f.mor !== void 0 ? { mor: f.mor } : {},
+          ...f.dug ? { dug: true } : {},
+          ...f.cross === false ? { cross: false } : {},
+          ...f.wear !== void 0 ? { wear: f.wear } : {},
+          ...f.fresh !== void 0 ? { fresh: f.fresh } : {},
+          divisions: [{ name, short, str: f.str, xp: f.xp, men }],
+          share: f.share * OWN_TEAM_SHARE,
+          battles: f.battles ?? 0
+        });
+      }
+      return {
+        ...f,
+        share: f.share * keep,
+        men: Math.round(f.men * keep),
+        ...f.divisions ? { divisions: f.divisions.map((d) => ({ ...d, men: Math.round(d.men * keep) })) } : {}
+      };
+    });
+    return made.length ? { ...s, forces: [...forces, ...made] } : s;
+  }
+  function ownTeams(t, seen = []) {
+    if ([...t.att.forces, ...t.def.forces].some(isOwnTeam)) return { ticket: t, seen: [...seen] };
+    const parents = /* @__PURE__ */ new Map();
+    const att = sideWith(t.att, OWN_TEAM_ID, parents);
+    const def = sideWith(t.def, OWN_TEAM_ID - parents.size, parents);
+    if (!parents.size) return { ticket: t, seen: [...seen] };
+    const known = new Set(seen);
+    return { ticket: { ...t, att, def }, seen: [...seen, ...[...parents].filter(([, parent]) => known.has(parent)).map(([id]) => id)] };
+  }
+  function ownTeamParents(t) {
+    const out = /* @__PURE__ */ new Map();
+    for (const s of [t.att, t.def]) {
+      const teams = s.forces.filter(isOwnTeam), parents = s.forces.filter((f) => !isOwnTeam(f) && brings(f));
+      if (!teams.length || teams.length !== 2 * parents.length) continue;
+      teams.forEach((f, i) => out.set(f.corps, parents[i >> 1].corps));
+    }
+    return out;
+  }
+  function ownTeamsLook(look) {
+    if ("ticket" in look && look.ticket) {
+      const o = ownTeams(look.ticket, look.live?.seen ?? []);
+      return o.ticket === look.ticket ? look : { ...look, ticket: o.ticket, live: { ...look.live ?? {}, seen: o.seen } };
+    }
+    return ownTeams(look).ticket;
+  }
+
   // ../../src/battle/land/sim.ts
   var other = (s) => s === "att" ? "def" : "att";
   var HEDGE_CELL = 10;
@@ -9326,6 +9401,7 @@
   var live2 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live2(u) && u.state !== "routing";
   var weightOf = (u) => u.priced ?? u.power0;
+  var ownArm = (u) => u.team === "mg" || u.team === "mor";
   var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
   function joinEdge(side, toward, own) {
     if (toward === void 0 || !Number.isFinite(toward)) return side === "att" ? "south" : "north";
@@ -9509,9 +9585,19 @@
        *     strength left, stopped being worn, and battles ran to the clock. The line's and the guns' are added as fitted,
        *     and LAND.teams is untouched.
        *   - the defence's staff never counts a team block firing from far back as a neighbour in a fight (ai.ts defend).
+       *   - a team is its own division's, never a gun (the design director, 25 November 20:03Z, on the ground thread's
+       *     teams-traces-1125.md). At the brink a force's own team block stands in its army's sums as its division's line
+       *     stands (wornShare, brokenShare, freshShare: ownLine). Off, as it was: a team far back, never worn, was whole
+       *     power in the sum, so the line had to be worn that much more before its army was spent. A team block with no
+       *     division of its own (a set piece's battalion, a brigade the player built) counts as itself, on or off.
+       *   - a team fires on the target in its reach its own weapon harms most, the nearest among those it harms alike
+       *     (targetOf), and the attack's staff no longer lays it on the main effort's target as it lays guns (ai.ts
+       *     planned). Off, as it was: laid with the guns, a machine gun spent half its fire on tanks.
        * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
        */
       __publicField(this, "teamsRule", false);
+      /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
+      __publicField(this, "teamParent");
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
       __publicField(this, "flanking", /* @__PURE__ */ new Map());
       /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
@@ -9731,6 +9817,7 @@
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
       this.power = { att: A, def: D2 };
+      this.teamParent = ownTeamParents(ticket);
       const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
       const def = makeBlocks("def", ticket.def, D2, att.length + 1, void 0, ticket.turn);
       this.units = [...att, ...def];
@@ -12195,6 +12282,8 @@
       }
       if (u.hid && u.order?.kind !== "attack" && !snp) reach = Math.min(reach, this.ambushAt(u));
       let best = null, score = Infinity;
+      const T = this.teamsRule && ownArm(u) ? LAND.teams[u.team] : null;
+      let harm = 0;
       for (const e of this.units) {
         if (e.side === u.side || !live2(e) || e.hid) continue;
         const d = this.gap(u, e);
@@ -12202,6 +12291,14 @@
         if (u.order?.kind === "attack" && u.order.target === e.id) return e;
         const off = Math.abs(turn(u.face, bearing(u.x, u.y, e.x, e.y)));
         const s = d * (1 + off) * (snp ? this.sniperPick(e) : e.state === "routing" ? 2 : 1);
+        if (T) {
+          const h = (e.kind === "arm" ? T.armour : 1) * (d < T.closeAt ? T.close : 1);
+          if (h < harm - 1e-9 || h <= harm + 1e-9 && s >= score) continue;
+          harm = h;
+          score = s;
+          best = e;
+          continue;
+        }
         if (s < score) {
           score = s;
           best = e;
@@ -12412,7 +12509,7 @@
      */
     tally(h, u, blow) {
       h.dmg += blow.dmg;
-      if (this.teamsRule && u.team) {
+      if (this.teamsRule && ownArm(u)) {
         h.team += blow.dmg;
         h.teamNerve += blow.dmg * blow.nerve;
       } else h.nerve += blow.nerve;
@@ -13082,15 +13179,65 @@
       for (const c of this.coming) s[c.u.side] += c.u.priced / tot;
       return s;
     }
+    /**
+     * A force's own team block's division on the field (own-teams.ts): the line blocks of the force it was taken from.
+     * Empty for every other block, and for a team block with no division of its own.
+     */
+    ownLine(u) {
+      if (!ownArm(u)) return [];
+      const parent = this.teamParent.get(u.corps);
+      return parent === void 0 ? [] : this.units.filter((p) => p.corps === parent && !p.team);
+    }
+    /**
+     * The power of its force's own team blocks that stands with a line block (0 for a block whose force brought none):
+     * each team block's shared among its division's line blocks by their power. The 8% a division gave its teams is
+     * still the division's weight (the staff's plan, ai.ts makePlan, with teamsRule).
+     */
+    ownTeamsPower(u) {
+      if (u.team || !this.teamParent.size) return 0;
+      let n = 0;
+      for (const t of this.units) {
+        if (!ownArm(t) || this.teamParent.get(t.corps) !== u.corps) continue;
+        const line = this.ownLine(t), whole = line.reduce((a, p) => a + p.power0, 0);
+        if (whole > 0 && line.includes(u)) n += t.power0 * (u.power0 / whole);
+      }
+      return n;
+    }
+    /**
+     * Support teams in battle (teamsRule): of a force's own team block, the share that stands in a sum at the brink as
+     * its division's line stands: `part` of each of its line blocks over their `whole`. Null where the block counts as
+     * itself: the rule off, no team block, or one with no division of its own on the field.
+     * A team takes its state (fresh, worn, running) from its division's line, but its own men still leave the sums as
+     * they fall (the design director, 25 November 20:22Z: priced once, no ghost): what it has lost is worn, as any
+     * block's is, and only what is left of it stands as its division stands. A team wiped out is all worn and counts
+     * nothing in the running or the fresh, whatever its division.
+     */
+    asItsLine(u, whole, part) {
+      if (!this.teamsRule || !ownArm(u)) return null;
+      const line = this.ownLine(u);
+      if (!line.length) return null;
+      const all = line.reduce((a, p) => a + whole(p), 0);
+      return all > 0 ? line.reduce((a, p) => a + part(p), 0) / all : null;
+    }
     brokenShare(s) {
+      const running = (u) => u.state === "routing" || u.state === "gone";
       let gone = 0;
-      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += weightOf(u);
+      for (const u of this.units) {
+        if (u.side !== s) continue;
+        const k = this.asItsLine(u, weightOf, (p) => running(p) ? weightOf(p) : 0);
+        if (k !== null) gone += weightOf(u) * (u.str / u.str0) * k;
+        else if (running(u)) gone += weightOf(u);
+      }
       return gone / this.power[s];
     }
     /** The share of a side's power worn away on the field (strength lost, before anyone runs). */
     wornShare(s) {
       let worn = 0;
-      for (const u of this.units) if (u.side === s) worn += u.power0 * (1 - u.str / u.str0);
+      for (const u of this.units) {
+        if (u.side !== s) continue;
+        const k = this.asItsLine(u, (p) => p.power0, (p) => p.power0 * (1 - p.str / p.str0)), left = u.str / u.str0;
+        worn += u.power0 * (1 - left + (k === null ? 0 : left * k));
+      }
       return worn / this.power[s];
     }
     /**
@@ -13208,7 +13355,12 @@
      */
     freshShare(s) {
       let n = 0;
-      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += weightOf(u);
+      for (const u of this.units) {
+        if (u.side !== s) continue;
+        const k = this.asItsLine(u, weightOf, (p) => fighting2(p) && this.fresh(p) ? weightOf(p) : 0);
+        if (k !== null) n += weightOf(u) * (u.str / u.str0) * k;
+        else if (fighting2(u) && this.fresh(u)) n += weightOf(u);
+      }
       for (const c of this.coming) if (c.u.side === s) n += c.u.priced;
       return n / this.power[s];
     }
@@ -14892,68 +15044,6 @@
     if (!p) throw new Error(`no set piece ${key}`);
     const s = seed ?? p.seeds[0];
     return new LiveBattle(ticketOf(p, s, opts.me ?? null), p, opts);
-  }
-
-  // ../../src/battle/land/own-teams.ts
-  var OWN_TEAM_SHARE = 0.04;
-  var OWN_TEAM_KINDS = ["inf", "mtn", "mot"];
-  var OWN_TEAM_ID = -1000001;
-  var WORD = { mg: ["machine guns", "MGs"], mor: ["mortars", "mortars"] };
-  var isOwnTeam = (f) => f.corps <= OWN_TEAM_ID;
-  var brings = (f) => f.corps >= 0 && OWN_TEAM_KINDS.includes(f.kind) && f.share > 0 && f.men > 0;
-  function sideWith(s, next, parents) {
-    const made = [];
-    const forces = s.forces.map((f) => {
-      if (!brings(f)) return f;
-      const keep = 1 - 2 * OWN_TEAM_SHARE;
-      for (const kind of ["mg", "mor"]) {
-        const id = next - made.length, men = Math.max(1, Math.round(f.men * OWN_TEAM_SHARE));
-        const name = `${f.name} ${WORD[kind][0]}`, short = `${f.name} ${WORD[kind][1]}`;
-        parents.set(id, f.corps);
-        made.push({
-          corps: id,
-          name: f.name,
-          nat: f.nat,
-          kind,
-          divs: 1,
-          men,
-          str: f.str,
-          org: f.org,
-          xp: f.xp,
-          ...f.mor !== void 0 ? { mor: f.mor } : {},
-          ...f.dug ? { dug: true } : {},
-          ...f.cross === false ? { cross: false } : {},
-          ...f.wear !== void 0 ? { wear: f.wear } : {},
-          ...f.fresh !== void 0 ? { fresh: f.fresh } : {},
-          divisions: [{ name, short, str: f.str, xp: f.xp, men }],
-          share: f.share * OWN_TEAM_SHARE,
-          battles: f.battles ?? 0
-        });
-      }
-      return {
-        ...f,
-        share: f.share * keep,
-        men: Math.round(f.men * keep),
-        ...f.divisions ? { divisions: f.divisions.map((d) => ({ ...d, men: Math.round(d.men * keep) })) } : {}
-      };
-    });
-    return made.length ? { ...s, forces: [...forces, ...made] } : s;
-  }
-  function ownTeams(t, seen = []) {
-    if ([...t.att.forces, ...t.def.forces].some(isOwnTeam)) return { ticket: t, seen: [...seen] };
-    const parents = /* @__PURE__ */ new Map();
-    const att = sideWith(t.att, OWN_TEAM_ID, parents);
-    const def = sideWith(t.def, OWN_TEAM_ID - parents.size, parents);
-    if (!parents.size) return { ticket: t, seen: [...seen] };
-    const known = new Set(seen);
-    return { ticket: { ...t, att, def }, seen: [...seen, ...[...parents].filter(([, parent]) => known.has(parent)).map(([id]) => id)] };
-  }
-  function ownTeamsLook(look) {
-    if ("ticket" in look && look.ticket) {
-      const o = ownTeams(look.ticket, look.live?.seen ?? []);
-      return o.ticket === look.ticket ? look : { ...look, ticket: o.ticket, live: { ...look.live ?? {}, seen: o.seen } };
-    }
-    return ownTeams(look).ticket;
   }
 
   // Rules/land-bridge.ts

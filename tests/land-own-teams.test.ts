@@ -12,8 +12,9 @@
 // soldier AI thread's line and test.)
 import { describe, expect, it, vi } from 'vitest';
 import { liveTicket } from '../src/battle/land/live';
-import { OWN_TEAM_ID, OWN_TEAM_SHARE, isOwnTeam, ownTeams, ownTeamsLook } from '../src/battle/land/own-teams';
+import { OWN_TEAM_ID, OWN_TEAM_SHARE, isOwnTeam, ownTeamParents, ownTeams, ownTeamsLook } from '../src/battle/land/own-teams';
 import { PIECES, ticketOf } from '../src/battle/land/pieces';
+import { LAND } from '../src/battle/land/rules';
 import { LandBattle } from '../src/battle/land/sim';
 import type { FieldTicket, ForceTicket, SideTicket } from '../src/battle/core/types';
 import type { LandPlace } from '../src/battle/land/field';
@@ -264,4 +265,187 @@ describe("support teams in battle: a team firing from far back is no neighbour i
     expect(orders).toBeGreaterThan(0);
     expect(on).toBe(0);
   }, 240_000);
+});
+
+describe("support teams in battle: a team is its own division's, never a gun (the count at the brink)", () => {
+  type U = { id: number; side: 'att' | 'def'; corps: number; kind: string; team?: string; power0: number; str: number; str0: number; state: string; met?: boolean };
+  type Sums = { wornShare(s: 'att' | 'def'): number; brokenShare(s: 'att' | 'def'): number; freshShare(s: 'att' | 'def'): number; ownLine(u: U): U[]; ownTeamsPower(u: U): number };
+  const field = (t: Ticket, rule: boolean): { sim: LandBattle; units: U[]; sums: Sums } => {
+    const sim = new LandBattle(t);
+    sim.teamsRule = rule;
+    return { sim, units: sim.units as unknown as U[], sums: sim as unknown as Sums };
+  };
+
+  it("reads each team block's parent back from the ticket, and none where there are no own teams", () => {
+    const t = campaign('normandy-1944'), o = ownTeams(t).ticket;
+    const parents = ownTeamParents(o);
+    for (const side of ['att', 'def'] as const) {
+      const foot = t[side].forces.filter((f) => ['inf', 'mtn', 'mot'].includes(f.kind));
+      const made = o[side].forces.filter(isOwnTeam);
+      expect(made.map((f) => parents.get(f.corps))).toEqual(foot.flatMap((f) => [f.corps, f.corps]));
+      // (each is named for its parent)
+      for (const f of made) expect(o[side].forces.find((x) => x.corps === parents.get(f.corps))!.name).toBe(f.name);
+    }
+    expect(ownTeamParents(t).size).toBe(0);
+    expect(ownTeamParents(ticketOf(PIECES[0], 11, null)).size).toBe(0);
+  });
+
+  it("gives a division its teams' weight back for the staff's plan: the line weighs what it did without them", () => {
+    const t = campaign('normandy-1944'), bare = field(t, true), own = field(ownTeams(t).ticket, true);
+    for (const side of ['att', 'def'] as const) {
+      const before = bare.units.filter((u) => u.side === side && u.kind !== 'art').map((u) => u.power0);
+      const line = own.units.filter((u) => u.side === side && u.kind !== 'art');
+      const after = line.map((u) => u.power0 + own.sums.ownTeamsPower(u));
+      expect(after.length).toBe(before.length);
+      after.forEach((w, i) => expect(w).toBeCloseTo(before[i], 6));
+      // (a tank block brought none; a team block and a gun have none of their own)
+      for (const u of own.units.filter((x) => x.side === side && (x.kind === 'arm' || x.kind === 'art'))) expect(own.sums.ownTeamsPower(u)).toBe(0);
+    }
+    for (const u of bare.units) expect(bare.sums.ownTeamsPower(u)).toBe(0);
+  });
+
+  it('on, a team block stands in the sums as its division stands; off, as itself', () => {
+    const t = ownTeams(campaign('normandy-1944')).ticket;
+    for (const rule of [true, false]) {
+      const { units, sums } = field(t, rule);
+      const team = units.find((u) => u.side === 'att' && u.team)!, line = sums.ownLine(team);
+      expect(line.length).toBeGreaterThan(0);
+      expect(line.every((p) => !p.team && p.kind !== 'art')).toBe(true);
+      const power = units.filter((u) => u.side === 'att').reduce((a, u) => a + u.power0, 0);
+      const mine = units.filter((u) => u.side === 'att' && u.team && sums.ownLine(u)[0] === line[0]);
+      const worn0 = sums.wornShare('att'), fresh0 = sums.freshShare('att');
+      // Its division worn by a fifth, the team blocks untouched far back.
+      for (const p of line) p.str = p.str0 * 0.8;
+      const lineWorn = line.reduce((a, p) => a + p.power0, 0) * 0.2, teamsWorn = mine.reduce((a, u) => a + u.power0, 0) * 0.2;
+      expect(sums.wornShare('att') - worn0).toBeCloseTo((lineWorn + (rule ? teamsWorn : 0)) / power, 9);
+      // The team blocks themselves struck, half their men down: those men are worn, on or off (priced once); on, the
+      // half left is worn as its division is, a fifth.
+      const worn1 = sums.wornShare('att');
+      for (const u of mine) u.str = u.str0 * 0.5;
+      const teamsPower = mine.reduce((a, u) => a + u.power0, 0);
+      expect(sums.wornShare('att') - worn1).toBeCloseTo((rule ? teamsPower * (0.5 + 0.5 * 0.2) - teamsWorn : teamsPower * 0.5) / power, 9);
+      for (const u of mine) u.str = u.str0;
+      // Its division running: on, its teams' weight runs with it; off, only the division's.
+      const run0 = sums.brokenShare('att');
+      for (const p of line) p.state = 'routing';
+      const lineW = line.reduce((a, p) => a + p.power0, 0), teamsW = mine.reduce((a, u) => a + u.power0, 0);
+      expect(sums.brokenShare('att') - run0).toBeCloseTo((lineW + (rule ? teamsW : 0)) / power, 9);
+      // And no longer fresh with it.
+      expect(sums.freshShare('att')).toBeLessThan(fresh0);
+      // No ghost: a team wiped out counts nothing in the running sum whatever its division (its men are all worn).
+      const run1 = sums.brokenShare('att'), worn2 = sums.wornShare('att');
+      for (const u of mine) u.str = 0;
+      expect(run1 - sums.brokenShare('att')).toBeCloseTo((rule ? teamsW : 0) / power, 9);
+      expect(sums.wornShare('att') - worn2).toBeCloseTo(teamsPower * (rule ? 1 - 0.2 : 1) / power, 9);
+    }
+  });
+
+  it('on, a team wiped out counts nothing in the fresh sum, and one whole counts as its division does', () => {
+    const { units, sums } = field(ownTeams(campaign('normandy-1944')).ticket, true);
+    const team = units.find((u) => u.side === 'att' && u.team)!;
+    const whole = sums.freshShare('att');
+    expect(whole).toBeGreaterThan(0);
+    team.str = 0;
+    const power = units.filter((u) => u.side === 'att').reduce((a, u) => a + u.power0, 0);
+    expect(whole - sums.freshShare('att')).toBeCloseTo(team.power0 / power, 9);
+  });
+
+  it("leaves a battalion with no division of its own (a set piece's) as itself, on or off", () => {
+    const t = ticketOf(PIECES[0], 11, null);
+    const sums = (rule: boolean): number[] => {
+      const { units, sums: s } = field(t, rule);
+      const team = units.find((u) => u.team)!;
+      expect(s.ownLine(team)).toEqual([]);
+      team.str = team.str0 * 0.5;
+      return [s.wornShare('att'), s.wornShare('def'), s.brokenShare('att'), s.brokenShare('def'), s.freshShare('att'), s.freshShare('def')];
+    };
+    expect(sums(true)).toEqual(sums(false));
+  });
+
+  it('on, a team fires on what its own weapon harms most, the nearest among those it harms alike; off, on the nearest', () => {
+    type T = U & { x: number; y: number; face: number; hid?: boolean; aim?: number; order?: unknown };
+    const t = ownTeams(campaign('normandy-1944')).ticket;
+    const pick = (rule: boolean, team: 'mg' | 'mor', tankAt: number, footAt: number): string => {
+      const { sim, units } = field(t, rule);
+      const all = units as T[];
+      const g = all.find((u) => u.side === 'att' && u.team === team)!;
+      const tank = all.find((u) => u.side === 'def' && u.kind === 'arm')!, foot = all.find((u) => u.side === 'def' && u.kind === 'inf')!;
+      // (the rest of the defence far out of reach; the two straight ahead of the team, in the open to it)
+      for (const e of all) if (e.side === 'def') { e.x = g.x; e.y = g.y + 9000; }
+      tank.y = g.y + tankAt; foot.y = g.y + footAt; tank.hid = false; foot.hid = false;
+      delete g.aim; delete g.order;
+      const got = (sim as unknown as { targetOf(u: T): T | null }).targetOf(g);
+      return got === tank ? 'tank' : got === foot ? 'foot' : 'none';
+    };
+    // A machine gun: the foot behind the tanks, not the tanks before them (LAND.teams.mg armour 0.15).
+    expect(pick(true, 'mg', 300, 500)).toBe('foot');
+    expect(pick(false, 'mg', 300, 500)).toBe('tank');
+    // A mortar: foot under its close mark (0.3 inside 100 m) is harmed less than a tank further off (0.5); foot beyond it more.
+    expect(pick(true, 'mor', 400, 50)).toBe('tank');
+    expect(pick(false, 'mor', 400, 50)).toBe('foot');
+    expect(pick(true, 'mor', 300, 500)).toBe('foot');
+    // Harmed alike, the nearer; and a tank where there is nothing else in reach.
+    expect(pick(true, 'mg', 300, 5000)).toBe('tank');
+  });
+
+  it('a target an order names for a team stands, on or off: the rule chooses only where none is named', () => {
+    type T = U & { x: number; y: number; hid?: boolean; aim?: number; order?: { kind: string; target?: number } | null; path: unknown[] };
+    const t = ownTeams(campaign('normandy-1944')).ticket;
+    for (const rule of [true, false]) {
+      const { sim, units } = field(t, rule);
+      const all = units as T[];
+      const g = all.find((u) => u.side === 'att' && u.team === 'mg')!;
+      const tank = all.find((u) => u.side === 'def' && u.kind === 'arm')!, foot = all.find((u) => u.side === 'def' && u.kind === 'inf')!;
+      for (const e of all) if (e.side === 'def') { e.x = g.x; e.y = g.y + 9000; }
+      tank.y = g.y + 300; foot.y = g.y + 500; tank.hid = false; foot.hid = false;
+      delete g.aim;
+      g.order = { kind: 'attack', target: tank.id }; g.path = [];
+      expect((sim as unknown as { targetOf(u: T): T | null }).targetOf(g)).toBe(tank);
+    }
+  });
+
+  it('reads only a machine-gun or a mortar team: a team of another arm (a sniper pair) is tallied, counted and aimed as with the rule off', () => {
+    type T = U & { x: number; y: number; hid?: boolean; aim?: number; order?: unknown };
+    type Hurt = { dmg: number; nerve: number; team: number; teamNerve: number };
+    const t = ownTeams(campaign('normandy-1944')).ticket;
+    // (a branch with no sniper pair has no figures for one: a stand-in for this test only, taken away after it)
+    const teams = LAND.teams as unknown as Record<string, unknown>, lent = !('snp' in teams);
+    if (lent) teams.snp = { ...LAND.teams.mg };
+    try {
+      const made = (rule: boolean, arm: string): { sums: Sums; g: T; line: U[]; tally: Hurt; target: string } => {
+        const { sim, units, sums } = field(t, rule);
+        const all = units as T[];
+        const g = all.find((u) => u.side === 'att' && u.team === 'mg')!, line = sums.ownLine(g);
+        // its division's line half worn and one block of it running, so a team that stands as its division is seen in every sum
+        for (const p of line) p.str = p.str0 * 0.5;
+        line[0].state = 'routing';
+        // (both of that division's team blocks made the arm asked for, so nothing else of the rule stands on that line)
+        for (const u of all.filter((u) => u.team && sums.ownLine(u).includes(line[0]))) u.team = arm;
+        const tank = all.find((u) => u.side === 'def' && u.kind === 'arm')!, foot = all.find((u) => u.side === 'def' && u.kind === 'inf')!;
+        for (const e of all) if (e.side === 'def') { e.x = g.x; e.y = g.y + 9000; }
+        tank.y = g.y + 300; foot.y = g.y + 500; tank.hid = false; foot.hid = false;
+        delete g.aim; delete g.order;
+        const h: Hurt = { dmg: 0, nerve: 0, team: 0, teamNerve: 0 };
+        (sim as unknown as { tally(h: Hurt, u: U, blow: { dmg: number; nerve: number }): void }).tally(h, g, { dmg: 2, nerve: 3 });
+        const got = (sim as unknown as { targetOf(u: T): T | null }).targetOf(g);
+        return { sums, g, line, tally: h, target: got === tank ? 'tank' : got === foot ? 'foot' : 'none' };
+      };
+      const sumsOf = (m: { sums: Sums }): number[] => [m.sums.wornShare('att'), m.sums.brokenShare('att'), m.sums.freshShare('att')];
+      // A machine-gun team: the rule reads it (its harm kept apart, its division's state in the sums, its target by harm).
+      const mgOn = made(true, 'mg'), mgOff = made(false, 'mg');
+      expect(mgOn.tally).toEqual({ dmg: 2, nerve: 0, team: 2, teamNerve: 6 });
+      expect(mgOff.tally).toEqual({ dmg: 2, nerve: 3, team: 0, teamNerve: 0 });
+      expect(sumsOf(mgOn)[0]).toBeGreaterThan(sumsOf(mgOff)[0] + 1e-6);
+      expect(sumsOf(mgOn)[1]).toBeGreaterThan(sumsOf(mgOff)[1] + 1e-6);
+      expect(mgOn.target).toBe('foot');
+      expect(mgOn.sums.ownTeamsPower(mgOn.line[0])).toBeGreaterThan(0);
+      // The same blocks as sniper pairs: nothing of the rule touches them, and they are no part of their division's teams' weight.
+      const snOn = made(true, 'snp'), snOff = made(false, 'snp');
+      expect(snOn.tally).toEqual({ dmg: 2, nerve: 3, team: 0, teamNerve: 0 });
+      expect(snOn.sums.ownLine(snOn.g)).toEqual([]);
+      expect(sumsOf(snOn)).toEqual(sumsOf(snOff));
+      expect(snOn.target).toBe(snOff.target);
+      expect(snOn.sums.ownTeamsPower(snOn.line[0])).toBe(0);
+    } finally { if (lent) delete teams.snp; }
+  });
 });
