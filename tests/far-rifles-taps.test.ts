@@ -425,6 +425,36 @@ describe('binds: false', () => {
     expect([carries(g, 'UK'), binds(g, 'UK'), canArm(g, 'UK', 3)]).toEqual([true, true, false]);
     expect(carve(g, 'UK', 3)).toBe(corpsList(g, 'UK', 'inf'));
   });
+
+  it('9. (drafts, a fold and the men) a binds: false row counts its drafts and its fold, and keeps its men test', () => {
+    lay('JAP', { perDiv: 15000, refit: 0.05, binds: false });
+    const g = grand();
+    levyMen(g, 'JAP', 30);
+    g.nations.JAP.pp = 2000;
+    // Its drafts: today's share, and a twentieth of what they bring drawn.
+    store(g, 10, 'JAP');
+    noInflow(g, 'JAP');
+    const feet = corpsOf(g, 'JAP').filter((c) => foot(g, c) && !c.vol);
+    for (const c of feet) c.str = Math.min(c.str, (c.full ?? 1) * 0.7);
+    const f = rises(feet);
+    try { startPhase(g, 'JAP'); } finally { f.stop(); }
+    expect(f.sum()).toBeGreaterThan(0.1);
+    expect(10 - stock(g, 'JAP')).toBeCloseTo(0.05 * f.sum(), 9);
+    // Its fold: the leftover men's rifles go home (the director's answer 4, wherever the nation's orders draw).
+    store(g, 1, 'JAP');
+    const capName = g.regions[g.nations.JAP.capital].name;
+    const a = addCorps(g, 'JAP', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'JAP', 'Folded corps', 'inf', 2, capName, {});
+    a.str = b.str = 0.6;
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(stock(g, 'JAP') - 1).toBeCloseTo(0.4, 12);
+    // Its men test is today's, (1 - strength) for every corps, a corps whose full is below 1 included.
+    a.full = 0.5;
+    a.str = 0.3;
+    let short = 0;
+    for (const c of corpsOf(g, 'JAP')) short += (1 - c.str) * c.divs;
+    for (const v of g.atSea ?? []) if (v.nat === 'JAP') short += (1 - v.corps.str) * v.corps.divs;
+    expect(menSpare(g, 'JAP')).toBe(menLeft(g, 'JAP') - short);
+  });
 });
 
 // ---- Slice S2: the armed level and the drafts -------------------------------------------------------------------------
