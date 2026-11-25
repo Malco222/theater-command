@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f9f35665 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9e3dcb3c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -20250,7 +20250,7 @@
   var COUNT = counting_default;
   var countingFor = (g2, nat, row2) => g2.flags.open === 1 && row2[1] === nat ? COUNT.rows[nat]?.[row2[2]] : void 0;
   var recordCount = (nat, corps) => COUNT.parents[nat]?.[corps]?.of;
-  var drawnWatch = { tell: null, laid: null };
+  var drawnWatch = { tell: null, laid: null, back: null };
   var clamp = (x) => Math.max(0, Math.min(1, x));
   function partsOf(g2, c) {
     return divisionsOf(g2, c).map((d) => ({ slot: d.slot, name: [d.name, d.short], no: d.no, str: clamp(c.str), xp: clamp(c.xp), org: c.org, ...c.mor !== void 0 ? { mor: c.mor } : {} }));
@@ -20368,6 +20368,9 @@
     return out;
   }
   var formsAny = (claims, n) => n - claims.length > 0 || claims.some((q) => q.from && !q.stays);
+  function ownShare(c) {
+    return c.out && c.outOf ? clamp(1 - c.out / c.outOf) : 1;
+  }
   function keepCounted(claims) {
     for (const q of claims) if (q.counted && q.stays && q.from && q.at >= 0 && !q.share) q.from.kept = (q.from.kept ?? 0) + 1;
   }
@@ -20440,6 +20443,7 @@
       const took = Math.min(recs / left * men2, mine4.length);
       h.str = clamp((men2 - took) / h.divs);
       h.out = (h.out ?? 0) + recs;
+      if (h.outOf === void 0) h.outOf = mine4[0].share.of;
       lot.set(h, took / mine4.length);
       g2.supplyDirty = true;
     }
@@ -20473,6 +20477,7 @@
   }
   function rowOver(g2, c, leaving2 = () => false, war = false) {
     const keep3 = [];
+    const apart3 = [];
     const back = /* @__PURE__ */ new Map();
     const home = /* @__PURE__ */ new Map();
     for (const p of partsOf(g2, c)) {
@@ -20481,11 +20486,13 @@
         if (war) keep3.push(p);
         continue;
       }
-      const parent = rec.from === c.id || rec.conv ? void 0 : g2.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving2(x));
-      if (parent && g2.regions[parent.reg].theatre === g2.regions[c.reg].theatre) {
+      const own = rec.from === c.id || !!rec.conv;
+      const parent = own ? void 0 : g2.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving2(x));
+      if (!own) drawnWatch.back?.({ turn: g2.turn, nat: c.nat, name: p.name[0], war, back: !!parent && parent.reg === c.reg, near: !!parent && g2.regions[parent.reg].theatre === g2.regions[c.reg].theatre });
+      if (parent && parent.reg === c.reg) {
         back.set(parent, [...back.get(parent) ?? [], p]);
         if (rec.rec) home.set(parent, (home.get(parent) ?? 0) + rec.rec);
-      } else keep3.push(p);
+      } else (war && !own ? apart3 : keep3).push(p);
     }
     for (const [parent, ps] of back) {
       assemble(g2, parent, [...partsOf(g2, parent), ...ps]);
@@ -20493,12 +20500,31 @@
       if (rec) {
         const out = (parent.out ?? 0) - rec;
         if (out > 1e-9) parent.out = out;
-        else delete parent.out;
+        else {
+          delete parent.out;
+          delete parent.outOf;
+        }
       }
       if (parent.drew || parent.rowed) {
         const had = parent.drew ?? [];
         parent.drew = [...had, ...ps.filter((p) => !had.some((r) => r.name[0] === p.name[0])).map((p) => ({ name: p.name, no: p.no, from: parent.id }))];
       }
+    }
+    let freed2 = false;
+    if (apart3.length && keep3.length) {
+      const before = standInCount(g2, c.nat, c.kind);
+      const f = addCorps(g2, c.nat, formationName(apart3.map((p) => p.name)) ?? c.name, c.kind, apart3.length, c.reg, {});
+      setStandInCount(g2, c.nat, c.kind, before);
+      f.ap = c.ap;
+      f.apMax = c.apMax;
+      f.supplied = c.supplied;
+      f.fought = c.fought;
+      if (c.mor !== void 0) f.mor = c.mor;
+      else delete f.mor;
+      assemble(g2, f, apart3);
+    } else if (apart3.length) {
+      keep3.push(...apart3);
+      freed2 = true;
     }
     if (!keep3.length) return false;
     assemble(g2, c, keep3);
@@ -20507,7 +20533,7 @@
       c.hold = c.rowed.hold;
       if (c.rowed.stay) c.stay = true;
       else delete c.stay;
-    } else if (!war) {
+    } else if (!war || freed2) {
       c.name = formationName(keep3.map((p) => p.name)) ?? c.name;
       c.hold = false;
       delete c.stay;
@@ -77689,7 +77715,7 @@
     const drafts = draftsMul(g2, nat) * traitDrafts(g2, nat) * supDrafts(g2, nat) * civicDrafts(g2, nat) * govMul(g2, nat, "drafts");
     const ward = (c) => restedMonth(g2, c) ? hospitalWorth(hospitalNear(g2, c, (h) => h === nat || allied(g2, h, nat))) : { drafts: 1, org: 0 };
     const stored = new Set(army2.filter((c) => onPortStores(g2, c)));
-    const wantOf = (c) => c.supplied && !stored.has(c) && !(c.lean && nat === g2.human) && !shutIn(g2, c) && !inPocket(g2, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g2, c) * ward(c).drafts * c.divs * lineStrength(g2, c).mul * columnShare(g2, c) * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0;
+    const wantOf = (c) => c.supplied && !stored.has(c) && !(c.lean && nat === g2.human) && !shutIn(g2, c) && !inPocket(g2, c) ? Math.min(Math.max(0, (c.full ?? 1) * ownShare(c) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g2, c) * ward(c).drafts * c.divs * lineStrength(g2, c).mul * columnShare(g2, c) * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0;
     const want = army2.map((c) => c.vol ? 0 : wantOf(c));
     const volWant = army2.map((c) => c.vol ? wantOf(c) : 0);
     const asked3 = want.reduce((s, x) => s + x, 0);
