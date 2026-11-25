@@ -2306,8 +2306,8 @@ export interface AirAssess {
   /**
    * Fog on raids: the fighters last seen in reach of the target that the weighing counts as all rising (KnownDefence's
    * extra): how many, the share of them that meets the raid, one's fighting weight and whose they were. Set only with
-   * `known`, and only where some rise. The sky gate of a raid on troops reads it (skyWon, fightLeft), so that the card's
-   * gate counts the fighters the card's own odds count.
+   * `known`, and only where some rise. A raid on troops reads it inside D and Dpow (strafeCarry), so that the fight the
+   * card's strafers carry counts the fighters the card's own odds count.
    */
   unseen?: { n: number; w: number; each: number; nat: string };
   /** Why the mission cannot be flown at all, or null. */
@@ -2911,8 +2911,7 @@ function fieldBlow(g: Game, a: AirAssess, nat: string, target: number, through: 
 /**
  * The sky's figure (air.json sky.win): the attacker's fighting weight over what the defender can put up, with the
  * fight's own type edge (fighters.ts; absent when its switch is off) and, under Units decide, its height; 99 with no
- * defender. The fight for the sky reads it on the defender's losses made good for the month; a raid on troops on the
- * defenders still in the air over the target (skyWon).
+ * defender. The fight for the sky reads it, on the defender's losses made good for the month.
  */
 function skyHold(a: AirAssess, Epow: number, Dpow: number): number {
   const te = a.typeEdge;
@@ -2922,47 +2921,25 @@ function skyHold(a: AirAssess, Epow: number, Dpow: number): number {
 }
 
 /**
- * A raid on troops with the strafers' rule on (strafers.ts): whether the raid's side won the sky in the air fight just
- * flown, read on the fighters of both sides as the fight left them (the design director, 16:04Z: "a group goes down only
- * when it is free of the air fight. Settled: its side won the sky (the enemy's fighters beaten or gone)"). The rules'
- * own test of a won sky is the fight for the sky's (fly(), superiority): at least sky.least fighters still over the
- * target and sky.win (1.65) times what the defender can put up, by the same weights, type edge and height. That test
- * reads the defender with his losses made good for the month; over the target, in the raid, nothing is made good, so
- * here it reads the defenders still in the air (their losses not made good). With none left, none having risen or
- * every one that rose lost, the sky is won.
+ * A raid on troops with the strafers' rule on (strafers.ts): the fight each of the raid's fighter groups still carries
+ * after its air fight in the settled raid, from 1 to 0, its weight on the troops and its share of the ground fire (the
+ * design director, 18:14Z: "carried = 1 - (the defenders' weight it met / its own fighters' weight), floor 0. There is
+ * no new figure, and both routes read one number"; 18:19Z: "On the settled raid each group carries 1 - D/E, so the two
+ * routes are one number in sum"). In the settled raid every fighter group of the raid meets the whole defence together,
+ * so each carries 1 - D / E, at least 0, where E and D are the two sides' starting weights as the field weighs them
+ * (sim.ts weight: aircraft x worth, the raid's by its fuel to stay): the field is handed each group's aircraft as
+ * a.att's x.ftr and a.def's f.ftr x w (to the whole aircraft) and each side's worth as Epow over E and Dpow over D with
+ * the height taken out (ticket.ts), so its weights sum to Epow and Dpow with the height taken out, here. (a.E and a.D
+ * count aircraft only: the two sides' worths differ, and the field weighs them.) The fighters last seen by the fog are in
+ * Dpow, as the card's odds count them. No defender up: 1. By the same measure the defenders carry 1 - E / D, so one side
+ * or the other carries nothing: where the raid's fighters carry some, no defender is left fit to fight over the target
+ * (ruling 3), and the sky is won (ruling 2); so the raid on troops reads no other test of the sky.
  */
-export function skyWon(g: Game, a: AirAssess, fit: FightLeft = { att: 1, def: 1 }): boolean {
-  let E = 0, Epow = 0, D = 0;
-  // (Ruling 3, 17:10Z: read after the bomb run, each side weighed by the fight it still carries, fit (fightLeft); a side
-  // with none counts no fighter fit to fight. Fresh, 1 and 1, it is the test as round five read it.)
-  for (const x of a.att) { const n = x.f.ftr * x.esc * x.crowd; if (fit.att > 0) E += n; Epow += n * worth(g, x.f) * fit.att; }
-  for (const x of a.def) D += Math.min(x.f.est.ftr, x.f.ftr) * x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar')) * fit.def;
-  // (Fog on raids: a weighing on one side's knowledge counts the fighters last seen near the target as rising.)
-  if (a.unseen) D += a.unseen.n * a.unseen.w * a.unseen.each * (a.height ? 1 : techMul(g, a.unseen.nat, 'radar')) * fit.def;
-  return D <= 0 || (E >= AIR.sky.least && skyHold(a, Epow, D) >= AIR.sky.win);
-}
-
-/** The fight each side of a settled raid on troops still carries over the target after the bomb run (fightLeft): 1 fresh, 0 fought out. */
-export interface FightLeft { att: number; def: number }
-
-/**
- * A raid on troops with the strafers' rule on: the fight each side of the settled raid still carries over the target
- * after the bomb run (the design director, 17:10Z ruling 3: "the sky test reads the defenders still fit to fight over
- * the target after the bomb run (their unspent fight, not those heading home), against the strafers"; 17:23Z: "A
- * half-spent group strafes with the fight it still carries: its weight is in proportion to that fight ... The settled
- * reading uses the same proportion, so the card and the field read one cause"). From 1 fresh to 0 fought out: the
- * field's own measure (sim.ts carries, (vig - SKY.spent) / (1 - SKY.spent)), read as the field leaves it. The field
- * hands each fighter group its share of what its side should bring down and lets it spend that while in contact, every
- * group at the one rate (SKY.tire on its own fight), and a fight goes on until a side breaks off for home with SKY.spent
- * of its fight left. So two sides that meet in the air fight both end it fought out, vig SKY.spent, carrying 0; a side
- * that meets nobody spends nothing and carries all of it, 1. The field's luck (SKY.wear.luck) moves what each unit of
- * fight brings down, never how much fight is spent; the settled raid's lucks are the same scatter of the losses, so they
- * move no fight either. The settled raid's air fight meets the raid's fighters and the defenders' whenever both are up
- * (its clash, min(E, D), is above 0); the defenders meet the raid when it brings fighters or bombers. No figure of its
- * own: SKY.spent and SKY.tire are where the field has them, and cancel here.
- */
-export function fightLeft(a: AirAssess): FightLeft {
-  return { att: a.E > 0 && a.D > 0 ? 0 : 1, def: a.D > 0 && (a.E > 0 || a.B > 0) ? 0 : 1 };
+export function strafeCarry(a: AirAssess): number {
+  if (a.Dpow <= 0) return 1;
+  const hx = a.height ? Math.pow(a.height.h, a.height.x) : 1;
+  const E = a.Epow / hx, D = a.Dpow * hx;
+  return E > 0 ? Math.max(0, 1 - D / E) : 0;
 }
 
 export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir, transit?: Transit): AirReport | null {
@@ -3251,15 +3228,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // (The strafers' rule, strafers.ts: only the groups with the reach to strafe go down, those of their fighters the air
     // fight left, and only they pay the ground fire; fought out, the field's strafers paid it there.)
     const strafers: number[] = [];
-    // (The sky gate, the design director 16:04Z: settled, a group goes down only when its side won the sky in the air
-    // fight just flown, skyWon. Fought out, the field decides it group by group. Read before the ground fire, and no die
-    // is thrown for it, so every throw of the raid stays where it was. Ruling 3 and 17:23Z: read after the bomb run, on
-    // the fight each side still carries, fit; a group goes down with the fight its side carries, its weight on the
-    // troops and its ground fire in proportion to it, and one that carries none goes home. Handed to the staff partway,
-    // the dice settle the rest of the raid, and read it the same way.)
-    const fit = fightLeft(a);
-    const won = rule && (!battle || staff) ? skyWon(g, a, fit) : true;
-    const carry = !battle || staff ? fit.att : 1;
+    // (The fight each group still carries after its air fight, the design director 18:14Z and 18:19Z: settled, every
+    // group of the raid meets the whole defence, so each carries 1 - D / E, at least 0 (strafeCarry); one that carries
+    // none goes home, and one that carries some goes down with it, its weight on the troops and its ground fire in
+    // proportion. It reads no die, so every throw of the raid stays where it was. Fought out, the field decides it group
+    // by group on the same measure. Handed to the staff partway, the dice settle the rest of the raid on the settled
+    // reading: the field's record of who met whom does not come back to the campaign.)
+    const carry = rule && (!battle || staff) ? strafeCarry(a) : 1;
     let fired = 0;
     if (rule) a.att.forEach((x, i) => {
       // (The same-key rule, the design director 12:59Z question 4: the raid's own stream is thrown exactly as with the
@@ -3271,7 +3246,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         if (k0) rng.roll(k0 * saved(false));
       }
       const left = x.f.ftr * x.esc * x.crowd;
-      if (!(won && carry > 0 && x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
+      if (!(carry > 0 && x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
       strafers.push(x.f.id);
       if (battle && !staff) return;
       const own = airRng(g, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
@@ -4373,42 +4348,41 @@ export function canStrafe(g: Game, x: { f: AirFleet; d: number }): boolean {
  * E[k | luck] = min(F, air x luck x share), and over the luck that is the mean of a clipped line: not linear, which is
  * where the card's old "even spread of losses, keep = 1 - air / E" went wrong (the clip at F, and losses counted on the
  * whole group F against a share counted on F x esc x crowd). The ground fire and the weight are linear in what is left,
- * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left; with the
- * sky gate (16:04Z), more likely than not to win the sky and have a fighter left, and every figure is taken over the
- * lucks on which the sky is won. Ruling 3 and 17:23Z (the design director, 17:10Z and 17:23Z): read after the bomb run,
- * on the fight each side still carries (fightLeft), each group's weight on the troops and its ground fire in proportion
- * to its side's. That fight does not turn on the raid's lucks: where the raid's fighters met the defence both sides end
- * the air fight fought out, the sky is won (no defender left fit to fight) and nobody goes down, on every luck; where
- * they met nobody, no defender rose, the sky is won on every luck and every group goes down with all its fight, the card
- * as it was, to the last digit. So the card is exact with no sum over the lucks for the gate.
+ * so their means follow from E[k]. The design director, 18:14Z and 18:19Z: each group goes down with the fight it still
+ * carries, carry = 1 - D / E (strafeCarry), its ground fire thrown on left x carry and its weight on the troops what is
+ * left after that fire, x carry; so its ground fire is left x carry x ground.fire and its weight left x carry x (1 - c x
+ * carry x ground.fire). The carry reads the two sides' starting weights and no luck: with none, nobody goes down; with
+ * some, a group goes down whenever it has a fighter left. So a group is named when it is more likely than not to have a
+ * fighter left and the carry is above 0. No defender up, carry 1: the card as it was, to the last digit.
  */
 export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number; parts: StrafePart[] } {
   const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, fire = AIRWAR.ground.fire;
   const ids: number[] = [];
   const parts: StrafePart[] = [];
   let left = 0, weight = 0;
-  // (Every group fought out: nobody goes down, fire 0, weight 0.)
-  const fit = fightLeft(a);
-  if (fit.att <= 0) return { ids, left, fire: 0, weight, parts };
-  // (Fresh: no defender rose, so skyWon holds on every luck, ruling 2; and a raid with no fighter has no strafer.)
+  // (Carrying none of their fight: nobody goes down, fire 0, weight 0.)
+  const carry = strafeCarry(a);
+  if (!(carry > 0)) return { ids, left, fire: 0, weight, parts };
   for (const x of a.att) {
     if (!(x.ftr > 0) || !canStrafe(g, x)) continue;
     const F = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air * (x.ftr / a.E) : 0;
-    parts.push({ F, c, m, keep: 1 - c * fire });
+    const keep = carry * (1 - c * carry * fire);
+    parts.push({ F, c, m, keep });
     // E[min(F, m u)] for u even on [lo, hi]; and the chance a fighter is left, P(roll(m u) < F).
     const lost = m <= 0 ? 0 : clipMean(m, F, lo, hi);
     const some = m <= 0 ? 1 : chanceBelow(m, F, lo, hi);
     const l = c * Math.max(0, F - lost);
     if (some > 0.5) ids.push(x.f.id);
     left += l;
-    weight += l * (1 - c * fire);
+    weight += l * keep;
   }
-  return { ids, left, fire: left * fire, weight, parts };
+  return { ids, left, fire: left * carry * fire, weight, parts };
 }
 
 /**
  * One group with the reach to strafe, as strafersExpected weighs it: F fighters, c = esc x crowd of them counting, m the
- * air fight's loss to it at even luck, keep the share of a counting fighter's weight left after the ground fire.
+ * air fight's loss to it at even luck, keep the share of a counting fighter's weight on the troops: the fight it carries
+ * (strafeCarry), less the ground fire on it.
  */
 export interface StrafePart { F: number; c: number; m: number; keep: number }
 
