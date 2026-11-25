@@ -160,10 +160,10 @@
     "Sea Wolves", "Iron Brigade", "Thunderbolt", "Phantom", "Hourglass", "Cactus", "Lightning Division", "Ivy Division", "Sunset Division", "The Few"
   ],
   "air": {
-    "_note": "Earned names for air groups (release 2; the design director's rulings of 25 November 2026 03:18Z and 03:31Z, design-director/air-names-1125.md; src/campaign/airnicks.ts). Under the same switch as the corps' names ('nicknames'); off, nothing here is read, counted or written. A group completes a mission in a month when it flies and meets its task: a raid whose bombers reached the target (a raid of fighters alone: one that fought, or that won or held the sky, or a raid on troops flown), a patrol or defence that met a raid, or support flown over a land battle. One a month; a month with no enemy met counts nothing, nor does a raid turned back. A hard fight counts double ('double'): PRESSED HOME, a raid that reached its target, or a sweep that fought, at a fighter ratio (the raid card's: the raiders' escort's fighting weight over the defence's) of 'hard.pressed' or less against a defence that came up; HELD, a defence that met a raid at a ratio of 'hard.held' or more; COSTLY, a group's loss on the mission (aircraft lost over aircraft it flew with) at least 'hard.costly' times its arm's running loss rate for that kind of mission (all aircraft lost over all aircraft flown on it since the war began, the defence one kind), once the arm has flown 'hard.least' aircraft on that kind. The name comes at 'need' missions completed. There is NO cap for air groups (the measure is the limit; the corps keep theirs). A name is in the nation's style ('styles', by nicknames.json 'nations'; a style not listed takes '_default'), never one the nation's units carry, never a blocked one, and shown as 'show' sets it beside the unit's name. A style with 'guards' gives the Guards title instead: the Guards form of the group's rung (regiment, division or corps; by its name, a regiment where it cannot tell), a new number from that Guards series in order (the historian's lists, air-unit-names-r2.json guards.SOV, M: real numbers, labels only), going on past the end, and the city it fought over as the record's honorific after 'Guards' ('city'; the historian: one city was given to many units, so it is not held unique). The Guards title is a name and a number, nothing more. ALL FIGURES ARE G: 'hard.pressed' 1.0, 'hard.held' 1.0 and 'hard.costly' 2 are the ruling's words (at most even, at least as strong, twice) and 'hard.least' 200 aircraft is ours, so that a rate is read only once it means something; 'need' 8 and 'double' 2 are the ruling's 03:31Z figures, G. None is set to reach a count of names. Every word list here is OURS, in each arm's manner, checked by tests/air-names-r2.test.ts against the historian's block list (air-names.json 'blocked', whole words) and nicknames.json 'blocked'; Italy's list is the historian's own 28 candidates in the 1940 style (air-unit-names-r2.json italyNames, G), its earned list since Brian's answer of 03:31Z dropped its day-one names. What aircrews counted as a hard fight (the historian, hardFight): a sortie counted when it reached the target, and crews judged a target by what it cost them; no aircrew measure for a defence was found, so 'held' stays the air thread's G.",
+    "_note": "Earned names for air groups (release 2; the design director's rulings of 25 November 2026 03:18Z and 03:31Z, design-director/air-names-1125.md; src/campaign/airnicks.ts). Under the same switch as the corps' names ('nicknames'); off, nothing here is read, counted or written. A group completes a mission in a month when it flies and meets its task: a raid whose bombers reached the target (a raid of fighters alone: one that fought, or that won or held the sky, or a raid on troops flown), a patrol or defence that met a raid, or support flown over a land battle. One a month; a month with no enemy met counts nothing, nor does a raid turned back. A hard fight counts double ('double'): PRESSED HOME, a raid that reached its target, or a sweep that fought, at a fighter ratio (the raid card's: the raiders' escort's fighting weight over the defence's) of 'hard.pressed' or less against a defence that came up; HELD, a defence that met a raid at a ratio of 'hard.held' or more; COSTLY, a group's loss on the mission (aircraft lost over aircraft it flew with) at least 'hard.costly' times its arm's running loss rate for that kind of mission (all aircraft lost over all aircraft flown on it since the war began, the defence one kind), once the arm has flown 'hard.least' aircraft on that kind. The name comes at 'need' missions completed. There is NO cap for air groups (the measure is the limit; the corps keep theirs). A name is in the nation's style ('styles', by nicknames.json 'nations'; a style not listed takes '_default'), never one the nation's units carry, never a blocked one, and shown as 'show' sets it beside the unit's name. A style with 'guards' gives the Guards title instead: the Guards form of the group's rung (regiment, division or corps; by its name, a regiment where it cannot tell), a new number from that Guards series in order (the historian's lists, air-unit-names-r2.json guards.SOV, M: real numbers, labels only), going on past the end, and, where the group has a hard fight on record, the city of its latest hard fight in this war as the record's honorific after 'Guards' ('city'; the design director 12:59Z: the place is kept on the group as it fights, taken once when the title is given and kept; a group with no hard fight takes the title without a city; the historian: one city was given to many units, so it is not held unique). The Guards title is a name and a number, nothing more. ALL FIGURES ARE G: 'hard.pressed' 0.8 and 'hard.held' 1.25 are the design director's gap of 05:12Z (review marks: pressed home at 0.8 or less, held at 1.25 or more, both G; a fight near even, between the two, is an ordinary fight for both sides; until then 1.0 and 1.0, the 03:18Z words 'at most even' and 'at least as strong'), 'hard.costly' 2 is the ruling's word (twice) and 'hard.least' 200 aircraft is ours, so that a rate is read only once it means something; 'need' 8 and 'double' 2 are the ruling's 03:31Z figures, G. None is set to reach a count of names. Every word list here is OURS, in each arm's manner, checked by tests/air-names-r2.test.ts against the historian's block list (air-names.json 'blocked', whole words) and nicknames.json 'blocked', and by tests/air-names-r2-words.test.ts against every distinctive word of both (the design director's review marks of 05:12Z; air-names.json blocked.common says which words are not distinctive). Fifteen names that held a real unit's distinctive word were replaced on 25 November by an original word in the same manner: Iron Swifts by Slate Swifts, Summer Lightning by Summer Squall (German); Sky Wranglers by Range Wranglers, Dust Devils by Dust Twisters, Tin Lizzies by Flivvers (American); the Drizzle Boys by the Drizzle Wrens, the Bell Ringers by the Hedgers (first by the Thatchers, which read as a real person's surname, struck at the review), the Watch over {place} by the Wardens of {place} (British); the Bell Founders by the Coopers (Polish); the Sea Swallows by the Shore Swallows, the Thunder Kites by the Squall Kites (Japanese); the Smiths of the Sky by the Cloud Smiths (Soviet); the Sky Wardens by the Cloud Wardens, the Hill Hawks by the Fell Hawks, the High Larks by the Upland Larks (the default). Italy's list is the historian's own 28 candidates in the 1940 style (air-unit-names-r2.json italyNames, G), its earned list since Brian's answer of 03:31Z dropped its day-one names. What aircrews counted as a hard fight (the historian, hardFight): a sortie counted when it reached the target, and crews judged a target by what it cost them; no aircrew measure for a defence was found, so 'held' stays the air thread's G.",
     "hard": {
-      "pressed": 1.0,
-      "held": 1.0,
+      "pressed": 0.8,
+      "held": 1.25,
       "costly": 2,
       "least": 200
     },
@@ -178,10 +178,10 @@
           "Storm Crows",
           "Hailstorm",
           "Rhine Gulls",
-          "Iron Swifts",
+          "Slate Swifts",
           "Harz Owls",
           "Clockmakers",
-          "Summer Lightning",
+          "Summer Squall",
           "Millrace",
           "Glassblowers",
           "Moor Harriers"
@@ -196,13 +196,13 @@
         "any": [
           "Prairie Dogs",
           "Hot Rods",
-          "Sky Wranglers",
-          "Dust Devils",
+          "Range Wranglers",
+          "Dust Twisters",
           "Bayou Hawks",
           "Barnstormers",
           "Jackrabbits",
           "Cloud Busters",
-          "Tin Lizzies",
+          "Flivvers",
           "Pea Pickers",
           "Crop Dusters"
         ],
@@ -224,11 +224,11 @@
           "the Wheelwrights",
           "the Ploughmen",
           "the Curlews",
-          "the Drizzle Boys",
-          "the Bell Ringers"
+          "the Drizzle Wrens",
+          "the Hedgers"
         ],
         "place": [
-          "the Watch over {place}",
+          "the Wardens of {place}",
           "the Kites of {place}"
         ]
       },
@@ -295,7 +295,7 @@
           "the Blizzard",
           "the Ural Kites",
           "the Taiga Owls",
-          "the Smiths of the Sky"
+          "the Cloud Smiths"
         ],
         "place": [
           "{place}"
@@ -562,7 +562,7 @@
           "the Stoats",
           "the Amber Wings",
           "the Vistula Swallows",
-          "the Bell Founders",
+          "the Coopers",
           "the Kestrels",
           "the Polecats",
           "the Rye Larks"
@@ -576,10 +576,10 @@
         "show": "{name} ({nick})",
         "any": [
           "the Mountain Kites",
-          "the Sea Swallows",
+          "the Shore Swallows",
           "the Bamboo Wings",
           "the Paper Cranes",
-          "the Thunder Kites",
+          "the Squall Kites",
           "the Snow Herons",
           "the Swordsmiths",
           "the Rain Crows"
@@ -607,13 +607,13 @@
       "_default": {
         "show": "{name} ({nick})",
         "any": [
-          "the Sky Wardens",
-          "the Hill Hawks",
+          "the Cloud Wardens",
+          "the Fell Hawks",
           "the Swift Wings",
           "the Weathervanes",
           "the Skylarks",
           "the Thunderclouds",
-          "the High Larks",
+          "the Upland Larks",
           "the Kite Makers",
           "the Hailstones",
           "the Harriers"

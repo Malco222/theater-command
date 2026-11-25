@@ -45,6 +45,7 @@ import { beyondEurope, farOn } from './world';
 import { hopAims, hopsBind, skiesOn } from './pacific';
 import { stopDef } from './history';
 import { settleFought, type BombLaw, type FoughtAir, type TroopLaw } from './airfought';
+import { strafeOn, strafeWatch } from './strafers';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
@@ -56,7 +57,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { chartDist, mapDist, nearX } from './wrap';
+import { chartDist, globeDist, globeLeg, mapDist, nearX } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
@@ -159,7 +160,7 @@ export const AIRWAR = warData as unknown as {
   count: { squadron: Record<string, number>; later: Record<string, [number, number]>; guns: { base: number; light: number; heavy: number } };
   groups: { most: number; names: Record<string, { ftr: string; bmr: string }> };
   raids: { kinds: RaidKindRow[] };
-  ground: { intensity: number; fighters: number; scale: number; perDiv: number; max: number; str: number; floor: number; dug: number; cover: Record<string, number>; fire: number; value: number };
+  ground: { intensity: number; fighters: number; scale: number; perDiv: number; max: number; str: number; floor: number; dug: number; cover: Record<string, number>; fire: number; value: number; reach?: number };
   /** Bombing the line: see the note in the data. */
   line: { intensity: number; scale: number; most: number; value: number };
   recon: { aircraft: number; loss: number; ready: number };
@@ -582,14 +583,23 @@ export interface Transit { from: number; to: number }
 
 /**
  * How far a group's fighters have to fly to meet aircraft on the leg between two fields (ferry.ts): to the nearest
- * point of that straight leg on the chart, either field included, the way the reach of every fighter is measured.
+ * point of that straight leg on the chart, either field included, the way the reach of every fighter is measured (km):
+ * on the globe where an end of the leg or the group's own place is of the far side (wrap.ts globeLeg, as chartDist
+ * reads it; the join's read of r2-head-1125k, fault 1), else the map's straight line as it always was.
  */
 export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
-  const p = groupAt(g, f), A = g.regions[from], B = g.regions[to];
+  return legKmAt(g, groupAt(g, f), from, to);
+}
+
+/** legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so). */
+export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
+  const A = g.regions[from], B = g.regions[to];
   const bx = nearX(g, B.x, A.x), px = nearX(g, p.x, A.x);
   const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
   const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
-  return Math.hypot(px - (A.x + t * dx), p.y - (A.y + t * dy)) * AIR.kmPerUnit;
+  const qx = A.x + t * dx, qy = A.y + t * dy;
+  if (globeLeg(g, A, B, p.region, p.sea)) return globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit;
+  return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
 }
 
 /** Where a group flies from, for a map to draw: its airfield, or the sea (or harbour) its carriers are in. */
@@ -760,8 +770,13 @@ export function fightersOver(g: Game, region: number, against: string): number {
   return n;
 }
 
-/** Fog on raids (airfog.ts): how far a nation's fighters reach, by its own table (a group of long-range fighters may reach farther). */
-export const fighterReach = (g: Game, nat: string): number => reach({ nat, name: '' }, g).ftrRange;
+/**
+ * Fog on raids (airfog.ts): how far a nation's fighters reach, by its own table (a group of long-range fighters may reach
+ * farther), as reach() reads it for a group based at `base` where one is given: on the far side the far rows
+ * (far-air.json ftrReach) and the cover cap (jobs.cover) of a group based there (the join's read of r2-head-1125k,
+ * fault 2). With no base, or off the far side, Europe's dated row as before.
+ */
+export const fighterReach = (g: Game, nat: string, base?: number): number => reach(base === undefined ? { nat, name: '' } : { nat, name: '', base }, g).ftrRange;
 
 /**
  * Fog on raids (airfog.ts, read only with its switch on): every enemy fighter group that guards a province's ground and
@@ -2943,7 +2958,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // fleet's side saw them, for its staff's weighing of staying against moving its base: navy.ts anchorLoss.)
       if (m === 'harbour' && farOn(g)) {
         const sunk = shipCount(struck![i].sunk) - struck![i].sunk.ss, had = shipCount(struck![i].ships) - struck![i].ships.ss;
-        const from = a.att.map((y) => {
+        // (Only the groups that carried bombs struck it: an escort's fighters reach no further than the bombers they guard.)
+        const from = a.att.filter((y) => y.bmr > 0).map((y) => {
           const c = carrierOf(g, y.f), R = reach(y.f, g, raidJob(m));
           return c && atSea(c) ? { sea: c.zone, field: -1, km: R.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R.bmrRange };
         });
@@ -3079,7 +3095,34 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // Ground fire takes its share of the fighters that come down low. Fought out (release 2), the fighters it brought
     // down are among the field's own losses, booked above; handed to the staff partway, what the field had cost stands
     // (booked above too) and the dice roll only the rest's share of the ground fire.
-    if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
+    const rule = strafeOn();
+    // (The strafers' rule, strafers.ts: only the groups with the reach to strafe go down, those of their fighters the air
+    // fight left, and only they pay the ground fire; fought out, the field's strafers paid it there.)
+    const strafers: number[] = [];
+    let fired = 0;
+    if (rule) a.att.forEach((x, i) => {
+      // (The same-key rule, the design director 12:59Z question 4: the raid's own stream is thrown exactly as with the
+      // rule off, every group's ground-fire throw drawn and set aside, so no later throw of the raid moves; each group
+      // that goes down then throws its own ground fire on a stream keyed by its own id, so a group that no longer throws
+      // moves no one else's.)
+      if (!battle || staff) {
+        const k0 = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G.fire * luck() * (staff ? staff.rest.ftr : 1))));
+        if (k0) rng.roll(k0 * saved(false));
+      }
+      const left = x.f.ftr * x.esc * x.crowd;
+      if (!(x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
+      strafers.push(x.f.id);
+      if (battle && !staff) return;
+      const own = airRng(g, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
+      const k = Math.min(x.f.ftr, own.roll(Math.max(0, left * G.fire * own.range(1 - C.luck, 1 + C.luck) * (staff ? staff.rest.ftr : 1))));
+      if (k) {
+        const p = airPool(g, x.f.nat), back = own.roll(k * saved(false));
+        x.f.ftr -= k; x.f.lost.ftr += k; att[i].lostFtr += k;
+        p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
+      }
+      fired += k;
+    });
+    else if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
     else if (staff) a.att.forEach((x, i) => {
       const k = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G.fire * luck() * staff.rest.ftr)));
       if (!k) return;
@@ -3089,7 +3132,11 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
     });
     // The fighters that count on the troops: every one that came through; fought out, those that strafed on the field.
-    const low = fix?.strafed() ?? a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+    const low = fix?.strafed() ?? a.att.reduce((s, x) => s + (!rule || strafers.includes(x.f.id) ? x.f.ftr * x.esc * x.crowd : 0), 0);
+    if (rule) {
+      const route = battle && !staff ? 'fought' : 'settled';
+      strafeWatch.tell?.({ route, target, nat, strafers: route === 'fought' ? [...(battle?.strafers ?? [])] : strafers, fire: route === 'fought' ? battle?.strafeFire ?? 0 : fired, weight: low });
+    }
     const cut = troopCut(r, foes, (through + low * G.fighters) * troopWeight(g, nat));
     let divs = 0;
     for (const c of foes) {
@@ -4107,6 +4154,12 @@ export function airDeliveries(g: Game, nat: string): { ftr: number; bmr: number;
 
 /** What a mission is likely to do: the odds, the losses to expect on both sides, what gets done, and the chance it is a success. */
 export interface AirForecast {
+  /**
+   * A raid on troops with the strafers' rule on (strafers.ts): the fighters the card expects the ground fire to bring
+   * down (in ftrLoss already), and the groups it charges with it, those with the reach to strafe. Absent otherwise.
+   */
+  fire?: number;
+  strafers?: number[];
   /** Airfields as targets: what the bombs should do to the field (fieldstate.ts planFieldHit). */
   field?: { shut: boolean; levels: number; ground: number; grounded: number; room: number; built: number };
   /** The fighter odds going in. */
@@ -4146,6 +4199,64 @@ export function foundShare(g: Game, a: AirAssess, nat: string): number {
 }
 
 /**
+ * A raid on troops with the strafers' rule on (strafers.ts): whether a group of the raid has the reach to go down on the
+ * troops, the troops lying within airwar.json ground.reach of its fighter range (G).
+ */
+export function canStrafe(g: Game, x: { f: AirFleet; d: number }): boolean {
+  return x.d <= (AIRWAR.ground.reach ?? AIR.range.fullAt) * reach(x.f, g).ftrRange;
+}
+
+/**
+ * The card's strafers (the strafers' rule): the exact expectation of what the staff's settled raid (fly(), no battle)
+ * charges, given the air fight the card itself expects (air: the escort's losses at even luck). The design director,
+ * 12:59Z question 4: "the card is the exact expectation of the settled raid; where a term is not linear in survivors,
+ * the card computes the expectation of the outcome, not the outcome at the expected count".
+ *
+ * The settled raid, group by group: the air fight takes k = min(F, roll(air x luck x share)) of the group's F fighters
+ * (share = its x.ftr over the raid's E; luck even between 1 - combat.luck and 1 + combat.luck, one throw for the raid);
+ * those left count (F - k) x esc x crowd; of those, a group with the reach to strafe pays ground.fire x its own luck
+ * (mean 1), and the rest weigh on the troops. A roll's mean is its argument and never passes the whole group, so
+ * E[k | luck] = min(F, air x luck x share), and over the luck that is the mean of a clipped line: not linear, which is
+ * where the card's old "even spread of losses, keep = 1 - air / E" went wrong (the clip at F, and losses counted on the
+ * whole group F against a share counted on F x esc x crowd). The ground fire and the weight are linear in what is left,
+ * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left.
+ */
+export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number } {
+  const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, fire = AIRWAR.ground.fire;
+  const ids: number[] = [];
+  let left = 0, weight = 0;
+  for (const x of a.att) {
+    if (!(x.ftr > 0) || !canStrafe(g, x)) continue;
+    const F = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air * (x.ftr / a.E) : 0;
+    // E[min(F, m u)] for u even on [lo, hi]; and the chance a fighter is left, P(roll(m u) < F).
+    const lost = m <= 0 ? 0 : clipMean(m, F, lo, hi);
+    const some = m <= 0 ? 1 : chanceBelow(m, F, lo, hi);
+    const l = c * Math.max(0, F - lost);
+    if (some > 0.5) ids.push(x.f.id);
+    left += l;
+    weight += l * (1 - c * fire);
+  }
+  return { ids, left, fire: left * fire, weight };
+}
+
+/** The mean of min(F, m u) for u even on [lo, hi] (m > 0). */
+function clipMean(m: number, F: number, lo: number, hi: number): number {
+  if (m * hi <= F) return m * (lo + hi) / 2;
+  if (m * lo >= F) return F;
+  const u = F / m;
+  return ((m / 2) * (u * u - lo * lo) + F * (hi - u)) / (hi - lo);
+}
+
+/** The chance that roll(m u) < F for u even on [lo, hi] (m > 0, F whole): 1 below F - 1, F - y between, 0 from F. */
+function chanceBelow(m: number, F: number, lo: number, hi: number): number {
+  // P(roll(y) < F) = clamp(F - y, 0, 1) for whole F; integrate over y = m u, u even on [lo, hi].
+  const y0 = m * lo, y1 = m * hi;
+  if (y1 <= y0) return Math.max(0, Math.min(1, F - y0));
+  const prim = (y: number): number => (y <= F - 1 ? y : y >= F ? (F - 1) + 0.5 : (F - 1) + ((y - (F - 1)) - ((y - (F - 1)) ** 2) / 2));
+  return (prim(y1) - prim(y0)) / (y1 - y0);
+}
+
+/**
  * The law fly() weighs a raid on troops by (airfought.ts TroopLaw), from the bombers that drop and the fighters that
  * strafe. Null for any other raid, or where no enemy stands there. An air battle carries it (release 2: a raid on troops
  * fought out), so the field earns the very cut the campaign books.
@@ -4161,6 +4272,8 @@ export function troopLaw(g: Game, a: AirAssess, m: AirMission, target: number): 
     // As fly() aims the bombers: the day's accuracy, their research and the weather on the day; then the nation's weight row.
     bomber: dayAim(g, nat, m) * techMul(g, nat, 'bombers') * a.aim * w, fighter: G.fighters * w,
     fire: G.fire, dug: G.dug, str: G.str, value: G.value,
+    // (The strafers' rule, strafers.ts: the groups with the reach to strafe.)
+    ...(strafeOn() ? { reach: a.att.filter((x) => x.ftr > 0 && canStrafe(g, x)).map((x) => x.f.id) } : {}),
   };
 }
 
@@ -4269,6 +4382,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   let town: TownHit | undefined;
   let city: number | undefined;
   let field: FieldHit | null = null;
+  let fire: number | undefined, strafers: number[] | undefined;
   if (m === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === target && f.ship === undefined && atWar(g, f.nat, nat)).length;
     cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
@@ -4339,9 +4453,19 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     const G = AIRWAR.ground;
     const r = g.regions[target];
     const foes = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
-    const fire = a.E * G.fire;
-    ftrLoss += fire;
-    cut = troopCut(r, foes, (through + Math.max(0, a.E - ftrLoss) * G.fighters) * troopWeight(g, nat));
+    if (strafeOn()) {
+      // (The strafers' rule, strafers.ts: the ground fire, and the fighters' weight on the troops, only on the fighters
+      // expected to be left after the air fight that have the reach to strafe, each group its share of the air's losses.)
+      const s = strafersExpected(g, a, ftrLoss);
+      ftrLoss += s.fire;
+      fire = s.fire; strafers = s.ids;
+      cut = troopCut(r, foes, (through + s.weight * G.fighters) * troopWeight(g, nat));
+      strafeWatch.tell?.({ route: 'card', target, nat, strafers: s.ids, fire: s.fire, weight: s.weight });
+    } else {
+      const fire = a.E * G.fire;
+      ftrLoss += fire;
+      cut = troopCut(r, foes, (through + Math.max(0, a.E - ftrLoss) * G.fighters) * troopWeight(g, nat));
+    }
     value = cut * foes.reduce((s, c) => s + c.divs, 0) * G.value;
   }
   // The chance of success: a raid succeeds when it costs the enemy more than it costs the raiders. A cut railway
@@ -4368,6 +4492,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   if (atomReach !== null) success = atomReach;
   const fc: AirForecast = { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
   if (city !== undefined) fc.city = city;
+  if (fire !== undefined) { fc.fire = fire; fc.strafers = strafers; }
   if (field) fc.field = { shut: field.closed, levels: field.levels, ground: field.ground, grounded: field.grounded, room: field.room, built: field.built };
   return fc;
 }

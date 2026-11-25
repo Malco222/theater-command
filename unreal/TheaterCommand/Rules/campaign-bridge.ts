@@ -99,7 +99,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, seaAt as seaUnder, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -5512,6 +5512,16 @@ function fleetPage(s: Game, id: number): Page | null {
     ].filter(Boolean);
     return { nat: card.nat, title: cap1(seaWhat(name)), lines, buttons: [{ label: 'LAY MINES', act: `fleetmines:${id}:${z}`, ok: up, tip: 'It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months.' }] };
   });
+  // (Release 2, the far chart: a fleet in passage moves its base nowhere else on its way. It can only be turned back.
+  // A longer move than a month's steaming is a voyage, and the tip says how long.)
+  const fp = s.fleets.find((x) => x.id === id);
+  const passing = fp?.stance === 'passage';
+  const moveTip = (r: { id: number }, tip: string): string => {
+    if (!fp) return tip;
+    if (passing) return passageWhy(s, fp);
+    const m = voyageMonths(s, fp, s.regions[r.id]);
+    return m ? `${tip.replace(/ It spends the month in harbour there\.$/, '')} It is a voyage: ${m === 1 ? 'a month' : `${m} months`} at sea on the way, and a month in harbour there when it comes in.` : tip;
+  };
   // (Release 2, harbourstrike.ts) The enemy harbours its carriers' aircraft reach, or would from another base, with what lies there.
   const may = new Set(s.human && up ? declarable(s) : []);
   const harbours: PageRow[] = (card.ships > 0 ? strikeHarbours(s, id, (nat) => may.has(nat)) : []).map((h) => {
@@ -5524,7 +5534,7 @@ function fleetPage(s: Game, id: number): Page | null {
     ].filter(Boolean);
     const buttons = h.launch >= 0
       ? [{ label: 'STRIKE FROM THE AIR', act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? 'It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month\'s air war. Ships at anchor cannot manoeuvre.' }]
-      : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
+      : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up && !passing, tip: moveTip(base, `Its new home port: from there its aircraft reach ${h.name}.`) }] : [];
     return { nat: h.holder, title: `${h.name}${who ? ` (${who.adj ?? who.name})` : ''}`, lines, buttons };
   });
   // (The far side's dated rows) A base move of the staff's plan that waits on him: he keeps the fleet, or runs the navy.
@@ -5536,7 +5546,14 @@ function fleetPage(s: Game, id: number): Page | null {
       `${waits.words} (${turnToDate(waits.turn).label}).`,
       staffRunsDesk(s, 'navy') ? 'You keep it under your own orders: hand it back to your admirals and it goes there with their next month.' : 'You run the navy yourself: the move is yours to make.',
     ],
-    buttons: [{ label: `MOVE BASE TO ${waits.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: 'Its new home port, where the staff\'s plan has it. It spends the month in harbour there.' }],
+    buttons: [{ label: `MOVE BASE TO ${waits.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up && !passing, tip: moveTip(waits.region, 'Its new home port, where the staff\'s plan has it. It spends the month in harbour there.') }],
+  }] : [];
+  // (Release 2, the far chart: struck at anchor, the move out of the strikers' reach that the news offers him.)
+  const away = fp && !passing && struckLine(s, fp) ? safeHarbour(s, fp) : null;
+  const withdraw: PageRow[] = away ? [{
+    nat: card.nat, title: away.name,
+    lines: [`The nearest friendly harbour out of reach of the aircraft that struck it at anchor at ${fp!.port}.`],
+    buttons: [{ label: `WITHDRAW TO ${away.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${away.id}`, ok: up, tip: moveTip(away, 'Its new home port, out of the strikers\' reach. It spends the month in harbour there.') }],
   }] : [];
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
@@ -5575,6 +5592,7 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
       { heading: 'SEAS TO MINE', text: '', rows: minable },
       { heading: 'ENEMY HARBOURS TO STRIKE', text: '', rows: harbours },
+      { heading: 'OUT OF THE STRIKERS\' REACH', text: '', rows: withdraw },
       { heading: 'THE STAFF\'S PLAN', text: '', rows: plan },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },

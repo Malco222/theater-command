@@ -56,7 +56,9 @@
     "dug": 0.6,
     "cover": { "plains": 1, "desert": 1, "hills": 0.85, "marsh": 0.85, "forest": 0.7, "mountain": 0.7, "urban": 0.6 },
     "fire": 0.015,
-    "value": 1500
+    "value": 1500,
+    "_reach": "Read only with the strafers' rule on (src/campaign/strafers.ts; the design director, 25 November 2026 05:12Z: the card, the settled raid and the fought raid charge the ground fire only on the fighters expected to be left after the air fight that have the reach to strafe). reach (G): a fighter group has the reach to go down on the troops when they lie within this share of its fighter range, the part of its range where it has its full time over the target (air.json range.fullAt); a group farther out escorts its bombers and turns for home, adds no weight on the troops and is not shot at by the ground.",
+    "reach": 0.6
   },
   "recon": {
     "_note": "A reconnaissance flight. aircraft is how many of the group go. loss is the share of them lost when enemy fighters patrol the target, per unit of their cover there. ready is the readiness the group spends.",
