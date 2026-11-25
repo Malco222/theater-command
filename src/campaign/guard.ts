@@ -43,7 +43,7 @@ export interface GuardSaid {
   ready: number | null;
   /** The share of the bombing that would cut the line which the guns stop now. */
   stops: number;
-  /** The sentence: 'No guns guard the railway here.' */
+  /** The sentence: 'No guns are built here to guard the railway.' */
   line: string;
   /** The order, on ground in the viewer's own hands and under the top level; otherwise null. */
   order: GuardOrder | null;
@@ -62,7 +62,9 @@ export function guardSays(g: Game, region: number, viewer: string | null = g.hum
   const due = own ? g.nations[viewer!].queue.filter((b) => b.what === 'work' && b.item === 'aa' && b.region === region).map((b) => b.eta).sort((a, b) => a - b) : [];
   const coming = due.length, ready = coming ? due[0] : null;
   const stops = guardStops(level);
-  const guards = level > 0 ? `Level ${level} guns guard the railway here: they stop ${Math.round(stops * 100)}% of the bombing that would cut it.` : 'No guns guard the railway here.';
+  // (The UI director, 25 Nov 2026 21:22Z, case f: the light guns every province has stop none of the bombing that cuts a
+  // railway, guardStops(0); the line speaks of built guns, so it says so.)
+  const guards = level > 0 ? `Level ${level} guns guard the railway here: they stop ${Math.round(stops * 100)}% of the bombing that would cut it.` : 'No guns are built here to guard the railway.';
   const building = ready !== null ? `Level ${level + 1} guns are being built here: ready in ${turnToDate(ready).label}.` : '';
   const line = !building ? guards : level > 0 ? `${guards} ${building}` : building;
   let order: GuardOrder | null = null;
