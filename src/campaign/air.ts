@@ -2553,6 +2553,9 @@ function escortAbove(g: Game, a: AirAssess, W: number): number {
   return wt > 0 ? sum / wt : 0;
 }
 
+/** A count in words to ten, for the searchlights' line (the UI director, 25 Nov 2026 20:33Z), and in digits above ten. */
+const upToTen = (n: number): string => ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][n] ?? String(n);
+
 export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: number, known?: KnownDefence, transit?: Transit): AirAssess {
   const C = AIR.combat;
   // A strike on one fleet is fought over the sea that fleet is in.
@@ -2874,14 +2877,19 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ${ring} the factories of ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
+  // The clauses that rest on the guns' levels (none, some lit, every level lit) read the side's count under fog on raids,
+  // so there they carry the guns' own hedge, "may", under the very condition that makes the guns' line "may ring". The
+  // design director, 25 Nov 2026 20:32Z, ruled one footing on one card: the card never states as plain fact what the
+  // side has not seen. The words are the UI director's, 20:33Z: the guns are "built here", and counts are in words.
   if (cn && cn.lights > 0) {
     const over = `Level ${cn.lights} searchlights over ${place}`, few = 'they help the night fighters a little.';
+    const light = known ? 'may light' : 'light';
     out.lines.push(cn.cloud
       ? { label: 'Searchlights', value: `Cloud over ${place}`, effect: 'The searchlights cannot see the bombers through it.' }
-      : !cn.guns ? { label: 'Searchlights', value: over, effect: `There are no guns for them to light. They help the night fighters a little.` }
+      : !cn.guns ? { label: 'Searchlights', value: over, effect: `${known ? 'There may be' : 'There are'} no guns built here for them to light. They help the night fighters a little.` }
         : !cn.radar ? { label: 'Searchlights', value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." }
           : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${place}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
-            : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they light every level of the guns, and ${few}` : `With radar laying the guns, they light ${cn.lit} of the ${cn.guns} levels of guns, and ${few}` });
+            : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they ${light} every level of the guns built here, and ${few}` : `With radar laying the guns, they ${light} ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of guns built here, and ${few}` });
   }
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
