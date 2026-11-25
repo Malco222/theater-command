@@ -1,19 +1,22 @@
-// The torpedo words' cloud test (Battle/SeaWordsCore; the naval rules behind their switch "Friendly torpedoes", Brian 25
-// November 12:52Z, and the UI director's words, final at 13:27Z): every word of the tags and the line, string for string
-// (her and their, is and are, has and have, your orders and hers or theirs, 1 second and N seconds, the count down to 0;
-// is and are as the phrase counts the ships where it does); an enemy piece never has words; no fields, nothing; held wins
-// over turning clear; the line is the camera's subject's own or none. Where the tags stand (SeaWords::Lay): never on one
-// another, the subject's first and on her ship, then the nearest; none over the bar, the line, the month scene's caption
-// or its way back; a lifted tag's stalk down to its ship behind the plates it passes. The fields as SeaFeed reads them
-// and the show carries them, through a few views written here (the player's order, one ship, the count's last second and
-// past it: what the computer's sides never record). Then each recording played through the very code the game runs (SeaFeed, SeaShow, SeaWordsCore), at 32
-// frames a second: SeaFeed reads every field the views set (read here apart, from the JSON itself); the tags stand over
-// the player's own pieces exactly while the views set their fields, each of his pieces given one tagged; a recording
-// without the fields shows no words at all; with them the show is the same ship for ship as without; where the views set
-// fields on the other side's pieces, a second play takes the player as that side; the naval rules' own-water
-// recordings (recordings/own-water-r2, the "Friendly torpedoes" switch on) show the very lines pinned for them, string
-// for string, and samar nothing at any frame; and the tags, through the eyes the scene's shots put the camera at (a
-// Fleets shot, the Line shot, the overview), stand laid apart on the screen.
+// The torpedo words' cloud test (Battle/SeaWordsCore; the naval rules behind their switch "Friendly torpedoes", Brian
+// 25 November 12:52Z, and the UI director's words, final at 13:27Z): every word of the tags and the line, string for
+// string (her and their, is and are, has and have, your orders and hers or theirs, 1 second and N seconds, the count
+// down to 0; is and are as the phrase counts the ships where it does); an enemy piece never has words; no fields,
+// nothing; held wins over turning clear; the line is the camera's subject's own or none. Where the tags stand
+// (SeaWords::Lay): never on one another, the subject's first and on her ship, then the nearest; none over the bar, the
+// line, the month scene's caption or its way back; a lifted tag's stalk down to its ship behind the plates it passes.
+// The shots' eyes, their axes the scene's (the up square to the look). The fields as SeaFeed reads them and the show
+// carries them, through a few views written here (the player's order, one ship, the count's last second and past it, a
+// turn clear without its name: what the computer's sides never record), at their pinned moments and then played frame
+// by frame as a recording, as either side, through every check below. Then each recording played through the very code
+// the game runs (SeaFeed, SeaShow, SeaWordsCore), at 32 frames a second: SeaFeed reads every field the views set (read
+// here apart, from the JSON itself); the tags stand over the player's own pieces exactly while the views set their
+// fields, each of his pieces given one tagged; a recording without the fields shows no words at all; with them the show
+// is the same ship for ship as without; where the views set fields on the other side's pieces, a second play takes the
+// player as that side; the naval rules' own-water recordings (recordings/own-water-r2, the "Friendly torpedoes" switch
+// on) show the very lines pinned for them, string for string, and samar nothing at any frame (one in an own-water-r2
+// folder that its pins do not know fails); and the tags, through the eyes the scene's shots put the camera at (a Fleets
+// shot, the Line shot, the overview), stand laid apart on the screen.
 //
 //   Tools/sea_show/run.sh   (builds and runs it over every recording)
 //
@@ -230,6 +233,13 @@ namespace
 			Expect(Sunk.What == SeaWords::Kind::None && Sunk.Tag.empty(), "a piece with none afloat: no words", Sunk.Tag, "none");
 			const SeaWords::Said Unnamed = Of(HeldFor(5, "", true), 0, 0, 1, 1, 100.0);
 			Expect(Unnamed.Tag == "Torpedoes held" && Unnamed.Line.empty(), "held with no name: the tag, no line", Unnamed.Tag + " / " + Unnamed.Line, "Torpedoes held / ");
+			// (the same for a turn clear without its clearFromName, a division and a ship alone under his order)
+			const SeaWords::Said UnnamedClear = Of(ClearOf(1, 112.0, "", false), 0, 0, 4, -1, 100.0);
+			Expect(UnnamedClear.What == SeaWords::Kind::Clearing && UnnamedClear.Tag == "Turning clear of torpedoes" && UnnamedClear.Line.empty(),
+			       "turning clear with no name: the tag, no line", UnnamedClear.Tag + " / " + UnnamedClear.Line, "Turning clear of torpedoes / ");
+			const SeaWords::Said UnnamedClearOrdered = Of(ClearOf(1, 112.0, "", true), 0, 0, 1, -1, 100.0);
+			Expect(UnnamedClearOrdered.What == SeaWords::Kind::Clearing && UnnamedClearOrdered.Tag == "Turning clear of torpedoes" && UnnamedClearOrdered.Line.empty(),
+			       "turning clear with no name, one ship, ordered: the tag, no line", UnnamedClearOrdered.Tag + " / " + UnnamedClearOrdered.Line, "Turning clear of torpedoes / ");
 		}
 
 		// The screen's words from the show's pieces: the tags his own only, the line the subject's own or none.
@@ -583,35 +593,108 @@ namespace
 		int Subject;
 	};
 
+	/** An eye's axes in board metres as the scene has them (EyeFacing, the look's rotator with no roll: its quaternion's
+	 * forward, right and up vectors, through World's X and Y swapped): the look F; the right Rt, level; the up Up, the
+	 * right across the look, square to both, tilted forward as the eye looks down. */
+	struct Axes
+	{
+		double F[3], Rt[3], Up[3];
+	};
+	Axes AxesOf(const Look& Eye)
+	{
+		Axes A;
+		for (int C = 0; C < 3; ++C) A.F[C] = Eye.To[C] - Eye.From[C];
+		const double FL = std::sqrt(A.F[0] * A.F[0] + A.F[1] * A.F[1] + A.F[2] * A.F[2]);
+		for (double& C : A.F) C /= FL;
+		const double RL = std::hypot(A.F[0], A.F[1]);
+		A.Rt[0] = A.F[1] / RL;
+		A.Rt[1] = -A.F[0] / RL;
+		A.Rt[2] = 0.0;
+		// (Rt x F: (-Fz Fx, -Fz Fy) / |Fxy| across, |Fxy| up)
+		A.Up[0] = A.Rt[1] * A.F[2] - A.Rt[2] * A.F[1];
+		A.Up[1] = A.Rt[2] * A.F[0] - A.Rt[0] * A.F[2];
+		A.Up[2] = A.Rt[0] * A.F[1] - A.Rt[1] * A.F[0];
+		return A;
+	}
+
+	/** Where a point (board metres) stands through an eye, as ASeaBattle::PlaceTorpedoWords puts it: across and down the
+	 * screen, 0 to 1 on it, and its depth along the look. */
+	void Through(const Look& Eye, const Axes& A, const double P[3], double& Across, double& Down, double& Deep)
+	{
+		const double O[3] = { P[0] - Eye.From[0], P[1] - Eye.From[1], P[2] - Eye.From[2] };
+		const double HalfWide = std::tan(Radians(Eye.Lens * 0.5));
+		Deep = O[0] * A.F[0] + O[1] * A.F[1] + O[2] * A.F[2];
+		Across = 0.5 + 0.5 * (O[0] * A.Rt[0] + O[1] * A.Rt[1] + O[2] * A.Rt[2]) / (Deep * HalfWide);
+		Down = 0.5 - 0.5 * (ScreenW / ScreenH) * (O[0] * A.Up[0] + O[1] * A.Up[1] + O[2] * A.Up[2]) / (Deep * HalfWide);
+	}
+
 	/** The tags' feet through an eye, as ASeaBattle::PlaceTorpedoWords finds them: over the top of each tagged piece's
 	 * leading ship, drawn, in front of the eye and on a 1600 by 900 screen. */
 	std::vector<SeaWords::Spot> SpotsThrough(const SeaShow::Show& Show, const SeaWords::Words& W, const Look& Eye)
 	{
-		double F[3] = { Eye.To[0] - Eye.From[0], Eye.To[1] - Eye.From[1], Eye.To[2] - Eye.From[2] };
-		const double FL = std::sqrt(F[0] * F[0] + F[1] * F[1] + F[2] * F[2]);
-		for (double& C : F) C /= FL;
-		// (right: the look across the up, level; up: the right across the look)
-		double Rt[2] = { F[1], -F[0] };
-		const double RL = std::hypot(Rt[0], Rt[1]);
-		Rt[0] /= RL;
-		Rt[1] /= RL;
-		const double Up[3] = { -F[2] * Rt[1], F[2] * Rt[0], Rt[0] * F[1] - Rt[1] * F[0] };
-		const double HalfWide = std::tan(Radians(Eye.Lens * 0.5));
+		const Axes A = AxesOf(Eye);
 		std::vector<SeaWords::Spot> Spots;
 		for (const SeaWords::Tag& Tg : W.Tags)
 		{
 			const SeaShow::ShipOut* Lead = Show.Ship(Show.LeaderOf(Tg.Piece));
 			if (!Lead || !Lead->bShown) continue;
-			const double Top = std::max(Lead->At.Z, 0.0) + Lead->Heave + 6.0 + 0.12 * Lead->Long;
-			const double O[3] = { Lead->At.X - Eye.From[0], Lead->At.Y - Eye.From[1], Top - Eye.From[2] };
-			const double Deep = O[0] * F[0] + O[1] * F[1] + O[2] * F[2];
+			const double Top[3] = { Lead->At.X, Lead->At.Y, std::max(Lead->At.Z, 0.0) + Lead->Heave + 6.0 + 0.12 * Lead->Long };
+			double Across = 0.0, Down = 0.0, Deep = 0.0;
+			Through(Eye, A, Top, Across, Down, Deep);
 			if (Deep < 1.0) continue;
-			const double Across = 0.5 + 0.5 * (O[0] * Rt[0] + O[1] * Rt[1]) / (Deep * HalfWide);
-			const double Down = 0.5 - 0.5 * (ScreenW / ScreenH) * (O[0] * Up[0] + O[1] * Up[1] + O[2] * Up[2]) / (Deep * HalfWide);
 			if (Across < 0.0 || Across > 1.0 || Down < 0.0 || Down > 1.0) continue;
 			Spots.push_back(SpotAt(Across * ScreenW, Down * ScreenH, PlateWide(Tg.Text), Deep, Tg.Piece, Tg.Piece == Eye.Subject));
 		}
 		return Spots;
+	}
+
+	/** The eyes the tags are put through, as the scene's: the axes FRotationMatrix gives the look's rotator (pitch P, yaw Y,
+	 * no roll; forward (cP cY, cP sY, sP), right (-sY, cY, 0), up (-sP cY, -sP sY, cP) in the engine's X north, Y east),
+	 * square to one another; the point looked at at the screen's very centre, a point over it above the centre and one to
+	 * the right of it right of the centre. */
+	void Eyes()
+	{
+		std::printf("the shots' eyes, the axes as the scene's\n");
+		const Look All[] = {
+			// (the overview on light-ships, high and looking down across; a Fleets shot, 55 m up; the Line shot, 20 m up; a level
+			// eye; one looking steeply down; one looking down the board's north)
+			{ "the overview", { 12295.0, 7810.0, 1300.0 }, { 9324.0, 10573.0, 0.0 }, 55.0, -1 },
+			{ "a Fleets shot", { 8406.0, 9228.0, 55.0 }, { 8700.0, 9850.0, 0.0 }, 45.0, -1 },
+			{ "the Line shot", { 6000.0, 6000.0, 20.0 }, { 5500.0, 6300.0, 8.0 }, 40.0, -1 },
+			{ "a level eye", { 0.0, 0.0, 10.0 }, { 100.0, 50.0, 10.0 }, 55.0, -1 },
+			{ "a steep eye", { 1000.0, 1000.0, 2000.0 }, { 1100.0, 1200.0, 0.0 }, 55.0, -1 },
+			{ "an eye looking north, down", { 500.0, 0.0, 300.0 }, { 500.0, 1000.0, 0.0 }, 55.0, -1 },
+		};
+		for (const Look& Eye : All)
+		{
+			const Axes A = AxesOf(Eye);
+			// (the scene's: the look in the engine's axes, World's X and Y swapped; its rotator's axes; back to the board's)
+			const double EX = A.F[1], EY = A.F[0], EZ = A.F[2];
+			const double Yaw = std::atan2(EY, EX), Pitch = std::atan2(EZ, std::hypot(EX, EY));
+			const double SP = std::sin(Pitch), CP = std::cos(Pitch), SY = std::sin(Yaw), CY = std::cos(Yaw);
+			const double SceneF[3] = { CP * SY, CP * CY, SP }, SceneRt[3] = { CY, -SY, 0.0 }, SceneUp[3] = { -SP * SY, -SP * CY, CP };
+			double Most = 0.0, Square = 0.0;
+			for (int C = 0; C < 3; ++C)
+			{
+				Most = std::max({ Most, std::fabs(A.F[C] - SceneF[C]), std::fabs(A.Rt[C] - SceneRt[C]), std::fabs(A.Up[C] - SceneUp[C]) });
+			}
+			Square = std::max({ std::fabs(A.Up[0] * A.F[0] + A.Up[1] * A.F[1] + A.Up[2] * A.F[2]), std::fabs(A.Up[0] * A.Rt[0] + A.Up[1] * A.Rt[1] + A.Up[2] * A.Rt[2]),
+			                    std::fabs(A.Up[0] * A.Up[0] + A.Up[1] * A.Up[1] + A.Up[2] * A.Up[2] - 1.0) });
+			char Got[160];
+			std::snprintf(Got, sizeof Got, "up %.4f %.4f %.4f, up.look %.2e, off the scene's by %.2e", A.Up[0], A.Up[1], A.Up[2],
+			              A.Up[0] * A.F[0] + A.Up[1] * A.F[1] + A.Up[2] * A.F[2], Most);
+			Expect(Most < 1e-9 && Square < 1e-9, std::string(Eye.Name) + ": the up square to the look, the axes the scene's", Got, "square, the scene's");
+			double Across = 0.0, Down = 0.0, Deep = 0.0, OverAcross = 0.0, OverDown = 0.0, RightAcross = 0.0, RightDown = 0.0;
+			Through(Eye, A, Eye.To, Across, Down, Deep);
+			const double Over[3] = { Eye.To[0], Eye.To[1], Eye.To[2] + 10.0 };
+			Through(Eye, A, Over, OverAcross, OverDown, Deep);
+			const double Right[3] = { Eye.To[0] + 10.0 * A.Rt[0], Eye.To[1] + 10.0 * A.Rt[1], Eye.To[2] };
+			Through(Eye, A, Right, RightAcross, RightDown, Deep);
+			std::snprintf(Got, sizeof Got, "looked at %.6f %.6f; over it %.4f %.4f; right of it %.4f %.4f", Across, Down, OverAcross, OverDown, RightAcross, RightDown);
+			Expect(std::fabs(Across - 0.5) < 1e-9 && std::fabs(Down - 0.5) < 1e-9 && std::fabs(OverAcross - 0.5) < 1e-9 && OverDown < 0.5 && RightAcross > 0.5 &&
+			           std::fabs(RightDown - 0.5) < 1e-9,
+			       std::string(Eye.Name) + ": the point looked at at the centre, over it above, right of it right", Got, "0.5 0.5; above; right");
+		}
 	}
 
 	/** A piece as the views' JSON says it, read here apart from SeaFeed: its side and ships as last told, and whether its
@@ -634,10 +717,12 @@ namespace
 	 * clear, and the views with any; those without a name; ordered; turning clear past their salvo's landing; each side's
 	 * pieces given a field in some view (0 the attacker, 1 the defender); and the turns clear the views end while their
 	 * salvo is still running (the rules let a ship go once the heads are past her), with the most seconds the count had
-	 * left then. */
+	 * left then. And, for the frame-by-frame checks to be seen to meet them: the piece-views with a field and one ship
+	 * afloat, and those with a field under an order, each side's. */
 	struct RawCount
 	{
-		long Held = 0, Clear = 0, HeldViews = 0, ClearViews = 0, HeldUnnamed = 0, ClearUnnamed = 0, Ordered = 0, PastUntil = 0, EndedEarly = 0;
+		long Held = 0, Clear = 0, HeldViews = 0, ClearViews = 0, HeldUnnamed = 0, ClearUnnamed = 0, Ordered = 0, PastUntil = 0, EndedEarly = 0, Alone = 0;
+		long OrderedOn[2] = { 0, 0 };
 		double MostLeft = 0.0;
 		std::set<int> Fielded[2];
 	};
@@ -690,7 +775,12 @@ namespace
 					bClearHere = true;
 				}
 				Count.Ordered += P.bOrdered ? 1 : 0;
-				if (P.bHeld || P.bClear) Count.Fielded[P.Side].insert(Id);
+				if (P.bHeld || P.bClear)
+				{
+					Count.Fielded[P.Side].insert(Id);
+					Count.Alone += P.Ships == 1 ? 1 : 0;
+					Count.OrderedOn[P.Side] += P.bOrdered ? 1 : 0;
+				}
 				Kept[Id] = P;
 				R.Pieces[Id] = P;
 			}
@@ -836,11 +926,12 @@ namespace
 	// ---- The fields as SeaFeed reads them and the show carries them: views written here ------------------------------
 
 	/** Six views written here (100 to 110 s), for what the computer's sides never record (the own-water recordings are
-	 * fought by the computer on both sides): the player's order, a ship alone holding and turning clear, a division turning
-	 * clear under his order, held winning over turning clear under his order, the count's last second and a turn clear the
-	 * views keep past its salvo's landing; what SeaFeed leaves unread (a turn clear without its clearUntil, an id below 0);
-	 * a view without the fields clearing them, ordered too; and the enemy's pieces holding and turning clear under an
-	 * order. Each piece's fields as the rules write them into its extra. */
+	 * fought by the computer on both sides): the player's order, a ship alone holding and turning clear, a division
+	 * turning clear under his order, held winning over turning clear under his order, the count's last second, a turn
+	 * clear the views keep past its salvo's landing and a turn clear without its clearFromName; what SeaFeed leaves
+	 * unread (a turn clear without its clearUntil, an id below 0); a view without the fields clearing them, ordered too;
+	 * and the enemy's pieces holding and turning clear under an order. Each piece's fields as the rules write them into
+	 * its extra. */
 	std::string WrittenViews()
 	{
 		struct Is
@@ -853,8 +944,9 @@ namespace
 			double X, Y;
 		};
 		const Is Pieces[] = { { 1, "att", "dd", "Destroyers 1", 4, 9000.0, 9000.0 },   { 2, "att", "ca", "Cruiser 2", 1, 9000.0, 9600.0 },
-		                      { 3, "att", "dd", "Destroyers 3", 2, 9400.0, 9000.0 },   { 5, "att", "ca", "Cruiser 3", 1, 9400.0, 9600.0 },
-		                      { 11, "def", "dd", "Destroyers 2", 4, 11000.0, 9000.0 }, { 12, "def", "ca", "Cruiser 1", 1, 11000.0, 9600.0 } };
+		                      { 3, "att", "dd", "Destroyers 3", 2, 9400.0, 9000.0 },   { 4, "att", "dd", "Destroyers 4", 2, 9800.0, 9000.0 },
+		                      { 5, "att", "ca", "Cruiser 3", 1, 9400.0, 9600.0 },      { 11, "def", "dd", "Destroyers 2", 4, 11000.0, 9000.0 },
+		                      { 12, "def", "ca", "Cruiser 1", 1, 11000.0, 9600.0 } };
 		auto Fields = [](double T, int Id) -> std::string
 		{
 			switch (Id)
@@ -871,6 +963,9 @@ namespace
 					       : T <= 102.0 ? ",\"heldFor\":-3,\"heldForName\":\"a cruiser of the Home Fleet\""
 					       : T <= 104.0 ? ",\"clearFrom\":1,\"clearUntil\":115.4,\"clearFromName\":\"4 destroyers of the Home Fleet\",\"ordered\":true"
 					                    : "";
+				// (Destroyers 4, a division of two: turns clear of Destroyers 1's salvo without its clearFromName at 102 s, landing
+				// at 112.4 s, so the tag and no line; nothing before or after)
+				case 4: return T == 102.0 ? ",\"clearFrom\":1,\"clearUntil\":112.4" : "";
 				// (Cruiser 3, a ship alone: holds for Destroyers 3 at 104 and 106 s; at 108 and 110 s holds for Destroyers 1 and
 				// turns clear of its salvo at once, under his order)
 				case 5:
@@ -921,7 +1016,7 @@ namespace
 
 	void Feed()
 	{
-		std::printf("the fields as SeaFeed reads them and the show carries them (views written here: his order, a ship alone, the last second, past the landing)\n");
+		std::printf("the fields as SeaFeed reads them and the show carries them (views written here: his order, a ship alone, the last second, past the landing, unnamed)\n");
 		SeaFeed::Recording Rec;
 		std::string Error;
 		if (!SeaFeed::ReadRecording(WrittenViews(), Rec, Error) || Rec.Views.size() != 6)
@@ -946,6 +1041,9 @@ namespace
 			Expect(P && P->ClearFrom == -1 && P->ClearFromName.empty() && P->ClearUntil < 0.0, "turning clear without its clearUntil: not read", Told(P), "none");
 			P = PieceIn(1, 3);
 			Expect(P && P->HeldFor == -1 && P->HeldForName.empty(), "held for an id below 0: none", Told(P), "none");
+			P = PieceIn(1, 4);
+			Expect(P && P->ClearFrom == 1 && std::fabs(P->ClearUntil - 112.4) < 1e-9 && P->ClearFromName.empty() && !P->bOrdered && P->HeldFor < 0,
+			       "turning clear without its clearFromName: read, the name empty", Told(P), "clear of 1 until 112.4, no name, not ordered");
 			P = PieceIn(2, 1);
 			Expect(P && P->HeldFor == -1 && P->HeldForName.empty() && !P->bOrdered, "a view without the fields clears them, ordered too", Told(P), "none, not ordered");
 			P = PieceIn(2, 2);
@@ -969,10 +1067,13 @@ namespace
 			{ 101.0, 3, "", "" },
 			{ 101.0, 11, "", "" },
 			{ 101.0, 12, "", "" },
+			{ 103.0, -1, "1 Torpedoes held, 2 Turning clear of torpedoes, 4 Turning clear of torpedoes", "" },
 			{ 103.0, 2, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. She takes up your orders again in 3 seconds, once the torpedoes have passed." },
 			{ 103.0, 3, "", "" },
+			{ 103.0, 4, Clear, "" },
 			{ 104.5, -1, "2 Turning clear of torpedoes, 3 Turning clear of torpedoes, 5 Torpedoes held", "" },
 			{ 104.5, 1, "", "" },
+			{ 104.5, 4, "", "" },
 			{ 104.5, 2, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. She takes up her orders again in 1 second, once the torpedoes have passed." },
 			{ 104.5, 3, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. They take up your orders again in 11 seconds, once the torpedoes have passed." },
 			{ 104.5, 5, Held, "Holding her torpedoes while 2 destroyers of the Home Fleet are in the line of fire. She fires the moment the water is clear." },
@@ -988,6 +1089,7 @@ namespace
 			{ 101.0, 12, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Battle Fleet. She takes up your orders again in 30 seconds, once the torpedoes have passed." },
 			{ 101.0, 1, "", "" },
 			{ 101.0, 2, "", "" },
+			{ 103.0, 4, "", "" },
 		};
 		for (const int Mine : { 0, 1 })
 		{
@@ -1086,7 +1188,7 @@ namespace
 		const double T0 = Rec.Views.front().Head.T, EndT = Rec.Views.back().Head.T;
 		long Frames = 0, Judged = 0, TagFrames = 0, Tags = 0, Lines = 0, Subjects = 0, TagsOff = 0, TextOff = 0, LinesOff = 0, EnemySet = 0, EnemySaid = 0, Unled = 0, Dirty = 0,
 		     Named = 0, Apart = 0;
-		std::map<std::string, long> Looks, RawOn, LiftedLooks;
+		std::map<std::string, long> Looks, RawOn, LiftedLooks, SpotsOn, TwoOn;
 		long LaidLifted = 0, LaidWrong = 0, LookSubjectOff = 0;
 		std::string FirstLaidWrong;
 		std::string FirstOff;
@@ -1270,6 +1372,9 @@ namespace
 						Kept.push_back(SeaWords::Box{ (ScreenW - LineWide) * 0.5 - 14.0, ScreenH - 64.0 - 26.0, (ScreenW + LineWide) * 0.5 + 14.0, ScreenH - 64.0 });
 					}
 					++Looks[Eye.Name];
+					// (the tags this eye puts on the screen, and whether two or more, so a shot is seen to check something)
+					SpotsOn[Eye.Name] += static_cast<long>(Spots.size());
+					TwoOn[Eye.Name] += Spots.size() >= 2 ? 1 : 0;
 					// (as they would stand on their own ships, unlaid)
 					bool bRawOn = false;
 					for (size_t I = 0; I < Spots.size() && !bRawOn; ++I)
@@ -1345,10 +1450,13 @@ namespace
 			{
 				AllLooks += Pair.second;
 				AllOn += RawOn[Pair.first];
-				Each += (Each.empty() ? "" : ", ") + Pair.first + " " + std::to_string(Pair.second) + " (" + std::to_string(RawOn[Pair.first]) + " met, " +
-				        std::to_string(LiftedLooks[Pair.first]) + " with a tag lifted)";
+				Each += (Each.empty() ? "" : ", ") + Pair.first + " " + std::to_string(Pair.second) + " (" + std::to_string(SpotsOn[Pair.first]) + " tags on the screen, " +
+				        std::to_string(TwoOn[Pair.first]) + " with two or more there, " + std::to_string(RawOn[Pair.first]) + " met, " + std::to_string(LiftedLooks[Pair.first]) +
+				        " with a tag lifted)";
 			}
-			std::printf("  looks with two tags or more, those whose tags would meet unlaid and those laid with a tag lifted: %s; %ld tags lifted\n", Each.c_str(), LaidLifted);
+			std::printf("  looks with two tags or more set, the tags each put on the screen, the looks with two or more there, those whose tags would meet unlaid and "
+			            "those laid with a tag lifted: %s; %ld tags lifted\n",
+			            Each.c_str(), LaidLifted);
 			Expect(LaidWrong == 0, "the tags laid through the shots' eyes: never on one another nor on the bar or the line",
 			       std::to_string(LaidWrong) + " looks wrong of " + std::to_string(AllLooks) + (FirstLaidWrong.empty() ? "" : " (" + FirstLaidWrong + ")"), "0");
 			Expect(LookSubjectOff == 0, "the subject's tag on her ship in every look", std::to_string(LookSubjectOff) + " off", "0");
@@ -1362,6 +1470,15 @@ namespace
 			// (its divisions hold and turn clear side by side: their tags meet on the screen, unlaid, and are lifted apart)
 			Expect(AllOn > 0 && LaidLifted > 0 && LaidWrong == 0, Of + ": its tags meet on the screen, and are lifted apart",
 			       std::to_string(AllOn) + " looks met of " + std::to_string(AllLooks) + ", " + std::to_string(LaidLifted) + " lifted", "some, some");
+			// (and each of the three shots puts two tags or more on the screen in some look, so none passes having laid nothing)
+			std::string Each;
+			bool bEach = true;
+			for (const char* Shot : { "a Fleets shot", "the Line shot", "the overview" })
+			{
+				Each += (Each.empty() ? "" : ", ") + std::string(Shot) + " " + std::to_string(SpotsOn[Shot]) + " on the screen, " + std::to_string(TwoOn[Shot]) + " looks with two";
+				bEach = bEach && SpotsOn[Shot] > 0 && TwoOn[Shot] > 0;
+			}
+			Expect(bEach, Of + ": each shot (Fleets, Line, overview) lays two tags or more on the screen", Each, "each some");
 		}
 		if (Pin->bEnemyOnly)
 		{
@@ -1376,24 +1493,27 @@ namespace
 		}
 	}
 
-	bool PlayRecording(const std::string& Path)
+	/** Whether a path lies within a folder of this name, anywhere along it. */
+	bool InFolder(const std::string& Path, const std::string& Folder)
 	{
-		std::ifstream In(Path, std::ios::binary);
-		if (!In)
+		size_t From = 0;
+		for (size_t Slash = Path.find_first_of("/\\"); Slash != std::string::npos; From = Slash + 1, Slash = Path.find_first_of("/\\", From))
 		{
-			std::printf("%s: cannot read\n", Path.c_str());
-			++Failures;
-			return false;
+			if (Path.compare(From, Slash - From, Folder) == 0) return true;
 		}
-		std::stringstream Buffer;
-		Buffer << In.rdbuf();
+		return false;
+	}
+
+	/** One recording (Path: its file, or what it is), read and played. */
+	bool PlayText(const std::string& Path, const std::string& Text)
+	{
 		SeaFeed::Recording Rec;
 		std::string Error;
 		std::vector<RawView> Raw;
 		std::string Me;
 		bool bFields = false;
 		RawCount Count;
-		if (!SeaFeed::ReadRecording(Buffer.str(), Rec, Error) || !ReadRaw(Buffer.str(), Raw, Me, bFields, Count))
+		if (!SeaFeed::ReadRecording(Text, Rec, Error) || !ReadRaw(Text, Raw, Me, bFields, Count))
 		{
 			std::printf("%s: %s\n", Path.c_str(), Error.empty() ? "not a recording" : Error.c_str());
 			++Failures;
@@ -1414,11 +1534,13 @@ namespace
 				ClearUnnamed += P.ClearFrom >= 0 && P.ClearFromName.empty() ? 1 : 0;
 				Ordered += P.bOrdered ? 1 : 0;
 			}
-		char Buf[400];
+		char Buf[512];
 		std::snprintf(Buf, sizeof Buf,
 		              "  the views set %ld piece-views held (in %ld views), %ld turning clear (in %ld views); held without a name %ld, turning clear without one %ld, "
-		              "ordered %ld; turning clear past the landing %ld; turns ended before their salvo landed %ld (the count at most %.1f s from its end)\n",
-		              Count.Held, Count.HeldViews, Count.Clear, Count.ClearViews, Count.HeldUnnamed, Count.ClearUnnamed, Count.Ordered, Count.PastUntil, Count.EndedEarly, Count.MostLeft);
+		              "ordered %ld (with a field: att %ld, def %ld); a ship alone with a field %ld; turning clear past the landing %ld; turns ended before their salvo "
+		              "landed %ld (the count at most %.1f s from its end)\n",
+		              Count.Held, Count.HeldViews, Count.Clear, Count.ClearViews, Count.HeldUnnamed, Count.ClearUnnamed, Count.Ordered, Count.OrderedOn[0], Count.OrderedOn[1],
+		              Count.Alone, Count.PastUntil, Count.EndedEarly, Count.MostLeft);
 		std::printf("%s", Buf);
 		Expect(Held == Count.Held && Clear == Count.Clear && HeldUnnamed == Count.HeldUnnamed && ClearUnnamed == Count.ClearUnnamed && Ordered == Count.Ordered,
 		       "SeaFeed reads every field the views set (held, turning clear, their names, ordered)",
@@ -1446,7 +1568,57 @@ namespace
 			}
 		}
 		if (PinPlays > 0) Expect(Played == PinPlays, Rec.Key + ": every pinned play played", std::to_string(Played) + " of " + std::to_string(PinPlays), "all");
+		// (a naval own-water recording, in an own-water-r2 folder, is found by its pins: re-recorded with another seed or
+		// another length, it would match none and play unpinned, so it fails here until its pins are made anew; the shipped
+		// Content recordings of the same keys are never in such a folder)
+		if (InFolder(Path, "own-water-r2"))
+		{
+			std::string Known;
+			for (const Pinned& P : Pins())
+			{
+				const std::string One = "seed " + std::to_string(P.Seed) + ", " + std::to_string(P.Views) + " views";
+				if (Rec.Key == P.Key && Known.find(One) == std::string::npos) Known += (Known.empty() ? "" : "; ") + One;
+			}
+			Expect(PinPlays > 0, Rec.Key + ": an own-water recording, found by its pins (key, seed, views)",
+			       "seed " + std::to_string(Rec.Seed) + ", " + std::to_string(Rec.Views.size()) + " views", Known.empty() ? "no pins for its key" : Known);
+		}
 		return true;
+	}
+
+	bool PlayRecording(const std::string& Path)
+	{
+		std::ifstream In(Path, std::ios::binary);
+		if (!In)
+		{
+			std::printf("%s: cannot read\n", Path.c_str());
+			++Failures;
+			return false;
+		}
+		std::stringstream Buffer;
+		Buffer << In.rdbuf();
+		return PlayText(Path, Buffer.str());
+	}
+
+	/** The views written here played as a recording, frame by frame, as the scene's player (att) and as the defender: the
+	 * frame-by-frame checks (the tags held to the views, the enemy never, the line only the subject's, clean and naming no
+	 * piece, the fields changing nothing ship for ship, the tags laid through the shots' eyes) on what the computer's sides
+	 * never record: his order and the enemy's, a ship alone, a turn clear past its landing, a turn clear without its name. */
+	void FeedPlayed()
+	{
+		std::printf("the views written here, played frame by frame as a recording, as either side\n");
+		const std::string Text = WrittenViews();
+		std::vector<RawView> Raw;
+		std::string Me;
+		bool bFields = false;
+		RawCount Count;
+		const bool bRead = ReadRaw(Text, Raw, Me, bFields, Count);
+		char Got[200];
+		std::snprintf(Got, sizeof Got, "ordered with a field: att %ld, def %ld; a ship alone %ld; past the landing %ld; turning clear unnamed %ld; fielded att %zu, def %zu",
+		              Count.OrderedOn[0], Count.OrderedOn[1], Count.Alone, Count.PastUntil, Count.ClearUnnamed, Count.Fielded[0].size(), Count.Fielded[1].size());
+		Expect(bRead && bFields && Count.OrderedOn[0] > 0 && Count.OrderedOn[1] > 0 && Count.Alone > 0 && Count.PastUntil > 0 && Count.ClearUnnamed > 0 &&
+		           !Count.Fielded[0].empty() && !Count.Fielded[1].empty(),
+		       "the views written here give the frame-by-frame play his order, the enemy's, a ship alone, past the landing, an unnamed turn clear", Got, "each some");
+		PlayText("(the views written here)", Text);
 	}
 }
 
@@ -1454,7 +1626,9 @@ int main(int Argc, char** Argv)
 {
 	Words();
 	Placing();
+	Eyes();
 	Feed();
+	FeedPlayed();
 	for (int K = 1; K < Argc; ++K) PlayRecording(Argv[K]);
 	std::printf("%d checks: %d passed, %d failed\n", Passes + Failures, Passes, Failures);
 	std::printf(Failures ? "SOME CHECKS FAILED\n" : "ALL CHECKS PASSED\n");
