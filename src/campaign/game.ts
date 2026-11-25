@@ -3119,9 +3119,24 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
 
 // ---- Moving, taking ground, and falling ---------------------------------------------
 
+/**
+ * Whether a province has already changed hands this month, read before anything in the present event touches it: the
+ * low keyed throws of a change of hands (the bridges, the track, scorched earth) keep their key for the month's first
+ * and take the missing side for any after it (the design director's ruling, 25 November 04:55Z), so a province taken
+ * twice in a month is not the same throw twice. Read from what the game holds, so a save in mid-month plays the same.
+ * In the opening month of a later start the ground history laid that month carries this month too (world.ts
+ * settleFallen): there only a province capture() has ever taken (its fellP mark) counts, so laying is no change.
+ */
+export function changedThisMonth(g: Game, r: Region): boolean {
+  if (r.since !== g.turn) return false;
+  return g.flags.openFrom !== g.turn || g.flags[`fellP:${r.id}`] !== undefined;
+}
+
 export function capture(g: Game, r: Region, nat: string): void {
   const old = r.ctrl;
   if (old === nat) return;
+  // (Read before this capture marks the month: a second change of hands this month throws its own dice.)
+  const again = changedThisMonth(g, r);
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
@@ -3137,7 +3152,7 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
-    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); railOnScorch(g, r, nat, old); }
+    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat, again, (far) => changedThisMonth(g, far)); railOnCapture(g, r, nat, old, again); railOnScorch(g, r, nat, old, again); }
   }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
