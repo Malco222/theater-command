@@ -823,6 +823,47 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   With `-TheaterLandChutes`: a pilot under his canopy from 100 m and from 300 m, his landing and run, and his canopy
   lying on the field.
 
+## The support teams' machine guns and mortars (release 2, off until passed)
+
+Brian, 25 November 2026: "Where are the machine gun teams and mortar teams", "There should be machine gun teams that
+lay down suppressing fire, such as the German MG 42 and the US machine gun". The rules already field them (a block of
+team `mg` or `mor`: three key men of role `hmg` or `mortar`, each with his loaders); until now each was drawn as a
+rifleman. On trial `-TheaterLandTrial=teamguns` (off; `-TheaterLandNoTeamGuns` off whatever the word says, for a paired
+run) each key man has his weapon:
+
+- **The models** (`Content/Models/Battle`, made by `tools/battle-models/land/support_guns.py` on the tank modeller's
+  kit): `HmgMG42`, `HmgMG34`, `HmgM1919`, `HmgM1917`, `HmgVickers`, `HmgMaxim`, `HmgType92`, `HmgHotchkiss`,
+  `HmgBreda37`; `MortarGER`, `MortarUSA`, `MortarUK`, `MortarSOV`, `MortarJAP`, `MortarITA`, `MortarFRA`. A machine
+  gun's parts are `mount` (the tripod or wheeled carriage, its origin on the ground under the pin), `cradle` (swings)
+  and `gun` (tips); a mortar's `mortar` and `tube`. Sockets: `seat` (the key man's own root), `seat.loader`, `muzzle`,
+  `feed`, the grips, `box` or `rounds`, the Maxim's `pull`. The picture sheet: `LAND_KIT_SUPPORT=1` to the painter
+  (`Tools/land_kit/land_picture.cpp`).
+- **Which file, where it stands** (`Battle/LandTeamGun`, plain C++): `FileFor` by the block's army, the role and the
+  month (the MG 34 until May 1942, the MG 42 after; an army with none of its own takes the nearest shape). `Gun::Step`
+  each frame: set up with the model's seat on the key man where the crowd draws him, swung and laid on his aim (45
+  and 20 degrees a second, stopped at the model's limits; a mortar turned whole); on his right shoulder while the team
+  moves (the Maxim rolled behind him by her trail); left where she stood when he falls; not drawn while he is hidden,
+  riding or mounted.
+- **In the scene** (`ALandBattle::MakeTeamGuns`, after the men are posed and before the fire is stepped): two instanced
+  meshes a file, the mount and what turns (`LandParts::BodiesMesh`: the fine level, the plain one from 90 m; gone past
+  460 m), placed by `LandParts::BankedAt` as a man is. `PlayWorld.Muzzle` gives a team's rounds her own muzzle and
+  tells her of each burst (she shakes 6 mm back along her bore a round); `PlayWorld.GunLook` gives her own burst
+  (`LandTeamGun::BurstOf`: the MG 42's 18 rounds in 0.9 s, where a section's gun fires 8), which `LandPlay` hands to
+  the sound as well.
+- **The gunner** (`LandMen::Crowd::Serve`): his rifle laid down, lying behind a low gun (`fire_prone`, whose hands
+  reach her grips) or kneeling at a high one or at his tube (`fire_kneel`), until his file brings `hmg_fire_prone`,
+  `hmg_fire_sit` or `mortar_sight`, which are used by name as soon as it has them.
+- **Checked in the cloud**: `Tools/land_kit/run.sh` (the section THE SUPPORT TEAMS' WEAPONS: every army's file reads;
+  seat, swing, lay, limits, bursts, carried, rolled, left, not drawn; `LAND_KIT_ONLY_TEAMGUNS=1` runs it alone) and
+  `Tools/land_show/run.sh` (the support teams' key men). The engine's part (`MakeTeamGuns`, `BodiesMesh`) has not been
+  compiled or seen: the Mac's first build and stills are owed.
+- **Not in this**: the loaders are where the drill puts them (the model's `seat.loader` is not read yet), no belt
+  runs through the gun, a mortar's bomb is not seen dropped. Suppression itself is the rules' (the smarter-fighting
+  thread's), not the scene's.
+
+Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
+`islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as

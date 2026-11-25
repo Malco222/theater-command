@@ -1273,6 +1273,61 @@ int main(int argc, char** argv)
 		P.Caption = K.Caption;
 		Panels.push_back(P);
 	}
+	// (LAND_KIT_SUPPORT=1: the support teams' weapons instead, release 2: each army's machine gun on its mount from her
+	// quarter and from the gunner's side, then each army's mortar; =side for every one square from the side)
+	const bool bSupportSheet = std::getenv("LAND_KIT_SUPPORT") != nullptr;
+	const std::string SupportSet = bSupportSheet ? std::getenv("LAND_KIT_SUPPORT") : "";
+	struct SupportLook
+	{
+		const char* File;
+		const char* Model;
+		double Gun, Bearing, Up;
+		const char* Caption;
+	};
+	const SupportLook SupportLooks[] = {
+		{ "sup_mg42", "HmgMG42", 0.0, 38.0, 16.0, "Germany: MG 42 on the Lafette, set low" },
+		{ "sup_mg42_back", "HmgMG42", 0.0, -150.0, 22.0, "the same from the gunner's left: the sight, the belt and its box" },
+		{ "sup_mg34", "HmgMG34", 0.0, 38.0, 16.0, "Germany until mid 1942: MG 34 in the same mount" },
+		{ "sup_m1919", "HmgM1919", 0.0, 38.0, 16.0, "United States: Browning M1919A4 on the M2 tripod" },
+		{ "sup_m1919_back", "HmgM1919", 0.0, -150.0, 22.0, "the same from the gunner's left" },
+		{ "sup_m1917", "HmgM1917", 0.0, 38.0, 16.0, "the water-cooled Browning (Poland's wz. 30)" },
+		{ "sup_vickers", "HmgVickers", 0.0, 38.0, 16.0, "Britain: Vickers on the Mk IV tripod, its condenser can" },
+		{ "sup_vickers_back", "HmgVickers", 0.0, 150.0, 22.0, "the same from the gunner's right: the belt comes in from the right" },
+		{ "sup_maxim", "HmgMaxim", 0.0, 38.0, 16.0, "Soviet Union: Maxim on the Sokolov wheeled mount" },
+		{ "sup_maxim_back", "HmgMaxim", 0.0, 150.0, 22.0, "the same from the gunner's right: the trail and its handle" },
+		{ "sup_type92", "HmgType92", 0.0, 38.0, 16.0, "Japan: Type 92, its strip in from the left" },
+		{ "sup_type92_back", "HmgType92", 0.0, -150.0, 22.0, "the same from the gunner's left" },
+		{ "sup_hotchkiss", "HmgHotchkiss", 0.0, 38.0, 16.0, "France (and China): Hotchkiss of 1914" },
+		{ "sup_breda", "HmgBreda37", 0.0, 38.0, 16.0, "Italy: Breda Mod. 37" },
+		{ "sup_mortar_ger", "MortarGER", 0.0, 50.0, 14.0, "Germany: 8 cm mortar, three bombs laid ready" },
+		{ "sup_mortar_ger_back", "MortarGER", 0.0, -140.0, 24.0, "the same from behind and left: the sight on the collar" },
+		{ "sup_mortar_usa", "MortarUSA", 0.0, 50.0, 14.0, "United States: 81 mm mortar" },
+		{ "sup_mortar_uk", "MortarUK", 0.0, 50.0, 14.0, "Britain: 3-inch mortar" },
+		{ "sup_mortar_sov", "MortarSOV", 0.0, 50.0, 14.0, "Soviet Union: 82 mm mortar on its round plate" },
+		{ "sup_mortar_jap", "MortarJAP", 0.0, 50.0, 14.0, "Japan: Type 97 mortar" },
+		{ "sup_mortar_ita", "MortarITA", 0.0, 50.0, 14.0, "Italy: 81 mm mortar" },
+		{ "sup_mortar_fra", "MortarFRA", 0.0, 50.0, 14.0, "France: 81 mm Brandt mortar" },
+	};
+	for (const SupportLook& K : SupportLooks)
+	{
+		if (!bSupportSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = "any";
+		P.Pin.Gun = K.Gun;
+		P.CameraBearing = SupportSet == "side" ? 90.0 : K.Bearing;
+		P.CameraUp = SupportSet == "side" ? 4.0 : K.Up;
+		P.Caption = K.Caption;
+		if (SupportSet == "side" && std::string(K.File).find("_back") != std::string::npos)
+		{
+			continue;
+		}
+		Panels.push_back(P);
+	}
 	// (LAND_KIT_BURNT=1: the burnt coat's own sheet instead, release 2's trial word "burntcoat": a grey hull, an olive one
 	// and Japan's khaki, each burnt out as it was (one sooty colour) and with the coat (soot, rust and ash), from her
 	// quarter and from above and behind; then one burnt out among live ones from 150 m, both ways)
@@ -1399,7 +1454,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet)
+		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet)
 		{
 			break;
 		}
@@ -1434,7 +1489,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet)
+	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";

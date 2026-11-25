@@ -499,6 +499,13 @@ namespace LandPlay
 			Sh.Round = R.N;
 			N.Rounds = B.Rounds;
 			N.PerSecond = B.PerSecond;
+			// (a support team's gun on its mount, release 2's "teamguns": the scene gives her own burst, heard as long as
+			// it is seen; a sub-machine gun's is heard by his clip)
+			if (Role == "hmg" && LookRounds > 0)
+			{
+				N.Rounds = Sh.Rounds;
+				N.PerSecond = Sh.PerSecond;
+			}
 			if (S >= 0) OutFx.push_back(M);
 			OutFx.push_back(Sh);
 		}

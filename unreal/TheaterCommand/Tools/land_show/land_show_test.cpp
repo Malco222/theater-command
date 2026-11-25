@@ -1135,6 +1135,83 @@ int main(int Argc, char** Argv)
 		}
 	}
 
+	// ---- Release 2's support teams (on trial "teamguns", Crowd::Serve): a team's key man whose weapon the scene draws
+	// at his place lays his rifle down, lying behind a low gun (1) or kneeling at a high one or at his tube (2), while
+	// his pose is `deployed` or `fire`; one not told so is drawn as before, and every one of them walks off as before.
+	{
+		std::ostringstream R;
+		R << "{\"seed\": 6, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.1, -1.1]},"
+		  << "\"blocks\": [{\"id\": 1, \"army\": \"GER\", \"nat\": \"GER\", \"team\": \"mg\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\", \"team\": \"mor\"}], \"men\": [";
+		for (int K = 0; K < 6; ++K)
+		{
+			// (each: deployed, firing from 2 s at a mark 300 m ahead, walking off from 6 s)
+			R << (K ? "," : "") << "{\"b\": " << (K < 3 ? 1 : 2) << ", \"k\": " << K % 3 << ", \"r\": \"" << (K < 3 ? "hmg" : "mortar") << "\", \"at\": [[0, " << 10 * K
+			  << ", 0, 0], [6, " << 10 * K << ", 0, 0], [12, " << 10 * K << ", 9, 0]], \"ch\": [[0, \"deployed\", \"none\", null, null, 0, 0], [2, \"fire\", \"none\", "
+			  << 10 * K << ", 300, 0, 0], [6, \"walk\", \"none\", null, null, 0, 0]]}";
+		}
+		R << "], \"rounds\": []}";
+		Crowd Teams;
+		Teams.AddSoldier("GER", Files["GER"]);
+		Teams.ReadArmies(ReadFile(Argv[3]), Err);
+		const GroundFn Level = [](double, double) { return Ground(); };
+		if (!Teams.Build(R.str(), Level, Err)) { Fail("the support teams' battle: %s", Err.c_str()); }
+		else
+		{
+			const Soldier& File = *Files["GER"];
+			const auto Has = [&File](const char* Clip) { return File.ClipIndex(Clip) >= 0; };
+			const std::string Lying = Has("hmg_fire_prone") ? "hmg_fire_prone" : "fire_prone", Sitting = Has("hmg_fire_sit") ? "hmg_fire_sit" : "fire_kneel";
+			const std::string AtTube = Has("mortar_sight") ? "mortar_sight" : "fire_kneel", AsBefore = File.Weapon == "lmg" ? "lmg_burst" : "fire_prone";
+			// (k0 of each team as before; the machine gun's k1 lying at his gun from the start, its k2 kneeling at his from
+			// 3 s, mid-fire; the mortar's k1 at his tube from the start, its k2 from 3 s)
+			const int Gun0 = Teams.Find(1, 0), Gun1 = Teams.Find(1, 1), Gun2 = Teams.Find(1, 2), Tube0 = Teams.Find(2, 0), Tube1 = Teams.Find(2, 1), Tube2 = Teams.Find(2, 2);
+			Teams.Serve(Gun1, 1);
+			Teams.Serve(Tube1, 2);
+			Teams.Serve(-1, 1); // (no such man: nothing)
+			int Faults = 0;
+			const auto Shows = [&](int Man, const std::string& Clip, bool bDown, const char* What, double When)
+			{
+				const Playing Pl = Teams.PlayingOf(Man);
+				if (Pl.Clip != Clip || Pl.bRifleDown != bDown)
+				{
+					++Faults;
+					Fail("the support teams at %.1f s: %s shows %s with his rifle %s, not %s with it %s", When, What, Pl.Clip.c_str(), Pl.bRifleDown ? "laid down" : "in his hands", Clip.c_str(),
+						bDown ? "laid down" : "in his hands");
+				}
+			};
+			bool bTold = false;
+			for (int Fr = 0; Fr * Dt <= 10.0; ++Fr)
+			{
+				const double T = Fr * Dt;
+				if (!bTold && T >= 3.0)
+				{
+					Teams.Serve(Gun2, 2);
+					Teams.Serve(Tube2, 2);
+					bTold = true;
+				}
+				Teams.Update(T);
+				const bool bEarly = std::fabs(T - 1.0) < Dt * 0.5, bFiring = std::fabs(T - 5.0) < Dt * 0.5, bWalking = std::fabs(T - 9.0) < Dt * 0.5;
+				if (bEarly || bFiring)
+				{
+					Shows(Gun0, AsBefore, false, "a gunner not told he serves a gun", T);
+					Shows(Gun1, Lying, true, "a gunner lying at his gun", T);
+					Shows(Gun2, bFiring ? Sitting : AsBefore, bFiring, "a gunner told at 3 s he kneels at his gun", T);
+					Shows(Tube0, "fire_kneel", false, "a mortar man not told he serves his tube", T);
+					Shows(Tube1, AtTube, true, "a mortar man at his tube", T);
+					Shows(Tube2, bFiring ? AtTube : "fire_kneel", bFiring, "a mortar man told at 3 s he serves his tube", T);
+				}
+				if (bWalking)
+				{
+					for (int Man : { Gun0, Gun1, Gun2, Tube0, Tube1, Tube2 })
+					{
+						Shows(Man, "walk", false, "a team's key man walking off", T);
+					}
+				}
+			}
+			std::printf("the support teams' key men (release 2, Crowd::Serve): lying at a gun %s, kneeling at one %s, at a tube %s, rifles laid down; untold and walking as before: %s\n",
+				Lying.c_str(), Sitting.c_str(), AtTube.c_str(), Faults ? "FAIL" : "ok");
+		}
+	}
+
 	// Feet.
 	std::printf("\nfeet: %ld gait man-frames, %ld (%.0f%%) at the 1.6 cap (the recording's men move faster than the clips can step, so their feet slide by design)\n",
 		GaitFrames, CappedFrames, GaitFrames ? 100.0 * CappedFrames / GaitFrames : 0.0);

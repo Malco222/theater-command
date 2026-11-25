@@ -6,6 +6,7 @@
 #include "Battle/LandKit.h"
 #include "Battle/Fates.h"
 #include "Battle/LandCrater.h"
+#include "Battle/LandTeamGun.h"
 
 #include <algorithm>
 #include <chrono>
@@ -747,6 +748,525 @@ namespace
 		std::printf("  %zu looks checked, %zu mark triangles near in all: %s\n", AllCases, AllAdded, Failures ? "FAIL" : "ok");
 		return Failures;
 	}
+	/**
+	 * The support teams' weapons (Battle/LandTeamGun; release 2, on trial "teamguns"): every army's machine gun and
+	 * mortar has a file that loads and reads as a support weapon; and each weapon, stepped as the scene steps it, stands
+	 * with its seat on its gunner's own place and on the drawn ground, swings and lays on what he fires at no faster
+	 * than its rates and no further than its limits, shakes back along its bore in bursts while he fires, rides on his
+	 * shoulder by its middle when the team moves (the wheeled one rolled behind him by her trail), stays where it stood
+	 * when he falls, and is not drawn while he is hidden or riding. Gives the failures.
+	 */
+	int CheckTeamGuns(const std::string& Content)
+	{
+		std::printf("THE SUPPORT TEAMS' WEAPONS (release 2, -TheaterLandTrial=teamguns: a machine gun or a mortar at each team's key man)\n");
+		using LandTeamGun::Crew;
+		using LandTeamGun::Gun;
+		using LandTeamGun::Kind;
+		constexpr double Pi = 3.14159265358979323846;
+		constexpr double Dt = 1.0 / 60.0;
+		int Failures = 0;
+		auto Fail = [&Failures](const std::string& Why)
+		{
+			std::printf("  FAIL %s\n", Why.c_str());
+			++Failures;
+		};
+		auto Apply = [](const LandMen::Xform& F, const V3& P)
+		{
+			return V3(F.R[0] * P.X + F.R[1] * P.Y + F.R[2] * P.Z + F.T[0], F.R[3] * P.X + F.R[4] * P.Y + F.R[5] * P.Z + F.T[1],
+				F.R[6] * P.X + F.R[7] * P.Y + F.R[8] * P.Z + F.T[2]);
+		};
+		auto Turn = [](const LandMen::Xform& F, const V3& P)
+		{
+			return V3(F.R[0] * P.X + F.R[1] * P.Y + F.R[2] * P.Z, F.R[3] * P.X + F.R[4] * P.Y + F.R[5] * P.Z, F.R[6] * P.X + F.R[7] * P.Y + F.R[8] * P.Z);
+		};
+		// How far a frame is from a soldier's kind of frame: its rows unit and square to each other, and its hand a
+		// man's own (x forward, y right, z up on a field of x east, y north: determinant -1). Not a number: huge.
+		auto FrameFault = [](const LandMen::Xform& F)
+		{
+			double Worst = 0.0;
+			for (int A = 0; A < 3; ++A)
+			{
+				for (int B = 0; B < 3; ++B)
+				{
+					const double Dot = static_cast<double>(F.R[A * 3]) * F.R[B * 3] + static_cast<double>(F.R[A * 3 + 1]) * F.R[B * 3 + 1]
+						+ static_cast<double>(F.R[A * 3 + 2]) * F.R[B * 3 + 2];
+					Worst = std::max(Worst, std::fabs(Dot - (A == B ? 1.0 : 0.0)));
+				}
+			}
+			const double Det = static_cast<double>(F.R[0]) * (static_cast<double>(F.R[4]) * F.R[8] - static_cast<double>(F.R[5]) * F.R[7])
+				- static_cast<double>(F.R[1]) * (static_cast<double>(F.R[3]) * F.R[8] - static_cast<double>(F.R[5]) * F.R[6])
+				+ static_cast<double>(F.R[2]) * (static_cast<double>(F.R[3]) * F.R[7] - static_cast<double>(F.R[4]) * F.R[6]);
+			Worst = std::max(Worst, std::fabs(Det + 1.0));
+			for (double T : { static_cast<double>(F.T[0]), static_cast<double>(F.T[1]), static_cast<double>(F.T[2]) })
+			{
+				if (!std::isfinite(T))
+				{
+					Worst = 1e9;
+				}
+			}
+			return std::isfinite(Worst) ? Worst : 1e9;
+		};
+		// A man's own frame standing at a place and going a way (the crowd's WorldFrame for a man upright).
+		auto ManFrame = [](double X, double Y, double Z, double F)
+		{
+			LandMen::Xform Out;
+			const float S = static_cast<float>(std::sin(F)), C = static_cast<float>(std::cos(F));
+			const float R[9] = { S, C, 0.f, C, -S, 0.f, 0.f, 0.f, 1.f };
+			std::copy(R, R + 9, Out.R);
+			Out.T[0] = static_cast<float>(X);
+			Out.T[1] = static_cast<float>(Y);
+			Out.T[2] = static_cast<float>(Z);
+			return Out;
+		};
+		auto Bearing = [](double X, double Y) { return std::atan2(X, Y) * 180.0 / 3.14159265358979323846; };
+		auto Flat = [](double, double) { return 0.0; };
+		auto Slope = [](double X, double Y) { return 3.0 + 0.02 * X + 0.01 * Y; };
+
+		// ---- Every army's file.
+		const char* Armies[] = { "GER", "GER@desert", "GER_winter", "USA", "UK", "UK@desert", "SOV", "SOV_winter", "FIN", "JAP", "ITA", "ROM", "FRA",
+			"CHN", "POL", "HUN", "NED", "" };
+		std::vector<std::string> Files;
+		size_t Asked = 0;
+		for (const char* Army : Armies)
+		{
+			for (const char* Role : { "hmg", "mortar" })
+			{
+				for (int Stamp : { 193909, 194205, 194206, 194506 })
+				{
+					const std::string File = LandTeamGun::FileFor(Army, Role, Stamp / 100, Stamp % 100);
+					++Asked;
+					if (File.empty())
+					{
+						Fail(std::string("no weapon for ") + Army + " " + Role);
+					}
+					else if (std::find(Files.begin(), Files.end(), File) == Files.end())
+					{
+						Files.push_back(File);
+					}
+				}
+			}
+			for (const char* Role : { "rifle", "lmg", "loader", "nco", "at", "" })
+			{
+				if (!LandTeamGun::FileFor(Army, Role, 1944, 6).empty())
+				{
+					Fail(std::string("a weapon for the role '") + Role + "'");
+				}
+			}
+		}
+		if (LandTeamGun::FileFor("GER", "hmg", 1942, 5) != "HmgMG34" || LandTeamGun::FileFor("GER@desert", "hmg", 1942, 6) != "HmgMG42"
+			|| LandTeamGun::FileFor("USA", "hmg", 1944, 6) != "HmgM1919" || LandTeamGun::FileFor("UK@desert", "hmg", 1941, 11) != "HmgVickers"
+			|| LandTeamGun::FileFor("SOV_winter", "hmg", 1942, 1) != "HmgMaxim" || LandTeamGun::FileFor("JAP", "mortar", 1942, 1) != "MortarJAP")
+		{
+			Fail("an army's own weapon is not the one it served (the MG 34 until June 1942 and the MG 42 after, the Browning, the Vickers, the Maxim)");
+		}
+		std::sort(Files.begin(), Files.end());
+		std::printf("  %zu asks of %zu armies, each answered; %zu weapons' files\n", Asked, sizeof(Armies) / sizeof(Armies[0]), Files.size());
+
+		// ---- Each weapon.
+		const std::map<std::string, int> FeedOf = { { "HmgMG42", -1 }, { "HmgMG34", -1 }, { "HmgM1919", -1 }, { "HmgM1917", -1 }, { "HmgType92", -1 },
+			{ "HmgHotchkiss", -1 }, { "HmgBreda37", -1 }, { "HmgVickers", 1 }, { "HmgMaxim", 1 } };
+		Tally Frames, Seats, Rates, Lays, Limits, Shakes, Carries, Rolls, Falls;
+		size_t Guns = 0, Mortars = 0;
+		for (const std::string& Name : Files)
+		{
+			std::string Text, Error, Why;
+			Dress D;
+			Model M;
+			Kind K;
+			if (!ReadFile(Content + "/Models/Battle/" + Name + ".json", Text))
+			{
+				Fail("cannot read " + Name + ".json");
+				continue;
+			}
+			D.Nation = "GER";
+			if (!M.Load(Text, D, Error))
+			{
+				Fail(Name + ": " + Error);
+				continue;
+			}
+			if (!K.Read(M, Why))
+			{
+				Fail(Name + ": " + Why);
+				continue;
+			}
+			(K.bMortar ? Mortars : Guns) += 1;
+			// What the file tells the game.
+			size_t MountTris = 0, TurnedTris = 0;
+			double Lowest = 1e9;
+			std::vector<int> All = K.Mount;
+			All.insert(All.end(), K.Turned.begin(), K.Turned.end());
+			std::sort(All.begin(), All.end());
+			bool bEach = All.size() == M.Bodies.size();
+			for (size_t B = 0; B < All.size() && bEach; ++B)
+			{
+				bEach = All[B] == static_cast<int>(B);
+			}
+			for (int B : K.Mount)
+			{
+				const Body& Of = M.Bodies[static_cast<size_t>(B)];
+				MountTris += Of.Near.Triangles.size() / 3;
+				for (size_t P = 2; P < Of.Near.Points.size(); P += 3)
+				{
+					Lowest = std::min(Lowest, Of.Near.Points[P] + Of.Pivot.Z);
+				}
+			}
+			for (int B : K.Turned)
+			{
+				TurnedTris += M.Bodies[static_cast<size_t>(B)].Near.Triangles.size() / 3;
+			}
+			K.File = Name;
+			if (K.Title.empty())
+			{
+				Why = "her model has no name of its own";
+			}
+			else if (!bEach)
+			{
+				Why = "a body neither stands nor turns, or does both";
+			}
+			// (a gun's feet on the ground to 2 cm; a mortar's base plate bedded in, its ribs up to 7 cm under)
+			else if (Lowest > 0.02 || Lowest < (K.bMortar ? -0.07 : -0.02))
+			{
+				Why = "her mount does not stand on the ground (lowest point " + std::to_string(Lowest) + " m)";
+			}
+			else if (std::fabs(K.Seat.Z) > 1e-6 || K.Seat.X >= K.Muzzle.X)
+			{
+				Why = "her gunner's place is not on the ground behind her muzzle";
+			}
+			else if (std::fabs(K.Bore.Length() - 1.0) > 1e-9 || K.Bore.X <= 0.0)
+			{
+				Why = "her bore is not a unit way forward";
+			}
+			else if (K.bMortar ? (K.FeedSide != 0 || !K.bKneels || K.bWheeled || K.Bore.Z < 0.7)
+				: (FeedOf.count(Name) == 0 || FeedOf.at(Name) != K.FeedSide || K.Left < 15.0 || K.Right < 15.0 || K.Low > -5.0 || K.High < 8.0 || K.bWheeled != (Name == "HmgMaxim")
+					|| (K.bWheeled && !K.bKneels)))
+			{
+				Why = "what her file tells the game is not her (the feed's side, her swing and lay, a mortar's steep tube, the Maxim's wheels)";
+			}
+			else if (!K.bMortar)
+			{
+				// (the game swings what turns about the gun's own pivot: the cradle's pin must stand under it)
+				const V3 Pin = M.Parts[static_cast<size_t>(M.PartIndex("cradle"))].Pivot;
+				if (std::hypot(Pin.X - K.Pivot.X, Pin.Y - K.Pivot.Y) > 0.001)
+				{
+					Why = "her cradle's pin is not under her gun's pivot";
+				}
+			}
+			if (!Why.empty())
+			{
+				Fail(Name + ": " + Why);
+				continue;
+			}
+			std::printf("  %-13s %-6s %s%s%s  swings %2.0f left %2.0f right, lays %3.0f to %2.0f  seat %5.2f back %5.2f %s  mount %4zu triangles, what turns %4zu  %s\n",
+				Name.c_str(), K.bMortar ? "mortar" : "gun", K.FeedSide < 0 ? "fed from the left " : K.FeedSide > 0 ? "fed from the right" : "dropped down her  ",
+				K.bKneels ? ", gunner kneels" : ", gunner lies  ", K.bWheeled ? ", on wheels" : "          ", K.Left, K.Right, K.Low, K.High, -K.Seat.X,
+				std::fabs(K.Seat.Y), K.Seat.Y < 0.0 ? "left " : "right", MountTris, TurnedTris, K.Title.c_str());
+
+			// Set up at her gunner, on a slope, nothing to fire at.
+			Crew C;
+			C.X = 137.25;
+			C.Y = -58.5;
+			C.Facing = 0.7;
+			C.Way = 0.7;
+			C.Pose = "deployed";
+			Gun G;
+			G.Step(K, C, 10.0, Dt, Slope);
+			{
+				const V3 Seat = Apply(G.MountFrame(), K.Seat);
+				LandMen::Vec3 At, Way;
+				const bool bMuzzle = G.MuzzleAt(K, At, Way);
+				const V3 Rest = Apply(G.MountFrame(), K.Muzzle);
+				Frames.Note(G.Is == Gun::State::SetUp && G.MountShown() && G.TurnedShown(), 0.0, Name + ": not set up at a deployed gunner");
+				Frames.Note(FrameFault(G.MountFrame()) < 1e-5 && FrameFault(G.TurnedFrame(K)) < 1e-5, std::max(FrameFault(G.MountFrame()), FrameFault(G.TurnedFrame(K))),
+					Name + ": her frame set up is not a soldier's kind of frame");
+				Seats.Note(std::hypot(Seat.X - C.X, Seat.Y - C.Y) < 0.001, std::hypot(Seat.X - C.X, Seat.Y - C.Y), Name + ": her seat is not on her gunner's place");
+				Seats.Note(std::fabs(G.Z - Slope(G.X, G.Y)) < 1e-9, std::fabs(G.Z - Slope(G.X, G.Y)), Name + ": she does not stand on the drawn ground");
+				Lays.Note(bMuzzle && std::hypot(At.X - Rest.X, At.Y - Rest.Y) < 0.001 && std::fabs(At.Z - Rest.Z) < 0.001
+					&& std::fabs(WrapDeg(Bearing(Way.X, Way.Y) - C.Facing * 180.0 / Pi)) < 0.01 && std::fabs(Way.Z - K.Bore.Z) < 1e-5,
+					bMuzzle ? std::fabs(WrapDeg(Bearing(Way.X, Way.Y) - C.Facing * 180.0 / Pi)) : 1e9, Name + ": at rest her muzzle is not her model's, facing as her gunner faces");
+			}
+
+			// Firing at a man 300 m off, 10 degrees to the right, on the level: 3 seconds.
+			auto Fire = [&](Gun& Of, Crew& By, double Off, double Far, const std::function<double(double, double)>& Ground, double Seconds, const char* What)
+			{
+				By.Pose = "fire";
+				By.bAim = true;
+				// (from her own pin, as she stands with nothing to fire at; a mortar's gunner is the place she turns about)
+				Gun At;
+				Crew Idle = By;
+				Idle.bAim = false;
+				At.Step(K, Idle, 0.0, Dt, Ground);
+				const double FromX = K.bMortar ? By.X : At.X, FromY = K.bMortar ? By.Y : At.Y;
+				By.AimX = FromX + Far * std::sin(By.Facing + Off * Pi / 180.0);
+				By.AimY = FromY + Far * std::cos(By.Facing + Off * Pi / 180.0);
+				double Now = 20.0;
+				for (int Frame = 0; Frame < static_cast<int>(Seconds * 60.0); ++Frame, Now += Dt)
+				{
+					const double WasT = Of.Traverse, WasE = Of.Elevation, WasF = Of.Facing;
+					const bool bWasUp = Of.Is == Gun::State::SetUp;
+					Of.Step(K, By, Now, Dt, Ground);
+					if (bWasUp)
+					{
+						const double Swung = std::fabs(Of.Traverse - WasT) / Dt, Laid = std::fabs(Of.Elevation - WasE) / Dt;
+						const double Faced = std::fabs(WrapDeg((Of.Facing - WasF) * 180.0 / Pi)) / Dt;
+						Rates.Note(Swung <= 45.0 + 1e-6 && Laid <= 20.0 + 1e-6 && Faced <= 40.0 + 1e-6, std::max(Swung, std::max(Laid, Faced)),
+							Name + ": " + What + ": she swings, lays or is turned faster than her rate");
+					}
+					Limits.Note(Of.Traverse >= -K.Left - 1e-9 && Of.Traverse <= K.Right + 1e-9 && (K.bMortar || (Of.Elevation >= K.Low - 1e-9 && Of.Elevation <= K.High + 1e-9)),
+						std::fabs(Of.Traverse), Name + ": " + What + ": past her limits");
+					Frames.Note(Of.Is == Gun::State::SetUp && Of.bFiring && FrameFault(Of.MountFrame()) < 1e-5 && FrameFault(Of.TurnedFrame(K)) < 1e-5,
+						FrameFault(Of.TurnedFrame(K)), Name + ": " + What + ": her frame while she fires");
+					const V3 Seat = Apply(Of.MountFrame(), K.Seat);
+					Seats.Note(std::hypot(Seat.X - By.X, Seat.Y - By.Y) < 0.001, std::hypot(Seat.X - By.X, Seat.Y - By.Y), Name + ": " + What + ": her seat left her gunner");
+				}
+			};
+			{
+				Crew By = C;
+				Gun Of;
+				Fire(Of, By, 10.0, 300.0, Flat, 3.0, "10 degrees right");
+				LandMen::Vec3 At, Way;
+				Gun Still = Of;
+				Still.Recoil = 0.0;
+				const bool bMuzzle = Still.MuzzleAt(K, At, Way);
+				const double To = Bearing(By.AimX - (K.bMortar ? By.X : At.X), By.AimY - (K.bMortar ? By.Y : At.Y));
+				const double Off = bMuzzle ? std::fabs(WrapDeg(Bearing(Way.X, Way.Y) - To)) : 1e9;
+				// (a gun's bore is laid on the man's chest and a little over; a mortar's is turned at him, her tube steep)
+				Lays.Note(Off < (K.bMortar ? 0.2 : 0.35), Off, Name + ": after 3 s her bore is not on what she fires at");
+				if (!K.bMortar && bMuzzle)
+				{
+					const double Far = std::hypot(By.AimX - At.X, By.AimY - At.Y);
+					const double Over = At.Z + Far * Way.Z / std::max(1e-6, std::hypot(static_cast<double>(Way.X), static_cast<double>(Way.Y)));
+					Lays.Note(Over >= 0.9 && Over <= 2.5 && std::fabs(Of.Traverse - 10.0) < 0.05, Over, Name + ": her bore does not pass a little over a man's chest out there");
+				}
+			}
+			// Far to each side: a gun stops at her limit, a mortar is turned whole.
+			for (double Side : { -80.0, 80.0 })
+			{
+				Crew By = C;
+				Gun Of;
+				// (already set up when the order comes, so she is swung or turned to it at her rate)
+				Of.Step(K, By, 0.0, Dt, Flat);
+				Fire(Of, By, Side, 300.0, Flat, 3.0, "80 degrees off");
+				if (K.bMortar)
+				{
+					const double Off = std::fabs(WrapDeg((Of.Facing - By.Facing) * 180.0 / Pi - Side));
+					Limits.Note(Off < 0.2 && Of.Traverse == 0.0, Off, Name + ": a mortar is not turned whole at what she fires at");
+				}
+				else
+				{
+					const double Stop = Side < 0.0 ? -K.Left : K.Right;
+					LandMen::Vec3 At, Way;
+					Of.MuzzleAt(K, At, Way);
+					const double Off = std::fabs(WrapDeg(Bearing(Way.X, Way.Y) - By.Facing * 180.0 / Pi - Stop));
+					Limits.Note(std::fabs(Of.Traverse - Stop) < 1e-9 && Off < 0.01 && std::fabs(WrapDeg((Of.Facing - By.Facing) * 180.0 / Pi)) < 1e-9, Off,
+						Name + ": a gun does not stop at her swing's limit, her mount as her gunner faces");
+				}
+			}
+			// Up a hill and down into a hollow: laid no further than she can be.
+			if (!K.bMortar)
+			{
+				for (double Rise : { 30.0, 150.0, -150.0 })
+				{
+					Crew By = C;
+					Gun Of;
+					double AimX = 0.0, AimY = 0.0;
+					auto Hill = [&AimX, &AimY, Rise](double X, double Y) { return std::hypot(X - AimX, Y - AimY) < 5.0 ? Rise : 0.0; };
+					// (where she will aim: her pin with nothing to fire at, 200 m out dead ahead)
+					Gun At;
+					At.Step(K, By, 0.0, Dt, Flat);
+					AimX = At.X + 200.0 * std::sin(By.Facing);
+					AimY = At.Y + 200.0 * std::cos(By.Facing);
+					Fire(Of, By, 0.0, 200.0, Hill, 3.0, "a hill");
+					LandMen::Vec3 Mz, Way;
+					Of.MuzzleAt(K, Mz, Way);
+					const double Up = std::asin(std::clamp(static_cast<double>(Way.Z), -1.0, 1.0)) * 180.0 / Pi;
+					const double Want = Rise > 100.0 ? K.High : Rise < -100.0 ? K.Low : Up;
+					Lays.Note(std::fabs(Up - Of.Elevation) < 0.01 && std::fabs(Up - Want) < 0.01 && (Rise < 0.0 || Up > 5.0), std::fabs(Up - Want),
+						Name + ": her bore's rise is not her lay, or past what she can be laid to");
+				}
+			}
+			// Bursts: 1.3 s of fire in every 2.8 s, the gun shaking back along her bore; two of a team not in step.
+			if (!K.bMortar)
+			{
+				Crew By = C;
+				Gun Of, Other;
+				Other.Phase = 0.5;
+				Fire(Of, By, 0.0, 300.0, Flat, 1.0, "a burst");
+				Fire(Other, By, 0.0, 300.0, Flat, 1.0, "a burst");
+				long Shaking = 0, Apart = 0;
+				const long Count = 28 * 60;
+				double Now = 50.0;
+				for (long Frame = 0; Frame < Count; ++Frame, Now += Dt)
+				{
+					Of.Step(K, By, Now, Dt, Flat);
+					Other.Step(K, By, Now, Dt, Flat);
+					Shaking += Of.Recoil > 0.0 ? 1 : 0;
+					Apart += (Of.Recoil > 0.0) != (Other.Recoil > 0.0) ? 1 : 0;
+					Gun Still = Of;
+					Still.Recoil = 0.0;
+					LandMen::Vec3 A, B, WayA, WayB;
+					Of.MuzzleAt(K, A, WayA);
+					Still.MuzzleAt(K, B, WayB);
+					const double Back = (static_cast<double>(B.X) - A.X) * WayB.X + (static_cast<double>(B.Y) - A.Y) * WayB.Y + (static_cast<double>(B.Z) - A.Z) * WayB.Z;
+					Shakes.Note(Of.Recoil >= 0.0 && Of.Recoil <= 0.006 + 1e-12 && std::fabs(Back - Of.Recoil) < 2e-4, Of.Recoil, Name + ": her shake is not back along her bore, 6 mm at most");
+				}
+				const double Share = static_cast<double>(Shaking) / static_cast<double>(Count);
+				Shakes.Note(Share > 0.40 && Share < 0.50 && Apart > Count / 2, Share, Name + ": she does not fire in bursts (1.3 s in 2.8), or two of a team shake in step");
+				// (and not at all once he stops firing)
+				By.Pose = "deployed";
+				Of.Step(K, By, Now, Dt, Flat);
+				Shakes.Note(!Of.bFiring && Of.Recoil == 0.0, Of.Recoil, Name + ": she shakes with no one firing");
+			}
+			// Told of her bursts by the scene (the rounds as they are fired): she shakes through each and no longer, for
+			// her own burst's length (nine tenths of a second at most, the rules firing her again within the second; a
+			// mortar has none).
+			{
+				int Rounds = 0;
+				double PerSecond = 0.0;
+				const bool bBurst = LandTeamGun::BurstOf(Name, Rounds, PerSecond);
+				Shakes.Note(bBurst != K.bMortar && (K.bMortar || (Rounds >= 6 && Rounds <= 40 && PerSecond >= 6.0 && PerSecond <= 30.0 && Rounds / PerSecond >= 0.75 && Rounds / PerSecond <= 0.9 + 1e-9)),
+					bBurst ? Rounds / PerSecond : 0.0, Name + ": her burst is not a tripod gun's (three quarters to nine tenths of a second), or a mortar has one");
+				Crew By = C;
+				Gun Of;
+				Of.bByRounds = true;
+				Fire(Of, By, 0.0, 300.0, Flat, 0.0, "");
+				const double Seconds = bBurst ? Rounds / PerSecond : 0.5, Rate = bBurst ? PerSecond : 1.0;
+				bool bQuiet = true, bShook = true, bStopped = true;
+				for (int Frame = 0; Frame < 60; ++Frame)
+				{
+					Of.Step(K, By, 100.0 + Frame * Dt, Dt, Flat);
+					bQuiet = bQuiet && !Of.bFiring && Of.Recoil == 0.0;
+				}
+				Of.Fired(101.0, Seconds, Rate);
+				Of.Fired(90.0, 30.0, Rate); // (an earlier one told late: nothing)
+				Of.Step(K, By, 100.99, Dt, Flat);
+				bQuiet = bQuiet && !Of.bFiring && Of.Recoil == 0.0;
+				for (double Into = 0.001; Into < Seconds; Into += Dt)
+				{
+					Of.Step(K, By, 101.0 + Into, Dt, Flat);
+					bShook = bShook && Of.bFiring && (K.bMortar ? Of.Recoil == 0.0 : Of.Recoil > 0.0 && Of.Recoil <= 0.006);
+				}
+				Of.Step(K, By, 101.0 + Seconds + 0.001, Dt, Flat);
+				bStopped = !Of.bFiring && Of.Recoil == 0.0;
+				Shakes.Note(bQuiet && bShook && bStopped, Seconds, Name + ": told of her bursts, she does not shake through each and no longer");
+			}
+
+			// The team moves: on his right shoulder by her middle, her muzzle up a little; a wheeled one rolled behind.
+			{
+				Crew By = C;
+				Gun Of;
+				Of.Step(K, By, 0.0, Dt, Slope);
+				By.Pose = "run";
+				By.Way = 2.1;
+				By.Facing = 2.1;
+				const LandMen::Xform Man = ManFrame(By.X, By.Y, Slope(By.X, By.Y), By.Way);
+				By.Frame = &Man;
+				Of.Step(K, By, 1.0, Dt, Slope);
+				LandMen::Vec3 At, Way;
+				if (K.bWheeled)
+				{
+					const V3 Handle = Apply(Of.MountFrame(), K.Pull), Ahead = Turn(Of.MountFrame(), V3(1.0, 0.0, 0.0));
+					const double Off = std::hypot(Handle.X - (By.X - 0.3 * std::sin(By.Way)), Handle.Y - (By.Y - 0.3 * std::cos(By.Way)));
+					Rolls.Note(Of.Is == Gun::State::Rolled && Of.MountShown() && Of.TurnedShown() && !Of.MuzzleAt(K, At, Way) && Off < 0.001
+						&& std::fabs(WrapDeg(Bearing(Ahead.X, Ahead.Y) - By.Way * 180.0 / Pi - 180.0)) < 0.01 && std::fabs(Of.Z - Slope(Of.X, Of.Y)) < 1e-9
+						&& Of.Traverse == 0.0 && Of.Elevation == 0.0 && FrameFault(Of.MountFrame()) < 1e-5 && FrameFault(Of.TurnedFrame(K)) < 1e-5,
+						Off, Name + ": a wheeled gun is not rolled behind her gunner, her trail's handle a pace back and her muzzle the way he came");
+				}
+				else
+				{
+					const V3 Middle = Apply(Of.TurnedFrame(K), K.Balance), Shoulder = Apply(Man, V3(0.02, 0.19, 1.47)), Ahead = Turn(Of.TurnedFrame(K), K.Bore);
+					const double Off = (Middle - Shoulder).Length();
+					const double Up = std::asin(std::clamp(Ahead.Z, -1.0, 1.0)) * 180.0 / Pi;
+					Carries.Note(Of.Is == Gun::State::Carried && !Of.MountShown() && Of.TurnedShown() && !Of.MuzzleAt(K, At, Way) && Off < 0.001
+						&& std::fabs(Up - 12.0) < 0.01 && std::fabs(WrapDeg(Bearing(Ahead.X, Ahead.Y) - By.Way * 180.0 / Pi)) < 0.01 && FrameFault(Of.TurnedFrame(K)) < 1e-5,
+						Off, Name + ": carried, her middle is not on his shoulder, her muzzle ahead and 12 degrees up");
+					// (no frame of his this frame: nothing to ride on, so not drawn)
+					Gun Lost;
+					Crew None = By;
+					None.Frame = nullptr;
+					Lost.Step(K, None, 1.0, Dt, Slope);
+					Carries.Note(Lost.Is == Gun::State::Away && !Lost.TurnedShown(), 0.0, Name + ": drawn carried by a man with no frame");
+				}
+				// He falls on the move: what he carried goes with him; a wheeled one stands where she stopped.
+				const Gun Before = Of;
+				By.bDown = true;
+				Of.Step(K, By, 2.0, Dt, Slope);
+				Falls.Note(K.bWheeled ? (Of.Is == Gun::State::Left && Of.X == Before.X && Of.Y == Before.Y && Of.Facing == Before.Facing) : Of.Is == Gun::State::Away, 0.0,
+					Name + ": her gunner fallen on the move");
+			}
+			// He falls at her: she stays as she stood, whatever his track says after.
+			{
+				Crew By = C;
+				Gun Of;
+				Fire(Of, By, 10.0, 300.0, Slope, 2.0, "before he falls");
+				const Gun Before = Of;
+				By.bDown = true;
+				bool bStill = true;
+				for (const char* Pose : { "fire", "run", "cower", "deployed" })
+				{
+					By.Pose = Pose;
+					Of.Step(K, By, 30.0, Dt, Slope);
+					bStill = bStill && Of.Is == Gun::State::Left && Of.MountShown() && Of.TurnedShown() && Of.X == Before.X && Of.Y == Before.Y && Of.Z == Before.Z
+						&& Of.Facing == Before.Facing && Of.Traverse == Before.Traverse && Of.Elevation == Before.Elevation && Of.Recoil == 0.0 && !Of.bFiring;
+				}
+				Falls.Note(bStill && FrameFault(Of.TurnedFrame(K)) < 1e-5, 0.0, Name + ": she does not stay as she stood when her gunner falls");
+			}
+			// Not drawn: hidden in ambush or not yet come, riding, mounted; a routed crew that never set her up. A routed
+			// crew at a weapon set up stays by it, and so does one that waits.
+			{
+				bool bAway = true, bStays = true;
+				for (int Case = 0; Case < 4; ++Case)
+				{
+					Crew By = C;
+					Gun Of;
+					Of.Step(K, By, 0.0, Dt, Flat);
+					By.bShown = Case != 0;
+					By.Pose = Case == 1 ? "mounted" : Case == 2 ? "ride" : "deployed";
+					if (Case == 3)
+					{
+						Of = Gun();
+						By.Pose = "cower";
+					}
+					Of.Step(K, By, 1.0, Dt, Flat);
+					bAway = bAway && Of.Is == Gun::State::Away && !Of.MountShown() && !Of.TurnedShown();
+				}
+				for (const char* Pose : { "cower", "wait", "deployed", "fire" })
+				{
+					Crew By = C;
+					Gun Of;
+					Of.Step(K, By, 0.0, Dt, Flat);
+					By.Pose = Pose;
+					Of.Step(K, By, 1.0, Dt, Flat);
+					bStays = bStays && Of.Is == Gun::State::SetUp && !Of.bFiring;
+				}
+				Frames.Note(bAway, 0.0, Name + ": drawn while her gunner is hidden, riding, or routed before she was set up");
+				Frames.Note(bStays, 0.0, Name + ": not kept set up through a wait or a rout, or firing with nothing to fire at");
+			}
+		}
+		auto Line = [&Failures](const char* What, const Tally& T, const char* Unit)
+		{
+			std::printf("  %-52s %s  (%ld checked, worst %.4g %s)\n", What, T.Failed ? "FAIL" : "ok", T.Checked, T.Worst, Unit);
+			if (T.Failed)
+			{
+				std::printf("    %ld failed, the first: %s\n", T.Failed, T.First.c_str());
+				++Failures;
+			}
+		};
+		Line("a soldier's kind of frame, drawn only when served", Frames, "off square");
+		Line("her seat on her gunner's place, on the ground", Seats, "m");
+		Line("swung, laid and turned no faster than her rates", Rates, "deg/s");
+		Line("her bore on what she fires at", Lays, "");
+		Line("stopped at her limits; a mortar turned whole", Limits, "deg");
+		Line("bursts, shaking back along her bore", Shakes, "");
+		Line("carried by her middle on his right shoulder", Carries, "m");
+		Line("the wheeled one rolled behind by her trail", Rolls, "m");
+		Line("left as she stood when her gunner falls", Falls, "");
+		if (Guns < 9 || Mortars < 7)
+		{
+			Fail("fewer weapons than the armies serve: " + std::to_string(Guns) + " guns, " + std::to_string(Mortars) + " mortars");
+		}
+		std::printf("  %zu machine guns and %zu mortars: %s\n", Guns, Mortars, Failures ? "FAIL" : "ok");
+		return Failures;
+	}
 }
 
 int main(int argc, char** argv)
@@ -761,6 +1281,11 @@ int main(int argc, char** argv)
 	if (std::getenv("LAND_KIT_ONLY_BURNT"))
 	{
 		return CheckBurntCoat(Content) ? 1 : 0;
+	}
+	// (LAND_KIT_ONLY_TEAMGUNS: the support teams' weapons alone)
+	if (std::getenv("LAND_KIT_ONLY_TEAMGUNS"))
+	{
+		return CheckTeamGuns(Content) ? 1 : 0;
 	}
 	const std::string RecordingPath = argc > 2 ? argv[2] : Content + "/Data/LandBattles/normandy-1944.json";
 	int Failures = 0;
@@ -922,6 +1447,7 @@ int main(int argc, char** argv)
 
 	Failures += CheckMarks(Content);
 	Failures += CheckBurntCoat(Content);
+	Failures += CheckTeamGuns(Content);
 	if (std::getenv("LAND_KIT_ONLY_MARKS"))
 	{
 		return Failures ? 1 : 0;
