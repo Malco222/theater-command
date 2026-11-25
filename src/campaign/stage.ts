@@ -153,3 +153,22 @@ export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
 export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
 /** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
 export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');
+
+// A fleet seeks battle once a month (release 2; the design director's ruling of 25 November 2026, 02:38Z; navy.ts):
+// the grand campaigns opened while it is true carry the flag 'seekOnce'. Forced by TC_SEEKONCE.
+/** True where new grand campaigns open with each fleet seeking battle at most once a month (stage.json 'seekOnce'). */
+export const SEEKONCE_STAGE: boolean = staged('TC_SEEKONCE', 'seekOnce');
+// The atomic project (release 2; Brian 25 November 2026 01:14Z, "lets do number 1"; the design director's ruling of
+// 01:27Z, design-director/atom-1125.md; atom.ts, data/campaign/atom.json): the grand campaigns opened while it is true
+// carry the flag 'atom'. Forced by TC_ATOM.
+/** True where new grand campaigns open with the atomic project (stage.json 'atomBomb'). */
+export const ATOM_STAGE: boolean = staged('TC_ATOM', 'atomBomb');
+// Carrier strikes on harbours by the player's own hand (release 2; Brian 24 November 2026 21:45Z, "Resume the Pacific
+// for release 2"; harbourstrike.ts): the grand campaigns opened while it is true carry its flag. Forced by TC_CARRIERSTRIKE.
+/** True where new grand campaigns open with the carrier strike on a harbour on a carrier fleet's page (stage.json 'carrierStrike'). */
+export const CARRIERSTRIKE_STAGE: boolean = staged('TC_CARRIERSTRIKE', 'carrierStrike');
+
+// Carrier wings by date (release 2; the rider to rulings 189 and 202; carriers.ts): the grand campaigns opened while it
+// is true carry its flag. Forced by TC_WINGBYDATE.
+/** True where new grand campaigns open with a navy's carrier wing by date (stage.json 'wingByDate'). */
+export const WINGBYDATE_STAGE: boolean = staged('TC_WINGBYDATE', 'wingByDate');

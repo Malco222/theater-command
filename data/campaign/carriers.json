@@ -23,6 +23,13 @@
     "USA": { "ftr": 30, "bmr": 48 },
     "JAP": { "ftr": 24, "bmr": 42 }
   },
+  "_wingByDate": "A carrier's wing by navy and by date (release 2, the switch 'Carrier wings by date', stage.json wingByDate; the design director's riders of 17 November 2026, 12:01Z and 12:12Z, to rulings 189 and 202; the historian's british-carrier-wing-check.md). Rows of [from month, fighters, strike aircraft] a deck, each read from its month on; before the first row the navy's own 'wing' stands. Britain's is the one dated navy: 12 and 24 from September 1939, 24 and 12 from August 1942 (month 36), 28 and 20 from January 1944 (53), 37 and 17 from January 1945 (65). Where a step lowers a kind, what is over goes to the reserve; where it raises one, the room fills as losses are made good, in harbour, from the reserve: nothing is given (carriers.ts syncWings). Every stop of the dial and every British carrier, Europe's too. 'words': the UI director's line for a player who is Britain (passed 16 November, 12:16Z), an ordinary news line shown only while he has a carrier afloat or building. Apart from the switch, a fleet whose row gives 'deck' below one (ruling 189(b): a light carrier that sailed alone) brings that share of its navy's wing a carrier.",
+  "wingByDate": {
+    "UK": {
+      "words": "The Fleet Air Arm re-equips: each of your carriers now has deck room for {ftr} fighters and {bmr} strike aircraft, where it had room for {wasFtr} and {wasBmr}.",
+      "rows": [[36, 24, 12], [53, 28, 20], [65, 37, 17]]
+    }
+  },
   "names": { "ftr": "{fleet} carrier fighters", "bmr": "{fleet} strike wing" },
   "range": { "ftr": 350, "bmr": 450, "next": 300 },
   "quality": { "_default": 0.9, "UK": 0.85, "USA": 1, "JAP": 1.1 },

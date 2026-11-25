@@ -343,6 +343,40 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 				}
 			}
 			ReadRegions(Wide->GetArrayField(TEXT("regions")));
+			// (Release 2, the far side.) The chart's "joins": the land borders between one of Europe's provinces and a
+			// far one (Gorky and Ulyanovsk), and between the Yukon and Alaska, which no province's own nb carries. The
+			// rules add them to both (world.ts attachWorld). So does the table, or a gun does not face a foe across the
+			// old map's edge, a town has no road that way and a camp does not turn to it. All but the pairs that lie a
+			// world apart on the chart (the Yukon and Alaska, over its seam at 141 W): what the table lays between two
+			// neighbours it lays straight from one to the other, which there is the long way round, until what is laid
+			// once is laid in both turns of the world.
+			const TArray<TSharedPtr<FJsonValue>>* Joins = nullptr;
+			if (bFar && Wide->TryGetArrayField(TEXT("joins"), Joins))
+			{
+				int32 Joined = 0, Over = 0;
+				for (const TSharedPtr<FJsonValue>& JoinValue : *Joins)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+					if (!JoinValue.IsValid() || !JoinValue->TryGetArray(Pair) || Pair->Num() != 2)
+					{
+						continue;
+					}
+					const int32 A = FMath::RoundToInt32((*Pair)[0]->AsNumber()), B = FMath::RoundToInt32((*Pair)[1]->AsNumber());
+					if (A == B || !Regions.IsValidIndex(A) || !Regions.IsValidIndex(B))
+					{
+						continue;
+					}
+					if (WorldWidth > 0.0 && FMath::Abs(Regions[A].Center.X - Regions[B].Center.X) > WorldWidth * 0.5)
+					{
+						++Over;
+						continue;
+					}
+					Regions[A].Neighbors.AddUnique(B);
+					Regions[B].Neighbors.AddUnique(A);
+					++Joined;
+				}
+				UE_LOG(LogTheater, Log, TEXT("The far side: %d of the chart's joins read into the table's neighbours (%d over the chart's seam left as they were)."), Joined, Over);
+			}
 			const TSharedPtr<FJsonObject>* WideSeas = nullptr;
 			if (Wide->TryGetObjectField(TEXT("seas"), WideSeas))
 			{

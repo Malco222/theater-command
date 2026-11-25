@@ -1,9 +1,9 @@
 {
- "carried": 303,
- "fresh": 222,
+ "carried": 302,
+ "fresh": 215,
  "byCountry": {
-  "UK": 51,
-  "CHN": 34,
+  "UK": 48,
+  "CHN": 27,
   "BRA": 21,
   "SOV": 21,
   "USA": 18,
@@ -35,7 +35,6 @@
   "Kasai": 5,
   "Pilcomayo": 5,
   "Webi Shebeli": 5,
-  "Yellow River": 5,
   "Awash": 4,
   "Japura": 4,
   "Kistna": 4,
@@ -44,7 +43,7 @@
   "Red River of the South": 4,
   "Tapajos": 4,
   "Xingu": 4,
-  "Yangtze": 4,
+  "Yellow River": 4,
   "Araguaia": 3,
   "Chenab": 3,
   "Chulym": 3,
@@ -52,7 +51,6 @@
   "Godavari": 3,
   "Helmand": 3,
   "Hungshui": 3,
-  "Indus": 3,
   "Jumna": 3,
   "Lomami": 3,
   "Maranon": 3,
@@ -62,18 +60,18 @@
   "Ogowe": 3,
   "Ruvuma": 3,
   "South Saskatchewan": 3,
-  "Sutlej": 3,
   "Tennessee": 3,
   "Uruguay": 3,
   "Vaal": 3,
   "Volta": 3,
-  "Yalung": 3,
+  "Yangtze": 3,
   "Amu Darya": 2,
   "Angara": 2,
   "Congo": 2,
   "East River": 2,
   "Ganges": 2,
   "Hudson": 2,
+  "Indus": 2,
   "Irtysh": 2,
   "Ishim": 2,
   "Jurua": 2,
@@ -93,6 +91,7 @@
   "Selenga": 2,
   "Siang": 2,
   "Snake": 2,
+  "Sutlej": 2,
   "Tocantins": 2,
   "Ucayali": 2,
   "Uele": 2,
@@ -119,7 +118,6 @@
   "Ottawa": 1,
   "Rio Grande": 1,
   "Sacramento": 1,
-  "Salween": 1,
   "Sao Francisco": 1,
   "Shari": 1,
   "Sittang": 1,
@@ -128,6 +126,7 @@
   "Tumen": 1,
   "Ural": 1,
   "Wei": 1,
+  "Yalung": 1,
   "Yenisei": 1,
   "Yukon": 1,
   "Yungting": 1,
@@ -671,14 +670,6 @@
    "middle"
   ],
   [
-   "Sikang",
-   "CHN",
-   "Chamdo",
-   "CHN",
-   "Yangtze",
-   "great"
-  ],
-  [
    "Hanchung",
    "CHN",
    "Tienshui",
@@ -690,14 +681,6 @@
    "Lanchow",
    "CHN",
    "Ningsia",
-   "CHN",
-   "Yellow River",
-   "great"
-  ],
-  [
-   "Sining",
-   "CHN",
-   "Chamdo",
    "CHN",
    "Yellow River",
    "great"
@@ -717,46 +700,6 @@
    "SOV",
    "Irtysh",
    "great"
-  ],
-  [
-   "Chamdo",
-   "CHN",
-   "Fort Hertz",
-   "UK",
-   "Salween",
-   "middle"
-  ],
-  [
-   "Chamdo",
-   "CHN",
-   "Sungpan",
-   "CHN",
-   "Yalung",
-   "middle"
-  ],
-  [
-   "Chamdo",
-   "CHN",
-   "Minhsien",
-   "CHN",
-   "Yalung",
-   "middle"
-  ],
-  [
-   "Gartok",
-   "CHN",
-   "Leh",
-   "UK",
-   "Indus",
-   "great"
-  ],
-  [
-   "Gartok",
-   "CHN",
-   "Simla",
-   "UK",
-   "Sutlej",
-   "middle"
   ],
   [
    "Iman",

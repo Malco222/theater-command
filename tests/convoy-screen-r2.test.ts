@@ -4,7 +4,7 @@
 // over the convoys at sea at once (a 9.5-day crossing). Q2 (b): the close screen's stations, 6 + columns / 3, the
 // columns the convoy's ships / 3.5; escorts on stations are the lesser of those with the convoy and the stations, times
 // the radar-fitted share. Q3 (a), Q4 (a): escorts beyond the stations add no frustration and still count in E.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { CAUSE, NAVY, convoyCount, convoySideOf, escortsAtSea, screenStations, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
@@ -14,6 +14,10 @@ import type { Fleet, Game, Ships } from '../src/campaign/types';
 const atlantic = NAVY.convoys.find((r) => r.id === 'atlantic')!;
 const C = 7 / 3;
 
+// (Radar alone, as this build was ruled: the eye term is unread here, and tested in convoy-load-r2.)
+const eyeKept = CAUSE.firing.eye!.effective41;
+beforeAll(() => { CAUSE.firing.eye!.effective41 = null; });
+afterAll(() => { CAUSE.firing.eye!.effective41 = eyeKept; });
 function open(on: boolean, seed = 1): Game {
   const g = startOpen(createGame(seed, null));
   if (on) g.flags.unitsDecide = 1; else delete g.flags.unitsDecide;
@@ -37,6 +41,12 @@ function meet(g: Game, ss: number, dd: number): void {
 }
 /** r, the radar-fitted escorts on stations for each boat trying, read back from the share. */
 const rOf = (fire: number): number => (1 / fire - 1) / C;
+/** With the escorts' losses form unread (convoycause.json 'escorts' null): E and k as the tons ruling set them. */
+function withoutEscorts<T>(f: () => T): T {
+  const keep = CAUSE.escorts;
+  CAUSE.escorts = null;
+  try { return f(); } finally { CAUSE.escorts = keep; }
+}
 /** Run with some of the ruling's figures unread. */
 function without<T>(what: { cycle?: boolean; screen?: boolean }, f: () => T): T {
   const dd = CAUSE.station.dd!, sc = CAUSE.firing.screen!;
@@ -100,9 +110,17 @@ describe('the screen\'s stations (Q2 (b), Q3 (a), Q4 (a))', () => {
     const tries = convoyCount(g, atlantic)!.pack / 0.3;
     expect(many.fire).toBeCloseTo(1 / (1 + (C * screenStations(atlantic)!) / tries), 12);
     expect(more.fire).toBeCloseTo(many.fire!, 12);
-    // (Q4 (a): the escorts beyond the stations still count in the escort's strength, so the contest still feels them.)
-    expect(more.E).toBeGreaterThan(many.E);
-    expect(more.sunk).toBeLessThanOrEqual(many.sunk);
+    // (Q4 (a): while the escorts' losses form is unread, the escorts beyond the stations still count in the escort's
+    // strength, so the contest still feels them.)
+    const unreadE = (dd: number): ReturnType<typeof convoySideOf> => { meet(g, 60, dd); return withoutEscorts(() => convoySideOf(g, 'UK', atlantic)); };
+    const manyU = unreadE(320)!, moreU = unreadE(640)!;
+    expect(moreU.E).toBeGreaterThan(manyU.E);
+    expect(moreU.sunk).toBeLessThanOrEqual(manyU.sunk);
+    // (With it laid, as shipped, they hunt as spare ships and E is the escorts on the stations alone: its Q5,
+    // convoy-escorts-r2.)
+    expect(more.E).toBeCloseTo(screenStations(atlantic)!, 12);
+    expect(many.E).toBeCloseTo(more.E, 12);
+    meet(g, 60, 640);
     // (Uncapped, those escorts would have frustrated far more.)
     expect(without({ screen: true }, () => convoySideOf(g, 'UK', atlantic)!).fire!).toBeLessThan(more.fire!);
   });
@@ -116,7 +134,7 @@ describe('the screen\'s stations (Q2 (b), Q3 (a), Q4 (a))', () => {
     expect(s).toEqual(without({ screen: true }, () => convoySideOf(g, 'UK', atlantic)!));
   });
 
-  it('escorts without radar fill stations but frustrate nothing yet (the eye term is its own form)', () => {
+  it('with the eye term unread, escorts without radar fill stations but frustrate nothing', () => {
     const g = open(true);
     meet(g, 60, 320);
     expect(convoySideOf(g, 'UK', atlantic)!.fire).toBe(1);

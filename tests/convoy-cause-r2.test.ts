@@ -42,6 +42,12 @@ function sea(g: Game, nat: string, zone: string, ships: Partial<Ships>, stance: 
 const give = (g: Game, nat: string, ids: string[]): void => { for (const id of ids) grantTech(g, nat, id); };
 const twin = (g: Game): Game => loadGame(saveGame(g))!;
 const run = (x: number): [number, number] => [Math.floor(x), Math.floor(x) + 1];
+/** With the escorts' losses form unread (convoycause.json 'escorts' null): the count's incidents at T2's rate and the split as first built. The form is tested in convoy-escorts-r2. */
+function asFirst<T>(f: () => T): T {
+  const keep = CAUSE.escorts;
+  CAUSE.escorts = null;
+  try { return f(); } finally { CAUSE.escorts = keep; }
+}
 
 afterEach(() => { convoyField.fought = undefined; });
 
@@ -168,7 +174,7 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
   /** The month's incidents on a route (the one-pass ruling's count): all of them the lone raider's. */
   const incidents = (g: Game, route = atlantic): number => convoyCount(g, route)!.incidents;
 
-  it('a close escort sinks 5 in 100 boats that attack, 9.5 with ahead-throwing weapons, 12 with escort-group training too', () => {
+  it('a close escort sinks 5 in 100 boats that attack, 9.5 with ahead-throwing weapons, 12 with escort-group training too (the count\'s incidents)', () => asFirst(() => {
     const g = open(true);
     sea(g, 'GER', 'natl', { ss: 10 }, 'raid');
     const esc = sea(g, 'UK', 'wapp', { dd: 20 }, 'escort', 'atlantic');
@@ -181,9 +187,9 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
     expect(expectLoss(kit) / expectLoss(g)).toBeCloseTo(1.9, 9);
     give(kit, 'UK', ['escortgroups']);
     expect(expectLoss(kit) / expectLoss(g)).toBeCloseTo(0.12 / 0.05, 9);
-  });
+  }));
 
-  it('a support group in the sea sinks 17 in 100, 55 with the kit; the close escort keeps its own rate beside it', () => {
+  it('a support group in the sea sinks 17 in 100, 55 with the kit; the close escort keeps its own rate beside it (the split as first built)', () => asFirst(() => {
     const g = open(true);
     const boats = sea(g, 'GER', 'natl', { ss: 10 }, 'raid');
     const esc = sea(g, 'UK', 'wapp', { dd: 10 }, 'escort', 'atlantic');
@@ -193,7 +199,7 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
     give(g, 'UK', ['sonar', 'hedgehog', 'escortgroups']);
     expect(expectLoss(g)).toBeCloseTo(incidents(g) * f * (0.55 + 0.12) / 2, 9);
     expect(boats.ships.ss).toBe(10);
-  });
+  }));
 
   it('no destroyers, no incidents: an unescorted convoy sinks no boat', () => {
     const g = open(true);
@@ -201,7 +207,7 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
     expect(expectLoss(g)).toBe(0);
   });
 
-  it('a German and a British navy with the same kit hunt alike', () => {
+  it('a German and a British navy with the same kit hunt alike (the count\'s incidents; by cause, convoy-escorts-r2)', () => asFirst(() => {
     // The Atlantic convoys to Britain, raided by German boats, guarded by British destroyers; and the Libyan convoys
     // to Italy, raided by British boats, guarded by German destroyers. The same ships, readiness and kit each way.
     for (const kit of [[], ['sonar'], ['sonar', 'hedgehog', 'escortgroups'], KIT]) {
@@ -227,7 +233,7 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
       expect(hg.kit! / (hg.weight - hg.air!)).toBeCloseTo(hu.kit! / (hu.weight - hu.air!), 9);
       expect(incidentRate(aswKit(g, 'GER'), true)).toBe(incidentRate(aswKit(g, 'UK'), true));
     }
-  });
+  }));
 
   it('a month books them: boats lost on the convoy, inside the hunt\'s cap, on their own key', () => {
     const g = open(true);
@@ -316,7 +322,7 @@ describe('no nation and no month', () => {
     try { navalUpkeep(g, 'UK'); } finally { subScene.on = false; }
     const look = g.subLook!.find((l) => l.nat === 'UK')!.convoys.find((c) => c.route === 'atlantic')!;
     const irish = look.seas.find((s) => s.zone === zoneOf(g, 'irish'))!;
-    expect(irish.kit).toEqual({ asdic: true, radar: true, hedgehog: true, hfdf: false });
+    expect(irish.kit).toEqual({ asdic: true, radar: true, hedgehog: true, hfdf: false, groups: false });
     expect(irish.cover).toBe('shore');
     expect(typeof irish.lost).toBe('number');
     expect(look.seas.reduce((s, x) => s + (x.lost ?? 0), 0)).toBe(g.convoys.atlantic.byEscorts);

@@ -7,10 +7,11 @@
 import { describe, expect, it } from 'vitest';
 import worldData from '../data/campaign/world.json';
 import { runAI } from '../src/campaign/ai';
-import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
+import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { addCorps, atWar, bloc, capture, createGame, declareWar, setWar } from '../src/campaign/game';
 import { enrol, founders, invites, partName, partOf, pathOptions, takePath, willing } from '../src/campaign/league';
 import { frontAshore, startOpen } from '../src/campaign/staff';
+import { FAR_STAGE } from '../src/campaign/stage';
 import type { Game } from '../src/campaign/types';
 import { WORLD, armyIdle, beyondEurope, enemyAtTheDoor, overseasOf } from '../src/campaign/world';
 
@@ -23,6 +24,12 @@ function war(human: string | null = null, seed = 3): Game {
   return g;
 }
 const said = (g: Game, re: RegExp): boolean => g.headlines.some((h) => re.test(h.text));
+/**
+ * A month's events: its opening, and its close. With the far side on the entry of December 1941 is read as its month
+ * closes and names Pearl Harbor only where Japan has struck (ruling 197); on the older chart the close reads nothing.
+ */
+const month = (g: Game): void => { monthlyDiplomacy(g); closeDiplomacy(g); };
+const ENTRY = FAR_STAGE ? /America has entered the war/ : /Pearl Harbor/;
 
 describe('the entries of the wider world test the war they bring (ruling 58a)', () => {
   it('is written that way in the data: no entry asks for peace with everyone, or that its country stand on no side', () => {
@@ -39,15 +46,15 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     const g = war();
     expect(bloc(g.nations.USA)).toBeNull();
     g.turn = DEC_41 - 1;
-    monthlyDiplomacy(g);
+    month(g);
     expect(atWar(g, 'USA', 'GER')).toBe(false);
     g.turn = DEC_41;
-    monthlyDiplomacy(g);
+    month(g);
     expect(g.nations.USA.align).toBe('allies');
     expect(atWar(g, 'USA', 'GER')).toBe(true);
     expect(atWar(g, 'USA', 'ITA')).toBe(true);
     expect(g.flags['event:pearl-harbor-world']).toBe(DEC_41);
-    expect(g.headlines.filter((h) => /Pearl Harbor/.test(h.text))).toHaveLength(1);
+    expect(g.headlines.filter((h) => ENTRY.test(h.text))).toHaveLength(1);
   });
 
   it('does not let an early Axis declaration switch America off: December 1941 still brings the wars not begun', () => {
@@ -60,13 +67,13 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     expect(g.nations.USA.align).toBe('allies');
     expect(g.nations.USA.atWar).toEqual(['BRA']);
     g.turn = DEC_41;
-    monthlyDiplomacy(g);
+    month(g);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
     expect(atWar(g, 'USA', 'ITA')).toBe(true);
     expect(g.nations.USA.align).toBe('allies');
     expect(g.flags['event:pearl-harbor-world']).toBe(DEC_41);
     // The news is told once, with the first war it brings.
-    expect(g.headlines.filter((h) => /Pearl Harbor/.test(h.text))).toHaveLength(1);
+    expect(g.headlines.filter((h) => ENTRY.test(h.text))).toHaveLength(1);
     // And the republics that follow America follow it still.
     expect(atWar(g, 'CUB', 'GER')).toBe(true);
     expect(atWar(g, 'PAN', 'GER')).toBe(true);
@@ -137,7 +144,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     expect(g.nations.USA.align).toBe('allies');
     expect(atWar(g, 'USA', 'ITA')).toBe(false);
     g.turn = DEC_41;
-    monthlyDiplomacy(g);
+    month(g);
     expect(atWar(g, 'USA', 'ITA')).toBe(true);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
   });
@@ -148,10 +155,10 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     setWar(g, 'USA', 'BRA');
     expect(bloc(g.nations.USA)).toBeNull();
     g.turn = 6;
-    monthlyDiplomacy(g);
+    month(g);
     expect(bloc(g.nations.USA)).toBeNull();
     g.nations.BRA.align = 'axis';
-    monthlyDiplomacy(g);
+    month(g);
     expect(g.nations.USA.align).toBe('allies');
     expect(said(g, /United States joins the Allies: it is at war with Brazil, and the Axis is one enemy/)).toBe(true);
     // A player who leads America keeps that choice for himself.
@@ -159,7 +166,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     setWar(p, 'USA', 'BRA');
     p.nations.BRA.align = 'axis';
     p.turn = 6;
-    monthlyDiplomacy(p);
+    month(p);
     expect(bloc(p.nations.USA)).toBeNull();
   });
 
@@ -169,7 +176,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     usual.nations.USA.align = 'allies_cobelligerent';
     usual.turn = DEC_41;
     expect(holds(usual, 'binds:USA')).toBe(true);
-    monthlyDiplomacy(usual);
+    month(usual);
     expect(atWar(usual, 'USA', 'GER')).toBe(true);
     expect(usual.nations.USA.align).toBe('allies');
     // Neutrals with ambitions (stops 4 and 5): the war he chose stays the war he has.
@@ -180,7 +187,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
       loose.nations.USA.align = 'allies_cobelligerent';
       loose.turn = DEC_41;
       expect(holds(loose, 'binds:USA')).toBe(false);
-      monthlyDiplomacy(loose);
+      month(loose);
       expect(atWar(loose, 'USA', 'GER')).toBe(false);
       expect(loose.nations.USA.align).toBe('allies_cobelligerent');
       // An America that has taken no side is still brought in there, as before.
@@ -199,7 +206,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     g.turn = 36;
     setWar(g, 'USA', 'GER');
     g.nations.USA.align = 'allies';
-    monthlyDiplomacy(g);
+    month(g);
     for (const id of ['CUB', 'MEX', 'BRA']) {
       expect(atWar(g, id, 'GER'), id).toBe(true);
       expect(g.nations[id].align, id).toBe('allies');
@@ -213,7 +220,7 @@ describe('the entries of the wider world test the war they bring (ruling 58a)', 
     g.turn = 36;
     setWar(g, 'USA', 'GER');
     g.nations.USA.align = 'allies';
-    monthlyDiplomacy(g);
+    month(g);
     expect(atWar(g, 'CUB', 'GER')).toBe(false);
     expect(g.nations.CUB.align).toBe('axis');
     expect(atWar(g, 'MEX', 'GER')).toBe(false);

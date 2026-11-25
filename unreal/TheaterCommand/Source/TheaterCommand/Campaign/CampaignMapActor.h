@@ -306,9 +306,75 @@ public:
 	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
 	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
 	 * two (a strait thinner than the search's squares, say): the fleet is then simply found at its new place, as it
-	 * was before ships sailed, and never sails over the land.
+	 * was before ships sailed, and never sails over the land. (Release 2, the far side: the short way round the
+	 * world. The way is given in the turn it leaves from, so over the chart's seam its last point lies a whole world
+	 * from To: a sailing piece comes round by itself, see RoundPiece, and a wake is laid in both turns.)
 	 */
 	TArray<FVector2D> WaterWay(const FVector2D& From, const FVector2D& To) const;
+	/**
+	 * (Release 2, the far side.) The whole world's chart goes round, and what is laid once on it (a town, a plate, a
+	 * piece) is laid in the chart's own turn of the world, from its seam at 141 W. LaidX brings a place from west to
+	 * east into that turn; NearX brings it into the turn nearest another place, which is the short way round between
+	 * the two (San Diego to Pearl Harbor is 1,066 units west across the seam, not 8,190 east across two oceans).
+	 * Both give the place back as it was on a table with edges. RoundPiece tells a piece its turn (AArmyPiece::KeepRound).
+	 */
+	double LaidX(double X) const;
+	double NearX(double X, double BesideX) const;
+	void RoundPiece(AArmyPiece* Piece) const;
+	/**
+	 * (Seam-4.) Where a thing that moves or changes each frame is shown: a place in the world's own measure, brought
+	 * into the turn of the world nearest what the eye looks at while both sides of the chart's seam are drawn
+	 * (OverSeam), so that a ship going down a little way over the seam is seen from this side of it. Otherwise the
+	 * place as it was given. (The same rule, each in its own measure: a raid, a train and a field's parked aircraft
+	 * count their place by NearX from the eye's; smoke and fire are brought round at the top of UpdateSmoke. What
+	 * stands still has its twin, LayOverSeam; the lights of the night have KeepLightsTwin; a piece has LookFrom.)
+	 */
+	FVector BesideEye(const FVector& Place) const;
+	/**
+	 * (Release 2, the far side: seam-2.) Whether what lies within sight of the chart's seam is shown from both sides of
+	 * it: the far side on, and tc.Far.OverSeam not 0. Then the screen counts its names, plates and badges in the turn of
+	 * the world nearest the eye (TheaterSpeed::RoundWorld).
+	 */
+	bool OverSeam() const;
+	/**
+	 * (Seam-2.) The eye has come in again at the other end of the world and now looks at Focus: the pieces and the
+	 * screen's names are counted from there at once (the camera's CameRound), not from the frame after.
+	 */
+	void EyeCameRound(const FVector& Focus);
+	/**
+	 * (Seam-2.) A builder says that it has laid this model of the table again. The twins' keeper looks at a model by
+	 * its counts and a few of its points, and a model may change and keep all of those (a gun pit moved a few degrees,
+	 * an airfield drawn smaller): this is what tells it. FCampaignMeshBuffers::Commit says it for every model it
+	 * fills; a builder that fills a model with CreateMeshSection itself says it after. It costs a look through the
+	 * twins' short list, and does nothing for a model that has no twin.
+	 */
+	void SeamLaidAgain(const UProceduralMeshComponent* Of);
+
+private:
+	/**
+	 * (Seam-2, third part.) What is laid once on the table in one great model (the borders, the railways, the rivers,
+	 * the works, the washes of an army in hand) ends at the chart's seam, and from the other side of the seam it was
+	 * not there. LayOverSeam lays the share of a model that lies within the high view's sight of the seam a second
+	 * time, a whole world away, on a twin of the model that is kept beside it: so the west end's things stand beyond
+	 * the east end too, and the east end's beyond the west. KeepSeamTwins, each frame, looks at each such model by a
+	 * few of its points, and by the count of times its builder has laid it again (SeamLaidAgain), and lays its twin
+	 * again when the model has changed, and keeps the twin shown, hidden and placed as its model is.
+	 */
+	void LayOverSeam(UProceduralMeshComponent* Of);
+	void KeepSeamTwins();
+	/**
+	 * (And what is laid in squares of country, the woods and the towns, is small enough to be moved whole: each square
+	 * is shown in the turn of the world nearest the eye, as a piece is.)
+	 */
+	void SquaresRound(const FVector& Focus);
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> SeamLaid; // the models looked at, as they were first seen
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> SeamTwins; // each one's twin, once it has anything to lay (else none)
+	TArray<uint32> SeamStamps; // and what each looked like when its twin was last laid
+	TArray<uint32> SeamCounts; // and how many times each has been laid again since it was first looked at (SeamLaidAgain)
+
+public:
 	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
@@ -1098,6 +1164,19 @@ private:
 	TArray<FVector> TownWindows; // the windows of the towns' houses, each as its place and the way it faces
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LightsMesh; // those windows lit, at night
+	/**
+	 * (Seam-4.) The same lights again, a whole world to one side: the windows, the villages' lamps and the towns' glow
+	 * of the far end of the chart, seen by night from over the seam. The lights are one model of the whole world
+	 * whose light changes with the hour, so it is not laid in shares as the lines and the works are (a share would be
+	 * laid again at every change of the hour): its twin is the whole of it, filled from the model itself and moved
+	 * whole to the side the eye is on. It is made the first night the eye comes within sight of the seam, and is
+	 * hidden, and not filled, whenever the eye is not.
+	 */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> LightsTwin;
+	bool bLightsTwinStale = true; // (the lights have changed, or been built again, since their twin was filled)
+	void KeepLightsTwin(const FVector& Focus);
+	void FillLightsTwin();
 	TArray<FVector> LightPoints;
 	TArray<FColor> LightColours;
 	float ShownNight = -1.0f;
@@ -1256,6 +1335,7 @@ private:
 	TObjectPtr<UProceduralMeshComponent> VictorFlagMesh;
 	TArray<TArray<FVector2D>> RiverPaths; // every river's course as it is drawn, wander and all
 	TArray<double> RiverBroad; // and how broad each is
+	TArray<TArray<double>> RiverHalf; // and its ribbon's half breadth at each point as it is laid (release 2: the gun pits keep off it)
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
@@ -1274,9 +1354,20 @@ private:
 		int32 Seed = 0; // no two alike
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
 		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
+		bool bLight = false; // (release 2, the flak brief, 2c) light flak: pale, half the size, lower, and soon gone
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
+	// (Release 2, the art director's flak brief of 24 November 2026; "tc.Look.FlakRing", off as it comes.) The heavy
+	// guns of a town as they stand on the table: where each barrel ends and which way it points, by region. With the
+	// ring on, each is seen to fire from there while a raid is over the town.
+	struct FFlakGun
+	{
+		FVector Muzzle = FVector::ZeroVector;
+		FVector Bore = FVector::UpVector;
+	};
+	TMap<int32, TArray<FFlakGun>> FlakGuns;
+	bool bFlakRingShown = false; // (the buildings as they stand were laid with the ring on)
 	// (The art director's round 36: "the lobes are round".) The smoke of a burst is one or two of her own painted
 	// shapes, torn at the edge and never round: twelve on one sheet, four shapes at each of three ages. Each is a
 	// flat picture turned to the wind and to the eye.
@@ -1487,6 +1578,7 @@ private:
 		int32 Yours = 0; // how many of the row are his, at its head
 		bool bShown = false;
 		float Up = 0.0f; // how far its aircraft have come up out of the ground, 0 to 1
+		double Aside = 0.0; // (seam-4) how far east of where they were built they are shown, in the world's measure: a whole number of worlds
 	};
 	TArray<FParkedField> ParkedFields;
 	UPROPERTY()

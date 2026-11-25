@@ -1,10 +1,10 @@
 // The war in the air: air fleets and their bases, range and radar, the missions, the fight for
 // the sky, bombing, strikes on shipping, replacements, the player's orders and saved games.
 import { describe, expect, it } from 'vitest';
-import { addCorps, assess, capture, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, assess, capture, computeSupply, createGame, declareWar } from '../src/campaign/game';
 import { income } from '../src/campaign/economy';
 import {
-  AIR, airBattles, airFleetsOf, airIncomeLoss, airPlanName, airPool, airTargets, airUpkeep, assessAir, cover, crowding, km, previewAir,
+  AIR, airBattles, airFleetsOf, airIncomeLoss, airPlanName, airPool, airTargets, airUpkeep, assessAir, cover, crowding, fieldFed, km, previewAir,
   rebaseAir, setMission, skyOver, whyNotBase, whyNotMission,
 } from '../src/campaign/air';
 import { airOver, shipCount, zoneOf } from '../src/campaign/navy';
@@ -111,6 +111,21 @@ describe('air fleets', () => {
     expect(f.ftr).toBe(100 + trained);
     expect(p.pilots).toBe(0);
     expect(p.ftr).toBeGreaterThan(0);
+  });
+
+  it('with the far side off a fleet is made up wherever it stands: no supply picture is read for it', () => {
+    const g = asPlayer('UK');
+    declareWar(g, 'GER', 'UK');
+    const f = air(g, 'No. 11 Group'), p = airPool(g, 'UK');
+    computeSupply(g);
+    g.supply.UK[f.base] = 0;
+    expect(fieldFed(g, f)).toBe(true);
+    f.ftr = 100;
+    p.ftr = 300; p.pilots = 300;
+    g.turn++;
+    airUpkeep(g, 'UK');
+    expect(f.ftr).toBe(f.est.ftr);
+    expect(f.unfed).toBeUndefined();
   });
 
   it('a resting fleet is first in line for replacements and recovers fastest', () => {

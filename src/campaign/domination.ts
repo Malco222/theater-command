@@ -24,6 +24,7 @@ import { allied, bloc, collapseScore, endVoyages, fieldArmy, headline, relocate,
 import { dropSieges } from './siege';
 import { armyKnown, fogOn, knowsBooks } from './intel';
 import { fleetsOnFall } from './navy';
+import { farOn, shoreOf } from './world';
 import type { Corps, Game, Nation, Region } from './types';
 
 export const DOMINATION = data as unknown as {
@@ -61,18 +62,81 @@ export interface Decided {
 }
 
 /**
+ * The great powers the deciding of the war reads. Ruling 201 (the owner's choice of 17 November 2026, "when the
+ * whole world war is won"): once America and Japan are both on the chart the test reads seven great powers,
+ * Europe's five with those two, so that Germany's fall while Japan fights on decides nothing. Built with the
+ * Pacific: on the whole-world chart (the far side's switch on). On any narrower chart it reads history's European
+ * five, as release 1 did.
+ */
+const deciders = (g: Game): Nation[] => (farOn(g) ? majorsOf(g) : DIPLOMACY.majors).map((id) => g.nations[id]).filter((n): n is Nation => !!n);
+
+/** A great power by the name the news gives it in these lines (the UI director's sheet 26 for ruling 201). */
+const POWER_NAME: Record<string, string> = { USA: 'America', UK: 'Britain', SOV: 'the Soviet Union' };
+const powerName = (n: Nation): string => POWER_NAME[n.id] ?? n.name;
+const listed = (names: string[]): string => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/** The war that goes on after a great power's fall: who is still at war, where, and the two lines that say so. */
+export interface GoesOn {
+  /** The great powers still at war with another great power. */
+  powers: string[];
+  /** 'the Pacific', 'Europe' or 'Europe and the Pacific'. */
+  where: string;
+  /** The news line, the second line of the fall's band. */
+  news: string;
+  /** The line at the head of the Powers tab, and why the last act cannot be opened yet. */
+  line: string;
+}
+
+/**
+ * Ruling 201, point 4 (the two lines passed 17 November 2026, 11:40Z): a great power has fallen and the war between
+ * the alliances is still not decided, because great powers still standing are at war with each other. It names the
+ * powers still at war and never pairs them, and says where the war goes on: the Pacific where every such war has a
+ * power of the far side in it, Europe where none has, else both. `fallen` is the power whose fall is being told
+ * (the last to fall where none is named). Null on a narrower chart, while no great power has fallen, once the fall
+ * decides the war, and in the last act.
+ */
+export function warGoesOn(g: Game, fallen?: string): GoesOn | null {
+  if (!domRules(g) || dominating(g) || !farOn(g)) return null;
+  const majors = deciders(g);
+  const down = majors.filter((n) => !n.alive && !!n.fellOn).sort((a, b) => a.fellOn!.turn - b.fellOn!.turn || a.fellOn!.week - b.fellOn!.week);
+  const told = fallen ? down.find((n) => n.id === fallen) : down[down.length - 1];
+  if (!told) return null;
+  const live = majors.filter((n) => n.alive);
+  const far = (n: Nation): boolean => n.capital >= 0 && shoreOf(g.regions[n.capital]) === 2;
+  let pacific = false, europe = false;
+  const still = live.filter((a) => {
+    const foes = live.filter((b) => b.id !== a.id && a.atWar.includes(b.id));
+    for (const b of foes) { if (far(a) || far(b)) pacific = true; else europe = true; }
+    return foes.length > 0;
+  });
+  if (!still.length) return null;
+  const bare = (name: string): string => name.replace(/^the /, '');
+  const names = listed(still.map(powerName).sort((a, b) => bare(a).localeCompare(bare(b))));
+  const where = pacific && europe ? 'Europe and the Pacific' : pacific ? 'the Pacific' : 'Europe';
+  const who = powerName(told);
+  return {
+    powers: still.map((n) => n.id), where,
+    news: `${who.charAt(0).toUpperCase()}${who.slice(1)} is beaten. The war goes on in ${where}: ${names} are still at war.`,
+    line: `The war between the alliances is not decided yet: ${names} are still at war. It is decided once no two great powers are at war with each other.`,
+  };
+}
+
+/**
  * Whether the war between the alliances is decided, and how. It is decided when a great power has fallen and no
  * two great powers still standing are at war with each other: the great fight is over. The alliance of the last
  * great power to fall is beaten, and so is an alliance that has lost a great power and has none left at all.
  */
 export function warDecided(g: Game): Decided | null {
   if (!domRules(g)) return null;
-  const majors = DIPLOMACY.majors.map((id) => g.nations[id]).filter((n): n is Nation => !!n);
+  const majors = deciders(g);
   const fallen = majors.filter((n) => !n.alive && !!n.fellOn).sort((a, b) => a.fellOn!.turn - b.fellOn!.turn || a.fellOn!.week - b.fellOn!.week);
   if (!fallen.length) return null;
   const live = majors.filter((n) => n.alive);
   if (live.some((a) => a.atWar.some((e) => live.some((b) => b.id === e)))) return null;
-  const last = bloc(fallen[fallen.length - 1]);
+  // (Ruling 201, the whole-world chart: Japan may fall outside both alliances, and such a fall beats no alliance.
+  // Where it comes after an alliance's own great power has fallen, that alliance is the one whose fight is over:
+  // the last great power of an alliance to fall is read. On a narrower chart, the last to fall, as release 1 read it.)
+  const last = bloc((farOn(g) ? [...fallen].reverse().find((n) => bloc(n) === 'axis' || bloc(n) === 'allies') : undefined) ?? fallen[fallen.length - 1]);
   const beaten = SIDES.filter((s) => fallen.some((n) => bloc(n) === s) && (s === last || !live.some((n) => bloc(n) === s)));
   if (!beaten.length) return null;
   const left = SIDES.filter((s) => !beaten.includes(s) && live.some((n) => bloc(n) === s));
@@ -84,7 +148,8 @@ export function whyNotDomination(g: Game, nat: string | null = g.human): string 
   if (!domRules(g)) return 'World Domination belongs to the grand campaign.';
   if (!nat || !g.nations[nat]?.alive) return 'Your nation is out of the war.';
   if (dominating(g)) return 'The last war has already begun.';
-  if (!warDecided(g)) return 'The war between the alliances is not decided yet: a great power must fall, and no two great powers may still be at war with each other.';
+  // (Ruling 201: on the whole-world chart, once a great power has fallen, the line names the powers still at war.)
+  if (!warDecided(g)) return warGoesOn(g)?.line ?? 'The war between the alliances is not decided yet: a great power must fall, and no two great powers may still be at war with each other.';
   return null;
 }
 

@@ -45,8 +45,9 @@ const months: { turn: number; can: number; canHome: number; bra: number; usa: nu
   // Norway. Seed 7 until Version 84, whose rules of what an attack brings and faces moved every war; seed 8 until ruling
   // 227, whose air war moved them again (in seed 8 Germany now never takes Norway). Of seeds 1 to 13 under 227, 3, 6, 7,
   // 9 and 12 tell this story in full. Seed 4 since ruling 232 (Warsaw's garrison, b566) and Italy's boats on the
-  // record's seas (b564) moved the war again: of seeds 1 to 9 then, 4 and 5 tell it in full.
-  const g = wide(4);
+  // record's seas (b564) moved the war again: of seeds 1 to 9 then, 4 and 5 tell it in full. Seed 5 since the fight back
+  // (release 1.5.1, airwar.json ai.back) moved it once more: of seeds 3 to 6 then, 5 tells it in full.
+  const g = wide(5);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);

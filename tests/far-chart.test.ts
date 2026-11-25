@@ -74,7 +74,8 @@ describe('the far stage: the whole world on one chart', () => {
 
   it('joins the old provinces to the new by land, both ways round', () => {
     const joins = WORLD_MAP.joins ?? [];
-    expect(joins.length).toBe(62);
+    // (61 since the Great Sand Sea's join, Siwa to Kufra, was struck: far.mjs GLOBE_NO_BORDER, the design director's 14:23Z of 22 November 2026.)
+    expect(joins.length).toBe(61);
     for (const [a, b] of joins) {
       expect(g.regions[a].nb, `${g.regions[a].name} to ${g.regions[b].name}`).toContain(b);
       expect(g.regions[b].nb, `${g.regions[b].name} to ${g.regions[a].name}`).toContain(a);

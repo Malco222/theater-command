@@ -80,6 +80,12 @@ export function battleHit(g: Game, r: Region, kind: FightKind, divs: number, gun
   return hurt(g, r, battlePoints(kind, divs, guns));
 }
 
+/** Damages a town by so many points of ruin outright (the atomic project's strike, atom.ts). Null outside the rules or where it did nothing. */
+export function ruinHit(g: Game, r: Region, pts: number): CityHit | null {
+  if (!damageRules(g)) return null;
+  return hurt(g, r, pts);
+}
+
 function hurt(g: Game, r: Region, pts: number): CityHit | null {
   const pay = DAMAGE.worth ? wholePay(g, r) : 0;
   const added = damageCity(g, r, pts);

@@ -4,6 +4,7 @@
 // Everything lives in data/campaign/tech.json, so every version of the game reads the same tree. A historical
 // scenario never sees it: there, research runs on history's clock (research.ts).
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
 import supportData from '../../data/campaign/support.json';
@@ -11,8 +12,9 @@ import carrierData from '../../data/campaign/carriers.json';
 import { turnToDate } from '../core/ticket';
 import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
+import { liftByRecord } from './pacific';
 import { traitRule, type Trait, type When } from './traits';
-import { RES, keepsStores, oilMonths } from './resources';
+import { RES, keepsStores, oilMonths, plantsMost, plantsSpent } from './resources';
 import { researchSpeed } from './buildings';
 import { govMul } from './government';
 import { PLANS, planRules, whyNoTechPlans } from './plans';
@@ -21,6 +23,7 @@ import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
 import { UNITS, unitsDecide } from './units';
 import causeData from '../../data/campaign/convoycause.json';
+import { ATOM, atomOn, atomWanted } from './atom';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -44,6 +47,8 @@ export interface Tech {
   slots?: number;
   /** Ends the eastern winter's penalty for the nation's troops. */
   winterKit?: boolean;
+  /** One of the three rows of the atomic project (atom.ts), 1 to 3: out of the tree while it is switched off. */
+  atom?: number;
   /** One of the infantry's support weapons (rulings 146 and 152): what it does is worked out in support.ts. */
   weapons?: boolean;
   /** Oil made each month by every working factory at home, out of any raider's reach. */
@@ -122,10 +127,10 @@ export const shipRule = (g: Game, k: ShipRule): boolean => SHIP_RESEARCH()?.[k]?
 export const shelved = (t: Tech | undefined): boolean => !!t?.ships && SHIP_RESEARCH()?.[t.ships]?.on !== true;
 
 /**
- * True for a row this campaign's tree does not have: one shelved by its switch, or a row of Units decide in a campaign
- * opened without it. Like `shelved`, nobody picks it, orders it or is given it, and no card or list shows it.
+ * True for a row this campaign's tree does not have: one shelved by its switch, a row of Units decide in a campaign
+ * opened without it, or a row of the atomic project while that is switched off (atom.ts). Like `shelved`, nobody picks it, orders it or is given it, and no card or list shows it.
  */
-export const outOfTree = (g: Game, t: Tech | undefined): boolean => shelved(t) || (!!t?.units && !unitsDecide(g));
+export const outOfTree = (g: Game, t: Tech | undefined): boolean => shelved(t) || (!!t?.units && !unitsDecide(g)) || (!!t?.atom && !atomOn(g));
 
 /** What a navy's ships are fitted with: the stage of their anti-aircraft guns (null where that rule is off), proximity shells, damage control. */
 export interface ShipKit { stage: GunStage | null; vt: boolean; dc: boolean }
@@ -346,8 +351,9 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   const s = n.tech!, t = BY_ID[id];
   if (!t || s.done.includes(id)) return;
   s.done.push(id);
-  // (The shipping may wait for the record's month for this nation: ruling 234, rider b630, lift.json.)
-  if (t.sealift) techLift(g, n.id, id, t.sealift);
+  // (A country whose lift is the record's own count has its landing craft in that count already: pacific.ts, rider b630.
+  // For the others the shipping may wait for the record's month: lift.json.)
+  if (t.sealift && !liftByRecord(g, n.id)) techLift(g, n.id, id, t.sealift);
   // (With the laboratories in his advisers' hands the free team is theirs to set to work: desks.ts.)
   if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t, g, n.id)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }
@@ -392,16 +398,21 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     // (Rider b542: the spy team works the Intelligence branch alone, in its order; the other teams never do, and
     // nobody's staff begins what only a great power's plans can give it.)
     if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
+    // (The atomic project, release 2: a staff takes up its rows only when it wants the project, atom.ts atomWanted, and
+    // then first. Never in a later start's catch-up months: those are the record's months, before the war it judges.)
+    const atom = t.atom ? (turn === g.turn && atomWanted(g, nat) ? ATOM.ai.first : null) : 0;
+    if (atom === null) continue;
     const place = order.indexOf(t.branch);
     // A staff watching its oil run down puts the fuel chemists first.
-    const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
+    // (The far side: a staff whose plants already make all the record allows them gains no oil by more of it.)
+    const fuel = t.oil && thirsty && !plantsSpent(g, nat) ? A.fuel ?? 0 : 0;
     // A small country buys its oil abroad and has no use for fuel chemistry.
     const idle = t.oil && !keepsStores(g, nat) ? A.later : 0;
     // The player's advisers take up winter equipment as soon as a winter in the east is in sight.
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
     // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
     const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns - atom;
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
@@ -413,6 +424,8 @@ function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolea
   kinTechs(g, n);
   // (Ruling 240: nothing more is done on a row whose switch is off, and nothing is announced.)
   s.work = workOf(s);
+  // (The atomic project switched off in mid-war, atom.ts: its rows leave the tree, and the teams on them are free.)
+  if (!atomOn(g) && s.work.some((w) => BY_ID[w.id]?.atom)) s.work = s.work.filter((w) => !BY_ID[w.id]?.atom);
   const due: string[] = [];
   // Schools and institutes at home quicken every team.
   const pace = researchSpeed(g, n.id) * govMul(g, n.id, 'research');
@@ -578,7 +591,7 @@ function shipWords(t: Tech): string | null {
 }
 
 /** What a technology does, in plain words worked out from its numbers, so the words and the rule cannot drift apart. */
-const CAUSE = causeData as unknown as { cover: number; asv: string; incident: { coordinated: number; independent: number; coordinatedKit: number; independentKit: number; atw: number }; seaLoss: string[] };
+const CAUSE = causeData as unknown as { cover: number; asv: string; incident: { coordinated: number; independent: number; coordinatedKit: number; independentKit: number; atw: number }; seaLoss: string[]; escorts?: boolean | null };
 const in100 = (x: number): number => Math.round(x * 100);
 
 /**
@@ -596,15 +609,29 @@ function unitsWords(id: string): string | null {
 /** What a row does in the convoy war by cause (Units decide; data/campaign/convoycause.json), in words, or null. */
 function causeWords(id: string): string | null {
   const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
-  const kills = `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
+  // (With the escorts' losses form laid, the design director's ruling of 24 November 2026 17:58Z, Q2 (a): a convoy's
+  // escorts beyond its close screen's stations work the coordinated column beside the hunting groups, and the escorts on
+  // the stations the independent one. With it null the cards read as they did.)
+  const laid = CAUSE.escorts === true;
+  const kills = laid
+    ? `a hunting group and a convoy's escorts beyond its close screen sink the submarine in ${in100(I.coordinatedKit)} of every 100 attacks they answer, and the escorts on the close screen in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`
+    : `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
   const air = `submarines in the waters its aircraft reach attack with only ${third} of their strength`;
   if (id === 'sonar') return `Its aircraft carry depth charges. With ${BY_ID[CAUSE.asv]?.name.toLowerCase() ?? 'sea-search radar'} as well, ${air}.`;
   if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air}. Its escorts carry the sets too.`;
   if (id === 'patrolaircraft') return 'Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.';
   if (id === 'escortgroups') return `Destroyers sent hunting work as trained support groups. With ahead-throwing weapons too, ${kills}.`;
+  if (id === 'hedgehog' && laid) return `The escorts on a convoy's close screen sink the submarine in ${in100(I.independent * I.atw)} of every 100 attacks they answer, and a hunting group and the convoy's escorts beyond the screen in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
   if (id === 'hedgehog') return `A convoy's own escort sinks the submarine in ${in100(I.independent * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
   return null;
 }
+
+/** What the three rows of the atomic project do (atom.ts), in words. */
+const ATOM_RULE: Record<number, string> = {
+  1: 'The first step of the atomic project. It does nothing at the front.',
+  2: 'The atomic plants can be started: they take a share of the earnings every month for years towards one great bill. A large industry finishes them in about two years; a small one never does.',
+  3: 'Once the plants are finished, the atomic bomb is ready, and after it one more every two months while the plants keep making them. A bomb is carried by a raid of four-engined bombers on an enemy city that is not a capital.',
+};
 
 export function techRule(t: Tech, g?: Game, nat?: string): string {
   const out: string[] = [];
@@ -630,9 +657,22 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   if (land) out.push(land);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
+  const atom = t.atom ? ATOM_RULE[t.atom] : undefined;
+  if (atom) out.push(atom);
+  // (The far side: a nation whose plants never made what the tree gives reads the record's yield, `plantsMost`.)
+  const most = t.oil && g && nat ? plantsMost(g, nat) : null;
+  // (The UI director's words of 20:45Z and 20:48Z, 22 November 2026: "your" to its own player, the country's name to anyone
+  // else; a step that adds nothing says so; and the fact the design director ruled at 20:46Z in a sentence of its own:
+  // submarines cannot touch this oil, but bombers can hit the plants.)
+  if (t.oil && most !== null && g && nat) {
+    const whose = g.human === nat ? 'your' : `${g.nations[nat].name}'s`;
+    out.push(plantsSpent(g, nat, t.id)
+      ? `${whose[0].toUpperCase()}${whose.slice(1)} fuel plants already make all they can: this adds no oil.`
+      : `With every factory at home working, ${whose} fuel plants make ${most} oil a month between them, far less than was planned for them. Submarines cannot touch this oil, but bombers can hit the plants.`);
+  }
   // (The design director, 22 November 20:46Z, in the UI director's words of 20:48Z: the air campaigns' oil raids cut a
   // bombed plant's yield (ruling 236.2), so this oil is safe from submarines, not from bombers.)
-  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
+  else if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
   // The Intelligence branch (rider b542): what it does for the nation's agents (intel.ts).
   const x = t.spy;
   if (x?.caught !== undefined) out.push(`Its agents abroad are caught ${pct(1 - x.caught)} less often.`);

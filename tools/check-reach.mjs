@@ -5,8 +5,12 @@
 //   node tools/check-reach.mjs [--file=world-next.json] [--quiet]
 //
 // A fleet reaches the seas of its base and two beyond, and a landing crosses three seas at most, the first and the
-// last counted (navy.json, range 3). Distance is from province centre to province centre, 2.78 km to a map unit, the
-// short way round the globe (air.ts, km).
+// last counted (navy.json, range 3). Distance is from province centre to province centre along the map's straight
+// line, 2.78 km to a map unit, the short way round the world: the planner's own measure, for its paper was drawn in
+// the chart's projection. It is not the rules' on the far side any longer: there they read the globe's distance
+// (src/campaign/wrap.ts, chartDist; the design director's rulings of 22 November 2026, item R), which east and west in
+// the tropics is half as long again. So this judges the chart against the paper, as before, and not the game's reach:
+// a flight in reach here may be out of it in the game (Rabaul to Guadalcanal is 810 km here and 1,048 on the globe).
 import fs from 'node:fs';
 
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);

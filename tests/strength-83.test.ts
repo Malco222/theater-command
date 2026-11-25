@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { landingWatch } from '../src/campaign/ai';
 import { STRENGTH, ashoreSays, followUp, knownTo, reckon, stands, strikes } from '../src/campaign/ashore';
-import { addCorps, allied, atWar, createGame } from '../src/campaign/game';
+import { addCorps, allied, atWar, capture, createGame } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { setFog } from '../src/campaign/intel';
 import { fieldCtrl } from '../src/campaign/siege';
@@ -413,34 +413,64 @@ describe('one war at the history stop, nobody playing', () => {
     // it). Of seeds 17 to 30 on release 1's tree only seed 27 tells it: America's corps are refused on the mainland of
     // France in May 1944 and land at Rouen in June, its only first wave of that summer. Seeds 17, 18, 23, 26, 29 and 30
     // are refused but land in France that same month; 19, 20, 24, 25 and 28 put no first wave ashore in the summer of
-    // 1944, and 21 lands in Liguria unrefused. Seed 27 until release 2's tree (to 22 November 2026), on which Germany
-    // falls before the summer of 1944 in seed 27. Of seeds 17 to 58 on release 2's tree (c07a8ccd), none puts an
-    // American first wave of 1944 on an island, and only seed 42 tells the story in full: Calais, Rouen, Brittany and
-    // the Cotentin refuse America's corps in May 1944, the staff lands at Nantes that month, Calais refuses again in
-    // July, and the corps land on the Cotentin in August. Seeds 23, 26, 32, 36, 40, 46, 48, 53 and 55 are refused in
-    // May 1944 but land in France that same month; 49, 51 and 57 are refused every month and hold their corps back;
-    // 19, 22, 27, 39, 44 and 47 see Germany fall first. Seed 42 until the start guns of 1.5.1 came onto release 2
-    // (ruling 124; airversion.json startGuns, 24 November 2026): the guns blunt the opening's bombing and the war moves
-    // again, and seed 42's Americans land at Nantes in April 1944, never refused. Of seeds 17 to 58 on release 2's tree
-    // with the guns on (169ae947), only seed 18 tells the story in full: Calais, Rouen, the Cotentin and Brittany refuse
-    // America's corps in May 1944, the mainland refuses them again in June, July and August, and in August the staff
-    // lands its three corps at Nantes, its only landing of the war. Seeds 17, 31, 32, 36, 45, 46, 51, 52, 56 and 58 are
-    // refused in May 1944 but land in France that same month; 21, 48, 49 and 57 are refused and put no first wave
-    // ashore that summer; 22 and 55 are refused and land in Sicily; 19, 20, 25, 29, 30, 33, 43, 47 and 54 see Germany
-    // fall first; the other sixteen are never refused. One of those, seed 34, puts three American corps on Rhodes in
-    // June 1944, never having been refused on the mainland: the first measured war in which an American first wave of
-    // 1944 goes to an island (named for the design director; this test's claim is of the staff that was refused).
-    // Seed 18 is the one used.)
-    const g = startOpen(createGame(18, null));
+    // 1944, and 21 lands in Liguria unrefused. Seed 27 is the one used.)
+    //
+    // STAGED since the computer's air forces fight back (airwar.json ai.back; the design director, 24 Nov 2026 20:26Z and
+    // 20:37Z). No war of seeds 17 to 88 told the story whole any more, so the test stages both choices, on Germany's side
+    // only: the American staff, its rule, the reckoning's bar and its dice are untouched, and so are the assertions.
+    // (1) From month 56 Germany holds Corsica, with no corps on it: an island America's reckoning passes, so that "none
+    // on an island" is a choice the staff makes. (2) After America's first refusal on France's mainland, Germany's field
+    // corps keep CUT of their strength, once: one fixed amount, never looped to a pass. Seed 46: refused at Calais in
+    // May 1944 (0.33 against 0.6), 0.65 after the cut, and it lands three corps at Bordeaux in July with Corsica open
+    // every month. (Seed 40 until the start guns of 1.5.1, ruling 124: the guns blunt the bombing, so Germany keeps
+    // more in reserve; seed 40's first refused beach fell from 0.49 to 0.32 and its Americans went to Sicily. Seeds 41
+    // to 52 are all refused at 0.32 to 0.40; seed 46 tells the story whole. The design director, 24 Nov 2026 22:58Z.)
+    const CUT = 0.25, ISLE = 'Corsica';
+    const g = startOpen(createGame(46, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
+    type Refusal = { at: Region; ask: number; chance: number; force: Corps[] };
+    const seen: { first: Refusal | null } = { first: null };
+    let after = -1;
+    const isles: Record<number, string[]> = {};
     landingWatch.tell = (e) => { if (!e.wave) landings.push({ turn: g.turn, nat: e.nat, to: e.to, corps: e.force.length }); };
-    strengthWatch.tell = (e) => { if (e.nat === 'USA' && g.turn >= 57 && e.force.length >= 3 && e.at.owner === 'FRA' && e.at.nb.length > 0 && e.R.chance < e.ask) refused.add(g.turn); };
-    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; strengthWatch.tell = null; }
+    strengthWatch.tell = (e) => {
+      if (e.nat === 'USA' && g.turn >= 57 && e.force.length >= 3 && e.at.owner === 'FRA' && e.at.nb.length > 0 && e.R.chance < e.ask) {
+        refused.add(g.turn);
+        seen.first ??= { at: e.at, ask: e.ask, chance: e.R.chance, force: [...e.force] };
+      }
+    };
+    // The islands an American force could take this month: enemy-held, with no land frontier, its reckoning passing.
+    const open = (f: { ask: number; force: Corps[] }): string[] => g.regions.filter((r) => r.nb.length === 0 && r.port && atWar(g, 'USA', r.ctrl) && (reckon(g, 'USA', r, f.force)?.chance ?? 0) >= f.ask).map((r) => r.name);
+    try {
+      while (g.turn <= 60 && g.nations.GER.alive) {
+        if (g.turn === 56) {
+          capture(g, g.byName[ISLE], 'GER');
+          // Setup: the island is Germany's, at war with America.
+          expect(g.byName[ISLE].ctrl).toBe('GER');
+          expect(atWar(g, 'USA', 'GER')).toBe(true);
+        }
+        runTurnAI(g);
+        const first = seen.first;
+        if (first && after < 0) {
+          for (const c of g.corps) if (!c.dead && c.nat === 'GER' && c.kind !== 'fort' && c.kind !== 'eng') c.str *= CUT;
+          after = reckon(g, 'USA', first.at, first.force)!.chance;
+        }
+        if (first) isles[g.turn] = open(first);
+      }
+    } finally { landingWatch.tell = null; strengthWatch.tell = null; }
+    // Setup: the staff was refused on France's mainland, the reckoning before and after the cut is said, and an island
+    // stayed a real choice in every month played after the refusal.
+    const f = seen.first;
+    expect(f, 'America is refused on the mainland of France').not.toBeNull();
+    const said = `${f!.at.name}: ${f!.chance.toFixed(2)} before the cut, ${after.toFixed(2)} after, against ${f!.ask}`;
+    expect(f!.chance, said).toBeLessThan(f!.ask);
+    expect(Object.keys(isles).length, said).toBeGreaterThan(0);
+    for (const [t, names] of Object.entries(isles)) expect(names.length, `month ${t}: no island open (${said})`).toBeGreaterThan(0);
     const usa = landings.filter((l) => l.nat === 'USA' && l.turn >= 57);
     // It was refused on the mainland first, in a month before its landing there.
-    expect([...refused].some((t) => usa.some((l) => l.turn > t))).toBe(true);
+    expect([...refused].some((t) => usa.some((l) => l.turn > t)), said).toBe(true);
     // No American first wave of 1944 goes to an island; its landing of that summer is in France.
     expect(usa.filter((l) => l.to.nb.length === 0)).toEqual([]);
     expect(usa.some((l) => l.to.owner === 'FRA' && !l.to.overseas)).toBe(true);

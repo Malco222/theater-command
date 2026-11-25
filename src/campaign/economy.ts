@@ -28,9 +28,10 @@ import { isTeam, TEAM_KINDS, TEAMS, teamName, teamsOn, type TeamKind } from './t
 import { TECH, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
+import { atomBill } from './atom';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
-import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
+import { MANPOWER, drawMen, menSpare, ownMen, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
@@ -64,13 +65,23 @@ export function corpsKinds(g: Game): Kind[] {
   return kinds.sort((a, b) => Number(a === 'eng') - Number(b === 'eng') || needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
 }
 
-/** What a corps of this kind costs this nation: the list price, less what its own abilities take off (the grand campaign). */
-export function corpsCost(g: Game, nat: string, kind: string): number {
+/** What a corps of this kind is priced at for this nation: the list price, less what its own abilities take off (the grand campaign). */
+export function corpsList(g: Game, nat: string, kind: string): number {
   const price = priceOf(g, nat, `corps:${kind}`, specOf(g, kind)?.cost ?? 0);
   // The player's Minister of Armaments drives the price down, or up (the grand campaign).
   const m = govMul(g, nat, 'cost');
   return m === 1 ? price : Math.round(price * m * 10) / 10;
 }
+
+/**
+ * True where this nation forms a corps of this kind from its own men (rider B of 20:45Z to ruling 234; manpower.ts,
+ * ownMen): the fighting arms that need no industry. It is paid for in men from the reserve, as every corps is, and
+ * in no points. Nobody with the far side off.
+ */
+export const paidInMen = (g: Game, nat: string, kind: string): boolean => ownMen(g, nat) && kind !== 'eng' && needsOf(g, kind) === 0;
+
+/** What a corps of this kind costs this nation in points: its price, or nothing where it is paid for in men. */
+export const corpsCost = (g: Game, nat: string, kind: string): number => (paidInMen(g, nat, kind) ? 0 : corpsList(g, nat, kind));
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
@@ -102,7 +113,7 @@ export const BUDGET = budgetData as unknown as {
    * country's treasury, by part; 'home' names the colony-marked provinces out there that are part of their country's
    * own economy and pay it as home ground does (Korea, Formosa, Karafuto).
    */
-  farColony: { land: number; port: number; oil: number; fac: number; home: string[] };
+  farColony: { land: number; port: number; oil: number; fac: number; home: string[]; guard?: number; posts?: string[] };
   /** Ruling b466: the share at which a country's own home ground on the far side counts, for its pay and for lines. */
   farHome: Record<string, number>;
   /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
@@ -167,6 +178,47 @@ const FAR_HOME = new Set(BUDGET.farColony.home);
 export const colonyPurse = (r: Region): boolean => !!r.overseas && !FAR_HOME.has(r.name);
 /** True for such ground on the far side of the world (world.ts shoreOf 2). None while the far side's switch is off. */
 export const farColony = (r: Region): boolean => colonyPurse(r) && shoreOf(r) === 2;
+const FAR_POSTS = new Set(BUDGET.farColony.posts ?? []);
+/**
+ * The share of a town's own guard that stands on this ground (ruling 234's rider b547; siege.ts guardOf). 1 on home
+ * ground and everywhere on the near side. On the far side's colonial ground the record's towns were held by the
+ * garrisons the rows already bring, not by a home town's division of depot troops, police and militia: a far post
+ * whose garrison the historian has given (budget.json 'farColony.posts') keeps no guard beside it, so that the
+ * record's figure is its whole defence, counted once; any other town there keeps the far side's one number, the tenth.
+ * One rule for every power (rider b552): Japan's mandates are colonial ground, and Saipan and Truk take the tenth.
+ * "Counted once" reaches the far colonial cities whose defenders the rows already hold (riders b561(d) and b563):
+ * Hong Kong, Manila, Rangoon, Batavia, the Indies' outposts, the four cities of Indochina, Colombo and Wake, whose
+ * fort row holds it; and Singapore, whose garrison row rose to the record's 0.8 as its guard came off. Midway, not yet
+ * checked against the record, keeps the tenth beside its fort; Hawaii is home ground.
+ * The post rule reaches home ground on the far side (rider b614 to ruling 234): Japan's island garrisons are rows at
+ * the record's worth by half-year, the Mandates' and the home islands' alike, so Marcus Island, Iwo Jima and Chichi
+ * Jima hold the record's worth and not a home town's whole guard. Only places the historian's table names are posts.
+ */
+const farPost = (r: Region): boolean => FAR_POSTS.has(r.name) && shoreOf(r) === 2;
+export const farGuard = (r: Region): number => (farPost(r) ? 0 : !farColony(r) ? 1 : BUDGET.farColony.guard ?? 1);
+/**
+ * The far chart's guard table (data/campaign/far-guards.json, laid over siege.json with the far side's switch on;
+ * the design director's rulings of 21 November 2026 on the historian's far-chart-town-guards.md and its globe
+ * table): the row of the land a town on the far side of the world stands in, or null where its land has none. A land
+ * is an owner's ground on the far side: all of it where the row names no places, or the provinces of the first chart
+ * it names with the parts the chart cuts them into. A figure is a number, or the record's figure by month where it
+ * changed, as the airfield table's is (game.ts estAt). With the switch off siege.json has no table, and a province
+ * of the old chart or of the Americas is never looked up. Read by guardOf (siege.ts) alone.
+ */
+export type FarGuardFig = number | [number, number][];
+export interface FarGuardRow { name: string; owner: string; town: FarGuardFig; city: FarGuardFig; capital: FarGuardFig; named?: Record<string, FarGuardFig>; places?: string[] }
+let farLands: { whole: Map<string, FarGuardRow>; by: Map<string, FarGuardRow> } | null = null;
+export function farGuardRow(g: Game, r: Region): FarGuardRow | null {
+  const T = SIEGE.farGuard;
+  if (!T || shoreOf(r) !== 2) return null;
+  if (!farLands) {
+    farLands = { whole: new Map(), by: new Map() };
+    for (const row of T) { if (row.places) for (const nm of row.places) farLands.by.set(nm, row); else farLands.whole.set(row.owner, row); }
+  }
+  const of = (WORLD_MAP.regions[r.id - WORLD_MAP.first] as { of?: number } | undefined)?.of ?? r.id;
+  const row = farLands.by.get(g.regions[of]?.name ?? '') ?? farLands.whole.get(r.owner);
+  return row && row.owner === r.owner ? row : null;
+}
 /**
  * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
  * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground
@@ -200,8 +252,10 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const far = farColony(r) && (own || allied(g, nat, r.owner)) ? BUDGET.farColony : null;
   const fac = (own ? works : works * (PRODUCTION.occupiedIncome + lift)) * (far?.fac ?? 1);
   const k = !own ? BUDGET.occupied + lift : colonyPurse(r) ? BUDGET.overseas : 1;
-  const worth = bare || !budgeted(g) ? 1 : landFactor(r);
-  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare) * (far?.land ?? 1) * share;
+  // (One cut, not two: ruling 234(e)3. Where the far colony's tenth is taken, ruling 214's factor is not, and the
+  // ground pays as any country's far colony does; the factor falls on the rest of that country's ground.)
+  const worth = bare || !budgeted(g) || far ? 1 : landFactor(r);
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare || !!far) * (far?.land ?? 1) * share;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) * share : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) * share : 0;
@@ -293,6 +347,9 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   // What it pays neutrals for their goods this month (release 2).
   const bought = bargainCost(g, nat);
   if (bought > 0) out.push({ key: 'bargains', label: 'Paid to neutrals for their goods', amount: bought });
+  // What the atomic project drew this month, its plants or the making of more bombs (release 2, atom.ts).
+  const atom = atomBill(g, nat);
+  if (atom > 0) out.push({ key: 'atom', label: 'The atomic plants', amount: atom });
   return out;
 }
 
@@ -518,7 +575,10 @@ export function cadreTerms(g: Game, nat: string, c: Corps): { cost: number; mont
   const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
   const kind = specOf(g, c.kind) ? c.kind : 'inf';
   const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', p.cost) : corpsCost(g, nat, kind);
-  return { cost: Math.round(list * MANPOWER.fold.price * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs };
+  // (A corps its row keeps small comes back at its own establishment, for that share of the price and of the men:
+  // rider b594 to ruling 234. No corps has one with the far side off.)
+  const size = c.full ?? 1;
+  return { cost: Math.round(list * MANPOWER.fold.price * size * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs * size };
 }
 
 /** Why a cadre cannot be raised again now, apart from money and a place to raise it; null when it can. */
@@ -548,7 +608,7 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
 
 /** A cadre takes the field again: the same corps, with its number, its diary and its ribbons, filled with new men. */
 function reform(g: Game, c: Corps, at: Region): void {
-  c.dead = false; c.str = 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
+  c.dead = false; c.str = c.full ?? 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
   c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
   for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
   raiseMorale(g, c);
@@ -721,6 +781,11 @@ export function aiProduction(g: Game, nat: string): void {
   // The grand campaign: a staff whose line has met dug-in troops orders massed guns to break them, one corps of guns
   // to every few of the rest, and brings them up where the works are.
   const wantsGuns = (): boolean => gunsWanted(g, nat);
+  // A corps paid for in men asks nothing of the bank (rider B of 20:45Z to ruling 234; paidInMen, above), and its
+  // men are counted in the reserve itself. Such a nation's thin corps are its standing shape, not a want its
+  // drafts will ever meet, so by the other test it would never have a man to spare. Nobody with the far side off.
+  const bank = (kind: string, price: number): boolean => paidInMen(g, nat, kind) || n.pp >= price + PRODUCTION.aiReserve;
+  const men = (kind: string, divs: number): boolean => (paidInMen(g, nat, kind) ? raisable(g, nat, divs) >= 1 : menSpare(g, nat) >= divs);
   while (slots() < most) {
     // The wider world: a staff an ocean away from every enemy raises no more corps than it has a use for at home.
     if (armyIdle(g, nat)) break;
@@ -730,7 +795,7 @@ export function aiProduction(g: Game, nat: string): void {
     if (old) {
       const t = cadreTerms(g, nat, old), up = corpsUpkeep(old.kind, old.divs);
       const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;
-      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= old.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
+      if (bank(old.kind, t.cost) && spare >= up * BUDGET.debt.aiMargin && men(old.kind, t.divs) && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
     }
     let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
@@ -738,11 +803,11 @@ export function aiProduction(g: Game, nat: string): void {
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
     // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
     if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = cap.id; }
-    if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
+    if (!bank(kind, corpsCost(g, nat, kind))) break;
     const cost = corpsUpkeep(kind, specOf(g, kind)!.divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
     // Nor does it raise new corps with men its armies in the field are waiting for (the grand campaign).
-    if (menSpare(g, nat) < specOf(g, kind)!.divs) break;
+    if (!men(kind, specOf(g, kind)!.divs)) break;
     if (!orderCorps(g, nat, kind, at)) break;
     spare -= cost;
   }

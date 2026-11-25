@@ -8,10 +8,13 @@
 // The Unreal side calls these by name through a global object, TC:
 //
 //   TC.starts()                         -> { years: [{ year, title, from, note }], groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
-//   TC.grand(from, seed)                -> { from, nations: [{ nat, name, major, blurb, standing, corps, regions }] }: who can be led in the grand campaign from that month
+//                                          (with the whole world on, `years` is September 1939 alone and `only` is the line that says so; else `only` is '')
+//   TC.grand(from, seed, world)         -> { from, chart, beyond, nations: [{ nat, name, major, small, blurb, door, standing, corps, regions }], absent: [{ nat, name, years, line }] }: who can be led in the grand campaign from that month; 'door' is a far seat's own words under its blurb, 'absent' the seats of other years, 'beyond' the line about the map this game is not on
+//   TC.nationsBook(world)               -> [{ tag, name, adjective, colour, alignment }]: every country the rules know (the running campaign's, else a first day's on that chart)
 //   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
 //   TC.save()                           -> { text }: the whole campaign as text
 //   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
+//   TC.peekChart(text)                  -> { chart: 'europe' | 'americas' | 'whole', now, fits, why }: the map a saved war was made on, whether this game can continue it, and the sentence to show when it cannot; null if the text is no save
 //   TC.load(text)                       -> view, or null if the save cannot be read
 //   TC.view()                           -> view
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
@@ -75,7 +78,7 @@ import {
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, orderCorps, provinceYield } from '../../../src/campaign/economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, needsOf, orderCorps, provinceYield } from '../../../src/campaign/economy';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
@@ -84,7 +87,7 @@ import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { airPiece } from '../../../src/campaign/airversion';
-import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
+import { crossesToWhole, loadGame, peekSave, saveChart, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
 import { carried } from '../../../src/campaign/support';
@@ -95,7 +98,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, bookBaseOf, fleetReach, landingTargets, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -114,8 +117,14 @@ import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwh
 import { REARGUARD, isRearguard, rearBridgesOn, rearguardOn, setRearBridges, setRearguard } from '../../../src/campaign/rearguard';
 import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '../../../src/campaign/shadow';
 import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
+import { ATOM as ATOM_DATA, PACES as ATOM_PACES, armedAt as atomArmedAt, atomOn, atomView, finishWords as atomFinishWords, setAtom, type AtomView } from '../../../src/campaign/atom';
+import type { AtomPace } from '../../../src/campaign/types';
+import { anchorLine, carrierStrikeOn, setCarrierStrike, strikeHarbours } from '../../../src/campaign/harbourstrike';
+import { setWingByDate, wingByDateOn } from '../../../src/campaign/carriers';
+import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
+import { sailorsOn, setSailors } from '../../../src/battle/sea/ticket';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -123,6 +132,7 @@ import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarc
 import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrders, type CardFigure as RuleFigure, type CardTone, type MonthCard as RuleCard, type MonthMark } from '../../../src/campaign/monthcard';
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
+import { cancelAtomStrike, orderAtomMaking, orderAtomPace, orderAtomPause, orderAtomPlants, orderAtomSite, orderAtomStrike, whyNotAtomPlants, whyNotAtomStrike } from '../../../src/campaign/turn';
 import { gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
 import { fieldRepairView } from '../../../src/campaign/fieldstate';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
@@ -134,7 +144,10 @@ import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
+import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
+import { FAR_PATHS } from '../../../src/campaign/far-rows';
+// (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
+import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
@@ -154,6 +167,7 @@ import {
 import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 import { seaWhat, seaWhere } from '../../../src/campaign/sea-words';
+import { patrolLoss } from '../../../src/campaign/seapatrol';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
@@ -1016,14 +1030,23 @@ function drawView() {
     shadow: shadowOn(s),
     // (Release 2, voyage.ts) Whether each fleet keeps a voyage log on its page.
     voyageLog: voyageOn(s),
+    // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Whether men go into the water when a ship goes down.
+    sailors: sailorsOn(s),
     // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
     seaMines: seaMinesOn(s),
     mines: minesSeen(s),
+    // (Release 2, atom.ts) Whether the atomic project is in this campaign.
+    atomBomb: atomOn(s),
     // (Release 2, heavyseas.ts) Whether gales blow at sea, and the seas in a gale this month.
     heavySeas: heavySeasOn(s),
     gales: [...galeSeas(s)],
+    // (Release 2, harbourstrike.ts) Whether a carrier fleet's page offers a strike on an enemy harbour from the air.
+    carrierStrike: carrierStrikeOn(s),
+    wingByDate: wingByDateOn(s),
     // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
     shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
+    // (Release 2, navy.ts) Whether a fleet seeks battle at most once a month, by order or at a month's end.
+    seekOnce: seekOnceOn(s),
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
@@ -1659,7 +1682,7 @@ const goOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => co
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
-interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean }
+interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean; /** (The art director's flak brief, 2c.) Bombers over a target on land with no guns built: the light guns any target puts up, as a count above 0. Never on a row over built guns (aa above 0), and on no fighters' row. */ light?: number }
 
 const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
 
@@ -1674,6 +1697,14 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
       seenIds.add(r.id);
       const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
       let first = true;
+      // (The art director's flak brief, 2c.) Light flak: bombers over a target on land with no guns built still lose
+      // some of their number to the light guns any target puts up (air.ts assessAir: the plain flak share, by day or
+      // by night, beside the guns of each level built). Each bomber flight of such a raid says so, with the count of
+      // those guns; a raid over built guns says nothing here, for the ring round the target is those guns' own.
+      // (The kind of raid is the replay's `kind`. The row read a `mission` the replay does not carry, so no flight
+      // ever said night and the searchlights of ruling 107 were never lit on the map in play: mended 25 November 2026.)
+      const byNight = r.kind === 'night';
+      const lightGuns = r.region >= 0 && workLevel(s, 'aa', r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, flakGuns(0).light) : 0;
       // (a carrier wing has no airfield: it takes off from where its fleet was, which the report gives as a point)
       const deck = (x: { base: number; x: number; y: number }): boolean => x.base < 0 && (x.x > 0 || x.y > 0);
       for (const a of r.attackers.filter((x) => (x.base >= 0 || deck(x)) && x.ftr + x.bmr >= 1).slice(0, 4)) {
@@ -1681,12 +1712,14 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
           from: a.base, ...(deck(a) ? { fromX: a.x, fromY: a.y, fleet: (s.airFleets.find((g) => g.id === a.id) as { ship?: number } | undefined)?.ship ?? -1 } : {}), x: r.x, y: r.y, nat: a.nat, bombers: a.bmr >= 1, escort: a.bmr >= 1 && a.ftr >= 1, region: r.region,
           aa: first && r.region >= 0 ? workLevel(s, 'aa', r.region) : 0, meet: first && riser ? riser.nat : '', meetFrom: first && riser ? riser.base : -1,
           loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
-          night: (r as { mission?: string }).mission === 'night',
+          night: byNight,
+          ...(lightGuns && a.bmr >= 1 ? { light: lightGuns } : {}),
         });
         first = false;
       }
       if (first) continue;
-      notes.push(r.result);
+      // (1.5.2, playtest #38: a raid with nothing to say adds no empty note, so a joined note never opens with a space.)
+      if (r.result.trim()) notes.push(r.result.trim());
       if (r.region >= 0) focus.push(r.region);
       if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
     }
@@ -1893,10 +1926,18 @@ function arrive(s: Game): string | null {
   return lost;
 }
 
+/** With the whole world on: the one day its war begins from, said under the years (the owner's answer of 25 November 2026: 1939 first, December 1941 next). */
+const WHOLE_FROM_1939 = 'On the whole-world map the war begins in September 1939.';
+
 /** The places a campaign can begin, with each playable nation's aims for the campaigns that start in September 1939. */
 function starts() {
+  // (Release 2, Japan and the Pacific.) On the whole-world map a later year is no start at all yet: history up to it is
+  // played on Europe's chart and the far side is laid over it as of September 1939, so January 1942 opened with America
+  // at peace with Japan and the Pacific Fleet still at San Diego. Only the first day is offered there, and `only` says so.
+  const whole = CHART_NOW === 'whole';
   return {
-    years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    years: GRAND.years.filter((y) => !whole || y.turn <= 1).map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    only: whole ? WHOLE_FROM_1939 : '',
     // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
     levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
     level: DIFFICULTY.start,
@@ -1971,6 +2012,8 @@ function grandGame(from: number, seed: number, human: string | null): Game {
  * the shared data come first, each with the data's word about what the player is taking on that year, and
  * are offered only in the years the data gives them. Every other country is offered whenever it is still there.
  */
+/** With the whole world off: where Japan is. The door shows it under the countries (the owner's question of 24 November 2026, "why can't you play as Japan?"). */
+const BEYOND_THE_CHART = 'Japan, China and the Pacific are on the whole-world map. Switch the whole world on under OPTIONS to lead them.';
 function grand(from = 1, seed = 1939, world = false) {
   wideWorld = world === true;
   const h = grandGame(from, seed, null);
@@ -1978,8 +2021,10 @@ function grand(from = 1, seed = 1939, world = false) {
   const order = GRAND.nations.map((n) => n.id);
   // The small countries whose path is their own to choose: led like any other, with a word about each in 1939.
   const smallOnes = new Set(GRAND.nations.filter((n) => n.small).map((n) => n.id));
+  // (Release 2, Japan and the Pacific.) A country of closed ground is nobody's seat: Tibet has no army and no army
+  // enters it, and it stood among the other countries on the door.
   const nations = Object.entries(h.nations)
-    .filter(([nat, n]) => n.alive && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
+    .filter(([nat, n]) => n.alive && !closedCountry(nat) && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
     .map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
       return {
@@ -1990,6 +2035,8 @@ function grand(from = 1, seed = 1939, world = false) {
         // What makes the country fight, build and earn in its own way, and its special formation, in words.
         abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
+        // A far seat's own words for the door (a client's tie, a dominion's place): the browser shows them after the blurb.
+        door: FAR_PATHS[nat] ?? '',
         standing: foes.length ? theWords(`At war with ${listNames(foes.map((f) => h.nations[f].name))}`) : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length,
@@ -1997,7 +2044,41 @@ function grand(from = 1, seed = 1939, world = false) {
     })
     .filter((n) => n.corps > 0 || n.regions > 0)
     .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1) : a.major ? -1 : 1));
-  return { from, nations };
+  // The great powers that can be led, but not from this year: the door greys them and says when (Japan is led from
+  // September 1939 for now; France not after 1940). A seat with no year at all is not listed.
+  const absent = GRAND.nations
+    .filter((n) => !n.small && n.years[year] === undefined && Object.keys(n.years).length > 0 && h.nations[n.id] && !nations.some((x) => x.nat === n.id))
+    .map((n) => {
+      const years = Object.keys(n.years).map(Number).sort((a, b) => a - b);
+      return { nat: n.id, name: h.nations[n.id].name, years, line: `${h.nations[n.id].name} can be led from ${listNames(years.map(String)).replace(/ and /, ' or ')}.` };
+    });
+  return { from, chart: wideWorld ? CHART_NOW : 'europe', beyond: wideWorld && CHART_NOW !== 'whole' ? BEYOND_THE_CHART : '', nations, absent };
+}
+
+/**
+ * (Release 2, Japan and the Pacific, 24 November 2026) Every country the rules know, for the 3D table's own list: its
+ * tag, name, adjective, colour ('#rrggbb') and where it stands, in the rules' own words as the data files write
+ * `align`: 'allies', 'allies_cobelligerent', 'leaning_allies', 'independent', 'leaning_axis', 'axis_cobelligerent'
+ * or 'axis'. The table kept its own list from the data files, and so lagged the rules wherever a chart added
+ * countries (the far side's fourteen; Tibet stands in no file at all). With a campaign running it is that campaign's
+ * countries as they stand today, so it may be asked again after one changes sides. With none, it is the countries of
+ * a first day on the chart asked for: `world` as TC.grand and TC.start take it (the wider chart, which is the whole
+ * world where the far switch is on). That first day is laid once and kept. It changes nothing.
+ */
+const bookDays = new Map<boolean, Game>();
+/** A first day on the chart asked for, laid once and kept: the countries the rules know before any campaign is begun. */
+function bookDay(wide: boolean): Game {
+  let s = bookDays.get(wide);
+  if (!s) {
+    s = createGame(1, null);
+    if (wide) attachWorld(s);
+    bookDays.set(wide, s);
+  }
+  return s;
+}
+function nationsBook(world = false) {
+  const s = g ?? bookDay(world === true);
+  return Object.values(s.nations).map((n) => ({ tag: n.id, name: n.name, adjective: n.adj, colour: n.color, alignment: n.align }));
 }
 
 function listNames(names: string[]): string {
@@ -2078,29 +2159,73 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
 
 /** The whole campaign as text, to be kept and picked up again later. */
 function save() {
-  return { text: saveGame(game()) };
+  const s = game();
+  // (1.5.2, playtest #32.) The month's report is the table's, not the rules': it is written into the save beside the
+  // rules' flags only while the save is made, and taken out again as the save is loaded, so the war itself never
+  // carries it and a save and load gives back the same text.
+  if (!lastMonth && !lastCard) return { text: saveGame(s) };
+  const flags = s.flags as Record<string, unknown>;
+  if (lastMonth) flags.monthReport = lastMonth;
+  if (lastCard) flags.monthCard = lastCard;
+  try { return { text: saveGame(s) }; } finally { delete flags.monthReport; delete flags.monthCard; }
+}
+
+/** The month's report and its card a save carries (see save), each null where the save has none or it does not read right. */
+function reportOfSave(s: Game): { report: typeof lastMonth; card: MonthCard | null } {
+  const flags = s.flags as Record<string, unknown>;
+  const m = flags.monthReport as typeof lastMonth | undefined;
+  const c = flags.monthCard as MonthCard | undefined;
+  delete flags.monthReport;
+  delete flags.monthCard;
+  const fine = !!m && typeof m.date === 'string' && Array.isArray(m.rows) && Array.isArray(m.news)
+    && m.rows.every((r) => r && typeof r.nat === 'string' && typeof r.note === 'string' && typeof r.region === 'number' && r.region < s.regions.length)
+    && m.news.every((x) => typeof x === 'string');
+  const card = !!c && typeof c === 'object' && typeof c.date === 'string' && Array.isArray(c.staff);
+  return { report: fine ? m! : null, card: card ? c! : null };
+}
+
+/**
+ * (Release 2, Japan and the Pacific.) A war is continued on the map it was saved on. The game knew a save's map only
+ * by its province count: with the whole world off, a whole-world save was "a save that could not be read", and with
+ * it on, a war saved on Europe and the Americas loaded with the far side laid over it as of September 1939, whatever
+ * its month, and the next autosave kept it so. Now the save says which map it is, the game says the true sentence,
+ * and peek and load leave a war of the other map alone.
+ */
+const SAVED_ON_WHOLE = 'This war was saved on the whole-world map. Switch the whole world on under OPTIONS to continue it.';
+const SAVED_ON_AMERICAS = 'This war was saved on the map of Europe and the Americas. Switch the whole world off under OPTIONS to continue it.';
+function peekChart(text: string) {
+  const chart = saveChart(text);
+  if (!chart) return null;
+  const other = chart === 'whole' ? CHART_NOW !== 'whole' : crossesToWhole(text);
+  const fits = !other && !!peekSave(text);
+  return { chart, now: CHART_NOW, fits, why: fits ? '' : chart === 'whole' && other ? SAVED_ON_WHOLE : other ? SAVED_ON_AMERICAS : 'That saved war could not be read.' };
 }
 
 /** A line about a saved campaign for the opening screen, without loading it. */
 function peek(text: string) {
+  if (crossesToWhole(text)) return null; // (a war of the other map is not offered: TC.peekChart says why)
   const p = peekSave(text);
   if (!p) return null;
-  const sample = g ?? createGame(1, null);
-  return { human: p.human, name: p.human ? sample.nations[p.human]?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
+  // (The seat's name from the war in play, else from a first day on the wider chart: a sample of Europe alone knew no
+  // Japan, and the line read "JAP".)
+  const seat = p.human ? g?.nations[p.human] ?? bookDay(true).nations[p.human] : undefined;
+  return { human: p.human, name: p.human ? seat?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
 }
 
 function load(text: string) {
-  const loaded = loadGame(text);
+  // (A war saved on Europe and the Americas is never laid over the whole world by the player's CONTINUE or LOAD.)
+  const loaded = crossesToWhole(text) ? null : loadGame(text);
   if (!loaded) return null;
   g = loaded;
   startGunsLoaded(g);
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
-  lastMonth = null;
+  const kept = reportOfSave(g);
+  lastMonth = kept.report;
   lastReel = -9;
   monthBook = null;
-  lastCard = null;
+  lastCard = kept.card;
   if (g.human && !humanUp(g)) {
     runOthers(g, null);
     arrive(g);
@@ -3641,7 +3766,7 @@ function endMonth() {
   const newsreel = big ? { date: turnToDate(month0).label, cards: reel.slice(0, 4) } : null;
   lastMonth = {
     date: turnToDate(month0).label,
-    rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
+    rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note?.trim() && !x.moved).map((x) => ({ nat: x.nat, note: x.note.trim(), region: x.focus?.[0] ?? -1, mine: !!x.mine })),
     news: events.map((e) => e.text),
   };
   // (every march that ended is told with the player's own fronts, with the way to go and look at the army)
@@ -3807,16 +3932,20 @@ function railTip(ids: number[], to: number) {
   } catch { return none; }
 }
 
-/** Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
+/**
+ * Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on.
+ * (Asked as one sea reading, navy.ts `seaReading`: each sea's balance and each search by sea from the corps' port
+ * are worked out once for the whole list, not again for every port on the map. The playtest's finding 40.)
+ */
 function seaReach(ids: number[]) {
   const s = game();
   const ports = new Set<number>();
   let beaches: number[] = [];
-  if (humanUp(s) && !onEve(s)) {
+  if (humanUp(s) && !onEve(s)) seaReading(s, () => {
     const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
     for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
     beaches = landingTargets(s, cs).map((r) => r.id);
-  }
+  });
   return { ports: [...ports], beaches };
 }
 
@@ -3830,11 +3959,14 @@ function bySeaWhy(ids: number[], to: number): { why: string } {
   const r = s.regions[to];
   const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
   if (!r || !cs.length) return { why: '' };
-  if (allied(s, cs[0].nat, r.ctrl)) {
-    for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
-    return { why: '' };
-  }
-  return { why: whyNotLand(s, cs, r) ?? '' };
+  // (One sea reading, as `seaReach`: a refusal for lying beyond a month's sailing searches from every port on the way.)
+  return seaReading(s, () => {
+    if (allied(s, cs[0].nat, r.ctrl)) {
+      for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
+      return { why: '' };
+    }
+    return { why: whyNotLand(s, cs, r) ?? '' };
+  });
 }
 
 /** Ships the chosen corps to a friendly port. */
@@ -3977,16 +4109,32 @@ function province(id: number) {
     })(),
     budget: budgeted(s),
     // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
-    raise: raiseHere ? (Object.keys(PRODUCTION.builds) as Kind[]).map((kind) => {
-      const spec = PRODUCTION.builds[kind];
-      return {
-        kind, label: spec.label, divs: spec.divs, cost: shown(spec.cost), months: spec.months, blurb: spec.blurb,
-        // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
-        keep: budgeted(s) ? shown(corpsUpkeep(kind, spec.divs, 1)) : 0,
-        ok: up && !!n && n.pp >= spec.cost,
-        why: !up ? 'It is not your month.' : n && n.pp < spec.cost ? `Needs ${shown(spec.cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
-      };
-    }) : [],
+    // (1.5.2, playtest #29: the price and the yes or no are the rules' own, the arsenal's offer for this province, so a
+    // button shown open is never refused and one the treasury can pay for is never shut: the nation's own price, the
+    // technology, the men, and whether this province can form up a corps of the kind at all.)
+    raise: raiseHere ? (() => {
+      const offers = new Map(arsenalOffers(s, id).map((o) => [o.key, o]));
+      return (Object.keys(PRODUCTION.builds) as Kind[]).map((kind) => {
+        const spec = PRODUCTION.builds[kind];
+        const o = offers.get(`corps:${kind}`);
+        const price = o?.cost ?? spec.cost;
+        const here = !!o && o.at === id;
+        const need = needsOf(s, kind);
+        const short = r.fac < need ? `${r.name} has not the ${need === 1 ? '1 factory' : `${need} factories`} it needs` : `${r.name} is too steep for tanks to form up`;
+        const why = !up ? 'It is not your month.'
+          : !o ? 'It cannot be ordered now.'
+            : o.poor && n ? `Needs ${shown(price).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.`
+              : o.why ? o.why
+                : !here ? `${short}.${o.at >= 0 ? ` Raise it at ${s.regions[o.at].name}.` : ''}` : '';
+        return {
+          kind, label: spec.label, divs: spec.divs, cost: shown(price), months: spec.months, blurb: spec.blurb,
+          // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
+          keep: budgeted(s) ? shown(corpsUpkeep(kind, spec.divs, 1)) : 0,
+          ok: up && !!o && !o.why && here,
+          why,
+        };
+      });
+    })() : [],
     raiseNote: raiseHere ? '' : home ? 'New corps are raised in the home country and sent out by sea.' : '',
     // Fortifications: the next level, if there is one.
     // (fortCost is null off home ground, save a conquered town that has settled: release 2, buildings.ts.)
@@ -4392,7 +4540,8 @@ function force(kind: string, id: number) {
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
   const base = s.regions[f.base];
-  const targetName = (m: AirMission, t: number) => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+  // (A strike on shipping and a sea patrol against submarines are aimed at a sea; every other mission at a province.)
+  const targetName = (m: AirMission, t: number) => (m === 'strike' || m === 'seapatrol' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
   const doing = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ''}.`;
   const mine = f.nat === s.human;
   if (mine) {
@@ -4644,6 +4793,8 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (pictureDamaged(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
   // (Release 2, columns.ts and logistics.ts) The supply columns, where they run.
   if (columnsAreOn(s) && s.nations[s.human]?.alive) out.push({ id: 'lorries', label: 'SUPPLY COLUMNS' });
+  // (Release 2, atom.ts) The atomic project, where it is in this campaign.
+  if (atomOn(s) && s.nations[s.human]?.alive) out.push({ id: 'atom', label: 'THE ATOMIC PROJECT' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
   return out;
@@ -4764,6 +4915,12 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
       });
     }
   } catch { /* rules without the secret war */ }
+  // (Release 2, atom.ts) A bomb in hand and no strike armed: from the month a bomb is ready until he has opened THE
+  // ATOMIC PROJECT once after that (the UI director: a bomb kept in hand is a choice, not a chore; the count stays on the page).
+  const atom = atomOn(s) ? me.atom : undefined;
+  if (atom?.bombs && !(atom.armed && atom.armed[0] === s.turn) && atom.struck !== s.turn && (atom.seen === undefined || atom.seen < (atom.fresh ?? atom.ready ?? 0))) {
+    out.push({ k: 'page:atom', t: atom.bombs === 1 ? 'AN ATOMIC BOMB IS READY' : `${atom.bombs} ATOMIC BOMBS ARE READY`, tip: 'A bomb is carried by a raid of four-engined bombers on an enemy city that is not a capital. Open THE ATOMIC PROJECT to choose the city, or keep it in hand.' });
+  }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
   if (me.queue.length === 0 && pictureOffers(s).some((o) => !o.why)) {
     out.push({
@@ -4974,7 +5131,8 @@ function lastActPage(s: Game): Page | null {
 // ---- The air war: airfields, the groups on them, and the planning of a raid --------------------------------
 
 const craftOf = (ftr: number, bmr: number): string => [ftr >= 1 ? `${Math.round(ftr).toLocaleString('en-US')} fighters` : '', bmr >= 1 ? `${Math.round(bmr).toLocaleString('en-US')} bombers` : ''].filter(Boolean).join(', ') || 'no aircraft fit to fly';
-const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+/** Where a group's mission is aimed: a sea for a strike on shipping and a sea patrol against submarines, else a province. */
+const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' || m === 'seapatrol' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
 const airDoing = (s: Game, f: Game['airFleets'][number]): string => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ''}`;
 const RAID_TITLE: Record<string, string> = { bomb: 'A BOMBING RAID BY DAY', night: 'RAIDS BY NIGHT', superiority: 'A FIGHT FOR THE SKY', strike: 'A STRIKE ON SHIPPING' };
 
@@ -5246,9 +5404,10 @@ function fleetPage(s: Game, id: number): Page | null {
     return {
       nat: '', title: `${z.name}${z.here ? '  \u00B7  it is here' : ''}`, lines: [`${enemy} ${meet}`, [hunt, risk].filter(Boolean).join(' ')].filter(Boolean),
       buttons: [
-        { label: 'PATROL', act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at('patrol'), tip: 'Seeks out the enemy\'s warships there and guards the convoys that cross it.' },
-        { label: 'RAID SHIPPING', act: `fleet:${id}:${z.zone}:raid`, ok: up && !at('raid'), tip: 'Goes for merchant ships and keeps clear of a fight with the enemy fleet.' },
-        { label: 'HUNT SUBMARINES', act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at('hunt') && card.hunters > 0, tip: card.hunters > 0 ? 'Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks.' : 'It has no destroyers to hunt with.' },
+        // (1.5.2, playtest #37: a button shut because it is the fleet's order now says so, as the side panel does.)
+        { label: 'PATROL', act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at('patrol'), tip: `${at('patrol') ? 'It is doing so now. ' : ''}Seeks out the enemy's warships there and guards the convoys that cross it.` },
+        { label: 'RAID SHIPPING', act: `fleet:${id}:${z.zone}:raid`, ok: up && !at('raid'), tip: `${at('raid') ? 'It is doing so now. ' : ''}Goes for merchant ships and keeps clear of a fight with the enemy fleet.` },
+        { label: 'HUNT SUBMARINES', act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at('hunt') && card.hunters > 0, tip: card.hunters > 0 ? `${at('hunt') ? 'It is doing so now. ' : ''}Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks.` : 'It has no destroyers to hunt with.' },
       ],
     };
   });
@@ -5307,6 +5466,32 @@ function fleetPage(s: Game, id: number): Page | null {
     ].filter(Boolean);
     return { nat: card.nat, title: cap1(seaWhat(name)), lines, buttons: [{ label: 'LAY MINES', act: `fleetmines:${id}:${z}`, ok: up, tip: 'It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months.' }] };
   });
+  // (Release 2, harbourstrike.ts) The enemy harbours its carriers' aircraft reach, or would from another base, with what lies there.
+  const may = new Set(s.human && up ? declarable(s) : []);
+  const harbours: PageRow[] = (card.ships > 0 ? strikeHarbours(s, id, (nat) => may.has(nat)) : []).map((h) => {
+    const who = s.nations[h.holder];
+    const base = h.forward >= 0 ? s.regions[h.forward] : undefined;
+    const lines = [
+      `At anchor: ${h.fleets.join(', ')}${anchorLine(h) ? ` (${anchorLine(h)})` : ''}.`,
+      h.launch >= 0 ? `Its aircraft reach it from ${seaWhat(s.seas[h.launch]?.name ?? 'sea')}.` : base ? `Beyond its aircraft from ${s.fleets.find((x) => x.id === id)?.port ?? 'its base'}: from ${base.name} they reach it.` : '',
+      h.atWar ? '' : `${who ? upFirst(theName(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`,
+    ].filter(Boolean);
+    const buttons = h.launch >= 0
+      ? [{ label: 'STRIKE FROM THE AIR', act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? 'It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month\'s air war. Ships at anchor cannot manoeuvre.' }]
+      : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
+    return { nat: h.holder, title: `${h.name}${who ? ` (${who.adj ?? who.name})` : ''}`, lines, buttons };
+  });
+  // (The far side's dated rows) A base move of the staff's plan that waits on him: he keeps the fleet, or runs the navy.
+  const fb = s.fleets.find((x) => x.id === id);
+  const waits = fb ? bookBaseOf(s, fb) : null;
+  const plan: PageRow[] = waits ? [{
+    nat: card.nat, title: waits.region.name,
+    lines: [
+      `${waits.words} (${turnToDate(waits.turn).label}).`,
+      staffRunsDesk(s, 'navy') ? 'You keep it under your own orders: hand it back to your admirals and it goes there with their next month.' : 'You run the navy yourself: the move is yours to make.',
+    ],
+    buttons: [{ label: `MOVE BASE TO ${waits.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: 'Its new home port, where the staff\'s plan has it. It spends the month in harbour there.' }],
+  }] : [];
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
@@ -5324,7 +5509,7 @@ function fleetPage(s: Game, id: number): Page | null {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
     note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
     top: [
-      { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
+      { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: `${card.stance === 'port' ? 'It is in harbour now. ' : ''}Safe from the enemy fleet, and takes no part at sea.` },
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
       ...(taskForceOn(s) && fl ? [fl.task
         ? { label: 'RELEASE TASK FORCE', act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP }
@@ -5338,6 +5523,8 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'SHADOWING', text: shadowing, rows: [] },
       { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
       { heading: 'SEAS TO MINE', text: '', rows: minable },
+      { heading: 'ENEMY HARBOURS TO STRIKE', text: '', rows: harbours },
+      { heading: 'THE STAFF\'S PLAN', text: '', rows: plan },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
@@ -5479,12 +5666,15 @@ function forcesPage(s: Game): Page | null {
     const gen = cs.map((c) => generalOf(s, c)?.name).find(Boolean);
     const kinds = new Map<string, number>();
     for (const c of field) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
-    const what = [...kinds.entries()].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(', ');
+    // (1.5.2, playtest #36: each kind with its own count and noun, "1 infantry division, 2 engineer divisions", never
+    // "1 infantry divisions"; the kinds' words as a division is named, "armoured" and "engineer".)
+    const DIV_WORD: Record<string, string> = { Armor: 'armoured', Engineers: 'engineer', Fortress: 'fortress' };
+    const what = [...kinds.entries()].map(([k, n]) => `${n} ${DIV_WORD[k] ?? k.toLowerCase()} division${n === 1 ? '' : 's'}`).join(', ');
     return {
       sort: (moving.length ? 0 : 1) * 1e6 - cs.reduce((n, c) => n + men(c), 0) / 1000,
       row: {
         nat: me, title: `${s.regions[reg].name}${gen ? `  ·  ${gen}` : ''}`,
-        lines: [`${cs.length} corps, ${num(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what} divisions` : ''}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? 'It has used its month, or holds its ground.' : ''].filter(Boolean),
+        lines: [`${cs.length} corps, ${num(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what}` : ''}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? 'It has used its month, or holds its ground.' : ''].filter(Boolean),
         buttons: [{ label: 'GO THERE', act: `goto:army:${reg}`, ok: true, tip: 'Looks at the army and picks it up.' }],
       },
     };
@@ -5686,6 +5876,105 @@ function repairsPage(s: Game): Page | null {
   };
 }
 
+const PACE_WORD: Record<AtomPace, string> = { steady: 'STEADY', full: 'FULL', crash: 'CRASH' };
+
+/**
+ * (Release 2, atom.ts; Brian 25 November 2026) The atomic project: the three rows of research, the plants (where they
+ * stand, the pace they draw at, how far they have come), the bombs in hand, a strike to arm, and what the player knows
+ * of other countries' projects. Plain words, no count, no spectacle (ruling 230, 4e).
+ */
+function atomPage(s: Game): Page | null {
+  const nat = s.human;
+  const me = nat ? s.nations[nat] : null;
+  if (!nat || !me?.alive) return null;
+  const v: AtomView | null = atomView(s, nat);
+  if (!v) return null;
+  const up = humanUp(s) && !onEve(s);
+  const notUp = 'It is not your month.';
+  const where = (r: number | null): string => (r === null ? 'nowhere yet' : townName(s.regions[r]));
+  const pct = (x: number): string => `${Math.round(x * 100)}%`;
+  const sections: Page['sections'] = [];
+  const top: PageButton[] = [];
+  // The research.
+  const rowWord = (r: AtomView['rows'][number]): string => (r.done ? 'done' : r.work ? 'a team is at work on it' : 'not begun');
+  const NAMES = ['Atomic physics', 'Chain reaction', 'Atomic weapon design'];
+  sections.push({
+    heading: 'THE RESEARCH',
+    text: 'Three steps of the Industry branch, ordered from RESEARCH like any other. Chain reaction lets the plants be started; Atomic weapon design is needed before the first bomb.',
+    rows: v.rows.map((r, i) => ({ nat: '', title: NAMES[i].toUpperCase(), lines: [`${NAMES[i]}: ${rowWord(r)}.`], buttons: [], meter: r.done ? 1 : 0 })),
+  });
+  // The plants.
+  const paceButtons = (): PageButton[] => ATOM_PACES.map((p) => ({
+    label: `${PACE_WORD[p]} \u00B7 ${pct(ATOM_DATA.plants.pace[p])}`, act: `atom:pace:${p}`, ok: up && p !== v.pace,
+    tip: !up ? notUp : p === v.pace ? 'The plants draw at this pace already.' : `The plants take ${pct(ATOM_DATA.plants.pace[p])} of your earnings every month.`,
+  }));
+  if (v.plants === null) {
+    const rows: PageRow[] = v.sites.map((x) => ({
+      nat, title: `${townName(s.regions[x.region]).toUpperCase()}${x.region === v.site ? '  \u00B7  CHOSEN' : ''}`,
+      lines: [`${s.regions[x.region].fac} factor${s.regions[x.region].fac === 1 ? 'y' : 'ies'}.  \u00B7  ${x.hops >= 99 ? 'No enemy ground anywhere near.' : `${x.hops} province${x.hops === 1 ? '' : 's'} from the nearest enemy ground.`}`],
+      buttons: [{ label: x.region === v.site ? 'CHOSEN' : 'BUILD THEM HERE', act: `atom:site:${x.region}`, ok: up && x.region !== v.site, tip: !up ? notUp : 'The plants will stand here. Bombing and sabotage here set them back, and if the province is lost, so are they.' }],
+    }));
+    sections.push({
+      heading: 'WHERE THE PLANTS WILL STAND',
+      text: `The plants are not research: they take a share of your earnings every month, for years, towards one great bill. A large industry finishes them in about two years; a small one never does. ${v.months === null ? "At today's earnings yours would never be finished." : `At ${PACE_WORD[v.pace].toLowerCase()} pace and today's earnings, they ${atomFinishWords(v.months)}.`}`,
+      rows,
+    });
+    top.push({ label: 'START THE ATOMIC PLANTS', act: 'atom:begin', ok: up && v.canPlants === null, tip: !up ? notUp : v.canPlants ?? `Work starts ${where(v.site) === 'nowhere yet' ? '' : `at ${where(v.site)} `}at ${PACE_WORD[v.pace].toLowerCase()} pace.` });
+    top.push(...paceButtons());
+  } else if (!v.done) {
+    sections.push({
+      heading: 'THE ATOMIC PLANTS',
+      text: `${v.paused ? 'Stopped by your order: they draw nothing, and their work stands.' : v.idle ? 'They stand idle: the treasury is in debt. They start again once it is out of debt.' : v.drawn ? `This month they take ${moneyWords(v.draw)} of your earnings.` : `From next month they take ${moneyWords(v.draw)} of your earnings.`} ${v.months === null ? "At today's earnings they would never be finished." : v.months > 60 ? "At this pace and today's earnings they need more than five years more." : `At this pace and today's earnings they need about ${v.months <= 1 ? 'a month' : `${v.months} months`} more.`} Bombing the town and sabotage there set them back; if the province is lost, so are they.`,
+      rows: [{ nat, title: `AT ${where(v.site).toUpperCase()}  \u00B7  ${pct(v.plants / v.bill)} DONE`, lines: [`Pace: ${PACE_WORD[v.pace].toLowerCase()}.`], buttons: [], meter: Math.min(1, v.plants / v.bill) }],
+    });
+    top.push(...paceButtons());
+    top.push({ label: v.paused ? 'START THEM AGAIN' : 'STOP THE PLANTS', act: v.paused ? 'atom:resume' : 'atom:pause', ok: up, tip: !up ? notUp : v.paused ? 'They draw their share again from this month.' : 'They draw nothing until you let them, and keep the work done.' });
+  } else {
+    sections.push({
+      heading: 'THE BOMBS',
+      text: v.bombs ? `${v.bombs === 1 ? 'One atomic bomb is' : `${v.bombs} atomic bombs are`} in hand.` : 'No atomic bomb is in hand.',
+      rows: [{ nat, title: v.making ? 'THE PLANTS MAKE MORE' : 'THE PLANTS MAKE NO MORE', lines: [v.making ? `One more every ${inWords(ATOM_DATA.plants.every)} months, for a tenth of your earnings, ${inWords(ATOM_DATA.plants.most)} in hand at most.` : 'They draw nothing.'], buttons: [{ label: v.making ? 'MAKE NO MORE' : 'MAKE MORE', act: `atom:making:${v.making ? 'off' : 'on'}`, ok: up, tip: !up ? notUp : v.making ? 'The plants stop making bombs.' : 'The plants make more bombs again.' }], meter: v.making ? Math.min(1, v.next / ATOM_DATA.plants.every) : 0 }],
+    });
+  }
+  // A strike.
+  if (v.bombs > 0) {
+    const rows: PageRow[] = v.targets.map((t) => ({
+      nat: s.regions[t.region].ctrl, title: `${townName(s.regions[t.region]).toUpperCase()}${v.armed === t.region ? '  \u00B7  SET ASIDE' : ''}`,
+      lines: t.why ? [t.why] : ['A bomber group of yours can reach it this month.'],
+      buttons: v.armed === t.region
+        ? [{ label: 'PLAN THE RAID', act: `atom:arm:${t.region}`, ok: up, tip: 'Opens the raid card for this city.' }, { label: 'CANCEL THE STRIKE', act: 'atom:disarm', ok: up, tip: 'The bomb stays in hand.' }]
+        : [{ label: 'CARRY THE BOMB HERE', act: `atom:arm:${t.region}`, ok: up && t.why === null, tip: !up ? notUp : t.why ?? 'Your next bombing raid on this city this month carries the bomb. The raid card opens.' }],
+    }));
+    sections.push({
+      heading: 'A STRIKE',
+      text: 'A bomb is carried by an ordinary raid of four-engined bombers on an enemy city, flown like any raid: if the bomber that carries it is shot down, the bomb is lost with it. One strike a month. Never a capital: there must be a government left to give in.',
+      rows,
+    });
+  }
+  // What strikes have cost the player, and what he knows of others.
+  if (v.worn > 0) sections.push({ heading: 'YOUR OWN CITIES', text: `Atomic strikes on your cities have taken ${pct(v.worn)} of your people's will to fight. It does not come back.`, rows: [] });
+  sections.push({
+    heading: 'OTHER COUNTRIES\' PROJECTS',
+    text: v.known.length ? 'What your agents, your allies and the news have told you.' : 'You know of no other country\'s atomic project. Your agents may find one: in the province its plants stand in, or reading the books in its capital.',
+    rows: v.known.map((k) => ({
+      nat: k.nat, title: (s.nations[k.nat]?.name ?? k.nat).toUpperCase(),
+      lines: k.done ? ['Its plants are finished.', ...(k.used ? ['It has used an atomic bomb.'] : [])] : [k.plants === null ? 'Its plants are lost.' : `Its plants are about ${pct(k.plants / v.bill)} done.`],
+      buttons: [], ...(k.plants !== null && !k.done ? { meter: Math.min(1, k.plants / v.bill) } : {}),
+    })),
+  });
+  const headline = v.armed !== null ? `A bomb is set aside for ${where(v.armed)}`
+    : v.bombs ? (v.bombs === 1 ? 'An atomic bomb is ready' : `${v.bombs} atomic bombs are ready`)
+    : v.done ? 'The plants are finished'
+    : v.plants !== null ? `The plants are ${pct(v.plants / v.bill)} done`
+    : v.rows[1].done ? 'The plants can be started'
+    : 'The research comes first';
+  return {
+    id: 'atom', title: 'THE ATOMIC PROJECT', headline,
+    note: 'A long gamble: years of research and a great share of your industry, taken from tanks and aircraft, for a weapon that can break the will of an enemy already beaten. Every country plays by the same rules.',
+    top, sections,
+  };
+}
+
 /**
  * (Release 2, columns.ts and logistics.ts) The supply columns: what last month's columns brought the corps beyond the
  * railhead and what caught them, the front the lorries go to first, and the forward dumps.
@@ -5884,7 +6173,7 @@ function cabinetPage(s: Game): Page | null {
       (d as { hard?: boolean }).hard ? 'The cabinet knows the place is strongly held: it has given more time and a larger reward.' : '',
       (d as { again?: boolean }).again ? 'The cabinet has asked for this before.' : ''].filter(Boolean),
     buttons: [
-      ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
+      ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:region:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
       ...(doorOf[d.kind as string] ? [{ ...doorOf[d.kind as string], ok: true }] : []),
       (() => {
         const why = up ? whyNotSetAsideDirective(s) : notNow;
@@ -5934,7 +6223,7 @@ function cabinetPage(s: Game): Page | null {
         nat: v.nat, title: `${x.promise.town}  \u00B7  ${x.promise.left <= 1 ? 'due this month' : `${months(x.promise.left)} left`}`,
         lines: [`${x.promise.bandName}. ${x.promise.progress}`, `Kept: ${x.promise.reward}.`],
         buttons: [
-          ...(x.promise.region !== undefined && x.promise.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${x.promise.region}`, ok: true, tip: 'Goes to the town you promised.' }] : []),
+          ...(x.promise.region !== undefined && x.promise.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:region:${x.promise.region}`, ok: true, tip: 'Goes to the town you promised.' }] : []),
           { label: 'TAKE IT BACK', act: 'cabinet:takeback', ok: pw === null, danger: true, tip: pw ?? `You tell the cabinet it cannot be done. Costs ${x.promise.back} of its trust, half of what breaking your word would.` },
         ],
       }] };
@@ -5985,7 +6274,7 @@ function cabinetPage(s: Game): Page | null {
   ] : cabinetTab === 'decrees' ? [
     { heading: 'DECREES', text: 'One step up at a time, for political capital. A step down is free.', rows: decrees }, comes,
   ] : cabinetTab === 'minutes' ? [
-    { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(1)}`).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] as PageRow[] },
+    { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => { const x = Math.round(m.amount * 10) / 10; return `${m.label} ${x > 0 ? '+' : x < 0 ? '\u2212' : ''}${Math.abs(x).toFixed(1)}`; }).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] as PageRow[] },
     { heading: 'MINUTES', text: v.log.length ? v.log.slice(-12).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join('\n') : 'Nothing minuted yet.', rows: [] as PageRow[] },
   ] : [
     { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
@@ -6134,12 +6423,17 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       const cut = name.search(/ (?:in|off) /);
       return { title: sea || name, who: cut > 0 ? name.slice(0, cut) : name };
     };
+    const bomb = (kind === 'bomb' || kind === 'night') && !!s.human && (() => { try { return atomArmedAt(s, s.human!) === target; } catch { return false; } })();
     const card = {
       kind, kindLabel: raidKinds(s).find((x) => x.key === kind)?.label ?? '', why: p.why ?? '',
       target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? '', sort: raidSort(s, kind, target), act: '', now: true, picture: picture(target, here?.holder ?? ''), ...titled(here, p.place) },
       // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
-      what: here?.what ?? '', effect: p.why ? '' : ((t: string): string => { const i = t.indexOf('. '); return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t; })(p.effects[0] ?? ''),
+      what: here?.what ?? '', effect: p.why ? '' : bomb ? p.effects[0] ?? '' : ((t: string): string => { const i = t.indexOf('. '); return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t; })(p.effects[0] ?? ''),
       effects: p.why ? '' : p.effects.join(' '),
+      // (Release 2, atom.ts; the UI director under ruling 134(f).) A raid that carries the atomic bomb: its one line in
+      // full in place of the output, railway and city rows; BACK, the safe answer, is lit and takes Enter and Esc; the
+      // raid itself takes a click only.
+      bomb, back: bomb ? { label: 'BACK', act: 'atom:back', ok: true, tip: 'The bomb stays in hand, and no raid carries it.' } : null,
       // (The art director's card: up to three boxes, each one number and a few words on what a hit does. The rules
       // give these as sentences today, so the figures are read out of the rules' own words; a sentence that fits
       // none of these gets no box, and the whole of it is on the pointer.)
@@ -6228,12 +6522,14 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'atom' ? atomPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'fleetattack' ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
     : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : part[0] === 'fold' ? foldPage(s, Number(part[1])) : null;
+  // (Release 2, atom.ts) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END THE MONTH has done its work.
+  if (p && id === 'atom' && s.human) { const a = s.nations[s.human]?.atom; if (a && (a.bombs ?? 0) > 0) a.seen = s.turn; }
   // An air group's row carries a large picture of its own machine, wherever the row is of an air group by name:
   // the fighter, or the bomber where the group is mostly bombers. (The fine model of an aircraft is seen here.)
   if (p) {
@@ -6583,6 +6879,55 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : (shadowRelayOn(s) ? 'The shadow relay is on: a shadow\'s fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact.' : on ? 'The shadow relay will work once shadowing is on.' : 'The shadow relay is off: shadows stay on station as long as they keep contact.');
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'seekoncerule') {
+    // (Release 2, navy.ts) One battle sought a month, switched by the player in any month.
+    setSeekOnce(s, part[1] === 'on');
+    ok = true;
+    note = seekOnceOn(s)
+      ? 'One battle sought a month is on: a fleet that attacked, by your order or at a month\'s end, seeks no other battle that month. It can still be attacked.'
+      : 'One battle sought a month is off: a fleet at sea can seek battle again in its allies\' months.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'carrierstrikerule') {
+    // (Release 2, harbourstrike.ts) Carrier strikes on harbours from a fleet's page, switched in any month.
+    setCarrierStrike(s, part[1] === 'on');
+    ok = true;
+    note = carrierStrikeOn(s) ? 'Carrier strikes on harbours are on: a carrier fleet\'s page lists the enemy harbours its aircraft reach, and one order sails it there and sends its wings in.' : 'Carrier strikes on harbours are off.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'wingbydaterule') {
+    // (Release 2, carriers.ts) Carrier wings by date (the rider to rulings 189 and 202), switched in any month.
+    setWingByDate(s, part[1] === 'on');
+    ok = true;
+    note = wingByDateOn(s) ? 'Carrier wings by date are on: a navy\'s carriers change their mix of aircraft on the dates the record gives (Britain\'s from August 1942). New room fills as losses are made good, in harbour.' : 'Carrier wings by date are off: every navy\'s carriers keep one mix of aircraft for the whole war.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'fleetstrike') {
+    // (Release 2, harbourstrike.ts) 'fleetstrike:<fleet>:<harbour>' sails it into reach and sends its wings at the harbour.
+    const id = Number(part[1]), r = Number(part[2]);
+    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    const done = orderCarrierStrikeFleet(s, id, r);
+    ok = !!done;
+    note = done
+      ? `The ${name} sails ${seaWhere(s.seas[done.zone]?.name ?? 'sea')}, and its aircraft will strike ${s.regions[r]?.name ?? 'the harbour'} with this month's air war.`
+      : (strikeHarbours(s, id, () => true).find((h) => h.region === r)?.why ?? 'It cannot strike that harbour now.');
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
+  if (part[0] === 'fleetbookbase') {
+    // (The far side's dated rows) 'fleetbookbase:<fleet>' moves its base where the staff's plan has it (navy.ts, bookWaits).
+    const id = Number(part[1]), f = s.fleets.find((x) => x.id === id);
+    const to = f ? bookBaseOf(s, f) : null;
+    ok = !!to && orderRebase(s, id, to.region.id);
+    note = ok ? `Its new home port is ${to!.region.name}.` : 'It cannot move its base there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
+  if (part[0] === 'fleetstrikebase') {
+    // (Release 2, harbourstrike.ts) 'fleetstrikebase:<fleet>:<port>' moves its base forward, to where its aircraft reach the harbour.
+    const id = Number(part[1]), r = Number(part[2]);
+    ok = orderRebase(s, id, r);
+    note = ok ? `Its new home port is ${s.regions[r]?.name ?? 'there'}.` : 'It cannot move its base there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
   if (part[0] === 'fleetmines') {
     // (Release 2, mines.ts) 'fleetmines:<fleet>:<sea>' sails it there and lays a field.
     const id = Number(part[1]), z = Number(part[2]);
@@ -6604,6 +6949,16 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : part[0] === 'voyagelogrule'
         ? (voyageOn(s) ? 'The voyage log is on: each fleet writes where it was and what it fought at every month\'s end, on its page.' : 'The voyage log is off: nothing more is written, and the logs are kept for when it is back on.')
         : (rearBridgesOn(s) ? 'Rearguards blow the bridges: a rearguard lays charges on the bridges behind it, and if its province is lost they go up almost every time.' : on ? 'Rearguards will blow the bridges once rearguards are on.' : 'Rearguards no longer lay charges: bridges behind them go up on the usual chance.');
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'sailorsrule') {
+    // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Men in the water, switched by the player in any month.
+    const on = part[1] === 'on';
+    setSailors(s, on);
+    ok = true;
+    note = sailorsOn(s)
+      ? 'Sailor rules are on: in fleet actions fought live on the sea field, men go into the water when a ship goes down, and the side left holding the water picks up who it can.'
+      : on ? 'Sailor rules work in the grand campaign only.' : 'Sailor rules are off.';
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'fleetshadow') {
@@ -6720,6 +7075,38 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       ? `${label} can be switched only in the campaign's first month.`
       : `${label} ${logisticsSet(s, which) ? `${which === 'dumps' ? 'are' : which === 'wagons' ? 'are' : 'is'} on${columnsAreOn(s) ? '' : ' (they work only with the supply columns on)'}.` : `${which === 'lorryShift' ? 'is' : 'are'} off.`}`;
     return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'atomrule') {
+    // (Release 2, atom.ts) The atomic project, switched in any month.
+    ok = setAtom(s, part[1] === 'on');
+    note = !ok ? 'The atomic project is part of the grand campaign only.' : atomOn(s) ? 'The atomic project is on: three steps of the Industry branch, then atomic plants that take a share of your earnings for years. Open THE ATOMIC PROJECT.' : 'The atomic project is off: its research leaves the tree, and no plants draw.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'atom') {
+    // (Release 2, atom.ts) The player's orders for his atomic project.
+    const nat = s.human;
+    const r = Number(part[2]);
+    // (The UI director under ruling 134(f): BACK on the raid card of a bomb raid, the safe answer, which Enter and Esc
+    // give. The bomb stays in hand and nothing is set aside, so no other raid on that city can carry it by surprise.)
+    if (part[1] === 'back') { if (nat) cancelAtomStrike(s); ok = true; note = 'The bomb stays in hand.'; }
+    // (THE ATOMIC PROJECT opened by the 3D page, which does not ask for the page by TC.page: the chip has done its work.)
+    else if (part[1] === 'seen') { const a = nat ? s.nations[nat]?.atom : undefined; if (a && (a.bombs ?? 0) > 0) a.seen = s.turn; ok = true; note = ''; return { ok, note, fly, flies, open: '', view: view() }; }
+    else if (!nat || !humanUp(s) || onEve(s)) { ok = false; note = 'It is not your month.'; }
+    else if (part[1] === 'begin') { const why = whyNotAtomPlants(s); ok = !why && orderAtomPlants(s); note = ok ? '' : why ?? 'The plants cannot be started now.'; }
+    else if (part[1] === 'site') { ok = orderAtomSite(s, r); note = ok ? `The plants will stand at ${townName(s.regions[r])}.` : 'The plants cannot stand there.'; }
+    else if (part[1] === 'pace') { ok = orderAtomPace(s, part[2] as AtomPace); note = ok ? `The plants draw at ${part[2]} pace: ${Math.round((ATOM_DATA.plants.pace[part[2] as AtomPace] ?? 0) * 100)}% of your earnings every month.` : ''; }
+    else if (part[1] === 'pause' || part[1] === 'resume') { ok = orderAtomPause(s, part[1] === 'pause'); note = ok ? (part[1] === 'pause' ? 'The plants are stopped: they draw nothing, and their work stands.' : 'The plants draw their share again.') : ''; }
+    else if (part[1] === 'making') { ok = orderAtomMaking(s, part[2] === 'on'); note = ok ? (part[2] === 'on' ? 'The plants make more bombs.' : 'The plants make no more bombs.') : ''; }
+    else if (part[1] === 'arm') {
+      const already = s.nations[nat].atom?.armed?.[0] === s.turn && s.nations[nat].atom?.armed?.[1] === r;
+      const why = already ? null : whyNotAtomStrike(s, r);
+      ok = already || (!why && orderAtomStrike(s, r));
+      note = ok ? `Your next bombing raid on ${townName(s.regions[r])} this month carries the atomic bomb.` : why ?? 'The bomb cannot be carried there now.';
+      // (The raid card for that city, with the staff's pick of groups, as a raid on the line is opened.)
+      if (ok) open = `plan:bomb:${r}:${(() => { try { return weighRaid(s, 'bomb', r).picked.join('.'); } catch { return ''; } })()}`;
+    }
+    else if (part[1] === 'disarm') { ok = cancelAtomStrike(s); note = ok ? 'The bomb stays in hand.' : ''; }
+    return { ok, note, fly, flies, open: open || (ok ? 'atom' : ''), view: view() };
   }
   if (part[0] === 'lorries') {
     // (Release 2, logistics.ts) The front the player's lorries go to first, or none.
@@ -6859,12 +7246,21 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   if (part[0] === 'air') {
     const f = s.airFleets.find((x) => x.id === Number(part[1]));
     const m = part[2] as AirMission, t = Number(part[3]);
+    // (A strike on shipping and a sea patrol against submarines are aimed at a sea; every other mission at a province.)
+    const sea = m === 'strike' || m === 'seapatrol';
     // What the raid will meet, as the planner worked it out: guns round the target, fighters rising, likely losses.
     const before = f && t >= 0 ? previewAirOrder(s, f.id, m, t) : null;
-    const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: '', loss: 0 };
+    // (A sea patrol's losses are its own (seapatrol.ts patrolLoss): the operational share of the aircraft on patrol and
+    // the fighters' part where enemy fighters meet it, never a target's guns, as a share of the group's bombers.)
+    const lossOf = (a: NonNullable<typeof before>): number => {
+      if (m !== 'seapatrol' || !f) return forecastAir(s, a, m, t).bomberLoss;
+      const x = patrolLoss(s, f, t);
+      return f.bmr >= 1 ? (x.op + x.fighters) / f.bmr : 0;
+    };
+    const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: lossOf(before) } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
     note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
-    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
+    if (ok && f && t >= 0) { const p = sea ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: sea ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
@@ -6874,7 +7270,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetstaff') {
     ok = handBackFleet(s, Number(part[1]));
-    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month.` : 'It cannot be handed back now.';
+    const fw = s.fleets.find((x) => x.id === Number(part[1])), plan = fw ? bookBaseOf(s, fw) : null;
+    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month${plan ? `, and goes to ${plan.region.name} as the staff's plan has it` : ''}.` : 'It cannot be handed back now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetescort') {
     ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));
@@ -6999,7 +7396,8 @@ function diplomacy() {
       nat: n.id, name: n.name, alive: n.alive, divs: n.alive ? fieldArmy(s, n.id) : 0,
       will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
       side: n.id === me.id ? 'own' : atWar(s, me.id, n.id) ? 'enemy' : allied(s, me.id, n.id) ? 'ally' : 'other',
-      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms`,
+      // (Ruling 201, point 4: a fallen great power's own card closes with the line that the war goes on, while it does.)
+      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms${((on) => (on ? `. ${on.news}` : ''))(warGoesOn(s, n.id))}`,
       war: can.has(n.id),
       // (Version 65) Its general staff as the player knows it: its character, what it is doing in a sentence, and
       // whether a main effort of its is aimed at the player or his allies, with the place it is aimed at.
@@ -7072,7 +7470,10 @@ function diplomacy() {
   return {
     nation: me.name, date: turnToDate(s.turn).label, bloc: side, up,
     capital: Math.floor(me.pc), income: pcIncome(me.id), cap: DIPLOMACY.pcCap, partners: partners.size, cost: DIPLOMACY.court.cost,
-    wind,
+    // (Ruling 201, point 4: at the head of the Powers tab, while a great power has fallen and the war is not decided,
+    // the line that names the powers still at war. Only on the whole-world chart; `undecided` carries it alone.)
+    wind: ((on) => (on ? `${on.line} ${wind}` : wind))(warGoesOn(s)),
+    undecided: warGoesOn(s)?.line ?? '',
     help: mine === 'league' ? 'The League courts nobody: it wins members by invitation, and only those who feel the danger say yes.' : mine
       ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth} a month to your treasury` : ''}; one that is fully won over joins your side.`
       : 'Your country belongs to neither bloc, so it has nobody to win the neutrals over to.',
@@ -7760,7 +8161,7 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's
@@ -7793,11 +8194,22 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadow = (on: boolean) => { const s = game(); setShadow(s, !!on); return { on: shadowOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).voyageLog = (on: boolean) => { const s = game(); setVoyageLog(s, !!on); return { on: voyageOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).rearBridges = (on: boolean) => { const s = game(); setRearBridges(s, !!on); return { on: rearBridgesOn(s) }; };
+// (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) TC.sailors(on) at any time; the options page uses
+// act('sailorsrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).sailors = (on: boolean) => { const s = game(); setSailors(s, !!on); return { on: sailorsOn(s) }; };
 // (Release 2: mines.ts, heavyseas.ts, shadow.ts) TC.seaMines(on), TC.heavySeas(on), TC.shadowRelay(on) at any time; the
 // options page uses act('seaminesrule:on' / 'heavyseasrule:on' / 'shadowrelayrule:on', or ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
+// (Release 2, atom.ts) The atomic project: TC.atomBomb(on) at any time; the options page uses act('atomrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).atomBomb = (on: boolean) => { const s = game(); setAtom(s, !!on); return { on: atomOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heavySeas = (on: boolean) => { const s = game(); setHeavySeas(s, !!on); return { on: heavySeasOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
+// (Release 2, navy.ts) One battle sought a month: TC.seekOnce(on) at any time; the options page uses act('seekoncerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seekOnce = (on: boolean) => { const s = game(); setSeekOnce(s, !!on); return { on: seekOnceOn(s) }; };
+// (Release 2, carriers.ts) TC.wingByDate(on) at any time; the options page uses act('wingbydaterule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wingByDate = (on: boolean) => { const s = game(); setWingByDate(s, !!on); return { on: wingByDateOn(s) }; };
+// (Release 2, harbourstrike.ts) TC.carrierStrike(on) at any time; the options page uses act('carrierstrikerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).carrierStrike = (on: boolean) => { const s = game(); setCarrierStrike(s, !!on); return { on: carrierStrikeOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
@@ -7809,3 +8221,49 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
 // (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };
+// ---- (Release 2 assembly) The ship list's campaign switches (Brian, 25 November 2026 01:10Z: "turn them on automatically") ----
+// The 3D's release 2 ship list (Source/TheaterCommand/Release2Ship.h) names the grand campaign's release 2 rule switches
+// that ship ON, by the ids OPTIONS presses them with (act('<id>:on')). A grand war takes each one once: as it opens, the
+// first time an older war (1.5, 1.5.1) is played in release 2, or the first time a war is played in a build whose list
+// has newly gained it. Each is then marked in the war (g.flags['r2:<id>']), so that a switch he turns off afterwards
+// stays off, through every save and load. A switch that can be set only in a war's opening month
+// (the supply columns and their three orders) is left as it is in an older war. Fleets sent straight at the enemy and
+// breaking corps up are not here: they are already on unless he turned them off. The secret war is not here either: a
+// new war reads it from its own setting, and an older war cannot take it. A parent switch comes before the one that
+// needs it (rearguards before the bridges blown behind them, shadowing before the relay, the columns before their orders).
+// TC.r2Ship(ids) answers the war's picture when it switched anything (the 3D takes it in place of start's or load's), else null.
+const R2_SHIP: Record<string, (s: Game) => boolean> = {
+  nicknames: (s) => { setNicknames(s, true); return nicknamesOn(s); },
+  marked: (s) => { setMarked(s, true); return markedOn(s); },
+  taskforcerule: (s) => { setTaskForce(s, true); return taskForceOn(s); },
+  rearguardrule: (s) => { setRearguard(s, true); return rearguardOn(s); },
+  rearbridgesrule: (s) => { setRearBridges(s, true); return rearBridgesOn(s); },
+  shadowrule: (s) => { setShadow(s, true); return shadowOn(s); },
+  voyagelogrule: (s) => { setVoyageLog(s, true); return voyageOn(s); },
+  seaminesrule: (s) => { setSeaMines(s, true); return seaMinesOn(s); },
+  heavyseasrule: (s) => { setHeavySeas(s, true); return heavySeasOn(s); },
+  shadowrelayrule: (s) => { setShadowRelay(s, true); return shadowRelayOn(s); },
+  seekoncerule: (s) => { setSeekOnce(s, true); return seekOnceOn(s); },
+  fleetwhyrule: (s) => { setFleetWhy(s, true); return fleetWhyOn(s); },
+  settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },
+  columns: (s) => setColumns(s, true),
+  'logistics:lorryShift': (s) => setLogistics(s, 'lorryShift', true),
+  'logistics:wagons': (s) => setLogistics(s, 'wagons', true),
+  'logistics:dumps': (s) => setLogistics(s, 'dumps', true),
+  // (Release 2, atom.ts: the atomic project, switched in any month, so an older war takes it too.)
+  atomrule: (s) => setAtom(s, true) && atomOn(s),
+};
+function r2Ship(ids: string[]) {
+  const s = game();
+  if (s.flags.open !== 1) return null;
+  let took = 0;
+  for (const id of Array.isArray(ids) ? ids : []) {
+    const turnOn = R2_SHIP[id];
+    const mark = 'r2:' + id;
+    if (!turnOn || s.flags[mark] === 1) continue;
+    try { if (turnOn(s)) took++; } catch { /* a switch this war cannot take now is left as it is */ }
+    s.flags[mark] = 1;
+  }
+  return took > 0 ? view() : null;
+}
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).r2Ship = r2Ship;

@@ -58,14 +58,16 @@ const NATL = (g: Game): number => top(clearOdds(g, zoneOf(g, 'natl')));
 
 afterEach(() => { convoyField.fought = undefined; });
 // (The ceiling on the pack as the count counts it: the escort's radar before a boat fires is unread here, and tested
-// with the ceiling in convoy-firing-r2.)
-const firingKept = CAUSE.firing.t2;
-beforeAll(() => { CAUSE.firing.t2 = null; });
-afterAll(() => { CAUSE.firing.t2 = firingKept; });
+// with the ceiling in convoy-firing-r2; the whole load into one convoy, as first built: the load form is unread here,
+// and tested in convoy-load-r2; the contest's E and k as the tons ruling set them: the escorts' losses form is unread
+// here, and tested in convoy-escorts-r2.)
+const firingKept = CAUSE.firing.t2, eyeKept = CAUSE.firing.eye!.effective41, reloadKept = CAUSE.load!.reload, escortsKept = CAUSE.escorts;
+beforeAll(() => { CAUSE.firing.t2 = null; CAUSE.firing.eye!.effective41 = null; CAUSE.load!.reload = null; CAUSE.escorts = null; });
+afterAll(() => { CAUSE.firing.t2 = firingKept; CAUSE.firing.eye!.effective41 = eyeKept; CAUSE.load!.reload = reloadKept; CAUSE.escorts = escortsKept; });
 
 describe('the figures', () => {
   it('lays 12 torpedoes inside the hull, 2 outside, 0.45 a torpedo fired, 0.57 a hit: about 3.1 ships a boat that fires a battle, 3.6 in a calm sea', () => {
-    expect(CAUSE.ceiling).toEqual({ inside: 12, outside: 2, hit: 0.45, sinkHit: 0.57 });
+    expect(CAUSE.ceiling).toEqual({ inside: 12, outside: 2, hit: 0.45, sinkHit: 0.57, tubes: 5 });
     const g = open(true);
     expect(boatCeiling(g, zoneOf(g, 'natl'))).toBeCloseTo(NATL(g), 12);
     // Inside the design director's 2-4 a boat a battle, rough or calm ...
