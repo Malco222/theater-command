@@ -1881,7 +1881,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const rushed = town && g.flags[`siege:${target.id}`] === g.turn ? SIEGE.assault.hasty[townSize(g, target)] : 1;
   const hasty = rushed < 1;
   // (City defences, the design director's ruling of 25 Nov 2026 02:23Z: the heavy anti-aircraft guns of a town with a
-  // living garrison fire on the tanks that storm it, a further cut on top of the streets'. 0 with the switch off.)
+  // living garrison fire on the tanks that storm it, a further cut on top of the streets'. 0 with the switch off, or
+  // with its sub-switch 'flakGround' off: held back by the design director's ruling of 22:10Z, citydefences.ts.)
   const flak = town ? townFlakCut(g, target) : 0;
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
