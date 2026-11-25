@@ -83,6 +83,11 @@ describe('the offers rule has a switch of its own, off until its screen passes t
     const on = singapore(true);
     expect(TANKS.map((nm) => names(on, 'JAP').includes(nm))).toEqual([true, true]);
     expect(rowOffers(on).filter((o) => o.loan !== null).map((o) => o.name)).toEqual(TANKS);
+    // Let go, each goes, and leaves no flag of its offer behind (game.ts, the end of a loan: `leaveKey`).
+    for (const o of rowOffers(on).filter((x) => x.loan !== null)) expect(takeOffer(on, o.id), o.name).toBeNull();
+    expect(TANKS.map((nm) => names(on, 'JAP').includes(nm))).toEqual([false, false]);
+    expect(rowOffers(on).filter((o) => o.loan !== null)).toEqual([]);
+    expect(offerFlags(on).filter((k) => k.startsWith('leave:'))).toEqual([]);
   });
 
   it('off: Oahu\'s split is made by itself for a player\'s America in month 26, as for a computer\'s', () => {
