@@ -603,8 +603,11 @@ namespace LandCrater
 	 * few old lines (the art director, 23 November: found from 300 m up in two seconds, not strewn evenly): each old
 	 * line a run of hedges or lanes across the fought-over ground in one heading, its holes mostly on one side of it;
 	 * some at the Spots; a few strewn. (A line stepped finer than 4 m, as a lane's is, has its steps joined into pieces
-	 * that long; and the old lines take no more holes than about one to 3 m of them, so a field with one lane across
-	 * it keeps the rest for its junctions and its open ground.) GroundWord: the effects kit's word for the ground at a
+	 * that long; and the old lines take no more holes than about one to 3 m of them. A field thin of old lines, with
+	 * less of them over the fought-over ground than would go once round it, one lane across open steppe, takes knots
+	 * along its line instead, 10 to 15 holes over 30 to 60 m and then 40 to 80 m clear, each thrown 5 to 25 m off the
+	 * line and mostly to one side, under half of all; the rest in the open and at the Spots: the art director, 25
+	 * November.) GroundWord: the effects kit's word for the ground at a
 	 * place, empty where no old hole is left (a floor, a wall, water, a lane or a yard mended since: the scene's). An
 	 * earlier battle's holes are older still. Seeded: the same field and seed, the same holes. Returns how many.
 	 */

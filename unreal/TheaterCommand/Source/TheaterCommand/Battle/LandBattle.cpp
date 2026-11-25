@@ -3752,6 +3752,12 @@ void ALandBattle::MakeMen()
 		Crowd->SetGore(true);
 		UE_LOG(LogTheater, Display, TEXT("Land battle: shell and tank hits take limbs off ON (gore twins of %d soldier files)"), Twins);
 	}
+	// Men who leave with their block walk or run off, and no man's body is left standing where the camera last saw him
+	// (release 2, on trial: "-TheaterLandTrial=leave", off until a Mac reading; -TheaterLandNoLeave off whatever the word
+	// says, for a paired run. Brian, 25 November 17:11Z: "some soldiers freeze and then disapear").
+	bLeaveWalk = LandParts::OnTrial("leave") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoLeave"));
+	Crowd->SetLeaveWalk(bLeaveWalk);
+	UE_LOG(LogTheater, Log, TEXT("Land battle: men who leave with their block %s"), bLeaveWalk ? TEXT("walk or run off ON (-TheaterLandTrial=leave, release 2)") : TEXT("as before (stopped and cut)"));
 	std::string Error;
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
 	// little over the drawn ground, and a body laid across a rim lies on it, not sunk in it)
@@ -3965,21 +3971,44 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
-		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || bHigh || Crowd.SeenDistance(Man) <= S.MenCullFrom);
+		bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || bHigh || Crowd.SeenDistance(Man) <= S.MenCullFrom);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
 		Crowd.PlaceAsPosed(Man, X, Y, Z, Facing); // (his height as last posed: no ground asked a man a frame)
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
-		const bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		// (release 2, on trial "leave") A man leaving with his block, out of the picture: hidden for good, so he walks
+		// out of frame and is never seen to go. And a man out of the picture whose body was last drawn where the
+		// picture now looks (the camera turned or cut back to ground he has left since): drawn again, where he is
+		// now, so no body stands frozen at the old place until he next comes into the picture.
+		if (bLeaveWalk && bShown && !bLooked && Crowd.Leaving(Man))
+		{
+			Crowd.LeftUnseen(Man);
+			bShown = false;
+		}
+		if (bLeaveWalk && bShown && !bLooked && D.bDrawnAt)
+		{
+			const LandPlay::Vec Old(D.DrawnAt[0], D.DrawnAt[1], D.DrawnAt[2]);
+			if ((Old - At).Length() > 0.5 && ((Old - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, Old, 1.15)))
+			{
+				bLooked = true;
+				++MenMovedOn;
+			}
+		}
 		if (bShown && bLooked)
 		{
 			++MenInPicture;
+			D.bDrawnAt = true;
+			D.DrawnAt[0] = At.X;
+			D.DrawnAt[1] = At.Y;
+			D.DrawnAt[2] = At.Z;
 		}
 		if (!bShown || !bLooked)
 		{
 			if (!bShown)
 			{
+				D.bDrawnAt = false;
 				if (D.Mesh.IsValid())
 				{
 					D.Mesh->SetVisibility(false);
@@ -7370,6 +7399,13 @@ void ALandBattle::Tick(float DeltaSeconds)
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
 			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
 			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs, PuffsMost, PuffsMostAsked);
+		// (release 2, on trial "leave": how often the picture came back to ground a man had left and his body was drawn
+		// again where he is now, in the span; the Mac's read of whether the stale body was ever there to see)
+		if (bLeaveWalk)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: men who left the place they were last drawn, drawn again where they are as the picture came back to it: %d in the span"), MenMovedOn);
+		}
+		MenMovedOn = 0;
 		// (the camera's line, CD0: what the camera's choice costs, and whether the span's longest gap between frames
 		// came on a shot change: 0 or 1 frames after a cut, with the camera's cut frames cheap, is the renderer's start
 		// afresh, not the choice)

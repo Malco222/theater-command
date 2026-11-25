@@ -418,6 +418,20 @@ namespace LandMen
 		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);
+		/**
+		 * Men who leave with their block walk or run off (release 2, the scene's trial word "leave"; Brian, 25 November
+		 * 17:11Z: "some soldiers freeze and then disapear"). A living man on foot whose block leaves the battle was read
+		 * as standing still from his last kept point, so he stopped dead, mid-stride if he was moving, and was cut half
+		 * a second later. On: he goes on from his last kept point along his last stretch at its speed, or, if he was
+		 * still, gets up, turns and walks for his own side's edge; in a gait all the way; whole for 3 s after he is out
+		 * and gone half a second later. The scene hides him sooner, the first frame he is out of the picture (Leaving,
+		 * LeftUnseen). Dead men, men aboard, riders and vehicles as before. Off unless set: every man as before.
+		 */
+		void SetLeaveWalk(bool bOn);
+		/** A living man on his way off with his block (SetLeaveWalk), still drawn. */
+		bool Leaving(int Man) const;
+		/** A leaving man gone out of the picture: not drawn again, unless his block comes back on the list. */
+		void LeftUnseen(int Man);
 		/** Men who fell as their file's gore twin so far in this play. */
 		int Gored() const;
 		/** Changes when his mesh becomes another (a gore fall, or back at a replay from the start): his triangles and

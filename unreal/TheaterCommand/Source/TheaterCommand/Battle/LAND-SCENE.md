@@ -73,7 +73,9 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
    - `-TheaterLandScars=N`, `-TheaterLandScarMonths=M`, `-TheaterLandNoScars` (release 2): old shell holes from
      earlier battles over the same field, as a recording's root `"scars": {"count", "months"}` gives them.
      They gather along the field's old lines (hedges, lanes, the village's edge): a line stepped finer than 4 m, as
-     a lane's is, has its steps joined, and the lines take no more than about a hole to 3 m of their length.
+     a lane's is, has its steps joined, and the lines take no more than about a hole to 3 m of their length. A field
+     thin of lines (one lane across open steppe) takes knots along its lane with clear stretches between, about a
+     third of the holes, and the rest in the open and at the junctions.
    - `-TheaterLandOldRuts=N`, `-TheaterLandOldRutMonths=M`, `-TheaterLandNoOldRuts` (release 2, mud memory): the ruts
      of battles fought here in mud before, as a recording's root `"oldRuts": {"count", "months"}` gives them: dried
      pale under three months, then a lusher green line fading; puddled with `-TheaterLandWeatherWord=mud`.
@@ -896,6 +898,19 @@ says): the tankers' files carry a `props.binoculars` track on `commander_hatch` 
 reads it (`Crowd::PropFrame`, the prop's place and turn in the world for a rider too) and `RideTanks` draws
 `Content/Models/Battle/Binoculars.json` there as instances, once he is over six tenths out of his hatch; nothing is
 drawn at the roof gun, where the track says put away. The men's test checks them in his hands at every moment.
+
+**Men who leave with their block** (trial word `leave`, off; `-TheaterLandNoLeave` off whatever the word says;
+Brian, 25 November 17:11Z: "some soldiers freeze and then disapear"). A block that falls back off the field or
+breaks takes its men out of the recording at `out`, and the record's track ends there: the scene read speed 0 past
+its last point, so a running man stopped dead in mid-stride, stood half a second and was cut. On, `LandMen`
+(`Crowd::SetLeaveWalk`) carries him on from his last kept point: along his last stretch at its speed where he was
+moving (run over 3 m/s, else walk); a man who was still, lying or kneeling gets up first and walks at 1.4 m/s toward
+his own side's edge (the block's `side`). He stays whole for 3 s after `out` and goes over half a second, and the
+scene hides him for good the first frame he is out of the picture (`Crowd::Leaving`, `Crowd::LeftUnseen`), so where
+the camera allows he is never seen to go. Dead men, riders and vehicles are as before. With it, a man out of the
+picture whose body was last drawn where the picture now looks is drawn again where he is now, so no body stands at
+a place its man has left (the frame log counts them). The men's test plays a running, a cowering and a lying man out,
+with the switch off and on (`Tools/land_show`). Owed: the bench window (`BenchFor`, men to 8 m behind the root).
 
 Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
 `islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.

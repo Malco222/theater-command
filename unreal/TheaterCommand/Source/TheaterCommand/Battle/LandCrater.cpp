@@ -3410,10 +3410,73 @@ namespace LandCrater
 				}
 			}
 		}
-		const double OnFronts = Fronts.empty() ? 0.0 : 0.68 * std::min(1.0, FrontLong / (3.0 * 0.68 * Wanted));
-		const double OnSpots = Fronts.empty() ? 0.6 : OnFronts + 0.2;
+		// A field thin of old lines: less of them over the fought-over ground than would go once round it (one lane
+		// across open steppe; the art director, 25 November 19:00Z). Hugging the hedges is the hedgerow country's
+		// habit, where the hedges were the positions: a lone lane that took its fronts' share carried four holes in
+		// five as a dotted stripe and left the steppe, where that battle's positions lay, clean. There the line takes
+		// knots, not bands, and the share along it follows how much line the field has, under half: 10 to 15 holes
+		// over 30 to 60 m, then 40 to 80 m clear, each knot thrown 5 to 25 m off the line and mostly to one side (a
+		// salvo falls short or over; it does not walk the centre line). The rest falls in the open in clusters, as an
+		// open field's does, and at the junctions and the village's edge. Hedgerow country is laid as it was, draw
+		// for draw.
+		double LineLong = 0.0;
+		for (const Piece& Pc : Pieces) LineLong += Pc.Long;
+		const bool bThin = !Pieces.empty() && LineLong < 2.0 * ((X1 - X0) + (Y1 - Y0));
+		const double OnFronts = bThin || Fronts.empty() ? 0.0 : 0.68 * std::min(1.0, FrontLong / (3.0 * 0.68 * Wanted));
+		const double OnSpots = bThin ? std::min(0.2, 0.05 * static_cast<double>(Spots.size())) : Fronts.empty() ? 0.6 : OnFronts + 0.2;
 
 		int Laid = 0;
+		if (bThin)
+		{
+			const int LineMost = Wanted / 2;
+			double Run = D.U(0.0, 40.0);
+			while (Run < LineLong && Laid < LineMost)
+			{
+				const double KnotLong = D.U(30.0, 60.0);
+				const int InKnot = 10 + static_cast<int>(D.U() * 6.0);
+				const double KnotSide = D.U() < 0.5 ? 1.0 : -1.0;
+				// (which battle before, as a cluster's below; each throw in its own statement)
+				int Earlier = 0;
+				if (Battles > 1)
+				{
+					const double First = D.U();
+					const double Second = D.U();
+					Earlier = static_cast<int>(First * Second * Battles);
+				}
+				const double KnotOlder = Months + Earlier * (2.0 + 4.0 * D.U());
+				for (int N = 0; N < InKnot && Laid < LineMost; ++N)
+				{
+					// (where along the knot, then which piece of line that is)
+					double Left = Run + D.U() * KnotLong;
+					size_t At2 = 0;
+					while (At2 + 1 < Pieces.size() && Left > Pieces[At2].Long) Left -= Pieces[At2++].Long;
+					// (past the last of the line: not laid, never heaped on its end)
+					if (Left > Pieces[At2].Long)
+					{
+						continue;
+					}
+					const Piece& Pc = Pieces[At2];
+					const double Share = std::clamp(Left / Pc.Long, 0.0, 1.0);
+					const double Fell = D.U() < 0.8 ? KnotSide : -KnotSide;
+					const double Wide = Fell * D.U(5.0, 25.0);
+					const double HX = Pc.AX + (Pc.BX - Pc.AX) * Share - Pc.Uy * Wide;
+					const double HY = Pc.AY + (Pc.BY - Pc.AY) * Share + Pc.Ux * Wide;
+					const double What = D.U();
+					const double Aged = std::max(0.0, KnotOlder + D.U() * 0.5);
+					const std::string Soil = GroundWord(HX, HY);
+					if (Soil.empty() || Soil == "water")
+					{
+						continue;
+					}
+					const char* Shell = What < 0.4 ? "mortar" : What < 0.6 ? "gun75" : What < 0.9 ? "field" : "heavy";
+					if (Holes.AddOld(HX, HY, Shell, What < 0.6 && What >= 0.4 ? 75.0 : 0.0, Soil, Aged))
+					{
+						++Laid;
+					}
+				}
+				Run += KnotLong + D.U(40.0, 80.0);
+			}
+		}
 		// (clusters: a barrage's dozen, a mortar's few; tried a while longer than wanted, since open ground is not all)
 		for (int Tries = 0; Laid < Wanted && Tries < Wanted * 6; )
 		{

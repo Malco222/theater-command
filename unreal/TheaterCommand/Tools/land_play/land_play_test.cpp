@@ -1143,7 +1143,13 @@ int main(int argc, char** argv)
 		}
 		std::printf("scars: %.0f%% of the old holes on an old line (the fought-over ground's own points %.0f%%; %zu lines, %zu junctions and village edge); a 150's bowl %.2f m fresh, %.2f at 6 months, %.2f at 12, %.2f at 24\n",
 			100.0 * OnShare, 100.0 * StrewnShare, OldOnes.Lines.size(), OldOnes.Spots.size(), AgedDeep[0], AgedDeep[1], AgedDeep[2], AgedDeep[3]);
-		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && OnShare < 0.55) Fault("scars: the old holes strewn, not along the old lines");
+		// (hedgerow country, where the fought-over ground's own points lie mostly by a line: most of the holes along the
+		// lines. A field thin of lines, one lane across open steppe: more along the lane than strewn holes would lie, in
+		// knots, and never most of them, a dotted stripe down the lane with the steppe clean: the art director, 25 November
+		// 19:00Z.)
+		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && StrewnShare >= 0.4 && OnShare < 0.55) Fault("scars: the old holes strewn, not along the old lines");
+		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && StrewnShare < 0.4 && OnShare < StrewnShare + 0.1) Fault("scars: a thin field's old holes strewn, none drawn to its lane");
+		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && StrewnShare < 0.4 && OnShare > 0.6) Fault("scars: a thin field's old holes a stripe down its lane, its open ground clean");
 		if (AgedDeep[0] > 0.0)
 		{
 			const double Mark[3] = { 0.8, 0.65, 0.5 };
