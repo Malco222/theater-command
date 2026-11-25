@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 320bef49 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3906339c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -73235,8 +73235,8 @@
             w.burnt++;
             w.ammo--;
             if (roll(this.seed, u.id, g2.n, w.burnt, 295) < M2.p) {
-              const a = M2.wait[0] + (M2.wait[1] - M2.wait[0]) * roll(this.seed, u.id, g2.n, w.burnt, 301);
-              w.mis = [t + a, t + a + M2.clear[0] + (M2.clear[1] - M2.clear[0]) * roll(this.seed, u.id, g2.n, w.burnt, 302)];
+              const a = M2.wait[0] + (M2.wait[1] - M2.wait[0]) * roll(this.seed, u.id, g2.n, w.burnt, 441);
+              w.mis = [t + a, t + a + M2.clear[0] + (M2.clear[1] - M2.clear[0]) * roll(this.seed, u.id, g2.n, w.burnt, 442)];
               g2.pose = "hide";
             } else {
               g2.shot = t;
@@ -73285,7 +73285,7 @@
         moves: 0,
         ammo: lerp(g2.role === "hmg" ? C4.supply.mg.start : C4.supply.mortar.start, r(266)),
         burnt: 0,
-        jamAt: lerp(C4.jam.every, r(303))
+        jamAt: lerp(C4.jam.every, r(443))
       };
     }
     /** The army whose drawn weapons a block's are (DR.teamwork.seat.right): its nation's (the Commonwealth's Britain's), letters only. */
@@ -73365,7 +73365,7 @@
       const mid = at4((lo + hi) / 2, 0);
       if (!draw7 || Math.abs(wrap(bearing2(g2.x, g2.y, mid[0], mid[1]) - g2.face)) > DR.teamwork.sweep.arc) return { mid };
       for (let k = 0; k < 4; k++) {
-        let [x, y] = at4(lo + (hi - lo) * roll(this.seed, u.id, g2.n, b.t * 10, k, 305), (roll(this.seed, u.id, g2.n, b.t * 10, k, 306) - 0.5) * 2 * half);
+        let [x, y] = at4(lo + (hi - lo) * roll(this.seed, u.id, g2.n, b.t * 10, k, 445), (roll(this.seed, u.id, g2.n, b.t * 10, k, 446) - 0.5) * 2 * half);
         const [nx, ny] = nearIn(e, x, y), dn = Math.hypot(x - nx, y - ny);
         if (dn > F.reach) {
           x = nx + (x - nx) * F.reach / dn;
@@ -73475,7 +73475,7 @@
       const own = final && !(near2 && near2.gap < L3.lift) ? b.unit(final.own) : void 0;
       if (own) {
         const vx = own.x - e.x, vy = own.y - e.y, vl = Math.hypot(vx, vy) || 1, ux = vx / vl, uy = vy / vl;
-        const lead2 = e.d / 2 + Math.min(DR.teamwork.fpl.short * roll(this.seed, u.id, g2.n, Math.floor(cyc * 2), 304), Math.max(0, b.gap(own, e) - 10));
+        const lead2 = e.d / 2 + Math.min(DR.teamwork.fpl.short * roll(this.seed, u.id, g2.n, Math.floor(cyc * 2), 444), Math.max(0, b.gap(own, e) - 10));
         const cx = e.x + ux * lead2, cy = e.y + uy * lead2;
         ax = cx - uy * (mid + half * tri);
         ay = cy + ux * (mid + half * tri);
@@ -73709,7 +73709,7 @@
       const run = w.run?.m === m ? w.run : void 0, S3 = C4.supply;
       if (run && (run.stage === "fetch" || run.stage === "up") && t > run.t1) run.stage = "back";
       const fetch = !!run && (run.stage === "fetch" || run.stage === "load");
-      if (run && fetch && !run.dump) run.dump = this.leash(sq, toWorld(L3, face, feed * S3.lane, -(S3.dump[0] + (S3.dump[1] - S3.dump[0]) * roll(this.seed, u.id, L3.n, w.moves, 307))), -4);
+      if (run && fetch && !run.dump) run.dump = this.leash(sq, toWorld(L3, face, feed * S3.lane, -(S3.dump[0] + (S3.dump[1] - S3.dump[0]) * roll(this.seed, u.id, L3.n, w.moves, 447))), -4);
       const o = run && run.stage !== "back" ? [two[0] + (mg ? feed : 1) * 0.8, two[1] - 0.9] : own;
       const hand2 = !!run && (run.stage === "up" || run.stage === "at"), seated = m.cj === "two" && !run && w.set <= t;
       m.hand = hand2 ? true : void 0;
@@ -73743,7 +73743,7 @@
             return true;
           }
           run.stage = "load";
-          run.t1 = t + S3.load[0] + (S3.load[1] - S3.load[0]) * roll(this.seed, u.id, m.n, Math.floor(t), 308);
+          run.t1 = t + S3.load[0] + (S3.load[1] - S3.load[0]) * roll(this.seed, u.id, m.n, Math.floor(t), 448);
         }
         if (run.stage === "load") {
           m.v = 0;
