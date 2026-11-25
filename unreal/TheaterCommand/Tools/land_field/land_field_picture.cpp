@@ -958,19 +958,41 @@ namespace LandFieldPicture
 			V3 Eye;
 			double Yaw = 0.5 * Pi;
 			if (!FindEye(G, F, Eye, Yaw)) Eye = { TX, TY - 500.0, G.At(TX, TY - 500.0).Z + 1.7 };
+			// LAND_FIELD_EYE="X Y A [UP PITCH]": where, the heading (math degrees), and optionally the height over the ground (m)
+			// and the pitch (degrees, down negative). With three numbers the eye is the soldier's: 1.7 m up, 2 degrees down.
+			bool bHigh = false;
+			double Pitch = -2.0;
 			if (const char* E = std::getenv("LAND_FIELD_EYE"))
 			{
-				double X, Y, A;
-				if (std::sscanf(E, "%lf %lf %lf", &X, &Y, &A) == 3)
+				double X = 0.0, Y = 0.0, A = 0.0, Up = 1.7, PitchDeg = -2.0;
+				const int N = std::sscanf(E, "%lf %lf %lf %lf %lf", &X, &Y, &A, &Up, &PitchDeg);
+				if (N >= 3)
 				{
 					Eye = { X, Y, G.At(X, Y).Z + 1.7 };
 					Yaw = A * Pi / 180.0;
 				}
+				if (N >= 4) // (a height alone: the pitch stays the soldier's 2 degrees down)
+				{
+					Eye.Z = G.At(X, Y).Z + Up;
+					Pitch = PitchDeg;
+					bHigh = true;
+				}
 			}
 			std::printf("  eye at %.0f, %.0f, %.1f m up, looking %.0f degrees from north\n", Eye.X, Eye.Y, Eye.Z - G.At(Eye.X, Eye.Y).Z, std::fmod(450.0 - Yaw * 180.0 / Pi, 360.0));
-			const View V = Looking(Eye, Yaw, -2.0 * Pi / 180.0, 62.0, W, H);
+			if (bHigh) std::printf("  eye pitch %.1f degrees\n", Pitch);
+			const View V = Looking(Eye, Yaw, Pitch * Pi / 180.0, 62.0, W, H);
 			const V3 Ahead{ std::cos(Yaw), std::sin(Yaw), 0.0 };
-			bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png");
+			if (!bHigh) bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png");
+			else
+			{
+				// A raised eye (as the oblique picture): the fine shadow round where the centre of the view meets the ground,
+				// the wide one well past it; the clutter round the eye as the oblique has it.
+				const double Over = std::max(Eye.Z - G.At(Eye.X, Eye.Y).Z, 0.5);
+				const double Hit = std::clamp(Over / std::tan(std::max(-Pitch, 1.0) * Pi / 180.0), 45.0, 450.0);
+				const V3 Ground{ Eye.X, Eye.Y, G.At(Eye.X, Eye.Y).Z };
+				const double Fine = std::clamp(1.5 * Hit, 120.0, 640.0);
+				bOk &= Picture(G, L, V, Ground + Ahead * Hit, Fine, Ground + Ahead * (Hit + 650.0), 2000.0, 70.0, true, Dir + "/" + Key + "-field-eye.png");
+			}
 		}
 		// (b) 30 m up over the bocage, south of the village, looking toward it.
 		{
