@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 682e3ac9 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 84f617a16 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -19881,11 +19881,19 @@
       },
       {
         id: "build",
-        name: "Building and trade",
+        name: "Recruitment",
         tab: "build",
         lead: "Your staff",
-        runs: "Your staff raises new corps, puts guns round industry that has been bombed, builds in your towns and signs trade agreements, inside the share of the treasury you allow it.",
-        hand: "You place every order and sign every agreement."
+        _split: "Release 2 (the design director's ruling on seamless play, part A): what was one desk, building and trade, is two. Recruitment keeps the old id and flag; towns and trade goes with it in a save that has no flag of its own for it (depth.ts). The staff works both out of the one share of the treasury, in the order the one desk worked in.",
+        runs: "Your staff raises new corps and support teams, lays down troopships for the crossing you have named and, when there are no men to spare, orders aircraft, inside the share of the treasury you allow it.",
+        hand: "You place every order for new forces."
+      },
+      {
+        id: "towns",
+        name: "Towns and trade",
+        lead: "Your ministers",
+        runs: "Your ministers sign trade agreements and give up those nothing gets through, repair bombed towns and airfields, put guns round industry that has been bombed and build in your towns, inside the same share of the treasury.",
+        hand: "You sign every agreement and order every building in your towns."
       },
       {
         id: "diplomacy",
@@ -19926,7 +19934,7 @@
         name: "Field command",
         under: "Simple",
         blurb: "You command the armies. Your staff runs everything behind them, there is no cabinet to answer to, and the map hides nothing.",
-        staff: ["research", "build", "diplomacy", "spies", "air", "navy"],
+        staff: ["research", "build", "towns", "diplomacy", "spies", "air", "navy"],
         cabinet: false,
         canFall: false,
         fog: false
@@ -19960,12 +19968,27 @@
   var deskDef = (id) => DEPTH.desks.find((d) => d.id === id);
   var depthRules = (g2) => g2.flags.open === 1 && g2.human !== null;
   var key = (desk) => `dk:${desk}`;
-  var staffRuns = (g2, nat, desk) => g2.flags.open === 1 && nat !== null && nat === g2.human && g2.flags[key(desk)] === 1;
-  var byHand = (g2, nat, desk) => nat === g2.human && g2.flags[key(desk)] !== 1;
+  function handed(g2, desk) {
+    if (desk !== "towns") return g2.flags[key(desk)] === 1;
+    const own = g2.flags[key("towns")];
+    return own === void 0 ? g2.flags[key("build")] === 1 : own === 1;
+  }
+  var staffRuns = (g2, nat, desk) => g2.flags.open === 1 && nat !== null && nat === g2.human && handed(g2, desk);
+  var byHand = (g2, nat, desk) => nat === g2.human && !handed(g2, desk);
+  function townsFlag(g2, towns2) {
+    if (towns2 === (g2.flags[key("build")] === 1)) delete g2.flags[key("towns")];
+    else g2.flags[key("towns")] = towns2 ? 1 : 0;
+  }
   function setDesk(g2, desk, staff) {
-    if (!depthRules(g2) || !DESKS.includes(desk) || g2.flags[key(desk)] === 1 === staff) return false;
+    if (!depthRules(g2) || !DESKS.includes(desk) || handed(g2, desk) === staff) return false;
+    if (desk === "towns") {
+      townsFlag(g2, staff);
+      return true;
+    }
+    const towns2 = handed(g2, "towns");
     if (staff) g2.flags[key(desk)] = 1;
     else delete g2.flags[key(desk)];
+    if (desk === "build") townsFlag(g2, towns2);
     return true;
   }
   var capPct = (g2) => g2.flags["dk:cap"] ?? DEPTH.cap.start;
@@ -19976,7 +19999,7 @@
     else g2.flags["dk:cap"] = pct14;
     return true;
   }
-  var deskRan = (g2, desk) => g2.flags[`dk:ran:${desk}`] === g2.turn;
+  var deskRan = (g2, desk) => g2.flags[`dk:ran:${desk}`] === g2.turn || desk === "towns" && g2.flags["dk:ran:build"] === g2.turn && g2.flags["dk:ran:only"] !== g2.turn;
   var markRan = (g2, desk) => {
     g2.flags[`dk:ran:${desk}`] = g2.turn;
   };
@@ -30439,7 +30462,7 @@
     if (!damageRules(g2) || !g2.flags["dmg:any"]) return [];
     const n = g2.nations[nat];
     if (!n?.alive) return [];
-    if (nat === g2.human && byHand(g2, nat, "build")) return [];
+    if (nat === g2.human && byHand(g2, nat, "towns")) return [];
     const P = `rpp:${nat}`;
     const towns2 = [];
     for (const r of g2.regions) {
@@ -47924,9 +47947,9 @@
     if (!signPeace(g2, RED, FIN)) return false;
     for (const k of ["st:on", "st:pushed", "st:rest"]) delete g2.flags[`${k}:${RED}:${FIN}`];
     g2.supplyDirty = true;
-    const handed = back.map((r) => r.name);
+    const handed2 = back.map((r) => r.name);
     const text = book3 ? cap4(W.book.replace("{after}", at4 === 3 && g2.turn === 7 ? W.long : "").replace("Moscow. it", "Moscow. It")) : given3.length ? W.held : W.none;
-    headline(g2, "event", handed.length ? `${text} ${W.back.replace("{list}", listOf3(handed))}` : text, FIN);
+    headline(g2, "event", handed2.length ? `${text} ${W.back.replace("{list}", listOf3(handed2))}` : text, FIN);
     close(g2);
     return true;
   }
@@ -54107,17 +54130,17 @@
     let held3 = 0;
     for (const r of g2.regions) if (isHome(g2, nat, r)) held3 += r.fac;
     for (const r of g2.regions) if (r.ctrl === nat && r.owner !== nat) held3 += g2.flags[`wk:facon:${r.id}:${nat}`] ?? 0;
-    const building2 = g2.nations[nat].queue.filter((b) => b.what === "work" && b.item === "factory").length;
-    return { held: held3, building: building2 };
+    const building3 = g2.nations[nat].queue.filter((b) => b.what === "work" && b.item === "factory").length;
+    return { held: held3, building: building3 };
   }
   function whyNoFactory(g2, nat) {
     const most = factoryCeiling(g2, nat);
     if (most === null) return null;
     const name = g2.nations[nat].name;
     if (most <= 0) return `${name} has no industry to build on.`;
-    const { held: held3, building: building2 } = factoriesHeld(g2, nat);
-    if (held3 + building2 < most) return null;
-    return `${name}'s industry can carry ${plural3(most, "factory", "factories")} in this war, and it has ${held3 + building2}${building2 ? ", built or building" : ""}.`;
+    const { held: held3, building: building3 } = factoriesHeld(g2, nat);
+    if (held3 + building3 < most) return null;
+    return `${name}'s industry can carry ${plural3(most, "factory", "factories")} in this war, and it has ${held3 + building3}${building3 ? ", built or building" : ""}.`;
   }
   function bestField(g2, nat) {
     let best = null, rank2 = -1;
@@ -54311,8 +54334,8 @@
   var liftBought = (g2, nat) => (g2.flags[`wk:tp:${nat}`] ?? 0) + g2.nations[nat].queue.filter((b) => b.what === "ship" && b.item === "tp").length;
   function liftView(g2, nat) {
     const n = g2.nations[nat];
-    const building2 = n.queue.filter((b) => b.what === "ship" && b.item === "tp").map((b) => b.eta).sort((a, b) => a - b);
-    return { lift: n.sealift, left: liftLeft(g2, nat), building: building2, room: Math.max(0, ARSENAL.lift.most - liftBought(g2, nat)) };
+    const building3 = n.queue.filter((b) => b.what === "ship" && b.item === "tp").map((b) => b.eta).sort((a, b) => a - b);
+    return { lift: n.sealift, left: liftLeft(g2, nat), building: building3, room: Math.max(0, ARSENAL.lift.most - liftBought(g2, nat)) };
   }
   var POOR2 = "The treasury cannot cover it.";
   function offers(g2, nat, sel = -1) {
@@ -54677,11 +54700,11 @@
     g2.flags[`wk:${what}:${r.id}`] = Math.min(TOP, workLevel(g2, what, r.id) + 1);
     tell2(what === "aa" ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g2, "aa", r.id)}.` : fieldRules(g2) ? `The concrete airfield at ${r.name} is ready: level ${workLevel(g2, "field", r.id)}, serving ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft.` : `The airfields at ${r.name} are ready: level ${workLevel(g2, "field", r.id)}.`);
   }
-  function aiArsenal(g2, nat) {
+  function aiArsenal(g2, nat, guns2 = true, fields = true) {
     const n = g2.nations[nat];
-    if (!budgeted(g2) || byHand(g2, nat, "build") || !n.alive) return;
-    aiGuns(g2, nat);
-    aiAirfields(g2, nat);
+    if (!budgeted(g2) || !n.alive) return;
+    if (guns2 && !byHand(g2, nat, "towns")) aiGuns(g2, nat);
+    if (fields && !byHand(g2, nat, "build")) aiAirfields(g2, nat);
   }
   function aiAirfields(g2, nat) {
     const n = g2.nations[nat];
@@ -55604,7 +55627,7 @@
   }
   function civicAI(g2, nat, earned, keeps = false, wait = false) {
     const n = g2.nations[nat];
-    if (!civicRules(g2) || byHand(g2, nat, "build") || !n?.alive || n.capital < 0) return;
+    if (!civicRules(g2) || byHand(g2, nat, "towns") || !n?.alive || n.capital < 0) return;
     const A = CIVIC.ai, purse = `cvb:${nat}`;
     g2.flags[purse] = (g2.flags[purse] ?? 0) + Math.max(0, earned) * A.share;
     if (wait) return;
@@ -82239,10 +82262,10 @@
     else delete g2.flags["dk:cross"];
     if (w && w.state !== "waiting") headline(g2, "info", w.text, nat, w.to.id);
   }
-  function build2(g2, nat) {
+  function building2(g2, nat, towns2, forces2) {
     const n = g2.nations[nat];
     const did = [];
-    if (tradeRules(g2) && n.capital >= 0) {
+    if (towns2 && tradeRules(g2) && n.capital >= 0) {
       const ctx = /* @__PURE__ */ new Map();
       for (const d of dealsOf(g2, nat)) {
         if (d.state !== "cut") continue;
@@ -82258,24 +82281,35 @@
       if (signed.length) did.push(`signed ${signed.length === 1 ? "a trade agreement" : "trade agreements"} with ${listAnd3(signed)}`);
     }
     const had = new Set(n.queue.map((b) => b.id));
+    const before = deskRan(g2, "build") || deskRan(g2, "towns") ? g2.flags["dk:spent"] ?? 0 : 0;
     let repaired = [];
     const spent = fromPurse(g2, nat, () => {
-      shipping2(g2, nat);
-      repaired = aiRepair(g2, nat);
-      repaired.push(...aiFieldRepair(g2, nat, (x) => allied(g2, nat, x)).map((x) => `the airfield at ${x}`));
-      aiProduction(g2, nat);
-      aiTeams(g2, nat);
-      aiArsenal(g2, nat);
-      civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat) || armyWorn(g2, nat));
-      machines(g2, nat);
+      if (forces2) shipping2(g2, nat);
+      if (towns2) {
+        repaired = aiRepair(g2, nat);
+        repaired.push(...aiFieldRepair(g2, nat, (x) => allied(g2, nat, x)).map((x) => `the airfield at ${x}`));
+      }
+      if (forces2) {
+        aiProduction(g2, nat);
+        aiTeams(g2, nat);
+      }
+      aiArsenal(g2, nat, towns2, forces2);
+      if (towns2) civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), staffRuns(g2, nat, "build") && (gunsWanted(g2, nat) || armyWorn(g2, nat)));
+      if (forces2) machines(g2, nat);
     });
     const fresh6 = n.queue.filter((b) => !had.has(b.id));
     if (fresh6.length) did.unshift(`ordered ${some(fresh6.map((b) => orderWords(g2, b)), 4)}`);
     if (repaired.length) did.unshift(`repaired ${some(repaired, 4)}`);
-    g2.flags["dk:spent"] = spent;
+    g2.flags["dk:spent"] = before ? before + spent : spent;
     if (!did.length) return null;
     return `${listAnd3(did)}.`;
   }
+  function build2(g2, nat) {
+    const towns2 = staffRuns(g2, nat, "towns") && !deskRan(g2, "towns");
+    if (!towns2) g2.flags["dk:ran:only"] = g2.turn;
+    return building2(g2, nat, towns2, true);
+  }
+  var townsDesk = (g2, nat) => building2(g2, nat, true, false);
   function diplomacy(g2, nat) {
     const back = Object.values(g2.nations).filter((T) => freeCourt(g2, nat, T.id) && canCourt(g2, nat, T.id).ok && court(g2, nat, T.id));
     const said = envoys(g2, nat);
@@ -82486,8 +82520,8 @@
     if (flown2.length) did.push(`flew ${plural7(flown2.length, "carrier strike")} at ${some(flown2.map((r) => raidWords(g2, r)))}`);
     return did.length ? `${listAnd3(did)}.` : null;
   }
-  var WORK = { research, build: build2, diplomacy, spies, air, navy };
-  var ORDER2 = ["research", "build", "diplomacy", "spies", "navy", "air"];
+  var WORK = { research, build: build2, towns: townsDesk, diplomacy, spies, air, navy };
+  var ORDER2 = ["research", "build", "towns", "diplomacy", "spies", "navy", "air"];
   function saidLastMonth(g2, desk, line) {
     let h = 7;
     for (let i = 0; i < line.length; i++) h = (h * 31 + line.charCodeAt(i)) % 2147483647;
@@ -82548,11 +82582,16 @@
         return at4.length ? `${at4.length} of ${teams2} team${teams2 === 1 ? "" : "s"} at work: ${some(at4, 4)}.` : `No research team has work.`;
       }
       case "build": {
-        const corps = n.queue.filter((b) => b.what === "corps").length, other4 = n.queue.length - corps;
-        const deals = dealsOf(g2, nat).length, houses = housesOf(g2, nat);
+        const corps = n.queue.filter((b) => b.what === "corps").length;
+        const other4 = n.queue.filter((b) => b.what !== "corps" && b.what !== "civic" && !(b.what === "work" && b.item === "aa")).length;
         const noMen = staffRuns(g2, nat, "build") && noMenFor(g2, nat);
         const air2 = !noMen || !DEPTH.build?.machines || !n.atWar.length ? "" : wingsWanted(g2, nat).length || n.queue.some((b) => b.what === "air") ? " Your staff is putting the money into aircraft instead, which need pilots and not divisions." : " The air force has all the aircraft its pilots can fly, so what is left in the treasury is your reserve.";
-        return `${corps ? `${corps} corps forming` : "No corps forming"}${other4 ? `, ${other4} other order${other4 === 1 ? "" : "s"} in hand` : ""}. ${deals} of ${houses} trading house${houses === 1 ? "" : "s"} in use.${noMen ? ` There are no men to spare for new corps: the armies in the field are waiting for theirs.${air2 || " Aircraft, ships and factories need few, and can be ordered by hand."}` : ""}`;
+        return `${corps ? `${corps} corps forming` : "No corps forming"}${other4 ? `, ${other4} other order${other4 === 1 ? "" : "s"} in hand` : ""}.${noMen ? ` There are no men to spare for new corps: the armies in the field are waiting for theirs.${air2 || " Aircraft, ships and factories need few, and can be ordered by hand."}` : ""}`;
+      }
+      case "towns": {
+        const up = n.queue.filter((b) => b.what === "civic" || b.what === "work" && b.item === "aa").length;
+        const deals = dealsOf(g2, nat).length, houses = housesOf(g2, nat);
+        return `${up ? `${up} building${up === 1 ? "" : "s"} going up in your towns` : "Nothing going up in your towns"}. ${deals} of ${houses} trading house${houses === 1 ? "" : "s"} in use.`;
       }
       case "diplomacy": {
         const b = bloc(n);
@@ -82616,7 +82655,7 @@
       cap: capPct(g2),
       caps: DEPTH.cap.steps,
       left: g2.flags["dk:alwt"] === g2.turn ? g2.flags["dk:alw"] ?? 0 : Math.max(0, g2.nations[nat].pp) * capOf(g2),
-      spent: g2.flags["dk:ran:build"] === g2.turn ? g2.flags["dk:spent"] ?? 0 : 0,
+      spent: deskRan(g2, "build") || deskRan(g2, "towns") ? g2.flags["dk:spent"] ?? 0 : 0,
       capNext: g2.flags["dk:alwt"] === g2.turn && g2.flags["dk:alwc"] !== void 0 && g2.flags["dk:alwc"] !== capPct(g2),
       cabinet: !cabinetOff(g2),
       canFall: !officeSecure(g2),
@@ -85379,8 +85418,8 @@
     const coming2 = due.length, ready = coming2 ? due[0] : null;
     const stops = guardStops(level);
     const guards = level > 0 ? `Level ${level} guns guard the railway here: they stop ${Math.round(stops * 100)}% of the bombing that would cut it.` : "No guns guard the railway here.";
-    const building2 = ready !== null ? `Level ${level + 1} guns are being built here: ready in ${turnToDate(ready).label}.` : "";
-    const line = !building2 ? guards : level > 0 ? `${guards} ${building2}` : building2;
+    const building3 = ready !== null ? `Level ${level + 1} guns are being built here: ready in ${turnToDate(ready).label}.` : "";
+    const line = !building3 ? guards : level > 0 ? `${guards} ${building3}` : building3;
     let order2 = null;
     if (own && level + coming2 < GUARD_TOP) {
       const o = offers(g2, viewer, region).find((x) => x.key === "work:aa");
@@ -110355,12 +110394,12 @@
     return out;
   }
   var FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
-  var DESK_WORD = { research: "Research", build: "Build", diplomacy: "Diplomacy", spies: "Spies", air: "Air", navy: "Navy" };
+  var DESK_WORD = { research: "Research", build: "Build", towns: "Towns", diplomacy: "Diplomacy", spies: "Spies", air: "Air", navy: "Navy" };
   var of = (place3) => /s$/i.test(place3) ? `${place3}'` : `${place3}'s`;
   function staffShort(desk, text, all = FOOT_ROOM.staff) {
     const word3 = DESK_WORD[desk] ?? `${desk.charAt(0).toUpperCase()}${desk.slice(1)}`;
     const room2 = all - word3.length - 2;
-    const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|secret service|engineers|generals) /, "");
+    const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|ministers|secret service|engineers|generals) /, "");
     const fit3 = (...tries) => {
       const t = tries.find((x) => x.length <= room2) ?? tries[tries.length - 1];
       return `${word3}: ${t.length <= room2 ? t : wholeWords(t, room2, 1).replace(/\.$/, "")}`;
@@ -111135,7 +111174,7 @@
       if (used.has(h) || !mine4(h.nat)) continue;
       if (h.kind === "letter") continue;
       if (h.desk) {
-        card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === "build" ? buildSign(h.text) : DESK_SIGN[h.desk] ?? "star", mayTake: staffRuns(g2, me, h.desk) });
+        card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === "build" || h.desk === "towns" ? buildSign(h.text) : DESK_SIGN[h.desk] ?? "star", mayTake: staffRuns(g2, me, h.desk) });
         used.add(h);
         continue;
       }
@@ -115249,7 +115288,8 @@
       foot: c.foot,
       count: c.count,
       home: home.map((x) => ({ sign: x.sign, count: x.count, text: x.text, where: x.where, grey: x.grey, tip: x.tip })),
-      staff: staffAll.slice(0, lines2).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: firsts.includes(x) ? `desk:${x.desk}:own` : "" })),
+      // (Release 2, the desk split: recruitment's line that told towns and trade's month too, as the one desk did, takes both back.)
+      staff: staffAll.slice(0, lines2).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: !firsts.includes(x) ? "" : x.desk === "build" && bothTold(s) ? "desk:build+towns:own" : `desk:${x.desk}:own` })),
       elsewhere: c.elsewhere.slice(0, lines2).map((x) => ({ nat: x.nat, text: x.text, tip: x.full ?? x.text })),
       rest: over > 0 ? `${over} more ${over === 1 ? "line" : "lines"} of news ${over === 1 ? "is" : "are"} in the Newsreel.` : "Every figure comes from the month's own battle reports."
     };
@@ -116514,7 +116554,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         });
       }
     }
-    const theirs = { research: "research", arsenal: "build", "page:trade": "build", "page:spies": "spies", "page:repairs": "build", "page:home": "build" };
+    const theirs = { research: "research", arsenal: "build", "page:trade": "towns", "page:spies": "spies", "page:repairs": "towns", "page:home": "towns" };
     return out.filter((t) => {
       const desk = t.k.startsWith("field:") ? "air" : theirs[t.k];
       try {
@@ -117744,7 +117784,7 @@ ${standing5}`,
     const me = s.human ? s.nations[s.human] : null;
     let staffed = true;
     try {
-      staffed = !!pictureCommand(s)?.desks.find((d) => d.id === "build")?.staff;
+      staffed = !!pictureCommand(s)?.desks.some((d) => (d.id === "build" || d.id === "towns") && d.staff);
     } catch {
       staffed = true;
     }
@@ -117892,7 +117932,27 @@ ${standing5}`,
     let staff = null;
     try {
       const v = commandOf(s), bar = deskBar(s, "build");
-      if (v && bar) staff = { on: bar.staff, line: bar.staff ? bar.line : deskRuns(s, "build"), label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })) };
+      const forces2 = v?.desks.find((d) => d.id === "build"), works2 = v?.desks.find((d) => d.id === "towns");
+      if (v && bar && forces2 && works2) {
+        const told2 = [forces2.news, works2.news].filter((x, i, all) => !!x && all.indexOf(x) === i).join(" ") || "Nothing to report this month.";
+        const line = forces2.staff && works2.staff ? `Your staff raises the forces and your ministers run the towns and trade. ${told2} What you order here by hand still goes out.` : forces2.staff ? `Your staff raises the forces; the towns and trade are yours. ${told2} What you order here by hand still goes out.` : works2.staff ? `Your ministers run the towns and trade; raising the forces is yours. ${told2} What you order here by hand still goes out.` : "You raise the forces and run the towns and trade yourself. Either can go to your staff, which spends only the share of the treasury you allow it.";
+        staff = {
+          on: forces2.staff || works2.staff,
+          line,
+          label: bar.label,
+          act: bar.act,
+          tip: bar.tip,
+          cap: v.cap,
+          caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })),
+          head: forces2.staff && works2.staff ? "YOUR STAFF GIVES THESE ORDERS" : forces2.staff || works2.staff ? "YOU AND YOUR STAFF SHARE THESE ORDERS" : "YOU GIVE THESE ORDERS YOURSELF",
+          desks: [forces2, works2].map((d) => ({
+            name: d.name.toUpperCase(),
+            on: d.staff,
+            act: `desk:${d.id}:${d.staff ? "own" : "staff"}`,
+            tip: d.staff ? `${deskDef(d.id)?.hand ?? ""} What your staff ordered this month stands.` : `${deskRuns(s, d.id)} Handed over in your own month, the staff goes to work at once.`
+          }))
+        };
+      }
     } catch {
       staff = null;
     }
@@ -117945,7 +118005,14 @@ ${standing5}`,
         { heading: "TOWNS THAT CAN TAKE A BUILDING", text: can2.length ? can2.length > 60 ? `The richest 60 of ${can2.length}.` : "" : "Every town is building or complete.", rows: townRows },
         ...goingRows.length ? [{ heading: "GOING UP IN YOUR TOWNS", text: "", rows: goingRows }] : [],
         { heading: "RAISE FORCES", text: h.up ? "" : "It is not your month.", rows: raiseRows },
-        { heading: "ON ORDER", text: orderRows.length ? "" : "Nothing is being raised.", rows: orderRows }
+        { heading: "ON ORDER", text: orderRows.length ? "" : "Nothing is being raised.", rows: orderRows },
+        // (Release 2, the desk split) Recruitment and towns and trade, each with its own switch: the board draws them on its staff strip.
+        ...h.staff ? [{ heading: "WHO GIVES THESE ORDERS", text: h.staff.line, rows: h.staff.desks.map((d) => ({
+          nat: "",
+          title: `${d.name}  ·  ${d.on ? "YOUR STAFF" : "YOU"}`,
+          lines: [],
+          buttons: [{ label: d.on ? "TAKE IT BACK" : "LET MY STAFF RUN IT", act: d.act, ok: true, tip: d.tip }]
+        })) }] : []
       ],
       home: h
     };
@@ -118488,7 +118555,14 @@ ${standing5}`,
   var runsLine = (lead2, desk) => lead2.toLowerCase().endsWith(lowFirst(desk).replace(/^the /, "")) ? `${lead2} runs itself for you.` : `${lead2} run${/s$/.test(lead2) ? "" : "s"} ${lowFirst(desk)}.`;
   function deskOfPage(id) {
     const head = id.split(":")[0];
-    return head === "spies" ? "spies" : head === "trade" || head === "towns" || head === "home" ? "build" : head === "airfield" ? "air" : head === "fleet" ? "navy" : null;
+    return head === "spies" ? "spies" : head === "trade" || head === "towns" ? "towns" : head === "airfield" ? "air" : head === "fleet" ? "navy" : null;
+  }
+  function bothTold(s) {
+    try {
+      return staffRunsDesk(s, "towns") && deskRan(s, "towns") && s.flags["dk:ran:towns"] !== s.turn;
+    } catch {
+      return false;
+    }
   }
   function deskBar(s, desk) {
     let v = null;
@@ -118499,7 +118573,8 @@ ${standing5}`,
     }
     const d = v?.desks.find((x) => x.id === desk), def = deskDef(desk);
     if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
-    return d.staff ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? "Nothing to report this month."} What you order here by hand still goes out.`, label: "TAKE IT BACK", act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` } : { staff: false, line: "", label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${deskRuns(s, desk)} You can take it back in any month.` };
+    const news3 = d.news ?? (desk === "towns" && bothTold(s) ? v.desks.find((x) => x.id === "build")?.news ?? null : null);
+    return d.staff ? { staff: true, line: `${runsLine(def.lead, d.name)} ${news3 ?? "Nothing to report this month."} What you order here by hand still goes out.`, label: "TAKE IT BACK", act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` } : { staff: false, line: "", label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${deskRuns(s, desk)} You can take it back in any month.` };
   }
   function commandBrief(s) {
     if (pictureDepth > 0 && pictureBriefKept && pictureBriefKept.s === s) return pictureBriefKept.brief;
@@ -118779,6 +118854,11 @@ ${standing5}`,
         }
         ok2 = !stands2 && orderDepth(s, part[1]);
         note4 = ok2 ? `You play at ${to?.name ?? "that depth"} now.${to && to.staff.length ? ` Your staff runs ${to.staff.map((k) => lowFirst(deskDef(k)?.name ?? k)).join(", ")}.` : " Everything is on your own desk."}` : "The campaign stands at that depth already.";
+      } else if (part[0] === "desk" && part[1] === "build+towns") {
+        const both = ["build", "towns"].filter((k) => staffRunsDesk(s, k));
+        ok2 = part[2] === "own" && both.map((k) => orderDesk(s, k, false)).some(Boolean);
+        const named5 = both.length > 1 ? "Recruitment, and towns and trade, are" : `${deskDef(both[0] ?? "build")?.name ?? ""} is`;
+        note4 = ok2 ? `${named5} on your own desk again. What your staff ordered this month stands.` : "Recruitment, and towns and trade, are on your own desk already.";
       } else if (part[0] === "desk") {
         const def = deskDef(part[1]), staff = part[2] === "staff";
         ok2 = !!def && orderDesk(s, part[1], staff);
