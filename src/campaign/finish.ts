@@ -31,6 +31,7 @@
  */
 import { turnToDate } from '../core/ticket';
 import { airOnFall } from './air';
+import { numbersUnderFlag } from './armies';
 import { handedOver, holdersNow } from './buildings';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { allied, atWar, bloc, declareWar, headline, relocate, retreatTarget, sendHome, theName, warning } from './game';
@@ -154,7 +155,7 @@ function endVichy(g: Game): void {
   V.fellOn = { turn: g.turn, week: g.week, to: 'FRA', how: 'annexed' };
   recordFall(g, 'VIC', 'FRA', 'annexed');
   const turned = new Set<number>();
-  for (const c of g.corps) if (c.nat === 'VIC' && !c.dead) { c.nat = 'FRA'; c.hold = false; turned.add(c.reg); }
+  for (const c of g.corps) if (c.nat === 'VIC' && !c.dead) { c.nat = 'FRA'; c.hold = false; numbersUnderFlag(g, c); turned.add(c.reg); }
   fleetsOnFall(g, 'VIC');
   airOnFall(g, 'VIC');
   dropSieges(g, 'VIC');

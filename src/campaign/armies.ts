@@ -35,6 +35,7 @@ import openRows from '../../data/campaign/open.json';
 import pacificRows from '../../data/campaign/pacific.json';
 import legionRows from '../../data/campaign/legions.json';
 import { hashString } from '../core/rng';
+import { FAR_STAGE } from './stage';
 import { turnToDate } from '../core/ticket';
 import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
 import { allied, atWar, men } from './game';
@@ -138,6 +139,13 @@ function rowNames(grand: boolean): Map<string, Set<string>> {
     } else if (x && typeof x === 'object') for (const y of Object.values(x)) if (y && typeof y === 'object') walk(y);
   };
   for (const file of [setup, worldRows, diplomacyRows, siegeRows, openRows, pacificRows, legionRows]) walk(file);
+  // (The far side's divisions sent west are rows of another shape, [the corps it leaves, how many, the name it goes
+  // by]: pacific.json `west`. Each name is its division's own all the same: the 32nd Rifle Division that leaves the
+  // Far East for Moscow is no stand-in's number. Read where the far side's switch is on, as its other rows are.)
+  if (FAR_STAGE) {
+    const west = (pacificRows as unknown as { west?: { nat: string; waves?: { rows: [string, number, string][] }[] } }).west;
+    for (const w of west?.waves ?? []) for (const row of w.rows) note(west!.nat, row[2], 'inf');
+  }
   if (grand) ROW_NAMES.grand = out; else ROW_NAMES.history = out;
   return out;
 }
@@ -147,7 +155,7 @@ function rowNames(grand: boolean): Map<string, Set<string>> {
  * country gives, and none a living named division of the country carries (a corps broken up by hand keeps its
  * divisions' names on itself, and they count). The living are read once for each corps numbered.
  */
-function standIns(g: Game, nat: string, kind: Kind): (from: number) => number {
+function standIns(g: Game, nat: string, kind: Kind, numbers = true): (from: number) => number {
   const words = divisionWords(nat, kind).name;
   const grand = g.flags.open === 1;
   const rows = rowNames(grand).get(nat);
@@ -156,7 +164,12 @@ function standIns(g: Game, nat: string, kind: Kind): (from: number) => number {
     if (rows?.has(name)) return true;
     if (!living) {
       living = new Set();
-      for (const o of g.corps) if (o.nat === nat && !o.dead) for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind, grand)) living.add(full);
+      for (const o of g.corps) if (o.nat === nat && !o.dead) {
+        for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind, grand)) living.add(full);
+        // (`numbers`: nor any number a living division of the arm carries. A nation's own count never comes back to
+        // one; a corps that came under its flag from another country's army may carry one the count has yet to reach.)
+        if (numbers && o.kind === kind && o.dn !== undefined) for (const n of numbersOf(o)) living.add(`${ordinal(n)} ${words}`);
+      }
     }
     return living.has(name);
   };
@@ -169,7 +182,7 @@ function standIns(g: Game, nat: string, kind: Kind): (from: number) => number {
 
 /** True where a stand-in of this number would carry a name that is another division's own: a row's, or a living named division's. */
 export function numberSpokenFor(g: Game, nat: string, kind: Kind, n: number): boolean {
-  return standIns(g, nat, kind)(n - 1) !== n;
+  return standIns(g, nat, kind, false)(n - 1) !== n;
 }
 
 /**
@@ -218,6 +231,39 @@ export function growCorps(g: Game, c: Corps, divs: number, kind: Kind): void {
   while (list.length < c.divs) list.push(next = free(next));
   g.flags[key] = next;
   keepNumbers(c, list);
+}
+
+/**
+ * A corps that has passed under another flag (a fallen country's garrison taken into keeping on the far side, the
+ * garrison of ground that was demanded, France's corps overseas under Vichy and back): each of its divisions that
+ * reads by its number keeps that number where it is no other division's name under the new flag, a row's or a living
+ * division's, and takes its new nation's next stand-in where it is. Called once the corps carries its new nation.
+ * The Netherlands Indies' garrisons were numbered 4th to 11th in their own army, and so were Britain's own: in
+ * keeping they read 19th and on. A division with a name of its own keeps it. The grand campaign only.
+ */
+export function numbersUnderFlag(g: Game, c: Corps): void {
+  if (g.flags.open !== 1 || c.dn === undefined) return;
+  const named = c.names ?? ownNames(c.name, c.nat, c.kind, true);
+  const words = divisionWords(c.nat, c.kind).name;
+  const rows = rowNames(true).get(c.nat);
+  let held: Set<string> | null = null;
+  const spoken = (n: number): boolean => {
+    const name = `${ordinal(n)} ${words}`;
+    if (rows?.has(name)) return true;
+    if (!held) {
+      held = new Set();
+      for (const o of g.corps) if (o !== c && o.nat === c.nat && !o.dead) for (const d of divisionsOf(g, o)) held.add(d.name);
+    }
+    return held.has(name);
+  };
+  const was = numbersOf(c);
+  const moves = was.map((n, i) => !named[i] && spoken(n));
+  if (!moves.some(Boolean)) return;
+  const key = counter(c.nat, c.kind);
+  let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
+  const free = standIns(g, c.nat, c.kind);
+  keepNumbers(c, was.map((n, i) => (moves[i] ? (next = free(next)) : n)));
+  g.flags[key] = next;
 }
 
 /**

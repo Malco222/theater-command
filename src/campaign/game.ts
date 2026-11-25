@@ -30,7 +30,7 @@ import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
-import { growCorps, numberCorps } from './armies';
+import { growCorps, numberCorps, numbersUnderFlag } from './armies';
 import { DRAWN, formsAny, heldAlready, heldLine, joinNames, joinsAlone, layOnce, namesNow, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
@@ -3994,7 +3994,7 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     const at = g.regions[c.reg];
     // The Army of Africa stays at its posts and answers to the new government.
-    if (armistice && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
+    if (armistice && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; numbersUnderFlag(g, c); continue; }
     removeCorps(g, c);
   }
   endVoyages(g, nat);
