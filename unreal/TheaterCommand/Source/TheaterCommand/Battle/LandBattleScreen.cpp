@@ -701,6 +701,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	{
 		if (T.Team == "mor") return TEXT("MORTARS");
 		if (T.Team == "mg") return TEXT("MACHINE-GUNS");
+		// (sniper teams, release 2: kind "art" like the other support teams, never the artillery's GUNS)
+		if (T.Team == "snp") return TEXT("SNIPERS");
 		const std::string& Kind = T.Kind;
 		return Kind == "inf" ? TEXT("RIFLES") : Kind == "arm" ? TEXT("TANKS") : Kind == "art" ? TEXT("GUNS") : Kind == "mot" ? TEXT("MOTORISED") : Kind == "eng" ? TEXT("ENGINEERS")
 			: Kind == "mtn" ? TEXT("MOUNTAIN") : Kind == "cav" ? TEXT("CAVALRY") : Kind == "fort" ? TEXT("WORKS") : TEXT("");
@@ -897,6 +899,18 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Path({ P(4, 20.5), P(13.2, 20.5) });
 			Path({ P(13.4, 11.8), P(19.8, 20.5) });
 		}
+		else if (Sign == TEXT("sniper"))
+		{
+			// (a scope's reticle: its ring, the cross broken at the middle, the aim dot)
+			TArray<FVector2D> Ring;
+			Arc(Ring, P(12, 12), 8.0 * K, 0.0, 2.0 * UE_DOUBLE_PI);
+			Path(Ring);
+			Path({ P(2, 12), P(9, 12) });
+			Path({ P(15, 12), P(22, 12) });
+			Path({ P(12, 2), P(12, 9) });
+			Path({ P(12, 15), P(12, 22) });
+			Dot(12, 12);
+		}
 	};
 	// (a unit's kind as the kit signs it, for a card with no room for its word)
 	auto KindSign = [](const LandCommand::Tag& T)
@@ -904,6 +918,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		if (T.Team == "mor") return TEXT("mortar");
 		if (T.Team == "mg") return TEXT("machine-gun");
 		if (T.Team == "at") return TEXT("anti-tank");
+		if (T.Team == "snp") return TEXT("sniper");
 		return T.Kind == "arm" ? TEXT("tank") : T.Kind == "art" ? TEXT("gun") : TEXT("infantry");
 	};
 	// One chip: its paper, its words (and the radio's sign and time first, where an order is on the air), from (X, Y);
