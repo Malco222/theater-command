@@ -36,6 +36,7 @@ namespace
 		{ TEXT("plain"), EKind::TrialWord, TEXT("Battle looks: dry plains"), TEXT("Dry plains look like dry plains: thin grass, bare earth and scrub. Off: the greener ground."), TEXT("plain"), true, TEXT("AD PASS 23 Nov (some months' stills owed); Mac fps in the final pass"), false },
 		{ TEXT("america"), EKind::TrialWord, TEXT("Battle looks: North American farmland"), TEXT("Fields in North America are laid out in its own big square farms. Off: the European pattern."), TEXT("america"), true, TEXT("AD PASS 23 Nov (some months' stills owed); Mac fps in the final pass"), false },
 		{ TEXT("runs"), EKind::TrialWord, TEXT("Battle looks: men run in their own strides"), TEXT("Men in a squad run each in his own stride instead of in step. Off: in step."), TEXT("runs"), true, TEXT("AD and Mac in the final pass"), false },
+		{ TEXT("deserthouses"), EKind::TrialWord, TEXT("Battle looks: desert towns' houses in full detail"), TEXT(""), TEXT("deserthouses"), false, TEXT("the AD's first review NOT YET (six mends, one more round); no Mac look yet"), false },
 		{ TEXT("wetlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("wet"), true, TEXT("the look of the Battle rules card's Wet mud row (its switch)"), false },
 		{ TEXT("wornlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("worn"), true, TEXT("the look of the Battle rules card's Worn uniforms row (its switch)"), false },
 		{ TEXT("capturedlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("captured"), true, TEXT("the look of the Battle rules card's Captured tanks row (its switch)"), false },
