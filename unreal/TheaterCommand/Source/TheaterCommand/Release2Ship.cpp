@@ -135,6 +135,7 @@ namespace
 		{ TEXT("wagons"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("logistics:wagons"), true, TEXT("Mac stills in the final pass (a new war's first month only)"), false },
 		{ TEXT("dumps"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("logistics:dumps"), true, TEXT("Mac stills in the final pass (a new war's first month only)"), false },
 		{ TEXT("seekonce"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("seekoncerule"), true, TEXT("pass 2 (navy moves): its gate PASSED; Mac look in pass 2"), false },
+		{ TEXT("ownwater"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("ownwaterrule"), false, TEXT("pass 2 (navy L1Pd via city glance 1125n): ships keep clear of their own side's torpedoes, in fleet actions fought live only; off until the Mac's destroyer clip and the AD; on a pass R2_SHIP gains ownwaterrule: setOwnWater(s, true)"), false },
 		{ TEXT("atom"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("atomrule"), false, TEXT("pass 2: its gate PASSED; waits the Mac's stills and the AD and UI director's read"), false },
 		{ TEXT("airnames"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("airnames"), false, TEXT("pass 2 (air lanes): the air thread adds it after its Mac look"), false },
 		{ TEXT("carrierstrike"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("carrierstrikerule"), false, TEXT("pass 2 (air lanes): off until its Mac look"), false },
