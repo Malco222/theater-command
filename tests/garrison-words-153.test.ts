@@ -19,11 +19,16 @@
 // landing are the field army's, and the garrison is named as it stays. On the eve of war a corps brought out of its
 // town has its whole month when the war opens, so Warsaw is told to take the field. Where the field outside is full,
 // the sentence gives that reason. And the 3D game asks the sentence for the corps in hand, not for the whole town.
+// The fourth review: the province's own railway and harbour are answered before the garrison's way out. A garrison in
+// the desert or off the railway is told there is no railway there, one whose railway is cut is told so, and one whose
+// harbour is wrecked is told for how long, never that out of the town it can ride or embark.
 import { describe, expect, it } from 'vitest';
 import { allied, createGame, hostileUnits, relocate, whyNoTrain } from '../src/campaign/game';
 import { whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { besieged, garrison, takeField } from '../src/campaign/siege';
+import { wreckPrize } from '../src/campaign/prizes';
+import { cutRail } from '../src/campaign/rails';
 import { garrisonLine, whyNotOrder, whyNotOrderGarrison } from '../src/campaign/armies';
 import { startOpen } from '../src/campaign/staff';
 import { townName } from '../src/campaign/towns';
@@ -540,5 +545,75 @@ describe('the third review: the sentence of the hand, and of a town whose field 
     expect(whyNotOrder(g, now)).toBe(line);
     TC.load(saveGame(g));
     expect(TC.reach([now.id]).why).toBe(line);
+  });
+});
+
+describe('the fourth review: the province\'s own railway and harbour come first', () => {
+  /** An Italian infantry corps of a province put inside its town, as having gone in a month before. */
+  const italian = (g: Game, at: Region): Corps => {
+    const c = at.units.find((u) => u.nat === 'ITA' && u.kind === 'inf' && !u.dead)!;
+    expect(garrison(g, c)).toBe(true);
+    c.town = EARLIER;
+    return c;
+  };
+
+  it('a garrison in the desert or off the railway is told there is none there, as out of the town (Italy, seed 3: Tobruk, Sardinia)', () => {
+    const g = playing('ITA', 3);
+    const tobruk = g.byName['Tobruk'], sardinia = g.byName['Sardinia'], rome = g.byName['Rome'];
+    const desert = 'No railway crosses the desert.';
+    const t = italian(g, tobruk);
+    expect(whyNoTrain(g, t)).toEqual({ code: 'desert', line: desert, at: tobruk.id });
+    // A month longer than a train's would once have sent it to TAKE THE FIELD, for a train it would never get.
+    t.apMax = 5;
+    expect(whyNoTrain(g, t)!.line).toBe(desert);
+    const s = italian(g, sardinia);
+    const road = `No railway runs through Sardinia: ${s.name} goes by road.`;
+    expect(whyNoTrain(g, s)).toEqual({ code: 'noline', line: road, at: sardinia.id });
+    // The 3D game's order by rail answers with the same line (railTip).
+    TC.load(saveGame(g));
+    expect(TC.rail([t.id], rome.id).said).toBe(desert);
+    expect(TC.rail([s.id], rome.id).said).toBe(road);
+    // Out of the town, with a whole month a month on, each is refused for the same reason: the line named the real block.
+    for (const c of [t, s]) {
+      expect(takeField(g, c)).toBe(true);
+      c.ap = c.apMax;
+    }
+    expect(whyNoTrain(g, t)!.line).toBe(desert);
+    expect(whyNoTrain(g, s)!.line).toBe(road);
+  });
+
+  it('a garrison whose railway is cut is told so, and is not sent to take the field for a train that does not leave', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'];
+    const c = inside(g, hamburg, EARLIER);
+    c.apMax = 5;
+    expect(whyNoTrain(g, c)!.line).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(cutRail(g, hamburg.id, 'bombed')).toBe(true);
+    const cut = whyNoTrain(g, c)!;
+    expect(cut).toMatchObject({ code: 'cut', at: hamburg.id });
+    expect(cut.line).toMatch(/^The railway at Hamburg is cut \(bombed, [^)]+\)\. No train leaves until engineers relay the track\.$/);
+    expect(takeField(g, c)).toBe(true);
+    c.ap = c.apMax;
+    expect(whyNoTrain(g, c)!.line).toBe(cut.line);
+  });
+
+  it('a garrison whose harbour is wrecked is told so and for how long, never that it can embark next month', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'], bremen = g.byName['Bremen'];
+    const c = inside(g, hamburg, EARLIER);
+    const d = inside(g, hamburg, EARLIER);
+    d.apMax = 5;
+    expect(whyNotShip(g, c, bremen)).toBe(NO_SHIP);
+    expect(wreckPrize(g, hamburg, 'harbour', 3)).toBe(true);
+    const wrecked = 'The harbour of Hamburg is wrecked: no ship will use it for 3 months more.';
+    expect(whyNotShip(g, c, bremen)).toBe(wrecked);
+    expect(whyNotShip(g, d, bremen)).toBe(wrecked);
+    // The 3D game's BY SEA notice asks of the garrison's own province (GarrisonAboard).
+    TC.load(saveGame(g));
+    expect(TC.bySeaWhy([c.id], hamburg.id).why).toBe(wrecked);
+    // Out of the town with its whole month, the harbour is what keeps it ashore.
+    expect(takeField(g, d)).toBe(true);
+    expect(d.ap).toBe(4);
+    expect(whyNotShip(g, d, bremen)).toBe(wrecked);
   });
 });

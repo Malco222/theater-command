@@ -643,13 +643,20 @@ function garrisonAboard(g: Game, c: Corps): string {
   return (g.flags.eve === 1 || apOutOfTown(g, c) >= Math.min(4, c.apMax)) && whyNotTakeField(g, c) === null ? 'A garrison does not take ship: TAKE THE FIELD first.' : 'A garrison does not take ship. Out of the town, it can embark next month.';
 }
 
+/** A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts): the sentence, or null where it is whole. */
+function harbourWrecked(g: Game, p: Region): string | null {
+  const out = prizeOut(g, p, 'harbour');
+  return out > 0 ? `The harbour of ${placeName(p.name)} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.` : null;
+}
+
 /** Why a corps cannot be shipped to a friendly port, or null if it can. */
 export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
   // (1.5.3; the playtest's find 17.) A garrison has not moved: it is told what it is and how it comes out, as the railway
-  // tells it. (The 1.5.3 review.) One in a town with no port is told that first, as a landing force is (whyNotLand).
-  if (c.town !== undefined) return from.port ? garrisonAboard(g, c) : `${placeName(from.name, true)} has no port: troops are shipped from one port to another.`;
+  // tells it. (The 1.5.3 review.) Its own harbour is answered first: one in a town with no port is told so, as a landing
+  // force is (whyNotLand), and one whose harbour is wrecked is told for how long, never that it can embark next month.
+  if (c.town !== undefined) return !from.port ? `${placeName(from.name, true)} has no port: troops are shipped from one port to another.` : harbourWrecked(g, from) ?? garrisonAboard(g, c);
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
   if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
@@ -660,7 +667,7 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
   if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
-  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${placeName(p.name)} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
+  for (const p of [from, to]) { const wrecked = harbourWrecked(g, p); if (wrecked) return wrecked; }
   if (hostileUnits(g, to, c.nat).length) {
     if (siegeRules(g) && !harbourOpen(g, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
     // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.

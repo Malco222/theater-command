@@ -2759,24 +2759,28 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   const open = (r: Region): boolean => (allied(g, c.nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, c.nat, r);
   const mended = (r: number): string => (hastyLeft(g, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g.turn + hastyLeft(g, r)).label}, or engineers relay it sooner` : 'engineers relay the track');
   if (c.kind === 'fort') return { code: 'fort', line: 'Fortress troops do not go by train.' };
-  // (A garrison in a town nobody besieges is not shut in: it takes the field first, and rides from the country outside.
-  // The 1.5.3 review: coming out costs a move (apOutOfTown) and a train takes four, so it is sent to TAKE THE FIELD only
-  // where that would put it on a train this month, or on the eve of war, when a corps brought out has its whole month
-  // as the war opens. Any other is told that out of the town it can ride next month.)
-  if (c.town) return { code: 'town', line: besieged(g, from) ? `${c.name} is shut in the town at ${from.name}. No train leaves a siege.` : (g.flags.eve === 1 || apOutOfTown(g, c) >= 4) && whyNotTakeField(g, c) === null ? 'A garrison does not take the train: TAKE THE FIELD first.' : 'A garrison does not take the train. Out of the town, it can go by rail next month.', at: from.id };
   // The test is four weeks of movement in hand. A corps that has moved, fought or worked has spent part of its month;
   // one slowed for want of fuel opens its month with three and has spent nothing (ruling 118(c); the art director's
-  // lines). A fast corps with five may march a week and still ride.
-  if (c.ap < 4) return {
+  // lines). A fast corps with five may march a week and still ride. (A garrison has not moved: it is answered below.)
+  if (!c.town && c.ap < 4) return {
     code: 'spent',
     line: c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.`
       : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
       : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
   };
   if (sandRules(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  // (A garrison in a town under siege is shut in. One in a town nobody besieges takes the field first, and rides from
+  // the country outside: it is answered below.)
+  if (c.town && besieged(g, from)) return { code: 'town', line: `${c.name} is shut in the town at ${from.name}. No train leaves a siege.`, at: from.id };
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
+  // (The 1.5.3 review: coming out costs a move (apOutOfTown) and a train takes four, so a garrison is sent to TAKE THE
+  // FIELD only where that would put it on a train this month, or on the eve of war, when a corps brought out has its
+  // whole month as the war opens. Any other is told that out of the town it can ride next month. Its province's own
+  // railway is answered first, as above: no railway in the desert or off the lines, and none while the line is cut, so
+  // that the way out of the town is never promised a train its province does not have.)
+  if (c.town) return { code: 'town', line: (g.flags.eve === 1 || apOutOfTown(g, c) >= 4) && whyNotTakeField(g, c) === null ? 'A garrison does not take the train: TAKE THE FIELD first.' : 'A garrison does not take the train. Out of the town, it can go by rail next month.', at: from.id };
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
   if (sandRules(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
