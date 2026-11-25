@@ -179,6 +179,13 @@ class APlayerController;
  *                         screen says so; it is asked when a year is picked and every time the screen opens, Escape
  *                         from the war included, where it was worked out in the press's frame. 0: in the press's
  *                         frame (a year picked: three frames after it), as before. The same list either way.
+ *   tc.Speed.MonthAside   0 (default, until the Mac has timed it): the other nations' months, played when he ends his
+ *                         (TC.endMonth: 0.35 to 0.8 s on the Europe-and-Americas chart and 1.0 to 1.7 s on the whole-world
+ *                         map in a cloud run, the far map's answer some 1.9 MB of text) are played and read on the rules'
+ *                         own thread, as an order's answer is, so the table's frames go on while they are; the bell rings
+ *                         at the press as before, and the watch or the month's card follows once they are in. The table
+ *                         takes no order meanwhile (IsAnswering), and a step run waits for it (IsBusyForSteps). A run that
+ *                         takes pictures plays it at once. 1 on; 0 in the press's frame, as before. The same month either way.
  *   tc.Speed.PicturesAside 1 (default): a card's unit pictures (the arsenal's, a province's raise list, the bigger
  *                         unit card, a page's machines, a fleet's ships) that have not been taken yet are each a model
  *                         built and photographed in the studio, and a card opened for the first time took all of them in
@@ -253,6 +260,7 @@ namespace TheaterSpeed
 	bool WarSpread(); // (tc.Speed.WarSpread) a war begun is laid a step a frame under a plate: false all in the press's frame, as before
 	bool SaveAside(); // (tc.Speed.SaveAside) the month's save written out off the game thread: false in the month's frames, as before
 	bool NationsAside(); // (tc.Speed.NationsAside) the opening screen's countries worked out on the rules' thread: false in the press's frame, as before
+	bool MonthAside(); // (tc.Speed.MonthAside) the other nations' months played and read on the rules' thread: false in the press's frame, as before
 	bool PicturesAside(); // (tc.Speed.PicturesAside) a card's unit pictures not yet taken are taken one a frame after it stands: false all in its frame, as before
 	/**
 	 * A run that only takes pictures ("-TheaterShots=<folder>" with no "-TheaterSteps="): the photographer arranges each

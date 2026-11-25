@@ -12169,6 +12169,17 @@ void ACampaignPlayerController::EndMonth()
 	{
 		return; // (his own battle is open: no key reaches the map behind it)
 	}
+	// (Release 2, tc.Speed.MonthAside) The others' months are still being played on the rules' thread: a second press
+	// (the END THE MONTH button is not gated as the keys are) ends nothing more and waits for nothing.
+	if (bMonthTurning)
+	{
+		const FCampaignSession* Turning = GetSession();
+		if (Turning && Turning->IsAnswering())
+		{
+			return;
+		}
+		bMonthTurning = false; // (its answer went with the war it belonged to: a war begun or read in since drops it)
+	}
 	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
 	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
 	FinishAnswer();
@@ -12318,7 +12329,26 @@ void ACampaignPlayerController::EndMonth()
 	{
 		WatchStood.Add(Unit.Id, Unit.Region);
 	}
-	Month = Session->EndMonth();
+	// (Release 2, tc.Speed.MonthAside; the map-speed lane, the whole-world map's month end.) The others' months are
+	// played and read on the rules' own thread, so the table's frames go on while they are (1.0 to 1.7 s on the
+	// whole-world map in a cloud run); the table takes no order meanwhile (IsAnswering), and the watch or the month's
+	// card follows once they are in. The switch off, or a run that takes pictures: at once, as before, inside this call.
+	const bool bWatchAsked = bAlwaysWatch; // (END THE MONTH AND WATCH holds it for this press only)
+	bMonthTurning = true;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->EndMonthAside(!bScripted, [Self, bWatchAsked](FMonthResult&& Played)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->bMonthTurning = false;
+			Me->Month = MoveTemp(Played);
+			Me->MonthPlayed(bWatchAsked);
+		}
+	});
+}
+
+void ACampaignPlayerController::MonthPlayed(bool bWatchAsked)
+{
 	if (!bHelpSeen)
 	{
 		bHelpSeen = true; // a month has been played: the reminder of the keys folds away into its mark
@@ -12338,7 +12368,7 @@ void ACampaignPlayerController::EndMonth()
 	// touched him, draws its moves, and comes back; the card follows. "-TheaterWatchNear" has a run that takes
 	// pictures watch the month so where it would have watched every move.
 	static const bool bNearPictures = FParse::Param(FCommandLine::Get(), TEXT("TheaterWatchNear"));
-	const bool bWatchEvery = (bAlwaysWatch && !(bNearPictures && bEnemyMoves)) || (bShowsFirst && !bScripted);
+	const bool bWatchEvery = (bWatchAsked && !(bNearPictures && bEnemyMoves)) || (bShowsFirst && !bScripted);
 	NearCount = 0;
 	NearShown = 0;
 	NearStopPlaces.Reset();
@@ -12350,7 +12380,7 @@ void ACampaignPlayerController::EndMonth()
 	ReadyUnits.Reset();
 	bReadyDue = false;
 	ReadySaid = -1;
-	if (bEnemyMoves && !bWatchEvery && (!bScripted || (bAlwaysWatch && bNearPictures)))
+	if (bEnemyMoves && !bWatchEvery && (!bScripted || (bWatchAsked && bNearPictures)))
 	{
 		for (const FMonthStep& Step : Month.Steps)
 		{
@@ -12785,7 +12815,8 @@ FString ACampaignPlayerController::GetWatchHeading() const
 
 void ACampaignPlayerController::WatchAgain()
 {
-	if (bWatching || Month.Steps.Num() == 0 || !Map.IsValid())
+	// (tc.Speed.MonthAside: while the others' months are being played, Month still holds last month's: nothing to watch again yet)
+	if (bWatching || bMonthTurning || Month.Steps.Num() == 0 || !Map.IsValid())
 	{
 		return;
 	}
