@@ -49,6 +49,30 @@ describe('the supply window: the rules hand the month on with supply fresh', () 
     endHuman(g);
     expect(g.supplyDirty).toBe(false);
   });
+
+  // (The design director's ruling of 25 November 2026, 02:55Z. A fortified port overseas keeps the month its sea was
+  // last found open, and feeds its garrison from its stores for a while after. Its sea is read whenever supply is
+  // drawn, and supply is now drawn at the close of a step that left it stale: open then means supplied that month,
+  // and the mark carries the month as it stands at the close. Before, the mark waited for the next step's opening.)
+  it('a fortified port overseas has its sea read at the close of a step: open then, it is marked for that month', () => {
+    const g = startOpen(createGame(3, 'GER'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 200) stepAI(g);
+    beginHuman(g);
+    const mark = (id: number): number | undefined => g.flags[`stores:${id}`];
+    // The ports whose sea the month's opening found open.
+    const open = g.regions.filter((r) => r.overseas && r.port && r.fort && mark(r.id) === g.turn);
+    expect(open.length).toBeGreaterThan(0);
+    // Their marks wound back, as if the sea had last been open two months ago, and supply left stale as an order leaves it.
+    for (const r of open) g.flags[`stores:${r.id}`] = g.turn - 2;
+    g.supplyDirty = true;
+    endHuman(g);
+    for (const r of open) expect(mark(r.id), r.name).toBe(g.turn);
+    // A step that left supply fresh draws nothing at its close, and the marks stand as its last drawing left them.
+    for (const r of open) g.flags[`stores:${r.id}`] = g.turn - 2;
+    advanceMarches(g);
+    for (const r of open) expect(mark(r.id), r.name).toBe(g.turn - 2);
+  });
 });
 
 describe('the supply window through the table', () => {
