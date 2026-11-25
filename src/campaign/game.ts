@@ -903,7 +903,7 @@ const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCh
  * war with (far.ts tiedPair's tie), and whether the far side is on. While this is the same, so is every answer
  * allied() gives (a change to allied() must be followed here; TC_SUPPLY_CHECK asks every kept answer afresh).
  */
-const friendsKeyOf = (g: Game): string => {
+export const friendsKeyOf = (g: Game): string => {
   let key = farOn(g) ? 'far' : 'near';
   for (const id in g.nations) { const n = g.nations[id]; key += `|${id}:${bloc(n)}:${n.alive ? 1 : 0}:${n.atWar.join(',')}`; }
   return key;
