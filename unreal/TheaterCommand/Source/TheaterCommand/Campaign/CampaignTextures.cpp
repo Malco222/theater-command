@@ -734,10 +734,11 @@ void CampaignTextures::MakeWeather(TArray<FColor>& OutPixels, bool bSnow)
 	// side. Her targets: no straight edge longer than about twelve screen points, no two neighbours sharing a lean,
 	// and the brightness spread inside a patch no more than a quarter of its mean. The picture is tiled about three
 	// times across the screen (RainTiles), so a point of it is about two screen points: a streak is now 3 to 6 points
-	// long, leans either way by a third to a whole length, and is drawn at a lower weight (SkyRain). Flakes lose their
-	// square corners. She judges it on the next pictures. NOTE for that round: the picture is tiled on the SCREEN, so
-	// its marks still slide over the map as the camera pans, which is her third target and cannot be mended here: the
-	// screen-or-ground choice is in the table's material, not in this file.)
+	// long, leans by a sixth to a half of its length ON THE SIDE OF THE FALL, and is drawn at a lower weight (SkyRain).
+	// Flakes lose their square corners. She judges it on the next pictures. Her third target, as she amended it at
+	// 05:36Z: the FALLING layer may ride the screen, because rain hangs in the air between the eye and the table; what
+	// must be fixed to the ground is the LID'S BODY, the zone's edge and the cloud and mist shares, and that is the sky
+	// picture, laid over the map through SkyFrame in map units. So nothing here asks the material to change.)
 	FRandomStream Dice(1944);
 	TArray<float> Falling;
 	Falling.Init(0.0f, Size * Size);
@@ -774,9 +775,14 @@ void CampaignTextures::MakeWeather(TArray<FColor>& OutPixels, bool bSnow)
 		{
 			const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size));
 			const float Long = Dice.FRandRange(3.0f, 6.0f), Bright = Dice.FRandRange(0.4f, 0.75f);
-			// (its own lean, either way, from a third of its length to the whole of it: no two neighbours fall alike.
+			// (its own lean, all on the side of the fall: from about a sixth of its length to about half of it, so that
+			// no two neighbours lean alike and every streak still leans the way its drop is falling.
+			// The art director mended her own wording at 05:36Z: "no two neighbours sharing a lean" was badly put,
+			// since a streak is the blur of a falling drop. The picture falls down the screen and a third as far
+			// across it (RainFall), so a streak that leans against its own travel reads as confetti in motion. The
+			// first build of this mend flipped half of them; her numbers, 0.15 to 0.55 and the old sign, do not.
 			// Named Slant, not Lean: this file already has a Lean() of its own above, for the hillsides' shading.)
-			const float Slant = Dice.FRandRange(0.33f, 1.0f) * (Dice.FRand() < 0.5f ? -1.0f : 1.0f);
+			const float Slant = Dice.FRandRange(0.15f, 0.55f);
 			const int32 Steps = FMath::CeilToInt32(Long * 2.0f);
 			for (int32 Step = 0; Step <= Steps; ++Step)
 			{
