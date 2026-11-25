@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 51b1954e 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2cc989c9 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -91785,6 +91785,7 @@
   var KILL_NEAR = LETHAL;
   var LET_GO2 = 240;
   var AHEAD_RANGE = 200;
+  var AHEAD_WORD = "ahead-throwing weapon";
   var NUMS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen"];
   var words = (n) => NUMS[n] ?? String(n);
   var MONTHS2 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -91804,6 +91805,18 @@
       if (out.staged) return out.staged;
     }
   }
+  function kitsOf(f, guard) {
+    const one2 = (k) => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, groups: k.groups ?? false });
+    if (f.kits && Object.keys(f.kits).length) return Object.fromEntries(Object.entries(f.kits).map(([n, k]) => [n, one2(k)]));
+    return f.kit ? { [guard]: one2(f.kit) } : void 0;
+  }
+  function escortsNat(m, f, guard) {
+    const ours = (n) => !atWarIn(m, n, guard);
+    const answered = Object.keys(f.kits ?? {}).filter(ours);
+    if (!answered.length) return f.escorts?.length && ours(f.escorts[0]) ? f.escorts[0] : guard;
+    const same4 = (k) => !!f.kit && ["asdic", "radar", "hedgehog", "hfdf"].every((x) => k[x] === f.kit[x]) && (k.groups ?? false) === (f.kit.groups ?? false);
+    return f.escorts?.find((n) => answered.includes(n)) ?? answered.find((n) => same4(f.kits[n])) ?? answered[0];
+  }
   function stageWith(m, pick4, plan, lastPlan = true) {
     const f = pick4.fact;
     const sea = seaPlace(f.sea);
@@ -91816,7 +91829,7 @@
     const nameOf2 = (n) => m.names?.[n] ?? { name: n, adj: n };
     const boatRow = rowOf(L2.boats, pick4.boats, at4, sea.basin);
     const fishRow = rowOf(L2.torpedoes, pick4.boats, at4, sea.basin);
-    const escNat = pick4.case === "convoy" && f.escorts?.length && !atWarIn(m, f.escorts[0], pick4.guard) ? f.escorts[0] : pick4.guard;
+    const escNat = pick4.case === "convoy" ? escortsNat(m, f, pick4.guard) : pick4.guard;
     const escRow = rowOf(L2.escorts, escNat, at4, sea.basin);
     const airRow = rowOf(L2.air, pick4.guard, at4, sea.basin);
     const convRow = rowOf(L2.convoys, pick4.guard, at4, sea.basin);
@@ -91828,6 +91841,10 @@
     if (pick4.case === "convoy" && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: an older save's record, without the raiders' heavy ships; the fleets as the scene is read" : "who raided: the fleets at sea as the month closed");
     const fan = pick4.case !== "hunt";
     const fleetEsc = pick4.case === "heavyLost" || pick4.case === "boatsKill";
+    const kits = pick4.case === "convoy" ? kitsOf(f, pick4.guard) : void 0;
+    const kit = kits?.[escNat];
+    const escRadar = fleetEsc || (kit ? kit.radar : escRow.radar);
+    const escAhead = fleetEsc ? null : kit ? kit.hedgehog ? escRow.ahead ?? AHEAD_WORD : null : escRow.ahead;
     const killsDrawn = Math.min(L2.most.boats, pick4.kills);
     const airShare = f.hunters ? f.hunters.aircraft / Math.max(1e-9, f.hunters.ships + f.hunters.aircraft) : airRow.share;
     const [byShips, byAir] = wholeShares(killsDrawn, [1 - airShare, airShare]);
@@ -91963,8 +91980,7 @@
       const start2 = { x: firePt.x - Math.sin(hdg) * v0 * t0, y: firePt.y - Math.cos(hdg) * v0 * t0, h: hdg, v: v0, r: 0 };
       const lastFire = mine4.length ? mine4[mine4.length - 1].t : 0;
       const firstAll = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : 0;
-      const radarOn = fleetEsc || escRow.radar;
-      const tDeep = !fan ? 6 + 3 * b : !mine4.length ? tFire0 + 4 + 3 * b : surfacedAttack ? radarOn ? lastFire + 3 + 1.5 * b : Math.max(lastFire + 3, firstAll + 2 + 1.5 * b) : lastFire + 4 + 1.5 * b;
+      const tDeep = !fan ? 6 + 3 * b : !mine4.length ? tFire0 + 4 + 3 * b : surfacedAttack ? escRadar ? lastFire + 3 + 1.5 * b : Math.max(lastFire + 3, firstAll + 2 + 1.5 * b) : lastFire + 4 + 1.5 * b;
       const away2 = mine4.length ? wrap2Pi(hdg + side5 * 2.4) : wrap2Pi(hdg + (look(`turn:${b}`) - 0.5) * 1.2);
       const orders2 = [{ at: 0, h: hdg, v: v0 }];
       if (mine4.length) orders2.push({ at: lastFire + 1, h: away2, v: surfacedAttack ? Math.min(boatRow.surf * 0.85, 7.5) : v0 });
@@ -91974,7 +91990,7 @@
       const deep = Math.round(Math.min(boatRow.deep * (0.85 + 0.3 * look(`deep:${b}`)), boatRow.crush * 0.8));
       const keels = [{ t: 0, keel: k0, dive: startDive, scope: startDive === "periscope" }];
       moveKeel(keels, tDeep, k0, deep, up, "deep");
-      dives.push({ t: tDeep, keel: deep, why: !fan ? "evade" : surfacedAttack && escRow.radar && !fleetEsc ? "radar" : "evade", from: startDive });
+      dives.push({ t: tDeep, keel: deep, why: !fan ? "evade" : surfacedAttack && escRadar && !fleetEsc ? "radar" : "evade", from: startDive });
       boats.push({
         id: nextId++,
         side: "att",
@@ -92008,7 +92024,7 @@
     const esc = fleetEsc ? { cls: "destroyer", len: L2.heavy.dd.len, beam: L2.heavy.dd.beam, speed: L2.heavy.dd.speed, turn: L2.heavy.dd.turn } : { cls: escRow.cls, len: escRow.len, beam: escRow.beam, speed: escRow.speed, turn: escRow.turn };
     const escK = { turn: esc.turn, speed: esc.speed, acc: 0.08 };
     const escWord = fleetEsc ? "destroyer" : shipWord(escRow.cls);
-    const radarFirst = surfacedAttack && (fleetEsc || escRow.radar);
+    const radarFirst = surfacedAttack && escRadar;
     const firstHitAt = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : -1;
     const reactAt = boats.map((_, i) => {
       const mine4 = fans.filter((x) => x.boat === i);
@@ -92261,7 +92277,7 @@
       const clear2 = clearOf.get(b);
       const t0 = clear2 ? Math.max(clear2.burst + 8, steadyFrom(b.keels) + 4) : reactAt[i];
       const s = clear2 ? sendAt(b, t0) : sendOn2(b, i, t0);
-      const ahead2 = !fleetEsc && !!escRow.ahead && look(`ahead:${i}`) < 0.6;
+      const ahead2 = !!escAhead && look(`ahead:${i}`) < 0.6;
       const run = planKill(s.e, b, s.t, ahead2, clear2 ? t0 : dives[i].t + 25);
       runs.push(run);
       killOf.set(b, run);
@@ -92355,7 +92371,7 @@
       const reach3 = pickIn(contactRange, look(`contact:${k}`));
       let tc = e.track.first((t) => b.track.at(t), reach3, run.from, run.drop);
       if (tc < 0) tc = Math.max(run.from, run.drop - 20);
-      const kind = keelOf(b.keels, tc).dive === "surfaced" && (fleetEsc || escRow.radar) ? "radar" : "asdic";
+      const kind = keelOf(b.keels, tc).dive === "surfaced" && escRadar ? "radar" : "asdic";
       const err = (look(`err:${k}`) - 0.5) * (run.kill ? 0.06 : 0.3) / (fleetEsc ? 1 : escRow.sonar ?? 1);
       const ep = e.track.at(tc), bp = b.track.at(tc);
       events.push({ t: tc, what: "sea:sonar", unit: e.id, side: "def", x: ep.x, y: ep.y, text: kind === "radar" ? `${upFirst3(an4(escWord))} has a radar contact.` : `${upFirst3(an4(escWord))} has an asdic contact.`, extra: { on: b.id, kind, range: Math.round(dist2(ep, bp)), bearing: r33(bearing3(ep.x, ep.y, bp.x, bp.y)), err: r33(err) } });
@@ -92371,7 +92387,7 @@
       if (tl >= 0) e.hunt.push({ from: tl, to: run.burst, phase: "blind", on: b.id, kind, err });
       e.hunt.push({ from: tl >= 0 ? run.burst : run.drop, to: run.burst + 30, phase: "open", on: b.id, kind, err });
       const dp = e.track.at(run.drop);
-      const word3 = run.kind === "ahead" ? `fires her ${escRow.ahead ?? "ahead-thrower"}` : `drops a pattern of ${words(run.n)} depth charges`;
+      const word3 = run.kind === "ahead" ? `fires her ${escAhead ?? AHEAD_WORD}` : `drops a pattern of ${words(run.n)} depth charges`;
       events.push({ t: run.drop, what: "sea:depthCharge", unit: e.id, side: "def", x: dp.x, y: dp.y, text: `${upFirst3(an4(escWord))} ${word3}.`, extra: { on: b.id, x: r1(run.centre.x), y: r1(run.centre.y), n: run.n, set: run.set, sinking: r1(run.sinking), spread: run.spread, kind: run.kind } });
       zone("pattern", run.centre, run.spread / 2, run.drop, run.burst + 6, "def", e.id);
       if (run.kill) {
@@ -92586,7 +92602,7 @@
       caption: { lines: caption, check: L2.caption.check },
       facts: { kind: f.kind, sea: f.sea, by: f.by, on: f.on, week, tons: f.tons ?? 0, ships: pick4.case === "convoy" ? pick4.ships : pick4.heavy.length, boats: pick4.kills, escortsLost: f.escortsLost ?? 0, source: pick4.source },
       drawn: { boats: boats.length, kills: ends.length, byAir: ends.filter((x) => x.by === "air").length, hits: hitAt.size, merchants: guarded2.filter((p) => p.cls === "mv").length, heavy: guarded2.filter((p) => p.cls !== "mv").length, escorts: escorts.length, ends: ends.map((x) => `${x.how} by ${x.by}`) },
-      looks: { boat: boatRow.cls, torpedo: fishRow.fish, wakeless: fishRow.wakeless, escort: esc.cls, ahead: fleetEsc ? null : escRow.ahead, aircraft: airRow.name, radar: fleetEsc ? true : escRow.radar },
+      looks: { boat: boatRow.cls, torpedo: fishRow.fish, wakeless: fishRow.wakeless, escort: esc.cls, ahead: escAhead, aircraft: airRow.name, radar: escRadar },
       night: { hour: r1(night.hour), hours: r1(night.hours), dusk: r1(night.dusk), dawn: r1(night.dawn) },
       standIns
     };
@@ -92601,6 +92617,12 @@
       lon: sea.lon,
       att: { nat: attNat, adj: attAdj, human: m.human === attNat, fleets: [{ id: 1, name: boatFleet, ships: shipsOf(boats) }] },
       def: { nat: defNat, adj: defAdj, human: m.human === defNat, fleets: [{ id: 2, name: defFleet, ships: shipsOf([...guarded2, ...escorts]) }] },
+      // A convoy's night carries its sea's kit and air cover where the record has them, in the convoy nights' shape
+      // (D2): the kit by navy (kitsOf), one entry for each navy that answered there, so that the scene draws each navy's
+      // escorts with their own kit, or the guard's alone from an older record; without the direction finder (that shape
+      // has none). Without them neither key is written, and the scene takes the historian's mix by navy and year.
+      ...kits ? { kit: kits } : {},
+      ...pick4.case === "convoy" && f.cover ? { cover: f.cover } : {},
       classes,
       torp: { travel: r1(fans.length ? fans[0].running : 60), radius: fans.length ? Math.round(fans[0].range * Math.tan(fans[0].spread / 2 * RAD)) + 60 : 300 },
       strike: { windup: 90, radius: 1500 },
@@ -92776,6 +92798,7 @@
           for (const x of r.seas) if (g2.seas[x.zone]) tonsBy[g2.seas[x.zone].key] = x.tons;
           const hunts = (look?.hunts ?? []).filter((x) => zones.includes(x.zone) && x.sunk > 0);
           const lostNats = hunts.length ? byNat2(hunts.flatMap((x) => x.quarry)).nats : byNat2(all, maybeBoats).nats;
+          const own = s0 && g2.seas[s0.zone] ? s0 : void 0;
           facts.push({
             kind: "convoy",
             sea: z2 >= 0 && g2.seas[z2] ? g2.seas[z2].key : route.zones[0],
@@ -92802,7 +92825,10 @@
             airGuard: s0 ? s0.air : 0,
             tonsBy,
             hunters: hunts.length ? huntersOf(hunts) : { ships: s0 ? sum3(s0.escorts) : 0, aircraft: s0 ? s0.air : 0 },
-            ...lostNats.length === 1 ? { boatsNat: lostNats[0] } : {}
+            ...lostNats.length === 1 ? { boatsNat: lostNats[0] } : {},
+            ...own?.kit ? { kit: { ...own.kit } } : {},
+            ...own?.kits ? { kits: Object.fromEntries(Object.entries(own.kits).map(([n, k]) => [n, { ...k }])) } : {},
+            ...own?.cover ? { cover: own.cover } : {}
           });
           continue;
         }

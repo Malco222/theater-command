@@ -125,7 +125,23 @@ export interface SeaFact {
   tonsBy?: Record<string, number>;
   /** A convoy month: the nation of the boats lost on the route, where the record shows them all one nation's (else none is named). */
   boatsNat?: string;
+  /**
+   * A convoy month, in the scene's sea, where the record has them (the rules' switch "Units decide" on): the
+   * anti-submarine kit of the navy with most destroyers answering attacks there, each answering navy's own kit by its
+   * nation (kits), as the record holds them, and the kind of its air cover. All are typed from the record (SubLook), so
+   * a kind the rules add reaches the scene unchanged. An older save's record has kit without kits, and its kit may
+   * have no groups. Absent otherwise (Units decide off, an older save, a fact made by hand): the scene then takes the
+   * historian's mix by navy and year.
+   */
+  kit?: SavedKit;
+  kits?: NonNullable<RecordSea['kits']>;
+  cover?: NonNullable<RecordSea['cover']>;
 }
+
+/** A convoy route's sea in the rules' record (SubLook below). */
+type RecordSea = SubLook['convoys'][number]['seas'][number];
+/** A sea's kit as a save may hold it: today's, or one written before the rules kept groups, which has none. */
+type SavedKit = Omit<NonNullable<RecordSea['kit']>, 'groups'> & Partial<Pick<NonNullable<RecordSea['kit']>, 'groups'>>;
 
 /**
  * A fleet in the rules' record (types.ts SubLookFleet): its id, its nation, and `n`, its boats (a hunter's or an
@@ -157,16 +173,21 @@ export interface SubLook {
   nat: string;
   hunts: { zone: number; hunters: SubLookFleet[]; air: number; quarry: SubLookFleet[]; sunk: number; cost: number }[];
   torpedoes: SubLookTorpedo[];
-  /** (release 2's navy, the convoy war by cause, Units decide only) each sea's escorts' kit, its air cover's kind and the boats its escorts sank there. */
-  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range'; lost?: number }[] }[];
+  /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false; groups is its escort-group training), the air cover's kind, and the boats its escorts sank there. */
+  /** Also with Units decide only, kits: each allied navy with destroyers answering attacks in the sea, keyed by its nation, with its own kit; where none answers, the convoy's own nation alone. The scene keys its escorts' looks by it, so each navy's escorts are drawn with their own kit. It is look only: no rule reads it. */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean; groups: boolean }; kits?: Record<string, { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean; groups: boolean }>; cover?: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; lost?: number }[] }[];
 }
 
 /**
  * The record as a save may hold it: today's (SubLook), or an older save's, written before the rules' 21a3a759, whose
- * torpedoings carry no `couldNat` and `byNat` (and whose raiders carry no `heavy`). The record keeps this month and
- * last, so an older save's rows are gone a month after it is loaded and played on. factsOf reads either.
+ * torpedoings carry no `couldNat` and `byNat` (and whose raiders carry no `heavy`), or one written before the rules
+ * kept each answering navy's kit, whose convoy seas have no `kits` and whose kit has no `groups`. The record keeps this
+ * month and last, so an older save's rows are gone a month after it is loaded and played on. factsOf reads either.
  */
-export type SubLookSaved = Omit<SubLook, 'torpedoes'> & { torpedoes: (Omit<SubLookTorpedo, 'couldNat' | 'byNat' | 'sunk'> & Partial<Pick<SubLookTorpedo, 'couldNat' | 'byNat' | 'sunk'>>)[] };
+export type SubLookSaved = Omit<SubLook, 'torpedoes' | 'convoys'> & {
+  torpedoes: (Omit<SubLookTorpedo, 'couldNat' | 'byNat' | 'sunk'> & Partial<Pick<SubLookTorpedo, 'couldNat' | 'byNat' | 'sunk'>>)[];
+  convoys: (Omit<SubLook['convoys'][number], 'seas'> & { seas: (Omit<RecordSea, 'kit'> & { kit?: SavedKit })[] })[];
+};
 
 export interface MonthFacts {
   /** The player's nation. */
@@ -708,6 +729,8 @@ export const KILL_NEAR = LETHAL;
 const LET_GO = 240;
 /** An ahead-thrower's salvo falls about this far (m) ahead of her middle (Hedgehog: some 200-250 yards ahead [L]). */
 export const AHEAD_RANGE = 200;
+/** An ahead-thrower's name where the record's kit gives a navy one and its escort row names none. */
+const AHEAD_WORD = 'ahead-throwing weapon';
 const NUMS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen'];
 const words = (n: number): string => NUMS[n] ?? String(n);
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -769,6 +792,38 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
   }
 }
 
+/** A navy's kit as a convoy's night carries it in its field, in the convoy nights' shape (D2), which has no direction finder. */
+type FieldKit = { asdic: boolean; radar: boolean; hedgehog: boolean; groups: boolean };
+
+/**
+ * A convoy's night's kit by navy, where the record has one: each navy the record's kits name as answering attacks in
+ * the scene's sea, with its own kit and group training; else, from an older record that names no navy, its one kit
+ * keyed by the guard's nation, with group training only where that kit has it. None where the record has neither.
+ */
+function kitsOf(f: SeaFact, guard: string): Record<string, FieldKit> | undefined {
+  const one = (k: SavedKit): FieldKit => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, groups: k.groups ?? false });
+  if (f.kits && Object.keys(f.kits).length) return Object.fromEntries(Object.entries(f.kits).map(([n, k]) => [n, one(k)]));
+  return f.kit ? { [guard]: one(f.kit) } : undefined;
+}
+
+/**
+ * The navy whose escorts a convoy's night draws: the one the record names most destroyers of in the sea, where it is
+ * the guard's or an ally's, else the guard's. Where the record's kits name the navies answering attacks there (the
+ * support groups hunting in the sea and the route's close escort, the only escorts the rules let sink boats there, as
+ * navy.ts incidentChance counts them), it is one of those: the first of the sea's navies that answered; else, where
+ * none of them did (a close escort staged in another of the route's seas), the first navy whose kit is the record's
+ * kit, the kit of the navy with most destroyers answering. A navy that only guards the route loosely in the sea, or
+ * whose destroyers there were all lost in the month's fighting, is then not drawn, so the field's kit always holds
+ * the drawn navy's own.
+ */
+function escortsNat(m: MonthFacts, f: SeaFact, guard: string): string {
+  const ours = (n: string): boolean => !atWarIn(m, n, guard);
+  const answered = Object.keys(f.kits ?? {}).filter(ours);
+  if (!answered.length) return f.escorts?.length && ours(f.escorts[0]) ? f.escorts[0] : guard;
+  const same = (k: SavedKit): boolean => !!f.kit && (['asdic', 'radar', 'hedgehog', 'hfdf'] as const).every((x) => k[x] === f.kit![x]) && (k.groups ?? false) === (f.kit.groups ?? false);
+  return f.escorts?.find((n) => answered.includes(n)) ?? answered.find((n) => same(f.kits![n])) ?? answered[0];
+}
+
 /** Stages a picked scene by a plan; `last` is the views' end and `end` the tracks'. */
 function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true): { staged: Staged | null; last: number; end: number } {
   const f = pick.fact;
@@ -784,8 +839,8 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
 
   const boatRow = rowOf(L.boats, pick.boats, at, sea.basin);
   const fishRow = rowOf(L.torpedoes, pick.boats, at, sea.basin);
-  // (a convoy's escorts are the navy the record names most of there, where it is the guard's or an ally's)
-  const escNat = pick.case === 'convoy' && f.escorts?.length && !atWarIn(m, f.escorts[0], pick.guard) ? f.escorts[0] : pick.guard;
+  // (a convoy's escorts are the navy the record names most of there, or the one that answered there: escortsNat)
+  const escNat = pick.case === 'convoy' ? escortsNat(m, f, pick.guard) : pick.guard;
   const escRow = rowOf(L.escorts, escNat, at, sea.basin);
   const airRow = rowOf(L.air, pick.guard, at, sea.basin);
   const convRow = rowOf(L.convoys, pick.guard, at, sea.basin);
@@ -799,6 +854,16 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
   // ---- The outcome, fixed first ------------------------------------------------------------------------------
   const fan = pick.case !== 'hunt';
   const fleetEsc = pick.case === 'heavyLost' || pick.case === 'boatsKill';
+  // What the drawn escorts carry. On a convoy's night where the record has a kit, it is their own navy's (escNat's) by
+  // the record: radar (its contacts, a boat diving for it, and the screen turning on a surfaced boat before she fires)
+  // only with radar, and an ahead-thrower only with hedgehog, called by the row's name for it where the row has one.
+  // Where the record has kits, the drawn navy is always one they name (escortsNat). An older record's one kit is the
+  // guard's: an ally drawn there has no kit made up for it, and its escorts keep the row's, as do all escorts where the
+  // record has no kit. A fleet's own screen keeps its destroyers' look: radar, no ahead-thrower.
+  const kits = pick.case === 'convoy' ? kitsOf(f, pick.guard) : undefined;
+  const kit = kits?.[escNat];
+  const escRadar = fleetEsc || (kit ? kit.radar : escRow.radar);
+  const escAhead = fleetEsc ? null : kit ? (kit.hedgehog ? escRow.ahead ?? AHEAD_WORD : null) : escRow.ahead;
   const killsDrawn = Math.min(L.most.boats, pick.kills);
   // Kills by aircraft where the kill's share is theirs (wholeShares, navy.ts:1650): the recorded hunters' split, or the row's.
   const airShare = f.hunters ? f.hunters.aircraft / Math.max(1e-9, f.hunters.ships + f.hunters.aircraft) : airRow.share;
@@ -934,8 +999,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     const firstAll = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : 0;
     // When she goes deep: a surfaced attacker as soon as she has fired where the screen has radar and is turning on her,
     // else as the hits come; one at periscope depth at once.
-    const radarOn = fleetEsc || escRow.radar;
-    const tDeep = !fan ? 6 + 3 * b : !mine.length ? tFire0 + 4 + 3 * b : surfacedAttack ? (radarOn ? lastFire + 3 + 1.5 * b : Math.max(lastFire + 3, firstAll + 2 + 1.5 * b)) : lastFire + 4 + 1.5 * b;
+    const tDeep = !fan ? 6 + 3 * b : !mine.length ? tFire0 + 4 + 3 * b : surfacedAttack ? (escRadar ? lastFire + 3 + 1.5 * b : Math.max(lastFire + 3, firstAll + 2 + 1.5 * b)) : lastFire + 4 + 1.5 * b;
     const away = mine.length ? wrap2Pi(hdg + side * 2.4) : wrap2Pi(hdg + (look(`turn:${b}`) - 0.5) * 1.2);
     const orders: Order[] = [{ at: 0, h: hdg, v: v0 }];
     if (mine.length) orders.push({ at: lastFire + 1, h: away, v: surfacedAttack ? Math.min(boatRow.surf * 0.85, 7.5) : v0 });
@@ -945,7 +1009,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     const deep = Math.round(Math.min(boatRow.deep * (0.85 + 0.3 * look(`deep:${b}`)), boatRow.crush * 0.8));
     const keels: KeelAt[] = [{ t: 0, keel: k0, dive: startDive, scope: startDive === 'periscope' }];
     moveKeel(keels, tDeep, k0, deep, up, 'deep');
-    dives.push({ t: tDeep, keel: deep, why: !fan ? 'evade' : surfacedAttack && escRow.radar && !fleetEsc ? 'radar' : 'evade', from: startDive });
+    dives.push({ t: tDeep, keel: deep, why: !fan ? 'evade' : surfacedAttack && escRadar && !fleetEsc ? 'radar' : 'evade', from: startDive });
     boats.push({ id: nextId++, side: 'att', cls: 'ss', name: `Submarine ${b + 1}`, nat: attNat, fleet: boatFleet, fleetId: 1, len: boatRow.len, beam: boatRow.beam, loop: 'ship_engine_loop', k: ssK, sunk: -1,
       track: new Track(start, orders, END, ssK), keels, tubes: boatRow.tubes, fired: mine.map((x) => ({ t: x.t, n: x.fish })) });
   }
@@ -968,7 +1032,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
   const escWord = fleetEsc ? 'destroyer' : shipWord(escRow.cls);
   // When the screen turns on each boat: with radar, as a surfaced boat comes in, before she fires; else when the hits
   // tell (or, in a hunt, as the line finds her).
-  const radarFirst = surfacedAttack && (fleetEsc || escRow.radar);
+  const radarFirst = surfacedAttack && escRadar;
   const firstHitAt = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : -1;
   const reactAt = boats.map((_, i) => {
     const mine = fans.filter((x) => x.boat === i);
@@ -1227,7 +1291,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     const t0 = clear ? Math.max(clear.burst + 8, steadyFrom(b.keels!) + 4) : reactAt[i];
     // (there is always one left: at least one escort for each kill booked to ships, nEsc)
     const s = (clear ? sendAt(b, t0) : sendOn(b, i, t0))!;
-    const ahead = !fleetEsc && !!escRow.ahead && look(`ahead:${i}`) < 0.6;
+    const ahead = !!escAhead && look(`ahead:${i}`) < 0.6;
     const run = planKill(s.e, b, s.t, ahead, clear ? t0 : dives[i].t + 25);
     runs.push(run);
     killOf.set(b, run);
@@ -1333,7 +1397,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     const reach = pickIn(contactRange, look(`contact:${k}`));
     let tc = e.track.first((t) => b.track.at(t), reach, run.from, run.drop);
     if (tc < 0) tc = Math.max(run.from, run.drop - 20);
-    const kind: 'asdic' | 'radar' = keelOf(b.keels!, tc).dive === 'surfaced' && (fleetEsc || escRow.radar) ? 'radar' : 'asdic';
+    const kind: 'asdic' | 'radar' = keelOf(b.keels!, tc).dive === 'surfaced' && escRadar ? 'radar' : 'asdic';
     const err = ((look(`err:${k}`) - 0.5) * (run.kill ? 0.06 : 0.3)) / (fleetEsc ? 1 : escRow.sonar ?? 1);
     const ep = e.track.at(tc), bp = b.track.at(tc);
     events.push({ t: tc, what: 'sea:sonar', unit: e.id, side: 'def', x: ep.x, y: ep.y, text: kind === 'radar' ? `${upFirst(an(escWord))} has a radar contact.` : `${upFirst(an(escWord))} has an asdic contact.`, extra: { on: b.id, kind, range: Math.round(dist(ep, bp)), bearing: r3(bearing(ep.x, ep.y, bp.x, bp.y)), err: r3(err) } });
@@ -1350,7 +1414,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     if (tl >= 0) e.hunt!.push({ from: tl, to: run.burst, phase: 'blind', on: b.id, kind, err });
     e.hunt!.push({ from: tl >= 0 ? run.burst : run.drop, to: run.burst + 30, phase: 'open', on: b.id, kind, err });
     const dp = e.track.at(run.drop);
-    const word = run.kind === 'ahead' ? `fires her ${escRow.ahead ?? 'ahead-thrower'}` : `drops a pattern of ${words(run.n)} depth charges`;
+    const word = run.kind === 'ahead' ? `fires her ${escAhead ?? AHEAD_WORD}` : `drops a pattern of ${words(run.n)} depth charges`;
     events.push({ t: run.drop, what: 'sea:depthCharge', unit: e.id, side: 'def', x: dp.x, y: dp.y, text: `${upFirst(an(escWord))} ${word}.`, extra: { on: b.id, x: r1(run.centre.x), y: r1(run.centre.y), n: run.n, set: run.set, sinking: r1(run.sinking), spread: run.spread, kind: run.kind } });
     zone('pattern', run.centre, run.spread / 2, run.drop, run.burst + 6, 'def', e.id);
     if (run.kill) {
@@ -1358,7 +1422,8 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
       events.push({ t: run.burst, what: 'sea:depthChargeHit', unit: b.id, side: 'def', x: q.x, y: q.y, text: `Depth charges hit ${an(attAdj)} submarine.`, extra: { from: e.id, harm: 1, keel: Math.round(keelOf(b.keels!, run.burst).keel) } });
     }
   }
-  // Starshell: after the first hit, over the water the boats came from; and over a boat forced up, to light her.
+  // Starshell: after the first hit, over the water the boats came from; and over a boat forced up, to light her. The
+  // row's alone: the record's kit says nothing of starshell, and no escort row ties it to radar.
   const shells: { t: number; over: Pt }[] = [];
   if (fleetEsc || escRow.starshell) {
     if (fan && firstHit >= 0) {
@@ -1529,7 +1594,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     caption: { lines: caption, check: L.caption.check },
     facts: { kind: f.kind, sea: f.sea, by: f.by, on: f.on, week, tons: f.tons ?? 0, ships: pick.case === 'convoy' ? pick.ships : pick.heavy.length, boats: pick.kills, escortsLost: f.escortsLost ?? 0, source: pick.source },
     drawn: { boats: boats.length, kills: ends.length, byAir: ends.filter((x) => x.by === 'air').length, hits: hitAt.size, merchants: guarded.filter((p) => p.cls === 'mv').length, heavy: guarded.filter((p) => p.cls !== 'mv').length, escorts: escorts.length, ends: ends.map((x) => `${x.how} by ${x.by}`) },
-    looks: { boat: boatRow.cls, torpedo: fishRow.fish, wakeless: fishRow.wakeless, escort: esc.cls, ahead: fleetEsc ? null : escRow.ahead, aircraft: airRow.name, radar: fleetEsc ? true : escRow.radar },
+    looks: { boat: boatRow.cls, torpedo: fishRow.fish, wakeless: fishRow.wakeless, escort: esc.cls, ahead: escAhead, aircraft: airRow.name, radar: escRadar },
     night: { hour: r1(night.hour), hours: r1(night.hours), dusk: r1(night.dusk), dawn: r1(night.dawn) },
     standIns,
   };
@@ -1539,6 +1604,12 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     date: `${day} ${MONTHS[month0]} ${year}`, when: { year, month: month0 }, lat: sea.lat, lon: sea.lon,
     att: { nat: attNat, adj: attAdj, human: m.human === attNat, fleets: [{ id: 1, name: boatFleet, ships: shipsOf(boats) }] },
     def: { nat: defNat, adj: defAdj, human: m.human === defNat, fleets: [{ id: 2, name: defFleet, ships: shipsOf([...guarded, ...escorts]) }] },
+    // A convoy's night carries its sea's kit and air cover where the record has them, in the convoy nights' shape
+    // (D2): the kit by navy (kitsOf), one entry for each navy that answered there, so that the scene draws each navy's
+    // escorts with their own kit, or the guard's alone from an older record; without the direction finder (that shape
+    // has none). Without them neither key is written, and the scene takes the historian's mix by navy and year.
+    ...(kits ? { kit: kits } : {}),
+    ...(pick.case === 'convoy' && f.cover ? { cover: f.cover } : {}),
     classes,
     torp: { travel: r1(fans.length ? fans[0].running : 60), radius: fans.length ? Math.round(fans[0].range * Math.tan((fans[0].spread / 2) * RAD)) + 60 : 300 },
     strike: { windup: 90, radius: 1500 },
@@ -1611,8 +1682,8 @@ function firstOf(g: Game, from?: number): number {
 /**
  * The month's facts at sea from the news the rules wrote, with the boats at sea as the month closed; and where the
  * rules' record (`g.subLook`, written while the viewing setting is on) has the month's rows, its hunters, aircraft and
- * quarry, the torpedoing's picked attacker and the convoy's raiders, escorts, air guard and tons by sea. It reads the
- * game and writes nothing.
+ * quarry, the torpedoing's picked attacker and the convoy's raiders, escorts, air guard and tons by sea, and its scene
+ * sea's kit, kits by navy and air cover where the record has them. It reads the game and writes nothing.
  */
 export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: SubLookSaved[]): MonthFacts {
   const facts: SeaFact[] = [];
@@ -1754,6 +1825,8 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
         // them, whatever its n, as a history campaign's n there may be after the boats were lost)
         const hunts = (look?.hunts ?? []).filter((x) => zones.includes(x.zone) && x.sunk > 0);
         const lostNats = hunts.length ? byNat(hunts.flatMap((x) => x.quarry)).nats : byNat(all, maybeBoats).nats;
+        // The kits and air cover are the scene's sea's own: the row of the sea the fact names, where the record has them.
+        const own = s0 && g.seas[s0.zone] ? s0 : undefined;
         facts.push({
           kind: 'convoy', sea: z >= 0 && g.seas[z] ? g.seas[z].key : route.zones[0], turn: h.turn, week: h.week, by: '', on: h.nat, route: route.id, routeName: route.name,
           tons: same ? book.tons : said ? Number(said[1].replace(/,/g, '')) : r.tons, boats: lost, escortsLost: same ? book.escortsLost : 0,
@@ -1768,6 +1841,9 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
           raiders: s0 ? byNat(s0.raiders, maybeBoats).nats : [], escorts: s0 ? byNat(s0.escorts).nats : [], escortShips: s0 ? sum(s0.escorts) : 0, airGuard: s0 ? s0.air : 0, tonsBy,
           hunters: hunts.length ? huntersOf(hunts) : { ships: s0 ? sum(s0.escorts) : 0, aircraft: s0 ? s0.air : 0 },
           ...(lostNats.length === 1 ? { boatsNat: lostNats[0] } : {}),
+          ...(own?.kit ? { kit: { ...own.kit } } : {}),
+          ...(own?.kits ? { kits: Object.fromEntries(Object.entries(own.kits).map(([n, k]) => [n, { ...k }])) } : {}),
+          ...(own?.cover ? { cover: own.cover } : {}),
         });
         continue;
       }
