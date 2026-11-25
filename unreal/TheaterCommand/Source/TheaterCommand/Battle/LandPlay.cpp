@@ -469,6 +469,7 @@ namespace LandPlay
 		N.bHidden = R.bSn && R.bHd;
 		// (the same gun the muzzle was put on: TankMg rolls the same for the same round)
 		if (R.W == "mg" && Role == "tank") N.Mount = TankMg(S, R.T, R.N, To, R.G);
+		else if (R.W == "mg" && Role == "hmg" && Here.TeamGunFile && S >= 0) N.Mount = Here.TeamGunFile(S);
 		N.bMiss = R.R == Result::Miss;
 		N.LandsAt = R.L;
 

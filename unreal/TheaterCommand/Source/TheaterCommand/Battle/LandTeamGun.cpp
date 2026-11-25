@@ -146,8 +146,10 @@ namespace LandTeamGun
 			int Rounds;
 			double PerSecond;
 		};
-		static const Row Rows[] = { { "HmgMG42", 18, 20.0 }, { "HmgMG34", 13, 15.0 }, { "HmgM1919", 7, 8.0 }, { "HmgM1917", 7, 8.0 }, { "HmgVickers", 7, 8.0 },
-			{ "HmgMaxim", 9, 10.0 }, { "HmgType92", 6, 7.5 }, { "HmgHotchkiss", 6, 7.5 }, { "HmgBreda37", 6, 7.5 } };
+		// (the Maxim's 8 rounds and the Vickers' 6: the sound check's ask of 25 November, so each burst is no longer
+		// than the stretch of firing in the one Maxim recording, 0.86 s, which the Vickers, her sister, shares)
+		static const Row Rows[] = { { "HmgMG42", 18, 20.0 }, { "HmgMG34", 13, 15.0 }, { "HmgM1919", 7, 8.0 }, { "HmgM1917", 7, 8.0 }, { "HmgVickers", 6, 8.0 },
+			{ "HmgMaxim", 8, 10.0 }, { "HmgType92", 6, 7.5 }, { "HmgHotchkiss", 6, 7.5 }, { "HmgBreda37", 6, 7.5 } };
 		for (const Row& R : Rows)
 		{
 			if (File == R.File)
@@ -191,13 +193,16 @@ namespace LandTeamGun
 			Right = M.Parts[static_cast<size_t>(Cradle)].Hi;
 		}
 		Bore = bMortar ? (Muzzle - Pivot).Unit(LandKit::V3(1.0, 0.0, 0.0)) : LandKit::V3(1.0, 0.0, 0.0);
-		// What turns: every body whose part is the tube, the cradle or the gun, or hangs on one.
+		// What turns: every body whose part is the tube, the cradle or the gun, or hangs on one. What only swings: every
+		// body whose part is the box, or hangs on it (a machine gun's alone).
+		const int Box = bMortar ? -1 : M.PartIndex("box");
 		Mount.clear();
 		Turned.clear();
+		Swung.clear();
 		double XLo = 1e9, XHi = -1e9;
 		for (size_t B = 0; B < M.Bodies.size(); ++B)
 		{
-			bool bTurns = false;
+			bool bTurns = false, bSwings = false;
 			int P = M.Bodies[B].Part;
 			for (int Guard = 0; P >= 0 && Guard < 16; ++Guard)
 			{
@@ -206,9 +211,14 @@ namespace LandTeamGun
 					bTurns = true;
 					break;
 				}
+				if (P == Box)
+				{
+					bSwings = true;
+					break;
+				}
 				P = M.Parts[static_cast<size_t>(P)].Parent;
 			}
-			(bTurns ? Turned : Mount).push_back(static_cast<int>(B));
+			(bTurns ? Turned : bSwings ? Swung : Mount).push_back(static_cast<int>(B));
 			if (bTurns)
 			{
 				const LandKit::Mesh& Near = M.Bodies[B].Near;
@@ -381,6 +391,23 @@ namespace LandTeamGun
 		LandMen::Xform Out;
 		Mul3(On.R, L, Out.R);
 		const LandKit::V3 Own = K.Pivot - Turned3(L, K.Pivot + K.Bore * Recoil);
+		const LandKit::V3 T = Turned3(On.R, Own);
+		Out.T[0] = static_cast<float>(T.X) + On.T[0];
+		Out.T[1] = static_cast<float>(T.Y) + On.T[1];
+		Out.T[2] = static_cast<float>(T.Z) + On.T[2];
+		return Out;
+	}
+
+	LandMen::Xform Gun::SwungFrame(const Kind& K) const
+	{
+		// own point p goes to Pivot + L * (p - Pivot), L her swing alone: about the upright through her pin, so what
+		// stands on the ground stays on it.
+		const LandMen::Xform On = MountFrame();
+		float L[9];
+		SwungAndTipped(K.bMortar ? 0.0 : Traverse, 0.0, L);
+		LandMen::Xform Out;
+		Mul3(On.R, L, Out.R);
+		const LandKit::V3 Own = K.Pivot - Turned3(L, K.Pivot);
 		const LandKit::V3 T = Turned3(On.R, Own);
 		Out.T[0] = static_cast<float>(T.X) + On.T[0];
 		Out.T[1] = static_cast<float>(T.Y) + On.T[1];

@@ -1993,6 +1993,23 @@ bool ALandBattle::Open()
 			}
 			return GunsLook;
 		};
+		// (and her gun's file, for her burst's own sound row: land.teamMg, the sound check's)
+		PlayWorld.TeamGunFile = [Weak](int Track) -> std::string
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || Track < 0)
+			{
+				return std::string();
+			}
+			const FLandBattleState& St = *Pinned;
+			const size_t K = static_cast<size_t>(Track);
+			if (K >= St.TeamGunOf.size() || St.TeamGunOf[K] < 0)
+			{
+				return std::string();
+			}
+			const int KindIndex = St.TeamGuns[static_cast<size_t>(St.TeamGunOf[K])].Kind;
+			return KindIndex >= 0 && static_cast<size_t>(KindIndex) < St.TeamKinds.size() ? St.TeamKinds[static_cast<size_t>(KindIndex)].File : std::string();
+		};
 	}
 	{
 		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
@@ -8994,6 +9011,7 @@ int32 ALandBattle::TeamGunKind(const std::string& File)
 	std::string Why;
 	UStaticMesh* Mount = nullptr;
 	UStaticMesh* Turned = nullptr;
+	UStaticMesh* Swung = nullptr;
 	const FString Name = LandParts::Wide(File);
 	if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models/Battle") / (Name + TEXT(".json")))))
 	{
@@ -9004,6 +9022,11 @@ int32 ALandBattle::TeamGunKind(const std::string& File)
 		// (names of their own each time: a battle before this one on the same actor made meshes of the same weapon)
 		Mount = LandParts::BodiesMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(TEXT("LandTeamGunMount_") + Name))), Prop, Kind.Mount, ThingInk, UnitsPerMetre, 90.0);
 		Turned = LandParts::BodiesMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(TEXT("LandTeamGunTurned_") + Name))), Prop, Kind.Turned, ThingInk, UnitsPerMetre, 90.0);
+		// (a belt-fed gun's box, which swings with her; a file without the part has none, and none is drawn)
+		if (!Kind.Swung.empty())
+		{
+			Swung = LandParts::BodiesMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(TEXT("LandTeamGunSwung_") + Name))), Prop, Kind.Swung, ThingInk, UnitsPerMetre, 90.0);
+		}
 		if (!Mount || !Turned)
 		{
 			Why = "its mount or what turns on it has no points";
@@ -9016,11 +9039,19 @@ int32 ALandBattle::TeamGunKind(const std::string& File)
 		return -1;
 	}
 	Kind.File = File;
-	for (int32 Half = 0; Half < 2; ++Half)
+	// (three rows a file in TeamGunCopies, in this order: her mount, what turns, her box; a file with no box keeps the
+	// row, empty, so a weapon's meshes are always at Kind * 3 + Part)
+	for (int32 Half = 0; Half < 3; ++Half)
 	{
-		UStaticMesh* Made = Half == 0 ? Mount : Turned;
+		UStaticMesh* Made = Half == 0 ? Mount : Half == 1 ? Turned : Swung;
+		if (!Made)
+		{
+			TeamGunCopies.Add(nullptr);
+			FreeTeamGunCopies.AddDefaulted();
+			continue;
+		}
 		PropMeshes.Add(Made);
-		const FString CopiesName = (Half == 0 ? TEXT("LandTeamGunMounts_") : TEXT("LandTeamGunsTurned_")) + Name;
+		const FString CopiesName = (Half == 0 ? TEXT("LandTeamGunMounts_") : Half == 1 ? TEXT("LandTeamGunsTurned_") : TEXT("LandTeamGunBoxes_")) + Name;
 		UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), FName(*CopiesName)));
 		Copies->SetupAttachment(Root);
 		Copies->SetStaticMesh(Made);
@@ -9056,11 +9087,11 @@ void ALandBattle::MakeTeamGuns(double LifeDt)
 	{
 		for (const FLandBattleState::FTeamGun& G : S.TeamGuns)
 		{
-			const int32 Copy[2] = { G.MountCopy, G.TurnedCopy };
-			const bool bShown[2] = { G.bMountShown, G.bTurnedShown };
-			for (int32 Half = 0; Half < 2; ++Half)
+			const int32 Copy[3] = { G.MountCopy, G.TurnedCopy, G.SwungCopy };
+			const bool bShown[3] = { G.bMountShown, G.bTurnedShown, G.bSwungShown };
+			for (int32 Half = 0; Half < 3; ++Half)
 			{
-				const int32 Mesh = G.Kind * 2 + Half;
+				const int32 Mesh = G.Kind * 3 + Half;
 				if (Copy[Half] >= 0 && TeamGunCopies.IsValidIndex(Mesh) && TeamGunCopies[Mesh])
 				{
 					if (bShown[Half])
@@ -9165,13 +9196,14 @@ void ALandBattle::MakeTeamGuns(double LifeDt)
 			}
 		}
 		G.Gun.Step(Kind, C, S.Battle, LifeDt, Height);
-		// Her two instances: moved while she is drawn, put away when she is not.
-		const bool bShow[2] = { G.Gun.MountShown(), G.Gun.TurnedShown() };
-		bool* bShown[2] = { &G.bMountShown, &G.bTurnedShown };
-		int32* Copy[2] = { &G.MountCopy, &G.TurnedCopy };
-		for (int32 Half = 0; Half < 2; ++Half)
+		// Her three instances (her mount, what turns, her box where her file has one): moved while she is drawn, put
+		// away when she is not.
+		const bool bShow[3] = { G.Gun.MountShown(), G.Gun.TurnedShown(), G.Gun.SwungShown() };
+		bool* bShown[3] = { &G.bMountShown, &G.bTurnedShown, &G.bSwungShown };
+		int32* Copy[3] = { &G.MountCopy, &G.TurnedCopy, &G.SwungCopy };
+		for (int32 Half = 0; Half < 3; ++Half)
 		{
-			const int32 Mesh = G.Kind * 2 + Half;
+			const int32 Mesh = G.Kind * 3 + Half;
 			UInstancedStaticMeshComponent* Copies = TeamGunCopies.IsValidIndex(Mesh) ? TeamGunCopies[Mesh].Get() : nullptr;
 			if (!Copies || (!bShow[Half] && !*bShown[Half]))
 			{
@@ -9181,7 +9213,7 @@ void ALandBattle::MakeTeamGuns(double LifeDt)
 			{
 				*Copy[Half] = FreeTeamGunCopies[Mesh].Num() > 0 ? FreeTeamGunCopies[Mesh].Pop(EAllowShrinking::No) : Copies->AddInstance(Gone, true);
 			}
-			const FTransform At = !bShow[Half] ? Gone : LandParts::BankedAt(Half == 0 ? G.Gun.MountFrame() : G.Gun.TurnedFrame(Kind), UnitsPerMetre);
+			const FTransform At = !bShow[Half] ? Gone : LandParts::BankedAt(Half == 0 ? G.Gun.MountFrame() : Half == 1 ? G.Gun.TurnedFrame(Kind) : G.Gun.SwungFrame(Kind), UnitsPerMetre);
 			Copies->UpdateInstanceTransform(*Copy[Half], At, true, false, true);
 			*bShown[Half] = bShow[Half];
 			Touched[Mesh] = true;

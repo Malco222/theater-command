@@ -196,8 +196,9 @@ namespace
 		// battalion of its own, so nothing is added to a side. It is NOT looks only: it changes what fights, so it stays
 		// off until the design director's ruling and the fairness tables pass it; -TheaterLandRuleTeams turns it on for
 		// a run. The weapons themselves are drawn on the 3D's own trial word, teamguns. In the joined build this row
-		// goes after the squad life, hatches and tank machine gun rows.)
-		{ TEXT("teams"), TEXT("Machine gun and mortar teams"), TEXT("Each infantry, mountain and motorized corps fields its own machine gun teams and mortar teams behind its line, firing in support. They are part of the corps, not extra men. Campaign battles only. Off: a battle has only the teams the campaign built."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		// goes after the squad life, hatches and tank machine gun rows. Its label is "Teams with the infantry", so it
+		// is not read as the machine gun teams thread's row, "Machine gun and mortar teams at work" (teamwork).)
+		{ TEXT("teams"), TEXT("Teams with the infantry"), TEXT("Each infantry, mountain and motorized corps fields its own machine gun teams and mortar teams behind its line, firing in support. They are part of the corps, not extra men. Campaign battles only. Off: a battle has only the teams the campaign built."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

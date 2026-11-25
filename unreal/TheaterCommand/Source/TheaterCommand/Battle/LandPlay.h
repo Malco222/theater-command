@@ -58,6 +58,10 @@ namespace LandPlay
 		 * sub-machine gun) its rounds and their rate a life second, else left at 0 for the round's own. Empty, or this
 		 * unset: the kit's row by the weapon alone, as before. */
 		std::function<std::string(int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond)> GunLook;
+		/** Release 2 "teamguns": the file of the support team's gun that track Track serves ("HmgMG34", LandTeamGun::FileFor),
+		 * so her burst is heard on her own gun's row (land.teamMg, through Noise.Mount). Empty, or this unset: her army's
+		 * row, as before. */
+		std::function<std::string(int Track)> TeamGunFile;
 	};
 
 	/** One thing for the effects kit (BattleEffects), at battle time T. */
