@@ -300,6 +300,20 @@ export type SeaReach = (x: string, forNat: string) => Uint8Array;
 export const seaReach = (g: Game, x: string, forNat: string): Uint8Array => openSeas(g, x, undefined, undefined, undefined, undefined, x === forNat ? undefined : forNat);
 
 /**
+ * Fresh walks kept for one reading only (one siegeView or siegesNow call): each (feeder, holder) is walked once however
+ * many towns or questions ask it, and nothing is kept past the call.
+ */
+const walkedOnce = (g: Game): SeaReach => {
+  const seen = new Map<string, Uint8Array>();
+  return (x, forNat) => {
+    const k = `${x} ${forNat}`;
+    let o = seen.get(k);
+    if (!o) seen.set(k, o = seaReach(g, x, forNat));
+    return o;
+  };
+};
+
+/**
  * True where the defenders' ships can still bring food into the harbour: such a town is never starved.
  *
  * Under true reach (game.ts trueReach; the design director's rulings of 13:58Z, 14:26Z and 17:35Z, 25 November 2026)
@@ -1235,12 +1249,18 @@ export interface SiegeView {
   lines: string[];
 }
 
-/** The town of a province as a fortress: what it holds, what it adds, and how its siege stands. Null outside the grand campaign. */
-export function siegeView(g: Game, region: number): SiegeView | null {
+/**
+ * The town of a province as a fortress: what it holds, what it adds, and how its siege stands. Null outside the grand
+ * campaign. Under true reach whether ships still feed it is asked only of a town under siege (as whether the book feeds
+ * it is), since only there does it count, and each feeder's voyage is walked once for the call (`reach`, from siegesNow
+ * for every town it reads). Off, it is asked of every town, as before.
+ */
+export function siegeView(g: Game, region: number, reach?: SeaReach): SiegeView | null {
   const r = g.regions[region];
   if (!r || !siegeRules(g)) return null;
   const size = townSize(g, r), by = besiegerOf(g, r);
-  const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = fedBySea(g, r), byBook = fedByBook(g, r);
+  const walk = trueReach(g) ? reach ?? walkedOnce(g) : undefined;
+  const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = !walk ? fedBySea(g, r) : !!by && fedBySea(g, r, walk), byBook = fedByBook(g, r);
   const inside = garrisonOf(r).length, guard = guardOf(g, r), bonus = townBonus(g, r), broken = breachOf(g, r);
   const left = Math.max(0, stores - shut);
   const clock = by ? crewClock(g, r) : null;
@@ -1253,7 +1273,7 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   if (driveOut(g) && inside && !by) lines.push('The garrison will hold the town after the field is lost: it must then be stormed or starved out.');
   if (by) {
     const closed = ringClosed(g, r);
-    const seas = bySea ? feedingSeas(g, r).map((z) => g.seas[z].name) : [];
+    const seas = bySea ? feedingSeas(g, r, walk).map((z) => g.seas[z].name) : [];
     lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by ${seaWhatList(seas)}` : ''}: the town cannot be starved while they do.${byBook ? ' Food comes in across the lake as well, so closing the sea would not starve it.' : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`}`
       : byBook ? 'Food still comes in across the lake: however close the ring, the town is not starved while no player\'s troops stand in it.'
       : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
@@ -1279,8 +1299,8 @@ export function siegeView(g: Game, region: number): SiegeView | null {
 /** Every town under siege, for a map to mark. */
 export function siegesNow(g: Game): SiegeView[] {
   if (!siegeRules(g)) return [];
-  const out: SiegeView[] = [];
-  for (const r of g.regions) if (besieged(g, r)) out.push(siegeView(g, r.id)!);
+  const out: SiegeView[] = [], walk = trueReach(g) ? walkedOnce(g) : undefined;
+  for (const r of g.regions) if (besieged(g, r)) out.push(siegeView(g, r.id, walk)!);
   return out;
 }
 

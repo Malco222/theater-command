@@ -16,8 +16,9 @@ vi.hoisted(() => { (globalThis as any).TC_SUPPLY_CHECK = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { addCorps, capture, computeSupply, createGame, declareWar, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
+import * as navy from '../src/campaign/navy';
 import { SeaPicture, openSeas, zoneOf } from '../src/campaign/navy';
-import { besieged, fedBySea, feeders, feedingSeas, garrison, garrisonFed, garrisonOf, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
+import { besieged, fedBySea, feeders, feedingSeas, garrison, garrisonFed, garrisonOf, monthsShut, ringClosed, siegeMonth, siegeView, siegesNow, storesOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { TRUEREACH_STAGE, UNITS_STAGE } from '../src/campaign/stage';
 import { setUnitsDecide } from '../src/campaign/units';
@@ -290,6 +291,28 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
       expect([reaches(g, 'UK', 'libyan'), openSeas(g, 'UK', pic, undefined, undefined, undefined, 'ITA')[libyan]]).toEqual([1, 0]);
       expect([on, fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied, card(g, r.id)]).toEqual([on, true, [libyan], true, true, true]);
     }
+  });
+
+  it('walks each feeder\'s voyage once for a siege card under true reach, and none for a town not under siege (off: as before)', () => {
+    // Every walk of the sea lanes is counted while the cards are read (the call is passed through unchanged).
+    const spy = vi.spyOn(navy, 'openSeas');
+    const walks = (f: () => unknown): number => { const n = spy.mock.calls.length; f(); return spy.mock.calls.length - n; };
+    try {
+      for (const on of [false, true]) {
+        // Tobruk fed by Italy's ships with Germany inside: two feeders, and the card asks of both whether ships come in
+        // and by which seas. On, each feeder's voyage is walked once for the card, and once for every card siegesNow
+        // reads; off, none is walked.
+        const { g, r, libyan } = tobruk(on, 'UK', 'none');
+        let v = siegeView(g, r.id)!;
+        expect([on, walks(() => { v = siegeView(g, r.id)!; }), v.bySea, v.lines.some((l) => l.startsWith('Ships still reach the harbour by'))]).toEqual([on, on ? 2 : 0, true, true]);
+        expect([on, walks(() => siegesNow(g)), siegesNow(g).map((x) => [x.town, x.bySea])]).toEqual([on, on ? 2 : 0, [['Tobruk', true]]]);
+        expect(feedingSeas(g, r)).toEqual([libyan]);
+        // A port not under siege: off, it says ships still feed it, as before; on, that is asked only of a town under
+        // siege (as whether the book feeds it is), so no voyage is walked for every port a map or a bomber's list reads.
+        const n = g.byName['Naples'];
+        expect([on, n.ctrl, n.port, feeders(g, n), besieged(g, n), walks(() => { v = siegeView(g, n.id)!; }), v.bySea, v.byBook]).toEqual([on, 'ITA', true, ['ITA'], false, 0, !on, false]);
+      }
+    } finally { spy.mockRestore(); }
   });
 
   it('keeps the siege card, the garrison\'s eating and every corps inside in step, on and off, month after month, from kept lanes and fresh ones alike', () => {
