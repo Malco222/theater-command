@@ -118,8 +118,9 @@ namespace AirMarks
 	 * Blast either way, where any such spot is (else the spot tried farthest from them, still on it or beside it as
 	 * the hit says). Salt makes each bomb's spot its own. */
 	void AimOn(const Column& C, int Index, const std::string& How, double Blast, uint32_t Salt, double& OutX, double& OutY);
-	/** What a hit makes of a piece as it is shown (the event's how; never down the list): wreck and blast out, burn
-	 * burning; a near miss and men scattered as they were, until a view's word says otherwise (view.marks). */
+	/** What a hit makes of a piece as it is shown (the event's how; never down the list): wreck and blast struck, burn
+	 * burning; a near miss and men scattered as they were. Out only by a view's word (view.marks), or where the caller
+	 * finds a block of men with none left. */
 	State StateAfter(const std::string& How, State Now);
 	/** A piece takes a state and the men left (-1: as they were): false where nothing changed. A piece that is out
 	 * never changes again. */

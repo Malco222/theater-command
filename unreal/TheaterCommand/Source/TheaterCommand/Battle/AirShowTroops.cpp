@@ -294,7 +294,7 @@ namespace AirShow
 		// (the piece as the hit leaves it, never down the list; a block of men thinned by the men it cost. The views'
 		// words, which come after, have the last say: MarkWords)
 		const int MenLeft = P.What == "men" && H.E.Men > 0 ? std::max(0, P.Men - H.E.Men) : -1;
-		AirMarks::Apply(P, AirMarks::StateAfter(H.E.How, P.Now), MenLeft);
+		AirMarks::Apply(P, MenLeft == 0 ? AirMarks::State::Out : AirMarks::StateAfter(H.E.How, P.Now), MenLeft);
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------

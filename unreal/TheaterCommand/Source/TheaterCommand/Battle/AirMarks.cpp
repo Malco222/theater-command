@@ -352,9 +352,13 @@ namespace AirMarks
 	State StateAfter(const std::string& How, State Now)
 	{
 		// (a near miss and men scattered leave it as the rules last said it, until a view's word says what it did: the
-		// scene does not decide that a near miss damaged a vehicle (the reviewer, 25 November))
+		// scene does not decide that a near miss damaged a vehicle (the reviewer, 25 November). A wreck or a blast says
+		// how it struck, not what is left: a piece stands for many men or machines, and the rules' TroopBook puts it out
+		// only once none is left, which the views' word says ('out', men 0); the rules' own recording (r2-head-1125k,
+		// 25 November) strafes one piece three times, "wreck" each time, with men left after each. So it shows struck,
+		// and the word, or a block of men with none left, puts it out.)
 		State To = Now;
-		if (How == "wreck" || How == "blast") To = State::Out;
+		if (How == "wreck" || How == "blast") To = State::Hit;
 		else if (How == "burn") To = State::Burn;
 		return static_cast<int>(To) > static_cast<int>(Now) ? To : Now;
 	}
