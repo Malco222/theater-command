@@ -641,6 +641,16 @@ namespace LandField
 		/** The footings' dial, on trial with them ("feetwide"): off, a clump may stand with half its own width inside a
 		 * footing's edge (as first built); on, its whole body and its blades' sweep in a full gust stand clear. */
 		bool bFeetWide = false;
+		/** Burnt ground (Ground::AddBurn; none unless the scorch layer gives some): rounds in which the clutter thins
+		 * and dries, by the clutter's 8 m squares each reaches into. Core: within it 3 things in 10 stay; Outer: from
+		 * there on all stay. BaseMean: each base's mean colour as built, to bring what stays toward straw (made at the
+		 * first round). */
+		struct Burn
+		{
+			float X = 0.0f, Y = 0.0f, Core = 0.0f, Outer = 0.0f;
+		};
+		std::unordered_map<uint64_t, std::vector<Burn>> BurnSquares;
+		std::vector<Col> BaseMean;
 
 		std::vector<HedgeLine> HedgeOut;
 		std::vector<HedgeOpening> OpeningOut;
@@ -709,6 +719,7 @@ namespace LandField
 		 * on a recorded men's way. */
 		void TakeUpTallLowKit();
 		void MakeFeet();
+		void AddBurn(double X, double Y, double Core, double Outer);
 		void MakeSites();
 		struct House ChurchYard(V2 C, double Yaw) const;
 		void LayChurch(V2 C, double Yaw, int Hurt);
@@ -1854,6 +1865,36 @@ namespace LandField
 			for (size_t Q = K; Q < E; ++Q) Feet.push_back(All[Q].F);
 			K = E;
 		}
+	}
+
+	void Ground::Impl::AddBurn(double X, double Y, double Core, double Outer)
+	{
+		if (!std::isfinite(X) || !std::isfinite(Y) || !(Outer > 0.0)) return;
+		Outer = std::min(Outer, 60.0);
+		Core = std::clamp(Core, 0.0, Outer);
+		if (BaseMean.empty())
+		{
+			BaseMean.assign(Bases.size(), Col{ 128.0, 128.0, 128.0 });
+			for (size_t B = 0; B < Bases.size(); ++B)
+			{
+				const std::vector<Rgb8>& Cs = Bases[B].Near.Colours;
+				if (Cs.empty()) continue;
+				Col Sum;
+				for (const Rgb8& C : Cs)
+				{
+					Sum.R += C.R;
+					Sum.G += C.G;
+					Sum.B += C.B;
+				}
+				const double N = static_cast<double>(Cs.size());
+				BaseMean[B] = { Sum.R / N, Sum.G / N, Sum.B / N };
+			}
+		}
+		const int I0 = static_cast<int>(std::floor((X - Outer) / ClutterSquare)), I1 = static_cast<int>(std::floor((X + Outer) / ClutterSquare));
+		const int J0 = static_cast<int>(std::floor((Y - Outer) / ClutterSquare)), J1 = static_cast<int>(std::floor((Y + Outer) / ClutterSquare));
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+				BurnSquares[SquareKeyIJ(I, J)].push_back({ static_cast<float>(X), static_cast<float>(Y), static_cast<float>(Core), static_cast<float>(Outer) });
 	}
 }
 
@@ -8714,6 +8755,8 @@ namespace LandField
 		}
 	}
 
+	void Ground::AddBurn(double X, double Y, double Core, double Outer) { In->AddBurn(X, Y, Core, Outer); }
+
 	void Ground::Clutter(double X0, double Y0, double X1, double Y1, std::vector<Placed>& Out) const
 	{
 		const Impl& G = *In;
@@ -8736,6 +8779,13 @@ namespace LandField
 						Foot0 = G.Feet.data() + Stood->second.first;
 						Foot1 = G.Feet.data() + Stood->second.second;
 					}
+				}
+				// (burnt ground: the rounds that reach into this square)
+				const std::vector<Impl::Burn>* Burnt = nullptr;
+				if (!G.BurnSquares.empty())
+				{
+					const auto Charred = G.BurnSquares.find(SquareKeyIJ(I, J));
+					if (Charred != G.BurnSquares.end()) Burnt = &Charred->second;
 				}
 				for (int K = 0; K < Tries; ++K)
 				{
@@ -8959,6 +9009,27 @@ namespace LandField
 						bool bIn = false;
 						for (const Impl::Footing* F = Foot0; F != Foot1 && !bIn; ++F) bIn = Tip > F->Z && Sq(X - F->X) + Sq(Y - F->Y) < Sq(F->R + Half);
 						if (bIn) continue;
+					}
+					// (on burnt ground: 3 things in 10 stay within a round's core, the same ones every time the square is laid,
+					// each by its own number; more toward the round's outer edge, where all stay; the flowers go first; what
+					// stays is dry, brought toward straw. Where rounds overlap the strongest counts. A stone stays a stone.)
+					if (Burnt && P.Kind != Base::Stone)
+					{
+						double Char = 0.0;
+						for (const Impl::Burn& Bn : *Burnt)
+						{
+							const double Off = std::hypot(X - Bn.X, Y - Bn.Y);
+							Char = std::max(Char, Off <= Bn.Core ? 1.0 : Off >= Bn.Outer ? 0.0 : (Bn.Outer - Off) / (Bn.Outer - Bn.Core));
+						}
+						if (Char > 0.0)
+						{
+							const bool bFlower = P.Kind == Base::Flowers || P.Kind == Base::Poppies;
+							if (Unit(Hash(H, 0xB027ull)) < Char * (bFlower ? 1.6 : 0.7)) continue;
+							const Col Mean = G.BaseMean[static_cast<size_t>(P.Kind)];
+							const double Dry = 0.85 * Char;
+							P.Tint = Tint8(Lerp(P.Tint.R / 128.0, 150.0 / std::max(Mean.R, 40.0), Dry), Lerp(P.Tint.G / 128.0, 125.0 / std::max(Mean.G, 40.0), Dry),
+								Lerp(P.Tint.B / 128.0, 80.0 / std::max(Mean.B, 40.0), Dry));
+						}
 					}
 					// (under snow: buried, or its tips showing through, frosted)
 					if (G.SnowLay && !G.SnowLay->Clutter(P, Seen)) continue;
