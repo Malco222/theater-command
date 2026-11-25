@@ -415,7 +415,7 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     expect(h.come).toBe(0);
     expect(h.kept).toBeCloseTo(power(g, a.kept), 9);
     expect(h.open).toBe(true);
-    expect(h.lines.some((l) => l.label === 'Enemy fleets your aircraft keep away' && l.value === Math.round(h.kept).toLocaleString('en-US'))).toBe(true);
+    expect(h.lines.some((l) => l.label === 'Enemy ships your aircraft keep away' && l.value === Math.round(h.kept).toLocaleString('en-US'))).toBe(true);
     expect(h.lines.some((l) => l.label === 'The sea behind the beach' && l.value === 'stays open')).toBe(true);
     // The North Sea under the same command: a beach in Norway keeps them all away, a beach in Yorkshire brings the
     // British fleet out and keeps the French one away still.
@@ -442,7 +442,7 @@ describe('the forecast of the sea behind a beach follows the enemy\'s admirals',
     const h = seaHold(g, 'GER', [aegean], g.byName.Crete);
     expect(h.open).toBe(true);
     expect(h.shy).toBeCloseTo(fleetPower(g, med), 9);
-    expect(h.lines.some((l) => l.label === 'Enemy fleets that will not risk it')).toBe(true);
+    expect(h.lines.some((l) => l.label === 'Enemy ships that will not risk it')).toBe(true);
     // Off Kent the Home Fleet comes out against odds it would not face off a foreign beach.
     const w = opened();
     const home = fleet(w, 'UK', 'Home Fleet');
