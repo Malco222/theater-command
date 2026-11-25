@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7b4878e76 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bead02828 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -31002,7 +31002,6 @@
     }
     return best;
   }
-  var natIndex = (g2, nat) => Object.keys(g2.nations).indexOf(nat);
   function pocketNat(g2, r) {
     if (g2.flags.sieges !== 1 || g2.flags[`pkt:${r.id}`] === void 0) return null;
     return Object.keys(g2.nations)[g2.flags[`pktn:${r.id}`] ?? -1] ?? null;
@@ -31220,17 +31219,24 @@
   }
   var placeWords = (g2, r) => r.cap && r.owner === r.ctrl ? `the capital of ${theName(g2.nations[r.owner])}` : `the ${TOWNS.words[townSize(g2, r)].toLowerCase()}`;
   var months = (n) => n <= 1 ? "a month" : `${n} months`;
-  function invest(g2, r, by2) {
+  function keptAtOpening(g2, r, monthOpen = false) {
+    if (!trueReach(g2)) return 0;
+    return keptStoresRun(g2, r, !monthOpen && g2.order.indexOf(r.ctrl) <= g2.phase);
+  }
+  function invest(g2, r, by2, monthOpen = false) {
     const key7 = `siege:${r.id}`;
     if (g2.flags[key7] !== void 0) return;
     g2.flags[key7] = g2.turn;
     g2.flags[`sgby:${r.id}`] = Object.keys(g2.nations).indexOf(by2);
     delete g2.flags[`sgm:${r.id}`];
+    let eaten = 0;
     if (g2.flags[`pkt:${r.id}`] !== void 0) {
-      const eaten = Math.min(storesOf(g2, r), Math.floor((g2.flags[`pkte:${r.id}`] ?? 0) / 10));
-      if (eaten > 0 && pocketNat(g2, r) === r.ctrl) g2.flags[`sgm:${r.id}`] = eaten;
+      const pocket = Math.min(storesOf(g2, r), Math.floor((g2.flags[`pkte:${r.id}`] ?? 0) / 10));
+      if (pocket > 0 && pocketNat(g2, r) === r.ctrl) eaten = pocket;
       clearPocket(g2, r);
     }
+    if (trueReach(g2)) eaten = Math.min(storesOf(g2, r), Math.max(eaten, keptAtOpening(g2, r, monthOpen)));
+    if (eaten > 0) g2.flags[`sgm:${r.id}`] = eaten;
     g2.supplyDirty = true;
     tallySiege(g2, "begun");
     const inside2 = garrisonOf(r);
@@ -31465,7 +31471,7 @@
         continue;
       }
       const by2 = armyOf(foes[0]);
-      if (g2.flags[`siege:${r.id}`] === void 0) invest(g2, r, by2);
+      if (g2.flags[`siege:${r.id}`] === void 0) invest(g2, r, by2, true);
       if (!townHeld(g2, r)) {
         fall(g2, r, by2, "empty");
         continue;
@@ -31581,7 +31587,8 @@
         lines2.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.` : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
       }
     } else {
-      lines2.push(`Closely invested, its stores would feed the defenders for ${months(stores2)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.`);
+      const would = stores2 - Math.min(stores2, keptAtOpening(g2, r));
+      lines2.push(would > 0 ? `Closely invested, its stores would feed the defenders for ${months(would)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.` : `Closely invested, its defenders would go hungry at once: its stores have been eaten while no ship came in${r.port ? ", and only ships reaching its harbour could feed them" : ""}.`);
     }
     return {
       region,
@@ -73768,6 +73775,13 @@
   function portKeep(g2, r) {
     return (fortRows(g2) ? portStores(g2, r) : null) ?? DESERT.stores;
   }
+  var natIndex = (g2, nat) => Object.keys(g2.nations).indexOf(nat);
+  function keptStoresRun(g2, r, drawn = false) {
+    const last = g2.flags[storesKey(r.id)];
+    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= r.since) return 0;
+    if (Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
+    return Math.min(portKeep(g2, r), Math.max(0, g2.turn - (drawn ? 0 : 1) - last));
+  }
   function onPortStores(g2, c) {
     if (!fortRow(g2, c) || !c.supplied) return false;
     const r = g2.regions[c.reg], last = g2.flags[`stores:${r.id}`];
@@ -73950,8 +73964,10 @@
   };
   var depotKeys = [];
   var storesKeys = [];
+  var storesByKeys = [];
   var depotKey = (id) => depotKeys[id] ?? (depotKeys[id] = "depot:" + id);
   var storesKey = (id) => storesKeys[id] ?? (storesKeys[id] = `stores:${id}`);
+  var storesByKey = (id) => storesByKeys[id] ?? (storesByKeys[id] = `stores:by:${id}`);
   function drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2) {
     const size = g2.regions.length;
     const ok2 = new Uint8Array(size);
@@ -74153,6 +74169,7 @@
       return lanes2.get(id);
     };
     const truly = trueReach(g2);
+    let places = null;
     const asIf2 = /* @__PURE__ */ new Map();
     const carrying = (a, id, theirs) => {
       const key7 = a + ">" + id;
@@ -74212,7 +74229,11 @@
         if (!quay && r.theatre >= 0 && r.port && (quay = (mates ?? (mates = shippers(id))).some((a) => feeds(a, id, r)))) by2 = 3;
         if (!shut && r.overseas && r.port && worksKept(r)) {
           if (quay) {
-            if (!truly || (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r)))) g2.flags[storesKey(r.id)] = g2.turn;
+            if (!truly) g2.flags[storesKey(r.id)] = g2.turn;
+            else if (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r))) {
+              g2.flags[storesKey(r.id)] = g2.turn;
+              g2.flags[storesByKey(r.id)] = (places ?? (places = new Map(Object.keys(g2.nations).map((n, i) => [n, i])))).get(r.ctrl);
+            }
           } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
         }
         if (!depot && !quay) continue;
