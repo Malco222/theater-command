@@ -1078,7 +1078,8 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
         first = false;
       }
       if (first) continue;
-      if (r.result) notes.push(r.result);
+      // (every raid takes its slot, as in 1.5.1, empty or not: the callers drop the empty ones after taking their two)
+      notes.push(r.result);
       if (r.region >= 0) focus.push(r.region);
       if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
     }
@@ -1193,7 +1194,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     if (!steps) return;
     // The raids it flew, or that were flown as its month closed: shown over the map with the rest of what it did.
     const air = raidsSince(s, air0, [month, s.turn]);
-    const raidNote = air.notes.slice(0, 2).join(' ');
+    const raidNote = air.notes.slice(0, 2).filter(Boolean).join(' ');
     const sea = seaFightsSince(s, sea0);
     const shore = shellingSince(s, shore0);
     const sunk = [...sea.sunk, ...strikeLossesSince(s, air0)];
@@ -2880,7 +2881,7 @@ function endMonth() {
       endHuman(s);
     }
     const air = raidsSince(s, air0, [month, s.turn]);
-    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view() });
+    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view() });
     const sea = seaFightsSince(s, sea00);
     if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view() });
     runOthers(s, steps);
@@ -5478,7 +5479,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       const flown = raidsSince(s, air0, [s.turn]);
       flies = flown.flights;
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
-      const told = flown.notes.join(' ') || note;
+      const told = flown.notes.filter(Boolean).join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
     }
     // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.

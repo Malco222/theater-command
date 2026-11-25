@@ -83,11 +83,12 @@ function groupPage(g: Game, id: number): Page | null {
     buttons: [{ label: j.on ? 'ITS ORDERS NOW' : 'GIVE THIS ORDER', act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.on ? 'This is its standing order now. Give it one of the others to change it.' : j.why ?? (up ? '' : 'It is not your month.') }],
   }));
   const menu = raidMenu(g);
-  // (A group on a standing campaign by night or by day has no raid of its own: its rows say so, and how to free it. Finding 4 of 1.5.1.)
+  // (A group on a standing campaign by night or by day has no raid of its own: its rows say so, and how to free it,
+  // where freeing it would give that kind a target. Finding 4 of 1.5.1.)
   const held = campaignWhy(g, id);
   const raids: PageRow[] = menu.filter((k) => k.key !== 'recon').map((k) => {
     const n = raidTargetsFor(g, k.key, id).length;
-    const cannot = x.flew ? 'It has flown its raid this month.' : k.why ?? (n ? null : x.kind === 'ftr' && (k.key === 'night') ? 'Fighters do not fly with the night bombers.' : held ?? 'Nothing in its reach.');
+    const cannot = x.flew ? 'It has flown its raid this month.' : k.why ?? (n ? null : x.kind === 'ftr' && (k.key === 'night') ? 'Fighters do not fly with the night bombers.' : (held && heldWhy(g, k.key, id)) ?? 'Nothing in its reach.');
     return { nat: x.nat, title: k.label, lines: [k.blurb, cannot ?? `${n} target${n === 1 ? '' : 's'} in its reach.`], buttons: [{ label: 'PICK A TARGET', act: `open:raid:${k.key}:${id}`, ok: up && !cannot, tip: cannot ?? '' }] };
   });
   const deck = x.ship >= 0;
@@ -194,6 +195,34 @@ function fieldToLay(g: Game, group: number): string | null {
   return best >= 0 && near <= reach ? g.regions[best].name : null;
 }
 
+/** True when no kind of raid has a target in reach of any of the player's groups. */
+const reachNothing = (g: Game): boolean => raidMenu(g).every((k) => raidTargetsFor(g, k.key, -1).length === 0);
+
+/**
+ * The targets of a kind a group would have, were it taken out of its standing campaign ('Support the armies'). A
+ * reading only: the group's orders are put back exactly as they were before it returns.
+ */
+function reachOnceFreed(g: Game, kind: RaidKind, id: number): number {
+  const f = g.airFleets.find((x) => x.id === id);
+  if (!f) return 0;
+  const keep = { mission: f.mission, target: f.target, escorts: f.escorts, close: f.close, hasEscorts: 'escorts' in f, hasClose: 'close' in f };
+  try {
+    f.mission = 'support'; f.target = -1;
+    delete f.escorts; delete f.close;
+    return raidTargetsFor(g, kind, id).length;
+  } finally {
+    f.mission = keep.mission; f.target = keep.target;
+    if (keep.hasEscorts) f.escorts = keep.escorts;
+    if (keep.hasClose) f.close = keep.close;
+  }
+}
+
+/** The campaign's way out (campaignWhy) for a group's page or targets page of one kind: only where freeing the group would give that kind a target. */
+const heldWhy = (g: Game, kind: RaidKind, id: number): string | null => {
+  const why = campaignWhy(g, id);
+  return why && reachOnceFreed(g, kind, id) > 0 ? why : null;
+};
+
 function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
   const k = raidMenu(g).find((x) => x.key === kind);
   if (!k) return null;
@@ -210,11 +239,14 @@ function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
     return { nat: t.holder, title: t.name, lines, buttons: [{ label: kind === 'recon' ? 'SEND THE FLIGHT' : 'PLAN THIS RAID', act, ok: up && !p.why, tip: p.why ?? (kind === 'recon' ? '' : 'Choose which groups fly it, and see what meeting up is worth, before you give the order.') }] };
   };
   const none = kind === 'fleet' ? 'No enemy fleet at sea has been found within reach. Search a sea from a group\'s page, or send a fleet to look: a fleet has to be found before it can be struck.' : kind === 'harbour' ? 'No enemy warships lie in a harbour within reach.' : kind === 'town' ? 'No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly.' : 'Move a group to an airfield nearer the enemy, or wait until one that has flown is back.';
-  // (A group held by its standing campaign is told why it has none, and how to free it: finding 4 of 1.5.1.)
-  const held = !all.length && group >= 0 ? campaignWhy(g, group) : null;
+  // (A group held by its standing campaign is told why it has none, and how to free it: finding 4 of 1.5.1. Only
+  // where freeing it would give it a target of this kind; otherwise the page says what it said before.)
+  const held = !all.length && group >= 0 ? heldWhy(g, kind, group) : null;
   const sections = targetSections(g, kind, all, row, held ?? none);
-  // (With nothing in reach of any group, the province a field would put the enemy in reach from: finding 13 of 1.5.1.)
-  const lay = all.length || held || kind === 'fleet' || kind === 'harbour' || kind === 'town' || kind === 'strike' || kind === 'recon' ? null : fieldToLay(g, group);
+  // (With nothing in reach of any group, the province a field would put the enemy in reach from: finding 13 of 1.5.1.
+  // Only where no kind of raid has a target in reach of any of his groups: where his aircraft already reach the enemy
+  // for another kind, the page says what it said before.)
+  const lay = all.length || held || kind === 'fleet' || kind === 'harbour' || kind === 'town' || kind === 'strike' || kind === 'recon' || !reachNothing(g) ? null : fieldToLay(g, group);
   return {
     id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`, title: k.label.toUpperCase(),
     headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, ${sections.length > 1 ? 'by country' : 'nearest first'}`

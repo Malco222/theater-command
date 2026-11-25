@@ -876,8 +876,9 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // (Release 1.5.2: a fight for the sky sent with fewer fighters over the target than hold a sky, air.json sky.least,
   // cannot win it whatever the odds. The card says so in a line of its own, and words its chance for the fight alone.)
   // (With no fighters going it is a raid on the airfields and no fight for the sky at all: the card stands as it was.
+  // A group holding less than one fighter, which the card shows as 0, is sending none.
   // With nobody to come up there is no air fight to word a chance for: the verdict says so, in the group card's words.)
-  if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least && plan.fighters > 0) {
+  if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least && Math.round(plan.fighters) > 0) {
     const over = Math.floor(a.E), sent = Math.round(plan.fighters);
     // (Words ruled by the UI director, 04:55Z: the short line where every fighter sent can be over the target.)
     plan.tooFew = `Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`;

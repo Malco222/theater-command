@@ -1320,19 +1320,35 @@ export function airUpkeep(g: Game, nat: string): void {
     // An air group is kept at its share of its command's aircraft of its own kind.
     const ef = e ? (f.kind === 'bmr' ? 0 : Math.round(e[1] * (f.share ?? 1))) : 0, eb = e ? (f.kind === 'ftr' ? 0 : Math.round(e[2] * (f.share ?? 1))) : 0;
     // Wings bought from the arsenal are kept on top of what the staff allots.
+    const was = { ...f.est };
     if (e) f.est = f.extra ? { ftr: ef + f.extra.ftr, bmr: eb + f.extra.bmr } : { ftr: ef, bmr: eb };
     const sf = Math.max(0, f.ftr - f.est.ftr), sb = Math.max(0, f.bmr - f.est.bmr);
     if (f.ftr > f.est.ftr) { const s = f.ftr - f.est.ftr; f.ftr -= s; p.ftr += s; p.pilots += s; }
     if (f.bmr > f.est.bmr) { const s = f.bmr - f.est.bmr; f.bmr -= s; p.bmr += s; }
-    // (Words only: the player is told when a dated row of his staff's lowers a command's establishment, below.)
-    if (r && e && e[0] === g.turn && nat === g.human && sf + sb > 0) {
-      const c = lowered.get(r.name) ?? { est: e[1] + e[2], ftr: 0, bmr: 0, region: f.base };
-      c.ftr += sf; c.bmr += sb;
-      lowered.set(r.name, c);
+    // (Words only: the player is told when a dated row of his staff's lowers a command's establishment, below. A row
+    // lowers a kind only where it is lower than the row before it for that command, fighters and bombers each on their
+    // own: a raise, a first row, or a group given a smaller share because its command grew into new groups, is not a
+    // lowering and tells nothing. Only the aircraft the lowering itself took off the group are counted: what it held
+    // over its new establishment, up to what it was kept at before.)
+    const i = r && e && e[0] === g.turn && nat === g.human ? r.est.indexOf(e) : -1;
+    if (i > 0) {
+      const before = r!.est[i - 1];
+      const low = { ftr: e![1] < before[1], bmr: e![2] < before[2] };
+      const tf = low.ftr ? Math.max(0, Math.min(sf, was.ftr - f.est.ftr)) : 0, tb = low.bmr ? Math.max(0, Math.min(sb, was.bmr - f.est.bmr)) : 0;
+      if (tf + tb > 0) {
+        // (the figure: the command's whole establishment, or where the row raises one kind, the kind it lowers)
+        const est = e![1] > before[1] || e![2] > before[2] ? (low.ftr ? e![1] : 0) + (low.bmr ? e![2] : 0) : e![1] + e![2];
+        const c = lowered.get(r!.name) ?? { est, ftr: 0, bmr: 0, region: f.base };
+        c.ftr += tf; c.bmr += tb;
+        lowered.set(r!.name, c);
+      }
     }
   }
   // Replacements go to resting fleets first.
   const order = airFleetsOf(g, nat).sort((a, b) => (a.mission === 'rest' ? 0 : 1) - (b.mission === 'rest' ? 0 : 1) || a.id - b.id);
+  const most = AIR.reserve[nat] ?? AIR.reserve._default;
+  // (Words only: what the lowerings really cost, read before the groups draw on the pool and changing nothing.)
+  const struck = lowered.size ? struckOff(g, order, p, most, lowered) : null;
   const R = AIR.ready;
   for (const f of order) {
     // A carrier wing is made up only while its fleet lies in harbour: no replacement aircraft reach a deck at sea.
@@ -1348,12 +1364,34 @@ export function airUpkeep(g: Game, nat: string): void {
     // Orders that no longer make sense lapse.
     if (!n.atWar.length || (isOffensive(f.mission) && whyNotMission(g, f, f.mission, f.target))) { f.mission = 'support'; f.target = -1; }
   }
-  const most = AIR.reserve[nat] ?? AIR.reserve._default;
-  const over = { ftr: Math.max(0, p.ftr - most.ftr), bmr: Math.max(0, p.bmr - most.bmr) };
   p.ftr = Math.min(p.ftr, most.ftr);
   p.bmr = Math.min(p.bmr, most.bmr);
   p.pilots = Math.min(p.pilots, most.pilots);
-  if (lowered.size) loweredNews(g, nat, lowered, over);
+  if (struck) loweredNews(g, nat, lowered, struck);
+}
+
+/**
+ * Of the aircraft lowered commands gave back to the pool this month, those it really loses (words only, for the lines
+ * on lowered establishments): what the pool's ceiling (air.json 'reserve') cuts at the end of the month's opening, less
+ * what it would have cut had those aircraft, and the fighters' pilots, never come back. Kind by kind. It reads the
+ * same sums the groups' draw on the pool makes, in the same order, and changes nothing. Where pilots are what limit
+ * the draw, the fighters that came back with their pilots let other groups draw, so fewer are lost than came back.
+ */
+function struckOff(g: Game, order: AirFleet[], p: { ftr: number; bmr: number; pilots: number }, most: { ftr: number; bmr: number }, lowered: Map<string, { ftr: number; bmr: number }>): Craft {
+  const cut = (pf: number, pb: number, pp: number): Craft => {
+    for (const f of order) {
+      const ship = f.ship === undefined ? null : carrierOf(g, f);
+      if (f.ship !== undefined && (!ship || atSea(ship))) continue;
+      const nf = Math.max(0, Math.min(f.est.ftr - f.ftr, pf, pp));
+      pf -= nf; pp -= nf;
+      pb -= Math.max(0, Math.min(f.est.bmr - f.bmr, pb));
+    }
+    return { ftr: Math.max(0, pf - most.ftr), bmr: Math.max(0, pb - most.bmr) };
+  };
+  const gave = { ftr: 0, bmr: 0 };
+  for (const c of lowered.values()) { gave.ftr += c.ftr; gave.bmr += c.bmr; }
+  const now = cut(p.ftr, p.bmr, p.pilots), had = cut(p.ftr - gave.ftr, p.bmr - gave.bmr, p.pilots - gave.ftr);
+  return { ftr: Math.min(Math.round(gave.ftr), Math.max(0, Math.round(now.ftr - had.ftr))), bmr: Math.min(Math.round(gave.bmr), Math.max(0, Math.round(now.bmr - had.bmr))) };
 }
 
 /** Aircraft of the two kinds, as the lines on lowered establishments count them. */
@@ -1418,16 +1456,14 @@ export function loweredSum(lines: string[]): { text: string; short: string } | n
  * of 25 November 2026, 05:45Z): what each is kept at now, and where its aircraft go. Words only. The aircraft over the
  * new establishment go to the nation's pool, from which every group under strength is made up as the month opens;
  * but the pool is cut to air.json 'reserve' at the end of that opening, and what it cannot hold is lost. Of each kind,
- * the lowered commands' aircraft the cut takes are those the pool held over its ceiling, up to all of theirs: had
- * they not come, the pool would have been that much lower and nothing else changed. The cut of each kind is shared
- * among the commands as their aircraft of that kind are (the greatest remainders taking the odd ones), so that the
- * lines add up to it.
+ * `struck` is what the lowerings really cost (struckOff). It is shared among the commands as their aircraft of that
+ * kind are (the greatest remainders taking the odd ones), so that the lines add up to it.
  */
-function loweredNews(g: Game, nat: string, lowered: Map<string, { est: number; ftr: number; bmr: number; region: number }>, over: Craft): void {
+function loweredNews(g: Game, nat: string, lowered: Map<string, { est: number; ftr: number; bmr: number; region: number }>, struck: Craft): void {
   const list = [...lowered.entries()].map(([name, c]) => ({ name, c, n: { ftr: Math.round(c.ftr), bmr: Math.round(c.bmr) }, off: { ftr: 0, bmr: 0 } }));
   for (const k of ['ftr', 'bmr'] as const) {
     const all = list.reduce((s, x) => s + x.n[k], 0);
-    const cut = Math.min(all, Math.round(over[k]));
+    const cut = Math.min(all, struck[k]);
     if (cut <= 0) continue;
     const share = list.map((x, i) => ({ i, q: (x.n[k] * cut) / all }));
     for (const s of share) list[s.i].off[k] = Math.floor(s.q);
