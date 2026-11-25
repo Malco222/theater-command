@@ -6568,6 +6568,114 @@ namespace LandField
 				Strip(M, { Foot, Head }, { 0.005, 0.004 }, AcrossOf(Lean, A), Rgb(96, 110, 60), Rgb(132, 130, 84));
 				Strip(M, { Head, Head + Lean * 0.4 + V3{ 0, 0, 0.12 } }, { 0.018, 0.0 }, AcrossOf(Lean, A + 1.0), Rgb(150, 140, 96), Rgb(168, 156, 112));
 			}
+			// (on trial, "heads": the clump built above, on the shared draws, so everything built after it is as it was; then
+			// let go and built again on its own draws. Its heads were paper, a pale triangle 3.6 cm across and 12 cm high on a
+			// stalk 1 cm wide, the brightest thing in a meadow. Now fourteen leaves half as wide, every second one arched
+			// over at its tip, one in five yellowing; and six flowering culms, thin, each nodding its head 10 to 35 degrees,
+			// a head of one of four kinds: an open panicle, a dense spike, a feathery spray (the steppe's feather grass), a
+			// spike of alternating spikelets. Painted dark for the grade, as the bracken and the dock were; each culm its
+			// own value. The heads as high as before: the lens over the grass and the snow's depths read that height.)
+			if (!Fd.Trial.empty() && Fd.Tried("heads"))
+			{
+				M = Mesh();
+				Rng RH(S ^ 0x4EAD5);
+				const auto FootOf = [&RH](double Spread) {
+					const double A = RH.Range(0.0, 2.0 * Pi);
+					const double D = Spread * std::sqrt(RH.Next());
+					return V3{ D * std::cos(A), D * std::sin(A), 0.0 };
+				};
+				// (a way Spread off a head's axis, Round turned about it; and a breadth across a way, as level as it goes)
+				const auto Off = [](V3 Axis, double Round, double Spread) {
+					const V3 U = Unit3(Cross({ 0, 0, 1 }, Axis), { 1, 0, 0 });
+					const V3 W = Cross(Axis, U);
+					return Unit3(Axis * std::cos(Spread) + (U * std::cos(Round) + W * std::sin(Round)) * std::sin(Spread), Axis);
+				};
+				const auto Level = [](V3 Way, double Round) { return Unit3(Cross({ 0, 0, 1 }, Way), { -std::sin(Round), std::cos(Round), 0 }); };
+				for (int K = 0; K < 14; ++K)
+				{
+					const V3 Foot = FootOf(0.12);
+					const double A = RH.Range(0.0, 2.0 * Pi);
+					const double High = RH.Range(0.45, 0.9);
+					const double Out = RH.Range(0.25, 0.6);
+					const V3 Lean{ std::cos(A) * High * Out, std::sin(A) * High * Out, 0 };
+					std::vector<V3> P = Bent(Foot, Lean, High, 3);
+					if (K % 2 == 1) P.back().Z -= 0.12 * High;
+					const bool bDry = K % 5 == 2;
+					Strip(M, P, { 0.0075, 0.006, 0.0035, 0.0 }, AcrossOf(Lean, A), bDry ? Rgb(92, 88, 52) : Rgb(64, 84, 44), bDry ? Rgb(150, 136, 84) : Rgb(112, 124, 72));
+				}
+				// (buff, straw, purple-grey and silver-green: a soft panicle purple-grey, a fresh spike silver-green, the rest
+				// ripening buff and straw. The purple-grey only just warm of grey: redder, the grade made it pink.)
+				const Col Paints[4] = { Rgb(150, 134, 92), Rgb(162, 146, 100), Rgb(122, 112, 106), Rgb(124, 134, 100) };
+				constexpr int PaintOf[6] = { 2, 3, 0, 1, 0, 1 };
+				// (their heights spread over 0.7 to 0.95 m a sixth each, the spike's the tallest: the clump stands to about a
+				// metre, as before, and no two heads at one height)
+				constexpr int Tier[6] = { 3, 5, 1, 4, 0, 2 };
+				for (int K = 0; K < 6; ++K)
+				{
+					const V3 Foot = FootOf(0.08);
+					const double A = RH.Range(0.0, 2.0 * Pi);
+					const double High = 0.7 + 0.25 * (Tier[K] + RH.Next()) / 6.0;
+					const double Nod = RH.Range(10.0, 35.0) * Pi / 180.0;
+					const double L = RH.Range(0.92, 1.08);
+					const V3 Out{ std::cos(A), std::sin(A), 0 };
+					const V3 Side{ -Out.Y, Out.X, 0 };
+					// (the culm up from the clump, leaning a little, bent over above its knee toward the nod; the head on along it)
+					const V3 Knee = Foot + Out * (0.04 * High) + V3{ 0, 0, 0.6 * High };
+					const V3 Neck = Knee + Out * (0.4 * High * std::sin(0.5 * Nod)) + V3{ 0, 0, 0.4 * High * std::cos(0.5 * Nod) };
+					const V3 Dir = Out * std::sin(Nod) + V3{ 0, 0, std::cos(Nod) };
+					const Col Tip = Varied(Paints[PaintOf[K]], L, 0.0), Foot0 = Varied(Paints[PaintOf[K]], 0.88 * L, 0.0);
+					Strip(M, { Foot, Knee, Neck }, { 0.0022, 0.0018, 0.0014 }, Side, Rgb(84, 102, 54), Mixed(Rgb(118, 122, 76), Tip, 0.35));
+					switch (K % 4)
+					{
+					case 0:
+						// an open panicle: four branchlets from its neck, hair-fine, the lower two splayed, the upper two close in
+						for (int Br = 0; Br < 4; ++Br)
+						{
+							const double Long = RH.Range(0.04, 0.07);
+							const double Spread = (Br < 2 ? RH.Range(28.0, 42.0) : RH.Range(10.0, 20.0)) * Pi / 180.0;
+							const double Round = A + Br * 0.5 * Pi + RH.Range(-0.3, 0.3);
+							const V3 Way = Off(Dir, Round, Spread);
+							Strip(M, { Neck, Neck + Way * Long }, { 0.0015, 0.0 }, Level(Way, Round), Foot0, Tip);
+						}
+						break;
+					case 1:
+					{
+						// a dense spike: two strips crossed along it, near even all its length (a diamond read as a paper kite)
+						const double Long = RH.Range(0.06, 0.1);
+						const V3 Mid = Neck + Dir * (0.5 * Long), End = Neck + Dir * Long;
+						Strip(M, { Neck, Mid, End }, { 0.003, 0.0034, 0.0012 }, Side, Foot0, Tip);
+						Strip(M, { Neck, Mid, End }, { 0.003, 0.0034, 0.0012 }, Unit3(Cross(Dir, Side), Out), Foot0, Tip);
+						break;
+					}
+					case 2:
+						// a feathery spray: five hairs fanned out from its neck
+						for (int Hair = 0; Hair < 5; ++Hair)
+						{
+							const double Long = RH.Range(0.05, 0.09);
+							const double Spread = RH.Range(6.0, 22.0) * Pi / 180.0;
+							const double Round = A + Hair * 0.4 * Pi + RH.Range(-0.25, 0.25);
+							const V3 Way = Off(Dir, Round, Spread);
+							Strip(M, { Neck, Neck + Way * Long }, { 0.001, 0.0 }, Level(Way, Round), Foot0, Tip);
+						}
+						break;
+					default:
+					{
+						// spikelets set alternately either side of its stem, edge on
+						const double Long = RH.Range(0.07, 0.11);
+						std::vector<V3> Spine;
+						std::vector<double> Half;
+						for (int Q = 0; Q < 5; ++Q)
+						{
+							const double Zig = Q == 1 ? 0.003 : Q == 3 ? -0.003 : 0.0;
+							Spine.push_back(Neck + Dir * (Long * Q / 4.0) + Side * Zig);
+							Half.push_back(Q % 2 == 1 ? 0.0034 : 0.0015);
+						}
+						Strip(M, Spine, Half, Side, Foot0, Tip);
+						break;
+					}
+					}
+				}
+			}
 		}
 		// Ripe corn: three dozen stalks, about a metre high (the field stands them 1.2 to 1.4 m to the ears), each with its
 		// ear, leaning a little with the wind; each stalk drawn is a few stalks seen together. (The environment review, 22
@@ -6714,6 +6822,67 @@ namespace LandField
 				const double A = R.Range(0.0, 2.0 * Pi);
 				const V3 Lean{ std::cos(A) * 0.1, std::sin(A) * 0.1, 0 };
 				Strip(M, Bent(Foot, Lean, 0.12, 2), { 0.015, 0.02, 0.0 }, AcrossOf(Lean, A), Rgb(68, 92, 42), Rgb(88, 110, 52));
+			}
+			// (on trial, "heads": built above on the shared draws, as the tall grass is, then built again on its own. The
+			// daisies were two crossed paper squares 6.4 cm across. Now each ox-eye daisy twelve rays 1.3 to 1.7 cm round a
+			// domed yellow middle, its rays tilted 10 degrees up; each buttercup five petals set round its heart in a cup,
+			// each petal from the heart out to its broad rim (a wedge: two faces of one triangle, so the flowers keep under
+			// 190 triangles). Stems and leaves as they were.)
+			if (!Fd.Trial.empty() && Fd.Tried("heads"))
+			{
+				M = Mesh();
+				Rng RF(S ^ 0xF10E5);
+				const auto FootOf = [&RF](double Spread) {
+					const double A = RF.Range(0.0, 2.0 * Pi);
+					const double D = Spread * std::sqrt(RF.Next());
+					return V3{ D * std::cos(A), D * std::sin(A), 0.0 };
+				};
+				const double RayUp = 10.0 * Pi / 180.0, CupUp = 48.0 * Pi / 180.0;
+				for (int K = 0; K < 6; ++K)
+				{
+					const bool bDaisy = K < 3;
+					const V3 Foot = FootOf(0.14);
+					const double A = RF.Range(0.0, 2.0 * Pi);
+					const double High = bDaisy ? RF.Range(0.38, 0.6) : RF.Range(0.25, 0.45);
+					const double DX = RF.Range(-0.05, 0.05);
+					const double DY = RF.Range(-0.05, 0.05);
+					const V3 Head = Foot + V3{ DX, DY, High };
+					Strip(M, { Foot, Head }, { 0.003, 0.002 }, { std::cos(A), std::sin(A), 0 }, Rgb(76, 98, 46), Rgb(90, 110, 54));
+					if (bDaisy)
+					{
+						for (int Ray = 0; Ray < 12; ++Ray)
+						{
+							const double Long = RF.Range(0.013, 0.017);
+							const double Round = A + Ray * Pi / 6.0 + RF.Range(-0.1, 0.1);
+							const V3 Out{ std::cos(Round), std::sin(Round), 0 };
+							const V3 Root = Head + Out * 0.005 + V3{ 0, 0, 0.003 };
+							Strip(M, { Root, Root + (Out * std::cos(RayUp) + V3{ 0, 0, std::sin(RayUp) }) * Long }, { 0.0035, 0.0 }, { -Out.Y, Out.X, 0 }, Rgb(214, 212, 198), Rgb(214, 212, 198));
+						}
+						// (its middle a low dome 1.6 cm across, arched over one way)
+						const V3 Ax{ std::cos(A), std::sin(A), 0 };
+						const V3 Mid = Head + V3{ 0, 0, 0.004 };
+						Strip(M, { Mid - Ax * 0.008, Mid + V3{ 0, 0, 0.004 }, Mid + Ax * 0.008 }, { 0.0055, 0.008, 0.0055 }, { -Ax.Y, Ax.X, 0 }, Rgb(214, 170, 36), Rgb(214, 170, 36));
+					}
+					else
+					{
+						const V3 Heart = Head + V3{ 0, 0, 0.002 };
+						for (int Pt = 0; Pt < 5; ++Pt)
+						{
+							const double Long = RF.Range(0.009, 0.011);
+							const double Round = A + Pt * 0.4 * Pi + RF.Range(-0.1, 0.1);
+							const V3 Out{ std::cos(Round), std::sin(Round), 0 };
+							const V3 Rim = Heart + (Out * std::cos(CupUp) + V3{ 0, 0, std::sin(CupUp) }) * Long;
+							Strip(M, { Rim, Heart }, { 0.0055, 0.0 }, { -Out.Y, Out.X, 0 }, Rgb(222, 192, 40), Rgb(196, 160, 32));
+						}
+					}
+				}
+				for (int K = 0; K < 4; ++K)
+				{
+					const V3 Foot = FootOf(0.12);
+					const double A = RF.Range(0.0, 2.0 * Pi);
+					const V3 Lean{ std::cos(A) * 0.1, std::sin(A) * 0.1, 0 };
+					Strip(M, Bent(Foot, Lean, 0.12, 2), { 0.015, 0.02, 0.0 }, AcrossOf(Lean, A), Rgb(68, 92, 42), Rgb(88, 110, 52));
+				}
 			}
 		}
 		// A stone of the field: a weathered lump of grey limestone or flint, more than half sunk, earth-stained and greened
