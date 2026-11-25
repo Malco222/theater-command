@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import page from '../src/campaign/ui/main.ts?raw';
 import { AC, acOn, airCampaignsShipped, setAirCampaigns } from '../src/campaign/aircampaigns';
-import { createGame } from '../src/campaign/game';
+import { createGame, ensureSupply } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import * as turnAll from '../src/campaign/turn';
@@ -87,6 +87,10 @@ describe("a war started as the game starts it is the gate runner's TC_AC=1 war (
     // ships them on: Brian's airfield ask, the playtester 22 November 21:26Z. The runner's start takes the same switch
     // here; whether the gate runners set it too is the gates' own call.)
     if (airfieldTargetsShipped()) setAirfieldTargets(runner, true);
+    // (The supply window, 25 November 2026: every call the table makes hands back with supply fresh, its start too.
+    // The runner's start leaves supply for its first step to draw, which draws the same picture: drawn here, the two
+    // saves are the same to the byte. tests/supply-window-r2.)
+    ensureSupply(runner);
     expect(hashString(bridge).toString(16)).toBe(fp(runner));
     expect(flagsOf(bridge).ac).toBe(1);
   });

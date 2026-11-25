@@ -328,7 +328,7 @@ export function fitFoot(items: string[], per: number, lines: number, most: numbe
 }
 /** The room the foot boxes have, in letters to a line: at home beside a sign and from the box's edge, elsewhere, and what a staff line may run to in all. */
 const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
-const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
+const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', towns: 'Towns', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
 /** "Hamburg's", "Calais'". */
 const of = (place: string): string => (/s$/i.test(place) ? `${place}'` : `${place}'s`);
 /**
@@ -339,7 +339,7 @@ const of = (place: string): string => (/s$/i.test(place) ? `${place}'` : `${plac
 export function staffShort(desk: string, text: string, all: number = FOOT_ROOM.staff): string {
   const word = DESK_WORD[desk] ?? `${desk.charAt(0).toUpperCase()}${desk.slice(1)}`;
   const room = all - word.length - 2;
-  const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|secret service|engineers|generals) /, '');
+  const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|ministers|secret service|engineers|generals) /, '');
   // The first way of saying it that fits; the last is always short.
   const fit = (...tries: string[]): string => { const t = tries.find((x) => x.length <= room) ?? tries[tries.length - 1]; return `${word}: ${t.length <= room ? t : wholeWords(t, room, 1).replace(/\.$/, '')}`; };
   const teams = /^put (a|\d+) research teams? to work on (.+)$/.exec(said);
@@ -1199,7 +1199,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
     if (h.kind === 'letter') continue;
-    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === 'build' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
+    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === 'build' || h.desk === 'towns' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
     const m = /^Research complete: ([^.]+)\./.exec(h.text);
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.

@@ -57,7 +57,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { chartDist, globeDist, globeLeg, mapDist, nearX, seaDist as seaChartDist } from './wrap';
+import { chartDist, globeDist, globeLeg, mapDist, nearX } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
@@ -602,24 +602,42 @@ export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
 
 /**
  * legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so).
- * Where the nearest point of the leg is one of its ends, the distance is the rules' own to that field, km() from a
- * province (wrap.ts seaDist from a sea), whichever chart either is on: a field never reads two distances (the review
- * of the air follow-on, finding 1: Moscow against the leg Kirov to Yaroslavl read 248.763 km on the globe where km()
- * reads 259.688 on the map). Only a point inside the leg is measured by the leg's own ruler, below; so just inside
- * an old-chart end of a leg that crosses to the far side the reading steps from the map's to the globe's.
+ * One field, one distance (the design director, 14:59Z; the reviews of the air follow-on, finding 1 and notes 2 and 3):
+ * - The rules' own distance from the place to a field of the leg is the one kmTo reads: km() from a province, whichever
+ *   chart either is on; seaKm from a sea, a carrier wing at sea being anywhere in its sea (a field on its shore at no
+ *   distance, not the sea's centre: North Atlantic against the Highlands read 444.0 km, kmTo 0).
+ * - From a province, where the nearest point of the leg is one of its ends, the distance is km() to that end (Moscow
+ *   against the leg Kirov to Yaroslavl read 248.763 km on the globe where km() reads 259.688 on the map), or to the
+ *   leg's other field where km() reads that one nearer: on the far chart the end nearest on the chart need not be the
+ *   nearer by km() (Singapore against Kuantan to Kuala Lumpur read 309.355 km, km() to Kuala Lumpur, where km() to
+ *   Kuantan is 289.260; the check of the third round). On the old chart the end nearest on the chart is always the
+ *   nearer by km(), so nothing moves there.
+ * - A point inside the leg is measured by the leg's own ruler (the globe's where an end of the leg or the place is of
+ *   the far side, else the map's straight line; from a sea, from the sea's centre), capped at the rules' distance to
+ *   each end: a leg never reads farther than either of its own fields (Manila against Formosa to Hong Kong read 904.052
+ *   km, km() to Formosa 902.923: the nearest point is found on the chart, not on the globe). On the old chart the cap
+ *   never binds for a province (the nearest point on the map's straight line is nearer than either end).
+ * - From a sea, where the sea's centre lies beyond an end the leg reads seaKm to the nearer of its two fields: the end
+ *   the sea's centre is nearest to on the chart need not be the nearer by seaKm, and a leg never reads farther than
+ *   either of its fields.
+ * Just inside an old-chart end of a leg that crosses to the far side the reading can still step down from the map's to
+ * the globe's: the far chart's two rulers (wrap.ts), not mended here.
  */
 export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
   const A = g.regions[from], B = g.regions[to];
   const bx = nearX(g, B.x, A.x), px = nearX(g, p.x, A.x);
   const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
   const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
-  if ((t <= 0 || t >= 1) && (p.region >= 0 || p.sea >= 0)) {
-    const E = t <= 0 ? A : B;
-    return (p.region >= 0 ? chartDist(g, g.regions[p.region], E) : seaChartDist(g, E, { id: p.sea, x: p.x, y: p.y })) * AIR.kmPerUnit;
-  }
+  const atEnd = t <= 0 || t >= 1;
+  // The rules' own distance to each field of the leg (kmTo's; seaKm takes the field, then the sea), the nearer of the two.
+  const ends = p.region >= 0 ? Math.min(km(g, p.region, from), km(g, p.region, to)) : p.sea >= 0 ? Math.min(seaKm(g, from, p.sea), seaKm(g, to, p.sea)) : Infinity;
+  if (atEnd && (p.region >= 0 || p.sea >= 0)) return ends;
   const qx = A.x + t * dx, qy = A.y + t * dy;
-  if (globeLeg(g, A, B, p.region, p.sea)) return globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit;
-  return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
+  const d = globeLeg(g, A, B, p.region, p.sea) ? globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit : Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
+  // From a sea, a point inside the leg keeps the sea centre's ruler, capped at seaKm to each end: the smallest change
+  // that keeps one field one distance. (The nearest shore of the sea to the leg, as kmTo reads a sea for a single
+  // field, would be truer: put to the design director, not built.)
+  return Math.min(d, ends);
 }
 
 /** Where a group flies from, for a map to draw: its airfield, or the sea (or harbour) its carriers are in. */
@@ -2973,6 +2991,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let atomLine: { text: string; hit: boolean; tell: boolean } | null = null;
   // Airfields as targets (fieldstate.ts): what the bombs did to a field, where they hit one.
   let fh: FieldHit | null = null;
+  // (A raid on troops with the strafers' rule on, strafers.ts: the names of the groups that went down, for the report.)
+  let strafed: string[] | undefined;
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -3207,6 +3227,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     if (rule) {
       const route = battle && !staff ? 'fought' : 'settled';
       strafeWatch.tell?.({ route, target, nat, strafers: route === 'fought' ? [...(battle?.strafers ?? [])] : strafers, fire: route === 'fought' ? battle?.strafeFire ?? 0 : fired, weight: low, cut });
+      // (The words, the UI director 15:04Z: the report says who went down, by the same ids the hook hears, named as
+      // the report names its groups and in the raid's order. Nothing is drawn: a record only.)
+      const down = route === 'fought' ? battle?.strafers ?? [] : strafers;
+      strafed = a.att.flatMap((x, i) => (down.includes(x.f.id) ? [att[i].fleet] : []));
     }
     let divs = 0;
     for (const c of foes) {
@@ -3313,6 +3337,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (city) rep.city = { region: city.region, added: city.added, now: city.now };
   if (fh) rep.field = { region: fh.region, shut: fh.shut, levels: fh.levels, ground: fh.ground };
   if (transit) rep.ferry = transit.to;
+  if (strafed) rep.strafed = strafed;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the

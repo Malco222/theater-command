@@ -2078,18 +2078,45 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 	{
 		const FVector Where((K - (Show.Num() - 1) * 0.5) * 4.2 * Unit, (K % 2 ? 2.4 : -1.8) * Unit, 0.02 * Unit);
 		const double Turn = -90.0 + (K - 1) * 4.0;
+		const FString Kind(Show[K]);
+		const double Long = (Kind.StartsWith(TEXT("Battleship")) ? 224.0 : Kind.StartsWith(TEXT("Carrier")) ? 244.0 : Kind.StartsWith(TEXT("Cruiser")) ? 184.0 : Kind.StartsWith(TEXT("Destroyer")) ? 108.0 : 72.0) * Metre;
+		const double Beam = (Kind.StartsWith(TEXT("Battleship")) || Kind.StartsWith(TEXT("Carrier")) ? 30.0 : Kind.StartsWith(TEXT("Cruiser")) ? 20.0 : Kind.StartsWith(TEXT("Destroyer")) ? 11.0 : 7.0) * Metre;
+		const double R = FMath::DegreesToRadians(Turn);
+		// (a model's front is toward -X before it is turned: Ahead is the way her bows point on the table)
+		const FVector Ahead(-FMath::Cos(R), -FMath::Sin(R), 0.0), Abeam(-Ahead.Y, Ahead.X, 0.0);
+		const int32 FirstVertex = Vertices.Num(), FirstIndex = Triangles.Num();
 		Vehicle(FString(Show[K]) + Tag, Where, Metre, Turn);
+		if (Vertices.Num() > FirstVertex && Triangles.Num() > FirstIndex)
+		{
+			// (Release 2, a fleet under way: which part of the mesh is this ship, for the piece that gives her a mesh of her own.)
+			FShip& Ship = Ships.AddDefaulted_GetRef();
+			Ship.FirstVertex = FirstVertex;
+			Ship.VertexCount = Vertices.Num() - FirstVertex;
+			Ship.FirstIndex = FirstIndex;
+			Ship.IndexCount = Triangles.Num() - FirstIndex;
+			Ship.Middle = Where;
+			Ship.Ahead = Ahead;
+			// Her length and beam as her model is built (the wake's round numbers above are not her own), for how far
+			// her ends and her sides move as she rides. Held near the round numbers, should a model be an odd one.
+			double Foremost = 0.0, Aftmost = 0.0, Portmost = 0.0, Starmost = 0.0;
+			for (int32 HullPoint = FirstVertex; HullPoint < Vertices.Num(); ++HullPoint)
+			{
+				const double FromMiddle = (Vertices[HullPoint].X - Where.X) * Ahead.X + (Vertices[HullPoint].Y - Where.Y) * Ahead.Y;
+				const double FromKeel = (Vertices[HullPoint].X - Where.X) * Abeam.X + (Vertices[HullPoint].Y - Where.Y) * Abeam.Y;
+				Foremost = FMath::Max(Foremost, FromMiddle);
+				Aftmost = FMath::Min(Aftmost, FromMiddle);
+				Starmost = FMath::Max(Starmost, FromKeel);
+				Portmost = FMath::Min(Portmost, FromKeel);
+			}
+			Ship.Long = FMath::Clamp(Foremost - Aftmost, 0.6 * Long, 1.6 * Long);
+			Ship.Beam = FMath::Clamp(Starmost - Portmost, 0.6 * Beam, 1.6 * Beam);
+			Ship.Class = Kind.StartsWith(TEXT("Battleship")) ? 0 : Kind.StartsWith(TEXT("Carrier")) ? 1 : Kind.StartsWith(TEXT("Cruiser")) ? 2 : Kind.StartsWith(TEXT("Destroyer")) ? 3 : 4;
+		}
 		if (bUnderWay)
 		{
 			// A ship at sea is under way. (The art director's brief of 15 November, after Brian asked for a more
 			// realistic wake: a ribbon of foam astern, the V from her bow, and a curl of white at her stem, all
 			// sized in her own lengths and beams. It replaces the sliver and two arms that were painted on the water.)
-			const FString Kind(Show[K]);
-			const double Long = (Kind.StartsWith(TEXT("Battleship")) ? 224.0 : Kind.StartsWith(TEXT("Carrier")) ? 244.0 : Kind.StartsWith(TEXT("Cruiser")) ? 184.0 : Kind.StartsWith(TEXT("Destroyer")) ? 108.0 : 72.0) * Metre;
-			const double Beam = (Kind.StartsWith(TEXT("Battleship")) || Kind.StartsWith(TEXT("Carrier")) ? 30.0 : Kind.StartsWith(TEXT("Cruiser")) ? 20.0 : Kind.StartsWith(TEXT("Destroyer")) ? 11.0 : 7.0) * Metre;
-			const double R = FMath::DegreesToRadians(Turn);
-			// (a model's front is toward -X before it is turned: Ahead is the way her bows point on the table)
-			const FVector Ahead(-FMath::Cos(R), -FMath::Sin(R), 0.0), Abeam(-Ahead.Y, Ahead.X, 0.0);
 			const FVector Sea(Where.X, Where.Y, 0.012 * Unit);
 			// How much water she has on each side before the next ship's own: half the way to her neighbour. The V
 			// stops there, so that no arm crosses a neighbour's hull or her wake. (None on a side: the open sea.)

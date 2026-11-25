@@ -107,6 +107,25 @@ public:
 	 * second and a half to three and a half.
 	 */
 	void SailAlong(const TArray<FVector>& Waypoints, float TableYaw);
+	/**
+	 * (Release 2, a fleet under way; Brian, 25 November 2026: "I want to keep upleveling the graphics and smoothness of
+	 * how they move and act to make it feel as real as possible", "can we do that for the campaign map too?") A fleet
+	 * sails a ship's course, laid and timed for her by the map (Campaign/ShipWay.h): out on her own turning circle,
+	 * wide round the corners of her way, in on a circle to lie as the table wants her; slow off the mark, slow round a
+	 * tight turn, carrying her way in. Her passage wake lies along the water her sterns have crossed. Given as her
+	 * times, in the world: where she is at each tick (Each seconds apart), the way her bows point there (a unit, in the
+	 * world's X and Y) and how far she has run. The last of it leaves her on the table's yaw. With fewer than two
+	 * ticks, or tables not of one length, it does nothing.
+	 */
+	void SailCourse(const TArray<FVector>& At, const TArray<FVector2D>& Head, const TArray<double>& Ran, double Each, float TableYaw);
+	/**
+	 * (Release 2, a fleet under way, second part: Campaign/ShipRide.h. Brian, 25 November 2026: "I want to keep upleveling
+	 * the graphics and smoothness of how they move and act to make it feel as real as possible".) The map tells each
+	 * piece, as the eye moves, how far the eye is from what it looks at and whether this piece is by that. Near enough,
+	 * each ship of a fleet heels outward as she turns and rides the swell; far off she lies level and costs nothing.
+	 * Only a fleet whose ships have meshes of their own takes any notice (tc.Map.ShipRide, when the piece was built).
+	 */
+	void SetEye(double EyeDistance, bool bByFocus);
 	/** The yaw every piece turns to, to face the eye: at once, or once a fleet under sail has come to rest. */
 	void FaceTable(float Yaw);
 	bool IsSailing() const { return bMarching && bSailing; }
@@ -290,6 +309,50 @@ private:
 	/** A place of the piece's own reckoning as it is shown: in the turn of the world nearest the eye, where the map has said so. */
 	FVector Shown(const FVector& Place) const;
 	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
+	// (Release 2, a fleet under way: see SailCourse.) Her times: where she is at each tick, the way her bows point
+	// there, and how far she has run, in the world. Empty when she is not on a course of her own.
+	TArray<FVector> SailAt;
+	TArray<FVector2D> SailHead;
+	TArray<double> SailRan;
+	double SailEach = 0.02;
+	float SailLaidYaw = 0.0f; // the table's yaw her course was laid to end on
+	TArray<FVector> WakeLaid; // her passage wake as it was built, straight astern
+	TArray<FVector> WakeBent; // and as it lies now, along the water her sterns have crossed
+	double WakeReach = 0.0; // how far astern of her middle the wake reaches, in her own units
+	double WakeStiff = 0.0; // and how far astern of her middle she is still herself (her ships, to their sterns)
+	bool bWakeBent = false;
+	void BendWake(double Ran, const FVector2D& Bows, double Progress);
+	void StraightenWake();
+	/**
+	 * (Release 2, a fleet under way, second part.) Each ship of a fleet in a small mesh of her own, about her own middle
+	 * on the water, so that she can heel in her turn and ride the swell while her wake stays flat in the body. Empty
+	 * unless tc.Map.ShipRide was on when the piece was built: then her ships are in the body's one mesh, as before.
+	 */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> Hulls;
+	/** How each of those ships lies and rides (one for each hull, in the same order). */
+	struct FHullRide
+	{
+		FVector Middle = FVector::ZeroVector; // her middle on the water, in the piece's own space
+		FVector2D Ahead = FVector2D(0.0, 1.0); // the way her bows point there (a unit)
+		double Long = 0.0, Beam = 0.0; // her length and beam, in the piece's own units
+		int32 Class = 2; // as Campaign/ShipRide.h counts them: 0 battleship, 1 carrier, 2 cruiser, 3 destroyer, 4 submarine
+		double HeelAngle = 0.0, HeelRate = 0.0; // her heel as it stands (radians, to port positive) and how fast it changes
+		double Phase = 0.0; // tells her from her sisters in the swell
+	};
+	TArray<FHullRide> HullRides;
+	double RideMuch = 0.0; // how much of the swell she shows, 0 to 1: it comes on as the eye comes near and dies as it leaves
+	bool bRideNear = false; // the eye is near enough to see her ride (see SetEye)
+	bool bHullsLevel = true; // every hull lies level, as it was built
+	bool bInHand = false; // carried in the hand: off the water
+	double SailFull = 0.0; // the furthest she goes in one tick of her course: her full speed
+	/**
+	 * A frame of her ships' riding. Turn is how fast her head swings (radians a second, to starboard positive) and Pace
+	 * her speed as a share of her full speed: what they heel by. False when there is nothing left to see: then every
+	 * hull lies level, and she need not be ticked for it.
+	 */
+	bool RideHulls(double Seconds, double Turn, double Pace);
+	void LevelHulls();
 	bool bSelected = false;
 	bool bHovered = false;
 

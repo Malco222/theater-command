@@ -4,14 +4,47 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
+#include "Campaign/ShipRide.h"
+#include "Campaign/ShipWay.h"
+#include "HAL/IConsoleManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/ScopeExit.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
+
+namespace
+{
+	// (Release 2, a fleet under way, second part; Brian, 25 November 2026: "I want to keep upleveling the graphics and
+	// smoothness of how they move and act to make it feel as real as possible".) Each ship of a fleet on the campaign
+	// map has a small mesh of her own, heels outward as she turns and rides the swell where the eye is near
+	// (Campaign/ShipRide.h). Off as it comes, until Brian has seen the Mac's film of it; "-TheaterShipRide" turns it on
+	// for that film, switch or no switch. The rest are its measures, for the Mac to try without a build.
+	TAutoConsoleVariable<int32> CVarShipRide(
+		TEXT("tc.Map.ShipRide"), 0,
+		TEXT("1: each ship of a fleet on the campaign map has a mesh of her own, heels outward as she turns on a ship's course (tc.Map.ShipWay) and rides the swell where the eye is near. 0: a fleet is one mesh, as before. Fleets are remade the next time the map shows them."));
+	TAutoConsoleVariable<float> CVarShipHeel(
+		TEXT("tc.Map.ShipHeel"), 1.0f,
+		TEXT("With tc.Map.ShipRide: how far a ship heels in her turn, as a multiple of her own (a battleship 5 degrees, a destroyer 9). 0 to 2; over 1 a lee rail may go under."));
+	TAutoConsoleVariable<float> CVarShipSwell(
+		TEXT("tc.Map.ShipSwell"), 1.0f,
+		TEXT("With tc.Map.ShipRide: how much a ship pitches, rolls and heaves in the swell, as a multiple of her own. 0 to 3."));
+	TAutoConsoleVariable<float> CVarShipRideReach(
+		TEXT("tc.Map.ShipRideReach"), 3000.0f,
+		TEXT("With tc.Map.ShipRide: the eye's distance from what it looks at under which ships heel and ride. Further off they lie level and cost nothing."));
+
+	bool ShipRideWanted()
+	{
+		static const bool bShipRideAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipRide"));
+		return bShipRideAsked || CVarShipRide.GetValueOnGameThread() != 0;
+	}
+}
 
 AArmyPiece::AArmyPiece()
 {
@@ -372,8 +405,10 @@ void AArmyPiece::SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation,
 	NationTag = Nation.Tag;
 	Fleet = InFleet;
 	// (a fleet that puts to sea or comes into harbour is remade: it has a wake at sea and none in port)
-	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d|%s|%d|%s"), *Nation.Tag, InFleet.Id,
-		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, *InFleet.Stance, InFleet.bReport ? 1 : 0, *InFleet.SizeWord);
+	// (release 2, a fleet under way, second part: and when tc.Map.ShipRide is turned on or off, for her ships are then meshes of their own, or one)
+	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d|%s|%d|%s%s"), *Nation.Tag, InFleet.Id,
+		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, *InFleet.Stance, InFleet.bReport ? 1 : 0, *InFleet.SizeWord,
+		ShipRideWanted() ? TEXT("|ride") : TEXT(""));
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -416,6 +451,19 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Body->DestroyComponent();
 		Body = nullptr;
 	}
+	// (Release 2, a fleet under way, second part.) Her ships' own meshes go with the body. How each stood is kept, so
+	// that a fleet remade in the middle of her turn does not snap upright.
+	const TArray<FHullRide> HullsWere = MoveTemp(HullRides);
+	HullRides.Reset();
+	for (UProceduralMeshComponent* HullMesh : Hulls)
+	{
+		if (HullMesh)
+		{
+			HullMesh->DestroyComponent();
+		}
+	}
+	Hulls.Reset();
+	bHullsLevel = true;
 	if (Flock)
 	{
 		Flock->DestroyComponent();
@@ -1018,11 +1066,82 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Body->RegisterComponent();
 	if (!bGlimpsed) // (ruling 154: an army he only glimpses has no base and no pieces)
 	{
-		Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
-		Body->SetMaterial(0, Map->GetPieceMaterial());
+		// (Release 2, a fleet under way, second part: tc.Map.ShipRide.) Each ship of a fleet in a small mesh of her own,
+		// about her own middle on the water, so that she can heel in her turn and ride the swell (Campaign/ShipRide.h);
+		// her wake stays flat, in the body. Only where every point of the model is some ship's and every corner of a
+		// ship's triangles is a point of her own: anything else is the one mesh, as before.
+		int32 Covered = 0;
+		bool bHulls = What == 1 && Model.Ships.Num() > 0 && ShipRideWanted()
+			&& Model.Normals.Num() == Model.Vertices.Num() && Model.Colors.Num() == Model.Vertices.Num();
+		for (int32 ShipIndex = 0; bHulls && ShipIndex < Model.Ships.Num(); ++ShipIndex)
+		{
+			const FMiniatureMesh::FShip& OneShip = Model.Ships[ShipIndex];
+			bHulls = OneShip.FirstVertex >= 0 && OneShip.VertexCount > 0 && OneShip.FirstVertex + OneShip.VertexCount <= Model.Vertices.Num()
+				&& OneShip.FirstIndex >= 0 && OneShip.IndexCount > 0 && OneShip.FirstIndex + OneShip.IndexCount <= Model.Triangles.Num();
+			for (int32 CornerIndex = 0; bHulls && CornerIndex < OneShip.IndexCount; ++CornerIndex)
+			{
+				const int32 PointIndex = Model.Triangles[OneShip.FirstIndex + CornerIndex] - OneShip.FirstVertex;
+				bHulls = PointIndex >= 0 && PointIndex < OneShip.VertexCount;
+			}
+			Covered += OneShip.VertexCount;
+		}
+		bHulls = bHulls && Covered == Model.Vertices.Num();
+		if (bHulls)
+		{
+			for (int32 ShipIndex = 0; ShipIndex < Model.Ships.Num(); ++ShipIndex)
+			{
+				const FMiniatureMesh::FShip& OneShip = Model.Ships[ShipIndex];
+				TArray<FVector> HullPoints, HullFacing;
+				TArray<FColor> HullPaint;
+				TArray<int32> HullFaces;
+				HullPoints.Reserve(OneShip.VertexCount);
+				HullFacing.Reserve(OneShip.VertexCount);
+				HullPaint.Reserve(OneShip.VertexCount);
+				HullFaces.Reserve(OneShip.IndexCount);
+				for (int32 PointIndex = 0; PointIndex < OneShip.VertexCount; ++PointIndex)
+				{
+					HullPoints.Add(Model.Vertices[OneShip.FirstVertex + PointIndex] - OneShip.Middle); // (about her own middle)
+					HullFacing.Add(Model.Normals[OneShip.FirstVertex + PointIndex]);
+					HullPaint.Add(Model.Colors[OneShip.FirstVertex + PointIndex]);
+				}
+				for (int32 CornerIndex = 0; CornerIndex < OneShip.IndexCount; ++CornerIndex)
+				{
+					HullFaces.Add(Model.Triangles[OneShip.FirstIndex + CornerIndex] - OneShip.FirstVertex);
+				}
+				UProceduralMeshComponent* HullMesh = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), TEXT("Hull")));
+				HullMesh->SetupAttachment(Root);
+				HullMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				HullMesh->SetRelativeLocation(OneShip.Middle);
+				HullMesh->RegisterComponent();
+				HullMesh->CreateMeshSection(0, HullPoints, HullFaces, HullFacing, TArray<FVector2D>(), HullPaint, TArray<FProcMeshTangent>(), false);
+				HullMesh->SetMaterial(0, Map->GetPieceMaterial());
+				HullMesh->SetCastShadow(bCastsShadows);
+				Hulls.Add(HullMesh);
+				FHullRide& Ride = HullRides.AddDefaulted_GetRef();
+				Ride.Middle = OneShip.Middle;
+				Ride.Ahead = FVector2D(OneShip.Ahead.X, OneShip.Ahead.Y);
+				Ride.Long = OneShip.Long;
+				Ride.Beam = OneShip.Beam;
+				Ride.Class = OneShip.Class;
+				Ride.Phase = 1.7 * ShipIndex + 0.61 * (Fleet.Id % 53); // (no two ships of a fleet, and no two fleets side by side, move as one)
+				if (HullsWere.IsValidIndex(ShipIndex) && HullsWere[ShipIndex].Class == Ride.Class)
+				{
+					Ride.HeelAngle = HullsWere[ShipIndex].HeelAngle;
+					Ride.HeelRate = HullsWere[ShipIndex].HeelRate;
+				}
+			}
+			RideHulls(0.0, 0.0, 0.0); // (set as they stood, with no time gone)
+		}
+		else
+		{
+			Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(0, Map->GetPieceMaterial());
+		}
 	}
 	// (a fleet at sea: its wake, foam lying on the water. Two of them, on patrol and on passage: the one that is not wanted is hidden.)
 	bHasWake = false;
+	WakeLaid.Reset();
+	bWakeBent = false; // (a new mesh: its wake is as it was built)
 	if (Model.Wake[0].Vertices.Num() > 0 && Map->GetWakeMaterial())
 	{
 		for (int32 Passage = 0; Passage < 2; ++Passage)
@@ -1030,6 +1149,16 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			const FMiniatureMesh::FWakeMesh& Foam = Model.Wake[Passage];
 			Body->CreateMeshSection(1 + Passage, Foam.Vertices, Foam.Triangles, Foam.Normals, Foam.UVs, Foam.Colors, TArray<FProcMeshTangent>(), false);
 			Body->SetMaterial(1 + Passage, Map->GetWakeMaterial());
+		}
+		// (Release 2, a fleet under way.) The passage wake is kept as it was built, to be laid along her course. Her
+		// ships lie in echelon about her middle, the sternmost stern nine of the piece's units astern of it (the
+		// battleship's: FMiniatureMesh::Fleet): from there forward the piece turns as one.
+		WakeLaid = Model.Wake[1].Vertices;
+		WakeStiff = 9.0 * U;
+		WakeReach = WakeStiff;
+		for (const FVector& Point : WakeLaid)
+		{
+			WakeReach = FMath::Max(WakeReach, -Point.Y);
 		}
 		bHasWake = true;
 		Body->SetMeshSectionVisible(1, !bMarching);
@@ -1319,6 +1448,11 @@ void AArmyPiece::Carry(const FVector& GroundPoint)
 {
 	bMarching = false;
 	SetActorTickEnabled(false);
+	if (!bInHand)
+	{
+		bInHand = true;
+		LevelHulls(); // (a fleet in the hand is off the water: her ships lie level)
+	}
 	SetActorLocation(GroundPoint + FVector(0.0, 0.0, LiftHeight));
 }
 
@@ -1326,6 +1460,7 @@ void AArmyPiece::ReturnToRest()
 {
 	// (the far side: from where it is in its own reckoning, which is where it is shown on any table with edges)
 	const FVector From = GetReckonedLocation();
+	bInHand = false; // (let go)
 	if (!bMarching && !From.Equals(HomeLocation(), 1.0))
 	{
 		MarchAlong({ From, RestLocation }, false, false);
@@ -1343,6 +1478,12 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	bInHand = false; // (set down, or sent on her way)
+	// (Release 2, a fleet under way: a march, or a sail corner to corner, is no course of her own. SailCourse sets it after.)
+	SailAt.Reset();
+	SailHead.Reset();
+	SailRan.Reset();
+	StraightenWake();
 	if (RoundSpan > 0.0)
 	{
 		// (Release 2, the far side.) The short way round: each point is counted in the turn of the world nearest the
@@ -1390,6 +1531,148 @@ void AArmyPiece::SailAlong(const TArray<FVector>& Waypoints, float TableYaw)
 	MarchTime = FMath::Clamp(1.1 + RouteMarks.Last() / 3800.0, 1.4, 3.6);
 }
 
+void AArmyPiece::SailCourse(const TArray<FVector>& At, const TArray<FVector2D>& Head, const TArray<double>& Ran, double Each, float TableYaw)
+{
+	if (At.Num() < 2 || Head.Num() != At.Num() || Ran.Num() != At.Num() || Each <= 0.0)
+	{
+		return;
+	}
+	// (as a piece glides: under way, not lifted, its passage wake shown)
+	MarchAlong({ At[0], At.Last() }, false, false);
+	if (!bMarching)
+	{
+		return;
+	}
+	bSailing = true;
+	SailEndYaw = TableYaw;
+	SailLaidYaw = TableYaw;
+	SailAt = At;
+	SailHead = Head;
+	SailRan = Ran;
+	SailEach = Each;
+	MarchTime = (At.Num() - 1) * Each;
+	// (Second part: the furthest she goes in a tick is her full speed, which her ships' heel is measured by.)
+	SailFull = 0.0;
+	for (int32 K = 1; K < At.Num(); ++K)
+	{
+		SailFull = FMath::Max(SailFull, FVector::Dist2D(At[K - 1], At[K]));
+	}
+}
+
+void AArmyPiece::BendWake(double Ran, const FVector2D& Bows, double Progress)
+{
+	if (!bHasWake || !Body || WakeLaid.Num() == 0 || SailAt.Num() < 2)
+	{
+		return;
+	}
+	// The water astern of her sterns, station by station back along her course, and each point of the wake laid on it.
+	const double Scale = GetActorScale3D().X;
+	static TheaterShipWay::FAstern Astern; // (the game's thread only)
+	TheaterShipWay::LookAstern(SailAt.GetData(), SailHead.GetData(), SailRan.GetData(), SailAt.Num(), Ran, FMath::Max((WakeReach - WakeStiff) * Scale, 1.0), 128, Astern);
+	const double Settle = TheaterShipWay::Straighten(Progress);
+	const TheaterShipWay::FSpot Head{ Bows.X, Bows.Y };
+	WakeBent.SetNumUninitialized(WakeLaid.Num());
+	for (int32 K = 0; K < WakeLaid.Num(); ++K)
+	{
+		double X = 0.0, Y = 0.0;
+		TheaterShipWay::Trail(Astern, Head, Scale, Settle, WakeStiff, WakeLaid[K].X, WakeLaid[K].Y, X, Y);
+		WakeBent[K] = FVector(X, Y, WakeLaid[K].Z);
+	}
+	Body->UpdateMeshSection(2, WakeBent, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+	bWakeBent = true;
+}
+
+void AArmyPiece::StraightenWake()
+{
+	if (bWakeBent && Body && WakeLaid.Num() > 0)
+	{
+		Body->UpdateMeshSection(2, WakeLaid, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+	}
+	bWakeBent = false;
+}
+
+void AArmyPiece::SetEye(double EyeDistance, bool bByFocus)
+{
+	if (Hulls.Num() == 0)
+	{
+		bRideNear = false;
+		return;
+	}
+	bRideNear = bByFocus && !IsHidden() && EyeDistance < FMath::Max(static_cast<double>(CVarShipRideReach.GetValueOnGameThread()), 0.0);
+	if (bRideNear && !bInHand && !IsActorTickEnabled())
+	{
+		SetActorTickEnabled(true); // (lying still, she is ticked while there is a swell to see: Tick turns it off again)
+	}
+}
+
+bool AArmyPiece::RideHulls(double Seconds, double Turn, double Pace)
+{
+	if (Hulls.Num() == 0 || Hulls.Num() != HullRides.Num())
+	{
+		return false;
+	}
+	// Only where the eye is near, and only on the water: not in the hand, nor held off the table, nor carried over it.
+	const bool bSee = bRideNear && !bInHand && !bSelected && (!bMarching || bSailing);
+	const double Span = FMath::Clamp(Seconds, 0.0, 0.25);
+	RideMuch = FMath::Clamp(RideMuch + (bSee ? 1.2 : -1.2) * Span, 0.0, 1.0);
+	if (!bSee && RideMuch <= 0.0)
+	{
+		LevelHulls(); // (nobody is near enough to see: she lies level, and costs nothing)
+		return false;
+	}
+	const double HeelBy = FMath::Clamp(static_cast<double>(CVarShipHeel.GetValueOnGameThread()), 0.0, 2.0);
+	// (a fleet at anchor by her port lies in sheltered water)
+	const double SwellBy = FMath::Clamp(static_cast<double>(CVarShipSwell.GetValueOnGameThread()), 0.0, 3.0) * (bAtAnchor ? 0.35 : 1.0);
+	const UWorld* World = GetWorld();
+	const double Clock = World ? World->GetTimeSeconds() : 0.0;
+	for (int32 Index = 0; Index < Hulls.Num(); ++Index)
+	{
+		FHullRide& Ride = HullRides[Index];
+		TheaterShipRide::FKind Kind = TheaterShipRide::KindOf(Ride.Class);
+		Kind.Heel *= HeelBy;
+		Kind.Pitch *= SwellBy;
+		Kind.Roll *= SwellBy;
+		Kind.Heave *= SwellBy;
+		// Her heel: toward what her turn and her speed ask of her while the eye is near, and back upright as it leaves.
+		TheaterShipRide::FHeel Heel;
+		Heel.Angle = Ride.HeelAngle;
+		Heel.Rate = Ride.HeelRate;
+		TheaterShipRide::Lean(Heel, bSee ? TheaterShipRide::HeelWanted(Kind, Turn, Pace) : 0.0, Span, Kind);
+		Ride.HeelAngle = Heel.Angle;
+		Ride.HeelRate = Heel.Rate;
+		const TheaterShipRide::FSea Sea = TheaterShipRide::Swell(Kind, Clock, Ride.Phase, RideMuch);
+		const TheaterShipRide::FSet Lie = TheaterShipRide::Set(Kind, Ride.Long, Ride.Beam, Ride.Ahead.X, Ride.Ahead.Y, Ride.HeelAngle, Sea, RideMuch);
+		if (UProceduralMeshComponent* HullMesh = Hulls[Index])
+		{
+			// (about her own middle on the water: her masts along Lie's up, with no turn of her head in it)
+			HullMesh->SetRelativeLocationAndRotation(Ride.Middle + FVector(0.0, 0.0, Lie.Rise), FQuat::FindBetweenNormals(FVector::UpVector, FVector(Lie.UpX, Lie.UpY, Lie.UpZ)));
+		}
+	}
+	bHullsLevel = false;
+	return true;
+}
+
+void AArmyPiece::LevelHulls()
+{
+	RideMuch = 0.0;
+	for (FHullRide& Ride : HullRides)
+	{
+		Ride.HeelAngle = 0.0;
+		Ride.HeelRate = 0.0;
+	}
+	if (!bHullsLevel)
+	{
+		for (int32 Index = 0; Index < Hulls.Num() && Index < HullRides.Num(); ++Index)
+		{
+			if (UProceduralMeshComponent* HullMesh = Hulls[Index])
+			{
+				HullMesh->SetRelativeLocationAndRotation(HullRides[Index].Middle, FQuat::Identity);
+			}
+		}
+		bHullsLevel = true;
+	}
+}
+
 void AArmyPiece::FaceTable(float Yaw)
 {
 	SailEndYaw = Yaw;
@@ -1404,7 +1687,12 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (!bMarching)
 	{
-		SetActorTickEnabled(false);
+		// (Release 2, a fleet under way, second part.) A fleet lying still is ticked only for as long as her ships have
+		// something to show: the last of a heel, or the swell while the eye is near.
+		if (!RideHulls(DeltaSeconds, 0.0, 0.0))
+		{
+			SetActorTickEnabled(false);
+		}
 		return;
 	}
 
@@ -1412,15 +1700,42 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	const double Progress = FMath::Clamp(MarchClock / MarchTime, 0.0, 1.0);
 	// Ease away from the start and into the finish, as a hand moves a piece.
 	const double Eased = Progress * Progress * (3.0 - 2.0 * Progress);
-	const double Target = Eased * RouteMarks.Last();
-
+	// (Release 2, a fleet under way.) On a course of her own she is where her times say, and heads as they say: the
+	// course has her weight in it already.
+	const bool bCourse = bSailing && SailAt.Num() >= 2;
+	FVector Position;
+	FVector2D CourseBows(0.0, 1.0);
+	double CourseRan = 0.0;
+	// (Second part.) How fast her head swings, to starboard positive, in radians a second, and her speed as a share of
+	// her full speed: what her ships heel by. Nothing under the old sail, corner to corner: there they only ride.
+	double CourseTurn = 0.0, CoursePace = 0.0;
 	int32 Segment = 1;
-	while (Segment < RouteMarks.Num() - 1 && RouteMarks[Segment] < Target)
+	if (bCourse)
 	{
-		++Segment;
+		const double Beat = FMath::Clamp(MarchClock / SailEach, 0.0, static_cast<double>(SailAt.Num() - 1));
+		const int32 Before = FMath::Min(FMath::FloorToInt32(Beat), SailAt.Num() - 2);
+		const double Between = Beat - Before;
+		Position = FMath::Lerp(SailAt[Before], SailAt[Before + 1], Between);
+		const FVector2D Mixed = SailHead[Before] + (SailHead[Before + 1] - SailHead[Before]) * Between;
+		CourseBows = Mixed.SizeSquared() > 1.0e-8 ? Mixed.GetSafeNormal() : SailHead[Before + 1];
+		CourseRan = FMath::Lerp(SailRan[Before], SailRan[Before + 1], Between);
+		if (Hulls.Num() > 0)
+		{
+			const double HeadBefore = FMath::Atan2(-SailHead[Before].X, SailHead[Before].Y), HeadAfter = FMath::Atan2(-SailHead[Before + 1].X, SailHead[Before + 1].Y);
+			CourseTurn = FMath::Atan2(FMath::Sin(HeadAfter - HeadBefore), FMath::Cos(HeadAfter - HeadBefore)) / SailEach;
+			CoursePace = SailFull > 1.0e-6 ? FVector::Dist2D(SailAt[Before], SailAt[Before + 1]) / SailFull : 0.0;
+		}
 	}
-	const double Span = FMath::Max(RouteMarks[Segment] - RouteMarks[Segment - 1], 1.0e-3);
-	FVector Position = FMath::Lerp(Route[Segment - 1], Route[Segment], (Target - RouteMarks[Segment - 1]) / Span);
+	else
+	{
+		const double Target = Eased * RouteMarks.Last();
+		while (Segment < RouteMarks.Num() - 1 && RouteMarks[Segment] < Target)
+		{
+			++Segment;
+		}
+		const double Span = FMath::Max(RouteMarks[Segment] - RouteMarks[Segment - 1], 1.0e-3);
+		Position = FMath::Lerp(Route[Segment - 1], Route[Segment], (Target - RouteMarks[Segment - 1]) / Span);
+	}
 	// Picked up, carried, set down.
 	if (bLiftOnMarch)
 	{
@@ -1438,7 +1753,18 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// (Seam-2: or shown in the turn nearest the eye, where the map has said so. Then it does not leave the table at the
 	// seam at all: it sails on across it, and the eye comes round with it.)
 	SetActorLocation(Shown(Position));
-	if (bSailing)
+	if (bCourse)
+	{
+		// Her bows as her course has them (a fleet's model has its bows toward its own +Y). The table may have been
+		// turned to a new eye since the course was laid: what it has turned by comes on over the last fifth of her time,
+		// so she still comes to rest facing it, with no snap.
+		const double Late = FMath::SmoothStep(0.8, 1.0, Progress);
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(-CourseBows.X, CourseBows.Y)) + FRotator::NormalizeAxis(SailEndYaw - SailLaidYaw) * Late;
+		SetActorRotation(FRotator(0.0, Yaw, 0.0));
+		const double Turned = FMath::DegreesToRadians(Yaw);
+		BendWake(CourseRan, FVector2D(-FMath::Sin(Turned), FMath::Cos(Turned)), Progress);
+	}
+	else if (bSailing)
 	{
 		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
 		// she comes in: turned a little each frame, never snapped.
@@ -1455,16 +1781,21 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		const double Rate = Progress < 0.84 ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
 		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * Rate), 0.0));
 	}
+	if (Hulls.Num() > 0)
+	{
+		RideHulls(DeltaSeconds, CourseTurn, CoursePace); // (second part: her ships heel outward as her head swings, and ride the swell)
+	}
 
 	if (Progress >= 1.0)
 	{
 		bMarching = false;
-		SetActorTickEnabled(false);
+		SetActorTickEnabled(Hulls.Num() > 0 && !bRemoveOnArrival); // (her ships may have a heel still to lose, or the swell to ride: the next tick says)
 		if (bSailing)
 		{
 			bSailing = false;
 			SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
 		}
+		StraightenWake();
 		if (bHasWake && Body)
 		{
 			Body->SetMeshSectionVisible(1, true);
@@ -1490,6 +1821,13 @@ void AArmyPiece::SetShadows(bool bCast)
 		{
 			Body->SetCastShadow(bCast);
 			TheaterSpeed::NoteMade(TheaterSpeed::EMade::ShadowFlips); // (speed log: its whole model is handed to the draw thread again)
+		}
+		for (UProceduralMeshComponent* HullMesh : Hulls)
+		{
+			if (HullMesh)
+			{
+				HullMesh->SetCastShadow(bCast); // (a fleet's ships, where each has a mesh of her own)
+			}
 		}
 		if (Camp)
 		{

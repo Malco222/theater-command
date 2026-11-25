@@ -75,6 +75,7 @@ import { FAR_STAGE } from './stage';
 import type { Game, Nation, Region } from './types';
 import { addCorps, allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
 import { drawMen } from './manpower';
+import { numbersUnderFlag } from './armies';
 import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
 import { station, stationBars, stationed, stationShut, unstation, whyStationBars } from './far';
 import { HISTORY, bookDate, onBook, stopDef } from './history';
@@ -504,7 +505,8 @@ export function demand(g: Game): boolean {
   if (!ground.length) return false;
   const P = PACIFIC!, D = P.demand, J = g.nations[P.power], V = g.nations[D.of];
   const ids = new Set(ground.map((r) => r.id));
-  for (const c of g.corps) if (c.nat === D.of && !c.dead && ids.has(c.reg)) { c.raised ??= D.of; c.nat = J.id; c.hold = true; c.stay = true; }
+  // (Under its new flag no division of it reads by a number that is another's name there: armies.ts numbersUnderFlag.)
+  for (const c of g.corps) if (c.nat === D.of && !c.dead && ids.has(c.reg)) { c.raised ??= D.of; c.nat = J.id; c.hold = true; c.stay = true; numbersUnderFlag(g, c); }
   g.airFleets = g.airFleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   g.fleets = g.fleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   for (const r of ground) { r.ctrl = J.id; r.cap = false; r.since = g.turn; station(g, r, J.id); }
@@ -716,7 +718,8 @@ export function keptForces(g: Game, nat: string, by: string, leave?: (r: Region)
   }
   if (!kept.size) return kept;
   // (A kept corps is still its own army's: by the book it fights at that army's figure. Rider b626 to ruling 234.)
-  for (const c of g.corps) if (c.nat === nat && !c.dead && kept.has(c.reg)) { c.raised ??= nat; c.nat = kept.get(c.reg)!; c.hold = true; }
+  // (Nor does a division of it read by a number that is another's name under the keeper's flag: armies.ts numbersUnderFlag.)
+  for (const c of g.corps) if (c.nat === nat && !c.dead && kept.has(c.reg)) { c.raised ??= nat; c.nat = kept.get(c.reg)!; c.hold = true; numbersUnderFlag(g, c); }
   for (const f of g.fleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
   // (A kept air group still reads its own country's row for what it is kept at and how it flies: air.ts rowOf.)
   for (const f of g.airFleets) if (f.nat === nat && kept.has(f.base)) { f.raised ??= nat; f.nat = kept.get(f.base)!; }

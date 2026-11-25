@@ -44,6 +44,7 @@ import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
+import { strafeSection, type StrafeSection } from './strafers';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -828,6 +829,12 @@ export interface RaidPlan {
    * the target's defences, and the forecast as a band. Out of its sight the plan's own figures are the band's high end.
    */
   fog?: RaidFog;
+  /**
+   * A raid on troops with the strafers' rule on (release 2, strafers.ts), on the player's own card only: the section
+   * LIKELY TO GO DOWN AND STRAFE, the UI director's words of 15:04Z. Its names are the groups the card's own forecast
+   * names (forecastAir's strafers, strafersExpected's ids from the same call), so its words and its figures cannot part.
+   */
+  strafe?: StrafeSection;
 }
 
 /**
@@ -1084,6 +1091,12 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.foeLossN = Math.round(fc.foeLoss);
   plan.effects = effectsOf(g, kind, target, fc, nat);
   plan.figures = figuresOf(g, kind, target, fc, nat);
+  // (The strafers' words, strafers.ts: only where the card's forecast priced its strafers, the switch on, and only on the
+  // player's own card; a staff's plan, and so any raid on the player, carries none.)
+  if (kind === 'ground' && fc.strafers && nat === g.human) {
+    const ids = fc.strafers;
+    plan.strafe = strafeSection(a.att.filter((x) => ids.includes(x.f.id)).map((x) => x.f.name));
+  }
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
   // (A strike on ships: the ships' own guns are part of that toll, and the card names them.)

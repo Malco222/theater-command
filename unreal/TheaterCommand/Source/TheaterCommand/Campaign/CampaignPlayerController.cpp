@@ -373,7 +373,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	{
 		if (Session->IsRunning() && !Session->GetView().CommandName.IsEmpty() && !Session->GetView().Human.IsEmpty())
 		{
-			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, building and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
+			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, recruitment, towns and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
 		}
 	}
 	// (Release 2) Earned nicknames and supply columns, each its own switch, kept by the campaign (nicknames.ts, columns.ts).
@@ -1476,6 +1476,7 @@ void ACampaignPlayerController::EnterCampaign()
 	EndAsk.bVisible = false;
 	ForgetScramble(); // (release 2, the scramble offer: nor a SCRAMBLE card, nor the month it held; the reviewer, 25 November)
 	RoundSeen.Reset();
+	ToDoSeen.Reset();
 	// (The code checker, 17 November.) The last month's newsreel and the first night's word belong to the campaign just
 	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
 	LastReel.Reset();
@@ -1844,6 +1845,64 @@ bool ACampaignPlayerController::IsTownCardStyle()
 
 namespace
 {
+	// (Release 2; the UI director's seamless plan for Brian's 25 November ask, fix 4: one NEXT.) Tab past the armies
+	// goes round the month's list; off until the art director has passed the Mac's stills; -TheaterNextAll for a run.
+	TAutoConsoleVariable<int32> CVarNextAll(
+		TEXT("tc.UI.NextAll"), 0,
+		TEXT("1: once every army has its orders, Tab (NEXT ARMY) goes on round the month's list under END THE MONTH, opening each row's screen once; 0 as before (as -TheaterNextAll)."));
+}
+
+bool ACampaignPlayerController::IsNextAllStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterNextAll"));
+	return bAsked || CVarNextAll.GetValueOnGameThread() != 0;
+}
+
+int32 ACampaignPlayerController::NextToDoIndex() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!IsNextAllStyle() || !Session || !Session->GetView().bHumanUp || bWatching || Opening.bVisible)
+	{
+		return INDEX_NONE;
+	}
+	const TArray<FCampaignView::FToDo>& List = Session->GetView().ToDo;
+	for (int32 Index = 0; Index < List.Num(); ++Index)
+	{
+		if (!List[Index].Screen.IsEmpty() && !ToDoSeen.Contains(List[Index].Screen))
+		{
+			return Index;
+		}
+	}
+	return INDEX_NONE;
+}
+
+bool ACampaignPlayerController::StepToDo()
+{
+	const FCampaignSession* Session = GetSession();
+	if (!IsNextAllStyle() || !Session)
+	{
+		return false;
+	}
+	const int32 Index = NextToDoIndex();
+	if (Index == INDEX_NONE)
+	{
+		if (ToDoSeen.Num() == 0)
+		{
+			return false; // (nothing on the list: Tab says what it always said)
+		}
+		// (round them all: the next Tab begins the list again)
+		ToDoSeen.Reset();
+		Notify(TEXT("Every army has its orders, and you have been round this month's list. Press Enter to end the month."), 4.0);
+		return true;
+	}
+	// (a row's screen is opened once a round: two rows that open the same screen are one stop)
+	ToDoSeen.Add(Session->GetView().ToDo[Index].Screen);
+	PressToDo(Index);
+	return true;
+}
+
+namespace
+{
 	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy and hard to
 	// manage. I want the UI and user experience to feel seamless and easy to manage the cities, recruitment, ect".) THE
 	// HOME FRONT, off until the art director has passed the Mac's stills of it; -TheaterHomeFront turns it on for a run.
@@ -1856,6 +1915,21 @@ bool ACampaignPlayerController::IsHomeFrontStyle()
 {
 	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterHomeFront"));
 	return bAsked || CVarHomeFront.GetValueOnGameThread() != 0;
+}
+
+namespace
+{
+	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy".) Screens
+	// that ease in and out, off until the art director has passed the Mac's stills of them; -TheaterEase turns it on.
+	TAutoConsoleVariable<int32> CVarEase(
+		TEXT("tc.UI.Ease"), 0,
+		TEXT("1 eases the rooms (the arsenal, the ledger, the generals, research, diplomacy, the guide and every page) in and out over about an eighth of a second, and fades and slides the province panel in; 0 they appear and vanish at once, as before (as -TheaterEase)."));
+}
+
+bool ACampaignPlayerController::IsEaseStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterEase"));
+	return bAsked || CVarEase.GetValueOnGameThread() != 0;
 }
 
 void ACampaignPlayerController::OpenHomeFront()
@@ -1901,6 +1975,7 @@ void ACampaignPlayerController::OpenTownFromHome(int32 Region)
 		ClosePage();
 		ShowProvince(Region);
 		OpenTownCard();
+		TownFromHomeRegion = IsEaseStyle() && IsTownCardOpen() ? Region : INDEX_NONE; // (release 2, tc.UI.Ease: Esc goes back to the board)
 		return;
 	}
 	PressPage(FString::Printf(TEXT("open:town:%d"), Region));
@@ -1945,6 +2020,7 @@ void ACampaignPlayerController::OpenTownCard()
 
 void ACampaignPlayerController::CloseTownCard()
 {
+	TownFromHomeRegion = INDEX_NONE; // (release 2, tc.UI.Ease)
 	if (bTownCardOpen)
 	{
 		bTownCardOpen = false;
@@ -2064,6 +2140,8 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	PageTrail.Reset(); // (release 2, tc.UI.Ease: a page opened from outside its rooms begins a new way back)
+	TownFromHomeRegion = INDEX_NONE;
 	if (Id == TEXT("home"))
 	{
 		// (Release 2, THE HOME FRONT) Opened afresh: the towns that can take a building, none unfolded, none kept.
@@ -2094,7 +2172,54 @@ void ACampaignPlayerController::ClosePage()
 		RejoinHeldBack(); // (closed without its order)
 	}
 	bPageOpen = false;
+	PageTrail.Reset(); // (release 2, tc.UI.Ease)
 	LessonPageChanged();
+}
+
+bool ACampaignPlayerController::StepBackPage()
+{
+	FCampaignSession* Session = GetSession();
+	if (!IsEaseStyle() || !Session || !bPageOpen || PageTrail.Num() == 0)
+	{
+		return false;
+	}
+	// (Release 2, tc.UI.Ease) Back through the door it came in by: the room it was reached from, read afresh. A room
+	// that no longer reads (what it was of has gone) is passed by for the one before it.
+	while (PageTrail.Num() > 0)
+	{
+		const FString Back = PageTrail.Pop();
+		FOfficePage Was = Session->Page(Back, SelectedRegion);
+		if (Was.bValid)
+		{
+			if (HeldBackSquadron != INDEX_NONE && Back != HeldBackCard)
+			{
+				RejoinHeldBack(); // (as a room's own door does: the split was for the card being left)
+			}
+			CampaignSounds::Play(this, TEXT("click"), 0.6f);
+			Was.Revision = Page.Revision + 1;
+			Page = MoveTemp(Was);
+			LessonPageChanged();
+			return true;
+		}
+	}
+	return false;
+}
+
+void ACampaignPlayerController::ReturnToHomeFront()
+{
+	// (Release 2, tc.UI.Ease) As OpenPage("home"), which begins the board afresh, but kept as he left it.
+	const int32 Filter = HomeFilter, Unfolded = HomeUnfolded, Rows = HomeRows, Openings = HomeOpenings;
+	const TSet<int32> Kept = HomeKept;
+	OpenPage(TEXT("home"));
+	if (bPageOpen && Page.Home.bValid)
+	{
+		HomeFilter = Filter;
+		HomeUnfolded = Unfolded;
+		HomeRows = Rows;
+		HomeOpenings = Openings; // (the same opening: each list keeps its place)
+		HomeKept = Kept;
+		++Page.Revision;
+	}
 }
 
 void ACampaignPlayerController::PressPage(const FString& Action)
@@ -2173,9 +2298,26 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		// A door from one room to another: the raid planner from the airfield, and back.
 		CampaignSounds::Play(this, TEXT("click"), 0.6f);
 		const int32 Opened = Page.Revision + 1;
-		Page = Session->Page(Action.Mid(5), SelectedRegion);
+		const FString Left = Page.Id, Into = Action.Mid(5);
+		Page = Session->Page(Into, SelectedRegion);
 		Page.Revision = Opened;
 		bPageOpen = Page.bValid;
+		if (IsEaseStyle() && bPageOpen && Left != Into)
+		{
+			// (Release 2, tc.UI.Ease) The way back for Esc: a room's own BACK takes the last step off it, any other door adds one.
+			if (PageTrail.Num() > 0 && PageTrail.Last() == Into)
+			{
+				PageTrail.Pop();
+			}
+			else if (!Left.IsEmpty())
+			{
+				PageTrail.Add(Left);
+				if (PageTrail.Num() > 16)
+				{
+					PageTrail.RemoveAt(0);
+				}
+			}
+		}
 		LessonPageChanged();
 		return;
 	}
@@ -5968,6 +6110,10 @@ void ACampaignPlayerController::NextArmy()
 	// touched before the others, then the nearest; each is shown once before any is shown again.
 	if (Session->GetView().Round.All <= 0)
 	{
+		if (StepToDo())
+		{
+			return;
+		}
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
@@ -5985,6 +6131,10 @@ void ACampaignPlayerController::NextArmy()
 	const int32 Next = Session->NextArmy(RoundSeen, From);
 	if (!Map->GetData().Regions.IsValidIndex(Next))
 	{
+		if (StepToDo())
+		{
+			return;
+		}
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
@@ -6075,7 +6225,7 @@ void ACampaignPlayerController::Escape()
 			AtomBackAt = FPlatformTime::Seconds();
 			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
 		}
-		else
+		else if (!StepBackPage()) // (release 2, tc.UI.Ease: back to the room it was reached from, where there is one)
 		{
 			ClosePage();
 		}
@@ -6090,7 +6240,13 @@ void ACampaignPlayerController::Escape()
 	}
 	else if (IsTownCardOpen())
 	{
+		// (release 2, tc.UI.Ease: a town opened from THE HOME FRONT goes back to the board, as he left it)
+		const bool bToBoard = IsEaseStyle() && TownFromHomeRegion != INDEX_NONE && TownFromHomeRegion == TownBar.Region;
 		CloseTownCard(); // (tc.UI.TownCard: Esc goes back one card, to the province)
+		if (bToBoard)
+		{
+			ReturnToHomeFront();
+		}
 	}
 	else if (AgentInHand != INDEX_NONE)
 	{
@@ -13804,6 +13960,7 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	const FCampaignView& View = Session->GetView();
 	RoundSeen.Reset(); // (the code checker, 17 November: a new month, and Tab's round of the armies begins again)
+	ToDoSeen.Reset(); // (release 2, tc.UI.NextAll: and its round of the month's list)
 	// (Release 2, map run 7: tc.Speed.MonthSpread. The new holders and the armies in the month's frame; the rest of the
 	// table a frame after, as an order's answer has it.)
 	ShowWar(View, TArray<FCorpsMove>(), nullptr, TheaterSpeed::MonthSpread());

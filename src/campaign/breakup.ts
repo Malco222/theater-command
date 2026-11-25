@@ -153,10 +153,14 @@ export function rejoin(g: Game, part: Corps, into: Corps): boolean {
   if (part.pressed) into.pressed = true;
   if ((part.blows ?? 0) > (into.blows ?? 0)) into.blows = part.blows;
   if ((part.whole?.length ?? 0) > (into.whole?.length ?? 0)) into.whole = part.whole;
-  // Whole again: the corps it all came from needs no record of its parts, nor its divisions' names written out.
+  // Whole again: the corps it all came from needs no record of its parts, nor its divisions' names written out
+  // where its own name gives them. (A corps a dated row laid may hold other divisions than its name lists, some of
+  // them standing with the corps that had them already: a division is laid once, drawn.ts. Those names it keeps.)
   if (into.part === undefined && into.whole !== undefined && into.divs >= into.whole.length && !g.corps.some((o) => o !== part && !o.dead && o.part === into.id)) {
     delete into.whole;
+    const written = into.names;
     delete into.names;
+    if (divisionsOf(g, into).some((d, i) => d.name !== written[i]?.[0])) into.names = written;
   }
   removeCorps(g, part);
   g.supplyDirty = true;

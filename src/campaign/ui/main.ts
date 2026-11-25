@@ -85,6 +85,7 @@ import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, ringStretch, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, gunsTo, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
+import { strafedLine, type StrafeSection } from '../strafers';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
@@ -3070,7 +3071,7 @@ function alertList(): Alert[] {
     });
   }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy', crowded: 'air' };
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'towns', tradecut: 'towns', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy', crowded: 'air' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
@@ -6609,6 +6610,15 @@ const MOON_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><pa
 const typeLines = (t: { types: string; edge: string | null; pilots?: string } | undefined | null): string =>
   t ? `<div class="sub" title="${esc(FIGHTERS.words.tooltip)}">${esc(t.types)}${t.edge ? `<br>${esc(t.edge)}` : ''}${t.pilots ? `<br>${esc(t.pilots)}` : ''}</div>` : '';
 
+/**
+ * (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z.) The card's section at
+ * the foot of the raid's forces: the heading, the muted line once and the groups a row each, or the line for none.
+ * No colour: no icon, no tag, the card's own muted and empty lines.
+ */
+const strafeHtml = (x: StrafeSection): string => `<h3>${esc(x.heading)}</h3>${x.names.length
+  ? `<p class="sub" style="margin:-2px 0 6px">${esc(x.note)}</p>${x.names.map((n) => `<div class="pickrow"><span class="grow"><b>${esc(n)}</b></span></div>`).join('')}`
+  : `<div class="empty">${esc(x.none)}</div>`}`;
+
 function raidCard(): string {
   const m = ui.modal!;
   const kind = m.raid as RaidKind;
@@ -6662,6 +6672,7 @@ function raidCard(): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Raid planner · ${date(g.turn)}</div><h2>${esc(p.title)}</h2></header>
     <div class="body">${p.sky ? `<div class="note"><b>The sky.</b> ${esc(p.sky)}</div>` : ''}${head}
       <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}${stayers}
+      ${p.strafe && !p.why ? strafeHtml(p.strafe) : ''}
       ${could.length || daytime ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}${daytime}` : ''}
       ${p.why ? '' : `<h3>Rising to meet them</h3>${meets}<h3>Battle Ticket</h3>${ticketTable(p.lines)}`}
       ${cannot.length ? `<details class="cannot"><summary>${cannot.length} group${cannot.length === 1 ? '' : 's'} cannot go</summary>${cannot.map((s) => `<div class="pickrow">${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(s.baseName)} · ${esc(s.why ?? '')}</span></span></div>`).join('')}</details>` : ''}
@@ -6744,7 +6755,7 @@ function airReportCard(r: AirReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · ${aw ? 'air raid' : 'air campaign'}, ${what} · ${date(r.turn)}</div><h2>${esc(airTitle(r))}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${esc(r.result)}${sky}</div>
+      <div class="sub">${esc(r.result)}${sky}${strafedLine(r, g.human) ? ` ${esc(strafedLine(r, g.human))}` : ''}</div>
       <div class="vs"><div><h4>${chip(r.attNat)} ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} ${r.defNat ? chip(r.defNat) : ''}</h4>${side(r.def)}</div></div>
       <h3>What the campaign map fed into the battle</h3>
       ${ticketTable(r.lines)}
@@ -7097,7 +7108,7 @@ const capWord = (c: number): string => (c >= 100 ? 'all' : c === 75 ? 'three qua
 /** The three depths side by side, the chosen one lit, and under them what the chosen one puts on the player's desk. */
 function depthPicker(chosen: string | null, act: string, live = false): string {
   const on = DEPTH.depths.find((d) => d.id === chosen) ?? null;
-  const yours = on ? (['research', 'build', 'diplomacy', 'spies', 'air', 'navy'] as DeskId[]).filter((k) => !on.staff.includes(k)) : [];
+  const yours = on ? (['research', 'build', 'towns', 'diplomacy', 'spies', 'air', 'navy'] as DeskId[]).filter((k) => !on.staff.includes(k)) : [];
   const note = on
     ? `<p>${esc(on.blurb)}</p><ul class="one"><li><b>On your desk:</b> the armies and their battles${yours.length ? `, ${esc(deskNames(yours))}` : ''}.</li>${on.staff.length ? `<li><b>Your staff runs:</b> ${esc(deskNames(on.staff))}.</li>` : ''}<li>${on.cabinet ? (on.canFall ? 'A war cabinet sits behind you, and it can bring you down.' : 'A war cabinet sits behind you. It cannot bring you down.') : 'No war cabinet.'} ${on.fog ? 'The fog of war lies on the map.' : 'No fog of war: every army is in plain sight.'}</li></ul>`
     : '<p>You have made a mix of your own from the switches below. Pick a depth to set them all at once.</p>';
@@ -7113,9 +7124,9 @@ function deskRow(d: CommandView['desks'][number], full: boolean): string {
 
 /** What the staff may spend in a month: four steps, and what is left of this month's allowance. */
 function capPicker(v: CommandView): string {
-  const spends = v.desks.some((d) => d.staff && (d.id === 'build' || d.id === 'spies'));
+  const spends = v.desks.some((d) => d.staff && (d.id === 'build' || d.id === 'towns' || d.id === 'spies'));
   return `<div class="gclevels four">${v.caps.map((c) => `<button class="gclevel${c === v.cap ? ' on' : ''}" data-act="setcap" data-cap="${c}" aria-pressed="${c === v.cap}"><b>${esc(upFirst(capWord(c)))}</b><span>${c}% a month</span></button>`).join('')}</div>
-    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.${v.capNext ? ` The new share takes hold from next month: this month's allowance was already drawn.` : ''}` : 'Nothing your staff runs now spends money: this takes hold when you hand it building and trade, or the secret service.'}</small></div>`;
+    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.${v.capNext ? ` The new share takes hold from next month: this month's allowance was already drawn.` : ''}` : 'Nothing your staff runs now spends money: this takes hold when you hand it recruitment, towns and trade, or the secret service.'}</small></div>`;
 }
 
 /** The fog of war: on, or lifted. */
