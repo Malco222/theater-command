@@ -385,6 +385,11 @@ namespace LandMen
 		float Lie = 0.f;
 	};
 
+	/** The front a place on the earth is dressed for when the battle's file does not say ("desert", "china", "pacific",
+	 * "south", "east" or "west"): the armies' colours and finishes are picked by it. Longitude is east positive, and may
+	 * be given past the date line either way. */
+	const char* FrontAt(double Lat, double Lon);
+
 	class Crowd
 	{
 	public:

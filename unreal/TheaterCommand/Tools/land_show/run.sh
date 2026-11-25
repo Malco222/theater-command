@@ -30,6 +30,9 @@ $CXX $FLAGS -pthread "$HERE/land_vat_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OU
 # The crowd's poses' picture as LandVat hands it to M_LandCrowd (Battle/LandVatPack.h): layout, lookups, halfs, bounds.
 $CXX $FLAGS -pthread "$HERE/land_vat_pack_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_vat_pack_test"
 STATUS=0
+# The men's front by the place on the earth (the Pacific past the date line, Formosa off the China coast).
+$CXX $FLAGS -pthread "$HERE/land_front_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_front_test"
+"$OUT/land_front_test" || STATUS=1
 for F in "$@"; do
   "$OUT/land_show_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
   "$OUT/land_bank_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1

@@ -4225,12 +4225,7 @@ namespace LandMen
 				// From the place on the earth, roughly: the lead can say it outright.
 				const J& LL = Root["sky"]["latLon"];
 				const double Lat = LL.Number(0, 49.0), Lon = LL.Number(1, 0.0);
-				if (Lat < 36.0 && Lon > -18.0 && Lon < 40.0) I.Front = "desert";
-				else if (Lon >= 95.0 && Lon < 125.0 && Lat > 18.0) I.Front = "china";
-				else if (Lon >= 95.0 || (Lat < 20.0 && Lon > 60.0)) I.Front = "pacific";
-				else if (Lat >= 36.0 && Lat < 47.0 && Lon >= 6.0 && Lon < 24.0) I.Front = "south";
-				else if (Lon >= 15.0) I.Front = "east";
-				else I.Front = "west";
+				I.Front = FrontAt(Lat, Lon);
 			}
 		}
 
@@ -5043,6 +5038,22 @@ namespace LandMen
 		const auto Found = Inner->Armies.find(Army);
 		return Found != Inner->Armies.end() ? Found->second.StandIn : std::string();
 	}
+	const char* FrontAt(double Lat, double Lon)
+	{
+		while (Lon > 180.0) Lon -= 360.0;
+		while (Lon < -180.0) Lon += 360.0;
+		if (Lat < 36.0 && Lon > -18.0 && Lon < 40.0) return "desert";
+		// (the China coast and the country behind it. Formosa, the Pescadores and the north of Luzon, east of 119.5 and
+		// south of 26, are the Pacific's: the Japan and Pacific thread's finding of 25 November)
+		if (Lon >= 95.0 && Lon < 125.0 && Lat > 18.0 && !(Lon >= 119.5 && Lat < 26.0)) return "china";
+		// (the Pacific runs on past the date line: Hawaii, Midway, the Aleutians and Alaska, out to the sea off the
+		// Americas' own coast. Before, a place east of the line was read as a negative longitude and dressed for the west.)
+		if (Lon >= 95.0 || Lon < -125.0 || (Lat < 20.0 && Lon > 60.0)) return "pacific";
+		if (Lat >= 36.0 && Lat < 47.0 && Lon >= 6.0 && Lon < 24.0) return "south";
+		if (Lon >= 15.0) return "east";
+		return "west";
+	}
+
 	const std::string& Crowd::FrontName() const { return Inner->Front; }
 
 	void Crowd::SetFallKind(int Man, const std::string& Kind)
