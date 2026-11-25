@@ -1350,6 +1350,33 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     expect(line(offFog, 'Searchlights')).toBeUndefined();
     expect(line(offFog, 'Anti-aircraft guns')!.effect).toBe('They stop 45% of the bombing and bring down more of the bombers');
   });
+
+  it('a forecast under fog lights no more of the guns than the side counts, however many lights and guns truly stand', () => {
+    // Level 3 guns stand at the Ruhr, the side counts level 1, and level 3 searchlights light that one level and no more.
+    const r = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100 });
+    const fog = assessAir(r.g, [r.f], 'night', r.t, knownAs(1));
+    expect(fog.lights).toEqual({ level: 3, cloud: false, lit: 1 });
+    expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
+    expect(line(fog, 'Searchlights')!.effect).toBe('With radar laying the guns, they light every level of the guns, and they help the night fighters a little.');
+  });
+
+  it('a night raid flown under fog on raids is priced on the truth, exactly as with the fog off', () => {
+    const r = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100, fighters: true, ac: true });
+    setRaidFog(r.g, true);
+    const truth = r.a();
+    expect(truth.lights).toEqual({ level: 3, cloud: false, lit: 1 });
+    // The fog's low end counts no guns where none were seen, so its lights light none: the raid flown is not priced so.
+    const w = weighKnown(r.g, 'UK', [r.f], 'night', r.t);
+    expect(w.lo.a.lights).toEqual({ level: 3, cloud: false, lit: 0 });
+    const twin = structuredClone(r.g);
+    setRaidFog(twin, false);
+    const rep = fly(r.g, 'UK', 'night', r.t, [r.f], ':fog')!;
+    const rep0 = fly(twin, 'UK', 'night', r.t, [twin.airFleets.find((x) => x.id === r.f.id)!], ':fog')!;
+    expect(rep).not.toBeNull();
+    expect(rep.lights).toEqual(truth.lights);
+    expect(JSON.stringify(rep)).toBe(JSON.stringify(rep0));
+    expect(JSON.stringify(r.g.airFleets)).toBe(JSON.stringify(twin.airFleets));
+  });
 });
 
 // The ferry leg stays as it was, in the design director's terms of 19:44Z: a group met on its ferry leg meets no city
