@@ -3,8 +3,8 @@
 // teams ... units you can place at the begining of a battle on your side and they can then attack from the back").
 //
 // A machine-gun brigade ('mg') and a mortar brigade ('mor'): one division's worth each, raised as artillery is, never a
-// fighting corps on its own (fights(), game.ts), riding into an attack beside the corps that do without taking room on
-// the roads (limitAttackers). On the card: the machine guns stiffen a defence against men on foot, the mortars break up
+// fighting corps on its own (fights(), game.ts), going into an attack only beside the corps that do, and taking a place
+// on the roads there as any corps does (limitAttackers; the design director, 25 November 2026 21:33Z). On the card: the machine guns stiffen a defence against men on foot, the mortars break up
 // the fieldworks the attack goes in against. On the field each is a team block that fires from the rear (src/battle/
 // land, LAND.teams).
 //

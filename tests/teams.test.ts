@@ -8,7 +8,7 @@ import { offers } from '../src/campaign/arsenal';
 import { cancelBuild, corpsKinds, deliver, orderCorps, specOf } from '../src/campaign/economy';
 import { addCorps, aloneLine, assess, createGame, fights, limitAttackers, TEAMS_ALONE } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
-import { TEAMS, setTeams, teamsOn } from '../src/campaign/teams';
+import { TEAMS, isTeam, setTeams, teamsOn } from '../src/campaign/teams';
 import { runTurnAI } from '../src/campaign/turn';
 import { saveGame } from '../src/campaign/save';
 import { landTicket } from '../src/battle/land/ticket';
@@ -75,18 +75,26 @@ describe('switched on: built like artillery, named apart', () => {
     expect(n.corpsNo).toBe(no);
   });
 
-  it('they are no fighting corps: never forward alone, riding in beside the corps that fight without taking room on the roads', () => {
+  it('they are no fighting corps: never forward alone, and beside the corps that fight each takes a place on the roads as any corps does', () => {
     const g = grand();
     const { target, from } = front(g);
     const mg = addCorps(g, 'GER', 'Test MG', 'mg', 1, from.id, {}), mor = addCorps(g, 'GER', 'Test Mortars', 'mor', 1, from.id, {});
     expect(fights(mg)).toBe(false);
     expect(limitAttackers(g, [mg, mor], target)).toEqual([]);
     expect(aloneLine([mg, mor])).toBe(TEAMS_ALONE);
-    // Enough infantry to fill the roads: the teams still go, on top.
+    // Enough infantry to fill the roads: no team rides past a full frontage (the design director, 21:33Z).
     const inf = Array.from({ length: 5 }, (_, i) => addCorps(g, 'GER', `Test Infantry ${i}`, 'inf', 3, from.id, {}));
     const without = limitAttackers(g, inf, target), withTeams = limitAttackers(g, [...inf, mg, mor], target);
-    expect(withTeams.filter((c) => c.kind === 'inf').map((c) => c.id)).toEqual(without.map((c) => c.id));
-    expect(withTeams.filter((c) => c.kind === 'mg' || c.kind === 'mor')).toHaveLength(Math.min(2, TEAMS.frontage));
+    expect(withTeams.map((c) => c.id)).toEqual(without.map((c) => c.id));
+    expect(withTeams.some(isTeam)).toBe(false);
+    // With a place to spare on the roads, a team takes it beside the infantry.
+    const one = limitAttackers(g, [inf[0], mg], target);
+    expect(one.map((c) => c.id)).toEqual([inf[0].id, mg.id]);
+    // And it takes it as any corps would: in a full road the place is a corps' place, never one more.
+    const room = without.length;
+    const short = limitAttackers(g, [...inf.slice(0, room - 1), mg, mor], target);
+    expect(short).toHaveLength(room);
+    expect(short.filter(isTeam)).toHaveLength(1);
   });
 
   it('on the card: the machine guns stiffen a defence against men on foot; the mortars break up its fieldworks', () => {
