@@ -6,8 +6,10 @@ no recording carries an hour, a sky or a swell. These three are real recordings 
 a Mac review can see a dawn, a gale and a swell on battles that were really fought by the show. Each is labelled a
 stand-in in its "what" and its title. The views (what the ships did) are the recording's own, byte for byte.
 
-  samar-dawn.json           the action off Samar at 6.8 h: the sun 4 deg up from 095, cumulus at 0.55 with rain 0.3,
-                            a 1.5 m swell at 11 s from 080
+  samar-dawn.json           the action off Samar at 6.8 h: the sun 6 deg up from 095, seen 20 km, broken cumulus at
+                            0.50 (base 600 m, top 3,500 m) with rain squalls at 0.7, a 1.5 m swell at 11 s from 080
+                            (its sky is the weather's, Tools/sea_waves/stand-ins/weather_days.py: the squalls the
+                            escort carriers hid in are the day's point)
   north-atlantic-gale.json  the stand-in convoy night in a gale: wind 19 m/s, a deck at 0.9, rain 0.5, vis 3,000 m, a
                             4 m swell at 13 s running with the wind
   fleet-swell.json          light ships against battleships with a Mediterranean swell, 1.2 m at 9 s from 300
@@ -51,8 +53,8 @@ def main():
     made("Content/Data/SeaBattles/samar.json", "samar-dawn.json", "samar-dawn",
          "The action off Samar at dawn (stand-in)",
          {"when": {"year": 1944, "month": 9, "hour": 6.8},
-          "light": {"sun": {"up": 4, "from": 95}},
-          "sky": {"cover": 0.55, "kind": "cumulus", "base": 600, "top": 2400, "rain": 0.3, "word": "squally"},
+          "light": {"sun": {"up": 6, "from": 95}, "vis": 20000},
+          "sky": {"cover": 0.50, "kind": "cumulus", "base": 600, "top": 3500, "rain": 0.7, "word": "broken cloud, rain squalls"},
           "sea": {"swell": {"height": 1.5, "period": 11, "from": 80}, "fetch": 900}})
     gale_from = 4.2  # (the stand-in night's own wind bearing, radians: the swell runs with it)
     made("Tools/sea_show/stand-ins/convoy-night.json", "north-atlantic-gale.json", "north-atlantic-gale",

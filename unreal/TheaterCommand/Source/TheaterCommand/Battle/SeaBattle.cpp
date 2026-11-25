@@ -1803,6 +1803,23 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		}
 	}
 	TakeTheRoom(SunAzimuth, SunElevation);
+	// The clouds and the weather (the release 2 ocean plan, step 13): the day's sky from the recording's field, laid
+	// through the air battle's own clouds, with the cloud dome, the clouds' shade on the sea and the far rain behind
+	// their own switches. Nothing is drawn unless one is asked for.
+	{
+		SkyWeather = MakeUnique<FSeaWeather>();
+		FSeaWeather::FRoom WeatherRoom;
+		WeatherRoom.Owner = this;
+		WeatherRoom.Root = Root;
+		WeatherRoom.Key = BattleKey;
+		WeatherRoom.Sun = Stage ? Stage->TowardSun() : FRotator(SunElevation, SunAzimuth, 0.0).Vector();
+		WeatherRoom.UnitsPerMetre = UnitsPerMetre;
+		// (a night action: light{sun} under the horizon, as the convoy nights give it)
+		WeatherRoom.bNight = S.Rec.Board.bLight && S.Rec.Board.SunUp < 0.0;
+		WeatherRoom.bPictures = !ShotFolder.IsEmpty();
+		const SeaShow::Vec Blow = S.Show.Wind();
+		SkyWeather->Begin(WeatherRoom, SeaLook, Text, Seed, Middle, Middle, FVector2D(Blow.X, Blow.Y));
+	}
 	if (Effects)
 	{
 		// (the sky is set: the kit's far smoke pales into the haze the screen shows at the horizon)
@@ -2122,6 +2139,12 @@ void ASeaBattle::GiveBackTheRoom()
 		return;
 	}
 	bRoomTaken = false;
+	// The weather's hook (step 13): the key lamp's light function given back as it was, and the dome, the sheets and
+	// the rain taken down.
+	if (SkyWeather)
+	{
+		SkyWeather->GiveBack();
+	}
 	for (const FKeptHaze& Kept : KeptHazes)
 	{
 		if (UExponentialHeightFogComponent* Fog = Kept.Haze.Get())
@@ -6064,7 +6087,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		}
 		const FVector2D Aside(Way.Y, -Way.X);
 		const FVector2D From = A - Way * 2200.0 + Aside * 1500.0;
-		OutEye = World(From.X, From.Y, 1300.0);
+		OutEye = World(From.X, From.Y, SkyWeather ? SkyWeather->OverviewHeight() : 1300.0); // (step 13: under a deck the dome draws)
 		OutLook = World(Middle.X, Middle.Y, 0.0);
 		OutLens = 55.0;
 		return true;
@@ -6146,6 +6169,12 @@ void ASeaBattle::AimEye()
 	EyeFacing = Looking.Rotation();
 	EyeLens = Lens;
 	ShotNow = Want;
+	// The weather's hook (step 13): the cloud dome round the eye, painted again at each cut; the far deck sheet, the
+	// haze band and the rain where they are laid.
+	if (SkyWeather)
+	{
+		SkyWeather->Tick(EyeAt, TicksSinceCut == 0, S.BattleT);
+	}
 	// U1 hook (under water): a burst's shock in the eye, on the camera only (never in EyeAt, so no cut comes of it)
 	Eye->SetActorLocationAndRotation(EyeAt + (Under ? Under->ShakeAt(S.BattleT) : FVector::ZeroVector), EyeFacing);
 	Eye->GetCameraComponent()->SetFieldOfView(static_cast<float>(EyeLens));
@@ -6226,6 +6255,10 @@ void ASeaBattle::SayFrameTimes()
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
 		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
 	SayThreadsAndLook(); // (the release 2 ocean plan, step 0)
+	if (SkyWeather)
+	{
+		SkyWeather->SayFrameTimes(); // (step 13: the cloud dome's paints)
+	}
 	if (Under)
 	{
 		Under->SayFrameTimes(); // U1 hook (under water): the frames under the water, said apart
@@ -6813,6 +6846,11 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		Under->End();
 		Under.Reset();
+	}
+	if (SkyWeather) // (step 13: a dome paint still on a pool thread waited for, and the room given back, however the scene ends)
+	{
+		SkyWeather->End();
+		SkyWeather.Reset();
 	}
 	Night.End(); // (step 11: night fighting's lamps out and its mesh cleared before the room is given back)
 	HideScreen();

@@ -120,9 +120,9 @@ int main(int Argc, char** Argv)
 		}
 		if (Name == "samar-dawn")
 		{
-			Check(Near(F.Hour, 6.8) && F.L.bSunFrom && Near(F.L.SunFrom, 95.0) && Near(F.L.SunUp, 4.0) && F.S.Kind == "cumulus" &&
-				Near(F.S.Cover, 0.55) && Near(F.S.Rain, 0.3) && F.W.bSwell && Near(F.W.SwellHeight, 1.5) && Near(F.W.SwellPeriod, 11.0) && Near(F.W.SwellFrom, 80.0),
-				"samar-dawn: 6.8 h, the sun 4 deg up from 095, cumulus 0.55 with rain 0.3, a 1.5 m swell at 11 s from 080");
+			Check(Near(F.Hour, 6.8) && F.L.bSunFrom && Near(F.L.SunFrom, 95.0) && Near(F.L.SunUp, 6.0) && Near(F.L.Vis, 20000.0) && F.S.Kind == "cumulus" &&
+				Near(F.S.Cover, 0.50) && Near(F.S.Top, 3500.0) && Near(F.S.Rain, 0.7) && F.W.bSwell && Near(F.W.SwellHeight, 1.5) && Near(F.W.SwellPeriod, 11.0) && Near(F.W.SwellFrom, 80.0),
+				"samar-dawn: 6.8 h, the sun 6 deg up from 095, seen 20 km, cumulus 0.50 to 3,500 m with rain squalls at 0.7, a 1.5 m swell at 11 s from 080");
 		}
 		if (Name == "north-atlantic-gale")
 		{

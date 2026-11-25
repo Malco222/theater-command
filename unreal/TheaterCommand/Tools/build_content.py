@@ -1918,6 +1918,67 @@ def build_under_sea():
     finish(m)
 
 
+def build_sky_dome():
+    """THE FLEET'S CLOUD DOME (the release 2 ocean plan, step 13; Battle/SeaWeather lays it, Battle/SeaSky paints it).
+    One dome of 48 by 12 quads at 150 km round the eye, showing the picture the game paints of the day's clouds as the
+    shot's own eye sees them ("Picture", SeaSky::PaintDome: the cloud's light in red, green and blue, each halved, as the
+    sheet of cloud shapes measures it, and how much cloud in alpha).
+
+    The picture is read by the way the eye looks, not by the dome's own quads, so where its quads fall never shows: the
+    way down the view ray is carried out to the clouds' own height ("LayerHeight", the day's middle, in the world's
+    units), moved back by how far the wind has carried them since the picture was painted ("Drift", the world's x and y),
+    and turned into a bearing and a height again. Across the picture is the bearing east of north over a turn; down it is
+    one less the sine of the height over the horizon, as SeaSky::DomeUv works them out.
+
+    Unlit and see-through, so the clouds lie over the stars and the sea's far edge and take the scene's own height fog;
+    two-sided, since the dome is only ever seen from inside. "Brightness" is the clouds' own ink (1.3, the air battle's
+    CloudBright) and "DayLight" the day's light share, which dims the whole of it with the day."""
+    m = new_material("M_SkyDome")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    # The way the eye looks: the engine's camera vector points from the pixel back to the eye, so the way out is its
+    # opposite, a metre long.
+    toward = one_in(m, unreal.MaterialExpressionNormalize,
+                    times(m, node(m, unreal.MaterialExpressionCameraVectorWS, -2200, 0), -1.0, -2000, 0), -1850, 0)
+    flat = node_from(m, unreal.MaterialExpressionComponentMask, toward, -1700, -100, r=True, g=True, b=False, a=False)
+    up = node_from(m, unreal.MaterialExpressionComponentMask, toward, -1700, 100, r=False, g=False, b=True, a=False)
+    high = scalar(m, "LayerHeight", 155000.0, -1700, 300)
+    # (out along the ray to the clouds' own height; a ray at or under the level is held just over it, so the lookup
+    # stays in the sky)
+    least = node(m, unreal.MaterialExpressionMax, -1500, 100)
+    _feed(m, least, "A", up)
+    _feed(m, least, "B", 0.001)
+    along = node(m, unreal.MaterialExpressionDivide, -1300, 200)
+    _feed(m, along, "A", high)
+    _feed(m, along, "B", least)
+    drift = vector(m, "Drift", (0.0, 0.0, 0.0, 0.0), -1700, 500)
+    carried = node(m, unreal.MaterialExpressionSubtract, -1000, 0)
+    _feed(m, carried, "A", times(m, flat, along, -1150, -100))
+    _feed(m, carried, "B", node_from(m, unreal.MaterialExpressionComponentMask, drift, -1500, 500, r=True, g=True, b=False, a=False))
+    north = node_from(m, unreal.MaterialExpressionComponentMask, carried, -850, -150, r=True, g=False, b=False, a=False)
+    east = node_from(m, unreal.MaterialExpressionComponentMask, carried, -850, -50, r=False, g=True, b=False, a=False)
+    # across: the bearing east of north over a turn (the engine's x is the board's north, its y the board's east)
+    bearing = node(m, unreal.MaterialExpressionArctangent2, -650, -100)
+    _feed(m, bearing, "Y", east)
+    _feed(m, bearing, "X", north)
+    u = one_in(m, unreal.MaterialExpressionFrac, times(m, bearing, 1.0 / (2.0 * 3.14159265358979), -500, -100), -350, -100)
+    # down: one less the sine of the height over the horizon
+    looked = one_in(m, unreal.MaterialExpressionNormalize, pair(m, carried, high, -850, 250), -650, 250)
+    v = one_in(m, unreal.MaterialExpressionOneMinus,
+               node_from(m, unreal.MaterialExpressionComponentMask, looked, -500, 250, r=False, g=False, b=True, a=False), -350, 250)
+    picture_of = picture(m, "Picture", pair(m, u, v, -200, 0), 0, 0, numbers=True)
+    # (the sheet's measure: the light painted is a half, so twice what is read; then the clouds' own ink and the day's)
+    light = times(m, picture_of, 2.0, 200, -100)
+    colour = node(m, unreal.MaterialExpressionVertexColor, 0, -400)
+    lit = times(m, times(m, light, colour, 400, -250),
+                times(m, scalar(m, "Brightness", 1.3, 200, -500), scalar(m, "DayLight", 1.0, 200, -400), 400, -450), 600, -300)
+    to_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    shown = times(m, (picture_of, "A"), (colour, "A"), 400, 300)
+    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, 600, 300), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
 def build_flak_lit():
     """Flak smoke inside a searchlight's beam: the painted shape again, as light added where the smoke is."""
     m = new_material("M_FlakLit")
@@ -1970,9 +2031,18 @@ def build_night_sky():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_UnderSea", build_under_sea), ("M_NightSky", build_night_sky)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_UnderSea", build_under_sea), ("M_SkyDome", build_sky_dome), ("M_NightSky", build_night_sky)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
-        build()
+        # (a material after the 15 pinned ones is built in a try of its own: a fault in a new one never stops the
+        # pinned materials, which the run before it has already written. The release 2 ocean plan, step 13)
+        if name in ("M_MapSurface", "M_Solid", "M_Highlight", "M_Flag", "M_Land", "M_Sea", "M_Wake", "M_FlakSmoke",
+                    "M_Beam", "M_FlakLit", "M_Glow", "M_Cloud", "M_DeckShade", "M_StageSea", "M_UnderSea"):
+            build()
+        else:
+            try:
+                build()
+            except Exception as why:
+                unreal.log_error(f"Theater Command: {MATERIALS}/{name} was not built: {why}")
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
 build_level()
