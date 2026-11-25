@@ -187,8 +187,10 @@ export function radarLays(g: Game, region: number): boolean {
  * raid, whatever the holder has built, so the guns fire by the dark cell or by the lights alone and no gun is laid by
  * radar on a lit bomber (`radar` false, `litShare` 0). The cause that blinds it is the caller's to price, once.
  * `at` (after `blind`, absent unless a caller says so): the guns' and the lights' levels to price in place of those
- * built at the target, as a forecast under fog on raids counts them (airfog.ts: the guns the side counts, and no
- * lights, for the fog's memory of a place keeps none). Fighter control's radar is read as it truly is either way.
+ * built at the target, as a forecast under fog on raids counts them (airfog.ts: the guns the side counts, and the
+ * lights as they truly are). Fighter control's radar is read as it truly is either way: the design director, 25 Nov
+ * 2026 19:44Z, ruled radar and searchlights known truth reads for the joint sight form (audit 28), never one true and
+ * one none.
  */
 export function cityNight(g: Game, target: number, bombers: number, sky: Sky, blind = false, at?: { guns: number; lights: number }): CityNight {
   const N = CITYDEF.night;

@@ -633,9 +633,10 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   const k = raidFogOn(g) && g.regions[t] ? skyKnown(g, nat, t, sight) : null;
   const hide = k && !k.live ? fogBits(k) : null;
   const gunsBit = (): string => (hide ? hide.guns : gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : '');
-  // City defences: the searchlights follow the guns where the guns are named as they are; where the fog hides or hedges
-  // the guns, no lights are named (the fog's memory of a place keeps none). Switch off: lightsAt reads none.
-  const lightsBit = (): string => (hide ? '' : lightsAt(g, t) ? `level ${lightsAt(g, t)} searchlights` : '');
+  // City defences: the searchlights follow the guns, as they truly are even where the fog hedges the guns: the design
+  // director, 25 Nov 2026 19:44Z, ruled radar and searchlights known truth reads for the joint sight form (audit 28),
+  // never one true and one none. Switch off: lightsAt reads none.
+  const lightsBit = (): string => (lightsAt(g, t) ? `level ${lightsAt(g, t)} searchlights` : '');
   if (kind === 'harbour') {
     const there = shipsInPort(g, t, nat);
     const seen = there.filter((f) => fleetKnown(g, f, nat) === 'exact');
