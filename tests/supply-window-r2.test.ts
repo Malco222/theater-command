@@ -6,7 +6,7 @@
 // step, as the player's month opens and closes, after his standing marches, and at the end of every call the table
 // makes. A picture never finds it stale, so a picture never refreshes it.
 import { describe, expect, it } from 'vitest';
-import { createGame } from '../src/campaign/game';
+import { createGame, keepSupply } from '../src/campaign/game';
 import { advanceMarches } from '../src/campaign/marches';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -101,19 +101,41 @@ describe('the supply window through the table', () => {
     for (const k of names) expect(table[k].name, k).toBe('supplyKept');
   });
 
-  it('a month through the table ends fresh, and looking at pictures on the way changes nothing', () => {
-    const text = saveGame(germany());
-    // The same month twice: once with a picture and the looks asked for at every chance, once with none.
+  it('a month through the table ends fresh, and looking on the way changes nothing', () => {
+    // A saved war whose supply is stale, as an order leaves it. (Before the supply window a look at a province's card
+    // drew supply afresh here and the quiet table did not: the two saves parted at once.)
+    const g = germany();
+    g.supplyDirty = true;
+    const text = saveGame(g);
+    // The same month twice: once with a picture and a province's card asked for at every chance, once with none.
     const play = (looking: boolean): string => {
       TC().load(text);
-      if (looking) { TC().view(); TC().view(); }
+      if (looking) { TC().view(); TC().province(36); }
+      const opened = (TC().save() as { text: string }).text;
       TC().endMonth();
-      if (looking) TC().view();
+      if (looking) { TC().view(); TC().province(36); }
       expect(saved().dirty).toBe(false);
       TC().endMonth();
-      return (TC().save() as { text: string }).text;
+      return `${opened}\n${(TC().save() as { text: string }).text}`;
     };
     const quiet = play(false), looked = play(true);
     expect(looked).toBe(quiet);
+  });
+
+  it('a call that fails hands back fresh supply too, and reports its own error', () => {
+    const g = startOpen(createGame(3, null));
+    // An order that takes ground, say, and then fails: supply is left stale behind it.
+    const failing = keepSupply(() => { g.supplyDirty = true; throw new Error('the order failed'); }, () => g);
+    expect(failing.name).toBe('supplyKept');
+    expect(() => failing()).toThrow('the order failed');
+    expect(g.supplyDirty).toBe(false);
+    // And a call opens on fresh supply, whatever was done to the game from outside the table.
+    g.supplyDirty = true;
+    let found: boolean | null = null;
+    const out = keepSupply((a) => { found = g.supplyDirty; return a; }, () => g)(7);
+    expect(found).toBe(false);
+    expect(out).toBe(7);
+    // (No game on the table yet: the call is made as it is.)
+    expect(keepSupply(() => 'no game', () => null)()).toBe('no game');
   });
 });
