@@ -479,8 +479,10 @@ export class AirSim implements BattleSim<AirUnit> {
         // box is gone keeps its role with the next box.
         const boxes = this.units.filter((b) => b.side === 'att' && b.air === 'bmr' && !off(b));
         // With no bombers to see through, a raid on troops sends its fighters down on the troops (once each), each with
-        // the fight it still carries; one with none goes home (goDown).
-        if (!boxes.length) { if (this.mayStrafe(u)) this.goDown(u, null); else u.job = { do: 'home' }; continue; }
+        // the fight it still carries; one with none goes home (goDown). (With the strafers' rule, only once it is free of
+        // the air fight, the design director 16:04Z: "no enemy fighter is engaging that group". One still engaged keeps
+        // its job and fights on; strafeDue, or this at a later think, sends it down, or home with none, once it is free.)
+        if (!boxes.length) { if (this.mayStrafe(u)) { if (this.troops!.law.reach && u.contacts.length) continue; this.goDown(u, null); } else u.job = { do: 'home' }; continue; }
         const load = (b: AirUnit): number => this.units.filter((f) => f.job.do === 'escort' && f.job.on === b.id).reduce((s, f) => s + f.n, 0) / b.n;
         const b = [...boxes].sort((x, y) => load(x) - load(y) || x.id - y.id)[0];
         const role = u.job.do === 'escort' ? roleOf(u.job) : this.role(u);

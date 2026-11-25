@@ -716,3 +716,44 @@ describe('the fuel to go down after a fight (the design director, 20:55Z, C1): a
     }
   });
 });
+
+// The design director, 25 November 2026 16:04Z: a group goes down when it is "Fought: no enemy fighter is engaging that
+// group, and it has the reach and the fuel". think()'s branch for a raid with no bombers left on the board (sim.ts) once
+// sent a group down while a German group was still engaging it (round seven's check). The Saar with the French bombers
+// cut to one (setup), lost before the target, against 2. Jagddivision at 750: both French escorts are still engaged
+// as the last bomber goes. Under the strafers' rule neither begins its go-down until it is free of the air fight; it
+// fights on meanwhile, and goes down, or home with no fight left (19:09Z, item 2), once free.
+describe('the go-down waits for the end of the air fight (the design director, 16:04Z): think\'s branch for a raid with no bombers left', () => {
+  it('a group never begins its go-down while a defending fighter group is in contact with it, and is never left without a job', () => {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
+    const d = g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 750; d.est.ftr = Math.max(d.est.ftr, 750);
+    const ids = [38, 10, 36];
+    for (const id of ids) { const f = g.airFleets.find((q) => q.id === id)!; if (f.bmr > 0) f.bmr = 1; }
+    g.seed = (911 + 7907 * 14) >>> 0;
+    g.flags.airBattles = 84;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const s = airBattle(ticketOf(g, target, ids, 'FRA'));
+    const S = s as unknown as { goDown(u: AirSim['units'][number], box: number | null): boolean; strafing: Map<number, { over: boolean }> };
+    const raid = s.units.filter((u) => u.side === 'att' && u.air === 'ftr');
+    const downs: { id: number; contacts: number }[] = [];
+    const go = S.goDown.bind(s);
+    S.goDown = (u, box) => { downs.push({ id: u.id, contacts: u.contacts.length }); return go(u, box); };
+    // The case is real: the last bomber leaves the board while the raid's escorts are engaged.
+    let engagedAsBombersGo = 0, gone = false;
+    fight(s, (sim) => {
+      if (gone) return;
+      if (sim.units.some((b) => b.side === 'att' && b.air === 'bmr' && b.n > 0 && b.job.do !== 'home')) return;
+      gone = true;
+      engagedAsBombersGo = raid.filter((u) => u.contacts.length > 0).length;
+    });
+    expect(gone).toBe(true);
+    expect(engagedAsBombersGo).toBeGreaterThan(0);
+    expect(downs.length).toBeGreaterThan(0);
+    for (const x of downs) expect(x.contacts).toBe(0);
+    // Each ends the raid with a job: on its way home, or down on the troops.
+    for (const u of raid) expect(['home', 'strafe']).toContain(u.job.do);
+  });
+});
