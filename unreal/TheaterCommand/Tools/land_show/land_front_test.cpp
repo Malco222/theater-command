@@ -4,6 +4,7 @@
 #include "Battle/LandMen.h"
 #include <cstdio>
 #include <cstring>
+#include <limits>
 int main()
 {
 	struct Row { const char* Name; double Lat, Lon; const char* Want; };
@@ -17,6 +18,9 @@ int main()
 		{ "Dutch Harbor", 53.9, -166.5, "pacific" }, { "Attu", 52.9, 172.9, "pacific" }, { "Tahiti", -17.6, -149.5, "pacific" },
 		{ "San Francisco", 37.77, -122.42, "west" }, { "Seattle", 47.6, -122.3, "west" }, { "Panama", 9.0, -79.5, "west" },
 		{ "New York", 40.7, -74.0, "west" }, { "Ceylon", 7.0, 80.0, "pacific" }, { "Moscow", 55.75, 37.6, "east" },
+		// (far past the line either way, and no number at all: one step, and no place given)
+		{ "Midway, three times round", 28.2, -177.37 - 1080.0, "pacific" }, { "Tarawa, twice round", 1.35, 172.93 + 720.0, "pacific" },
+		{ "no number", std::numeric_limits<double>::quiet_NaN(), 10.0, "west" }, { "endless east", 20.0, std::numeric_limits<double>::infinity(), "west" },
 	};
 	int Bad = 0;
 	for (const Row& R : Rows)

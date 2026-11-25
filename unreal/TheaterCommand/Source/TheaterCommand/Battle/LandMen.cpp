@@ -5040,8 +5040,14 @@ namespace LandMen
 	}
 	const char* FrontAt(double Lat, double Lon)
 	{
-		while (Lon > 180.0) Lon -= 360.0;
-		while (Lon < -180.0) Lon += 360.0;
+		// (any longitude, however far past the line, in one step; a place that is no number at all is dressed as no
+		// place given, 49 N 0 E: the pre-check's note of 25 November, a loop here would never end on an infinite one)
+		if (!std::isfinite(Lat) || !std::isfinite(Lon))
+		{
+			Lat = 49.0;
+			Lon = 0.0;
+		}
+		Lon = std::remainder(Lon, 360.0);
 		if (Lat < 36.0 && Lon > -18.0 && Lon < 40.0) return "desert";
 		// (the China coast and the country behind it. Formosa, the Pescadores and the north of Luzon, east of 119.5 and
 		// south of 26, are the Pacific's: the Japan and Pacific thread's finding of 25 November)
