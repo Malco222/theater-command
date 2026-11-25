@@ -7167,6 +7167,14 @@ namespace LandField
 				LandSteppe::PlainKit(B, M);
 			}
 		}
+		// (the birch's bark made over on trial "birchbark": off-white, short marks, a dark foot)
+		if (Fd.Tried("birchbark"))
+		{
+			BaseMesh& M = At(Base::Birch);
+			LandSteppe::BirchBark(M.Near, true);
+			LandSteppe::BirchBark(M.Mid, false);
+			LandSteppe::BirchBark(M.Far, false);
+		}
 		// A haycock of the bocage's mown meadows (July 1944: the hay cut in June, forked into cocks to make before it is
 		// carted): a beehive of hay 1.4 m high and 1.7 m across, settled a little wider at its foot, rounded to its top.
 		// Built up in layers of forkfuls, each layer's foot hanging over the one below like thatch (a ragged lip and a

@@ -119,6 +119,14 @@ namespace LandSteppe
 	/** A plain stand-in for a kit model whose file is not given (the cloud test without the kit, a build without it):
 	 * a white box under a straw roof, a post, a hurdle, a stack. Plain on purpose: the kit is what is meant to be seen. */
 	void PlainKit(LandField::Base B, LandField::BaseMesh& Out);
+	/**
+	 * The kit birch's bark made over (the art director's Mac pass 1, B2 shots 1 and 2 and B7 shot 2: "hard black bands on
+	 * pure white, like surveyor's poles": the kit paints whole facets of the trunk black, a metre high): the bark
+	 * off-white (about 215, 212, 200), the old bands gone, the foot dark and fading up over the first metre, and, with
+	 * bMarks (the near model), short dark marks lying across the trunk, none wider than a third of it. On trial
+	 * "birchbark" (LandField's bases); a model without the kit's bark colours is left as it is.
+	 */
+	void BirchBark(LandField::Mesh& M, bool bMarks);
 	/** The kit's file name for a base (Khata, BurntChimney, TelegraphPole, WattleFence, WellSweep, Haystack, Birch), or empty. */
 	const char* KitName(LandField::Base B);
 
