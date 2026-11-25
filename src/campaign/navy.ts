@@ -2592,7 +2592,7 @@ export function strikeThreat(g: Game, f: Fleet): { seas: Map<number, number>; fi
 }
 
 /** Whether a harbour lies beyond where the enemy could strike a fleet's harbour from next month (strikeThreat). */
-function outOfStrikes(g: Game, r: Region, T: ReturnType<typeof strikeThreat>): boolean {
+export function outOfStrikes(g: Game, r: Region, T: ReturnType<typeof strikeThreat>): boolean {
   for (const [z, R] of T.seas) if (seaKm(g, r.id, z) <= R) return false;
   for (const [id, R] of T.fields) if (km(g, id, r.id) <= R) return false;
   return true;
@@ -2650,6 +2650,125 @@ function withdraws(g: Game, f: Fleet): boolean {
   }
   if (!to && anchorLoss(g, f) > 0) g.flags[`anc:${f.id}`] = g.turn;
   return false;
+}
+
+// ---- A fleet with no enemy in its reach stands forward (release 2, the far chart) ----------------------------------
+// The design director's ruling of 18:14Z, 25 November 2026 (the 24 wars on Units decide audit items 42 to 45: with the
+// book's May 1940 move at stops 1 and 2 only, America's Pacific fleets lay at San Diego through every war). One rule
+// for every nation: a fleet whose country is at war, with no enemy sea, coast or lane in its reach, makes a voyage to
+// the nearest friendly harbour from which one is, priced as any move of base is (voyageMonths), and only to a harbour
+// beyond where the enemy could strike from next month at its side's own sight (strikeThreat, the withdrawal's own
+// test), so no fleet advances to a harbour it would leave the month after. Bounded at 18:23Z and 18:26Z, by cause: of
+// harbours an equal voyage away, the one with the most of the enemy in reach; and no farther than one month's voyage.
+
+/**
+ * The stand-to join's seam (the design director, 18:35Z): standing forward is held behind balance's record of a danger
+ * at peace. Without it the rule reads declared wars alone and empties a theatre (the 24 wars of 18:28Z: America's
+ * Pacific fleets to Cayenne at war with Germany alone, the China and dominion fleets west), so it acts only where
+ * balance has joined (joinStandTo) and is switched on, and reads a power stood to against as an enemy. Until then it
+ * never acts. At the join balance.ts calls joinStandTo with its switch and its one record (standsTo, watchedBy).
+ */
+const STAND_TO: { on: (g: Game) => boolean; against: (g: Game, nat: string) => string[] } = { on: () => false, against: () => [] };
+export function joinStandTo(on: (g: Game) => boolean, against: (g: Game, nat: string) => string[]): void {
+  STAND_TO.on = on;
+  STAND_TO.against = against;
+}
+
+/**
+ * The powers a nation's fleets read as the enemy for standing forward: those it is at war with, and with balance on,
+ * those it stands to against, from the one record (the design director, 18:14Z).
+ */
+export function foesOf(g: Game, nat: string): string[] {
+  const at = g.nations[nat]?.atWar ?? [];
+  return [...new Set([...at, ...(STAND_TO.on(g) ? STAND_TO.against(g, nat) : [])])];
+}
+
+/**
+ * The seas on which a fleet meets its country's enemy: a coast its enemy holds, an enemy fleet its side knows of there,
+ * at sea or in harbour, or a lane of its enemy's that carries something laid (laneCounts).
+ */
+function foeSeaSet(g: Game, f: Fleet): Set<number> {
+  const foes = new Set(foesOf(g, f.nat)), at = new Set<number>();
+  if (!foes.size) return at;
+  g.seas.forEach((s, z) => { if (s.coast.some((id) => foes.has(g.regions[id].ctrl))) at.add(z); });
+  for (const x of g.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g, x, f.nat) !== 'none') at.add(x.zone);
+  for (const rt of seaRoutes(g)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) at.add(z);
+  return at;
+}
+
+/**
+ * How much of its enemy a fleet would have in its reach from a harbour, as its reach is reckoned from its base
+ * (fleetReach) in calm weather: the enemy seas in reach (those holding an enemy coast, fleet or lane), and how many seas
+ * out it first meets one (1 on the harbour's own sea). Nothing in reach is { seas: 0, out: 0 }.
+ */
+function foeReach(g: Game, nat: string, r: Region, at: Set<number>): { seas: number; out: number } {
+  const o = { seas: 0, out: 0 };
+  if (!at.size) return o;
+  const d = new Int16Array(g.seas.length).fill(-1), q: number[] = [];
+  for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) {
+    if (at.has(q[i])) { o.seas++; if (!o.out) o.out = d[q[i]]; }
+    if (d[q[i]] >= NAVY.range) continue;
+    for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  }
+  return o;
+}
+
+/** For the tests and the readings: how much of the enemy a fleet would have in its reach from a harbour (foeReach). */
+export const enemyInReach = (g: Game, f: Fleet, r: Region): { seas: number; out: number } => foeReach(g, f.nat, r, foeSeaSet(g, f));
+
+/**
+ * The farthest a fleet stands forward on this rule alone: one month's voyage (voyageMonths 1), the game's own turn and
+ * not a tuned figure. A fleet a month away can be back the next month if the war turns; an ocean crossing is a staff's
+ * decision with a named purpose, never this default (the design director, 18:23Z).
+ */
+const FORWARD_MONTHS = 1;
+
+/** Whether an enemy sea, coast or lane of a fleet's country lies within its reach from a harbour. */
+export const foeInReach = (g: Game, f: Fleet, r: Region): boolean => foeReach(g, f.nat, r, foeSeaSet(g, f)).seas > 0;
+
+/**
+ * Where a fleet with no enemy in its reach stands forward to (the rulings of 18:14Z, 18:23Z and 18:26Z above), or
+ * null: balance's stand-to has not joined or is switched off (joinStandTo), it has an enemy in its reach, its country
+ * has none, or no friendly harbour open to it, at most a month's voyage away, has one in reach and lies beyond where the
+ * enemy could strike from next month. Of those, the fewest months of
+ * voyage; of harbours an equal voyage away, the one with the most of the enemy in reach (a fleet stands forward to
+ * reach its war, not a corner of it), then the fewer seas out to it, then the nearest on the chart. None off the far
+ * chart.
+ */
+export function forwardHarbour(g: Game, f: Fleet): Region | null {
+  if (!farOn(g) || !STAND_TO.on(g) || f.base < 0 || inPassage(f)) return null;
+  const at = foeSeaSet(g, f);
+  if (!at.size || foeReach(g, f.nat, g.regions[f.base], at).seas > 0) return null;
+  const here = g.regions[f.base];
+  let T: ReturnType<typeof strikeThreat> | null = null;
+  let best: Region | null = null, key: number[] = [];
+  // (Fewest months of voyage; then the most of the enemy in reach; then the fewer seas out to it; then the nearest.)
+  const better = (k: number[]): boolean => { for (let i = 0; i < k.length; i++) if (k[i] !== key[i]) return key[i] === undefined || k[i] < key[i]; return false; };
+  for (const r of baseTargets(g, f)) {
+    if (closedTo(g, r.seas[0], f.nat)) continue;
+    const e = foeReach(g, f.nat, r, at);
+    if (!e.seas) continue;
+    const m = voyageMonths(g, f, r);
+    if (m > FORWARD_MONTHS) continue;
+    const k = [m, -e.seas, e.out, chartDist(g, r, here)];
+    if (!better(k)) continue;
+    T ??= strikeThreat(g, f);
+    if (!outOfStrikes(g, r, T)) continue;
+    best = r; key = k;
+  }
+  return best;
+}
+
+/**
+ * The staff's move forward of a fleet with no enemy in its reach (navalAI, every computer navy and a player's navy his
+ * admirals run): its base moves to forwardHarbour, a voyage beyond a month's steaming, with news. True where it moved.
+ */
+function standsForward(g: Game, f: Fleet): boolean {
+  const to = forwardHarbour(g, f), from = f.port;
+  if (!to || !rebase(g, f, to)) return false;
+  headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}: no enemy lies within its reach from ${from}.`, f.nat, to.id);
+  return true;
 }
 
 /**
@@ -5977,6 +6096,9 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       home(`Worn down to ${Math.round(f.ready * 100)}% readiness, it refits in harbour and sails again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
       continue;
     }
+    // (Release 2, the far chart: with no enemy sea, coast or lane in its reach, a fleet on patrol duty and tied to no
+    // station stands forward to the nearest friendly harbour from which one is: the design director's ruling of 18:14Z.)
+    if (f.duty !== 'raid' && !f.tied && standsForward(g, f)) { say(`No enemy lay within its reach, so it moves its base to ${f.port}.`); continue; }
     if (f.duty === 'raid') {
       // (Release 2, the sea patrol, once live (Q5 (a)): the staff moves its boats to the sea of their routes, within
       // reach, where they spend most of the month up on station, out of waters aircraft without kit keep them down in
