@@ -1,6 +1,7 @@
 #include "TheaterCommand.h"
 #include "Modules/ModuleManager.h"
 #include "Release2Ship.h"
+#include "Look/WholeLook.h"
 
 DEFINE_LOG_CATEGORY(LogTheater);
 
@@ -14,6 +15,13 @@ public:
 	virtual void StartupModule() override
 	{
 		Release2Ship::Apply();
+		// (the whole picture's looks, after the list has set their variables: Look/WholeLook.h)
+		WholeLook::Start();
+	}
+
+	virtual void ShutdownModule() override
+	{
+		WholeLook::Stop();
 	}
 };
 

@@ -25,6 +25,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/TheaterSpeed.h"
+#include "Look/WholeLook.h"
 #include "Components/AudioComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -6126,7 +6127,23 @@ void ALandBattle::HideTheTable()
 			const double Snowed = State.IsValid() && State->Field ? FMath::Clamp(State->Field->SnowLying(), 0.0, 1.0) : 0.0;
 			double SnowBelow = 2.0;
 			LandLook::Asked(TEXT("TheaterLandSnowBelow="), { &SnowBelow });
-			const FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			// (Release 2, the whole picture's bounce, tc.Look.Bounce (Look/WholeLook.h; agreed with the ground and environments
+			// threads, 25 Nov 04:26Z): every ground gives back its own colour as snow does, the field's paint read once here
+			// on a grid and laid as a solid colour under the sky light, so the desert's sand lifts a hull's shaded side warm
+			// and the grass gives a little green. Off, the block below is as it was. Snow's own path is unchanged; the
+			// environments thread may give a look its own bounce colour in LandScape's Air in place of the field's mean.)
+			const bool bBounceAll = WholeLook::BounceOn() && State.IsValid() && State->Field;
+			if (bBounceAll)
+			{
+				const LandFeed::Field& Plan = State->Rec.Ground;
+				const auto* Painted = State->Field.get();
+				Bare = WholeLook::GroundMean([Painted](double X, double Y)
+				{
+					const auto C = Painted->ColourAt(X, Y);
+					return FColor(C.R, C.G, C.B, 255);
+				}, Plan.W > 0.0 ? Plan.W : Plan.Cols * Plan.Cell, Plan.H > 0.0 ? Plan.H : Plan.Rows * Plan.Cell) * WholeLook::BounceStrength();
+			}
 			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 4.0));
 			const FLinearColor Field = FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
 			// (the engine lays this colour over the sky's lower half only when the lower half is a solid colour, which
@@ -6137,9 +6154,9 @@ void ALandBattle::HideTheTable()
 			// to 1, as the air battle's light from below (AirBattle.cpp): the scalings above carry into the alpha (0.78 at
 			// full snow, past 1 above 1.15) and the engine may weigh the colour by it. "-TheaterLandSnowBelowOld" keeps
 			// the cubemap's on snow too, to set the two side by side)
-			const bool bSolidBelow = Snowed >= 0.25 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld"));
+			const bool bSolidBelow = bBounceAll || (Snowed >= 0.25 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld")));
 			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f; snow's strength %.2f, -TheaterLandSnowBelow=), %s"), Field.R, Field.G, Field.B, Snowed, SnowBelow,
-				bSolidBelow ? TEXT("laid as a solid colour") : Snowed >= 0.25 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (little or no snow)"));
+				bBounceAll ? TEXT("laid as a solid colour, the field's own (tc.Look.Bounce)") : bSolidBelow ? TEXT("laid as a solid colour") : Snowed >= 0.25 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (little or no snow)"));
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
