@@ -202,6 +202,9 @@ export interface Man {
   coax?: true;
   /** A tank's commander struck up in his hatch (BOOK.tankMg): the battle time; she fights buttoned up from then. */
   cmdDown?: number;
+  /** Hatches (Drill.hatches): the battle time her commander drops inside (his own moment after what alarmed him), and the time he comes up again if nothing more does. */
+  shutAt?: number;
+  shutTo?: number;
   /**
    * Stretcher bearers (release 2; LandBattle.bearers): the battle time he fell wounded, not killed (wd), lying for the
    * bearers or, a light case (light), for his dressing; the time a light case is back in the line (back); the carry that
@@ -368,6 +371,7 @@ const DR = data as unknown as {
     pause: { every: [number, number]; for: [number, number]; gun: [number, number]; gunFor: [number, number] };
     ready: [number, number];
   };
+  hatch: { near: [number, number, number]; own: [number, number]; drop: [number, number]; quick: [number, number, number]; quiet: [number, number, number]; burst: number; mates: [number, number, number] };
   blast: { hold: number; anchor: number; most: Record<Calibre, number>; lying: number; kneeling: number };
   escort: {
     near: number; men: number; reach: number; gap: number; file: number; side: number; moving: number; pace: [number, number];
@@ -525,12 +529,12 @@ interface Squad {
   foAt?: [number, number];
   phase: Phase;
   since: number;
+  /** Squad life: how long the phase before this one lasted (a block whose phase flickers is not given fresh lags, Drill.lags). */
+  lastFor?: number;
   nextThink: number;
   /** Strength last step, and the share of strength it is losing a second (smoothed). */
   lastStr: number;
   harm: number;
-  /** Squad life: how long the phase before this one lasted (a block whose phase flickers is not given fresh lags, Drill.lags). */
-  lastFor?: number;
   shelledAt: number;
   /**
    * Shell blasts (release 2, LandBattle.blast): the battle time its first loss to a shell became due while held for the
@@ -629,12 +633,12 @@ interface Memo {
   bySec: Map<number, Man[]>;
   /** Squad life (Drill.teamOf): each man's buddy team in his group, [its number, the group's teams, his place among the group's men]. */
   teams?: Map<Man, [number, number, number]>;
+  /** Squad life (Drill.sentryList): each group's men who can stand sentry, in their order. */
+  sentries?: Map<number, Man[]>;
 }
 
 /** Whom each kind of man who keeps by another keeps by (Drill.leadOf). */
 const LEADS: Partial<Record<Role, Role[]>> = { loader: ['mg', 'at', 'hmg', 'mortar'], crew: ['gun'], rifle: ['officer'], holder: ['holder'] };
-  /** Squad life (Drill.sentryList): each group's men who can stand sentry, in their order. */
-  sentries?: Map<number, Man[]>;
 /** A field gun's crew at their places round it, metres across and along from the gun, facing as it faces (Drill.pairs). */
 /**
  * Room between men (drawn as sections): no man's place within SPACE.men metres of a mate's, a gun's crew SPACE.crew of
@@ -701,6 +705,15 @@ export class Drill {
    * Off unless asked (DR.life).
    */
   readonly life: boolean;
+  /**
+   * Heads up, hatches down (release 2; Brian, 25 November 2026, 15:11Z: "do those 3 ideas"): each tank's commander rides
+   * with his head out until something sends him down (a round at his own tank, a shell bursting by her, the enemy's foot
+   * within his own nerve of it), drops inside at his own moment and comes up again in his own time once it is quiet: a
+   * green crew early and for long, a veteran late and briefly. Looks only (the drill's own dice; what a closed-up tank
+   * sees is the rules' business and is not touched here). Off unless asked (DR.hatch); off, a block's tanks close up as
+   * one with the enemy inside 120 m, as before.
+   */
+  readonly hatches: boolean;
   /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
   private readonly freshNow = new Set<Man>();
   private readonly sup = new Suppression();
@@ -708,12 +721,13 @@ export class Drill {
   private tankMemo: { t: number; at: Partial<Record<Side, [number, number][]>> } = { t: -1, at: {} };
   private readonly priMemo = new Map<number, { t: number; men: Man[] }>();
 
-  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; scale?: number } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; scale?: number } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
     this.sections = !!opts.sections || !!opts.platoons;
     this.platoons = !!opts.platoons;
     this.life = !!opts.life;
+    this.hatches = !!opts.hatches;
     this.byBook = opts.book ?? (this.platoons || this.life);
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
     for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
@@ -1189,6 +1203,7 @@ export class Drill {
       // (a block's armoured cars and AA vehicles: their own drive, outriders)
       if (t >= sq.nextThink && sq.esc) { sq.nextThink = t + 0.5; this.outriders(sq); }
       else if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (b.escort) this.escort(sq); if (sq.screenQ) this.screenRound(sq); }
+      if (this.hatches && u.kind === 'arm' && !sq.esc) this.hatchNow(sq);
       this.walk(sq);
       this.fire(sq);
     }
@@ -1276,7 +1291,32 @@ export class Drill {
 
   /** Men of every block near a burst duck. */
   private duck(x: number, y: number): void {
-    for (const sq of this.squads.values()) if (Math.hypot(sq.u.x - x, sq.u.y - y) < Math.max(sq.u.w, sq.u.d) / 2 + 40) sq.shelledAt = this.b.t;
+    for (const sq of this.squads.values()) if (Math.hypot(sq.u.x - x, sq.u.y - y) < Math.max(sq.u.w, sq.u.d) / 2 + 40) {
+      sq.shelledAt = this.b.t;
+      // (hatches: a burst by a tank sends her commander down)
+      if (this.hatches && sq.u.kind === 'arm' && !sq.esc) for (const m of sq.men) if (m.role === 'tank' && m.fell === undefined && Math.hypot(m.x - x, m.y - y) < DR.hatch.burst) this.alarm(sq, m, this.b.t);
+    }
+  }
+
+  /**
+   * Hatches: something sends this tank's commander down at battle time `at` (a round at her landing then, a burst by
+   * her, the enemy's foot too near). The first of a spell, he drops inside his own moment after it ('drop', a veteran
+   * quicker by 'quick'); every one keeps him down his own quiet time longer ('quiet': a green commander long, a veteran
+   * briefly). With `mate`, it was at another tank of his block: he closes up for it only a share 'mates' of the time, by
+   * his crew's experience (green crews when any of them is fired on, veterans at their own rounds).
+   */
+  private alarm(sq: Squad, m: Man, at: number, mate = false): void {
+    const u = sq.u, H = DR.hatch, x = this.band(u);
+    if (mate && roll(this.seed, u.id, m.n, Math.floor(at / 4), 174) >= H.mates[x]) return;
+    const gone = m.shutTo === undefined || at > m.shutTo;
+    if (gone) m.shutAt = at + (H.drop[0] + (H.drop[1] - H.drop[0]) * roll(this.seed, u.id, m.n, Math.floor(at), 171)) * H.quick[x];
+    m.shutTo = Math.max(gone ? 0 : m.shutTo!, at + H.quiet[x] * (H.own[0] + (H.own[1] - H.own[0]) * roll(this.seed, u.id, m.n, 172)));
+  }
+
+  /** Hatches: each tank closed up or not this step, by her own commander's times (alarm); one struck in his hatch stays down. */
+  private hatchNow(sq: Squad): void {
+    const t = this.b.t;
+    for (const m of sq.men) if (m.role === 'tank' && m.fell === undefined) m.buttoned = m.cmdDown !== undefined || (m.shutAt !== undefined && t >= m.shutAt && t < m.shutTo!) || undefined;
   }
 
   /** Where model k of block id stands now (alive, or the moment he falls): the shell that cost him lands there. */
@@ -2051,6 +2091,17 @@ export class Drill {
    * lie in the open, more kneel behind a bank or in a wood, most stand to at a parapet or a window; far from the enemy
    * some stand easy. Each keeps his stance a spell of his own, so no two change together.
    */
+  /** Squad life: the men of a group who can stand sentry (on foot, not its leader, not its gun), in their order. */
+  private sentryList(sq: Squad, g: number): Man[] {
+    const M = this.memo(sq);
+    let l = (M.sentries ??= new Map<number, Man[]>()).get(g);
+    if (!l) {
+      l = M.up.filter((x) => grp(x) === g && !VEHICLE.has(x.role) && !CREWED.has(x.role) && x.role !== 'holder' && x.role !== 'officer' && x.role !== 'mg' && !(x.lead || (x.j === undefined && !!x.hasSec)));
+      l.sort((a, c) => (a.j ?? 0) - (c.j ?? 0));
+      M.sentries.set(g, l);
+    }
+    return l;
+  }
   private watchPose(sq: Squad, m: Man, near: number, plain: Pose): Pose {
     if (!this.life || VEHICLE.has(m.role) || CREWED.has(m.role) || m.role === 'holder' || m.role === 'officer') return plain;
     m.sentry = undefined;
@@ -2093,17 +2144,6 @@ export class Drill {
     if (!this.life) return undefined;
     const P = DR.life.pause, u = sq.u, t = this.b.t, gun = m.role === 'mg';
     const [e0, e1] = gun ? P.gun : P.every, [f0, f1] = gun ? P.gunFor : P.for;
-  /** Squad life: the men of a group who can stand sentry (on foot, not its leader, not its gun), in their order. */
-  private sentryList(sq: Squad, g: number): Man[] {
-    const M = this.memo(sq);
-    let l = (M.sentries ??= new Map<number, Man[]>()).get(g);
-    if (!l) {
-      l = M.up.filter((x) => grp(x) === g && !VEHICLE.has(x.role) && !CREWED.has(x.role) && x.role !== 'holder' && x.role !== 'officer' && x.role !== 'mg' && !(x.lead || (x.j === undefined && !!x.hasSec)));
-      l.sort((a, c) => (a.j ?? 0) - (c.j ?? 0));
-      M.sentries.set(g, l);
-    }
-    return l;
-  }
     const every = e0 + (e1 - e0) * roll(this.seed, u.id, m.n, 141), at = t + every * roll(this.seed, u.id, m.n, 142), win = Math.floor(at / every);
     const len = f0 + (f1 - f0) * roll(this.seed, u.id, m.n, win, 143), ph = at - win * every;
     return ph < len ? t + (len - ph) : undefined;
@@ -2233,6 +2273,8 @@ export class Drill {
    */
   private arrive(sq: Squad, m: Man): void {
     m.v = 0;
+    // (squad life: a routing man may run upright or bent low; he is known by his block's rout as well as his pose)
+    const routed = m.pose === 'flee' || (this.life && sq.phase === 'flee');
     // One who keeps by a weapon or an officer waits there for it (pairs gives him his pose).
     if (m.pr) { m.pose = routed ? 'cower' : 'wait'; return; }
     switch (m.role) {
@@ -2273,8 +2315,6 @@ export class Drill {
     if (sq.memo && sq.memo.fig === u.figures && sq.memo.on === on) return sq.memo;
     const up: Man[] = [], keys: Man[] = [], keyOf = new Map<number, Man>(), bySec = new Map<number, Man[]>(), stand: Man[] = [];
     for (const m of sq.men) {
-    // (squad life: a routing man may run upright or bent low; he is known by his block's rout as well as his pose)
-    const routed = m.pose === 'flee' || (this.life && sq.phase === 'flee');
       if (!this.stands(sq, m)) continue;
       stand.push(m);
       if (m.j === undefined) { keys.push(m); keyOf.set(m.k, m); }
@@ -3699,7 +3739,9 @@ export class Drill {
     let behind = Infinity;
     if (close && foot.length) for (const f of foot) behind = Math.min(behind, (f.x - u.x) * fx + (f.y - u.y) * fy + f.d / 2 - 15);
     tanks.forEach((m, i) => {
-      m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || m.cmdDown !== undefined || undefined;
+      // (hatches: each commander by his own nerve, alarm and hatchNow; else the block's as one, the enemy inside 120 m)
+      if (!this.hatches) m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || m.cmdDown !== undefined || undefined;
+      else if (lone || (e !== null && b.gap(u, e) < DR.hatch.near[this.band(u)] * (DR.hatch.own[0] + (DR.hatch.own[1] - DR.hatch.own[0]) * roll(this.seed, u.id, m.n, 173)))) this.alarm(sq, m, t);
       // The drill book: her machine guns on the enemy's foot while her block fights it.
       m.coax = (this.byBook && !!e && FOOT_KINDS.includes(e.kind) && u.engaged !== undefined && b.gap(u, e) < 600) || undefined;
       const n = sq.u.figures0 - 1 - m.k;
@@ -4309,6 +4351,8 @@ export class Drill {
     const range = Math.hypot(v.x - m.x, v.y - m.y);
     if (range > ((w === 'mg' || w === 'rifle') ? 900 : 4000)) return;
     const l = Math.round((t + range / R.speed[w]) * 10) / 10, k0 = Math.round(t * 10);
+    // (hatches: a round at a tank sends her commander down as it lands, and by their experience her mates')
+    if (this.hatches && v.role === 'tank' && !tq.esc) for (const x of alive) if (x.role === 'tank') this.alarm(tq, x, l, x !== v);
     const base: Round = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: 'miss' };
     if (m.j !== undefined) base.j = m.j;
     if (w === 'mg' && m.role === 'tank') base.g = this.tankGun(u, m, aim, k0);
