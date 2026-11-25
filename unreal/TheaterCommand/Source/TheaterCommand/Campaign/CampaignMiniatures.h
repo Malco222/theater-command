@@ -270,9 +270,11 @@ struct FMiniatureMesh
 	 * square with one landmark of its own that is known from the air. A port has its quay at the water's edge,
 	 * with cranes, warehouses, ships alongside and a lighthouse. Roofs and walls are those of its part of Europe.
 	 * OutQuarters takes the middles of its lit quarters, on the map, for its glow by night; OutBeacon the lantern
-	 * of its lighthouse, on the table (left alone where it has none).
+	 * of its lighthouse, on the table (left alone where it has none). (Release 2, street cars.) OutAvenues takes,
+	 * for each arm of a city's or a capital's two avenues that a street car may work, two points of the map: her
+	 * stop by the square and her terminus (Campaign/StreetLife.h); asking for them throws no dice and builds nothing.
 	 */
-	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr, FVector* OutLandmarkTop = nullptr);
+	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr, FVector* OutLandmarkTop = nullptr, TArray<FVector2D>* OutAvenues = nullptr);
 	/**
 	 * One of the buildings a town is given by its owner, standing at the town's edge: Line is 0 a market, 1 farms,
 	 * 2 a school, 3 a drill ground, 4 a hospital, 5 a town hall. Each grows with its level (1 to 3); bGoing puts

@@ -1,6 +1,7 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Misc/ScopeExit.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "Campaign/StreetLife.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
 #include "Dom/JsonObject.h"
@@ -2483,7 +2484,7 @@ void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool 
 	(void)bTown;
 }
 
-void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters, FVector* OutBeacon, FVector* OutLandmarkTop)
+void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters, FVector* OutBeacon, FVector* OutLandmarkTop, TArray<FVector2D>* OutAvenues)
 {
 	FRandomStream Dice(Site.Seed * 7919 + 13);
 	const double U = Site.Unit * (Site.bPacked ? 0.85 : 1.0); // a house is under one of these long (a little smaller where the town is packed into a small province)
@@ -3194,6 +3195,26 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// The square, its two avenues, and what stands in it.
 	Street(-ReachAt(Yaw0 + 180.0) + 0.3 * Um, 0.0, ReachAt(Yaw0) - 0.3 * Um, 0.0, 0.3);
 	Street(0.0, -ReachAt(Yaw0 + 270.0) + 0.3 * Um, 0.0, ReachAt(Yaw0 + 90.0) - 0.3 * Um, 0.3);
+	if (OutAvenues && !bFar && !bPacked && Look != 9)
+	{
+		// (Release 2, street cars: Campaign/StreetLife.h.) Where a street car may run on each of the four arms of the
+		// two avenues just laid: from just outside the square to just short of where the arm's cobble ends unbroken,
+		// by the same lengths and the same test Street lays them with. Two points of the map an arm. No dice are
+		// thrown and nothing is built: the town is laid out as it was. (None in a packed town, whose avenues are too
+		// short, nor in the thatch and tin town.)
+		const double AvenueRuns[4] = { ReachAt(Yaw0) - 0.3 * Um, ReachAt(Yaw0 + 90.0) - 0.3 * Um, ReachAt(Yaw0 + 180.0) - 0.3 * Um, ReachAt(Yaw0 + 270.0) - 0.3 * Um };
+		for (int32 Spoke = 0; Spoke < 4; ++Spoke)
+		{
+			const double SpokeA = Spoke == 0 ? 1.0 : Spoke == 2 ? -1.0 : 0.0, SpokeB = Spoke == 1 ? 1.0 : Spoke == 3 ? -1.0 : 0.0;
+			double StopAt = 0.0, EndAt = 0.0;
+			if (TheaterStreetLife::Arm(Spoke % 2 == 0 ? SquareHalfA : SquareHalfB, AvenueRuns[Spoke], AvenueRuns[(Spoke + 2) % 4], 1.6 * Um,
+				[&](double OutBy) { return CanBuild(SpokeA * OutBy, SpokeB * OutBy); }, StopAt, EndAt))
+			{
+				OutAvenues->Add(MapAt(SpokeA * StopAt, SpokeB * StopAt));
+				OutAvenues->Add(MapAt(SpokeA * EndAt, SpokeB * EndAt));
+			}
+		}
+	}
 	{
 		// (paved a block at a time, all at the height of its middle, leaving out the corners that are built on)
 		const FVector Mid = Stand(0.0, 0.0, 0.0);
