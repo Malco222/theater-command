@@ -10135,11 +10135,11 @@ void ALandBattle::SoundOverhead()
 		return Own.IsValid() && Own->TryGetNumberField(Name, Value) ? Value : Else;
 	};
 	// (a word of a row of the mix by a key, else its "*", else Else)
-	auto Word = [this](const TCHAR* Row, const FString& Key, const FString& Else)
+	auto Word = [this](const TCHAR* Row, const FString& Named, const FString& Else)
 	{
-		const TSharedPtr<FJsonObject> Table = LandParts::MixObject(Mix, Row);
+		const TSharedPtr<FJsonObject> Rows = LandParts::MixObject(Mix, Row);
 		FString Out;
-		if (Table.IsValid() && (Table->TryGetStringField(Key, Out) || Table->TryGetStringField(TEXT("*"), Out)) && !Out.IsEmpty())
+		if (Rows.IsValid() && (Rows->TryGetStringField(Named, Out) || Rows->TryGetStringField(TEXT("*"), Out)) && !Out.IsEmpty())
 		{
 			return Out;
 		}
@@ -10172,11 +10172,11 @@ void ALandBattle::SoundOverhead()
 		}
 		Player->SetWorldLocation(World(Plane->second->At.X, Plane->second->At.Y, Plane->second->At.Z));
 	}
-	auto Fly = [this](UAudioComponent* Player, int32 Key)
+	auto Fly = [this](UAudioComponent* Player, int32 Plane)
 	{
 		if (Player)
 		{
-			OverheadMoving.Add({ Player, Key, LastVoice, LastVoiceUse });
+			OverheadMoving.Add({ Player, Plane, LastVoice, LastVoiceUse });
 		}
 	};
 
@@ -10189,9 +10189,9 @@ void ALandBattle::SoundOverhead()
 		// it strikes the ground or leaves the sky.
 		if (!P.bWreck)
 		{
-			const int32 Key = -1 - P.Key; // (the engines' map holds the vehicles by number from 0: the planes below it)
-			Flying.Add(Key);
-			TObjectPtr<UAudioComponent>* Found = Engines.Find(Key);
+			const int32 EngineKey = -1 - P.Key; // (the engines' map holds the vehicles by number from 0: the planes below it)
+			Flying.Add(EngineKey);
+			TObjectPtr<UAudioComponent>* Found = Engines.Find(EngineKey);
 			UAudioComponent* Player = Found ? Found->Get() : nullptr;
 			if (!Player)
 			{
@@ -10202,8 +10202,8 @@ void ALandBattle::SoundOverhead()
 					if (Player)
 					{
 						Player->FadeIn(1.5f, 1.0f);
-						Engines.Add(Key, Player);
-						EngineCue.Add(Key, FName(*Loop));
+						Engines.Add(EngineKey, Player);
+						EngineCue.Add(EngineKey, FName(*Loop));
 					}
 				}
 			}
@@ -10328,7 +10328,7 @@ void ALandBattle::SoundOverhead()
 		N.Kind = LandPlay::NoiseKind::Shot;
 		N.Weapon = "mg";
 		N.Role = "mg";
-		N.Army = Theirs >= 0 && static_cast<size_t>(Theirs) < S.Rec.Sides.size() ? S.Rec.Sides[static_cast<size_t>(Theirs)].Army : std::string();
+		N.Army = Theirs >= 0 && Theirs < 2 ? S.Rec.Sides[Theirs].Army : std::string();
 		N.Side = Theirs;
 		N.At = LandPlay::Vec(G.From.X, G.From.Y, G.From.Z);
 		N.From = N.At;
