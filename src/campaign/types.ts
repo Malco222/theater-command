@@ -1616,6 +1616,12 @@ export interface AirReport {
   city?: { region: number; added: number; now: number };
   /** Airfields as targets (behind its switch): what the bombs did to the field: whether its runway is shut, the levels burned now, the aircraft destroyed on the ground. */
   field?: { region: number; shut: boolean; levels: number; ground: number };
+  /**
+   * A raid on troops with the strafers' rule on (release 2, strafers.ts): the names of the raid's fighter groups that
+   * went down on the troops, as the report names them, in the raid's order; empty where none did. Written only with
+   * the switch on; a report without it (the switch off, or an older save) says nothing of strafing.
+   */
+  strafed?: string[];
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

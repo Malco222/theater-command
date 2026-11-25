@@ -106,6 +106,7 @@ import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
 import type { FoughtAir } from '../../../src/campaign/airfought';
+import { strafedLine } from '../../../src/campaign/strafers';
 import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
 import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the enemy's month near you)
@@ -6844,6 +6845,10 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast; a strike on ships
       // names the ships' guns, each share by its own name: airwar.ts gunsOfThem)
       gunsWords: p.why || p.bombers <= 0 ? '' : gunsOfThem(p.guns), toGuns: p.why || p.bombers <= 0 ? '' : `about ${Math.round(p.guns.lossN).toLocaleString('en-US')}`,
+      // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z. New for the 3D card to
+      // draw, where it will, at the foot of the raid's forces: the heading, the muted line once and the groups a row each,
+      // or the line for none in place of both ('' in note). No colour. Absent with the switch off, and on any other raid.)
+      ...(p.strafe && !p.why ? { strafe: { heading: p.strafe.heading, note: p.strafe.note, names: [...p.strafe.names], none: p.strafe.none } } : {}),
       fly: { label: dn ? (kind === 'night' ? 'FLY THE RAID BY NIGHT' : 'FLY THE RAID BY DAY') : 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
     };
     // (the same round: the one line of prose is dropped when it only repeats a lone box)
@@ -7012,6 +7017,12 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
       const told = flown.notes.join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
+      // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report then says
+      // who went down, to the side that flew it. Added whole after the cut, so the line is never cut. Nothing with the
+      // switch off: no report carries the field then. A raid fought out carries the line on its after card, so the note
+      // leaves it there and the line is said once: the fourth round's check.)
+      const strafe = air.after ? '' : s.airReports.filter((r) => r.id > air0).map((r) => strafedLine(r, s.human)).filter(Boolean).join(' ');
+      if (strafe) note = note ? `${note} ${strafe}` : strafe;
     }
     // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.
     if (air.ok && part[0] === 'search') {

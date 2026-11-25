@@ -127,3 +127,45 @@ describe('a place in a province on the old chart reads as before', () => {
     expect([bound, endsOff]).toEqual([0, 0]);
   });
 });
+
+describe('a carrier wing in a sea with no shore (a known behaviour)', () => {
+  // The design director, 25 November 2026 15:31Z, ruled to leave it: "A hop over open ocean can be met by a carrier in
+  // that ocean, and nothing over land is in its reach, as kmTo says. Please name it with one test so it stays a known
+  // behaviour." Twelve seas of the chart have no shore (Mid-Atlantic Gap among them). A wing at sea in one reads every
+  // field, and so every end of a leg, as out of reach: seaKm over an empty coast is Infinity, as kmTo reads it. A point
+  // inside a leg is read by the leg's own ruler from the sea's centre, a finite distance, and the cap at the ends
+  // (Infinity) does not bind.
+  it('every field and every leg\'s end is Infinity, as kmTo; a point inside a leg is a finite distance from the sea\'s centre', () => {
+    const g = startOpen(createGame(3, null));
+    setFerry(g, true);
+    expect(globeOn(g)).toBe(false);
+    const bare = g.seas.filter((s) => s.coast.length === 0);
+    expect(bare.length).toBe(12);
+    const z = sea(g, 'Mid-Atlantic Gap');
+    expect(g.seas[z].coast).toEqual([]);
+    const w = wingIn(g, z), at = groupAt(g, w);
+    const fields = g.regions.filter((r) => airfieldsHold(g, r.id) > 0).map((r) => r.id);
+    expect(fields.length).toBeGreaterThan(100);
+    // Every field: out of reach, by kmTo and by a leg that ends there.
+    for (const r of fields) {
+      expect(seaKm(g, r, z)).toBe(Infinity);
+      expect(kmTo(g, w, r)).toBe(Infinity);
+      expect(legKm(g, w, r, r)).toBe(Infinity);
+    }
+    // Every leg between two fields within 1,500 km: where the sea's centre lies beyond an end, Infinity; where it lies
+    // inside the leg, the map's straight line from the sea's centre to the leg's nearest point, finite.
+    let ends = 0, inside = 0;
+    for (const a of fields) for (const b of fields) {
+      if (a === b || realKm(g, a, b) > 1500) continue;
+      const A = g.regions[a], B = g.regions[b], dx = B.x - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
+      const t = ((at.x - A.x) * dx + (at.y - A.y) * dy) / L;
+      const d = legKmAt(g, at, a, b);
+      if (t <= 0 || t >= 1) { ends++; expect(d).toBe(Infinity); continue; }
+      inside++;
+      expect(Number.isFinite(d)).toBe(true);
+      expect(d).toBe(Math.hypot(at.x - (A.x + t * dx), at.y - (A.y + t * dy)) * U);
+    }
+    expect(ends).toBeGreaterThan(1000);
+    expect(inside).toBeGreaterThan(100);
+  });
+});
