@@ -6,7 +6,7 @@
 // them; bombers that hold their run over the target drop; morale breaks groups that bleed too much. When a group's
 // count drops by one, an 'air:lost' event says how the 3D side shows that aircraft going down.
 
-import { Rng } from '../../core/rng';
+import { hashString, Rng } from '../../core/rng';
 import { dist, bearing } from '../core/geometry';
 import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
@@ -18,8 +18,8 @@ import { collideWords, drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
-import { fighterGuns, type GunKind } from './guns';
-import type { AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import { bomberGuns, fighterGuns, type GunKind } from './guns';
+import type { AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
@@ -148,10 +148,26 @@ export class AirSim implements BattleSim<AirUnit> {
   /** Battle seconds each group last showed a hit it survived; the heaviest gun each fighter group carries. */
   private hitAt = new Map<number, number>();
   private gunOf = new Map<number, GunKind | null>();
+  /** The one gun's name each group carries, where all its guns are of one name (the hits' 'gun'); null where they are not. */
+  private oneGunOf = new Map<number, string | null>();
   /** The pass each fighter group is flying at each bomber group it is on ('fighter:bomber'). */
   private passes = new Map<string, Pass>();
+  /**
+   * R1 (the design director, 25 November 2026): the bomber box each fighter group was given as its quarry, whose pass
+   * was drawn then, not at contact; and how many passes have been drawn for each fighter and box, the label of the
+   * pass's own stream (drawPass).
+   */
+  private aimed = new Map<number, number>();
+  private passDraws = new Map<string, number>();
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
+  /**
+   * R5 (the design director, 25 November 2026: "no argmax, and no new draw on the rules' stream"): each group's ledger
+   * of credit, by creditor ('flak' for the guns). Each loss that falls on it credits every group that owed on it that
+   * tick its share of that loss, a fraction; the loss is booked to the one with the largest balance, which gives one
+   * back (creditor). Never a count.
+   */
+  private ledger = new Map<number, Map<number | 'flak', number>>();
   /** Each bomber group's gunners' kills: the enemy fighters whose loss was booked to it (ruling 227), for the campaign's record. */
   private gunKills = new Map<number, number>();
   private stragId = 1;
@@ -503,6 +519,44 @@ export class AirSim implements BattleSim<AirUnit> {
         keep(e);
       }
     }
+    this.aimAll();
+  }
+
+  /**
+   * The bomber box a fighter group has been given as its quarry (its job, by the computer or by the player's order):
+   * one it is sent to intercept, while it is fighting. Null for any other job, and for a group gone, broken or homeward.
+   */
+  private quarryBox(u: AirUnit): AirUnit | null {
+    if (u.air !== 'ftr' || off(u) || away(u) || u.job.do !== 'intercept') return null;
+    const b = this.unit(u.job.on);
+    return b && b.air === 'bmr' && b.side !== u.side && flying(b) ? b : null;
+  }
+
+  /**
+   * R1: each fighter group given a bomber box as its quarry has the pass it will fly on it drawn then, once; again only
+   * when its quarry changes. Called wherever a job is given (think, the player's attack) and before contact.
+   */
+  private aimAll(): void {
+    for (const u of this.units) {
+      if (u.air !== 'ftr') continue;
+      const b = this.quarryBox(u);
+      if ((b?.id ?? null) === (this.aimed.get(u.id) ?? null)) continue;
+      if (!b) { this.aimed.delete(u.id); continue; }
+      this.aimed.set(u.id, b.id);
+      this.drawPass(u, b);
+    }
+  }
+
+  /**
+   * The pass a fighter group flies at a bomber box, by its doctrine against that bomber (doctrine.ts), from a stream of
+   * its own for that fighter, that box and that draw: a fork of the battle's pass stream, which is never drawn on
+   * itself, so when and in what order the passes are drawn moves no other throw. Never a count: it sets the beat of the
+   * passes (beat), what the dispatches tell of a ram, and between flak and the fighters who a box's loss is booked to.
+   */
+  private drawPass(d: AirUnit, b: AirUnit): void {
+    const key = `${d.id}:${b.id}`, n = this.passDraws.get(key) ?? 0;
+    this.passDraws.set(key, n + 1);
+    this.passes.set(key, pickPass(this.passRng.fork(hashString(`${key}:${n}`)), passesOn(d.nat, this.when, b.model, b.nat)));
   }
 
   /**
@@ -921,6 +975,7 @@ export class AirSim implements BattleSim<AirUnit> {
   private touch(): void {
     const r = this.place.night ? SKY.contact.night : SKY.contact.day;
     const live = this.units.filter(flying);
+    this.aimAll();
     const before = new Map(live.map((u) => [u.id, new Set(u.contacts)]));
     for (const u of live) u.contacts = [];
     for (const a of live) {
@@ -941,7 +996,8 @@ export class AirSim implements BattleSim<AirUnit> {
         this.fired = true;
         if (before.get(a.id)?.has(d.id)) continue;
         // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
-        if (a.air === 'bmr') this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
+        // At their quarry, the pass drawn when they were given it (R1); at any other box, one drawn now.
+        if (a.air === 'bmr' && !(this.aimed.get(d.id) === a.id && this.passes.has(`${d.id}:${a.id}`))) this.drawPass(d, a);
         // A new contact: the higher fighter group dives on the lower one and strikes first. A bomber box above a fighter
         // is simply in contact: bombers do not dive on fighters (the tactics panel's S0).
         const hi = a.band > d.band && a.air === 'ftr' ? a : d.band > a.band ? d : null;
@@ -1203,11 +1259,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private fall(live: AirUnit[]): void {
     const P = this.place;
     const lost: Loss[] = [];
-    const hit: [AirUnit, number][] = [];
+    const hit: [AirUnit, number, Map<number | 'flak', number> | undefined][] = [];
     for (const u of live) {
       let k = u.owed;
       const owed = k;
       u.owed = 0;
+      // Who owed on it this tick, as it stood before any loss was booked: the shown hit's 'by' (R2).
+      const due = this.show && owed > 0 ? new Map(this.owedBy.get(u.id) ?? []) : undefined;
       for (; k > 0 && u.n > 0; k -= 1) {
         if (k < 1 && this.lossRng.next() >= k) break;
         // Which group brought it down, and whether it was a straggler (the box's next loss is its straggler's): never a count.
@@ -1228,10 +1286,10 @@ export class AirSim implements BattleSim<AirUnit> {
         u.figures = this.modelsAfter(u, s);
         lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures });
       }
-      if (this.show && owed > 0 && u.n > 0) hit.push([u, owed]);
+      if (this.show && owed > 0 && u.n > 0) hit.push([u, owed, due]);
     }
     if (lost.length) this.fated(lost);
-    for (const [u, owed] of hit) this.hitShown(u, owed);
+    for (const [u, owed, due] of hit) this.hitShown(u, owed, due);
   }
 
   /**
@@ -1374,15 +1432,46 @@ export class AirSim implements BattleSim<AirUnit> {
    * A hit one of its aircraft survives (Brian, 20 November: "not all planes that get hit go down"; fates.ts hitOf):
    * while a group is being hit, a chance of SKY.hit.k times what it was owed this tick, at most once each SKY.hit.gap
    * battle seconds. Shown only, and never told: holes, smoke, pieces torn off, or a bomber's engine fire put out.
+   * Whose hit it was ('by', and 'gun' where one gun's name covers all that group carries: AirHitWho) comes from what
+   * each enemy group owed on it this tick ('due'), by the same draw that decided the hit: no draw is added anywhere.
    */
-  private hitShown(u: AirUnit, owed: number): void {
+  private hitShown(u: AirUnit, owed: number, due?: Map<number | 'flak', number>): void {
     const H = SKY.hit;
     if (this.t - (this.hitAt.get(u.id) ?? -Infinity) < H.gap) return;
-    if (!this.hitRng.chance(Math.min(0.5, owed * H.k))) return;
+    // (The draw chance() makes: kept as a number, for under p it is spread evenly over the shares of who owed.)
+    const p = Math.min(0.5, owed * H.k), x = this.hitRng.next();
+    if (!(x < p)) return;
     this.hitAt.set(u.id, this.t);
     const h = hitOf(this.hitRng, u.air);
+    const by = due ? this.hitBy(due, x / p) : null;
+    const gun = typeof by === 'number' ? this.oneGun(by) : null;
+    const who: AirHitWho | null = by === null ? null : { by, ...(gun ? { gun } : {}) };
     // A fire put out leaves its propeller feathered on a bomber with more than one engine (the art director).
-    this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt });
+    this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt, ...(who ?? {}) });
+  }
+
+  /**
+   * The group whose fire a shown hit was (R2): of those that owed on the group this tick, the one in whose share of it
+   * 'f' (0 to 1) falls, the groups in the order of their ids and the guns last. Null when nobody owed (never, for a hit).
+   */
+  private hitBy(due: Map<number | 'flak', number>, f: number): number | 'flak' | null {
+    const all = [...due].filter(([, k]) => k > 0).sort(([a], [b]) => (a === 'flak' ? 1 : b === 'flak' ? -1 : a - b));
+    const sum = all.reduce((t, [, k]) => t + k, 0);
+    if (!all.length || sum <= 0) return null;
+    let x = f * sum;
+    for (const [by, k] of all) { x -= k; if (x < 0) return by; }
+    return all[all.length - 1][0];
+  }
+
+  /** The gun's name (guns.ts) where every gun a group carries that month has the one name; null where they differ. */
+  private oneGun(id: number): string | null {
+    if (!this.oneGunOf.has(id)) {
+      const v = this.unit(id);
+      const L = !v ? null : this.place.guns?.[v.nat]?.[v.air] ?? (v.air === 'ftr' ? fighterGuns(v.model, v.nat, this.when) : bomberGuns(v.model, v.nat, this.when));
+      const names = new Set((L?.guns ?? []).map((g) => g.gun));
+      this.oneGunOf.set(id, names.size === 1 ? [...names][0] : null);
+    }
+    return this.oneGunOf.get(id) ?? null;
   }
 
   /**
@@ -1475,13 +1564,29 @@ export class AirSim implements BattleSim<AirUnit> {
     return firing ? { holdIn: left } : {};
   }
 
-  /** The group that owed a group the most this tick takes the next aircraft it loses ('flak' for the guns). */
+  /**
+   * Who a group's next loss is booked to ('flak' for the guns): the fractional ledger (R5), never an argmax and never a
+   * draw. The loss credits each group that owed on it this tick its share of what was owed (a fraction, the shares
+   * summing to one); it is booked to the one of those with the largest balance (on a tie the lower id, the guns last),
+   * which gives one back. So over a battle each creditor's booked losses keep within about one of its share of them, and
+   * two equal groups on one box share its losses, where the largest debt alone gave one of them all.
+   */
   private creditor(u: AirUnit): number | 'flak' | null {
     const m = this.owedBy.get(u.id);
     if (!m || !m.size) return null;
-    let best: number | 'flak' = 'flak', most = -Infinity;
-    for (const [by, k] of m) if (k > most) { most = k; best = by; }
-    m.set(best, most - 1);
+    const due = [...m].filter(([, k]) => k > 0).sort(([a], [b]) => (a === 'flak' ? 1 : b === 'flak' ? -1 : a - b));
+    const all = due.reduce((t, [, k]) => t + k, 0);
+    if (!due.length || all <= 0) return null;
+    const L = this.ledger.get(u.id) ?? new Map<number | 'flak', number>();
+    this.ledger.set(u.id, L);
+    let best: number | 'flak' = due[0][0], most = -Infinity;
+    for (const [by, k] of due) {
+      const v = (L.get(by) ?? 0) + k / all;
+      L.set(by, v);
+      // (A share's rounding is no lead: within a millionth it is a tie.)
+      if (v > most + 1e-9) { most = v; best = by; }
+    }
+    L.set(best, L.get(best)! - 1);
     return best;
   }
 
@@ -1581,7 +1686,7 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /**
    * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
-   * the box's that owed them (ruling 227): the loss's creditor ('by', the group that owed it the most) is the box, and
+   * the box's that owed them (ruling 227): the loss's creditor ('by', booked by the ledger: creditor) is the box, and
    * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
    * theirs, and no lot moves it. Returns the box and the seat, or null.
    */
@@ -1636,12 +1741,16 @@ export class AirSim implements BattleSim<AirUnit> {
       // ('quarry': an interceptor's from before the groups meet, an escort's only while it has turned on an attacker),
       // and how good its pilots are ('skill').
       const q = flying(u) && !away(u) ? this.after.get(u.id) : undefined;
+      // R1: the pass it will fly at the bomber box it has been given as its quarry, from then until it has another or none.
+      const box = this.quarryBox(u);
+      const pass = box && this.aimed.get(u.id) === box.id ? this.passes.get(`${u.id}:${box.id}`) : undefined;
       u.extra = {
         model: u.model, cool: coolOf(u.model), form: u.form, style: u.style, boxes: this.boxesOf(u), ammo: Math.round(ammo * 1000) / 1000,
         ...(u.job.do === 'escort' ? { role: roleOf(u.job), with: u.job.on } : {}),
         // A raid on troops: a group on its passes flies them low ('strafe'), and 'run' is how far down this pass it is.
         ...(u.job.do === 'strafe' ? { strike: 'strafe', run: Math.round((this.strafing.get(u.id)?.p ?? 0) * 1000) / 1000, passes: this.strafing.get(u.id)?.done ?? 0 } : {}),
         ...(q !== undefined ? { quarry: q } : {}),
+        ...(pass ? { pass } : {}),
         skill: this.skill.get(u.id) ?? SKY.pilots.base,
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
@@ -1825,6 +1934,7 @@ export class AirSim implements BattleSim<AirUnit> {
         const us = fighters(c.units);
         for (const u of us) u.job = { do: 'intercept', on: e.id };
         this.keptUp(us);
+        this.aimAll();
         return us.length > 0;
       }
       case 'air:escort': {

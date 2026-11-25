@@ -107,8 +107,6 @@ export const SKY = {
    * readiness. A group at full readiness under a level 3 leader comes to 0.85; a tired one with no leader, under a half.
    */
   pilots: { base: 0.3, leader: 0.25, ready: 0.3 },
-  /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
-  tied: 0.6,
   /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */
   edge: { bounce: 1.5, bounceFor: 60, climbing: 0.7, wavering: 0.8 },
   /** How near a side is to breaking off (AirSim.nearBreak) when the player is warned: three quarters of the way (ruling 226, mark 3). */
