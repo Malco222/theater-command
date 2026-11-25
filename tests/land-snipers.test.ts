@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import groundCard from '../data/campaign/ground.json';
 import { LAND, LandBattle, PRACTICE_GROUNDS, partsFor, practiceTicket, sniperShare, withSnipers, withTeams } from '../src/battle/land';
-import { LiveBattle } from '../src/battle/land/live';
+import { LiveBattle, LiveKeeper, type LiveDelta } from '../src/battle/land/live';
 import type { FieldTicket } from '../src/battle/core/types';
 import type { LandPlace } from '../src/battle/land';
 
@@ -200,4 +200,30 @@ describe('sniper teams: on the field', () => {
     expect(out.spotterSeen).toBeGreaterThan(0);
     expect(out.spotterNear / out.spotterSeen).toBeGreaterThan(0.9);
   }, 240_000);
+});
+
+describe('sniper teams: what the 3D game reads', () => {
+  it('names each team\'s sniper and spotter in the live tracks (MenOut.sn), and no one else', () => {
+    const fight = (snipers: boolean): { L: LiveBattle; deltas: LiveDelta[] } => {
+      const L = new LiveBattle(ticket(), null, { snipers });
+      const deltas: LiveDelta[] = [];
+      while (!L.sim.over && L.sim.t < 10 - 1e-6) deltas.push(JSON.parse(JSON.stringify(L.to(Math.min(10, L.sim.t + 2), 100000))));
+      return { L, deltas };
+    };
+    const on = fight(true), teams = new Set(on.L.sim.units.filter((u) => u.team === 'snp').map((u) => u.id));
+    const tracks = LiveKeeper.assemble(on.deltas);
+    expect(teams.size).toBeGreaterThan(0);
+    for (const id of teams) {
+      const men = tracks.filter((tr) => tr.b === id);
+      // Each team is made of pairs: a sniper (1) and his spotter (2), both drawn on the rifleman's file until the models exist.
+      const snipers = men.filter((tr) => tr.sn === 1).length;
+      expect(snipers).toBeGreaterThan(0);
+      expect(men.filter((tr) => tr.sn === 2).length).toBe(snipers);
+      expect(men.length).toBe(2 * snipers);
+      for (const tr of men) expect(tr.r).toBe('rifle');
+    }
+    expect(tracks.filter((tr) => tr.sn !== undefined && !teams.has(tr.b)).length).toBe(0);
+    // Off: no man is tagged.
+    expect(LiveKeeper.assemble(fight(false).deltas).some((tr) => tr.sn !== undefined)).toBe(false);
+  });
 });
