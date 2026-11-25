@@ -182,10 +182,15 @@ export function radarLays(g: Game, region: number): boolean {
   return !!ctrl && hasTech(g, ctrl, AC.radar.control);
 }
 
-export function cityNight(g: Game, target: number, bombers: number, sky: Sky): CityNight {
+/**
+ * `blind` (the last parameter, false unless a caller says so): the radar that lays the guns reads as absent for this
+ * raid, whatever the holder has built, so the guns fire by the dark cell or by the lights alone and no gun is laid by
+ * radar on a lit bomber (`radar` false, `litShare` 0). The cause that blinds it is the caller's to price, once.
+ */
+export function cityNight(g: Game, target: number, bombers: number, sky: Sky, blind = false): CityNight {
   const N = CITYDEF.night;
   const L = gunsAt(g, target), Ls = lightsAt(g, target);
-  const radar = radarLays(g, target);
+  const radar = !blind && radarLays(g, target);
   const clear = sky === 'clear';
   const lit = clear ? Math.min(L, Ls) : 0;
   const sat = Math.min(1, (CITYDEF.saturation * Ls) / Math.max(1, bombers));
@@ -199,7 +204,7 @@ export function cityNight(g: Game, target: number, bombers: number, sky: Sky): C
  * 1): it replaces the night guns' half of ruling 107(b) rather than riding on it, one cause, one price. Cloud keeps
  * its own price beside it (weather, ruling 127).
  */
-export const cityNightShare = (g: Game, target: number, bombers: number, sky: Sky): number => cityNight(g, target, bombers, sky).share;
+export const cityNightShare = (g: Game, target: number, bombers: number, sky: Sky, blind = false): number => cityNight(g, target, bombers, sky, blind).share;
 
 /**
  * The night fighters' floor over a target lit by searchlights (choice 4, the floor): a share of their day worth by
