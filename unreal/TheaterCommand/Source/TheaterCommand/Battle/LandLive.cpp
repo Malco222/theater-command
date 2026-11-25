@@ -109,6 +109,14 @@ namespace
 		// can see is not touched: that part changes results and waits for the design director's ruling under a switch of
 		// its own. Off until a Mac off/on line and the art director pass it; -TheaterLandRuleHatches turns it on for a run.)
 		{ TEXT("hatches"), TEXT("Heads up, hatches down"), TEXT("Each tank commander rides with his head out of the hatch for the view, and drops inside in his own time when rounds come at his tank or the enemy gets close: green crews early and for long, veterans late and briefly. Off: a platoon's tanks all close up together when the enemy is within 120 metres."), TEXT("TheaterLandNoHatches"), false, TEXT("TheaterLandRuleHatches") },
+		// (Machine gun and mortar teams at work, release 2: Brian, 25 November 14:15Z, machine gun and mortar teams "lay down
+		// suppressing fire, such as the German MG 42 and the US machine gun". The drill's, looks only: where a team sets up,
+		// how its crew works the gun (number two at the feed, the NCO with his glasses, bearers running ammunition), bursts
+		// and spells, barrel changes, sweeping a sector, lifting as its own men close, and moving one gun at a time, and a
+		// battle ends the same with it on or off (tests/land-teamwork). What the fire does to the enemy is not touched: that
+		// part changes results and is the fight's own. Off until a Mac off/on line and the art director pass it;
+		// -TheaterLandRuleTeamwork turns it on for a run.)
+		{ TEXT("teamwork"), TEXT("Machine gun and mortar teams at work"), TEXT("Each machine gun and mortar team works as a crew: the gun sets up on good ground, fires in bursts and spells so the guns of a team take turns and never all fall quiet, sweeps its own sector across the target, lifts its fire as its own men close, and moves one gun at a time while the others cover. The number two feeds the gun, the team leader watches through his glasses and bearers bring up ammunition. Off: the guns fire steadily from where their unit stands."), TEXT("TheaterLandNoTeamwork"), false, TEXT("TheaterLandRuleTeamwork") },
 		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
 		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
 		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },
