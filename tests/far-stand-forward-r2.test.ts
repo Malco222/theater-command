@@ -18,7 +18,7 @@ import { addCorps, atWar, capitulate, createGame, declareWar } from '../src/camp
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import { setStop } from '../src/campaign/history';
 import { km } from '../src/campaign/air';
-import { beatFrom, enemyInReach, fleetReach, foeInReach, foesOf, forwardHarbour, foundFleet, holdTo, inPassage, joinStandTo, navalAI, outOfStrikes, planCrossing, rebase, strikeThreat, voyageMonths } from '../src/campaign/navy';
+import { beatFrom, beatOnMove, enemyInReach, fleetReach, foeInReach, foesOf, forwardHarbour, foundFleet, holdTo, inPassage, joinStandTo, navalAI, outOfStrikes, planCrossing, rebase, strikeThreat, voyageMonths } from '../src/campaign/navy';
 import { gatherMonth } from '../src/campaign/readiness';
 import { startOpen } from '../src/campaign/staff';
 import { ferry } from '../src/campaign/ai';
@@ -418,6 +418,23 @@ describe('the fleet that goes where its army has gone (19:13Z, 3: the order behi
     g.flags.world = 0;
     holdTo(g, atl, 1);
     expect(g.flags[`held:${atl.id}`]).toBeUndefined();
+  }, 300000);
+});
+
+describe("one rule for a fleet's beat when its staff moves its base (beatOnMove, the design director, 20:19Z)", () => {
+  it("kept while in reach where the job keeps it, else the job's first sea in reach, else the beat it left if in reach, else the new home sea", () => {
+    const { g, pf } = opening();
+    expect(rebase(g, pf, g.byName['Pearl Harbor'], true)).toBe(true);
+    const reach = fleetReach(g, pf, true);
+    const near = reach.find((z) => z !== pf.home)!, other = reach.find((z) => z !== pf.home && z !== near)!;
+    const far = g.seas.findIndex((z) => z.name === 'Baltic Sea');
+    expect(reach).not.toContain(far);
+    expect(beatOnMove(g, pf, near, { seas: [other], keep: true })).toBe(near);
+    expect(beatOnMove(g, pf, far, { seas: [far, other], keep: true })).toBe(other);
+    expect(beatOnMove(g, pf, near, { seas: [other], keep: false })).toBe(other);
+    expect(beatOnMove(g, pf, near, { seas: [far], keep: false })).toBe(near);
+    expect(beatOnMove(g, pf, far, null)).toBe(pf.home);
+    expect(beatOnMove(g, pf, near, null)).toBe(near);
   }, 300000);
 });
 

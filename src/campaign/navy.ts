@@ -2392,6 +2392,23 @@ export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
   return true;
 }
 
+/**
+ * A fleet's beat after its staff moves its base for a job: one rule for every such move (the design director, 20:02Z
+ * and 20:19Z). The beat follows the job the base moved for and always lies within the new base's reach (fleetReach
+ * from its new base in calm weather; a raider's own). `was` is the beat before the move; `job` the move's seas, best
+ * first, and whether the beat it left is kept while it lies in reach (a quay: the crossing's seas, quay to beach, kept;
+ * standing forward: the enemy seas by its reading, not kept); null for a move with no seas of its own. Returns the old
+ * beat where kept and in reach, else the job's first sea in reach, else the old beat if in reach, else the new home
+ * sea. Each caller asks it under its own switch and writes f.station with it; with every switch off nothing calls it.
+ */
+export function beatOnMove(g: Game, f: Fleet, was: number, job: { seas: readonly number[]; keep: boolean } | null): number {
+  const reach = new Set(fleetReach(g, f, true, f.duty === 'raid'));
+  if (job?.keep && reach.has(was)) return was;
+  const z = job?.seas.find((x) => reach.has(x));
+  if (z !== undefined) return z;
+  return reach.has(was) ? was : f.home;
+}
+
 // ---- A base move is a voyage (release 2, the far chart) ----------------------------------------------------------
 // The design director's ruling of 04:33Z, 25 November 2026 (finding 39 of the 1.5.1 playtest: Japan's Mobile Fleet
 // moved its base to Konigsberg in a month). A fleet steams its reach (NAVY.range seas, the sea it starts on counted as
@@ -2721,25 +2738,22 @@ function reachOf(g: Game, nat: string, r: Region): { z: number; d: number }[] {
 }
 
 /**
- * The beat a fleet that stands forward takes with its new harbour, by the reading that picked the harbour (the design
- * director, 20:02Z, 1): of the seas in its reach from there, the one that counts most of the enemy (each enemy coast on
- * it, each known enemy fleet in it, each enemy lane through it), then the fewer seas out, then the chart's order. A
- * fleet stands forward to reach its war, and a beat left behind is a war it no longer reaches. -1 with none in reach.
+ * The seas a fleet that stands forward would take its beat from at its new harbour, best first, by the reading that
+ * picked the harbour (the design director, 20:02Z, 1): of the seas in its reach from there, those that count most of
+ * the enemy (each enemy coast on it, each known enemy fleet in it, each enemy lane through it), then the fewer seas out,
+ * then the chart's order. A fleet stands forward to reach its war, and a beat left behind is a war it no longer reaches.
  */
-function forwardBeat(g: Game, nat: string, r: Region, at: Map<number, number>): number {
-  let best = -1, bw = 0, bd = 0;
-  for (const { z, d } of reachOf(g, nat, r)) {
-    const w = at.get(z) ?? 0;
-    if (w > bw || (w === bw && w > 0 && (d < bd || (d === bd && z < best)))) { best = z; bw = w; bd = d; }
-  }
-  return best;
+function forwardBeats(g: Game, nat: string, r: Region, at: Map<number, number>): number[] {
+  return reachOf(g, nat, r).filter(({ z }) => (at.get(z) ?? 0) > 0)
+    .sort((a, b) => at.get(b.z)! - at.get(a.z)! || a.d - b.d || a.z - b.z).map(({ z }) => z);
 }
+
 
 /** For the tests and the readings: how much of the enemy a fleet would have in its reach from a harbour (foeReach). */
 export const enemyInReach = (g: Game, f: Fleet, r: Region): { seas: number; out: number } => foeReach(g, f.nat, r, foeSeaSet(g, f));
 
 /** For the tests and the readings: the beat a fleet standing forward to a harbour would take there (forwardBeat), or -1. */
-export const beatFrom = (g: Game, f: Fleet, r: Region): number => forwardBeat(g, f.nat, r, foeSeaSet(g, f));
+export const beatFrom = (g: Game, f: Fleet, r: Region): number => forwardBeats(g, f.nat, r, foeSeaSet(g, f))[0] ?? -1;
 
 /**
  * The farthest a fleet stands forward on this rule alone: one month's voyage (voyageMonths 1), the game's own turn and
@@ -2821,10 +2835,10 @@ export function forwardHarbour(g: Game, f: Fleet): Region | null {
 function standsForward(g: Game, f: Fleet): boolean {
   const to = forwardHarbour(g, f), from = f.port;
   if (!to) return false;
-  const beat = forwardBeat(g, f.nat, to, foeSeaSet(g, f));
+  const job = forwardBeats(g, f.nat, to, foeSeaSet(g, f)), was = f.station;
   if (!rebase(g, f, to)) return false;
   // (Its beat moves with its base, to the sea there that counts most of the enemy: the design director, 20:02Z, 1.)
-  if (beat >= 0) f.station = beat;
+  f.station = beatOnMove(g, f, was, { seas: job, keep: false });
   headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}: no enemy lies within its reach from ${from}.`, f.nat, to.id);
   return true;
 }
