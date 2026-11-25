@@ -184,6 +184,10 @@ export function joinEdge(side: Side, toward: number | undefined, own?: 'west' | 
 }
 /** A number from 0 to under 1 fixed by a whole number: where a wreck lies, never drawn from the battle's dice. */
 const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+/** A die keyed by place (its seed, the block, the tick, the salt), from no stream: the sniper teams' own (salts 341-359). */
+const roll = (...ns: number[]): number => { let h = 0x9e3779b9; for (const n of ns) h = Math.imul(h ^ (Math.floor(n) >>> 0), 0x01000193) + 0x7f4a7c15; return mix(h); };
+/** How a block moves and is seen: its kind's, but a sniper team's as men on foot (release 2, LAND.snipers; never as towed guns). */
+const motionOf = (u: LandUnit): Motion => (u.team === 'snp' ? 'foot' : MOTION[u.kind]);
 
 /**
  * Why an army breaks, in the UI director's words (/mnt/project-files/ui-director/field-battles/land-slice-3-review.md,
@@ -436,6 +440,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Each block's wire, by its id; and the wires' own dice (never the battle's), from when they are laid. */
   private wireBy = new Map<number, Wire>();
   private phoneRng: Rng | null = null;
+  /** Whether any sniper team is on the field (release 2, LAND.snipers): settled at the first tick that asks. */
+  private snpOn: boolean | null = null;
   /**
    * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
    * someone doesnt want it"; the design director's rulings Q4 and Q5, 18:36Z; LAND.bearers; "Stretcher bearers" below):
@@ -1642,10 +1648,19 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       case 'attack': {
         const t = this.unit(c.target);
-        const us = mine(c.units);
+        const all = mine(c.units);
         // Never at a block hidden from his side (release 2): nobody there knows it is there.
-        if (!t || t.side === by || !live(t) || t.hid || !us.length) return false;
-        hands(us);
+        if (!t || t.side === by || !live(t) || t.hid || !all.length) return false;
+        hands(all);
+        // A sniper team sent in with others (the plain attack: every block at the nearest enemy) takes no lane in the
+        // line abreast: it stays in its cover and takes the target as its aim, as a fire order gives it (land:fire). In
+        // a lane of its own it pushed the line's real blocks out past the target's flanks and cost the plain attack 6
+        // battles in 100 (the sniper gate's G7, 25 Nov; the design director's ruling of 18:55Z). Sent alone, or with
+        // only other sniper teams, it goes as ordered.
+        const lone = all.some((u) => u.team !== 'snp') ? all.filter((u) => u.team === 'snp') : [];
+        for (const u of lone) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; });
+        const us = lone.length ? all.filter((u) => u.team !== 'snp') : all;
+        if (!us.length) return true;
         // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
         // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
@@ -1917,7 +1932,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   // (A joiner over dry ground keeps off the water only where the river bends away from the dry lanes; with no bend it wades.)
   private going(u: LandUnit): Going {
     if (this.bocage && this.heldBack(u)) return 'hedged';
-    return u.dry && MOTION[u.kind] === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : MOTION[u.kind];
+    return u.dry && motionOf(u) === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : motionOf(u);
   }
   private ashore: Record<Ground, number> | null = null;
   private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : m === 'hedged' ? LAND.pace.tracks : LAND.pace[m]; }
@@ -2230,6 +2245,9 @@ export class LandBattle implements BattleSim<LandUnit> {
   hideOn(): boolean {
     if (this.t > 0 || this.over) return false;
     this.hide = true;
+    // Sniper teams (release 2, Q6(2)): the player's start where his staff would put them, and he may move them before
+    // the clock starts; the computer's take their cover as the clock starts (hideStart).
+    for (const s of ['att', 'def'] as Side[]) if (this.ticket[s].human && this.units.some((u) => u.team === 'snp' && u.side === s)) this.laySnipers(s);
     for (const u of this.units) this.markHid(u);
     return true;
   }
@@ -2334,8 +2352,215 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Standing in woods (fieldworks dug into woods too): where a block can hide. */
   private inWoods(u: LandUnit): boolean { return coverAt(this.field, u.x, u.y) === 'woods'; }
 
-  /** Cover a block can hide in: woods, or a hedge line. */
-  private inCover(u: LandUnit): boolean { return this.inWoods(u) || this.onHedge(u.x, u.y); }
+  /** Cover a block can hide in: woods, or a hedge line; a sniper team also buildings, rubble and rough (LAND.snipers.cover). */
+  private inCover(u: LandUnit): boolean { return this.inWoods(u) || this.onHedge(u.x, u.y) || (u.team === 'snp' && this.sniperCover(u.x, u.y)); }
+
+  // ---- Sniper teams (release 2; Brian, 25 November 16:07Z; LAND.snipers, withSnipers; the design director's ruling of
+  // 16:30Z, sniper teams Q1 to Q8) --------------------------------------------------------------------------------------
+  //
+  // Only where the switch put sniper teams on the field: nothing here runs, and no die is drawn, for any other block. Its
+  // dice are its own, keyed by place (roll, salts 341-359), never the battle's, so on and off keep the battle's in step.
+
+  /** Ground a sniper team hides on beyond woods and a hedge line (LAND.snipers.cover). */
+  sniperCover(x: number, y: number): boolean { return LAND.snipers.cover.includes(coverAt(this.field, x, y)); }
+
+  /** Hiding ground for a sniper team: its own cover, woods, or a hedge line. */
+  sniperGround(x: number, y: number): boolean { return this.sniperCover(x, y) || coverAt(this.field, x, y) === 'woods' || this.onHedge(x, y); }
+
+  /** Closed up now (LAND.closed): a tank block whose commanders are down inside, set by a rule whose switch is on. */
+  closed(u: LandUnit): boolean { return u.closedTo !== undefined && this.t < u.closedTo; }
+
+  /** A sniper team's die, keyed by its seed, the team, the tick and the salt (341-359). */
+  private snpRoll(u: LandUnit, salt: number): number { return roll(this.ticket.seed, this.ticket.attempt ?? 0, u.id, Math.round(this.t / DT), salt); }
+
+  /** The weight of a sniper team's blows on t (LAND.snipers.bite), 0 to 1: its striking weight now over t's power. */
+  private bite(u: LandUnit, t: LandUnit): number {
+    const r = (u.power0 * (0.35 + 0.65 * (u.str / u.str0))) / Math.max(1e-9, t.power0);
+    return Math.min(1, r / LAND.snipers.bite);
+  }
+
+  /** A sniper team's choice of target, as a multiplier on targetOf's score (LAND.snipers.pick: lower first). */
+  private sniperPick(e: LandUnit): number {
+    const P = LAND.snipers.pick;
+    if (e.state === 'routing') return P.routing;
+    if (e.team === 'snp') return P.snp;
+    if (e.team === 'mg') return P.mg;
+    if (e.kind === 'arm') return this.closed(e) ? P.closed : P.open;
+    return motionOf(e) === 'foot' && e.speed > 0.5 && e.order?.kind !== 'withdraw' && (e.pinSpent ?? 0) < LAND.pin.most ? P.moving : P.still;
+  }
+
+  /**
+   * In woods, off a hedge line, a sniper team reaches beyond LAND.hide.forest only where its line to 'e' leaves the woods
+   * within LAND.snipers.edge metres: it shoots from the edge.
+   */
+  private sniperSees(u: LandUnit, e: LandUnit, d: number): boolean {
+    if (d <= LAND.hide.forest || !this.inWoods(u) || this.onHedge(u.x, u.y)) return true;
+    const k = Math.hypot(e.x - u.x, e.y - u.y), step = Math.min(10, this.field.cell);
+    if (k < 1e-6) return true;
+    for (let r = step; r <= LAND.snipers.edge; r += step) if (coverAt(this.field, u.x + ((e.x - u.x) * r) / k, u.y + ((e.y - u.y) * r) / k) !== 'woods') return true;
+    return false;
+  }
+
+  /**
+   * Where a sniper team of the computer's goes next (ai.ts snipersUp): hiding ground within 'step' metres of it toward
+   * 'to', never ahead of 'front' (its own leading foot, measured along its side's way), and at least 'keep' metres from
+   * every found enemy block; the furthest forward first, then the nearest. Null where there is none.
+   */
+  sniperSpot(u: LandUnit, to: [number, number], front: number, step = 400, keep: number = LAND.snipers.keep): [number, number] | null {
+    const dir = u.side === 'att' ? 1 : -1, cell = this.field.cell, k = Math.max(1e-6, Math.hypot(to[0] - u.x, to[1] - u.y));
+    const foes = this.units.filter((e) => e.side !== u.side && live(e) && !e.hid);
+    let best: [number, number] | null = null, score = -Infinity;
+    for (let a = -step; a <= step; a += cell) for (let c = -step / 2; c <= step / 2; c += cell) {
+      // Along the way to 'to', and across it.
+      const x = Math.round(clamp(u.x + ((to[0] - u.x) * a) / k - ((to[1] - u.y) * c) / k, 5, this.field.w - 5));
+      const y = Math.round(clamp(u.y + ((to[1] - u.y) * a) / k + ((to[0] - u.x) * c) / k, 5, this.field.h - 5));
+      if (Math.hypot(x - u.x, y - u.y) > step || dir * y > dir * front || !this.sniperGround(x, y)) continue;
+      if (foes.some((e) => dist(e.x, e.y, x, y) < keep)) continue;
+      const sc = dir * y * 1000 - Math.hypot(x - u.x, y - u.y);
+      if (sc <= score || this.wet(u, x, y, false)) continue;
+      score = sc; best = [x, y];
+    }
+    return best;
+  }
+
+  /**
+   * Where a sniper team slipping away goes (ai.ts snipersUp; LAND.snipers.slip): hiding ground 'least' to 'most' metres
+   * from where it is, no nearer its own side's front than it is (never forward), no nearer any found enemy block than it
+   * is now; the nearest first. Null where there is none: it crawls to another window where it is.
+   */
+  slipSpot(u: LandUnit, least = 30, most = 120): [number, number] | null {
+    const dir = u.side === 'att' ? 1 : -1, cell = Math.min(10, this.field.cell);
+    const foes = this.units.filter((e) => e.side !== u.side && live(e) && !e.hid);
+    const now = foes.reduce((m, e) => Math.min(m, dist(e.x, e.y, u.x, u.y)), Infinity);
+    let best: [number, number] | null = null, gap = Infinity;
+    for (let dy = -most; dy <= 0; dy += cell) for (let dx = -most; dx <= most; dx += cell) {
+      const r = Math.hypot(dx, dy);
+      if (r < least || r > most || r >= gap) continue;
+      const x = Math.round(clamp(u.x + dx, 5, this.field.w - 5)), y = Math.round(clamp(u.y + dir * dy, 5, this.field.h - 5));
+      if (!this.sniperGround(x, y) || this.wet(u, x, y, false) || foes.some((e) => dist(e.x, e.y, x, y) < now)) continue;
+      gap = r; best = [x, y];
+    }
+    return best;
+  }
+
+  /**
+   * A sniper team fires from hiding this tick (LAND.snipers.find): no ambush sprung, no 'fired' at once. Found by odds
+   * by its flash and its crack, less often the better its men; found, it is not yet located for find.locate seconds. Its
+   * fire counts as an ambush for the struck side's staff, which searches the cover ahead.
+   */
+  private snipeFromHiding(u: LandUnit, t: LandUnit): void {
+    const F = LAND.snipers.find;
+    this.ambushed.add(t.side);
+    let f = (this.gap(u, t) > F.near ? F.far : F.close) * (F.xp - u.xp);
+    if (this.units.some((e) => e.team === 'snp' && e.side !== u.side && fighting(e) && this.gap(u, e) <= reachOf(u))) f *= F.hunt;
+    f = clamp(f, 0, 1);
+    if (this.snpRoll(u, 341) >= 1 - (1 - f) ** (DT / F.every)) return;
+    this.reveal(u, 'fired', t);
+    u.unloc = Math.round((this.t + F.locate) * 1000) / 1000;
+  }
+
+  /**
+   * What a sniper team's blow does beyond its harm, by its bite b (LAND.snipers): its leaders shot, the block steadies on
+   * xp x (1 - lead.xp b) for lead.secs; a block on foot goes to ground and crawls at pace x (1 - pin.pace b) for
+   * pin.secs, until it has spent LAND.pin.most seconds so (never routing or falling back).
+   */
+  private sniped(u: LandUnit, t: LandUnit): void {
+    const S = LAND.snipers, b = this.bite(u, t), at = (secs: number): number => Math.round((this.t + secs) * 1000) / 1000;
+    const lead = 1 - S.lead.xp * b;
+    t.leadK = t.leadTo !== undefined && this.t < t.leadTo ? Math.min(t.leadK ?? 1, lead) : lead;
+    t.leadTo = at(S.lead.secs);
+    if (motionOf(t) !== 'foot' || t.state === 'routing' || t.order?.kind === 'withdraw' || (t.pinSpent ?? 0) >= LAND.pin.most) return;
+    const pin = 1 - S.pin.pace * b;
+    t.pinK = t.pinTo !== undefined && this.t < t.pinTo ? Math.min(t.pinK ?? 1, pin) : pin;
+    t.pinTo = at(S.pin.secs);
+  }
+
+  /** A sniper team at half strength or the rout nerve (LAND.snipers.back): it withdraws to its own edge, never routs. */
+  private sniperBack(u: LandUnit): void {
+    if (u.order?.kind === 'withdraw') return;
+    this.send(u, { kind: 'withdraw', x: u.x, y: u.side === 'att' ? 0 : this.field.h });
+    u.engaged = undefined;
+    delete u.slipTo;
+    delete u.search; delete u.searchR;
+    if (this.ticket[u.side].human) this.say({ what: 'land:snipersBack', unit: u.id, side: u.side, text: `${this.named(u)} has lost too many men and pulls back.`, x: u.x, y: u.y });
+  }
+
+  /**
+   * Each tick (LAND.snipers.slip): a sniper team found, on its hiding ground, unstruck for slip.after seconds, with no
+   * enemy within slip.clear metres, slips away: it holds its fire slip.secs while it moves, then is hidden again if all
+   * of that still holds (struck meanwhile, suffer calls it off and it stays found). At most slip.most a battle, none
+   * below slip.str of its strength.
+   */
+  private snipersSlip(): void {
+    const S = LAND.snipers.slip;
+    for (const u of this.units) {
+      if (u.team !== 'snp' || u.hid || !fighting(u) || u.order?.kind === 'withdraw') continue;
+      const clear = (): boolean => this.sniperGround(u.x, u.y) && !this.units.some((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= S.clear);
+      if (u.slipTo !== undefined) {
+        if (this.t < u.slipTo - 1e-9) continue;
+        delete u.slipTo;
+        if (clear()) { u.hid = true; delete u.unloc; }
+        continue;
+      }
+      if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || !clear()) continue;
+      u.slipTo = Math.round((this.t + S.secs) * 1000) / 1000;
+      u.slips = (u.slips ?? 0) + 1;
+    }
+  }
+
+  /**
+   * The clock starts (Q6(2)): a computer side's sniper teams take hiding ground, each to its own stretch of the line,
+   * buildings, hedges and wood edges first. The defence's: the most forward spot about its leading foot (layAmbush's
+   * reach of it, within its room) from which the attack's way in is within reach. The attack's: within LAND.snipers.behind metres behind its leading foot, where
+   * the enemy's line is within reach; otherwise it stays. The player's stay where he placed them.
+   */
+  private laySnipers(side: Side): void {
+    const S = LAND.snipers, H = LAND.hide.staff, dir = side === 'att' ? 1 : -1, z = this.field.zones[side];
+    const own = this.units.filter((u) => u.side === side && live(u));
+    const snp = own.filter((u) => u.team === 'snp' && !u.taken);
+    const foot = own.filter((u) => !u.team && u.kind !== 'art' && u.kind !== 'fort');
+    const foes = this.units.filter((u) => u.side !== side && live(u) && u.kind !== 'fort');
+    if (!snp.length || !foot.length || !foes.length) return;
+    const room: [number, number, number, number] = [
+      Math.min(z[0], ...own.map((u) => u.x - u.w / 2)), Math.min(z[1], ...own.map((u) => u.y - u.d / 2)),
+      Math.max(z[2], ...own.map((u) => u.x + u.w / 2)), Math.max(z[3], ...own.map((u) => u.y + u.d / 2)),
+    ];
+    // Its leading foot's front, along its side's way.
+    const front = dir > 0 ? Math.max(...foot.map((u) => u.y + u.d / 2)) : Math.min(...foot.map((u) => u.y - u.d / 2));
+    const x0 = room[0], span = Math.max(1, room[2] - room[0]), reach = LAND.teams.snp.reach;
+    const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
+    // In reach of what: the defence's, the attack's way in (its blocks where they stand and its march to the line); the
+    // attack's, the enemy's line.
+    const inReach = (x: number, y: number): boolean => foes.some((e) => Math.hypot(e.x - x, e.y - y) - (e.w + e.d) / 4 <= reach || (side === 'def' && Math.abs(e.x - x) <= reach && dir * (y - e.y) < 0 && Math.abs(y - e.y) - (e.d / 2) <= reach + 400));
+    snp.sort((a, b) => a.x - b.x || a.id - b.id);
+    snp.forEach((u, i) => {
+      const cx = x0 + (span * (i + 0.5)) / snp.length, half = span / snp.length / 2;
+      const [lo, hi] = side === 'def' ? [-H.back, H.ahead] : [-S.behind, 0];
+      let best: { x: number; y: number; score: number } | null = null;
+      for (let dy = lo; dy <= hi; dy += cell) for (let dx = -half; dx <= half; dx += cell) {
+        const x = Math.round(cx + dx), y = Math.round(front + dir * dy);
+        if (!this.sniperGround(x, y)) continue;
+        if (!inReach(x, y)) continue;
+        // The furthest forward; buildings, hedges and wood edges before plain cover; then the nearest its stretch's middle.
+        const edge = this.sniperCover(x, y) || this.onHedge(x, y) || !this.inWoodsAt(x, y + dir * 30) ? 1 : 0;
+        const score = edge * 1e6 + dir * y * 10 - Math.abs(dx) * 0.1;
+        if (best && score <= best.score) continue;
+        if (this.standWhy(u, x, y, room) !== null) continue;
+        best = { x, y, score };
+      }
+      if (best) this.place(u, best.x, best.y);
+    });
+  }
+
+  /** Where a sniper team hides, in words: the hedges, the houses, the ruins, the rocks. */
+  private sniperWhere(u: LandUnit): string {
+    if (this.onHedge(u.x, u.y)) return 'the hedges';
+    const c = coverAt(this.field, u.x, u.y);
+    return c === 'buildings' || c === 'suburb' || c === 'industry' ? 'the houses' : c === 'blown' ? 'the ruins' : c === 'rough' || c === 'rock' ? 'the rocks' : 'cover';
+  }
+
+  /** Woods at this point (a wood's edge is where the woods end a little ahead). */
+  private inWoodsAt(x: number, y: number): boolean { return coverAt(this.field, clamp(x, 0, this.field.w - 1), clamp(y, 0, this.field.h - 1)) === 'woods'; }
 
   /** Hidden if it stands in woods or on a hedge line, before the clock starts. Fieldworks are known where they are built. */
   private markHid(u: LandUnit): void {
@@ -2370,6 +2595,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.hidStarted = true;
     // Only the computer's: the player's own staff never moves the blocks he drew up.
     if (this.ai.def && !this.ticket.def.human) this.layAmbush('def');
+    // Sniper teams (release 2): the computer's take their cover first, then they hide with the rest.
+    for (const s of ['att', 'def'] as Side[]) if (this.ai[s] && !this.ticket[s].human && this.units.some((u) => u.team === 'snp' && u.side === s)) this.laySnipers(s);
     for (const u of this.units) this.markHid(u);
     // Night patrol (release 2): settled now, with the posts laid and hidden, before either staff first thinks.
     if (this.patrol) this.patrolOut();
@@ -2431,8 +2658,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (how === 'fired') u.unloc = Math.round((this.t + LAND.hide.locate.secs) * 1000) / 1000;
     const mineFound = this.ticket[u.side].human, theirs = this.ticket[other(u.side)].human;
     if (theirs) u.found = true;
-    const where = this.inWoods(u) ? 'the woods' : 'the hedges';
-    const text = mineFound
+    const where = this.inWoods(u) ? 'the woods' : u.team === 'snp' ? this.sniperWhere(u) : 'the hedges';
+    // A sniper team found by its fire (release 2): its flash or its crack gave it away; it springs no ambush.
+    const text = u.team === 'snp' && how === 'fired'
+      ? mineFound ? `${this.named(u)} has been spotted by its fire in ${where}.` : theirs ? `${by ? `Your ${by.name} has` : 'We have'} spotted an enemy sniper in ${where}.` : ''
+      : mineFound
       ? how === 'fired' ? `${this.named(u)} springs its ambush from ${where}.` : how === 'seen' ? `${this.named(u)} has been seen in ${where}.` : how === 'heard' ? `${this.named(u)} has been heard moving in ${where}.` : how === 'out' ? `${this.named(u)} has left cover and can be seen.` : how === 'searched' ? `${this.named(u)} is flushed out of ${where} by fire.` : how === 'patrol' ? `An enemy patrol found ${this.named(u)} in ${where} in the night.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.`
       : theirs
         ? how === 'fired' && by ? `Enemy troops hidden in ${where} open fire on your ${by.name}.` : (how === 'seen' || how === 'heard') && by ? `Your ${by.name} has found enemy troops in ${where}.` : how === 'searched' && by ? `Your ${by.name} has flushed enemy troops out of ${where}.` : how === 'patrol' ? 'Our night patrol found a hidden post.' : how === 'out' ? 'Enemy troops come out of cover.' : `Enemy troops found in ${where}.`
@@ -2447,16 +2677,18 @@ export class LandBattle implements BattleSim<LandUnit> {
   private spotHidden(): void {
     const H = LAND.hide;
     for (const u of this.units) {
-      const sight = H.sight[MOTION[u.kind]];
+      const sight = H.sight[motionOf(u)];
       if (u.unloc !== undefined && (this.t >= u.unloc || !live(u) || this.units.some((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= sight))) delete u.unloc;
       if (!u.hid) continue;
       if (!live(u)) { delete u.hid; continue; }
       if (!this.inCover(u)) { this.reveal(u, 'out'); continue; }
-      const heard = u.speed > 0.5 ? H.heard[MOTION[u.kind]] : 0;
+      const heard = u.speed > 0.5 ? H.heard[motionOf(u)] : 0;
       // Smoke on call (release 2): nobody sees it through a screen standing between them (it may still be heard).
       const veiled = (e: LandUnit): boolean => this.smoke && this.screens.length > 0 && this.screened(e.x, e.y, u.x, u.y);
-      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= Math.max(sight, heard) && (this.gap(u, e) <= heard || !veiled(e)));
-      if (by) this.reveal(u, this.gap(u, by) <= sight && !veiled(by) ? 'seen' : 'heard', by);
+      // Closed up (LAND.closed), a tank block sees it only from nearer.
+      const sees = (e: LandUnit): number => (e.closedTo !== undefined && this.closed(e) ? sight * LAND.closed.sight : sight);
+      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= Math.max(sees(e), heard) && (this.gap(u, e) <= heard || !veiled(e)));
+      if (by) this.reveal(u, this.gap(u, by) <= sees(by) && !veiled(by) ? 'seen' : 'heard', by);
     }
   }
 
@@ -2612,13 +2844,27 @@ export class LandBattle implements BattleSim<LandUnit> {
       const blind = !!t.hid;
       if (this.contactAt === null && u.kind !== 'art') this.contactAt = this.t;
       // A hidden block that opens fire gives itself away, and its first fire is the ambush's (release 2, LAND.hide).
-      if (u.hid) { u.sprung = this.t; this.reveal(u, 'fired', t); }
+      if (u.hid && u.team === 'snp') this.snipeFromHiding(u, t);
+      else if (u.hid) { u.sprung = this.t; this.reveal(u, 'fired', t); }
       // An ambushed side shoots at the cover ahead from then on (the historian: "shooting constantly at the hedgerows").
       if (u.sprung === this.t) this.ambushed.add(t.side);
       // He knows a block one of his has fought, his guns' target too, and one of theirs that has struck his in contact;
       // their guns firing from far back are not contact (b464(2)). Fire on cover finds nothing yet.
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; if (!blind) t.found = true; }
-      if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
+      if (!u.met) {
+        u.met = true;
+        // A hidden sniper team's first shot (the design director's sniper ruling Q7, guard 3): the player it falls on
+        // hears of it where his block is struck, never where the shooter lies, and the dispatch names nothing of him,
+        // with the fog of war on or off (hidden is hidden).
+        const unseen = u.team === 'snp' && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
+        if (u.side === 'att' || !t.met) {
+          if (unseen) this.say({ what: 'contact', side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
+          else this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
+        }
+      }
+      // A sniper team's shot at a tank block is at her commanders' heads: no blow, no harm, no hold on her (Q3); she
+      // closes up (LAND.closed). It draws no die.
+      if (u.team === 'snp' && t.kind === 'arm') { if (!blind) t.closedTo = Math.round((this.t + LAND.closed.secs) * 1000) / 1000; continue; }
       const blow = this.blow(u, t);
       // Field telephone lines (release 2): a gun's or a mortar team's blow may cut the wire to the block it falls on.
       if (this.phones && this.wires.length) this.wireBlow(u, t);
@@ -2656,6 +2902,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       h.from.push([u, blow.dmg]);
       hurt.set(t.id, h);
       if (blow.front) t.pinned = true;
+      if (u.team === 'snp' && !blind) this.sniped(u, t);
       if (blow.aspect !== 'front' && this.t - t.flankedAt > 20) {
         t.flankedAt = this.t;
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
@@ -2692,6 +2939,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (before) this.cutOn(before, moved!);
     if (tanks) this.wireTanks(tanks);
     if (this.hide) this.spotHidden();
+    if (this.hide && (this.snpOn ??= this.allBlocks().some((u) => u.team === 'snp'))) this.snipersSlip();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     // Cuts whose time is up stand open as gaps, before the drill's men walk this tick (hedge cutters, release 2).
     if (this.cuts.length) this.openCuts();
@@ -2711,7 +2959,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Never eased onto ground it can hardly cross (into the river off a bridge, tanks into a marsh), unless it stands on such
     // already; nor into the river off its bank, where foot could wade but would be left standing (b464(5)).
     const can = (u: LandUnit, ux: number, uy: number, push: number): boolean => {
-      const x = clamp(u.x + ux * push, 5, this.field.w - 5), y = clamp(u.y + uy * push, 5, this.field.h - 5), pace = LAND.pace[MOTION[u.kind]];
+      const x = clamp(u.x + ux * push, 5, this.field.w - 5), y = clamp(u.y + uy * push, 5, this.field.h - 5), pace = LAND.pace[motionOf(u)];
       const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
       if (inRiver(there) && !inRiver(here)) return false;
       const to = pace[there];
@@ -2784,19 +3032,23 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.kind === 'art' && marching) return null;
     if (u.order?.kind === 'withdraw') return null;
     let reach = reachOf(u);
+    // A sniper team under fire, or slipping away, holds its fire (LAND.snipers.quiet, slip).
+    const snp = u.team === 'snp';
+    if (snp && ((u.quietTo !== undefined && this.t < u.quietTo) || u.slipTo !== undefined)) return null;
     // Guns told to fire on one block strike it whenever it is in their reach (ai.ts; ruling 239(6)).
     if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
-    // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in.
-    if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));
+    // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in. A sniper team
+    // fires from hiding at its whole reach, and may be found for it (snipeFromHiding).
+    if (u.hid && u.order?.kind !== 'attack' && !snp) reach = Math.min(reach, this.ambushAt(u));
     let best: LandUnit | null = null, score = Infinity;
     for (const e of this.units) {
       // A block hidden from its side is never struck: nobody there knows it is there.
       if (e.side === u.side || !live(e) || e.hid) continue;
       const d = this.gap(u, e);
-      if (d > reach) continue;
+      if (d > reach || (snp && !this.sniperSees(u, e, d))) continue;
       if (u.order?.kind === 'attack' && u.order.target === e.id) return e;
       const off = Math.abs(turn(u.face, bearing(u.x, u.y, e.x, e.y)));
-      const s = d * (1 + off) * (e.state === 'routing' ? 2 : 1);
+      const s = d * (1 + off) * (snp ? this.sniperPick(e) : e.state === 'routing' ? 2 : 1);
       if (s < score) { score = s; best = e; }
     }
     // Firing on cover (reconnaissance by fire): nothing else in reach, it strikes blind at what hides near that point.
@@ -3076,6 +3328,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.team && t.kind === 'arm') p *= LAND.teams[u.team].armour;
     }
     if (u.kind === 'arm' && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
+    // Closed up (LAND.closed): her commanders down inside, she finds less of the men on foot to fire at.
+    if (u.kind === 'arm' && motionOf(t) === 'foot' && this.closed(u)) p *= LAND.closed.foot;
     const rise = heightAt(this.field, uAt[0], uAt[1]) - heightAt(this.field, tAt[0], tAt[1]);
     if (rise > LAND.height.over) p *= LAND.height.up; else if (rise < -LAND.height.over) p *= LAND.height.down;
     const aspect = rearguard || pair ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
@@ -3090,7 +3344,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
     // Upright and running in the open, at the double: struck harder (direct command, release 2).
     if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
-    const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
+    // A sniper team found and located: two men and no depth; the window it fires from blown in by bombs and shells.
+    if (t.team === 'snp' && !t.hid && !vague) {
+      take *= LAND.snipers.take.fragile;
+      if (u.team === 'mor' || (u.kind === 'art' && !u.team) || u.kind === 'arm') take *= LAND.snipers.take.blast;
+    }
+    const luck = 1 + LAND.jitter * ((u.team === 'snp' ? this.snpRoll(u, 342) : this.rng.next()) * 2 - 1);
     // The day's luck, and under the field spread's move (step 1b) its factor beside it.
     const f = this.lean === undefined ? this.fortune : this.fortune * this.lean;
     const dmg = p * am * amx * take * luck * (u.side === 'att' ? f : 1 / f) * DT;
@@ -3121,8 +3380,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     const before = t.str, had = t.figures;
     t.str = Math.max(0, t.str - share * t.str0);
     const lost = (before - t.str) / t.str0;
+    // Sniper teams (release 2): its leaders shot (LAND.snipers.lead), it steadies on part of its experience.
+    const xpNow = t.leadTo !== undefined && this.t < t.leadTo ? t.xp * (t.leadK ?? 1) : t.xp;
     // (Under the field spread's N, step 1b, a block reads the reference army's steadiness: its quality acts at the army.)
-    const steady = this.refNerve ? REF_NERVE.steady : 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
+    const steady = this.refNerve ? REF_NERVE.steady : 1 - LAND.nerve.xp * xpNow - LAND.nerve.general * this.generalOf(t.side);
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     // The field spread's army ledger (step 1b, form 13A): the block's loss at its own experience and its side's general,
     // weighed by the parts of m read at the army, over its side's power.
@@ -3136,6 +3397,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       T.loss += k;
       for (const p of NERVE_PARTS) T[p] += k * ((parts?.[p] ?? 1) - 1);
     }
+    // A sniper team under fire, seen, vague or blind, holds its fire till LAND.snipers.quiet after the last blow; struck
+    // while it slips away, it stays found.
+    if (t.team === 'snp') { t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1000) / 1000; delete t.slipTo; }
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
     // Stretcher bearers (release 2): its wounded lie for its bearers, its light cases go to their dressing. A model lost
@@ -3150,7 +3414,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (!by) { this.drill?.fromAir(t.id, k); continue; }
       owed[by.id] -= model;
       // A tank block's man off the enemy's foot may go to her machine guns, not a shell (the drill book; looks only).
-      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg' && !(by.kind === 'arm' && this.drill?.mgKill(by, t, k))) this.shell(by, t, k, w);
+      // (a sniper team's man is shot, as a machine-gun team's is: no shell)
+      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg' && by.team !== 'snp' && !(by.kind === 'arm' && this.drill?.mgKill(by, t, k))) this.shell(by, t, k, w);
       else this.drill?.struckBy(by.id, t.id, k);
     }
   }
@@ -3228,7 +3493,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
     // Help that never came (hold until relieved, release 2): it breaks where a block starts to waver, until relieved.
-    if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) { this.rout(u); return; }
+    // A sniper team never routs (LAND.snipers.back): at half strength or the rout nerve it withdraws, as a block ordered back.
+    if (u.team === 'snp' && (u.str <= LAND.snipers.back * u.str0 || u.mor < N.rout)) this.sniperBack(u);
+    else if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) { this.rout(u); return; }
     const was = u.state;
     u.state = u.mor < N.waver ? 'wavering' : 'steady';
     if (was === 'steady' && u.state === 'wavering') this.say({ what: 'wavering', unit: u.id, side: u.side, text: `${this.named(u)} is wavering.`, x: u.x, y: u.y });
@@ -3332,7 +3599,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Blocks wheel before they march; a runner just runs, and one wading the river turns as it wades.
     if (!run && !wading && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
     if (run) u.face = head; else this.turnTo(u, head);
-    const m = MOTION[k];
+    const m = motionOf(u);
     const g = groundAt(this.field, u.x, u.y);
     let pace = LAND.pace[m][g];
     if (k === 'mtn' && (g === 'rough' || g === 'rock')) pace = Math.min(1, pace * LAND.mountainFoot);
@@ -3345,6 +3612,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     const double = !run && u.order?.kind === 'move' && !!u.order.run;
     if (double) u.winded = this.t + LAND.double.winded;
     let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (double ? LAND.double.pace[m] : 1) * (u.state === 'wavering' ? 0.85 : 1);
+    // Pinned (LAND.pin; a sniper team's fire, release 2): men on foot go to ground and crawl, at most LAND.pin.most
+    // seconds a battle, counted while it moves; never routing or falling back.
+    if (u.pinTo !== undefined && this.t < u.pinTo && m === 'foot' && !run && u.order?.kind !== 'withdraw' && (u.pinSpent ?? 0) < LAND.pin.most) {
+      v *= u.pinK ?? 1;
+      u.pinSpent = Math.round(((u.pinSpent ?? 0) + DT) * 1000) / 1000;
+    }
     const d = dist(u.x, u.y, to[0], to[1]);
     const stepLen = Math.min(d, v * DT);
     const [ax, ay] = ahead(head);
@@ -3504,9 +3777,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * (mouth false) may stand at a bridge's end.
    */
   private wet(u: LandUnit, x: number, y: number, mouth = true): boolean {
-    if (MOTION[u.kind] === 'fixed') return false;
+    if (motionOf(u) === 'fixed') return false;
     const g = groundAt(this.field, clamp(x, 5, this.field.w - 5), clamp(y, 5, this.field.h - 5));
-    if (g === 'bridge' || g === 'water' || g === 'blown' || LAND.pace[MOTION[u.kind]][g] <= LAND.queue.hard) return true;
+    if (g === 'bridge' || g === 'water' || g === 'blown' || LAND.pace[motionOf(u)][g] <= LAND.queue.hard) return true;
     if (!mouth) return false;
     if (!this.mouths) {
       const f = this.field, C = f.cols, R = f.rows, n = Math.round(LAND.mouth / f.cell);
@@ -3529,7 +3802,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * wades, none once the battle is over, so it is set down on the nearest bank). Where it stands already, that point.
    */
   private shore(u: LandUnit, perTurn = 30): [number, number] {
-    const pace = LAND.pace[MOTION[u.kind]], f = this.field;
+    const pace = LAND.pace[motionOf(u)], f = this.field;
     const ok = (x: number, y: number): boolean => { const g = groundAt(f, x, y); return !inRiver(g) && pace[g] > 0; };
     if (ok(u.x, u.y)) return [u.x, u.y];
     let best: [number, number] = [u.x, u.y], score = Infinity;

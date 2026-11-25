@@ -45,7 +45,8 @@ export const OWN_TEAM_KINDS: readonly string[] = ['inf', 'mtn', 'mot'];
 export const OWN_TEAM_ID = -1_000_001;
 
 /** Their words on a block's card: "VII Corps machine guns" (all of a corps' machine-gun companies together, more men than one team block). */
-const WORD: Record<Team, [string, string]> = { mg: ['machine guns', 'MGs'], mor: ['mortars', 'mortars'] };
+// (Exclude: a campaign corps brings no sniper team of its own; snipers come from the rules' LAND.snipers, release 2.)
+const WORD: Record<Exclude<Team, 'snp'>, [string, string]> = { mg: ['machine guns', 'MGs'], mor: ['mortars', 'mortars'] };
 
 /** Whether a force is one of these team blocks (by its id). */
 export const isOwnTeam = (f: { corps: number }): boolean => f.corps <= OWN_TEAM_ID;

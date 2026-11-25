@@ -14,9 +14,12 @@ const SUPPORT_COVER = (support as unknown as { antiTank: { alone: { cover: numbe
 
 export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
 export type Motion = 'foot' | 'wheels' | 'tracks' | 'guns' | 'fixed';
-/** A support team's arm (release 2): a machine-gun team or a mortar team. A ticket force of this kind makes one. */
-export type Team = 'mg' | 'mor';
-export const TEAMS: readonly Team[] = ['mg', 'mor'];
+/**
+ * A support team's arm (release 2): a machine-gun team, a mortar team, or a sniper team ('snp': sniper teams, release 2,
+ * LAND.snipers; only on the field where its switch put one there, withSnipers). A ticket force of this kind makes one.
+ */
+export type Team = 'mg' | 'mor' | 'snp';
+export const TEAMS: readonly Team[] = ['mg', 'mor', 'snp'];
 
 export const MOTION: Record<Kind, Motion> = { inf: 'foot', mtn: 'foot', cav: 'foot', eng: 'foot', mot: 'wheels', arm: 'tracks', art: 'guns', fort: 'fixed' };
 
@@ -179,7 +182,84 @@ export const LAND = {
   teams: {
     mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
     mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },
+    // Sniper teams (release 2, LAND.snipers): a few aimed rounds a minute, each at a man who matters; no harm to armour.
+    snp: { reach: 600, punch: 0.12, nerve: 4, close: 0.25, closeAt: 80, armour: 0, speed: 5, size: [40, 20], figures: 2 },
   } as Record<Team, { reach: number; punch: number; nerve: number; close: number; closeAt: number; armour: number; speed: number; size: [number, number]; figures: number }>,
+  /**
+   * Sniper teams (release 2; Brian, 25 November 16:07Z: "should we add snipers? how would that impact the battle?", then
+   * "yes" to a small specialist team, not a common unit, small in kills and large in nerve and tempo; the design form at
+   * snipers/form.md, ruled by the design director). Only where the switch put them on the field (withSnipers): a team
+   * is a support team block ('snp', LAND.teams.snp) carved from its side's own foot power, so the card's odds stand (b418).
+   *   share: the share of a side's foot power its army gives its snipers, by doctrine, never by the year (the design
+   *     director's ruling of 25 November 16:30Z, Q2: the history start's level of each army's doctrine; the historian
+   *     checks the order): the Soviet sniper movement, a sniper in every rifle platoon; Finland; Japan; Germany's
+   *     Scharfschuetzen; Britain's sniper section of eight a battalion; a few scoped rifles a company in the US Army;
+   *     France; Italy; '_' any other. Read through sniperShare, never here.
+   *   kin: a nation that takes its senior partner's share, as smoke's kin do.
+   *   foot: the arms that give: the card's own arms on foot (data/campaign/ground.json arms.foot), never tanks, guns,
+   *     engineers, fortress troops or teams.
+   *   per: one team for every 'per' foot blocks, at least one, at most 'most'. xp: picked men, their foot's own
+   *     (power-weighted) plus 'xp', no higher than 'xpTop'.
+   *   cover: the ground a sniper team hides on (beside woods and a hedge line, as every block): buildings, rubble, rough.
+   *   edge: in woods (off a hedge line) it reaches a target beyond LAND.hide.forest only where its line to it leaves the
+   *     woods within 'edge' metres: it shoots from the edge.
+   *   find: each second it fires from hiding it is found with odds 1 - (1 - f)^(dt / 'every'), f 'far' while its target
+   *     is beyond 'near' metres, 'close' within, times ('xp' - its experience); 'hunt' times that where an enemy sniper
+   *     team stands within its reach. Found, it is not yet located for 'locate' seconds. Its own dice, keyed by place.
+   *   quiet: any blow that lands on it holds its fire until 'quiet' seconds after the last (MG fire on suspected spots).
+   *   slip: found, on its hiding ground, unstruck for 'after' seconds and no enemy within 'clear' metres, it holds its
+   *     fire 'secs' seconds while it moves, then hides again if all of that still holds; struck meanwhile, it stays
+   *     found. At most 'most' slips a battle, none below 'str' of its strength.
+   *   back: at 'back' of its strength, or at the rout nerve, it withdraws to its own edge, never routs.
+   *   bite: the weight of its blows against its target: b = min(1, r / 'bite'), r its striking weight (power0 x (0.35 +
+   *     0.65 str/str0)) over its target's power0. Every side effect scales with it. 0.6 by the gate (the design
+   *     director, 25 November 17:48Z, mend step 2): at 0.15 a team bit a whole block in full and its pin ran attacks
+   *     into the clock (practice fields -0.07 attack wins); at 0.6 a division's bite is about SOV 0.16, GER 0.13,
+   *     UK 0.10, USA 0.06, ITA 0.05, a second or two of its march, and leaders down a quarter as deep.
+   *   pin: a block on foot struck by it moves at pace x (1 - 'pace' x b) for 'secs' seconds, at most LAND.pin.most
+   *     seconds a battle (men go to ground and crawl).
+   *   lead: for 'secs' after a strike, the block steadies on its xp x (1 - 'xp' x b) (its leaders are the ones shot).
+   *   take: once found and located it takes harm 'fragile' times (two men, no depth), and 'blast' more from mortars, guns
+   *     and tanks (the window it fires from is blown in).
+   *   pick: its choice of target, the score's multiplier (lower first): foot on the move with pin time left, a found
+   *     enemy sniper team, a machine-gun team, still foot, guns and mortars, a tank block with heads out, one closed up;
+   *     one routing only where nothing else is in reach. The player's order beats them all.
+   *   keep, behind: the computer's: it keeps 'keep' metres from any found enemy block, and an attacking team takes
+   *     its cover within 'behind' metres behind its leading foot.
+   */
+  snipers: {
+    share: { SOV: 0.03, FIN: 0.03, JAP: 0.03, GER: 0.025, UK: 0.02, USA: 0.012, FRA: 0.012, ITA: 0.01, _: 0.012 } as Record<string, number>,
+    kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', NZ: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA' } as Record<string, string>,
+    foot: ['inf', 'mtn', 'mot', 'cav'],
+    per: 4, most: 3, xp: 0.15, xpTop: 0.9,
+    cover: ['buildings', 'suburb', 'industry', 'blown', 'rough', 'rock'] as Ground[],
+    edge: 100,
+    find: { every: 10, far: 0.15, close: 0.4, near: 300, xp: 1.4, hunt: 2, locate: 60 },
+    quiet: 5,
+    slip: { after: 20, clear: 150, secs: 30, most: 2, str: 0.75 },
+    back: 0.5,
+    bite: 0.6,
+    pin: { pace: 0.5, secs: 8 },
+    lead: { xp: 0.5, secs: 30 },
+    take: { fragile: 2.5, blast: 1.5 },
+    pick: { moving: 0.5, snp: 0.5, mg: 0.6, still: 1, open: 1.5, closed: 3, routing: 1e6 },
+    keep: 250, behind: 150,
+  },
+  /**
+   * Pinned (release 2; the design director's ruling of 25 November 16:30Z, Q3): a block slowed by fire on it (sniper
+   * teams now; machine-gun teams' suppression, if it is ruled, the same field): at most 'most' battle seconds a block for
+   * the whole battle, from every cause together, counted only while it moves (LandUnit.pinTo, pinSpent). 20 by the
+   * gate (the design director, 25 November 17:48Z, mend step 1; 40 as first ruled).
+   */
+  pin: { most: 20 },
+  /**
+   * A tank block closed up (release 2): its commanders down inside their hatches, seeing the field through vision slits
+   * and periscopes. One meaning for every rule that closes a block up (sniper teams now; the smarter-soldiers thread's
+   * fire on her and enemy foot close later): it sets LandUnit.closedTo, never draws a die, and does nothing unless a
+   * switch that sets it is on. For 'secs' after the last thing that closed it: its blows on foot weigh 'foot', and it
+   * finds a hidden block by sight at 'sight' of the distance.
+   */
+  closed: { secs: 30, foot: 0.85, sight: 0.5 },
   /** Damage and nerve by where a blow lands: [damage, nerve]. */
   aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] } as Record<'front' | 'flank' | 'rear', [number, number]>,
   /**
@@ -675,6 +755,13 @@ export const patrolSize = (nat: string): number => LAND.patrol.size[nat] ?? LAND
 export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
 /** An army's section smoke (LAND.smoke): its own, or its senior partner's (kin); null where it has none. */
 export const smokeMeans = (nat: string): SmokeMeans | null => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+
+/**
+ * The share of its foot power an army gives its sniper teams (release 2, LAND.snipers; the design director's ruling of
+ * 25 November 16:30Z, Q2): its doctrine's, a kin nation its senior partner's, never by the year. The one place it is
+ * read, so the share can move into the land quality store as a starting level by changing this line.
+ */
+export const sniperShare = (nat: string): number => { const S = LAND.snipers; return S.share[S.kin[nat] ?? nat] ?? S.share._; };
 /** An army's stretcher bearers, as a share of a block's men (LAND.bearers.share): its own, or every other army's. */
 export const bearerShare = (nat: string): number => LAND.bearers.share[nat] ?? LAND.bearers.share._;
 /** An army's share of each loss killed, the rest wounded (LAND.bearers.killed): its own, or every other army's. */

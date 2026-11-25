@@ -202,6 +202,11 @@ namespace
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
 		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		// (Sniper teams, release 2: Brian, 25 November 16:07Z, "should we add snipers? how would that impact the battle?",
+		// then "yes". The rules' LAND.snipers: each side's foot gives its army's share of its power to a few sniper teams,
+		// so the card's odds stand; they change how a battle goes, so this row waits for the design director's ruling and
+		// its paired measure, then the Mac and the art director. Off; -TheaterLandRuleSnipers turns it on for a run.)
+		{ TEXT("snipers"), TEXT("Sniper teams"), TEXT("Each army brings a few sniper pairs, hidden in houses, woods and hedges. They kill few, but they shoot officers, machine gunners and tank commanders, slow an advance and shake men's nerve; once found they are easily driven off. Needs Forest ambushes. Off: no snipers on the field."), TEXT("TheaterLandNoSnipers"), false, TEXT("TheaterLandRuleSnipers") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

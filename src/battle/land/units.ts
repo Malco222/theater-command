@@ -74,6 +74,24 @@ export interface LandUnit extends UnitBase {
   ovr?: { on: number; to: [number, number]; back: [number, number]; leg: 'in' | 'back' };
   /** Found by its fire but not yet located, till this battle time: fire back at it strikes softer (LAND.hide.locate). */
   unloc?: number;
+  /** Closed up till this battle time (release 2, LAND.closed): a tank block whose commanders are down inside. */
+  closedTo?: number;
+  /**
+   * Pinned (release 2, LAND.pin): slowed till this battle time to 'pinK' of its pace, a block on foot under a sniper
+   * team's fire (LAND.snipers.pin); 'pinSpent' the seconds it has moved so this battle (at most LAND.pin.most).
+   */
+  pinTo?: number;
+  pinK?: number;
+  pinSpent?: number;
+  /** Its leaders shot (sniper teams, release 2: LAND.snipers.lead): till this battle time it steadies on 'leadK' of its xp. */
+  leadTo?: number;
+  leadK?: number;
+  /** A sniper team's (release 2, LAND.snipers): silent under fire till this battle time (quiet); slipping away till 'slipTo'; its slips this battle. */
+  quietTo?: number;
+  slipTo?: number;
+  slips?: number;
+  /** A machine-gun or mortar team of the computer's aimed at this found enemy sniper team (LAND.snipers; ai.ts counterSnipers). */
+  hunts?: number;
   /**
    * Firing on a stretch of cover to flush out what may hide there (reconnaissance by fire, LAND.hide.search): the point,
    * and how far round it (LAND.hide.search.reach where not said; the computer's sweep of the cover ahead, wider).
@@ -218,7 +236,7 @@ export interface LandUnit extends UnitBase {
 
 const ORD =(n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const KIND_WORD: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain', cav: 'Cavalry', eng: 'Engineers', mot: 'Motorized', arm: 'Armoured', art: 'Artillery', fort: 'Fortress' };
-const TEAM_WORD: Record<Team, string> = { mg: 'Machine-Gun Battalion', mor: 'Mortar Battalion' };
+const TEAM_WORD: Record<Team, string> = { mg: 'Machine-Gun Battalion', mor: 'Mortar Battalion', snp: 'Sniper Detachment' };
 /** The team a ticket force makes, where its kind is one (release 2). */
 export const teamOf = (f: { kind: string }): Team | undefined => (TEAMS as readonly string[]).includes(f.kind) ? (f.kind as Team) : undefined;
 

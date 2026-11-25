@@ -28,6 +28,7 @@ import { calFor } from './shells';
 import type { LandUnit } from './units';
 import type { Drill, MenBlock, MenOut, Round } from './drill';
 import { PIECES, openSteppe, ticketOf, type SetPiece, type Steppe } from './pieces';
+import { withSnipers } from './snipers';
 import { AFV_PER_DIV } from './wrecks';
 
 /** A kept point may be left out where the straight line from the last kept one misses the man by less than this (the recorder's). */
@@ -315,6 +316,12 @@ export interface LiveOpts {
    */
   teamwork?: boolean;
   /**
+   * Sniper teams (release 2; Brian, 25 November 16:07Z; the rules' LAND.snipers, withSnipers): each side's foot gives its
+   * army's share of its power to a few sniper teams, hidden in cover, few kills but much nerve and tempo; drawn as sniper
+   * and spotter pairs. Changes the fight. Off unless true, and only with hiding on (hide).
+   */
+  snipers?: boolean;
+  /**
    * Direct command (Brian, 03:09Z "do 1 2 and 3"; the rules' switches, sim.ts perUnit and radio). staff: a block he
    * orders is his, and his staff fights the rest of his side. radio: his orders land a few seconds later, longer where
    * the block is hit. Both on for the player unless turned off.
@@ -535,7 +542,8 @@ export class LiveBattle {
   constructor(readonly ticket: FieldTicket<LandPlace>, readonly piece: SetPiece | null, opts: LiveOpts = {}) {
     this.me = opts.me ?? null;
     this.skyOf = opts.sky ?? ticketSky(opts.wet === false ? { ...ticket, weather: undefined } : ticket);
-    const sim = (this.sim = new LandBattle(ticket));
+    // (sniper teams need hiding on, as the night patrol does: with it off no team is made and the field is as it was)
+    const sim = (this.sim = new LandBattle(opts.snipers === true && opts.hide !== false ? withSnipers(ticket) : ticket));
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
     // (every block, those of corps still coming up from next door too: neighbours join the fight, release 2)
