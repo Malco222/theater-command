@@ -763,13 +763,15 @@ for fall and skin for skin the same as with none).
   as measured (the test's table: each of the 17 twins of 25 November, his gun 400 m off in the middle of a side; the
   move along the line toward the gun, less than 0 away): standing or running `die_leg_off_d` flings the right calf back
   and to his right (a gun ahead -1.06 to -0.68 m, at his left -2.55 to -1.74, at his right +1.74 to +2.55, behind
-  +0.68 to +1.06) and `die_leg_off_f` the left calf back and to his left (ahead -1.62 to +0.07, left +1.68 to +2.42,
-  right -2.42 to -1.68, behind -0.07 to +1.62); kneeling or in cover `die_leg_off_e` the left shin to his left and a
-  little back (ahead -0.79 to -0.26, left +1.89 to +2.12, right -2.12 to -1.89, behind +0.26 to +0.79) and
-  `die_leg_off_g` the right shin to his right and a little back (ahead -0.65 to -0.17, left -2.40 to -1.91, right +1.91
-  to +2.40, behind +0.17 to +0.64). So with his gun at his left a man on his feet loses his right calf and a man on a
-  knee his right shin, at his right the left; ahead both (but in the one twin whose `die_leg_off_f` moves the calf
-  0.07 m forward); behind him, where both fly back toward the gun (but in that twin), the one that flies least so.
+  +0.68 to +1.06) and `die_leg_off_f` the left calf to his left and back, but in SOV_snow 0.07 m forward (ahead
+  -1.62 to +0.07, left +1.68 to +2.42, right -2.42 to -1.68, behind -0.07 to +1.62); kneeling or in cover
+  `die_leg_off_e` the left shin to his left and a little back (ahead -0.79 to -0.26, left +1.89 to +2.12, right -2.12
+  to -1.89, behind +0.26 to +0.79) and `die_leg_off_g` the right shin to his right and a little back (ahead -0.65 to
+  -0.17, left -2.40 to -1.91, right +1.91 to +2.40, behind +0.17 to +0.64). So with his gun at his left a man on his
+  feet loses his right calf and a man on a knee his right shin, at his right the left; ahead both (but in the one twin
+  whose `die_leg_off_f` moves the calf 0.07 m forward); behind him, where both fly back toward the gun (but in that
+  twin), the one that flies least so. So too, standing or running, with his gun a few metres off on his right just
+  short of his back (1 to 3 m off, 133 to 135 degrees round, on a 1-degree grid): both legs move toward it there.
   Since the rules lay nearly every shell kill on its man, the falls from under now take most gored men on their feet.
   Where his stance's gore falls hold none from under he may take (a man lying killed by any other round; any man of
   twins before 24 November), by the gun's side as for a burst there, away from the gun (a man lying so since a424a37e:
@@ -908,11 +910,12 @@ for fall and skin for skin the same as with none).
   gun's side gives him (every limb as far from the gun as that side's falls set); his gun known, none in a fall from
   under that moves its limb toward the gun where another from under he may take does not, nor where all do in one that
   moves it more than the least of them (read from the falls' first frames and last, 0.01 m allowed: the test reads his
-  place and heading in its own sums; asked only of a battle with a man so, the guns' and the band's, for the first
-  battle's and the sides' rounds have no gun known), and printed, his fall from under read against his gun as played,
-  by stance, and the men such a shell offered both a fall from under and a throw, with how many were thrown (no check
-  of the kind's weight: the Fates rule sways a choice of two too far, the band's 43 of 73 thrown against 8 in 11
-  before it); no limb off a man standing or running moving toward the burst or the gun as it
+  place and heading in its own sums; asked of the guns' battle wherever the twins hold any fall from under, and there
+  of at least one man so, so that it cannot pass on none, and of the band's only with a man so; not of the first
+  battle nor the sides', whose rounds have no gun known), and printed, his fall from under read against his gun as
+  played, by stance, and the men such a shell offered both a fall from under and a throw, with how many were thrown
+  (no check of the kind's weight: the Fates rule sways a choice of two too far, the band's 43 of 73 thrown against 8
+  in 11 before it); no limb off a man standing or running moving toward the burst or the gun as it
   moved (the least and those under half a metre counted), nor off a man of a stance whose gore falls hold one from each
   side that is not a throw (with the twins of 24 November kneeling, in cover and lying too; in those before a note), nor
   his body (his pelvis), standing or running, more than 0.1 m where another fall he may take moves it away (kneeling, in
@@ -993,11 +996,12 @@ for fall and skin for skin the same as with none).
   own 43 notes as under 3efa6a0c, the output 3efa6a0c's but for the new lines and the reworded labels (every digest
   and every count the same): the sweep's checks of the falls from under on his feet or a knee find no cells, asked for
   cells only where some twin holds one, and of the battles' checks of the falls from under against his gun only the
-  guns' battle's is asked (its 2 men lying thrown from under, by `die_blast_d`). With every set the first battle and
-  the sides' print instead that none there is in a fall from under with his gun known (their rounds have no gun
-  known). The repo's Content holds no twins: there the test stops at its first line, no USA or GER twin, as under
-  3efa6a0c. The same output from g++ and clang++; 9 to 12 s here. Pictures: `/mnt/project-files/battle-fx/gore/` (r3:
-  the joined skin, fresh twins 29ad7cfe).
+  guns' battle's is asked, its 2 men lying thrown from under, by `die_blast_d` (asked there wherever the twins hold
+  any fall from under, of at least one man so read: it fails rather than passes where the battle has none). With every
+  set the first battle and the sides' print instead that none there is in a fall from under with his gun known (their
+  rounds have no gun known). The repo's Content holds no twins: there the test stops at its first line, no USA or GER
+  twin, as under 3efa6a0c. The same output from g++ and clang++; 9 to 12 s here. Pictures:
+  `/mnt/project-files/battle-fx/gore/` (r3: the joined skin, fresh twins 29ad7cfe).
 - **Owed.** The Mac shots behind the switch, and gore twins for every soldier file (the soldiers folder's `GER_panzer`
   and `USA_tanker` have none: they fall as before). The deaths thread's re-runs of the falls that rested a limb under 1
   m from its joint or threw one over 3 m up (USA and GER `die_leg_off_a`, GER `die_arm_off_b`; USA and GER
@@ -1010,12 +1014,13 @@ for fall and skin for skin the same as with none).
   under came on 25 November (`die_leg_off_f`, `die_leg_off_g`), and with his gun known a man on his feet or a knee is
   given the leg that flies away from it; but with the gun behind him both legs fly back toward it (the sweep's gaps,
   above: standing or running the gun within 42 degrees of his back on his right or 27 on his left, the leg as much as
-  1.19 m toward it; kneeling or in cover within 18 and 15 degrees, 0.60 m), so a fall from under that flings a lower
-  leg forward is owed for those. The prone throw from under (`die_blast_d`, a limb toward the gun in 75,810 of the fine
-  grid's 85,680 cells, 3992 of the test's 4080) is kept as it was, not held away from the gun. Nor is a man's body in a
-  fall from under (toward the gun in 2008 of the sweep's 8160 cells standing, as much as 0.71 m; 1058 kneeling, 0.62
-  m). Kneeling, in cover or lying the falls' own bodies may move
-  toward the burst or the gun: kneeling or in cover as much as 0.36 m, a burst behind on his left, in a fall from behind
+  1.19 m toward it, and on a 1-degree grid a gun 1 to 3 m off within 47 on his right, so beyond his back's quarter;
+  kneeling or in cover within 18 and 15 degrees, 0.60 m), so a fall from under that flings a lower leg forward is owed
+  for those. The prone throw from under (`die_blast_d`, a limb toward the gun in 75,810 of the fine grid's 85,680
+  cells, 3992 of the test's 4080) is kept as it was, not held away from the gun. Nor is a man's body in a fall from
+  under (toward the gun in 2008 of the sweep's 8160 cells standing, as much as 0.71 m; 1058 kneeling, 0.62 m).
+  Kneeling, in cover or lying the falls' own bodies may move toward the burst or the gun: kneeling or in cover as much
+  as 0.36 m, a burst behind on his left, in a fall from behind
   (806 cells of each stance's on the fine grid where another he may take moves it away; in nearly all of them the falls
   given already hold one that does, `die_arm_off_m` beside `die_arm_off_f`, so choosing among those by the body too
   would make the test's note a check: a follow-up), lying as much as 0.04 m; the test notes them. The rate: in the

@@ -484,7 +484,8 @@ namespace LandMen
 		 * read against his gun as a limb is against a burst: with one each stance it moved his lower leg toward the gun
 		 * about half the time; with the deaths thread's mirrors (a fall from under for each leg) only those that do not
 		 * (with his gun ahead mostly both, at his side the leg flung the other way), or where both do (his gun behind
-		 * him: both legs may fly back) the one that moves it least so. The same
+		 * him, or a few metres off on his right just short of his back: both legs may fly back) the one that moves it
+		 * least so. The same
 		 * battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he falls
 		 * changes. Off unless set: every man falls as before.
 		 */

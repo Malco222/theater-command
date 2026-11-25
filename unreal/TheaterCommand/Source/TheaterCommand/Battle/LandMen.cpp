@@ -1870,9 +1870,11 @@ namespace LandMen
 			// art director, 23 Nov 17:52Z: the limb flies away from the blast; with one fall from under each stance it flew
 			// toward the gun about half the time. The deaths thread's mirrors (die_leg_off_f standing and running,
 			// die_leg_off_g kneeling and in cover: the other leg, flung to the other side) give him at least one that flies
-			// away from a gun ahead (mostly both) or at either side; with it behind him both legs may fly back toward it
-			// (the test prints those cells). His gun not known, all of them, either leg; a stance with one from under (the
-			// twins before; lying, the prone throw) is given it whatever his gun's side, as before)
+			// away from a gun ahead (mostly both) or at either side, but for a gun a few metres off on his right just short
+			// of his back (1 to 3 m off, 133 to 135 degrees round, standing or running: a probe's 1-degree grid); with it
+			// behind him both legs may fly back toward it (the test prints those cells). His gun not known, all of them,
+			// either leg; a stance with one from under (the twins before; lying, the prone throw) is given it whatever his
+			// gun's side, as before)
 			std::map<std::string, double> Gain;
 			double Floor = -1e9;
 			if (!Strike.Gun.empty() && Strike.bAway)

@@ -864,10 +864,11 @@ namespace
 				Out.LyingSide += bThrown ? 0 : 1;
 				if (bThrown && !(bBig && Far < 1.0 && Gf == "under")) ++Out.LyingWrong;
 			}
-			// (a burst under him whose stance's gore falls hold one from under he may take: one of those, none measured (a
-			// burst under him is no point to be thrown away from), or a field gun's or a howitzer's shell's throw from his
-			// gun's side where that side's falls give it, every limb at least as far from the gun as the floor they set;
-			// a throw so read against the gun below as any man thrown)
+			// (a burst under him whose stance's gore falls hold one from under he may take: one of those, with his gun known
+			// read against it below (UnderLegs, UnderToward: none that moves a limb toward the gun where another from under
+			// he may take does not, and where all do none but the least so), not known any; or a field gun's or a howitzer's
+			// shell's throw from his gun's side where that side's falls give it, every limb at least as far from the gun as
+			// the floor they set; a throw so read against the gun below as any man thrown)
 			const bool bUnder = Side == "under" && bThere;
 			std::string By = Side;
 			if (bUnder)
@@ -1206,13 +1207,18 @@ int main(int Argc, char** Argv)
 	};
 	const double Until = Hit + 5.0;
 	// (what the battles' twins hold, so their checks ask only what the falls allow: a prone fall that is not a throw (the
-	// deaths thread, 24 Nov: a man lying gored by any shell, by its side), and a fall from under him on his feet that is not
-	// a throw (a lower leg off, the burst within a metre))
-	bool bLyingFalls = false, bUnderFalls = false;
+	// deaths thread, 24 Nov: a man lying gored by any shell, by its side), a fall from under him on his feet that is not
+	// a throw (a lower leg off, the burst within a metre), and any fall from under at all, in any stance (lying, the prone
+	// throw))
+	bool bLyingFalls = false, bUnderFalls = false, bAnyUnder = false;
 	for (const auto& KV : Twins)
 	{
 		for (const FallRead& Fr : ReadFalls(KV.second, "prone")) bLyingFalls = bLyingFalls || !Fr.bThrow;
 		for (const FallRead& Fr : ReadFalls(KV.second, "stand")) bUnderFalls = bUnderFalls || (!Fr.bThrow && Fr.From == "under");
+		for (const char* St : { "stand", "run", "kneel", "cover", "prone" })
+		{
+			for (const FallRead& Fr : ReadFalls(KV.second, St)) bAnyUnder = bAnyUnder || Fr.From == "under";
+		}
 	}
 
 	// ---- Off: the twins added, the switch off, against no twins at all.
@@ -1306,7 +1312,7 @@ int main(int Argc, char** Argv)
 	}
 
 	// ---- Sides: the burst's side against each gored man, his limbs away from it, the big throw a gun's alone.
-	auto SideChecks = [&](const char* Label, const Sided& Sd) {
+	auto SideChecks = [&](const char* Label, const Sided& Sd, bool bUnderMust) {
 		PrintSides(Label, Sd);
 		const std::string L = Label;
 		Check(Sd.Read + Sd.Under > 0 && Sd.OffSide == 0 && Sd.NoneUp == 0, L + ": each gored man read by a side (1.5 m or more from the burst, or his gun's side "
@@ -1322,10 +1328,13 @@ int main(int Argc, char** Argv)
 			+ "take falls in one, or by a field gun's or a howitzer's shell in the throw his gun's side gives him (every limb at least as far from the gun as that "
 			+ "side's falls set; " + std::to_string(Sd.Under) + " so struck, " + std::to_string(Sd.UnderFrom) + " from under, " + std::to_string(Sd.UnderThrown)
 			+ " thrown, " + std::to_string(Sd.UnderWrong) + " not)");
-		// (asked only of a battle with a man in a fall from under, his gun known: the first battle's and the sides' rounds
-		// have no gun known (bBy), and 7caf9453's twins no fall from under on his feet or a knee)
-		if (Sd.UnderLegs > 0)
-			Check(Sd.UnderToward == 0, L + ": no gored man the burst was under, his gun known, falls from under in a fall that moves a limb toward his gun where "
+		// (asked of the guns' battle wherever the twins hold any fall from under (bUnderMust: its men the shell burst under
+		// all have their gun known; with 7caf9453's twins its two men lying are thrown from under), and there of at least
+		// one man so read, so that a battle left with none fails rather than passing on none; of the others only with a
+		// man in a fall from under, his gun known: the first battle's and the sides' rounds have no gun known (bBy), and
+		// with 7caf9453's twins the band's men (none lying) none from under)
+		if (bUnderMust || Sd.UnderLegs > 0)
+			Check(Sd.UnderLegs > 0 && Sd.UnderToward == 0, L + ": no gored man the burst was under, his gun known, falls from under in a fall that moves a limb toward his gun where "
 				+ "another fall from under he may take does not, nor where all do in one that moves it more than the least of them so (the test's reading, from the "
 				+ "falls' first frames and last; " + std::to_string(Sd.UnderLegs) + " in a fall from under with his gun known, " + std::to_string(Sd.UnderToward) + " so)");
 		else
@@ -1362,7 +1371,7 @@ int main(int Argc, char** Argv)
 		Check(Sd.LyingWrong == 0, L + ": a man lying thrown only from under him, by such a shell bursting on him (die_blast_d; " + std::to_string(Sd.Lying) + " lying gored, "
 			+ std::to_string(Sd.LyingSide) + " of them in a fall that is not a throw; " + std::to_string(Sd.LyingWrong) + " not)");
 	};
-	SideChecks("on", ReadSides(C, Men, Rc, Files));
+	SideChecks("on", ReadSides(C, Men, Rc, Files), false);
 
 	// ---- Same: another crowd, built alike.
 	{
@@ -1425,7 +1434,7 @@ int main(int Argc, char** Argv)
 		std::printf("     sides' battle not gored: %d men, %s\n", Kept, Digest(Pc, Whole).c_str());
 		Check(Pc.NaN == 0 && Mc.Gored() == static_cast<int>(Many.size()) - Kept, "sides' battle: the crowd's count of the gored, and no NaN in any skin");
 		const Sided Ss = ReadSides(Mc, Many, Pc, Files);
-		SideChecks("sides' battle", Ss);
+		SideChecks("sides' battle", Ss, false);
 		if (bLyingFalls)
 			Check(Ss.LyingSide > 0, "sides' battle: men lying gored by a tank's or a mortar's shell, or one off to their side, in a prone fall that is not a throw (the "
 				"deaths thread, 24 Nov; " + std::to_string(Ss.LyingSide) + " of " + std::to_string(Ss.Lying) + " lying gored)");
@@ -1480,7 +1489,7 @@ int main(int Argc, char** Argv)
 				"gun's or a howitzer's shell throws some from their gun's side (" + std::to_string(Sg.UnderThrown) + ")");
 		else std::printf("     note: guns' battle: the twins' standing falls hold none from under that is not a throw: a man the shell burst under is read by his gun's "
 			"side (%d)\n", Sg.ByGun);
-		SideChecks("guns' battle", Sg);
+		SideChecks("guns' battle", Sg, bAnyUnder);
 	}
 
 	// ---- The band's battle: every twin's men, the burst (or the gun) 31 to 49 degrees round ahead on his left or his
@@ -1515,7 +1524,7 @@ int main(int Argc, char** Argv)
 			Digest(Pb, Whole).c_str(), static_cast<int>(Many.size()) - Kept, Digest(Pb, Gone).c_str());
 		Check(Pb.NaN == 0 && Bc.Gored() == static_cast<int>(Many.size()) - Kept && Kept < static_cast<int>(Many.size()), "band's battle: men gored, the crowd's count of them, "
 			"and no NaN in any skin");
-		SideChecks("band's battle", ReadSides(Bc, Many, Pb, BandFiles, false));
+		SideChecks("band's battle", ReadSides(Bc, Many, Pb, BandFiles, false), false);
 	}
 
 	// ---- The sweep: every twin's gore falls as the crowd gives them (GoreFalls, ChooseFall's own rule), for a burst, or
