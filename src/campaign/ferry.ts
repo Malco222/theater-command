@@ -24,6 +24,7 @@ import { fleetKnown } from './carriers';
 import { fighterTypesOn, typeMix } from './fighters';
 import { grounded, skyAt, weatherOn } from './weather';
 import { wrecked } from './airversion';
+import { fieldRules, fieldShut } from './fieldstate';
 import { NAVY, crossingRisk, seaPath } from './navy';
 import { nearX } from './wrap';
 import { Rng, hashString } from '../core/rng';
@@ -362,6 +363,13 @@ function goOn(g: Game, f: AirFleet): void {
     const next = w.stops[0];
     const r = g.regions[next];
     if (!r || whyNotStop(g, f, r) || realKm(g, f.base, next) > ferryRange(g, f)) { if (!replan(g, f)) return; continue; }
+    // A cratered runway lets nobody out (airfields as targets, the same test as today's move, air.ts whyNotBase): the
+    // group waits where it is until its crews have the field open again.
+    if (g.flags.fields === 1 && fieldRules(g) && fieldShut(g, f.base)) {
+      headline(g, 'event', `${f.name} is held at ${g.regions[f.base].name}: the runway is cratered until it is repaired.`, f.nat, f.base);
+      w.at = [g.turn, done()];
+      return;
+    }
     // A closed sky over either end holds the hop for the month (weather, ruling 127).
     if (weatherOn(g) && (skyAt(g, f.base) === 'closed' || skyAt(g, next) === 'closed')) {
       headline(g, 'event', `${f.name} is held at ${g.regions[f.base].name}: the sky is closed on the way to ${r.name}.`, f.nat, f.base);

@@ -13,6 +13,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, orderAirBase, stepAI } from '../src/campaign/turn';
 import { skyAt } from '../src/campaign/weather';
+import { fieldKey, openFields } from '../src/campaign/fieldstate';
 import type { AirFleet, Game } from '../src/campaign/types';
 
 const PER = FERRY.perMonth;
@@ -267,5 +268,25 @@ describe('the staffs', () => {
     // Without the switch no group gets there this month, and none is on its way.
     expect(off.airFleets.some((f) => f.nat === 'UK' && f.base === nar)).toBe(false);
     expect(off.airFleets.some((f) => f.way !== undefined)).toBe(false);
+  });
+});
+
+describe('review: a shut runway', () => {
+  it('lets nobody out by stages either: a group on a cratered field is held there until it is repaired', () => {
+    const g = atlantic();
+    openFields(g);
+    const f = fighters(g);
+    const home = f.base;
+    // Its own runway cratered (airfields as targets): today's move refuses it, and so must the first hop.
+    g.flags[fieldKey('fsh', home)] = g.turn;
+    expect(whyNotBase(g, f, g.regions[id(g, 'Nova Scotia')], true)).toMatch(/cratered/);
+    expect(airAct(g, `ferry:${f.id}:${id(g, 'Nova Scotia')}`)!.ok).toBe(true);
+    expect(f.base).toBe(home);
+    expect(f.way?.to).toBe(id(g, 'Nova Scotia'));
+    // Repaired, it sets off as its next month opens.
+    delete g.flags[fieldKey('fsh', home)];
+    g.turn++;
+    ferryMonth(g, 'UK');
+    expect(f.base).not.toBe(home);
   });
 });
