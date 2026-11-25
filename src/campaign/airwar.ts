@@ -40,6 +40,7 @@ import { townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
+import { wayWords } from './ferry';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -210,6 +211,11 @@ export interface GroupRow {
   mine: boolean;
   /** Weather (ruling 143): only when the sky over its airfield is closed, why it is grounded and next month's chances. */
   sky?: string[];
+  /**
+   * Release 2, the switch 'ferry' (ferry.ts): one of the viewer's own groups on its way to another field by stages, where
+   * it is going, the hops still to fly (0 when it goes crated by sea), and whether it goes by sea. Never set otherwise.
+   */
+  way?: { to: number; toName: string; left: number; sea: boolean };
 }
 
 /** A sea patrol's line on its group's row (Q8, the UI director's words): the sea, and the share of the waters it reaches that its side's patrols watch. */
@@ -229,7 +235,9 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
   const deck = afloat(f), at = groupAt(g, f);
   const fleet = deck ? carrierOf(g, f) : f.ashore !== undefined ? g.fleets.find((c) => c.id === f.ashore) ?? null : null;
   const own = f.nat === viewer;
-  const doing = away ? `Flew against ${place} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
+  // (On its way to another field by stages, ferry.ts: out of the fight until it gets there. Only that switch writes `way`.)
+  const doing = f.way !== undefined ? (own ? `${wayWords(g, f)}: out of the fight until it gets there` : 'On its way to another airfield: out of the fight')
+    : away ? `Flew against ${place} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
     : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     // (Release 2, the sea patrol: the share of the waters it reaches that its side's patrols watch.)
@@ -251,7 +259,8 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
     // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
-    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : {}),
+    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) && f.way === undefined ? { sky: [whyNotField(g, f)!] } : {}),
+    ...(f.way !== undefined && own ? { way: { to: f.way.to, toName: g.regions[f.way.to]?.name ?? '', left: f.way.sea ? 0 : f.way.stops.length, sea: !!f.way.sea } } : {}),
   };
 }
 

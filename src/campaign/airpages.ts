@@ -18,9 +18,10 @@ import type { Game } from './types';
 import { SHIP_AIR_TIP, airWar, carrierRules, closeRules, groupAt, overOcean } from './air';
 import type { GroupRow, RaidKind, RaidPlan, RaidTarget } from './airwar';
 import {
-  airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
-  raidTargetsFor, searchOptionsFor, wingsOfFleet,
+  airFerryRoutes, airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderFerryOff, orderFerryTo, orderGroupJob, orderRaid,
+  orderScout, orderSearch, previewRaid, raidMenu, raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
+import { FERRY, ferryOn } from './ferry';
 import { afterCard, type AfterCard, type FoughtAir } from './airfought';
 import { band, raidFogOn } from './airfog';
 
@@ -96,6 +97,8 @@ function groupPage(g: Game, id: number): Page | null {
   ];
   if (carrierRules(g)) top.push({ label: 'SEARCH A SEA', act: `open:search:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft quarter one sea for the month: enemy ships there may be reported, or identified. A fleet has to be found before it can be struck.' });
   if (!deck) top.push({ label: 'MOVE TO ANOTHER AIRFIELD', act: `open:rebase:${id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' });
+  // On its way to another field by stages (release 2, ferry.ts): it can be called off, and stays where it has got to.
+  if (x.way) top.push({ label: 'CALL IT OFF', act: `ferryoff:${id}`, ok: up, tip: `It stays at ${x.baseName}, the field it has reached, and is back in the fight.` });
   // A carrier wing's own order (ruling 175(b)): ashore from its fleet, or back aboard. With one place to go the button gives the order; with several it opens the list.
   const mv = x.wingMove;
   if (mv?.order === 'ashore') {
@@ -270,12 +273,29 @@ function rebasePage(g: Game, id: number): Page | null {
     buttons: [{ label: 'SHIP IT HERE', act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? SHIP_AIR_TIP }],
   }));
   const sections = [{ heading: 'AIRFIELDS', text: '', rows }];
-  if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
+  // With the switch 'ferry' (release 2, ferry.ts): every other airfield of his side's or his allies', with the way there
+  // by stages or crated by sea, the turns it takes and the enemy fighters known on the way. The fields across the ocean
+  // are among them, so the old section by sea is not shown beside it. Off, the page is as it was.
+  const far = ferryOn(g) ? farRows(g, x, rows.map((r) => r.title)) : [];
+  if (far.length) sections.push({ heading: 'FARTHER, BY STAGES', text: `It flies from field to field, up to ${FERRY.perMonth} hops a month, and is out of the fight until it gets there. A closed sky holds it where it is. Where enemy fighters are known within reach of the way it can be caught, and fights.`, rows: far });
+  else if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  ·  ${x.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
     note: `${x.name} is based at ${x.baseName}. Aircraft can be based only where there is an airfield: engineers lay new ones out, and the treasury enlarges them. A group reaches farther into enemy country from a field nearer the front.`,
     top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
+}
+
+/** The fields a group could be sent to by stages, those it can reach soonest first (ferry.ts): every one but those it can move to this month. */
+function farRows(g: Game, x: GroupRow, direct: string[]): PageRow[] {
+  const up = humanUp(g);
+  return airFerryRoutes(g, x.id).filter((r) => !direct.includes(r.name))
+    .sort((a, b) => (a.how === 'none' ? 1 : 0) - (b.how === 'none' ? 1 : 0) || a.turns - b.turns || a.hops.length - b.hops.length || a.name.localeCompare(b.name))
+    .map((r) => ({
+      nat: g.regions[r.to].ctrl, title: r.name,
+      lines: [r.words, ...(r.hops.length > 1 ? [`The way: ${r.hops.map((h) => `${g.regions[h.to].name} (${num(h.km)} km)`).join(', ')}.`] : r.hops.length ? [`One hop of ${num(r.hops[0].km)} km.`] : [])],
+      buttons: [{ label: 'SEND IT THERE', act: `ferry:${x.id}:${r.to}`, ok: up && r.how !== 'none', tip: r.why ?? (r.how === 'sea' ? SHIP_AIR_TIP : `It sets off at once. Settling in at ${r.name} costs it some readiness for a month.`) }],
+    }));
 }
 
 /** The fleets a carrier wing ashore could go back aboard. */
@@ -396,6 +416,17 @@ export function airAct(g: Game, action: string, fought?: FoughtAir): AirActResul
     const ok = orderAirBase(g, Number(part[1]), Number(part[2]));
     const where = to?.name ?? 'its new airfield';
     return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : sea ? `The group is shipped across the ocean to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : sea ? 'It cannot be shipped there now.' : 'It cannot move there now.', open: `group:${part[1]}` };
+  }
+  // By stages to a far field, and calling that off (release 2, ferry.ts; never offered with the switch off).
+  if (part[0] === 'ferry' && ferryOn(g)) {
+    const route = orderFerryTo(g, Number(part[1]), Number(part[2]));
+    const f = g.airFleets.find((y) => y.id === Number(part[1]));
+    const where = g.regions[Number(part[2])]?.name ?? 'that airfield';
+    return { ok: !!route, note: route ? (f?.way ? `${f.name} sets off for ${where}: ${route.words}` : `${f?.name ?? 'The group'} reaches ${where}.`) : 'There is no way there now.', open: `group:${part[1]}` };
+  }
+  if (part[0] === 'ferryoff' && ferryOn(g)) {
+    const ok = orderFerryOff(g, Number(part[1]));
+    return { ok, note: ok ? 'Called off: it stays at the field it has reached.' : 'It is not on its way anywhere.', open: `group:${part[1]}` };
   }
   if (part[0] === 'aboard') {
     const id = Number(part[1]), fleet = g.fleets.find((c) => c.id === Number(part[2]));
