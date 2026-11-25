@@ -15,7 +15,7 @@
 import data from '../../data/campaign/laidonce.json';
 import { divisionsOf, growCorps, keepNumbers, numbersOf } from './armies';
 import { atWar, removeCorps } from './game';
-import type { Corps, Game, Region } from './types';
+import type { Corps, Game, Region, Voyage } from './types';
 
 /**
  * A holder of a row's division: its corps' name, the divisions it gives, the numbers they carry where the record knows
@@ -24,7 +24,7 @@ import type { Corps, Game, Region } from './types';
  */
 type Holder = [string, number, number[], string?];
 const ROWS = new Map<string, Holder[]>(Object.entries((data as unknown as { rows: Record<string, Holder[]> }).rows));
-const WORDS = data as unknown as { from: string; fromMany: string };
+const WORDS = data as unknown as { from: string; fromMany: string; ashore: string; afloat: string };
 
 /** A watch on the rule, for the patch's gate (null in play): each read row as it comes, what it drew and what stayed. Changes nothing. */
 export const laidWatch: { tell: ((e: { turn: number; nat: string; row: string; drew: number; stayed: number; n: number }) => void) | null } = { tell: null };
@@ -73,6 +73,21 @@ function keeps(g: Game, nat: string, row: any[], place: Region, c: Corps, afloat
     || (c.town !== undefined && g.regions[c.reg].units.some((u) => !u.dead && atWar(g, nat, u.nat)));
 }
 
+/** The words' blanks filled. */
+const fill = (line: string, as: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (all, key: string) => as[key] ?? all);
+
+/**
+ * The player's line for one of his corps that keeps the divisions a row names: which they are, where it stands (or, on
+ * a passage, where it is bound), and that none is raised twice.
+ */
+function told(g: Game, row: any[], place: Region, x: Corps, nos: number[], v: Voyage | undefined): string {
+  const cards = divisionsOf(g, x).filter((d) => nos.includes(d.no)).map((d) => `the ${d.name}`);
+  const at = v ? fill(WORDS.afloat, { to: g.regions[v.to].name }) : fill(WORDS.ashore, { where: g.regions[x.reg].name });
+  const as = { names: cards.join(' and '), place: place.name, army: x.name, at, count: String(nos.length), formation: row[2] };
+  const line = fill(nos.length === 1 ? WORDS.from : WORDS.fromMany, as);
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}
+
 /**
  * The divisions a dated row names that living corps of its country hold (the read rows only), as the row comes in
  * the grand campaign: drawn out of each holder that can give them, and held back where it cannot. Returns what was
@@ -82,7 +97,9 @@ function keeps(g: Game, nat: string, row: any[], place: Region, c: Corps, afloat
  *
  * A holder is a living corps of the country by the record's name, on the map or at sea. Where the record knows the
  * numbers its divisions carry, it gives only those it still carries: a corps raised again under the name, carrying
- * none of them, holds none of the row's divisions and gives nothing.
+ * none of them, holds none of the row's divisions and gives nothing. The player's own divisions never move, and a
+ * part he broke off a holder carries the rest of its numbers: they stay with it just the same. A row never takes in
+ * more divisions than it is to form.
  */
 export function drawHeld(g: Game, nat: string, row: any[], place: Region, n: number): { n: number; drawn: Drawn[]; line: string | null } {
   const holders = g.flags.open === 1 ? ROWS.get(`${nat}:${row[2]}`) : undefined;
@@ -90,40 +107,53 @@ export function drawHeld(g: Game, nat: string, row: any[], place: Region, n: num
   const drawn: Drawn[] = [];
   const lines: string[] = [];
   const read = new Set<string>();
-  const sea = new Set((g.atSea ?? []).filter((v) => v.nat === nat && !v.corps.dead).map((v) => v.corps));
+  const sea = new Map((g.atSea ?? []).filter((v) => v.nat === nat && !v.corps.dead).map((v) => [v.corps, v] as const));
   let stayed = 0;
+  let took = 0;
   for (const [name, want, record, alt] of holders) {
     if (alt !== undefined && read.has(alt)) continue;
     const h = g.corps.find((x) => x.nat === nat && !x.dead && x.name === name && x.kind !== 'fort')
-      ?? [...sea].find((x) => x.name === name && x.kind !== 'fort');
-    if (!h || n <= 0) continue;
+      ?? [...sea.keys()].find((x) => x.name === name && x.kind !== 'fort');
+    if (!h || n - took <= 0) continue;
     const list = numbersOf(h).slice(0, h.divs);
     // The numbers the record names, where the holder carries them; where the record names none, its last divisions.
     const known = record.length > 0 && (h.nos !== undefined || h.dn !== undefined);
     const give: number[] = known ? record.filter((x) => list.includes(x)) : [];
     if (!known) for (let j = list.length - 1; give.length < want && j >= 0; j--) give.push(list[j]);
-    const k = Math.min(want, h.divs, n, give.length);
+    if (nat === g.human) {
+      // His own stay where they are, the holder's and those of the parts he broke off it, and the row comes without them.
+      const parts = known ? [...g.corps, ...sea.keys()].filter((x) => x.nat === nat && !x.dead && x.part === h.id && x.kind === h.kind) : [];
+      let left = Math.min(want, n);
+      let kept = 0;
+      for (const x of [h, ...parts]) {
+        const xs = numbersOf(x).slice(0, x.divs);
+        const mine = (x === h ? give : record.filter((r) => xs.includes(r))).slice(0, Math.min(left, x.divs));
+        if (!mine.length) continue;
+        left -= mine.length;
+        kept += mine.length;
+        n -= mine.length;
+        stayed += mine.length;
+        lines.push(told(g, row, place, x, mine, sea.get(x)));
+      }
+      if (alt !== undefined && kept > 0) read.add(alt);
+      continue;
+    }
+    const k = Math.min(want, h.divs, n - took, give.length);
     if (k <= 0) continue;
     give.length = k;
     if (alt !== undefined) read.add(alt);
     if (keeps(g, nat, row, place, h, sea.has(h))) {
       n -= k;
       stayed += k;
-      if (nat === g.human) {
-        const cards = divisionsOf(g, h).filter((d) => give.includes(d.no)).map((d) => `the ${d.name}`);
-        const fill = (line: string, as: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (all, key: string) => as[key] ?? all);
-        const as = { names: cards.join(' and '), place: place.name, army: h.name, where: g.regions[h.reg].name, count: String(k), formation: row[2] };
-        const line = fill(k === 1 ? WORDS.from : WORDS.fromMany, as);
-        lines.push(line.charAt(0).toUpperCase() + line.slice(1));
-      }
       continue;
     }
+    took += k;
     drawn.push({ id: h.id, k, nos: h.kind === row[3] ? give : [], str: h.str, xp: h.xp, org: h.org, ...(h.mor !== undefined ? { mor: h.mor } : {}) });
     if (k >= h.divs) removeCorps(g, h);
     else { h.divs -= k; keepNumbers(h, list.filter((x) => !give.includes(x))); }
     g.supplyDirty = true;
   }
-  laidWatch.tell?.({ turn: g.turn, nat, row: row[2], drew: drawn.reduce((s, d) => s + d.k, 0), stayed: stayed, n });
+  laidWatch.tell?.({ turn: g.turn, nat, row: row[2], drew: took, stayed: stayed, n });
   return { n, drawn, line: lines.length ? lines.join(' ') : null };
 }
 

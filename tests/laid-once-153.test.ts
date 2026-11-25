@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { divisionsOf, keepNumbers, numbersOf } from '../src/campaign/armies';
 import { addCorps, createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
+import { breakUp } from '../src/campaign/breakup';
 import { drawHeld, layDrawn, loanOver } from '../src/campaign/laidonce';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -287,5 +288,60 @@ describe('what a review of the rule found (25 November 2026)', () => {
     expect(c.xp).toBeCloseTo(0.9, 9);
     expect(c.org).toBeCloseTo(0.3, 9);
     expect(c.mor).toBeCloseTo(0.2, 9);
+  });
+});
+
+describe('what a second review found (25 November 2026, evening)', () => {
+  const rowAt = (nat: string, name: string): number => ROWS.findIndex((r) => r[1] === nat && r[2] === name);
+  const said = (g: Game): string[] => g.headlines.filter((h) => /No division is raised twice/.test(h.text)).map((h) => h.text);
+
+  it('the player\'s holder on a passage at sea is told as at sea, bound for its harbour, not in the port it sailed from', () => {
+    const g = startOpen(createGame(1, 'UK'));
+    declareWar(g, 'UK', 'ITA');
+    only(g, 'UK', '1st Armoured Division');
+    const home = addCorps(g, 'UK', '1st Armoured Division', 'arm', 1, 'London', {});
+    g.turn = 31;
+    putToSea(g, home, g.byName['Alexandria'], 3);
+    month(g, 'UK', 32);
+    const lines = said(g);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('drawn from your 1st Armoured Division at sea, bound for Alexandria.');
+    expect(lines[0]).not.toContain('London');
+    expect(g.corps.filter((c) => c.nat === 'UK' && !c.dead && c.name === '1st Armoured Division')).toHaveLength(0);
+    expect(home.divs).toBe(1);
+  });
+
+  it('a part the player broke off a holder keeps the division it carries, as the holder does: the row comes without it', () => {
+    const g = balkans('GER');
+    only(g, 'GER', PANZERS);
+    g.phase = g.order.indexOf('GER');
+    const xxii = corps(g, 'GER', 'XXII Corps')!;
+    const part = breakUp(g, xxii, [0])!;
+    expect(part).not.toBeNull();
+    expect(numbersOf(part).slice(0, part.divs)).toEqual([2]);
+    expect(numbersOf(xxii).slice(0, xxii.divs)).toEqual([9]);
+    month(g, 'GER', 19);
+    expect(corps(g, 'GER', PANZERS)).toBeUndefined();
+    expect(names(g, xxii)).toEqual(['9th Panzer Division']);
+    expect(names(g, part)).toEqual(['2nd Panzer Division']);
+    expect(holders(g, 'GER', '2nd Panzer Division')).toEqual([part]);
+    expect(holders(g, 'GER', '9th Panzer Division')).toEqual([xxii]);
+    const lines = said(g);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('The 9th Panzer Division was due');
+    expect(lines[0]).toContain('your XXII Corps');
+    expect(lines[0]).toContain('The 2nd Panzer Division was due');
+    expect(lines[0]).toContain(`your ${part.name}`);
+  });
+
+  it('a row never takes in more divisions than it is to form', () => {
+    const g = balkans();
+    const i = rowAt('GER', EIGHTH);
+    const iv = corps(g, 'GER', 'IV Corps')!;
+    const was = iv.divs;
+    const held = drawHeld(g, 'GER', ROWS[i], g.byName['Sofia'], 1);
+    expect(held.drawn.reduce((s, d) => s + d.k, 0)).toBe(1);
+    expect(held.n).toBe(1);
+    expect(iv.divs).toBe(was);
   });
 });
