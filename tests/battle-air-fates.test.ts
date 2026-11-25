@@ -178,7 +178,8 @@ describe('a falling aircraft strikes another; a fighter collides with the bomber
           expect([e.text, o.text].filter(Boolean).length).toBe(1);
           // The UI director, 15:02Z: 'A bomber of the 8th Bomb Group and a fighter of JG 26 collide, and both go down.'
           if (e.text) {
-            expect(e.text).toMatch(/^[A-Z].* and an? .* collide, and both go down(, .*)?\.$/);
+            // ("and one of the Home Fleet's carrier fighters" names an aircraft too: the design director, 24 Nov 2026 22:58Z)
+            expect(e.text).toMatch(/^[A-Z].* and (an?|one of) .* collide, and both go down(, .*)?\.$/);
             // The bomber first, as the ruled line has it.
             if (fallOf(e).air !== fallOf(o).air) { mixedPairs++; expect(e.text).not.toMatch(/^(An? (\w+ )?fighter of |One of the [^,]*fighters and )/); }
             const c = fallOf(e).chutes + fallOf(o).chutes;

@@ -37,6 +37,7 @@ struct FCampaignRegion
 	bool bOre = false;
 	bool bDepot = false;
 	bool bColony = false;
+	bool bIslet = false; // (release 2, the whole world) one of the Pacific's islets, the chart's "islet": Midway, Wake, Truk. About ten units across, which the world's coarse sheet cannot see
 	int32 FortLevel = 0;
 	FVector2D Center = FVector2D::ZeroVector; // the region's seed point (its chief town)
 	FVector2D Centroid = FVector2D::ZeroVector; // middle of its largest piece of land

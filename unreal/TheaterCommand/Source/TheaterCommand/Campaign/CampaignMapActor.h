@@ -1496,6 +1496,8 @@ private:
 	void ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> AirSignMesh; // aircraft parked on the airfields that have air groups based there
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> AirPennantMesh; // the player's pennants on fields other countries hold: never sunk with the box aircraft
 	FLandFeatures Land;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;

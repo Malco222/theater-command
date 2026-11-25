@@ -2746,12 +2746,40 @@ bool FCampaignSession::StepFind(const FString& Name, int32& OutRegion, int32& Ou
 
 FMonthResult FCampaignSession::EndMonth()
 {
-	FMonthResult Out;
 	TSharedPtr<FJsonObject> Object;
 	if (!CallRules(TEXT("endMonth"), TEXT("[]"), Object))
 	{
-		return Out;
+		return FMonthResult();
 	}
+	FMonthResult Out = ReadMonth(Object, true);
+	TakeView(Object);
+	return Out;
+}
+
+void FCampaignSession::EndMonthAside(bool bAside, TFunction<void(FMonthResult&&)>&& InThen)
+{
+	if (!bAside || !TheaterSpeed::MonthAside() || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	{
+		InThen(EndMonth()); // (at once, as before)
+		return;
+	}
+	// (the month played and its answer read on the rules' thread; the picture of the war is taken by Settle, then Then runs)
+	const TSharedRef<FMonthResult, ESPMode::ThreadSafe> Read = MakeShared<FMonthResult, ESPMode::ThreadSafe>();
+	Order(TEXT("endMonth"), TEXT("[]"), true,
+		[Read](const TSharedPtr<FJsonObject>& Answer)
+		{
+			*Read = ReadMonth(Answer, false);
+			return FHandNext();
+		},
+		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? MoveTemp(*Read) : FMonthResult());
+		});
+}
+
+FMonthResult FCampaignSession::ReadMonth(const TSharedPtr<FJsonObject>& Object, bool bGameThread)
+{
+	FMonthResult Out;
 	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
 	if (Object->TryGetArrayField(TEXT("steps"), Steps))
 	{
@@ -2847,7 +2875,7 @@ FMonthResult FCampaignSession::EndMonth()
 			const TSharedPtr<FJsonObject>* StepView = nullptr;
 			if (Entry->TryGetObjectField(TEXT("view"), StepView))
 			{
-				Step.View = ParseView(*StepView);
+				Step.View = bGameThread ? ParseView(*StepView) : ReadView(*StepView);
 			}
 			Out.Steps.Add(MoveTemp(Step));
 		}
@@ -2947,7 +2975,6 @@ FMonthResult FCampaignSession::EndMonth()
 		(*Year)->TryGetStringField(TEXT("kicker"), Out.Year.Kicker);
 		(*Year)->TryGetStringArrayField(TEXT("lines"), Out.Year.Lines);
 	}
-	TakeView(Object);
 	return Out;
 }
 
