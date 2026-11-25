@@ -185,7 +185,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     domain: 'air', kind: 'field',
     seed,
     turn: g.turn, date,
-    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
+    title: m === 'superiority' ? `The fight for the sky over ${placeName(a.place)}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${placeName(a.place)}`,
     place,
     att: side(nat, att, g.human === nat),
     def: side(defNat, def, g.human === defNat),

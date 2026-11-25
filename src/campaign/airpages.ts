@@ -108,14 +108,14 @@ function groupPage(g: Game, id: number): Page | null {
   const mv = x.wingMove;
   if (mv?.order === 'ashore') {
     const to = airGroupBases(g, id).filter((b) => !b.why);
-    top.push({ label: 'FLY ASHORE', act: to.length === 1 ? `airbase:${id}:${to[0].region}` : `open:rebase:${id}`, ok: up && !mv.why, tip: mv.why ?? `${to.length === 1 ? `To the airfield at ${to[0].name}. ` : ''}${mv.price}` });
+    top.push({ label: 'FLY ASHORE', act: to.length === 1 ? `airbase:${id}:${to[0].region}` : `open:rebase:${id}`, ok: up && !mv.why, tip: mv.why ?? `${to.length === 1 ? `To the airfield at ${placeName(to[0].name)}. ` : ''}${mv.price}` });
   }
   if (mv?.order === 'aboard') {
     const to = airGroupDecks(g, id).filter((d) => !d.why);
     top.push({ label: 'BACK ABOARD', act: to.length === 1 ? `aboard:${id}:${to[0].fleet}` : `open:aboard:${id}`, ok: up && !mv.why, tip: mv.why ?? `${to.length === 1 ? `To the ${to[0].name}, ${to[0].where}. ` : ''}${mv.price}` });
   }
   return {
-    id: `group:${id}`, title: x.name.toUpperCase(), headline: `${craft(x)} ${deck ? 'aboard the' : x.ashore >= 0 ? 'ashore at' : 'at'} ${x.baseName}`,
+    id: `group:${id}`, title: x.name.toUpperCase(), headline: `${craft(x)} ${deck ? 'aboard the' : x.ashore >= 0 ? 'ashore at' : 'at'} ${deck ? x.baseName : placeName(x.baseName)}`,
     note: `${groupLines(x).join(' ')}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ''}, ordered ashore: while it is here its carriers fight as empty carriers.` : ''}`,
     top,
     sections: [{ heading: 'STANDING ORDERS', text: 'What it does between raids.', rows: jobs }, { heading: 'RAIDS', text: 'One raid a month. A raid is flown the moment you order it, and the group is away until next month.', rows: raids }],
@@ -287,7 +287,7 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
   const link = (list: number[]): string => `open:plan:${kind}:${target}:${list.join('.')}`;
   const seat = (s: RaidPlan['seats'][number]): PageRow => ({
     nat: g.human ?? '', title: s.name,
-    lines: [`${num(s.aircraft)} ${s.kind === 'ftr' ? 'fighters' : s.kind === 'bmr' ? 'bombers' : 'aircraft'} ${s.ship >= 0 ? 'aboard the' : 'at'} ${s.baseName}. ${s.why ?? `${s.note[0].toUpperCase()}${s.note.slice(1)}.`}${s.locked ? ' It goes because it is ordered to stick with its bombers.' : ''}`],
+    lines: [`${num(s.aircraft)} ${s.kind === 'ftr' ? 'fighters' : s.kind === 'bmr' ? 'bombers' : 'aircraft'} ${s.ship >= 0 ? 'aboard the' : 'at'} ${s.ship >= 0 ? s.baseName : placeName(s.baseName)}. ${s.why ?? `${s.note[0].toUpperCase()}${s.note.slice(1)}.`}${s.locked ? ' It goes because it is ordered to stick with its bombers.' : ''}`],
     buttons: s.why ? [] : s.picked
       ? [{ label: 'LEAVE IT OUT', act: link(p.picked.filter((id) => id !== s.id)), ok: !s.locked, tip: s.locked ? 'Change its standing order to take it off escort.' : '' }]
       : [{ label: 'ADD IT TO THE RAID', act: link([...p.picked, s.id]), ok: true, tip: s.kind === 'ftr' ? 'It goes as escort, and leaves its patrol for the rest of the month.' : 'Bombers that meet up lose fewer of their number.' }],
@@ -304,7 +304,7 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
     sections: [
       { heading: 'FLYING THE RAID', text: going.length ? '' : 'No group is picked.', rows: going.map(seat) },
       { heading: 'COULD JOIN IT', text: could.length ? '' : 'No other group can reach it this month.', rows: could.map(seat) },
-      { heading: 'RISING TO MEET THEM', text: p.meets.length ? '' : 'No enemy fighters are in reach.', rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num(m.ftr)} fighters ${m.afloat ? 'aboard the' : 'at'} ${m.baseName}: about ${num(m.able)} can meet the raid.`], buttons: [] })) },
+      { heading: 'RISING TO MEET THEM', text: p.meets.length ? '' : 'No enemy fighters are in reach.', rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num(m.ftr)} fighters ${m.afloat ? 'aboard the' : 'at'} ${m.afloat ? m.baseName : placeName(m.baseName)}: about ${num(m.able)} can meet the raid.`], buttons: [] })) },
       { heading: 'THE BATTLE TICKET', text: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'), rows: [] },
       { heading: 'CANNOT GO', text: '', rows: cannot.slice(0, 8).map(seat) },
     ].filter((s) => s.rows.length || s.text),
@@ -374,7 +374,7 @@ function rebasePage(g: Game, id: number): Page | null {
   if (over.length) sections.push({ heading: 'ACROSS THE OCEAN, BY SEA', text: SHIP_AIR_TIP, rows: over });
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  ·  ${x.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
-    note: `${x.name} is based at ${x.baseName}. Aircraft can be based only where there is an airfield: engineers lay new ones out, and the treasury enlarges them. A group reaches farther into enemy country from a field nearer the front.`,
+    note: `${x.name} is based at ${placeName(x.baseName)}. Aircraft can be based only where there is an airfield: engineers lay new ones out, and the treasury enlarges them. A group reaches farther into enemy country from a field nearer the front.`,
     top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
 }
@@ -392,7 +392,7 @@ function aboardPage(g: Game, id: number): Page | null {
   return {
     id: `aboard:${id}`, title: `BACK ABOARD  ·  ${x.name.toUpperCase()}`,
     headline: rows.length ? `${rows.length} fleet${rows.length === 1 ? '' : 's'} with deck room for it` : 'No carrier has deck room standing empty for it',
-    note: `${x.name} is ashore at ${x.baseName}. It goes back aboard a fleet of its navy that has deck room standing empty, when that fleet lies in the harbour here or in the sea off this coast.`,
+    note: `${x.name} is ashore at ${placeName(x.baseName)}. It goes back aboard a fleet of its navy that has deck room standing empty, when that fleet lies in the harbour here or in the sea off this coast.`,
     top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections: [{ heading: 'FLEETS', text: '', rows }],
   };
 }
@@ -409,7 +409,7 @@ function wingsPage(g: Game, fleet: number): Page | null {
     buttons: mine ? [{ label: 'ORDERS', act: `open:group:${w.id}`, ok: true, tip: 'Its standing orders, the strikes it can fly, a search of a sea, or a reconnaissance.' }] : [],
   }));
   const ashore: PageRow[] = c.ashore.map((w) => ({
-    nat: c.nat, title: w.name, lines: [`${num(w.aircraft)} aircraft ashore at ${w.at}.`],
+    nat: c.nat, title: w.name, lines: [`${num(w.aircraft)} aircraft ashore at ${placeName(w.at)}.`],
     buttons: mine ? [{ label: 'ORDERS', act: `open:group:${w.id}`, ok: true, tip: 'Its orders as an air group ashore, and the order that sends it back aboard.' }] : [],
   }));
   return {
@@ -479,10 +479,10 @@ function raidVerdict(r: AirReport, side: 'att' | 'def'): string {
 
 function raidTitle(g: Game, r: AirReport): string {
   if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
-  if (r.mission === 'harbour') return `Raid on the harbour of ${r.place}`;
-  if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
-  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raid on ${r.place}`
-    : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+  if (r.mission === 'harbour') return `Raid on the harbour of ${placeName(r.place)}`;
+  if (r.mission === 'town') return `Bombing of the defences of ${placeName(r.region >= 0 ? townName(g.regions[r.region]) : r.place)}`;
+  return r.mission === 'superiority' ? `The sky over ${placeName(r.place)}` : r.mission === 'bomb' ? `Bombing of ${placeName(r.place)}` : r.mission === 'night' ? `Night raid on ${placeName(r.place)}`
+    : r.mission === 'ground' ? `Raid on the troops at ${placeName(r.place)}` : r.mission === 'line' ? `Bombing of the line at ${placeName(r.place)}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
 }
 
 /** "1 fighter, 53 bombers": aircraft counted with their nouns, the singular where it is one. */
@@ -642,7 +642,7 @@ export function airAct(g: Game, action: string, fought?: FoughtAir): AirActResul
     const grp = g.airFleets.find((f) => f.id === Number(part[1])), to = g.regions[Number(part[2])];
     const sea = !!grp && !!to && overOcean(g, grp, to);
     const ok = orderAirBase(g, Number(part[1]), Number(part[2]));
-    const where = to?.name ?? 'its new airfield';
+    const where = to ? placeName(to.name) : 'its new airfield';
     return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : sea ? `The group is shipped across the ocean to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : sea ? 'It cannot be shipped there now.' : 'It cannot move there now.', open: `group:${part[1]}` };
   }
   if (part[0] === 'aboard') {

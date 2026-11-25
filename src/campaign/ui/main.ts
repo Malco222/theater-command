@@ -97,7 +97,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, placeOwns, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -4887,8 +4887,8 @@ function airVerdict(r: AirReport): { text: string; cls: string } {
 function airTitle(r: AirReport): string {
   if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
   if (r.mission === 'harbour') return `Raid on the harbour of ${placeName(r.place)}`;
-  if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
-  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+  if (r.mission === 'town') return `Bombing of the defences of ${placeName(r.region >= 0 ? townName(g.regions[r.region]) : r.place)}`;
+  return r.mission === 'superiority' ? `The sky over ${placeName(r.place)}` : r.mission === 'bomb' ? `Bombing of ${placeName(r.place)}` : r.mission === 'night' ? `Night raids on ${placeName(r.place)}` : r.mission === 'ground' ? `Raid on the troops at ${placeName(r.place)}` : r.mission === 'line' ? `Bombing of the line at ${placeName(r.place)}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
 }
 
 function airBrow(r: AirReport): string {
@@ -5883,15 +5883,15 @@ function missionText(f: AirFleet): string {
   switch (f.mission) {
     case 'support': return 'supporting the armies and defending its sky';
     case 'rest': return 'resting and refitting';
-    case 'superiority': return `fighting for the sky over ${where}`;
-    case 'bomb': return `bombing ${where} by day`;
-    case 'night': return `bombing ${where} by night`;
+    case 'superiority': return `fighting for the sky over ${placeName(where)}`;
+    case 'bomb': return `bombing ${placeName(where)} by day`;
+    case 'night': return `bombing ${placeName(where)} by night`;
     case 'strike': return `striking at shipping in ${where}`;
-    case 'ground': return `raiding the troops at ${where}`;
-    case 'line': return `bombing the fieldworks at ${where}`;
+    case 'ground': return `raiding the troops at ${placeName(where)}`;
+    case 'line': return `bombing the fieldworks at ${placeName(where)}`;
     case 'fleet': return `striking ${where}`;
     case 'harbour': return `raiding the harbour of ${placeName(where)}`;
-    case 'town': return `bombing the defences of ${g.regions[f.target] ? townName(g.regions[f.target]) : where}`;
+    case 'town': return `bombing the defences of ${placeName(g.regions[f.target] ? townName(g.regions[f.target]) : where)}`;
   }
 }
 
@@ -5951,9 +5951,9 @@ function airOrders(f: AirFleet): string {
 }
 
 function airOrderText(o: AirOrder): string {
-  const from = o.base?.length ? ` from ${o.base[0]}` : '';
+  const from = o.base?.length ? ` from ${placeName(o.base[0])}` : '';
   const sea = o.sea ? g.seas.find((z) => z.key === o.sea)?.name ?? 'sea' : '';
-  const what = o.mission === 'superiority' ? `fights for the sky over ${o.region}` : o.mission === 'bomb' ? `bombs ${o.region} by day` : o.mission === 'night' ? `bombs ${o.region} by night` : o.mission === 'strike' ? `strikes at shipping in the ${sea}` : o.mission === 'rest' ? 'rests' : 'supports the armies';
+  const what = o.mission === 'superiority' ? `fights for the sky over ${placeName(o.region!)}` : o.mission === 'bomb' ? `bombs ${placeName(o.region!)} by day` : o.mission === 'night' ? `bombs ${placeName(o.region!)} by night` : o.mission === 'strike' ? `strikes at shipping in the ${sea}` : o.mission === 'rest' ? 'rests' : 'supports the armies';
   return `${o.fleet}${from} ${what}.`;
 }
 
@@ -5961,7 +5961,7 @@ function airPane(): string {
   const me = g.human && g.nations[g.human].alive ? g.human : null;
   const size = (a: AirFleet, b: AirFleet): number => b.ftr + b.bmr - (a.ftr + a.bmr);
   const held = g.regions.filter((r) => skyOver(g, r.id));
-  const skyNote = held.length ? `<div class="note"><b>The sky.</b> ${held.map((r) => `The ${g.nations[skyOver(g, r.id)!].adj} air force holds the sky over ${esc(r.name)}.`).join(' ')} An army attacking there has the air on its side, and on a coast the holder's aircraft command the sea. It has to be won again every month.</div>` : '';
+  const skyNote = held.length ? `<div class="note"><b>The sky.</b> ${held.map((r) => `The ${g.nations[skyOver(g, r.id)!].adj} air force holds the sky over ${esc(placeName(r.name))}.`).join(' ')} An army attacking there has the air on its side, and on a coast the holder's aircraft command the sea. It has to be won again every month.</div>` : '';
   const plan = (nat: string, mine: boolean): string => {
     // A player sees the month he is about to play; a spectator the month that has just been flown.
     const ph = airPlanFor(g, nat, mine ? g.turn : Math.max(1, g.turn - 1));
@@ -6171,7 +6171,7 @@ function airWarPane(me: string): string {
   const cut = airIncomeLoss(g, me);
   if (cut > 0) out += `<div class="note" style="border-left-color:var(--red)"><b>Under the bombs.</b> Bombing and attacks on coastal shipping stopped ${tenthPct(cut)} of your production this month.</div>`;
   const held = g.regions.filter((r) => skyOver(g, r.id));
-  if (held.length) out += `<div class="note"><b>The sky.</b> ${held.map((r) => `The ${g.nations[skyOver(g, r.id)!].adj} air force holds the sky over ${esc(r.name)}.`).join(' ')} An army attacking there has the air on its side. It has to be won again every month.</div>`;
+  if (held.length) out += `<div class="note"><b>The sky.</b> ${held.map((r) => `The ${g.nations[skyOver(g, r.id)!].adj} air force holds the sky over ${esc(placeName(r.name))}.`).join(' ')} An army attacking there has the air on its side. It has to be won again every month.</div>`;
 
   // An airfield opened that is not one of the player's own: what is known of it.
   const open = ui.field >= 0 ? airfieldAt(g, ui.field) : null;
@@ -6320,7 +6320,7 @@ function airPlanCard(): string {
   const mission = m.mission as AirMission;
   const sea = mission === 'strike';
   const place = sea ? `the ${g.seas[m.target].name}` : g.regions[m.target].name;
-  const title = mission === 'superiority' ? `The sky over ${place}` : mission === 'bomb' ? `Bombing ${place}` : mission === 'night' ? `Night raids on ${place}` : `Strikes on shipping in ${place}`;
+  const title = mission === 'superiority' ? `The sky over ${placeName(place)}` : mission === 'bomb' ? `Bombing ${placeName(place)}` : mission === 'night' ? `Night raids on ${placeName(place)}` : `Strikes on shipping in ${place}`;
   const a = previewAirOrder(g, f.id, mission, m.target);
   const why = whyNotMission(g, f, mission, m.target) ?? a?.why ?? (a ? null : 'Nothing can reach the target.');
   let body: string;
@@ -6353,7 +6353,7 @@ function airPlanCard(): string {
         <div class="sub">About ${lossPct}% of the bombers are likely to be lost. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number, and merchant ships in these waters will be sunk.</div>`;
     } else {
       head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light losses expected' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
-        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${g.regions[m.target].fac > 0 ? `The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(place)}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[g.regions[m.target].ctrl].adj} production.` : `There is no industry at ${esc(place)}: the bombers go for its rail yards and junctions.`}${fc.rail ? ` There is about a ${Math.round(fc.rail * 100)}% chance of cutting the railway through ${esc(place)}, which stays cut until engineers relay it.` : ''}${fc.ruin ? ` There is about a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}</div>`;
+        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${g.regions[m.target].fac > 0 ? `The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(placeOwns(place))} output for a month: ${tenthPct(fc.nation)} of ${g.nations[g.regions[m.target].ctrl].adj} production.` : `There is no industry at ${esc(placeName(place))}: the bombers go for its rail yards and junctions.`}${fc.rail ? ` There is about a ${Math.round(fc.rail * 100)}% chance of cutting the railway through ${esc(placeName(place))}, which stays cut until engineers relay it.` : ''}${fc.ruin ? ` There is about a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}</div>`;
     }
     const flying = a.att.map((x) => `<div class="pickrow pick">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[x.f.base].name)}, ${num(x.d)} km · ${esc(craft(mission === 'night' ? 0 : x.f.ftr, x.bmr > 0 ? x.f.bmr : 0))}${x.crowd < 1 ? ` · crowded airfields, ${Math.round(x.crowd * 100)}% can fly` : ''}</span></span></div>`).join('');
     const meeting = a.def.length ? a.def.map((x) => `<div class="pickrow">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.f.nat].adj}, from ${esc(g.regions[x.f.base].name)} · ${num(x.f.ftr)} fighters, about ${num(x.f.ftr * x.w)} able to meet the raids</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';

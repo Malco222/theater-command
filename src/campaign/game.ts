@@ -235,6 +235,13 @@ export function theWords(text: string, before = ''): string {
 export function placeName(name: string, start = false): string {
   return PLACES.the.includes(name) ? `${start ? 'The' : 'the'} ${name}` : name;
 }
+/**
+ * A place's name owning something, as theWords sets it: "the Ruhr's output", "the Midlands' output" (a plural name of
+ * the list owns with the apostrophe alone), "Warsaw's output".
+ */
+export function placeOwns(name: string, start = false): string {
+  return PLACES.the.includes(name) ? `${placeName(name, start)}${/s$/.test(name) ? "'" : "'s"}` : `${name}'s`;
+}
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
   g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind, nat, region, ...tag });

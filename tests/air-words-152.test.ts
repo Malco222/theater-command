@@ -133,7 +133,7 @@ describe('finding 12: a share that rounds to nothing is never "0%"', () => {
     const { g, f } = overTheChannel('bmr', 3);
     for (const x of g.airFleets) if (x.nat === 'GER') x.ftr = 0;
     const rep = launchRaid(g, 'bomb', regionOf(g, 'Ruhr'), [f.id], 'USA')!;
-    expect(rep.result).toMatch(/^The bombing stopped less than 1% of Ruhr's output for a month: less than 0\.1% of German production\./);
+    expect(rep.result).toMatch(/^The bombing stopped less than 1% of the Ruhr's output for a month: less than 0\.1% of German production\./);
   });
 
   it("a raid on factories whose bombs fell and stopped nothing says it did not stop any of the output", () => {
@@ -143,7 +143,7 @@ describe('finding 12: a share that rounds to nothing is never "0%"', () => {
     g.flags[`wk:aa:${regionOf(g, 'Ruhr')}`] = 7;
     const rep = launchRaid(g, 'bomb', regionOf(g, 'Ruhr'), [f.id], 'USA')!;
     expect(rep.att[0].bmr - rep.att[0].lostBmr).toBeGreaterThan(0);
-    expect(rep.result).toMatch(/^The bombing did not stop any of Ruhr's output\./);
+    expect(rep.result).toMatch(/^The bombing did not stop any of the Ruhr's output\./);
   });
 });
 

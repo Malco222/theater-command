@@ -25,7 +25,7 @@ import {
   fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, placeName, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, placeName, placeOwns, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { airfieldOpenTo } from './prizes';
@@ -214,7 +214,7 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
     leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: deck ? -1 : f.base, baseName: homeName(g, f),
     port: deck && fleet && !atSea(fleet) ? fleet.base : -1, ashore: f.ashore ?? -1, fleetName: f.ashore !== undefined ? fleet?.name ?? '' : '',
-    where: deck ? `Aboard the ${homeName(g, f)}` : f.ashore !== undefined ? `Ashore at ${g.regions[f.base].name}` : `At ${g.regions[f.base].name}`,
+    where: deck ? `Aboard the ${homeName(g, f)}` : f.ashore !== undefined ? `Ashore at ${placeName(g.regions[f.base].name)}` : `At ${placeName(g.regions[f.base].name)}`,
     wingMove: !own ? null : deck ? { order: 'ashore', price: PRICE_ASHORE, why: whyNoShore(g, f) } : f.ashore !== undefined ? { order: 'aboard', price: PRICE_ABOARD, why: whyNoDeck(g, f) } : null,
     ship: f.ship ?? -1, sea: at.sea, x: at.x, y: at.y,
     doing, job: away || isOffensive(f.mission) ? 'raid' : f.mission === 'rest' ? 'rest' : with_ ? 'escort' : 'patrol',
@@ -253,7 +253,7 @@ export function airfieldCard(g: Game, region: number, viewer: string | null = g.
   const build = built < E
     ? `An engineer corps standing here can ${field ? 'enlarge it' : 'lay one out'} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.`
     : 'It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.';
-  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build, aboard: '', hidden: false, rows: [] };
+  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${placeName(r.name)}: no aircraft can be based here.`, build, aboard: '', hidden: false, rows: [] };
   const hidden = field.groups < 0;
   const rows = hidden ? [] : g.airFleets.filter((f) => f.base === region && !afloat(f) && flying(f)).map((f) => groupRow(g, f, viewer));
   const used = rows.reduce((s, x) => s + x.aircraft, 0);
@@ -280,7 +280,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   const f = mine(g, id, nat);
   if (!f) return [];
   const R = airRange(f, g), kind = kindOf(f);
-  const deck = carrierOf(g, f), home = deck ? `the ${deck.name}` : g.regions[f.base].name;
+  const deck = carrierOf(g, f), home = deck ? `the ${deck.name}` : placeName(g.regions[f.base].name);
   const away = f.flew === g.turn && isOffensive(f.mission);
   const gone = away ? `It has flown its raid this month, and is back ${deck ? 'aboard' : 'at its airfield'} next month.` : null;
   const out: GroupJob[] = [];
@@ -728,12 +728,12 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
   const place = placeOf(g, kind, target);
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
-    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
-    if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${place}, which stays cut until engineers relay it.`);
+    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${placeOwns(place)} output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${placeName(place)}: the bombers go for its rail yards.`);
+    if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${placeName(place)}, which stays cut until engineers relay it.`);
     if (fc.ruin) out.push(`About a ${pct(fc.ruin)} chance of wrecking a factory outright.`);
   } else if (kind === 'superiority') {
     out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
-    if (fc.cut > 0) out.push(`The air groups based at ${place} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
+    if (fc.cut > 0) out.push(`The air groups based at ${placeName(place)} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
   } else if (kind === 'strike') {
     out.push(`Warships caught at sea there could lose up to ${pct(fc.cut)} of their number, and merchant ships in those waters will be sunk.`);
   } else if (kind === 'fleet' || kind === 'harbour') {
@@ -749,12 +749,12 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     const most = Math.max(0, ...g.regions[target].units.filter((u) => !u.dead && atWar(g, nat, u.nat)).map(worksOf));
     const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
     out.push(took >= 0.05
-      ? `Should take about ${monthsOf(took)} off the fieldworks at ${place}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
-      : `Too few bombers would get through to break up the works at ${place}.`);
+      ? `Should take about ${monthsOf(took)} off the fieldworks at ${placeName(place)}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
+      : `Too few bombers would get through to break up the works at ${placeName(place)}.`);
     out.push('The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.');
   } else if (kind === 'ground') {
     const dug = g.regions[target].units.some((u) => !u.dead && u.dug && atWar(g, nat, u.nat));
-    out.push(`The troops at ${place} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
+    out.push(`The troops at ${placeName(place)} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
   }
   return out;
 }
@@ -859,7 +859,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const lost = n * risk;
     if (f.ftr > 0) plan.fighterLossN = Math.round(lost); else plan.bomberLossN = Math.round(lost);
     plan.bomberLoss = f.ftr > 0 ? 0 : risk;
-    plan.effects = [`Every army at ${place} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+    plan.effects = [`Every army at ${placeName(place)} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
     return plan;
   }
 
@@ -906,7 +906,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     }
   }
   const off = going.filter((f) => f.ftr > 0 && f.mission === 'support' && kindOf(f) !== 'bmr');
-  if (off.length) plan.offPatrol = `${list(off.map((f) => `the ${f.name}`))} ${off.length === 1 ? 'leaves its patrol' : 'leave their patrols'} for the rest of the month: the sky over ${list([...new Set(off.map((f) => (afloat(f) ? `the ${homeName(g, f)}` : g.regions[f.base].name)))])} has that much less cover until next month.`;
+  if (off.length) plan.offPatrol = `${list(off.map((f) => `the ${f.name}`))} ${off.length === 1 ? 'leaves its patrol' : 'leave their patrols'} for the rest of the month: the sky over ${list([...new Set(off.map((f) => (afloat(f) ? `the ${homeName(g, f)}` : placeName(g.regions[f.base].name))))])} has that much less cover until next month.`;
   if (off.some(afloat)) plan.offPatrol += ` A fleet whose fighters are away is open to the enemy's strike until they are back.`;
   return plan;
 }
@@ -1134,7 +1134,7 @@ export function scout(g: Game, id: number, target: number, nat: string | null = 
   g.intel.scout = kept;
   const foes = r.units.filter((u) => !u.dead && atWar(g, f.nat, u.nat));
   const seen = foes.length ? `${plural(foes.length, 'corps', 'corps')}, ${plural(foes.reduce((s, c) => s + c.divs, 0), 'division')}${foes.some((c) => c.dug) ? ', dug in' : ''}` : 'no troops there';
-  const text = `Aircraft of the ${f.name} photographed ${r.name}: ${seen}.${lost ? ` ${plural(lost, 'aircraft', 'aircraft')} did not come back.` : ''}`;
+  const text = `Aircraft of the ${f.name} photographed ${placeName(r.name)}: ${seen}.${lost ? ` ${plural(lost, 'aircraft', 'aircraft')} did not come back.` : ''}`;
   if (f.nat === g.human) headline(g, 'info', text, f.nat, r.id);
   return { ok: true, text, lost };
 }

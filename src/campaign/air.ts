@@ -20,7 +20,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, newsWeek, placeName, routineNews, theWords, thornGround, worksOf } from './game';
+import { allied, atWar, headline, newsWeek, placeName, placeOwns, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { hasTech } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
@@ -1281,8 +1281,8 @@ export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: numbe
   }
   if (m === 'town') {
     if (!siegeRules(g) || !airWar(g)) return 'Towns are bombed only in the grand campaign.';
-    if (!atWar(g, f.nat, r.ctrl)) return `${townName(r)} is not in enemy hands.`;
-    if (!townHeld(g, r)) return `Nobody holds ${townName(r)}: an army can walk in.`;
+    if (!atWar(g, f.nat, r.ctrl)) return `${placeName(townName(r), true)} is not in enemy hands.`;
+    if (!townHeld(g, r)) return `Nobody holds ${placeName(townName(r))}: an army can walk in.`;
     if (!f.bmr && !escort) return 'It has no bombers.';
     return d > (escort ? R.ftrRange : R.bmrRange) ? (escort ? 'That town is beyond its fighters.' : 'That town is beyond its bombers.') : null;
   }
@@ -1753,7 +1753,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const sky: Sky = wx ? (sea ? skyAtSea(g, zone) : skyAt(g, target)) : 'clear';
   const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
-  if (sky === 'closed') { out.why = `Closed sky this month: nothing flies over ${place}.`; return out; }
+  if (sky === 'closed') { out.why = `Closed sky this month: nothing flies over ${placeName(place)}.`; return out; }
   if (m === 'fleet' && (!quarry || !atSea(quarry) || !surfaceShips(quarry))) { out.why = 'That fleet is not at sea.'; return out; }
   if (m === 'fleet') out.ships = [quarry!];
   else if (m === 'harbour') out.ships = shipsInPort(g, target, nat);
@@ -1877,10 +1877,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${harbourOf(place)}`, effect: 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
-    out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
+    out.lines.push({ label: 'The town', value: `Troops inside ${placeName(townName(r))} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${placeName(place)}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${placeName(place)}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
@@ -2096,14 +2096,14 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     value += outputWorth(g, r, cut);
     // (No line where no bombs fell.)
     // (A share that rounds to nothing is "less than 1%", and where the bombs fell and stopped nothing it says so: finding 12 of 1.5.1, the UI director's words of 05:10Z.)
-    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${sharePct(cut)} of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.`
-      : r.fac > 0 && through > 0 ? `The bombing did not stop any of ${r.name}'s output.` : '';
+    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${sharePct(cut)} of ${placeOwns(r.name)} output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.`
+      : r.fac > 0 && through > 0 ? `The bombing did not stop any of ${placeOwns(r.name)} output.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     // Fought out as an air battle, the field's own throws decide both (b397), so the campaign cuts the line the field showed cut.
     if (bombFactories(g, nat, r, cut, battle?.rolls?.ruin)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
-    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0, battle?.rolls?.rail)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
-    else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
+    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0, battle?.rolls?.rail)) { value += 300; notable = true; result += ` The railway through ${placeName(r.name)} is cut: no train runs until engineers relay it.`; }
+    else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${placeName(r.name)}, but the line still runs.` : 'No bombers got through.';
     result = result.trim();
   } else if (m === 'town') {
     // A raid on a town: part of its works are broken down for the assault, and the troops inside are shaken.
@@ -2125,7 +2125,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     value += months * divs * AIRWAR.line.value;
     const took = Math.min(months, held), left = Math.max(0, held - months);
     result = took >= 0.05
-      ? `The bombing took ${monthsWord(took)} off the fieldworks at ${r.name}, which leaves ${left < 0.05 ? 'nothing of them' : `${monthsWord(left)} of work in them`}. The troops there dig them back a month at a time: attack while it lasts.`
+      ? `The bombing took ${monthsWord(took)} off the fieldworks at ${placeName(r.name)}, which leaves ${left < 0.05 ? 'nothing of them' : `${monthsWord(left)} of work in them`}. The troops there dig them back a month at a time: attack while it lasts.`
       : 'Too few bombers got through to break up the works.';
   } else if (m === 'ground') {
     // A raid on troops: the army there is harried for a month, and goes into its next battle the weaker for it.
@@ -2146,8 +2146,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     value += cut * divs * G.value;
     const whom = foes.length === 1 ? foes[0].name : `the ${foes.length} corps`;
     result = cut > 0
-      ? `The raids cut the organisation of ${whom} at ${r.name} by ${sharePct(cut)}${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
-      : foes.length && through + low > 0 ? `The raids did not cut the organisation of ${whom} at ${r.name}.` : 'The aircraft found little to hit.';
+      ? `The raids cut the organisation of ${whom} at ${placeName(r.name)} by ${sharePct(cut)}${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
+      : foes.length && through + low > 0 ? `The raids did not cut the organisation of ${whom} at ${placeName(r.name)}.` : 'The aircraft found little to hit.';
   } else {
     const S = AIR.damage.shipping;
     const frac = Math.min(S.maxSink, S.sink * (through / (through + S.scale)));
@@ -2241,7 +2241,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // the sky, is told below in full, in place of this. Only where it concerns the player: his own sweep, or one over
   // his ground or against him. Others' sweeps that met nobody keep no line, and stay out of his month's notes.
   const his = !!g.human && (nat === g.human || defNat === g.human || (!sea && g.regions[target].ctrl === g.human));
-  if (his && m === 'superiority' && !result && !df(def) && att.every((s) => s.bmr <= 0)) rep.result = `${who} flew over ${a.place} and met no enemy fighters.`;
+  if (his && m === 'superiority' && !result && !df(def) && att.every((s) => s.bmr <= 0)) rep.result = `${who} flew over ${placeName(a.place)} and met no enemy fighters.`;
   const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
   const adj = defNat ? g.nations[defNat].adj : 'enemy';
   // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
@@ -2271,7 +2271,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // the player read before the raid and the line he reads after it agree.)
     const n = Math.floor(over), flew = Math.round(a.att.reduce((s, x) => s + x.f.ftr, 0));
     const why = flew > n ? `only ${n} of the ${flew} sent could be over it` : `only ${n} ${n === 1 ? 'was' : 'were'} there`;
-    text = `${who} ${one ? 'flies' : 'fly'} over ${a.place}, but no enemy fighters came up to meet ${one ? 'it' : 'them'}${held ? ': the sky there is still yours.' : n < AIR.sky.least ? `, and the sky is not won: it takes ${AIR.sky.least} still over it at the end, and ${why}.` : ', and the sky there is not won.'}`;
+    text = `${who} ${one ? 'flies' : 'fly'} over ${placeName(a.place)}, but no enemy fighters came up to meet ${one ? 'it' : 'them'}${held ? ': the sky there is still yours.' : n < AIR.sky.least ? `, and the sky is not won: it takes ${AIR.sky.least} still over it at the end, and ${why}.` : ', and the sky there is not won.'}`;
     rep.result = text;
   }
   // What changes something is told in full: the sky won, a ship sunk, a factory wrecked, a railway cut, a fleet or

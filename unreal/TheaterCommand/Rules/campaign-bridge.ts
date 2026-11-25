@@ -117,7 +117,7 @@ import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
-import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, theWords } from '../../../src/campaign/game';
+import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
@@ -3479,7 +3479,7 @@ function province(id: number) {
           const plan = weighRaid(s, 'recon', r.id);
           if (plan.picked.length) {
             const group = s.airFleets.find((f) => f.id === plan.picked[0]);
-            out.push({ key: `recon:${plan.picked[0]}`, label: 'Send a reconnaissance flight', detail: `${group?.name ?? 'An air group'} photographs ${r.name}: every army here and beside it is seen whole and identified until the month ends. ${plan.effects[0] ?? ''}`.trim(), ok: up && !plan.why, why: plan.why ?? (up ? '' : 'It is not your month.') });
+            out.push({ key: `recon:${plan.picked[0]}`, label: 'Send a reconnaissance flight', detail: `${group?.name ?? 'An air group'} photographs ${placeName(r.name)}: every army here and beside it is seen whole and identified until the month ends. ${plan.effects[0] ?? ''}`.trim(), ok: up && !plan.why, why: plan.why ?? (up ? '' : 'It is not your month.') });
           }
         } catch { /* the air war as its own game is the grand campaign's alone */ }
       }
@@ -4340,7 +4340,7 @@ function raidPage(s: Game, mission: AirMission, id: number): Page | null {
         const fac = s.regions[t].fac > 0;
         lines.push(`Likely bomber losses: about ${loss}% (${loss <= 10 ? 'light' : loss <= 25 ? 'the fighters will take a toll' : 'heavy'}). ${fac ? `The raid should stop about ${Math.round(fc.cut * 100)}% of its output for a month.` : 'There is no industry here: the bombers go for the rail yards.'}${fc.rail ? ` About a ${Math.round(fc.rail * 100)}% chance of cutting its railway.` : ''}${fc.ruin ? ` About a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}`);
       }
-      lines.push(`Flying it: ${a.att.map((x) => `${x.f.name} from ${s.regions[x.f.base].name} (${craftOf(mission === 'night' ? 0 : x.ftr, x.bmr)})`).join('; ')}.`);
+      lines.push(`Flying it: ${a.att.map((x) => `${x.f.name} from ${placeName(s.regions[x.f.base].name)} (${craftOf(mission === 'night' ? 0 : x.ftr, x.bmr)})`).join('; ')}.`);
       lines.push(a.def.length ? `Rising to meet them: ${a.def.map((x) => `${x.f.name}, about ${Math.round(x.f.ftr * x.w)} fighters`).join('; ')}.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ''}` : `No enemy fighters are in reach.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ''}`);
       const now = f.mission === mission && f.target === t;
       buttons.push({ label: now ? 'ORDERED' : `SEND ${f.name.toUpperCase()}`, act: `air:${f.id}:${mission}:${t}`, ok: up && !now, tip: 'Flown when you end the month. A group on a raid does not defend its own sky that month.' });
@@ -4348,7 +4348,7 @@ function raidPage(s: Game, mission: AirMission, id: number): Page | null {
       for (const o of others) {
         if (o.mission === mission && o.target === t) continue;
         if (whyNotMission(s, o, mission, t) !== null) continue;
-        buttons.push({ label: `ALSO SEND ${o.name.toUpperCase()}`, act: `air:${o.id}:${mission}:${t}`, ok: up, tip: `${o.name} from ${s.regions[o.base].name} (${craftOf(o.ftr, o.bmr)}) joins the raid. Groups given the same target fly it together, and the odds above are worked out again.` });
+        buttons.push({ label: `ALSO SEND ${o.name.toUpperCase()}`, act: `air:${o.id}:${mission}:${t}`, ok: up, tip: `${o.name} from ${placeName(s.regions[o.base].name)} (${craftOf(o.ftr, o.bmr)}) joins the raid. Groups given the same target fly it together, and the odds above are worked out again.` });
         if (buttons.length >= 5) break;
       }
     }
@@ -4357,7 +4357,7 @@ function raidPage(s: Game, mission: AirMission, id: number): Page | null {
   return {
     id: `raid:${mission}:${id}`, title: `${RAID_TITLE[mission] ?? 'A RAID'}  \u00B7  ${f.name.toUpperCase()}`,
     headline: targets.length ? `${targets.length} target${targets.length === 1 ? '' : 's'} in reach, nearest first` : 'No target is in reach',
-    note: `${MISSION[mission].what} ${f.name} flies from ${base.name} with ${craftOf(f.ftr, f.bmr)}. Its orders now: ${airDoing(s, f)}. Send more than one group against the same target and they fly it together, which spreads the defenders' fire.`,
+    note: `${MISSION[mission].what} ${f.name} flies from ${placeName(base.name)} with ${craftOf(f.ftr, f.bmr)}. Its orders now: ${airDoing(s, f)}. Send more than one group against the same target and they fly it together, which spreads the defenders' fire.`,
     top: [{ label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' }],
     sections: [{ heading: 'TARGETS', text: targets.length ? '' : 'Move the group to an airfield nearer the enemy, or wait for aircraft with a longer reach.', rows }],
   };
