@@ -220,6 +220,8 @@ namespace LandScape
 				bPalms = F.Lat < 34.6 && F.Lon < 12.0 && F.Lon > 7.0;
 				// (the braided tracks, on trial: laid in Sites, once the lanes are)
 				bTracks = F.Tried("trigh");
+				// (the field's own wadi with its line of scrub, and a low ridge beyond the field, on trial: "desertland")
+				bLand = F.Tried("desertland");
 				// The wadis read once onto a 4 m grid over the field and 320 m round it (the paint and the track marks ask
 				// them many times a frame: two noises each is too dear), straight from the noise beyond it.
 				GX0 = -320.0;
@@ -255,12 +257,48 @@ namespace LandScape
 				const double Dx = std::max({ 0.0, -X, X - Fd.Width() }), Dy = std::max({ 0.0, -Y, Y - Fd.Depth() });
 				return std::sqrt(Dx * Dx + Dy * Dy);
 			}
-			/** A wadi here: 1 on its floor's middle, 0 out on the plain. Its lines wander some 650 m apart; 15 to 40 m across. */
+			/** A wadi here: 1 on its floor's middle, 0 out on the plain. Its lines wander some 650 m apart; 15 to 40 m across.
+			 * And the field's own (FieldWadi): one always crosses it. */
 			double WadiNoise(double X, double Y) const
 			{
 				const double Warp = 0.35 * Noise(X / 230.0, Y / 230.0, Seed ^ 0xA2);
 				const double N = Noise(X / 640.0 + Warp, Y / 640.0, Seed ^ 0xA1);
-				return Smooth(0.032, 0.011, std::fabs(N));
+				return std::max(Smooth(0.032, 0.011, std::fabs(N)), FieldWadi(X, Y));
+			}
+			/** The field's own wadi (the art director's Mac pass 1, B5: "a plate of ground with no dune, wadi or scrub"; the
+			 * noise's wadis some 650 m apart can miss a field): one crossing it from west to east between a quarter and three
+			 * quarters of its depth, meandering 60 to 110 m either side over 350 to 550 m, its floor 10 to 22 m across and its
+			 * banks a cut, 2.5 m from the plain's edge to the floor (the same depth as the noise's, under a metre in the field:
+			 * Relief), so from a man's eye it is a shaded step and a line of scrub across the plain (Plants). 1 on the floor.
+			 * On trial, "desertland" (0 without it). */
+			double FieldWadi(double X, double Y) const
+			{
+				if (!bLand) return 0.0;
+				const double Mid = Fd.Depth() * (0.25 + 0.5 * Unit(Hash(Seed, 0x3AD1)));
+				const double Wave = 350.0 + 200.0 * Unit(Hash(Seed, 0x3AD2)), Swing = 60.0 + 50.0 * Unit(Hash(Seed, 0x3AD3));
+				const double Line = Mid + Swing * std::sin(2.0 * Pi * X / Wave + 6.0 * Unit(Hash(Seed, 0x3AD4))) + 0.45 * Swing * Noise(X / 170.0, 0.5, Seed ^ 0x3AD5);
+				const double Half = 5.0 + 6.0 * (0.5 + 0.5 * Noise(X / 260.0, 1.5, Seed ^ 0x3AD6));
+				// (thinning out a kilometre beyond the field's ends, so it runs into the plain's own wadis or the haze)
+				const double Ends = Smooth(-1300.0, -300.0, X) * Smooth(Fd.Width() + 1300.0, Fd.Width() + 300.0, X);
+				return Ends * Smooth(Half + 1.5, Half - 1.0, std::fabs(Y - Line));
+			}
+			/** A low ridge out beyond the field (the art director, B5: "a low ridge between eye and horizon"): 12 to 22 m high
+			 * some 300 to 700 m out from the field's edge, rising gently on the field's side over 350 m and falling over 500 m
+			 * beyond, broken into pieces round the field (about half the horizon), and never on the escarpment's side, which has
+			 * its own. In Relief, so all of its height stands (the rolling country is only blended in over 1.2 km). On trial,
+			 * "desertland" (0 without it). */
+			double Ridge(double X, double Y) const
+			{
+				const double D = Outside(X, Y);
+				if (!bLand || D <= 0.0) return 0.0;
+				const double Cx = 0.5 * Fd.Width(), Cy = 0.5 * Fd.Depth();
+				const double A = std::atan2(Y - Cy, X - Cx), CA = std::cos(A), SA = std::sin(A);
+				const double Out = 500.0 + 200.0 * Noise(1.8 * CA, 1.8 * SA, Seed ^ 0x51D1);
+				const double High = 12.0 + 10.0 * (0.5 + 0.5 * Noise(3.1 * CA + 4.0, 3.1 * SA, Seed ^ 0x51D2));
+				const double Piece = Smooth(-0.12, 0.18, Noise(2.4 * CA - 3.0, 2.4 * SA + 1.0, Seed ^ 0x51D3));
+				const double T = D - Out;
+				const double Across = T < 0.0 ? Smooth(-350.0, 0.0, T) : Smooth(500.0, 0.0, T);
+				return High * Piece * Across * Smooth(-250.0, -600.0, Scarp(X, Y));
 			}
 			/** The varnished gravel's patches: 1 where the pebbles lie thickest, 0 on the pale serir; organic, soft-edged
 			 * shapes tens of metres across (a noise bent by another, so its lattice never shows as square cells), some
@@ -320,7 +358,7 @@ namespace LandScape
 				// (low swells a few hundred metres across, enough to hide a hull at a kilometre; the wadis cut under a
 				// metre inside the field, where the fight reads its own heights, and two or three beyond it)
 				const double Deep = 0.9 + 1.1 * Smooth(0.0, 250.0, Outside(X, Y));
-				return Z + 0.4 * Fbm(X, Y, 300.0, 2, Seed ^ 0xD1) - Deep * Wadi(X, Y);
+				return Z + 0.4 * Fbm(X, Y, 300.0, 2, Seed ^ 0xD1) - Deep * Wadi(X, Y) + Ridge(X, Y);
 			}
 			/** The escarpment north of the field: metres north of its foot (negative south of it). */
 			double Scarp(double X, double Y) const
@@ -854,8 +892,14 @@ namespace LandScape
 					// scrub flats and the wadis' floors thicker, as the research has them)
 					double Share = S.Kind == KRough ? 0.02 : S.Kind == KWoods ? 0.025 : S.Kind == KMarsh ? 0.008 : S.Crop == Scrub ? 0.2 : 0.016;
 					Share = std::max(Share, 0.6 * Wd) * (0.35 + 1.3 * Clump * Clump);
+					// (the field's own wadi: a line of scrub along its floor and up its banks, thick and a third bigger, broken
+					// only now and then, so it reads across the plain as a dark line; the art director, B5)
+					const double Fw = FieldWadi(X, Y);
+					const double Line = Fw * (0.55 + 0.45 * Smooth(-0.4, 0.1, Noise(X / 90.0, Y / 90.0, Seed ^ 0x7D)));
+					Share = std::max(Share, 0.75 * Line);
 					if (Keep >= Share || !H.Free(X, Y, 0.8)) continue;
-					H.Plant(KitOf(KThorn), X, Y, Yaw, Size, Size * Tall, Tint(Grey * ThornR, Grey, Grey * ThornB));
+					const double Big = 1.0 + 0.35 * Fw;
+					H.Plant(KitOf(KThorn), X, Y, Yaw, Size * Big, Size * Big * Tall, Tint(Grey * ThornR, Grey, Grey * ThornB));
 				}
 				// Loose stones and boulders, as the art director's desert set lays them: on the open plain some 22 patches of
 				// stones a hectare and a boulder in two or three hectares; on the rough 60 and 14.
@@ -1545,7 +1589,7 @@ namespace LandScape
 			const char* Earth() const override { return "sand"; }
 
 		private:
-			bool bSpring = false, bPalms = false, bTracks = false;
+			bool bSpring = false, bPalms = false, bTracks = false, bLand = false;
 			// (the braided tracks, on trial: their strands' points, each with its way, half width, wear, its ruts' gauge and
 			// width, the metres along it, the ground under its two ruts (left, right; NaN unread), and whether the next
 			// point is of its strand; the raster of each square's nearest)
