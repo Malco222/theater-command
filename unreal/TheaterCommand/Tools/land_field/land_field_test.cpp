@@ -2131,7 +2131,8 @@ int main(int Argc, char** Argv)
 			const char* Name;
 			LandShade::Shape S;
 		};
-		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
+		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "car", LandShade::Car(-1.7, -0.8, 1.7, 0.8) },
+			{ "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
 			{ "standing man", LandShade::Standing() }, { "prone man", LandShade::Prone() }, { "body", LandShade::Body() } };
 		for (const Kind& K : Kinds)
 		{
@@ -2182,6 +2183,18 @@ int main(int Argc, char** Argv)
 				(std::string("the ") + K.Name + "'s footprint shade fades out over its feather, its edge wavering, in under 1,500 points").c_str(),
 				Fmt("%.2f to ", NearestOut) + Fmt("%.2f m out, ", FarthestOut) + Fmt("%.0f points", static_cast<double>(N)));
 		}
+		// (a car's whole shade no longer than 1.2 of her, and on full snow no share darker than L 100 on snow at L 158:
+		// the art director's Mac pass 1, B4)
+		const LandShade::Shape Car = LandShade::Car(-1.7, -0.8, 1.7, 0.8);
+		const double CarLong = (3.4 + 2.0 * Car.Feather * (1.0 + Car.Wander)) / 3.4;
+		const auto OnSnow = [](double Share, double Strength) {
+			const double Lin = std::pow(Share, 2.2), Left = 1.0 - Strength * (1.0 - Lin);
+			return 158.0 * std::pow(Left, 1.0 / 2.2);
+		};
+		const double Full = LandShade::SnowStrength(1.0), Lying = LandShade::SnowStrength(0.87);
+		Check(CarLong <= 1.25 && OnSnow(LandShade::Tank(-3, -1.6, 3, 1.6).Belly, Lying) >= 100.0 && OnSnow(Car.Belly, Lying) >= 100.0 && Full < 1.0 && LandShade::SnowStrength(0.0) == 1.0,
+		      "a car's footprint shade no longer than about 1.2 of her, and on snow no shade under L 100",
+		      Fmt("%.2f of her length, ", CarLong) + Fmt("a tank's belly L %.0f, ", OnSnow(LandShade::Tank(-3, -1.6, 3, 1.6).Belly, Lying)) + Fmt("a car's L %.0f on snow at 158", OnSnow(Car.Belly, Lying)));
 	}
 
 	Check(Build < 2.0, "built in under two seconds", Fmt("%.2f s", Build));
