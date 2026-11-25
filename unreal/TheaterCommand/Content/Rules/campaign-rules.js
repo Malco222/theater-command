@@ -88593,6 +88593,34 @@
       const more = { ...pursuit ? { pursuit } : {}, ...r.brokeBy ? { brokeBy: r.brokeBy } : {} };
       return out && typeof out === "object" && Object.keys(more).length ? { ...out, ...more } : out;
     };
+    function airBegin(g2, kind, target, ids2, side5, raid2) {
+      const t = side5 ? airTicket(g2, kind, target, ids2, side5.nat) : airTicket(g2, kind, target, ids2);
+      if (!t.ticket) return null;
+      const ticket = side5 ? { ...t.ticket, att: { ...t.ticket.att, human: side5.me === "att" }, def: { ...t.ticket.def, human: side5.me === "def" } } : t.ticket;
+      const sim = new AirSim(ticket, { show: true });
+      const withLost = (out) => {
+        const after = out?.after;
+        return after ? { ...out, after: { ...after, lost: afterLost(after) } } : out;
+      };
+      const ses = begin(sim, (r) => withLost(raid2(r.extra?.air ? foughtAir(r.extra.air) : void 0)));
+      const sideOut = (x) => ({ nat: x.nat, adj: x.adj, human: x.human });
+      return {
+        sky: {
+          w: SKY.w,
+          h: SKY.h,
+          scale: SKY.scale,
+          target: SKY.target,
+          flakR: SKY.flakR,
+          bands: SKY.bands.alt,
+          place: ticket.place,
+          title: ticket.title,
+          date: ticket.date,
+          att: sideOut(ticket.att),
+          def: sideOut(ticket.def)
+        },
+        view: viewOut(ses, sim.view(ses.me))
+      };
+    }
     const landSettled = /* @__PURE__ */ new WeakMap();
     const WRONG_BATTLE = "The attack the campaign would make now is not the battle that was fought.";
     function begin(sim, settle2) {
@@ -88806,31 +88834,15 @@
       airStart(kind, target, ids2) {
         const raid2 = h.raid;
         if (!raid2) return null;
-        const t = airTicket(h.game(), kind, target, ids2);
-        if (!t.ticket) return null;
-        const sim = new AirSim(t.ticket, { show: true });
-        const withLost = (out) => {
-          const after = out?.after;
-          return after ? { ...out, after: { ...after, lost: afterLost(after) } } : out;
-        };
-        const ses = begin(sim, (r) => withLost(raid2(kind, target, ids2, r.extra?.air ? foughtAir(r.extra.air) : void 0)));
-        const side5 = (x) => ({ nat: x.nat, adj: x.adj, human: x.human });
-        return {
-          sky: {
-            w: SKY.w,
-            h: SKY.h,
-            scale: SKY.scale,
-            target: SKY.target,
-            flakR: SKY.flakR,
-            bands: SKY.bands.alt,
-            place: t.ticket.place,
-            title: t.ticket.title,
-            date: t.ticket.date,
-            att: side5(t.ticket.att),
-            def: side5(t.ticket.def)
-          },
-          view: viewOut(ses, sim.view(ses.me))
-        };
+        return airBegin(h.game(), kind, target, ids2, null, (r) => raid2(kind, target, ids2, r));
+      },
+      /**
+       * A battle of your own in the air (release 2, custom-bridge.ts): the same battle on a war of only the two air forces,
+       * the raid flown by 'nat' (the computer's when he defends), his side the one he picked, and the raid paid on that war
+       * with its own after card. The grand campaign is not touched.
+       */
+      airStartOn(g2, kind, target, ids2, nat, me, settle2) {
+        return airBegin(g2, kind, target, ids2, { nat, me }, settle2 ?? ((r) => airAct(g2, `raid:${kind}:${target}:${ids2.join(".")}`, r)));
       }
     };
   }
