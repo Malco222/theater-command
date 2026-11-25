@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bdcd64a27 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b35b336f6 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -62052,6 +62052,7 @@
     }
     return wt > 0 ? sum3 / wt : 0;
   }
+  var upToTen = (n) => ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][n] ?? String(n);
   function assessAir(g2, fleets, m, target, known, transit) {
     const C4 = AIR.combat;
     const quarry = m === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
@@ -62294,7 +62295,8 @@
     else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} the factories of ${place3}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
       const over = `Level ${cn.lights} searchlights over ${place3}`, few = "they help the night fighters a little.";
-      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${place3}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `There are no guns for them to light. They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${place3}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they light every level of the guns, and ${few}` : `With radar laying the guns, they light ${cn.lit} of the ${cn.guns} levels of guns, and ${few}` });
+      const light = known ? "may light" : "light";
+      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${place3}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `${known ? "There may be" : "There are"} no guns built here for them to light. They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${place3}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they ${light} every level of the guns built here, and ${few}` : `With radar laying the guns, they ${light} ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of guns built here, and ${few}` });
     }
     if (out.ships.length) {
       const pc = (x) => `${Math.round(x * 100)}%`;
@@ -115057,10 +115059,11 @@
     const r = s.regions[id];
     const level = lightsAt(s, id);
     const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === "work" && b.item === "lights" && b.region === id).length ?? 0;
-    const line = level <= 0 ? "" : guns2 <= 0 ? `level ${level}: There are no guns for them to light. They help the night fighters a little.` : `level ${level}: ${Math.min(level, guns2)} of the ${guns2} levels of guns are lit by night, under a clear sky`;
+    const lit = Math.min(level, guns2);
+    const line = level <= 0 ? "" : guns2 <= 0 ? `level ${level}: there are no guns built here for them to light. They help the night fighters a little.` : guns2 === 1 ? `level ${level}: the guns are lit by night, under a clear sky` : lit >= guns2 ? `level ${level}: every level of guns is lit by night, under a clear sky` : lit === 1 ? `level ${level}: one of the ${inWords(guns2)} levels of guns is lit by night, under a clear sky` : `level ${level}: ${inWords(lit)} of the ${inWords(guns2)} levels of guns are lit by night, under a clear sky`;
     return {
       level,
-      lit: Math.min(level, guns2),
+      lit,
       guns: guns2,
       radar: radarLays(s, id),
       going,
