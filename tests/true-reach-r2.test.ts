@@ -15,9 +15,9 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_SUPPLY_CHECK = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, computeSupply, createGame, declareWar, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
+import { addCorps, capture, computeSupply, createGame, declareWar, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
 import { SeaPicture, openSeas, zoneOf } from '../src/campaign/navy';
-import { besieged, fedBySea, feeders, feedingSeas, garrison, garrisonFed, garrisonOf, siegeView } from '../src/campaign/siege';
+import { besieged, fedBySea, feeders, feedingSeas, garrison, garrisonFed, garrisonOf, monthsShut, ringClosed, siegeMonth, siegeView, storesOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { TRUEREACH_STAGE, UNITS_STAGE } from '../src/campaign/stage';
 import { setUnitsDecide } from '../src/campaign/units';
@@ -130,26 +130,55 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
   });
 
   // A besieged port town (the design director's ruling of 17:35Z, 25 November 2026): one town, one larder, one reach,
-  // and the reach is the holder's. Tobruk's harbour lies inside the walls, so ships may still use it under siege.
+  // and the reach is the holder's. The town is fed when the ships of one of its feeders, carrying the holder's stores,
+  // reach a sea off the harbour by the supply picture's own lanes (siege.ts fedBySea): the whole voyage, not the sea
+  // off the quay alone. The harbours of Tobruk and Bordeaux lie inside the walls, so ships may still use them under siege.
+  /** A town of the old chart closely invested: the corps inside (a corps sent into a town with the enemy round it goes in at once), and corps of the besieger's put round it. */
+  const besiege = (g: Game, town: string, inside: string[], by: string, ring = 1) => {
+    const r = g.byName[town];
+    const cs = inside.map((nat) => { const c = addCorps(g, nat, `${town} test`, 'inf', 1, town, {}); if (!c.town) expect(garrison(g, c)).toBe(true); return c; });
+    for (let i = 0; i < ring; i++) {
+      const s = addCorps(g, by, 'Besieger test', 'inf', 1, g.regions[g.nations[by].capital].name, {});
+      g.regions[s.reg].units.splice(g.regions[s.reg].units.indexOf(s), 1);
+      s.reg = r.id; r.units.push(s);
+    }
+    g.flags[`siege:${r.id}`] = g.turn;
+    g.supplyDirty = true;
+    computeSupply(g);
+    expect([besieged(g, r), garrisonOf(r).map((x) => x.nat)]).toEqual([true, inside]);
+    return { g, r, cs, pic: new SeaPicture(g) };
+  };
+  /** True where the siege card says ships still reach the harbour. */
+  const card = (g: Game, id: number): boolean => siegeView(g, id)!.lines.some((l) => l.startsWith('Ships still reach the harbour'));
+
   /** Italy's Tobruk with a German corps inside and no other, a Soviet corps round it, its stores long eaten; the Libyan Sea shut by one nation's fleets. */
   const tobruk = (on: boolean, shutter: string, foe: string) => {
     const g = war(on);
-    const r = g.byName['Tobruk'], libyan = zoneOf(g, 'libyan');
+    const libyan = zoneOf(g, 'libyan');
     if (foe !== 'none') declareWar(g, shutter, foe);
     patrol(g, shutter, 'libyan');
-    const c = addCorps(g, 'GER', 'Tobruk test', 'inf', 1, 'Tobruk', {});
-    expect(garrison(g, c)).toBe(true);
     if (shutter !== 'SOV') declareWar(g, 'ITA', 'SOV');
-    const s = addCorps(g, 'SOV', 'Besieger test', 'inf', 1, 'Moscow', {});
-    g.regions[s.reg].units.splice(g.regions[s.reg].units.indexOf(s), 1);
-    s.reg = r.id; r.units.push(s);
-    g.flags[`siege:${r.id}`] = g.turn;
+    const { r, cs: [c] } = besiege(g, 'Tobruk', ['GER'], 'SOV');
     // Its stores long eaten: only ships keep the garrison fed.
     g.flags[`sgm:${r.id}`] = 99;
-    g.supplyDirty = true;
     computeSupply(g);
-    expect([r.ctrl, besieged(g, r), r.seas, garrisonOf(r).map((x) => x.nat), feeders(g, r)]).toEqual(['ITA', true, [libyan], ['GER'], ['ITA', 'GER']]);
+    expect([r.ctrl, r.seas, feeders(g, r)]).toEqual(['ITA', [libyan], ['ITA', 'GER']]);
     return { g, r, c, libyan, pic: new SeaPicture(g) };
+  };
+
+  /**
+   * France's Bordeaux with a British corps inside, three German corps round it: the war as it opens, no side's
+   * alignment touched. France has no ships of her own to send, so Britain is the town's one feeder. Germany's fleets
+   * lie across the Western Approaches (one) and the Iberian Coast (two), the Allied fleets far off in the eastern
+   * Mediterranean: the Bay of Biscay off the harbour is open to Britain and France, and no British ship can sail there.
+   */
+  const bordeaux = (on: boolean) => {
+    const g = war(on);
+    const ger = g.fleets.filter((f) => f.nat === 'GER');
+    ger.forEach((f, i) => { f.zone = zoneOf(g, i === 0 ? 'wapp' : 'iberia'); f.stance = 'patrol'; });
+    for (const f of g.fleets) if (f.nat === 'UK' || f.nat === 'FRA') { f.zone = zoneOf(g, 'emed'); f.stance = 'patrol'; }
+    const { r, cs: [c], pic } = besiege(g, 'Bordeaux', ['UK'], 'GER', 3);
+    return { g, r, c, pic };
   };
 
   it('feeds a besieged town by its holder\'s reach, whoever is inside: Italy\'s Tobruk held by a German corps alone eats from Italy\'s larder', () => {
@@ -162,11 +191,11 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
       // On and off the town is fed: ships that can carry stores there for its holder come in, and the guest eats from
       // them. The holder has no corps of its own inside and needs none: the town and its quay are the holder's.
       expect([on, fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied]).toEqual([on, true, [libyan], true, true]);
-      expect([on, siegeView(g, r.id)!.lines.some((l) => l.startsWith('Ships still reach the harbour'))]).toEqual([on, true]);
+      expect([on, card(g, r.id)]).toEqual([on, true]);
     }
   });
 
-  it('never feeds a besieged town through a sea shut to its holder, though a guest\'s ships could sail it: the same Tobruk with the sea shut to Italy and open to Germany', () => {
+  it('under true reach never feeds a besieged town through a sea shut to its holder, though a guest\'s ships could sail it: the same Tobruk with the sea shut to Italy and open to Germany (off: fed by paper, pinned)', () => {
     for (const on of [false, true]) {
       // The Soviet Union at war with Italy alone, its fleets across the Libyan Sea: closed to Italy, the holder, and
       // open to Germany, whose corps is inside and whose ships could sail it.
@@ -175,7 +204,79 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
       // Off (today's answer, pinned): Germany's ships feed the town by paper. On: a sea shut to the holder is shut to
       // every ship carrying the town its stores, whatever the flag; the town starves, and its card says so.
       expect([on, fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied]).toEqual([on, !on, on ? [] : [libyan], !on, !on]);
-      expect([on, siegeView(g, r.id)!.lines.some((l) => l.startsWith('Ships still reach the harbour'))]).toEqual([on, !on]);
+      expect([on, card(g, r.id)]).toEqual([on, !on]);
+    }
+  });
+
+  it('under true reach feeds a besieged port town only where the feeder\'s ships can sail all the way to it: Bordeaux by Britain, with every way into the Bay of Biscay shut (off: fed by paper, pinned)', () => {
+    for (const on of [false, true]) {
+      const { g, r, c, pic } = bordeaux(on);
+      const biscay = zoneOf(g, 'biscay'), wapp = zoneOf(g, 'wapp'), iberia = zoneOf(g, 'iberia');
+      // The ground both readings share: the sea off the harbour is open to the feeder and the holder, and the only
+      // seas it can be reached by are shut to them. Britain's own lanes do not reach it, nor her lanes carrying
+      // France's stores; France sends no ships.
+      expect([r.ctrl, r.owner, r.seas, feeders(g, r), g.seas[biscay].adj]).toEqual(['FRA', 'FRA', [biscay], ['UK'], [wapp, iberia]]);
+      expect([pic.closed(biscay, 'UK'), pic.closed(biscay, 'FRA'), pic.closed(wapp, 'UK'), pic.closed(iberia, 'UK')]).toEqual([false, false, true, true]);
+      expect([reaches(g, 'UK', 'biscay'), openSeas(g, 'UK', pic, undefined, undefined, undefined, 'FRA')[biscay]]).toEqual([0, 0]);
+      expect(ringClosed(g, r)).toBe(true);
+      // The months of the siege, each opening France's month (siegeMonth) and drawing the picture: off, Britain's ships
+      // feed the town by paper and its stores never run down; on, no ship comes in, the stores are eaten, and then the
+      // British corps inside starves.
+      const stores = storesOf(g, r);
+      expect(stores).toBeGreaterThan(0);
+      for (let k = 1; k <= stores + 2; k++) {
+        g.turn++;
+        siegeMonth(g, 'FRA');
+        computeSupply(g);
+        const eating = !on || k <= stores;
+        expect([on, k, monthsShut(g, r), fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied, card(g, r.id)]).toEqual([on, k, on ? k : 0, !on, on ? [] : [biscay], eating, eating, !on]);
+      }
+    }
+  });
+
+  /**
+   * Italy's Tobruk taken by Britain at war with Italy (capture), Italy's own corps still round it in the country
+   * outside the walls, a British corps gone in; Britain's fleets across the Libyan Sea, which is shut to Italy, the
+   * owner, and open to Britain, the holder. Its stores long eaten.
+   */
+  const taken = (on: boolean) => {
+    const g = war(on);
+    declareWar(g, 'UK', 'ITA');
+    patrol(g, 'UK', 'libyan');
+    capture(g, g.byName['Tobruk'], 'UK');
+    const { r, cs: [c] } = besiege(g, 'Tobruk', ['UK'], 'ITA', 0);
+    g.flags[`sgm:${r.id}`] = 99;
+    computeSupply(g);
+    return { g, r, c, libyan: zoneOf(g, 'libyan'), pic: new SeaPicture(g) };
+  };
+
+  it('reads the reach of the town\'s holder, not of its owner: Italy\'s Tobruk taken by Britain is fed by British ships through a sea shut to Italy', () => {
+    for (const on of [false, true]) {
+      const { g, r, c, libyan, pic } = taken(on);
+      expect([r.ctrl, r.owner, r.seas, feeders(g, r)]).toEqual(['UK', 'ITA', [libyan], ['UK']]);
+      expect([pic.closed(libyan, 'UK'), pic.closed(libyan, 'ITA')]).toEqual([false, true]);
+      // Britain's ships reach the sea carrying Britain's stores, and not carrying Italy's.
+      expect([reaches(g, 'UK', 'libyan'), openSeas(g, 'UK', pic, undefined, undefined, undefined, 'ITA')[libyan]]).toEqual([1, 0]);
+      expect([on, fedBySea(g, r), feedingSeas(g, r), garrisonFed(g, r), c.supplied, card(g, r.id)]).toEqual([on, true, [libyan], true, true, true]);
+    }
+  });
+
+  it('keeps the siege card, the garrison\'s eating and every corps inside in step, on and off, month after month, from kept lanes and fresh ones alike', () => {
+    // Each town above, drawn under TC_SUPPLY_CHECK (which throws where a besieged town reads differently from the kept
+    // lanes than from a fresh walk), over three further months of the supply picture.
+    const cases: [string, (on: boolean) => { g: Game; r: Game['regions'][number] }][] = [
+      ['Tobruk, the sea shut to the guest', (on) => tobruk(on, 'UK', 'none')],
+      ['Tobruk, the sea shut to the holder', (on) => tobruk(on, 'SOV', 'ITA')],
+      ['Tobruk taken by Britain', taken],
+      ['Bordeaux, the way shut', (on) => { const b = bordeaux(on); b.g.flags[`sgm:${b.r.id}`] = 99; computeSupply(b.g); return b; }],
+    ];
+    for (const [name, make] of cases) for (const on of [false, true]) {
+      const { g, r } = make(on);
+      for (let k = 0; k <= 3; k++) {
+        if (k) { g.turn++; computeSupply(g); }
+        const eats = garrisonFed(g, r);
+        expect([name, on, k, card(g, r.id), garrisonOf(r).map((x) => x.supplied)]).toEqual([name, on, k, fedBySea(g, r), garrisonOf(r).map(() => eats)]);
+      }
     }
   });
 
