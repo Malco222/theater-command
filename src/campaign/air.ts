@@ -2092,7 +2092,9 @@ function firstOfKind(g: Game, nat: string): void {
         mission: 'support', target: -1, ready: first.ready, leader: null, moved: first.moved, lost: { ftr: 0, bmr: 0 }, kind, parent: r.name, share: 1,
       };
       if (first.raised) grp.raised = first.raised;
-      grp.name = groupName(g, first.nat, kind, want, base);
+      // (The group itself goes with the asking: under the air arms' own names it is told its short form and whether
+      // its name says its role, as every other group named there is. Off, nothing reads it.)
+      grp.name = groupName(g, first.nat, kind, want, base, grp);
       g.airFleets.splice(g.airFleets.indexOf(mine[mine.length - 1]) + 1, 0, grp);
       headline(g, 'info', `${grp.name} forms in ${base.name}, a new group of ${r.name}.`, first.nat, base.id);
     }
