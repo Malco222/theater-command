@@ -41,7 +41,7 @@ import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setSt
 import { seat } from './commanders';
 import type { Corps, Game, Kind, Region } from './types';
 
-export const DRAWN = words as unknown as { one: string; many: string; conv: string; stood: string };
+export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string };
 
 /** One division as it passes between corps: its place in the corps it stands in, its name and number, its men (0 to 1) and experience, and its corps' order and morale. */
 interface Part { slot: number; name: [string, string]; no: number; str: number; xp: number; org: number; mor?: number }
@@ -391,7 +391,11 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
   const where = (qs: Claim[]): string => list([...new Set(qs.map((q) => g.regions[q.from!.reg].name))]);
   const lines: string[] = [];
   const mine = claims.filter((q) => q.from && !q.conv), made = claims.filter((q) => q.from && q.conv);
-  if (mine.length) lines.push((mine.length === 1 ? DRAWN.one : DRAWN.many).replace('{names}', cap(list(mine.map((q) => the(q.name[0]))))).replace('{place}', row[5]).replace('{where}', where(mine)));
-  for (const q of made) lines.push(DRAWN.conv.replace('{names}', cap(the(q.name[0]))).replace('{place}', row[5]).replace('{was}', q.conv!).replace('{where}', where([q])));
+  // (A line may say a place more than once: every one of its places is filled.)
+  const fill = (line: string, as: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (all, k: string) => as[k] ?? all);
+  // (Where every one of them stands at the row's own place already, the place is said once: the UI director's `here`.)
+  const there = mine.length > 0 && mine.every((q) => g.regions[q.from!.reg].name === row[5]);
+  if (mine.length) lines.push(fill(there ? (mine.length === 1 ? DRAWN.here : DRAWN.hereMany) : mine.length === 1 ? DRAWN.one : DRAWN.many, { names: cap(list(mine.map((q) => the(q.name[0])))), place: row[5], where: where(mine) }));
+  for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, where: where([q]) }));
   return lines.length ? lines.join(' ') : null;
 }
