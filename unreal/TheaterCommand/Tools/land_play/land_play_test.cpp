@@ -4189,49 +4189,78 @@ int main(int argc, char** argv)
 			Shots, Dk.DarkCuts(), ES.DarkLeave * 100.0, 100.0 * DarkFrames / std::max(1, Looked), Longest, LongestAt, Again, ES.DarkClear);
 		if (Longest > ES.DarkHold + 0.6) Fault("a shot held a dark picture past the dark rule");
 		if (Again > 0) Fault("a shot stood again where one was left for a dark picture");
-		// The rule's rest, under three lights the stand-in above never gives (no recording is fought at dusk): a reading
-		// that is the same whatever the lens looks at, as a dusk's or a storm's is. Dark everywhere, the rule leaves its
+		// The rule's rest, under lights the stand-in above never gives (no recording is fought at dusk): a reading that
+		// is the same whatever the lens looks at, as a dusk's or a storm's is. Dark everywhere, the rule leaves its
 		// DarkRunMost shots and then rests for the battle: the light is to blame. (Until 25 November its run started
-		// again at every ordinary cut, and this battle was cut 90 times more, two shots of three quarters of a second
-		// after every ordinary one. The scene's reading was blind then, so no battle showed it.) Hovering about the
-		// leaving line, it rests as well: only a picture read plainly light, DarkLight, starts the run again. And where
-		// the light does come back and goes again, the rule works again.
-		// (Light: the reading at a battle second, the shot so many seconds old; read every Every seconds, 0 every frame)
-		auto LeftUnder = [&](const std::function<double(double, double)>& Light, double Every) -> int
+		// again at every ordinary cut, and this battle's film left 90 shots for a dark picture, 138 cuts against 56:
+		// two shots of three quarters of a second after nearly every ordinary cut. The scene's reading was blind then,
+		// so no battle showed it.) Hovering about the leaving line, it rests as well: only a picture read plainly
+		// light, DarkLight for DarkHold seconds on end, starts the run again. And where the light does come back and
+		// goes again, the rule works again.
+		// (Light: the reading at a battle second, of a shot so many seconds old, of a picture the rule judges or of an
+		// opening's or a wide's, which it does not. Asked for every Every seconds, 0 every frame, the first at Phase;
+		// the director has it Lag seconds after it was asked for and holds it until the next, as the scene's does.)
+		auto LeftUnder = [&](const std::function<double(double, double, bool)>& Light, double Every, double Lag = 0.0, double Phase = 0.0) -> int
 		{
 			LandEye::World Wl = EW;
-			double Read = -1.0;
+			double Read = -1.0, Asked = -1.0, BackAt = 1e18;
 			Wl.DarkNow = [&Read]() { return Read; };
 			LandEye::Director Dl;
 			Dl.Begin(Rec, Wl, ES);
-			double Next = 0.0, CutAt = 0.0;
+			double Next = Phase, CutAt = 0.0;
+			bool bJudged = false;
 			for (double B = 0.0; B < Rec.End + 3.0; B += Dt)
 			{
+				if (B >= BackAt)
+				{
+					Read = Asked;
+					BackAt = 1e18;
+				}
 				if (B >= Next)
 				{
 					Next = B + Every;
-					Read = Light(B, B - CutAt);
+					Asked = Light(B, B - CutAt, bJudged);
+					if (Lag > 0.0) BackAt = B + Lag;
+					else Read = Asked;
 				}
 				PlaceMovers(B);
-				if (Dl.Update(B, 3000.0 + B, Dt).bCut) CutAt = B;
+				const LandEye::Pose P = Dl.Update(B, 3000.0 + B, Dt);
+				if (P.bCut) CutAt = B;
+				bJudged = P.Shot != LandEye::Kind::Open && P.Shot != LandEye::Kind::Wide;
 			}
 			return Dl.DarkCuts();
 		};
-		const int LeftDusk = LeftUnder([](double, double) { return 0.6; }, 0.25);
-		const int LeftHover = LeftUnder([&ES](double B, double) { return std::fmod(B, 4.0) < 2.0 ? ES.DarkLeave + 0.06 : ES.DarkLeave - 0.06; }, 0.25);
-		const int LeftBack = LeftUnder([](double B, double) { return B >= 30.0 && B < 45.0 ? 0.05 : 0.6; }, 0.25);
+		const int LeftDusk = LeftUnder([](double, double, bool) { return 0.6; }, 0.25);
+		const int LeftHover = LeftUnder([&ES](double B, double, bool) { return std::fmod(B, 4.0) < 2.0 ? ES.DarkLeave + 0.06 : ES.DarkLeave - 0.06; }, 0.25);
+		// (the light come back reads nothing dark at all, as an open field does: a reading of 0 is a reading, and light)
+		const int LeftBack = LeftUnder([](double B, double, bool) { return B >= 30.0 && B < 45.0 ? 0.0 : 0.6; }, 0.25);
 		// (no reading for a second in every six, as under a card: no reading is not a light one)
-		const int LeftGaps = LeftUnder([](double B, double) { return std::fmod(B, 6.0) < 1.0 ? -1.0 : 0.6; }, 0.25);
-		// (the frame drawn lags the cut: the last shot's light picture read in the new shot's first fifth of a second is
-		// not this shot's)
-		const int LeftLag = LeftUnder([](double, double Held) { return Held < 0.2 ? 0.05 : 0.6; }, 0.0);
-		std::printf("dark (the rule's rest, the same reading whatever the lens looks at): dark everywhere %d shots left; hovering about the leaving line %d; dark, light from 30 to 45 s, dark again %d; dark with no reading a second in six %d; dark but for each shot's first fifth of a second %d (it rests at %d running until a picture reads %.0f%% or lighter)\n",
-			LeftDusk, LeftHover, LeftBack, LeftGaps, LeftLag, ES.DarkRunMost, ES.DarkLight * 100.0);
-		if (LeftDusk < 1 || LeftDusk > ES.DarkRunMost) Fault("under a light dark everywhere the dark rule did not leave its few shots and then rest (a dusk's film cut again and again)");
+		const int LeftGaps = LeftUnder([](double B, double, bool) { return std::fmod(B, 6.0) < 1.0 ? -1.0 : 0.6; }, 0.25);
+		// (the frame drawn lags the cut, and on a slow machine by more than the scene's quarter second: the last shot's
+		// light picture, still the reading six tenths of a second into the new shot, is not this shot's. The light is
+		// counted from the shot's first quarter second, so that is 0.35 s of it, short of DarkHold.)
+		const int LeftLag = LeftUnder([](double, double Held, bool) { return Held < 0.6 ? 0.05 : 0.6; }, 0.0);
+		// (one light reading in twenty, a quarter of a second of a shell's flash: a flash is not the light come back)
+		const int LeftFlash = LeftUnder([](double B, double, bool) { return std::fmod(B, 5.0) < 0.25 ? 0.05 : 0.6; }, 0.25);
+		// (as the scene reads: a frame asked for four times a second, back a twentieth or three twentieths of a second
+		// later and held until the next. An opening's and a wide's pictures light, as from high over the smoke, every
+		// other dark: the wide's light picture, asked for just before the cut, is still the reading a quarter of a
+		// second into the next shot. The worst of four phases of the asking and the two lags.)
+		int LeftWide = 0;
+		for (int K = 0; K < 8; ++K)
+		{
+			LeftWide = std::max(LeftWide, LeftUnder([](double, double, bool bJudged) { return bJudged ? 0.6 : 0.05; }, 0.25, K < 4 ? 0.05 : 0.15, 0.0625 * (K % 4)));
+		}
+		std::printf("dark (the rule's rest, the same reading whatever the lens looks at): dark everywhere %d shots left; hovering about the leaving line %d; dark, light from 30 to 45 s, dark again %d; dark with no reading a second in six %d; dark but for each shot's first six tenths of a second %d; dark but for one reading in twenty %d; dark but for the openings' and the wides' pictures, read late as the scene reads, %d at the most (it rests at %d running until a picture reads %.0f%% or lighter for %.2f s)\n",
+			LeftDusk, LeftHover, LeftBack, LeftGaps, LeftLag, LeftFlash, LeftWide, ES.DarkRunMost, ES.DarkLight * 100.0, ES.DarkHold);
+		if (LeftDusk < 1) Fault("under a light dark everywhere the dark rule left no shot at all (the rule is not working)");
+		if (LeftDusk > ES.DarkRunMost) Fault("under a light dark everywhere the dark rule did not rest after its few shots (a dusk's film cut again and again)");
 		if (LeftHover > ES.DarkRunMost) Fault("under a light hovering about the dark rule's line its run started again without a picture plainly light");
 		if (LeftBack <= ES.DarkRunMost || LeftBack > 2 * ES.DarkRunMost) Fault("the dark rule did not work again once the light had come back and gone (or did not rest again after it)");
 		if (LeftGaps > ES.DarkRunMost) Fault("the dark rule's run started again where there was no reading (no reading is not a light picture)");
-		if (LeftLag > ES.DarkRunMost) Fault("the dark rule's run started again on a reading from a shot's first quarter second (the last shot's picture, not its own)");
+		if (LeftLag > ES.DarkRunMost) Fault("the dark rule's run started again on a light reading that did not outlast a shot's first six tenths of a second (the last shot's picture come late, not its own)");
+		if (LeftFlash > ES.DarkRunMost) Fault("the dark rule's run started again on one light reading (a flash is not the light come back)");
+		if (LeftWide > ES.DarkRunMost) Fault("the dark rule's run started again on a wide's or an opening's light picture read late into the next shot (not that shot's own)");
 	}
 	RunCorn();
 	if (std::getenv("LAND_PLAY_STILLS")) RunStills();

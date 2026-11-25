@@ -6979,26 +6979,36 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	LandFell::Phase("tick: the pictures taken");
 	TakeShots();
-	// (the film's log, 25 November: at every cut of the film, on every frame a still is waiting to be taken, and with
-	// "-TheaterLandPoseLog" four times a real second: the shot, why the last was left, where the lens stands, what it
-	// looks at through how wide a lens, and how dark the picture last read (-1: no reading). The art director's black
+	// (the film's log, 25 November: at every cut of the film while the film is the picture, on every frame a still is
+	// waiting to be taken, and with "-TheaterLandPoseLog" four times a real second: the shot, why the last was left,
+	// where the lens stands, what it looks at through how high a lens (the pose's lens is the vertical one: AimEye
+	// makes Unreal's horizontal one of it by the window's shape), how dark the picture last read (-1: no reading), and
+	// how far ahead of the picture the rules have fought (-1: not a live battle; a place the camera asks for past
+	// what is fought is the last one known, so its tests ahead tell nothing there). The pose is the film's own: a
+	// drag's look aside, told beside it in degrees right and up, and a shell's jolt, which the scene adds as it
+	// aims, are not in it. A still is told once for each asking, not every frame it waits. The art director's black
 	// still of the Mac's first pass could not be laid against the field again, because nothing told where the lens had
-	// stood; the log's own frame number heads each line. Here, after the tick's own stills are asked for, so that a
-	// still asked for anywhere in this tick or before it in the frame is seen; one asked for after it, by another
-	// actor, is taken with this frame's picture too, and the switch's lines either side of it tell that one.)
+	// stood; the log's own clock and frame count (the last three figures of it) head each line. Here, after the
+	// tick's own stills are asked for, so that a still asked for anywhere in this tick or before it in the frame is
+	// seen; one asked for after it, by another actor, is taken with this frame's picture too, and the switch's lines
+	// either side of it tell that one.)
 	{
 		static const bool bPoseLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPoseLog"));
-		const bool bStillAsked = FScreenshotRequest::IsScreenshotRequested();
+		static bool bStillWas = false;
+		const bool bStillNow = FScreenshotRequest::IsScreenshotRequested();
+		const bool bStillAsked = bStillNow && !bStillWas;
+		bStillWas = bStillNow;
 		// (his own view is the picture drawn once his eye has begun, unless the film has been given the camera)
 		const bool bOwnView = S.bGeneralEye && !S.General.bFilm;
 		const bool bFilmCut = S.FilmPose.bCut && !bOwnView;
 		if (bFilmCut || bStillAsked || (bPoseLog && FMath::Abs(RealT - PoseLogAt) >= 0.25))
 		{
 			PoseLogAt = RealT;
-			UE_LOG(LogTheater, Display, TEXT("Land battle: %s %s at %.2f s of battle: a %s shot of %d, the film's last left for %s; the lens at %.2f %.2f %.2f looks at %.2f %.2f %.2f through %.1f degrees; the picture last read %.2f dark"),
+			UE_LOG(LogTheater, Display, TEXT("Land battle: %s %s at %.2f s of battle: a %s shot of %d, the film's last left for %s; the lens at %.2f %.2f %.2f looks at %.2f %.2f %.2f through %.1f degrees high, looked aside %.1f %.1f; the picture last read %.2f dark; the rules %.1f s ahead"),
 				bOwnView ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
 				S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject, ANSI_TO_TCHAR(LandEye::NameOf(S.Eye.LastWhy())),
-				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, DarkShare);
+				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, LookAside.X, LookAside.Y, DarkShare,
+				Live.IsValid() ? Live->Fought() - S.Battle : -1.0);
 		}
 	}
 	LandFell::Phase("tick: the 10 s log");
@@ -7190,14 +7200,18 @@ void ALandBattle::ReadDark(double Real)
 		DarkGrab->CaptureThisFrame(FFramePayloadPtr());
 		++DarkAsks;
 	}
+	// (no frame read for six tenths of a second: the last reading is stale, so the rule is told there is none;
+	// pre-check's note. Before the frames are taken, so that it holds on every way out below: a frame come back empty
+	// too. And under the rule's own quarter second and half second together (LandEye: a shot's reading counts from
+	// its first quarter second and must hold DarkHold), so that a reading of the last shot, the frames stopped, can
+	// never by itself have the next one left or the run of dark cuts started again. It was a second, 25 November.)
+	if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
+	{
+		DarkShare = -1.0;
+	}
 	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
 	if (Frames.Num() == 0)
 	{
-		// (no frame back for a second: the last reading is stale, so the rule is told there is none; pre-check's note)
-		if (DarkShare >= 0.0 && Now - DarkGotAt > 1.0)
-		{
-			DarkShare = -1.0;
-		}
 		return;
 	}
 	DarkBacks += Frames.Num();
@@ -7205,9 +7219,15 @@ void ALandBattle::ReadDark(double Real)
 	// on the picture, the night before the attack and its dawn; nor while the general's own view is the picture drawn
 	// (his eye begun and the film not given the camera): the film goes on being directed behind it, for its corner
 	// and for his return to it, and a dark reading of HIS view, a wood from above, would have the film leave shots
-	// that are not dark at all. Until the reading had a clock of its own, 25 November, nothing was read and this
-	// could not show.)
-	if (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
+	// that are not dark at all; nor while a drag has the lens looking aside from the shot (AimEye; more than a degree
+	// either way): what he turns the lens to, a hedge, a crown, an open field, is not the shot's picture, and the
+	// film would leave the shot he is looking about in and bar its place, or take the field for the light come back.
+	// Until the reading had a clock of its own, 25 November, nothing was read and none of this could show.
+	// These are asked as the frame comes back, a frame or two after it was drawn: one frame already on its way at
+	// a change is read as the new picture's. One reading cannot act alone: the rule wants half a second of dark to
+	// leave a shot and half a second of light to start its run again.)
+	if (FMath::Abs(LookAside.X) > 1.0 || FMath::Abs(LookAside.Y) > 1.0
+		|| (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0)))
 	{
 		DarkShare = -1.0;
 		return;
