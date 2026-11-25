@@ -16492,7 +16492,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	const double Table = UnitScale;
 	// (release 2, the art director's flak brief of 24 November 2026; tc.Look.FlakRing, off as it comes)
 	const bool bFlakRing = FlakRingAsked();
-	TArray<int32, TInlineAllocator<8>> TownsFiring; // (a town's guns are drawn firing once, however many raids are over it)
+	// (a town's guns are drawn firing once, however many raids are over it; with the far side's seam, once in each
+	// turn of the world that has a raid over it: the town's number, and the turn)
+	TArray<FIntPoint, TInlineAllocator<8>> TownsFiring;
 	// (The mend of 25 November 2026. A raid is up to four flights, and each was puffing for itself: three times the
 	// puffs, and pale puffs over a gunned town beside its heavy bursts, since the rules name the guns on the first
 	// flight alone. Light flak is fired by one flight a town at a time, over a province of the map, and never over
@@ -16588,9 +16590,18 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// its own time, so that the ring ripples and never fires as one. They are drawn at the barrels' known
 			// mouths: the barrels are in the merged mesh and do not turn. From the top, the flash alone.
 			const TArray<FFlakGun>* TownGuns = bFlakRing ? FlakGuns.Find(Flight.Sortie.Region) : nullptr;
-			if (TownGuns && TownGuns->Num() > 0 && !TownsFiring.Contains(Flight.Sortie.Region))
+			// (The far side, seam-2, where it meets the flak ring.) A raid over the chart's seam is flown to its
+			// target's place a world on (UpdateSorties: the turn nearest its airfield), where the buildings' twin
+			// stands the town's pits. The guns' fire is drawn there with the raid, in the turn of the world nearest
+			// the flight, and not a world away under an empty sky; and two raids on one town flown in two turns each
+			// have the guns under them. With the far side off, or tc.Far.OverSeam off, the span is nothing, the turn
+			// is 0 and the fire is drawn at the pits as it always was.
+			const double SeamSpan = (TownGuns && TownGuns->Num() > 0 && OverSeam()) ? Data.WorldWidth * UnitScale : 0.0;
+			const int32 RaidTurn = SeamSpan > 0.0 ? FMath::RoundToInt32((Flight.At.Y - (*TownGuns)[0].Muzzle.Y) / SeamSpan) : 0;
+			const FIntPoint FiringKey(Flight.Sortie.Region, RaidTurn);
+			if (TownGuns && TownGuns->Num() > 0 && !TownsFiring.Contains(FiringKey))
 			{
-				TownsFiring.Add(Flight.Sortie.Region);
+				TownsFiring.Add(FiringKey);
 				const double GunUnit = UnitScale * 2.1; // (the size the pits are built to)
 				static const bool bMuzzleHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld")); // (for a still: every flash held)
 				const bool bFromTop = CameraDistance > 9000.0f;
@@ -16599,13 +16610,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double FlashOut = FMath::Max(0.2 * GunUnit, 0.0015 * CameraDistance);
 				const FLinearColor MuzzleBody(FColor(214, 128, 52)), MuzzleHeart(FColor(238, 176, 96)), GunSmoke(0.46f, 0.46f, 0.47f);
 				const FVector DownTheWind = Wind.GetSafeNormal();
-				// (The far side, seam-2, where it meets the flak ring.) A raid over the chart's seam is flown to its
-				// target's place a world on (UpdateSorties: the turn nearest its airfield), where the buildings' twin
-				// stands the town's pits. The guns' fire is drawn there with the raid, in the turn of the world nearest
-				// the flight, and not a world away under an empty sky. With the far side off, or tc.Far.OverSeam off,
-				// the span is nothing and the fire is drawn at the pits as it always was.
-				const double SeamSpan = OverSeam() ? Data.WorldWidth * UnitScale : 0.0;
-				const FVector ToRaid(0.0, SeamSpan > 0.0 ? FMath::RoundToDouble((Flight.At.Y - (*TownGuns)[0].Muzzle.Y) / SeamSpan) * SeamSpan : 0.0, 0.0);
+				const FVector ToRaid(0.0, RaidTurn * SeamSpan, 0.0); // (whole worlds along the chart, to the raid's turn)
 				// (The mend of 25 November 2026. Each gun had a reload of its own, 1.7 to 2.4 seconds: guns on different
 				// clocks drift through one another, and every so often several fired within a frame or two, as one. A
 				// town's guns now load to ONE time, the town's own, and each fires at its turn round the ring and a
