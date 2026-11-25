@@ -1268,6 +1268,7 @@ private:
 	TObjectPtr<UProceduralMeshComponent> VictorFlagMesh;
 	TArray<TArray<FVector2D>> RiverPaths; // every river's course as it is drawn, wander and all
 	TArray<double> RiverBroad; // and how broad each is
+	TArray<TArray<double>> RiverHalf; // and its ribbon's half breadth at each point as it is laid (release 2: the gun pits keep off it)
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
