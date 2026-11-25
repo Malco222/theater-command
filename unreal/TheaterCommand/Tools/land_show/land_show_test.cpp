@@ -1144,10 +1144,10 @@ int main(int Argc, char** Argv)
 		  << "\"blocks\": [{\"id\": 1, \"army\": \"GER\", \"nat\": \"GER\", \"team\": \"mg\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\", \"team\": \"mor\"}], \"men\": [";
 		for (int K = 0; K < 6; ++K)
 		{
-			// (each: deployed, firing from 2 s at a mark 300 m ahead, walking off from 6 s)
+			// (each: deployed, firing from 2 s at a mark 300 m ahead, set down a moment at 5 s, walking off from 6 s)
 			R << (K ? "," : "") << "{\"b\": " << (K < 3 ? 1 : 2) << ", \"k\": " << K % 3 << ", \"r\": \"" << (K < 3 ? "hmg" : "mortar") << "\", \"at\": [[0, " << 10 * K
 			  << ", 0, 0], [6, " << 10 * K << ", 0, 0], [12, " << 10 * K << ", 9, 0]], \"ch\": [[0, \"deployed\", \"none\", null, null, 0, 0], [2, \"fire\", \"none\", "
-			  << 10 * K << ", 300, 0, 0], [6, \"walk\", \"none\", null, null, 0, 0]]}";
+			  << 10 * K << ", 300, 0, 0], [5, \"wait\", \"none\", null, null, 0, 0], [6, \"walk\", \"none\", null, null, 0, 0]]}";
 		}
 		R << "], \"rounds\": []}";
 		Crowd Teams;
@@ -1189,7 +1189,7 @@ int main(int Argc, char** Argv)
 					bTold = true;
 				}
 				Teams.Update(T);
-				const bool bEarly = std::fabs(T - 1.0) < Dt * 0.5, bFiring = std::fabs(T - 5.0) < Dt * 0.5, bWalking = std::fabs(T - 9.0) < Dt * 0.5;
+				const bool bEarly = std::fabs(T - 1.0) < Dt * 0.5, bFiring = std::fabs(T - 4.5) < Dt * 0.5, bWaiting = std::fabs(T - 5.4) < Dt * 0.5, bWalking = std::fabs(T - 9.0) < Dt * 0.5;
 				if (bEarly || bFiring)
 				{
 					Shows(Gun0, AsBefore, false, "a gunner not told he serves a gun", T);
@@ -1198,6 +1198,14 @@ int main(int Argc, char** Argv)
 					Shows(Tube0, "fire_kneel", false, "a mortar man not told he serves his tube", T);
 					Shows(Tube1, AtTube, true, "a mortar man at his tube", T);
 					Shows(Tube2, bFiring ? AtTube : "fire_kneel", bFiring, "a mortar man told at 3 s he serves his tube", T);
+				}
+				if (bWaiting)
+				{
+					// (set down a moment, a served man is at his weapon still, as deployed, not kneeling apart with his rifle up)
+					Shows(Gun1, Lying, true, "a gunner waiting at his gun", T);
+					Shows(Gun2, Sitting, true, "a kneeling gunner waiting at his gun", T);
+					Shows(Tube1, AtTube, true, "a mortar man waiting at his tube", T);
+					Shows(Tube2, AtTube, true, "a mortar man told at 3 s, waiting at his tube", T);
 				}
 				if (bWalking)
 				{
@@ -1209,6 +1217,62 @@ int main(int Argc, char** Argv)
 			}
 			std::printf("the support teams' key men (release 2, Crowd::Serve): lying at a gun %s, kneeling at one %s, at a tube %s, rifles laid down; untold and walking as before: %s\n",
 				Lying.c_str(), Sitting.c_str(), AtTube.c_str(), Faults ? "FAIL" : "ok");
+		}
+	}
+
+	// ---- Release 2's section machine gunners (the scene reads soldier_<ARMY>_lmg and _lmg34 only on trial "gunners"):
+	// a section's gunner is drawn from his army's gunner's file, the earlier gun's before July 1942 where it is made,
+	// his burst from his gun's own clip and his muzzle by him; a rifleman of his section from the rifleman's file.
+	{
+		std::map<std::string, std::shared_ptr<Soldier>> Gunners;
+		for (const char* Army : { "GER_lmg", "GER_lmg34" })
+		{
+			const std::string Text = ReadFile(std::string(Argv[2]) + "/soldier_" + Army + ".json");
+			if (Text.empty()) continue; // (not made yet)
+			auto S = std::make_shared<Soldier>();
+			if (!S->Load(Text, Err)) { Fail("soldier_%s.json: %s", Army, Err.c_str()); continue; }
+			if (S->Weapon != "lmg") Fail("soldier_%s.json: its weapon is %s, not lmg (a gunner's bursts play lmg_burst by it)", Army, S->Weapon.c_str());
+			if (S->ClipIndex("lmg_burst") < 0) Fail("soldier_%s.json has no lmg_burst", Army);
+			Gunners[Army] = S;
+		}
+		if (Gunners.empty()) std::printf("the sections' machine gunners (release 2): no soldier_GER_lmg.json here\n");
+		for (const char* Date : { "July 1944", "May 1940" })
+		{
+			if (Gunners.empty()) break;
+			std::ostringstream R;
+			R << "{\"seed\": 7, \"date\": \"" << Date << "\", \"sky\": {\"latLon\": [49.1, -1.1]}, \"blocks\": [{\"id\": 1, \"army\": \"GER\", \"nat\": \"GER\"}], \"men\": ["
+			  << "{\"b\": 1, \"k\": 0, \"r\": \"mg\", \"at\": [[0, 0, 0, 0], [20, 0, 0, 0]], \"ch\": [[0, \"lmg_burst\", \"none\", 0, 300, 0, 0]]},"
+			  << "{\"b\": 1, \"k\": 1, \"r\": \"rifle\", \"at\": [[0, 10, 0, 0], [20, 10, 0, 0]], \"ch\": [[0, \"fire_prone\", \"none\", 10, 300, 0, 0]]}"
+			  << "], \"rounds\": []}";
+			Crowd Section;
+			Section.AddSoldier("GER", Files["GER"]);
+			for (const auto& KV : Gunners) Section.AddSoldier(KV.first, KV.second);
+			Section.ReadArmies(ReadFile(Argv[3]), Err);
+			const GroundFn Level = [](double, double) { return Ground(); };
+			if (!Section.Build(R.str(), Level, Err)) { Fail("the section gunners' battle (%s): %s", Date, Err.c_str()); continue; }
+			const bool bEarlyGun = std::string(Date) == "May 1940";
+			const std::string GunFile = bEarlyGun && Gunners.count("GER_lmg34") ? "GER_lmg34" : Gunners.count("GER_lmg") ? "GER_lmg" : "GER";
+			const int Gunner = Section.Find(1, 0), Rifleman = Section.Find(1, 1);
+			int Faults = 0;
+			if (Gunner < 0 || Rifleman < 0) { Fail("the section gunners' battle (%s): its two men are not both made", Date); continue; }
+			if (Section.Info(Gunner).FileArmy != GunFile) { ++Faults; Fail("%s: the section's gunner is drawn from soldier_%s, not soldier_%s", Date, Section.Info(Gunner).FileArmy.c_str(), GunFile.c_str()); }
+			if (Section.Info(Rifleman).FileArmy != "GER") { ++Faults; Fail("%s: the section's rifleman is drawn from soldier_%s, not soldier_GER", Date, Section.Info(Rifleman).FileArmy.c_str()); }
+			for (int Fr = 0; Fr * Dt <= 3.0; ++Fr) Section.Update(Fr * Dt);
+			const Playing Pl = Section.PlayingOf(Gunner);
+			if (GunFile != "GER" && Pl.Clip != "lmg_burst") { ++Faults; Fail("%s: the section's gunner shows %s at his gun, not lmg_burst", Date, Pl.Clip.c_str()); }
+			double GunnerX = 0.0, GunnerY = 0.0, GunnerZ = 0.0;
+			float GunnerFacing = 0.f;
+			Vec3 MuzzleAt, MuzzleWay;
+			const bool bPlaced = Section.PlaceOf(Gunner, GunnerX, GunnerY, GunnerZ, GunnerFacing), bMuzzle = Section.Muzzle(Gunner, MuzzleAt, MuzzleWay);
+			const double Off = bPlaced && bMuzzle ? std::hypot(static_cast<double>(MuzzleAt.X) - GunnerX, static_cast<double>(MuzzleAt.Y) - GunnerY) : -1.0;
+			// (lying behind his gun on her bipod: her muzzle a metre or so before him, under his standing height)
+			if (!(Off > 0.3 && Off < 2.0) || !(static_cast<double>(MuzzleAt.Z) - GunnerZ > 0.05 && static_cast<double>(MuzzleAt.Z) - GunnerZ < 0.9))
+			{
+				++Faults;
+				Fail("%s: the section gunner's muzzle is %.2f m from his place and %.2f m up (lying behind his gun: 0.3 to 2 m, 0.05 to 0.9 m)", Date, Off, bMuzzle ? static_cast<double>(MuzzleAt.Z) - GunnerZ : -1.0);
+			}
+			std::printf("the sections' machine gunners (release 2, %s): the gunner from soldier_%s, lmg_burst, his muzzle %.2f m before him and %.2f m up; his rifleman from soldier_GER: %s\n",
+				Date, GunFile.c_str(), Off, bMuzzle ? static_cast<double>(MuzzleAt.Z) - GunnerZ : -1.0, Faults ? "FAIL" : "ok");
 		}
 	}
 

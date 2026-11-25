@@ -3829,13 +3829,27 @@ void ALandBattle::MakeMen()
 	// gunner and his loader, soldier_USA_bar, _nco, _bazooka and _loader; a file not made yet is passed over below)
 	// (and the tank commanders' files, soldier_USA_tanker and soldier_GER_panzer: ridden on their tanks, MakeRiders)
 	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader"), TEXT("_radio"), TEXT("_tanker"), TEXT("_panzer") };
+	// (release 2, -TheaterLandTrial=gunners; Brian, 25 November 2026: "such as the German MG 42": each army's section
+	// machine gunner with his section's own gun where the soldiers thread has made him, soldier_<ARMY>_lmg, and the
+	// earlier gun's man, _lmg34: the German's MG 42 and MG 34. LandMen draws a section's gunner from them where they
+	// are read; off, they are not read and he is the rifleman he was.)
+	static const TCHAR* const SectionGunners[] = { TEXT("_lmg"), TEXT("_lmg34") };
+	const bool bSectionGunners = LandParts::OnTrial("gunners");
 	for (const FString& Army : TArray<FString>(Armies.Array()))
 	{
 		for (const TCHAR* Suffix : OtherMen)
 		{
 			Armies.Add(Army + Suffix);
 		}
+		if (bSectionGunners)
+		{
+			for (const TCHAR* Suffix : SectionGunners)
+			{
+				Armies.Add(Army + Suffix);
+			}
+		}
 	}
+	UE_LOG(LogTheater, Log, TEXT("Land battle: the sections' machine gunners with their own guns %s"), bSectionGunners ? TEXT("ON (-TheaterLandTrial=gunners, release 2)") : TEXT("off"));
 	// Soldiers at the vehicles' detail (release 2, -TheaterLandDetailMen; Brian, 23 November: "the soldiers at the same
 	// level of artistic detail as the vehicles, tanks, and planes"): where the soldiers thread has made an army's
 	// detailed man (Models/Soldiers/Detail/soldier_<ARMY>.json, the German rifleman first), he is drawn in its place,

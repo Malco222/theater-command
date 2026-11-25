@@ -1876,8 +1876,16 @@ run) each key man has his weapon:
   `HmgBreda37`; `MortarGER`, `MortarUSA`, `MortarUK`, `MortarSOV`, `MortarJAP`, `MortarITA`, `MortarFRA`. A machine
   gun's parts are `mount` (the tripod or wheeled carriage, its origin on the ground under the pin), `cradle` (swings)
   and `gun` (tips); a mortar's `mortar` and `tube`. Sockets: `seat` (the key man's own root), `seat.loader`, `muzzle`,
-  `feed`, the grips, `box` or `rounds`, the Maxim's `pull`. The picture sheet: `LAND_KIT_SUPPORT=1` to the painter
-  (`Tools/land_kit/land_picture.cpp`).
+  `feed`, the grips, `box` or `rounds`, the Maxim's `pull`. Every cartridge is drawn on the near mesh (Brian on the
+  first sheet, 25 November: "make them more detailed with bullets feeding into the machine gun and more realistic
+  angles and shapes"): a belt hangs from the feed down into an open box standing end-on to the gun, or a strip of
+  rounds goes in from the left. The fed end of a belt is part of `gun`, so its rounds go in under the feed cover
+  however she is swung and laid; the box and the fold of belt in it stand with `mount`. Slots, holes and bores are
+  dark marks a millimetre proud of their face. A machine gun is 3,300 to 5,200 triangles near and 600 to 1,100 far;
+  a mortar 2,300 and 1,000. The MG 42 is the section gunner's own gun (the soldiers' `soldier_GER_lmg`) to the same
+  measures. The picture sheet: `LAND_KIT_SUPPORT=1` to the painter (`Tools/land_kit/land_picture.cpp`; the battle's
+  daylight, each weapon whole beside a post banded every 25 cm and then close on her feed; `LAND_KIT_SCALE=2` paints
+  each picture twice the size), laid out by `LAND_SHEET_ACROSS=4 LAND_SHEET_WIDE=3200 land_sheet.py`.
 - **Which file, where it stands** (`Battle/LandTeamGun`, plain C++): `FileFor` by the block's army, the role and the
   month (the MG 34 until May 1942, the MG 42 after; an army with none of its own takes the nearest shape). `Gun::Step`
   each frame: set up with the model's seat on the key man where the crowd draws him, swung and laid on his aim (45
@@ -1900,6 +1908,12 @@ run) each key man has his weapon:
 - **Not in this**: the loaders are where the drill puts them (the model's `seat.loader` is not read yet), no belt
   runs through the gun, a mortar's bomb is not seen dropped. Suppression itself is the rules' (the smarter-fighting
   thread's), not the scene's.
+
+**The sections' own machine gunners** (trial word `gunners`, off): where the soldiers thread has made an army's
+section gunner with his gun, `soldier_<ARMY>_lmg.json` (the German MG 42) and the earlier gun's man, `_lmg34` (his
+MG 34), the scene reads those files (`MakeMen`'s list) and `LandMen` draws a section's `mg` man from them: `_lmg34`
+before July 1942 where it is made, else `_lmg`, else the American's `_bar` as before. Off, the files are not read and he
+is the rifleman he was. The men's test plays one of each date (`Tools/land_show`).
 
 Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
 `islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.
