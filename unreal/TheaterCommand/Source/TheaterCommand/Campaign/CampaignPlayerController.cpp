@@ -508,6 +508,13 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			{
 				PickedDivisions.Reset();
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+				// (1.5.1, Brian's hand-check list: an army still in hand when the row is flipped has its card laid out afresh,
+				// its division tiles and SPLIT OFF with it, as the fleet in hand is for "Fleets attack fleets"; before, the card
+				// kept the old setting until the army was put down and picked up again)
+				if (ArmyRegion != INDEX_NONE)
+				{
+					RefreshOrders();
+				}
 			}
 			if (!Note.IsEmpty())
 			{
