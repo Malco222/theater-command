@@ -5445,7 +5445,7 @@ function seaOddsLine(f: Fleet, zone: number, meet: 'battle' | 'shy'): string {
   const swing = oddsSwing(p.odds.low, p.odds.high);
   const odds = swing.endsWith(' all day') ? lowerFirst(swing) : `${oddsWord(p.odds.mid)} to 1 (${oddsWord(p.odds.low)} to ${oddsWord(p.odds.high)})`;
   const ours = n(p.likely.ours), theirs = n(p.likely.theirs);
-  return `${lead}: odds ${odds}, ${p.verdict.toLowerCase()}${offers ? '' : ' if he comes to you'}; likely to cost ${ours} of your ship${ours === 1 ? '' : 's'} for ${theirs} of his`;
+  return `${lead}: odds ${odds}, ${p.verdict.toLowerCase()}${offers ? '' : ' if he comes to you'}; likely to cost ${ours} of your ships for ${theirs} of his`;
 }
 
 /** The orders the player can give the fleet that is picked. */
