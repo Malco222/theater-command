@@ -1216,6 +1216,7 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	bool bAirNames = false; // (release 2, airnames.ts) new air groups are named with their own air force's numbers and words
 	bool bMarkedOn = false; // (release 2, marked.ts) the armies that took his towns are marked in red
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back

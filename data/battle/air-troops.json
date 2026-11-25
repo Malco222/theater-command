@@ -1,0 +1,22 @@
+{
+  "_note": "The army under a raid on troops fought out as an air battle (release 2; Brian, 24 November 2026: 'if a bomber group is bombing troops instead of a factory or town and they get intercepted than i want that playable'). SHOWN, NEVER COUNTED, all of it but 'strafe': the rules keep no stock of tanks, guns or lorries for a corps, so the pieces under the aiming point are a sample drawn by the corps's kind and nation. Every figure here is G (a guess to be sized from the record by the historian). slice: the part of the army drawn under the raid, in men: share of the men in the province, never under least nor over most. pieces: the most pieces a ticket carries. unit: how many men, vehicles, guns or teams one piece of each kind stands for. worth: the men one of each is counted as when it is put out of action, so that what is shown wrecked never passes the men the campaign's law books lost (the organisation cut x its strength share x the men there). mix: by corps kind, the share of the slice's men in each kind of piece; 'haul' is split between lorries and horse-drawn wagons by the nation's 'lorried' share. figures: the most soldier figures the slice's men are drawn as ('per' on the ticket is men for each figure). strafe: the fighters' passes on the troops (COUNTED: the design director, 24 November 22:28Z, 'strafing passes by escorting fighters: yes, as extra weight on target through the same law, paid in the fighters' exposure to the guns'): passes a group flies, each worth one part in 'passes' of its fighters on target by the campaign's own figure (airwar.json ground.fighters) and paying the same part of the ground fire (ground.fire); half is half a pass's length in metres, width the lane it rakes.",
+  "slice": { "share": 0.05, "least": 3000, "most": 12000 },
+  "pieces": 64,
+  "figures": 400,
+  "unit": { "men": 150, "wagon": 12, "lorry": 10, "halftrack": 6, "car": 4, "gun": 4, "aa": 2, "tank": 5 },
+  "worth": { "men": 1, "wagon": 3, "lorry": 3, "halftrack": 8, "car": 3, "gun": 8, "aa": 8, "tank": 5 },
+  "mix": {
+    "inf": { "men": 0.68, "haul": 0.2, "gun": 0.07, "aa": 0.02, "car": 0.03 },
+    "mtn": { "men": 0.74, "haul": 0.17, "gun": 0.06, "aa": 0.01, "car": 0.02 },
+    "cav": { "men": 0.6, "haul": 0.28, "gun": 0.07, "aa": 0.02, "car": 0.03 },
+    "mot": { "men": 0.3, "haul": 0.44, "halftrack": 0.08, "gun": 0.09, "aa": 0.05, "car": 0.04 },
+    "arm": { "tank": 0.3, "haul": 0.32, "halftrack": 0.14, "men": 0.08, "gun": 0.07, "aa": 0.05, "car": 0.04 },
+    "art": { "gun": 0.4, "haul": 0.36, "men": 0.18, "aa": 0.03, "car": 0.03 },
+    "eng": { "men": 0.6, "haul": 0.34, "aa": 0.02, "car": 0.04 },
+    "fort": { "men": 0.82, "gun": 0.14, "aa": 0.04 }
+  },
+  "lorried": { "USA": 1, "UK": 1, "CAN": 1, "AUS": 1, "GER": 0.35, "FRA": 0.4, "ITA": 0.3, "SOV": 0.25, "JAP": 0.2, "POL": 0.1 },
+  "lorriedElse": 0.2,
+  "motor": ["mot", "arm"],
+  "strafe": { "passes": 3, "half": 3000, "width": 120 }
+}

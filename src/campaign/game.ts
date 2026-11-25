@@ -3110,7 +3110,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     headline(g, 'info', `Your staff on the loss of ${target.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight up to ${Math.round(GUNS.thickenMost * 100)}% stronger, and the enemy's staff thinks twice before attacking guns. An artillery corps behind each threatened sector would help the next one hold.`, defNat, target.id);
   }
   // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
-  if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
+  if (a.air) { bookCloseAir(g, a.air, opts.closeSorties, target.id); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   // Damaged cities (the grand campaign with its switch): a battle in the province leaves its town damaged, the more so
   // when it is fought for the town itself or at its gates, and the attackers' guns add to it.
   const fight = town ? (win ? 'storm' : 'repulsed') : inField || relief || opts.sally ? 'streets' : 'field';

@@ -5,6 +5,7 @@ import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type CrewOrder, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
+import { raidFogOn, rememberSkies } from './airfog';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, plannedStrike, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import { attackTargets, fleetAttackOn, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan, type FleetAttackResult } from './fleetattack';
@@ -97,6 +98,7 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { cancelFerry, ferryMonth, ferryOn, ferryRoutes, orderFerry, type FerryRoute } from './ferry';
 import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
 import { legionsMonth, recallLegion, sendLegion } from './legions';
 
@@ -165,6 +167,8 @@ export function stepAI(g: Game): string {
   startPhase(g, nat);
   // Its fleets at sea in an enemy's minefield may strike a mine (release 2, mines.ts; nothing with that switch off).
   minesStrike(g, nat);
+  // Its air groups on their way to another field fly the month's hops (release 2, ferry.ts; nothing with that switch off).
+  ferryMonth(g, nat);
   // Every shadow follows its quarry as a country's month opens (release 2, shadow.ts; nothing with that switch off).
   shadowsFollow(g, nat);
   // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
@@ -188,6 +192,8 @@ export function beginHuman(g: Game): void {
   startPhase(g, current(g));
   // His fleets at sea in an enemy's minefield may strike a mine (release 2, mines.ts; nothing with that switch off).
   minesStrike(g, current(g));
+  // His air groups on their way to another field fly the month's hops (release 2, ferry.ts; nothing with that switch off).
+  ferryMonth(g, current(g));
   // The month's gales over his seas, in a line of news (release 2, heavyseas.ts; nothing with that switch off).
   galeNews(g, current(g));
   // Every shadow follows its quarry, and his report where it is (release 2, shadow.ts; nothing with that switch off).
@@ -198,6 +204,8 @@ export function beginHuman(g: Game): void {
   yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
+  // Fog on raids (airfog.ts, its switch on): and what his side sees of the enemy's air defence is noted, as every staff's is.
+  if (raidFogOn(g)) rememberSkies(g, g.human);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
   noteReadings(g);
   quietNews(g);
@@ -1978,8 +1986,35 @@ export function orderGate(g: Game, gate: number, shut: boolean): boolean {
 export function orderAirBase(g: Game, id: number, region: number): boolean {
   const f = myAir(g, id), r = g.regions[region];
   if (!f || !r) return false;
+  // A group on its way by stages (ferry.ts) is sent here instead: its journey is called off first, and stands if the move cannot be made.
+  const was = f.way;
+  if (was) delete f.way;
   // (Across an ocean a land group goes by sea, one a month: ruling 133(b).)
-  return f.ship !== undefined ? flyAshore(g, f, r) : overOcean(g, f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
+  const ok = f.ship !== undefined ? flyAshore(g, f, r) : overOcean(g, f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
+  if (!ok && was) f.way = was;
+  return ok;
+}
+
+/**
+ * Every airfield of his side's one of the player's land groups could be sent to by stages (release 2, ferry.ts), each
+ * with its way there in plain words: the turns, the fields on the way, and the enemy fighters his side knows of within
+ * reach of it; or crated by sea, or why not. Empty with the switch off.
+ */
+export function airFerryRoutes(g: Game, id: number): FerryRoute[] {
+  const f = g.airFleets.find((x) => x.id === id && x.nat === g.human);
+  return f && g.human && ferryOn(g) ? [...ferryRoutes(g, f, g.human).values()] : [];
+}
+
+/** Sends one of the player's land groups to a friendly airfield by stages: it sets off at once. False only where there is no way there (ferry.ts). */
+export function orderFerryTo(g: Game, id: number, region: number): FerryRoute | null {
+  const f = myAir(g, id);
+  return f && ferryOn(g) ? orderFerry(g, f, region) : null;
+}
+
+/** Calls off one of the player's groups' journey: it stays at the field it has reached. */
+export function orderFerryOff(g: Game, id: number): boolean {
+  const f = myAir(g, id);
+  return !!f && ferryOn(g) && cancelFerry(g, f);
 }
 
 /** The fleets one of the player's carrier wings ashore could go back aboard, those it can board now first: each with where it lies, the deck room standing empty, and why not now. */
@@ -2331,6 +2366,10 @@ export function setCityDamage(g: Game, on: boolean): boolean {
 // b636). The browser's newGame and the campaign bridge's start turn it on right after startOpen, where the war runners
 // set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
 export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
+
+// Fog and reconnaissance on air raids (airfog.ts; off as shipped, airwar.json fog.on): a war has it with g.flags.rfog,
+// set by setRaidFog right after startOpen. The bridge can ask for both by name.
+export { raidFogShipped, setRaidFog } from './airfog';
 
 /** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
 export function cityDamage(g: Game, region: number): RepairView | null {

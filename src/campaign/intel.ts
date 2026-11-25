@@ -12,6 +12,7 @@
 
 import { FIGHTERS, fieldedMark, fighterTypesOn, hasFighterWorks, holdsMark, stealMark, stolenMarks, stolenWords } from './fighters';
 import data from '../../data/campaign/intel.json';
+import warData from '../../data/campaign/airwar.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, DoubleAgent, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
 import { allied, atWar, bloc, declareWar, fieldArmy, headline, placeName, theName, theWords } from './game';
@@ -97,6 +98,9 @@ export function sightOf(g: Game, viewer: string | null = g.human): Uint8Array {
   for (const a of agentsOf(g, me)) if (atWork(g, a) && dist[a.reg] !== 0) { dist[a.reg] = 0; ring.push(a.reg); }
   // Ground the player's aircraft have photographed this month is seen as an agent on watch would see it.
   if (me === g.human) for (const [id, turn] of Object.entries(g.intel.scout ?? {})) if (turn === g.turn && dist[+id] !== 0) { dist[+id] = 0; ring.push(+id); }
+  // Fog on raids (airfog.ts, its switch on): ground a nation's own aircraft photographed, this month or last, is seen
+  // the same way, by the player and by every staff alike.
+  if (g.flags.rfog === 1) for (const id of photographedBy(g, me)) if (dist[id] !== 0) { dist[id] = 0; ring.push(id); }
   for (let d = 1; d <= far && ring.length; d++) {
     const next: number[] = [];
     for (const id of ring) for (const j of g.regions[id].nb) if (dist[j] < 0) { dist[j] = d; next.push(j); }
@@ -247,6 +251,17 @@ export function identify(g: Game, corps: Corps[], by: string | null, how: Source
   }
 }
 
+/**
+ * Fog on raids (airfog.ts; only with its switch on): the provinces a nation's own reconnaissance flights have
+ * photographed and that it still sees by them, the month flown and so many months in all (airwar.json fog.months).
+ */
+export function photographedBy(g: Game, nat: string | null): number[] {
+  const by = nat !== null && g.flags.rfog === 1 ? g.intel?.scoutBy?.[nat] : undefined;
+  if (!by) return [];
+  const months = (warData as unknown as { fog: { months: number } }).fog.months;
+  return Object.entries(by).filter(([, turn]) => g.turn - turn < months).map(([id]) => +id);
+}
+
 /** The provinces round a set of provinces that an agent's eyes or a camera cover: each one's own and those around it. */
 function cover(g: Game, from: number[]): Set<number> {
   const out = new Set<number>(from);
@@ -274,6 +289,8 @@ export function reconnoitre(g: Game): void {
   const me = g.human;
   if (!me || !intelRules(g) || !g.nations[me]?.alive) return;
   const photographed = Object.entries(g.intel.scout ?? {}).filter(([, turn]) => turn === g.turn).map(([id]) => +id);
+  // (Fog on raids: last month's photographs still show the ground, so the armies on it are still named.)
+  if (g.flags.rfog === 1) for (const id of photographedBy(g, me)) if (!photographed.includes(id)) photographed.push(id);
   for (const id of cover(g, photographed)) identify(g, g.regions[id].units, me, 'air');
   for (const id of cover(g, agentsOf(g, me).filter((a) => atWork(g, a)).map((a) => a.reg))) identify(g, g.regions[id].units, me, 'agent');
   const known = g.intel.known;

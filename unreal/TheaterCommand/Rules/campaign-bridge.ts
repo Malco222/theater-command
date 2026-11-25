@@ -127,6 +127,7 @@ import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/camp
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { sailorsOn, setSailors } from '../../../src/battle/sea/ticket';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
+import { raidFogOn, skyKnown } from '../../../src/campaign/airfog';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
 import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarch, marchMonths, marchOf, marchState, orderMarch, planMarch } from '../../../src/campaign/marches';
@@ -134,7 +135,7 @@ import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrder
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import { cancelAtomStrike, orderAtomMaking, orderAtomPace, orderAtomPause, orderAtomPlants, orderAtomSite, orderAtomStrike, whyNotAtomPlants, whyNotAtomStrike } from '../../../src/campaign/turn';
-import { gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
+import { airWords, gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
 import { fieldRepairView } from '../../../src/campaign/fieldstate';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
 import { FIGHTERS } from '../../../src/campaign/fighters';
@@ -172,6 +173,7 @@ import { patrolLoss } from '../../../src/campaign/seapatrol';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
+import { airNamesOn, setAirNames } from '../../../src/campaign/airnames';
 import { markedOn, setMarked } from '../../../src/campaign/marked';
 import { thePlace } from '../../../src/campaign/bombers';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
@@ -830,6 +832,9 @@ function drawView() {
     }),
     air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && (f as { ship?: number }).ship === undefined && !fieldHidden.has(f.base)).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
+      // (Release 2, better air unit names and earned names: the role word where the name does not say it, the counter's
+      // short form, the name with its earned name set as its arm sets it, and its earned colours. Words and paint only.)
+      ...airWords(s, f),
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
     // branch fields its later models early, and one that neglects it keeps the old ones longer. The tanks' year is
@@ -1014,6 +1019,8 @@ function drawView() {
     dumps: (() => { try { return dumpsView(s).map((d) => ({ nat: d.nat, side: d.side, x: d.x, y: d.y, region: d.region, stock: d.stock, filling: d.filling })); } catch { return []; } })(),
     // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
     nickFlags: nicknamesOn(s),
+    // (Release 2, airnames.ts) Whether new air groups are named with their arms' own numbers and words.
+    airNames: airNamesOn(s),
     // (Release 2, marked.ts) Whether the armies that took his towns are marked in red.
     markedOn: markedOn(s),
     // (Release 2, fleetattack.ts) Whether the player's fleets can be dropped on an enemy fleet to attack it at once.
@@ -6423,7 +6430,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
     // target that is not a place.)
     // (The art director's round 38: the guns round a place take part in the bombing of its industry, its town and its
     // harbour, by day or by night. In any other raid they take none, and the targets carry no pips.)
-    const gunsOf = (t: number): number => (sea || !s.regions[t] || !['bomb', 'night', 'town', 'harbour'].includes(kind) ? -1 : gunsRound(s, t));
+    // (Fog on raids, airfog.ts with its switch on: a place out of sight shows the guns last seen, and none where never seen.)
+    const gunsOf = (t: number): number => (sea || !s.regions[t] || !['bomb', 'night', 'town', 'harbour'].includes(kind) ? -1 : raidFogOn(s) && me ? ((k) => (k.live ? gunsRound(s, t) : k.guns))(skyKnown(s, me, t)) : gunsRound(s, t));
     const stops = raidStopsFor(s, k, -1);
     const here = stops.find((t) => t.id === target);
     const lead = p.seats.find((x) => x.picked && x.kind !== 'ftr') ?? p.seats.find((x) => x.picked);
@@ -6500,23 +6508,32 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
           // (the guns' part: the line under the bombers lost, and the note on the WHAT A HIT DOES line; the 3D card's
           // column is narrower than the browser's, so the note stops at the figure)
           toGuns: w.toGuns, gunsWords: w.gunsWords, stopNote: w.stopNote.replace(/ of the bombing$/, ''),
-          foot: w.foot,
+          foot: w.foot, ...(w.band ? { band: w.band } : {}),
           act: w.kind === kind ? '' : `open:plan:${w.kind}:${target}:${carry.join('.')}`,
           tip: w.kind === kind ? `The raid is planned ${w.kind === 'night' ? 'by night' : 'by day'}.` : `Plan it ${w.kind === 'night' ? 'by night' : 'by day'} instead. Nobody you picked is dropped.`,
         });
         const foes = Math.round(dn.foes);
+        // (Fog on raids, airfog.ts with its switch on: out of sight the fighters are those known for sure, with more
+        // perhaps behind them, and the guns as last seen, or not known.)
+        const hid = !!dn.fog && !dn.fog.live;
         return {
           label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
-          foes: foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
+          foes: hid && foes <= 0 ? 'Unknown' : foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: hid ? (foes > 0 ? 'enemy fighters known in reach, more may come' : 'fighters in reach: not scouted') : foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
           // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
-          guns: dn.guns, gunsFigure: dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.gunsTail ? `\u00B7 ${dn.gunsTail}` : '', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
+          guns: dn.guns, gunsFigure: hid && dn.gunsKnown === false ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.gunsTail ? `\u00B7 ${dn.gunsTail}` : '', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
           day: one(dn.day), night: one(dn.night),
+          // (new for the 3D card to draw, where it will: what the side knows, a line each, and the band)
+          ...(dn.fog ? { fog: { live: dn.fog.live, fighters: dn.fog.fighters, guns: dn.fog.guns, damage: dn.fog.damage, band: dn.fog.band } } : {}),
         };
       })() : null,
       success: p.success, verdict: p.verdict, bombers: Math.round(p.bombers), bomberLoss: Math.round(p.bomberLossN), bomberShare: p.bomberLoss,
       fighters: Math.round(p.fighters), fighterLoss: Math.round(p.fighterLossN), foeLoss: Math.round(p.foeLossN),
       meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
-      massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
+      massed: p.massed, offPatrol: p.offPatrol,
+      // (Fog on raids: the ticket opens with what the side knows of the target and the forecast's band.)
+      ticket: [...(p.fog && !p.why ? [p.fog.fighters, p.fog.guns, p.fog.damage, p.fog.band].filter(Boolean) : []), ...p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`)].join('\n'),
+      // (new for the 3D card to draw, where it will: the same, as fields, with the band's two ends)
+      ...(p.fog && !p.why ? { fog: { live: p.fog.live, scouted: p.fog.scouted, ago: p.fog.ago, fighters: p.fog.fighters, guns: p.fog.guns, damage: p.fog.damage, band: p.fog.band, loss: p.fog.loss, success: p.fog.success } } : {}),
       // (Release 2; the UI director, 24 Nov 2026, on the air thread's words.) The fighters at the raid's height and which side's
       // aircraft are stronger (fighters.ts raidCardLines, under its switch or Units decide), and, under Units decide where
       // both sides' hours are read, the pilots' training. Each '' where the rules give none; the card leaves an empty one out.
@@ -6843,6 +6860,16 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = nicknamesOn(s)
       ? 'Earned names are on: a corps that wins three hard fights is given a name by its own army, and the name goes on its flag.'
       : 'Earned names are off: no corps is given a new one, and none is shown on the flags. The names already earned are kept.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'airnames') {
+    // (Release 2, airnames.ts) Better air unit names, switched by the player in any month: a name is only a name, and a
+    // group keeps the name it was given.
+    setAirNames(s, part[1] === 'on');
+    ok = true;
+    note = airNamesOn(s)
+      ? 'Air units\' own names are on: each new air group is named the way its own air force numbered and named its units. The groups you have keep their names.'
+      : 'Air units\' own names are off: new air groups are named as before. The groups you have keep their names.';
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'secretwar') {
@@ -8200,6 +8227,9 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 // name), TC.columns(on) only in a campaign's opening month ('set' false otherwise). The options page uses act('nicknames:on'
 // and so on) instead, which answers with the view.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
+// (Release 2, airnames.ts) Better air unit names: TC.airNames(on) at any time (new groups only); the options page uses act('airnames:on' / ':off').
+// Not on the ship list (R2_SHIP) yet: the air thread adds it after the Mac pass.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).airNames = (on: boolean) => { const s = game(); setAirNames(s, !!on); return { on: airNamesOn(s) }; };
 // (Release 2, fleetattack.ts) Fleets sent straight at the enemy: TC.fleetAttack(on) at any time; the options page uses act('fleetattackrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
 // (Release 2, rearguard.ts) Rearguards: TC.rearguard(on) at any time; the options page uses act('rearguardrule:on' / ':off').

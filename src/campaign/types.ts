@@ -1482,6 +1482,37 @@ export interface AirFleet extends Storied {
    * (`was`), for the card's refit note (the UI director 24 Nov 18:10Z).
    */
   joined?: { on: number; n: number; was: number };
+  /**
+   * On its way to another airfield by stages (release 2, the switch 'ferry'; ferry.ts), written only under that switch:
+   * where it is going, the fields still to land at in order (the last is `to`), or `sea` when it goes crated by sea, and
+   * the month and the hops it has flown in it. Out of the fight while it is set. `base` is the field it has reached.
+   */
+  way?: { to: number; stops: number[]; sea?: boolean; at?: [number, number] };
+  /**
+   * (Release 2, better air unit names; the switch 'airNames') Written only as a group is named under that switch: the
+   * short form for the map counter, where its rung has one, and true where its name itself says fighters or bombers
+   * (so the role is not shown beside it). Words only; no rule reads them.
+   */
+  short?: string;
+  roleNamed?: boolean;
+  /**
+   * (Release 2, earned names under the switch 'nicknames') A group of an arm that gives the Guards title, once it has
+   * earned it: its number in the Guards series, and the name it bore before. Words only; no rule reads them.
+   */
+  guards?: number;
+  was?: string;
+  /**
+   * (Release 2, earned names for air groups under the switch 'nicknames'; airnicks.ts, Brian's answer of 25 November
+   * 2026 03:31Z) Its missions completed: the count (a hard fight counts double), the month it last completed one (one a
+   * month), whether that month's was already counted double, and its hard fights in all. Read by no rule but the naming.
+   */
+  done?: { n: number; at: number; x: number; h: number };
+  /**
+   * (The same) Its earned colours: the scheme it wears from its nation's palette (the 3D side's, data/campaign/
+   * air-colours.json 'count' per nation), the tier of marking reached (1 spinner, 2 nose band, 3 tail) and the month
+   * it was first earned. Words and paint only: no edge.
+   */
+  colours?: { scheme: number; tier: number; since: number };
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1534,6 +1565,8 @@ export interface AirReport {
   result: string;
   /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
   dropped?: number;
+  /** A group caught by enemy fighters on its way to another airfield (ferry.ts): the field it was flying to. Never set with that switch off. */
+  ferry?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
@@ -1798,6 +1831,18 @@ export interface Game {
   atSea?: Voyage[];
   /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
   ac?: AirWarMemory;
+  /**
+   * (Release 2, better air unit names; air.ts groupName under the switch 'airNames') The forming-order position of each
+   * nation's series of names ('at', keyed nation:kind:rung, or nation:day:rung, or nation:base:province) and the largest
+   * number handed out in it ('top'). Absent until a group is named under the switch. Words only.
+   */
+  airNames?: { at: Record<string, number>; top: Record<string, number> };
+  /**
+   * (Release 2, earned names for air groups under the switch 'nicknames'; airnicks.ts) Each air arm's running tally by
+   * kind of mission, nation:mission: aircraft that flew it and aircraft lost on it, for its running loss rate. Absent
+   * while that switch is off. Read by no rule but the naming.
+   */
+  airRates?: Record<string, [number, number]>;
   /** A neutral's bargains (bargains.ts; release 2): absent while the switch is off. */
   bargains?: BargainBook;
   /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
@@ -2005,6 +2050,17 @@ export interface Intel {
    * last met there, each with its month. Absent until the patrol is live.
    */
   seaSight?: Record<string, Record<number, SeaSight>>;
+  /**
+   * Fog on raids (airfog.ts; only with its switch on): the provinces each nation's aircraft have photographed and the
+   * month they did, by nation, then by province. A flight gives sight for the month flown and the next.
+   */
+  scoutBy?: Record<string, Record<number, number>>;
+  /**
+   * Fog on raids (airfog.ts; only with its switch on): what each nation last saw of the air defence of an enemy
+   * province, by nation, then by province: [the month, the enemy fighters in reach of its sky (to the nearest ten),
+   * the groups they were in, the level of its guns, the percent of the town in ruins].
+   */
+  airSeen?: Record<string, Record<number, number[]>>;
   /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.

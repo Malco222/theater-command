@@ -119,7 +119,17 @@
 //                                   under fire, it lost 4,644 more men in the rearguard and as stragglers." (b474)
 //                                   Where an army broke on the field, also brokeBy: why it broke, as below (b496(2)).
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
-//                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
+//                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority'; and the
+//                                   kinds TC.airKinds has switched on)
+//   TC.airKinds([kinds])         -> { kinds }: release 2's further kinds of air battle, each behind its own switch, all
+//                                   off until switched on here (src/battle/air/ticket.ts MORE_KINDS; today 'ground', a
+//                                   raid on troops). With a list, those kinds are offered from then on (an empty list
+//                                   switches them all off); with none, it only answers which are on. A raid on troops
+//                                   carries its troops on the ticket (place.marks) and each view (marks: { fire, cut,
+//                                   pieces }, the pieces changed since the view before); its events 'air:mark-hit' and
+//                                   'air:strafe' (/mnt/project-files/air-battles/every-kind/CONTRACT.md sections 2 to 4).
+//                                   Its own order: TC.battleOrder({ do: 'air:strafe', units }) sends fighters down on
+//                                   the troops now, { do: 'air:strafe', units, hold: true } keeps them up with the bombers
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
 //                                   ({ w, h, scale, target, flakR, bands, place, title, date, att, def }: att and def
 //                                   { nat, adj, human }). Each view of an air battle also carries sky: { chance, fired,
@@ -497,7 +507,7 @@ import type { LandUnit } from '../../../src/battle/land/units';
 import { STORIES } from '../../../src/campaign/stories';
 import { SKY } from '../../../src/battle/air/book';
 import { AirSim } from '../../../src/battle/air/sim';
-import { airTicket, foughtAir } from '../../../src/battle/air/ticket';
+import { airTicket, flyKinds, foughtAir } from '../../../src/battle/air/ticket';
 import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import { afterLost, type AfterCard, type FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
@@ -652,6 +662,9 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // A strike on ships carries the ships under attack (src/battle/air/ships.ts, ruling 238): each one's place, hits
     // and how it went down. The air thread's; passed as it comes.
     ...((v as BattleView & { ships?: unknown }).ships ? { ships: (v as BattleView & { ships?: unknown }).ships } : {}),
+    // A raid on troops carries the troops under it (src/battle/air/troops.ts, release 2): the guns' fire, the cut so far
+    // and the pieces changed since the view before. The air thread's; passed as it comes.
+    ...((v as BattleView & { marks?: unknown }).marks ? { marks: (v as BattleView & { marks?: unknown }).marks } : {}),
   };
 }
 
@@ -956,6 +969,9 @@ export function battleCalls(h: BattleHooks) {
         return { key: a.key, R: r.R, level: r.level, lines: r.lines, sunk: x.sunk, burnt: x.burnt };
       });
       return { field: { size: SEA.field.size, edge: SEA.field.edge, zoneName: a.ticket.place.zoneName }, view: viewOut(ses, sim.view(ses.me)) };
+    },
+    airKinds(kinds?: string[]) {
+      return { kinds: flyKinds(Array.isArray(kinds) ? kinds.map(String) : undefined) };
     },
     airLook(kind: string, target: number, ids: number[]) {
       const t = airTicket(h.game(), kind as RaidKind, target, ids);
