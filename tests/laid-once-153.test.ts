@@ -6,8 +6,9 @@
 // dated row of the country but the one read is marked as come already, so that one row is read alone.
 import { describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
-import { divisionsOf } from '../src/campaign/armies';
-import { addCorps, createGame, declareWar, relocate, removeCorps, startPhase } from '../src/campaign/game';
+import { divisionsOf, keepNumbers, numbersOf } from '../src/campaign/armies';
+import { addCorps, createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
+import { drawHeld, layDrawn, loanOver } from '../src/campaign/laidonce';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -195,5 +196,96 @@ describe('Britain\'s rows', () => {
     expect(sa.dead).toBeFalsy();
     expect(sa.divs).toBe(1);
     expect(corps(g, 'UK', '1st South African and 50th Divisions')!.divs).toBe(1);
+  });
+});
+
+describe('what a review of the rule found (25 November 2026)', () => {
+  const NZ = 'New Zealand and 9th Australian Divisions';
+  const rowAt = (nat: string, name: string): number => ROWS.findIndex((r) => r[1] === nat && r[2] === name);
+  function desert(): Game {
+    const g = startOpen(createGame(1, null));
+    declareWar(g, 'UK', 'ITA');
+    return g;
+  }
+
+  it('a division that goes back to its corps at a loan\'s end brings its share of the row\'s corps: no man is made or lost', () => {
+    const g = balkans();
+    only(g, 'GER', EIGHTH);
+    removeCorps(g, corps(g, 'GER', 'IV Corps')!);
+    month(g, 'GER', 20);
+    const row = corps(g, 'GER', EIGHTH)!, xv = corps(g, 'GER', 'XV Corps')!;
+    expect(row.divs).toBe(2);
+    relocate(g, xv, g.regions[row.reg]);
+    row.str = 0.3; row.xp = 0.8; xv.str = 0.95; xv.xp = 0.5;
+    expect(loanOver(g, rowAt('GER', EIGHTH), row)).toBe(false);
+    expect(names(g, xv)).toEqual(['7th Panzer Division', '8th Panzer Division']);
+    expect(xv.divs * xv.str).toBeCloseTo(0.95 + 0.3, 9);
+    expect(xv.xp).toBeCloseTo((0.95 * 0.5 + 0.3 * 0.8) / 1.25, 9);
+    // (The 14th, raised new by the row, leaves with it.)
+    expect(row.dead).toBe(true);
+  });
+
+  it('a corps raised again under a holder\'s name, carrying none of the record\'s divisions, gives nothing: the row raises them as before', () => {
+    for (const human of [null, 'GER']) {
+      const g = balkans(human);
+      only(g, 'GER', INFANTRY);
+      const old = corps(g, 'GER', 'III Corps')!;
+      const at = old.reg;
+      removeCorps(g, old);
+      const again = addCorps(g, 'GER', 'III Corps', 'inf', 3, at, {});
+      keepNumbers(again, [276, 277, 278]);
+      month(g, 'GER', 19);
+      expect(again.dead, `${human}`).toBeFalsy();
+      expect(numbersOf(again).slice(0, again.divs), `${human}`).toEqual([276, 277, 278]);
+      expect(corps(g, 'GER', INFANTRY)!.divs, `${human}`).toBe(3);
+      expect(g.headlines.some((h) => /No division is raised twice/.test(h.text)), `${human}`).toBe(false);
+    }
+  });
+
+  it('where W Force never formed, the 2nd New Zealand Division holds the New Zealand Division: in the desert it stays, at home it is drawn', () => {
+    for (const [where, stays] of [['Mersa Matruh', true], ['London', false]] as const) {
+      const g = desert();
+      only(g, 'UK', NZ);
+      const nz = addCorps(g, 'UK', '2nd New Zealand Division', 'inf', 1, where, {});
+      month(g, 'UK', 34);
+      const row = corps(g, 'UK', NZ)!;
+      if (stays) {
+        expect(nz.dead, where).toBeFalsy();
+        expect(nz.divs, where).toBe(1);
+        expect(row.divs, where).toBe(1);
+      } else {
+        expect(nz.dead, where).toBe(true);
+        expect(row.divs, where).toBe(2);
+      }
+    }
+  });
+
+  it('a holder on a passage at sea lands with its division: the row comes without it, and the division is held once', () => {
+    const g = desert();
+    only(g, 'UK', '1st Armoured Division');
+    const home = addCorps(g, 'UK', '1st Armoured Division', 'arm', 1, 'London', {});
+    g.turn = 31;
+    putToSea(g, home, g.byName['Alexandria'], 3);
+    expect((g.atSea ?? []).some((v) => v.corps === home)).toBe(true);
+    month(g, 'UK', 32);
+    expect(g.corps.filter((c) => c.nat === 'UK' && !c.dead && c.name === '1st Armoured Division')).toHaveLength(0);
+    expect(home.dead).toBeFalsy();
+    expect(home.divs).toBe(1);
+  });
+
+  it('a drawn division comes with its own order and morale, as with its strength and experience', () => {
+    const g = balkans();
+    const i = rowAt('GER', PANZERS);
+    const xxii = corps(g, 'GER', 'XXII Corps')!;
+    xxii.org = 0.3; xxii.mor = 0.2; xxii.str = 0.6; xxii.xp = 0.9;
+    const place = g.byName['Sofia'];
+    const held = drawHeld(g, 'GER', ROWS[i], place, 2);
+    expect(held.drawn.map((d) => d.k)).toEqual([2]);
+    const c = addCorps(g, 'GER', PANZERS, 'arm', held.n, place.id, {});
+    layDrawn(g, i, c, held.drawn);
+    expect(c.str).toBeCloseTo(0.6, 9);
+    expect(c.xp).toBeCloseTo(0.9, 9);
+    expect(c.org).toBeCloseTo(0.3, 9);
+    expect(c.mor).toBeCloseTo(0.2, 9);
   });
 });
