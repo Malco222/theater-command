@@ -3618,8 +3618,11 @@ namespace LandField
 			// (the trial "houses", release 2: the kit houses LandHouse builds to the vehicles' detail where the region asks
 			// it (its KitHouse), four looks of each kind, each look a slot of its own after the region's kit; each house
 			// turned end for end where need be so its door, or its gable where it stands gable on, faces the nearest lane)
-			if (Fd.Tried("houses"))
+			// (the desert's houses, LandHouse's Kind 10 and over, wait on a word of their own, "deserthouses", until they
+			// too have passed: "houses" alone leaves the desert's kit as it was)
+			if (Fd.Tried("houses") || Fd.Tried("deserthouses"))
 			{
+				auto Asked = [&](const LandHouse::Spec& Of) { return Fd.Tried(Of.Kind >= 10 ? "deserthouses" : "houses"); };
 				HouseSlot0 = 0;
 				for (int K = 0; K < KitSlots; ++K)
 					if (Rg->KitName(K) || Rg->KitBuilt(K)) HouseSlot0 = K + 1;
@@ -3628,7 +3631,7 @@ namespace LandField
 					if (!H.bKit) continue;
 					LandHouse::Spec S;
 					const int K = static_cast<int>(H.KitB) - static_cast<int>(Base::Kit0);
-					if (K < 0 || K >= KitSlots || !Rg->KitHouse(K, S)) continue;
+					if (K < 0 || K >= KitSlots || !Rg->KitHouse(K, S) || !Asked(S)) continue;
 					S.Long = H.Long;
 					S.Deep = H.Deep;
 					S.Hurt = 0;
@@ -3675,7 +3678,7 @@ namespace LandField
 				{
 					const int K = static_cast<int>(RK.K.B) - static_cast<int>(Base::Kit0);
 					LandHouse::Spec S;
-					if (K < 0 || K >= KitSlots || !Rg->KitHouse(K, S)) continue;
+					if (K < 0 || K >= KitSlots || !Rg->KitHouse(K, S) || !Asked(S)) continue;
 					S.Hurt = 0;
 					const uint64_t Where = Hash(static_cast<uint64_t>(std::llround(RK.K.P.X * 8.0)) ^ 0x5EEDull, static_cast<uint64_t>(std::llround(RK.K.P.Y * 8.0)));
 					const uint64_t Look = static_cast<uint64_t>(std::min(3.0, 4.0 * Unit(Hash(Where, 0x1D8B))));
@@ -3727,6 +3730,9 @@ namespace LandField
 				const size_t Was = L.size();
 				Plant(H.KitB, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(1.0, 1.0, 1.0));
 				if (L.size() > Was) L.back().Z = static_cast<float>(H.Floor - 0.1); // (its plinth on the highest ground under it)
+				// (the trial "deserthouses": a desert house's yard is its own floor of beaten earth, laid just over the highest ground
+				// under it, its walls run down past the ground's fall)
+				if (L.size() > Was && H.Model >= 0 && H.Model < static_cast<int>(HouseModels.size()) && HouseModels[static_cast<size_t>(H.Model)].Kind == 10) L.back().Z = static_cast<float>(H.Floor + 0.03);
 			}
 			RegionHost Host(*this, false);
 			Rg->Plants(Host);
@@ -7119,9 +7125,9 @@ namespace LandField
 			M.FarFrom = 300.0f;
 			M.Class = BaseMesh::Draw::House;
 			static const char* const Hurts[4] = { "Whole", "RoofHole", "Gable", "Shell" };
-			static const char* const Kinds[10] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba", "Khata", "Burnt" };
-			const int Kd = std::clamp(HouseModels[K].Kind, 0, 9);
-			const char* const Roofs = Kd == 9 ? (HouseModels[K].Roof == 1 ? "Clay" : "Logs") : Kd >= 7 ? (HouseModels[K].Roof == 1 ? "Thatch" : "Plank") : (HouseModels[K].Roof == 1 ? "Tile" : "Slate");
+			static const char* const Kinds[11] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba", "Khata", "Burnt", "Desert" };
+			const int Kd = std::clamp(HouseModels[K].Kind, 0, 10);
+			const char* const Roofs = Kd == 10 ? (HouseModels[K].Roof == 1 ? "Mud" : HouseModels[K].Roof == 2 ? "Two" : "Lime") : Kd == 9 ? (HouseModels[K].Roof == 1 ? "Clay" : "Logs") : Kd >= 7 ? (HouseModels[K].Roof == 1 ? "Thatch" : "Plank") : (HouseModels[K].Roof == 1 ? "Tile" : "Slate");
 			M.Name = std::string(Kinds[Kd]) + Roofs + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
 		}
 		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not

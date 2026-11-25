@@ -699,19 +699,37 @@ namespace LandFieldPicture
 		const double Taps[12][2] = { { -0.326, -0.406 }, { -0.840, -0.074 }, { -0.696, 0.457 }, { -0.203, 0.621 }, { 0.962, -0.195 }, { 0.473, -0.480 },
 									 { 0.519, 0.767 },   { 0.185, -0.893 }, { 0.507, 0.064 },  { 0.896, 0.412 },  { -0.322, -0.933 }, { -0.792, -0.598 } };
 
-		/** How lit a place is (0 to 1): the finest map that holds it, a dozen taps round it for a soft edge. -1: no map holds it. */
-		double LitBy(const Shadow& S, const V3& P, const V3& N, double Lean)
+		/** How lit a place is (0 to 1): the finest map that holds it, a dozen taps round it for a soft edge. -1: no map holds it.
+		 * bPlane (a solid face, not a leaf or a blade): each tap is tried at the depth the face's own plane has there, so a
+		 * wall the sun grazes is not striped by its own depths a tap or two along (the desert's limewashed walls,
+		 * 24 November); the run of depth held to eight texels a texel, so the sun does not leak far under what stands on
+		 * a face it only skims. */
+		double LitBy(const Shadow& S, const V3& P, const V3& N, double Lean, bool bPlane)
 		{
 			const V3 Q = S.V.ToView(P + N * (S.Texel * (1.5 + Lean)) + S.V.Fwd * -(S.Texel * 0.6));
 			double SX, SY;
 			S.V.ToScreen(Q.X, Q.Y, Q.Z, SX, SY);
 			const double Margin = S.Soft + 2.0;
 			if (SX < Margin || SY < Margin || SX > S.T.W - Margin || SY > S.T.H - Margin) return -1.0;
+			double GX = 0.0, GY = 0.0;
+			const double Away = Dot(N, S.V.Fwd);
+			if (bPlane && Away < -1e-3)
+			{
+				GX = -Dot(N, S.V.Right) / Away * S.Texel;
+				GY = Dot(N, S.V.Up) / Away * S.Texel;
+				const double Run = std::hypot(GX, GY), Most = 8.0 * S.Texel;
+				if (Run > Most)
+				{
+					GX *= Most / Run;
+					GY *= Most / Run;
+				}
+			}
 			int Lit = 0;
 			for (const auto& Tp : Taps)
 			{
 				const int X = static_cast<int>(SX + Tp[0] * S.Soft), Y = static_cast<int>(SY + Tp[1] * S.Soft);
-				if (Q.Z <= S.T.Depth[static_cast<size_t>(Y) * S.T.W + X] + S.Texel * 0.5) ++Lit;
+				const double Z = Q.Z + GX * (X + 0.5 - SX) + GY * (Y + 0.5 - SY);
+				if (Z <= S.T.Depth[static_cast<size_t>(Y) * S.T.W + X] + S.Texel * 0.5) ++Lit;
 			}
 			return Lit / 12.0;
 		}
@@ -745,7 +763,7 @@ namespace LandFieldPicture
 							double Lit = 1.0;
 							for (const Shadow* S : Shadows)
 							{
-								const double Got = LitBy(*S, P, N, Mat == MatLeaves ? 2.0 : 0.0);
+								const double Got = LitBy(*S, P, N, Mat == MatLeaves ? 2.0 : 0.0, Mat == MatGround);
 								if (Got >= 0.0)
 								{
 									Lit = Got;
