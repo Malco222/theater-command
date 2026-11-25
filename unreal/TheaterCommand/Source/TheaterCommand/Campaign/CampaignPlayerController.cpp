@@ -6429,7 +6429,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			const FApproachPlan GarrisonRoad = (!GarrisonTip.IsEmpty() && !bComesOut) ? GarrisonApproach(TipRegion) : FApproachPlan();
 			if (!GarrisonTip.IsEmpty() && !bComesOut && !GarrisonRoad.bOk)
 			{
-				Line += TEXT("\n") + GarrisonTip + GarrisonWhere(); // (a garrison in hand is promised no march)
+				// (a garrison in hand is promised no march; BY SEA it is told the rules' reason by sea, as a right-click
+				// answers it there: OrderTo, the 1.5.3 review)
+				const FString Aboard = bBySea ? GarrisonAboard() : FString();
+				Line += TEXT("\n") + (Aboard.IsEmpty() ? GarrisonTip + GarrisonWhere() : Aboard);
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
@@ -9022,7 +9025,8 @@ FString ACampaignPlayerController::GarrisonAboard() const
 {
 	// (The 1.5.3 review; the playtest's find 17. The rules answer a garrison before they ask about the place it is sent
 	// to, so its own province is asked: "A garrison does not take ship. Out of the town, it can embark next month.", or
-	// that its province has no port, that no ship leaves a siege, or that there is no shipping.)
+	// that its province has no port, that its harbour is wrecked and for how long, that no ship leaves a siege, or that
+	// there is no shipping.)
 	FCampaignSession* Session = GetSession();
 	if (!Session || ArmyRegion == INDEX_NONE)
 	{
@@ -9290,6 +9294,14 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		// only if the order goes: a card's No, the war question's No or a refusal leaves it inside, nothing spent. The 1.5.3
 		// review, the playtest's find 16: and one sent at an enemy army beyond its reach that it could march up to and
 		// attack once out is given the march up and the attack below, as its field brothers are.)
+		if (!Garrison.IsEmpty() && bBySea)
+		{
+			// (The 1.5.3 review.) BY SEA, no order brings a garrison out (ComesOut), and no ship takes it: a right-click is
+			// answered with the rules' reason by sea (GarrisonAboard), the line the BY SEA notice gave, not the march's.
+			const FString Aboard = GarrisonAboard();
+			Notify(Aboard.IsEmpty() ? Garrison + GarrisonWhere() : Aboard, 10.0);
+			return;
+		}
 		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId) && !GarrisonApproach(RegionId).bOk)
 		{
 			Notify(Garrison + GarrisonWhere(), 10.0); // (a garrison in hand: it is told how it can be moved, and promised no march)
