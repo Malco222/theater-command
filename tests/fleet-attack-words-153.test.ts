@@ -12,7 +12,7 @@ import { detach } from '../src/campaign/fleets';
 import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan } from '../src/campaign/fleetattack';
 import { setFog } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { sail, zoneOf } from '../src/campaign/navy';
+import { fleetName, sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -21,6 +21,7 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TC = (globalThis as Record<string, unknown>).TC as any;
 const fleet = (g: Game, name: string): Fleet => g.fleets.find((f) => f.name === name)!;
+const Cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 
 interface Row { title: string; lines: string[]; buttons: { tip?: string }[] }
 interface Page { id: string; title: string; headline: string; note: string; top: { label: string; ok: boolean; tip: string }[]; sections: { heading: string; text: string; rows: Row[] }[] }
@@ -142,6 +143,57 @@ describe('25: a fleet only reported stays unnamed', () => {
     sail(g, home, zoneOf(g, 'wapp'), 'patrol');
     home.seen = { GER: g.turn };
     expect(whyNotFleetAttack(g, swine.id, home.id)).toBe('The Home Fleet is in the Western Approaches, out of reach of the Swinemunde Fleet from Swinemunde.');
+  });
+
+  it('in harbour beside a fleet identified, the odds name the fleet identified and not the harbour', () => {
+    // (The 1.5.3 review) A fleet in harbour is identified the month it is met, while another in the same port stays reported.
+    let checked = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = germany(seed);
+      const battle = fleet(g, 'Battle Fleet'), home = fleet(g, 'Home Fleet');
+      sail(g, home, home.home, 'port');
+      g.regions[home.base].fort = { lv: 2, vs: [] };
+      const sq = detach(g, home, { dd: 2 })!;
+      sq.seen = { GER: g.turn };
+      if (fleetKnown(g, home, 'GER') !== 'report' || fleetKnown(g, sq, 'GER') !== 'exact') continue;
+      checked++;
+      const row = (p: FleetAttackPlan, label: string): string => p.lines.find((l) => l.label === label)!.value;
+      const plan = planFleetAttack(g, battle.id, home.id)!;
+      expect(row(plan, 'In harbour')).toBe(`${Cap(fleetName(sq))} at anchor in harbour`);
+      expect(row(plan, 'Shore batteries')).toBe('The harbour\'s guns');
+      TC.load(saveGame(g));
+      const p = TC.page(`fleetattack:${battle.id}:${home.id}`) as Page;
+      for (const w of words(p)) {
+        expect(w, p.id).not.toContain(home.port);
+        expect(w, p.id).not.toContain(home.name);
+      }
+      // Sent at the squadron it has identified, the harbour is named as before; and so it is with the fog lifted.
+      const known = planFleetAttack(g, battle.id, sq.id)!;
+      expect(row(known, 'In harbour')).toBe(`${Cap(fleetName(sq))} at anchor at ${home.port}`);
+      expect(row(known, 'Shore batteries')).toBe(`The guns of ${home.port}`);
+      expect(row(planFleetAttack(g, battle.id, home.id, null)!, 'In harbour')).toBe(`The Home Fleet and ${fleetName(sq)} at anchor at ${home.port}`);
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('the fleet\'s room lists a fleet only reported, in harbour and in reach, as "In harbour." and no more', () => {
+    // UK from 17, seed 5: the German ships reported in harbour (the Battle Fleet at Wilhelmshaven) are in the Home Fleet's reach.
+    TC.start({ human: 'UK', view: 'grand', from: 17, seed: 5 });
+    const g = loadGame(TC.save().text)!;
+    const v = TC.view() as { fleets: { id: number; nat: string; name: string; report: boolean }[] };
+    const german = v.fleets.find((f) => f.report && f.nat === 'GER')!;
+    const real = g.fleets.find((f) => f.id === german.id)!;
+    expect(real.stance).toBe('port');
+    const home = v.fleets.find((f) => f.nat === 'UK' && f.name === 'Home Fleet')!;
+    const room = TC.page(`fleet:${home.id}`) as Page;
+    const rows = room.sections.find((s) => s.heading === 'ENEMY FLEETS TO ATTACK')!.rows.filter((r) => r.buttons.some((b) => (b as { act?: string }).act === `open:fleetattack:${home.id}:${german.id}`));
+    expect(rows.length).toBe(1);
+    expect(rows[0].title).toBe('German ships reported');
+    expect(rows[0].lines[0]).toBe('In harbour.');
+    for (const w of words(room)) {
+      expect(w).not.toContain(real.port);
+      expect(w).not.toContain(real.name);
+    }
   });
 });
 

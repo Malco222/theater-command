@@ -256,8 +256,10 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
   const ourShips = shipsIn(mine);
   plan.lines.push({ label: 'Forces', value: `${ourShips} ${ourShips === 1 ? 'ship' : 'ships'} against ${shipsIn(met)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
   if (at.harbour) {
-    plan.lines.push({ label: 'In harbour', value: `${cap(listNames(met))} at anchor at ${at.port}`, effect: `Ships at anchor fight at ${pct(at.anchor)} of their weight` });
-    if (at.shore > 0) plan.lines.push({ label: 'Shore batteries', value: `The guns of ${at.port}`, effect: `Worth ${Math.round(at.shore)} to the defence` });
+    // (1.5.3, playtest #25) The harbour of a fleet only reported is not named, though a fleet identified lies there with it.
+    const port = identified(g, viewer)(t) ? at.port : null;
+    plan.lines.push({ label: 'In harbour', value: `${cap(listNames(met))} at anchor ${port ? `at ${port}` : 'in harbour'}`, effect: `Ships at anchor fight at ${pct(at.anchor)} of their weight` });
+    if (at.shore > 0) plan.lines.push({ label: 'Shore batteries', value: port ? `The guns of ${port}` : 'The harbour\'s guns', effect: `Worth ${Math.round(at.shore)} to the defence` });
   }
   if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: 'Air', value: airA > airD ? 'You have the stronger air cover from the coast' : airD > airA ? 'The enemy has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
   // (1.5.3, playtest #33) Where both ends of the swing read the same, they are said once: "More than 10 to 1 all day".
