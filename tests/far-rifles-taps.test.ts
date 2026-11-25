@@ -24,6 +24,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { rearMonth, startOpen } from '../src/campaign/staff';
 import { storyFallen } from '../src/campaign/stories';
 import { setTeams } from '../src/campaign/teams';
+import { runTurnAI } from '../src/campaign/turn';
 import { techOf } from '../src/campaign/tech';
 import { eliteOf, priceOf } from '../src/campaign/traits';
 import { TECH } from '../src/campaign/tech';
@@ -377,6 +378,38 @@ describe('binds: false', () => {
     expect(cancelBuild(g, 'JAP', a.id)).toBe(true);
     expect(stock(g, 'JAP')).toBe(1);
   });
+
+  it("9. (the director's answer 3) a binds: false row's war is the war with no row, but for the module's flags and the Builds' rifles", () => {
+    // A short war (seed 17): Japan orders a corps by hand in its first month and its staff and drafts run four
+    // months more, once with a binds: false row and a shelf of 2 laid on Japan, once with no row.
+    const war = (laid: boolean): { save: string; drew: number } => {
+      const off: (() => void)[] = [];
+      if (laid) {
+        RIFLES.nations.JAP = { perDiv: 15000, refit: 0.05, binds: false };
+        off.push(() => { delete RIFLES.nations.JAP; }, rowsFrom((_g, x) => (x === 'JAP' ? { rifles: { start: 2 } } : undefined)));
+      }
+      try {
+        const g = startOpen(createGame(17, null));
+        const j = g.nations.JAP;
+        levyMen(g, 'JAP', 10);
+        j.pp += 100;
+        let drew = 0;
+        riflesWatch.tell = (e) => { if (e.nat === 'JAP') drew += e.rifles; };
+        expect(orderCorps(g, 'JAP', 'inf', j.capital)).not.toBeNull();
+        for (let t = 0; t < 4; t++) runTurnAI(g);
+        riflesWatch.tell = null;
+        const save = JSON.parse(saveGame(g));
+        for (const k of Object.keys(save.flags)) if (/^(sa|sam|rflm|rflc|rfa|rfo):/.test(k)) delete save.flags[k];
+        for (const n of Object.values(save.nations) as { queue: Build[] }[]) for (const b of n.queue) delete b.rifles;
+        return { save: JSON.stringify(save), drew: Math.round(drew * 1e9) / 1e9 };
+      } finally { while (off.length) off.pop()!(); }
+    };
+    const a = war(true), b = war(false);
+    // (The order drew the 2 on the shelf and was not refused; nothing was drawn where no row is laid.)
+    expect(a.drew).toBeGreaterThanOrEqual(2);
+    expect(b.drew).toBe(0);
+    expect(a.save === b.save).toBe(true);
+  }, 300_000);
 
   it('9. (and only false frees it) a row that says nothing of binds binds', () => {
     lay('UK', { perDiv: 15000 });
