@@ -22,8 +22,9 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf,
+  AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf, type AirForecast,
 } from './air';
+import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { raidCardLines } from './fighters';
@@ -40,6 +41,7 @@ import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
+import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon' | 'airfield';
 
@@ -584,22 +586,26 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
     const up = deckFighters(g, f.id);
     return `${shipList(f.ships)}${f.ships.cv > 0 ? (up > 0 ? `, about ${num(up)} carrier fighters over it` : ', its fighters away or spent') : ''}`;
   }
+  // Fog on raids (airfog.ts, its switch on): out of the side's sight its guns and the fighters in reach are as last seen.
+  const k = raidFogOn(g) && g.regions[t] ? skyKnown(g, nat, t, sight) : null;
+  const hide = k && !k.live ? fogBits(k) : null;
+  const gunsBit = (): string => (hide ? hide.guns : gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : '');
   if (kind === 'harbour') {
     const there = shipsInPort(g, t, nat);
     const seen = there.filter((f) => fleetKnown(g, f, nat) === 'exact');
     const bits = seen.map((f) => `${f.name}: ${shipList(f.ships)}`);
     if (seen.length < there.length) bits.push(seen.length ? 'more ships not identified' : 'Warships in harbour, not identified');
-    if (gunsAt(g, t)) bits.push(`level ${gunsAt(g, t)} guns`);
+    if (gunsBit()) bits.push(gunsBit());
     return bits.join(', ');
   }
   const r = g.regions[t];
   if (kind === 'town') {
     const v = siegeView(g, t)!;
     const who = sight[t] === SIGHT.none && !v.by ? 'its garrison not known' : v.inside ? `${plural(v.inside, 'corps', 'corps')} inside${v.guard > 0 ? ' with its guard' : ''}` : 'held by its guard alone';
-    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsAt(g, t) ? `, level ${gunsAt(g, t)} guns` : ''}`;
+    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsBit() ? `, ${gunsBit()}` : ''}`;
   }
   if (kind === 'bomb' || kind === 'night') {
-    const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : ''];
+    const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsBit(), hide ? hide.fighters : ''];
     return bits.filter(Boolean).join(', ');
   }
   if (kind === 'line') {
@@ -620,14 +626,15 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
     const groups = g.airFleets.filter((f) => f.base === t && !afloat(f) && f.ftr + f.bmr > 0 && atWar(g, f.nat, nat));
     const planesThere = groups.reduce((s, f) => s + f.ftr + f.bmr, 0);
     const up = fightersOver(g, t, nat);
+    const upBit = hide ? hide.fighters : up >= 1 ? `about ${num(up)} fighters can come up` : 'no fighters in reach';
     return [v ? `${v.tier === 'strip' ? 'Field strip' : 'Concrete airfield'}${v.shut ? ', shut' : ''}${v.burned ? `, ${plural(v.burned, 'level')} burned` : ''}` : 'An airfield',
       seen ? (groups.length ? `${plural(groups.length, 'air group')} based there, about ${num(planesThere)} aircraft` : 'no air group seen there') : 'what is based there is not known',
-      up >= 1 ? `about ${num(up)} fighters can come up` : 'no fighters in reach'].join(', ');
+      upBit].join(', ');
   }
   if (kind === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === t && !afloat(f) && flying(f) && atWar(g, f.nat, nat)).length;
     const up = fightersOver(g, t, nat);
-    return [based ? `${plural(based, 'air group')} based there` : airfieldsHold(g, t) > 0 ? 'an empty airfield' : 'no airfield', up >= 1 ? `about ${num(up)} fighters can come up` : 'no fighters in reach'].join(', ');
+    return [based ? `${plural(based, 'air group')} based there` : airfieldsHold(g, t) > 0 ? 'an empty airfield' : 'no airfield', hide ? hide.fighters : up >= 1 ? `about ${num(up)} fighters can come up` : 'no fighters in reach'].join(', ');
   }
   if (sight[t] === SIGHT.full) {
     const foes = g.regions[t].units.filter((u) => !u.dead && !allied(g, u.nat, nat));
@@ -775,6 +782,38 @@ export interface RaidPlan {
   wear?: number;
   /** Weather (ruling 127, 143): the card's one line for the sky over the target. Only in a campaign with weather. */
   sky?: string;
+  /**
+   * Fog on raids (airfog.ts; only with its switch on, and only for a target on land): what the planner's side knows of
+   * the target's defences, and the forecast as a band. Out of its sight the plan's own figures are the band's high end.
+   */
+  fog?: RaidFog;
+}
+
+/**
+ * Fog on raids: what one side knows of a raid's target, and its forecast as a band (the design director's ruling of
+ * 24 November 22:10Z). Each pair is [the low end, the high end]: the low end counts only the defence known for sure,
+ * the high end every enemy fighter last seen in reach rising. In sight the two are one figure, the truth.
+ */
+export interface RaidFog {
+  /** In full sight now; and in sight by the side's own reconnaissance flight, this month or last. */
+  live: boolean;
+  scouted: boolean;
+  /** Months since the place was last seen: 0 in sight, -1 never seen. */
+  ago: number;
+  /** The level of its guns as known, 0 to 3; -1 where never seen. */
+  gunLevel: number;
+  /** The card's lines: "Fighters: unknown", "Guns: heavy, seen 3 months ago", "Damage: none, in sight" ('' where towns take no lasting damage). */
+  fighters: string;
+  guns: string;
+  damage: string;
+  /** The share lost of the bombers (of the fighters, where no bombers fly), the bombers and fighters lost, the chance of success, the enemy squadrons up. */
+  loss: [number, number];
+  bomberLossN: [number, number];
+  fighterLossN: [number, number];
+  success: [number, number];
+  squadrons: [number, number];
+  /** "Losses forecast: 3 to 9% (not scouted)", or one figure: "Losses forecast: 5% (scouted)". */
+  band: string;
 }
 
 export interface RaidFigures {
@@ -891,7 +930,7 @@ function figuresOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
  * group that can reach (for a raid without bombers, the nearest fighter group). Fighter groups ordered to stick with
  * a bomber group that is going go too. Nothing is changed: launchRaid() flies it.
  */
-export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human): RaidPlan {
+export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[], nat: string | null = g.human, truth = false): RaidPlan {
   const row = kindRow(kind);
   const place = placeOf(g, kind, target, nat);
   const quarry = kind === 'fleet' ? g.fleets.find((x) => x.id === target) ?? null : null;
@@ -959,15 +998,38 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const lost = n * risk;
     if (f.ftr > 0) plan.fighterLossN = Math.round(lost); else plan.bomberLossN = Math.round(lost);
     plan.bomberLoss = f.ftr > 0 ? 0 : risk;
-    plan.effects = [`Every army at ${place} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+    // (Fog on raids: the photographs show the ground, and its fighters, guns and damage, this month and the next.)
+    plan.effects = [raidFogOn(g) ? `Every army at ${place} and in the provinces beside it is identified, corps by corps, and the fighters, guns and damage there are seen. The sight lasts this month and next month, and is remembered after.` : `Every army at ${place} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
     return plan;
   }
 
   const m = missionOf(kind);
   if (row.needs === 'bmr' && plan.bombers <= 0) { plan.why = 'Pick at least one bomber group: fighters only go as their escort.'; return plan; }
-  const a = assessAir(g, going, m, target);
+  // Fog on raids (airfog.ts, its switch on): out of the side's sight the card is weighed on what it knows, at both ends
+  // of the band, and its figures are the high end's, the defence the side must allow for. (`truth`: a raid being flown
+  // is weighed on what is there; it is fought on that in any case, air.ts fly.)
+  const fogOn_ = !truth && raidFogOn(g) && !!g.regions[target] && kind !== 'strike' && kind !== 'fleet';
+  const sight = fogOn_ ? sightOf(g, nat) : undefined;
+  const hid = fogOn_ && fogged(g, nat, m, target, sight);
+  const known = hid ? knownDefence(g, nat, target, 'high', sight) : undefined;
+  const a = assessAir(g, going, m, target, known);
   if (a.why) { plan.why = a.why; return plan; }
   const fc = forecastAir(g, a, m, target);
+  if (fogOn_) {
+    const k = skyKnown(g, nat, target, sight);
+    const al = hid ? assessAir(g, going, m, target, knownDefence(g, nat, target, 'low', sight)) : a;
+    const lo = hid && !al.why ? forecastAir(g, al, m, target) : fc;
+    const share = (x: AirForecast): number => (a.B > 0 ? x.bomberLoss : plan.fighters > 0 ? x.ftrLoss / plan.fighters : 0);
+    const pair = (x: number, y: number): [number, number] => [Math.min(x, y), Math.max(x, y)];
+    const loss = pair(share(lo), share(fc));
+    plan.fog = {
+      live: k.live, scouted: k.scouted, ago: k.ago, gunLevel: k.guns,
+      ...knownLines(g, k, damageRules(g) && (kind === 'bomb' || kind === 'night' || kind === 'town')),
+      loss, bomberLossN: pair(Math.round(lo.bmrLoss), Math.round(fc.bmrLoss)), fighterLossN: pair(Math.round(lo.ftrLoss), Math.round(fc.ftrLoss)),
+      success: pair(lo.success, fc.success), squadrons: pair(Math.round(al.squadrons), Math.round(a.squadrons)),
+      band: `Losses forecast: ${band(loss[0], loss[1])} (${bandNote(k)})`,
+    };
+  }
   plan.meets = a.def.map((x) => ({ name: x.f.name, nat: x.f.nat, baseName: homeName(g, x.f), afloat: afloat(x.f), ftr: x.f.ftr, able: Math.round(x.f.ftr * x.w) }));
   plan.lines = a.lines;
   const types = raidCardLines(g, a, m);
@@ -988,7 +1050,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // What meeting up is worth: each bomber group alone, with the fighters from its own airfield, beside all of them together.
   const bombers = going.filter((f) => f.bmr > 0);
   if (bombers.length >= 2) {
-    const alone = bombers.map((b) => assessAir(g, [b, ...going.filter((x) => x.bmr <= 0 && homeOf(x) === homeOf(b))], m, target)).filter((x) => !x.why).map((x) => x.bomberLoss);
+    const alone = bombers.map((b) => assessAir(g, [b, ...going.filter((x) => x.bmr <= 0 && homeOf(x) === homeOf(b))], m, target, known)).filter((x) => !x.why).map((x) => x.bomberLoss);
     if (alone.length) {
       const lo = Math.min(...alone), hi = Math.max(...alone);
       const fields = new Set(bombers.map(homeOf)).size;
@@ -1055,6 +1117,8 @@ export interface RaidWay {
   foot: string;
   /** The card's one line of prose for this way. */
   prose: string;
+  /** Fog on raids (airfog.ts, its switch on): "Losses forecast: 3 to 9% (not scouted)". Out of sight `lost` and `fightersLost` give the band too. */
+  band?: string;
 }
 
 /** A bombing raid weighed by day and by night, side by side: the same groups against the same target. */
@@ -1091,6 +1155,13 @@ export interface DayNight {
   home: number[];
   /** Fighter groups that could join by day and cannot by night: "Cannot fly: no escort by night". */
   barred: number[];
+  /**
+   * Fog on raids (airfog.ts, its switch on): what the planner's side knows of the target, as the plan has it. Out of
+   * sight the guns and the fighters above are as known: `guns` the level last seen (0 where never seen, with
+   * `gunsKnown` false), and the fighters those known for sure.
+   */
+  fog?: RaidFog;
+  gunsKnown?: boolean;
 }
 
 /**
@@ -1114,7 +1185,10 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     if (flown && f.factory) hits.push({ n: pct(f.factory), words: 'chance a factory is wrecked' });
     if (flown && !bomb && !hits.length) hits.push({ n: '', words: 'No industry there, and too few bombers to cut the railway.' });
     const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
-    return {
+    // (Fog on raids: out of sight the losses are a band, low end to high.)
+    const fb = flown && p.fog && !p.fog.live ? p.fog : null;
+    const about = (x: [number, number]): string => band(x[0], x[1], false);
+    const out: RaidWay = {
       kind: k, label: k === 'bomb' ? 'BY DAY' : 'BY NIGHT', why: p.why, picked: p.picked, bombers: p.bombers, fighters: p.fighters,
       success: p.success, verdict: p.verdict,
       bomberLoss: p.bomberLoss, bomberLossN: p.bomberLossN, fighterLoss, fighterLossN: p.fighterLossN,
@@ -1127,6 +1201,12 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
       foot: k === 'bomb' ? 'Escorts can fly with them.' : 'No escorts. Fewer lost, fewer hits.',
       prose: flown ? p.effects[0] ?? '' : '',
     };
+    if (flown && p.fog) out.band = p.fog.band;
+    if (fb) {
+      out.lost = `${band(fb.loss[0], fb.loss[1])} · about ${about(fb.bomberLossN)}`;
+      if (p.fighters > 0) out.fightersLost = `${band(fb.fighterLossN[0] / p.fighters, fb.fighterLossN[1] / p.fighters)} · about ${about(fb.fighterLossN)}`;
+    }
+    return out;
   };
   const day = way('bomb'), night = way('night');
   // A line one way has, the other prints too, dim, with its true figure (the art director's review of Version 82.1):
@@ -1142,10 +1222,13 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
   }
   const lead = !plans.bomb.why ? plans.bomb : plans.night;
   const fighter = (id: number): boolean => plans.bomb.seats.some((s) => s.id === id && s.kind === 'ftr');
-  const level = g.regions[target] ? gunsAt(g, target) : 0;
+  // (Fog on raids: out of sight the guns are as last seen, and the squadrons a band.)
+  const fog = lead.fog;
+  const hidden = !!fog && !fog.live;
+  const level = hidden ? Math.max(0, fog.gunLevel) : g.regions[target] ? gunsAt(g, target) : 0;
   const guns = flakGuns(level);
   const squadrons = lead.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able, turnToDate(g.turn).year), 0), able = lead.meets.reduce((n, x) => n + x.able, 0);
-  return {
+  const out: DayNight = {
     chosen: kind, day, night,
     bombers: lead.bombers,
     foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
@@ -1157,6 +1240,20 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
     barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
   };
+  if (fog) {
+    out.fog = fog;
+    out.gunsKnown = fog.gunLevel >= 0;
+    if (hidden) {
+      const when = fog.guns.replace(/^Guns: [^,]*/, '');
+      out.gunsLabel = fog.gunLevel < 0 ? 'Anti-aircraft guns not known' : `${level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns'}${when}`;
+      out.gunsTail = fog.gunLevel < 0 ? 'not scouted' : out.gunsTail;
+      out.gunsCount = fog.gunLevel < 0 ? 'guns not known' : out.gunsCount;
+      const [lo, hi] = fog.squadrons;
+      out.foeSquadrons = hi;
+      out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? 'squadron' : 'squadrons'} in range (not scouted)` : fog.fighters === 'Fighters: unknown' ? 'fighters in range not known' : '';
+    }
+  }
+  return out;
 }
 
 /**
@@ -1166,7 +1263,7 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
  */
 export function launchRaid(g: Game, kind: RaidKind, target: number, ids: number[], nat: string | null = g.human, fought?: FoughtAir): AirReport | null {
   if (kind === 'recon' || nat === null) return null;
-  const plan = planRaid(g, kind, target, ids, nat);
+  const plan = planRaid(g, kind, target, ids, nat, true);
   if (plan.why) return null;
   const fleets = plan.picked.map((id) => g.airFleets.find((f) => f.id === id)!);
   const m = missionOf(kind);
@@ -1241,11 +1338,22 @@ export function scout(g: Game, id: number, target: number, nat: string | null = 
   else { f.bmr -= lost; f.lost.bmr += lost; p.lostBmr += lost; }
   f.ready = Math.max(AIR.ready.floor, f.ready - AIRWAR.recon.ready);
   f.scouted = g.turn;
-  // Last month's photographs are out of date: the armies have moved.
-  const kept: Record<number, number> = {};
-  for (const [k, turn] of Object.entries(g.intel.scout ?? {})) if (turn === g.turn) kept[+k] = turn;
-  kept[target] = g.turn;
-  g.intel.scout = kept;
+  // Last month's photographs are out of date: the armies have moved. (The player's own table: a staff's flight,
+  // flown only with the fog on raids, keeps to its own.)
+  if (!raidFogOn(g) || f.nat === g.human) {
+    const kept: Record<number, number> = {};
+    for (const [k, turn] of Object.entries(g.intel.scout ?? {})) if (turn === g.turn) kept[+k] = turn;
+    kept[target] = g.turn;
+    g.intel.scout = kept;
+  }
+  // Fog on raids (airfog.ts): the photographs show the ground for the month flown and the next, to the player and to
+  // every staff alike; what they show of its air defence is remembered.
+  if (raidFogOn(g)) {
+    const by = ((g.intel.scoutBy ??= {})[f.nat] ??= {});
+    for (const k of Object.keys(by)) if (g.turn - by[+k] >= AIRWAR.fog.months) delete by[+k];
+    by[target] = g.turn;
+    rememberSkies(g, f.nat);
+  }
   const foes = r.units.filter((u) => !u.dead && atWar(g, f.nat, u.nat));
   const seen = foes.length ? `${plural(foes.length, 'corps', 'corps')}, ${plural(foes.reduce((s, c) => s + c.divs, 0), 'division')}${foes.some((c) => c.dug) ? ', dug in' : ''}` : 'no troops there';
   const text = `Aircraft of the ${f.name} photographed ${r.name}: ${seen}.${lost ? ` ${plural(lost, 'aircraft', 'aircraft')} did not come back.` : ''}`;

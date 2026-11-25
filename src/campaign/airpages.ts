@@ -22,6 +22,7 @@ import {
   raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
 import { afterCard, type AfterCard, type FoughtAir } from './airfought';
+import { band, raidFogOn } from './airfog';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
 export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
@@ -44,6 +45,8 @@ const craft = (x: { ftr: number; bmr: number }): string => [x.ftr >= 1 ? `${num(
 const KINDS: RaidKind[] = ['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon'];
 const isKind = (k: string): k is RaidKind => (KINDS as string[]).includes(k);
 const ids = (s: string | undefined): number[] => (s ? s.split('.').map(Number).filter((n) => Number.isFinite(n)) : []);
+/** Fog on raids (airfog.ts, its switch on): a reconnaissance flight's sight lasts the month flown and the next. */
+const SEEN_TWO = 'A few aircraft photograph one province and the ground beside it: it is seen whole this month and next month.';
 const BACK: PageButton = { label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' };
 
 /** A group's lines. On its airfield's own page the crowding is said once, in the page's head, so its rows leave it out (the UI director, build 1668). */
@@ -89,7 +92,7 @@ function groupPage(g: Game, id: number): Page | null {
   const deck = x.ship >= 0;
   const top: PageButton[] = [
     deck ? { label: 'BACK TO THE FLEET', act: `open:wings:${x.ship}`, ok: true, tip: '' } : BACK,
-    { label: 'SCOUT FROM THE AIR', act: `open:scout:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft photograph one province: its armies are seen whole until the month ends.' },
+    { label: 'SCOUT FROM THE AIR', act: `open:scout:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : raidFogOn(g) ? SEEN_TWO : 'A few aircraft photograph one province: its armies are seen whole until the month ends.' },
   ];
   if (carrierRules(g)) top.push({ label: 'SEARCH A SEA', act: `open:search:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft quarter one sea for the month: enemy ships there may be reported, or identified. A fleet has to be found before it can be struck.' });
   if (!deck) top.push({ label: 'MOVE TO ANOTHER AIRFIELD', act: `open:rebase:${id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' });
@@ -123,7 +126,11 @@ function raidsPage(g: Game): Page | null {
   };
 }
 
-const lossLine = (p: RaidPlan): string => `Chance of success ${pct(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num(p.bomberLossN)} of ${num(p.bombers)} bombers (${pct(p.bomberLoss)})` : '', p.fighters ? `${num(p.fighterLossN)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}${p.foeLossN ? `, for about ${num(p.foeLossN)} enemy fighters` : ''}.`;
+const lossLine = (p: RaidPlan): string => (p.fog && !p.fog.live ? fogLossLine(p, p.fog) : `Chance of success ${pct(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num(p.bomberLossN)} of ${num(p.bombers)} bombers (${pct(p.bomberLoss)})` : '', p.fighters ? `${num(p.fighterLossN)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}${p.foeLossN ? `, for about ${num(p.foeLossN)} enemy fighters` : ''}.`);
+
+/** Fog on raids (airfog.ts, its switch on): out of sight the same line gives each figure as a band, low end to high. */
+const fogLossLine = (p: RaidPlan, f: NonNullable<RaidPlan['fog']>): string =>
+  `Chance of success ${band(f.success[0], f.success[1])}, not scouted. Likely losses: ${[p.bombers ? `${band(f.bomberLossN[0], f.bomberLossN[1], false)} of ${num(p.bombers)} bombers (${band(f.loss[0], f.loss[1])})` : '', p.fighters ? `${band(f.fighterLossN[0], f.fighterLossN[1], false)} of ${num(p.fighters)} fighters` : ''].filter(Boolean).join(', ') || 'none'}.`;
 
 /**
  * Every target of a raid as the sections of its page (Brian, 24 November 2026: "you cant bomb germany from london").
@@ -203,7 +210,9 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
     sections: [
       { heading: 'FLYING THE RAID', text: going.length ? '' : 'No group is picked.', rows: going.map(seat) },
       { heading: 'COULD JOIN IT', text: could.length ? '' : 'No other group can reach it this month.', rows: could.map(seat) },
-      { heading: 'RISING TO MEET THEM', text: p.meets.length ? '' : 'No enemy fighters are in reach.', rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num(m.ftr)} fighters ${m.afloat ? 'aboard the' : 'at'} ${m.baseName}: about ${num(m.able)} can meet the raid.`], buttons: [] })) },
+      // (Fog on raids: what the side knows of the target's defences, and the forecast's band.)
+      ...(p.fog && !p.why ? [{ heading: 'WHAT IS KNOWN OF ITS DEFENCES', text: [p.fog.fighters, p.fog.guns, p.fog.damage, p.fog.band].filter(Boolean).join('\n'), rows: [] as PageRow[] }] : []),
+      { heading: 'RISING TO MEET THEM', text: p.fog && !p.fog.live ? (p.meets.length ? 'Only the groups whose airfields are in sight are named: more may come.' : 'No enemy fighter is known for sure to be in reach. Scout it to see what is there.') : p.meets.length ? '' : 'No enemy fighters are in reach.', rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num(m.ftr)} fighters ${m.afloat ? 'aboard the' : 'at'} ${m.baseName}: about ${num(m.able)} can meet the raid.`], buttons: [] })) },
       { heading: 'THE BATTLE TICKET', text: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'), rows: [] },
       { heading: 'CANNOT GO', text: '', rows: cannot.slice(0, 8).map(seat) },
     ].filter((s) => s.rows.length || s.text),
@@ -224,7 +233,7 @@ function scoutPage(g: Game, id: number): Page | null {
   if (sections.length === 1) sections[0].heading = 'PROVINCES';
   return {
     id: `scout:${id}`, title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`, headline: all.length ? `${all.length} province${all.length === 1 ? '' : 's'} it could photograph, ${sections.length > 1 ? 'by country' : 'nearest first'}` : x.scouted ? 'It has flown its reconnaissance this month' : 'Nothing in its reach is hidden',
-    note: 'A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends. One flight a month for each group, beside its raid, and it keeps its patrol.',
+    note: `${raidFogOn(g) ? `${SEEN_TWO} Its fighters, its guns and the damage to it are seen too, and remembered after.` : 'A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends.'} One flight a month for each group, beside its raid, and it keeps its patrol.`,
     top: [{ label: 'BACK', act: `open:group:${id}`, ok: true, tip: '' }], sections,
   };
 }

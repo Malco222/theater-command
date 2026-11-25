@@ -1903,6 +1903,17 @@ export interface Intel {
    */
   seaSight?: Record<string, Record<number, SeaSight>>;
   /**
+   * Fog on raids (airfog.ts; only with its switch on): the provinces each nation's aircraft have photographed and the
+   * month they did, by nation, then by province. A flight gives sight for the month flown and the next.
+   */
+  scoutBy?: Record<string, Record<number, number>>;
+  /**
+   * Fog on raids (airfog.ts; only with its switch on): what each nation last saw of the air defence of an enemy
+   * province, by nation, then by province: [the month, the enemy fighters in reach of its sky (to the nearest ten),
+   * the groups they were in, the level of its guns, the percent of the town in ruins].
+   */
+  airSeen?: Record<string, Record<number, number[]>>;
+  /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.
    */

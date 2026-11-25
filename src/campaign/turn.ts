@@ -5,6 +5,7 @@ import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type CrewOrder, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
+import { raidFogOn, rememberSkies } from './airfog';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import { attackTargets, fleetAttackOn, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan, type FleetAttackResult } from './fleetattack';
@@ -191,6 +192,8 @@ export function beginHuman(g: Game): void {
   yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
+  // Fog on raids (airfog.ts, its switch on): and what his side sees of the enemy's air defence is noted, as every staff's is.
+  if (raidFogOn(g)) rememberSkies(g, g.human);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
   noteReadings(g);
   quietNews(g);
@@ -2305,6 +2308,10 @@ export function setCityDamage(g: Game, on: boolean): boolean {
 // b636). The browser's newGame and the campaign bridge's start turn it on right after startOpen, where the war runners
 // set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
 export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
+
+// Fog and reconnaissance on air raids (airfog.ts; off as shipped, airwar.json fog.on): a war has it with g.flags.rfog,
+// set by setRaidFog right after startOpen. The bridge can ask for both by name.
+export { raidFogShipped, setRaidFog } from './airfog';
 
 /** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
 export function cityDamage(g: Game, region: number): RepairView | null {
