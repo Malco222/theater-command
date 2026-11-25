@@ -10,7 +10,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { AIR, airRange, assessAir, groupAt, km, legKm, legKmAt } from '../src/campaign/air';
+import { AIR, airRange, airfieldsHold, assessAir, groupAt, km, legKm, legKmAt } from '../src/campaign/air';
 import { ferryRoute, legCovered, pointLeg, realKm, setFerry } from '../src/campaign/ferry';
 import { airAct } from '../src/campaign/airpages';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -18,7 +18,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, Game, Region } from '../src/campaign/types';
-import { globeDist, mapDist, nearX } from '../src/campaign/wrap';
+import { globeDist, globeFor, mapDist, nearX } from '../src/campaign/wrap';
 
 const rows = AIR.fleets.length;
 afterEach(() => { AIR.fleets.splice(0, AIR.fleets.length - rows); });
@@ -174,13 +174,50 @@ describe('a leg never reads one of its ends differently from km()', () => {
         const r = read(g, e, x, y);
         if (r.t <= 0) { expect(r.leg).toBe(km(g, r.E.id, r.A.id)); ends++; }
         else if (r.t >= 1) { expect(r.leg).toBe(km(g, r.E.id, r.B.id)); ends++; }
-        // Inside the leg it is never farther than km() to the nearer end by more than the chart's own search allows
-        // (the nearest point is found on the chart, not on the globe: Manila against Formosa to Hong Kong reads 904.052,
-        // km() to Formosa 902.923, the review's note).
-        else expect(r.leg).toBeLessThanOrEqual(Math.min(km(g, r.E.id, r.A.id), km(g, r.E.id, r.B.id)) + 1.2);
+        // Inside the leg it is never farther than km() to either end (the design director, 14:59Z: the cap; until then
+        // up to 1.2 km over was let pass, the nearest point being found on the chart, not on the globe).
+        else expect(r.leg).toBeLessThanOrEqual(Math.min(km(g, r.E.id, r.A.id), km(g, r.E.id, r.B.id)));
+        // Over every case, at an end or inside, a leg never reads farther than km() to either of its ends.
+        expect(r.leg).toBeLessThanOrEqual(km(g, r.E.id, r.A.id));
+        expect(r.leg).toBeLessThanOrEqual(km(g, r.E.id, r.B.id));
       }
     }
     expect(ends).toBeGreaterThanOrEqual(20);
+  });
+
+  it('Manila against Formosa to Hong Kong: an inside point that read 904.052 km, over km() to Formosa, now reads km() to Formosa', () => {
+    const g = world();
+    const r = read(g, 'Manila', 'Formosa', 'Hong Kong');
+    expect(r.t).toBeGreaterThan(0);
+    expect(r.t).toBeLessThan(1);
+    // The leg's own ruler (the globe's, from the nearest point found on the chart) reads 904.052; km() to Formosa 902.923.
+    const bx = nearX(g, r.B.x, r.A.x), qx = r.A.x + r.t * (bx - r.A.x), qy = r.A.y + r.t * (r.B.y - r.A.y);
+    expect(globeDist(g, nearX(g, r.E.x, qx), r.E.y, qx, qy) * U).toBeCloseTo(904.052, 3);
+    expect(km(g, r.E.id, r.A.id)).toBeCloseTo(902.923, 3);
+    expect(r.leg).toBe(km(g, r.E.id, r.A.id));
+  });
+
+  it('a place in a province of the old chart, against a leg of the old chart, reads as before: the cap never binds', () => {
+    const g = world();
+    // The old chart's provinces: those km() reads on the map's straight line (wrap.ts globeFor).
+    const old = (r: Region): boolean => !globeFor(g, r, r);
+    const fields = g.regions.filter((r) => old(r) && airfieldsHold(g, r.id) > 0).map((r) => r.id);
+    let inside = 0, bound = 0, ends = 0, endsOff = 0;
+    for (const a of fields) for (const b of fields) {
+      if (a === b || realKm(g, a, b) > 1500) continue;
+      const A = g.regions[a], B = g.regions[b], dx = nearX(g, B.x, A.x) - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
+      for (const r of g.regions) {
+        if (!old(r) || Math.min(km(g, r.id, a), km(g, r.id, b)) > 2500) continue;
+        const d = legKmAt(g, { x: r.x, y: r.y, region: r.id, sea: -1 }, a, b);
+        const px = nearX(g, r.x, A.x), t = ((px - A.x) * dx + (r.y - A.y) * dy) / L;
+        if (t <= 0 || t >= 1) { ends++; if (d !== km(g, r.id, t <= 0 ? a : b)) endsOff++; continue; }
+        inside++;
+        // The leg's own ruler, the map's straight line, uncapped: what it read before the cap.
+        if (d !== Math.hypot(px - (A.x + t * dx), r.y - (A.y + t * dy)) * U) bound++;
+      }
+    }
+    expect(inside).toBeGreaterThan(500_000);
+    expect([bound, endsOff]).toEqual([0, 0]);
   });
 });
 
