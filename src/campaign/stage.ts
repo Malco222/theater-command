@@ -163,3 +163,7 @@ export const SEEKONCE_STAGE: boolean = staged('TC_SEEKONCE', 'seekOnce');
 // carry the flag 'atom'. Forced by TC_ATOM.
 /** True where new grand campaigns open with the atomic project (stage.json 'atomBomb'). */
 export const ATOM_STAGE: boolean = staged('TC_ATOM', 'atomBomb');
+// Moving an air group to any airfield of its side's with one order (release 2; Brian 24 November 2026 22:08Z; ferry.ts):
+// the grand campaigns opened while this is true carry the flag 'ferry'. Forced by TC_FERRY.
+/** True where new grand campaigns open with air groups able to go to any friendly airfield by stages (stage.json 'ferry'). */
+export const FERRY_STAGE: boolean = staged('TC_FERRY', 'ferry');

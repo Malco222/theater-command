@@ -45,7 +45,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { ATOM_STAGE, BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SHADOW_STAGE, SHADOWRELAY_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, VOYAGELOG_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
+import { ATOM_STAGE, BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FERRY_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SHADOW_STAGE, SHADOWRELAY_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, VOYAGELOG_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -147,6 +147,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (DUMPS_STAGE) g.flags.dumps = 1;
   // A fleet sent straight at an enemy fleet (release 2, fleetattack.ts).
   if (FLEETATTACK_STAGE) g.flags.fleetAttack = 1;
+  // An air group sent to any friendly airfield with one order, by stages (release 2, ferry.ts).
+  if (FERRY_STAGE) g.flags.ferry = 1;
   // Breaking a corps up into its divisions (release 2, breakup.ts).
   if (BREAKUP_STAGE) g.flags.breakUp = 1;
   // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
