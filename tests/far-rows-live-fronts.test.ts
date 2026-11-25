@@ -45,6 +45,10 @@ const lose = (g: Game, name: string, to: string, away: string): Region => {
 const war = (o: { stop?: number; human?: string | null; went?: boolean; rangoon?: boolean } = {}): Game => {
   const g = startOpen(createGame(3, o.human ?? null));
   if (o.stop && o.stop !== 3) setStop(g, o.stop, true);
+  // (Cam Ranh is Japan's, as the demand on Vichy France makes it before the strike south in a played war. Since the
+  // design director's ruling B7 of 25 November 2026 a row posted on a neutral's ground waits for its war, where no
+  // book dates the rows: with Cam Ranh still France's the Kawaguchi Detachment would not be on its quay in month 27.)
+  lose(g, 'Cam Ranh', 'JAP', 'Saigon');
   month(g, 27);
   g.turn = 28;
   if (o.went !== false) g.flags['st:done:JAP:south'] = 28;

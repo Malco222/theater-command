@@ -41,6 +41,8 @@
 //                                          Each corps in the view carries school (at the schools now), schoolTo (the grade it would come back) and schoolWhy (why it cannot go, '' if it can)
 //                                          and wear, how worn its uniforms look, 0.1 fresh to 1 after six weeks in the line (its battles' blocks carry the same)
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
+//   TC.offers()                         -> { count, head, note, can, why, rows }: the formations offered out of the player's own corps (the whole world; Rules/offers-look.ts)
+//   TC.offerTake(ids | 'all')           -> { ok, taken, left, said, offers, view }: he takes those offers; TC.offerDecline(ids | 'all') -> { ok, declined, said, offers, view }
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
@@ -110,6 +112,7 @@ import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
 import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the enemy's month near you)
 import { scrambleCalls } from './scramble-demo'; // (release 2, the scramble offer's stand-in: a demonstration, nothing booked)
+import { offerCalls, offersLook, type OffersLook } from './offers-look'; // (release 2, the whole world: formations offered out of the player's own corps, ruling B8)
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
@@ -3549,6 +3552,13 @@ interface MonthCard {
   elsewhere: { nat: string; text: string; tip: string }[];
   /** What is said at the card's foot of the news that found no line: "3 more lines of news are in the Newsreel." */
   rest: string;
+  /**
+   * (Release 2, the whole world; the design director's ruling B8 of 25 November 2026.) The formations offered out of
+   * the player's own corps, the month's one list: how many stand open, and each in plain words (Rules/offers-look.ts,
+   * the same as TC.offers()). He takes all, takes some or declines with TC.offerTake and TC.offerDecline. A list of
+   * none on the older maps, where no offer is ever made.
+   */
+  offers: OffersLook;
 }
 
 /** The mark kept as the player's month opened: what the card that closes it is counted from. */
@@ -3623,6 +3633,8 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: firsts.includes(x) ? `desk:${x.desk}:own` : '' })),
     elsewhere: c.elsewhere.slice(0, lines).map((x) => ({ nat: x.nat, text: x.text, tip: x.full ?? x.text })),
     rest: over > 0 ? `${over} more ${over === 1 ? 'line' : 'lines'} of news ${over === 1 ? 'is' : 'are'} in the Newsreel.` : "Every figure comes from the month's own battle reports.",
+    // (Ruling B8) What is offered him this month and still open from earlier ones: one list, never a card each.
+    offers: offersLook(s),
   };
 }
 
@@ -5278,7 +5290,8 @@ let lastMonth: { date: string; rows: { nat: string; note: string; region: number
 function monthShown(s: Game, card: MonthCard) {
   let run: string[] = [];
   try { run = (commandOf(s)?.desks ?? []).filter((d) => d.staff).map((d) => String(d.id)); } catch { run = []; }
-  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.desk) })) };
+  // (Ruling B8) And the offers as they stand now: one he has answered since is off the list.
+  return { ...card, staff: card.staff.map((x) => ({ ...x, ok: run.includes(x.desk) })), offers: offersLook(s) };
 }
 
 /** A battle's report set out to be read: who fought, what each lost, and what the map fed into the fight. */
@@ -8231,6 +8244,9 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
 Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCalls(game, battleTable.airStartOn)); // (release 2: the scramble offer's stand-in, Rules/scramble-demo.ts)
+// (Release 2, the whole world; ruling B8 of 25 November 2026) TC.offers(), TC.offerTake(ids | 'all'), TC.offerDecline(ids | 'all'):
+// a dated formation that would take corps of the player's off the map is offered to him, never taken (Rules/offers-look.ts).
+Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(game, view));
 // (Release 2, the marked army; Brian 24 November 2026 18:01Z) TC.marked(on) at any time: the corps that takes a town of
 // the player's wears a red tag until he beats it (marked.ts). The options page uses act('marked:on') and act('marked:off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).marked = (on: boolean) => { const s = game(); setMarked(s, !!on); return { on: markedOn(s) }; };
