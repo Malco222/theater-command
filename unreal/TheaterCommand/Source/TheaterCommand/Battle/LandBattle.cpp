@@ -10302,6 +10302,9 @@ void ALandBattle::PlaySound(double RealDt)
 		Ear.At = S.Pose.Eye;
 	}
 	Ear.Yaw = LandFeed::FacingTo(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Look.X, S.Pose.Look.Y);
+	// (the fighters on call, as FlyOver drew them: their own takes, and the ground's guns firing up at them as this
+	// frame's noises; release 2 sound check, -TheaterLandAirSound)
+	SoundOverhead();
 	for (const LandPlay::Noise& N : S.Noises)
 	{
 		S.Mix.Hear(N, S.Real, S.Battle, FMath::Max(0.25 / S.Life, S.SpeedNow / S.Life), Ear, S.Takes);
@@ -10738,9 +10741,31 @@ void ALandBattle::PlayEngines()
 	// Louder down among the men (land.closeView), as every other world sound.
 	const float Volume = LandParts::Gain(BusDb(TEXT("loops")) + LiftDb);
 	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	if (S.HatchWas.size() != All.size())
+	{
+		S.HatchWas.assign(All.size(), -1.0);
+	}
 	for (int32 K = 0; K < static_cast<int32>(All.size()); ++K)
 	{
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
+		// Her commander's hatch (the release 2 sound check): heard as its lid comes down on its rim, or swings back to its
+		// stop, at her turret top. The take is land.bodyCues' for hatch_shut or hatch_open (null, silent, until a real
+		// one passes Brian's ear); "Heads up, hatches down" (the drill's hatches row) shuts and opens it as fire comes
+		// and goes.
+		{
+			double& Was = S.HatchWas[static_cast<size_t>(K)];
+			const double Now = V.HatchOpen;
+			const char* HatchCue = Was < 0.0 || V.bDead ? nullptr : Was > 0.05 && Now <= 0.02 ? "hatch_shut" : Was < 0.9 && Now >= 0.97 ? "hatch_open" : nullptr;
+			Was = Now;
+			if (HatchCue)
+			{
+				const std::string Take = S.Mix.CueTake(HatchCue);
+				if (!Take.empty())
+				{
+					StartTake(*LandParts::Wide(Take), World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z + 2.4), true, TEXT("engines"), LandParts::Gain(BusDb(TEXT("loops")) + LiftDb), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+				}
+			}
+		}
 		// (a wreck burning crackles where her engine ran)
 		const bool bFire = V.bDead && V.bBurning && V.Fade >= 0.5;
 		// (her loop's name worked out only when her cue changes, LandSound::EngineNames: an FName a vehicle a frame before)
@@ -10789,6 +10814,300 @@ void ALandBattle::PlayEngines()
 			Player->SetVolumeMultiplier(Volume);
 		}
 		Player->SetWorldLocation(At);
+	}
+}
+
+void ALandBattle::SoundOverhead()
+{
+	// The release 2 sound check (25 Nov 2026): the fighters on call over the field, which FlyOver draws diving, firing,
+	// fired on and going down, were heard not at all. With -TheaterLandAirSound beside -TheaterLandAirSupport they are
+	// heard; off, silent as before, and nothing else changes. Every take is one Brian passed for the air battle, read from
+	// that battle's own rows (air.loops, air.passByPlane, air.gunsByCalibre), so a take changed there changes here;
+	// land.airSupport keeps only this scene's numbers. Each plane's engine is a loop flying with it; a fighter's pass is
+	// heard once as it comes within passWithin of the ear, a dive bomber's dive as it pushes over; its wing guns' bursts
+	// are laid end to end while it fires, flying with it; the ground's guns firing up at it are the land battle's own
+	// machine-gun bursts by army (this frame's noises, mixed as any other: cracks, distance, far takes); a plane blown
+	// apart is heard where it burst, after its flash, and one into the ground as a gun's shell bursting there, with its
+	// metal coming apart when near.
+	FLandBattleState& S = *State;
+	FLandBattleState::FAirSupport& A = S.AirSupport;
+	if (!A.bSoundAsked && A.bAsked)
+	{
+		A.bSoundAsked = true;
+		A.bSound = A.bOn && FParse::Param(FCommandLine::Get(), TEXT("TheaterLandAirSound"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: the fighters on call %s"),
+			A.bSound ? TEXT("heard: engines, passes, wing guns, the ground's fire and the losses (-TheaterLandAirSound, release 2)") : TEXT("silent, as before"));
+	}
+	if (!A.bSound || !A.bMade || !Mix.IsValid())
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject> Own = LandParts::MixObject(Mix, TEXT("land.airSupport"));
+	auto Number = [&Own](const TCHAR* Name, double Else)
+	{
+		double Value = Else;
+		return Own.IsValid() && Own->TryGetNumberField(Name, Value) ? Value : Else;
+	};
+	// (a word of a row of the mix by a key, else its "*", else Else)
+	auto Word = [this](const TCHAR* Row, const FString& Key, const FString& Else)
+	{
+		const TSharedPtr<FJsonObject> Table = LandParts::MixObject(Mix, Row);
+		FString Out;
+		if (Table.IsValid() && (Table->TryGetStringField(Key, Out) || Table->TryGetStringField(TEXT("*"), Out)) && !Out.IsEmpty())
+		{
+			return Out;
+		}
+		return Else;
+	};
+	const LandPlay::Vec EarAt = S.Pose.Eye;
+	auto Far = [&EarAt](const LandAir::V3& P)
+	{
+		return std::sqrt((P.X - EarAt.X) * (P.X - EarAt.X) + (P.Y - EarAt.Y) * (P.Y - EarAt.Y) + (P.Z - EarAt.Z) * (P.Z - EarAt.Z));
+	};
+	const double PassWithin = Number(TEXT("passWithin"), 350.0);
+	const float LoopGain = LandParts::Gain(BusDb(TEXT("loops")) + LiftDb + Number(TEXT("engineDb"), 0.0));
+	const float CloseGain = LandParts::Gain(BusDb(TEXT("close")) + LiftDb);
+
+	// The takes that fly with their planes: moved to where each plane is now; let go once their voice plays another take.
+	std::map<int, const LandAir::Plane*> ByKey;
+	for (const LandAir::Plane& P : A.Planes)
+	{
+		ByKey[P.Key] = &P;
+	}
+	for (int32 K = OverheadMoving.Num() - 1; K >= 0; --K)
+	{
+		const FMoving& M = OverheadMoving[K];
+		UAudioComponent* Player = M.Player.Get();
+		const auto Plane = ByKey.find(M.Track);
+		if (!Player || !StillHeld(M.Voice, M.Use) || Plane == ByKey.end())
+		{
+			OverheadMoving.RemoveAtSwap(K);
+			continue;
+		}
+		Player->SetWorldLocation(World(Plane->second->At.X, Plane->second->At.Y, Plane->second->At.Z));
+	}
+	auto Fly = [this](UAudioComponent* Player, int32 Key)
+	{
+		if (Player)
+		{
+			OverheadMoving.Add({ Player, Key, LastVoice, LastVoiceUse });
+		}
+	};
+
+	TSet<int32> Flying;
+	for (const LandAir::Plane& P : A.Planes)
+	{
+		const FVector At = World(P.At.X, P.At.Y, P.At.Z);
+		const FString Model = LandParts::Wide(P.Model);
+		// Its engine: a loop by its kind (land.airSupport.engineRow names the air battle's air.loops row), with it until
+		// it strikes the ground or leaves the sky.
+		if (!P.bWreck)
+		{
+			const int32 Key = -1 - P.Key; // (the engines' map holds the vehicles by number from 0: the planes below it)
+			Flying.Add(Key);
+			TObjectPtr<UAudioComponent>* Found = Engines.Find(Key);
+			UAudioComponent* Player = Found ? Found->Get() : nullptr;
+			if (!Player)
+			{
+				const FString Loop = Word(TEXT("air.loops"), Word(TEXT("land.airSupport.engineRow"), Model, TEXT("fighter")), TEXT("fighter_engine_loop"));
+				if (USoundBase* Played = SoundOf(FName(*Loop), true))
+				{
+					Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, At, FRotator::ZeroRotator, LoopGain, 1.0f, 0.0f, FamilyOf(TEXT("aircraft")), nullptr, false);
+					if (Player)
+					{
+						Player->FadeIn(1.5f, 1.0f);
+						Engines.Add(Key, Player);
+						EngineCue.Add(Key, FName(*Loop));
+					}
+				}
+			}
+			if (Player)
+			{
+				Player->SetWorldLocation(At);
+				Player->SetVolumeMultiplier(LoopGain);
+			}
+		}
+		if (P.bWreck || P.How != LandAir::Fall::None)
+		{
+			continue;
+		}
+		// A dive bomber's dive (land.airSupport.dive by its kind), heard once as it pushes over, flying with it.
+		const FString Dive = Word(TEXT("land.airSupport.dive"), Model, FString());
+		if (!Dive.IsEmpty() && P.Pitch < Number(TEXT("diveFromPitch"), -30.0) && !A.Dived.count(P.Key))
+		{
+			A.Dived.insert(P.Key);
+			Fly(StartTake(*Dive, At, true, TEXT("aircraft"), CloseGain * LandParts::Gain(Number(TEXT("diveDb"), 0.0)), 1.0f, 0.0f, 0.0f, 0.0f, 0.3f), P.Key);
+		}
+		// A fighter's pass (air.passByPlane by its kind), once as it comes within passWithin of the ear; not a dive
+		// bomber's (its dive is its pass).
+		if (Dive.IsEmpty() && !A.Passed.count(P.Key) && Far(P.At) < PassWithin)
+		{
+			A.Passed.insert(P.Key);
+			++A.Passes;
+			const FString Pass = Word(TEXT("air.passByPlane"), Model, TEXT("fighter_pass"));
+			Fly(StartTake(*Pass, At, true, TEXT("aircraft"), CloseGain * LandParts::Gain(Number(TEXT("passDb"), 1.5)), 1.0f, 0.0f, 0.0f, 0.0f, 2.0f), P.Key);
+		}
+		// Its wing guns while it fires: the air battle's takes for its kind of gun (land.airSupport.gunRow names the
+		// air.gunsByCalibre row), each only its part (the firing, not the range's echo), the next laid on as it ends.
+		if (!P.bFiring)
+		{
+			A.GunDue.erase(P.Key);
+			continue;
+		}
+		const auto Due = A.GunDue.find(P.Key);
+		if (Due != A.GunDue.end() && RealT < Due->second)
+		{
+			continue;
+		}
+		const FString Row = FString(TEXT("air.gunsByCalibre.")) + Word(TEXT("land.airSupport.gunRow"), LandParts::Wide(P.Gun), TEXT("heavy"));
+		const TSharedPtr<FJsonObject> Guns = LandParts::MixObject(Mix, Row);
+		FString Take;
+		double From = 0.0, To = 0.0, Fade = 0.08;
+		if (Guns.IsValid())
+		{
+			Guns->TryGetNumberField(TEXT("fadeOut"), Fade);
+			const TArray<TSharedPtr<FJsonValue>>* Takes = nullptr;
+			if (!Guns->TryGetStringField(TEXT("wing"), Take) && !Guns->TryGetStringField(TEXT("take"), Take) && Guns->TryGetArrayField(TEXT("takes"), Takes) && Takes->Num() > 0)
+			{
+				Take = (*Takes)[A.GunTakes % Takes->Num()]->AsString();
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Part = nullptr;
+			const TSharedPtr<FJsonObject>* ByTake = nullptr;
+			if (Guns->TryGetObjectField(TEXT("partByTake"), ByTake))
+			{
+				(*ByTake)->TryGetArrayField(Take, Part);
+			}
+			if (!Part)
+			{
+				Guns->TryGetArrayField(TEXT("part"), Part);
+			}
+			if (Part && Part->Num() == 2)
+			{
+				From = (*Part)[0]->AsNumber();
+				To = (*Part)[1]->AsNumber();
+			}
+		}
+		if (Take.IsEmpty())
+		{
+			Take = TEXT("plane_guns");
+		}
+		double Long = To > From ? To - From : 0.0;
+		if (Long <= 0.0)
+		{
+			const float* Known = TakeSeconds.Find(FName(*Take));
+			USoundBase* Played = Known ? nullptr : SoundOf(FName(*Take));
+			Long = Known ? *Known : Played ? Played->GetDuration() : 1.0;
+		}
+		A.GunDue[P.Key] = RealT + FMath::Max(0.15, Long - 0.02);
+		++A.GunTakes;
+		Fly(StartTake(*Take, At, true, TEXT("air_guns"), CloseGain * LandParts::Gain(Number(TEXT("gunsDb"), 0.0)), 1.0f + FMath::FRandRange(-0.02f, 0.02f), static_cast<float>(From),
+			To > From ? static_cast<float>(To - From) : 0.0f, static_cast<float>(Fade), 0.0f), P.Key);
+	}
+	// The planes gone from the sky (struck, or away beyond the field): their engines fade out.
+	for (auto It = Engines.CreateIterator(); It; ++It)
+	{
+		if (It.Key() < 0 && !Flying.Contains(It.Key()))
+		{
+			if (UAudioComponent* Player = It.Value().Get())
+			{
+				Player->FadeOut(1.0f, 0.0f);
+			}
+			EngineCue.Remove(It.Key());
+			It.RemoveCurrent();
+		}
+	}
+
+	// The ground's guns firing up at them: each a machine-gun burst of the defender's army every so often (the land
+	// battle's own: its row by army, the rounds' cracks, the far takes), from where the gun stands toward its stream's end.
+	std::map<int, int> SideOfLeg;
+	for (const LandAir::Plane& P : A.Planes)
+	{
+		SideOfLeg[P.Leg] = P.Side;
+	}
+	const double EveryLo = Number(TEXT("groundEveryFrom"), 1.2), EveryHi = Number(TEXT("groundEveryTo"), 3.0);
+	std::set<int> GunsNow;
+	for (const LandAir::Gunner& G : A.Guns)
+	{
+		GunsNow.insert(G.Key);
+		const auto Due = A.GunnerDue.find(G.Key);
+		if (Due != A.GunnerDue.end() && RealT < Due->second)
+		{
+			continue;
+		}
+		A.GunnerDue[G.Key] = RealT + FMath::FRandRange(static_cast<float>(EveryLo), static_cast<float>(EveryHi));
+		const auto Leg = SideOfLeg.find(G.Key / 8);
+		const int Theirs = Leg != SideOfLeg.end() && (Leg->second == 0 || Leg->second == 1) ? 1 - Leg->second : -1;
+		LandPlay::Noise N;
+		N.T = S.Battle;
+		N.Kind = LandPlay::NoiseKind::Shot;
+		N.Weapon = "mg";
+		N.Role = "mg";
+		N.Army = Theirs >= 0 && static_cast<size_t>(Theirs) < S.Rec.Sides.size() ? S.Rec.Sides[static_cast<size_t>(Theirs)].Army : std::string();
+		N.Side = Theirs;
+		N.At = LandPlay::Vec(G.From.X, G.From.Y, G.From.Z);
+		N.From = N.At;
+		N.To = LandPlay::Vec(G.To.X, G.To.Y, G.To.Z);
+		const LandPlay::Burst B = LandPlay::BurstOf("mg", N.Army, "mg");
+		N.Rounds = B.Rounds;
+		N.PerSecond = B.PerSecond;
+		S.Noises.push_back(N);
+		++A.GroundBursts;
+	}
+	for (auto It = A.GunnerDue.begin(); It != A.GunnerDue.end();)
+	{
+		It = GunsNow.count(It->first) ? std::next(It) : A.GunnerDue.erase(It);
+	}
+
+	// This frame's losses (FlyOver's: a plane hit, a plane into the ground), each heard once; on a replay wound back only
+	// those of the last moment are heard again.
+	for (const LandAir::Happen& E : A.Happens)
+	{
+		if (E.T < S.Battle - 1.0)
+		{
+			continue;
+		}
+		const LandPlay::Vec At(E.At.X, E.At.Y, E.At.Z);
+		const double Metres = Far(E.At);
+		// (heard after its flash, as the mixer's flash-to-bang: the distance at 343 m a second, at most 3 s, in real
+		// seconds at the battle's pace)
+		const double Delay = Metres > 150.0 ? FMath::Min(Metres / 343.0, 3.0) / FMath::Max(0.25, S.SpeedNow) : 0.0;
+		if (E.Kind == LandAir::Happen::What::Hit)
+		{
+			if (!A.HeardHit.insert(E.Key).second || E.How != LandAir::Fall::Explode)
+			{
+				continue;
+			}
+			LandSound::Take T;
+			T.Name = LandParts::Narrow(Word(TEXT("land.airSupport.blownApart"), TEXT("take"), TEXT("plane_explode")));
+			T.At = At;
+			T.Family = "explosions";
+			T.Bus = "big";
+			T.Delay = Delay;
+			S.Takes.push_back(T);
+			continue;
+		}
+		if (!A.HeardStruck.insert(E.Key).second)
+		{
+			continue;
+		}
+		// (into the ground: a gun's shell bursting there, as FlyOver draws it, mixed as any landing; and near, the metal
+		// of it coming apart)
+		LandPlay::Noise N;
+		N.T = S.Battle;
+		N.Kind = LandPlay::NoiseKind::Landing;
+		N.Size = E.How != LandAir::Fall::Explode ? "howitzer_105" : "mortar";
+		N.At = At;
+		S.Noises.push_back(N);
+		if (E.How != LandAir::Fall::Explode && Metres < Number(TEXT("breakUpWithin"), 400.0))
+		{
+			LandSound::Take T;
+			T.Name = LandParts::Narrow(Word(TEXT("land.airSupport.strikes"), TEXT("take"), TEXT("aircraft_break_up")));
+			T.At = At;
+			T.Family = "explosions";
+			T.Db = Number(TEXT("breakUpDb"), -4.0);
+			T.Delay = Delay;
+			S.Takes.push_back(T);
+		}
 	}
 }
 

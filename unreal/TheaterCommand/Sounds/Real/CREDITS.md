@@ -249,11 +249,31 @@ The game is for personal use only.
 | `sea_battle_loop` | `sea_battle_loop.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
 | `sea_battle_loop` | `sea_battle_loop.wav` | [Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll](https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv) | Wikimedia Commons | Public domain | none |
 | `sea_battle_loop` | `sea_battle_loop.wav` | [G54-02-Bow Wave.wav](https://freesound.org/people/craigsmith/sounds/438837/) | Freesound | CC0 | none |
+| `enfield_shot` | `enfield_shot.wav` | [gun lee enfield 303 rifle fire shot loud badass crispy.wav](https://freesound.org/people/kyles/sounds/450852/) | Freesound | CC0 | none |
+| `bolt_enfield` | `bolt_enfield.wav` | [lee enfield open+close breech slow.wav](https://freesound.org/people/beerbelly38/sounds/162153/) | Freesound | CC BY 4.0 | beerbelly38 |
+| `bolt_enfield_02` | `bolt_enfield_02.wav` | [rifle_open+close breech(2).wav](https://freesound.org/people/beerbelly38/sounds/362346/) | Freesound | CC BY 4.0 | beerbelly38 |
+| `ppsh_burst_01` | `ppsh_burst_01.wav` | [PPSh-41 - Soviet Submachine Gun.wav](https://freesound.org/people/Lubini/sounds/338323/) | Freesound | CC BY 4.0 | Lubini |
+| `ppsh_burst_02` | `ppsh_burst_02.wav` | [PPSh-41 - Soviet Submachine Gun.wav](https://freesound.org/people/Lubini/sounds/338323/) | Freesound | CC BY 4.0 | Lubini |
+| `soviet_cheer` | `soviet_cheer.wav` | [End of WWII on Elba - Soviets Celebrating.wav](https://freesound.org/people/Lubini/sounds/338321/) | Freesound | CC BY 4.0 | Lubini |
+| `torpedo_hit` | `torpedo_hit.wav` | [10091 water bomb exploding.wav](https://freesound.org/people/Robinhood76/sounds/565947/) | Freesound | CC BY-NC 4.0 | Robinhood76 |
+| `naval_guns_far_loop` | `naval_guns_far_loop.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `naval_guns_far_loop` | `naval_guns_far_loop.wav` | [913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon](https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm) | Wikimedia Commons | Public domain | none |
+| `ship_engine_loop` | `ship_engine_loop.wav` | [Large Ship Engine Idle](https://freesound.org/people/Suhuy/sounds/715171/) | Freesound | CC0 | none |
+| `destroyer_wash_loop` | `destroyer_wash_loop.wav` | [Choppy waves against a ship's bow](https://freesound.org/people/tiennotg/sounds/551436/) | Freesound | CC0 | none |
+| `ship_steam_engine_loop` | `ship_steam_engine_loop.wav` | [Running ship steam engine](https://freesound.org/people/derplayer/sounds/587171/) | Freesound | CC0 | none |
+| `ship_bells_two` | `ship_bells_two.wav` | [Two Bells,Ship Time.wav](https://freesound.org/people/Benboncan/sounds/77699/) | Freesound | CC BY 4.0 | Benboncan |
+| `aero_engine_idle_loop` | `aero_engine_idle_loop.wav` | [B-25 TAKEOFF 01.wav](https://freesound.org/people/LOVEBURD/sounds/329616/) | Freesound | CC0 | none |
+| `jet_engine_loop` | `jet_engine_loop.wav` | [ILA 2014 - Messerschmitt Me-262 Flying Display](https://commons.wikimedia.org/wiki/File:ILA_2014_-_Messerschmitt_Me-262_Flying_Display.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `air_raid_siren` | `air_raid_siren.wav` | [Alarm, Air Raid Siren, Test, Devonport, Sony PCM M-10.wav](https://freesound.org/people/audiojacked/sounds/336640/) | Freesound | CC0 | none |
+| `bridge_blown` | `bridge_blown.wav` | [2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro](https://freesound.org/people/julujanus/sounds/768370/) | Freesound | CC0 | none |
+| `magazine_explosion` | `magazine_explosion.wav` | [Explosions-LS100152](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `magazine_explosion` | `magazine_explosion.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
 
 ## Credits owed
 
 - **A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video)** "B-17 fly-over" · Public domain
-- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain", "Ricochet 3_2.wav", "Ricochet 1.wav", "Ricochet 2.wav", "Ricochet 3.wav" · CC BY 4.0
+- **beerbelly38** "lee enfield open+close breech slow.wav", "rifle_open+close breech(2).wav" · CC BY 4.0
+- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain", "Ricochet 3_2.wav", "Ricochet 1.wav", "Ricochet 2.wav", "Ricochet 3.wav", "Two Bells,Ship Time.wav" · CC BY 4.0
 - **brunoboselli** "Dragging Kayak" · CC BY 4.0
 - **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
 - **Cheeseheadburger** "Distant WW2 Gunfire Kent", "Spitfire 2 passes Military od", "Distant WW2 Gunfire Kent.wav" · CC BY 4.0
@@ -268,8 +288,8 @@ The game is for personal use only.
 - **juskiddink** "Nearby explosion with debris.wav" · CC BY 4.0
 - **kirkrcarter** "Ship bow wave" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
-- **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
-- **Lubini** "MG 42 (Solo) WW2", "Heavy Mashine Guns Around (Background) WW2.wav", "mp 38 schmeisser (Variations) WW2.wav", "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav" · CC BY 4.0
+- **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38", "ILA 2014 - Messerschmitt Me-262 Flying Display" · CC BY 3.0
+- **Lubini** "MG 42 (Solo) WW2", "Heavy Mashine Guns Around (Background) WW2.wav", "mp 38 schmeisser (Variations) WW2.wav", "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav", "PPSh-41 - Soviet Submachine Gun.wav", "End of WWII on Elba - Soviets Celebrating.wav" · CC BY 4.0
 - **Nanashi** "M224 Mortar Impact Medium Distance 01", "M224 Mortar Impact Medium Distance 02", "M224 Mortar Impact  Distant 01", "M224 Mortar Impact  Distant 03" · CC BY 4.0
 - **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
 - **nicStage** "Sherman E8 ("Easy 8") tank starting up and running", "Sherman E8 ("Easy 8") tank driving" · CC BY 4.0
@@ -278,6 +298,7 @@ The game is for personal use only.
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)", "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv" · CC BY 3.0
 - **rakurka** "Incoming Ricochets.wav" · CC BY 3.0
 - **relwin** "b24" · CC BY 4.0
+- **Robinhood76** "10091 water bomb exploding.wav" · CC BY-NC 4.0
 - **shawshank73** "military01_scottstoked.wav" · CC BY 3.0
 - **SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video)** "CAF brings Flying Fortress to Sioux City" · Public domain
 - **SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video)** "Wings Over Whiteman B-roll" · Public domain

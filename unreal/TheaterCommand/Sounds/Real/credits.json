@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The ground battle's own recordings (the Normandy dry run: each army's rifles, machine guns and sub-machine guns, the tanks' guns and engines, artillery and mortars, the shells landing, the men's falls, orders and kit) follow them, played by the mix's land section. The Prokhorovka battle's Soviet recordings (the Maxim, the Mosin's bolt, four orders), from the same approved battle pack, close the list. The air battle's second sound pass (21 November 2026, release 2) adds each fighter's own pass, rounds cracking past, the far air bed, and the B-24's and the Stuka's own engines. The sea battle's six (a battleship's and a cruiser's guns, a shell's splash, a dive bomber, the open sea and a fleet action far off) follow, for the sea battle scene.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The ground battle's own recordings (the Normandy dry run: each army's rifles, machine guns and sub-machine guns, the tanks' guns and engines, artillery and mortars, the shells landing, the men's falls, orders and kit) follow them, played by the mix's land section. The Prokhorovka battle's Soviet recordings (the Maxim, the Mosin's bolt, four orders), from the same approved battle pack, close the list. The air battle's second sound pass (21 November 2026, release 2) adds each fighter's own pass, rounds cracking past, the far air bed, and the B-24's and the Stuka's own engines. The sea battle's six (a battleship's and a cruiser's guns, a shell's splash, a dive bomber, the open sea and a fleet action far off) follow, for the sea battle scene. The battle pack's seventeen approved recordings that the 3D game named but never brought in (the release 2 sound check, 25 November 2026: British rifles and bolts, the Soviet sub-machine gun and cheer, a torpedo striking, ships' engines, wash, steam and bells, the far fleet action, aircraft ticking over on a field, the Me 262's jets, the long air raid siren, a bridge blown, a ship's magazine) close the list: the mix and the rules already named each, and each was silent for want of its file.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -3120,6 +3120,258 @@
      "licence": "CC0",
      "page": "https://freesound.org/people/craigsmith/sounds/438837/",
      "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "enfield_shot",
+   "recording": "enfield_shot",
+   "what": "A British rifleman fires (Lee-Enfield)",
+   "sources": [
+    {
+     "title": "gun lee enfield 303 rifle fire shot loud badass crispy.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/kyles/sounds/450852/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bolt_enfield",
+   "recording": "bolt_enfield",
+   "what": "A British rifleman works his bolt (Lee-Enfield)",
+   "sources": [
+    {
+     "title": "lee enfield open+close breech slow.wav",
+     "creator": "beerbelly38",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/beerbelly38/sounds/162153/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bolt_enfield_02",
+   "recording": "bolt_enfield_02",
+   "what": "A British rifleman works his bolt (second take)",
+   "sources": [
+    {
+     "title": "rifle_open+close breech(2).wav",
+     "creator": "beerbelly38",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/beerbelly38/sounds/362346/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ppsh_burst_01",
+   "recording": "ppsh_burst_01",
+   "what": "A Soviet submachine gun fires (PPSh-41, take 1)",
+   "sources": [
+    {
+     "title": "PPSh-41 - Soviet Submachine Gun.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338323/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ppsh_burst_02",
+   "recording": "ppsh_burst_02",
+   "what": "A Soviet submachine gun fires (PPSh-41, take 2)",
+   "sources": [
+    {
+     "title": "PPSh-41 - Soviet Submachine Gun.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338323/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "soviet_cheer",
+   "recording": "soviet_cheer",
+   "what": "Soviet soldiers cheer",
+   "sources": [
+    {
+     "title": "End of WWII on Elba - Soviets Celebrating.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338321/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "torpedo_hit",
+   "recording": "torpedo_hit",
+   "what": "A torpedo strikes",
+   "sources": [
+    {
+     "title": "10091 water bomb exploding.wav",
+     "creator": "Robinhood76",
+     "licence": "CC BY-NC 4.0",
+     "page": "https://freesound.org/people/Robinhood76/sounds/565947/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "naval_guns_far_loop",
+   "recording": "naval_guns_far_loop",
+   "what": "A sea fight, far off (loop)",
+   "sources": [
+    {
+     "title": "Artillery Battery Barrage • U.S.-ROK Marines Live-Fire",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "ship_engine_loop",
+   "recording": "ship_engine_loop",
+   "what": "A big ship's engine runs",
+   "sources": [
+    {
+     "title": "Large Ship Engine Idle",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Suhuy/sounds/715171/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "destroyer_wash_loop",
+   "recording": "destroyer_wash_loop",
+   "what": "Choppy water on a small ship's bow",
+   "sources": [
+    {
+     "title": "Choppy waves against a ship's bow",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/tiennotg/sounds/551436/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ship_steam_engine_loop",
+   "recording": "ship_steam_engine_loop",
+   "what": "A steamship's engine runs",
+   "sources": [
+    {
+     "title": "Running ship steam engine",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/derplayer/sounds/587171/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ship_bells_two",
+   "recording": "ship_bells_two",
+   "what": "Two bells",
+   "sources": [
+    {
+     "title": "Two Bells,Ship Time.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/77699/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "aero_engine_idle_loop",
+   "recording": "aero_engine_idle_loop",
+   "what": "Aircraft engines ticking over",
+   "sources": [
+    {
+     "title": "B-25 TAKEOFF 01.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/LOVEBURD/sounds/329616/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "jet_engine_loop",
+   "recording": "jet_engine_loop",
+   "what": "An Me 262's jets at full power",
+   "sources": [
+    {
+     "title": "ILA 2014 - Messerschmitt Me-262 Flying Display",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:ILA_2014_-_Messerschmitt_Me-262_Flying_Display.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "air_raid_siren",
+   "recording": "air_raid_siren",
+   "what": "An air raid siren wails",
+   "sources": [
+    {
+     "title": "Alarm, Air Raid Siren, Test, Devonport, Sony PCM M-10.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/audiojacked/sounds/336640/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bridge_blown",
+   "recording": "bridge_blown",
+   "what": "A bridge is blown",
+   "sources": [
+    {
+     "title": "2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/julujanus/sounds/768370/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "magazine_explosion",
+   "recording": "magazine_explosion",
+   "what": "A ship's magazine blows up",
+   "sources": [
+    {
+     "title": "Explosions-LS100152",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Explosions-LS100155",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
     }
    ]
   }

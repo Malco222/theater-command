@@ -294,6 +294,59 @@ namespace SeaParts
 		return Else;
 	}
 
+	/**
+	 * How much of a sound's top the air takes off at this distance, by the mix's whole low-pass table for its family
+	 * (distance.<family>.lpf, [[metres, Hz], ...]): full (20 kHz) nearer than its first row, its last row's beyond its
+	 * last, and between two rows the frequency eased by octaves (as the ear hears a filter close), not in Hz. 0 where the
+	 * family has no table. (The release 2 sound check, 25 Nov 2026: an attenuation keeps only two points of a table, and
+	 * the sea's took its second row as its near one, so every gun, splash and hit nearer than 2 to 6 km was dulled as if
+	 * from that far: a battleship's own guns heard from her bridge at 3 kHz. Each take now gets the table's own value.)
+	 */
+	static float TableLpf(const TSharedPtr<FJsonObject>& Mix, const FName& Family, double Metres)
+	{
+		static TMap<FName, TArray<FVector2D>> Tables;
+		const TArray<FVector2D>* Rows = Tables.Find(Family);
+		if (!Rows)
+		{
+			TArray<FVector2D> Read;
+			const TSharedPtr<FJsonValue> Got = MixAt(Mix, TEXT("distance.") + Family.ToString() + TEXT(".lpf"));
+			if (Got.IsValid() && Got->Type == EJson::Array)
+			{
+				for (const TSharedPtr<FJsonValue>& Row : Got->AsArray())
+				{
+					if (!Row.IsValid() || Row->Type != EJson::Array || Row->AsArray().Num() != 2)
+					{
+						continue;
+					}
+					const double At = Row->AsArray()[0]->AsNumber(), Hz = Row->AsArray()[1]->AsNumber();
+					if (Hz > 0.0)
+					{
+						Read.Add(FVector2D(At, Hz));
+					}
+				}
+			}
+			Rows = &Tables.Add(Family, Read);
+		}
+		if (Rows->Num() == 0)
+		{
+			return 0.0f;
+		}
+		const TArray<FVector2D>& T = *Rows;
+		if (Metres <= T[0].X)
+		{
+			return static_cast<float>(T[0].Y);
+		}
+		for (int32 K = 1; K < T.Num(); ++K)
+		{
+			if (Metres <= T[K].X)
+			{
+				const double Share = (Metres - T[K - 1].X) / FMath::Max(1e-6, T[K].X - T[K - 1].X);
+				return static_cast<float>(FMath::Exp(FMath::Lerp(FMath::Loge(T[K - 1].Y), FMath::Loge(T[K].Y), Share)));
+			}
+		}
+		return static_cast<float>(T.Last().Y);
+	}
+
 	/** The sound of a ship's guns by her class (the battle pack's takes): a boat's deck gun and a merchant's gun, one gun of
 	 * a field gun's size, the field gun's crack, not a warship's broadside. */
 	static FName GunsOf(const std::string& Class)
@@ -2541,7 +2594,16 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			{
 				Kit->ShellOfSize(OnSea, SplashRow(E.What), TEXT("water"));
 			}
-			Sound(TEXT("shell_splash"), OnSea, TEXT("explosions"), 0.8f);
+			{
+				// (heard by its size, as it is drawn: the mix's sea.splashes.<heavy|medium|light|small>, its takes and its
+				// level; a size with none listed is the pack's one shell_splash at -1.9 dB, as every splash was before the
+				// release 2 sound check, so a battleship's column and a destroyer's are told apart only once a real heavy
+				// splash passes Brian's ear)
+				const FString Size = E.What == "heavy" || E.What == "medium" || E.What == "small" ? Wide(E.What) : FString(TEXT("light"));
+				const FString Take = MixTake(Mix, TEXT("sea.splashes.") + Size + TEXT(".takes"), FMath::Rand());
+				const double Db = MixNumber(Mix, TEXT("sea.splashes.") + Size + TEXT(".db"), -1.94);
+				Sound(Take.IsEmpty() ? FName(TEXT("shell_splash")) : FName(*Take), OnSea, TEXT("explosions"), FromDb(Db));
+			}
 			break;
 		case SeaShow::FxKind::ShellHit:
 		case SeaShow::FxKind::BombHit:
@@ -6347,7 +6409,8 @@ USoundAttenuation* ASeaBattle::FamilyOf(const FName& Name)
 		return nullptr;
 	}
 	// A distance family of the mix: full loudness to `full` metres, nothing past `silent`, the top taken off with
-	// distance by its lpf points (as the air battle reads it).
+	// distance by its lpf points (its first row near, as the air and land battles read it; each take is also given
+	// the whole table's value where it starts, TableLpf, and the lower of the two is heard).
 	double Full = 50.0, Silent = 1500.0;
 	(*Family)->TryGetNumberField(TEXT("full"), Full);
 	(*Family)->TryGetNumberField(TEXT("silent"), Silent);
@@ -6362,7 +6425,7 @@ USoundAttenuation* ASeaBattle::FamilyOf(const FName& Name)
 	const TArray<TSharedPtr<FJsonValue>>* Lpf = nullptr;
 	if ((*Family)->TryGetArrayField(TEXT("lpf"), Lpf) && Lpf->Num() >= 2)
 	{
-		const TArray<TSharedPtr<FJsonValue>>& Near = (*Lpf)[1]->AsArray();
+		const TArray<TSharedPtr<FJsonValue>>& Near = (*Lpf)[0]->AsArray();
 		const TArray<TSharedPtr<FJsonValue>>& Far = Lpf->Last()->AsArray();
 		if (Near.Num() == 2 && Far.Num() == 2)
 		{
@@ -6406,7 +6469,22 @@ UAudioComponent* ASeaBattle::Sound(const FName& Name, const FVector& Where, cons
 	{
 		return nullptr;
 	}
-	UAudioComponent* Heard = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(Family));
+	// (no shot a copy of the last: a small random pitch, the mix's variety.pitchPercent for the family, as the land battle
+	// gives every one-shot; the sea's ships and the air's guns by its sea and aircraft rows)
+	const FString Varied = Family == TEXT("ships") ? FString(TEXT("sea")) : Family == TEXT("air_guns") ? FString(TEXT("aircraft")) : Family.ToString();
+	const double Spread = SeaParts::MixNumber(Mix, TEXT("variety.pitchPercent.") + Varied, 0.0) / 100.0;
+	const float Pitch = static_cast<float>(1.0 + (FMath::FRand() * 2.0 - 1.0) * FMath::Clamp(Spread, 0.0, 0.1));
+	UAudioComponent* Heard = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, Pitch, 0.0f, FamilyOf(Family));
+	if (Heard && Eye)
+	{
+		// (near sharp, far a dull roll: the family's whole low-pass table at the distance it starts from, SeaParts::TableLpf)
+		const float Hz = SeaParts::TableLpf(Mix, Family, FVector::Dist(Where, Eye->GetActorLocation()) / UnitsPerMetre);
+		if (Hz > 0.0f && Hz < 19000.0f)
+		{
+			Heard->SetLowPassFilterEnabled(true);
+			Heard->SetLowPassFilterFrequency(Hz);
+		}
+	}
 	if (Under)
 	{
 		Under->Muffle(Heard); // U1 hook (under water): a sound from above the sea dulled under it
