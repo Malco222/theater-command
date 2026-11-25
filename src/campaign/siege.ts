@@ -22,7 +22,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, keptStoresRun, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, keptStoresRun, men, natIndex, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
 import { farGuard, farGuardRow, type FarGuardRow } from './economy';
 import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
@@ -438,8 +438,6 @@ function larder(g: Game, nat: string, pocket: number[]): Region | null {
   }
   return best;
 }
-
-const natIndex = (g: Game, nat: string): number => Object.keys(g.nations).indexOf(nat);
 
 /** The nation whose troops are cut off in a province, or null if it lies in no pocket. */
 export function pocketNat(g: Game, r: Region): string | null {
