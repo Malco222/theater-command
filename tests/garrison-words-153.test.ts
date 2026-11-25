@@ -21,7 +21,8 @@
 // the sentence gives that reason. And the 3D game asks the sentence for the corps in hand, not for the whole town.
 // The fourth review: the province's own railway and harbour are answered before the garrison's way out. A garrison in
 // the desert or off the railway is told there is no railway there, one whose railway is cut is told so, and one whose
-// harbour is wrecked is told for how long, never that out of the town it can ride or embark.
+// harbour is wrecked is told for how long, never that out of the town it can ride or embark. And each part of the test
+// that sends a garrison to TAKE THE FIELD for a ship has a case of its own: a full field outside, and the eve of war.
 import { describe, expect, it } from 'vitest';
 import { allied, createGame, hostileUnits, relocate, whyNoTrain } from '../src/campaign/game';
 import { whyNotLand, whyNotShip } from '../src/campaign/navy';
@@ -548,7 +549,7 @@ describe('the third review: the sentence of the hand, and of a town whose field 
   });
 });
 
-describe('the fourth review: the province\'s own railway and harbour come first', () => {
+describe('the fourth review: the province\'s own railway and harbour come first, and each part of the sea\'s test has its case', () => {
   /** An Italian infantry corps of a province put inside its town, as having gone in a month before. */
   const italian = (g: Game, at: Region): Corps => {
     const c = at.units.find((u) => u.nat === 'ITA' && u.kind === 'inf' && !u.dead)!;
@@ -615,5 +616,40 @@ describe('the fourth review: the province\'s own railway and harbour come first'
     expect(takeField(g, d)).toBe(true);
     expect(d.ap).toBe(4);
     expect(whyNotShip(g, d, bremen)).toBe(wrecked);
+  });
+
+  it('with a month longer than a train\'s, a garrison whose field outside is full is told next month, not to take the field', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'], bremen = g.byName['Bremen'];
+    const c = inside(g, hamburg, EARLIER);
+    c.apMax = 5;
+    expect(whyNotShip(g, c, bremen)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    const ours = (): number => hamburg.units.filter((u) => allied(g, u.nat, 'GER') && u.kind !== 'eng').length;
+    for (const x of g.corps.filter((x) => goes(x) && x.reg !== hamburg.id)) {
+      if (ours() >= STACK) break;
+      relocate(g, x, hamburg);
+    }
+    expect(ours()).toBe(STACK);
+    expect(whyNotShip(g, c, bremen)).toBe(NO_SHIP);
+    expect(whyNoTrain(g, c)!.line).toBe(NO_TRAIN);
+    expect(takeField(g, c)).toBe(false);
+  });
+
+  it('on the eve of war a garrison that went in this month is sent to take the field for a ship, where its nation has shipping', () => {
+    TC.start({ view: 'grand', human: 'POL', from: 1, seed: 31 });
+    const g = loadGame(TC.save().text)!;
+    expect(g.flags.eve).toBe(1);
+    const danzig = g.byName['Danzig Corridor'];
+    expect(danzig.port).toBe(true);
+    const c = danzig.units.find((u) => u.nat === 'POL' && u.kind === 'inf' && !u.dead)!;
+    expect(garrison(g, c)).toBe(true);
+    expect(c.town).toBe(g.turn);
+    expect(c.apMax).toBe(4);
+    expect(whyNotShip(g, c, danzig)).toBe('Poland has no shipping to move an army by sea.');
+    g.nations.POL.sealift = 1; // (Poland moved no army by sea: shipping is lent here, so that the garrison is the reason)
+    expect(whyNotShip(g, c, danzig)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    // Once the war has opened, one that went in this month has no move once out: it embarks next month.
+    g.flags.eve = 0;
+    expect(whyNotShip(g, c, danzig)).toBe(NO_SHIP);
   });
 });
