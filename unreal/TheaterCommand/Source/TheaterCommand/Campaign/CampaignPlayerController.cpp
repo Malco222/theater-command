@@ -9575,7 +9575,13 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	else if (bPageOpen)
 	{
 		if (!Page.Headline.IsEmpty()) { Said.Add(Page.Headline); }
-		if (!Page.Note.IsEmpty()) { Said.Add(Page.Note.Left(400)); }
+		// (1.5.1, the Mac's p7, 25 November 2026: the step player's reading only. A fleet's note runs past 400 letters
+		// with its admirals' line last, and a section's own line, "it stays where the battle left it", was not read.)
+		if (!Page.Note.IsEmpty()) { Said.Add(Page.Note.Left(1200)); }
+		for (const FPageSection& Section : Page.Sections)
+		{
+			if (!Section.Text.IsEmpty()) { Said.Add(Section.Text.Left(400)); }
+		}
 	}
 	else if (Tray.bVisible)
 	{
@@ -9590,7 +9596,14 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	{
 		TArray<FString> Ids;
 		for (const int32 Id : PickedCorps) { Ids.Add(FString::FromInt(Id)); }
-		OutHand = FString::Printf(TEXT("army at %s: corps %s%s"), *Place(ArmyRegion), *FString::Join(Ids, TEXT(",")), bByRail ? TEXT(" (by rail)") : bBySea ? TEXT(" (by sea)") : TEXT(""));
+		// (1.5.1, the Mac's p7: a division's tile picked or let go on a card is a change in hand the step player can see)
+		int32 Splitting = 0;
+		for (const TPair<int32, TSet<int32>>& Each : PickedDivisions)
+		{
+			Splitting += Each.Value.Num();
+		}
+		const FString Split = Splitting > 0 ? FString::Printf(TEXT(", %d division%s picked to split off"), Splitting, Splitting == 1 ? TEXT("") : TEXT("s")) : FString();
+		OutHand = FString::Printf(TEXT("army at %s: corps %s%s%s"), *Place(ArmyRegion), *FString::Join(Ids, TEXT(",")), bByRail ? TEXT(" (by rail)") : bBySea ? TEXT(" (by sea)") : TEXT(""), *Split);
 	}
 	else if (FleetInHand != INDEX_NONE) { OutHand = FString::Printf(TEXT("fleet %d"), FleetInHand); }
 	else if (AgentInHand != INDEX_NONE) { OutHand = FString::Printf(TEXT("agent %d"), AgentInHand); }
