@@ -35,6 +35,7 @@
 #include "Serialization/JsonWriter.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/Parse.h"
+#include "Release2Ship.h"
 
 namespace
 {
@@ -495,6 +496,13 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 		Add(TEXT("colour"), TEXT("How strongly countries are coloured"), TEXT("Light shows more of the land itself, strong more of whose it is. Key Y has flat colours."), Strength == 0 ? TEXT("LIGHT") : Strength == 1 ? TEXT("MIDDLE") : TEXT("STRONG"), Strength == 2);
 	}
 	Add(TEXT("edge"), TEXT("Sliding the map at the window's edge"), TEXT("Rest the pointer at the window's very edge and the table slides that way."), bEdgeScroll ? TEXT("ON") : TEXT("OFF"), bEdgeScroll);
+	// (Release 2 assembly; Brian, 25 November 2026: "turn them on automatically") Release 2's looks, effects and map pieces
+	// that have no switch of their own anywhere else: each comes on, and each can be turned off here (Release2Ship.h).
+	// (The battle's rules are switched on the Battle rules card, and a grand war's rules in its own rows above.)
+	for (const Release2Ship::FRow& Row : Release2Ship::OptionRows())
+	{
+		Add(*Row.Id, Row.Label, *Row.Tip, Row.bOn ? TEXT("ON") : TEXT("OFF"), Row.bOn);
+	}
 	return Out;
 }
 
@@ -532,6 +540,12 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("enemymoves")) // (release 2, the enemy's month near you)
 	{
 		bEnemyMoves = !bEnemyMoves;
+	}
+	else if (Id.StartsWith(TEXT("r2:"))) // (release 2 assembly: the ship list's rows, kept in GameUserSettings.ini, not options.json)
+	{
+		Release2Ship::Press(Id);
+		++Opening.Revision;
+		return;
 	}
 	else if (Id == TEXT("alliesnear")) // (release 2, the enemy's month near you, round 2)
 	{
@@ -772,6 +786,13 @@ void ACampaignPlayerController::SaveOptions() const
 
 void ACampaignPlayerController::LoadOptions()
 {
+	// (Release 2 assembly; Brian, 25 November 2026: "turn them on automatically") Fading wakes come as the release 2 ship
+	// list ships them (on), wherever options.json does not hold his own choice yet (Release2Ship.h).
+	bWakes = Release2Ship::Ships(Release2Ship::EKind::Option, TEXT("wakes"));
+	if (Map.IsValid())
+	{
+		Map->SetWakes(bWakes);
+	}
 	// (a run that takes pictures starts from the choices as they come, unless told to keep what the last one left)
 	FString Pictures;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Pictures, false) && !FParse::Param(FCommandLine::Get(), TEXT("TheaterKeepOptions")))
@@ -815,7 +836,7 @@ void ACampaignPlayerController::LoadOptions()
 	bTakeMeThere = Yes(TEXT("takeMe"), true);
 	bCornerPings = Yes(TEXT("cornerPings"), true);
 	bShipsSail = Yes(TEXT("sail"), true); // (the 1.5 patch: ships that sail, on unless switched off)
-	bWakes = Yes(TEXT("wakes"), false); // (release 2: fading wakes)
+	bWakes = Yes(TEXT("wakes"), bWakes); // (release 2: fading wakes; where the file has no word, as the ship list ships them)
 	if (Map.IsValid())
 	{
 		Map->SetShipsSail(bShipsSail);

@@ -9,6 +9,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
+#include "Release2Ship.h"
 #include "Rules/RulesHost.h"
 
 #include <cstdlib>
@@ -150,7 +151,9 @@ const FLandLive::FRule& FLandLive::RuleAt(int32 Index)
 
 bool FLandLive::RuleOn(int32 Index)
 {
-	bool bOn = RuleAt(Index).bOnAtFirst;
+	// (Release 2 assembly; Brian, 25 November 2026: "turn them on automatically") A row the release 2 ship list ships on
+	// starts on too, until he switches it off on the card (Release2Ship.h; -TheaterR2Off leaves the rows as before it).
+	bool bOn = RuleAt(Index).bOnAtFirst || Release2Ship::Ships(Release2Ship::EKind::LandRule, RuleAt(Index).Key);
 	if (GConfig)
 	{
 		GConfig->GetBool(RulesSection, RuleAt(Index).Key, bOn, GGameUserSettingsIni);

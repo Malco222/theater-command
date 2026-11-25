@@ -2,6 +2,7 @@
 
 #include "Campaign/CampaignMapData.h"
 #include "Campaign/TheaterSpeed.h"
+#include "Release2Ship.h"
 #include "Rules/RulesHost.h"
 #include "TheaterCommand.h"
 #include "Async/Async.h"
@@ -25,6 +26,29 @@ namespace
 	FString IdList(const TArray<int32>& Ids)
 	{
 		return FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+	}
+
+	/** (Release 2 ship list: the grand campaign's rule switches that ship on are switched on once in each war, as it
+	 * opens or the first time an older war is played in release 2. The rules mark the war, so that a switch he turns off
+	 * afterwards stays off; they answer null when there was nothing to do, else the new picture, which replaces Json.) */
+	void ShipWarSwitches(FRulesHost& Host, FString& Json)
+	{
+		const FString Switches = Release2Ship::WarSwitchesJson();
+		if (Switches == TEXT("[]"))
+		{
+			return;
+		}
+		FString Shipped, Error;
+		if (!Host.Call(TEXT("r2Ship"), FString::Printf(TEXT("[%s]"), *Switches), Shipped, Error))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Release 2 ship list: the war's switches were not set: %s"), *Error);
+			return;
+		}
+		if (!Shipped.IsEmpty() && Shipped != TEXT("null"))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Release 2 ship list: this war's rule switches set on as release 2 ships them: %s"), *Switches);
+			Json = MoveTemp(Shipped);
+		}
 	}
 
 	/** (Speed, b414 mark 1: see FCampaignSession::MoveAside.) */
@@ -394,6 +418,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 	{
 		return false;
 	}
+	ShipWarSwitches(*Host, ViewJson);
 	// (Speed: the same call takes about 0.25 to 0.6 s in a fast JavaScript engine on a laptop, and two or three times
 	// that where the engine cannot compile the rules as it runs them. This line says which the game has.)
 	UE_LOG(LogTheater, Display, TEXT("Rules: the campaign was set up in %.0f ms (%d characters of picture)"), (FPlatformTime::Seconds() - Began) * 1000.0, ViewJson.Len());
@@ -455,8 +480,12 @@ bool FCampaignSession::Load(const FString& SaveText)
 	TSharedPtr<FJsonObject> Object;
 	DropAside();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
-	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("load"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
-		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	const bool bRead = bReady && !SaveText.IsEmpty() && Host->Call(TEXT("load"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error);
+	if (bRead)
+	{
+		ShipWarSwitches(*Host, Json);
+	}
+	if (!bRead || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
 		if (!Error.IsEmpty())
 		{
