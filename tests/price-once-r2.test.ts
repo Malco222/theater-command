@@ -234,14 +234,15 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(heldTwice(g)).toEqual([]);
   });
 
-  it('when a lent row ends a drawn division goes back to its corps where that stands in the same theatre, and a formed one never reverts', () => {
+  it('when a lent row ends a drawn division goes back to its corps where the two stand together, and a formed one never reverts', () => {
     const { g } = balkans();
     const xv = corps(g, 'XV Corps')!, iv = corps(g, 'IV Corps')!;
     month(g, MARCH_41);
     month(g, APRIL_41);
     const c = corps(g, EIGHTH)!;
-    // XV Corps has followed into the Balkans: the 8th Panzer rejoins it there.
-    relocate(g, xv, g.byName['Banat']);
+    // XV Corps has followed into the Balkans, to the row's corps itself: the 8th Panzer rejoins it there. (A return
+    // never moves a division for free: the design director's rulings of 19:03Z and 19:17Z, 25 November 2026.)
+    relocate(g, xv, g.regions[c.reg]);
     c.xp = 0.9;
     month(g, JUNE_41);
     expect(names(g, xv)).toEqual(['7th Panzer Division', '8th Panzer Division']);
@@ -259,6 +260,28 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(xv.xp).toBeCloseTo((0.4 + 0.9) / 2, 9);
     expect(c.xp).toBeCloseTo(0.9, 9);
     expect(names(g, iv)).toEqual(['46th Infantry Division', '27th Infantry Division']);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('in the same theatre but apart from its corps, the division stands on where it is, under its own name and free: no return moves it (19:17Z)', () => {
+    const { g } = balkans();
+    const xv = corps(g, 'XV Corps')!;
+    month(g, MARCH_41);
+    month(g, APRIL_41);
+    const c = corps(g, EIGHTH)!;
+    // XV Corps has followed into the Balkans, to the Banat: the same side theatre, another province.
+    relocate(g, xv, g.byName['Banat']);
+    expect(g.regions[xv.reg].theatre).toBe(g.regions[c.reg].theatre);
+    expect(xv.reg).not.toBe(c.reg);
+    const at = place(g, c);
+    month(g, JUNE_41);
+    expect(names(g, xv)).toEqual(['7th Panzer Division']);
+    expect(c.dead).toBe(false);
+    expect(names(g, c)).toEqual(['8th Panzer Division', '14th Panzer Division']);
+    expect(c.name).toBe('8th and 14th Panzer Divisions');
+    expect(c.hold).toBe(false);
+    expect(place(g, c)).toBe(at);
+    expect(c.drew).toBeUndefined();
     expect(heldTwice(g)).toEqual([]);
   });
 
@@ -685,12 +708,15 @@ describe('what a third review, of the second review\'s mends, found (25 November
     expect(c).not.toBe(p);
     expect(names(g, c)).toEqual(['2nd Panzer Division']);
     expect(names(g, p)).toEqual(['901st Panzer Division']);
+    // (Each loan ends where the corps it owes stands with it: a return never moves a division for free, 19:17Z.)
+    relocate(g, c, g.regions[p.reg]);
     month(g, 12);
     month(g, 13);
     // The second loan's time is up: the 2nd is back with the corps it was drawn from, which owes it to XXII Corps still.
     expect(c.dead).toBe(true);
     expect(names(g, p).sort()).toEqual(['2nd Panzer Division', '901st Panzer Division']);
     expect(p.drew!.find((r) => r.name[0] === '2nd Panzer Division')!.from).toBe(xxii.id);
+    relocate(g, p, g.regions[xxii.reg]);
     for (let t = 14; t <= 16; t++) month(g, t);
     // And the first loan's: XXII Corps has its division again; only the one the row raised new leaves.
     expect(names(g, xxii).sort()).toEqual(['2nd Panzer Division', '9th Panzer Division']);
@@ -741,6 +767,8 @@ describe('what a third review, of the second review\'s mends, found (25 November
     expect(a.names!.length).toBe(1);
     expect(names(g, a)[0]).toBe('2nd Panzer Division');
     expect(names(g, a)[1]).not.toBe('9th Panzer Division');
+    // (It ends its loan beside XXII Corps: a return never moves a division for free, 19:17Z.)
+    relocate(g, a, g.regions[xxii.reg]);
     for (let t = 12; t <= 14; t++) month(g, t);
     expect(a.dead).toBe(true);
     expect(names(g, xxii).sort()).toEqual(['2nd Panzer Division', '9th Panzer Division']);
