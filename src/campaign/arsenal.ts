@@ -9,7 +9,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { worksName } from './rivers';
-import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, whyNotBase } from './air';
+import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, standingGuns, whyNotBase } from './air';
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
@@ -748,13 +748,19 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.${said}` : '', why });
   }
   const FULL = { yard: 'The shipyard at % is as large as a yard can be.', aa: 'The guns at % are as heavy as they can be.', field: 'The airfields at % are as large as they can be.', lights: 'The searchlights at % are as many as they can be.' };
-  const NONE = { yard: 'no shipyard', aa: 'no guns', field: 'only rough landing grounds', lights: 'no searchlights' };
+  const NONE = { yard: 'no shipyard', field: 'only rough landing grounds', lights: 'no searchlights' };
+  // (The guns, the UI director's marks of 25 Nov 2026 21:22Z, case a: "None built" is the true form, and the light guns
+  // every province has are named last. With fog on raids on (g.flags.rfog, airfog.ts raidFogOn), on ground not in the
+  // nation's hands the note says nothing of the guns: it would tell the true level, which the fog hides on the raid card.)
+  const gunsNote = (x: Region, now: number, building: string): string => (g.flags.rfog === 1 && x.ctrl !== nat ? ''
+    : now ? `${x.name} has level ${now}${building}.` : `${x.name} has no guns built${building}: only the ${standingGuns().toLocaleString('en-US')} light guns every province has.`);
   const level = (what: 'yard' | 'aa' | 'field' | 'lights', spec: LevelSpec, now: number, upkeep: number, why: string | null): void => {
     const next = now + (r ? queued(g, nat, what, r.id) : 0) + 1;
     const cost = priceOf(g, nat, `work:${what}`, spec.cost[Math.min(TOP, next)]);
+    const building = next - 1 > now ? `, level ${next - 1} building` : '';
     out.push({
       key: `work:${what}`, group: 'works', label: spec.label, blurb: spec.blurb, size: `level ${Math.min(TOP, next)}`, cost, months: spec.months, upkeep, at: r ? r.id : -1,
-      note: r ? `${r.name} has ${now ? `level ${now}` : NONE[what]}${next - 1 > now ? `, level ${next - 1} building` : ''}.` : '',
+      note: !r ? '' : what === 'aa' ? gunsNote(r, now, building) : `${r.name} has ${now ? `level ${now}` : NONE[what]}${building}.`,
       why: why ?? (next > TOP ? FULL[what].replace('%', r!.name) : poor(cost)),
     });
   };

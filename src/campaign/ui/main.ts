@@ -3398,7 +3398,9 @@ function provinceSlots(r: Region): string {
     ? slot('work:field', plane, 'Airfield', !!afc.field, pipsOf(fl, flComing, 3), afc.field ? `${afc.field.word}: serves ${num(afc.field.holds)} aircraft. ${afc.hidden ? 'What flies from here is not known' : afc.rows.length ? `${afc.rows.length} air group${afc.rows.length > 1 ? 's' : ''}, ${num(afc.rows.reduce((t, x) => t + x.aircraft, 0))} aircraft` : 'No air group based here'}` : 'No airfield: no aircraft can be based here. Engineers can lay one out', afc.field ? `Enlarge it by ${num(ARSENAL.works.field.holds)} aircraft` : 'Build an airfield')
     : slot('work:field', plane, 'Airfields', wings.length > 0 || fl > 0, pipsOf(fl, flComing, 3), `${flying}${fl ? `. Level ${fl} fields: room for ${num(AIR.airfields.holds + fl * ARSENAL.works.field.holds)} aircraft` : ''}`, `Build level ${fl + flComing + 1}`);
   const aa = workLevel(g, 'aa', r.id), aaComing = coming('aa');
-  const guns = slot('work:aa', slotIcon(GUN), 'Air defence', aa > 0, pipsOf(aa, aaComing, 3), aa ? `Level ${aa} guns: they stop ${Math.round(aa * ARSENAL.works.aa.cut * 100)}% of any bombing here` : `None built: only the ${num(standingGuns())} light guns every town has.`, `Build level ${aa + aaComing + 1}`);
+  // (The UI director, 25 Nov 2026 21:22Z, case a: a province is not always a town, so its standing guns are those "every
+  // province has"; the town glance keeps "every town has".)
+  const guns = slot('work:aa', slotIcon(GUN), 'Air defence', aa > 0, pipsOf(aa, aaComing, 3), aa ? `Level ${aa} guns: they stop ${Math.round(aa * ARSENAL.works.aa.cut * 100)}% of any bombing here` : `None built: only the ${num(standingGuns())} light guns every province has.`, `Build level ${aa + aaComing + 1}`);
   // City defences (release 2): the searchlights beside the guns, with the switch on only. (No picture of their own
   // yet: the works' glyph, as for any work without one.)
   const lt = cityDefences(g) ? lightsAt(g, r.id) : 0, ltComing = cityDefences(g) ? coming('lights') : 0;
