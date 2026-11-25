@@ -2239,7 +2239,7 @@ namespace LandMen
 			const Soldier* S = nullptr;
 			const Bank* B = nullptr;
 			int Finish = -1;
-			float W = 0.6f;     // (the wear its look is made at: SetWearMix)
+			float W = DefaultWear;  // (the wear its look is made at: SetWearMix)
 			Look Lk;
 		};
 		std::vector<BankSet> BankSets;
@@ -2257,7 +2257,7 @@ namespace LandMen
 		{
 			const Soldier* S = nullptr;
 			const ArmyColours* Colours = nullptr;
-			float W = 0.6f;     // (the wear its looks are made at: SetWearMix)
+			float W = DefaultWear;  // (the wear its looks are made at: SetWearMix)
 			const Variant* Var[LodCount] = { nullptr, nullptr, nullptr };
 			const Bank* B[LodCount] = { nullptr, nullptr, nullptr };
 			Look Lk[LodCount];
@@ -2467,11 +2467,13 @@ namespace LandMen
 			return static_cast<uint8_t>(std::clamp(std::lround(R * 255.f), 1L, 253L));
 		}
 
-		/** His wear (ManInfo::Wear) from his months in the line (WearMonths: 0 months 0.1, six weeks or more 1), 0.6 where
-		 * they are not known (the files' own baked look), the mix's where it forces one; in twentieths, as it keys his sets. */
+		/** His wear (ManInfo::Wear) from his months in the line (WearMonths: 0 months 0.1, six weeks or more 1), 0.8 where
+		 * they are not known (the art director's ruling of 25 November: her band is for every man in the line, so the
+		 * default man is well worn; the files' own baked look is W 0.6), the mix's where it forces one; in twentieths, as
+		 * it keys his sets. */
 		void SettleWear(Man& M) const
 		{
-			double W = M.WearMonths > 0.0 ? std::clamp(0.1 + 0.9 * M.WearMonths / 1.5, 0.1, 1.0) : 0.6;
+			double W = M.WearMonths > 0.0 ? std::clamp(0.1 + 0.9 * M.WearMonths / 1.5, 0.1, 1.0) : DefaultWear;
 			if (Wear.W >= 0.f) W = Wear.W;
 			M.Info.Wear = static_cast<float>(std::lround(std::clamp(W, 0.0, 1.0) * 20.0)) / 20.f;
 		}

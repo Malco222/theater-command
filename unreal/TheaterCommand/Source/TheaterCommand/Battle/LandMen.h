@@ -430,9 +430,11 @@ namespace LandMen
 		double Rested = -1.0;           // when he came to rest and froze
 		/** Release 2 (tc.Look.Worn, Crowd::SetWearMix): his uniform's wear W, in twentieths, from 0.1 (a fresh replacement)
 		 * to 1 (six weeks or more in the line): his side's months in the line where uniforms age (Crowd::SetWorn) and
-		 * the recording gives them, else 0.6, the soldier files' own baked look; the mix's W where it forces one. Read
-		 * only with the mix on, and part of what keys his sets (BankKey, BodyKey): men drawn alike share one W. */
-		float Wear = 0.6f;
+		 * the recording gives them, else 0.8 (the art director's ruling of 25 November: her band, boots 30 in 100 of the
+		 * way to the field's ground by W 0.75, is for every man in the line, not only the old hands); the mix's W where it
+		 * forces one. Read only with the mix on, and part of what keys his sets (BankKey, BodyKey): men drawn alike share
+		 * one W. */
+		float Wear = 0.8f;
 	};
 
 	/** His drawn look at one level of detail: the triangles, each point's paint and its colour (sRGB, 0 to 255). */
@@ -768,6 +770,9 @@ namespace LandMen
 			float Snow = 0.f;                           // 0 to 1: snow lying, where it snows
 			float W = -1.f;                             // 0 to 1: every man's wear (pictures, tests); under 0 each his own
 		};
+		/** A man's wear where his side's months in the line are not known (the worn trial off): 0.8, the art director's
+		 * ruling of 25 November (her band is for every man in the line). A fresh replacement is 0.1, six weeks or more 1. */
+		static constexpr float DefaultWear = 0.8f;
 		void SetWearMix(const WearMix& Mix);
 		/**
 		 * Run styles (release 2, Brian's 23 Nov: "not all players are running exactly the same at the same time"): on,
