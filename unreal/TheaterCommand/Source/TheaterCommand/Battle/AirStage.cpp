@@ -1826,6 +1826,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 				}
 			}
 		}
+		ShipIce::Glaze(Model, UnitsPerMetre, Frost, Given.Face, Clock); // S6 hook (ship ice): nothing unless the sea battle set a frost (SetFrost); her cut-out guns take her colours
 		TArray<int32> HullNear;
 		TArray<FMiniatureMesh> GunNear;
 		if (GunParts.Num() > 0)
@@ -1847,6 +1848,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 			{
 				// (her guns out of the far one too, where it says its points' parts; else it keeps them stowed, and her guns
 				// drawn on their own show only near)
+				ShipIce::Glaze(Far, UnitsPerMetre, Frost, Given.Face, Clock); // S6 hook (ship ice): her far model as her near
 				TArray<int32> HullFar;
 				if (GunParts.Num() > 0 && Parted->Far.Num() == Far.Vertices.Num() && Far.Normals.Num() == Far.Vertices.Num() && Far.Colors.Num() == Far.Vertices.Num())
 				{
