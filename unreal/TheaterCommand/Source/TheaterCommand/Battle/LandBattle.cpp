@@ -2124,6 +2124,16 @@ bool ALandBattle::Open()
 		// (the recording's grade where it gives one, over the look's own where its ground is not the bocage's: LandScape)
 		const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying(), Rec.Weather.Lat, Rec.Weather.Lon, LandParts::MonthOf(Rec.Date), LandParts::TrialWords());
 		LandParts::Grade(Lens->PostProcessSettings, &Rec.Weather, &LookAir);
+		// The footprint shade lighter where snow lies (LandShade::SnowStrength; the art director's Mac pass 1, B4: a
+		// jeep stood in a near-black patch on the snow), over LoadInks' strength ("-TheaterLandFootShade=").
+		if (ShadeInk)
+		{
+			float FootShade = 1.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFootShade="), FootShade);
+			const double Strength = FMath::Clamp(FootShade, 0.0f, 1.0f) * LandShade::SnowStrength(FieldPtr->SnowLying());
+			ShadeInk->SetScalarParameterValue(TEXT("Strength"), static_cast<float>(Strength));
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the footprint shade at %.2f (snow lying %.2f)"), Strength, FieldPtr->SnowLying());
+		}
 		// The grain of the film stock, a little (the art director's to tune: "-TheaterLandGrain=0.3").
 		float Grain = 0.25f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrain="), Grain);
@@ -5240,7 +5250,9 @@ int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
 	if (ShadeInk && HiX - LoX > 0.2 && HiY - LoY > 0.2)
 	{
 		LandShade::Shape Shape = Model.Kind == "gun" ? LandShade::Gun(LoX, LoY, HiX, HiY)
-			: Model.Kind == "carrier" ? LandShade::Lorry(LoX, LoY, HiX, HiY) : LandShade::Tank(LoX, LoY, HiX, HiY);
+			: Model.Kind == "carrier" ? LandShade::Lorry(LoX, LoY, HiX, HiY)
+			: Model.Kind == "car"	  ? LandShade::Car(LoX, LoY, HiX, HiY)
+									  : LandShade::Tank(LoX, LoY, HiX, HiY);
 		Shape.Seed = GetTypeHash(ModelKey);
 		LandShade::Mesh Laid;
 		LandShade::Make(Shape, Laid);
