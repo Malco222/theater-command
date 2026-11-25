@@ -3,11 +3,12 @@
 // the record is stripped.
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
-import { navalUpkeep, subScene } from '../src/campaign/navy';
+import { navalUpkeep, subScene, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { SUBSCENE_ENV } from '../src/campaign/stage';
-import type { Game } from '../src/campaign/types';
+import { grantTech } from '../src/campaign/tech';
+import type { Fleet, Game, Ships, SubLook } from '../src/campaign/types';
 
 afterEach(() => { subScene.on = false; });
 
@@ -125,5 +126,94 @@ describe('the submarine scene\'s record', () => {
     const turns = [...new Set(g.subLook!.map((l) => l.turn))].sort();
     expect(turns).toEqual([g.turn - 1, g.turn]);
     expect(twin(g).subLook).toEqual(g.subLook);
+  });
+});
+
+/**
+ * A grand campaign at its start with Units decide on or off, every fleet in harbour, and the United States in the
+ * Allies' camp. The British have depth charges, radar, ahead-throwers and escort groups; the Americans depth charges
+ * alone. German boats raid in the Irish Sea; with 'escort', twenty British destroyers escort the Atlantic convoys from
+ * the Western Approaches; thirty American destroyers hunt in the Irish Sea.
+ */
+function open(units: boolean, escort = true): Game {
+  const g = startOpen(createGame(1, null));
+  if (units) g.flags.unitsDecide = 1; else delete g.flags.unitsDecide;
+  delete g.flags.weather;
+  for (const f of g.fleets) f.stance = 'port';
+  g.nations.USA.align = 'allies';
+  for (const id of ['sonar', 'asvradar', 'hedgehog', 'escortgroups']) grantTech(g, 'UK', id);
+  grantTech(g, 'USA', 'sonar');
+  sea(g, 'GER', 'irish', { ss: 20 }, 'raid');
+  if (escort) sea(g, 'UK', 'wapp', { dd: 20 }, 'escort', 'atlantic');
+  sea(g, 'USA', 'irish', { dd: 30 }, 'hunt');
+  return g;
+}
+/** One of this nation's fleets, put to sea in a sea with only these ships, fully ready. */
+function sea(g: Game, nat: string, zone: string, ships: Partial<Ships>, stance: Fleet['stance'], lane?: string): Fleet {
+  const f = g.fleets.find((x) => x.nat === nat)!;
+  f.ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0, ...ships };
+  f.zone = zoneOf(g, zone);
+  f.stance = stance;
+  if (lane) f.lane = lane; else delete f.lane;
+  f.ready = 1;
+  return f;
+}
+/** The British month with the scene's setting on, and the record's Atlantic convoy row. */
+function atlantic(g: Game): SubLook['convoys'][number] {
+  subScene.on = true;
+  try { navalUpkeep(g, 'UK'); } finally { subScene.on = false; }
+  return g.subLook!.find((l) => l.nat === 'UK' && l.turn === g.turn)!.convoys.find((c) => c.route === 'atlantic')!;
+}
+const UK_KIT = { asdic: true, radar: true, hedgehog: true, hfdf: false, groups: true };
+const USA_KIT = { asdic: true, radar: false, hedgehog: false, hfdf: false, groups: false };
+
+describe('the submarine scene\'s record of each answering navy\'s kit (Units decide)', () => {
+  it('keys each answering navy\'s own kit by navy, keeps the most destroyers\' kit as kit, and moves nothing else', () => {
+    const a = open(true), b = twin(a);
+    navalUpkeep(a, 'UK');
+    const c = atlantic(b);
+    expect(stripped(b)).toBe(saveGame(a));
+    const irish = c.seas.find((s) => s.zone === zoneOf(b, 'irish'))!;
+    // Each navy's entry is from its own research: the British have radar, ahead-throwers and escort groups, the Americans none.
+    expect(irish.kits).toEqual({ UK: UK_KIT, USA: USA_KIT });
+    // The Americans' thirty destroyers outnumber the British twenty, so the one kit is theirs, as answerer gives it.
+    expect(irish.kit).toEqual(irish.kits!.USA);
+    // The hunting group answers only in its own sea, and the close escort in every sea of the route.
+    const rest = c.seas.filter((s) => s !== irish);
+    expect(rest.length).toBe(2);
+    for (const s of rest) { expect(s.kits).toEqual({ UK: UK_KIT }); expect(s.kit).toEqual(UK_KIT); }
+  });
+
+  it('gives the convoy\'s own navy\'s kit alone where no navy answers', () => {
+    const g = open(true, false), c = atlantic(g);
+    // Only the American group answers in the Irish Sea, so its kit stands alone there; in the other two seas none answers.
+    const irish = c.seas.find((s) => s.zone === zoneOf(g, 'irish'))!;
+    expect(irish.kits).toEqual({ USA: USA_KIT });
+    expect(irish.kit).toEqual(USA_KIT);
+    for (const s of c.seas.filter((x) => x !== irish)) { expect(s.kits).toEqual({ UK: UK_KIT }); expect(s.kit).toEqual(UK_KIT); }
+  });
+
+  it('carries escort-group training as each navy\'s research has it', () => {
+    for (const groups of [false, true]) {
+      const g = open(true);
+      if (groups) grantTech(g, 'USA', 'escortgroups');
+      const irish = atlantic(g).seas.find((s) => s.zone === zoneOf(g, 'irish'))!;
+      expect(irish.kits!.USA.groups).toBe(groups);
+      expect(irish.kit!.groups).toBe(groups);
+      expect(irish.kits!.UK.groups).toBe(true);
+    }
+  });
+
+  it('with Units decide off, writes neither kit nor kits', () => {
+    const c = atlantic(open(false));
+    expect(c.seas.length).toBe(3);
+    for (const s of c.seas) { expect('kit' in s).toBe(false); expect('kits' in s).toBe(false); }
+  });
+
+  it('with the scene\'s setting off, writes no record at all', () => {
+    const g = open(true);
+    navalUpkeep(g, 'UK');
+    expect(g.subLook).toBeUndefined();
+    expect('subLook' in JSON.parse(saveGame(g))).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 169ae947 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b1bd81fa 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12541,10 +12541,10 @@
   }
   var capPct = (g2) => g2.flags["dk:cap"] ?? DEPTH.cap.start;
   var capOf = (g2) => capPct(g2) / 100;
-  function setCap(g2, pct12) {
-    if (!depthRules(g2) || !DEPTH.cap.steps.includes(pct12) || capPct(g2) === pct12) return false;
-    if (pct12 === DEPTH.cap.start) delete g2.flags["dk:cap"];
-    else g2.flags["dk:cap"] = pct12;
+  function setCap(g2, pct13) {
+    if (!depthRules(g2) || !DEPTH.cap.steps.includes(pct13) || capPct(g2) === pct13) return false;
+    if (pct13 === DEPTH.cap.start) delete g2.flags["dk:cap"];
+    else g2.flags["dk:cap"] = pct13;
     return true;
   }
   var deskRan = (g2, desk) => g2.flags[`dk:ran:${desk}`] === g2.turn;
@@ -14375,8 +14375,8 @@
     g2.flags["dmg:any"] = 1;
     return Math.round((now - was) * 10) / 10;
   }
-  function setDamage(g2, r, pct12) {
-    const p = Math.round(Math.min(DAMAGE.most, Math.max(0, pct12)) * 10) / 10;
+  function setDamage(g2, r, pct13) {
+    const p = Math.round(Math.min(DAMAGE.most, Math.max(0, pct13)) * 10) / 10;
     if (p <= 0) {
       delete g2.flags[damageKey(r.id)];
       delete g2.flags[hitKey(r.id)];
@@ -14397,8 +14397,8 @@
     return (B3[kind] + Math.min(B3.gunsMost, B3.guns * Math.max(0, guns2))) * size;
   }
   function damageWords(name, added, now) {
-    const pct12 = (x) => `${x < 1 ? "<1" : Math.round(x)}%`;
-    return `${name} took ${pct12(added)} more damage and is now ${pct12(now)} in ruins: its factories and its pay are down by as much until it is repaired.`;
+    const pct13 = (x) => `${x < 1 ? "<1" : Math.round(x)}%`;
+    return `${name} took ${pct13(added)} more damage and is now ${pct13(now)} in ruins: its factories and its pay are down by as much until it is repaired.`;
   }
 
   // ../../src/generated/campaign-rivers.json
@@ -15496,8 +15496,8 @@
     return size === "capital" || size === "city" && !!r.fort && r.fort.lv >= SIEGE.ai.great.works;
   }
   var breachOf = (g2, r) => clamp((g2.flags[`breach:${r.id}`] ?? 0) / 100, 0, 1);
-  function breach(g2, r, pct12) {
-    const now = Math.min(SIEGE.breach.most, (g2.flags[`breach:${r.id}`] ?? 0) + Math.max(0, pct12));
+  function breach(g2, r, pct13) {
+    const now = Math.min(SIEGE.breach.most, (g2.flags[`breach:${r.id}`] ?? 0) + Math.max(0, pct13));
     if (now > 0) g2.flags[`breach:${r.id}`] = Math.round(now * 10) / 10;
     return now / 100;
   }
@@ -15517,8 +15517,8 @@
   };
   var guardForce = (r) => -1 - r.id;
   var guardMen = (g2, r) => Math.round(guardOf(g2, r) * MEN_PER_DIV);
-  function hitGuard(g2, r, pct12) {
-    const now = Math.min(100, (g2.flags[`guard:${r.id}`] ?? 0) + Math.max(0, pct12));
+  function hitGuard(g2, r, pct13) {
+    const now = Math.min(100, (g2.flags[`guard:${r.id}`] ?? 0) + Math.max(0, pct13));
     if (now > 0) g2.flags[`guard:${r.id}`] = Math.round(now);
   }
   function guardInField(g2, r, nat, force3) {
@@ -16190,8 +16190,8 @@
     const clock = by2 ? crewClock(g2, r) : null;
     const crew = clock === null ? null : { left: clock, months: Math.max(...garrisonOf(r).filter((c) => !c.dead && fortRow(g2, c)).map((c) => crewStores(c) ?? 0)) };
     const lines2 = [];
-    const pct12 = Math.round((bonus - 1) * 100);
-    lines2.push(`Troops inside ${townName(r)} fight ${pct12}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ""}. It has room for ${roomIn(g2, r) === 1 ? "one corps" : `${roomIn(g2, r)} corps`}.`);
+    const pct13 = Math.round((bonus - 1) * 100);
+    lines2.push(`Troops inside ${townName(r)} fight ${pct13}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ""}. It has room for ${roomIn(g2, r) === 1 ? "one corps" : `${roomIn(g2, r)} corps`}.`);
     if (guard > 0) lines2.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : "part of a division"}. ${driveOut(g2) && !inside2 && !by2 && r.units.some((u) => !u.dead && allied(g2, u.nat, r.ctrl)) ? "With no garrison inside, it fights beside the army in the field, and the town falls with the field." : "It holds the town while no army does."}`);
     if (driveOut(g2) && inside2 && !by2) lines2.push("The garrison will hold the town after the field is lost: it must then be stormed or starved out.");
     if (by2) {
@@ -27033,13 +27033,13 @@
     const share = (n) => all > 0 ? (held3[n.id]?.vp ?? 0) / all : 0;
     const top = great[0] ?? [...live5].sort((a, b) => share(b) - share(a) || (a.id < b.id ? -1 : 1))[0];
     if (share(top) < DOMINATION.won.share) return;
-    const pct12 = Math.round(share(top) * 100);
+    const pct13 = Math.round(share(top) * 100);
     const rest = live5.filter((n) => n.id !== top.id);
     g2.flags["dom:won"] = g2.turn;
     g2.flags["dom:laid"] = rest.length;
     for (const n of rest) layDown(g2, n, top.id);
     g2.supplyDirty = true;
-    headline(g2, "goal", fill2(DOMINATION.lines.last, { name: top.name, adj: top.adj, pct: pct12, rest: rest.length === 1 ? `${rest[0].name} lays down its arms.` : `The ${rest.length} countries still standing lay down their arms.` }), top.id);
+    headline(g2, "goal", fill2(DOMINATION.lines.last, { name: top.name, adj: top.adj, pct: pct13, rest: rest.length === 1 ? `${rest[0].name} lays down its arms.` : `The ${rest.length} countries still standing lay down their arms.` }), top.id);
   }
   function worldWinner(g2) {
     if (!dominating(g2) || !g2.flags["dom:won"]) return null;
@@ -27422,6 +27422,14 @@
   var cloudAim = (sky, night) => sky === "cloud" ? night ? WEATHER.cloud.bombsNight : WEATHER.cloud.bombsDay : 1;
   var cloudMet = (sky) => sky === "cloud" ? WEATHER.cloud.met : 1;
   var cloudGuns = (sky, night) => sky === "cloud" ? night ? WEATHER.cloud.gunsNight : WEATHER.cloud.gunsDay : 1;
+  function dayShare(lat, month3) {
+    const rad = Math.PI / 180;
+    const day = Math.round(15.5 + month3 * (365 / 12));
+    const decl = 23.44 * rad * Math.sin(2 * Math.PI * (284 + day) / 365);
+    const phi = Math.max(-89.9, Math.min(89.9, lat)) * rad;
+    const c = (Math.sin(-0.833 * rad) - Math.sin(phi) * Math.sin(decl)) / (Math.cos(phi) * Math.cos(decl));
+    return c <= -1 ? 1 : c >= 1 ? 0 : Math.acos(c) / Math.PI;
+  }
   var skySupport = (sky) => sky === "closed" ? 0 : sky === "cloud" ? WEATHER.cloud.support : 1;
   function whyNotSky(g2, f, targetZone) {
     if (!weatherOn(g2)) return null;
@@ -30839,6 +30847,10 @@
     if (w >= S3.find * need) return "exact";
     return w >= S3.report * need || met2 === g2.turn - 1 ? "report" : "none";
   }
+  function boatsInView(g2, nat, z) {
+    const S3 = CARRIERS.search;
+    return !!g2.seas[z] && searchOf(g2, nat, z) >= S3.report * openness(g2, z) * S3.subs;
+  }
   function fleetKnown(g2, f, viewer = g2.human) {
     if (viewer === null || !carrierRules(g2)) return "exact";
     if (viewer === g2.human && !fogOn(g2, viewer)) return "exact";
@@ -33004,10 +33016,10 @@
     }
     return [...out];
   }
-  function nearEnemy(g2, nat, at4, within3) {
+  function nearEnemy(g2, nat, at4, within4) {
     const seen2 = /* @__PURE__ */ new Set([at4.id]);
     let ring = [at4.id];
-    for (let d = 0; d < within3; d++) {
+    for (let d = 0; d < within4; d++) {
       const next = [];
       for (const id of ring) for (const j of g2.regions[id].nb) if (!seen2.has(j)) {
         seen2.add(j);
@@ -33537,9 +33549,9 @@
     }
     const cap15 = n.capital >= 0 ? g2.regions[n.capital] : null;
     if (cap15 && cap15.ctrl === nat && nearEnemy(g2, nat, cap15, OPEN.guardWithin)) phase.staging = { ...phase.staging ?? {}, [cap15.name]: OPEN.guard };
-    const watch = coastWatch(g2, nat);
-    for (const [name, count4] of Object.entries(watch)) phase.staging = { ...phase.staging ?? {}, [name]: Math.max(phase.staging?.[name] ?? 0, count4) };
-    if (Object.keys(watch).length) phase.watch = Object.keys(watch);
+    const watch2 = coastWatch(g2, nat);
+    for (const [name, count4] of Object.entries(watch2)) phase.staging = { ...phase.staging ?? {}, [name]: Math.max(phase.staging?.[name] ?? 0, count4) };
+    if (Object.keys(watch2).length) phase.watch = Object.keys(watch2);
     const ward = wards(g2, nat);
     if (ward.length) phase.ward = Object.fromEntries(ward.map((name) => [name, OPEN.ward.corps]));
     for (const slot of [0, 1]) {
@@ -39015,7 +39027,7 @@
     }
   }
   var purseKey = (nat, arm2) => `pg:${nat}:${arm2}`;
-  function aiFortify(g2, nat, watch, C4) {
+  function aiFortify(g2, nat, watch2, C4) {
     const n = g2.nations[nat];
     if (!C4 || g2.flags.open !== 1 || !budgeted(g2) || nat === g2.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
     const level = (r) => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === "fort" && b.region === r.id).length;
@@ -39024,8 +39036,8 @@
       return cost !== null && n.pp >= cost + keep2 && !!orderFort(g2, nat, r.id);
     };
     const idle = corpsCost(g2, nat, "inf") + PRODUCTION.aiReserve;
-    const coast = watch.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C4.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
-    if (coast.length && !n.queue.some((b) => b.what === "fort" && watch.includes(g2.regions[b.region].name))) order2(coast[0], idle);
+    const coast = watch2.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C4.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
+    if (coast.length && !n.queue.some((b) => b.what === "fort" && watch2.includes(g2.regions[b.region].name))) order2(coast[0], idle);
     const D2 = C4.dig;
     if (!D2 || menSpare(g2, nat) >= (specOf(g2, "inf")?.divs ?? 1)) return;
     const dist2 = new Int16Array(g2.regions.length).fill(-1);
@@ -39579,18 +39591,18 @@
     const own = r.owner === nat;
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
-    const pct12 = (x) => `${Math.round(x * 1e3) / 10}%`;
+    const pct13 = (x) => `${Math.round(x * 1e3) / 10}%`;
     const keep2 = keepOf(g2, r);
     if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep2)} more a month`);
-    if (l.trade) bits.push(`trade agreements worth ${pct12(l.trade)} more`);
+    if (l.trade) bits.push(`trade agreements worth ${pct13(l.trade)} more`);
     if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
-    if (l.research) bits.push(`research ${pct12(l.research)} faster`);
+    if (l.research) bits.push(`research ${pct13(l.research)} faster`);
     if (l.xp && (own || !settledTownsOn(g2))) bits.push("corps raised here start more experienced");
-    if (l.drafts) bits.push(`replacements ${pct12(l.drafts)} faster`);
-    if (l.rest) bits.push(`corps resting here or beside it recover ${pct12(l.rest)} faster`);
+    if (l.drafts) bits.push(`replacements ${pct13(l.drafts)} faster`);
+    if (l.rest) bits.push(`corps resting here or beside it recover ${pct13(l.rest)} faster`);
     if (own && l.tax) bits.push(`${cash(l.tax * keep2)} more tax a month`);
     if (own && l.pc) bits.push(`${l.pc.toFixed(2)} political capital a month`);
-    if (!own && l.occupiedShare) bits.push(`the province pays ${pct12(l.occupiedShare)} more of its worth`);
+    if (!own && l.occupiedShare) bits.push(`the province pays ${pct13(l.occupiedShare)} more of its worth`);
     const s = bits.join(", ");
     return s ? `${s[0].toUpperCase()}${s.slice(1)}.` : "";
   }
@@ -39600,18 +39612,18 @@
     const share = own ? 1 : OCCUPIED;
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
-    const pct12 = (x) => `${Math.round(x * 1e3) / 10}%`;
+    const pct13 = (x) => `${Math.round(x * 1e3) / 10}%`;
     const keep2 = keepOf(g2, r);
     if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep2)} a month`);
-    if (serve && l.trade) bits.push(`trade agreements worth ${pct12(l.trade * lv)} more`);
+    if (serve && l.trade) bits.push(`trade agreements worth ${pct13(l.trade * lv)} more`);
     if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
-    if (serve && l.research) bits.push(`research ${pct12(l.research * lv)} faster`);
+    if (serve && l.research) bits.push(`research ${pct13(l.research * lv)} faster`);
     if (own && l.xp) bits.push("corps raised here start more experienced");
-    if (serve && l.drafts) bits.push(`replacements ${pct12(l.drafts * lv)} faster`);
-    if (l.rest) bits.push(`corps resting here or beside it recover ${pct12(l.rest * lv)} faster`);
+    if (serve && l.drafts) bits.push(`replacements ${pct13(l.drafts * lv)} faster`);
+    if (l.rest) bits.push(`corps resting here or beside it recover ${pct13(l.rest * lv)} faster`);
     if (own && l.tax) bits.push(`${cash(l.tax * lv * keep2)} tax a month`);
     if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
-    if (!own && l.occupiedShare) bits.push(`the province pays ${pct12(l.occupiedShare * lv)} more of its worth`);
+    if (!own && l.occupiedShare) bits.push(`the province pays ${pct13(l.occupiedShare * lv)} more of its worth`);
     if (!bits.length) return "Stands idle under occupation.";
     const s = bits.join(", ");
     return `${s[0].toUpperCase()}${s.slice(1)}.`;
@@ -40816,10 +40828,14 @@
     station: { ss: { patrol: 20, passage: 5, refit: 40 }, raid: 3.5, dd: { convoy: 19, turnaround: 6, refit: 8, unavailable: 0.333, crossing: 9.5 } },
     _count: "The convoy-side count (one-pass ruling Q1(a), Q2(a), Q4, and the reading ruling of 24 November 13:50Z): a route's convoys attacked a month = convoys sailed x the share attacked. attacked 0.42 and sighted 0.68: OEG ch. 10 Table 2, northern routes, Oct 1942 to May 1943, 80 convoys (F; historian/convoy-reads-1124.md); a contact is a convoy sighted. The share attacked is 1 - exp(-phi x F x B), B the boats on station on the route's seas (station above), F finding from kit (none laid: 1), one phi for every route, fitted so the share is 0.42 at boatsT2. boatsT2 40: the boats at sea in the northwest Atlantic over T2's window, 22 to 60 (D from F, the middle). perAttack 2: boats a convoy attacked (F, OEG's own estimate). Convoys sailed a month = ways x the route's tons / (ships a convoy x GRT a ship). ways 2: T2's 0.42 is over its convoys both ways, so the count takes the return sailings as well as the loaded ones (D, the ruling of 13:50Z: about 10.4 a month on the Atlantic route). The incidents with the escort are counted from the boats' side, at T2's own rate: t2 80 convoys over 8 months (F, OEG T2's window) x 0.42 x 2 boats / 40 on station = 0.21 a boat on station a month (D). The pack, the boats a convoy attacked, follows from the two (incidents / attacked), and the card shows it. ships: atlantic 44 (D from L, historian/convoy-size-1124.md); libya 2 (D from L: Bragadin's 883 escorted convoys, the usual operation 2 ships, O'Hara; 1 to 7). grt: atlantic 5,200 (D: every pair read gives 4,400-5,800; ruling 241 Q8); libya 3,800 (D from L: 342 Axis freighters lost, 1,299,777 tons). historian/convoy-build-reads-1124.md. sink (k): the tons ruling (naval-battles/convoy-r2/tons-form.md): a convoy the boats attack loses its ships x P / (P + k x E), P the pack's raid strength (the pack x a boat's raid strength on station, its kit, fit and the air over it), E the convoy's share of the route's escort worth (G / convoys sailed); tons = convoys attacked x ships sunk x GRT, both ways, and the share of cargo lost is the share of ships sunk. k is refit once at OEG T2's window so that 2 boats sink 3.75 ships a convoy attacked (D: T2's 80 convoys, 125.6 ships sunk over 33.5 convoys attacked; SC/ONS 4.4, HX/ONF 3.2): 0.137 (D, six AI wars Oct 1942 to May 1943, 48 months: a boat's raid strength on station 0.298, a convoy's escort worth 46.5; the months' median 0.136). Never fitted to a battle; the battle table (wolfpack-r2/history.md, P) is a check only. The month's swing and a fought night act on the ships sunk a convoy attacked, never past its ships (Q3(a)). A surface raider or a fortress astride the route keeps the lanes' form beside it, its tons of the loaded sailings as before; the two shares together at most the lanes' cap (0.95). Null: the boats keep the lanes' form. A route whose count is not laid (a null) keeps the per-boat share above ('find').",
     count: { attacked: 0.42, sighted: 0.68, boatsT2: 40, perAttack: 2, ways: 2, t2: { convoys: 80, months: 8 }, sink: 0.137, ships: { atlantic: 44, libya: 2 }, grt: { atlantic: 5200, libya: 3800 } },
-    _ceiling: "The boat ceiling (the design director's rulings of 24 November 2026 14:46Z, corrected 14:49Z, and 16:27Z and 16:31Z on naval-battles/convoy-r2/ceiling-reading-1124.md): the ships one boat sinks in one convoy battle at most on an average night = its torpedoes usable that battle x the share that hit x the ships a hit sinks; a convoy attacked loses at most the pack x that, the pack at least one boat (a convoy attacked has one on it; the count's pack falls under one on Libya, builder's choice of the review). The month's swing and a fought night act around it (mean 1, ruling 241), never past the convoy's ships. inside 12: the torpedoes a VIIC or a IXC carries inside its hull (L, historian/naval-reads-3-1124.md sections 2 and 5: VIIC 5 in the tubes, 6 bow reloads, 1 aft; IXC 6 in the tubes, 6 inside). outside 2: those carried outside the hull in pressure-tight canisters, which a crew can bring inside only in a calm sea and with time on the surface (L). The game has no sea state; the calm sea is read from the sky: with weather, all of them under a clear sky and none under cloud or a closed sky (the builder's reading of 'calm sea (weather)'); with no weather, the share the weather table expects that month, its chance of a clear sky over the sea's zone, and one of two where the table has no sky for the sea (the design director's 16:27Z ruling: the expected value, neither all calm nor all rough). The game builds one boat design; 2 is the VIIC's (L), the type of most boats (M), laid for every boat until a boat design row sets its own (16:27Z); a IXC carried 10. hit 0.45: the share of torpedoes fired that hit, one figure for every boat that fires, in every year (the design director's 16:31Z ruling; D from F: about 4 ships sunk a boat at sea a month, July 1940 to March 1941, OEG 51 chapters 2-3, at 1.4-1.75 hits a ship sunk from about 14 torpedoes; historian/convoy-gap-1940-41-1124.md). The escort's radar acts before a boat fires, not on its hits (historian/torpedo-hits-radar-1124.md: about 70% of attempted attacks frustrated late in 1942, yet about two ships torpedoed in each attack that succeeded, F); how it does waits for its own form, and is never counted on the hit share. sinkHit 0.57: the ships sunk for every hit, overkill and ships hit that survived counted, since the ceiling multiplies every hit: 289 ships sunk for 507 or more hits (Hezlet ch. 33, British and Allied submarines against Axis merchant ships, 1941-45, L; D; the design director's 16:27Z correction of 0.7, which is the chance a single hit sinks). So a boat that fires sinks at most 12 x 0.45 x 0.57 = 3.1 ships a convoy battle (D), and 14 x 0.45 x 0.57 = 3.6 in a calm sea. The record's checks, never fitted: about 1.0 ship sunk a boat a battle, 0.7-1.8 by convoy size (D from OEG T3, F; its row pairs U; wolfpack-r2/history.md), about 2 ships torpedoed in each attack that succeeded (OEG 5.2.1, F), the design director's 2-4 a boat a battle (14:46Z; the historian's 14:50Z read gives 1-3) and the best single boat's 7 (U-100, U-515, L) the tail, against the most a month's swing books, 1.2 x 3.6. Null in inside, hit or sinkHit: no ceiling, the tons ruling as before.",
-    ceiling: { inside: 12, outside: 2, hit: 0.45, sinkHit: 0.57 },
-    _firing: "The escort's radar before a boat fires (the design director's ruling of 24 November 2026 16:35Z on naval-battles/convoy-r2/radar-firing-form.md, (a) on all three; historian/torpedo-hits-radar-1124.md). Radar worked mostly before a boat fired, not on its hits: late in 1942 'about 70 per cent of the attempted attacks were frustrated by the escorts', yet 'about two ships were torpedoed in each successful attack' (OEG 51 section 5.2.1, F). The count's pack is the boats that fired (OEG's 'U-boats attacking each contact', measured at T2 against escorts with radar), so the boats that try are the pack / t2, and those that fire are the tries x 1 / (1 + c x r): r the radar-fitted escorts a convoy (the route's escort vessels whose navy has sea-search radar, at their share on the route, over the convoys sailed a month) for each boat trying, c = (1/t2 - 1) / rT2. 1 with no radar-fitted escort (D: 1940's about 4 ships a boat at sea a month at 0.45 a torpedo). Applied once, on the pack that the contest and the ceiling both read; the escort's kills keep the count's incidents (Q3 (a), for now). t2 0.3: the share that fired at T2 (D from F, 70% frustrated). rT2 1: T2's ratio, the record's, never the game's (the design director: the game has about 3 times the record's boats there, a gap the work-up pipeline answers): about 6.5 escorts a convoy (F, OEG ch. 10 Table 5), nearly all with radar (M), over about 6.7 boats trying (2 / 0.3, D); so c = 7/3 (D). The check, never fitted: HX 229/SC 122, March 1943, boats about 2:1 over the escorts, r about 0.5, a share of about 0.46; 21-22 ships lost (L). Null in either: every boat counted fires, as before. The radar-fitted escorts a convoy (the design director's ruling of 24 November 2026 16:58Z on naval-battles/convoy-r2/screen-cycle-form.md): the escorts at sea with the convoys at once over the convoys at sea at once (station.dd, Q1 (d)); and where 'screen' is read, the escorts on the close screen's stations, the lesser of the escorts with the convoy and the stations, times the radar-fitted share of them, so a thin screen fills fewer stations (Q2 (b)). Stations = 'stations' + the convoy's columns / 'columnsAStation', the columns its ships (count.ships) / 'shipsAColumn': the US Fleet A/S Instructions' screens of 7 to 11 escorts for 3 to 15 columns, 6 + columns / 3 (F, D; historian/escort-screen-cycle-1124.md). shipsAColumn 3.5 (D from L, historian/naval-reads-4-1124.md: HX 229's 37 ships in 11 columns, SC 122's 50 in 14), the columns at most 'maxColumns' 19 (L: HX 300's 166 ships in 19 columns; past that the columns go deeper): the route's 44-ship convoy has 12.6 columns and 10.2 stations (D). No 1940-42 convoy's columns were read, so the rule is D there (the design director, 17:04Z). A null in any of them: the escorts with the convoy are not capped. Escorts beyond the stations add nothing to frustrating attacks (Q3 (a)) and still count in the escort's strength E (Q4 (a)); the escorts' losses form moves them to pickets and support groups. Screens without radar frustrate too: an eye term, its own form, not laid.",
-    firing: { t2: 0.3, rT2: 1, screen: { stations: 6, columnsAStation: 3, shipsAColumn: 3.5, maxColumns: 19 } }
+    _ceiling: "The boat ceiling (the design director's rulings of 24 November 2026 14:46Z, corrected 14:49Z, and 16:27Z and 16:31Z on naval-battles/convoy-r2/ceiling-reading-1124.md): the ships one boat sinks in one convoy battle at most on an average night = its torpedoes usable that battle x the share that hit x the ships a hit sinks; a convoy attacked loses at most the pack x that, the pack at least one boat (a convoy attacked has one on it; the count's pack falls under one on Libya, builder's choice of the review). The month's swing and a fought night act around it (mean 1, ruling 241), never past the convoy's ships. inside 12: the torpedoes a VIIC or a IXC carries inside its hull (L, historian/naval-reads-3-1124.md sections 2 and 5: VIIC 5 in the tubes, 6 bow reloads, 1 aft; IXC 6 in the tubes, 6 inside). outside 2: those carried outside the hull in pressure-tight canisters, which a crew can bring inside only in a calm sea and with time on the surface (L). The game has no sea state; the calm sea is read from the sky: with weather, all of them under a clear sky and none under cloud or a closed sky (the builder's reading of 'calm sea (weather)'); with no weather, the share the weather table expects that month, its chance of a clear sky over the sea's zone, and one of two where the table has no sky for the sea (the design director's 16:27Z ruling: the expected value, neither all calm nor all rough). The game builds one boat design; 2 is the VIIC's (L), the type of most boats (M), laid for every boat until a boat design row sets its own (16:27Z); a IXC carried 10. hit 0.45: the share of torpedoes fired that hit, one figure for every boat that fires, in every year (the design director's 16:31Z ruling; D from F: about 4 ships sunk a boat at sea a month, July 1940 to March 1941, OEG 51 chapters 2-3, at 1.4-1.75 hits a ship sunk from about 14 torpedoes; historian/convoy-gap-1940-41-1124.md). The escort's radar acts before a boat fires, not on its hits (historian/torpedo-hits-radar-1124.md: about 70% of attempted attacks frustrated late in 1942, yet about two ships torpedoed in each attack that succeeded, F); how it does waits for its own form, and is never counted on the hit share. sinkHit 0.57: the ships sunk for every hit, overkill and ships hit that survived counted, since the ceiling multiplies every hit: 289 ships sunk for 507 or more hits (Hezlet ch. 33, British and Allied submarines against Axis merchant ships, 1941-45, L; D; the design director's 16:27Z correction of 0.7, which is the chance a single hit sinks). So, with the whole load into one convoy (the load form unread), a boat that fires sinks at most 12 x 0.45 x 0.57 = 3.1 ships a convoy battle (D), and 14 x 0.45 x 0.57 = 3.6 in a calm sea. With the load form laid (below, and _load), it fires salvos of its 5 ready tubes, one approach and a further one the next night as seldom as its causes allow: 5 x 0.45 x 0.57 = 1.28 a salvo, about 1.33-1.41 a firing boat in the six wars (load-reading-1124.md); the checks below then read the record's per-boat figures (about 2.3 hits a firing boat in 1941 and 2.7 at T2), and the design director's 2-4 a boat a battle stands for the whole load. The record's checks, never fitted: about 1.0 ship sunk a boat a battle, 0.7-1.8 by convoy size (D from OEG T3, F; its row pairs U; wolfpack-r2/history.md), about 2 ships torpedoed in each attack that succeeded (OEG 5.2.1, F), the design director's 2-4 a boat a battle (14:46Z; the historian's 14:50Z read gives 1-3) and the best single boat's 7 (U-100, U-515, L) the tail, against the most a month's swing books, 1.2 x 3.6. Null in inside, hit or sinkHit: no ceiling, the tons ruling as before. tubes 5 (the load form, 17:37Z): the ready tubes a boat fires in one approach, 4 bow and 1 stern for a VIIC (L, historian/naval-reads-3-1124.md; F, the war diaries: all ready tubes each approach, both eras), the boat type's kit; the game builds one boat design, so 5 for every boat until a boat design row sets its own. With the load form laid (load), a boat that fires puts salvos of its tubes into a convoy, not its whole load, and the load becomes a cap for its patrol. hit 0.45 stays as the share of torpedoes fired in a convoy approach that hit (the design director's 17:37Z ruling: D on its own evidence; 5 x 0.45 is about 2.2 hits an approach, against 2.3 hits a boat a convoy in 1941 and 2.7 at T2; the war diaries' 0.6 claims are an upper check; the boat-month yield, about 4 ships a boat at sea a month in July 1940 to March 1941, is a check on the whole chain).",
+    ceiling: { inside: 12, outside: 2, hit: 0.45, sinkHit: 0.57, tubes: 5 },
+    _firing: "The escort's radar before a boat fires (the design director's ruling of 24 November 2026 16:35Z on naval-battles/convoy-r2/radar-firing-form.md, (a) on all three; historian/torpedo-hits-radar-1124.md). Radar worked mostly before a boat fired, not on its hits: late in 1942 'about 70 per cent of the attempted attacks were frustrated by the escorts', yet 'about two ships were torpedoed in each successful attack' (OEG 51 section 5.2.1, F). The count's pack is the boats that fired (OEG's 'U-boats attacking each contact', measured at T2 against escorts with radar), so the boats that try are the pack / t2, and those that fire are the tries x 1 / (1 + c x r): r the radar-fitted escorts a convoy (the route's escort vessels whose navy has sea-search radar, at their share on the route, over the convoys sailed a month) for each boat trying, c = (1/t2 - 1) / rT2. 1 with no radar-fitted escort (D: 1940's about 4 ships a boat at sea a month at 0.45 a torpedo). Applied once, on the pack that the contest and the ceiling both read; the escort's kills keep the count's incidents (Q3 (a), for now). t2 0.3: the share that fired at T2 (D from F, 70% frustrated). rT2 1: T2's ratio, the record's, never the game's (the design director: the game has about 3 times the record's boats there, a gap the work-up pipeline answers): about 6.5 escorts a convoy (F, OEG ch. 10 Table 5), nearly all with radar (M), over about 6.7 boats trying (2 / 0.3, D); so c = 7/3 (D). The check, never fitted: HX 229/SC 122, March 1943, boats about 2:1 over the escorts, r about 0.5, a share of about 0.46; 21-22 ships lost (L). Null in either: every boat counted fires, as before. The radar-fitted escorts a convoy (the design director's ruling of 24 November 2026 16:58Z on naval-battles/convoy-r2/screen-cycle-form.md): the escorts at sea with the convoys at once over the convoys at sea at once (station.dd, Q1 (d)); and where 'screen' is read, the escorts on the close screen's stations, the lesser of the escorts with the convoy and the stations, times the radar-fitted share of them, so a thin screen fills fewer stations (Q2 (b)). Stations = 'stations' + the convoy's columns / 'columnsAStation', the columns its ships (count.ships) / 'shipsAColumn': the US Fleet A/S Instructions' screens of 7 to 11 escorts for 3 to 15 columns, 6 + columns / 3 (F, D; historian/escort-screen-cycle-1124.md). shipsAColumn 3.5 (D from L, historian/naval-reads-4-1124.md: HX 229's 37 ships in 11 columns, SC 122's 50 in 14), the columns at most 'maxColumns' 19 (L: HX 300's 166 ships in 19 columns; past that the columns go deeper): the route's 44-ship convoy has 12.6 columns and 10.2 stations (D). No 1940-42 convoy's columns were read, so the rule is D there (the design director, 17:04Z). A null in any of them: the escorts with the convoy are not capped. Escorts beyond the stations add nothing to frustrating attacks (Q3 (a)) and still count in the escort's strength E (Q4 (a)); the escorts' losses form moves them to pickets and support groups. Screens without radar frustrate too: the eye term, laid below; where it is laid it reads only its own figures, and radar alone (t2, rT2) is its fallback. eye (the design director's ruling of 24 November 2026 17:13Z on naval-battles/convoy-r2/eye-term-form.md, Q1 (a), Q2 and Q3, with the units of 17:24Z and the inputs of 17:17Z): escorts on stations without radar frustrate too, at a lower rate than with it, one rule for every navy: the share that fires = 1 / (1 + c_e e + c_r r), e every escort on the stations for each boat trying (lookouts and asdic), r the radar-fitted ones (a radar-fitted escort counts in both). c_e and c_r are solved together on the record's two points, never on the game. 1941's sample (OEG, Apr-Dec 1941, 17 convoys, F): of 4.2 boats engaging, 2.6 made an effective attack (effective41 0.62, one that torpedoed a ship), a boat that fired putting in n41 4.8 torpedoes (1.7 ships torpedoed x 1.35 hits a ship torpedoed = 2.3 hits, conditional on a hit at 0.45, D), so 0.66 fired; e41 1.07 (4.5 escorts, 'one destroyer and three or four corvettes', F, over 4.2 boats; the reinforced-sample lean of 5-7 is flagged, not laid, e41 1.43 its sensitivity); r41 0.07 (Type 271 about 0 a convoy in April-August and 0.3-1 in September-December 1941, about 0.29 over the period, D on L). T2 (October 1942 to May 1943): 0.3 of attempted attacks not frustrated (F), nT2 5.8 (about 2 torpedoed = 2.7 hits, D), so 0.31 fired; eT2 = rT2 0.97 (about 6.5 escorts, nearly all fitted, over 6.7 boats trying). So c_e about 0.36 and c_r about 1.94 (D); at T2's point the share is 0.31, so the boats that try are the count's pack / 0.31 and the pack comes back there. About three quarters of 1941's convoys were outside 400 nm air reach; the rest is a flagged lean, not fitted out. The check, never fitted: HX 229/SC 122, e and r about 0.5, about 0.46. A null in any eye figure: radar alone, as above.",
+    firing: { t2: 0.3, rT2: 1, screen: { stations: 6, columnsAStation: 3, shipsAColumn: 3.5, maxColumns: 19 }, eye: { effective41: 0.62, n41: 4.8, e41: 1.07, r41: 0.07, effectiveT2: 0.3, nT2: 5.8, eT2: 0.97, rT2: 0.97 } },
+    _load: "What a boat that fires puts into one convoy (the design director's ruling of 24 November 2026 17:27Z on naval-battles/convoy-r2/load-per-convoy-form.md, (a) on all three, with the figures of 17:37Z from historian/finding-b-load-1124.md sections 2.3-2.5 and 3; one rule for every navy, never the date). Torpedoes into one convoy = salvos x the boat's ready tubes (ceiling.tubes), never more than its load: a boat fires all its ready tubes each approach, in both eras (U-100 fired 4 tubes in 5 minutes, U-628 5 in 4, F), and a further approach goes ahead with q = the firing share (the same screen contest, one c pair, Q1 (a): an approach that fails puts the boat down and ends its night) x the share of the night a reload fits in x the share of boats that regain contact after an attack (Q2 (a)). reload 1.25: hours to reload the ready tubes, about 15-20 minutes a tube, 1-1.5 hours for all (D from F: U-100 had 3 tubes ready 35-45 minutes after emptying them, surfaced at night; U-99 reloaded 5 dived in at most 100 minutes); the night's dark hours are the day less its daylight (weather.ts dayShare, the shared astronomy, at the sea's mean latitude), the attack falling at any hour of the dark alike, so a reload fits 1 - reload / dark of the time. regain null (U): contact is lost when running in to attack (F, British 1943-44 summary), and is regained from a shadower's report or the boat's own hydrophone search (F, U-99 by U-101's signal); no share is read, so with it unread a boat that fires makes one approach a convoy, as the record's boats mostly did ('elsewhere a boat got one run per convoy', F; several runs only against a weak screen, HX 72: U-100's six runs, 12 torpedoes). The next night's contact (the boat's surface speed, 17.7-18 knots for a VIIC, against the convoy's 6-8 or 9-13, L; broken by the day's air cover, the sea patrol's keep-down, fitted with it at the one a0 refit, and by a rough sea) waits on the same share. The load is a cap for a patrol, not a convoy (Q3 (a)): a boat holds one load for its days on station (station.ss.patrol), so the torpedoes the route's firing boats put into a month's convoys attacked are never more than its boats on station x their load x 30 / patrol days; past that each convoy's share falls alike. The record's checks, never fitted: about 4.8 torpedoes, 2.3 hits, a boat that fired a convoy in 1941 and 2.7 hits at T2 (the product, ships torpedoed a successful attack x 1.35 hits a ship torpedoed, F/D); escorts attacked 3.2 of 4.2 engaging boats in 1941 (F), and about half of successful attacks went undetected late in 1942 (F); nights in contact 2-5 (F); OEG Table 6 (1941-42), ships sunk a boat in the pack 0.88 at 3.4 escorts, 0.75 at 6.7, 0.34 at 11.1 (F). Null in reload, or tubes null: the whole load into one convoy, as first built. The next night (the design director's ruling of 24 November 2026 18:00Z, Q2 (a) from its causes; the second run within one night stays unread, 'regain'): a further approach the next night goes ahead with the share of the boats that fired that hold or regain contact through the day, h = the margin of the boat's surface speed over the convoy's (1 - convoy / boat, none where the convoy is as fast: a D form with no figure, flagged), weighed over the route's convoys by class, x the share of its time the aircraft that keep boats down by day leave it up (the sea patrol's keep-down as built, none while the patrol is dormant), x the calm share (a rough sea breaks contact, calmShare as built: D by cause, a VIIC in heavy seas dropping to about the convoy's speed, M; the historian is reading the boats' speed in heavy seas, and if it beats the convoy's, rough months regain through the margin at that speed instead of none). So q = the firing share x (w + (1 - w) x h), w the night's own second run (unread, 0). next.boat 17.85 knots: the VIIC's 17.7-18 on the surface (F, historian/finding-b-load-1124.md; the game builds one boat design, so every boat takes it; the IXC's 18-20 waits on a boat design row). next.convoys: each class's speed and its share of the route's sailings both ways, half each way (the route's convoys sail both ways, count.ways). The Atlantic: slow 7 knots (SC, slow ON and ONS, 6-8, L) and fast 11 knots (HX and fast ON, 9-13, L); eastbound 0.37 slow (D from F: the series' numbering from August 1940, SC 1-177 and HX 59-358), westbound 0.5 slow (D from L/F: the ON convoys alternated fast and slow; the design director, 18:07Z), so 0.185, 0.315, 0.25 and 0.25 of the route's sailings. The spring 1943 change (every ON fast, the slow ships in ONS) is a side's order for its convoys, never a date: on the known list. Libya: 9 knots (L, two convoys, historian/finding-b-load-1124.md section 5), flagged; routing far from a hostile base, which almost doubled the distances, is a staff's choice by the threat: on the known list. Checks, never fitted: nights in contact a convoy, the pack's with shadowers relieving each other, not a firing boat's (1 in 1940, once 2; at most 3 in September 1941; 2-5, often 4, in 1942-43, F) and a second firing run in 3 of 8 engagements in 1940 (D from F, a tiny sample).",
+    load: { reload: 1.25, regain: null, next: { boat: 17.85, convoys: { atlantic: [{ class: "eastbound slow: SC", speed: 7, share: 0.185 }, { class: "eastbound fast: HX", speed: 11, share: 0.315 }, { class: "westbound slow: slow ON, and ONS", speed: 7, share: 0.25 }, { class: "westbound fast: fast ON", speed: 11, share: 0.25 }], libya: [{ class: "Italian convoys to Libya", speed: 9, share: 1 }] } } },
+    _patrol: "The sea patrol against submarines (the design director's ruling of 24 November 2026 15:14Z on naval-battles/convoy-r2/sea-patrol-form.md, (a) on all nine questions, with his marks of 15:14Z, 15:23Z and 15:32Z). A land bomber group on the standing order 'Patrol the [sea] against submarines' watches a share of that sea: s = R x (1 - e^(-A / A_R)), R the share of the sea's waters it reaches, A the aircraft on patrol there (each group's bombers x its readiness x the sky, none from a grounded field or under a closed sky, half under cloud, at the air rules' cover curve over its distance: full to 0.6 of its range, half at its limit), A_R the aircraft that watch the waters reached. 'reach' says how R and A_R are read: 'map', as the design director ruled for the dormant interim (his ruling of 24 November 2026 17:49Z, 4), R the share of the sea's squares on the chart within the group's bomber range of its airfield and A_R = a0 for each 10,000 square nautical miles of them, to be replaced at the one a0 refit by the aircraft type's radius on the map geometry; 'air', as first ruled at 15:14Z and no longer the reading, R the sea's 'air' share and A_R = a0 x R / air. A sea is reached at all as a strike is judged (its nearest coast within bomber range), all of it with long-range patrol aircraft. intensity: the air fighting's own row where enemy fighters meet a patrol, as they meet a strike over the sea (air.ts assessAir; the air thread's Q6), U until laid. It gates only the fighters (the design director's ruling of 24 November 2026 17:49Z, 5 (a)): while it is unread no enemy fighter meets a patrol and none of its bombers is lost to them, and the patrol itself works. A patrol loses only the fighters' part of what a strike there would lose, since an open sea has no guns, and nothing to the enemy where no fighter comes up (seapatrol.ts patrolLoss); its losses are booked to the group's and the nation's, as a raid's are. The computer's staff sends only bomber groups with no fighters: a patrol flies alone, and a bomber group defends nothing. It sends them where its side last saw boats, never where they truly are, and predicts no move of theirs. It weighs a group's patrol against the raid its raid staff chose for the group, at that raid's own score, before the raid flies, and a group the raid staff left on support against nothing; the patrol goes wherever it is worth more, with no other test (the design director's ruling of 24 November 2026 17:49Z, 2 (a) and 3 (a)). A computer-run raider's staff moves its beat out of waters where its side's boats last met aircraft without kit, never reading the patrols truly flown, and only where the month's gain in time up on station, each beat read from the port the staff would base it at, is more than the move itself loses: for its boats on station, the passage from the old beat to the new (station.ss.passage days a sea crossed, by the sea graph), or the whole month in harbour where the move takes it to another base and keeping its beat would not; and where keeping its beat would take it to another base and the move would not, the month in harbour that staying costs counts for the move (17:49Z, 1 (a)). a0: fitted through the game to the historian's arc of sinkings inside shore reach, 1940 to October 1941 (historian/air-vs-subs-1124.md section 8), at each quarter's anti-submarine hours, never standalone (U until fitted). In watched waters a boat on station is attacked 'attacks' times a month, by the kit its attackers carry (depth charges and sea-search radar: convoycause.json 'asv'), and 'kill' of those attacks sink it (U until read: the historian's 2.5% of attacks in 1941 to 25% in 1943-44 are by date and wait to be set against kit). The boats sunk are booked inside the hunt's cap, on their own dice. Aircraft without the kit keep the boats down instead: a boat's time on station in the waters they watch counts at 1 - s for finding and attacking convoys and meeting the escort; with the kit, OEG T7's cut ('cover') stands at the share watched, and Q4's kills with it, no keeping down on top. Each staff counts the other side's units where its own side last saw them (the design director's 24 November 2026 17:49Z amendment to ruling 1, and his ruling of 17:54Z on naval-battles/convoy-r2/sight-store-form.md, (a) on all five questions): while the patrol is live, each nation keeps one record a sea (seasight.ts) of the enemy boats it last saw there (its convoys attacked, its escort met, its patrols sighted, it sank, or its search identified them, the most any one of these showed; a fleet only reported is not counted, as the map counts no strength for it) and of the enemy aircraft its own boats last met there (the watch each enemy patrol kept over its boats as the patrol's own month booked it, so a patrol is seen once it has flown over the boats, never at its order), each with its month, written at the close of its month at sea and read by its staffs and its allies' and by the player's own panel; a sea never seen counts as clear, there is no decay figure, and nothing is written or read while the patrol is dormant. 'lost': the share of the aircraft on patrol lost a month (U: about 2 aircraft a 1,000 hours flown, D, waits for the hours an aircraft flies a month). 'live': the switch (the design director's ruling of 24 November 2026 17:49Z, 5 (a)): the patrol runs only when live is true and a0, attacks and kill are laid. It is false as shipped, so the patrol is dormant until the one a0 refit, and going live needs Brian's card; if intensity is still null then, that is the open gap, and no enemy fighter meets a patrol until the air thread's row is laid. While live is false, or a0, attacks or kill are unread (null), nothing here is read: no order is offered, and the flat air term in the hunt and the cover from coasts held stand (the design director's mark: never remove a working cause before its replacement is laid). Laid as interim (the design director's rulings of 24 November 2026 16:58Z, 17:06Z, 17:10Z and 17:13Z on naval-battles/convoy-r2/sea-patrol-a0-reading-1124.md), the patrol still dormant while live is false: a0 8 aircraft on patrol to each 10,000 square nautical miles reached (D, read through the game on the fall of the historian's section 8 arc, 4 seeds; one refit owed once daylight, the ships' density near the home ports and the route's western seas are laid, on the arc re-cut to the game's water and bases, historian/naval-reads-4-1124.md section 3). attacks: none 2.65 a boat-month watched (D from F: 8 attacks a month, Jul 1940-Mar 1941, over about 5 boats on station x 0.60 of them inside reach, the section 8 arc's mean for those quarters); kit 2.92, radar finding 1.1 times as often by day (D, OEG ch. 13 Table 2, F: ESF and Trinidad straddle 1) and nothing more by night without a searchlight; 18 and 39 a month in 1941 are checks, never fitted. kill 0.025 of attacks for every air force (F, 1941); radar adds no kill until the share of attacks catching a boat surfaced is laid (warning receivers, depth settings and fill, the searchlight: rows the tree lacks; 0.10 of 1942-43 is a check, never laid). lost 0.04 of the aircraft on patrol a month to weather and accident (D on L: about half of 2 a 1,000 hours, 116 of 233 to May 1943, x 40 hours a month), flat until the game's own flying weather by season is tied in; enemy losses only through intensity, so nothing counts twice. By day only: the boats are kept down, and the kit's cut acts, for the day's share of their time, the sun's day over the sea's mean latitude that month (weather.ts dayShare, astronomy, F; 17:10Z); about 0.7 of convoy attacks at night, Jul 1940-Mar 1941 (F), is the check.",
+    patrol: { live: false, reach: "map", a0: 8, intensity: null, attacks: { kit: 2.92, none: 2.65 }, kill: { kit: 0.025, none: 0.025 }, lost: 0.04 }
   };
 
   // ../../src/campaign/tech.ts
@@ -41778,6 +41794,341 @@
     }
   };
 
+  // ../../src/campaign/seasight.ts
+  var seaMonth = () => ({ attack: {}, incident: {}, sunk: {} });
+  var HOW = ["attack", "incident", "sighting", "loss", "search", "keptDown"];
+  var r22 = (x) => Math.round(x * 100) / 100;
+  var r32 = (x) => Math.round(x * 1e3) / 1e3;
+  function boatsThere(g2, nat, z) {
+    let b = 0;
+    for (const f of g2.fleets) if (f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g2, f.nat, nat)) b += f.ships.ss * onStation(g2, f, z);
+    return b;
+  }
+  function airMet(g2, nat) {
+    const me = g2.order.indexOf(nat);
+    const out = /* @__PURE__ */ new Map();
+    const sea = (z) => {
+      let r = out.get(z);
+      if (!r) out.set(z, r = { kit: 0, none: 0, lost: 0 });
+      return r;
+    };
+    for (const by2 of Object.keys(g2.patrolSunk ?? {}).sort()) {
+      const rec = g2.patrolSunk[by2];
+      if (!(rec.turn === g2.turn || rec.turn === g2.turn - 1 && g2.order.indexOf(by2) > me)) continue;
+      for (const z of Object.keys(rec.met ?? {})) {
+        const m = rec.met[+z][nat];
+        if (m) {
+          const r = sea(+z);
+          r.kit += m.kit;
+          r.none += m.none;
+        }
+      }
+      for (const z of Object.keys(rec.at ?? {})) {
+        const k = rec.at[+z][nat];
+        if (k) sea(+z).lost += k;
+      }
+    }
+    return out;
+  }
+  function noteSeaSight(g2, nat, month3 = seaMonth(), sunk = {}) {
+    const n = g2.nations[nat];
+    if (!patrolOn(g2) || !n?.alive) return;
+    const t = g2.turn;
+    const eyes = /* @__PURE__ */ new Set();
+    const eye = (z) => {
+      if (g2.seas[z]) eyes.add(z);
+    };
+    if (n.atWar.length) {
+      for (const r of NAVY.convoys) if (r.to === nat) for (const k of r.zones) eye(zoneOf(g2, k));
+      for (const f of g2.fleets) {
+        if (f.nat !== nat || !atSea(f) || shipCount(f.ships) <= 0) continue;
+        if (f.stance === "escort") {
+          eye(f.zone);
+          for (const z of seaRoutes(g2).find((r) => r.id === f.lane)?.zones ?? []) eye(z);
+        } else if (f.stance === "hunt") eye(f.zone);
+      }
+      for (const a of g2.airFleets) if (a.nat === nat && a.mission === "seapatrol" && g2.seas[a.target] && patrolAircraft(g2, a, a.target) > 0) eye(a.target);
+      for (const z of g2.seas) if (boatsInView(g2, nat, z.id)) eye(z.id);
+    }
+    const shown2 = /* @__PURE__ */ new Map();
+    const show = (z, how, x) => {
+      if (!(x > 0) || !g2.seas[z]) return;
+      let m = shown2.get(z);
+      if (!m) shown2.set(z, m = /* @__PURE__ */ new Map());
+      m.set(how, (m.get(how) ?? 0) + x);
+    };
+    for (const z of Object.keys(month3.attack)) show(+z, "attack", month3.attack[+z]);
+    for (const z of Object.keys(month3.incident)) show(+z, "incident", month3.incident[+z]);
+    for (const z of Object.keys(sunk)) show(+z, "loss", sunk[+z]);
+    for (const z of Object.keys(month3.sunk)) show(+z, "loss", month3.sunk[+z]);
+    const watched2 = /* @__PURE__ */ new Map();
+    for (const a of g2.airFleets) {
+      if (a.nat !== nat || a.mission !== "seapatrol" || !g2.seas[a.target] || watched2.has(a.target)) continue;
+      watched2.set(a.target, watchFor(g2, a.target, (x) => x === nat)?.s ?? 0);
+    }
+    const reported = /* @__PURE__ */ new Set();
+    for (const f of g2.fleets) {
+      if (!atSea(f) || f.ships.ss <= 0 || !g2.seas[f.zone] || !atWar(g2, f.nat, nat)) continue;
+      const b = f.ships.ss * onStation(g2, f, f.zone);
+      show(f.zone, "sighting", b * (watched2.get(f.zone) ?? 0));
+      const found2 = fleetFound(g2, f, nat);
+      if (found2 === "exact") show(f.zone, "search", b);
+      else if (found2 === "report") reported.add(f.zone);
+    }
+    const book3 = (z) => {
+      var _a, _b, _c;
+      return (_c = (_b = (_a = g2.intel).seaSight ?? (_a.seaSight = {}))[nat] ?? (_b[nat] = {}))[z] ?? (_c[z] = {});
+    };
+    for (const z of [.../* @__PURE__ */ new Set([...eyes, ...shown2.keys()])].sort((a, b) => a - b)) {
+      const m = shown2.get(z);
+      if (!m && reported.has(z)) continue;
+      const most = m ? Math.max(...m.values()) : 0;
+      book3(z).boats = { t, n: r22(most), how: HOW.filter((h) => (m?.get(h) ?? 0) > 0) };
+    }
+    const met2 = airMet(g2, nat);
+    const on = new Set(met2.keys());
+    for (const f of g2.fleets) if (f.nat === nat && atSea(f) && f.ships.ss > 0 && raidShare(f) > 0 && g2.seas[f.zone]) on.add(f.zone);
+    for (const z of [...on].sort((a, b) => a - b)) {
+      if (!g2.seas[z]) continue;
+      const a = met2.get(z);
+      const none4 = r32(Math.min(1, a?.none ?? 0)), kit = r32(Math.min(1 - none4, a?.kit ?? 0)), lost = a?.lost ?? 0;
+      const how = [];
+      if (kit > 0) how.push("attack");
+      if (lost > 0) how.push("loss");
+      if (none4 > 0) how.push("keptDown");
+      book3(z).air = { t, kit, none: none4, lost, how };
+    }
+  }
+  function seaSeen(g2, viewer, z) {
+    const all = viewer && patrolOn(g2) && g2.nations[viewer] ? g2.intel?.seaSight : void 0;
+    if (!all || !viewer) return null;
+    let boats, air2;
+    for (const k of Object.keys(all).sort()) {
+      if (k !== viewer && !(g2.nations[k] && allied(g2, k, viewer))) continue;
+      const r = all[k][z];
+      if (!r) continue;
+      if (r.boats && (!boats || r.boats.t > boats.t || r.boats.t === boats.t && r.boats.n > boats.n)) boats = r.boats;
+      if (r.air && (!air2 || r.air.t > air2.t || r.air.t === air2.t && r.air.kit + r.air.none > air2.kit + air2.none)) air2 = r.air;
+    }
+    return boats || air2 ? { ...boats ? { boats } : {}, ...air2 ? { air: air2 } : {} } : null;
+  }
+  var seenBoats = (g2, viewer, z) => seaSeen(g2, viewer, z)?.boats ?? null;
+  var seenAir = (g2, viewer, z) => seaSeen(g2, viewer, z)?.air ?? null;
+  var lifted = (g2, viewer) => viewer !== null && viewer === g2.human && !fogOn(g2, viewer);
+  function boatsKnown(g2, viewer, z) {
+    if (!viewer || !patrolOn(g2) || !g2.seas[z]) return null;
+    if (lifted(g2, viewer)) return { n: boatsThere(g2, viewer, z), t: g2.turn };
+    const b = seenBoats(g2, viewer, z);
+    return b ? { n: b.n, t: b.t } : null;
+  }
+  function airKnown(g2, viewer, z) {
+    if (!viewer || !patrolOn(g2) || !g2.seas[z]) return null;
+    if (lifted(g2, viewer)) {
+      const w = watchAgainst(g2, z, viewer);
+      return { kit: w?.kit ?? 0, none: w?.none ?? 0, lost: airMet(g2, viewer).get(z)?.lost ?? 0, t: g2.turn };
+    }
+    const a = seenAir(g2, viewer, z);
+    return a ? { kit: a.kit, none: a.none, lost: a.lost, t: a.t } : null;
+  }
+  var about = (n) => n < 10 ? n.toFixed(1) : String(Math.round(n));
+  var pct6 = (x) => `${Math.round(x * 100)}%`;
+  function seaSeenWords(g2, viewer, z) {
+    if (!viewer || !patrolOn(g2)) return "";
+    const b = boatsKnown(g2, viewer, z);
+    return b && b.n >= 0.05 ? `Boats last seen there: about ${about(b.n)} (${turnToDate(b.t).label})` : "No boats seen there";
+  }
+  function airMetWords(g2, viewer, z) {
+    if (!viewer || !patrolOn(g2) || !g2.seas[z]) return "";
+    const sea = seaWhat(g2.seas[z].name);
+    const a = airKnown(g2, viewer, z);
+    if (!a) return `No aircraft met over ${sea}`;
+    const parts2 = [];
+    if (a.none >= 5e-3) parts2.push(`keeping the boats down about ${pct6(a.none)} of the time`);
+    if (a.kit >= 5e-3) parts2.push(`attacking them with radar and depth charges about ${pct6(a.kit)} of the time`);
+    if (a.lost > 0) parts2.push(`${a.lost} boat${a.lost === 1 ? "" : "s"} lost to them`);
+    return `Aircraft last met over ${sea}: ${parts2.length ? parts2.join(", ") : "none"} (${turnToDate(a.t).label})`;
+  }
+
+  // ../../src/campaign/seapatrol.ts
+  function patrolFigures() {
+    const P = CAUSE2.patrol;
+    if (!P || P.live !== true || P.a0 === null || P.attacks.kit === null || P.attacks.none === null || P.kill.kit === null || P.kill.none === null) return null;
+    return { a0: P.a0, intensity: P.intensity, attacks: { kit: P.attacks.kit, none: P.attacks.none }, kill: { kit: P.kill.kit, none: P.kill.none }, lost: P.lost };
+  }
+  var patrolMet = () => (patrolFigures()?.intensity ?? null) !== null;
+  var patrolOn = (g2) => unitsDecide(g2) && patrolFigures() !== null;
+  function patrolReach(g2, f, z) {
+    const zone = g2.seas[z];
+    if (!zone || f.ship !== void 0 || f.ashore !== void 0 || f.kind === "ftr") return null;
+    const range2 = airRange(f, g2).bmr;
+    const long = aswKit(g2, f.nat).patrol;
+    let d = Infinity;
+    if (zone.coast.length) d = kmToSea(g2, f, z);
+    else if (long) {
+      for (const a of zone.adj) if (g2.seas[a]?.coast.length) d = Math.min(d, kmToSea(g2, f, a));
+    }
+    if (d > range2) return null;
+    const sq = seaSquares(g2), all = sq.at.get(z)?.length ?? 0;
+    const R2 = long ? 1 : CAUSE2.patrol.reach === "map" ? squaresWithin(g2, f.base, z, range2) : zone.air;
+    if (R2 <= 0) return null;
+    return { R: R2, d, nm2: R2 * all * sq.nm2 };
+  }
+  var within2 = /* @__PURE__ */ new Map();
+  function squaresWithin(g2, base, z, km2) {
+    const key7 = `${g2.flags.world === 1 ? "w" : "e"}:${base}:${z}:${km2}`;
+    let v = within2.get(key7);
+    if (v !== void 0) return v;
+    const at4 = seaSquares(g2).at.get(z) ?? [];
+    const r = g2.regions[base], lim = km2 / AIR.kmPerUnit;
+    let n = 0;
+    for (const p of at4) if (mapDist(g2, p.x, p.y, r.x, r.y) <= lim) n++;
+    v = at4.length ? n / at4.length : 0;
+    within2.set(key7, v);
+    return v;
+  }
+  function patrolAircraft(g2, f, z, at4 = patrolReach(g2, f, z)) {
+    if (!at4 || f.bmr <= 0) return 0;
+    const sky = weatherOn(g2) ? grounded(g2, f) ? 0 : skySupport(skyAtSea(g2, z)) : 1;
+    return f.bmr * f.ready * sky * cover2(at4.d, airRange(f, g2).bmr);
+  }
+  function patrolLoss(g2, f, z) {
+    const lost = patrolFigures()?.lost ?? null;
+    const op = lost !== null ? patrolAircraft(g2, f, z) * lost : 0;
+    const a = assessAir(g2, [f], "seapatrol", z);
+    const fighters = !a.why && a.D > 0 ? a.B * Math.max(0, a.bomberLoss - a.gunLoss) : 0;
+    return { op, fighters };
+  }
+  function watch(g2, z, side5) {
+    const F = patrolFigures();
+    if (!F || !unitsDecide(g2) || !g2.seas[z]) return null;
+    let A = 0, Ak = 0, R2 = 0, nm2 = 0, attacks = 0, kills = 0;
+    const by2 = {};
+    for (const f of g2.airFleets) {
+      if (f.mission !== "seapatrol" || f.target !== z || !side5(f.nat)) continue;
+      const at4 = patrolReach(g2, f, z);
+      const a = patrolAircraft(g2, f, z, at4);
+      if (!at4 || a <= 0) continue;
+      const kit = airKit(aswKit(g2, f.nat));
+      A += a;
+      if (kit) Ak += a;
+      if (at4.R > R2) {
+        R2 = at4.R;
+        nm2 = at4.nm2;
+      }
+      const rate2 = kit ? F.attacks.kit : F.attacks.none;
+      attacks += a * rate2;
+      kills += a * rate2 * (kit ? F.kill.kit : F.kill.none);
+      by2[f.nat] = (by2[f.nat] ?? 0) + a;
+    }
+    if (A <= 0 || R2 <= 0) return null;
+    const AR = CAUSE2.patrol.reach === "map" ? F.a0 * nm2 / 1e4 : F.a0 * R2 / g2.seas[z].air;
+    const s = R2 * (1 - Math.exp(-A / AR));
+    const day = dayShare(seaLatitude(g2, z), turnToDate(g2.turn).month);
+    return { s, kit: s * day * Ak / A, none: s * day * (A - Ak) / A, day, A, R: R2, attacks: attacks / A, kills: kills / A, by: by2 };
+  }
+  var watchAgainst = (g2, z, boats) => watch(g2, z, (nat) => atWar(g2, nat, boats));
+  var watchFor = (g2, z, side5) => watch(g2, z, side5);
+  function watchWith(g2, f, z) {
+    const was = { m: f.mission, t: f.target };
+    f.mission = "seapatrol";
+    f.target = z;
+    try {
+      const w = watchFor(g2, z, (nat) => allied(g2, nat, f.nat));
+      return w ? { share: w.s / w.R, s: w.s, R: w.R } : { share: 0, s: 0, R: patrolReach(g2, f, z)?.R ?? 0 };
+    } finally {
+      f.mission = was.m;
+      f.target = was.t;
+    }
+  }
+  function patrolSeas(g2, f) {
+    if (!patrolOn(g2)) return [];
+    const out = [];
+    for (const z of g2.seas) {
+      if (!patrolReach(g2, f, z.id)) continue;
+      const ours = seaRoutes(g2).some((r) => r.zones.includes(z.id) && allied(g2, r.to, f.nat));
+      if (ours || f.mission === "seapatrol" && f.target === z.id) out.push(z.id);
+    }
+    return out;
+  }
+  var boatsOnStation = (g2, nat, z) => seenBoats(g2, nat, z)?.n ?? 0;
+  function boatsExpected(g2, nat, zs) {
+    const at4 = /* @__PURE__ */ new Map();
+    const side5 = (n) => allied(g2, n, nat);
+    for (const z of zs) {
+      const b = boatsOnStation(g2, nat, z);
+      if (!(b > 0)) continue;
+      const w = watchFor(g2, z, side5);
+      at4.set(z, b * (w && w.none > 0 ? 1 - w.none : 1));
+    }
+    return at4;
+  }
+  function patrolWorth(g2, nat, f, z, route, B3, all) {
+    const F = patrolFigures();
+    if (!F || B3 <= 0) return 0;
+    const side5 = (n) => allied(g2, n, nat);
+    const w0 = watchFor(g2, z, side5);
+    const was = { m: f.mission, t: f.target };
+    f.mission = "seapatrol";
+    f.target = z;
+    let w1;
+    try {
+      w1 = watchFor(g2, z, side5);
+    } finally {
+      f.mission = was.m;
+      f.target = was.t;
+    }
+    if (!w1) return 0;
+    let v = B3 * (w1.s * w1.kills - (w0 ? w0.s * w0.kills : 0)) * (CARRIERS.strike.value.ss ?? 0);
+    const kept2 = w1.none - (w0?.none ?? 0) + (w1.kit - (w0?.kit ?? 0)) * (1 - CAUSE2.cover);
+    const rec = g2.convoys[route.id];
+    if (rec?.loss && all > 0) v += 3e3 * route.share * rec.loss * (B3 * kept2 / all);
+    const lost = patrolLoss(g2, f, z);
+    v -= lost.op + lost.fighters;
+    return v;
+  }
+  function patrolStaff(g2, nat, mine4, raid2) {
+    if (!patrolOn(g2)) return false;
+    const R2 = AIRWAR.ai.raids;
+    const free2 = (f) => f.flew !== g2.turn && f.mission === "support" && !f.close && !deckBred2(f) && f.kind !== "ftr" && f.ftr <= 0 && f.bmr > 0 && f.ready >= R2.ready;
+    const pool = raid2 ? [raid2.f] : mine4;
+    const given3 = (f) => raid2 && f === raid2.f ? raid2.v : 0;
+    const routes = [];
+    for (const r of NAVY.convoys) {
+      const to = g2.nations[r.to];
+      if (!to?.alive || !to.atWar.length || !allied(g2, r.to, nat)) continue;
+      const zs = [...new Set(r.zones.map((k) => zoneOf(g2, k)).filter((z) => z >= 0))];
+      const boats = zs.reduce((a, z) => a + boatsOnStation(g2, nat, z), 0);
+      if (boats > 0) routes.push({ r, zs, boats });
+    }
+    routes.sort((a, b) => b.boats - a.boats || a.zs[0] - b.zs[0]);
+    let sent = false;
+    for (const { r, zs } of routes) {
+      for (; ; ) {
+        const at4 = boatsExpected(g2, nat, zs);
+        const all = [...at4.values()].reduce((x, y) => x + y, 0);
+        let z = -1, most = 0, fit3 = [];
+        for (const s of zs) {
+          const b = at4.get(s) ?? 0;
+          if (b <= most + 1e-12) continue;
+          const can2 = pool.filter((f2) => free2(f2) && whyNotMission2(g2, f2, "seapatrol", s) === null);
+          if (can2.length) {
+            z = s;
+            most = b;
+            fit3 = can2;
+          }
+        }
+        if (z < 0) break;
+        fit3.sort((a, b) => patrolAircraft(g2, b, z) - patrolAircraft(g2, a, z) || a.id - b.id);
+        const f = fit3.find((x) => patrolWorth(g2, nat, x, z, r, most, all) > given3(x));
+        if (!f) break;
+        setMission2(g2, f, "seapatrol", z);
+        sent = true;
+        if (raid2) return true;
+      }
+    }
+    return sent;
+  }
+
   // ../../data/campaign/hulls.json
   var hulls_default = {
     _about: "The names of the battleships and carriers, for the card that marks one lost (Brian's memorial card, asked for by the 3D builder 19 November 2026). A record only: nothing here changes a fight, a count or a die. A ship gone by any way (a fight, bombers, a submarine, a fleet scuttled for want of a port) is never named again. 'navies' gives each nation's battleships ('bb') and carriers ('cv') in the order of the record, each with her name, her crew in wartime (the men aboard), the month she joins (the campaign's turn: 1 is September 1939, 28 December 1941; none for a ship afloat at the start), and the fleet she began with ('fleet', the fleet rows' own names in navy.json, world.json and far-world.json). A light carrier unit of two ships ('pair': the arrivals' 'light carriers Independence and Princeton') is one carrier in the counts and goes down as one, both names and both crews. When a nation's battleship or carrier goes down, the ship named is one still afloat of the fleet that lost her if it has one, any afloat of her nation if not, and none (a name of null) once the record runs out; and of her crew a share is lost that is one of the real ones of her class ('share': each the men lost of the men aboard when a ship of the class went down in the war, 1939 to 1945). Both draws are the game's own and always the same for the same fight, but are made apart from the war's dice. 'crew' is the crew of a ship of the class the record has no name for. Escort carriers are named one for each the game counts in the Escort Carrier Fleet. Wyoming, a gunnery training ship from 1931, stands in for the fourth battleship the game gives the American Atlantic Fleet. Rows are only ever added at the end of a list, never moved or put between others: a lost ship is kept by her place in the list (the flag hull:nation:class:place), so a moved row would rename ships in saved games. 'later' gives a change from a month on, in the order of the months: a new name (Marat is Petropavlovsk from May 1943) or a move to another fleet (Ark Royal from the Home Fleet to Force H); a ship lost after it goes down under her name of that month. 'type' marks a ship whose type is not her class's: Hood, Renown and Repulse were battlecruisers, counted by the game as battleships. Caio Duilio and Andrea Doria were being rebuilt in September 1939 (back in July and October 1940), but stay afloat from the start, because the game's 1st Fleet has four battleships from the first month. Draft by the rules thread from the standard figures; checked by the historian on 19 November 2026 (historian/memorial-roster-check.md), corrections made.",
@@ -42196,10 +42547,11 @@
     harbour: { label: "Raid a harbour", what: "Bombers go for the warships lying in one enemy port." },
     town: { label: "Bomb a town", what: "Bombers go for the defences of a town an army means to take, and shake the troops inside it." },
     line: { label: "Bomb the line", what: "Bombers go for the fieldworks of an enemy line, and take months of digging off them before the army attacks." },
-    airfield: { label: "Bomb an airfield", what: "Bombers go for the runways, hangars and fuel of one enemy airfield by day: enough bombs shut it until its owner repairs it." }
+    airfield: { label: "Bomb an airfield", what: "Bombers go for the runways, hangars and fuel of one enemy airfield by day: enough bombs shut it until its owner repairs it." },
+    seapatrol: { label: "Patrol a sea against submarines", what: "Bombers watch one sea for submarines all month, and fly nothing else." }
   };
   var OFFENSIVE = ["superiority", "bomb", "night", "strike", "ground", "fleet", "harbour", "town", "line", "airfield"];
-  var intensity = (m) => m === "ground" ? AIRWAR.ground.intensity : m === "line" ? AIRWAR.line.intensity : m === "fleet" ? CARRIERS.strike.intensity : m === "harbour" ? CARRIERS.harbour.intensity : m === "town" ? SIEGE.bombard.intensity : m === "airfield" ? AIR.combat.intensity.bomb : AIR.combat.intensity[m];
+  var intensity = (m) => m === "ground" ? AIRWAR.ground.intensity : m === "line" ? AIRWAR.line.intensity : m === "fleet" ? CARRIERS.strike.intensity : m === "harbour" ? CARRIERS.harbour.intensity : m === "town" ? SIEGE.bombard.intensity : m === "airfield" ? AIR.combat.intensity.bomb : m === "seapatrol" ? patrolFigures()?.intensity ?? AIR.combat.intensity.strike : AIR.combat.intensity[m];
   var isOffensive = (m) => OFFENSIVE.includes(m);
   var SURFACE = ["bb", "cv", "ca", "dd"];
   var AIRQ = { on: false, ...air_quality_default };
@@ -42381,6 +42733,7 @@
   }
   function comesUp(g2, f, m, target, zone) {
     if (m === "ground" || m === "line") return true;
+    if (m === "seapatrol") return patrolMet() && guardsSea(g2, f, zone);
     if (m === "strike" || m === "fleet") return guardsSea(g2, f, zone);
     if (m === "harbour") return f.ship === void 0 || inHarbour(g2, f, target);
     return guardsLand(g2, f, target, g2.regions[target].ctrl);
@@ -42963,8 +43316,19 @@
     if (NAVY.convoys.some((c) => atWar(g2, nat, c.to) && c.zones.includes(g2.seas[z].key))) return true;
     return g2.seas[z].coast.some((id) => g2.regions[id].port && atWar(g2, nat, g2.regions[id].ctrl));
   }
+  function whyNotPatrol(g2, f, z) {
+    if (!patrolOn(g2)) return "Sea patrols against submarines are flown only where units decide, once the patrol is live.";
+    if (!g2.seas[z]) return "Pick a sea.";
+    if (deckBred2(f)) return "Carrier aircraft cover their own fleet.";
+    if (f.kind === "ftr" || f.bmr <= 0) return "Only bombers patrol the sea: fighters do not reach far enough.";
+    const field4 = whyNotField(g2, f);
+    if (field4) return field4;
+    if (g2.flags.fields === 1 && f.kind === "bmr" && f.ashore === void 0 && fieldRules(g2) && fieldTier(g2, f.base) === "strip") return `Bombers need a concrete airfield to fly from: ${g2.regions[f.base].name} has a field strip.`;
+    if (patrolReach(g2, f, z)) return null;
+    return g2.seas[z].coast.length || aswKit(g2, f.nat).patrol ? "That sea is beyond its bombers." : "Only long-range patrol aircraft reach a sea with no coast.";
+  }
   function skyZone(g2, m, target) {
-    if (m === "strike") return zoneOfSea(g2, target);
+    if (m === "strike" || m === "seapatrol") return zoneOfSea(g2, target);
     if (m === "fleet") {
       const t = g2.fleets.find((x) => x.id === target);
       return t && atSea(t) ? zoneOfSea(g2, t.zone) : -1;
@@ -42974,6 +43338,7 @@
   function whyNotMission2(g2, f, m, target) {
     if (m === "support" || m === "rest") return null;
     if (!g2.nations[f.nat].atWar.length) return "The nation is at peace.";
+    if (m === "seapatrol") return whyNotPatrol(g2, f, target);
     if (weatherOn(g2)) {
       const why = whyNotSky(g2, f, skyZone(g2, m, target));
       if (why) return why;
@@ -43042,6 +43407,7 @@
     return !groundRules(g2) ? "There is no industry there to bomb." : onNet(target) ? "There is no industry there, and its railway is already cut." : "There is no industry or railway there to bomb.";
   }
   function airTargets(g2, f, m) {
+    if (m === "seapatrol") return g2.seas.map((z) => z.id).filter((t) => whyNotMission2(g2, f, m, t) === null);
     if (!isOffensive(m)) return [];
     const all = m === "strike" ? g2.seas.map((z) => z.id) : m === "fleet" ? g2.fleets.map((x) => x.id) : g2.regions.map((r) => r.id);
     return all.filter((t) => whyNotMission2(g2, f, m, t) === null);
@@ -43049,7 +43415,7 @@
   function setMission2(g2, f, m, target = -1) {
     if (whyNotMission2(g2, f, m, target)) return false;
     f.mission = m;
-    f.target = isOffensive(m) ? target : -1;
+    f.target = isOffensive(m) || m === "seapatrol" ? target : -1;
     return true;
   }
   function airUpkeep(g2, nat) {
@@ -43115,7 +43481,7 @@
         f.mission = "support";
         f.target = -1;
       }
-      if (!n.atWar.length || isOffensive(f.mission) && whyNotMission2(g2, f, f.mission, f.target)) {
+      if (!n.atWar.length || (isOffensive(f.mission) || f.mission === "seapatrol") && whyNotMission2(g2, f, f.mission, f.target)) {
         f.mission = "support";
         f.target = -1;
       }
@@ -43294,7 +43660,7 @@
   function assessAir(g2, fleets, m, target) {
     const C4 = AIR.combat;
     const quarry = m === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
-    const sea = m === "strike" || m === "fleet", night = m === "night";
+    const sea = m === "strike" || m === "fleet" || m === "seapatrol", night = m === "night";
     const zone = m === "fleet" ? quarry?.zone ?? -1 : target;
     const nat = fleets[0]?.nat ?? "";
     const place2 = sea ? g2.seas[zone] ? seaWhat(g2.seas[zone].name) : "the sea" : g2.regions[target]?.name ?? "";
@@ -43438,11 +43804,11 @@
     if (night) out.lines.push({ label: "Night", value: "Flown in darkness", effect: "Few fighters find the bombers, and only about a third of the bombs find the target" });
     else if (af > 0) {
       const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
-      const pct12 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
+      const pct13 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
       out.lines.push({
         label: "Range",
-        value: pct12 >= 100 ? "The target is well inside fighter range" : pct12 > 0 ? `The fighters are at ${pct12}% effect over the target` : "The target is beyond fighter range",
-        effect: pct12 >= 100 ? void 0 : pct12 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
+        value: pct13 >= 100 ? "The target is well inside fighter range" : pct13 > 0 ? `The fighters are at ${pct13}% effect over the target` : "The target is beyond fighter range",
+        effect: pct13 >= 100 ? void 0 : pct13 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
       });
     } else if (out.B > 0) out.lines.push({ label: "Range", value: "No escort", effect: "The bombers go alone" });
     if (out.groups) {
@@ -43983,7 +44349,9 @@
     if (g2.flags.open === 1) {
       flyReadOrders(g2, nat, mine4);
       seaStaff(g2, nat, nat === g2.human ? "land" : "all");
-      raidStaff(g2, nat, mine4, ph);
+      const patrol = patrolOn(g2);
+      raidStaff(g2, nat, mine4, ph, patrol ? (f, v) => patrolStaff(g2, nat, mine4, { f, v }) : void 0);
+      if (patrol) patrolStaff(g2, nat, mine4);
       return;
     }
     for (const ph2 of AIR.plan) {
@@ -44207,7 +44575,7 @@
       if (to && to.v > here * K2.better + K2.least * f.bmr) rebaseAir(g2, f, to.r);
     }
   }
-  function raidStaff(g2, nat, mine4, ph) {
+  function raidStaff(g2, nat, mine4, ph, patrol) {
     if (!airWar(g2)) return;
     const R2 = AIRWAR.ai.raids;
     const B3 = bombingFor(g2, nat);
@@ -44285,8 +44653,8 @@
       const cap15 = g2.nations[nat].capital;
       const guards = (f) => g2.regions[f.base].owner === nat && !g2.regions[f.base].overseas && cap15 >= 0;
       for (let k = 0; k < (BP ? BP.monthly : 1); k++) {
-        const within3 = fighters.filter((f) => whyNotMission2(g2, f, "superiority", t) === null).length;
-        if (within3 >= (BP ? BP.groups : 1)) break;
+        const within4 = fighters.filter((f) => whyNotMission2(g2, f, "superiority", t) === null).length;
+        if (within4 >= (BP ? BP.groups : 1)) break;
         const spare = !!BP && fighters.filter(guards).length > BP.home;
         let move2 = null;
         for (const f of fighters) {
@@ -44401,6 +44769,7 @@
         }
       }
       if (!pick4.best) break;
+      if (patrol?.(pick4.best.fleets[0], pick4.best.v)) continue;
       send2(pick4.best.m, pick4.best.t, pick4.best.fleets, flown++);
     }
   }
@@ -45051,6 +45420,56 @@
     const c = Math.floor(x / md.cell), r = Math.floor(y / md.cell);
     if (c < 0 || r < 0 || c >= lookCols || r >= md.grid.length) return -1;
     return lookup[r * lookCols + c];
+  }
+  var squaresOf = /* @__PURE__ */ new Map();
+  function seaSquares(g2) {
+    const wideChart = g2.flags.world === 1;
+    const key7 = wideChart ? "world" : "europe";
+    let s = squaresOf.get(key7);
+    if (s) return s;
+    const at4 = /* @__PURE__ */ new Map();
+    const put = (z, x, y) => {
+      if (z >= 0) {
+        let l = at4.get(z);
+        if (!l) at4.set(z, l = []);
+        l.push({ x, y });
+      }
+    };
+    let cell;
+    if (wideChart) {
+      const W2 = worldMap2;
+      cell = W2.seas.cell;
+      for (let r = 0; r < W2.seas.grid.length; r++) for (let c = 0; c < W2.seas.cols; c++) {
+        const x = W2.frame.x0 + (c + 0.5) * cell, y = W2.frame.y0 + (r + 0.5) * cell;
+        put(seaAtWide(x, y), x, y);
+      }
+    } else {
+      const md = campaign_map_default.seas;
+      cell = md.cell;
+      const cols2 = Math.ceil(campaign_map_default.width / cell);
+      for (let r = 0; r < md.grid.length; r++) for (let c = 0; c < cols2; c++) {
+        const x = (c + 0.5) * cell, y = (r + 0.5) * cell;
+        put(seaAt(x, y), x, y);
+      }
+    }
+    const km2 = cell * AIR.kmPerUnit;
+    s = { at: at4, nm2: (km2 / 1.852) ** 2 };
+    squaresOf.set(key7, s);
+    return s;
+  }
+  var CHART = { north: 71.4, scale: 40 };
+  var latOf = /* @__PURE__ */ new Map();
+  function seaLatitude(g2, z) {
+    const key7 = g2.flags.world === 1 ? "world" : "europe";
+    let m = latOf.get(key7);
+    if (!m) latOf.set(key7, m = /* @__PURE__ */ new Map());
+    let v = m.get(z);
+    if (v === void 0) {
+      const at4 = seaSquares(g2).at.get(z) ?? [];
+      v = at4.length ? CHART.north - at4.reduce((a, p) => a + p.y, 0) / at4.length / CHART.scale : 50;
+      m.set(z, v);
+    }
+    return v;
   }
   function chartSeas(g2, md) {
     g2.seas = md.zones.map((z, id) => ({ id, key: z.id, name: z.name, x: z.x, y: z.y, adj: z.adj, coast: z.coast, air: z.air ?? 1, narrow: !!z.narrow }));
@@ -46172,8 +46591,11 @@
     }
     const nights = convoyNights(g2, nat);
     const sunk = seaWar(g2) && n.atWar.length ? huntSubs(g2, nat, nights) : void 0;
+    if (sunk && patrolOn(g2)) patrolSubs(g2, nat, sunk);
     if (sunk) torpedoes(g2, nat);
-    convoyWar(g2, nat, sunk, nights);
+    const seen2 = patrolOn(g2) ? seaMonth() : void 0;
+    convoyWar(g2, nat, sunk, nights, seen2);
+    if (seen2) noteSeaSight(g2, nat, seen2, sunk);
   }
   function wholeShares(total, weights) {
     const w = weights.map((x) => Math.max(0, x));
@@ -46356,7 +46778,7 @@
   }
   var kitEdge = (k, group) => incidentRate(k, group) / incidentRate({ ...k, hedgehog: false }, group);
   var radarKit = (k) => 1 + (k.radar ? CAUSE2.radar : 0);
-  var kitLook = (k) => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, hfdf: false });
+  var kitLook = (k) => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, hfdf: false, groups: k.groups });
   function seaCover(g2, nat, z, lane) {
     const wx = seaSkyMul(g2, z);
     let best = { kind: "none", share: 0 };
@@ -46366,6 +46788,11 @@
     };
     if (lane !== void 0) {
       for (const f of g2.fleets) if (f.stance === "escort" && f.lane === lane && f.zone === z && f.ships.cv > 0 && allied(g2, f.nat, nat) && airKit(aswKit(g2, f.nat))) take2("carrier", wx * Math.min(1, wingShare(g2, f)));
+    }
+    if (patrolOn(g2)) {
+      const w = watchFor(g2, z, (x) => allied(g2, x, nat));
+      if (w && w.kit > 0) take2("patrol", w.kit);
+      return best;
     }
     const flies = (id) => {
       const r = g2.regions[id];
@@ -46403,6 +46830,7 @@
     }
     return 0;
   }
+  var MONTH_DAYS = 30;
   function stationDays(c) {
     const r = CAUSE2.station[c];
     return r && r.patrol !== null && r.passage !== null && r.refit !== null ? r : null;
@@ -46412,6 +46840,18 @@
     if (!D2) return 1;
     return D2.patrol / (D2.patrol + 2 * D2.passage * passageSeas(g2, f, z) + D2.refit);
   }
+  function onWatch(g2, f, z) {
+    return onStation(g2, f, z) * keptUp(g2, f.nat, z);
+  }
+  function keptUp(g2, nat, z) {
+    const w = patrolOn(g2) ? watchAgainst(g2, z, nat) : null;
+    return w && w.none > 0 ? 1 - w.none : 1;
+  }
+  function seenUp(g2, nat, z) {
+    const a = seenAir(g2, nat, z);
+    return a && a.none > 0 ? 1 - a.none : 1;
+  }
+  var seenOnWatch = (g2, f, z) => onStation(g2, f, z) * seenUp(g2, f.nat, z);
   function raidPower(g2, f, cause) {
     let p = 0;
     for (const c of CLASSES) p += c === "ss" ? boatRaid(g2, f, cause) : f.ships[c] * NAVY.classes[c].raid;
@@ -46421,9 +46861,8 @@
     const st = cause && stationDays("ss") ? onStation(g2, f, f.zone) * (weighed ? CAUSE2.station.raid ?? 1 : 1) : 1;
     return f.ships.ss * NAVY.classes.ss.raid * st;
   }
-  function nearerPort(g2, f) {
+  function nearerPort(g2, f, z = f.station) {
     if (!unitsDecide(g2) || f.tied || f.duty !== "raid" || f.ships.ss <= 0 || !stationDays("ss")) return null;
-    const z = f.station;
     const here = onStation(g2, f, z);
     const at4 = g2.seas[z];
     let best = null, bv = here, bd = Infinity;
@@ -46439,6 +46878,38 @@
     }
     return best;
   }
+  function quieterBeat(g2, f) {
+    if (!patrolOn(g2) || f.tied || f.duty !== "raid" || f.ships.ss <= 0) return -1;
+    const here = f.station;
+    if (seenUp(g2, f.nat, here) >= 1) return -1;
+    const seas = /* @__PURE__ */ new Set();
+    for (const r of NAVY.convoys) {
+      const zs = r.zones.map((k) => zoneOf(g2, k));
+      if (zs.includes(here) && atWar(g2, f.nat, r.to)) for (const z of zs) seas.add(z);
+    }
+    const reach3 = new Set(fleetReach(g2, f));
+    const stay = nearerPort(g2, f, here);
+    const up = seenOnWatch(g2, stay ? portOf2(f, stay) : f, here);
+    let best = -1, bv = 0;
+    for (const z of [...seas].sort((a, b) => a - b)) {
+      if (z === here || !reach3.has(z)) continue;
+      const to = nearerPort(g2, f, z);
+      const gain = seenOnWatch(g2, to ? portOf2(f, to) : f, z) - up - moveLoss(g2, f, z, !!to, !!stay);
+      if (gain > bv + 1e-9) {
+        best = z;
+        bv = gain;
+      }
+    }
+    return best;
+  }
+  var portOf2 = (f, r) => ({ nat: f.nat, base: r.id, home: r.seas[0] });
+  function moveLoss(g2, f, z, rebases, would) {
+    const D2 = stationDays("ss");
+    if (!D2) return 0;
+    if (rebases) return would ? 0 : seenOnWatch(g2, f, f.station);
+    const passage = atSea(f) ? seenOnWatch(g2, f, f.zone) * D2.passage * passageSeas(g2, { nat: f.nat, base: -1, home: f.zone }, z) / MONTH_DAYS : 0;
+    return would ? passage - seenOnWatch(g2, f, f.station) : passage;
+  }
   var escortRate = () => {
     const K2 = CAUSE2.count;
     return K2.t2.convoys / K2.t2.months * K2.attacked * K2.perAttack / K2.boatsT2;
@@ -46451,7 +46922,7 @@
     let boats = 0;
     for (const f of g2.fleets) {
       if (!atSea(f) || f.ships.ss <= 0 || !zones.includes(f.zone) || !atWar(g2, f.nat, route.to)) continue;
-      boats += f.ships.ss * raidShare(f) * onStation(g2, f, f.zone);
+      boats += f.ships.ss * raidShare(f) * onWatch(g2, f, f.zone);
     }
     const sailed = K2.ways * route.tons / (ships * grt);
     const phi = -Math.log(1 - K2.attacked) / K2.boatsT2;
@@ -46459,7 +46930,7 @@
     const incidents = boats * escortRate();
     return { boats, sailed, sighted: Math.min(sailed, attacked * K2.sighted / K2.attacked), attacked, incidents, pack: attacked > 0 ? incidents / attacked : 0 };
   }
-  var incidentsPerBoat = (g2, f, count4) => raidShare(f) * onStation(g2, f, f.zone) * (count4 ? escortRate() : CAUSE2.find);
+  var incidentsPerBoat = (g2, f, count4) => raidShare(f) * onWatch(g2, f, f.zone) * (count4 ? escortRate() : CAUSE2.find);
   function onRouteOf(g2, nat, f) {
     for (const r of NAVY.convoys) {
       const to = g2.nations[r.to];
@@ -46520,7 +46991,7 @@
         fleets.push(f);
       }
     }
-    const air2 = ownAirOver(g2, z, nat) * H.air;
+    const air2 = cause && patrolOn(g2) ? 0 : ownAirOver(g2, z, nat) * H.air;
     w += air2;
     return k ? { weight: w, fleets, air: air2, kit } : { weight: w * techMul(g2, nat, "radar"), fleets };
   }
@@ -46600,6 +47071,62 @@
     }
     return out;
   }
+  function patrolSubs(g2, nat, sunk) {
+    const zones = [...new Set(g2.airFleets.filter((f) => f.nat === nat && f.mission === "seapatrol").map((f) => f.target))].filter((z) => !!g2.seas[z]).sort((a, b) => a - b);
+    const rec = {}, seas = {}, at4 = {};
+    const met2 = {};
+    const kit = airKit(aswKit(g2, nat));
+    for (const z of zones) {
+      const quarry = g2.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g2, f.nat, nat));
+      if (!quarry.length) continue;
+      for (const f of quarry) {
+        if (met2[z]?.[f.nat]) continue;
+        const w = watchAgainst(g2, z, f.nat);
+        const mine4 = w?.by[nat] ?? 0;
+        if (!w || mine4 <= 0) continue;
+        const part = (w.kit + w.none) * mine4 / w.A;
+        (met2[z] ?? (met2[z] = {}))[f.nat] = kit ? { kit: part, none: 0 } : { kit: 0, none: part };
+      }
+      const rng = seaRng(g2, `patrol:${nat}:${z}`);
+      let n = 0;
+      const here = {};
+      for (const f of quarry) {
+        const w = watchAgainst(g2, z, f.nat);
+        const mine4 = w?.by[nat] ?? 0;
+        if (!w || mine4 <= 0) continue;
+        const x = Math.min(f.ships.ss * onStation(g2, f, z) * w.s * w.kills * (mine4 / w.A), roomLeft(g2, f));
+        const k = Math.min(f.ships.ss, rng.roll(x));
+        if (k <= 0) continue;
+        noteLost(g2, f, k);
+        f.ships.ss -= k;
+        f.lost.ss += k;
+        n += k;
+        loseStars(f, "ss", k);
+        rec[f.nat] = (rec[f.nat] ?? 0) + k;
+        here[f.nat] = (here[f.nat] ?? 0) + k;
+      }
+      if (!n) continue;
+      sunk[z] = (sunk[z] ?? 0) + n;
+      seas[z] = n;
+      at4[z] = here;
+      const told2 = !g2.human || g2.human === nat || allied(g2, g2.human, nat) || quarry.some((f) => f.nat === g2.human);
+      const boats = Object.keys(here);
+      const subs = `${andList2(boats.map((x) => `${here[x]} ${g2.nations[x].adj}`))} submarine${n === 1 ? "" : "s"}`;
+      const most = boats.reduce((a, b) => here[b] > here[a] ? b : a);
+      if (told2) routineNews(g2, `patrol:${nat}:${z}`, "battle", `${g2.nations[nat].adj} aircraft on patrol sink ${subs} ${seaWhere(g2.seas[z].name)}.`, `${subs} sunk from the air ${seaWhere(g2.seas[z].name)}`, nat, void 0, { arm: "sea", won: nat, lost: most });
+    }
+    (g2.patrolSunk ?? (g2.patrolSunk = {}))[nat] = { turn: g2.turn, sunk: rec, seas, at: at4, met: met2 };
+    for (const f of g2.airFleets) {
+      if (f.nat !== nat || f.mission !== "seapatrol" || !g2.seas[f.target] || f.bmr <= 0) continue;
+      const x = patrolLoss(g2, f, f.target);
+      const k = Math.min(f.bmr, seaRng(g2, `patrol:lost:${nat}:${f.id}`).roll(x.op + x.fighters));
+      if (k > 0) {
+        f.bmr -= k;
+        f.lost.bmr += k;
+        airPool(g2, f.nat).lostBmr += k;
+      }
+    }
+  }
   function huntExpected(g2, nat, z, quarry) {
     const h = huntersIn(g2, nat, z);
     const subs = quarry.reduce((s, f) => s + f.ships.ss, 0);
@@ -46609,6 +47136,8 @@
     for (const f of quarry) {
       const raiding = onRouteOf(g2, nat, f) ? raidShare(f) : 0;
       let x = h.weight > 0 ? share * (h.air + h.kit * (1 - raiding)) / h.weight : 0;
+      const w = patrolOn(g2) ? watchAgainst(g2, z, f.nat) : null;
+      if (w && (w.by[nat] ?? 0) > 0) x += onStation(g2, f, z) * w.s * w.kills * (w.by[nat] / w.A);
       if (raiding > 0) {
         for (const r of NAVY.convoys) {
           const to = g2.nations[r.to];
@@ -46716,7 +47245,17 @@
     const r = tries > 0 ? radarEscorts / tries : 0;
     return 1 / (1 + c * r);
   }
-  var MONTH_DAYS = 30;
+  var firedOf = (effective, n, p) => effective / (1 - Math.pow(1 - p, n));
+  function eyePair() {
+    const E = CAUSE2.firing?.eye, p = CAUSE2.ceiling?.hit;
+    if (!E || p == null || [E.effective41, E.n41, E.e41, E.r41, E.effectiveT2, E.nT2, E.eT2, E.rT2].some((x) => x == null)) return null;
+    const f41 = firedOf(E.effective41, E.n41, p), fT2 = firedOf(E.effectiveT2, E.nT2, p);
+    const det = E.e41 * E.rT2 - E.r41 * E.eT2;
+    if (!(f41 > 0 && f41 <= 1 && fT2 > 0 && fT2 <= 1) || Math.abs(det) < 1e-12) return null;
+    const a = 1 / f41 - 1, b = 1 / fT2 - 1;
+    const ce = (a * E.rT2 - b * E.r41) / det, cr = (b * E.e41 - a * E.eT2) / det;
+    return ce >= 0 && cr >= 0 ? { ce, cr, t2: fT2 } : null;
+  }
   function escortsAtSea() {
     const D2 = CAUSE2.station.dd;
     if (!D2 || D2.convoy === null || D2.turnaround === null || D2.refit === null || D2.unavailable === null || D2.crossing === null) return null;
@@ -46728,25 +47267,37 @@
     if (!S3 || S3.stations === null || S3.columnsAStation === null || S3.shipsAColumn === null || S3.maxColumns === null || !ships || S3.columnsAStation <= 0 || S3.shipsAColumn <= 0) return null;
     return S3.stations + Math.min(ships / S3.shipsAColumn, S3.maxColumns) / S3.columnsAStation;
   }
-  function radarOnStations(route, count4, radarShips, escortShips) {
-    if (count4.sailed <= 0) return 0;
+  function onStations(route, count4, radarShips, escortShips) {
+    if (count4.sailed <= 0) return { all: 0, radar: 0 };
     const atSea2 = escortsAtSea(), crossing2 = CAUSE2.station.dd?.crossing ?? 0;
     const aConvoy = (ships) => atSea2 === null ? ships / count4.sailed : ships * atSea2 * MONTH_DAYS / (count4.sailed * crossing2);
-    const radar = aConvoy(radarShips), stations = screenStations(route);
-    if (stations === null) return radar;
-    const all = aConvoy(escortShips);
-    return all > 0 ? Math.min(all, stations) * (radar / all) : 0;
+    const radar = aConvoy(radarShips), stations = screenStations(route), all = aConvoy(escortShips);
+    if (stations === null) return { all, radar };
+    const on = Math.min(all, stations);
+    return { all: on, radar: all > 0 ? on * (radar / all) : 0 };
   }
-  function convoySide(route, count4, boats, G5, each3, radarShips = 0, escortShips = 0) {
+  var radarOnStations = (route, count4, radarShips, escortShips) => onStations(route, count4, radarShips, escortShips).radar;
+  function convoySide(route, count4, boats, G5, ceilingAt, radarShips = 0, escortShips = 0) {
     const K2 = CAUSE2.count, ships = K2.ships[route.id] ?? 0, k = K2.sink;
     const F = CAUSE2.firing;
-    const laid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
-    const tries = laid ? count4.pack / F.t2 : count4.pack;
-    const fire2 = laid ? firingShare(radarOnStations(route, count4, radarShips, escortShips), tries) : null;
+    const radarLaid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
+    const eye = F ? eyePair() : null;
+    const tries = eye ? count4.pack / eye.t2 : radarLaid ? count4.pack / F.t2 : count4.pack;
+    let fire2 = null;
+    if (eye) {
+      const on = onStations(route, count4, radarShips, escortShips);
+      fire2 = tries > 0 ? 1 / (1 + (eye.ce * on.all + eye.cr * on.radar) / tries) : 1;
+    } else if (radarLaid) fire2 = firingShare(radarOnStations(route, count4, radarShips, escortShips), tries);
     const pack = fire2 === null ? count4.pack : tries * fire2;
     const P = count4.boats > 0 ? pack * boats / count4.boats : 0;
     const E = count4.sailed > 0 ? G5 / count4.sailed : 0;
     const contest = P > 0 ? ships * P / (P + k * E) : 0;
+    const ceil = ceilingAt(fire2 ?? 1);
+    let each3 = ceil ? ceil.each : null;
+    if (ceil && each3 !== null && ceil.torpedoes !== void 0 && ceil.month !== void 0) {
+      const used = count4.attacked * Math.max(1, pack) * ceil.torpedoes;
+      if (used > ceil.month) each3 *= ceil.month / used;
+    }
     const torps = each3 === null ? void 0 : Math.max(1, pack) * each3;
     const sunk = torps === void 0 ? contest : Math.min(contest, torps);
     return { P, E, sunk, L: count4.sailed > 0 && ships > 0 ? count4.attacked * sunk / (count4.sailed * ships) : 0, ...torps !== void 0 ? { torps } : {}, ...fire2 !== null ? { fire: fire2, fired: pack } : {} };
@@ -46762,22 +47313,68 @@
     const all = o ? o[0] + o[1] + o[2] : 0;
     return o && all > 0 ? o[0] / all : 0.5;
   }
-  function boatCeiling(g2, z) {
+  function boatCeiling(g2, z, fire2 = 1, at4) {
     if (!ceilingLaid()) return null;
     const C4 = CAUSE2.ceiling;
-    return (C4.inside + calmShare(g2, z) * (C4.outside ?? 0)) * C4.hit * C4.sinkHit;
+    return torpedoesInto(g2, z, fire2, at4) * C4.hit * C4.sinkHit;
   }
-  function routeCeiling(g2, route) {
+  var loadLaid = () => ceilingLaid() && CAUSE2.ceiling.tubes != null && CAUSE2.ceiling.tubes > 0 && CAUSE2.load?.reload != null;
+  var loadIn = (g2, z) => CAUSE2.ceiling.inside + calmShare(g2, z) * (CAUSE2.ceiling.outside ?? 0);
+  function nightFits(g2, z) {
+    const dark = 24 * (1 - dayShare(seaLatitude(g2, z), turnToDate(g2.turn).month));
+    return dark > 0 ? Math.max(0, 1 - CAUSE2.load.reload / dark) : 0;
+  }
+  function salvosInto(q, salvos) {
+    if (salvos <= 0) return 0;
+    const whole2 = Math.floor(salvos);
+    let s = 0, t = 1;
+    for (let k = 0; k < whole2; k++) {
+      s += t;
+      t *= q;
+    }
+    return s + (salvos - whole2) * t;
+  }
+  function torpedoesInto(g2, z, fire2 = 1, at4) {
+    const load2 = loadIn(g2, z);
+    if (!loadLaid()) return load2;
+    const C4 = CAUSE2.ceiling, regain = CAUSE2.load.regain;
+    const w = regain == null ? 0 : nightFits(g2, z) * regain;
+    const h = at4 ? nextNight(g2, z, at4.route, at4.nat) : 0;
+    const q = fire2 * (w + (1 - w) * h);
+    return C4.tubes * salvosInto(q, load2 / C4.tubes);
+  }
+  function nextNight(g2, z, route, nat) {
+    const N = CAUSE2.load?.next;
+    const boat = N?.boat ?? null, classes = N?.convoys[route] ?? null;
+    if (boat === null || boat <= 0 || !classes || !classes.length) return 0;
+    let margin = 0, all = 0;
+    for (const c of classes) {
+      if (c.speed === null || c.share === null) return 0;
+      margin += c.share * Math.max(0, 1 - c.speed / boat);
+      all += c.share;
+    }
+    return all > 0 ? margin / all * keptUp(g2, nat, z) * calmShare(g2, z) : 0;
+  }
+  function routeCeiling(g2, route, fire2 = 1) {
     if (!ceilingLaid()) return null;
     const zones = route.zones.map((k) => zoneOf(g2, k));
-    let w = 0, c = 0;
+    const load2 = loadLaid();
+    let w = 0, c = 0, t = 0, held3 = 0;
     for (const f of g2.fleets) {
       if (!atSea(f) || f.ships.ss <= 0 || !zones.includes(f.zone) || !atWar(g2, f.nat, route.to)) continue;
-      const b = f.ships.ss * raidShare(f) * onStation(g2, f, f.zone);
+      const b = f.ships.ss * raidShare(f) * onWatch(g2, f, f.zone);
+      const at4 = { route: route.id, nat: f.nat };
       w += b;
-      c += b * boatCeiling(g2, f.zone);
+      c += b * boatCeiling(g2, f.zone, fire2, at4);
+      if (load2) {
+        t += b * torpedoesInto(g2, f.zone, fire2, at4);
+        held3 += b * loadIn(g2, f.zone);
+      }
     }
-    return w > 0 ? c / w : null;
+    if (w <= 0) return null;
+    if (!load2) return { each: c / w };
+    const patrol = CAUSE2.station.ss?.patrol;
+    return { each: c / w, torpedoes: t / w, ...patrol ? { month: held3 * MONTH_DAYS / patrol } : {} };
   }
   function sideLoss(route, side5, Lo, w) {
     const ships = CAUSE2.count.ships[route.id] ?? 0;
@@ -46797,12 +47394,13 @@
       if (atWar(g2, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
         const m = quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? coverCut(cover3[zones.indexOf(f.zone)]) : 1);
-        const p = raidPower(g2, f, !!cover3) * m;
+        const up = cover3 ? keptUp(g2, f.nat, f.zone) : 1;
+        const p = up === 1 ? raidPower(g2, f, !!cover3) * m : raidPower(g2, f, !!cover3) * m - boatRaid(g2, f, !!cover3) * m * (1 - up);
         if (p > 0) {
           raid2 += p;
           raiders.push(f);
-          boats += boatRaid(g2, f, !!cover3, false) * m;
-          weighed += boatRaid(g2, f, !!cover3) * m;
+          boats += boatRaid(g2, f, !!cover3, false) * m * up;
+          weighed += boatRaid(g2, f, !!cover3) * m * up;
         }
       } else if (allied(g2, f.nat, nat)) {
         const w = guardShare(g2, f, zones, route.id);
@@ -46827,7 +47425,7 @@
       const G6 = guard * NAVY.convoy.escortWorth;
       const count4 = (CAUSE2.count.sink ?? null) === null ? null : convoyCount(g2, route);
       if (count4) {
-        const side5 = convoySide(route, count4, boats, G6, routeCeiling(g2, route), radarShips, escortShips);
+        const side5 = convoySide(route, count4, boats, G6, (fire2) => routeCeiling(g2, route, fire2), radarShips, escortShips);
         const rest = raid2 - weighed;
         const Lo = rest > 1e-12 ? rest / (rest + G6 + NAVY.convoy.ocean) : 0;
         return { zones, raid: raid2, guard, raiders, escorts, G: G6, L: sideLoss(route, side5, Lo, 1).L, cover: cover3, side: side5, Lo };
@@ -46841,8 +47439,18 @@
   }
   var CONVOY_BATTLE = convoybattle_default;
   var convoyRules = (g2) => g2.flags.open === 1 && g2.flags.convoyBattle === 1;
-  var countRecord = (c, sunk, torps, fired) => ({ boats: r22(c.boats), sailed: r22(c.sailed), sighted: r22(c.sighted), attacked: r22(c.attacked), incidents: r22(c.incidents), pack: r22(c.pack), ...sunk !== void 0 ? { sunk: r22(sunk) } : {}, ...torps !== void 0 ? { torps: r22(torps) } : {}, ...fired !== void 0 ? { fired: r22(fired) } : {} });
-  var r22 = (x) => Math.round(x * 100) / 100;
+  var countRecord = (c, sunk, torps, fired, watched2) => ({ boats: r23(c.boats), sailed: r23(c.sailed), sighted: r23(c.sighted), attacked: r23(c.attacked), incidents: r23(c.incidents), pack: r23(c.pack), ...sunk !== void 0 ? { sunk: r23(sunk) } : {}, ...torps !== void 0 ? { torps: r23(torps) } : {}, ...fired !== void 0 ? { fired: r23(fired) } : {}, ...watched2 !== void 0 ? { watched: r23(watched2) } : {} });
+  function routeWatched(g2, nat, zones) {
+    if (!patrolOn(g2)) return void 0;
+    let w = 0, s = 0;
+    for (const z of zones) {
+      const size = 1 / Math.max(1e-6, g2.seas[z].air);
+      w += size;
+      s += size * (watchFor(g2, z, (x) => allied(g2, x, nat))?.s ?? 0);
+    }
+    return w > 0 ? s / w : 0;
+  }
+  var r23 = (x) => Math.round(x * 100) / 100;
   var convoyField = {};
   function convoyMeeting(g2, nat, route) {
     const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L2, side: side5, Lo } = routeForces(g2, nat, route);
@@ -46863,7 +47471,7 @@
         tons: side5 ? sideLoss(route, side5, Lo ?? 0, 1).tons : Math.round(route.tons * L2 / 1e3) * 1e3,
         raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * incidentsPerBoat(g2, f, count4) * (p.get(f.zone) ?? 0), roomLeft(g2, f)) })),
         escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid2 > 0 ? raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 })),
-        ...count4 ? { count: countRecord(count4, side5?.sunk, side5?.torps, side5?.fired) } : {}
+        ...count4 ? { count: countRecord(count4, side5?.sunk, side5?.torps, side5?.fired, routeWatched(g2, nat, zones)) } : {}
       };
     }
     if (seaWar(g2) && g2.nations[nat].atWar.length) {
@@ -46966,18 +47574,34 @@
       escorts: escorts.filter((f) => f.zone === z || z === most && !zones.includes(f.zone)).map((f) => lookFleet(f, at4.dd.get(f.id) ?? f.ships.dd)),
       air: airOver(g2, z, nat) * NAVY.convoy.air,
       tons: Math.round((all > 0 ? tons * (by2[i] / all) : tons / zones.length) / 1e3) * 1e3,
-      // (Units decide only: the kit of the navy with most destroyers answering attacks in the sea, the cover's kind, and
-      // the boats the escorts sank there. Off, none of these is written.)
-      ...cause ? { kit: kitLook(aswKit(g2, answerer(g2, nat, route, z))), cover: cause.cover[i].kind, lost: cause.lost[z] ?? 0 } : {}
+      // (Units decide only: the kit of the navy with most destroyers answering attacks in the sea, each answering navy's
+      // own kit by navy, the cover's kind, and the boats the escorts sank there. Off, none of these is written.)
+      ...cause ? { ...seaKits(g2, nat, route, z), cover: cause.cover[i].kind, lost: cause.lost[z] ?? 0 } : {}
     }));
     lookOf(g2, nat).convoys.push({ route, tons, seas });
   }
-  function answerer(g2, nat, route, z) {
+  function metConvoys(g2, count4, side5, raiders, seen2) {
+    const fired = count4 ? count4.attacked * (side5?.fired ?? count4.pack) : 0;
+    const attack2 = {}, incident = {};
+    for (const f of raiders) {
+      if (f.ships.ss <= 0) continue;
+      const most = f.ships.ss * onStation(g2, f, f.zone);
+      const b = f.ships.ss * raidShare(f) * onWatch(g2, f, f.zone);
+      if (count4 && count4.boats > 0) attack2[f.zone] = (attack2[f.zone] ?? 0) + Math.min(most, fired * b / count4.boats);
+      incident[f.zone] = (incident[f.zone] ?? 0) + Math.min(most, f.ships.ss * incidentsPerBoat(g2, f, count4));
+    }
+    for (const z of Object.keys(attack2)) seen2.attack[+z] = Math.max(seen2.attack[+z] ?? 0, attack2[+z]);
+    for (const z of Object.keys(incident)) seen2.incident[+z] = Math.max(seen2.incident[+z] ?? 0, incident[+z]);
+  }
+  function answering(g2, nat, route, z) {
     const by2 = /* @__PURE__ */ new Map();
     for (const f of g2.fleets) {
       if (!atSea(f) || f.ships.dd <= 0 || !allied(g2, f.nat, nat)) continue;
       if (f.stance === "hunt" && f.zone === z || f.stance === "escort" && f.lane === route) by2.set(f.nat, (by2.get(f.nat) ?? 0) + f.ships.dd);
     }
+    return by2;
+  }
+  function answerer(g2, nat, route, z, by2 = answering(g2, nat, route, z)) {
     let best = nat, most = 0;
     for (const [k, n] of by2) if (n > most) {
       most = n;
@@ -46985,7 +47609,12 @@
     }
     return best;
   }
-  function convoyWar(g2, nat, sunkAt, nights) {
+  function seaKits(g2, nat, route, z) {
+    const by2 = answering(g2, nat, route, z);
+    const kits = Object.fromEntries((by2.size ? [...by2.keys()] : [nat]).map((k) => [k, kitLook(aswKit(g2, k))]));
+    return { kit: { ...kits[answerer(g2, nat, route, z, by2)] }, kits };
+  }
+  function convoyWar(g2, nat, sunkAt, nights, seen2) {
     const n = g2.nations[nat];
     for (const route of NAVY.convoys) {
       if (route.to !== nat) continue;
@@ -47028,6 +47657,7 @@
         if (cover3 && sunkAt) {
           const irng = seaRng(g2, `incident:${route.id}`);
           count4 = convoyCount(g2, route);
+          if (seen2) metConvoys(g2, count4, side5, raiders, seen2);
           for (const z of zones) {
             const p = incidentChance(g2, nat, route.id, z);
             let lost = 0;
@@ -47042,7 +47672,10 @@
               lost += k;
               loseStars(f, "ss", k);
             }
-            if (lost) (byEscorts ?? (byEscorts = {}))[z] = lost;
+            if (lost) {
+              (byEscorts ?? (byEscorts = {}))[z] = lost;
+              if (seen2) seen2.sunk[z] = (seen2.sunk[z] ?? 0) + lost;
+            }
           }
         }
       }
@@ -47050,7 +47683,11 @@
       if (swing !== void 0) g2.convoys[route.id].swing = swing;
       if (night) g2.convoys[route.id].fought = night.clamped ? "clamped" : "field";
       if (cover3) g2.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
-      if (count4) g2.convoys[route.id].count = countRecord(count4, month3?.sunk, side5?.torps, side5?.fired);
+      if (count4) g2.convoys[route.id].count = countRecord(count4, month3?.sunk, side5?.torps, side5?.fired, routeWatched(g2, nat, zones));
+      if (cover3 && patrolOn(g2)) {
+        const ps = g2.patrolSunk?.[nat];
+        g2.convoys[route.id].byAircraft = ps?.turn === g2.turn ? zones.reduce((a, z) => a + (ps.seas[z] ?? 0), 0) : 0;
+      }
       if (at4) lookConvoy(g2, nat, route.id, zones, raiders, escorts, at4, tons, cover3 && { cover: cover3, lost: byEscorts ?? {} });
       storyConvoy(g2, raiders, escorts, tons, raid2 > 0);
       if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat))) {
@@ -47065,7 +47702,10 @@
       if (!atSea(f)) continue;
       if (atWar(g2, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
-        raid2 += raidPower(g2, f, !!cover3) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? cover3[zones.indexOf(f.zone)] : 1);
+        const c = cover3 ? cover3[zones.indexOf(f.zone)] : 1;
+        const p = raidPower(g2, f, !!cover3) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * c;
+        const up = cover3 ? keptUp(g2, f.nat, f.zone) : 1;
+        raid2 += up === 1 ? p : p - boatRaid(g2, f, !!cover3) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * c * (1 - up);
       } else if (allied(g2, f.nat, nat)) {
         const w = guardShare(g2, f, zones, lane);
         if (w <= 0) continue;
@@ -47344,6 +47984,11 @@
         continue;
       }
       if (f.duty === "raid") {
+        const quiet2 = quieterBeat(g2, f);
+        if (quiet2 >= 0) {
+          headline(g2, "info", `${cap9(fleetName(f))} shifts its hunting ground from ${seaWhat(g2.seas[f.station].name)} to ${seaWhat(g2.seas[quiet2].name)}, out of the aircraft's way.`, nat);
+          f.station = quiet2;
+        }
         const to = nearerPort(g2, f);
         if (to) {
           const from2 = f.port;
@@ -52145,8 +52790,8 @@
     for (let i = g2.reports.length - 1; i >= 0 && g2.reports[i].turn === g2.turn; i--) if (g2.reports[i].attNat === me) floor = Math.max(floor, g2.reports[i].week);
     return Math.max(g2.week, floor);
   }
-  function warning(g2, title, text, nat, region, about2) {
-    g2.headlines.push({ turn: g2.turn, week: newsWeek(g2), text: theWords(text), kind: "event", nat, region, warn: title, ...about2 ? { about: about2 } : {} });
+  function warning(g2, title, text, nat, region, about3) {
+    g2.headlines.push({ turn: g2.turn, week: newsWeek(g2), text: theWords(text), kind: "event", nat, region, warn: title, ...about3 ? { about: about3 } : {} });
   }
   var routineKept = /* @__PURE__ */ new WeakMap();
   var ROUTINE_GAP = 3;
@@ -53143,11 +53788,11 @@
     let dice2 = winChanceOn(g2) && !town ? luckOf(prepared) : today;
     const guarded2 = !town && !opts.sally && defenders.length > 0 ? guardInField(g2, target, attNat, attackers2) : 0;
     const guardWalls = guarded2 > 0 ? fieldWalls(g2, target, breach2 ? 1 - (1 - soften) * (1 - breach2) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
-    const watch = town ? guardPower(g2, target) * walls : guarded2 > 0 ? guardPower(g2, target) * guardWalls : 0;
-    if (watch > 0) {
-      rawD += watch;
-      cmdD += watch;
-      D2 += watch;
+    const watch2 = town ? guardPower(g2, target) * walls : guarded2 > 0 ? guardPower(g2, target) * guardWalls : 0;
+    if (watch2 > 0) {
+      rawD += watch2;
+      cmdD += watch2;
+      D2 += watch2;
     }
     const aAir = airOf(g2, aN, dN), dAir = airOf(g2, dN, aN);
     let airEdge = (aAir - dAir) / (aAir + dAir + 1);
@@ -53180,7 +53825,7 @@
     const sum3 = (cs) => cs.reduce((s, c) => s + men(c), 0).toLocaleString("en-US");
     if (town) {
       const broken = breachOf(g2, target), place2 = townName(target);
-      lines2.push({ label: "Forces", value: `${attackers2.length} corps, ${sum3(attackers2)} men, against ${defenders.length ? `${defenders.length} corps, ${sum3(defenders)} men` : watch > 0 ? "no army" : "0 corps, 0 men"}${watch > 0 ? `${defenders.length ? ", and" : ":"} the town guard of about ${guardMen(g2, target).toLocaleString("en-US")}` : ""}` });
+      lines2.push({ label: "Forces", value: `${attackers2.length} corps, ${sum3(attackers2)} men, against ${defenders.length ? `${defenders.length} corps, ${sum3(defenders)} men` : watch2 > 0 ? "no army" : "0 corps, 0 men"}${watch2 > 0 ? `${defenders.length ? ", and" : ":"} the town guard of about ${guardMen(g2, target).toLocaleString("en-US")}` : ""}` });
       lines2.push({
         // ("Panama City, Panama's capital", not "Capital of Panama City"; "Lodz, a city", not "City of Lodz": the UI director,
         // builds 1668 and 1678.)
@@ -53299,12 +53944,12 @@
     const wear2 = works > 0 ? Math.min(works, DEFENCE.wear.perAttack * weight6 * (1 + DEFENCE.wear.guns * soften)) : 0;
     const tired = tiredD > 0 && cmdD > 0 ? Math.min(DEFENCE.tired.most, tiredD / cmdD) : 0;
     if (tiredMost >= 0.05) {
-      const pct12 = Math.round(DEFENCE.tired.per * tiredMost * 100);
+      const pct13 = Math.round(DEFENCE.tired.per * tiredMost * 100);
       const n = Math.max(1, Math.round(tiredMost));
       lines2.push({
         label: "Earlier attacks",
         value: opts.after ? "The defenders as the first wave will leave them" : tiredMost < 0.5 ? "The defenders have been attacked lightly already this month" : `The defenders have already stood off ${n === 1 ? "an attack" : `${n} attacks`} this month`,
-        effect: `Tired men: defence down ${pct12 ? `as much as ${pct12}%` : "a little"} for the corps that fought. They are fresh again when their own month begins`
+        effect: `Tired men: defence down ${pct13 ? `as much as ${pct13}%` : "a little"} for the corps that fought. They are fresh again when their own month begins`
       });
     }
     if (wide3 && !town && defenders.length && weight6 < 0.95) lines2.push({
@@ -53428,8 +54073,8 @@
     if (heartA !== null || heartD !== null) {
       const say = (m, who) => m === null ? "" : `${who} ${moraleWord(m).toLowerCase()} (${Math.round(m * 100)}%)`;
       const fx = (m, what) => {
-        const pct12 = m === null ? 0 : Math.round((m - 0.5) * MORALE.fight.span * 100);
-        return pct12 ? `${what} ${pct12 > 0 ? "up" : "down"} ${Math.abs(pct12)}%` : "";
+        const pct13 = m === null ? 0 : Math.round((m - 0.5) * MORALE.fight.span * 100);
+        return pct13 ? `${what} ${pct13 > 0 ? "up" : "down"} ${Math.abs(pct13)}%` : "";
       };
       const value = [say(heartA, "Attackers"), say(heartD, heartA === null ? "Defenders" : "defenders")].filter(Boolean).join(", ");
       const effect = [fx(heartA, "Attack"), fx(heartD, "defence")].filter(Boolean).join(", ");
@@ -53650,13 +54295,13 @@
     if (frozen(g2, c.nat, to) && cmdWinter(g2, c) >= 1) cost += 1;
     return cost;
   }
-  var lifted = (c) => c.kind === "mot" || c.kind === "arm" ? 1 : 0;
+  var lifted2 = (c) => c.kind === "mot" || c.kind === "arm" ? 1 : 0;
   var afoot = (c) => !KIND[c.kind].mobile && c.kind !== "fort";
   var chaser = (c) => fights(c) && c.supplied && c.str >= 0.15;
   var chasePace = (g2, u, c, to) => u.org < c.org && KIND[u.kind].mobile ? pace(g2, u, to, "inf") : pace(g2, u, to);
   function roadsCut(g2, c, from2, winner, banned, blocks, pay = true, open2) {
     const cut2 = /* @__PURE__ */ new Set();
-    if (!unitsDecide(g2) || !afoot(c) && lifted(c) >= 1) return cut2;
+    if (!unitsDecide(g2) || !afoot(c) && lifted2(c) >= 1) return cut2;
     for (const j of from2.nb) {
       const r = g2.regions[j];
       if (open2?.has(j) || !fallsOn(g2, c, r, banned) || r.units.some((u) => allied(g2, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g2, u.nat, c.nat))) continue;
@@ -53698,7 +54343,7 @@
     }
     const slow = lost + held3;
     if (slow > 0 && !fast.some((u) => chasePace(g2, u, c, to) + slow < mine4)) return 0;
-    return PURSUIT.share * (1 - lifted(c));
+    return PURSUIT.share * (1 - lifted2(c));
   }
   function onTheRoad(g2, u, road, fight2) {
     const home = g2.regions[u.reg], at4 = home.units.indexOf(u), dug = u.dug;
@@ -53900,7 +54545,7 @@
     const inField2 = !town && (a.guard ?? 0) > 0;
     const enemyCapital = target.cap && atWar(g2, attNat, target.owner) && (town || inField2 || !sieges2 || !townHeld(g2, target));
     const relief = sieges2 && !town && allied(g2, attNat, target.ctrl);
-    const watchMen = town || inField2 ? guardMen(g2, target) : 0, watch = town || inField2 ? guardOf(g2, target) : 0;
+    const watchMen = town || inField2 ? guardMen(g2, target) : 0, watch2 = town || inField2 ? guardOf(g2, target) : 0;
     for (const d of new Set(defenders.map((c) => c.nat))) {
       const first2 = AN.lastFight[d] === void 0;
       if (first2 || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
@@ -54065,15 +54710,15 @@
       });
       moveIn(g2, attackers2, target, opts, attU);
       if (town) {
-        if (watch > 0) {
+        if (watch2 > 0) {
           prisoners += watchMen;
-          defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: Math.round(watch * 10) / 10, men: watchMen, lost: watchMen, fate: "surrendered", guard: true });
+          defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: Math.round(watch2 * 10) / 10, men: watchMen, lost: watchMen, fate: "surrendered", guard: true });
         }
         for (const c of attackers2) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
         fall(g2, target, attNat, "storm");
       } else if (inField2 && !intoWorks) {
         prisoners += watchMen;
-        defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: Math.max(0.1, Math.round(watch * 10) / 10), men: watchMen, lost: watchMen, fate: "surrendered", guard: true });
+        defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: Math.max(0.1, Math.round(watch2 * 10) / 10), men: watchMen, lost: watchMen, fate: "surrendered", guard: true });
         fall(g2, target, attNat, "field");
       } else {
         const walls = sieges2 && !relief && townHeld(g2, target);
@@ -54085,13 +54730,13 @@
       const spent = !town && a.prepared >= DEFENCE.prepared.spentAt && a.prepared > 0;
       for (const c of attackers2) c.ap = spent ? 0 : Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
       if (town) tallySiege(g2, "repulsed");
-      if ((town || inField2) && watch > 0) {
+      if ((town || inField2) && watch2 > 0) {
         const onField = inField2 && opts.field ? opts.field.corps[guardForce(target)] !== void 0 ? opts.field.def : null : null;
         const share = onField !== null ? clamp(onField, 0, 1) : clamp(SIEGE.assault.guardHit / 100 * Math.min(1.2, RL), 0.05, 0.6);
         const lost = Math.round(watchMen * share);
         guardAfter(g2, target, share);
         defLost += lost;
-        defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: inField2 ? Math.max(0.1, Math.round(watch * 10) / 10) : Math.round(watch * 10) / 10, men: watchMen, lost, fate: "", guard: true });
+        defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: inField2 ? Math.max(0.1, Math.round(watch2 * 10) / 10) : Math.round(watch2 * 10) / 10, men: watchMen, lost, fate: "", guard: true });
       }
     }
     g2.flags.battles = Math.max(g2.flags.battles ?? 0, g2.reports.length) + 1;
@@ -55195,7 +55840,7 @@
       }
       if (g2.flags.open === 1 && o.takes) {
         const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
-        const j = setup_1939_default.expeditions.findIndex((r23) => r23[1] === nat && r23[2] === o.takes.name);
+        const j = setup_1939_default.expeditions.findIndex((r24) => r24[1] === nat && r24[2] === o.takes.name);
         if (x) {
           x.str *= 1 - o.takes.share;
           if (nat === g2.human && o.takes.leaves) headline(g2, "event", o.takes.leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
@@ -55203,12 +55848,12 @@
       }
       if (g2.flags.open === 1 && UNLESS.has(row2[2])) {
         g2.flags[`came:${i}`] = g2.turn;
-        (setup_1939_default.expeditions ?? []).forEach((r23, j) => {
-          if (r23[6]?.unless !== row2[2] || r23[1] !== nat) return;
+        (setup_1939_default.expeditions ?? []).forEach((r24, j) => {
+          if (r24[6]?.unless !== row2[2] || r24[1] !== nat) return;
           if (!g2.flags[`sent:${j}`]) g2.flags[`sent:${j}`] = 2;
-          const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === r23[2]);
+          const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === r24[2]);
           if (!x) return;
-          if (nat === g2.human && r23[6].leaves) headline(g2, "event", r23[6].leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
+          if (nat === g2.human && r24[6].leaves) headline(g2, "event", r24[6].leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
           removeCorps(g2, x);
           g2.supplyDirty = true;
         });
@@ -55843,7 +56488,7 @@
   var SWING = [0.8, 1.2];
   var STEPS2 = 40;
   var zero = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
-  var pct6 = (x) => `${Math.round(x * 100)}%`;
+  var pct7 = (x) => `${Math.round(x * 100)}%`;
   var oneDp = (x) => x >= 9.95 ? "more than 10" : x.toFixed(1);
   function shares2(r) {
     const won = r >= 1, edge4 = won ? r : 1 / r;
@@ -55959,8 +56604,8 @@
     const worn = mine4.filter((x) => x.ready < 0.8);
     if (worn.length) plan.lines.push({ label: "Readiness", value: `${worn.map((x) => x.name).join(", ")} not fully fit for sea`, effect: "A fleet in need of refit fights below its strength" });
     plan.notes.push(offers2 ? `Your admiral will offer battle: he wants ${B3.seek} to 1 and has ${oneDp(mid)}.` : `At these odds your admiral will not offer battle: he wants ${B3.seek} to 1 and has ${oneDp(mid)}. An enemy who is patrolling and thinks himself strong enough will come to you.`);
-    if (plan.declines) plan.notes.push(plan.declines.who === "theirs" ? `Outweighed ${B3.evadeAt} to 1 or more, the enemy declines battle about ${pct6(B3.evade)} of the time and makes for port, which leaves you the sea.` : `Outweighed ${B3.evadeAt} to 1 or more, your fleet declines battle about ${pct6(B3.evade)} of the time and makes for port.`);
-    plan.notes.push(`Ships that are raiding and not patrolling have to be caught first: about ${pct6(B3.catchRaider)} of the time each month.`);
+    if (plan.declines) plan.notes.push(plan.declines.who === "theirs" ? `Outweighed ${B3.evadeAt} to 1 or more, the enemy declines battle about ${pct7(B3.evade)} of the time and makes for port, which leaves you the sea.` : `Outweighed ${B3.evadeAt} to 1 or more, your fleet declines battle about ${pct7(B3.evade)} of the time and makes for port.`);
+    plan.notes.push(`Ships that are raiding and not patrolling have to be caught first: about ${pct7(B3.catchRaider)} of the time each month.`);
     if (viewer !== null && fogOn(g2, viewer)) plan.notes.push("What your side has not found is not in these figures.");
     return plan;
   }
@@ -55984,7 +56629,7 @@
   }
   var cap11 = (s) => s[0].toUpperCase() + s.slice(1);
   var zero2 = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
-  var pct7 = (x) => `${Math.round(x * 100)}%`;
+  var pct8 = (x) => `${Math.round(x * 100)}%`;
   var oneDp2 = (x) => x >= 9.95 ? "more than 10" : x.toFixed(1);
   var sum2 = (g2, fs) => fs.reduce((s, x) => s + fleetPower(g2, x), 0);
   var shipsIn = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
@@ -56126,7 +56771,7 @@
     };
     plan.lines.push({ label: "Forces", value: `${shipsIn(mine4)} ships against ${shipsIn(met2)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
     if (at4.harbour) {
-      plan.lines.push({ label: "In harbour", value: `${cap11(listNames(met2))} at anchor at ${at4.port}`, effect: `Ships at anchor fight at ${pct7(at4.anchor)} of their weight` });
+      plan.lines.push({ label: "In harbour", value: `${cap11(listNames(met2))} at anchor at ${at4.port}`, effect: `Ships at anchor fight at ${pct8(at4.anchor)} of their weight` });
       if (at4.shore > 0) plan.lines.push({ label: "Shore batteries", value: `The guns of ${at4.port}`, effect: `Worth ${Math.round(at4.shore)} to the defence` });
     }
     if (airA > 0.5 || airD > 0.5) plan.lines.push({ label: "Air", value: airA > airD ? "You have the stronger air cover from the coast" : airD > airA ? "The enemy has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(airA)} against ${Math.round(airD)}` });
@@ -56136,8 +56781,8 @@
     const worn = mine4.filter((x) => x.ready < 0.8);
     if (worn.length) plan.lines.push({ label: "Readiness", value: `${worn.map((x) => x.name).join(", ")} not fully fit for sea`, effect: "A fleet in need of refit fights below its strength" });
     plan.notes.push(plan.enough ? `Your admiral would have offered battle at these odds anyway: this fights it now, not at the month's end.` : `Your admiral would not offer battle at these odds (he wants ${B3.seek} to 1 and has ${oneDp2(mid)}): it is your order, and it will be carried out.`);
-    if (plan.found < 1) plan.notes.push(`${cap11(fleetName(t))} is not patrolling, so it has to be found first: about ${pct7(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
-    if (plan.slips > 0) plan.notes.push(`Outweighed ${B3.evadeAt} to 1 or more, the enemy makes for port about ${pct7(plan.slips)} of the time, which leaves you the sea.`);
+    if (plan.found < 1) plan.notes.push(`${cap11(fleetName(t))} is not patrolling, so it has to be found first: about ${pct8(plan.found)} of the time. Not found, your fleet patrols ${seaWhere(sea.name)}.`);
+    if (plan.slips > 0) plan.notes.push(`Outweighed ${B3.evadeAt} to 1 or more, the enemy makes for port about ${pct8(plan.slips)} of the time, which leaves you the sea.`);
     if (at4.harbour) plan.notes.push("A fleet in harbour cannot make for port: it is there, and it fights where it lies.");
     if (mine4.length > 1) plan.notes.push(`${cap11(listNames(mine4.slice(1)))}, already patrolling ${seaWhere(sea.name)}, ${mine4.length === 2 ? "joins" : "join"} the attack.`);
     plan.notes.push("The side that loses breaks off and makes for its home port. A fleet attacks once a month, and stays where the battle leaves it until the next.");
@@ -56186,7 +56831,7 @@
 
   // ../../src/campaign/airwar.ts
   var num3 = (n) => Math.round(n).toLocaleString("en-US");
-  var pct8 = (x) => `${Math.round(x * 100)}%`;
+  var pct9 = (x) => `${Math.round(x * 100)}%`;
   var plural6 = (n, one2, many = `${one2}s`) => `${num3(n)} ${Math.round(n) === 1 ? one2 : many}`;
   var list3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var kindRow = (k) => AIRWAR.raids.kinds.find((x) => x.key === k);
@@ -56273,6 +56918,9 @@
     }
     return out;
   }
+  function patrolDoing(g2, f, z, w = watchWith(g2, f, z)) {
+    return `Patrol ${seaWhat(g2.seas[z].name)} against submarines: watches about ${pct9(w.share)} of the waters it reaches`;
+  }
   var escorted = (g2, f) => f.escorts === void 0 ? null : g2.airFleets.find((x) => x.id === f.escorts && x.nat === f.nat && x.bmr > 0) ?? null;
   function groupRow(g2, f, viewer = g2.human) {
     const R2 = airRange(f, g2);
@@ -56283,7 +56931,7 @@
     const deck = afloat(f), at4 = groupAt(g2, f);
     const fleet = deck ? carrierOf(g2, f) : f.ashore !== void 0 ? g2.fleets.find((c) => c.id === f.ashore) ?? null : null;
     const own = f.nat === viewer;
-    const doing2 = away2 ? `Flew against ${place2} this month: back ${deck ? "aboard" : "at its airfield"} next month` : isOffensive(f.mission) ? `Ordered against ${place2}: flies when the month ends` : f.mission === "rest" ? "Resting and refitting" : kind === "bmr" ? deck ? "Ranged on deck, ready for a strike" : "Supporting the armies, and ready for a raid" : f.close && !deck ? "On ground support: on call over its own side's battles within its reach, and meets no raid" : with_ ? `On patrol, and sticking with the ${with_.name} as its escort` : deck ? fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : "On patrol over its fleet: meets any raid on the ships in its sea" : "On patrol: meets any raid within its reach";
+    const doing2 = away2 ? `Flew against ${place2} this month: back ${deck ? "aboard" : "at its airfield"} next month` : isOffensive(f.mission) ? `Ordered against ${place2}: flies when the month ends` : f.mission === "rest" ? "Resting and refitting" : f.mission === "seapatrol" && g2.seas[f.target] ? patrolDoing(g2, f, f.target) : kind === "bmr" ? deck ? "Ranged on deck, ready for a strike" : "Supporting the armies, and ready for a raid" : f.close && !deck ? "On ground support: on call over its own side's battles within its reach, and meets no raid" : with_ ? `On patrol, and sticking with the ${with_.name} as its escort` : deck ? fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : "On patrol over its fleet: meets any raid on the ships in its sea" : "On patrol: meets any raid within its reach";
     return {
       id: f.id,
       nat: f.nat,
@@ -56333,7 +56981,7 @@
     const used = rows.reduce((s, x) => s + x.aircraft, 0);
     const inPort = hidden ? [] : g2.fleets.filter((c) => c.base === region && !atSea(c) && c.ships.cv > 0 && viewer !== null && allied(g2, c.nat, viewer) && g2.airFleets.some((w) => w.ship === c.id && w.ftr + w.bmr > 0));
     const aboard = inPort.length ? ` The aircraft of the ${inPort.length === 1 ? inPort[0].name : inPort.map((c) => c.name).join(" and the ")}, in harbour here, are aboard ${inPort.length === 1 ? "its" : "their"} carriers.` : "";
-    const note4 = `${field4.word}: it has room for ${num3(field4.holds)} aircraft${hidden ? ". What flies from here is not known: scout it from the air, or put an agent on watch" : `, and ${used > 0 ? `${num3(used)} are based here` : "none are based here"}${field4.crowded ? `. It is crowded: only ${pct8(field4.holds / used)} of each group can fly` : ""}`}.${aboard}`;
+    const note4 = `${field4.word}: it has room for ${num3(field4.holds)} aircraft${hidden ? ". What flies from here is not known: scout it from the air, or put an agent on watch" : `, and ${used > 0 ? `${num3(used)} are based here` : "none are based here"}${field4.crowded ? `. It is crowded: only ${pct9(field4.holds / used)} of each group can fly` : ""}`}.${aboard}`;
     return { region, name: r.name, field: field4, note: note4, build: build3, aboard: aboard.trim(), hidden, rows };
   }
   var mine2 = (g2, id, nat) => {
@@ -56383,15 +57031,26 @@
       }
       if (!bombers.length) out.push({ key: "escort", label: "Escort a bomber group", on: false, why: `No bomber group is based within ${num3(R2.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: "" });
     }
+    if (kind === "bmr" && !deck) for (const z of patrolSeas(g2, f)) {
+      const w = watchWith(g2, f, z), sea = g2.seas[z];
+      const met2 = airKnown(g2, f.nat, z) ? ` ${airMetWords(g2, f.nat, z)}.` : "";
+      out.push({
+        key: `sea:${z}`,
+        label: `Patrol ${seaWhat(sea.name)} against submarines`,
+        on: !away2 && f.mission === "seapatrol" && f.target === z,
+        why: gone,
+        forecast: `${patrolDoing(g2, f, z, w)}. Its aircraft attack the boats they find there${aswKit(g2, f.nat).radar && aswKit(g2, f.nat).asdic ? ", by night and in fog too, with their radar" : ", and keep the rest down; without sea-search radar and depth charges they sink few"}. While it patrols it flies no raid, meets no raid and escorts no bomber, and regains ${pct9(AIR.ready.flying)} readiness a month in place of ${pct9(AIR.ready.support)}. ${seaSeenWords(g2, f.nat, z)}.${met2}`
+      });
+    }
     if (closeRules(g2) && kind !== "bmr" && !deck) out.push({
       key: "close",
       label: "Ground support",
       on: idle && !!f.close,
       why: gone,
-      forecast: `Flies over your own battles within ${num3(R2.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, and only while its readiness is ${pct8(CLOSE.least)} or more. Each battle costs it ${pct8(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. While it does this it is off air defence: it meets no raid and escorts no bomber.`
+      forecast: `Flies over your own battles within ${num3(R2.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, and only while its readiness is ${pct9(CLOSE.least)} or more. Each battle costs it ${pct9(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. While it does this it is off air defence: it meets no raid and escorts no bomber.`
     });
     const R22 = AIR.ready;
-    out.push({ key: "rest", label: "Rest and refit", on: f.mission === "rest", why: null, forecast: deck ? `Stands down: it regains ${pct8(R22.rest)} readiness a month in place of ${pct8(R22.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.` : `Stands down: it regains ${pct8(R22.rest)} readiness a month in place of ${pct8(R22.support)}, and gets replacement aircraft first. It does not fly, and does not meet raids.` });
+    out.push({ key: "rest", label: "Rest and refit", on: f.mission === "rest", why: null, forecast: deck ? `Stands down: it regains ${pct9(R22.rest)} readiness a month in place of ${pct9(R22.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.` : `Stands down: it regains ${pct9(R22.rest)} readiness a month in place of ${pct9(R22.support)}, and gets replacement aircraft first. It does not fly, and does not meet raids.` });
     return out;
   }
   function setGroupJob(g2, id, key7, nat = g2.human) {
@@ -56409,6 +57068,10 @@
       return setMission2(g2, f, "support");
     }
     delete f.close;
+    if (key7.startsWith("sea:")) {
+      delete f.escorts;
+      return setMission2(g2, f, "seapatrol", Number(key7.split(":")[1]));
+    }
     if (key7 === "patrol") delete f.escorts;
     else f.escorts = Number(key7.split(":")[1]);
     return setMission2(g2, f, "support");
@@ -56465,6 +57128,7 @@
     if (f.flew === g2.turn) return "It has flown its raid this month.";
     if (f.mission === "rest") return "It is resting and refitting.";
     if (isOffensive(f.mission)) return "It already has orders for the month.";
+    if (f.mission === "seapatrol") return "It is patrolling the sea against submarines this month.";
     return whyNotMission2(g2, f, kind, target);
   }
   var able = (g2, nat) => airFleetsOf(g2, nat).filter((f) => flying(f));
@@ -56629,13 +57293,13 @@
     const place2 = placeOf3(g2, kind, target);
     if (kind === "bomb" || kind === "night") {
       const r = g2.regions[target];
-      out.push(r.fac > 0 ? `Should stop about ${pct8(fc.cut)} of ${place2}'s output for a month: ${tenthPct(fc.nation)} of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place2}: the bombers go for its rail yards.`);
-      if (fc.rail) out.push(`About a ${pct8(fc.rail)} chance of cutting the railway through ${place2}, which stays cut until engineers relay it.`);
-      if (fc.ruin) out.push(`About a ${pct8(fc.ruin)} chance of wrecking a factory outright.`);
+      out.push(r.fac > 0 ? `Should stop about ${pct9(fc.cut)} of ${place2}'s output for a month: ${tenthPct(fc.nation)} of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place2}: the bombers go for its rail yards.`);
+      if (fc.rail) out.push(`About a ${pct9(fc.rail)} chance of cutting the railway through ${place2}, which stays cut until engineers relay it.`);
+      if (fc.ruin) out.push(`About a ${pct9(fc.ruin)} chance of wrecking a factory outright.`);
       if (fc.city) out.push(cityLine(g2, target, fc.city));
     } else if (kind === "superiority") {
       out.push(`Fighter odds ${fc.odds >= 9 ? "overwhelming" : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
-      if (fc.cut > 0) out.push(`The air groups based at ${place2} should lose about ${pct8(fc.cut)} of their readiness, and aircraft on the ground.`);
+      if (fc.cut > 0) out.push(`The air groups based at ${place2} should lose about ${pct9(fc.cut)} of their readiness, and aircraft on the ground.`);
       if (fc.field) out.push(...fieldLines(fc.field));
     } else if (kind === "airfield") {
       if (fc.field) out.push(...fieldLines(fc.field));
@@ -56647,7 +57311,7 @@
       const sunk = fc.ships, hits = fc.hits ?? 0;
       const word3 = (c, n) => n === 1 ? NAVY.classes[c].one : NAVY.classes[c].many;
       const sure = sunk ? CLASSES.filter((c) => sunk[c] >= 1).map((c) => `${Math.floor(sunk[c])} ${word3(c, Math.floor(sunk[c]))}`) : [];
-      const maybe = sunk ? CLASSES.filter((c) => sunk[c] % 1 >= 0.15).map((c) => `${pct8(sunk[c] % 1)} for ${sunk[c] >= 1 ? "another" : "a"} ${word3(c, 1)}`) : [];
+      const maybe = sunk ? CLASSES.filter((c) => sunk[c] % 1 >= 0.15).map((c) => `${pct9(sunk[c] % 1)} for ${sunk[c] >= 1 ? "another" : "a"} ${word3(c, 1)}`) : [];
       out.push(`About ${hits >= 10 ? num3(hits) : hits.toFixed(1)} bombs and torpedoes should hit. ${sure.length ? `That should sink ${list3(sure)}` : maybe.length ? "No ship is sure to go down" : "Too few to sink a ship"}${maybe.length ? `, with a chance of ${list3(maybe)}` : ""}. Carriers and battleships are aimed at first, and every ship hit leaves the fleet less fit for sea.`);
       if (sunk && sunk.cv > 0.15) out.push("A carrier that goes down takes most of its aircraft with it.");
     } else if (kind === "town") {
@@ -56660,7 +57324,7 @@
       out.push("The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.");
     } else if (kind === "ground") {
       const dug = g2.regions[target].units.some((u) => !u.dead && u.dug && atWar(g2, nat, u.nat));
-      out.push(`The troops at ${place2} should lose about ${pct8(fc.cut)} of their organisation${dug ? " (less where they are dug in)" : ""}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
+      out.push(`The troops at ${place2} should lose about ${pct9(fc.cut)} of their organisation${dug ? " (less where they are dug in)" : ""}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
     }
     return out;
   }
@@ -56789,7 +57453,7 @@
       const why = whys.get(f.id) ?? null;
       const atSeaTarget = kind === "strike" || kind === "fleet";
       const here = d > 0 ? "" : atSeaTarget ? f.ship !== void 0 ? "its carriers are in these waters" : "based on these shores" : f.ship !== void 0 ? "its carriers lie off this coast" : "based at the target";
-      const note4 = why ? "" : kind === "recon" ? `${Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr)} of its aircraft go` : here ? here : k === "bmr" ? `${num3(d)} km to fly` : effect >= 1 ? `${num3(d)} km: well inside its range` : `${num3(d)} km: at ${pct8(effect)} effect over the target`;
+      const note4 = why ? "" : kind === "recon" ? `${Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr)} of its aircraft go` : here ? here : k === "bmr" ? `${num3(d)} km to fly` : effect >= 1 ? `${num3(d)} km: well inside its range` : `${num3(d)} km: at ${pct9(effect)} effect over the target`;
       return { id: f.id, name: f.name, kind: k, aircraft: f.ftr + f.bmr, base: f.base, baseName: homeName(g2, f), ship: f.ship ?? -1, km: d, effect, ready: f.ready, picked: going.includes(f), locked: locked2.has(f.id), why, note: note4 };
     }).sort((a2, b) => (a2.why ? 1 : 0) - (b.why ? 1 : 0) || a2.km - b.km || a2.id - b.id);
     plan.bombers = going.reduce((s, f) => s + f.bmr, 0);
@@ -56846,7 +57510,7 @@
         const lo = Math.min(...alone), hi = Math.max(...alone);
         const fields = new Set(bombers.map(homeOf)).size;
         const from2 = bombers.some(afloat) ? plural6(fields, "fleet or airfield", "fleets and airfields") : plural6(fields, "airfield");
-        plan.massed = hi > a.bomberLoss + 5e-3 ? `Meeting up pays: ${plural6(bombers.length, "bomber group")} from ${from2} flying together should lose about ${pct8(a.bomberLoss)} of their bombers. Sent one group at a time it would be ${pct8(lo)}${pct8(lo) !== pct8(hi) ? ` to ${pct8(hi)}` : ""}.` : `${plural6(bombers.length, "bomber group")} fly together from ${from2}. Here it changes the losses little: ${a.D < 1 ? "no fighters will come up" : "the defenders are too many, or the escort too strong, for numbers to tell"}.`;
+        plan.massed = hi > a.bomberLoss + 5e-3 ? `Meeting up pays: ${plural6(bombers.length, "bomber group")} from ${from2} flying together should lose about ${pct9(a.bomberLoss)} of their bombers. Sent one group at a time it would be ${pct9(lo)}${pct9(lo) !== pct9(hi) ? ` to ${pct9(hi)}` : ""}.` : `${plural6(bombers.length, "bomber group")} fly together from ${from2}. Here it changes the losses little: ${a.D < 1 ? "no fighters will come up" : "the defenders are too many, or the escort too strong, for numbers to tell"}.`;
       }
     }
     const off2 = going.filter((f) => f.ftr > 0 && f.mission === "support" && kindOf2(f) !== "bmr");
@@ -56862,9 +57526,9 @@
       const f = p.figures;
       const flown = !p.why;
       const hits = [];
-      if (flown && f.output !== void 0) hits.push({ n: f.output <= 0 ? "0%" : f.output < 5e-3 ? "<1%" : `−${pct8(f.output)}`, words: "output, for a month" });
-      if (flown && f.rail) hits.push({ n: pct8(f.rail), words: "chance the railway is cut" });
-      if (flown && f.factory) hits.push({ n: pct8(f.factory), words: "chance a factory is wrecked" });
+      if (flown && f.output !== void 0) hits.push({ n: f.output <= 0 ? "0%" : f.output < 5e-3 ? "<1%" : `−${pct9(f.output)}`, words: "output, for a month" });
+      if (flown && f.rail) hits.push({ n: pct9(f.rail), words: "chance the railway is cut" });
+      if (flown && f.factory) hits.push({ n: pct9(f.factory), words: "chance a factory is wrecked" });
       if (flown && !hits.length) hits.push({ n: "", words: "No industry there, and too few bombers to cut the railway." });
       const fighterLoss = p.fighters > 0 ? p.fighterLossN / p.fighters : 0;
       return {
@@ -56880,14 +57544,14 @@
         bomberLossN: p.bomberLossN,
         fighterLoss,
         fighterLossN: p.fighterLossN,
-        lost: flown ? `${pct8(p.bomberLoss)} · about ${num3(p.bomberLossN)}` : "",
-        fightersLost: flown && p.fighters > 0 ? `${pct8(fighterLoss)} · about ${num3(p.fighterLossN)}` : "",
+        lost: flown ? `${pct9(p.bomberLoss)} · about ${num3(p.bomberLossN)}` : "",
+        fightersLost: flown && p.fighters > 0 ? `${pct9(fighterLoss)} · about ${num3(p.fighterLossN)}` : "",
         gunLoss: flown ? p.guns.loss : 0,
         gunLossN: flown ? p.guns.lossN : 0,
         toGuns: flown ? `about ${num3(p.guns.lossN)}` : "",
         gunsStop: flown ? p.guns.stop : 0,
         gunsWords: !flown ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
-        stopNote: flown && p.guns.stop > 0 ? `after the guns stop ${pct8(p.guns.stop)} of the bombing` : "",
+        stopNote: flown && p.guns.stop > 0 ? `after the guns stop ${pct9(p.guns.stop)} of the bombing` : "",
         figures: f,
         hits,
         foot: k === "bomb" ? "Escorts can fly with them." : "No escorts. Fewer lost, fewer hits.",
@@ -57469,7 +58133,7 @@
   };
   var spared2 = (g2, c) => relieves(g2, c.nat) && wornOut(g2, c);
   var aside = (g2, r, nat) => r.theatre >= 0 && !!THEATRES[r.theatre] && apart2(g2, r.theatre, nat);
-  var within2 = (r) => !scope || scope.has(r.id);
+  var within3 = (r) => !scope || scope.has(r.id);
   var allowed = (g2, r) => !bound2 || bound2.has(r.name) || r.ctrl === g2.human;
   var COUNTER_WINDOW = 2;
   function theatrePhase(g2, nat, list4) {
@@ -57676,11 +58340,11 @@
     if (!after) {
       for (const r of g2.regions) {
         if (!n.alive) return;
-        if (r.units.length || !within2(r) || !atWar(g2, nat, r.ctrl) || !townHeld(g2, r) || lineShut(g2, nat, r)) continue;
+        if (r.units.length || !within3(r) || !atWar(g2, nat, r.ctrl) || !townHeld(g2, r) || lineShut(g2, nat, r)) continue;
         const size = townSize(g2, r);
         if (!garrisonOf(r).length && size !== "capital" && size !== "city") continue;
         const inside2 = garrisonOf(r).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g2, r);
-        const near2 = r.nb.map((j) => g2.regions[j]).filter((x) => within2(x) && allied(g2, nat, fieldCtrl(g2, x)) && !besieged(g2, x)).flatMap((x) => x.units.filter((c) => c.nat === nat && !c.dead && !c.hold && !spared2(g2, c) && c.kind !== "fort" && c.kind !== "eng" && c.joint === void 0 && c.leave === void 0 && c.org >= 0.35 && c.ap >= Math.min(moveCost(g2, c, r), 4) && c.ap > 0 && !blocked(g2, c, r))).sort((x, y) => atkPower(g2, y) - atkPower(g2, x) || x.id - y.id);
+        const near2 = r.nb.map((j) => g2.regions[j]).filter((x) => within3(x) && allied(g2, nat, fieldCtrl(g2, x)) && !besieged(g2, x)).flatMap((x) => x.units.filter((c) => c.nat === nat && !c.dead && !c.hold && !spared2(g2, c) && c.kind !== "fort" && c.kind !== "eng" && c.joint === void 0 && c.leave === void 0 && c.org >= 0.35 && c.ap >= Math.min(moveCost(g2, c, r), 4) && c.ap > 0 && !blocked(g2, c, r))).sort((x, y) => atkPower(g2, y) - atkPower(g2, x) || x.id - y.id);
         const want = SIEGE.ai.invest * inside2;
         if (near2.reduce((s, c) => s + c.divs * c.str, 0) < want) continue;
         let have = 0;
@@ -57693,7 +58357,7 @@
     }
     for (const r of g2.regions) {
       if (!n.alive) return;
-      if (!r.units.length || !within2(r) || !besieged(g2, r)) continue;
+      if (!r.units.length || !within3(r) || !besieged(g2, r)) continue;
       const mine4 = () => r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && atWar(g2, nat, r.ctrl));
       if (!mine4().length) continue;
       const sat = g2.turn - investedOn(g2, r);
@@ -57716,7 +58380,7 @@
       const outside = () => mine4().reduce((s, c) => s + c.divs * c.str, 0);
       const shut = () => ringClosed(g2, r);
       if (!after && prize2 && (!noStorm && now < need || !shut())) {
-        const far = hops(g2, r.id, (x) => within2(x) && allied(g2, nat, fieldCtrl(g2, x)));
+        const far = hops(g2, r.id, (x) => within3(x) && allied(g2, nat, fieldCtrl(g2, x)));
         const front = (x) => x.nb.some((j) => atWar(g2, nat, fieldCtrl(g2, g2.regions[j])));
         const weigh3 = fortRows(g2);
         const standing5 = (c) => ({ ...c, reg: r.id });
@@ -57775,19 +58439,19 @@
     if (!siegeRules(g2)) return;
     const lands = /* @__PURE__ */ new Set();
     for (const r of g2.regions) {
-      if (!within2(r) || !besieged(g2, r) || !atWar(g2, nat, r.ctrl) || g2.turn - investedOn(g2, r) < SIEGE.ai.sea.after || !feeders(g2, r).length) continue;
+      if (!within3(r) || !besieged(g2, r) || !atWar(g2, nat, r.ctrl) || g2.turn - investedOn(g2, r) < SIEGE.ai.sea.after || !feeders(g2, r).length) continue;
       if (r.units.some((c) => c.nat === nat && !c.dead)) lands.add(r.ctrl);
     }
     if (!lands.size) return;
     for (const c of g2.corps) {
       if (c.nat !== nat || c.dead || c.town || c.hold || spared2(g2, c) || c.ap <= 0 || c.kind === "fort" || c.kind === "eng" || c.joint !== void 0 || c.leave !== void 0) continue;
       const here = g2.regions[c.reg];
-      if (!within2(here)) continue;
+      if (!within3(here)) continue;
       if (!besieged(g2, here) && here.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0)) continue;
       let best = null, bv = -1;
       for (const j of here.nb) {
         const x = g2.regions[j];
-        if (!within2(x) || !lands.has(x.ctrl) || x.owner !== x.ctrl || !atWar(g2, nat, x.ctrl) || x.units.length || besieged(g2, x)) continue;
+        if (!within3(x) || !lands.has(x.ctrl) || x.owner !== x.ctrl || !atWar(g2, nat, x.ctrl) || x.units.length || besieged(g2, x)) continue;
         if (blocked(g2, c, x) || c.ap < Math.min(moveCost(g2, c, x), 4) || !hasRoom(g2, x, c)) continue;
         const v = x.vp + (x.cap ? 5 : 0) + x.fac * 0.2;
         if (v > bv) {
@@ -57803,7 +58467,7 @@
     if (!siegeRules(g2)) return;
     for (const r of g2.regions) {
       if (!g2.nations[nat].alive) return;
-      if (!r.garr || !within2(r) || !besieged(g2, r) || whyNotSally(g2, r, nat)) continue;
+      if (!r.garr || !within3(r) || !besieged(g2, r) || whyNotSally(g2, r, nat)) continue;
       const a = previewSally(g2, r, nat);
       if (a && a.odds >= SIEGE.ai.sally) sally(g2, r, nat);
     }
@@ -58165,7 +58829,7 @@
   }
   function fallBack2(g2, nat, cap15 = g2.nations[nat].capital) {
     if (!given2.size || cap15 < 0 || !allied(g2, nat, ctl(g2, g2.regions[cap15]))) return;
-    const home = hops(g2, cap15, (r) => allied(g2, nat, ctl(g2, r)) && within2(r));
+    const home = hops(g2, cap15, (r) => allied(g2, nat, ctl(g2, r)) && within3(r));
     const leaving2 = g2.corps.filter((c) => c.nat === nat && c.kind !== "fort" && !c.hold && given2.has(c.reg) && home[c.reg] > 0).sort((a, b) => home[a.reg] - home[b.reg]);
     const makeRoom = (r, depth = 0) => {
       if (placed(g2, r, nat).length < STACK) return true;
@@ -58379,7 +59043,7 @@
       for (let guard = 0; guard < want && fast(r).length < want; guard++) {
         if (crowd(r) >= STACK) {
           const foot = r.units.find((u) => u.nat === nat && !u.hold && u.kind !== "fort" && !KIND[u.kind].mobile && u.ap > 0);
-          const next = r.nb.map((j) => g2.regions[j]).filter((x) => ctl(g2, x) === nat && within2(x) && !at4.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
+          const next = r.nb.map((j) => g2.regions[j]).filter((x) => ctl(g2, x) === nat && within3(x) && !at4.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
           if (!foot || !next || !moveCorps2(g2, foot, next)) break;
         }
         const d = hops(g2, r.id, (x) => allied(g2, nat, ctl(g2, x)));
@@ -58410,12 +59074,12 @@
     const list4 = phases(nat).filter((p) => p.from <= g2.turn).sort((a, b) => b.from - a.from);
     return list4.flatMap((p) => p.objectives ?? []);
   }
-  function landings(g2, nat, ph, within3) {
+  function landings(g2, nat, ph, within4) {
     for (const L2 of ph.landings ?? []) {
       const c = g2.corps.find((x) => x.nat === nat && x.name === L2.corps && !x.dead);
       if (!c) continue;
       const from2 = g2.regions[c.reg];
-      const waiting2 = from2.port && (within3 ? within3.has(from2.id) && allied(g2, nat, from2.ctrl) && !L2.to.includes(from2.name) : from2.owner === nat);
+      const waiting2 = from2.port && (within4 ? within4.has(from2.id) && allied(g2, nat, from2.ctrl) && !L2.to.includes(from2.name) : from2.owner === nat);
       if (!waiting2) continue;
       const force3 = [c, ...(L2.with ?? []).map((nm) => g2.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x) => !!x)];
       if (leavesHome(g2, nat, from2)) force3.splice(Math.min(force3.length, mayLeave(g2, nat)));
@@ -58672,8 +59336,8 @@
       const want = seaFoe(g2, nat)?.L.force ?? 0;
       const kept2 = door.units.filter((x) => x.nat === nat && !x.dead && x.kind !== "fort" && x.kind !== "eng").sort(byWorth2).slice(0, want);
       for (const u of kept2) massed.add(u.id);
-      const watch = coastWatch(g2, nat);
-      const lone = (c) => g2.regions[c.reg].name in watch && g2.regions[c.reg].units.filter((u) => u.nat === nat && u.kind !== "fort").length < 2;
+      const watch2 = coastWatch(g2, nat);
+      const lone = (c) => g2.regions[c.reg].name in watch2 && g2.regions[c.reg].units.filter((u) => u.nat === nat && u.kind !== "fort").length < 2;
       const pool = home().filter((c) => c.kind === "inf" && !c.hold && c.reg !== door.id && !c.airborne && !c.town && c.joint === void 0 && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id)).sort(byWorth2);
       let have = kept2.length;
       for (const c of pool) {
@@ -58749,8 +59413,8 @@
     };
     const room2 = (p) => placed(g2, p, nat).length < STACK;
     const quay = g2.turn - (g2.flags[`st:quayAt:${nat}`] ?? -99) < 6 ? (g2.flags[`st:quay:${nat}`] ?? 0) - 1 : -1;
-    const watch = coastWatch(g2, nat);
-    const lone = (c) => g2.regions[c.reg].name in watch && g2.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort").length < 2;
+    const watch2 = coastWatch(g2, nat);
+    const lone = (c) => g2.regions[c.reg].name in watch2 && g2.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort").length < 2;
     const pool = g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && !c.hold && !c.airborne && !c.town && c.joint === void 0 && c.supplied && c.str >= 0.7 && c.ap >= c.apMax).filter((c) => homeland(g2.regions[c.reg], nat) && c.reg !== quay && !lone(c)).sort((a, b) => atkPower(g2, b) - atkPower(g2, a) || a.id - b.id);
     const harbours2 = g2.regions.filter((r) => homeland(r, nat) && r.port && r.ctrl === nat);
     const sails = harbours2.some((r) => r.seas.some((z) => !closedTo(g2, z, nat)));
@@ -58950,7 +59614,7 @@
       const here = g2.regions[c.reg];
       const now = facing2(here, c);
       if (now >= 2) continue;
-      const far = hops(g2, c.reg, (x) => within2(x) && allied(g2, nat, ctl(g2, x)));
+      const far = hops(g2, c.reg, (x) => within3(x) && allied(g2, nat, ctl(g2, x)));
       let best = null, bv = now ? now * 10 : 0;
       for (const r of g2.regions) {
         const d = far[r.id];
@@ -58984,7 +59648,7 @@
       const here = g2.regions[c.reg];
       const now = facing2(here);
       if (now === 2) continue;
-      const far = hops(g2, c.reg, (x) => within2(x) && allied(g2, nat, ctl(g2, x)));
+      const far = hops(g2, c.reg, (x) => within3(x) && allied(g2, nat, ctl(g2, x)));
       let best = null, bv = now ? 10 : 0;
       for (const r of g2.regions) {
         const d = far[r.id];
@@ -59283,7 +59947,7 @@
       const a = q[i];
       if (full(g2.regions[a])) continue;
       for (const j of g2.regions[a].nb) {
-        if (!allied(g2, nat, ctl(g2, g2.regions[j])) || !within2(g2.regions[j])) continue;
+        if (!allied(g2, nat, ctl(g2, g2.regions[j])) || !within3(g2.regions[j])) continue;
         if (dist2[a] + 1 < dist2[j]) {
           dist2[j] = dist2[a] + 1;
           q.push(j);
@@ -59485,7 +60149,7 @@
         spared3 = defPower(g2, c, here);
         if (friendlyUnits(g2, here, nat).length <= 2 || held3[here.id] - spared3 < 1.6 * threat2[here.id]) continue;
       }
-      const d = hops(g2, here.id, (r) => allied(g2, nat, ctl(g2, r)) && within2(r));
+      const d = hops(g2, here.id, (r) => allied(g2, nat, ctl(g2, r)) && within3(r));
       let to = null, bs = 0;
       for (const r of g2.regions) {
         if (!mine4(r) || d[r.id] <= 0 || placed(g2, r, nat).length >= STACK) continue;
@@ -59548,7 +60212,7 @@
     return !!best && railMove(g2, c, best);
   }
   function walkToward(g2, c, to) {
-    const d = hops(g2, to.id, (r) => allied(g2, c.nat, ctl(g2, r)) && within2(r) && (r.id === c.reg || placed(g2, r, c.nat).length < STACK));
+    const d = hops(g2, to.id, (r) => allied(g2, c.nat, ctl(g2, r)) && within3(r) && (r.id === c.reg || placed(g2, r, c.nat).length < STACK));
     for (let step2 = 0; step2 < 6 && c.ap > 0 && c.reg !== to.id; step2++) {
       let next = null;
       for (const j of g2.regions[c.reg].nb) {
@@ -59596,7 +60260,7 @@
     const stuck = [];
     for (const c of out) {
       if (!g2.regions[c.reg].port) {
-        const d = hops(g2, c.reg, (r) => allied(g2, c.nat, ctl(g2, r)) && within2(r));
+        const d = hops(g2, c.reg, (r) => allied(g2, c.nat, ctl(g2, r)) && within3(r));
         let port = null;
         for (const r of g2.regions) {
           if (!r.port || r.owner === c.nat || d[r.id] < 0 || placed(g2, r, c.nat).length >= STACK) continue;
@@ -60182,9 +60846,9 @@
     return { ...base, open: open2, line: `Shut to your ships: ${why}.`, why };
   }
   var gateViews = (g2, viewer = g2.human) => g2.gates.map((gt, id) => view(g2, gt, id, viewer));
-  function onLand(g2, x, y, within3 = 260) {
+  function onLand(g2, x, y, within4 = 260) {
     for (const r of g2.regions) {
-      if (Math.abs(r.x - x) > within3 || Math.abs(r.y - y) > within3) continue;
+      if (Math.abs(r.x - x) > within4 || Math.abs(r.y - y) > within4) continue;
       for (const poly of r.polys) {
         let inside2 = false;
         poly.forEach((ring, k) => {
@@ -60333,6 +60997,8 @@
       ac: g2.ac,
       // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
       subLook: g2.subLook,
+      // The sea patrol's record (release 2, Units decide, once it is live): absent otherwise, so such a save is written as it always was.
+      patrolSunk: g2.patrolSunk,
       // The month's lorry columns (release 2, columns.ts): absent while the switch is off, so such a save is written as it always was.
       columns: g2.columns,
       // Forward dumps and the front the lorries go to first (release 2, logistics.ts): absent while those switches are off.
@@ -60506,6 +61172,7 @@
     if (Array.isArray(d.atSea) && d.atSea.length) g2.atSea = d.atSea;
     if (d.ac && typeof d.ac === "object") g2.ac = d.ac;
     if (Array.isArray(d.subLook)) g2.subLook = d.subLook;
+    if (d.patrolSunk && typeof d.patrolSunk === "object") g2.patrolSunk = d.patrolSunk;
     if (d.columns && typeof d.columns === "object") g2.columns = d.columns;
     if (Array.isArray(d.dumps) && d.dumps.length) g2.dumps = d.dumps;
     if (d.lorryFirst && typeof d.lorryFirst === "object") g2.lorryFirst = d.lorryFirst;
@@ -61049,7 +61716,7 @@
       fog: g2.flags.nofog !== 1
     };
   }
-  var setStaffCap = (g2, pct12) => setCap(g2, pct12);
+  var setStaffCap = (g2, pct13) => setCap(g2, pct13);
 
   // ../../src/campaign/finish.ts
   var finishRules = (g2) => g2.flags.open === 1 && !g2.flags.dom && !!LIB.finish;
@@ -61631,8 +62298,8 @@
   function orderDepth(g2, id) {
     return g2.human !== null && setDepth(g2, id, humanUp(g2) && !onEve(g2));
   }
-  function orderStaffCap(g2, pct12) {
-    return g2.human !== null && setStaffCap(g2, pct12);
+  function orderStaffCap(g2, pct13) {
+    return g2.human !== null && setStaffCap(g2, pct13);
   }
   function humanUp(g2) {
     return g2.human !== null && current(g2) === g2.human && g2.nations[g2.human].alive;
@@ -63097,7 +63764,7 @@
   var CAPITAL_BESIEGED = "It is your capital: the country will not long outlast it.";
   var REACH_AT = 2 / 3;
   var NEAR = 0.05;
-  var pct9 = (x) => `${Math.round(clamp(x, 0, 1) * 100)}%`;
+  var pct10 = (x) => `${Math.round(clamp(x, 0, 1) * 100)}%`;
   var weigh2 = (capital3, home, army2, more) => COLLAPSE.capital * capital3 + COLLAPSE.home * home + COLLAPSE.army * (1 - army2) + more;
   function standing4(g2, nat, ahead2 = 0) {
     const n = g2.nations[nat];
@@ -63248,7 +63915,7 @@
       return make("fall", `${name} can fall next month`, `${parts2}. ${ends}`, note4, note4);
     }
     if ((r.within || r.twoThirds) && !told2) {
-      const way = `${name} gives in when the capital, the home provinces and the army lost together pass what the country will bear, and your campaign ends with it: it is ${pct9(r.near)} of the way there.`;
+      const way = `${name} gives in when the capital, the home provinces and the army lost together pass what the country will bear, and your campaign ends with it: it is ${pct10(r.near)} of the way there.`;
       if (r.within) {
         const adj = r.reachBy && g2.nations[r.reachBy] ? g2.nations[r.reachBy].adj : "Enemy";
         const where = r.reachFrom === r.region ? `${adj} troops are at the gates of ${city}` : `${adj} troops stand in ${g2.regions[r.reachFrom].name}, beside the capital`;
@@ -63735,7 +64402,7 @@
 
   // ../../src/campaign/airpages.ts
   var num4 = (n) => Math.round(n).toLocaleString("en-US");
-  var pct10 = (x) => `${Math.round(x * 100)}%`;
+  var pct11 = (x) => `${Math.round(x * 100)}%`;
   var craft = (x) => [x.ftr >= 1 ? `${num4(x.ftr)} fighters` : "", x.bmr >= 1 ? `${num4(x.bmr)} bombers` : ""].filter(Boolean).join(", ") || "no aircraft fit to fly";
   var KINDS3 = ["bomb", "night", "ground", "line", "town", "superiority", "strike", "fleet", "harbour", "recon"];
   var isKind = (k) => KINDS3.includes(k);
@@ -63743,8 +64410,8 @@
   var BACK = { label: "BACK TO THE AIRFIELD", act: "open:airfield", ok: true, tip: "" };
   function groupLines(x, crowd = true) {
     return [
-      `${craft(x)}${x.command ? `, of ${x.command}` : ""}${x.leader ? `. ${x.leader} commands` : ""}. Reaches ${num4(x.range)} km. Readiness ${pct10(x.ready)}.`,
-      `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct10(x.crowd)} of it can fly.` : ""}`
+      `${craft(x)}${x.command ? `, of ${x.command}` : ""}${x.leader ? `. ${x.leader} commands` : ""}. Reaches ${num4(x.range)} km. Readiness ${pct11(x.ready)}.`,
+      `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct11(x.crowd)} of it can fly.` : ""}`
     ];
   }
   function airfieldPage(g2, region) {
@@ -63821,7 +64488,7 @@
       sections: [{ heading: "KINDS OF RAID", text: "", rows: menu.map((k) => ({ nat: "", title: k.label, lines: [k.blurb, k.why ?? `${k.targets} target${k.targets === 1 ? "" : "s"} in reach this month.`], buttons: [{ label: "PICK A TARGET", act: `open:raid:${k.key}`, ok: up && !k.why, tip: k.why ?? "" }] })) }]
     };
   }
-  var lossLine = (p) => `Chance of success ${pct10(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num4(p.bomberLossN)} of ${num4(p.bombers)} bombers (${pct10(p.bomberLoss)})` : "", p.fighters ? `${num4(p.fighterLossN)} of ${num4(p.fighters)} fighters` : ""].filter(Boolean).join(", ") || "none"}${p.foeLossN ? `, for about ${num4(p.foeLossN)} enemy fighters` : ""}.`;
+  var lossLine = (p) => `Chance of success ${pct11(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num4(p.bomberLossN)} of ${num4(p.bombers)} bombers (${pct11(p.bomberLoss)})` : "", p.fighters ? `${num4(p.fighterLossN)} of ${num4(p.fighters)} fighters` : ""].filter(Boolean).join(", ") || "none"}${p.foeLossN ? `, for about ${num4(p.foeLossN)} enemy fighters` : ""}.`;
   function targetsPage(g2, kind, group) {
     const k = raidMenu(g2).find((x) => x.key === kind);
     if (!k) return null;
@@ -63861,7 +64528,7 @@
     return {
       id: `plan:${kind}:${target}:${p.picked.join(".")}`,
       title: p.title.toUpperCase(),
-      headline: p.why ?? `${p.verdict}: ${pct10(p.success)}`,
+      headline: p.why ?? `${p.verdict}: ${pct11(p.success)}`,
       note: p.why ? "" : [lossLine(p), ...p.effects, p.massed, p.offPatrol].filter(Boolean).join(" "),
       top: [
         { label: "FLY THE RAID", act: `raid:${kind}:${target}:${p.picked.join(".")}`, ok: up && !p.why, tip: p.why ?? "Flown at once. Every group that goes is away for the rest of the month." },
@@ -63966,7 +64633,7 @@
     const rows = wingsOfFleet(g2, fleet).map((w) => ({
       nat: c.nat,
       title: w.name,
-      lines: [`${num4(w.aircraft)} of ${num4(w.est)} ${w.kind === "ftr" ? "fighters" : "strike aircraft"}. Reaches ${num4(w.range)} km. Readiness ${pct10(w.ready)}.`, `${w.doing}. ${w.note}`],
+      lines: [`${num4(w.aircraft)} of ${num4(w.est)} ${w.kind === "ftr" ? "fighters" : "strike aircraft"}. Reaches ${num4(w.range)} km. Readiness ${pct11(w.ready)}.`, `${w.doing}. ${w.note}`],
       buttons: mine4 ? [{ label: "ORDERS", act: `open:group:${w.id}`, ok: true, tip: "Its standing orders, the strikes it can fly, a search of a sea, or a reconnaissance." }] : []
     }));
     const ashore = c.ashore.map((w) => ({
@@ -66576,8 +67243,8 @@
       } else if (h.stage === "in" && !hasTarget(u, foes)) by(b, side5, u, mainTarget(b, P, u, foes));
     }
   }
-  function coming(b, mine4, foes, within3) {
-    let best = null, gap = within3;
+  function coming(b, mine4, foes, within4) {
+    let best = null, gap = within4;
     for (const f of foes) {
       if (f.kind === "art" || f.kind === "fort" || f.speed <= 0.5) continue;
       for (const l of mine4) {
@@ -66833,11 +67500,11 @@
     if (c === null) return null;
     return Math.min(hi, Math.max(lo, c * ARMOUR.models[shooter].kills / PAR[face]));
   }
-  function fateOf(target, face, r12, r23) {
+  function fateOf(target, face, r12, r24) {
     const m = target ? ARMOUR.models[target] : void 0;
     const fire2 = m?.fire?.[face] ?? 0.5;
     if (r12 >= fire2) return "out";
-    return r23 < (m?.explodes ?? 0.2) ? "blow" : "burn";
+    return r24 < (m?.explodes ?? 0.2) ? "blow" : "burn";
   }
 
   // ../../src/battle/land/units.ts
@@ -68356,8 +69023,8 @@
       return at4;
     }
     /** The place of the man of 'of' nearest p (within a reach). */
-    nearestOf(of2, p, within3 = Infinity) {
-      let best, d = within3;
+    nearestOf(of2, p, within4 = Infinity) {
+      let best, d = within4;
       for (const o of of2) {
         const dd = Math.hypot(o.x - p[0], o.y - p[1]);
         if (dd < d) {
@@ -68404,8 +69071,8 @@
      */
     liftAim(sq, g2, e, kind) {
       const b = this.b, u = sq.u, t = b.t;
-      const r12 = roll(this.seed, u.id, g2.n, t), r23 = roll(this.seed, u.id, g2.n, t, 1);
-      const plain2 = [e.x + (r12 - 0.5) * e.w * 0.6, e.y + (r23 - 0.5) * e.d * 0.6];
+      const r12 = roll(this.seed, u.id, g2.n, t), r24 = roll(this.seed, u.id, g2.n, t, 1);
+      const plain2 = [e.x + (r12 - 0.5) * e.w * 0.6, e.y + (r24 - 0.5) * e.d * 0.6];
       if (!this.byBook) return plain2;
       let near2 = null, gap = BOOK2.lift[kind];
       for (const f of b.units) if (f.side === u.side && fighting(f) && FOOT_KINDS.includes(f.kind)) {
@@ -70996,9 +71663,9 @@
     }
     view(as) {
       const b = this.b, out = [];
-      const r12 = (v) => Math.round(v * 10) / 10, r23 = (v) => Math.round(v * 100) / 100;
+      const r12 = (v) => Math.round(v * 10) / 10, r24 = (v) => Math.round(v * 100) / 100;
       const one2 = (m) => {
-        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r12(m.x), y: r12(m.y), f: r23(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r12(m.went ?? 0) : 0, c: m.cover };
+        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r12(m.x), y: r12(m.y), f: r24(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r12(m.went ?? 0) : 0, c: m.cover };
         if (m.j !== void 0) o.j = m.j;
         if (m.aim) o.a = [r12(m.aim[0]), r12(m.aim[1])];
         if (m.shot !== void 0) o.s = r12(m.shot);
@@ -71050,7 +71717,7 @@
      */
     linemen(id) {
       const b = this.b, t = b.t, out = [], pace2 = LAND2.speed.inf;
-      const r12 = (v) => Math.round(v * 10) / 10, r23 = (v) => Math.round(v * 100) / 100;
+      const r12 = (v) => Math.round(v * 10) / 10, r24 = (v) => Math.round(v * 100) / 100;
       for (const m of b.wireMends) {
         const w = b.wires[m.wire - 1];
         if (!w || w.unit !== id || t < m.t0) continue;
@@ -71059,7 +71726,7 @@
         const out1 = bearing2(hx, hy, m.x, m.y);
         const k = t < m.t1 ? m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1 : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - (t - m.t) * pace2 / d) : 0;
         const p = t < m.t1 ? "reel" : t < m.t ? "splice" : "walk";
-        out.push({ k: 300 + m.man, r: "rifle", x: r12(hx + (m.x - hx) * k), y: r12(hy + (m.y - hy) * k), f: r23(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace2, c: "none", ln: 1 });
+        out.push({ k: 300 + m.man, r: "rifle", x: r12(hx + (m.x - hx) * k), y: r12(hy + (m.y - hy) * k), f: r24(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace2, c: "none", ln: 1 });
       }
       return out;
     }
@@ -71717,7 +72384,7 @@
       const still = new Set(this.coming.map((c) => c.u.corps));
       const on = this.riders.filter((r) => this.ticket[r.side].human && still.has(r.corps) && r.there <= r.comes);
       if (!on.length) return {};
-      const r32 = (v) => Math.round(v * 1e3) / 1e3, r12 = (v) => Math.round(v * 10) / 10;
+      const r33 = (v) => Math.round(v * 1e3) / 1e3, r12 = (v) => Math.round(v * 10) / 10;
       const KIND2 = { inf: "infantry", mtn: "mountain", cav: "cavalry", eng: "engineer", mot: "motorized", arm: "armoured", art: "artillery", fort: "fortress" };
       const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
       return {
@@ -71735,17 +72402,17 @@
             side: r.side,
             x: r12(r.from[0] + (r.to[0] - r.from[0]) * k),
             y: r12(r.from[1] + (r.to[1] - r.from[1]) * k),
-            face: r32(bearing(r.from[0], r.from[1], r.to[0], r.to[1])),
+            face: r33(bearing(r.from[0], r.from[1], r.to[0], r.to[1])),
             speed: k < 1 ? Math.max(...Object.values(LAND2.speed)) : 0,
-            there: r32(r.there),
-            comes: r32(r.comes),
+            there: r33(r.there),
+            comes: r33(r.comes),
             edge: r.edge,
-            ...staff ? { line: r32(line) } : {},
+            ...staff ? { line: r33(line) } : {},
             name: r.f.name,
             kind: r.f.kind,
             divs,
             men: Math.round(men2),
-            str: r32(str),
+            str: r33(str),
             says
           };
         })
@@ -72115,8 +72782,8 @@
      * of a block he has not met is kept from him).
      */
     cutBegin(u, x, y, yaw) {
-      const C4 = LAND2.cutters, r12 = (v) => Math.round(v * 10) / 10, r32 = (v) => Math.round(v * 1e3) / 1e3;
-      const c = { t0: r32(this.t), t1: r32(this.t + C4.secs), unit: u.id, side: u.side, x: r12(x), y: r12(y), yaw: r32(yaw), width: C4.width, known: this.known(u), open: false };
+      const C4 = LAND2.cutters, r12 = (v) => Math.round(v * 10) / 10, r33 = (v) => Math.round(v * 1e3) / 1e3;
+      const c = { t0: r33(this.t), t1: r33(this.t + C4.secs), unit: u.id, side: u.side, x: r12(x), y: r12(y), yaw: r33(yaw), width: C4.width, known: this.known(u), open: false };
       this.cuts.push(c);
       const words = this.ticket[u.side].human || !this.ticket[other2(u.side)].human;
       this.say({ what: "land:cut", unit: u.id, side: u.side, text: words ? `${this.named(u)} cuts a gap through the hedge.` : "", x: c.x, y: c.y, extra: { t1: c.t1, yaw: c.yaw, width: c.width } });
@@ -72402,13 +73069,13 @@
      * leaves the headquarters now; he reaches the cut at foot pace and the wire is mended LAND.phones.splice seconds later.
      */
     wireCut(w, x, y, by2) {
-      const r12 = (v) => Math.round(v * 10) / 10, r32 = (v) => Math.round(v * 1e3) / 1e3;
+      const r12 = (v) => Math.round(v * 10) / 10, r33 = (v) => Math.round(v * 1e3) / 1e3;
       w.cut++;
-      const c = { t: r32(this.t), wire: w.id, x: r12(x), y: r12(y), by: by2.id };
+      const c = { t: r33(this.t), wire: w.id, x: r12(x), y: r12(y), by: by2.id };
       this.wireCuts.push(c);
       if (!w.out) {
-        const t1 = r32(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND2.speed.inf);
-        w.out = { t: r32(t1 + LAND2.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
+        const t1 = r33(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND2.speed.inf);
+        w.out = { t: r33(t1 + LAND2.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
         this.wireMends.push(w.out);
       }
       const u = this.unit(w.unit);
@@ -72426,7 +73093,7 @@
     }
     /** A lineman's splice is done: every cut on the wire is mended, and whatever was waiting for it goes at once. */
     mend(w) {
-      const m = w.out, r32 = (v) => Math.round(v * 1e3) / 1e3;
+      const m = w.out, r33 = (v) => Math.round(v * 1e3) / 1e3;
       w.out = null;
       w.cut = 0;
       const u = this.unit(w.unit);
@@ -72436,7 +73103,7 @@
         if (u && now.some((p) => !p.smoke)) delete u.orderAt;
         if (u && fighting2(u)) for (const p of now) {
           p.go();
-          p.held.went = r32(this.t);
+          p.held.went = r33(this.t);
         }
       }
       if (u && this.phoneWords()) this.say({ what: "land:mend", unit: u.id, side: u.side, x: m.x, y: m.y, extra: { wire: w.id, man: m.man }, text: `The line to ${this.named(u)} is mended.` });
@@ -72451,17 +73118,17 @@
      * (wireHeld) as it is given, and as it goes.
      */
     byFallback(u, go, from2, c, smoke = false) {
-      const r32 = (v) => Math.round(v * 1e3) / 1e3, key7 = c ? JSON.stringify(c) : void 0;
+      const r33 = (v) => Math.round(v * 1e3) / 1e3, key7 = c ? JSON.stringify(c) : void 0;
       const slot = (p) => p.id === u.id && !p.smoke === !smoke;
       const was = this.pending.find(slot);
       if (this.staffing && was?.held && key7 !== void 0 && was.key === key7) return;
-      const held3 = { t: r32(from2), unit: u.id, due: r32(from2 + this.fallbackWait(u)) };
+      const held3 = { t: r33(from2), unit: u.id, due: r33(from2 + this.fallbackWait(u)) };
       this.wireHeld.push(held3);
       this.pending = this.pending.filter((p) => !slot(p));
       if (held3.due <= this.t + 1e-9) {
         if (!smoke) delete u.orderAt;
         go();
-        held3.went = r32(this.t);
+        held3.went = r33(this.t);
         return;
       }
       this.pending.push(smoke ? { at: held3.due, id: u.id, go, smoke, key: key7, held: held3 } : { at: held3.due, id: u.id, go, key: key7, held: held3 });
@@ -74428,21 +75095,21 @@
      * view; nothing in the fight reads it.
      */
     breakCause(s) {
-      const r32 = (x) => Math.round(x * 1e3) / 1e3;
+      const r33 = (x) => Math.round(x * 1e3) / 1e3;
       const b = this.brink(s), w = b.worn / LAND2.spent[s], r = b.running / LAND2.breaks;
       const mine4 = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
       const on = mine4.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + weightOf(u), 0);
       const steady3 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
       return {
         side: s,
-        bar: r32(b.bar),
+        bar: r33(b.bar),
         by: Math.max(w, r) < 1 ? "none" : nearer,
         nearer,
-        worn: r32(b.worn),
+        worn: r33(b.worn),
         spent: LAND2.spent[s],
-        running: r32(b.running),
+        running: r33(b.running),
         breaks: LAND2.breaks,
-        fresh: r32(this.freshShare(s)),
+        fresh: r33(this.freshShare(s)),
         fought: LAND2.fought,
         small: this.freshHold[s],
         holding: b.holding,
@@ -74453,7 +75120,7 @@
         wornAt: LAND2.fresh.str,
         routing: mine4.filter((u) => u.state === "routing").length,
         fled: mine4.filter((u) => u.state === "gone").length,
-        steady: r32(steady3),
+        steady: r33(steady3),
         stillSteady: steady3 >= 0.9995 ? "all" : steady3 > 0.5 ? "most" : "less"
       };
     }
@@ -74572,15 +75239,15 @@
       }
       for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
       const loser = other2(winner);
-      const pct12 = (p) => p < 1e-4 ? "none" : p < 5e-3 ? "less than 1%" : `about ${Math.round(p * 100)}%`;
+      const pct13 = (p) => p < 1e-4 ? "none" : p < 5e-3 ? "less than 1%" : `about ${Math.round(p * 100)}%`;
       const cap15 = (t) => t[0].toUpperCase() + t.slice(1);
       const line = this.practice && this.ticket.def.human ? "Your line" : this.practice ? "Their line" : `The ${this.ticket.def.adj} line`;
       const told2 = how === "rout" && why && why.by !== "none";
       const lines2 = [
         how === "rout" ? this.brokeAfter(loser, told2 ? why : void 0) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
       ];
-      if (how !== "objective") lines2.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told2 ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct12(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct12(lost.def)}.` : `${cap15(this.sideOf("att", "attack"))} lost ${pct12(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct12(lost.def)}.`);
-      else if (this.contactAt !== null) lines2.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct12(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct12(lost.def)}.`);
+      if (how !== "objective") lines2.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told2 ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct13(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct13(lost.def)}.` : `${cap15(this.sideOf("att", "attack"))} lost ${pct13(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct13(lost.def)}.`);
+      else if (this.contactAt !== null) lines2.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct13(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct13(lost.def)}.`);
       for (const u of this.units) if (live3(u) && u.state !== "routing") {
         u.act = "idle";
         u.speed = 0;
@@ -79599,7 +80266,7 @@
     const base = [fixed(G4.rifle, ["gun.nose"], 500, { n: 2, rate: Math.round(G4.rifle.rate * SYNC) }), fixed(G4.rifle, ["gun.1", "gun.2"], 500)];
     return { mark: `Fighter:${nat}`, conv: 250, silent: [], guns: d < 1942 ? base : [...base, fixed(G4.heavy, ["gun.1", "gun.2"], 250)] };
   }
-  var about = (facing2, half, lo, hi) => ({ yaw: [(facing2 - half + 360) % 360, (facing2 + half) % 360], pitch: [lo, hi] });
+  var about2 = (facing2, half, lo, hi) => ({ yaw: [(facing2 - half + 360) % 360, (facing2 + half) % 360], pitch: [lo, hi] });
   var from = (a, b, lo, hi) => ({ yaw: [a, b], pitch: [lo, hi] });
   var hand = (spec2, where, rounds, arc, more = {}) => gun(spec2, "hand", where, rounds, { arc, ...more });
   var turret = (spec2, where, rounds, arc = null) => gun(spec2, "turret", where, rounds, { arc });
@@ -79609,17 +80276,17 @@
     const box = (mark, guns2, silent = []) => ({ mark, conv: null, silent, guns: guns2, reach: REACH2 });
     switch (model) {
       case "He111": {
-        const nose = from(325, 35, -20, 30), dorsal = about(180, 70, 0, 70), gondola = about(180, 40, -60, 0), fwd2 = about(0, 40, -60, 0);
+        const nose = from(325, 35, -20, 30), dorsal = about2(180, 70, 0, 70), gondola = about2(180, 40, -60, 0), fwd2 = about2(0, 40, -60, 0);
         const drums = (k) => ({ drum: 75, rounds: 75 * k });
         if (d < 1940) return box("He 111P", [hand(G4.mg15, ["turret.1"], 600, nose, drums(8)), hand(G4.mg15, ["turret.2"], 600, dorsal, drums(8)), hand(G4.mg15, ["turret.3"], 600, gondola, drums(8))], ["turret.4"]);
-        if (d < 1943) return box("He 111H", [hand(G4.mg15, ["turret.1"], 900, nose, drums(12)), hand(G4.mg15, ["turret.2"], 900, dorsal, drums(12)), hand(G4.mg15, ["turret.3"], 900, gondola, drums(12)), hand(G4.mg15, ["turret.4"], 900, fwd2, drums(12)), hand(G4.mg15, [], 900, about(90, 40, -30, 30), drums(12)), hand(G4.mg15, [], 900, about(270, 40, -30, 30), drums(12))]);
-        return box("He 111H-16", [hand(G4.mgffm, ["turret.1"], 180, nose, { drum: 60 }), hand(G4.mg131, ["turret.2"], 1e3, dorsal), hand(G4.mg81z, ["turret.3"], 850, gondola), hand(G4.mg81, ["turret.4"], 500, fwd2), hand(G4.mg81, [], 500, about(90, 40, -30, 30)), hand(G4.mg81, [], 500, about(270, 40, -30, 30))]);
+        if (d < 1943) return box("He 111H", [hand(G4.mg15, ["turret.1"], 900, nose, drums(12)), hand(G4.mg15, ["turret.2"], 900, dorsal, drums(12)), hand(G4.mg15, ["turret.3"], 900, gondola, drums(12)), hand(G4.mg15, ["turret.4"], 900, fwd2, drums(12)), hand(G4.mg15, [], 900, about2(90, 40, -30, 30), drums(12)), hand(G4.mg15, [], 900, about2(270, 40, -30, 30), drums(12))]);
+        return box("He 111H-16", [hand(G4.mgffm, ["turret.1"], 180, nose, { drum: 60 }), hand(G4.mg131, ["turret.2"], 1e3, dorsal), hand(G4.mg81z, ["turret.3"], 850, gondola), hand(G4.mg81, ["turret.4"], 500, fwd2), hand(G4.mg81, [], 500, about2(90, 40, -30, 30)), hand(G4.mg81, [], 500, about2(270, 40, -30, 30))]);
       }
       case "B17": {
-        const tail = hand(G4.m2, ["turret.12", "turret.13"], 500, about(180, 30, -30, 30), { n: 2 });
+        const tail = hand(G4.m2, ["turret.12", "turret.13"], 500, about2(180, 30, -30, 30), { n: 2 });
         const waist = [hand(G4.m2, ["turret.9"], 500, from(30, 150, -40, 50)), hand(G4.m2, ["turret.10"], 500, from(210, 330, -40, 50))];
         const top = turret(G4.m2, ["turret.3", "turret.4"], 500), ball = turret(G4.m2, ["turret.5", "turret.6"], 500);
-        const radio = hand(G4.m2, ["turret.11"], 500, about(180, 40, 10, 70));
+        const radio = hand(G4.m2, ["turret.11"], 500, about2(180, 40, 10, 70));
         const cheeks = [hand(G4.m2, ["turret.7"], 500, from(0, 60, -30, 30)), hand(G4.m2, ["turret.8"], 500, from(300, 360, -30, 30))];
         if (d < 1943) return box("B-17E", [hand(G4.m1919, ["turret.7"], 500, from(320, 40, -30, 30)), top, ball, ...waist, radio, tail], ["turret.1", "turret.2", "turret.8"]);
         if (d < 1943 + 8 / 12) return box("B-17F", [...cheeks, top, ball, ...waist, radio, tail], ["turret.1", "turret.2"]);
@@ -79628,31 +80295,31 @@
         return box("B-17G", [chin, ...cheeks, top, ball, ...waist, tail], ["turret.11"]);
       }
       case "Lancaster":
-        return box("Lancaster I", [turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about(0, 95, -45, 60)), turret(G4.browning303, ["turret.3", "turret.4"], 1e3, from(0, 360, 0, 70)), turret(G4.browning303, ["turret.5", "turret.6", "turret.7", "turret.8"], 2500, about(180, 95, -60, 60))]);
+        return box("Lancaster I", [turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about2(0, 95, -45, 60)), turret(G4.browning303, ["turret.3", "turret.4"], 1e3, from(0, 360, 0, 70)), turret(G4.browning303, ["turret.5", "turret.6", "turret.7", "turret.8"], 2500, about2(180, 95, -60, 60))]);
       // The four models of 23 Nov, laid on their own sockets (the 3D thread's reading of the files, 08:41Z). Guns from the
       // standard references (medium, for the historian's check); rounds unchecked. Arcs as the same turret or position on
       // the Lancaster, the B-17 and the He 111.
       case "Wellington": {
-        const nose = turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about(0, 95, -45, 60));
+        const nose = turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about2(0, 95, -45, 60));
         const beams = [hand(G4.browning303, ["turret.5"], 500, from(30, 150, -40, 50)), hand(G4.browning303, ["turret.6"], 500, from(210, 330, -40, 50))];
-        const tail = (n) => ({ ...turret(G4.browning303, ["turret.3", "turret.4"], n === 4 ? 2500 : 1e3, about(180, 95, -60, 60)), n });
+        const tail = (n) => ({ ...turret(G4.browning303, ["turret.3", "turret.4"], n === 4 ? 2500 : 1e3, about2(180, 95, -60, 60)), n });
         return d < 1941 + 5 / 12 ? box("Wellington IC", [nose, tail(2), ...beams]) : box("Wellington III", [nose, tail(4), ...beams]);
       }
       case "Pe2": {
-        const above = about(180, 70, 0, 70), below = about(180, 40, -60, 0);
+        const above = about2(180, 70, 0, 70), below = about2(180, 40, -60, 0);
         if (d < 1942 + 6 / 12) return box("Pe-2", [fixed(G4.shkas, ["gun.1", "gun.2"], 750), hand(G4.shkas, ["turret.1"], 750, above), hand(G4.shkas, ["turret.2"], 750, below)]);
         return box("Pe-2 (1942)", [fixed(G4.ubs, ["gun.1"], 150), fixed(G4.shkas, ["gun.2"], 450), hand(G4.ubs, ["turret.1"], 200, above), hand(G4.ubs, ["turret.2"], 200, below)]);
       }
       case "LeO451":
-        return box("LeO 451", [hand(G4.hs404, ["turret.1"], 120, about(180, 70, 0, 70), { drum: 60 }), hand(G4.mac34, ["turret.2"], 500, about(180, 40, -60, 0)), fixed(G4.mac34, [], 300)]);
+        return box("LeO 451", [hand(G4.hs404, ["turret.1"], 120, about2(180, 70, 0, 70), { drum: 60 }), hand(G4.mac34, ["turret.2"], 500, about2(180, 40, -60, 0)), fixed(G4.mac34, [], 300)]);
       case "SM79":
-        return box("SM.79", [fixed(G4.breda127, ["turret.1"], 500), hand(G4.breda127, ["turret.2"], 350, about(180, 70, 0, 70)), hand(G4.breda127, ["turret.3"], 350, about(180, 40, -60, 0)), hand(G4.breda77, ["turret.4"], 500, from(30, 150, -40, 50)), hand(G4.breda77, ["turret.5"], 500, from(210, 330, -40, 50))]);
+        return box("SM.79", [fixed(G4.breda127, ["turret.1"], 500), hand(G4.breda127, ["turret.2"], 350, about2(180, 70, 0, 70)), hand(G4.breda127, ["turret.3"], 350, about2(180, 40, -60, 0)), hand(G4.breda77, ["turret.4"], 500, from(30, 150, -40, 50)), hand(G4.breda77, ["turret.5"], 500, from(210, 330, -40, 50))]);
       case "Nell":
-        return box("G3M2", [hand(G4.type99, ["turret.2"], 360, about(180, 70, 0, 70), { drum: 45 }), hand(G4.type92, ["turret.1"], 582, from(0, 360, 0, 70), { drum: 97 }), hand(G4.type92, ["turret.3"], 582, from(30, 150, -40, 50), { drum: 97 }), hand(G4.type92, ["turret.4"], 582, from(210, 330, -40, 50), { drum: 97 }), hand(G4.type92, [], 582, from(320, 40, -30, 30), { drum: 97 })]);
+        return box("G3M2", [hand(G4.type99, ["turret.2"], 360, about2(180, 70, 0, 70), { drum: 45 }), hand(G4.type92, ["turret.1"], 582, from(0, 360, 0, 70), { drum: 97 }), hand(G4.type92, ["turret.3"], 582, from(30, 150, -40, 50), { drum: 97 }), hand(G4.type92, ["turret.4"], 582, from(210, 330, -40, 50), { drum: 97 }), hand(G4.type92, [], 582, from(320, 40, -30, 30), { drum: 97 })]);
       case "Betty": {
         const nose = hand(G4.type92, ["turret.1"], 582, from(320, 40, -30, 30), { drum: 97 });
-        const tail = hand(G4.type99, ["turret.5"], 360, about(180, 30, -30, 30), { drum: 45 });
-        const up = about(180, 80, 0, 80), right2 = from(30, 150, -40, 50), left = from(210, 330, -40, 50);
+        const tail = hand(G4.type99, ["turret.5"], 360, about2(180, 30, -30, 30), { drum: 45 });
+        const up = about2(180, 80, 0, 80), right2 = from(30, 150, -40, 50), left = from(210, 330, -40, 50);
         if (d < 1943 + 8 / 12) return box("G4M1", [nose, hand(G4.type92, ["turret.2"], 582, up, { drum: 97 }), hand(G4.type92, ["turret.3"], 582, right2, { drum: 97 }), hand(G4.type92, ["turret.4"], 582, left, { drum: 97 }), tail]);
         return box("G4M2", [nose, turret(G4.type99, ["turret.2"], 450, up), hand(G4.type99, ["turret.3"], 360, right2, { drum: 45 }), hand(G4.type99, ["turret.4"], 360, left, { drum: 45 }), tail]);
       }
@@ -79664,7 +80331,7 @@
     if (nat === "UK" || nat === "CAN" || nat === "AUS" || nat === "NZL" || nat === "SAF" || nat === "IND")
       return { mark: "Bomber:UK", conv: null, silent: [], reach: reach3, guns: [hand(G4.vickersK, ["turret.1"], 960, nose, { drum: 96 }), turret(G4.vickersK, ["turret.2"], 960)] };
     if (nat === "FRA")
-      return { mark: "Bomber:FRA", conv: null, silent: [], reach: reach3, guns: [hand(G4.mac34, ["turret.1"], 500, nose), turret(G4.mac34, ["turret.2"], 500), hand(G4.mac34, [], 500, about(180, 40, -60, 0))] };
+      return { mark: "Bomber:FRA", conv: null, silent: [], reach: reach3, guns: [hand(G4.mac34, ["turret.1"], 500, nose), turret(G4.mac34, ["turret.2"], 500), hand(G4.mac34, [], 500, about2(180, 40, -60, 0))] };
     return { mark: `Bomber:${nat}`, conv: null, silent: [], reach: reach3, guns: [hand(G4.rifle, ["turret.1"], 500, nose), turret(d < 1942 ? G4.rifle : G4.heavy, ["turret.2"], 500)] };
   }
 
@@ -82555,10 +83222,10 @@
   var DECK_LEAST = 0.6;
   function coverOf(kind, chance, u) {
     const v = Math.max(0, Math.min(1, u));
-    const r23 = (x) => Math.round(x * 100) / 100;
-    if (kind === "deck") return r23(DECK_LEAST + (1 - DECK_LEAST) * Math.pow(v, 0.7));
+    const r24 = (x) => Math.round(x * 100) / 100;
+    if (kind === "deck") return r24(DECK_LEAST + (1 - DECK_LEAST) * Math.pow(v, 0.7));
     const lean = Math.max(0.8, Math.min(2, 2 - 1.8 * chance));
-    return r23(CUMULUS_MOST * Math.pow(v, lean));
+    return r24(CUMULUS_MOST * Math.pow(v, lean));
   }
   var ZONES = air_cloud_default.zones;
   var FALLBACK = air_cloud_default.fallback;
@@ -86816,18 +87483,18 @@
     return { [me]: by2[me], [them]: { side: them, bar: by2[them].bar } };
   }
   function skyOut(a, me) {
-    const r32 = (x) => Math.round(x * 1e3) / 1e3;
+    const r33 = (x) => Math.round(x * 1e3) / 1e3;
     const near2 = (side5) => {
       const n = a.nearWhy(side5);
-      return { at: r32(n.at), why: n.why };
+      return { at: r33(n.at), why: n.why };
     };
     const sc = a.score();
     return {
-      chance: r32(a.staffChance()),
+      chance: r33(a.staffChance()),
       fired: a.fired,
       winding: a.winding(),
       near: { att: near2("att"), def: near2("def") },
-      score: { lost: sc.lost, worth: Math.round(sc.worth), cut: sc.cut, ruined: sc.ruined, ratio: r32(sc.ratio), up: sc.up },
+      score: { lost: sc.lost, worth: Math.round(sc.worth), cut: sc.cut, ruined: sc.ruined, ratio: r33(sc.ratio), up: sc.up },
       called: Object.fromEntries(a.units.map((u) => [u.id, a.called(u)])),
       me
     };
@@ -87073,8 +87740,8 @@
         const ses = need();
         const land2 = ses.sim instanceof LandBattle ? ses.sim : null;
         if (!land2) return null;
-        const r32 = (x) => Math.round(x * 1e3) / 1e3, contact2 = land2.contactAt !== null;
-        return ses.band ? { lo: r32(land2.chanceAt(ses.band.lo)), hi: r32(land2.chanceAt(ses.band.hi)), contact: contact2 } : { chance: r32(land2.chanceNow()), contact: contact2 };
+        const r33 = (x) => Math.round(x * 1e3) / 1e3, contact2 = land2.contactAt !== null;
+        return ses.band ? { lo: r33(land2.chanceAt(ses.band.lo)), hi: r33(land2.chanceAt(ses.band.hi)), contact: contact2 } : { chance: r33(land2.chanceNow()), contact: contact2 };
       },
       battleEnd() {
         const ses = need();
@@ -89180,7 +89847,7 @@
       if (!room2) return none4;
       const live5 = up && !onEve(s);
       const pct100 = (x) => Math.round(x * 100);
-      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct11(room2.threat.chance)}, with ${room2.threat.guards === 1 ? "one agent" : `${inWords(room2.threat.guards)} agents`} on guard.` : "No enemy service is working against you at home this month.";
+      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct12(room2.threat.chance)}, with ${room2.threat.guards === 1 ? "one agent" : `${inWords(room2.threat.guards)} agents`} on guard.` : "No enemy service is working against you at home this month.";
       const firstUp = (m) => m.now ? 0 : m.ok ? 1 : 2;
       return {
         agents: room2.agents.map((a) => ({
@@ -90132,9 +90799,9 @@
     }
     const town = ruin && ruin.damage > 0 ? ruin.pct : 0;
     const plants = r.fac > 0 ? Math.round(lost / r.fac * 100) : 0;
-    const pct12 = Math.max(town, plants);
-    if (pct12 <= 0) return null;
-    return { pct: pct12, town, lost, fac: r.fac, ruin: ruin && ruin.damage > 0 ? ruin : null };
+    const pct13 = Math.max(town, plants);
+    if (pct13 <= 0) return null;
+    return { pct: pct13, town, lost, fac: r.fac, ruin: ruin && ruin.damage > 0 ? ruin : null };
   }
   var sayDivs = (d) => `${d} div`;
   var sayMonths = (m) => m <= 0 ? "now" : `${m} mo`;
@@ -90260,9 +90927,9 @@
     const strWords = (c2, share) => {
       if (share >= 0.95) return "";
       const sure = see.own || see.ally || see.agent || corpsKnown(s, c2, s.human).level !== "report";
-      const worth3 = c2.divs * share, about2 = sure ? "" : "about ";
+      const worth3 = c2.divs * share, about3 = sure ? "" : "about ";
       const worthSaid = worth3 >= 0.95 ? String(Math.round(worth3)) : (Math.round(worth3 * 10) / 10).toFixed(1);
-      return ` at ${about2}${Math.round(share * 100)}% strength, worth ${sure ? "" : "about "}${worthSaid}`;
+      return ` at ${about3}${Math.round(share * 100)}% strength, worth ${sure ? "" : "about "}${worthSaid}`;
     };
     for (const c2 of see.known) {
       const share = glanceStr(s, c2, see);
@@ -91695,7 +92362,7 @@
       const mine4 = corpsById(s, pickedIds), mineLook = mine4.length ? attackOutlook(s, mine4, s.regions[to]) : null;
       opened = `The staff has brought in every corps the roads will carry. ${corps.length === 1 ? "One corps goes" : `${corps.length} corps go`} in at ${look.odds.toFixed(2)} to 1${mineLook ? `, where the ${mine4.length === 1 ? "corps" : `${mine4.length} corps`} you picked ${mine4.length === 1 ? "reads" : "read"} ${mineLook.odds.toFixed(2)} to 1` : ""}.`;
     }
-    const pct12 = {
+    const pct13 = {
       chancePct: oddsPct(look?.chance ?? 0),
       chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0),
       chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0),
@@ -91730,7 +92397,7 @@
         attack: look.odds,
         defence: 1,
         odds: look.odds,
-        ...pct12,
+        ...pct13,
         exact: false,
         lo: look.lo,
         hi: look.hi,
@@ -91745,7 +92412,7 @@
       };
     }
     return {
-      ...pct12,
+      ...pct13,
       allies,
       exact: true,
       lo: a.odds,
@@ -93209,7 +93876,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
     const base = s.regions[f.base];
-    const targetName = (m, t) => m === "strike" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
+    const targetName = (m, t) => m === "strike" || m === "seapatrol" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
     const doing2 = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ""}.`;
     const mine4 = f.nat === s.human;
     if (mine4) {
@@ -93562,7 +94229,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     }
     return out;
   }
-  var pct11 = (x) => `${Math.round(x * 100)}%`;
+  var pct12 = (x) => `${Math.round(x * 100)}%`;
   var WORK_NEEDS = [
     [/keeps its books in its capital/, "a capital"],
     [/^There is no industry /, "a factory"],
@@ -93617,13 +94284,13 @@ ${next.text}` : ""}` : next ? next.also : "";
         label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
         act: `spy:mission:${a.id}:${m.id}`,
         ok: up && m.ok && !m.now,
-        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct11(m.success)}.` : ""}${a.abroad ? ` Chance of being caught ${pct11(m.caught)}.` : ""}${m.ok ? "" : ` ${m.why}`}`
+        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct12(m.success)}.` : ""}${a.abroad ? ` Chance of being caught ${pct12(m.caught)}.` : ""}${m.ok ? "" : ` ${m.why}`}`
       }));
       buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : "SEND TO A PROVINCE", act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here ? placeName(here.name) : "the province selected on the map"} and sets to work there.` });
       buttons.push({ label: "RETIRE", act: `spy:retire:${a.id}`, ok: up, tip: "The agent leaves the service, which frees a place in it.", danger: true });
       const lines2 = [`${placeName(a.where, true)}, ${a.host === s.human ? "at home" : `in ${theName2(s, a.host)}`}: ${a.status}.`];
       if (a.wait > 0) lines2.push(`At work in ${a.wait === 1 ? "a month" : `${inWords(a.wait)} months`}.`);
-      if (a.atWork && a.abroad) lines2.push(`Chance of being caught this month: ${pct11(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest === 1 ? "another month" : `${inWords(a.rest)} more months`} before another act of sabotage.` : ""}`);
+      if (a.atWork && a.abroad) lines2.push(`Chance of being caught this month: ${pct12(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest === 1 ? "another month" : `${inWords(a.rest)} more months`} before another act of sabotage.` : ""}`);
       const rest = a.training ? "" : barredLine(a.missions, { host: theName2(s, a.host), restSaid: a.atWork && a.abroad && a.rest > 0 });
       if (rest) lines2.push(rest);
       for (const x of a.sees.slice(0, 5)) {
@@ -93644,13 +94311,13 @@ ${next.text}` : ""}` : next ? next.also : "";
     });
     const doubles = (room2.doubles ?? []).map((d) => ({ nat: d.of, title: `Double agent ${d.name}`, lines: [d.text], buttons: [] }));
     const orders2 = room2.orders ?? [];
-    const who = room2.threat.foes.map((f) => `${theName2(s, f)} ${pct11(room2.threat.rate[f] ?? 0)}`).join(", ");
+    const who = room2.threat.foes.map((f) => `${theName2(s, f)} ${pct12(room2.threat.rate[f] ?? 0)}`).join(", ");
     return {
       id: "spies",
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
       // (The UI director, 22 November, release 2: the head note in about 30 words; the quiet months say only "this month".)
-      note: `Agents abroad see through the fog of war, read the enemy's books${room2.orders ? ", steal orders" : ""} and sabotage. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct11(room2.threat.chance)}, with ${room2.threat.guards === 1 ? "one agent" : `${inWords(room2.threat.guards)} agents`} on guard.` : "No enemy service is working against you at home this month."}`,
+      note: `Agents abroad see through the fog of war, read the enemy's books${room2.orders ? ", steal orders" : ""} and sabotage. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct12(room2.threat.chance)}, with ${room2.threat.guards === 1 ? "one agent" : `${inWords(room2.threat.guards)} agents`} on guard.` : "No enemy service is working against you at home this month."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
@@ -93675,7 +94342,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const row2 = (r) => ({
       nat: r.nat,
       title: r.you ? `${r.name} (you)` : r.name,
-      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct11(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
+      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct12(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
       buttons: []
     });
     const top = [];
@@ -93688,7 +94355,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const laidWords = laid === 1 ? "the last country still standing has laid down its arms" : `the last ${laid} countries still standing have laid down their arms`;
     if (act2.winner) {
       const name = upFirst3(theName2(s, act2.winner)), top1 = board.rows[0];
-      note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct11(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct11(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
+      note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct12(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct12(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
     } else if (act2.on) note4 = need > 0 ? `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The world goes to the last great power standing, once it holds ${needWords} of it: the countries still standing then lay down their arms.` : `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
     else {
       const why = whyNotOrderDomination(s);
@@ -93717,7 +94384,7 @@ ${next.text}` : ""}` : next ? next.also : "";
             },
             {
               nat: "",
-              title: `${pct11(mine4.share)} of the world is yours`,
+              title: `${pct12(mine4.share)} of the world is yours`,
               lines: [`It takes ${Math.round(need * 100)}%.${mine4.share >= need ? " The second test is met." : ""}`],
               buttons: [],
               meter: Math.min(1, mine4.share / need)
@@ -93730,7 +94397,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     };
   }
   var craftOf = (ftr, bmr) => [ftr >= 1 ? `${Math.round(ftr).toLocaleString("en-US")} fighters` : "", bmr >= 1 ? `${Math.round(bmr).toLocaleString("en-US")} bombers` : ""].filter(Boolean).join(", ") || "no aircraft fit to fly";
-  var airPlace = (s, m, t) => m === "strike" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
+  var airPlace = (s, m, t) => m === "strike" || m === "seapatrol" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
   var airDoing = (s, f) => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ""}`;
   var RAID_TITLE = { bomb: "A BOMBING RAID BY DAY", night: "RAIDS BY NIGHT", superiority: "A FIGHT FOR THE SKY", strike: "A STRIKE ON SHIPPING" };
   function airfieldPage2(s, region) {
@@ -94858,7 +95525,7 @@ ${standing5}`,
     } catch {
       vs = [];
     }
-    const pct12 = (x) => `${Math.round(x * 100)}%`;
+    const pct13 = (x) => `${Math.round(x * 100)}%`;
     const num7 = (n) => Math.round(n).toLocaleString("en");
     const corpsOfId = (id) => s.corps.find((c) => c.id === id);
     const pairs2 = /* @__PURE__ */ new Map();
@@ -94870,12 +95537,12 @@ ${standing5}`,
       const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
       return {
         heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : "TWO CORPS",
-        text: a && b ? `${a.name}: ${num7(men(a))} men, ${pct12(a.str)} of its strength. ${b.name}: ${num7(men(b))} men, ${pct12(b.str)}.` : "",
+        text: a && b ? `${a.name}: ${num7(men(a))} men, ${pct13(a.str)} of its strength. ${b.name}: ${num7(men(b))} men, ${pct13(b.str)}.` : "",
         rows: p.map((v) => ({
           nat: s.human,
           title: `Keep ${v.keepName}`,
           lines: [
-            `${num7(v.men)} men in one corps at ${pct12(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+            `${num7(v.men)} men in one corps at ${pct13(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
             v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ""}.` : "No general commands it.",
             v.back > 0 ? `${num7(v.back)} men over go back to the reserve.` : "",
             v.works !== void 0 ? `It takes over the fieldworks ${v.goneName} stands in.` : "",
@@ -95683,13 +96350,19 @@ ${standing5}`,
     if (part[0] === "air") {
       const f = s.airFleets.find((x) => x.id === Number(part[1]));
       const m = part[2], t = Number(part[3]);
+      const sea = m === "strike" || m === "seapatrol";
       const before = f && t >= 0 ? previewAirOrder(s, f.id, m, t) : null;
-      const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? "", loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: "", loss: 0 };
+      const lossOf2 = (a) => {
+        if (m !== "seapatrol" || !f) return forecastAir(s, a, m, t).bomberLoss;
+        const x = patrolLoss(s, f, t);
+        return f.bmr >= 1 ? (x.op + x.fighters) / f.bmr : 0;
+      };
+      const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? "", loss: lossOf2(before) } : { aa: 0, meet: "", loss: 0 };
       ok2 = orderAir(s, Number(part[1]), m, t);
       note4 = ok2 ? t >= 0 ? `${f?.name ?? "The group"} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? "The group"}: ${MISSION[m].label.toLowerCase()}.` : "That order cannot be given now.";
       if (ok2 && f && t >= 0) {
-        const p = m === "strike" ? s.seas[t] : s.regions[t];
-        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, escort: m !== "night" && f.ftr >= 1, region: m === "strike" ? -1 : t, meetFrom: -1, night: m === "night", ...meets };
+        const p = sea ? s.seas[t] : s.regions[t];
+        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, escort: m !== "night" && f.ftr >= 1, region: sea ? -1 : t, meetFrom: -1, night: m === "night", ...meets };
       }
     } else if (part[0] === "airbase") {
       ok2 = orderAirBase(s, Number(part[1]), Number(part[2]));
@@ -95981,7 +96654,7 @@ ${standing5}`,
       const ahead2 = Math.round(monthsAhead(lab, f));
       const eta = arrival(s, me.id, f);
       const k = lead(s, me.id, f);
-      const pct12 = Math.round(spec2.per * k * 100);
+      const pct13 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
       const at4 = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
@@ -95991,7 +96664,7 @@ ${standing5}`,
         pace: ahead2 > 0 ? `${ahead2} month${ahead2 === 1 ? "" : "s"} ahead` : ahead2 < 0 ? `${-ahead2} month${ahead2 === -1 ? "" : "s"} behind` : "On history's schedule",
         now: cur?.name ?? "nothing yet",
         next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? "at this pace it never comes" : `yours is due ${when(eta)}`}.` : "The designers have nothing further on the drawing board.",
-        effect: k ? `${spec2.who}: ${pct12 > 0 ? "+" : ""}${pct12}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
+        effect: k ? `${spec2.who}: ${pct13 > 0 ? "+" : ""}${pct13}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
         good: k > 0,
         teams: n,
         max: MAX_TEAMS,
