@@ -995,6 +995,21 @@ describe('city defences in the bridge (slice 5)', () => {
     }
   });
 
+  it('the AIR DEFENCE shelf\'s searchlights line, with lights and no guns, uses the raid card\'s no-guns words', () => {
+    const g = britain(true);
+    const id = g.byName.London.id;
+    delete g.flags[`wk:aa:${id}`];
+    g.flags[`wk:lights:${id}`] = 2;
+    TC().load(saveGame(g));
+    const air = (TC().province(id) as { glance: { air: Record<string, unknown> | null } }).glance.air!;
+    const l = air.lights as { level: number; lit: number; guns: number; line: string };
+    expect(l.level).toBe(2);
+    expect(l.guns).toBe(0);
+    expect(l.lit).toBe(0);
+    expect(l.line).toBe('level 2: There are no guns for them to light. They help the night fighters a little.');
+    expect(l.line).not.toMatch(/0 of the 0/);
+  });
+
   it('a night raid\'s flight row carries the searchlights from its report, only with the switch on', () => {
     for (const on of [true, false]) {
       const g = britain(on);

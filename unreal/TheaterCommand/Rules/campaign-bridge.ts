@@ -1562,9 +1562,14 @@ function glanceLights(s: Game, id: number, guns: number, own: boolean, up: boole
   const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === 'work' && b.item === 'lights' && b.region === id).length ?? 0;
   const o = own ? arsenalOffers(s, id).find((x) => x.key === 'work:lights' && x.at === id) : undefined;
   const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : '';
+  // With lights and no guns there is nothing to count: the raid card's own words for that case (the UI director's
+  // section 2, "No guns built"), after the level, rather than "0 of the 0 levels of guns".
+  const line = level <= 0 ? ''
+    : guns <= 0 ? `level ${level}: There are no guns for them to light. They help the night fighters a little.`
+    : `level ${level}: ${Math.min(level, guns)} of the ${guns} levels of guns are lit by night, under a clear sky`;
   return {
     level, lit: Math.min(level, guns), guns, radar: radarLays(s, id), going,
-    line: level > 0 ? `level ${level}: ${Math.min(level, guns)} of the ${guns} levels of guns are lit by night, under a clear sky` : '',
+    line,
     add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
   };
 }
