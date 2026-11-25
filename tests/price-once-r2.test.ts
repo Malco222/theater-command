@@ -14,7 +14,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { divisionsOf, growCorps, keepNumbers, numberCorps, numberSpokenFor } from '../src/campaign/armies';
-import { DRAWN, drawnWatch, formationName, rowOver } from '../src/campaign/drawn';
+import { DRAWN, corpsInContact, drawnWatch, formationName, rowOver } from '../src/campaign/drawn';
+import { setStop } from '../src/campaign/history';
 import { breakUp, rejoin, setBreakUp } from '../src/campaign/breakup';
 import { foldCorps } from '../src/campaign/fold';
 import { createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
@@ -967,5 +968,36 @@ describe('the names a corps takes from the divisions it holds', () => {
     expect(formationName(d('8th Panzer Division', '14th Panzer Division'))).toBe('8th and 14th Panzer Divisions');
     expect(formationName(d('8th Indian Brigade'))).toBeNull();
     expect(formationName([])).toBeNull();
+  });
+});
+
+describe("the dial: a date never lifts a corps out of a fight at stops 3 to 5; at the book's stops the book's rows keep their book", () => {
+  // The design director's ruling of 21:50Z, 25 November 2026: her 21:25Z scope for "a date never lifts a corps out of
+  // a fight" reaches the draw's door too. At stops 1 and 2 a row that draws a held division takes it at its date, even
+  // from a fight, and it is still laid once. Stops 3 to 5 are unchanged.
+  function fight(stop: number): ReturnType<typeof balkans> & { iii: Corps; at: string } {
+    const b = balkans();
+    expect(setStop(b.g, stop, true)).toBe(true);
+    const iii = corps(b.g, 'III Corps')!;
+    const at = place(b.g, iii);
+    declareWar(b.g, 'GER', 'POL');
+    expect(corpsInContact(b.g, 'GER', iii)).toBe(true);
+    month(b.g, MARCH_41);
+    return { ...b, iii, at };
+  }
+  it.each([1, 2])('at stop %i the row draws the 50th out of III Corps in its month, fight or not, and it is laid once', (stop) => {
+    const { g, told, iii } = fight(stop);
+    expect(told.find((t) => t.row === INFANTRY)!.claims).toEqual([expect.objectContaining({ name: '50th Infantry Division', from: 'III Corps', stays: false })]);
+    expect(iii.divs).toBe(2);
+    expect(names(g, corps(g, INFANTRY)!)).toContain('50th Infantry Division');
+    expect(heldTwice(g)).toEqual([]);
+  });
+  it.each([4, 5])('at stop %i it acts as at stop 3: the 50th stays and fights where it is, and the row forms without it', (stop) => {
+    const { g, told, iii, at } = fight(stop);
+    expect(told.find((t) => t.row === INFANTRY)!.claims).toEqual([expect.objectContaining({ name: '50th Infantry Division', from: 'III Corps', stays: true })]);
+    expect(iii.divs).toBe(3);
+    expect(place(g, iii)).toBe(at);
+    expect(names(g, corps(g, INFANTRY)!)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
+    expect(heldTwice(g)).toEqual([]);
   });
 });

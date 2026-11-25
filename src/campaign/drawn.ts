@@ -60,6 +60,7 @@ import counting from '../../data/campaign/counting.json';
 import { addCorps, atWar, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
 import { seat } from './commanders';
+import { stopDef } from './history';
 import type { Corps, Game, Kind, Region } from './types';
 
 export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string; from: string; fromMany: string };
@@ -197,8 +198,10 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   const k = g.byName[row[5]]?.theatre ?? -1;
   // (Nor out of a fight, on either chart: a corps with an enemy at war on its province or beside it, holding the ground
   // or standing on it, keeps its divisions there, and the row forms without them, as for a corps that cannot leave.
-  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026. `corpsInContact`.)
-  const fighting = (c: Corps): boolean => corpsInContact(g, nat, c);
+  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026. `corpsInContact`.
+  // That sentence acts at stops 3 to 5 only, on this door as on the 'from' rows': at the book's stops the book's rows
+  // keep their book and draw a held division at its date, fight or not, still laid once. Her rulings of 21:25Z and 21:50Z.)
+  const fighting = (c: Corps): boolean => !stopDef(g).book && corpsInContact(g, nat, c);
   const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c) || fighting(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
