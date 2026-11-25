@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6b3ce0ef 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0efb7850d 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -14925,13 +14925,14 @@
     t.said.add(key7);
     return true;
   }
-  function bridgesOnCapture(g2, taken2, by2) {
+  function bridgesOnCapture(g2, taken2, by2, again) {
     if (!groundRules(g2)) return;
     for (const c of crossingsAt(taken2.id)) {
       if (bridgeDown(g2, c)) continue;
       const far = g2.regions[farBank(c, taken2.id)];
       if (!atWar(g2, by2, far.ctrl)) continue;
-      const roll3 = new Rng(hashString(`bridge:${g2.seed}:${g2.turn}:${c.a}:${c.b}`)).next();
+      const key7 = `bridge:${g2.seed}:${g2.turn}:${c.a}:${c.b}`;
+      const roll3 = new Rng(hashString(again?.(far) ? `${key7}:${by2}` : key7)).next();
       const name = riverName(c), holder = g2.nations[far.ctrl].adj, captor = g2.nations[by2].adj;
       const laid = chargesLaid(g2, taken2.id, (nat) => nat === far.ctrl || allied(g2, nat, far.ctrl));
       if (roll3 < (laid ? REARGUARD.bridges : blowChance(g2, c, taken2, by2))) {
@@ -15870,7 +15871,7 @@
     const inside2 = garrisonOf(r);
     const who = inside2.length ? `${inside2.length === 1 ? "one corps" : `${inside2.length} corps`} inside` : "only its guard inside";
     tell(g2, r, `${g2.nations[by2].adj} troops close round ${townName(r)}: ${placeWords(g2, r)} is under siege, with ${who}.`, r.ctrl, [by2, r.ctrl, ...inside2.map((c) => c.nat)], { won: by2, lost: r.ctrl });
-    prizesOnLoss(g2, r, by2, r.ctrl, "outside");
+    prizesOnLoss(g2, r, by2, r.ctrl, "outside", g2.flags[`relieved:${r.id}`] === g2.turn || takenInWarThisMonth(g2, r) && willBurn(g2, r.prev, r));
   }
   function lift(g2, r, by2 = null) {
     const key7 = `siege:${r.id}`;
@@ -15890,6 +15891,7 @@
     const since = g2.flags[`siege:${r.id}`];
     const lasted = since === void 0 ? 0 : g2.turn - since;
     const old = r.ctrl;
+    const again = takenInWarThisMonth(g2, r) && (willBurn(g2, r.prev, r) || willBurn(g2, old, r)) || (since === void 0 && g2.flags[`relieved:${r.id}`] === g2.turn ? "outside" : false);
     tallySiege(g2, how);
     if (how !== "empty") tallySiege(g2, "months", lasted);
     tallySiege(g2, "taken", garrisonOf(r).length);
@@ -15906,7 +15908,7 @@
     clearPocket(g2, r);
     const adj = g2.nations[by2].adj;
     const cap15 = r.cap && r.owner === old;
-    prizesOnLoss(g2, r, by2, old, since === void 0 ? "all" : "inside");
+    prizesOnLoss(g2, r, by2, old, since === void 0 ? "all" : "inside", again);
     if (!cap15 && how !== "empty" && how !== "storm" && how !== "field") {
       const text = how === "gates" ? `${townName(r)} opens its gates to ${adj} troops without a fight.` : `Starved out after a siege of ${months(lasted)}, ${townName(r)} surrenders to ${adj} forces.`;
       tell(g2, r, text, old, [by2, old], { won: by2, lost: old });
@@ -16348,9 +16350,9 @@
     if (taken2.units.some((u) => !u.dead && allied(g2, u.nat, by2) && KIND[u.kind].mobile)) p += W2.fastCaptor;
     return Math.max(0.05, Math.min(0.95, p));
   }
-  function railOnCapture(g2, taken2, by2, from2) {
+  function railOnCapture(g2, taken2, by2, from2, again = false) {
     if (!groundRules(g2) || !onNet(taken2.id) || railCut(g2, taken2.id)) return;
-    const roll3 = new Rng(hashString(`rail:${g2.seed}:${g2.turn}:${taken2.id}`)).next();
+    const roll3 = new Rng(hashString(again ? `rail:${g2.seed}:${g2.turn}:${taken2.id}:${from2}` : `rail:${g2.seed}:${g2.turn}:${taken2.id}`)).next();
     if (roll3 >= wreckChance(g2, taken2, by2) || !cutRail(g2, taken2.id, "retreat", from2)) return;
     if (concerns2(g2, by2, from2)) headline(g2, "battle", `${g2.nations[from2].adj} troops tear up the railway at ${taken2.name} as they fall back.`, from2, taken2.id, { arm: "land", won: by2, lost: from2 });
   }
@@ -37813,7 +37815,7 @@
     if (r.units.some((u) => !u.dead && allied(g2, armyOf(u), by2) && (KIND[u.kind].mobile || u.airborne))) p -= B3.fastCaptor;
     return Math.max(0.05, Math.min(0.95, p));
   }
-  function prizesOnLoss(g2, r, by2, from2, which) {
+  function prizesOnLoss(g2, r, by2, from2, which, again = false) {
     const burnt = [];
     if (!prizeRules(g2) || !g2.nations[from2] || !atWar(g2, by2, from2) || !willBurn(g2, from2, r)) return burnt;
     const p = burnChance(g2, r, by2, from2);
@@ -37822,15 +37824,16 @@
       const inside2 = prizeInside(g2, r, kind);
       if (which === "outside" && inside2 || which === "inside" && !inside2) continue;
       if (kind === "junction") continue;
-      const roll3 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:${kind}`)).next();
+      const salt = again === true || again === "outside" && !inside2;
+      const roll3 = new Rng(hashString(salt ? `prize:${g2.seed}:${g2.turn}:${r.id}:${kind}:${from2}` : `prize:${g2.seed}:${g2.turn}:${r.id}:${kind}`)).next();
       if (roll3 < p && wreckPrize(g2, r, kind, PRIZES.burn.months[kind], void 0, "burn")) burnt.push(kind);
     }
     if (burnt.length) noteBurnt(g2, r, from2, by2, burnt);
     return burnt;
   }
-  function railOnScorch(g2, r, by2, from2) {
+  function railOnScorch(g2, r, by2, from2, again = false) {
     if (!prizeRules(g2) || !g2.nations[from2] || !atWar(g2, by2, from2) || !onNet(r.id) || railCut(g2, r.id) || !willBurn(g2, from2, r)) return false;
-    const roll3 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:rail`)).next();
+    const roll3 = new Rng(hashString(again ? `prize:${g2.seed}:${g2.turn}:${r.id}:rail:${from2}` : `prize:${g2.seed}:${g2.turn}:${r.id}:rail`)).next();
     if (roll3 >= burnChance(g2, r, by2, from2) || !cutRailHasty(g2, r.id, PRIZES.burn.months.rail, from2)) return false;
     noteBurnt(g2, r, from2, by2, ["rail"]);
     return true;
@@ -55122,9 +55125,17 @@
     if (mine4) headline(g2, "battle", `${g2.nations[nat].adj} troops probe your line at ${target.name} in strength. They know now who holds it${works > 0 ? `, and your fieldworks there are ${months4(wear2)} the worse` : ""}.`, mine4.nat, target.id, { arm: "land" });
     return rep;
   }
+  function changedThisMonth(g2, r) {
+    if (r.since !== g2.turn) return false;
+    return g2.flags.openFrom !== g2.turn || g2.flags[`fellP:${r.id}`] !== void 0;
+  }
+  function takenInWarThisMonth(g2, r) {
+    return changedThisMonth(g2, r) && r.prev != null && !!g2.nations[r.prev] && !!g2.nations[r.ctrl] && atWar(g2, r.ctrl, r.prev);
+  }
   function capture(g2, r, nat) {
     const old = r.ctrl;
     if (old === nat) return;
+    const prev = r.prev, again = takenInWarThisMonth(g2, r), burnt = again && (willBurn(g2, prev, r) || willBurn(g2, old, r));
     const owner = g2.nations[r.owner];
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
@@ -55138,10 +55149,11 @@
     }
     if (groundRules(g2)) {
       liftMines(g2, r);
+      const crossed = (far) => again && (atWar(g2, old, far.ctrl) || atWar(g2, prev, far.ctrl)) || takenInWarThisMonth(g2, far) && (atWar(g2, far.ctrl, old) || atWar(g2, far.prev, old));
       if (atWar(g2, nat, old)) {
-        bridgesOnCapture(g2, r, nat);
-        railOnCapture(g2, r, nat, old);
-        railOnScorch(g2, r, nat, old);
+        bridgesOnCapture(g2, r, nat, crossed);
+        railOnCapture(g2, r, nat, old, again);
+        railOnScorch(g2, r, nat, old, burnt);
       }
     }
     if (r.cap && r.owner === old) headline(g2, "fall", `${r.name} falls to ${g2.nations[nat].adj} forces.`, old, r.id, { arm: "land", won: nat, lost: old });
@@ -72552,7 +72564,7 @@
       /** The cells within LAND.mouth of a bridge, worked out once. */
       __publicField(this, "mouths", null);
       this.ticket = ticket;
-      this.rng = new Rng(ticket.seed);
+      this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
       this.power = { att: A, def: D2 };
