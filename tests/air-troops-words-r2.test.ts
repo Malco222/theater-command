@@ -25,6 +25,7 @@ import { afterCard } from '../src/campaign/airfought';
 import { createGame, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
+import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import { STRAFE_WORDS, strafeOn, strafeWatch, strafedLine } from '../src/campaign/strafers';
 import type { Game } from '../src/campaign/types';
 import { AirSim, airBattle } from '../src/battle/air/sim';
@@ -58,6 +59,13 @@ function saar(k: number, groups: 'both' | 'far' | 'alone' | 'three' = 'both') {
   const ids = groups === 'both' ? [BOMBERS, GC3, GC1] : groups === 'far' ? [BOMBERS, GC1] : groups === 'alone' ? [BOMBERS] : [BOMBERS, GC1, GC2, GC3];
   return { g, target, ids };
 }
+/**
+ * (Ruling 3, 17:10Z, and 17:23Z: read after the bomb run, a group goes down with the fight it still carries, and where
+ * the French escort meets the German fighters both sides end the air fight fought out, so nobody goes down. Setup only:
+ * a raid whose list or report must name groups is flown with the German fighters grounded, so none rises and every
+ * group with the reach goes down.)
+ */
+function clear<T extends { g: Game }>(c: T, nat = 'GER'): T { for (const f of c.g.airFleets) if (f.nat === nat) f.ftr = 0; return c; }
 const on = (): void => { flyKinds(['ground']); strafeWatch.tell = (x) => { heard.push(JSON.parse(JSON.stringify(x))); }; };
 const names = (ids: number[]): string[] => ids.map((id) => NAME[id]);
 function fight(s: AirSim): void {
@@ -70,14 +78,14 @@ function fight(s: AirSim): void {
 describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
   it('to the letter, with a list: the heading, the muted line once, the groups a row each, on the browser\'s plan, the air page and the 3D card', () => {
     on();
-    const c = saar(0);
-    const p = planRaid(c.g, 'ground', c.target, c.ids, 'FRA');
+    const c = saar(0), e0 = clear(saar(0));
+    const p = planRaid(e0.g, 'ground', e0.target, e0.ids, 'FRA');
     expect(p.why).toBeNull();
     expect(p.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
     expect(STRAFE_WORDS).toEqual({ heading: HEADING, note: NOTE, none: NONE, nobody: NOBODY });
     // The air page (the rows the rules build): at the foot of the raid's forces, right under FLYING THE RAID; the muted
     // line is the section's text, each group a row with no nation (no flag, no picture, no colour).
-    const page = airPage(c.g, `plan:ground:${c.target}:${p.picked.join('.')}`)!;
+    const page = airPage(e0.g, `plan:ground:${e0.target}:${p.picked.join('.')}`)!;
     const at = page.sections.findIndex((s) => s.heading === HEADING);
     expect(page.sections[at - 1].heading).toBe('FLYING THE RAID');
     expect(page.sections[at]).toEqual({ heading: HEADING, text: NOTE, rows: [{ nat: '', title: 'Groupement de Chasse 3', lines: [], buttons: [] }] });
@@ -92,11 +100,17 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     // With every German fighter grounded before the load (none can rise: the sky is won) the 3D card names the group,
     // the muted line once above it: round four's list, still read through the bridge.
     const w = saar(0);
+    // (Changed on ruling 3, 17:10Z, and 17:23Z: one German fighter able to rise is a fight that leaves nobody fit to strafe,
+    // and the load runs the month's other moves, which bring Jagdgeschwader 1 up. Setup only: the month's other moves are
+    // made first, as the bridge's own raid test makes them, and the German fighters grounded after them.)
+    let guard = 0;
+    while (!humanUp(w.g) && guard++ < 200) stepAI(w.g);
+    beginHuman(w.g);
     for (const f of w.g.airFleets) if (f.nat === 'GER') f.ftr = 0;
     TC.load(saveGame(w.g));
     expect(TC.page(`plan:ground:${w.target}:${p.picked.join('.')}`).card.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
     // Three groups in reach: each a row, in the raid's order.
-    const t = saar(0, 'three');
+    const t = clear(saar(0, 'three'));
     const q = planRaid(t.g, 'ground', t.target, t.ids, 'FRA');
     expect(q.strafe!.names.length).toBe(3);
     expect([...q.strafe!.names].sort()).toEqual(names([GC1, GC2, GC3]));
@@ -136,7 +150,7 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     expect(planRaid(b.g, 'bomb', t.id, undefined, 'FRA').strafe).toBeUndefined();
     // On: a German raid on French troops in Alsace (2. Jagddivision moved to the Saar, with Kampfgeschwader 1) is weighed
     // with its strafers, and its forecast names one, but no card of it carries the section: the player's sight is his own.
-    const e = saar(0);
+    const e = clear(saar(0), 'FRA');
     const foe = raidTargets(e.g, 'ground', 'GER').find((x) => e.g.regions[x.id].name === 'Alsace')!;
     e.g.airFleets.find((f) => f.id === 3)!.base = e.g.regions.find((r) => r.name === 'Saar')!.id;
     heard = [];
@@ -150,9 +164,9 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     on();
     let named = 0, none = 0;
     for (const mult of [1, 8, 26, 28, 30, 60]) {
-      for (const groups of ['both', 'far', 'alone', 'three'] as const) {
+      for (const groups of ['both', 'far', 'alone', 'three', 'both clear', 'three clear'] as const) {
         AIR.combat.fighters = WAS * mult;
-        const c = saar(0, groups);
+        const c = groups.endsWith(' clear') ? clear(saar(0, groups.split(' ')[0] as 'both' | 'three')) : saar(0, groups as 'both' | 'far' | 'alone' | 'three');
         heard = [];
         const p = planRaid(c.g, 'ground', c.target, c.ids, 'FRA');
         expect(p.why).toBeNull();
@@ -175,16 +189,20 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
 });
 
 describe('the raid report: who went down', () => {
-  it('the settled raid: the report\'s line is fly()\'s strafers on 50 lucks, at the edge where the card says likely and the dice differ', () => {
+  it('the settled raid: the report\'s line is fly()\'s strafers on 50 lucks, a sky contested on half and empty on half', () => {
     on();
-    // A heavier air fight than the game's (the combat rate x28): the card names Groupement de Chasse 3 as likely, and
-    // over 50 lucks it is sometimes shot out of the sky before it can go down.
+    // A heavier air fight than the game's (the combat rate x28). (Changed on ruling 3, 17:10Z, and 17:23Z: who goes down
+    // no longer turns on the luck: where the German fighters rise, both sides end the air fight fought out and nobody
+    // goes down; where none rise, Groupement de Chasse 3 goes down on every luck. Setup only: the odd lucks are flown
+    // with the German fighters grounded, so the report says each line.)
     AIR.combat.fighters = WAS * 28;
     const c0 = saar(0);
-    expect(planRaid(c0.g, 'ground', c0.target, c0.ids, 'FRA').strafe!.names).toEqual(['Groupement de Chasse 3']);
+    expect(planRaid(c0.g, 'ground', c0.target, c0.ids, 'FRA').strafe!.names).toEqual([]);
+    const c1 = clear(saar(1));
+    expect(planRaid(c1.g, 'ground', c1.target, c1.ids, 'FRA').strafe!.names).toEqual(['Groupement de Chasse 3']);
     const seen = new Map<string, number>();
     for (let k = 0; k < 50; k++) {
-      const c = saar(k);
+      const c = k % 2 ? clear(saar(k)) : saar(k);
       heard = [];
       const rep = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
       const settled = heard.filter((x) => x.route === 'settled');
@@ -204,12 +222,12 @@ describe('the raid report: who went down', () => {
 
   it('several groups are joined as the report joins names; none with the reach: nobody went down', () => {
     on();
-    const two = saar(0);
+    const two = clear(saar(0));
     two.g.airFleets.find((f) => f.id === GC1)!.base = two.g.regions.find((r) => r.name === 'Lorraine')!.id;
     const r2 = launchRaid(two.g, 'ground', two.target, two.ids, 'FRA')!;
     expect(strafedLine(r2, 'FRA')).toBe(`${r2.strafed![0]} and ${r2.strafed![1]} went down and strafed.`);
     expect([...r2.strafed!].sort()).toEqual(names([GC1, GC3]));
-    const three = saar(0, 'three');
+    const three = clear(saar(0, 'three'));
     const r3 = launchRaid(three.g, 'ground', three.target, three.ids, 'FRA')!;
     expect(r3.strafed!.length).toBe(3);
     expect(strafedLine(r3, 'FRA')).toBe(`${r3.strafed![0]}, ${r3.strafed![1]} and ${r3.strafed![2]} went down and strafed.`);

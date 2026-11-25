@@ -13,7 +13,7 @@
 // reach, and the first test says so.)
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
-import { AIR, AIRWAR, airRange, assessAir, canStrafe, forecastAir, kmTo, skyWon, strafersExpected } from '../src/campaign/air';
+import { AIR, AIRWAR, airRange, assessAir, canStrafe, fightLeft, forecastAir, kmTo, skyWon, strafersExpected } from '../src/campaign/air';
 import { createGame, setWar } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -74,7 +74,12 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       // Both fighter groups are in the raid (each within its fighter range), but only one has the reach to strafe.
       expect(sorted(a.att.filter((x) => x.ftr > 0).map((x) => x.f.id))).toEqual([FAR_GROUP, LORRAINE]);
       const fc = forecastAir(c.g, a, 'ground', c.target);
-      expect(sorted(fc.strafers)).toEqual(rule);
+      // (Changed on the design director's ruling 3, 17:10Z, and 17:23Z: read after the bomb run on the fight each side
+      // still carries, the French escort and the German group meet over the Saar and both end the air fight fought
+      // out, so nobody goes down on any of the three routes: the reach is still Groupement de Chasse 3's alone.)
+      const goes: number[] = [];
+      expect(fightLeft(a)).toEqual({ att: 0, def: 0 });
+      expect(sorted(fc.strafers)).toEqual(goes);
       const air = fc.ftrLoss - fc.fire!;
       // (Changed on the 12:59Z answer 4: the card's figure is now the settled raid's exact expectation, strafersExpected,
       // no longer the even spread x.ftr x (1 - air / E); the 200-luck comparison below holds it to the settled raid.)
@@ -84,11 +89,11 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       // Not every fighter of the raid, and not before the air fight: less than the card charged on d06286d4.
       expect(fc.fire!).toBeLessThan(a.E * AIRWAR.ground.fire);
       expect(sorted(a.att.filter((x) => x.ftr > 0 && canStrafe(c.g, x)).map((x) => x.f.id))).toEqual(rule);
-      expect(s0.ids).toEqual(rule);
+      expect(s0.ids).toEqual(goes);
       // The card was heard, once, naming the same groups, at the same fire and weight.
       const cards = heard.filter((x) => x.route === 'card');
       expect(cards.length).toBe(1);
-      expect(sorted(cards[0].strafers)).toEqual(rule);
+      expect(sorted(cards[0].strafers)).toEqual(goes);
       expect(cards[0].fire).toBeCloseTo(fc.fire!, 12);
       expect(cards[0].weight).toBeCloseTo(s0.weight, 12);
       // The ticket the field is armed from says the same groups, and the card's own ground fire.
@@ -105,7 +110,7 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       launchRaid(s.g, 'ground', s.target, s.ids, s.nat);
       const settled = heard.filter((x) => x.route === 'settled');
       expect(settled.length).toBe(1);
-      expect(sorted(settled[0].strafers)).toEqual(rule);
+      expect(sorted(settled[0].strafers)).toEqual(goes);
 
       // The same raid fought out by the computer on both sides, and booked back.
       heard = [];
@@ -118,7 +123,7 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       // design director's ruling 4, 17:10Z and 17:23Z: a group strafes with the fight it still carries after its air
       // fight, and over the Saar Groupement de Chasse 3 fights itself out against the German group, so it goes home too.)
       const down = new Set(sim.history().filter((e) => e.what === 'air:strafe').map((e) => sim.units.find((u) => u.id === e.unit)!.corps));
-      const fieldDown: number[] = [];
+      const fieldDown = goes;
       expect([...down].sort((x, y) => x - y)).toEqual(fieldDown);
       expect(sorted(o.strafers)).toEqual(fieldDown);
       expect(o.strafeFire!).toBe(0);
@@ -276,14 +281,22 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
 // de Chasse 3 at Lorraine (65 km), Groupe 36 moved to Verdun (127 km, inside the reach to strafe but with a crowded field)
 // and Groupement de Chasse 1 at Namur (216 km of 220, out of reach at 0.9; it stood at Belfort, 190 km, at 0.6).
 // AIR.combat.fighters is scaled in setup only, to make the air fight deadlier; no die and no law of the game is changed.
+// (Changed on the design director's ruling 3, 17:10Z, and 17:23Z: with the German group up, the French escort meets it
+// and both sides end the air fight fought out, so nobody goes down on any luck and there is no strafer to weigh; the sky
+// gate's tests below read that. Setup only: here the German fighters over the Saar are grounded, so no defender rises,
+// every group with the reach goes down with all its fight, and the card's strafers are read against the settled raid's.
+// With no defender there is no air fight, so the deadlier fights below no longer move the strafers left.)
 const REVIEW_IDS = [BOMBERS, LORRAINE, 36, FAR_GROUP];
 let reviewBase: string | null = null;
+let contestedBase: string | null = null;
 function reviewRaid(k: number) {
   if (!reviewBase) {
     const g = startOpen(createGame(7, 'FRA'));
     setWar(g, 'FRA', 'GER');
     g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
     g.airFleets.find((f) => f.id === FAR_GROUP)!.base = g.regions.find((r) => r.name === FAR_FIELD)!.id;
+    contestedBase = saveGame(g);
+    g.airFleets.find((f) => f.id === 3)!.ftr = 0;
     reviewBase = saveGame(g);
   }
   const g = loadGame(reviewBase)!;
@@ -466,7 +479,7 @@ const gateBase: Record<number, string> = {};
 function gateRaid(k: number, defenders: number) {
   if (!gateBase[defenders]) {
     reviewRaid(0);
-    const g = loadGame(reviewBase!)!;
+    const g = loadGame(contestedBase!)!;
     const d = g.airFleets.find((f) => f.id === JG)!;
     d.ftr = defenders; d.est.ftr = Math.max(d.est.ftr, defenders);
     gateBase[defenders] = saveGame(g);
@@ -530,19 +543,35 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
     // A strong defence (800): lost.
     const s = gateRaid(0, 800);
     expect(skyWon(s.g, assessAir(s.g, fleetsOf(s.g, REVIEW_IDS), 'ground', s.target))).toBe(false);
+    // (Ruling 3, 17:10Z: read after the bomb run, on the fight each side still carries. Where the two sides met, both are
+    // fought out: no defender is left fit to fight, so the sky is won at any strength (ruling 2), and no strafer carries
+    // any fight. Where no defender rose, both are fresh and the test is the one above.)
+    for (const n of [1, 200, 309, 800]) {
+      const r = gateRaid(0, n), x = assessAir(r.g, fleetsOf(r.g, REVIEW_IDS), 'ground', r.target);
+      expect(fightLeft(x)).toEqual({ att: 0, def: 0 });
+      expect(skyWon(r.g, x, fightLeft(x))).toBe(true);
+    }
+    expect(fightLeft(b)).toEqual({ att: 0, def: 0 });
+    const ground = reviewRaid(0), y = assessAir(ground.g, fleetsOf(ground.g, REVIEW_IDS), 'ground', ground.target);
+    expect(y.D).toBe(0);
+    expect(fightLeft(y)).toEqual({ att: 1, def: 1 });
+    expect(skyWon(ground.g, y, fightLeft(y))).toBe(true);
   });
 
-  it('surely won (the review\'s raid as built): the card as before to the last digit, and the settled raid sends its strafers down on every luck', () => {
+  // (Changed on ruling 3, 17:10Z, and 17:23Z: read after the bomb run, the French escort and the German group both end the
+  // air fight fought out at every strength, so the card names none and nobody goes down on any luck; the card's cut is
+  // the bombers' alone, the settled mean within the lane's 1%. Before: 200 named both groups and sent them down on every
+  // luck; 309 named both, 315 none with fire above 0, each on part of the luck.)
+  it('as built (200 German fighters): both sides fought out, the card names none, and nobody goes down on any luck', () => {
     const r = gateAgainstSettled(200);
-    expect(r.s.gate).toBeUndefined();
-    expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
-    expect(r.won).toBe(r.seeds);
-    near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
+    expect(sorted(r.card.strafers)).toEqual([]);
+    expect(r.won).toBe(0);
+    expect(r.fc.fire).toBe(0); expect(r.fire).toBe(0); expect(r.weight).toBe(0); expect(r.card.weight).toBe(0);
+    near(r.cut, r.fc.cut, 0.01);
   });
 
   it('surely lost (800 German fighters): the card names none and charges no ground fire; nobody goes down on any luck; the cut is the bombers\' alone', () => {
     const r = gateAgainstSettled(800);
-    expect(r.s.gate).toBeUndefined();
     expect(r.card.strafers).toEqual([]);
     expect(r.fc.strafers).toEqual([]);
     expect(r.fc.fire).toBe(0);
@@ -551,34 +580,40 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
     expect(r.fire).toBe(0);
     expect(r.weight).toBe(0);
     near(r.cut, r.fc.cut, 0.01);
-    // The reach is still there: it is the sky that keeps them up.
+    // The reach is still there: it is the fight, spent (ruling 3), that keeps them up.
     const c = gateRaid(0, 800);
     expect(byRule(c.g, c.target, REVIEW_IDS)).toEqual([LORRAINE, 36]);
   });
 
-  it('near the edge (309 German fighters): the card against the settled mean over 200 lucks, and the groups it names are those more likely than not to go down', () => {
+  it('round five\'s edge (309 German fighters): no edge now; both sides fought out, the card names none, nobody goes down', () => {
     const r = gateAgainstSettled(309);
-    // Won on part of the luck only.
-    expect(r.s.gate).toBeDefined();
-    expect(r.won).toBeGreaterThan(20);
-    expect(r.won).toBeLessThan(r.seeds);
-    // The lane's own tolerances: fire and weight within 3%, the cut within 1%.
-    near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
-    expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
-    for (const id of [LORRAINE, 36]) expect(r.named[id]).toBeGreaterThan(r.seeds / 2);
+    expect(r.won).toBe(0);
+    near(r.cut, r.fc.cut, 0.01);
+    expect(sorted(r.card.strafers)).toEqual([]);
+    expect(r.fc.fire).toBe(0); expect(r.fire).toBe(0); expect(r.weight).toBe(0);
+    for (const id of [LORRAINE, 36]) expect(r.named[id] ?? 0).toBe(0);
   });
 
-  it('past the edge (315 German fighters): the sky won on about a quarter of the lucks; the card names none, and is the settled mean within the lane\'s 8%', () => {
+  it('past round five\'s edge (315 German fighters): the same, nobody on any luck, the cut the bombers\' alone', () => {
     const r = gateAgainstSettled(315);
-    expect(r.s.gate).toBeDefined();
-    expect(r.won).toBeGreaterThan(20);
-    expect(r.won).toBeLessThan(r.seeds / 2);
+    expect(r.won).toBe(0);
     expect(r.card.strafers).toEqual([]);
-    expect(r.fc.fire).toBeGreaterThan(0);
-    // (A step's mean over 200 lucks is the noisiest figure the lane proves: its own widest tolerance, the 8% of the
-    // thirty-times-deadlier raid.)
-    near(r.fire, r.card.fire, 0.08); near(r.weight, r.card.weight, 0.08); near(r.cut, r.fc.cut, 0.08);
-    for (const id of [LORRAINE, 36]) expect(r.named[id] ?? 0).toBeLessThan(r.seeds / 2);
+    expect(r.fc.fire).toBe(0);
+    near(r.cut, r.fc.cut, 0.01);
+    for (const id of [LORRAINE, 36]) expect(r.named[id] ?? 0).toBe(0);
+  });
+
+  it('the new edge (ruling 3): one German fighter up is a fight, and leaves nobody fit to strafe; none up and every group goes down with all its fight', () => {
+    const one = gateAgainstSettled(1);
+    expect(one.card.strafers).toEqual([]);
+    expect(one.won).toBe(0);
+    near(one.cut, one.fc.cut, 0.01);
+    const none = gateAgainstSettled(0);
+    expect(sorted(none.card.strafers)).toEqual([LORRAINE, 36]);
+    expect(none.won).toBe(none.seeds);
+    for (const id of [LORRAINE, 36]) expect(none.named[id]).toBe(none.seeds);
+    near(none.fire, none.card.fire, 0.03); near(none.weight, none.card.weight, 0.03); near(none.cut, none.fc.cut, 0.01);
+    expect(none.cut).toBeGreaterThan(one.cut);
   });
 
   it('fog on raids: the fighters last seen near the target, which the card\'s odds count as rising, are in its sky gate too', () => {
@@ -611,12 +646,16 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
     expect(skyWon(g, many.a)).toBe(false);
     expect(many.fc.strafers).toEqual([]);
     expect(many.fc.fire).toBe(0);
-    // A handful last seen: still won on every luck, and the card is the card of a won sky.
+    // A handful last seen: the sky test on fresh fight is still won. (Changed on ruling 3, 17:10Z, and 17:23Z: read
+    // after the bomb run, the escort meets them, so on that knowledge both sides end the air fight fought out: the card
+    // names none and charges no ground fire. Before: Groupement de Chasse 3 named, fire above 0.)
     const few = card(20);
     expect(few.a.unseen?.n).toBe(20);
     expect(skyWon(g, few.a)).toBe(true);
-    expect(few.fc.strafers).toEqual([LORRAINE]);
-    expect(few.fc.fire!).toBeGreaterThan(0);
+    expect(fightLeft(few.a)).toEqual({ att: 0, def: 0 });
+    expect(fightLeft(none.a)).toEqual({ att: 1, def: 1 });
+    expect(few.fc.strafers).toEqual([]);
+    expect(few.fc.fire).toBe(0);
   });
 
   it('switched off: the sky is not read, and every figure is as on the lane\'s switch off', () => {
