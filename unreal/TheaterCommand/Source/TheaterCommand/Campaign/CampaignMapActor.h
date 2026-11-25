@@ -332,6 +332,31 @@ public:
 	 * screen's names are counted from there at once (the camera's CameRound), not from the frame after.
 	 */
 	void EyeCameRound(const FVector& Focus);
+
+private:
+	/**
+	 * (Seam-2, third part.) What is laid once on the table in one great model (the borders, the railways, the rivers,
+	 * the works, the washes of an army in hand) ends at the chart's seam, and from the other side of the seam it was
+	 * not there. LayOverSeam lays the share of a model that lies within the high view's sight of the seam a second
+	 * time, a whole world away, on a twin of the model that is kept beside it: so the west end's things stand beyond
+	 * the east end too, and the east end's beyond the west. KeepSeamTwins, each frame, looks at each such model by a
+	 * few of its points and lays its twin again when the model has changed, and keeps the twin shown, hidden and
+	 * placed as its model is. No builder knows of it.
+	 */
+	void LayOverSeam(UProceduralMeshComponent* Of);
+	void KeepSeamTwins();
+	/**
+	 * (And what is laid in squares of country, the woods and the towns, is small enough to be moved whole: each square
+	 * is shown in the turn of the world nearest the eye, as a piece is.)
+	 */
+	void SquaresRound(const FVector& Focus);
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> SeamLaid; // the models looked at, as they were first seen
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> SeamTwins; // each one's twin, once it has anything to lay (else none)
+	TArray<uint32> SeamStamps; // and what each looked like when its twin was last laid
+
+public:
 	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is

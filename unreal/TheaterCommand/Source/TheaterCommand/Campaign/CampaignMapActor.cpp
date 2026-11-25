@@ -455,6 +455,260 @@ void ACampaignMapActor::EyeCameRound(const FVector& Focus)
 			Pair.Value->LookFrom(Focus.Y, bOverSeam);
 		}
 	}
+	SquaresRound(Focus); // (and the squares of woods and towns)
+}
+
+namespace
+{
+	/**
+	 * (Release 2, the far side: seam-2.) How far from the chart's seam the highest view sees, in the map's units: the
+	 * eye stands 3,000 units off at the top of its climb, and its picture is about that wide. What is laid nearer the
+	 * seam than this is laid again a world away (LayOverSeam).
+	 */
+	const double SeamSight = 1700.0;
+}
+
+void ACampaignMapActor::LayOverSeam(UProceduralMeshComponent* Of)
+{
+	if (!Of)
+	{
+		return;
+	}
+	int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+	if (Slot == INDEX_NONE)
+	{
+		Slot = SeamLaid.Add(Of);
+		SeamTwins.Add(nullptr);
+		SeamStamps.Add(0);
+	}
+	UProceduralMeshComponent* Twin = SeamTwins[Slot].Get();
+	// (Only a model that lies on the table as it was built: one that has been turned or grown is a thing that moves,
+	// and is not laid twice.)
+	const FTransform& Stands = Of->GetComponentTransform();
+	if (!OverSeam() || !Stands.GetRotation().IsIdentity(1.0e-4) || !Stands.GetScale3D().Equals(FVector::OneVector, 1.0e-4))
+	{
+		if (Twin)
+		{
+			Twin->ClearAllMeshSections();
+		}
+		return;
+	}
+	// The seam at the chart's west end, the same seam a world on at its east end, and the sight of each: in the
+	// model's own measure along the table's east.
+	const double Span = Data.WorldWidth * UnitScale;
+	const double West = MapToWorld(Data.Charted.Min.X, 0.0).Y - Stands.GetLocation().Y;
+	const double WestSight = West + SeamSight * UnitScale, EastSight = West + Span - SeamSight * UnitScale;
+	const int32 Sections = Of->GetNumSections();
+	TArray<FVector> Points, Normals;
+	TArray<int32> Corners, WestNumber, EastNumber;
+	TArray<FVector2D> UV0, UV1, UV2, UV3;
+	TArray<FColor> Inks;
+	TArray<FProcMeshTangent> Tangents;
+	for (int32 Section = 0; Section < Sections; ++Section)
+	{
+		const FProcMeshSection* Laid = Of->GetProcMeshSection(Section);
+		Points.Reset();
+		Normals.Reset();
+		Corners.Reset();
+		UV0.Reset();
+		UV1.Reset();
+		UV2.Reset();
+		UV3.Reset();
+		Inks.Reset();
+		Tangents.Reset();
+		if (Laid && Laid->ProcIndexBuffer.Num() >= 3 && Laid->ProcVertexBuffer.Num() > 0)
+		{
+			// (each point's number in the share: laid a world east, for the west end's; a world west, for the east end's)
+			const int32 Count = Laid->ProcVertexBuffer.Num();
+			WestNumber.Init(INDEX_NONE, Count);
+			EastNumber.Init(INDEX_NONE, Count);
+			auto Take = [&](TArray<int32>& Numbers, uint32 Point, double Shift) -> int32
+			{
+				int32& Number = Numbers[Point];
+				if (Number == INDEX_NONE)
+				{
+					const FProcMeshVertex& From = Laid->ProcVertexBuffer[Point];
+					Number = Points.Add(FVector(From.Position.X, From.Position.Y + Shift, From.Position.Z));
+					Normals.Add(FVector(From.Normal));
+					UV0.Add(FVector2D(From.UV0));
+					UV1.Add(FVector2D(From.UV1));
+					UV2.Add(FVector2D(From.UV2));
+					UV3.Add(FVector2D(From.UV3));
+					Inks.Add(From.Color);
+					Tangents.Add(From.Tangent);
+				}
+				return Number;
+			};
+			for (int32 First = 0; First + 2 < Laid->ProcIndexBuffer.Num(); First += 3)
+			{
+				const uint32 A = Laid->ProcIndexBuffer[First], B = Laid->ProcIndexBuffer[First + 1], C = Laid->ProcIndexBuffer[First + 2];
+				if (A >= static_cast<uint32>(Count) || B >= static_cast<uint32>(Count) || C >= static_cast<uint32>(Count))
+				{
+					continue;
+				}
+				// (a face is laid whole, by where its first corner lies)
+				const double Along = Laid->ProcVertexBuffer[A].Position.Y;
+				if (Along < WestSight)
+				{
+					Corners.Add(Take(WestNumber, A, Span));
+					Corners.Add(Take(WestNumber, B, Span));
+					Corners.Add(Take(WestNumber, C, Span));
+				}
+				else if (Along > EastSight)
+				{
+					Corners.Add(Take(EastNumber, A, -Span));
+					Corners.Add(Take(EastNumber, B, -Span));
+					Corners.Add(Take(EastNumber, C, -Span));
+				}
+			}
+		}
+		if (Corners.Num() == 0)
+		{
+			if (Twin && Section < Twin->GetNumSections())
+			{
+				Twin->ClearMeshSection(Section);
+			}
+			continue;
+		}
+		if (!Twin)
+		{
+			// (a still model's twin is a still model, and a plain one's plain: each is drawn as its model is)
+			Twin = Of->IsA<UTheaterStillMesh>() ? static_cast<UProceduralMeshComponent*>(UTheaterStillMesh::Make(this, TEXT("OverSeam"))) : NewObject<UProceduralMeshComponent>(this);
+			Twin->SetupAttachment(Root);
+			Twin->bUseAsyncCooking = false;
+			Twin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Twin->SetCastShadow(Of->CastShadow);
+			Twin->SetTranslucentSortPriority(Of->TranslucencySortPriority);
+			Twin->SetRelativeTransform(Of->GetRelativeTransform());
+			Twin->RegisterComponent();
+			Twin->SetVisibility(Of->IsVisible());
+			SeamTwins[Slot] = Twin;
+		}
+		Twin->CreateMeshSection(Section, Points, Corners, Normals, UV0, UV1, UV2, UV3, Inks, Tangents, false);
+		Twin->SetMaterial(Section, Of->GetMaterial(Section));
+	}
+	// (sections the model no longer has)
+	for (int32 Section = Sections; Twin && Section < Twin->GetNumSections(); ++Section)
+	{
+		Twin->ClearMeshSection(Section);
+	}
+}
+
+void ACampaignMapActor::KeepSeamTwins()
+{
+	// The models laid once that are not things that move: the lines and works of the table, and the washes and signs
+	// laid for the player's hand. (Not the ground, the sea or the sky, which go round by themselves; not smoke, lights,
+	// trains or aircraft, which change each frame or move: those are still laid once. The woods and the towns are
+	// moved whole: SquaresRound.)
+	UProceduralMeshComponent* const Kept[] = {
+		BorderMesh.Get(), RailMesh.Get(), RiverMesh.Get(), WorksMesh.Get(), WorksLeftMesh.Get(), CivicMesh.Get(), PrizesMesh.Get(), ScarsMesh.Get(),
+		BuildingsMesh.Get(), TownMesh.Get(), TownFarMesh.Get(), AirSignMesh.Get(), AirPennantMesh.Get(), GunLineMesh.Get(), ColumnsMesh.Get(),
+		LanesMesh.Get(), ChartMesh.Get(), WrecksMesh.Get(), WatchMesh.Get(), FrontLineMesh.Get(), EnemyReachMesh.Get(), CutLampMesh.Get(),
+		RailLightMesh.Get(), OrdersMesh.Get(), HighlightMesh.Get(), MovesMesh.Get(), PointerMesh.Get(), WakeMesh.Get() };
+	const bool bOverSeam = OverSeam();
+	for (int32 Gone = 0; Gone < SeamLaid.Num(); ++Gone)
+	{
+		// (a model that is no more leaves no twin standing)
+		if (!SeamLaid[Gone] && SeamTwins[Gone] && SeamTwins[Gone]->GetNumSections() > 0)
+		{
+			SeamTwins[Gone]->ClearAllMeshSections();
+		}
+	}
+	for (UProceduralMeshComponent* Of : Kept)
+	{
+		if (!Of)
+		{
+			continue;
+		}
+		// What it looks like now: how many points and corners each section has, its ink, and a few of its points.
+		uint32 Stamp = bOverSeam ? 2u : 1u;
+		const int32 Sections = Of->GetNumSections();
+		for (int32 Section = 0; Section < Sections; ++Section)
+		{
+			const FProcMeshSection* Laid = Of->GetProcMeshSection(Section);
+			const int32 Count = Laid ? Laid->ProcVertexBuffer.Num() : 0;
+			Stamp = HashCombine(Stamp, GetTypeHash(Count));
+			Stamp = HashCombine(Stamp, GetTypeHash(Laid ? Laid->ProcIndexBuffer.Num() : 0));
+			Stamp = HashCombine(Stamp, PointerHash(Of->GetMaterial(Section)));
+			for (int32 Nth = 0; Nth < 8 && Count > 0; ++Nth)
+			{
+				const FProcMeshVertex& Sample = Laid->ProcVertexBuffer[static_cast<int32>(static_cast<int64>(Nth) * (Count - 1) / 7)];
+				Stamp = HashCombine(Stamp, GetTypeHash(Sample.Position));
+				Stamp = HashCombine(Stamp, GetTypeHash(Sample.Color));
+			}
+		}
+		int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+		if (Slot == INDEX_NONE || SeamStamps[Slot] != Stamp)
+		{
+			if (Slot == INDEX_NONE && !bOverSeam)
+			{
+				continue; // (never laid over the seam, and not asked to be)
+			}
+			LayOverSeam(Of);
+			Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+			if (Slot == INDEX_NONE)
+			{
+				continue;
+			}
+			SeamStamps[Slot] = Stamp;
+		}
+		// Its twin is shown, hidden and placed as it is.
+		if (UProceduralMeshComponent* Twin = SeamTwins[Slot].Get())
+		{
+			if (Twin->IsVisible() != Of->IsVisible())
+			{
+				Twin->SetVisibility(Of->IsVisible());
+			}
+			if (!Twin->GetRelativeTransform().Equals(Of->GetRelativeTransform(), 0.01))
+			{
+				Twin->SetRelativeTransform(Of->GetRelativeTransform());
+			}
+			if (!Twin->IsA<UTheaterStillMesh>())
+			{
+				// (a plain model's sections may be shown and hidden one by one; a still model's never are)
+				for (int32 Section = 0; Section < Sections && Section < Twin->GetNumSections(); ++Section)
+				{
+					const bool bShown = Of->IsMeshSectionVisible(Section);
+					if (Twin->IsMeshSectionVisible(Section) != bShown)
+					{
+						Twin->SetMeshSectionVisible(Section, bShown);
+					}
+				}
+			}
+		}
+	}
+}
+
+void ACampaignMapActor::SquaresRound(const FVector& Focus)
+{
+	const double Span = OverSeam() ? Data.WorldWidth * UnitScale : 0.0;
+	auto Beside = [&](UProceduralMeshComponent* Square)
+	{
+		if (!Square)
+		{
+			return;
+		}
+		// (its own middle as it was built: where it is shown now, less what it has been moved by)
+		const FVector Moved = Square->GetRelativeLocation();
+		const double Middle = Square->Bounds.Origin.Y - Moved.Y;
+		const double Round = Span > 0.0 ? FMath::RoundToDouble((Focus.Y - Middle) / Span) * Span : 0.0;
+		if (FMath::Abs(Moved.Y - Round) > 0.5)
+		{
+			Square->SetRelativeLocation(FVector(Moved.X, Round, Moved.Z));
+		}
+	};
+	for (const TObjectPtr<UProceduralMeshComponent>& Square : TreeMeshes)
+	{
+		Beside(Square.Get());
+	}
+	for (const TObjectPtr<UProceduralMeshComponent>& Square : TownSquares)
+	{
+		Beside(Square.Get());
+	}
+	for (const TObjectPtr<UProceduralMeshComponent>& Square : TownFarSquares)
+	{
+		Beside(Square.Get());
+	}
 }
 
 double ACampaignMapActor::NearX(double X, double BesideX) const
@@ -6366,6 +6620,10 @@ bool ACampaignMapActor::RecolourRivers()
 		RiverMesh->UpdateMeshSection(Section, Positions, TArray<FVector>(), TArray<FVector2D>(), Inks, TArray<FProcMeshTangent>());
 	}
 	RiversHazedFor = HazeSet;
+	if (OverSeam())
+	{
+		LayOverSeam(RiverMesh); // (seam-2: the rivers' twin over the seam takes the new inks; its keeper looks at a few points only)
+	}
 	return true;
 }
 
@@ -11255,8 +11513,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 				// (Release 2, the far side.) A way over the chart's seam comes back in the turn of the world it left from,
 				// and ends a whole world from where the fleet is laid. Its wake is laid twice, once from where it left and
 				// once to where it lies: each is whole, and each lies on ground that is drawn while the eye is near it.
+				// (Seam-2: once only where the wakes have a twin over the seam, which lays the other.)
 				const double WorldRound = At.X - Wake.Last().X;
-				if (FMath::Abs(WorldRound) > 1.0)
+				if (FMath::Abs(WorldRound) > 1.0 && !OverSeam())
 				{
 					FWakeTrail& Twin = Wakes.AddDefaulted_GetRef();
 					Twin.Fleet = Fleet.Id;
@@ -13523,12 +13782,19 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 			Ring(Where, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
 			Ring(Where, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
 		};
-		Anchorage(Middle);
 		// (Release 2, the far side.) A sea over the chart's seam from the fleet is marked a second time in the fleet's
 		// own turn of the world, where the eye that picked the fleet up can see it (Hawaiian Waters from San Diego),
 		// and the course is dashed to it the short way round.
+		// (Seam-2: where the orders have a twin over the seam, such a sea is marked once only, at the place nearest
+		// the fleet, and the twin marks it at its own place on the chart: marked twice here it would be laid four
+		// times, and its wash double.)
 		const FVector2D Nearer(bHaveFleet ? NearX(Middle.X, From.X) : Middle.X, Middle.Y);
-		if (FMath::Abs(Nearer.X - Middle.X) > 1.0)
+		const bool bOverTheSeam = FMath::Abs(Nearer.X - Middle.X) > 1.0;
+		if (!bOverTheSeam || !OverSeam())
+		{
+			Anchorage(Middle);
+		}
+		if (bOverTheSeam)
 		{
 			Anchorage(Nearer);
 		}
@@ -16862,6 +17128,13 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	const bool bWorldComing = UpdateLand(WorldLand, CameraDistance, CameraFocus, false);
 	bLandTilesComing = bHomeComing || bWorldComing;
 	UpdateFineSheets(CameraDistance, CameraFocus);
+	// (Release 2, the far side: seam-2. What is laid once is seen from both sides of the chart's seam: the squares of
+	// woods and towns are shown on the eye's side, and the great models have their twins.)
+	if (Data.bWorld || SeamLaid.Num() > 0)
+	{
+		SquaresRound(CameraFocus);
+		KeepSeamTwins();
+	}
 
 	// Pieces cast shadows only near what the eye is looking at, and not at all from far off.
 	{
@@ -16916,10 +17189,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	};
 	bSquaresComing = false;
 	{
+		const double TreesRound = OverSeam() ? Data.WorldWidth * UnitScale : 0.0;
 		TArray<TPair<double, int32>> Owed; // (how far from the eye's point, squared, and which square)
 		for (int32 Index = 0; Index < TreeMeshes.Num(); ++Index)
 		{
-			const double Away = FVector::DistSquared2D(TreeCentres[Index], CameraFocus);
+			// (the far side, seam-2: a square of woods is shown in the turn of the world nearest the eye, and is so far from it)
+			const double AwayEast = TreeCentres[Index].Y - CameraFocus.Y;
+			const double Away = FMath::Square(TreeCentres[Index].X - CameraFocus.X)
+				+ FMath::Square(TreesRound > 0.0 ? AwayEast - FMath::RoundToDouble(AwayEast / TreesRound) * TreesRound : AwayEast);
 			const bool bShow = bNear && Away < Reach * Reach;
 			if (bShow != TreesShown[Index])
 			{
