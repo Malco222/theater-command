@@ -3556,16 +3556,23 @@ int main(int Argc, char** Argv)
 					Here.Hide = X < SX ? 20500.0 : LowHide;
 					return Here;
 				};
+				Stepped.BaysOf = Show.BaysOf;
 				std::map<int, bool> BegunWest;
+				// (fed as the main play is fed, one view in hand ahead of what it shows, at its rate: the smooth flying
+				// reads the path a little ahead of the picture, so a re-fly fed further ahead flies its own paths, and its
+				// falls end away from the step laid on the main play's)
 				size_t Next = 0;
+				auto TakeStep = [&]()
+				{
+					const AirFeed::Frame& F = Rec.Views[Next++];
+					Stepped.Take(F.Head.T, F.Groups, F.Events, F.Ships);
+				};
+				TakeStep();
+				if (Next < Rec.Views.size()) TakeStep();
 				for (double At = Rec.Views.front().Head.T; At < EndT - 1e-9;)
 				{
-					At = std::min(EndT, At + 1.0 / 30.0);
-					while (Next < Rec.Views.size() && Rec.Views[Next].Head.T <= At + 1.0 + 1e-9)
-					{
-						Stepped.Take(Rec.Views[Next].Head.T, Rec.Views[Next].Groups, Rec.Views[Next].Events, Rec.Views[Next].Ships);
-						++Next;
-					}
+					At = std::min(EndT, At + Dt);
+					while (Next < Rec.Views.size() && Rec.Views[Next - 1].Head.T <= At + 1e-9) TakeStep();
 					Stepped.Advance(At);
 					for (const AirShow::Fx& E : Stepped.Effects)
 					{

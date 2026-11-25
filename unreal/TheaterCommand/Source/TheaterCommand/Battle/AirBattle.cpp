@@ -633,6 +633,16 @@ bool AAirBattle::WantsReplay(FString& OutKey)
 	return FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattle="), OutKey) && !OutKey.IsEmpty();
 }
 
+// (1.5.1; Brian, 24 November, on the film of a raid flown from the campaign: "why is the plane shaking in the test
+// video?") The flight core's smooth flying is on (AirShow::Show::SetSmooth: the roll eased in and out, a formation's
+// velocity read over a battle second). "-TheaterAirOldFlying" flies every air battle as 1.5 flew it, for a film of the
+// one beside the other.
+static bool AirOldFlying()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirOldFlying"));
+	return bAsked;
+}
+
 void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
@@ -678,6 +688,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	S.Show = AirShow::Show(S.Recording.Seed ? S.Recording.Seed : 238);
 	AirFeed::Apply(S.Board, S.Show);
+	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
 	S.Card = S.Desk.CardOf(S.Recording.Card);
@@ -729,6 +740,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	S.bReplay = false;
 	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	AirFeed::Apply(S.Board, S.Show);
+	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships);

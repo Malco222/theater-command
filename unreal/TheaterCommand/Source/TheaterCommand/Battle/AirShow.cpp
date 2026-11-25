@@ -262,7 +262,10 @@ namespace AirShow
 		for (const Group& G : InGroups) V.Groups[G.Id] = G;
 		if (!Views.empty() && T <= Views.back().T) Views.back() = V; // (the same moment again: the newer word stands)
 		else Views.push_back(V);
-		while (Views.size() > 12 && Views[1].T <= ShownT) Views.pop_front();
+		// (smooth flying: the views of the last two PathSpan are kept as well, the formations' velocities being read
+		// from them, GroupVelocity)
+		const double Keep = bSmooth ? 2.0 * PathSpan : 0.0;
+		while (Views.size() > 12 && Views[1].T <= ShownT - Keep) Views.pop_front();
 		// A group made from a view that named no model (the place's main one stood in) takes its own when a view names
 		// it: every model of the group still flying is made over, its shape and limits with it, where it is.
 		// The views kept and the groups as now shown take it too, so that what reads a group's model (its engines'
@@ -459,8 +462,64 @@ namespace AirShow
 		}
 	}
 
+	bool Show::PathAt(int GroupId, double T, Vec& OutAt, double& OutT) const
+	{
+		// A group's middle at a battle time, along the straight lines between the views kept that have it; a time
+		// before the first of them or after the last is brought to that view (OutT: the time it is given for).
+		const Group* Ga = nullptr;
+		const Group* Gb = nullptr;
+		double Ta = 0.0, Tb = 0.0;
+		for (const View& V : Views)
+		{
+			const auto It = V.Groups.find(GroupId);
+			if (It == V.Groups.end()) continue;
+			if (V.T <= T || !Ga)
+			{
+				Ga = &It->second;
+				Ta = V.T;
+				if (V.T <= T) continue;
+			}
+			Gb = &It->second;
+			Tb = V.T;
+			break;
+		}
+		if (!Ga) return false;
+		if (!Gb || Tb <= Ta || T <= Ta)
+		{
+			OutAt = Vec(Ga->X, Ga->Y, Ga->Alt);
+			OutT = Ta;
+			return true;
+		}
+		const double F = Clamp((T - Ta) / (Tb - Ta), 0.0, 1.0);
+		OutAt = Vec(Lerp(Ga->X, Gb->X, F), Lerp(Ga->Y, Gb->Y, F), Lerp(Ga->Alt, Gb->Alt, F));
+		OutT = Ta + (Tb - Ta) * F;
+		return true;
+	}
+
 	Vec Show::GroupVelocity(int GroupId) const
 	{
+		if (bSmooth)
+		{
+			// (SetSmooth) Read off the one hop between two views, as it was, a live raid's formation changed direction by a
+			// third of a degree at every rules step (10 cm of rounding in the 30 m it had come), and every pilot in it
+			// banked after that. Now: its place at three times PathSpan apart, the last of them PathLead ahead of now as
+			// far as the views in hand reach (Advance), and the velocity now of the parabola through the three. A steady
+			// turn or a steady change of speed is read as it is now, however far ahead the views reach; what is left of a
+			// view's rounding is spread over a battle second.
+			const double To = ShownT + PathLead;
+			Vec P0, P1, P2;
+			double T0 = 0.0, T1 = 0.0, T2 = 0.0;
+			if (PathAt(GroupId, To - 2.0 * PathSpan, P0, T0) && PathAt(GroupId, To - PathSpan, P1, T1) && PathAt(GroupId, To, P2, T2) && T2 - T0 > 0.5 * PathSpan)
+			{
+				const double Per = 1.0 / Scale; // (battle seconds to air seconds)
+				if (T1 - T0 < 0.25 * PathSpan || T2 - T1 < 0.25 * PathSpan) return (P2 - P0) * (Per / (T2 - T0));
+				const double T = Clamp(ShownT, T0, T2);
+				const double W0 = ((T - T1) + (T - T2)) / ((T0 - T1) * (T0 - T2));
+				const double W1 = ((T - T0) + (T - T2)) / ((T1 - T0) * (T1 - T2));
+				const double W2 = ((T - T0) + (T - T1)) / ((T2 - T0) * (T2 - T1));
+				return (P0 * W0 + P1 * W1 + P2 * W2) * Per;
+			}
+		}
 		const View* A = nullptr;
 		const View* B = nullptr;
 		for (const View& V : Views)
@@ -626,11 +685,15 @@ namespace AirShow
 		if (C.bFighter)
 		{
 			C.VMin = 80.0; C.VMax = 153.0; C.VTop = 200.0; C.RMin = 210.0; C.GMax = 6.0; C.RollMax = 120.0 * Deg;
+			C.RollTime = 0.12;
 		}
 		else
 		{
 			C.VMin = 65.0; C.VMax = 110.0; C.VTop = 150.0; C.RMin = 500.0; C.GMax = 2.0; C.RollMax = 40.0 * Deg;
 			if (C.Form.bDive) { C.GMax = 5.0; C.RMin = 300.0; C.RollMax = 90.0 * Deg; C.VTop = 165.0; }
+			// (her roll's own time, by her size: longer for a twin and longer again for a four-engined heavy; kept short
+			// enough that her pilot's turn after his box, Fly's, stays as steady as it was)
+			C.RollTime = C.Form.Engines.size() >= 4 || C.Form.Span >= 28.0 ? 0.22 : C.Form.Engines.size() >= 2 || C.Form.Span >= 20.0 ? 0.18 : 0.15;
 		}
 	}
 
@@ -926,7 +989,9 @@ namespace AirShow
 			const double Over = C.P.Z - FloorAhead(C);
 			const double Least = Chasing(C) > 0.0 ? 30.0 : 100.0;
 			const double SinkNow = std::max(0.0, -std::sin(C.Gam)) * C.Spd;
-			const double Rolling = std::fabs(C.Bank) / std::max(C.RollMax, 0.5);
+			// (and, flying smooth, the time her roll takes to pick up and to ease off as her wings come level: about four
+			// of her roll times, SetSmooth)
+			const double Rolling = std::fabs(C.Bank) / std::max(C.RollMax, 0.5) + (bSmooth ? 4.0 * C.RollTime : 0.0);
 			if (Over < Least + SinkNow * SinkNow / (2.0 * Gee * 3.0) + SinkNow * (0.5 + Rolling))
 			{
 				K.Gam = std::max(K.Gam, Over < Least ? 10.0 * Deg : 0.0);
@@ -957,15 +1022,33 @@ namespace AirShow
 		// the Pe-2, 17.2 m, and the plain bomber, 19.8, banked 21 degrees with her doors open, and her box spread on its
 		// rally turn)
 		double RollMost = C.RollMax;
+		bool bBoxed = false;
 		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2) && C.Doing != Role::Fall)
 		{
 			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
 			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
 			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
-			if (C.Doing == Role::Slot && !bOnRun) RollMost = std::min(RollMost, HeavyRollMost * Deg);
+			if (C.Doing == Role::Slot && !bOnRun)
+			{
+				RollMost = std::min(RollMost, HeavyRollMost * Deg);
+				bBoxed = true;
+			}
 		}
 		// Roll toward it, no faster than the airframe rolls.
-		const double Roll_ = Clamp(Wrap(BankWant - C.Bank), -RollMost * Dt, RollMost * Dt);
+		double Roll_ = Clamp(Wrap(BankWant - C.Bank), -RollMost * Dt, RollMost * Dt);
+		// (a bomber in her box rolls at HeavyRollMost at most, a twelfth of a degree a frame: no snap to ease, and her
+		// box's rally turn is flown to that roll as it was)
+		if (bSmooth && !bBoxed && C.Doing != Role::Fall && Dt > 0.0)
+		{
+			// (smooth flying, SetSmooth) Her pilot asks a roll rate by how far her wings are from where he wants them,
+			// all his aileron for a large change and a little for a small one, and her roll rate eases toward what he
+			// asks in her own roll time: she rolls in and rolls out, and a frame's change of mind is never a frame's
+			// snap. The gain brings her wings to rest a few percent past at most (RollDamping, of a critical 1).
+			const double Gain = 1.0 / (4.0 * RollDamping * RollDamping * std::max(C.RollTime, 0.02));
+			const double Ask = Clamp(Wrap(BankWant - C.Bank) * Gain, -RollMost, RollMost);
+			const double Rate = C.RollNow + (Ask - C.RollNow) * (1.0 - std::exp(-Dt / std::max(C.RollTime, 0.02)));
+			Roll_ = Clamp(Rate, -RollMost, RollMost) * Dt;
+		}
 		C.Bank = Wrap(C.Bank + Roll_);
 		// The turn the bank gives (none on its back or on its side: a half-roll turns the nose down, not round).
 		double Omega = 0.0;
@@ -1059,7 +1142,16 @@ namespace AirShow
 		case Role::Fight:
 			if (G && G->Doing == Act::Fight && G->Engaged >= 0 && PilotFight(C, *G, Dt))
 			{
-				if (!C.bStrafing && C.Doing == Role::Fight) (Chasing(C) > 0.0 ? Check.LowestChase : Check.LowestFight) = std::min(Chasing(C) > 0.0 ? Check.LowestChase : Check.LowestFight, C.P.Z - GroundAt(C.P.X, C.P.Y));
+				if (!C.bStrafing && C.Doing == Role::Fight)
+				{
+					// (one who followed a torpedo plane down to wave-top is counted with those chases until he has climbed
+					// back over 60 m: her loss leaves him low over the sea, as it found him, not diving at it)
+					const double Over = C.P.Z - GroundAt(C.P.X, C.P.Y);
+					if (Chasing(C) > 0.0) C.bLowChase = true;
+					else if (Over >= 60.0) C.bLowChase = false;
+					double& Lowest = C.bLowChase ? Check.LowestChase : Check.LowestFight;
+					Lowest = std::min(Lowest, Over);
+				}
 				// (one who turned for home in this step flies it as one going home: a step not flown is a stop in the
 				// air, and the rounds laid wide of him as he flew are drawn through him)
 				if (C.Doing == Role::Home) FlyHome();
@@ -7332,6 +7424,9 @@ namespace AirShow
 		T = std::min(T, Latest());
 		const double DT = std::max(0.0, T - ShownT);
 		ShownT = std::max(ShownT, T);
+		// (smooth flying: how far ahead the formations' velocities are read, GroupVelocity. Out to PathSpan as the views
+		// in hand allow, no faster than the clock runs; never past the last view.)
+		PathLead = std::max(0.0, std::min({ PathLead + DT, PathSpan, Latest() - ShownT }));
 		const double AirDt = DT * Scale;
 		AirT += AirDt;
 		Interpolate();

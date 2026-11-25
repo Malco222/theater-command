@@ -558,6 +558,25 @@ namespace AirShow
 		double LowFallM = 400.0;
 		double StickSteady = 1.5, RunBankMost = 2.0, RallyBankMost = 20.0, HeavyBankMost = 30.0, HeavyRollMost = 5.0;
 		/**
+		 * Smooth flying (Brian, 24 November, on the film of a raid flown from the campaign: "why is the plane shaking in
+		 * the test video?", "i want the flying to be smooth and very realistic"). Measured (Tools/air_show/
+		 * air_smooth_probe): every fighter in formation kicked its wings up to 2 degrees in one frame, five times a
+		 * second. A live raid's views come every rules step (a tenth of a battle second) with places rounded to 10 cm,
+		 * a formation's velocity was read off the one hop between two views, so its direction jumped a third of a degree
+		 * at every view; the pilot's turn toward it asks 12 degrees of bank for a degree of heading; and the roll had a
+		 * most but no inertia, so a frame's ask was a frame's snap. With this on (the default):
+		 * - a formation's velocity is its travel over PathSpan battle seconds each way about now (GroupVelocity), all of
+		 *   it in views already in hand, never the hop between two views;
+		 * - an aircraft's roll rate eases toward what her pilot asks of her ailerons and eases off again (Craft::RollTime,
+		 *   the type's roll time: a fighter's wings take about an eighth of a second to pick the roll up, a heavy
+		 *   bomber's nearer a quarter), and her pilot asks by how far her wings are from where he wants
+		 *   them: all his aileron only for a large change, a little for a small one. No snap, in any feed.
+		 * Off: the flying as releases 1.5 and before had it.
+		 */
+		void SetSmooth(bool bOn) { bSmooth = bOn; }
+		bool Smooth() const { return bSmooth; }
+		double PathSpan = 0.5, RollDamping = 0.7;
+		/**
 		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
 		 * his stick first, and each of the others as her bombardier sees his bombs leave, DropOnLeadLeast to
 		 * DropOnLeadMost air seconds after his first (each craft its own, from its key, the same every run). Her doors
@@ -682,6 +701,7 @@ namespace AirShow
 			Vec P;
 			double Spd = 100.0, Hdg = 0.0, Gam = 0.0, Bank = 0.0;
 			double VMin = 80.0, VMax = 153.0, VTop = 200.0, RMin = 210.0, GMax = 6.0, RollMax = 2.79;
+			double RollTime = 0.12;  // air seconds for her roll rate to come most of the way to what her ailerons ask (SetSmooth)
 			Role Doing = Role::Slot;
 			Phase Step = Phase::None;
 			double StepT = 0.0;      // air seconds into the phase
@@ -768,6 +788,7 @@ namespace AirShow
 			bool bScissWin = false;  // the one of the two who comes out behind the other
 			bool bScissIn = false;   // the attacker, still coming through fast: the overshoot that begins it
 			bool bStrafing = false;  // his pass is at an aircraft on the ground
+			bool bLowChase = false;  // (the checks: he followed a torpedo plane down to wave-top and has not yet climbed back over 60 m)
 			bool bFleeing = false;   // half-rolled and diving away from an enemy on his tail
 			bool bOpened = false;    // has made his first pass of this fight
 			bool bAnywhere = false;  // waiting to go in from where he is (the fight's opening), not from his perch
@@ -1026,6 +1047,13 @@ namespace AirShow
 		std::vector<FlakHit> FlakHits;
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
+		bool bSmooth = true;                 // (SetSmooth)
+		/** How far ahead of the battle time shown the formations' velocities are read (GroupVelocity): PathSpan where
+		 * the views in hand reach that far (a live raid's always do: its rules run a battle second ahead), less where a
+		 * recording's next view has yet to come, and never moved faster than the clock, so that a view's coming is
+		 * never a jump. */
+		double PathLead = 0.0;
+		bool PathAt(int GroupId, double T, Vec& OutAt, double& OutT) const;
 		/** The strike (StrikeOn), and what holds it this frame: bombs and torpedoes in the air, bombers with doors open on
 		 * their run or a stick still to go, dive bombers over, down or pulling out, torpedo planes on their run in, ship
 		 * hits still to be shown. */
