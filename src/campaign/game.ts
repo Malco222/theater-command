@@ -1335,6 +1335,32 @@ export const worksKept = (r: Region): Region['fort'] => r.fort ?? (r.id === asid
 export function ensureSupply(g: Game): void {
   if (g.supplyDirty) computeSupply(g);
 }
+/**
+ * A call the table makes, kept inside the supply window (release 2; the 3D table's every call is wrapped in this at
+ * the foot of the campaign bridge). Supply is made fresh as the call opens and as it hands back, whether it returns
+ * or fails, so the moment supply is drawn is fixed by the order of the calls and never by which of them happens to
+ * be a look. A call that fails reports its own error: a redraw that fails in its turn does not hide it. `game` is
+ * asked each time, since a start or a load puts a new game on the table.
+ */
+export function keepSupply(fn: (...a: unknown[]) => unknown, game: () => Game | null | undefined): (...a: unknown[]) => unknown {
+  return function supplyKept(this: unknown, ...a: unknown[]): unknown {
+    // (Fresh as it opens: after a call that failed part-way and could not be redrawn, or a game changed from outside
+    // the table, the next call starts as after any other. On clean supply this is one test of a flag.)
+    const was = game();
+    if (was) ensureSupply(was);
+    let out: unknown;
+    try {
+      out = fn.apply(this, a);
+    } catch (e) {
+      const left = game();
+      if (left) { try { ensureSupply(left); } catch { /* the call's own error is the one reported */ } }
+      throw e;
+    }
+    const now = game();
+    if (now) ensureSupply(now);
+    return out;
+  };
+}
 
 // ---- Battles ------------------------------------------------------------------------
 

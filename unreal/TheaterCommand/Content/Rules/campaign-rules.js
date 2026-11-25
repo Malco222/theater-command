@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e02b0600 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e02b0600e 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -73596,6 +73596,28 @@
   function ensureSupply(g2) {
     if (g2.supplyDirty) computeSupply(g2);
   }
+  function keepSupply(fn, game2) {
+    return function supplyKept(...a) {
+      const was = game2();
+      if (was) ensureSupply(was);
+      let out;
+      try {
+        out = fn.apply(this, a);
+      } catch (e) {
+        const left = game2();
+        if (left) {
+          try {
+            ensureSupply(left);
+          } catch {
+          }
+        }
+        throw e;
+      }
+      const now = game2();
+      if (now) ensureSupply(now);
+      return out;
+    };
+  }
   function frontage(r) {
     return r.terrain === "plains" ? 4 : r.terrain === "mountain" ? 2 : 3;
   }
@@ -81140,6 +81162,7 @@
       else g2.flags[`marchAs:${id}`] = standing3(c);
     }
     sweepHot(g2);
+    ensureSupply(g2);
     return { ended, went: [...new Set(went)] };
   }
 
@@ -82982,6 +83005,7 @@
       aiMines(g2, nat);
     }
     closePhase(g2, nat);
+    ensureSupply(g2);
     return nat;
   }
   function beginHuman(g2) {
@@ -83000,10 +83024,12 @@
     crowdedNews(g2);
     taskForcesMonth(g2, current2(g2));
     staffMonth(g2);
+    ensureSupply(g2);
   }
   function endHuman(g2) {
     entrench(g2, current2(g2));
     closePhase(g2, current2(g2));
+    ensureSupply(g2);
   }
   function entrench(g2, nat) {
     if (g2.flags.open === 1 && DEFENCE.entrench.auto) return;
@@ -111531,10 +111557,11 @@
   var pictureOffers = (s) => inPicture(s, "offers", () => arsenalOffers(s, -1));
   var pictureDamaged = (s) => inPicture(s, "damaged", () => damagedOfMine(s));
   var pictureGunsAlone = (s) => inPicture(s, "alone", () => gunsAloneOf(s));
-  function view2() {
+  function view2(step2 = false) {
+    if (pictureDepth === 0 && g) ensureSupply(g);
     pictureDepth++;
     try {
-      return drawView();
+      return drawView(step2);
     } finally {
       if (--pictureDepth === 0) {
         pictureTradeKept = null;
@@ -111565,9 +111592,10 @@
     }
     return out;
   }
-  function drawView() {
+  function drawView(step2 = false) {
     const s = game();
     const up = humanUp(s);
+    const panel = (f) => step2 ? void 0 : f();
     const seen2 = sight(s);
     const based2 = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
     const fields = airfieldsSeen(s, seen2);
@@ -111591,12 +111619,12 @@
       current: current2(s),
       humanUp: up,
       // Where an ally's corps stand beside the player's own and could be asked to march with them: the province, how many, and whose.
-      joins: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== "fort").map((c) => c.reg))].map((reg) => {
+      joins: panel(() => s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== "fort").map((c) => c.reg))].map((reg) => {
         const can2 = joinOffers(s, reg).filter((o) => !o.why);
         return { region: reg, n: can2.length, nats: [...new Set(can2.map((o) => s.nations[o.nat]?.adj ?? o.nat))] };
-      }).filter((x) => x.n > 0) : [],
+      }).filter((x) => x.n > 0) : []),
       // (Version 64) Where two of the player's corps standing together are worn thin and could be folded into one: the province, and their names.
-      folds: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== "fort").map((c) => c.reg))].map((reg) => {
+      folds: panel(() => s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== "fort").map((c) => c.reg))].map((reg) => {
         let vs = [];
         try {
           vs = foldChoicesAt(s, reg).filter((v) => !v.why);
@@ -111604,7 +111632,7 @@
           vs = [];
         }
         return { region: reg, names: [...new Set(vs.map((v) => v.keepName))] };
-      }).filter((x) => x.names.length > 0) : [],
+      }).filter((x) => x.names.length > 0) : []),
       // (Version 64) Fieldworks standing empty on ground of the player's side: the province, tenths of a month of work, and room for how many corps.
       worksLeft: (() => {
         const out = [];
@@ -111621,21 +111649,21 @@
       // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
       // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
       // fortifications, 32 a field strip, release 2's airfields). Only where the player can know it.
-      cityOrders: (() => {
+      cityOrders: panel(() => {
         try {
           return cityOrdersOf(s);
         } catch {
           return [];
         }
-      })(),
+      }),
       // (Release 2: the city at a glance.) Every town the player may know something of, with its plate's marks and their words.
-      glance: (() => {
+      glance: panel(() => {
         try {
           return glanceMarks(s, seen2);
         } catch {
           return [];
         }
-      })(),
+      }),
       going: (() => {
         const at4 = /* @__PURE__ */ new Map();
         try {
@@ -111715,12 +111743,12 @@
       level: isOpen(s) && s.human ? levelNow(s).name : "",
       // (Version 66) How deep the player plays: the depth's name, and each desk with who runs it and a line for a bar on
       // its own screen (the staff's news of the month where it runs the desk, an offer to hand it over where it does not).
-      command: commandBrief(s),
+      command: panel(() => commandBrief(s)),
       fallen: fallenNation,
       // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
-      treasury: s.human ? treasuryOf(s, s.human) : null,
+      treasury: panel(() => s.human ? treasuryOf(s, s.human) : null),
       // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
-      declare: up ? declarable(s) : [],
+      declare: panel(() => up ? declarable(s) : []),
       // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
       down: groundRules(s) ? crossingsOf(s).map((c, i) => bridgeDown(s, c) ? i : -1).filter((i) => i >= 0) : [],
       // (Rulings 113 and 114: the cuts drawn are the cuts he knows of, with how he knows each and the rules' words for it.)
@@ -111884,9 +111912,9 @@
         };
       }),
       // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
-      gates: gatesOf(s),
+      gates: panel(() => gatesOf(s)),
       // (Rulings 88, 101 and 102.) The round of armies, counted by the rules for both builds.
-      round: roundOf(s),
+      round: panel(() => roundOf(s)),
       // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
       // many groups and aircraft stand on it, or -1 where the fog hides that.
       // (Release 2; the art director's airfield spec of 24 November, item 2: the card says a shut runway, a repair in
@@ -111935,32 +111963,34 @@
       // Things the player should be told as his month opens, and the rooms beyond the main screens that are open to him.
       // Capitals of fallen countries the player would set free by taking them (or holds already): ringed in gold.
       free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
-      alerts: alertsOf(s),
-      todo: todoOf(s),
+      alerts: panel(() => alertsOf(s)),
+      todo: panel(() => todoOf(s)),
       // (Rules 84.2.6; ruling 211(c).) The alarm that names the cure: the red row first in the tray. Empty until the rules have it.
-      alarms: alarmsOf(s),
+      alarms: panel(() => alarmsOf(s)),
       // (Rules 84.2.6.) His own guns left alone round an enemy town: the siege's row in the rules' words. Empty until the rules have it.
-      alone: pictureGunsAlone(s),
+      alone: panel(() => pictureGunsAlone(s)),
       // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
       // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
       // (release 1) What each arm is, for the bigger unit card.
-      arms: armsTable(s),
+      arms: panel(() => armsTable(s)),
       // (Version 70) The history dial as it stands: null outside the grand campaign, and where the rules have none.
-      dial: (() => {
+      dial: panel(() => {
         const d = dialNow(s);
         return d ? { stop: d.stop, name: d.name, under: d.under } : null;
-      })(),
+      }),
       // (Version 72) The sea lift in a few words, for the heading of the fleet card: empty where the rules have none.
-      lift: (() => {
+      lift: panel(() => {
         try {
           const l = seaCalls.lift ? seaCalls.lift(s) : null;
           return l ? l.lift > 0 ? `sea lift for ${l.lift} corps a month, ${l.left} left` : "no sea lift" : "";
         } catch {
           return "";
         }
-      })(),
+      }),
       // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
-      chart: chartOf(s),
+      // (A step's picture leaves the chart out but still draws it: drawing it writes the admiral's sightings, the
+      // 'sight:' flags kept with the game, and a fleet seen only in the middle of a month is remembered by them.)
+      chart: step2 ? void chartOf(s) : chartOf(s),
       // (release 1) Wrecks on the chart: where the big ships went down.
       wrecks: wrecksOf(s),
       dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
@@ -112095,9 +112125,9 @@
       pages: pagesOf(s),
       // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
       // the months it will last and its books in words, and every shipping lane to draw over the sea.
-      stores: storesOf3(s),
+      stores: panel(() => storesOf3(s)),
       // (Version 59) The reserve of men: how much of what the war opened with is left, in a word and in a sentence.
-      men: (() => {
+      men: panel(() => {
         try {
           const m = pictureMen(s);
           if (!m) return null;
@@ -112118,7 +112148,7 @@
         } catch {
           return null;
         }
-      })(),
+      }),
       // (Version 59) The war cabinet can be switched off by a player who wants the war without the politics.
       // The countries whose armies fight beside the player's: a province crowded with friendly flags shows one, with a count.
       allied: s.human ? Object.keys(s.nations).filter((n) => n !== s.human && s.nations[n].alive && allied(s, n, s.human)) : [],
@@ -112224,7 +112254,7 @@
         }
       })(),
       // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
-      idle: s.human ? pictureIdle(s, s.human) : 0,
+      idle: panel(() => s.human ? pictureIdle(s, s.human) : 0),
       // The members of the League, the third alliance: their ground is shown in its own colour.
       league: leagueMembers(s).map((n) => n.id),
       nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
@@ -112362,20 +112392,14 @@
   var joinWords = (xs) => xs.length <= 1 ? xs[0] ?? "" : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var glanceName = (s, c) => c.nat === s.human ? c.name : corpsNamed2(s, c.nat, c.name);
   var guardLeft = (s, id) => 1 - Math.max(0, Math.min(100, s.flags[`guard:${id}`] ?? 0)) / 100;
-  var guardReachKey = "";
-  var guardReachWas = /* @__PURE__ */ new Set();
   function guardReach(s, me) {
-    const key7 = `${s.turn}:${me}:${s.corps.filter((c) => !c.dead && c.nat !== me).map((c) => `${c.id}.${c.reg}.${c.ap}`).join(",")}:${s.regions.map((r) => r.ctrl).join(",")}`;
-    if (key7 === guardReachKey) return guardReachWas;
-    let danger = /* @__PURE__ */ new Set();
-    try {
-      danger = enemyReach(s, (id) => s.regions[id]?.ctrl === me);
-    } catch {
-      danger = /* @__PURE__ */ new Set();
-    }
-    guardReachKey = key7;
-    guardReachWas = danger;
-    return danger;
+    return inPicture(s, `guard:${me}`, () => {
+      try {
+        return enemyReach(s, (id) => s.regions[id]?.ctrl === me);
+      } catch {
+        return /* @__PURE__ */ new Set();
+      }
+    });
   }
   function glanceMarks(s, seen2) {
     const me = s.human;
@@ -112988,9 +113012,9 @@
       const nearOf = (mine4) => ({ near: close3.near || mine4, arrows: close3.arrows, nearNote: close3.nearNote, ...close3.nearAllies ? { nearAllies: true, allyNote: close3.allyNote ?? "" } : {} });
       if (!taken2.length && !reps.length) {
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (look()[c.reg] > 0 || look()[stood.get(c.id)] > 0)).map((c) => c.reg))];
-        if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air2.mine || sea.mine || shore.mine), view: view2() });
-        else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view2() });
-        else if (to.length || close3.near || close3.nearAllies) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close3.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view2() });
+        if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, sunk, shelled: shore.regions, ...nearOf(air2.mine || sea.mine || shore.mine), view: view2(true) });
+        else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, ...nearOf(sea.mine || shore.mine), view: view2(true) });
+        else if (to.length || close3.near || close3.nearAllies) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.length ? to.slice(0, 6) : close3.arrows.map((a) => a.to).slice(0, 6), mine: false, moved: true, ...nearOf(false), view: view2(true) });
         return;
       }
       const some3 = (names) => names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
@@ -113017,7 +113041,7 @@
         // The player's own ground or troops were involved.
         mine: reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken2.some((id) => ctrl[id] === s.human),
         ...nearOf(reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken2.some((id) => ctrl[id] === s.human) || air2.mine || sea.mine || shore.mine),
-        view: view2()
+        view: view2(true)
       });
     }
   }
@@ -114664,9 +114688,9 @@
         endHuman(s);
       }
       const air2 = raidsSince(s, air0, [month4, s.turn]);
-      if (air2.flights.length) steps.push({ nat: me, note: air2.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: true, raids: air2.flights, sunk: strikeLossesSince(s, air0), view: view2() });
+      if (air2.flights.length) steps.push({ nat: me, note: air2.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: true, raids: air2.flights, sunk: strikeLossesSince(s, air0), view: view2(true) });
       const sea = seaFightsSince(s, sea00);
-      if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view2() });
+      if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view2(true) });
       runOthers(s, steps);
       fallen = arrive4(s);
       if (!fallen && s.human) {
@@ -114677,7 +114701,7 @@
         const out = advanceMarches(s);
         marched = out.ended;
         const said2 = [out.went.length ? `${out.went.length === 1 ? "One of your corps is" : `${out.went.length} of your corps are`} on the march.` : "", ...out.ended.slice(0, 2).map((x) => x.note)].filter(Boolean).join(" ");
-        if (said2) steps.push({ nat: s.human, note: said2, taken: [], battles: [], focus: [...out.ended.map((x) => x.region), ...out.went].slice(0, 6), mine: false, moved: true, view: view2() });
+        if (said2) steps.push({ nat: s.human, note: said2, taken: [], battles: [], focus: [...out.ended.map((x) => x.region), ...out.went].slice(0, 6), mine: false, moved: true, view: view2(true) });
       }
     }
     {
@@ -114696,7 +114720,7 @@
           sunk: all.sunk.filter((x) => zones.includes(x.zone)),
           mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
           note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(" ") || all.notes[0] || "",
-          view: view2()
+          view: view2(true)
         });
       }
     }
@@ -119495,4 +119519,12 @@ ${standing5}`,
     return took > 0 ? view2() : null;
   }
   globalThis.TC.r2Ship = r2Ship;
+  {
+    const table = globalThis.TC;
+    for (const name of Object.keys(table)) {
+      const fn = table[name];
+      if (typeof fn !== "function") continue;
+      table[name] = keepSupply(fn, () => g);
+    }
+  }
 })();
