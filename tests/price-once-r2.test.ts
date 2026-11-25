@@ -37,6 +37,10 @@ type Laid = Parameters<NonNullable<typeof drawnWatch.laid>>[0];
  */
 function balkans(human: string | null = null, allies = true, open = true): { g: Game; told: Told[]; laid: Laid[]; then: Map<string, Map<number, Shot>> } {
   const g = open ? startOpen(createGame(1, human)) : createGame(1, human);
+  // (The board is the first day's, read in 1941: Germany's first wars stand still on it, so that no German corps stands
+  // beside an enemy, as none did behind the lines that spring. A corps in a fight keeps its divisions: the design
+  // director's ruling of 18:47Z, 25 November 2026, read in its own test below.)
+  for (const x of [...g.nations.GER.atWar]) { g.nations.GER.atWar = g.nations.GER.atWar.filter((y) => y !== x); g.nations[x].atWar = g.nations[x].atWar.filter((y) => y !== 'GER'); }
   declareWar(g, 'ITA', 'GRE');
   declareWar(g, 'GER', 'GRE');
   for (const n of ['BUL', 'HUN', 'ROM']) { g.nations[n].align = 'axis'; if (allies) declareWar(g, n, 'GRE'); }
@@ -230,14 +234,15 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(heldTwice(g)).toEqual([]);
   });
 
-  it('when a lent row ends a drawn division goes back to its corps where that stands in the same theatre, and a formed one never reverts', () => {
+  it('when a lent row ends a drawn division goes back to its corps where the two stand together, and a formed one never reverts', () => {
     const { g } = balkans();
     const xv = corps(g, 'XV Corps')!, iv = corps(g, 'IV Corps')!;
     month(g, MARCH_41);
     month(g, APRIL_41);
     const c = corps(g, EIGHTH)!;
-    // XV Corps has followed into the Balkans: the 8th Panzer rejoins it there.
-    relocate(g, xv, g.byName['Banat']);
+    // XV Corps has followed into the Balkans, to the row's corps itself: the 8th Panzer rejoins it there. (A return
+    // never moves a division for free: the design director's rulings of 19:03Z and 19:17Z, 25 November 2026.)
+    relocate(g, xv, g.regions[c.reg]);
     c.xp = 0.9;
     month(g, JUNE_41);
     expect(names(g, xv)).toEqual(['7th Panzer Division', '8th Panzer Division']);
@@ -255,6 +260,28 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(xv.xp).toBeCloseTo((0.4 + 0.9) / 2, 9);
     expect(c.xp).toBeCloseTo(0.9, 9);
     expect(names(g, iv)).toEqual(['46th Infantry Division', '27th Infantry Division']);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('in the same theatre but apart from its corps, the division stands on where it is, under its own name and free: no return moves it (19:17Z)', () => {
+    const { g } = balkans();
+    const xv = corps(g, 'XV Corps')!;
+    month(g, MARCH_41);
+    month(g, APRIL_41);
+    const c = corps(g, EIGHTH)!;
+    // XV Corps has followed into the Balkans, to the Banat: the same side theatre, another province.
+    relocate(g, xv, g.byName['Banat']);
+    expect(g.regions[xv.reg].theatre).toBe(g.regions[c.reg].theatre);
+    expect(xv.reg).not.toBe(c.reg);
+    const at = place(g, c);
+    month(g, JUNE_41);
+    expect(names(g, xv)).toEqual(['7th Panzer Division']);
+    expect(c.dead).toBe(false);
+    expect(names(g, c)).toEqual(['8th Panzer Division', '14th Panzer Division']);
+    expect(c.name).toBe('8th and 14th Panzer Divisions');
+    expect(c.hold).toBe(false);
+    expect(place(g, c)).toBe(at);
+    expect(c.drew).toBeUndefined();
     expect(heldTwice(g)).toEqual([]);
   });
 
@@ -337,6 +364,26 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(place(g, c)).toBe('Sofia');
   });
 
+  it('a corps in a fight keeps its divisions: with an enemy beside it the row forms without them (the design director, 18:47Z)', () => {
+    const { g, told, laid } = balkans();
+    const iii = corps(g, 'III Corps')!;
+    const at = place(g, iii);
+    // (Germany at war with Poland again, whose ground lies beside III Corps.)
+    const beside = g.regions[iii.reg].nb.map((j) => g.regions[j]).find((r) => r.ctrl === 'POL');
+    expect(beside).toBeDefined();
+    declareWar(g, 'GER', 'POL');
+    month(g, MARCH_41);
+    expect(told.find((t) => t.row === INFANTRY)!.claims).toEqual([expect.objectContaining({ name: '50th Infantry Division', from: 'III Corps', stays: true })]);
+    // The 50th stays and fights where it is; the row forms its two new divisions, and nothing of III Corps.
+    const l = laid.find((t) => t.row === INFANTRY)!;
+    expect(l.fresh).toBe(2);
+    expect(l.after - l.before).toBeCloseTo(2, 9);
+    expect(iii.divs).toBe(3);
+    expect(place(g, iii)).toBe(at);
+    expect(names(g, corps(g, INFANTRY)!)).toEqual(['72nd Infantry Division', '164th Infantry Division']);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
   it('a corps that cannot leave where it is stays: one sent home out of the line is not drawn', () => {
     const { g, told } = balkans();
     const xxii = corps(g, 'XXII Corps')!;
@@ -380,6 +427,8 @@ describe('what four independent reviews of the rule found (25 November 2026)', (
     month(g, MARCH_41);
     expect(xxii.rowed).toBeDefined();
     expect(xxii.drew).toHaveLength(2);
+    // (Pulled back from the Greek border to Varna, out of contact: a corps in a fight keeps its divisions, 18:47Z.)
+    relocate(g, xxii, g.byName['Varna']);
     // A second row, not lent, names the same two divisions for the capital in April.
     const i = addRow([APRIL_41, 'GER', PANZERS, 'arm', 2, 'Berlin', {}]);
     month(g, APRIL_41);
@@ -551,7 +600,8 @@ describe('what a second review, of the mends themselves, found (25 November 2026
     const { g } = balkans();
     const xv = corps(g, 'XV Corps')!;
     const home = xv.reg;
-    const iA = addRow([10, 'GER', '8th Panzer Division', 'arm', 1, 'Sofia', { hold: 1, until: 40 }]);
+    // (Varna, behind the Greek border: a lent corps in contact would keep its division, the ruling of 18:47Z.)
+    const iA = addRow([10, 'GER', '8th Panzer Division', 'arm', 1, 'Varna', { hold: 1, until: 40 }]);
     const iB = addRow([12, 'GER', '8th Panzer Division', 'arm', 1, g.regions[home].name, { until: 14 }]);
     month(g, 10);
     const c = g.corps.find((x) => x.id === g.flags[`lent:${iA}`])!;
@@ -658,12 +708,15 @@ describe('what a third review, of the second review\'s mends, found (25 November
     expect(c).not.toBe(p);
     expect(names(g, c)).toEqual(['2nd Panzer Division']);
     expect(names(g, p)).toEqual(['901st Panzer Division']);
+    // (Each loan ends where the corps it owes stands with it: a return never moves a division for free, 19:17Z.)
+    relocate(g, c, g.regions[p.reg]);
     month(g, 12);
     month(g, 13);
     // The second loan's time is up: the 2nd is back with the corps it was drawn from, which owes it to XXII Corps still.
     expect(c.dead).toBe(true);
     expect(names(g, p).sort()).toEqual(['2nd Panzer Division', '901st Panzer Division']);
     expect(p.drew!.find((r) => r.name[0] === '2nd Panzer Division')!.from).toBe(xxii.id);
+    relocate(g, p, g.regions[xxii.reg]);
     for (let t = 14; t <= 16; t++) month(g, t);
     // And the first loan's: XXII Corps has its division again; only the one the row raised new leaves.
     expect(names(g, xxii).sort()).toEqual(['2nd Panzer Division', '9th Panzer Division']);
@@ -714,6 +767,8 @@ describe('what a third review, of the second review\'s mends, found (25 November
     expect(a.names!.length).toBe(1);
     expect(names(g, a)[0]).toBe('2nd Panzer Division');
     expect(names(g, a)[1]).not.toBe('9th Panzer Division');
+    // (It ends its loan beside XXII Corps: a return never moves a division for free, 19:17Z.)
+    relocate(g, a, g.regions[xxii.reg]);
     for (let t = 12; t <= 14; t++) month(g, t);
     expect(a.dead).toBe(true);
     expect(names(g, xxii).sort()).toEqual(['2nd Panzer Division', '9th Panzer Division']);

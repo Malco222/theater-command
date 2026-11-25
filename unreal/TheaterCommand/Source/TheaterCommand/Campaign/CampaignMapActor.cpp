@@ -181,6 +181,28 @@ namespace
 		return bShipSmokeAsked || CVarShipSmoke.GetValueOnGameThread() != 0;
 	}
 
+	// (Release 2, surf on the coasts: the art director's campaign map upgrade 4, 25 November 2026, on Brian's "I want this to
+	// visually wow people on how smooth and realistic and detailed grand it looks".) Breakers roll in on an open coast:
+	// white arcs that rise some fifty units out, come in over five seconds and die on the beach, in three sets, bowed
+	// and broken along their length, lively where the ocean runs in and all but still in a bay's lee. They are a second
+	// sea material (M_SeaSurf: Tools/build_content.py, build_sea with SEA_BREAKERS; its cloud test Tools/sea_surf), so
+	// that the sea without them pays nothing for them. Off as it comes, until Brian has seen the Mac's film of it;
+	// "-TheaterSurf" turns it on for that film, switch or no switch. The switch is read as the table is laid (every
+	// sea paint is made from one parent then): changed in play, it shows at the next campaign. Its measure is seen at
+	// once. Without the asset (Tools/build_content.sh makes it) the sea is M_Sea as before, and the log says so.
+	TAutoConsoleVariable<int32> CVarSurf(
+		TEXT("tc.Map.Surf"), 0,
+		TEXT("1: breakers roll in on the map's open coasts (the sea is drawn with M_SeaSurf; read as the table is laid, so a change shows at the next campaign; without that asset the sea is as before); 0: the sea as before."));
+	TAutoConsoleVariable<float> CVarSurfMuch(
+		TEXT("tc.Map.SurfMuch"), 1.0f,
+		TEXT("With tc.Map.Surf: how strong the breakers are, 0 (none: the sea as before) to 2. Seen at once."));
+
+	bool SurfWanted()
+	{
+		static const bool bSurfAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterSurf"));
+		return bSurfAsked || CVarSurf.GetValueOnGameThread() != 0;
+	}
+
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
 	const TCHAR* HighlightMaterialPath = TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight");
@@ -2374,6 +2396,20 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	SeaScalar(TEXT("Swell"), 1.3f * Hour * Swelling * Moves);
 	SeaScalar(TEXT("Chop"), 0.55f * Hour * Chopping * Moves);
 	SeaScalar(TEXT("Shallows"), (1.0f - Moon) * Chopping * Moves); // (no flicker in the shallows by night)
+	// (Release 2, tc.Map.Surf: the breakers' measure. They go with the chop as the eye rises, for from the top lines
+	// so thin crawl like static. M_Sea has no such number, and to it this is nothing. Switched off in play, they are
+	// put out once, and nothing more is set.)
+	static bool bBreakersShown = false;
+	if (SurfWanted())
+	{
+		SeaScalar(TEXT("Breakers"), FMath::Clamp(CVarSurfMuch.GetValueOnGameThread(), 0.0f, 2.0f) * Chopping * FMath::Min(Moves, 1.0f));
+		bBreakersShown = true;
+	}
+	else if (bBreakersShown)
+	{
+		SeaScalar(TEXT("Breakers"), 0.0f);
+		bBreakersShown = false;
+	}
 	LandScalar(TEXT("WatersMove"), Hour * Chopping * FMath::Min(Moves, 1.5f)); // (the land's painted lakes and rivers: the sea's recipe, weaker)
 	SeaScalar(TEXT("Glints"), FMath::Lerp(1.0f, 0.7f, Moon) * FMath::Min(Moves, 1.0f));
 	SeaScalar(TEXT("GlintElsewhere"), FMath::Lerp(0.1f, 0.0f, Moon)); // (by night one band and none outside it)
@@ -2772,7 +2808,20 @@ void ACampaignMapActor::LoadMaterials()
 
 	// The land and the sea take their colour from pictures painted in PaintGround.
 	LandMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Land.M_Land")), this);
-	SeaMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Sea.M_Sea")), this);
+	UMaterialInterface* SeaParent = Load(TEXT("/Game/Campaign/Materials/M_Sea.M_Sea"));
+	if (SurfWanted())
+	{
+		// (Release 2, tc.Map.Surf: the sea with breakers. The world's sea and every fine sheet's take this one's parent.)
+		if (UMaterialInterface* WithBreakers = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_SeaSurf.M_SeaSurf")))
+		{
+			SeaParent = WithBreakers;
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Surf: tc.Map.Surf is on, but M_SeaSurf is missing (run Tools/build_content.sh to make it). The sea is drawn as before."));
+		}
+	}
+	SeaMaterial = UMaterialInstanceDynamic::Create(SeaParent, this);
 	{
 		// "-TheaterNightSea=grey,surf,r,g,b,liftr,liftg,liftb" and "-TheaterNightRiver=r,g,b" try another grading of
 		// the water by moonlight; "-TheaterNightGlow=wash,line" other strengths for the wash under a lit town and the

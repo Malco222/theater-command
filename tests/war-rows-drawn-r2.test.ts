@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import counting from '../data/campaign/counting.json';
 import { divisionsOf } from '../src/campaign/armies';
-import { DRAWN, countingFor, drawnWatch, recordCount } from '../src/campaign/drawn';
+import { DRAWN, countingFor, drawnWatch, ownShare, recordCount } from '../src/campaign/drawn';
 import { signPeace } from '../src/campaign/diplomacy';
 import { createGame, relocate, removeCorps, setWar, startPhase } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -340,6 +340,9 @@ describe('the Army of the Po: ten of the record\'s divisions in the game\'s thre
     expect(back).not.toBeNull();
     const po = corps(back, 'ITA', 'Army of the Po')!, a = corps(back, 'ITA', ARIETE)!;
     expect(po.out).toBe(1);
+    // (And what of its establishment is still its own: the drafts read it.)
+    expect(po.outOf).toBe(10);
+    expect(ownShare(po)).toBeCloseTo(0.9, 9);
     expect(a.drew).toEqual([{ name: [ARIETE, expect.any(String)], no: expect.any(Number), from: po.id, rec: 1 }]);
     expect(back.flags[`lent:${rowAt('ITA', ARIETE)}`]).toBe(a.id);
   });
@@ -475,6 +478,13 @@ describe('Romania: the armies of the Don are the board\'s own corps', () => {
     }
     g.supplyDirty = true;
     month(g, 'ROM', 21);
+    // (By the rows' months the front stands far to the east: no Romanian corps stands beside the enemy. A corps in a
+    // fight keeps its divisions, the design director's ruling of 18:47Z, read on its own below.)
+    for (const c of g.corps.filter((x) => x.nat === 'ROM' && !x.dead)) for (const j of [c.reg, ...g.regions[c.reg].nb]) {
+      if (g.regions[j].ctrl !== 'SOV') continue;
+      g.regions[j].ctrl = 'GER';
+      for (const u of g.corps.filter((x) => x.reg === j && !x.dead && x.nat === 'SOV')) removeCorps(g, u);
+    }
     return w;
   }
   const A = '3rd Army: I and II Corps', B = '3rd Army: IV and V Corps', C = '4th Army: VI Corps', D = '4th Army: VII Corps';
@@ -511,40 +521,80 @@ describe('Romania: the armies of the Don are the board\'s own corps', () => {
     for (const c of [ii, third, fourth, v]) expect(['Don Bend', 'Kalmyk Steppe']).toContain(place(g, c));
   });
 
-  it('the war over, each division goes back to the corps it came out of, and a corps that came itself has its own name and orders again', () => {
+  it('the war over, a division goes back to the corps it came out of where they stand together; one apart stands on, a corps of its own, free; a corps that came itself has its own name and orders again (the design director, 19:03Z)', () => {
     const { g } = don();
-    const ii = corps(g, 'ROM', 'II Corps')!, v = corps(g, 'ROM', 'V Corps')!, third = corps(g, 'ROM', '3rd Army')!, fourth = corps(g, 'ROM', '4th Army')!;
+    const ii = corps(g, 'ROM', 'II Corps')!, v = corps(g, 'ROM', 'V Corps')!, third = corps(g, 'ROM', '3rd Army')!, fourth = corps(g, 'ROM', '4th Army')!, cav = corps(g, 'ROM', 'Cavalry Corps')!;
+    const cavNames = names(g, cav);
     const before = fieldDivs(g, 'ROM');
     month(g, 'ROM', 37);
     month(g, 'ROM', 38);
     // While the war lasts nothing goes back.
     month(g, 'ROM', 39);
     expect(corps(g, 'ROM', A)).toBe(ii);
+    // The II Corps and the 3rd Army stand together on the Don Bend; the V Corps stands on the Kalmyk Steppe, apart
+    // from its two divisions in the 3rd Army's row.
+    expect(place(g, ii)).toBe('Don Bend');
+    expect(place(g, third)).toBe('Don Bend');
+    expect(place(g, v)).toBe('Kalmyk Steppe');
+    const vTwo = names(g, third).filter((n) => !['4th Infantry Division', '5th Infantry Division'].includes(n));
+    expect(vTwo).toHaveLength(2);
     signPeace(g, 'GER', 'SOV');
     month(g, 'ROM', 40);
     expect(ii.name).toBe('II Corps');
     expect(third.name).toBe('3rd Army');
     expect(fourth.name).toBe('4th Army');
     expect(v.name).toBe('V Corps');
-    // The 3rd Army has its division back from the II Corps, and the V Corps its two from the 3rd Army: as they stood.
+    // The 3rd Army has its division back from the II Corps, standing with it: as they stood.
     expect(ii.divs).toBe(3);
     expect(third.divs).toBe(3);
+    expect(names(g, third)).not.toEqual(expect.arrayContaining(vTwo));
     expect(fourth.divs).toBe(3);
-    // (The Cavalry Corps was broken up into the row: its two divisions have no corps to go back to, and stand on.)
-    expect(v.divs).toBe(5);
+    // The V Corps' two stand on where they are, on the Don Bend, a corps of their own under their own names, free
+    // for the staff, which may send them home by the rules: no return moves a division for free.
+    const apart = g.corps.filter((c) => c.nat === 'ROM' && !c.dead && c !== third && names(g, c).some((n) => vTwo.includes(n)));
+    expect(apart).toHaveLength(1);
+    expect(names(g, apart[0])).toEqual(vTwo);
+    expect(place(g, apart[0])).toBe('Don Bend');
+    expect(apart[0].hold).toBe(false);
+    expect(apart[0].name).toBe(`${vTwo.map((n) => n.replace(/ Infantry Division$/, '')).join(' and ')} Infantry Divisions`);
+    expect(v.divs).toBe(1);
+    // (The Cavalry Corps was broken up into the row: its two divisions have no corps to go back to, and stand on where
+    // they are as a corps of their own.)
+    const horse = g.corps.filter((c) => c.nat === 'ROM' && !c.dead && names(g, c).some((n) => cavNames.includes(n)));
+    expect(horse).toHaveLength(1);
+    expect(horse[0]).not.toBe(v);
+    expect(names(g, horse[0])).toEqual(cavNames);
+    expect(place(g, horse[0])).toBe('Kalmyk Steppe');
+    expect(horse[0].hold).toBe(false);
     expect(third.hold).toBe(true);
     expect(ii.hold).toBe(false);
-    for (const c of [ii, third, fourth, v]) { expect(c.drew).toBeUndefined(); expect(c.rowed).toBeUndefined(); }
+    for (const c of [ii, third, fourth, v, apart[0], horse[0]]) { expect(c.drew).toBeUndefined(); expect(c.rowed).toBeUndefined(); }
     for (const name of [A, B, C, D]) expect(g.flags[`lent:${rowAt('ROM', name)}`], name).toBe(-1);
     expect(fieldDivs(g, 'ROM')).toBe(before);
     // Nothing is told again, and nothing more moves.
     month(g, 'ROM', 41);
     expect(third.divs).toBe(3);
+    expect(apart[0].divs).toBe(2);
+  });
+
+  it('where they stand together, the V Corps has its two back from the 3rd Army', () => {
+    const { g } = don();
+    const v = corps(g, 'ROM', 'V Corps')!, third = corps(g, 'ROM', '3rd Army')!;
+    month(g, 'ROM', 37);
+    month(g, 'ROM', 38);
+    relocate(g, v, g.regions[third.reg]);
+    signPeace(g, 'GER', 'SOV');
+    month(g, 'ROM', 40);
+    expect(v.name).toBe('V Corps');
+    expect(third.divs).toBe(3);
+    // Its own last division and the two the 3rd Army had; the Cavalry Corps' two, whose corps is no more, are apart.
+    expect(v.divs).toBe(3);
+    expect(g.corps.filter((c) => c.nat === 'ROM' && !c.dead && c.born === 40)).toHaveLength(1);
   });
 });
 
 describe('the war\'s end, for what a row raised new', () => {
-  it('Pistoia and La Spezia: the war with America over, La Spezia, raised new, stays with the corps, and Pistoia stands on in Tunisia', () => {
+  it('Pistoia and La Spezia: the war with America over, La Spezia, raised new, stays with the corps; Pistoia, apart from the 1st Army, stands on in Tunisia, a corps of its own', () => {
     const { g } = war([['ITA', 'UK'], ['ITA', 'USA']]);
     g.byName['Tunis'].ctrl = 'ITA';
     month(g, 'ITA', monthOf('ITA', PISTOIA));
@@ -555,15 +605,22 @@ describe('the war\'s end, for what a row raised new', () => {
     month(g, 'ITA', monthOf('ITA', PISTOIA) + 1);
     expect(c.dead).toBeFalsy();
     expect(g.corps).toContain(c);
-    expect(names(g, c)).toEqual(['Pistoia Division', 'La Spezia Division']);
+    expect(names(g, c)).toEqual(['La Spezia Division']);
+    // (The row's corps keeps the row's name and orders: the design director's 19:03Z, 2.)
+    expect(c.name).toBe(PISTOIA);
     expect(c.drew).toBeUndefined();
     expect(c.rowed).toBeUndefined();
+    const p = corps(g, 'ITA', 'Pistoia Division')!;
+    expect(p).toBeDefined();
+    expect(names(g, p)).toEqual(['Pistoia Division']);
+    expect(p.reg).toBe(c.reg);
+    expect(p.hold).toBe(false);
     expect(g.flags[`lent:${i}`]).toBe(-1);
   });
 });
 
 describe('the war\'s end, for a division drawn by share', () => {
-  it('in another theatre than the corps it came out of, it stands on where it is, and the row\'s corps keeps its name and orders', () => {
+  it('apart from the corps it came out of, it stands on where it is under its own name, free for its staff (the design director, 19:03Z)', () => {
     const { g } = war(ITALY_UK);
     const po = corps(g, 'ITA', 'Army of the Po')!;
     month(g, 'ITA', monthOf('ITA', ARIETE));
@@ -572,7 +629,7 @@ describe('the war\'s end, for a division drawn by share', () => {
     month(g, 'ITA', monthOf('ITA', ARIETE) + 1);
     expect(a.dead).toBeFalsy();
     expect(a.name).toBe(ARIETE);
-    expect(a.hold).toBe(true);
+    expect(a.hold).toBe(false);
     expect(a.drew).toBeUndefined();
     expect(po.divs).toBe(3);
     // The record's division is out of the Army of the Po for good.
@@ -580,7 +637,7 @@ describe('the war\'s end, for a division drawn by share', () => {
     expect(g.flags[`lent:${rowAt('ITA', ARIETE)}`]).toBe(-1);
   });
 
-  it('in the same theatre it goes back as a division of its own, and the corps counts the record\'s divisions as its own again', () => {
+  it('standing together, it goes back as a division of its own, and the corps counts the record\'s divisions as its own again', () => {
     const { g } = war(ITALY_UK);
     const po = corps(g, 'ITA', 'Army of the Po')!;
     month(g, 'ITA', monthOf('ITA', ARIETE));
@@ -599,6 +656,31 @@ describe('the war\'s end, for a division drawn by share', () => {
     // (No man is lost by it: the drafts of the month can only have added.)
     expect(po.divs * po.str).toBeGreaterThanOrEqual(men - 1e-9);
     expect(g.corps.filter((c) => c.nat === 'ITA' && !c.dead).length).toBeLessThan(laidOff + 1);
+  });
+});
+
+describe('the drafts, for a corps drawn by share (the design director, 19:03Z: price once, carried past the first day)', () => {
+  it('make good only what is still the corps\' own: the Army of the Po fills to nine tenths, and Ariete, a division, fills whole', () => {
+    const { g } = war(ITALY_UK);
+    const po = corps(g, 'ITA', 'Army of the Po')!;
+    const m = monthOf('ITA', ARIETE);
+    month(g, 'ITA', m);
+    const a = corps(g, 'ITA', ARIETE)!;
+    expect(po.out).toBe(1);
+    expect(ownShare(po)).toBeCloseTo(0.9, 9);
+    expect(ownShare(a)).toBe(1);
+    // Both worn by a hard winter: the drafts make each good, the Po army to what is still its own.
+    po.str = 0.5;
+    const had = a.str;
+    for (let t = m + 1; t <= m + 12; t++) { po.supplied = true; month(g, 'ITA', t); expect(po.str, `month ${t}`).toBeLessThanOrEqual(0.9 + 1e-9); }
+    expect(po.str).toBeGreaterThan(0.5);
+    expect(a.str).toBeGreaterThan(had);
+  });
+
+  it('a corps never drawn by share is made good whole, as always', () => {
+    const { g } = war(ITALY_UK);
+    const po = corps(g, 'ITA', 'Army of the Po')!;
+    expect(ownShare(po)).toBe(1);
   });
 });
 

@@ -48,7 +48,7 @@ import { inTheWay, pacificGround, runQuays } from './pacific';
 import { roomAt } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { AIRNAMES_STAGE, ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FERRY_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, OFFERS_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE } from './stage';
+import { AIRNAMES_STAGE, ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FERRY_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, OFFERS_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -247,6 +247,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (CONVOY_STAGE) g.flags.convoyBattle = 1;
   // The honest win chance on land (release 2, auto-resolve fix 1): set at a campaign's start only, where stage.json switches it on.
   if (WINCHANCE_STAGE) g.flags.winChance = 1;
+  // True reach on the old chart (game.ts trueReach): a step of Units decide, set at a campaign's start only, where stage.json switches both on.
+  if (UNITS_STAGE && TRUEREACH_STAGE) g.flags.trueReach = 1;
   // A neutral's bargains (release 2): only where stage.json switches them on.
   openBargains(g);
   openGovernment(g);
@@ -1366,11 +1368,16 @@ function frontsKept(g: Game, nat: string, real: Front[]): void {
       if (!elsewhere.has(e) && !(g.turn <= flag(g, `st:push:${nat}`) && flag(g, `st:pushed:${nat}:${e}`))) delete g.flags[k];
     }
   }
-  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten.)
+  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten. One walk
+  // over the flags for this and the marks below: the two kinds of key share no key, and neither reads the other's.)
   const word = `st:on:${nat}:`;
-  for (const k of Object.keys(g.flags)) if (k.startsWith(word) && k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
   const mine = [`${MARK.on}:${nat}:`, `${MARK.rest}:${nat}:`, `${MARK.idle}:${nat}:`];
   for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('st:')) continue;
+    if (k.startsWith(word)) {
+      if (k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
+      continue;
+    }
     const pre = mine.find((m) => k.startsWith(m));
     if (!pre) continue;
     // (A rest lasts its months whatever becomes of the front, and is forgotten when it is over.)

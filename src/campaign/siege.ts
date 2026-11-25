@@ -22,14 +22,14 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
 import { farGuard, farGuardRow, type FarGuardRow } from './economy';
 import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
 import { armyOf } from './joint';
-import { closedTo, seaOpenAt } from './navy';
+import { closedTo, openSeas, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss, willBurn } from './prizes';
@@ -290,23 +290,68 @@ export function portElsewhere(g: Game, nat: string, not: number[]): boolean {
   return false;
 }
 
-/** True where the defenders' ships can still bring food into the harbour: such a town is never starved. */
-export function fedBySea(g: Game, r: Region): boolean {
-  return feeders(g, r).some((id) => seaOpenAt(g, id, r));
+/**
+ * The seas nation x's ships reach carrying nation forNat's stores (true reach), one bit a sea, as the supply picture's
+ * own lanes give them: x's own lanes where forNat is x, and otherwise x's lanes walked with every sea closed to forNat
+ * closed to them as well (navy.ts openSeas, its `carrying`). The supply picture hands the siege its kept answers
+ * (game.ts computeSupply); every other reader takes seaReach, a fresh walk.
+ */
+export type SeaReach = (x: string, forNat: string) => Uint8Array;
+
+/** The fresh walk of SeaReach: x's lanes from where its ships set out this month, carrying forNat's stores. */
+export const seaReach = (g: Game, x: string, forNat: string): Uint8Array => openSeas(g, x, undefined, undefined, undefined, undefined, x === forNat ? undefined : forNat);
+
+/**
+ * Fresh walks kept for one reading only (one siegeView or siegesNow call): each (feeder, holder) is walked once however
+ * many towns or questions ask it, and nothing is kept past the call.
+ */
+const walkedOnce = (g: Game): SeaReach => {
+  const seen = new Map<string, Uint8Array>();
+  return (x, forNat) => {
+    const k = `${x} ${forNat}`;
+    let o = seen.get(k);
+    if (!o) seen.set(k, o = seaReach(g, x, forNat));
+    return o;
+  };
+};
+
+/**
+ * True where the defenders' ships can still bring food into the harbour: such a town is never starved.
+ *
+ * Under true reach (game.ts trueReach; the design director's rulings of 13:58Z, 14:26Z and 17:35Z, 25 November 2026)
+ * one town has one larder and one reach, and the reach is the holder's: the town is fed when the ships of one of its
+ * feeders, carrying the holder's stores, reach a sea off the harbour by the supply picture's own lanes. Paper reach is
+ * not reach: a sea off the harbour open to the feeder and the holder feeds nothing while the feeder's ships cannot sail
+ * there. (A sea closed to the feeder or to the holder is never open in that walk, so the town is never fed through it.)
+ * Every corps inside eats from the town, whoever's it is, and the holder needs no corps of its own inside. `reach`, if
+ * given, answers the walks (the supply picture's kept lanes); absent, each is walked afresh. Off, a sea off the harbour
+ * not closed to a feeder is enough.
+ */
+export function fedBySea(g: Game, r: Region, reach?: SeaReach): boolean {
+  if (!trueReach(g)) return feeders(g, r).some((id) => seaOpenAt(g, id, r));
+  const by = reach ?? ((x: string, id: string) => seaReach(g, x, id));
+  return feeders(g, r).some((x) => { const o = by(x, r.ctrl); return r.seas.some((z) => o[z] === 1); });
 }
 
 /** True where the town's stores do not run down however closely it is ringed: ships still reach it, or the book feeds it (history.json 'restraint'). */
-export const fed = (g: Game, r: Region): boolean => fedBySea(g, r) || fedByBook(g, r);
+export const fed = (g: Game, r: Region, reach?: SeaReach): boolean => fedBySea(g, r, reach) || fedByBook(g, r);
 const fedFrom = fed;
 
 /** True for a town the book feeds against the ring round it now: Leningrad against a computer Germany, at stops 1 and 2. */
 // (Each besieger by the army it fights in: a corps lent to a player stands in the player's ring.)
 export const fedByBook = (g: Game, r: Region): boolean => besieged(g, r) && bookFed(g, r.name, r.ctrl, [...new Set(besiegers(g, r).map(armyOf))]);
 
-/** The seas the town's food comes in by: those off its harbour that are still open to someone who feeds it. Close them all and it starves like any other. */
-export function feedingSeas(g: Game, r: Region): number[] {
+/**
+ * The seas the town's food comes in by: those off its harbour that are still open to someone who feeds it. Close them
+ * all and it starves like any other. Under true reach, those some feeder's ships reach carrying the holder's stores
+ * (fedBySea); `reach` as there.
+ */
+export function feedingSeas(g: Game, r: Region, reach?: SeaReach): number[] {
   const who = feeders(g, r);
-  return r.seas.filter((z) => who.some((id) => !closedTo(g, z, id)));
+  if (!trueReach(g)) return r.seas.filter((z) => who.some((id) => !closedTo(g, z, id)));
+  const by = reach ?? ((x: string, id: string) => seaReach(g, x, id));
+  const open = who.map((x) => by(x, r.ctrl));
+  return r.seas.filter((z) => open.some((o) => o[z] === 1));
 }
 
 const strength = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
@@ -332,7 +377,7 @@ export function ringClosed(g: Game, r: Region): boolean {
 }
 
 /** True while the garrison still eats: the stores last, or ships still come in. */
-export const garrisonFed = (g: Game, r: Region): boolean => !besieged(g, r) || monthsShut(g, r) <= storesOf(g, r) || fed(g, r);
+export const garrisonFed = (g: Game, r: Region, reach?: SeaReach): boolean => !besieged(g, r) || monthsShut(g, r) <= storesOf(g, r) || fed(g, r, reach);
 
 // ---- A pocket: part of a country cut off from the rest of it ------------------------------------
 //
@@ -1097,15 +1142,18 @@ export function siegeEmpties(g: Game): void {
   }
 }
 
-/** Marks which garrisons still eat. Called whenever the supply picture is drawn. */
-export function siegeSupply(g: Game): void {
+/**
+ * Marks which garrisons still eat. Called whenever the supply picture is drawn, which hands it the seas its lanes reach
+ * under true reach (`reach`, SeaReach), so that the siege reads the very voyage the quays are drawn by.
+ */
+export function siegeSupply(g: Game, reach?: SeaReach): void {
   if (!siegeRules(g)) return;
   for (const r of g.regions) {
     if (!r.garr || !r.garr.length || !besieged(g, r)) continue;
-    const fed = garrisonFed(g, r);
+    const fed = garrisonFed(g, r, reach);
     // (A fortress crew inside eats none of the town's stores, the fortress rows' 06:15Z (b): it lives on its own, and
     // is fed only where food still reaches the town from outside, by sea or across a lake.)
-    const outside = r.garr.some((c) => fortRow(g, c)) ? fedFrom(g, r) : false;
+    const outside = r.garr.some((c) => fortRow(g, c)) ? fedFrom(g, r, reach) : false;
     for (const c of r.garr) c.supplied = fortRow(g, c) ? outside : fed;
   }
 }
@@ -1216,12 +1264,18 @@ export interface SiegeView {
   lines: string[];
 }
 
-/** The town of a province as a fortress: what it holds, what it adds, and how its siege stands. Null outside the grand campaign. */
-export function siegeView(g: Game, region: number): SiegeView | null {
+/**
+ * The town of a province as a fortress: what it holds, what it adds, and how its siege stands. Null outside the grand
+ * campaign. Under true reach whether ships still feed it is asked only of a town under siege (as whether the book feeds
+ * it is), since only there does it count, and each feeder's voyage is walked once for the call (`reach`, from siegesNow
+ * for every town it reads). Off, it is asked of every town, as before.
+ */
+export function siegeView(g: Game, region: number, reach?: SeaReach): SiegeView | null {
   const r = g.regions[region];
   if (!r || !siegeRules(g)) return null;
   const size = townSize(g, r), by = besiegerOf(g, r);
-  const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = fedBySea(g, r), byBook = fedByBook(g, r);
+  const walk = trueReach(g) ? reach ?? walkedOnce(g) : undefined;
+  const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = !walk ? fedBySea(g, r) : !!by && fedBySea(g, r, walk), byBook = fedByBook(g, r);
   const inside = garrisonOf(r).length, guard = guardOf(g, r), bonus = townBonus(g, r), broken = breachOf(g, r);
   const left = Math.max(0, stores - shut);
   const clock = by ? crewClock(g, r) : null;
@@ -1234,7 +1288,7 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   if (driveOut(g) && inside && !by) lines.push('The garrison will hold the town after the field is lost: it must then be stormed or starved out.');
   if (by) {
     const closed = ringClosed(g, r);
-    const seas = bySea ? feedingSeas(g, r).map((z) => g.seas[z].name) : [];
+    const seas = bySea ? feedingSeas(g, r, walk).map((z) => g.seas[z].name) : [];
     lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by ${seaWhatList(seas)}` : ''}: the town cannot be starved while they do.${byBook ? ' Food comes in across the lake as well, so closing the sea would not starve it.' : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`}`
       : byBook ? 'Food still comes in across the lake: however close the ring, the town is not starved while no player\'s troops stand in it.'
       : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
@@ -1260,8 +1314,8 @@ export function siegeView(g: Game, region: number): SiegeView | null {
 /** Every town under siege, for a map to mark. */
 export function siegesNow(g: Game): SiegeView[] {
   if (!siegeRules(g)) return [];
-  const out: SiegeView[] = [];
-  for (const r of g.regions) if (besieged(g, r)) out.push(siegeView(g, r.id)!);
+  const out: SiegeView[] = [], walk = trueReach(g) ? walkedOnce(g) : undefined;
+  for (const r of g.regions) if (besieged(g, r)) out.push(siegeView(g, r.id, walk)!);
   return out;
 }
 
