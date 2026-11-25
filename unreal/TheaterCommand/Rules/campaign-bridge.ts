@@ -4676,6 +4676,23 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
     ].filter(Boolean),
     buttons: [],
   }));
+  // (1.5.3, the release review) A fleet the player's side has not found at all (an old page, a fleet since lost from
+  // sight) is refused, and the card says nothing of where it is: not its sea, not whether it is in harbour, and not the
+  // fleets of either side that would fight beside it there. Only the fleet that was to be sent is shown.
+  if (!them) {
+    const why = p.why ?? 'No such enemy fleet is known.';
+    return {
+      id: `fleetattack:${id}:${target}`, title: 'ATTACK THE ENEMY FLEET?', headline: why, note: `${card.name} against the enemy fleet.`,
+      top: [
+        { label: 'SEND THEM IN', act: `fleetattack:${id}:${target}`, ok: false, tip: why, danger: false },
+        { label: 'CALL IT OFF', act: `goto:fleet:${id}`, ok: true, tip: 'The fleet stays where it is, in your hand.' },
+      ],
+      sections: [
+        { heading: 'YOUR SHIPS', text: '', rows: side(p.ours.fleets.filter((x) => x.id === id), true) },
+        { heading: 'THE ODDS', text: 'Nothing of his strength is known: the odds cannot be given.', rows: [] },
+      ].filter((x) => x.rows.length || x.text),
+    };
+  }
   const ticket: PageRow[] = p.lines.map((l) => ({ nat: '', title: l.label, lines: [l.value, l.effect ?? ''].filter(Boolean), buttons: [] }));
   const losses: PageRow[] = p.odds ? [
     { nat: card.nat, title: 'You are likely to lose', lines: [likely(p.likely.ours as unknown as Record<string, number>, p.risk.ours), range(p.range.ours as unknown as Record<string, number>[], true)], buttons: [] },

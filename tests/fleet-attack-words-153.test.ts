@@ -1,7 +1,7 @@
 // Release 1.5.3: the fleet attack card's words (the 1.5.1 playtest, findings 25, 26 and 33). Words only, and the sea
 // report's strength line: no rule reads any of them, and the card stays a forecast that throws no die.
 //   25  a fleet the player's side has only reported keeps its name, its port and what it is about to itself, in every
-//       refusal and on the card;
+//       refusal and on the card; and of a fleet not found at all, the card says nothing of where it is;
 //   26  "1 ship", not "1 ships", on the card and in the month's sea forecast; the losses listed with "and" before the
 //       last, and their range said plainly; a battleship or carrier the likely count rounds away, though it may well go
 //       down, named on that line; and in the sea report, "The Battle Fleet was caught at anchor" (not "The the"), and each
@@ -15,7 +15,7 @@ import { detach } from '../src/campaign/fleets';
 import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan } from '../src/campaign/fleetattack';
 import { setFog } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { NAVY, cutOff, fleetName, sail, zoneOf } from '../src/campaign/navy';
+import { NAVY, cutOff, fleetName, sail, shipCount, surfaceShips, zoneOf } from '../src/campaign/navy';
 import { oddsSwing, oddsWord, planSeaBattle } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, fleetOptions, humanUp, stepAI } from '../src/campaign/turn';
@@ -236,6 +236,59 @@ describe('25: a fleet only reported stays unnamed', () => {
       expect(w).not.toContain(real.port);
       expect(w).not.toContain(real.name);
     }
+  });
+
+  it('a fleet not found at all: the card refuses it and says nothing of where it is', () => {
+    // (The 1.5.3 review) GER from 1, seed 11: the card for the Dover Fleet, not found, said "in the English Channel".
+    TC.start({ human: 'GER', from: 1, seed: 11, view: 'grand', depth: 'theatre' });
+    let g = loadGame(TC.save().text)!;
+    const mine = g.fleets.filter((f) => f.nat === 'GER' && surfaceShips(f) > 0);
+    let unseen = 0;
+    for (const t of g.fleets.filter((x) => atWar(g, x.nat, 'GER') && shipCount(x.ships) > 0 && fleetKnown(g, x, 'GER') === 'none')) {
+      for (const f of mine) {
+        const p = TC.page(`fleetattack:${f.id}:${t.id}`) as Page | null;
+        if (!p) continue;
+        unseen++;
+        const sea = planFleetAttack(g, f.id, t.id)!.zoneName;
+        expect(p.headline).toBe('No such enemy fleet is known.');
+        expect(p.note).toBe(`${f.name} against the enemy fleet.`);
+        expect(p.top[0]).toMatchObject({ label: 'SEND THEM IN', ok: false, tip: 'No such enemy fleet is known.' });
+        expect(p.sections.map((x) => x.heading)).toEqual(['YOUR SHIPS', 'THE ODDS']);
+        for (const w of words(p)) for (const said of [sea, t.name, t.port, 'harbour', '0 forces'].filter(Boolean)) expect(w, p.id).not.toContain(said);
+      }
+    }
+    expect(unseen).toBeGreaterThan(0);
+    // A British squadron in contact this month patrols the English Channel beside the Dover Fleet, which nobody has
+    // found: the card names neither the sea nor the squadron, and the German fleet patrolling there is not on it either.
+    let checked = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      g = germany(seed);
+      const battle = fleet(g, 'Battle Fleet'), dover = fleet(g, 'Dover Fleet'), z = zoneOf(g, 'channel');
+      sail(g, dover, z, 'patrol');
+      dover.seen = {};
+      const sq = detach(g, dover, { dd: 2 })!;
+      sail(g, sq, z, 'patrol');
+      sq.seen = { GER: g.turn };
+      const beside = detach(g, battle, { dd: 2 }, 'Scouting Group')!;
+      expect(sail(g, beside, z, 'patrol')).toBe(true);
+      if (fleetKnown(g, dover, 'GER') !== 'none' || fleetKnown(g, sq, 'GER') !== 'exact') continue;
+      checked++;
+      // (The rules still weigh up the squadron and the German fleet beside it: the card shows neither.)
+      const plan = planFleetAttack(g, battle.id, dover.id)!;
+      expect(plan.theirs.fleets.map((x) => x.id)).toEqual([sq.id]);
+      expect(plan.ours.fleets.map((x) => x.id)).toContain(beside.id);
+      TC.load(saveGame(g));
+      const p = TC.page(`fleetattack:${battle.id}:${dover.id}`) as Page;
+      expect(p.note).toBe('Battle Fleet against the enemy fleet.');
+      expect(p.sections.map((x) => x.heading)).toEqual(['YOUR SHIPS', 'THE ODDS']);
+      expect(p.sections[0].rows.map((r) => r.title)).toEqual([`Battle Fleet  \u00B7  ${shipCount(battle.ships)} ships`]);
+      for (const w of words(p)) for (const said of ['English Channel', dover.name, sq.name, beside.name]) expect(w, p.id).not.toContain(said);
+      // Sent at the squadron it has found, the card is as before.
+      const known = TC.page(`fleetattack:${battle.id}:${sq.id}`) as Page;
+      expect(known.note).toMatch(/^Battle Fleet against .+, in the English Channel\. /);
+      expect(known.sections.map((x) => x.heading)).toContain('HIS SHIPS, AS FAR AS YOU KNOW');
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });
 
