@@ -114,7 +114,9 @@ export interface Claim {
 export const drawnWatch: {
   tell: ((e: { turn: number; nat: string; row: string; place: string; lands: string; home: boolean; divs: number; claims: { name: string; from: string | null; id: number | null; at: string | null; stays: boolean; conv: string | null; share: boolean }[] }) => void) | null;
   laid: ((e: { turn: number; nat: string; row: string; corps: number; took: boolean; fresh: number; str: number; before: number; after: number }) => void) | null;
-} = { tell: null, laid: null };
+  /** Each drawn division at a loan's or a war's end: `back` it rejoined its corps; else `near` true where its corps lived in the same side theatre (it went back before the rulings of 19:03Z and 19:17Z). */
+  back: ((e: { turn: number; nat: string; name: string; war: boolean; back: boolean; near: boolean }) => void) | null;
+} = { tell: null, laid: null, back: null };
 
 const clamp = (x: number): number => Math.max(0, Math.min(1, x));
 
@@ -422,6 +424,7 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
     if (!rec) { if (war) keep.push(p); continue; }
     const own = rec.from === c.id || !!rec.conv;
     const parent = own ? undefined : g.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving(x));
+    if (!own) drawnWatch.back?.({ turn: g.turn, nat: c.nat, name: p.name[0], war, back: !!parent && parent.reg === c.reg, near: !!parent && g.regions[parent.reg].theatre === g.regions[c.reg].theatre });
     if (parent && parent.reg === c.reg) {
       back.set(parent, [...(back.get(parent) ?? []), p]);
       if (rec.rec) home.set(parent, (home.get(parent) ?? 0) + rec.rec);
