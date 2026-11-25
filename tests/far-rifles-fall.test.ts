@@ -91,4 +91,13 @@ describe("a seller's fall is news once", () => {
       `T10 ${FELL}`,
     ]);
   });
+
+  it('fallen, then cut and freed while the seller stays fallen: told once only', () => {
+    const g = grand('CHN');
+    month(g);
+    capitulate(g, 'SOV', 'GER'); month(g);
+    g.byName.Lanchow.ctrl = 'JAP'; month(g);
+    g.byName.Lanchow.ctrl = 'CHN'; month(g); month(g);
+    expect(said(g).filter((x) => x.endsWith(FELL))).toEqual([`T3 ${FELL}`]);
+  });
 });
