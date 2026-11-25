@@ -301,6 +301,11 @@ namespace SeaParts
 	 */
 	static float TableLpf(const TSharedPtr<FJsonObject>& Mix, const FName& Family, double Metres)
 	{
+		// (read once per family for the life of the game, and only from a loaded mix: none loaded yet is not remembered)
+		if (!Mix.IsValid())
+		{
+			return 0.0f;
+		}
 		static TMap<FName, TArray<FVector2D>> Tables;
 		const TArray<FVector2D>* Rows = Tables.Find(Family);
 		if (!Rows)
