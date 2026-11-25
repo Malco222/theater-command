@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import armsText from '../src/campaign/arms.ts?raw';
 import {
-  ARMS, SHELVES, armsMonth, armsOf, armsView, countOn, draw, firstOf, gainOf, giveBack, has, peaceFooting, put, rowsFrom, seedFrom, stockOf, take, warFooting,
+  ARMS, SHELVES, armsMonth, armsOf, armsView, countOn, draw, everMoved, firstOf, gainOf, giveBack, has, peaceFooting, put, rowsFrom, seedFrom, stockOf, take, warFooting,
   type ArmsRows,
 } from '../src/campaign/arms';
 import { createGame } from '../src/campaign/game';
@@ -137,8 +137,16 @@ describe('the contract: a shelf with a figure and without', () => {
     const g = game();
     lay(A, { rifles: { start: 10 }, cadres: { start: 5 }, guns: { start: 2 } });
     expect(ours(g)).toEqual([]);
+    expect(everMoved(g, A, 'rifles')).toBe(false);
     draw(g, A, 'rifles', 1); draw(g, A, 'cadres', 1); draw(g, A, 'guns', 1);
     expect(ours(g)).toEqual(['sa:GER', 'sac:GER', 'sag:GER']);
+    expect(SHELVES.map((s) => everMoved(g, A, s))).toEqual([true, true, true]);
+    // Moved back to its first day, it has still been moved; a draw of nothing moves nothing.
+    giveBack(g, A, 'rifles', 1);
+    expect(stockOf(g, A, 'rifles')).toBe(10);
+    expect(everMoved(g, A, 'rifles')).toBe(true);
+    draw(g, B, 'rifles', 1);
+    expect(everMoved(g, B, 'rifles')).toBe(false);
   });
 
   it('armsOf: the rifles and guns a living corps carries at its strength, none for a dead one', () => {
@@ -185,6 +193,20 @@ describe("the month's gain", () => {
     peaceFooting(g, A);
     expect(g.flags['saw:GER']).toBeUndefined();
     expect(gainOf(g, A, 'rifles')).toBe(1);
+  });
+
+  it('the share held is read from 0 to 1, and as whole where it is not a number; a made gain below nothing is none, the works still come', () => {
+    const g = game();
+    const place = g.regions[g.nations[A].capital];
+    lay(A, { guns: { peace: 2 }, rifles: { peace: 1, war: -3, works: [{ place: place.name, gain: 0.5 }] } });
+    expect(gainOf(g, A, 'guns', 2)).toBe(2);
+    expect(gainOf(g, A, 'guns', Infinity)).toBe(2);
+    expect(gainOf(g, A, 'guns', NaN)).toBe(2);
+    expect(gainOf(g, A, 'guns', -1)).toBe(0);
+    expect(gainOf(g, A, 'rifles')).toBe(1.5);
+    warFooting(g, A);
+    expect(gainOf(g, A, 'rifles')).toBe(0.5);
+    expect(gainOf(g, A, 'rifles', 0.5)).toBe(0.5);
   });
 
   it("with no 'turn' the war figure comes at once; a missing 'war' reads as 'peace'; no war figure anywhere, no footing written", () => {

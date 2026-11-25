@@ -55,6 +55,9 @@ let SEED: DepotSeed | null = null;
 /**
  * Registers a row source: fn(g, nat) gives that nation's rows, or undefined. The latest registered is asked first, and
  * a source that gives no row for a shelf leaves that shelf to the next. Returns the call that takes the source away.
+ * A source must not throw: every read of the shelves asks it. A row it gives for a shelf stands whole in place of the
+ * table's and the depot seed's, so a rifles row with gains and no 'start' stands at 0 on the first day, whatever the
+ * depots held: give it the start too.
  */
 export function rowsFrom(fn: RowSource): () => void {
   SOURCES.unshift(fn);
@@ -89,6 +92,9 @@ export const has = (g: Game, nat: string, shelf: Shelf): boolean => rowOf(g, nat
 export const firstOf = (g: Game, nat: string, shelf: Shelf): number => amount(num(rowOf(g, nat, shelf)?.start));
 
 // ---- The shelves ------------------------------------------------------------------------------------------------------
+
+/** True where a shelf has been moved since the first day (its flag stands); a shelf never moved stands at its first day. */
+export const everMoved = (g: Game, nat: string, shelf: Shelf): boolean => g.flags[kShelf[shelf](nat)] !== undefined;
 
 /** What stands on a shelf now, in divisions' worth (0 where the nation has no figure for it). */
 export function stockOf(g: Game, nat: string, shelf: Shelf): number {
