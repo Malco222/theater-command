@@ -22,7 +22,7 @@ $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$S
 # (against the show: the game's own SeaShow and its feed, as the sea show's cloud test builds them)
 $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/convoy_looks_show.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" \
-  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/convoy_looks_show"
+  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/convoy_looks_show"
 if [ "$#" -eq 0 ]; then
   set -- "$ROOT/Tools/sea_show/stand-ins/convoy-night.json" "$ROOT/Tools/sea_show/stand-ins/wolf-pack-surrender.json" "$ROOT/Tools/sea_show/stand-ins/wolf-pack-abeam.json" \
     "$ROOT/Tools/sea_show/stand-ins/wolf-pack-abandon.json"
