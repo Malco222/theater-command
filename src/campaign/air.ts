@@ -2271,7 +2271,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // the player read before the raid and the line he reads after it agree.)
     const n = Math.floor(over), flew = Math.round(a.att.reduce((s, x) => s + x.f.ftr, 0));
     const why = flew > n ? `only ${n} of the ${flew} sent could be over it` : `only ${n} ${n === 1 ? 'was' : 'were'} there`;
-    text = `${who} ${one ? 'flies' : 'fly'} over ${placeName(a.place)}, but no enemy fighters came up to meet ${one ? 'it' : 'them'}${held ? ': the sky there is still yours.' : n < AIR.sky.least ? `, and the sky is not won: it takes ${AIR.sky.least} still over it at the end, and ${why}.` : ', and the sky there is not won.'}`;
+    text = `${who} ${one ? 'flies' : 'fly'} over ${placeName(a.place)}, but no enemy fighters came up to meet ${one ? 'it' : 'them'}${held ? ': the sky there is still yours.' : n < AIR.sky.least ? `, and the sky is not won: it takes at least ${AIR.sky.least} fighters still over the target at the end, and ${why}.` : ', and the sky there is not won.'}`;
     rep.result = text;
   }
   // What changes something is told in full: the sky won, a ship sunk, a factory wrecked, a railway cut, a fleet or

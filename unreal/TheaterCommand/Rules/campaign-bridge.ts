@@ -3811,7 +3811,7 @@ function force(kind: string, id: number) {
   }
   return {
     name: f.name, nat: f.nat, mine,
-    lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base?.name ?? 'the field'}.`, doing], options,
+    lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base ? placeName(base.name) : 'the field'}.`, doing], options,
   };
 }
 
@@ -4375,7 +4375,7 @@ function rebasePage(s: Game, id: number): Page | null {
   }));
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  \u00B7  ${f.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
-    note: `${f.name} is based at ${base.name}. A group reaches farther into enemy country from an airfield nearer the front.`,
+    note: `${f.name} is based at ${placeName(base.name)}. A group reaches farther into enemy country from an airfield nearer the front.`,
     top: [{ label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' }], sections: [{ heading: 'AIRFIELDS', text: '', rows }],
   };
 }
@@ -5864,11 +5864,11 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     const before = f && t >= 0 ? previewAirOrder(s, f.id, m, t) : null;
     const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
-    note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
+    note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${placeName(airPlace(s, m, t))} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
     if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
-    note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
+    note = ok ? `The group moves to ${s.regions[Number(part[2])] ? placeName(s.regions[Number(part[2])].name) : 'its new airfield'}.` : 'It cannot move there now.';
   } else if (part[0] === 'fleet') {
     ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3] as Stance);
     note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : fleetWhyId(s, Number(part[1])) || 'That order cannot be given now.';

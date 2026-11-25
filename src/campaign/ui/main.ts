@@ -5900,7 +5900,7 @@ function airRow(f: AirFleet, mine: boolean, whose = false): string {
   const short = Math.max(0, f.est.ftr - f.ftr) + Math.max(0, f.est.bmr - f.bmr);
   const crowd = crowding(g, f);
   const tags: string[] = [];
-  if (crowd < 1) tags.push(`<span class="tag bad" title="More aircraft are based in ${esc(g.regions[f.base].name)} than its airfields can serve. Move a fleet to a neighbouring region.">Crowded airfields: flies ${Math.round(crowd * 100)}%</span>`);
+  if (crowd < 1) tags.push(`<span class="tag bad" title="More aircraft are based in ${esc(placeName(g.regions[f.base].name))} than its airfields can serve. Move a fleet to a neighbouring region.">Crowded airfields: flies ${Math.round(crowd * 100)}%</span>`);
   if (short > (f.est.ftr + f.est.bmr) * 0.2) tags.push(`<span class="tag bad">${num(short)} aircraft short</span>`);
   if (f.moved === g.turn) tags.push('<span class="tag">Moved this month</span>');
   const lost = f.lost.ftr + f.lost.bmr;
@@ -6224,7 +6224,7 @@ function airWarPane(me: string): string {
 /** Any air group as a row for a list, whoever it belongs to. */
 const myGroupRow = (f: AirFleet): GroupRow => (f.ship !== undefined ? groupRow(g, f) : airfieldAt(g, f.base)?.rows.find((x) => x.id === f.id) ?? {
   id: f.id, nat: f.nat, name: f.name, command: '', kind: f.bmr <= 0 ? 'ftr' : f.ftr <= 0 ? 'bmr' : 'mixed', ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
-  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, port: -1, ashore: f.ashore ?? -1, fleetName: '', where: `At ${g.regions[f.base].name}`, wingMove: null, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
+  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, port: -1, ashore: f.ashore ?? -1, fleetName: '', where: `At ${placeName(g.regions[f.base].name)}`, wingMove: null, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
 });
 
 /** The art director's signs for a raid by day and a raid by night: a sun and a moon, one filled path each in a 24 by 16 box. */
@@ -6337,13 +6337,13 @@ function airPlanCard(): string {
       // any other odds the band keeps its own words, and the line below the bar says the sky cannot be held; the
       // verdict is never coloured as a win while it cannot be.)
       const tooFew = smallOn(g) && a.E < AIR.sky.least && a.E > 0;
-      const short = `not enough fighters to hold it: it takes ${AIR.sky.least} still over it at the end`;
+      const short = `not enough fighters to hold it: it takes at least ${AIR.sky.least} fighters still over the target at the end`;
       const word = a.D <= 0 ? 'No fighters will come up'
         : fc.odds >= AIR.sky.win ? (tooFew ? `The sky is within reach, but ${short}` : fc.odds >= AIR.sky.win * 1.25 ? 'The sky is within reach' : 'The sky can be won, at a price')
         : fc.odds >= 1.2 ? 'A hard fight that wears them down' : fc.odds >= 0.8 ? 'An even fight' : 'The defenders have the edge';
       // (The UI director's second read, 05:38Z: the note ends as the raid card's own line does, with the player's number.)
       const over = Math.floor(a.E), sent = Math.round(a.att.reduce((n, x) => n + x.f.ftr, 0));
-      const few = tooFew && !(a.D > 0 && fc.odds >= AIR.sky.win) ? `<div class="note"><b>The sky.</b> Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.</div>` : '';
+      const few = tooFew && !(a.D > 0 && fc.odds >= AIR.sky.win) ? `<div class="note"><b>The sky.</b> Too few fighters to hold this sky: it takes at least ${AIR.sky.least} fighters still over the target at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.</div>` : '';
       const share = a.Epow + a.Dpow > 0 ? a.Epow / (a.Epow + a.Dpow) : 1;
       head = `<div class="verdict ${fc.odds >= AIR.sky.win && !tooFew ? 'win' : fc.odds >= 1.2 ? '' : 'loss'}" style="font-size:24px">${word}</div>${few}
         <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[f.nat].color}"></i><i style="flex:1;background:${defNat ? g.nations[defNat].color : 'var(--panel-3)'}"></i></div>

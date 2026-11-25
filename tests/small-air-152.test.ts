@@ -341,7 +341,7 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     expect(p.effects[0]).toMatch(/^Fighter odds /);
     expect(p.effects.some((e) => e.startsWith('Too few'))).toBe(false);
     // (The UI director ruled these words at 04:55Z: the short line where every fighter sent can be over the target.)
-    expect(p.tooFew).toBe(`Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`);
+    expect(p.tooFew).toBe(`Too few fighters to hold this sky: it takes at least ${AIR.sky.least} fighters still over the target at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`);
     expect(['Very likely to win the air fight', 'Likely to win the air fight', 'The air fight could go either way', 'Likely to lose the air fight', 'Very likely to lose the air fight']).toContain(p.verdict);
     // The bridge's page for the plan carries both: the headline and the note.
     const page = airPage(h, `plan:superiority:${t.id}:${p.picked.join('.')}`)!;
@@ -378,7 +378,7 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     one.ftr = 40;
     const Q = planRaid(h, 'superiority', big!.t, [one.id], 'GER');
     expect(Q.why).toBeNull();
-    expect(Q.tooFew).toMatch(/^Too few fighters to hold this sky: it takes 50 still over it at the end, and you are sending 40(\.|, of which only \d+ can be over it\.)$/);
+    expect(Q.tooFew).toMatch(/^Too few fighters to hold this sky: it takes at least 50 fighters still over the target at the end, and you are sending 40(\.|, of which only \d+ can be over it\.)$/);
   });
 
   it('his own fight for the sky that nobody came up to meet is told to him in one plain sentence', () => {
@@ -408,7 +408,7 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     expect(who).not.toBe('');
     const there = Math.floor(on.h.airFleets.filter((f) => r.att.some((x) => x.id === f.id)).reduce((s, f) => s + f.ftr, 0) + 1e-9);
     // (The UI director ruled these words at 04:55Z: the same two figures as the plan card's own line.)
-    expect(r.result).toMatch(new RegExp(`^${esc(who)} flies over ${esc(r.place)}, but no enemy fighters came up to meet it, and the sky is not won: it takes 50 still over it at the end, and only \\d+ (?:(?:was|were) there|of the \\d+ sent could be over it)\\.$`));
+    expect(r.result).toMatch(new RegExp(`^${esc(who)} flies over ${esc(r.place)}, but no enemy fighters came up to meet it, and the sky is not won: it takes at least 50 fighters still over the target at the end, and only \\d+ (?:(?:was|were) there|of the \\d+ sent could be over it)\\.$`));
     expect(Number(r.result.match(/and only (\d+)/)![1])).toBeLessThanOrEqual(there);
     // Where fewer could be over the target than were sent, the line gives the fighters sent; where it does not, every
     // fighter sent was over it, and the one figure is theirs.
@@ -484,7 +484,7 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     expect(p.meets).toEqual([]);
     expect(p.fighters).toBeGreaterThan(0);
     expect(p.verdict).toBe('No fighters will come up');
-    expect(p.tooFew).toMatch(/^Too few fighters to hold this sky: it takes 50 still over it at the end, and you are sending \d+(\.|, of which only \d+ can be over it\.)$/);
+    expect(p.tooFew).toMatch(/^Too few fighters to hold this sky: it takes at least 50 fighters still over the target at the end, and you are sending \d+(\.|, of which only \d+ can be over it\.)$/);
   });
 
   it('a staff\'s fight for the sky that met nobody is still not news', () => {

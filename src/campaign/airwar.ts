@@ -885,7 +885,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least && Math.round(plan.fighters) > 0) {
     const over = Math.floor(a.E), sent = Math.round(plan.fighters);
     // (Words ruled by the UI director, 04:55Z: the short line where every fighter sent can be over the target.)
-    plan.tooFew = `Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`;
+    plan.tooFew = `Too few fighters to hold this sky: it takes at least ${AIR.sky.least} fighters still over the target at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`;
     plan.verdict = a.D <= 0 ? 'No fighters will come up' : FIGHT_VERDICT.find(([least]) => fc.success >= least)![1];
   }
   plan.figures = figuresOf(g, kind, target, fc, nat);
