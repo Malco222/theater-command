@@ -20,6 +20,7 @@ import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } fro
 import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
 import { bearingOf, streamFor } from './stream';
+import { spreadFor, spreadOn } from '../../campaign/spread';
 
 /** The corps that would actually go in, as the attack card and the battle count them. */
 export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
@@ -130,7 +131,7 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   const cardAir = (a as { air?: CardAir }).air;
   const weighDef = (c: Corps): number => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)));
-  return {
+  const t: FieldTicket<LandPlace> = {
     domain: 'land', kind: 'field', seed: hashString(`field:${g.seed}:${g.turn}:${target.id}:${attNat}`) >>> 0,
     turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
     // The card's river line counts the corps that cross as those with the river between them and the place (assess in
@@ -144,6 +145,10 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // The history dial's stop: at 1 to 3 the computer general fights in its nation's style, at 4 and 5 the situation's (styles.ts).
     hist: stopOf(g),
   };
+  // The field spread (release 2, bench-only): the battle's one draw, on the ticket's own seed and attempt; only where the
+  // switch is on. Draws nothing on g.rng and writes nothing in the game.
+  if (spreadOn(g)) t.reckoning.spread = spreadFor(g, t);
+  return t;
 }
 
 /**
