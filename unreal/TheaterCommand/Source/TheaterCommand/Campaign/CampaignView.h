@@ -450,6 +450,7 @@ struct FSortie
 	bool bBombers = false;
 	bool bEscort = false; // fighters go with the bombers
 	int32 Flak = 0; // the level of the anti-aircraft guns round the target
+	bool bLightFlak = false; // (release 2, the flak brief, 2c) no guns are built there, and its light flak is seen to fire: the bridge's "light"
 	FString Meet; // the nation whose fighters rise to meet the raid; empty if none can
 	int32 MeetFrom = INDEX_NONE; // the province whose airfield they rise from, if it is known
 	// A carrier's aircraft fly from the ships, wherever they are on the map, not from an airfield.

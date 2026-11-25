@@ -6,6 +6,9 @@
 import { hashString, Rng } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
 import { aswKit, NAVY, type ConvoyMeeting } from '../../campaign/navy';
+import { allied } from '../../campaign/game';
+import { patrolOn } from '../../campaign/seapatrol';
+import { airMetWords, routeSeenWords } from '../../campaign/seasight';
 import type { Game } from '../../campaign/types';
 import seasData from '../../../data/campaign/seas.json';
 import type { ForceTicket, Side, SideTicket } from '../core/types';
@@ -79,6 +82,14 @@ export function convoyTicket(g: Game, m: ConvoyMeeting, mine: string | null = g.
   const attNat = [...att].sort((a, b) => b.n - a.n)[0]?.nat ?? m.raiders[0]?.nat ?? 'GER';
   const route = NAVY.convoys.find((r) => r.id === m.route);
   const light = lightOf(seed, lat, year, month);
+  // (Release 2, once the sea patrol is live: what the player's side last saw, in his panel's own words (seasight.ts; the
+  // design director's ruling of 24 November 2026 17:54Z, Q4 (a)): on the convoys' side the boats last seen on the
+  // route's seas, and where he holds boats the aircraft his side's boats last met over the night's sea.)
+  const sight: string[] = [];
+  if (mine && patrolOn(g)) {
+    if (mine === m.owner || allied(g, mine, m.owner)) sight.push(routeSeenWords(g, mine, m.zones));
+    if (att.some((f) => f.nat === mine)) sight.push(airMetWords(g, mine, zone));
+  }
   return {
     domain: 'sea', kind: 'field', seed, turn: m.turn, date: turnToDate(m.turn).label,
     title: `A night on ${route?.name ?? 'the convoys'}`,
@@ -86,7 +97,7 @@ export function convoyTicket(g: Game, m: ConvoyMeeting, mine: string | null = g.
       route: m.route, sea: sea?.key ?? '', seaName: sea?.name ?? '', lat, lon, when: { year, month }, light,
       ships: CONVOY.convoy.ships[m.route] ?? 40, fleets, kit, habits,
       // (Units decide, where the route's convoy count is laid: the month's convoys sailed, sighted and attacked, for the card.)
-      card: { raid: m.raid, guard: m.guard, G: m.G, L: m.L, tons: m.tons, ...(m.count ? { count: m.count } : {}) },
+      card: { raid: m.raid, guard: m.guard, G: m.G, L: m.L, tons: m.tons, ...(m.count ? { count: m.count } : {}), ...(sight.length ? { sight } : {}) },
       surrender: SUB_SURRENDER.on,
       ...(mine ? { mine } : {}),
     },

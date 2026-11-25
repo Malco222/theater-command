@@ -4,7 +4,7 @@
 // over the convoys at sea at once (a 9.5-day crossing). Q2 (b): the close screen's stations, 6 + columns / 3, the
 // columns the convoy's ships / 3.5; escorts on stations are the lesser of those with the convoy and the stations, times
 // the radar-fitted share. Q3 (a), Q4 (a): escorts beyond the stations add no frustration and still count in E.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { CAUSE, NAVY, convoyCount, convoySideOf, escortsAtSea, screenStations, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
@@ -14,6 +14,10 @@ import type { Fleet, Game, Ships } from '../src/campaign/types';
 const atlantic = NAVY.convoys.find((r) => r.id === 'atlantic')!;
 const C = 7 / 3;
 
+// (Radar alone, as this build was ruled: the eye term is unread here, and tested in convoy-load-r2.)
+const eyeKept = CAUSE.firing.eye!.effective41;
+beforeAll(() => { CAUSE.firing.eye!.effective41 = null; });
+afterAll(() => { CAUSE.firing.eye!.effective41 = eyeKept; });
 function open(on: boolean, seed = 1): Game {
   const g = startOpen(createGame(seed, null));
   if (on) g.flags.unitsDecide = 1; else delete g.flags.unitsDecide;
@@ -116,7 +120,7 @@ describe('the screen\'s stations (Q2 (b), Q3 (a), Q4 (a))', () => {
     expect(s).toEqual(without({ screen: true }, () => convoySideOf(g, 'UK', atlantic)!));
   });
 
-  it('escorts without radar fill stations but frustrate nothing yet (the eye term is its own form)', () => {
+  it('with the eye term unread, escorts without radar fill stations but frustrate nothing', () => {
     const g = open(true);
     meet(g, 60, 320);
     expect(convoySideOf(g, 'UK', atlantic)!.fire).toBe(1);

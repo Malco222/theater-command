@@ -19,8 +19,8 @@ import { clamp } from '../core/math';
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, carrierRules, groupOverSea, groupsOver, skyDenies, skyOver, skyReach } from './air';
-import { oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
+import { AIR, CARRIERS, airPool, assessAir, carrierRules, groupOverSea, groupsOver, skyDenies, skyOver, skyReach } from './air';
+import { dayShare, oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
 import { capOver, deckWorth, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
 import { COMMAND } from './commanders';
@@ -35,6 +35,8 @@ import { techMul, techNotes } from './research';
 import { dcOf, hasTech, techTraits } from './tech';
 import { PLANS } from './plans';
 import { unitsDecide } from './units';
+import { patrolLoss, patrolOn, watchAgainst, watchFor } from './seapatrol';
+import { noteSeaSight, seaMonth, seenAir, type SeaMonth } from './seasight';
 import causeData from '../../data/campaign/convoycause.json';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
@@ -312,6 +314,60 @@ export function seaAt(x: number, y: number, g?: Game): number {
   const c = Math.floor(x / md.cell), r = Math.floor(y / md.cell);
   if (c < 0 || r < 0 || c >= lookCols || r >= md.grid.length) return -1;
   return lookup[r * lookCols + c];
+}
+
+/**
+ * The squares of the chart in play, sea by sea (their centres, in map units), and each square's area in square
+ * nautical miles: the map's own measure of a sea's waters (release 2, the sea patrol's reach, ruled for the dormant
+ * interim at 17:49Z). Read only by the sea patrol, which nothing reads while it is dormant (its switch off, or its
+ * figures unread).
+ */
+const squaresOf = new Map<string, { at: Map<number, { x: number; y: number }[]>; nm2: number }>();
+export function seaSquares(g: Game): { at: Map<number, { x: number; y: number }[]>; nm2: number } {
+  const wideChart = g.flags.world === 1;
+  const key = wideChart ? 'world' : 'europe';
+  let s = squaresOf.get(key);
+  if (s) return s;
+  const at = new Map<number, { x: number; y: number }[]>();
+  const put = (z: number, x: number, y: number): void => { if (z >= 0) { let l = at.get(z); if (!l) at.set(z, (l = [])); l.push({ x, y }); } };
+  let cell: number;
+  if (wideChart) {
+    const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
+    cell = W.seas.cell;
+    for (let r = 0; r < W.seas.grid.length; r++) for (let c = 0; c < W.seas.cols; c++) {
+      const x = W.frame.x0 + (c + 0.5) * cell, y = W.frame.y0 + (r + 0.5) * cell;
+      put(seaAtWide(x, y), x, y);
+    }
+  } else {
+    const md = (mapData as any).seas as { cell: number; grid: string[] };
+    cell = md.cell;
+    const cols = Math.ceil((mapData as any).width / cell);
+    for (let r = 0; r < md.grid.length; r++) for (let c = 0; c < cols; c++) {
+      const x = (c + 0.5) * cell, y = (r + 0.5) * cell;
+      put(seaAt(x, y), x, y);
+    }
+  }
+  const km = cell * AIR.kmPerUnit;
+  s = { at, nm2: (km / 1.852) ** 2 };
+  squaresOf.set(key, s);
+  return s;
+}
+
+/** The chart's top edge and scale (tools/build-geo-campaign.mjs; the world chart shares both): latitude = north - y / scale. */
+const CHART = { north: 71.4, scale: 40 };
+const latOf = new Map<string, Map<number, number>>();
+/** A sea's mean latitude on the chart, over its squares (degrees north; release 2, for the day's length over it). */
+export function seaLatitude(g: Game, z: number): number {
+  const key = g.flags.world === 1 ? 'world' : 'europe';
+  let m = latOf.get(key);
+  if (!m) latOf.set(key, (m = new Map()));
+  let v = m.get(z);
+  if (v === undefined) {
+    const at = seaSquares(g).at.get(z) ?? [];
+    v = at.length ? CHART.north - at.reduce((a, p) => a + p.y, 0) / at.length / CHART.scale : 50;
+    m.set(z, v);
+  }
+  return v;
 }
 
 // ---- Setting up ---------------------------------------------------------------------------
@@ -2327,8 +2383,16 @@ export function navalUpkeep(g: Game, nat: string): void {
   // read first, as the fleets stand before the hunt, and booked into the hunt's and the convoy's own rolls.)
   const nights = convoyNights(g, nat);
   const sunk = seaWar(g) && n.atWar.length ? huntSubs(g, nat, nights) : undefined;
+  // (Release 2, Units decide, once live: the aircraft on patrol hunt too, after the ships, inside the same cap.)
+  if (sunk && patrolOn(g)) patrolSubs(g, nat, sunk);
   if (sunk) torpedoes(g, nat);
-  convoyWar(g, nat, sunk, nights);
+  // (Release 2, Units decide, once the sea patrol is live: once the hunt, its patrols' attacks and the battles on its
+  // convoy routes are fought, what its month at sea showed this nation of the enemy's boats, and what its own boats met
+  // of the enemy's aircraft, go into its record of what it has seen (seasight.ts; the design director's ruling of 24
+  // November 2026 17:54Z). Nothing is read or written for it otherwise.)
+  const seen = patrolOn(g) ? seaMonth() : undefined;
+  convoyWar(g, nat, sunk, nights, seen);
+  if (seen) noteSeaSight(g, nat, seen, sunk);
 }
 
 // ---- The submarines' beats (ruling 233 rider b564) ----------------------------------------------------------------
@@ -2579,11 +2643,25 @@ export const CAUSE = causeData as unknown as {
   station: Partial<Record<Exclude<ShipClass, 'dd'>, { patrol: number | null; passage: number | null; refit: number | null }>> & { raid: number | null; dd?: EscortCycleRow };
   /** The convoy-side count's figures; a route with a null in 'ships' or 'grt' keeps the per-boat share ('find'). */
   count: { attacked: number; sighted: number; boatsT2: number; perAttack: number; ways: number; t2: { convoys: number; months: number }; sink: number | null; ships: Record<string, number | null>; grt: Record<string, number | null> };
-  /** The boat ceiling: a boat's torpedoes inside its hull and outside it (used only in a calm sea), the share of those fired that hit, the ships sunk a hit. A null in inside, hit or sinkHit: no ceiling. */
-  ceiling: { inside: number | null; outside: number | null; hit: number | null; sinkHit: number | null };
-  /** The escort's radar before a boat fires: the share of the boats that try which fire at T2's ratio of radar-fitted escorts a convoy to boats trying, and that ratio. A null in either: the pack fires as counted. */
-  firing: { t2: number | null; rT2: number | null; screen?: { stations: number | null; columnsAStation: number | null; shipsAColumn: number | null; maxColumns: number | null } };
+  /** The boat ceiling: a boat's torpedoes inside its hull and outside it (used only in a calm sea), the share of those fired that hit, the ships sunk a hit, and its ready tubes, the torpedoes of one approach (read with 'load'). A null in inside, hit or sinkHit: no ceiling. */
+  ceiling: { inside: number | null; outside: number | null; hit: number | null; sinkHit: number | null; tubes?: number | null };
+  /** The escort's radar before a boat fires: the share of the boats that try which fire at T2's ratio of radar-fitted escorts a convoy to boats trying, and that ratio. A null in either: the pack fires as counted. 'eye': the eye term's two record points (every escort finds, radar-fitted ones again); a null in it: radar alone. */
+  firing: { t2: number | null; rT2: number | null; screen?: { stations: number | null; columnsAStation: number | null; shipsAColumn: number | null; maxColumns: number | null }; eye?: EyeRow };
+  /** What a boat that fires puts into one convoy (the load form): hours to reload its ready tubes, and the share of boats that regain contact after an attack. A null in reload: the whole load into one convoy, as first built; a null in regain: one approach. */
+  load?: { reload: number | null; regain: number | null; next?: NextNightRow };
+  /** The sea patrol against submarines (seapatrol.ts): 'live' its switch; the aircraft that watch a sea's waters reached, attacks on a boat a month in watched waters and the share of them that sink it, by kit, and aircraft lost a month; 'intensity' the air fighting's own row for a patrol met by enemy fighters (the air thread's Q6), which gates only the fighters (null: none meets a patrol). With live false, or a null in a0, attacks or kill, none of it is read (the design director's ruling of 24 November 2026 17:49Z, 5 (a)). */
+  patrol: { live: boolean; reach: 'map' | 'air'; a0: number | null; intensity: number | null; attacks: { kit: number | null; none: number | null }; kill: { kit: number | null; none: number | null }; lost: number | null };
 };
+
+/**
+ * The next night's contact (convoycause.json load.next): the boats' surface speed in knots, and for each route its
+ * convoys by class, each class's speed in knots and its share of the route's sailings. A null speed or share, or a route
+ * left null: unread, and its boats have no next night.
+ */
+interface NextNightRow { boat: number | null; convoys: Record<string, { class: string; speed: number | null; share: number | null }[] | null> }
+
+/** The eye term's record points (convoycause.json firing.eye): for 1941's sample and T2, the share of boats trying that torpedoed a ship, the torpedoes a boat that fired put in (n), and the escorts on stations and the radar-fitted ones for each boat trying. A null: unread. */
+interface EyeRow { effective41: number | null; n41: number | null; e41: number | null; r41: number | null; effectiveT2: number | null; nT2: number | null; eT2: number | null; rT2: number | null }
 
 /** The escorts' cycle on a convoy route (convoycause.json station.dd): days with a convoy, turnaround and refit in port, the share of strength out of service, and a convoy's crossing. A null: unread. */
 interface EscortCycleRow { convoy: number | null; turnaround: number | null; refit: number | null; unavailable: number | null; crossing: number | null }
@@ -2615,11 +2693,14 @@ const kitEdge = (k: AswKit, group: boolean): number => incidentRate(k, group) / 
 /** Radar on escorts: what sea-search radar adds (not laid: 1 until the historian's figure is read). */
 const radarKit = (k: AswKit): number => 1 + (k.radar ? CAUSE.radar : 0);
 
-/** Where an escort's look on the scene comes from: its navy's kit as the sea scene reads it. HF/DF has no rule yet. */
-const kitLook = (k: AswKit): { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean } => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, hfdf: false });
+/** A navy's kit as the submarine scene's record holds it (types.ts SubLook). */
+type KitLook = NonNullable<SubLook['convoys'][number]['seas'][number]['kit']>;
+
+/** Where an escort's look on the scene comes from: its navy's kit as the sea scene reads it, with its escort-group training. HF/DF has no rule yet. */
+const kitLook = (k: AswKit): KitLook => ({ asdic: k.asdic, radar: k.radar, hedgehog: k.hedgehog, hfdf: false, groups: k.groups });
 
 /** The air cover over a convoy's sea: where it flies from, and the share of the sea's waters it reaches. */
-export interface SeaCover { kind: 'none' | 'shore' | 'carrier' | 'long-range'; share: number }
+export interface SeaCover { kind: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; share: number }
 
 /**
  * The air cover a convoy has in one sea from aircraft carrying anti-submarine kit, for the nation it feeds: a carrier
@@ -2635,6 +2716,13 @@ export function seaCover(g: Game, nat: string, z: number, lane?: string): SeaCov
   if (lane !== undefined) {
     // (By the aircraft she has aboard: an empty deck covers nothing.)
     for (const f of g.fleets) if (f.stance === 'escort' && f.lane === lane && f.zone === z && f.ships.cv > 0 && allied(g, f.nat, nat) && airKit(aswKit(g, f.nat))) take('carrier', wx * Math.min(1, wingShare(g, f)));
+  }
+  // (Release 2, the sea patrol, once live: the aircraft its side keeps on patrol there with kit, over the share of the
+  // sea they watch, in place of the coasts held. The sky is already in the aircraft on patrol.)
+  if (patrolOn(g)) {
+    const w = watchFor(g, z, (x) => allied(g, x, nat));
+    if (w && w.kit > 0) take('patrol', w.kit);
+    return best;
   }
   // A coast its side holds, flying aircraft with kit, under a sky no enemy has won.
   const flies = (id: number): AswKit | null => {
@@ -2679,6 +2767,9 @@ export function passageSeas(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z:
   return 0;
 }
 
+/** The days in a month the escorts' cycle and a raider's move of beat are read against (D: the game's month as thirty days). */
+const MONTH_DAYS = 30;
+
 /** A class's on-station days, or null while any of them is unread. */
 function stationDays(c: Exclude<ShipClass, 'dd'>): { patrol: number; passage: number; refit: number } | null {
   const r = CAUSE.station[c];
@@ -2695,6 +2786,35 @@ export function onStation(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z: n
   if (!D) return 1;
   return D.patrol / (D.patrol + 2 * D.passage * passageSeas(g, f, z) + D.refit);
 }
+
+/**
+ * The share of the month a fleet's boats are on station in a sea as the convoys meet them (release 2, the sea patrol;
+ * the design director's 02:25Z ruling and Q5 (a)): on station, less the time aircraft without anti-submarine kit keep
+ * them down there, 1 - the share of the sea those aircraft watch. onStation itself where none watch, or the patrol is not live.
+ * This is the world, what the boats meet. A boats' staff weighs its beats on the aircraft its side's boats last met
+ * instead (seenOnWatch, below; the design director's ruling of 24 November 2026 17:54Z).
+ */
+export function onWatch(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z: number): number {
+  return onStation(g, f, z) * keptUp(g, f.nat, z);
+}
+/** What aircraft without kit leave of a boat's time up on station in a sea: 1 - the share of it they watch (1 where none do). The world's: what the boats meet, never what a staff believes. */
+function keptUp(g: Game, nat: string, z: number): number {
+  const w = patrolOn(g) ? watchAgainst(g, z, nat) : null;
+  return w && w.none > 0 ? 1 - w.none : 1;
+}
+
+/**
+ * What a boats' staff believes aircraft without kit leave of its boats' time up in a sea: 1 - the part of a boat's time
+ * its side's boats last met them keeping the boats down there (seasight.ts seenAir), never the watch truly kept there
+ * (the design director's 24 November 2026 17:49Z amendment to ruling 1, and his ruling of 17:54Z). 1 where its side's
+ * boats never met any there: a sea never seen counts as clear (Q2 (a)).
+ */
+function seenUp(g: Game, nat: string, z: number): number {
+  const a = seenAir(g, nat, z);
+  return a && a.none > 0 ? 1 - a.none : 1;
+}
+/** A fleet's time up on station in a sea as its own staff sees it: on station, less the time its side's boats last met aircraft without kit keeping them down there (seenUp). */
+const seenOnWatch = (g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z: number): number => onStation(g, f, z) * seenUp(g, f.nat, z);
 
 /**
  * A fleet's raiding strength against cargoes, before its nation's quality and fitness: each class's raid. With Units
@@ -2720,14 +2840,13 @@ function boatRaid(g: Game, f: Fleet, cause: boolean, weighed = true): number {
 
 /**
  * The held port a computer-run raiding fleet's staff would base it at: the friendly port, held since before this
- * month and within its reach by sea, from which its boats spend most time on station on its beat, where that is more
- * than from its own port (nearest the beat by the sea graph; on a tie, the nearer on the chart). Null where none is
- * better, for a tied fleet, while its days are unread, and without Units decide. One rule for every navy: the player
- * moves his own fleets' bases himself.
+ * month and within its reach by sea, from which its boats spend most time on station on its beat (or on the beat
+ * given, as its staff weighs a new one: quieterBeat), where that is more than from its own port (nearest the beat by
+ * the sea graph; on a tie, the nearer on the chart). Null where none is better, for a tied fleet, while its days are
+ * unread, and without Units decide. One rule for every navy: the player moves his own fleets' bases himself.
  */
-export function nearerPort(g: Game, f: Fleet): Region | null {
+export function nearerPort(g: Game, f: Fleet, z = f.station): Region | null {
   if (!unitsDecide(g) || f.tied || f.duty !== 'raid' || f.ships.ss <= 0 || !stationDays('ss')) return null;
-  const z = f.station;
   const here = onStation(g, f, z);
   const at = g.seas[z];
   let best: Region | null = null, bv = here, bd = Infinity;
@@ -2738,6 +2857,73 @@ export function nearerPort(g: Game, f: Fleet): Region | null {
     if (v > bv + 1e-9 || (best && Math.abs(v - bv) <= 1e-9 && d < bd)) { best = r; bv = v; bd = d; }
   }
   return best;
+}
+
+/**
+ * A computer-run raider's better beat under the sea patrol (release 2, once live; Q5 (a)): of the seas of the convoy
+ * routes its beat lies on, within its reach by sea, the one where the month's gain in its boats' time up on station
+ * (seenOnWatch: the passage there and back by the sea graph, less the time aircraft without kit keep them down there as
+ * its side's boats last met them) over their time up on their own beat, less what the move itself loses (moveLoss), is
+ * most, where that is more than nothing. Each beat, its own too, is read from the port its staff would base it at
+ * (nearerPort). -1 where none is, where its side's boats last met no aircraft without kit on its beat, for a tied fleet,
+ * and while the patrol is not live. A boat keeps its beat unless the move's gain covers the time it costs (the design
+ * director's ruling of 24 November 2026 17:49Z, 1 (a)): without it the boats' staff and the patrol staff chased each
+ * other from sea to sea, and with Atlantic ports held the boats spent every other month in harbour.
+ * The staff reads only what its side has seen (the design director's 17:49Z amendment to ruling 1, and his ruling of
+ * 17:54Z): the aircraft over each sea as its side's boats last met them there (seasight.ts seenAir), never the patrols
+ * truly flown or ordered there. A sea its boats have never met aircraft in counts as clear (Q2 (a)), so a staff learns
+ * of new cover only once it has flown its month over its boats there, keeping them down, attacking them or sinking them
+ * (the patrols' own months, patrolSubs), and never at the order. The keeping down itself, in the convoys' count, the
+ * lanes and the next night, stays the world's (keptUp).
+ */
+export function quieterBeat(g: Game, f: Fleet): number {
+  if (!patrolOn(g) || f.tied || f.duty !== 'raid' || f.ships.ss <= 0) return -1;
+  const here = f.station;
+  // (Only out of the aircraft's way: a beat where its side's boats last met no aircraft without kit stays as its staff set it.)
+  if (seenUp(g, f.nat, here) >= 1) return -1;
+  const seas = new Set<number>();
+  for (const r of NAVY.convoys) {
+    const zs = r.zones.map((k) => zoneOf(g, k));
+    if (zs.includes(here) && atWar(g, f.nat, r.to)) for (const z of zs) seas.add(z);
+  }
+  const reach = new Set(fleetReach(g, f));
+  const stay = nearerPort(g, f, here);
+  const up = seenOnWatch(g, stay ? portOf(f, stay) : f, here);
+  let best = -1, bv = 0;
+  for (const z of [...seas].sort((a, b) => a - b)) {
+    if (z === here || !reach.has(z)) continue;
+    const to = nearerPort(g, f, z);
+    const gain = seenOnWatch(g, to ? portOf(f, to) : f, z) - up - moveLoss(g, f, z, !!to, !!stay);
+    if (gain > bv + 1e-9) { best = z; bv = gain; }
+  }
+  return best;
+}
+
+/** A fleet as based at another port: what seenOnWatch and onStation read of it. */
+const portOf = (f: Fleet, r: Region): Pick<Fleet, 'nat' | 'base' | 'home'> => ({ nat: f.nat, base: r.id, home: r.seas[0] });
+
+/**
+ * The time up on station a raider's move of beat to a sea itself loses in the month, against keeping its beat, as a
+ * share of the month (release 2, the sea patrol; the design director's ruling of 24 November 2026 17:49Z, 1 (a)), read
+ * from the way its staff makes the move (navalAI) and weighed, as quieterBeat weighs the move, on the aircraft as its
+ * side's boats last met them (seenOnWatch, the ruling of 17:54Z): the beat is changed, the boats sail to it from where
+ * they are, and the staff then bases them at the held port it would raid the beat from (nearerPort), which costs the
+ * month in harbour (rebase): the month's whole time up on its beat (seenOnWatch there, from the port it has), given up. So: where the move
+ * takes the fleet to another base and staying would not ('rebases' without 'would'), that month in harbour; where
+ * staying would move its base too, nothing, for the month in harbour comes either way. Where the move keeps its base:
+ * for a fleet at sea, its boats on station crossing from the sea they are in to the new beat, station.ss.passage days
+ * for each sea crossed by the sea graph, through the straits open to it (passageSeas), at their time up on station
+ * there, over the month's days (a fleet in harbour sails to the new beat as to the old, and loses nothing on the way);
+ * and where staying would move its base ('would'), less the month in harbour that staying costs and the move does not,
+ * so that what the move loses can be less than nothing. Nothing while the boats' days are unread: no tuned figure
+ * stands in for them.
+ */
+function moveLoss(g: Game, f: Fleet, z: number, rebases: boolean, would: boolean): number {
+  const D = stationDays('ss');
+  if (!D) return 0;
+  if (rebases) return would ? 0 : seenOnWatch(g, f, f.station);
+  const passage = atSea(f) ? (seenOnWatch(g, f, f.zone) * D.passage * passageSeas(g, { nat: f.nat, base: -1, home: f.zone }, z)) / MONTH_DAYS : 0;
+  return would ? passage - seenOnWatch(g, f, f.station) : passage;
 }
 
 /** A route's convoy count for a month: the boats on station on its seas, the convoys that sail (both ways), those the boats sight and attack, the incidents with the escort, and the boats that meet it for each convoy attacked (the pack), all on average. */
@@ -2758,7 +2944,7 @@ export function convoyCount(g: Game, route: ConvoyRoute): ConvoyCount | null {
   let boats = 0;
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.ss <= 0 || !zones.includes(f.zone) || !atWar(g, f.nat, route.to)) continue;
-    boats += f.ships.ss * raidShare(f) * onStation(g, f, f.zone);
+    boats += f.ships.ss * raidShare(f) * onWatch(g, f, f.zone);
   }
   // The route's tons go out loaded; the convoys come back too, and T2's share is over both ('ways').
   const sailed = (K.ways * route.tons) / (ships * grt);
@@ -2771,7 +2957,7 @@ export function convoyCount(g: Game, route: ConvoyRoute): ConvoyCount | null {
 }
 
 /** The incidents one of a raiding fleet's boats meets with a route's escort in a month, on average: its share raiding and on station, times T2's rate a boat on station where the route's count is laid, or the per-boat share (OEG T2) where it is not. */
-const incidentsPerBoat = (g: Game, f: Fleet, count: ConvoyCount | null): number => raidShare(f) * onStation(g, f, f.zone) * (count ? escortRate() : CAUSE.find);
+const incidentsPerBoat = (g: Game, f: Fleet, count: ConvoyCount | null): number => raidShare(f) * onWatch(g, f, f.zone) * (count ? escortRate() : CAUSE.find);
 
 /** True where a boat raids a convoy route of this nation's side: one of its seas, the route's nation at war with the boat's. */
 function onRouteOf(g: Game, nat: string, f: Fleet): boolean {
@@ -3023,7 +3209,8 @@ export function huntersIn(g: Game, nat: string, z: number, but?: Fleet): { weigh
     if (k) { p *= radarKit(k); kit += p * kitEdge(k, f.stance === 'hunt'); }
     if (p > 0) { w += p; fleets.push(f); }
   }
-  const air = ownAirOver(g, z, nat) * H.air;
+  // (Release 2, the sea patrol, once live: the aircraft hunt on patrol, by their own count and kit (patrolSubs), in place of this flat term.)
+  const air = cause && patrolOn(g) ? 0 : ownAirOver(g, z, nat) * H.air;
   w += air;
   return k ? { weight: w, fleets, air, kit } : { weight: w * techMul(g, nat, 'radar'), fleets };
 }
@@ -3122,6 +3309,79 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
 }
 
 /**
+ * The sea patrol's month for one nation (release 2, Units decide, once live; seapatrol.ts, Q4 (a)): in every sea its
+ * bomber groups patrol, the enemy boats on station there are attacked as often as the patrols' aircraft watch them,
+ * at the attacks a boat-month and the kills an attack of the kit they carry; this nation's aircraft sink their share of
+ * those, by their share of the aircraft on patrol, so that allies do not sink the same boats twice. Booked inside the
+ * hunt's cap for the month, on dice of their own ('patrol:<nation>:<sea>'). The boats sunk join the month's hunt by sea
+ * ('sunk', which the convoys' record reads), and the month's record by the boats' nation and sea (g.patrolSunk), which the
+ * boats' own side reads as its boats lost to aircraft (seasight.ts).
+ * The same record keeps, by sea and the boats' nation, this nation's part of the watch its patrols kept against boats on
+ * station there this month ('met': the parts of a boat's time watched by its aircraft with kit and without, its share
+ * of the watch by its share of the aircraft on patrol, as the kills are shared). That is the watch as it acted on the
+ * boats, which their own side reads as the aircraft its boats met there (seasight.ts): a patrol is seen by doing it,
+ * once it has flown its month over the boats, never at its order (the design director's ruling of 24 November 2026
+ * 17:54Z). Throws no dice.
+ */
+function patrolSubs(g: Game, nat: string, sunk: Record<number, number>): void {
+  const zones = [...new Set(g.airFleets.filter((f) => f.nat === nat && f.mission === 'seapatrol').map((f) => f.target))].filter((z) => !!g.seas[z]).sort((a, b) => a - b);
+  const rec: Record<string, number> = {}, seas: Record<number, number> = {}, at: Record<number, Record<string, number>> = {};
+  const met: Record<number, Record<string, { kit: number; none: number }>> = {};
+  const kit = airKit(aswKit(g, nat));
+  for (const z of zones) {
+    const quarry = g.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g, f.nat, nat));
+    if (!quarry.length) continue;
+    // (The watch this nation's patrols kept over the boats on station here, by the boats' nation.)
+    for (const f of quarry) {
+      if (met[z]?.[f.nat]) continue;
+      const w = watchAgainst(g, z, f.nat);
+      const mine = w?.by[nat] ?? 0;
+      if (!w || mine <= 0) continue;
+      const part = ((w.kit + w.none) * mine) / w.A;
+      (met[z] ??= {})[f.nat] = kit ? { kit: part, none: 0 } : { kit: 0, none: part };
+    }
+    const rng = seaRng(g, `patrol:${nat}:${z}`);
+    let n = 0;
+    // (The boats sunk in this sea, by their nation, for the month's words.)
+    const here: Record<string, number> = {};
+    for (const f of quarry) {
+      const w = watchAgainst(g, z, f.nat);
+      const mine = w?.by[nat] ?? 0;
+      if (!w || mine <= 0) continue;
+      const x = Math.min(f.ships.ss * onStation(g, f, z) * w.s * w.kills * (mine / w.A), roomLeft(g, f));
+      const k = Math.min(f.ships.ss, rng.roll(x));
+      if (k <= 0) continue;
+      noteLost(g, f, k);
+      f.ships.ss -= k; f.lost.ss += k; n += k;
+      loseStars(f, 'ss', k);
+      rec[f.nat] = (rec[f.nat] ?? 0) + k;
+      here[f.nat] = (here[f.nat] ?? 0) + k;
+    }
+    if (!n) continue;
+    sunk[z] = (sunk[z] ?? 0) + n;
+    seas[z] = n;
+    at[z] = here;
+    const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
+    // (Each nation's boats by its own name: "1 German and 2 Italian submarines". The news is tagged with the nation
+    // that lost the most, the first of them on a tie.)
+    const boats = Object.keys(here);
+    const subs = `${andList(boats.map((x) => `${here[x]} ${g.nations[x].adj}`))} submarine${n === 1 ? '' : 's'}`;
+    const most = boats.reduce((a, b) => (here[b] > here[a] ? b : a));
+    if (told) routineNews(g, `patrol:${nat}:${z}`, 'battle', `${g.nations[nat].adj} aircraft on patrol sink ${subs} ${seaWhere(g.seas[z].name)}.`, `${subs} sunk from the air ${seaWhere(g.seas[z].name)}`, nat, undefined, { arm: 'sea', won: nat, lost: most });
+  }
+  (g.patrolSunk ??= {})[nat] = { turn: g.turn, sunk: rec, seas, at, met };
+  // (Q6 (a): the aircraft lost on patrol, after the month's hunt, and only these two: an operational share of those on
+  // patrol where it is laid, and the enemy's fighters where they reach the sea and meet it, as they meet a strike there
+  // (seapatrol.ts patrolLoss). Booked to the group's and the nation's losses, as a raid's are.)
+  for (const f of g.airFleets) {
+    if (f.nat !== nat || f.mission !== 'seapatrol' || !g.seas[f.target] || f.bmr <= 0) continue;
+    const x = patrolLoss(g, f, f.target);
+    const k = Math.min(f.bmr, seaRng(g, `patrol:lost:${nat}:${f.id}`).roll(x.op + x.fighters));
+    if (k > 0) { f.bmr -= k; f.lost.bmr += k; airPool(g, f.nat).lostBmr += k; }
+  }
+}
+
+/**
  * The boats a nation's hunt would sink this month among these enemy fleets in one sea, on average, as huntSubs counts
  * them; with Units decide, also those the convoys' escorts there would sink in their attacks (convoyWar). For the fleet
  * orders' look-ahead. Off, it is the boats times the hunt's share, as before.
@@ -3135,6 +3395,9 @@ export function huntExpected(g: Game, nat: string, z: number, quarry: Fleet[]): 
   for (const f of quarry) {
     const raiding = onRouteOf(g, nat, f) ? raidShare(f) : 0;
     let x = h.weight > 0 ? (share * (h.air! + h.kit * (1 - raiding))) / h.weight : 0;
+    // (Release 2, the sea patrol, once live: what this nation's aircraft on patrol there would sink, as patrolSubs counts it.)
+    const w = patrolOn(g) ? watchAgainst(g, z, f.nat) : null;
+    if (w && (w.by[nat] ?? 0) > 0) x += onStation(g, f, z) * w.s * w.kills * (w.by[nat] / w.A);
     if (raiding > 0) {
       for (const r of NAVY.convoys) {
         const to = g.nations[r.to];
@@ -3264,7 +3527,7 @@ function airAttack(g: Game, f: Fleet): void {
 }
 
 /** How much of its raiding strength a fleet at sea brings against cargoes: all of it when it is raiding, part when it is on patrol, none on other work. */
-const raidShare = (f: Fleet): number => (f.stance === 'raid' ? 1 : f.stance === 'patrol' ? NAVY.convoy.patrolRaid : 0);
+export const raidShare = (f: Fleet): number => (f.stance === 'raid' ? 1 : f.stance === 'patrol' ? NAVY.convoy.patrolRaid : 0);
 
 /**
  * The far side (ruling 194, point 6): what a navy's submarines are worth as raiders this month, where its fleet is.
@@ -3374,8 +3637,31 @@ export function firingShare(radarEscorts: number, tries: number): number | null 
   return 1 / (1 + c * r);
 }
 
-/** The days in a month the escorts' cycle is read against (D: the game's month as thirty days). */
-const MONTH_DAYS = 30;
+/**
+ * The share of the boats that try which fired, from the record's share that torpedoed a ship: a boat that put n
+ * torpedoes into a convoy at p a hit torpedoed at least one ship 1 - (1 - p)^n of the time (the design director's
+ * rulings of 24 November 2026 17:13Z and 17:24Z on naval-battles/convoy-r2/eye-term-form.md Q2: n in hits' units).
+ */
+const firedOf = (effective: number, n: number, p: number): number => effective / (1 - Math.pow(1 - p, n));
+
+/**
+ * The eye term (the design director's ruling of 24 November 2026 17:13Z on naval-battles/convoy-r2/eye-term-form.md,
+ * Q1 (a)): the share of the boats that try which fire = 1 / (1 + c_e e + c_r r), e every escort on the close screen's
+ * stations for each boat trying (lookouts and asdic find, whatever the kit), r the radar-fitted ones (a radar-fitted
+ * escort counts in both, for it keeps its lookouts). c_e and c_r are solved together on the record's two points, 1941's
+ * sample and T2 (Q3), record against record, never on the game; t2 is the share at T2's own point, so the count's pack
+ * comes back there. Null where a figure or the hit share is unread, or the two points give no pair of positive weights.
+ */
+export function eyePair(): { ce: number; cr: number; t2: number } | null {
+  const E = CAUSE.firing?.eye, p = CAUSE.ceiling?.hit;
+  if (!E || p == null || [E.effective41, E.n41, E.e41, E.r41, E.effectiveT2, E.nT2, E.eT2, E.rT2].some((x) => x == null)) return null;
+  const f41 = firedOf(E.effective41!, E.n41!, p), fT2 = firedOf(E.effectiveT2!, E.nT2!, p);
+  const det = E.e41! * E.rT2! - E.r41! * E.eT2!;
+  if (!(f41 > 0 && f41 <= 1 && fT2 > 0 && fT2 <= 1) || Math.abs(det) < 1e-12) return null;
+  const a = 1 / f41 - 1, b = 1 / fT2 - 1;
+  const ce = (a * E.rT2! - b * E.r41!) / det, cr = (b * E.e41! - a * E.eT2!) / det;
+  return ce >= 0 && cr >= 0 ? { ce, cr, t2: fT2 } : null;
+}
 
 /**
  * The share of the escorts bound to a route that is at sea with a convoy at any one time (the design director's
@@ -3402,33 +3688,42 @@ export function screenStations(route: ConvoyRoute): number | null {
 }
 
 /**
- * The radar-fitted escorts with a convoy, for the firing share. Escorts a convoy are those at sea with the convoys at
+ * The escorts on a convoy's stations, all of them and the radar-fitted ones, for the firing share. Escorts a convoy are those at sea with the convoys at
  * once over the convoys at sea at once (the cycle, Q1 (d)); while the cycle is unread, the escorts bound to the route
  * over the convoys sailed a month, as first built. Where the screen's stations are read, the escorts on stations are
  * the lesser of those with the convoy and the stations, times the radar-fitted share of them (Q2 (b)): a thin screen
  * fills fewer stations, and escorts beyond them add nothing to frustrating attacks (Q3 (a); they still count in the
  * escort's strength E, Q4 (a)).
  */
-function radarOnStations(route: ConvoyRoute, count: ConvoyCount, radarShips: number, escortShips: number): number {
-  if (count.sailed <= 0) return 0;
+function onStations(route: ConvoyRoute, count: ConvoyCount, radarShips: number, escortShips: number): { all: number; radar: number } {
+  if (count.sailed <= 0) return { all: 0, radar: 0 };
   const atSea = escortsAtSea(), crossing = CAUSE.station.dd?.crossing ?? 0;
   const aConvoy = (ships: number): number => (atSea === null ? ships / count.sailed : (ships * atSea * MONTH_DAYS) / (count.sailed * crossing));
-  const radar = aConvoy(radarShips), stations = screenStations(route);
-  if (stations === null) return radar;
-  const all = aConvoy(escortShips);
-  return all > 0 ? Math.min(all, stations) * (radar / all) : 0;
+  const radar = aConvoy(radarShips), stations = screenStations(route), all = aConvoy(escortShips);
+  if (stations === null) return { all, radar };
+  const on = Math.min(all, stations);
+  return { all: on, radar: all > 0 ? on * (radar / all) : 0 };
 }
+const radarOnStations = (route: ConvoyRoute, count: ConvoyCount, radarShips: number, escortShips: number): number => onStations(route, count, radarShips, escortShips).radar;
 
-function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: number, each: number | null, radarShips = 0, escortShips = 0): ConvoySide {
+function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: number, ceilingAt: (fire: number) => RouteCeiling | null, radarShips = 0, escortShips = 0): ConvoySide {
   const K = CAUSE.count, ships = K.ships[route.id] ?? 0, k = K.sink!;
   // (The escort's radar before a boat fires, ruled 16:35Z: the count's pack is the boats that fired at T2, against
   // escorts with radar, so the boats that try are the pack / t2, and those that fire are the tries x the share at this
   // convoy's own ratio of radar-fitted escorts to boats trying. At T2's ratio it gives the count's pack back. Applied
-  // once, here, on the pack the contest and the ceiling both read; the escort's kills keep the count's incidents.)
+  // once, here, on the pack the contest and the ceiling both read; the escort's kills keep the count's incidents. With
+  // the eye term laid, 17:13Z, every escort on the stations finds as well, and t2 is the eye's own share at T2's point.)
+  // (The eye term reads only its own figures: a null in radar alone's t2 or rT2 leaves a laid eye running, and a null in
+  // any eye figure falls back to radar alone, as ruled. Review of 24 Nov.)
   const F = CAUSE.firing;
-  const laid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
-  const tries = laid ? count.pack / F.t2! : count.pack;
-  const fire = laid ? firingShare(radarOnStations(route, count, radarShips, escortShips), tries) : null;
+  const radarLaid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
+  const eye = F ? eyePair() : null;
+  const tries = eye ? count.pack / eye.t2 : radarLaid ? count.pack / F.t2! : count.pack;
+  let fire: number | null = null;
+  if (eye) {
+    const on = onStations(route, count, radarShips, escortShips);
+    fire = tries > 0 ? 1 / (1 + (eye.ce * on.all + eye.cr * on.radar) / tries) : 1;
+  } else if (radarLaid) fire = firingShare(radarOnStations(route, count, radarShips, escortShips), tries);
   const pack = fire === null ? count.pack : tries * fire;
   // (The pack, times a boat's raid strength on station: its kit, fit and the air over it, as the lanes count them.)
   const P = count.boats > 0 ? (pack * boats) / count.boats : 0;
@@ -3437,6 +3732,15 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
   // (The boat ceiling: never more than the pack's torpedoes sink on an average night, each boat's at most 'each'. A convoy
   // attacked has at least one boat on it, so the pack counts as one where the count's falls under one: on a short route
   // of many convoys, as Libya's, its incidents a convoy attacked are fewer than one. Builder's choice, review of 24 Nov.)
+  // (The load form, 17:27Z Q3 (a): a boat holds one load for its patrol, so the torpedoes the route's firing boats put
+  // into the month's convoys attacked are never more than its boats on station hold this month; past that each convoy's
+  // share falls alike.)
+  const ceil = ceilingAt(fire ?? 1);
+  let each = ceil ? ceil.each : null;
+  if (ceil && each !== null && ceil.torpedoes !== undefined && ceil.month !== undefined) {
+    const used = count.attacked * Math.max(1, pack) * ceil.torpedoes;
+    if (used > ceil.month) each *= ceil.month / used;
+  }
   const torps = each === null ? undefined : Math.max(1, pack) * each;
   const sunk = torps === undefined ? contest : Math.min(contest, torps);
   return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0, ...(torps !== undefined ? { torps } : {}), ...(fire !== null ? { fire, fired: pack } : {}) };
@@ -3470,23 +3774,107 @@ export function calmShare(g: Game, z: number): number {
  * boat that fires (the escort's radar acts before a boat fires, not on its hits), x the ships sunk a hit. Nothing in it
  * reads the flag or the date. Null where a figure is not laid.
  */
-export function boatCeiling(g: Game, z: number): number | null {
+export function boatCeiling(g: Game, z: number, fire = 1, at?: ConvoyAt): number | null {
   if (!ceilingLaid()) return null;
   const C = CAUSE.ceiling;
-  return (C.inside! + calmShare(g, z) * (C.outside ?? 0)) * C.hit! * C.sinkHit!;
+  return torpedoesInto(g, z, fire, at) * C.hit! * C.sinkHit!;
 }
 
-/** The boat ceiling on a route, over the boats on station on its seas as the count counts them (convoyCount): null where it is not laid or no boat is on station. */
-function routeCeiling(g: Game, route: ConvoyRoute): number | null {
+/** The convoy route a boat fires on and the boats' nation, where its next night is read. */
+export interface ConvoyAt { route: string; nat: string }
+
+/** True where the load form is laid on the ceiling: the ready tubes and the hours to reload them. */
+const loadLaid = (): boolean => ceilingLaid() && CAUSE.ceiling.tubes != null && CAUSE.ceiling.tubes > 0 && CAUSE.load?.reload != null;
+
+/** A boat's load for a convoy: its torpedoes inside the hull, and those outside it as far as the sea is calm. */
+const loadIn = (g: Game, z: number): number => CAUSE.ceiling.inside! + calmShare(g, z) * (CAUSE.ceiling.outside ?? 0);
+
+/**
+ * The share of a night a further approach fits in, in a sea this month (the load form's Q2 (a), the design director's
+ * ruling of 24 November 2026 17:27Z): the boat's ready tubes reloaded inside the dark hours left after an attack, the
+ * attack falling at any hour of the dark alike, so 1 - reload hours / dark hours, none where the night is shorter than a
+ * reload. The dark hours are the day's less its daylight (dayShare, the shared astronomy).
+ */
+export function nightFits(g: Game, z: number): number {
+  const dark = 24 * (1 - dayShare(seaLatitude(g, z), turnToDate(g.turn).month));
+  return dark > 0 ? Math.max(0, 1 - CAUSE.load!.reload! / dark) : 0;
+}
+
+/**
+ * The salvos a boat that fires puts into one convoy (the load form, Q1 (a)): the first, and each further approach with
+ * the chance q (it fires again past the screen, has kept contact and has reloaded in the dark), up to its load:
+ * 1 + q + q^2 + ... over load / tubes salvos, the last a part salvo of what is left.
+ */
+export function salvosInto(q: number, salvos: number): number {
+  if (salvos <= 0) return 0;
+  const whole = Math.floor(salvos);
+  let s = 0, t = 1;
+  for (let k = 0; k < whole; k++) { s += t; t *= q; }
+  return s + (salvos - whole) * t;
+}
+
+/**
+ * The torpedoes one boat that fires puts into one convoy in a sea, at the convoy's firing share. As first built, its
+ * whole usable load. With the load form laid (the design director's rulings of 24 November 2026 17:27Z and 17:37Z on
+ * naval-battles/convoy-r2/load-per-convoy-form.md): salvos of its ready tubes (all of them each approach, both eras, F),
+ * a further approach going ahead with q = the firing share x the share of the night it fits in x the share of boats that
+ * regain contact after an attack (contact is lost running in, F). With that share unread, one approach.
+ */
+export function torpedoesInto(g: Game, z: number, fire = 1, at?: ConvoyAt): number {
+  const load = loadIn(g, z);
+  if (!loadLaid()) return load;
+  const C = CAUSE.ceiling, regain = CAUSE.load!.regain;
+  // (A further approach the same night: a reload in the dark left and the share that regain contact, unread. Failing that,
+  // the next night: contact held through the day (nextNight). Either way it meets the screen again and fires at the share.)
+  const w = regain == null ? 0 : nightFits(g, z) * regain;
+  const h = at ? nextNight(g, z, at.route, at.nat) : 0;
+  const q = fire * (w + (1 - w) * h);
+  return C.tubes! * salvosInto(q, load / C.tubes!);
+}
+
+/**
+ * The share of the boats that fired on a convoy one night that hold or regain contact for the next night (the load
+ * form's Q2 (a), the design director's ruling of 24 November 2026 18:00Z: the next-night part from its causes; the
+ * second run within one night stays unread). By day a boat runs on the surface after the convoy, and what its speed has
+ * over the convoy's (1 - the convoy's speed / its own, none where the convoy is as fast) is its margin to work round
+ * ahead of it for the next night, weighed over the route's convoys by class (load.next). Two things break contact: the
+ * aircraft that keep boats down by day, as the sea patrol keeps them down (keptUp, as built: one cause acting once, and
+ * nothing while the patrol is dormant), and a rough sea (the complement of calmShare, as built). 0 where a speed is unread.
+ */
+export function nextNight(g: Game, z: number, route: string, nat: string): number {
+  const N = CAUSE.load?.next;
+  const boat = N?.boat ?? null, classes = N?.convoys[route] ?? null;
+  if (boat === null || boat <= 0 || !classes || !classes.length) return 0;
+  let margin = 0, all = 0;
+  for (const c of classes) {
+    if (c.speed === null || c.share === null) return 0;
+    margin += c.share * Math.max(0, 1 - c.speed / boat);
+    all += c.share;
+  }
+  return all > 0 ? (margin / all) * keptUp(g, nat, z) * calmShare(g, z) : 0;
+}
+
+/** A route's boat ceiling: the ships a boat that fires sinks in one convoy at most; with the load form, the torpedoes it puts in and those the route's boats on station hold this month (the per-patrol cap). */
+interface RouteCeiling { each: number; torpedoes?: number; month?: number }
+
+/** The boat ceiling on a route at a firing share, over the boats on station on its seas as the count counts them (convoyCount): null where it is not laid or no boat is on station. */
+function routeCeiling(g: Game, route: ConvoyRoute, fire = 1): RouteCeiling | null {
   if (!ceilingLaid()) return null;
   const zones = route.zones.map((k) => zoneOf(g, k));
-  let w = 0, c = 0;
+  const load = loadLaid();
+  let w = 0, c = 0, t = 0, held = 0;
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.ss <= 0 || !zones.includes(f.zone) || !atWar(g, f.nat, route.to)) continue;
-    const b = f.ships.ss * raidShare(f) * onStation(g, f, f.zone);
-    w += b; c += b * boatCeiling(g, f.zone)!;
+    const b = f.ships.ss * raidShare(f) * onWatch(g, f, f.zone);
+    const at = { route: route.id, nat: f.nat };
+    w += b; c += b * boatCeiling(g, f.zone, fire, at)!;
+    if (load) { t += b * torpedoesInto(g, f.zone, fire, at); held += b * loadIn(g, f.zone); }
   }
-  return w > 0 ? c / w : null;
+  if (w <= 0) return null;
+  if (!load) return { each: c / w };
+  // (A boat holds one load for its days on station, so in a month of them the boats on station hold 30 / patrol loads.)
+  const patrol = CAUSE.station.ss?.patrol;
+  return { each: c / w, torpedoes: t / w, ...(patrol ? { month: (held * MONTH_DAYS) / patrol } : {}) };
 }
 
 /**
@@ -3528,8 +3916,10 @@ function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[
       // its faulty torpedoes are read in the boats' part, boatRaid: with neither on, its worth times the three together,
       // as it has always been multiplied.)
       const m = quality(g, f.nat) * fit(g, f) * raidShare(f) * (cover ? coverCut(cover[zones.indexOf(f.zone)]) : 1);
-      const p = raidPower(g, f, !!cover) * m;
-      if (p > 0) { raid += p; raiders.push(f); boats += boatRaid(g, f, !!cover, false) * m; weighed += boatRaid(g, f, !!cover) * m; }
+      // (Release 2, the sea patrol: boats kept down by aircraft without kit raid the convoys only for their time up.)
+      const up = cover ? keptUp(g, f.nat, f.zone) : 1;
+      const p = up === 1 ? raidPower(g, f, !!cover) * m : raidPower(g, f, !!cover) * m - boatRaid(g, f, !!cover) * m * (1 - up);
+      if (p > 0) { raid += p; raiders.push(f); boats += boatRaid(g, f, !!cover, false) * m * up; weighed += boatRaid(g, f, !!cover) * m * up; }
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, route.id);
       if (w <= 0) continue;
@@ -3558,7 +3948,7 @@ function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[
     const count = (CAUSE.count.sink ?? null) === null ? null : convoyCount(g, route);
     if (count) {
       // (P counts a boat on station at 1; the others' part is the raid less the boats as the lanes weigh them.)
-      const side = convoySide(route, count, boats, G, routeCeiling(g, route), radarShips, escortShips);
+      const side = convoySide(route, count, boats, G, (fire) => routeCeiling(g, route, fire), radarShips, escortShips);
       const rest = raid - weighed;
       const Lo = rest > 1e-12 ? rest / (rest + G + NAVY.convoy.ocean) : 0;
       return { zones, raid, guard, raiders, escorts, G, L: sideLoss(route, side, Lo, 1).L, cover, side, Lo };
@@ -3610,9 +4000,25 @@ export interface ConvoyMeeting {
   count?: ConvoyCountRecord;
 }
 
-/** A route's convoy count as the record and the card carry it: boats on station, convoys sailed, sighted and attacked, incidents, the pack, and where the tons are counted from the convoys' side the ships a convoy attacked lost (the card's expected figure; the month's record, after the swing), to two places. Where the escort's radar before a boat fires is laid, 'fired' is the boats that fire a convoy attacked, the pack the contest and the ceiling read (the card's boats each). */
-export type ConvoyCountRecord = ConvoyCount & { sunk?: number; torps?: number; fired?: number };
-const countRecord = (c: ConvoyCount, sunk?: number, torps?: number, fired?: number): ConvoyCountRecord => ({ boats: r2(c.boats), sailed: r2(c.sailed), sighted: r2(c.sighted), attacked: r2(c.attacked), incidents: r2(c.incidents), pack: r2(c.pack), ...(sunk !== undefined ? { sunk: r2(sunk) } : {}), ...(torps !== undefined ? { torps: r2(torps) } : {}), ...(fired !== undefined ? { fired: r2(fired) } : {}) });
+/** A route's convoy count as the record and the card carry it: boats on station, convoys sailed, sighted and attacked, incidents, the pack, and where the tons are counted from the convoys' side the ships a convoy attacked lost (the card's expected figure; the month's record, after the swing), to two places. Where the escort's radar before a boat fires is laid, 'fired' is the boats that fire a convoy attacked, the pack the contest and the ceiling read (the card's boats each); with the sea patrol live, 'watched' is the share of the route's waters its aircraft watch. */
+export type ConvoyCountRecord = ConvoyCount & { sunk?: number; torps?: number; fired?: number; watched?: number };
+const countRecord = (c: ConvoyCount, sunk?: number, torps?: number, fired?: number, watched?: number): ConvoyCountRecord => ({ boats: r2(c.boats), sailed: r2(c.sailed), sighted: r2(c.sighted), attacked: r2(c.attacked), incidents: r2(c.incidents), pack: r2(c.pack), ...(sunk !== undefined ? { sunk: r2(sunk) } : {}), ...(torps !== undefined ? { torps: r2(torps) } : {}), ...(fired !== undefined ? { fired: r2(fired) } : {}), ...(watched !== undefined ? { watched: r2(watched) } : {}) });
+/**
+ * The share of a route's waters its side's aircraft on patrol watch this month (release 2, the sea patrol, once live;
+ * Q8's convoy card): each sea's watched share, the seas weighed by their size as 1 / 'air' stands in for it, the scale
+ * of the reading first ruled at 15:14Z. The interim reading the design director ruled at 17:49Z ('map') measures each
+ * sea's waters on the chart (seaSquares), but the card's weights do not read that measure yet. Undefined where the
+ * patrol is not live.
+ */
+function routeWatched(g: Game, nat: string, zones: number[]): number | undefined {
+  if (!patrolOn(g)) return undefined;
+  let w = 0, s = 0;
+  for (const z of zones) {
+    const size = 1 / Math.max(1e-6, g.seas[z].air);
+    w += size; s += size * (watchFor(g, z, (x) => allied(g, x, nat))?.s ?? 0);
+  }
+  return w > 0 ? s / w : 0;
+}
 const r2 = (x: number): number => Math.round(x * 100) / 100;
 
 /** A night the player fought, as the rules take it: the swing, and boats and destroyers lost by fleet id. A fleet left out rolls its dice. */
@@ -3641,7 +4047,7 @@ export function convoyMeeting(g: Game, nat: string, route: ConvoyRoute): ConvoyM
       turn: g.turn, route: route.id, owner: nat, zones, raid, guard, G, L, tons: side ? sideLoss(route, side, Lo ?? 0, 1).tons : Math.round((route.tons * L) / 1000) * 1000,
       raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * incidentsPerBoat(g, f, count) * (p.get(f.zone) ?? 0), roomLeft(g, f)) })),
       escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid > 0 ? raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 })),
-      ...(count ? { count: countRecord(count, side?.sunk, side?.torps, side?.fired) } : {}),
+      ...(count ? { count: countRecord(count, side?.sunk, side?.torps, side?.fired, routeWatched(g, nat, zones)) } : {}),
     };
   }
   if (seaWar(g) && g.nations[nat].atWar.length) {
@@ -3760,27 +4166,68 @@ function lookConvoy(g: Game, nat: string, route: string, zones: number[], raider
     escorts: escorts.filter((f) => f.zone === z || (z === most && !zones.includes(f.zone))).map((f) => lookFleet(f, at.dd.get(f.id) ?? f.ships.dd)),
     air: airOver(g, z, nat) * NAVY.convoy.air,
     tons: Math.round((all > 0 ? tons * (by[i] / all) : tons / zones.length) / 1000) * 1000,
-    // (Units decide only: the kit of the navy with most destroyers answering attacks in the sea, the cover's kind, and
-    // the boats the escorts sank there. Off, none of these is written.)
-    ...(cause ? { kit: kitLook(aswKit(g, answerer(g, nat, route, z))), cover: cause.cover[i].kind, lost: cause.lost[z] ?? 0 } : {}),
+    // (Units decide only: the kit of the navy with most destroyers answering attacks in the sea, each answering navy's
+    // own kit by navy, the cover's kind, and the boats the escorts sank there. Off, none of these is written.)
+    ...(cause ? { ...seaKits(g, nat, route, z), cover: cause.cover[i].kind, lost: cause.lost[z] ?? 0 } : {}),
   }));
   lookOf(g, nat).convoys.push({ route, tons, seas });
 }
 
-/** The navy with most destroyers answering attacks on a route's convoys in one sea (its groups there and the close escort), or the route's own. */
-function answerer(g: Game, nat: string, route: string, z: number): string {
+/**
+ * The boats that met a route's convoys this month, sea by sea, for the record of what the route's nation has seen
+ * (release 2, once the sea patrol is live; seasight.ts, the design director's ruling of 24 November 2026 17:54Z, Q2 (a)):
+ * those that fired on its convoys (the count's convoys attacked x the boats that fire a convoy attacked) and those that
+ * met its escort (the count's incidents, or each boat's per-boat share where the count is not laid), each fleet's part
+ * by its share of the route's boats on station as the count shares them, and never more than its boats on station there.
+ * Within a route a sea's fleets add up; between routes the most counts, since the same boats may meet both. Throws no dice.
+ */
+function metConvoys(g: Game, count: ConvoyCount | null, side: ConvoySide | undefined, raiders: Fleet[], seen: SeaMonth): void {
+  const fired = count ? count.attacked * (side?.fired ?? count.pack) : 0;
+  const attack: Record<number, number> = {}, incident: Record<number, number> = {};
+  for (const f of raiders) {
+    if (f.ships.ss <= 0) continue;
+    const most = f.ships.ss * onStation(g, f, f.zone);
+    const b = f.ships.ss * raidShare(f) * onWatch(g, f, f.zone);
+    if (count && count.boats > 0) attack[f.zone] = (attack[f.zone] ?? 0) + Math.min(most, (fired * b) / count.boats);
+    incident[f.zone] = (incident[f.zone] ?? 0) + Math.min(most, f.ships.ss * incidentsPerBoat(g, f, count));
+  }
+  for (const z of Object.keys(attack)) seen.attack[+z] = Math.max(seen.attack[+z] ?? 0, attack[+z]);
+  for (const z of Object.keys(incident)) seen.incident[+z] = Math.max(seen.incident[+z] ?? 0, incident[+z]);
+}
+
+/** The allied navies answering attacks on a route's convoys in one sea (their groups hunting there and the close escort), each with its destroyers there, in the order of the fleets. */
+function answering(g: Game, nat: string, route: string, z: number): Map<string, number> {
   const by = new Map<string, number>();
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.dd <= 0 || !allied(g, f.nat, nat)) continue;
     if ((f.stance === 'hunt' && f.zone === z) || (f.stance === 'escort' && f.lane === route)) by.set(f.nat, (by.get(f.nat) ?? 0) + f.ships.dd);
   }
+  return by;
+}
+
+/** The navy with most destroyers answering attacks on a route's convoys in one sea, or the route's own. */
+function answerer(g: Game, nat: string, route: string, z: number, by = answering(g, nat, route, z)): string {
   let best = nat, most = 0;
   for (const [k, n] of by) if (n > most) { most = n; best = k; }
   return best;
 }
 
-/** The month's fighting on the convoy routes that feed this nation: raiders against escorts. */
-export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>, nights?: ConvoyNights): void {
+/**
+ * A convoy sea's kits for the scene's record: each answering navy's own kit, keyed by its nation (the route's own
+ * nation's alone where none answers), and as 'kit', as before, the kit of the navy with most destroyers there.
+ */
+function seaKits(g: Game, nat: string, route: string, z: number): { kit: KitLook; kits: Record<string, KitLook> } {
+  const by = answering(g, nat, route, z);
+  const kits = Object.fromEntries((by.size ? [...by.keys()] : [nat]).map((k) => [k, kitLook(aswKit(g, k))]));
+  return { kit: { ...kits[answerer(g, nat, route, z, by)] }, kits };
+}
+
+/**
+ * The month's fighting on the convoy routes that feed this nation: raiders against escorts. With 'seen' (release 2, once
+ * the sea patrol is live), what each route's convoys met of the enemy's boats, sea by sea, for this nation's record of
+ * what it has seen (metConvoys).
+ */
+export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>, nights?: ConvoyNights, seen?: SeaMonth): void {
   const n = g.nations[nat];
   for (const route of NAVY.convoys) {
     if (route.to !== nat) continue;
@@ -3824,6 +4271,9 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
         const irng = seaRng(g, `incident:${route.id}`);
         // (The one-pass ruling: what the boats on station meet is counted from the convoys' side, where its figures are laid.)
         count = convoyCount(g, route);
+        // (Release 2, once the sea patrol is live: the boats its convoys and escort met on the route, sea by sea, before
+        // any is lost, for the record of what this nation has seen.)
+        if (seen) metConvoys(g, count, side, raiders, seen);
         for (const z of zones) {
           const p = incidentChance(g, nat, route.id, z);
           let lost = 0;
@@ -3836,7 +4286,10 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
             f.ships.ss -= k; f.lost.ss += k; subsLost += k; lost += k;
             loseStars(f, 'ss', k);
           }
-          if (lost) (byEscorts ??= {})[z] = lost;
+          if (lost) {
+            (byEscorts ??= {})[z] = lost;
+            if (seen) seen.sunk[z] = (seen.sunk[z] ?? 0) + lost;
+          }
         }
       }
     }
@@ -3847,7 +4300,9 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     // (Record only, and only with Units decide: the boats the convoy's escorts sank, of subsLost.)
     if (cover) g.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
     // (Record only, with Units decide and the route's count laid: the convoys' side of the month, as the boats stood after the hunt.)
-    if (count) g.convoys[route.id].count = countRecord(count, month?.sunk, side?.torps, side?.fired);
+    if (count) g.convoys[route.id].count = countRecord(count, month?.sunk, side?.torps, side?.fired, routeWatched(g, nat, zones));
+    // (Record only, with the sea patrol live: the boats this nation's aircraft on patrol sank in the route's seas, of subsLost.)
+    if (cover && patrolOn(g)) { const ps = g.patrolSunk?.[nat]; g.convoys[route.id].byAircraft = ps?.turn === g.turn ? zones.reduce((a, z) => a + (ps.seas[z] ?? 0), 0) : 0; }
     if (at) lookConvoy(g, nat, route.id, zones, raiders, escorts, at, tons, cover && { cover, lost: byEscorts ?? {} });
     storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
@@ -3870,7 +4325,12 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
     if (!atSea(f)) continue;
     if (atWar(g, f.nat, nat)) {
       if (!zones.includes(f.zone)) continue;
-      raid += raidPower(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * (cover ? cover[zones.indexOf(f.zone)] : 1);
+      const c = cover ? cover[zones.indexOf(f.zone)] : 1;
+      const p = raidPower(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * c;
+      // (Release 2, the sea patrol, as on a convoy route (routeForces): boats kept down by aircraft without kit raid the
+      // lane only for their time up. 1 where none watch, or the patrol is not live, and then the raid is as before.)
+      const up = cover ? keptUp(g, f.nat, f.zone) : 1;
+      raid += up === 1 ? p : p - boatRaid(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * c * (1 - up);
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, lane);
       if (w <= 0) continue;
@@ -4413,6 +4873,15 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       continue;
     }
     if (f.duty === 'raid') {
+      // (Release 2, the sea patrol, once live (Q5 (a)): the staff moves its boats to the sea of their routes, within
+      // reach, where they spend most of the month up on station, out of waters aircraft without kit keep them down in
+      // as its side's boats last met them there (the design director's ruling of 24 November 2026 17:54Z), and only
+      // where that gain covers the time the move itself loses (his ruling of 17:49Z, 1 (a)): quieterBeat.)
+      const quiet = quieterBeat(g, f);
+      if (quiet >= 0) {
+        headline(g, 'info', `${cap(fleetName(f))} shifts its hunting ground from ${seaWhat(g.seas[f.station].name)} to ${seaWhat(g.seas[quiet].name)}, out of the aircraft's way.`, nat);
+        f.station = quiet;
+      }
       // (Units decide, the one-pass ruling: the staff bases a raider at the held port nearest its beat, where its boats
       // spend more time on station. The move takes the month in harbour, as any move of base does.)
       const to = nearerPort(g, f);

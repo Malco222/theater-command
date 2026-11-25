@@ -39,10 +39,15 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; entered: boolean }[] = [];
 const canada: { turn: number; across: number; inBritain: number; where: string[] }[] = [];
 {
-  // Seed 8 (seed 7 until Version 84, whose rules of what an attack brings and faces moved every war): nobody stands on
-  // Germany's ground in January 1943. (America's own landing was Marseille in June 1944 until ruling 227; since then it
-  // is Sardinia in July 1943.)
-  const g = wide(8);
+  // Seed 7: nobody stands on Germany's ground in January 1943. (A French corps is in the Saar in August 1940, and then
+  // nobody until the Red Army takes Memel in October 1943. America's own landing is Sardinia, an island, in April 1943,
+  // and Britain's is Rhodes that month. Britain lands at Marseille in November 1943 and America in Brittany in February
+  // 1944, both with France's date set aside: the Red Army stands on German ground by then.)
+  // (The seed's history. It was seed 7 until Version 84, whose rules of what an attack brings and faces moved every war,
+  // and seed 8 from then until release 2 opened a war with its heavy guns built, 25 November 2026, which moved them
+  // again: on seed 8 the Red Army is in Masuria in December 1942 and holds Memel in January 1943. Of seeds 1 to 11
+  // and 14, nine tell this file's whole story with the guns on, 7 among them; 1, 4 and 8 do not, each by that one line.)
+  const g = wide(7);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, entered: germanyEntered(g) }); };
   while (g.turn < OCT_44) {
     runTurnAI(g);

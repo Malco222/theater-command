@@ -316,7 +316,7 @@ describe('no nation and no month', () => {
     try { navalUpkeep(g, 'UK'); } finally { subScene.on = false; }
     const look = g.subLook!.find((l) => l.nat === 'UK')!.convoys.find((c) => c.route === 'atlantic')!;
     const irish = look.seas.find((s) => s.zone === zoneOf(g, 'irish'))!;
-    expect(irish.kit).toEqual({ asdic: true, radar: true, hedgehog: true, hfdf: false });
+    expect(irish.kit).toEqual({ asdic: true, radar: true, hedgehog: true, hfdf: false, groups: false });
     expect(irish.cover).toBe('shore');
     expect(typeof irish.lost).toBe('number');
     expect(look.seas.reduce((s, x) => s + (x.lost ?? 0), 0)).toBe(g.convoys.atlantic.byEscorts);
