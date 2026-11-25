@@ -571,6 +571,16 @@ export interface Corps extends Storied {
   /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
   whole?: number[];
   /**
+   * (Release 2, the grand campaign: a division is laid once, drawn.ts.) The divisions a dated row brought into this
+   * corps from living corps, instead of laying them a second time: each one's name, its number, and the corps it came
+   * out of ('from': this corps' own id where the row took the whole corps, and the divisions are its own). 'conv'
+   * marks one formed out of another division (the 14th Panzer, out of the 4th Infantry): it never goes back. Read when
+   * the row's time with its campaign is up ('until'): each goes back to its corps, or stands on where it is.
+   */
+  drew?: { name: [string, string]; no: number; from: number; conv?: true }[];
+  /** (The same.) Its own name and standing orders from before a dated row took the whole corps under the row's name: it has them back when the row's time is up. */
+  rowed?: { name: string; hold: boolean; stay?: boolean };
+  /**
    * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, the weeks of marching it
    * gave up for it (given back if it is stood down in the same month), and the province it holds (driven out of it, it
    * is a rearguard no longer). Gone at the start of its side's next month.

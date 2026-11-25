@@ -309,7 +309,7 @@
     [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"]}],
     [19, "GER", "50th, 72nd and 164th Infantry Divisions", "inf", 3, "Plovdiv", {"hold": 1, "xp": 0.3, "war": ["ITA", "GRE"]}],
     [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
-    [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"], "until": 22}],
+    [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"], "until": 22, "was": {"14th Panzer Division": "4th Infantry Division"}}],
     [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", {"hold": 1, "xp": 0.2, "war": ["ITA", "GRE"]}],
     [21, "GER", "XI Air Corps", "inf", 3, "Athens", {"gen": "Kurt Student", "trait": "attacker", "airborne": 1, "hold": 1, "xp": 0.7, "war": ["GER", "UK"]}],
     [35, "HUN", "2nd Army: III Corps", "inf", 3, "Voronezh", {"gen": "Gusztav Jany", "trait": "defender", "hold": 1, "join": 1, "until": 45, "xp": 0.05, "war": ["GER", "SOV"]}],

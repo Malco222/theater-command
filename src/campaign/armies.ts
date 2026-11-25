@@ -50,6 +50,8 @@ export const DIVISIONS = data as unknown as {
   kinds: Record<Kind, { word: string; name: string; short: string }>;
   names: Record<string, Partial<Record<Kind, [string, string]>>>;
   historic: Record<string, Record<string, [string, string][]>>;
+  /** The divisions a formation's own name gives where the name alone does not read as its record does: by nation and formation name. */
+  reads?: Record<string, Record<string, [string, string][]>>;
   order: Kind[];
   spread: { str: number; xp: number };
   hardened: number;
@@ -77,7 +79,7 @@ for (const [nat, arms] of Object.entries(DIVISIONS.record ?? {})) for (const [ki
 const numbersOf = (c: Corps): number[] => c.nos ?? Array.from({ length: c.divs }, (_, i) => c.dn! + i);
 
 /** Lays out a corps' numbers: its first, and the whole list only where they do not run on one from the next. */
-function keepNumbers(c: Corps, list: number[]): void {
+export function keepNumbers(c: Corps, list: number[]): void {
   c.dn = list[0];
   if (list.some((n, i) => n !== list[0] + i)) c.nos = list;
   else delete c.nos;
@@ -87,12 +89,26 @@ function keepNumbers(c: Corps, list: number[]): void {
 
 /** What a formation's own name makes of its divisions, kept by "nation:kind:name" (the same few names are asked often). */
 const NAMED = new Map<string, [string, string][]>();
-function ownNames(name: string, nat: string, kind: Kind): [string, string][] {
-  const k = `${nat}:${kind}:${name}`;
-  let got = NAMED.get(k);
-  if (!got) NAMED.set(k, got = DIVISIONS.historic[nat]?.[name] ?? namedDivisions(name, nat, kind));
+/** The same in the grand campaign, where a dated row's name is read by the names table (`reads`) before its own words: a division is laid once, drawn.ts. */
+const READ = new Map<string, [string, string][]>();
+/**
+ * `grand` true in the grand campaign alone: there a row's name is read by the table that gives each of its divisions
+ * the one name the country's other rows know it by (divisions.json `reads`). A historical scenario reads every name
+ * as it always did, and its cards and battle tickets carry the names they were measured with.
+ */
+function ownNames(name: string, nat: string, kind: Kind, grand = false): [string, string][] {
+  const k = `${nat}:${kind}:${name}`, kept = grand ? READ : NAMED;
+  let got = kept.get(k);
+  if (!got) kept.set(k, got = DIVISIONS.historic[nat]?.[name] ?? (grand ? DIVISIONS.reads?.[nat]?.[name] : undefined) ?? namedDivisions(name, nat, kind));
   return got;
 }
+
+/**
+ * The divisions a formation's own name gives in the grand campaign, as its cards show them there (the historian's
+ * table first, then the names table, then the name read): [name, short], in order. `grand` false: as a historical
+ * scenario reads it.
+ */
+export const divisionsNamed = (name: string, nat: string, kind: Kind, grand = true): [string, string][] => ownNames(name, nat, kind, grand);
 
 /**
  * The division names the data's rows give, by nation: every row of the campaign's data files that names a formation
@@ -101,12 +117,13 @@ function ownNames(name: string, nat: string, kind: Kind): [string, string][] {
  * first numbered: by then the far side's rows are laid over the files (far-rows.ts), where its switch is on. A row
  * that never lands keeps its names all the same, and so does one whose division has died.
  */
-let ROW_NAMES: Map<string, Set<string>> | null = null;
-function rowNames(): Map<string, Set<string>> {
-  if (ROW_NAMES) return ROW_NAMES;
+const ROW_NAMES: { grand: Map<string, Set<string>> | null; history: Map<string, Set<string>> | null } = { grand: null, history: null };
+function rowNames(grand: boolean): Map<string, Set<string>> {
+  const got = grand ? ROW_NAMES.grand : ROW_NAMES.history;
+  if (got) return got;
   const out = new Map<string, Set<string>>();
   const note = (nat: string, name: string, kind: Kind): void => {
-    const own = ownNames(name, nat, kind);
+    const own = ownNames(name, nat, kind, grand);
     if (!own.length) return;
     let set = out.get(nat);
     if (!set) out.set(nat, set = new Set());
@@ -121,7 +138,8 @@ function rowNames(): Map<string, Set<string>> {
     } else if (x && typeof x === 'object') for (const y of Object.values(x)) if (y && typeof y === 'object') walk(y);
   };
   for (const file of [setup, worldRows, diplomacyRows, siegeRows, openRows, pacificRows, legionRows]) walk(file);
-  return ROW_NAMES = out;
+  if (grand) ROW_NAMES.grand = out; else ROW_NAMES.history = out;
+  return out;
 }
 
 /**
@@ -131,13 +149,14 @@ function rowNames(): Map<string, Set<string>> {
  */
 function standIns(g: Game, nat: string, kind: Kind): (from: number) => number {
   const words = divisionWords(nat, kind).name;
-  const rows = rowNames().get(nat);
+  const grand = g.flags.open === 1;
+  const rows = rowNames(grand).get(nat);
   let living: Set<string> | null = null;
   const taken = (name: string): boolean => {
     if (rows?.has(name)) return true;
     if (!living) {
       living = new Set();
-      for (const o of g.corps) if (o.nat === nat && !o.dead) for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind)) living.add(full);
+      for (const o of g.corps) if (o.nat === nat && !o.dead) for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind, grand)) living.add(full);
     }
     return living.has(name);
   };
@@ -199,6 +218,27 @@ export function growCorps(g: Game, c: Corps, divs: number, kind: Kind): void {
   while (list.length < c.divs) list.push(next = free(next));
   g.flags[key] = next;
   keepNumbers(c, list);
+}
+
+/**
+ * The next stand-in numbers of a nation's arm, for divisions raised new into a corps that already stands (a division
+ * is laid once, drawn.ts): its nation counts on from them, as for a corps raised whole. None outside the grand campaign.
+ */
+export function standInNumbers(g: Game, nat: string, kind: Kind, count: number): number[] {
+  if (g.flags.open !== 1 || count <= 0) return [];
+  const key = counter(nat, kind);
+  let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
+  const free = standIns(g, nat, kind);
+  const list: number[] = [];
+  while (list.length < count) list.push(next = free(next));
+  g.flags[key] = next;
+  return list;
+}
+
+/** A nation's count of an arm's stand-ins as it stands, and that count put back: for a corps laid with a place kept open that no new division fills (drawn.ts). */
+export const standInCount = (g: Game, nat: string, kind: Kind): number | undefined => g.flags[counter(nat, kind)];
+export function setStandInCount(g: Game, nat: string, kind: Kind, n: number | undefined): void {
+  if (n === undefined) delete g.flags[counter(nat, kind)]; else g.flags[counter(nat, kind)] = n;
 }
 
 /** The number a corps' first division carries. Where none is kept, the divisions are numbered as the armies stand. */
@@ -296,7 +336,7 @@ export function divisionsOf(g: Game, c: Corps): DivisionCard[] {
   const ds = characters(c.id, c.divs, 'ds'), dx = characters(c.id, c.divs, 'dx');
   // Each stands a little above or below the corps, within the room the corps' own figure leaves either side of it.
   const roomS = Math.min(str, 1 - str) * DIVISIONS.spread.str, roomX = Math.min(xp, 1 - xp) * DIVISIONS.spread.xp;
-  const named = c.names ?? DIVISIONS.historic[c.nat]?.[c.name] ?? namedDivisions(c.name, c.nat, c.kind);
+  const named = c.names ?? ownNames(c.name, c.nat, c.kind, g.flags.open === 1);
   return Array.from({ length: c.divs }, (_, i) => {
     const s = str + ds[i] * roomS, x = xp + dx[i] * roomX;
     const no = c.nos?.[i] ?? first + i;

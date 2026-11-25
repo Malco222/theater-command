@@ -5,6 +5,7 @@
     "kinds": "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
     "names": "What a nation calls its own divisions of a kind, where it differs: [name, short].",
     "historic": "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358). A division whose kind the corps does not hold is left to its number (b371: I Corps' third, Panzer Division Kempf, waits until the corps holds armour).",
+    "reads": "The divisions a formation's own name gives, by nation and formation name, where the name alone does not read as its record does (the design director, 13:48Z, 13:50Z and 14:28Z of 25 November 2026, on the historian's named-twice-reads-1125.md; no row is renamed, since a row's name is its key). One division, one name for life: New Zealand's is the 'New Zealand Division' in every row, the name its first row gives. An American division carries its arm (the '5th Infantry Division'; a bare '5th' in a list of British divisions is the British 5th). A different army's unit carries that army's name (the Chinese 50th is not Britain's 50th). A part is not a division: a brigade, a regiment or a detachment laid as a row of its own reads as itself, never as the whole division it belongs to. Nor is a row of one division that stands for several of another army's a list of them: it reads as one, under its own name (a Chinese army of three small divisions, laid as one). Read after 'historic', before the name itself.",
     "order": "The order the kinds are listed in when an army is summed up.",
     "spread": "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
     "hardened": "The experience (0 to 1) at which a division counts as battle-hardened.",
@@ -30,6 +31,39 @@
     "GER": {
       "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"]],
       "Corps Wodrig": [["1st Infantry Division", "1st Infantry"], ["12th Infantry Division", "12th Infantry"]]
+    }
+  },
+  "reads": {
+    "UK": {
+      "2nd New Zealand Division": [["New Zealand Division", "New Zealand"]],
+      "New Zealand Corps (2nd New Zealand and 4th Indian Divisions)": [["New Zealand Division", "New Zealand"], ["4th Indian Division", "4th Indian"]],
+      "Chinese 14th and 50th Divisions": [["Chinese 14th and 50th Divisions", "Chinese 14th and 50th"]],
+      "Chinese 5th Army (200th, 22nd and 96th Divisions)": [["Chinese 5th Army", "Chinese 5th Army"]],
+      "Chinese 6th Army (49th, 55th and 93rd Divisions)": [["Chinese 6th Army", "Chinese 6th Army"]],
+      "Chinese 66th Army (38th, 28th and 29th Divisions)": [["Chinese 66th Army", "Chinese 66th Army"]],
+      "Chinese Army in India (22nd and 38th Divisions), with America's 5307th from February 1944": [["Chinese 22nd Division", "Chinese 22nd"], ["Chinese 38th Division", "Chinese 38th"]],
+      "9th Indian Division (8th Brigade)": [["8th Indian Brigade", "8th Indian Brigade"]],
+      "9th Indian Division (22nd Brigade)": [["22nd Indian Brigade", "22nd Indian Brigade"]],
+      "First Allied Airborne Army: I Airborne Corps (1st Airborne, US 82nd and 101st Airborne Divisions)": [["1st Airborne Division", "1st Airborne"], ["US 82nd Airborne Division", "US 82nd Airborne"], ["US 101st Airborne Division", "US 101st Airborne"]],
+      "First Canadian Army: II Canadian Corps and British I Corps (2nd and 3rd Canadian, 4th Canadian Armoured, 1st Polish Armoured and 51st Highland Divisions)": [["2nd Canadian Division", "2nd Canadian"], ["3rd Canadian Division", "3rd Canadian"], ["4th Canadian Armoured Division", "4th Canadian Armoured"], ["1st Polish Armoured Division", "1st Polish Armoured"], ["51st Highland Division", "51st Highland"]]
+    },
+    "USA": {
+      "Fifth Army: VI Corps (3rd and 45th Infantry, 1st Armored and British 1st and 5th Divisions)": [["3rd Infantry Division", "3rd Infantry"], ["45th Infantry Division", "45th Infantry"], ["1st Armored Division", "1st Armored"], ["British 1st Division", "British 1st"], ["British 5th Division", "British 5th"]],
+      "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)": [["British 46th Division", "British 46th"], ["British 56th Division", "British 56th"], ["British 7th Armoured Division", "British 7th Armoured"]],
+      "Third Army: XX Corps (7th Armored, 5th and 90th Infantry Divisions)": [["7th Armored Division", "7th Armored"], ["5th Infantry Division", "5th Infantry"], ["90th Infantry Division", "90th Infantry"]],
+      "Third Army: XII Corps (4th Armored, 35th and 80th Infantry Divisions)": [["4th Armored Division", "4th Armored"], ["35th Infantry Division", "35th Infantry"], ["80th Infantry Division", "80th Infantry"]],
+      "Third Army: III Corps (26th and 95th Infantry, 6th and 10th Armored Divisions)": [["26th Infantry Division", "26th Infantry"], ["95th Infantry Division", "95th Infantry"], ["6th Armored Division", "6th Armored"], ["10th Armored Division", "10th Armored"]],
+      "First Army: VII Corps (4th, 9th and 90th Infantry, 82nd and 101st Airborne Divisions)": [["4th Infantry Division", "4th Infantry"], ["9th Infantry Division", "9th Infantry"], ["90th Infantry Division", "90th Infantry"], ["82nd Airborne Division", "82nd Airborne"], ["101st Airborne Division", "101st Airborne"]],
+      "First Army: VIII Corps (8th, 79th and 83rd Infantry, 4th and 6th Armored Divisions)": [["8th Infantry Division", "8th Infantry"], ["79th Infantry Division", "79th Infantry"], ["83rd Infantry Division", "83rd Infantry"], ["4th Armored Division", "4th Armored"], ["6th Armored Division", "6th Armored"]],
+      "First Army: XIX Corps (30th and 35th Infantry, 2nd and 3rd Armored Divisions)": [["30th Infantry Division", "30th Infantry"], ["35th Infantry Division", "35th Infantry"], ["2nd Armored Division", "2nd Armored"], ["3rd Armored Division", "3rd Armored"]]
+    },
+    "JAP": {
+      "Kimura Detachment (16th Division)": [["Kimura Detachment", "Kimura Detachment"]],
+      "16th Division (9th Infantry)": [["9th Infantry Regiment", "9th Infantry Regiment"]],
+      "229th Infantry (of the 38th Division)": [["229th Infantry Regiment", "229th Infantry Regiment"]],
+      "229th Infantry Regiment (with the 38th Division's headquarters)": [["229th Infantry Regiment", "229th Infantry Regiment"]],
+      "Shoji Detachment (230th Infantry, of the 38th Division)": [["Shoji Detachment", "Shoji Detachment"]],
+      "13th Army (detachments of the 32nd and 116th Divisions)": [["Detachments of the 32nd and 116th Divisions", "32nd and 116th detachments"]]
     }
   },
   "names": {
