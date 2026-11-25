@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a1e76169e 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6cc4af8f3 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -55400,6 +55400,10 @@
     if (!was) return null;
     g2.flags[`was:${was}`] = g2.turn;
     g2.human = null;
+    if (g2.townQueue?.[was]) {
+      delete g2.townQueue[was];
+      if (!Object.keys(g2.townQueue).length) delete g2.townQueue;
+    }
     return was;
   }
   function fallenNations(g2, viewer = g2.human) {
@@ -83241,6 +83245,18 @@
     keep2(g2, nat, all.filter((q) => q !== gone && !(q.region === region && q.line === gone.line && q.level > gone.level)));
     return true;
   }
+  function dropBehind(g2, nat, region, line) {
+    const all = queueOf(g2, nat);
+    let top = civicLevel(g2, line, region) + (civicGoing(g2, nat, region)?.item === line ? 1 : 0);
+    const gone = [];
+    for (const q of all) {
+      if (q.region !== region || q.line !== line) continue;
+      if (q.level <= top + 1) top = Math.max(top, q.level);
+      else gone.push(q);
+    }
+    if (gone.length) keep2(g2, nat, all.filter((q) => !gone.includes(q)));
+    return gone;
+  }
   var money2 = (pp) => Math.floor(pp * BUDGET.scale + 1e-6);
   function queueHeads(g2, nat) {
     const n = g2.nations[nat];
@@ -83248,10 +83264,12 @@
     const out = [], seen2 = /* @__PURE__ */ new Set();
     for (const q of queueOf(g2, nat)) {
       if (seen2.has(q.region)) continue;
-      seen2.add(q.region);
       const l = civicLine(q.line), going = civicGoing(g2, nat, q.region);
-      const cost = l ? l.cost[Math.min(l.cost.length, civicLevel(g2, q.line, q.region) + 1) - 1] : 0;
-      out.push({ q, name: queuedName(g2, q), cost: Math.round(cost * BUDGET.scale), short: going ? 0 : Math.max(0, Math.round(cost * BUDGET.scale) - money2(n.pp)), after: going ? going.name.split(" at ")[0].toLowerCase() : "" });
+      const ahead2 = civicLevel(g2, q.line, q.region) + (going?.item === q.line ? 1 : 0);
+      if (!l || q.level <= ahead2) continue;
+      seen2.add(q.region);
+      const lv = Math.min(q.level, ahead2 + 1), cost = Math.round(l.cost[lv - 1] * BUDGET.scale);
+      out.push({ q, name: queuedName(g2, { ...q, level: lv }), cost, short: going ? 0 : Math.max(0, cost - money2(n.pp)), after: going ? going.name.split(" at ")[0].toLowerCase() : "" });
     }
     return out;
   }
@@ -85110,7 +85128,11 @@
     return humanUp(g2) ? orderFort(g2, g2.human, region) : null;
   }
   function orderCancelBuild(g2, id) {
-    return humanUp(g2) && cancelBuild(g2, g2.human, id);
+    if (!humanUp(g2)) return false;
+    const b = g2.nations[g2.human]?.queue.find((x) => x.id === id);
+    if (!cancelBuild(g2, g2.human, id)) return false;
+    if (b?.what === "civic" && b.item) dropBehind(g2, g2.human, b.region, b.item);
+    return true;
   }
   function techTree(g2) {
     return g2.human ? techView(g2, g2.human) : null;
@@ -116389,9 +116411,10 @@ ${next.text}` : ""}` : next ? next.also : "";
         if (!t) return null;
         const lineNo = (id2) => id2 ? ["market", "farm", "school", "camp", "hospital", "hall"].indexOf(id2) : -1;
         const queueOf_ = (line) => {
-          const me2 = t.mine ? s.human : null;
-          if (!me2 || !humanUp(s) || onEve(s) || whyNotQueue(s, me2, r.id, line) !== null) return { queue: "", queueLabel: "" };
-          return { queue: `queue:${r.id}:${line}`, queueLabel: civicLine(line)?.levels[nextQueued(s, me2, r.id, line) - 1] ?? "" };
+          const me2 = t.mine ? s.human : null, l = civicLine(line);
+          if (!me2 || !l || !humanUp(s) || onEve(s) || whyNotQueue(s, me2, r.id, line) !== null) return { queue: "", queueLabel: "", queueLevel: 0, queueCost: 0, queueMonths: 0, queueAfter: "" };
+          const lv = nextQueued(s, me2, r.id, line);
+          return { queue: `queue:${r.id}:${line}`, queueLabel: l.levels[lv - 1] ?? "", queueLevel: lv, queueCost: shown(l.cost[lv - 1]), queueMonths: l.months[lv - 1], queueAfter: lv > 1 ? l.levels[lv - 2] : "" };
         };
         return {
           town: t.town,
@@ -118176,7 +118199,8 @@ ${standing5}`,
       const going = !!p?.building, top = o.has >= 3 && !going;
       const lines2 = top ? [`Complete: ${o.hasLabel}.`, o.blurb] : going ? [`${o.label} is going up: due ${date2(p.due)}.`, o.blurb] : [`${o.has ? "Next" : "First"}: ${o.label}  ·  ${moneyWords(o.cost)}  ·  ${monthsWords(o.months)}`, o.effect, o.blurb];
       const queueWhy = me && townQueueOn(s) ? whyNotQueue(s, me, region, o.line) : "off";
-      const queued2 = queueWhy === null ? civicLine(o.line)?.levels[nextQueued(s, me, region, o.line) - 1] ?? o.label : "";
+      const qLine = civicLine(o.line), qLevel = queueWhy === null ? nextQueued(s, me, region, o.line) : 0;
+      const queued2 = queueWhy === null && qLine ? `${qLine.levels[qLevel - 1] ?? o.label} (${moneyWords(qLine.cost[qLevel - 1] ?? o.cost)} at today's price)` : "";
       return {
         nat: "",
         title: `${o.name}${o.has ? `  ·  ${o.hasLabel}` : ""}`,
@@ -119510,9 +119534,12 @@ ${standing5}`,
         if (b) noteOwnOrder(s, b, key7, -1, offer?.label ?? b.name);
         note4 = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? "It is not your month." : offer?.why ?? "That cannot be ordered now.";
       } else if (part[1] === "cancel") {
+        const was = s.human ? queueOf(s, s.human).slice() : [];
         ok2 = orderCancelBuild(s, Number(part[2]));
         if (ok2) forgetOwnOrder(Number(part[2]));
-        note4 = ok2 ? "The order is taken back and the money returned." : "An order can only be taken back in the month it was placed.";
+        const off2 = s.human ? was.filter((q) => !queueOf(s, s.human).includes(q)).map((q) => queuedName(s, q)) : [];
+        const offWords = off2.length > 1 ? `${off2.slice(0, -1).join(", ")} and ${off2[off2.length - 1]}` : off2[0] ?? "";
+        note4 = ok2 ? `The order is taken back and the money returned.${off2.length ? ` ${offWords.charAt(0).toUpperCase()}${offWords.slice(1)}, queued behind it, ${off2.length === 1 ? "comes" : "come"} off the queue too: nothing had been paid.` : ""}` : "An order can only be taken back in the month it was placed.";
       } else if (part[1] === "again") {
         const plan = againPlan(s);
         const placed3 = [], out = plan ? plan.out.slice() : [];
