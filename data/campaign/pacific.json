@@ -1,0 +1,388 @@
+{
+  "_about": "The Pacific war's ties (ruling 197, the offer of war: the Pacific planner's paper 12, /mnt/project-files/pacific-planner/12-the-offer-of-war.md), read by src/campaign/pacific.ts and only while the far side's switch is on. 'power' is the country the ties are written for, which begins outside both blocs leaning to 'bloc'. It counts as that bloc's co-belligerent from the month it is at war with a member of the other bloc that is at war with a member of this one, and from that month 'china', at war with it since the first day, stands with the other bloc. 'pair': when the power is at war with one of the two and the two stand together in an alliance, the other is at war with it the month after. 'with': the countries that are at war with the power the same day one of the pair is, while they stand in its alliance (its dominions are world.json's, 'follow'). 'pact': the months from which Germany and Italy are bound to the power's war with 'with' (the far-pacific-war.json event 'pact-binds'): 'book' at the stops of the history dial that keep the book, and at the others so many 'months' after 'fallen' is beaten. 'freeze': America's sales to the power (and the south's) stop on 'book' at the stops that keep the book; at the others the month after the power holds one of 'places', and at every stop the month after it is at war with one of 'wars'. Once come it does not lift. 'north': the computer's 'nat' goes to war with the power so many 'months' after 'fallen' is beaten, while the power is still at war with one of 'while', and at the stops that keep the book not before 'book'. Until then the two computers keep the peace: no great choice of either names the other. The news lines are 'says' (the freeze's are ruling 197's own words, for the countries named here). 'demand' (ruling 199(e), the planner's paper 07): Japan may demand of 'of' the ground it holds that joins 'key' by land, while the two are at peace; the computer's Japan makes it in month 'book' while the book stands in 'theatre', and where no book dates it the month after the two of 'war' go to war or 'months' after 'fallen' fell, never once 'never' is beaten. 'keepers' (ruling 199(c)): who takes a fallen country's far ground into keeping, in order, the first still fighting the victor; its forces there stay and answer to the keeper. 'africa' (ruling 234(e)1): the list is Asia's and the Pacific's; on Africa's far ground, the provinces from the first to the last of the pair counted from the far side's first (El Aaiun to Sao Tome, with the towns cut out of them), the keepers are the wider world's own in their order, Britain and then America (world.json 'protector'). 'shores' (ruling 200, finding 2, and ruling 202(h)): the ground whose shores the Pacific's own rows decide in place of the second front's row: the 'slice' provinces of the far side's first slice (Pearl Harbor to Dunedin: Hawaii and Alaska, Japan, China, Siam, Burma, Malaya, the Indies, Australia and New Zealand) with their cities, and any province with a coast on one of 'seas'. A staff's own landing there asks the second front's own odds and risk (open.json 'descent'). 'skies' (rulings 184 and 187; the planner's paper 10, section 4): over each of 'seas' the air a side has is counted from its land air groups in reach of it, not from who holds the coast: the fighters of each group by how far its field lies from the sea's nearest shore (air.ts cover), its bombers in full inside their reach, as much of the group as its field can serve, divided by 'per' aircraft to a point, times the sea's air share. A resting group counts nothing, nor one whose field has gone unfed since its country's month opened; a group under a sky the enemy has won counts three tenths; carrier wings afloat are not counted here. 'cover' is the most a nation's land fighters reach for this job where the ruling gives one short of its escorts' reach (187(a): America's 550). The seas are the far side's, all but the western Indian Ocean's, where no groups are laid and East Africa's war keeps today's rule. The 8 and the shares are the planner's models: named for the tuning pass, not tuned here. 'runs' is America's shipping in the Pacific (ruling 190; the Pacific planner's paper 05; pacific.ts `pacificRuns`, read by world.ts and staff.ts beside world.json 'overseas'): 'share' of the country's sea lift works the Pacific each month on top of the Atlantic's, from the month it is at war with the power and not before (nor is it counted in the corps raised ahead before then). 'roads' are its two runs, parted by the 'equator' (the chart's own y: a harbour of the Pacific's ground below it is the southern run's, one above it the central run's). While the book stands each run has the share its 'book' rows give from their month on (the southern run all of it until June 1943, then three parts in five), slid with the Pacific's calendar; off the book the share goes to the road with a beach named for a hop, each road its 'both' when both have one, and all of it to 'idle' while neither has. When no enemy is left across the Atlantic that ocean's share is added to the Pacific's runs in their own proportion; when the power is beaten first the Pacific's share is added to the Atlantic's. 'from' are the run's own quays at home, the first of them in the country's hands with a way open (the port of embarkation does not change with the harbour named first, and no run of the Pacific's sails from the Atlantic coast). A run puts an army down only on its lane: a harbour on its side of the equator that the country itself holds, one on the home ground of a country under 'lane' (Australia, New Zealand), or one of 'havens' (America's own line, the planner's paper 14, section 4, point 2: New Caledonia, Fiji, Samoa, Port Moresby, with the New Hebrides between them); and a corps already across the Pacific is sent on by ship only along that lane. 'first' is the special formation (traits.json, 'unit') that sails on a Pacific run before any other corps. A player's America ships its own army. 'ready' (ruling 200(m) and rider b586 to ruling 234, the planner's paper 14, section 6; src/campaign/readiness.ts): the readiness test, which names the month the computer's Japan takes its great choice 'choice' where no book dates it, by raising 'flag'. No freeze, no strike. The 'window' is the third to the sixth month after the freeze. The staff's character gives the first month it may strike ('first'; an opportunist's is 'busy'.first while one of 'busy'.of has fought 'busy'.with on land within the staffs' own months for a busy enemy, rivals.json). From that month, in each month it is ready as its month opens, it strikes with chance 'chance', drawn from the war's seed; in the window's last month it strikes, ready or not. Ready is three things: the fleet the choice's strike names is fit for sea (the admirals' own figure, fleets.json) with the harbour it means to strike in its reach; the corps the choice names for its landings stand on quays with their beaches within a landing's range, as many as the sea lift carries; and the test of strength (open.json, 'descent.strength') passes for each place under 'leads' at the first of its beaches in enemy hands, with the choice's own corps for that beach, counting as enemies the countries the choice declares on and those that follow them. 'gather': 'after' so many months from the freeze the staff moves that fleet's base as the book's dated row does at the stops that keep the book (navy 'moves' in far-pacific-war.json), so that it lies in reach as the window opens. A player's Japan is bound by none of it. 'lift' is the Allies' landing ships in the Pacific by the record (rider b614 to ruling 234; the historian's count, historian/allied-lift-pacific-1941-43-b593.md): a second count beside a country's monthly sea lift, read for a landing from the sea on an enemy shore of the Pacific's ground ('shores') and for nothing else. The count is a country's own troops put ashore on an enemy-held shore, in anyone's ships (the game has no boarding, so the Australians at Lae and the New Zealanders in the Treasuries are theirs, though American ships carried them); each landing counts, opposed or not, and the top of the record's range is taken. 'by' gives a country's lines of month and worth: from the month of a line to the country's next line it may put ashore there so many divisions' worth in all (size times strength), and nothing before its first line; a country with no line has none (Britain, China, the Netherlands, France). By half-year from December 1941, June 1942, December 1942 and June 1943, and for December 1943: America 0, 1.25, 1.5, 6 and 1.3; Australia 0, 0.06 (Goodenough Island and Betano), 0, 1.2 (Lae and Finschhafen) and 0; New Zealand 0.5 from June 1943 (Vella Lavella and the Treasuries); Canada 0.35 from June 1943 (Kiska). It is a fact of the day, read by the date at every stop and for player and computer alike; Japan and those beside it keep ruling 200's six a month and are not counted. After 'until' the ordinary lift binds alone, until the rows of 1944 and 1945 are laid. 'ring': the month the power draws its ring by the book (the outer line, the Pacific planner's paper 14, section 3), slid with the strike; at a stop with no book it is drawn the first month its offensive has gone the staffs' 'stall' months without gain since its war with 'pact.with' began, and stays drawn. From then its carrier striking force and its battle line are kept together (navy.ts); before it the fleet goes to the beach it covers as every nation's does (rider b599 (iii) to ruling 234).",
+  "_sandbox": "At stops 4 and 5 of the dial only (the sandbox playtest of 19 November, owner the Pacific planner): 'demand'.'choose' makes the demand on Vichy the staff's own choice, made in each month it may be made with the chance its character gives, times 'busy' while Germany and the Soviet Union are at war; 'ready'.'flank' is the chance, by the staff's character and drawn once a war, that the strike south takes in a country that has only stopped Japan's trade, fights none of Japan's friends and is bound to nobody Japan strikes (pacific.ts inTheWay, staff.ts asGoes, readiness.ts). There too 'ready'.'window' has no last month: from it the staff no longer waits for the odds, and strikes on the draw once its fleet is fit and its army on its quays. Stops 1 to 3 read none of this.",
+  "power": "JAP",
+  "bloc": "axis",
+  "china": "CHN",
+  "pair": [
+    "USA",
+    "UK"
+  ],
+  "with": {
+    "UK": [
+      "NED"
+    ]
+  },
+  "pact": {
+    "with": "USA",
+    "book": 13,
+    "fallen": "FRA",
+    "months": 3
+  },
+  "freeze": {
+    "book": 24,
+    "places": [
+      "Saigon",
+      "Cam Ranh"
+    ],
+    "wars": [
+      "UK",
+      "NED"
+    ],
+    "seller": "USA",
+    "south": [
+      "UK",
+      "NED"
+    ]
+  },
+  "north": {
+    "nat": "SOV",
+    "fallen": "GER",
+    "months": 3,
+    "book": 72,
+    "while": [
+      "USA",
+      "UK"
+    ]
+  },
+  "west": {
+    "_about": "The Soviet Far East's divisions that go west (the design director's rulings of 19:45Z and 20:03Z, 22 November 2026; the historian's far-east-west-and-us-divisions-dec41.md, section (c), and the notes of 20:00Z and 20:03Z). Two in the first month after Germany's attack (the rail order of 25 June 1941); three, five and three in the first, second and third months after the freeze, while Germany is at war with the Soviet Union; three in the seventh month after Japan's war with America or Britain (July 1942). Each only while Japan is at peace with the Soviet Union. At the stops that keep the book the months are the book's: 23, 25, 26, 27 and 35. Only the divisions whose row the historian has named are laid, with no stand-in for the rest: the 114th (September) is not found, the 78th (October) lies between two rows that are both spent, and the 82nd Motorised (November) came from Mongolia, whose rows are not held. A row is named by the far chart's own name for it; the third word is the record's formation. 'leaves': the 16th Army went west from Chita and Dauria in late May 1941 and the old chart's own book raises it at Kiev that month, so the Chita row leaves the far chart then.",
+    "nat": "SOV",
+    "foe": "GER",
+    "while": ["USA", "UK"],
+    "leaves": [
+      [21, "Transbaikal Military District (Chita)", "The 16th Army entrains at Chita for Kiev."]
+    ],
+    "waves": [
+      {"cause": "foe", "after": 1, "book": 23, "rows": [
+        ["2nd Red Banner Army (the Amur)", 1, "69th Motorised Division"],
+        ["2nd Red Banner Army (Khabarovsk)", 1, "59th Tank Division"]]},
+      {"cause": "freeze", "after": 1, "book": 25, "needs": "foe", "rows": [
+        ["1st Red Banner Army (Primorye)", 2, "21st and 26th Rifle Divisions"]]},
+      {"cause": "freeze", "after": 2, "book": 26, "needs": "foe", "rows": [
+        ["1st Red Banner Army (Posyet and the Khasan border)", 1, "32nd Rifle Division"],
+        ["1st Red Banner Army (Primorye)", 1, "92nd Rifle Division"],
+        ["Transbaikal Military District (Chita, new divisions)", 1, "93rd Rifle Division"],
+        ["2nd Red Banner Army (Birobidzhan)", 1, "60th Tank Division"]]},
+      {"cause": "freeze", "after": 3, "book": 27, "needs": "foe", "rows": [
+        ["Transbaikal Military District (facing Manchouli)", 1, "65th Rifle Division"],
+        ["1st Red Banner Army (Primorye)", 1, "58th Tank Division"]]},
+      {"cause": "war", "after": 7, "book": 35, "rows": [
+        ["2nd Red Banner Army (Svobodny)", 1, "204th Rifle Division"],
+        ["2nd Red Banner Army (Khabarovsk)", 1, "205th Rifle Division"],
+        ["1st Red Banner Army (the Ussuri, new divisions)", 1, "422nd Rifle Division"]]}
+    ]
+  },
+  "demand": {
+    "of": "VIC",
+    "key": "Saigon",
+    "theatre": "pacific",
+    "book": 23,
+    "war": [
+      "GER",
+      "SOV"
+    ],
+    "fallen": "FRA",
+    "months": 13,
+    "never": "GER",
+    "choose": {
+      "bold": 0.06,
+      "opportunist": 0.03,
+      "cautious": 0.015,
+      "busy": 5
+    },
+    "_posts": "Japan's own troops in Tonkin under the agreement, who come with the demand (the design director's 16:46Z of 21 November 2026; the historian's japan-taken-towns-1942.md, section 7: the Indochina force within the 6,000 limit at Haiphong, Hanoi (Gia Lam) and Phu Lang Thuong, about 0.3 to 0.4, and the Lao Kay airfield; ranges at their middles). None at Lang Son or Vinh. The 21st Division's 0.7 at Hanoi from month 28 is not laid: on the chart that division is the Tientsin-Pukow railway garrison at Hsuchow for the whole war. Hanoi's post is made from the 104th Division's fourth regiment, the 170th Infantry, which the record sent from Canton to become the 21st Independent Mixed Brigade in Indochina (a row's fourth word, 'from': the design director's ruling of 08:48Z of 22 November 2026; china-setup.json, '_canton'): it takes its 0.3 out of that row wherever it stands and the row is struck off, so the regiment is counted once; with the regiment lost the post is not made. Haiphong's and Lao Kay's come from nobody, as they did. 'coup' is the month of the record's coup of 9 March 1945, the kept French army's end at the book's stops.",
+    "posts": [
+      ["Hanoi", 0.3, "Indochina Expeditionary Force (Hanoi and Gia Lam)", ["21st Army (170th Infantry Regiment, of the 104th Division)"]],
+      ["Haiphong", 0.1, "Indochina Expeditionary Force (Haiphong)"],
+      ["Lao Kay", 0.035, "Lao Kay airfield guard (Indochina Expeditionary Force)"]
+    ],
+    "xp": 0.3,
+    "coup": 67
+  },
+  "runs": {
+    "of": "USA",
+    "share": 0.05,
+    "equator": 2850,
+    "idle": "south",
+    "first": "marines",
+    "from": [
+      "San Francisco",
+      "Los Angeles",
+      "San Diego",
+      "Puget Sound"
+    ],
+    "lane": [
+      "AUS",
+      "NZL"
+    ],
+    "havens": [
+      "New Caledonia",
+      "Fiji",
+      "Samoa",
+      "Espiritu Santo",
+      "Port Moresby"
+    ],
+    "roads": {
+      "south": {
+        "south": true,
+        "book": [
+          [
+            1,
+            0.05
+          ],
+          [
+            46,
+            0.03
+          ]
+        ],
+        "both": 0.03
+      },
+      "central": {
+        "south": false,
+        "book": [
+          [
+            46,
+            0.02
+          ]
+        ],
+        "both": 0.02
+      }
+    }
+  },
+  "ready": {
+    "choice": "south",
+    "flag": "pac:strike",
+    "window": [
+      3,
+      6
+    ],
+    "chance": 0.5,
+    "first": {
+      "bold": 3,
+      "cautious": 4,
+      "opportunist": 4
+    },
+    "busy": {
+      "first": 3,
+      "of": [
+        "UK",
+        "SOV"
+      ],
+      "with": "GER"
+    },
+    "gather": {
+      "after": 2,
+      "fleet": "Mobile Fleet",
+      "base": "Etorofu",
+      "port": "Hitokappu Bay",
+      "home": "kurile",
+      "words": "The carrier striking force gathers at Hitokappu Bay in the Kuriles"
+    },
+    "leads": {
+      "Singapore": [
+        "Singora",
+        "Kota Bharu"
+      ],
+      "Manila": [
+        "Lingayen",
+        "Aparri",
+        "Legaspi"
+      ]
+    },
+    "flank": {
+      "bold": 0.85,
+      "opportunist": 0.5,
+      "cautious": 0.25
+    }
+  },
+  "keepers": [
+    "UK",
+    "AUS",
+    "USA"
+  ],
+  "africa": [
+    478,
+    678
+  ],
+  "shores": {
+    "slice": 312,
+    "seas": [
+      "bengal",
+      "andaman",
+      "ceylon",
+      "malacca"
+    ]
+  },
+  "lift": {
+    "until": 52,
+    "by": {
+      "USA": [
+        [
+          34,
+          1.25
+        ],
+        [
+          40,
+          1.5
+        ],
+        [
+          46,
+          6
+        ],
+        [
+          52,
+          1.3
+        ]
+      ],
+      "AUS": [
+        [
+          34,
+          0.06
+        ],
+        [
+          40,
+          0
+        ],
+        [
+          46,
+          1.2
+        ],
+        [
+          52,
+          0
+        ]
+      ],
+      "NZL": [
+        [
+          46,
+          0.5
+        ],
+        [
+          52,
+          0
+        ]
+      ],
+      "CAN": [
+        [
+          46,
+          0.35
+        ],
+        [
+          52,
+          0
+        ]
+      ]
+    },
+    "own": {
+      "JAP": [
+        [
+          1,
+          4
+        ],
+        [
+          26,
+          11
+        ]
+      ]
+    }
+  },
+  "skies": {
+    "per": 8,
+    "cover": {
+      "USA": 550
+    },
+    "seas": [
+      "gulfalaska",
+      "bering",
+      "aleutian",
+      "npacific",
+      "calrun",
+      "hawaii",
+      "midway",
+      "midpac",
+      "line",
+      "wake",
+      "marcus",
+      "marshalls",
+      "eniwetok",
+      "gilberts",
+      "ellice",
+      "truk",
+      "marianas",
+      "wcarolines",
+      "bonin",
+      "philsea",
+      "honshu",
+      "kyushu",
+      "kurile",
+      "okhotsk",
+      "japansea",
+      "tsushima",
+      "inland",
+      "yellow",
+      "echina",
+      "ryukyu",
+      "formosa",
+      "luzonstrait",
+      "schina",
+      "luzonsea",
+      "palawan",
+      "tonkin",
+      "indochina",
+      "siam",
+      "natuna",
+      "sulu",
+      "visayan",
+      "leyte",
+      "celebes",
+      "malacca",
+      "java",
+      "makassar",
+      "molucca",
+      "banda",
+      "flores",
+      "timor",
+      "arafura",
+      "ngnorth",
+      "bismarck",
+      "solomon",
+      "eastsol",
+      "coral",
+      "newhebrides",
+      "fiji",
+      "samoa",
+      "spacific",
+      "tasman",
+      "nzwaters",
+      "bight",
+      "westaus",
+      "eindian",
+      "mentawai",
+      "andaman",
+      "bengal",
+      "ceylon",
+      "chukchi"
+    ]
+  },
+  "ring": {"from": 33},
+  "says": {
+    "beside": "{Power} fights beside the Axis: it is at war with {foe}, and {foe} is at war with {axis}.",
+    "china": "{China} stands with the Allies: {power}, its enemy, now fights beside the Axis.",
+    "follow": "{Names} {are} at war with {power}, beside {lead}.",
+    "freeze": "America has stopped selling oil and steel to Japan.",
+    "freezeBoth": " Britain and the Dutch have done the same.",
+    "freezeBritain": " Britain has done the same.",
+    "freezeDutch": " The Dutch have done the same.",
+    "north": "Three months after {fallen}'s defeat, {nat} turns east and declares war on {power}.",
+    "west": "The Far East can spare {n} {divisions} for the war in the west: {list}. Nothing has been moved. They are yours to send.",
+    "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison keeps its posts under its own officers.",
+    "coup": "{Power} strikes at the French garrison of Indochina and disarms it in two days.",
+    "post": "The French garrison of Indochina answers to its own officers, not to you.",
+    "card": "The French garrison keeps order in the colony under its own officers, and takes no orders from you.",
+    "agreed": "Belongs to {owner}. {Holder}'s troops are stationed here by agreement, and the French garrison keeps its posts.",
+    "agreedBound": "You may strike {holder}'s troops, works and ships here from the air, but not attack or land without war on {owner}.",
+    "agreedShut": "You may strike {holder}'s troops, works and ships here from the air, but not attack or land while the agreement stands.",
+    "agreedHolder": "Belongs to {owner}. Your troops are stationed here by agreement, and the French garrison keeps its posts under its own officers."
+  }
+}

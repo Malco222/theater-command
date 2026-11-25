@@ -18,6 +18,8 @@
 //   the far side's oilfields and the Soviet home row (rulings 194 and 231; the planner's far-oil.md, the same way)
 //   two towns of the old chart that share a name with a far-side province, and the oil mark the far side takes off
 //     the old chart (the planner's paper 21)
+//   the armies on both sides of the frontier between India and Burma, by date (ruling 202; the clerk's
+//     burma-front-forces.json), with the corps each of Japan's is formed from (the planner's paper 18, section 8)
 //
 //   node tools/make-far-world.mjs            write the file
 //   node tools/make-far-world.mjs --check    exit 1 if the file on disk is not what the sources give today
@@ -42,6 +44,7 @@ const men = src('historian/manpower-213.json');
 const levy = src('pacific-planner/runs-219/levy218-seats.json');
 const pacific = src('pacific-planner/pacific-fleets.json');
 const rig = src('pacific-planner/20-trial/base-seats.json');
+const burma = src('map-tables/burma-front-forces.json');
 // Ruling b445: "a Japan that can lay no keel is a fault, not a balance choice". The planner's paper carries the list as
 // the inside of a JSON object, between ```json marks: province on the chart, level (1 destroyers, submarines and
 // troopships; 2 cruisers too; 3 carriers and battleships too).
@@ -105,6 +108,41 @@ for (const row of [...opening.by_date, ...opening.japan_by_date, ...opening.japa
 }
 for (const l of Object.values(dated)) l.sort((a, b) => a[0] - b[0]);
 
+// Ruling 202: the armies on both sides of the frontier between India and Burma (the clerk's rows, in the game's own
+// form). The first-day rows stand with the old powers' garrisons; the rows by date go at the END of the expeditions,
+// in the clerk's order (a saved game remembers an expedition by its place in the list). Five of Japan's are formed
+// from corps that already stand in the game (the planner's paper 18, section 8): the row names them, and the game
+// strikes those off the day the new one forms (game.ts, 'from'), so no division is counted twice.
+const BURMA_FROM = {
+  '15th Army (33rd and 55th Divisions)': ['11th Army (33rd Division)'],
+  '18th Division': ['25th Army (18th Division)', 'Kawaguchi Detachment (35th Brigade, of the 18th Division)'],
+  '15th Division': ['13th Army (15th Division, Nanking)'],
+  '2nd Division': ['16th Army (2nd Division)'],
+  '56th Division': ['Sakaguchi Detachment (56th Mixed Infantry Group)'],
+};
+const burmaFirst = burma.world_corps.map(firstRow);
+for (const row of burmaFirst) {
+  need(owner.has(row[4]), `Burma's first-day row "${row[1]}": ${row[4]} is not a province of the chart`);
+  need(!garrisons.some((x) => x[0] === row[0] && x[1] === row[1]), `Burma's first-day row "${row[1]}" is laid already`);
+}
+garrisons.push(...burmaFirst);
+const standing = new Set([...japan, ...garrisons].map((r) => r[1]).concat(dated.expeditions.map((r) => r[2])));
+const fromLeft = new Set(Object.keys(BURMA_FROM));
+const burmaDated = burma.expeditions.map(datedRow).map((row) => {
+  need(owner.has(row[5]), `Burma's row by date "${row[2]}": ${row[5]} is not a province of the chart`);
+  need(!dated.expeditions.some((x) => x[1] === row[1] && x[2] === row[2]), `Burma's row by date "${row[2]}" is laid already`);
+  const from = row[1] === 'JAP' ? BURMA_FROM[row[2]] : undefined;
+  if (from) {
+    for (const nm of from) need(standing.has(nm), `Burma's row "${row[2]}" is formed from "${nm}", which no row lays`);
+    need(row[6].from === undefined, `Burma's row "${row[2]}" names its own 'from' now: take it out of BURMA_FROM`);
+    row[6].from = from;
+    fromLeft.delete(row[2]);
+  }
+  return row;
+});
+need(fromLeft.size === 0, `no row of Burma's for: ${[...fromLeft].join('; ')}`);
+dated.expeditions.push(...burmaDated);
+
 // ---- The fleets (the planner's paper 11, section 7, with the historian's first-day destroyers; names and admirals
 // ruling 208(f) and the planner's paper 16; Britain's and the Dutch rows the historian's, pacific-allied-fleet-rows.md)
 const fleet = (nat, name, base, port, sea, duty, ships, admiral) => {
@@ -126,6 +164,10 @@ const fleets = [
   fleet('UK', 'China Fleet', 'Singapore', 'Singapore', 0, 'patrol', { cv: 1, ca: 8, dd: 9, ss: 15 }, 'Percy Noble'),
   fleet('NED', 'Dutch East Indies Fleet', 'Soerabaja', 'Soerabaja', 'java', 'patrol', { ca: 3, dd: 7, ss: 15 }, 'Conrad Helfrich'),
 ];
+// Ruling 189(b): a light carrier that sailed alone has a row of its own and, where a row can carry one, its own wing.
+// The historian's figure (pacific-fleets-check.md, section 4): a third of a wing. Ryujo with the 3rd Fleet; Shoho, who
+// joins the 4th Fleet in January 1942. 'deck' is the share of its navy's wing each of the fleet's carriers brings.
+for (const name of ['3rd Fleet', '4th Fleet']) fleets.find((f) => f.nat === 'JAP' && f.name === name).deck = 0.33;
 // Japan's ships that joined between September 1939 and Pearl Harbor, in navy.json's form (the historian's table of
 // destroyers; the planner's of carriers and battleships). Later arrivals and the building rows come with the hunt.
 const arrivals = [
@@ -147,6 +189,36 @@ const arrivals = [
   [23, 'JAP', '2nd Fleet', { dd: 1 }, 'a new destroyer'],
   [25, 'JAP', 'Mobile Fleet', { dd: 1, cv: 2 }, 'two new fleet carriers'],
   [28, 'JAP', 'Combined Fleet', { dd: 1 }, 'a new destroyer'],
+  // Japan's ships from January 1942 (ruling 189(f): the historian's rows stand; pacific-fleets-check.md, section 2, and
+  // the planner's table it corrects). Light carriers count two to one (189(2)): Chiyoda and Chitose are one carrier, the
+  // last class's three decks with no air groups are one, and Ryuho (November 1942) is counted with the two converted
+  // liners, three decks of about 130 aircraft, so she brings no row. Shoho sailed alone, with the 4th Fleet, and has a
+  // row of her own as one carrier (189(b)). The fleet each ship joins is the navy thread's reading where the historian
+  // names none (25 November 2026): battleships and later flagships to the Combined Fleet, carriers to the Mobile Fleet,
+  // the light cruisers that led destroyer squadrons to the 2nd Fleet.
+  [29, 'JAP', '4th Fleet', { cv: 1 }, 'the light carrier Shoho'],
+  [30, 'JAP', 'Combined Fleet', { bb: 1 }, 'the new battleship Yamato'],
+  [33, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the carrier Junyo, converted from a liner'],
+  [35, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the carrier Hiyo, converted from a liner'],
+  [38, 'JAP', '2nd Fleet', { ca: 1 }, 'the new light cruiser Agano'],
+  [41, 'JAP', 'Combined Fleet', { bb: 1 }, 'the new battleship Musashi'],
+  [42, 'JAP', 'Combined Fleet', { ca: 1 }, 'the new light cruiser Oyodo'],
+  [46, 'JAP', '2nd Fleet', { ca: 1 }, 'the new light cruiser Noshiro'],
+  [52, 'JAP', '2nd Fleet', { ca: 1 }, 'the new light cruiser Yahagi'],
+  [53, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the light carriers Chiyoda and Chitose, converted from seaplane carriers'],
+  [55, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the new carrier Taiho'],
+  [60, 'JAP', 'Mobile Fleet', { cv: 1 }, 'the new carriers Unryu and Amagi, short of aircraft to fly from them'],
+  [63, 'JAP', 'Combined Fleet', { ca: 1 }, 'the new light cruiser Sakawa'],
+];
+// Japan's building (189(f)): destroyers about 1.5 a month from 1942 to 1944 (the historian: about 10 in 1942, 13 in 1943
+// and 31 in 1944, most of them the small class of 1944), laid in whole ships as one a month in 1942 and 1943 to the
+// carriers' screen and three a month for seven months of 1944 and two for five to the battle line (55 in all). Japan's
+// submarines are far-books.json's (the director's rulings of 22 November). The convoy escorts of 1943 to 1945 are not
+// laid: they want a fleet whose duty is the lanes, which no row has yet.
+const japanBuilding = [
+  { nat: 'JAP', fleet: 'Mobile Fleet', cls: 'dd', from: 29, to: 52, perMonth: 1 },
+  { nat: 'JAP', fleet: 'Combined Fleet', cls: 'dd', from: 53, to: 59, perMonth: 3 },
+  { nat: 'JAP', fleet: 'Combined Fleet', cls: 'dd', from: 60, to: 64, perMonth: 2 },
 ];
 
 // America's fleets in the Pacific (the planner's pacific-fleets.json, in navy.json's own forms). A fleet that forms
@@ -159,13 +231,29 @@ for (const f of usFleets) {
   need(seas.has(f.home) && seas.has(f.zone), `fleet "${f.name}": no sea "${f.home}" or "${f.zone}"`);
 }
 const fleetNames = new Set([...fleets, ...usFleets].map((f) => `${f.nat}|${f.name}`));
+for (const a of arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
+for (const b of japanBuilding) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
 // The Atlantic Fleet is world.json's own row: three battleships and a carrier cross to it in May 1941 and come back (ruling 189(1)).
 fleetNames.add('USA|Atlantic Fleet');
 for (const a of pacific.arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
 for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
-for (const m of pacific.moves) {
+// Ruling 234(d): a move with 'sea' in place of a base is the record's month at sea in a month of peace (the Pacific
+// Fleet's carriers in December 1941, at the stops that keep the book). The script's own marks beside it: 'with', the
+// great choice whose month it keeps where that month is drawn (Japan's strike south: the carriers are at sea in the
+// strike's month, whenever the draw puts it); and on the fleet's row 'cruise', [that sea, CRUISE, the choice's nation]:
+// at a stop that keeps no book the fleet is at sea in a month of peace on that chance by the seed (the ruling's one in
+// two), and peace is peace with that nation (rider b593: America is at war with Germany from the close of December 1941).
+const CRUISE = 0.5;
+const STRIKE = 'JAP:south';
+const usMoves = pacific.moves.map((m) => (m.sea !== undefined ? { ...m, with: STRIKE } : m));
+for (const m of usMoves) {
   need(fleetNames.has(`${m.nat}|${m.fleet}`), `move "${m.words}": no fleet "${m.fleet}"`);
-  need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
+  if (m.sea !== undefined) {
+    need(seas.has(m.sea) && m.base === undefined && m.home === undefined, `move "${m.words}": the sea "${m.sea}" is not on the chart, or the row names a base as well`);
+    const f = usFleets.find((x) => x.nat === m.nat && x.name === m.fleet);
+    need(f && !f.cruise, `move "${m.words}": "${m.fleet}" is not one of these fleets, or has two months at sea`);
+    f.cruise = [m.sea, CRUISE, STRIKE.split(':')[0]];
+  } else need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
 }
 
 // ---- The men (rulings 213(b), 216(b), 218) -----------------------------------------------------------
@@ -283,7 +371,7 @@ notes.push(`oil: home ${Object.entries(oilHome).map(([n, v]) => `${n} ${v} (was 
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
   _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md'].map((p) => [p, stamp(p)])),
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'map-tables/burma-front-forces.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md', 'pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b599.json'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{
@@ -292,7 +380,9 @@ const out = {
     }],
   },
   world: {
-    nations: { JAP: { name: 'Japan', adj: 'Japanese', color: '#c4204a', quality: 1, air: 60, resilience: 0.95, align: 'leaning_axis', seaSupply: true, sealift: 6 } },
+    // (Her sea lift on the first day is 4: rider b644 to ruling 234, laid in the data by hand in 35a0bfe and carried so since; this
+    // line gave 6, ruling 200's figure, so the file as committed was not what the script wrote. Her lift by date is pacific.json's.)
+    nations: { JAP: { name: 'Japan', adj: 'Japanese', color: '#c4204a', quality: 1, air: 60, resilience: 0.95, align: 'leaning_axis', seaSupply: true, sealift: 4 } },
     order: ['JAP'],
     great: ['JAP'],
     parts: { of: { JAP: 'asia' } },
@@ -302,8 +392,12 @@ const out = {
   navy: {
     fleets: usFleets.filter((f) => f.from !== undefined),
     arrivals: [...arrivals, ...pacific.arrivals].sort((a, b) => a[0] - b[0]),
-    building: pacific.building,
-    moves: pacific.moves,
+    building: [...pacific.building, ...japanBuilding],
+    moves: usMoves,
+    // The design director's B1 of 25 November 2026, 02:35Z (pacific-japan-1125.md): ship quality for the two Pacific
+    // navies, which had none and fought at navy.json's 0.7 default. USA 1.0 and JAP 1.1, laid as G and flagged until the
+    // historian's 1939 middles replace them; whole world only, so the old chart's wars do not move.
+    quality: { USA: 1, JAP: 1.1 },
   },
   // Japan's character as a staff (paper 14, section 8, item 13; ruled with 181 to 202): where its budget leans. Its temper
   // (ruling 202(l)) is laid by china-line.json already; the two files must say the same thing.
@@ -340,6 +434,89 @@ const out = {
   setup: { held: Object.fromEntries(Object.entries(held).sort(([a], [b]) => (a < b ? -1 : 1))), unmark },
   'setup-1939': dated,
 };
+
+// ---- Ruling 234's riders ---------------------------------------------------------------------------------
+// The record's rows the opening was measured with (the design director's riders to ruling 234; the Pacific six's
+// builder keeps the files). They are laid last, over what the sources above give, one file after the other:
+//   riders-234.json        riders b552 to b583, the book's rows of the opening
+//   riders-234-b591.json   riders b591 to b614, the facts of the day at every stop of the dial (Japan's armour roster
+//                          and her island garrisons by half-year)
+//   riders-234-b641.json   rider b641, a fact of the day at every stop: the 7th Division, home to Hokkaido in August
+//                          1940 from the 6th Army's row in Manchuria, which is cut in two for it
+//   riders-234-b642.json   rider b642 part 2: the rows a lost posting may not bring ashore (a local levy), and what
+//                          a row that takes corps on the board adds from home (the 56th Division's body)
+//   riders-234-b599.json   rider b599 (i), the corps of Japan's second ring the world had not (the book's, stops 1-2)
+// And after them the director's later orders, kept by the rules builder of release 2's far side:
+//   pacific-r2/riders-luzon-1121.json   his order for Luzon of 21 November 2026: the 65th Brigade's size, and his rulings of
+//                          22:34Z to 22:50Z on the Lingayen reading: the 14th Army's rows and Luzon's garrison by the record
+//   pacific-r2/riders-lent-1122.json    his rulings of 22:55Z, 21 November, and 03:49Z, 22 November 2026: the place each lent
+//                          row of the far side was lent for ('takes', 'holds'; game.ts, lentOver)
+//   pacific-r2/riders-tanks-1122.json   his ruling of 04:01Z, 22 November 2026, item 4: the later moves of the tank regiments
+//                          the 1st and 2nd Tank Divisions were made of (the book's, stops 1-2), each cut from its
+//                          division by a sister row as the 21st Division's detachment for Bataan is
+// A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
+// of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
+// another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
+// order (a saved game remembers an expedition by its place in the list).
+const sameWord = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const setRow = (what, rows, words, r) => {
+  need(rows.length === 1, `rider: ${rows.length} ${what} named ${JSON.stringify(r.row)}`);
+  for (const [k, v] of Object.entries(r.was)) need(sameWord(words(rows[0])[k], v), `rider: ${what} ${JSON.stringify(r.row)} reads ${k} ${JSON.stringify(words(rows[0])[k])}, not ${JSON.stringify(v)}`);
+  for (const [k, v] of Object.entries(r.now)) { if (v === null) delete words(rows[0])[k]; else words(rows[0])[k] = v; }
+};
+const byDate = (r) => dated.expeditions.filter((x) => x[0] === r.row[0] && x[1] === r.row[1] && x[2] === r.row[2]);
+function layRiders(file) {
+  const riders = src(file);
+  const E = riders.expeditions ?? {}, C = riders.corps ?? {};
+  for (const r of E.set ?? []) setRow('row by date', byDate(r), (x) => x[6], r);
+  // (A formation of the opening armies, the dated rows the far world lists as 'formations', is named the same way.)
+  for (const r of riders.formations?.set ?? []) setRow('formation by date', dated.formations.filter((x) => x[0] === r.row[0] && x[1] === r.row[1] && x[2] === r.row[2]), (x) => x[6], r);
+  for (const r of E.move ?? []) {
+    const rows = byDate(r);
+    need(rows.length === 1, `rider: ${rows.length} rows by date named ${JSON.stringify(r.row)}`);
+    need(rows[0][5] === r.was.place, `rider: the row by date ${JSON.stringify(r.row)} stands at ${rows[0][5]}, not ${r.was.place}`);
+    if (r.place !== undefined) { need(owner.has(r.place), `rider: "${r.row[2]}": ${r.place} is not a province of the chart`); rows[0][5] = r.place; }
+    if (r.turn !== undefined) { need(!dated.expeditions.some((x) => x !== rows[0] && x[0] === r.turn && x[1] === r.row[1] && x[2] === r.row[2]), `rider: the row by date "${r.row[2]}" is laid already in turn ${r.turn}`); rows[0][0] = r.turn; }
+  }
+  for (const { row } of E.add ?? []) {
+    need(!dated.expeditions.some((x) => x[0] === row[0] && x[1] === row[1] && x[2] === row[2]), `rider: the row by date "${row[2]}" is laid already`);
+    need(owner.has(row[5]), `rider: "${row[2]}": ${row[5]} is not a province of the chart`);
+    dated.expeditions.push(row);
+  }
+  for (const r of C.set ?? []) {
+    const rows = out.world.corps.filter((x) => x[0] === r.row[0] && x[1] === r.row[1]);
+    setRow('first-day row', rows, (x) => x[5], r);
+    // (A first-day row a rider cuts in two by name gives up the divisions its other half takes: 'divs' is before and after.)
+    if (r.divs) { need(rows[0][3] === r.divs[0], `rider: the first-day row ${JSON.stringify(r.row)} has ${rows[0][3]} divisions, not ${r.divs[0]}`); rows[0][3] = r.divs[1]; }
+  }
+  for (const { row } of C.add ?? []) {
+    need(!out.world.corps.some((x) => x[0] === row[0] && x[1] === row[1]), `rider: the first-day row "${row[1]}" is laid already`);
+    need(owner.has(row[4]), `rider: "${row[1]}": ${row[4]} is not a province of the chart`);
+    out.world.corps.push(row);
+  }
+  for (const r of riders.fleets?.set ?? []) setRow('fleet', out.world.fleets.filter((f) => f.nat === r.row[0] && f.name === r.row[1]), (f) => f.ships, r);
+  for (const { row } of riders.arrivals?.add ?? []) {
+    need(!out.navy.arrivals.some((x) => sameWord(x, row)), `rider: the arrival "${row[4]}" is laid already`);
+    need([...out.world.fleets, ...out.navy.fleets].some((f) => f.nat === row[1] && f.name === row[2]), `rider: the arrival "${row[4]}" names no fleet`);
+    out.navy.arrivals.push(row);
+  }
+  for (const [nat, r] of Object.entries(riders.roster ?? {})) {
+    if (nat === 'why') continue;
+    if (Array.isArray(r)) { need(out.commanders.roster[nat] === undefined, `rider: a roster for ${nat} is laid already`); out.commanders.roster[nat] = r; continue; }
+    const roster = out.commanders.roster[nat].map((x) => [...x]);
+    for (const [name, was, now] of r.month ?? []) {
+      const rows = roster.filter((x) => x[1] === name);
+      need(rows.length === 1 && rows[0][0] === was, `rider: ${name} is not rostered once, in turn ${was}`);
+      rows[0][0] = now;
+    }
+    for (const x of r.first ?? []) need(!roster.some((y) => y[1] === x[1]), `rider: ${x[1]} is rostered already`);
+    out.commanders.roster[nat] = [...(r.first ?? []), ...roster];
+  }
+  const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
+  notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(riders.formations?.set) ? `${n(riders.formations.set)} formations by date changed, ` : ''}${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
+}
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json', 'pacific-six/riders-234-b599.json', 'pacific-r2/riders-luzon-1121.json', 'pacific-r2/riders-lent-1122.json', 'pacific-r2/riders-tanks-1122.json'];
+for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';
 if (process.argv.includes('--check')) {

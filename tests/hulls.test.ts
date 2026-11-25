@@ -36,9 +36,14 @@ describe('the record of names', () => {
     const far = await import(/* @vite-ignore */ farFile).then((m) => m.default).catch(() => ({ world: { fleets: [] }, navy: { fleets: [] } }));
     const fleetRows = [...navy.fleets, ...world.fleets, ...far.world.fleets, ...far.navy.fleets] as unknown as FleetRow[];
     expect(fleetRows.length).toBeGreaterThan(navy.fleets.length);
+    // (A far row is found under the far chart's fleet for its class where the record names the old chart's: 'far',
+    // America's carriers, which are the Pacific Fleet's on the old chart and a fleet of their own on the far one.)
+    const farRows = new Set<unknown>([...far.world.fleets, ...far.navy.fleets]);
+    const alias = (hulls as unknown as { far?: Record<string, Partial<Record<'bb' | 'cv', Record<string, string>>>> }).far ?? {};
     for (const f of fleetRows) for (const cls of ['bb', 'cv'] as const) {
       if (!f.ships[cls]) continue;
-      expect(names(f.nat, cls, (r) => fleetAt(r, f.from ?? 1) === f.name && (r.from ?? 1) <= (f.from ?? 1)).length, `${f.name} (${f.nat}) ${cls}`).toBeGreaterThanOrEqual(f.ships[cls]!);
+      const at = (r: Row): string | undefined => { const x = fleetAt(r, f.from ?? 1); return farRows.has(f) && x !== undefined ? alias[f.nat]?.[cls]?.[x] ?? x : x; };
+      expect(names(f.nat, cls, (r) => at(r) === f.name && (r.from ?? 1) <= (f.from ?? 1)).length, `${f.name} (${f.nat}) ${cls}`).toBeGreaterThanOrEqual(f.ships[cls]!);
     }
     for (const nat of Object.keys(NAVIES)) for (const cls of ['bb', 'cv'] as const) for (const r of NAVIES[nat][cls] ?? []) {
       expect(r.crew, r.name).toBeGreaterThan(400);

@@ -9,13 +9,13 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { worksName } from './rivers';
-import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, whyNotBase } from './air';
+import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, whyNotBase } from './air';
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
 import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
-import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsList, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { allied, atWar, headline, theName } from './game';
@@ -24,6 +24,7 @@ import { stopOf } from './history';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
+import { chartDist } from './wrap';
 import { mendStars } from './stars';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 import { fighterTypesOn, joinBought, sellerType } from './fighters';
@@ -350,9 +351,34 @@ export function openSmallAir(g: Game): void {
 export function smallAirMonth(g: Game): void {
   if (!budgeted(g) || !airWar(g)) return;
   const S = SMALL();
+  // The far side (ruling 234's rider b518, 7): a smaller power whose own works keep up the commands the record gives
+  // it. What its works build this month, kind by kind from the month each opens, goes to its pool, with the men to fly
+  // the fighters; its commands are made up from the pool as a great power's are. One count at every seat (rider b522):
+  // while a wing of a kind is on order the works build that wing, and nothing of that kind goes to the pool besides.
+  // And nothing built is lost (rider b539, 1): what the works make in those months is counted, and what they made
+  // beyond the wing goes to the pool the month the wing is handed over (worksOver). An order taken back leaves what
+  // was made of it for the pool.
+  for (const nat of AIR.works ?? []) {
+    const n = g.nations[nat];
+    if (!n?.alive || n.dormant) continue;
+    const p = airPool(g, nat);
+    for (const wing of ['ftr', 'bmr'] as Wing[]) {
+      const from = worksFrom(nat, wing);
+      if (from === null || from > g.turn) continue;
+      const k = Math.round(worksRate(g, nat, wing)), key = `built:${nat}:${wing}`;
+      if (n.queue.some((q) => q.what === 'air' && q.item === wing)) { g.flags[key] = (g.flags[key] ?? 0) + k; continue; }
+      const all = k + (g.flags[key] ?? 0);
+      delete g.flags[key];
+      p[wing] += all;
+      if (wing === 'ftr') p.pilots += all;
+    }
+  }
+  // (b518, 9, one count: a receiver whose additions arrive with the date on the record's own rows takes no row from abroad besides.)
+  const dated = new Set(AIR.fleets.filter((r) => r.arrives).map((r) => r.nat));
   S.gifts.forEach(([month, to, points, kind, givers], i) => {
     const key = `gift:${i}`;
     if (month > g.turn || g.flags[key]) return;
+    if (dated.has(to)) { g.flags[key] = 1; return; }
     const n = g.nations[to];
     // A receiver not on this map waits for it; one that has fallen loses the row.
     if (!n || n.dormant) return;
@@ -390,6 +416,22 @@ export function smallAirMonth(g: Game): void {
   }
 }
 
+/**
+ * The wing's remainder (ruling 234's rider b539, 1): a smaller power whose works feed its pool builds a wing in whole
+ * months, so by the month the wing is handed over its works have made a little more than the wing. That remainder goes
+ * to the pool, as the staff's output would, with the men to fly the fighters: a player who orders is never worse off
+ * than the staff, and nothing built is lost.
+ */
+function worksOver(g: Game, nat: string, wing: Wing, count: number): void {
+  if (!AIR.works?.includes(nat)) return;
+  const key = `built:${nat}:${wing}`, over = Math.max(0, (g.flags[key] ?? 0) - count);
+  delete g.flags[key];
+  if (over <= 0) return;
+  const p = airPool(g, nat);
+  p[wing] += over;
+  if (wing === 'ftr') p.pilots += over;
+}
+
 /** True if a new wing can be stationed in this region: the nation holds it and it has airfields, built or already in use by one of its fleets. */
 export function canStation(g: Game, nat: string, r: Region | undefined): boolean {
   if (!r || r.ctrl !== nat || r.since >= g.turn) return false;
@@ -424,7 +466,7 @@ function roomNear(g: Game, nat: string, base: number): number {
   let best = base, near = Infinity;
   for (const r of g.regions) {
     if (r.id === base || !canStation(g, nat, r)) continue;
-    const d = Math.hypot(r.x - B.x, r.y - B.y);
+    const d = chartDist(g, r, B);
     if (d < near && free(r.id) >= wing) { near = d; best = r.id; }
   }
   return best;
@@ -597,8 +639,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       blurb: `The cadre of a corps whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same corps filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
       size: plural(c.divs, 'division'), cost: t.cost, months: t.months, upkeep: budgeted(g) ? corpsUpkeep(c.kind, c.divs) : 0, at,
       note: at < 0 ? '' : `Forms up at ${g.regions[at].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
-      why: whyNoCadre(g, nat, c) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : noMen(c.divs) ?? poor(t.cost)),
-      ...menFor(c.divs),
+      why: whyNoCadre(g, nat, c) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : noMen(t.divs) ?? poor(t.cost)),
+      ...menFor(t.divs),
     });
   }
   for (const kind of corpsKinds(g)) {
@@ -810,6 +852,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air && !seller) air.push(d); else headline(g, 'info', d.text, nat, d.region, { ready: 'air' }); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
+    worksOver(g, nat, wing, count);
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
     const war = airWar(g);
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
@@ -1054,7 +1097,7 @@ export function aiProgramme(g: Game, nat: string): void {
   const wants = programmeWants(g, nat);
   if (!wants.length) return;
   const men = menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1);
-  const keep = PRODUCTION.aiReserve + (men ? corpsCost(g, nat, 'inf') : 0);
+  const keep = PRODUCTION.aiReserve + (men ? corpsList(g, nat, 'inf') : 0);
   const inc = income(g, nat);
   let spare = inc - upkeepTotal(g, nat);
   // What the arsenal would build for it: an order it could place, or one that waits only for the money.
@@ -1102,7 +1145,7 @@ export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | 
   if (!C || g.flags.open !== 1 || !budgeted(g) || nat === g.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
   const level = (r: Region): number => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
   const order = (r: Region, keep: number): boolean => { const cost = fortCost(g, nat, r); return cost !== null && n.pp >= cost + keep && !!orderFort(g, nat, r.id); };
-  const idle = corpsCost(g, nat, 'inf') + PRODUCTION.aiReserve;
+  const idle = corpsList(g, nat, 'inf') + PRODUCTION.aiReserve;
   const coast = watch.map((nm) => g.byName[nm]).filter((r) => !!r && isHome(g, nat, r) && level(r) < C.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
   if (coast.length && !n.queue.some((b) => b.what === 'fort' && watch.includes(g.regions[b.region].name))) order(coast[0], idle);
   const D = C.dig;

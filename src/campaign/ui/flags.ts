@@ -68,7 +68,8 @@ export const FLAGS: Record<string, string> = {
   ITA: vb('#1b8a4b', WHITE, RED) + shield(11, 4.4, 3.8, 5.4, RED, BLUE) + `<path d="M11 4.9V9.2M9.5 6.7H12.5" stroke="${WHITE}" stroke-width=".9"/>`,
   UK: union(W, H),
   FRA: vb(BLUE, WHITE, RED),
-  VIC: vb(BLUE, WHITE, RED) + `<path d="M11 3V11" stroke="${GOLD}" stroke-width=".8"/><path d="M11 3.8Q8.5 4 8.7 6.6Q9.8 5.5 11 5.8Q12.2 5.5 13.3 6.6Q13.5 4 11 3.8Z" fill="${BLUE}"/>`,
+  // (The plain tricolour, as France's: no regime's emblem is drawn on a flag. The art director, 21 November 2026.)
+  VIC: vb(BLUE, WHITE, RED),
   POL: hb(WHITE, '#d4213d'),
   SOV: field('#cc1b1b') + star(4.4, 2.5, 1.5, GOLD) + `<path d="M3 5.2A2.3 2.3 0 1 0 6.1 8.1" fill="none" stroke="${GOLD}" stroke-width=".8" stroke-linecap="round"/><path d="M3.1 8.4L5.6 5.6M4.9 5L6.3 6.3" stroke="${GOLD}" stroke-width=".9" stroke-linecap="round"/>`,
   USA: stripes(),

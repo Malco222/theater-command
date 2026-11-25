@@ -208,10 +208,14 @@ export const PACIFIC_REGIONS = [
   ['Kashgar', 39.47, 75.99, 'CHN', 'desert', 0, 0, {}],
   ['Khotan', 37.11, 79.93, 'CHN', 'desert', 0, 0, {}],
   ['Charkhlik', 39.02, 88.17, 'CHN', 'desert', 0, 0, {}],
-  ['Lhasa', 29.65, 91.1, 'CHN', 'mountain', 1, 0, {}],
-  ['Chamdo', 31.14, 97.18, 'CHN', 'mountain', 0, 0, {}],
-  ['Gartok', 31.75, 80.37, 'CHN', 'mountain', 0, 0, {}],
-  ['Changtang', 33.5, 87.0, 'CHN', 'mountain', 0, 0, {}],
+  // (Tibet's own, governed from Lhasa and independent in fact from 1913; Chamdo was Tibet's from 1918 to October
+  // 1950. Neutral throughout: rider b632 to ruling 234, historian/tibet-1937-45.md. Shigatse, cut from Lhasa on
+  // the cities' chart, is Tibet's with it. Lhasa is its capital. The owner and the capital the chart reads are the
+  // clerk's row: tables/pacific.csv.)
+  ['Lhasa', 29.65, 91.1, 'TIB', 'mountain', 1, 0, { cap: 1 }],
+  ['Chamdo', 31.14, 97.18, 'TIB', 'mountain', 0, 0, {}],
+  ['Gartok', 31.75, 80.37, 'TIB', 'mountain', 0, 0, {}],
+  ['Changtang', 33.5, 87.0, 'TIB', 'mountain', 0, 0, {}],
   // ---- Mongolia.
   ['Ulan Bator', 47.92, 106.92, 'MGL', 'hills', 2, 0, { cap: 1 }],
   ['Choibalsan', 48.07, 114.5, 'MGL', 'plains', 0, 0, {}],
@@ -403,7 +407,8 @@ export const PACIFIC_FRONTIERS = [
       [46.95, 119.3], [47.5, 116.5], [48.5, 114.5], [50.5, 115.0], [54.5, 121.0], [54.5, 136.5], [47.0, 136.5], [42.0, 132.0], [41.5, 129.5], [39.5, 125.0], [38.3, 122.5], [38.7, 120.4], [39.65, 120.15]],
   },
   { country: 'Hong Kong', owners: ['UK'] },
-  { country: 'China', owners: ['CHN'] },
+  // (Tibet's ground lies inside the atlas's China: its provinces are Tibet's own, rider b632 to ruling 234.)
+  { country: 'China', owners: ['CHN', 'TIB'] },
   { country: 'Mongolia', owners: ['MGL'] },
   // The Soviet Far East out of Russia: east of a line through Lake Baikal and up the 110th meridian, with the
   // north of Sakhalin, and without the Kuriles, which were Japan's.
@@ -431,7 +436,28 @@ export const PACIFIC_LINKS = [
 /** Land borders the map-maker misses. */
 export const PACIFIC_ROADS = [];
 /** Borders the map-maker finds that are not there. A name of today's chart may stand on one side. */
-export const PACIFIC_NO_BORDER = [];
+export const PACIFIC_NO_BORDER = [
+  // The high plateau (rider b632 to ruling 234; historian/tibet-1937-45.md). Tibet let no troops of any nation
+  // through, and the going closed the rest: Sining to Lhasa was three to four months with 1,000 km above 4,500 m,
+  // Sikang to Lhasa a dozen passes over 4,500 m, Lhasa to India weeks to months over passes of 4,300 to 5,000 m.
+  // Nothing above about a fifth of a division ever crossed, and Lhasa could not feed a few thousand men. At the
+  // game's scale that is closed ground: no march, attack or supply line crosses any border of Tibet's. Its own
+  // provinces still border one another. To India and Burma:
+  ['Lhasa', 'Darjeeling'], ['Lhasa', 'Gauhati'], ['Lhasa', 'Dibrugarh'], ['Chamdo', 'Dibrugarh'], ['Chamdo', 'Myitkyina'],
+  ['Gartok', 'Leh'], ['Gartok', 'Simla'],
+  // to Nepal:
+  ['Lhasa', 'Kathmandu'], ['Gartok', 'Kathmandu'],
+  // and to China (Sikang and Sining stay China's, with the mountain going ruling 215 (g) gives them):
+  ['Chamdo', 'Chengtu'], ['Chamdo', 'Sikang'], ['Chamdo', 'Lanchow'], ['Chamdo', 'Sining'], ['Chamdo', 'Tsaidam'],
+  ['Gartok', 'Khotan'], ['Changtang', 'Tsaidam'], ['Changtang', 'Khotan'], ['Changtang', 'Charkhlik'],
+  // The Karakoram, Tibet's sibling (the rider of 19:25Z to ruling 234, item 7; historian/sinkiang-karakoram-1937-45.md).
+  // From Sinkiang's oases to Leh and to Gilgit ran caravan roads over passes of about 4,700 to 5,540 m, open in
+  // summer, ten marches with no grazing or fuel: no army crossed them in the record, a few hundred men with pack
+  // animals at most, and Ladakh could not feed a corps. By Tibet's form they carry none. Sinkiang's desert stays
+  // open: armies did cross it from Kansu by Hami.
+  // (Yarkand is a city cut out of Kashgar's province once the chart is laid: its border with Gilgit is Kashgar's here.)
+  ['Khotan', 'Leh'], ['Khotan', 'Gilgit'], ['Kashgar', 'Gilgit'],
+];
 
 // ---- The rest of the globe: the Soviet Union from the map of Europe to Lake Baikal, Persia, Arabia, Afghanistan,
 // India, and Africa south of the map of Europe. The map of Europe ends at 47 E and at 28.6 N: a province here
@@ -908,7 +934,17 @@ export const GLOBE_FRONTIERS = [
 
 export const GLOBE_LINKS = [];
 export const GLOBE_ROADS = [];
-export const GLOBE_NO_BORDER = [];
+export const GLOBE_NO_BORDER = [
+  // The Libyan Desert between Kufra and the Nile (the design director's note of 14:18Z, 22 November 2026). Only
+  // patrols and a small garrison's track crossed it, never an army, and nothing was fed over it: the record's Kufra
+  // fell from Chad (March 1941) and the Fezzan from Chad (January 1943). So no march, attack or supply line crosses
+  // Kufra's borders with the Sudan. Chad's with Kufra stay open.
+  ['Kufra', 'Dongola'], ['Kufra', 'Wadi Halfa'],
+  // The Great Sand Sea between Kufra and Egypt's oases (the director's note of 14:23Z): only patrols and a car party
+  // crossed it, never an army or an army's supply. (Farafra is a city cut from an oasis province: its border is its
+  // province's there. Siwa is a province of today's chart, and its border with Kufra crosses the same sand.)
+  ['Kufra', 'Bahariya'], ['Kufra', 'Kharga'], ['Kufra', 'Siwa'],
+];
 
 /**
  * The slices of the far side, in the order they are numbered. Each frontier, and each island no frontier runs

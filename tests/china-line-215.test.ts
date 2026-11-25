@@ -324,6 +324,30 @@ describe('215(c): the record\'s line', () => {
     expect(lineShut(g, 'POL', at(g, 'Warsaw'))).toBe(false);
   });
 
+  it('reads the floor\'s month province by province where the line gives one: the invaded country comes in behind a withdrawal, not ahead of it', () => {
+    // (The design director, 00:12Z of 21 November 2026: the 1944 ground in China. Kielce's span runs to month 8; the
+    // floor lifts for all at month 7.)
+    kept.lines = H.lines;
+    H.lines = [{ ...test, floor: { until: 7, kinds: test.floor.kinds } }];
+    const g = grand(2, null, 1);
+    at(g, 'Kielce').ctrl = 'GER';
+    at(g, 'Poznan').ctrl = 'GER';
+    g.turn = 6;
+    expect(lineShut(g, 'POL', at(g, 'Kielce'))).toBe(true);
+    // With one floor month the invaded country may come at month 7, a month before the invader's rows are due to leave.
+    g.turn = 7;
+    expect(lineShut(g, 'POL', at(g, 'Kielce'))).toBe(false);
+    // With the province's own month past its span's end it is shut while the span runs, and the span's own end
+    // decides: it is open the month after the span's last, though that month is still before the figure.
+    H.lines = [{ ...test, floor: { until: 7, kinds: test.floor.kinds }, back: { Kielce: 10 } }];
+    for (const t of [7, 8]) { g.turn = t; expect(lineShut(g, 'POL', at(g, 'Kielce')), `month ${t}`).toBe(true); }
+    g.turn = 9;
+    expect(lineShut(g, 'POL', at(g, 'Kielce'))).toBe(false);
+    // The rest of the line keeps the floor's own month.
+    g.turn = 7;
+    expect(lineShut(g, 'POL', at(g, 'Poznan'))).toBe(false);
+  });
+
   it('never binds the player, on either side, and ground the player holds is open to all', () => {
     drawn();
     expect(lineShut(grand(2, 'POL', 1), 'GER', at(grand(2, 'POL', 1), 'Warsaw'))).toBe(false);
@@ -546,10 +570,10 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
   const L = D.history.lines[0];
 
   it('dates Japan\'s offensive of 1944 to April 1944, in its own theatre, with the key that makes its front wait', () => {
-    expect(D.history.dates.JAP.ichigo).toBe(56);
+    expect(D.history.dates['JAP+'].ichigo).toBe(56);
     expect(D.history.theatre['JAP:ichigo']).toBe('china');
     expect(D.history.theatres.china).toBeTruthy();
-    const op = D.open.ops.JAP.find((o) => o.id === 'ichigo')!;
+    const op = D.open.ops['JAP+'].find((o) => o.id === 'ichigo')!;
     expect(op).toMatchObject({ wait: true, from: 56, to: 66, push: 8 });
     expect(op.declare).toBeUndefined();
     expect(op.side).toBeUndefined();
@@ -581,36 +605,59 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     expect(all.some(([, s]) => s.some((x) => x.kind === 'ichigo' && x.to > L.floor.until && x.to < L.until))).toBe(true);
   });
 
+  it('gives every province of the floor\'s kinds its own floor month, past its span\'s end: China comes in behind the withdrawal of 1945 and not at all where Japan stood to the surrender', () => {
+    // (The design director, 00:12Z and 00:16Z of 21 November 2026, with the historian's ichigo-withdrawal-1945.md. The
+    // floor binds only while the span runs, so the span's own end decides; two months past its last covers every draw
+    // of a stop with slack, where a span's months move a month either way. At 00:42Z the director gave the day-one and
+    // lasting ground the same rule, on the trace of China's gains of 1945: with one floor month, 69, China's staff walked
+    // into ground whose spans run to the line's last month.)
+    const want: Record<string, number> = {};
+    for (const [nm, spans] of Object.entries(L.spans)) for (const s of spans) if (L.floor.kinds.includes(s.kind)) want[nm] = s.to + 2;
+    expect(L.back).toEqual(want);
+    // The corridor goes on its months, and what was held to the surrender is shut to the line's end.
+    expect([L.back!.Nanning, L.back!.Liuchow, L.back!.Wuchow, L.back!.Kweilin]).toEqual([71, 72, 72, 73]);
+    for (const nm of ['Loyang', 'Changsha', 'Hengyang', 'Lingling', 'Kukong', 'Kanchow']) expect(L.back![nm], nm).toBeGreaterThan(L.until);
+    // The day-one and lasting ground was held to the surrender too: shut to the line's end. A raid has no floor.
+    for (const nm of ['Peiping', 'Nanking', 'Hankow', 'Canton', 'Yochow', 'Ichang', 'Ningpo']) expect(L.back![nm], nm).toBe(L.until + 2);
+    for (const nm of ['Pakhoi', 'Chuchow', 'Changteh']) expect(L.back![nm], nm).toBeUndefined();
+    // (Sixty, and Waichow: Japan's from January 1945 to the end, the design director's ruling of 08:12Z of 22 November
+    // 2026 on the historian's waichow-1938-45.md. tests/far-china-attacks.test.ts.)
+    expect(Object.keys(L.back!).length).toBe(61);
+    expect(L.back!.Waichow).toBe(L.until + 2);
+  });
+
   it('dates the record\'s raids of 1939 to 1941 as great choices of the book alone, Nanning landing from a home port (219(3), b375)', () => {
     const raids = ['nanning', 'wuyuan', 'ichang', 'coast41', 'yencheng', 'changsha41'];
     for (const id of raids) {
-      const op = D.open.ops.JAP.find((o) => o.id === id)!;
+      const op = D.open.ops['JAP+'].find((o) => o.id === id)!;
       expect(op, id).toBeTruthy();
       // A great choice in a war already on: no side-show, nobody to declare on, so it opens the China front (216(a)).
-      expect(op.side, id).toBeUndefined();
+      // (But the 1941 coast raid, a side-show since the design director's 13:39Z of 21 November 2026: a blockade
+      // landing beside the main front, as the 1944 coast's is. tests/china-rows-1121.test.ts.)
+      expect(op.side, id).toBe(id === 'coast41' ? true : undefined);
       expect(op.declare, id).toBeUndefined();
       expect(D.history.theatre[`JAP:${id}`], id).toBe('china');
       // Off the book its own conditions can never hold; the book reads its own.
       expect(op.if, id).toEqual(['war:JAP,CHN', 'peace:JAP,CHN']);
       expect(D.history.bookIf[`JAP:${id}`], id).toEqual(['war:JAP,CHN', 'alive:CHN']);
-      const date = D.history.dates.JAP[id];
+      const date = D.history.dates['JAP+'][id];
       expect(op.from, id).toBe(date);
       expect(op.to!, id).toBeGreaterThan(date);
     }
     // No two on one date: one great choice a month at most.
-    expect(new Set(raids.map((id) => D.history.dates.JAP[id])).size).toBe(raids.length);
+    expect(new Set(raids.map((id) => D.history.dates['JAP+'][id])).size).toBe(raids.length);
     // Nanning: ashore at Pakhoi, the historian's raid span, from Taihoku, where the 5th Division is brought the month before.
     expect(L.spans.Pakhoi).toEqual([{ from: 3, to: 15, kind: 'raid' }]);
-    const nanning = D.open.ops.JAP.find((o) => o.id === 'nanning')!;
+    const nanning = D.open.ops['JAP+'].find((o) => o.id === 'nanning')!;
     expect(nanning.landings).toEqual([{ corps: '21st Army (5th Division)', with: ['Formosa Army'], to: ['Pakhoi'] }]);
     const row = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, Record<string, unknown>][] } })['setup-1939'].expeditions.find((r) => r[2] === '21st Army (5th Division)')!;
     expect(row.slice(0, 6)).toEqual([2, 'JAP', '21st Army (5th Division)', 'inf', 1, 'Taihoku']);
-    expect(row[0]).toBeLessThan(D.history.dates.JAP.nanning);
+    expect(row[0]).toBeLessThan(D.history.dates['JAP+'].nanning);
   });
 
   it('lands the 1941 coast raid from Japan\'s own ports, each force alone, in the month every span opens (224, b375)', () => {
-    const coast = D.open.ops.JAP.find((o) => o.id === 'coast41')!;
-    expect(D.history.dates.JAP.coast41).toBe(20);
+    const coast = D.open.ops['JAP+'].find((o) => o.id === 'coast41')!;
+    expect(D.history.dates['JAP+'].coast41).toBe(20);
     for (const nm of ['Foochow', 'Ningpo', 'Wenchow']) expect(L.spans[nm][0].from, nm).toBe(20);
     expect(coast.landings).toEqual([
       { corps: '23rd Army (48th Division)', to: ['Foochow', 'Wenchow'] },
@@ -618,11 +665,12 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
       { corps: '13th Army (Wenchow detachment)', to: ['Wenchow', 'Ningpo'] },
     ]);
     // Each force comes to a home port the month before, by a row of its own beside the 5th Division's.
-    const rows = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, { str: number; from?: string[]; war: string[]; until?: number }][] } })['setup-1939'].expeditions;
+    // (They head the file; the record's rows of 21 November 2026 follow them: tests/china-rows-1121.test.ts.)
+    const rows = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, { str: number; from?: string[]; war: string[]; until?: number }][] } })['setup-1939'].expeditions.slice(0, 4);
     expect(rows.map((r) => r[2])).toEqual(['21st Army (5th Division)', ...coast.landings!.map((l) => l.corps)]);
     for (const l of coast.landings!) {
       const r = rows.find((x) => x[2] === l.corps)!;
-      expect(r[0], l.corps).toBe(D.history.dates.JAP.coast41 - 1);
+      expect(r[0], l.corps).toBe(D.history.dates['JAP+'].coast41 - 1);
       expect(r[1], l.corps).toBe('JAP');
       expect(['Formosa', 'Taihoku'], l.corps).toContain(r[5]);
       expect(r[6].war, l.corps).toEqual(['JAP', 'CHN']);

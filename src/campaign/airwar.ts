@@ -935,7 +935,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   }
   plan.picked = going.map((f) => f.id);
   plan.seats = fleets.map((f): RaidSeat => {
-    const d = dist(f), R = airRange(f, g), k = kindOf(f);
+    // (An escort's reach is the raid's: on the far side a fighter flies farther with the bombers than over a beach, ruling 187(a).)
+    const d = dist(f), R = airRange(f, g, kind), k = kindOf(f);
     const effect = k === 'bmr' ? (d <= R.bmr ? 1 : 0) : kind === 'night' ? 0 : cover(d, R.ftr);
     const why = whys.get(f.id) ?? null;
     // (A group with no distance to fly is not told '0 km', which reads as a fault: its carriers lie off the target, or its field is at it.)

@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetName, fleetPower, fleetReach, fleetsOf, keptByHand, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
@@ -36,8 +36,50 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${num(n)} 
 
 // ---- The wings ------------------------------------------------------------------------------------------
 
-/** The aircraft one carrier of this navy brings. */
-export const wingSize = (nat: string): { ftr: number; bmr: number } => CARRIERS.wing[nat] ?? CARRIERS.wing._default;
+/** True where the carrier's wing goes by date (release 2, the switch 'Carrier wings by date'; the rider to rulings 189 and 202). */
+export const wingByDateOn = (g: Game): boolean => g.flags.open === 1 && g.flags.wingByDate === 1;
+/** Switches the carrier's wing by date on or off in a campaign under way. */
+export function setWingByDate(g: Game, on: boolean): void {
+  if (on) g.flags.wingByDate = 1;
+  else delete g.flags.wingByDate;
+}
+/** The navy's own wing a deck, undated. */
+const navyWing = (nat: string): { ftr: number; bmr: number } => CARRIERS.wing[nat] ?? CARRIERS.wing._default;
+/** The navy's wing a deck this month: its dated row where wings go by date (carriers.json 'wingByDate'), else its own. */
+function datedWing(g: Game | undefined, nat: string): { ftr: number; bmr: number } {
+  let w = navyWing(nat);
+  if (g && wingByDateOn(g)) for (const [t, ftr, bmr] of CARRIERS.wingByDate?.[nat]?.rows ?? []) if (t <= g.turn) w = { ftr, bmr };
+  return w;
+}
+/**
+ * The aircraft one carrier of this navy brings: its navy's wing (by date where wings go by date), and for a fleet whose
+ * carriers bring less than a whole one, its share (Fleet.deck: a light carrier that sailed alone, ruling 189(b)). A
+ * share may leave a part of an aircraft a deck: a fleet's wing is its decks' sum, rounded (`roomOf`).
+ */
+export const wingSize = (nat: string, g?: Game, c?: Fleet): { ftr: number; bmr: number } => {
+  const w = datedWing(g, nat), d = c?.deck;
+  return d !== undefined && d < 1 ? { ftr: w.ftr * d, bmr: w.bmr * d } : w;
+};
+/** A fleet's room for one kind: its carriers times the room a deck, rounded to whole aircraft. */
+const roomOf = (cv: number, per: number): number => Math.round(cv * per);
+/** Notes a wing's room a deck where it is not the navy's own (AirFleet.size), and takes the note off where it is. */
+const noteSize = (w: AirFleet, nat: string, kind: WingKind, per: number): void => { if (per !== navyWing(nat)[kind]) w.size = per; else delete w.size; };
+
+/**
+ * The month a navy's wing a deck changes by date (wings by date on): its player is told, while he has a carrier afloat
+ * or building (the UI director's line, carriers.json). The wings themselves follow in syncWings: room taken away sends
+ * what is over to the reserve; room added fills as losses are made good, in harbour, from the reserve (air.ts).
+ */
+export function wingStep(g: Game, nat: string): void {
+  const D = CARRIERS.wingByDate?.[nat];
+  if (!D || !wingByDateOn(g) || nat !== g.human || !g.nations[nat]?.alive) return;
+  const k = D.rows.findIndex((r) => r[0] === g.turn);
+  if (k < 0) return;
+  const was = k > 0 ? { ftr: D.rows[k - 1][1], bmr: D.rows[k - 1][2] } : navyWing(nat), now = { ftr: D.rows[k][1], bmr: D.rows[k][2] };
+  const decks = g.fleets.some((f) => f.nat === nat && f.ships.cv > 0) || g.nations[nat].queue.some((b) => b.what === 'ship' && b.item === 'cv');
+  if (!decks || (was.ftr === now.ftr && was.bmr === now.bmr)) return;
+  headline(g, 'info', D.words.replace('{ftr}', String(now.ftr)).replace('{bmr}', String(now.bmr)).replace('{wasFtr}', String(was.ftr)).replace('{wasBmr}', String(was.bmr)), nat);
+}
 
 /** The wings that fly from one fleet's carriers: fighters first. */
 export const wingsOf = (g: Game, fleet: number): AirFleet[] => g.airFleets.filter((f) => f.ship === fleet).sort((a, b) => (a.kind === 'ftr' ? 0 : 1) - (b.kind === 'ftr' ? 0 : 1));
@@ -78,11 +120,12 @@ export function openCarriers(g: Game): void {
   const before = new Map(navies.map((nat) => [nat, need(nat)]));
   for (const c of g.fleets) {
     if (c.ships.cv <= 0) continue;
-    const size = wingSize(c.nat);
+    const size = wingSize(c.nat, g, c);
     for (const kind of KINDS) {
       if (size[kind] <= 0) continue;
       const w = newWing(g, c, kind);
-      w.est[kind] = w[kind] = c.ships.cv * size[kind];
+      w.est[kind] = w[kind] = roomOf(c.ships.cv, size[kind]);
+      noteSize(w, c.nat, kind, size[kind]);
     }
   }
   for (const nat of navies) {
@@ -116,15 +159,28 @@ export function syncWings(g: Game): void {
   }
   for (const c of g.fleets) {
     if (c.ships.cv <= 0 || !g.nations[c.nat]?.alive) { if (c.bare) delete c.bare; continue; }
-    const size = wingSize(c.nat);
+    const size = wingSize(c.nat, g, c);
     for (const kind of KINDS) {
+      let w = wingOf(g, c.id, kind);
+      // (A change of room a deck, by date or by share, is neither a carrier gained nor one lost: nothing is given and
+      // nothing goes down. Room taken away sends what is over to the reserve; room added stands empty until it is made
+      // good in harbour from the reserve, as losses are (air.ts). The rider to rulings 189 and 202, (2).)
+      const per = size[kind], perWas = w ? w.size ?? navyWing(c.nat)[kind] : per;
+      if (w && per !== perWas && perWas > 0) {
+        const ratio = per / perWas;
+        if (c.bare?.[kind]) c.bare[kind] = Math.round(c.bare[kind] * ratio);
+        const now = Math.max(0, Math.round(w.est[kind] * ratio));
+        const over = Math.max(0, w[kind] - now);
+        if (over > 0) { const p = airPool(g, w.nat); w[kind] -= over; if (kind === 'ftr') { p.ftr += over; poolIn(g, w.nat, over, w); } else p.bmr += over; }
+        w.est[kind] = now;
+      }
+      if (w) noteSize(w, c.nat, kind, per);
       // Deck room whose wing was ordered ashore stands empty: no new wing is raised for it (ruling 175(b)).
-      const full = c.ships.cv * size[kind];
+      const full = roomOf(c.ships.cv, size[kind]);
       if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
       const est = full - bareOf(c, kind);
-      let w = wingOf(g, c.id, kind);
       // (Under Units decide a new wing's and new deck room's pilots come from the deck school, with no experience.)
-      if (!w) { if (est > 0) { w = newWing(g, c, kind); joinPilots(g, w, est, kind, 'school'); w.est[kind] = w[kind] = est; } continue; }
+      if (!w) { if (est > 0) { w = newWing(g, c, kind); joinPilots(g, w, est, kind, 'school'); w.est[kind] = w[kind] = est; noteSize(w, c.nat, kind, per); } continue; }
       const was = w.est[kind];
       if (est > was) { joinPilots(g, w, est - was, kind, 'school'); w[kind] += est - was; }
       if (est < was && was > 0) {
@@ -149,7 +205,12 @@ export function syncWings(g: Game): void {
  */
 export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had: number): void {
   if (!carrierRules(g) || carriers <= 0 || had <= 0) return;
-  const size = wingSize(from.nat);
+  const size = wingSize(from.nat, g, from);
+  // (Carriers that bring less than a whole wing bring their share: the fleet they join has the mean a deck. Ruling 189(b).)
+  const before = to.ships.cv - carriers, mean = to.ships.cv > 0 ? (Math.max(0, before) * (to.deck ?? 1) + carriers * (from.deck ?? 1)) / Math.max(1, Math.max(0, before) + carriers) : 1;
+  if (mean < 1 && (to.deck !== undefined || from.deck !== undefined)) to.deck = mean;
+  else delete to.deck;
+  const sizeTo = wingSize(to.nat, g, to);
   for (const kind of KINDS) {
     // Decks whose wing is ashore stay with the first fleet as far as it keeps carriers to hold them: the carriers
     // sent are those with aircraft aboard first. With no wing ashore the share is the carriers that went, as ever.
@@ -173,8 +234,10 @@ export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had
     a[kind] -= n;
     if (a.flew !== undefined && (b.flew ?? -1) < a.flew) b.flew = a.flew;
     if (a.scouted !== undefined && (b.scouted ?? -1) < a.scouted) b.scouted = a.scouted;
-    b.est[kind] = Math.max(0, to.ships.cv * size[kind] - bareOf(to, kind));
-    a.est[kind] = Math.max(0, from.ships.cv * size[kind] - bareOf(from, kind));
+    b.est[kind] = Math.max(0, roomOf(to.ships.cv, sizeTo[kind]) - bareOf(to, kind));
+    a.est[kind] = Math.max(0, roomOf(from.ships.cv, size[kind]) - bareOf(from, kind));
+    noteSize(b, to.nat, kind, sizeTo[kind]);
+    noteSize(a, from.nat, kind, size[kind]);
     if (share >= 1) g.airFleets.splice(g.airFleets.indexOf(a), 1);
   }
   trimBare(from);
@@ -749,12 +812,60 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
 }
 
 /**
+ * A strike the staff's plan orders by name (the far side, ruling 200(c): the carrier striking force on Pearl Harbor
+ * in the month Japan's blow falls). The fleet puts to sea, to the nearest sea in its reach from which its strike wing
+ * can fly at the harbour, and the wing goes for what lies there that month, with the fleet's fighters where fighters
+ * will come up. None of the admirals' sums is asked: the plan orders it. A harbour with no ship of an enemy's in it
+ * is not struck and nothing sails; afterwards the admirals' own rule decides. A player who runs his navy himself
+ * keeps his fleets his own; where his staff runs it, the plan's strike is flown as he declares (turn.ts, orderDeclare).
+ * `home`: the base the fleet makes for once the strike is flown, that same month (the force was back in the Inland Sea
+ * before December 1941 was out; its country moves last in a month, and left at its northern anchorage it would lie in
+ * reach of the fleet it had just struck through all of that fleet's January).
+ */
+export function plannedStrike(g: Game, nat: string, fleet: string, harbour: string, home?: { base: string; port: string; home: string; words: string }): boolean {
+  if (!carrierRules(g) || byHand(g, nat, 'navy')) return false;
+  const c = fleetsOf(g, nat).find((f) => f.name === fleet), r = g.byName[harbour];
+  if (!c || !r || c.ships.cv <= 0 || !atWar(g, nat, r.ctrl) || !shipsInPort(g, r.id, nat).length) return false;
+  // (A fleet the player keeps under his own orders is not sailed by the plan, nor left at sea after: the audit's
+  // re-check of 25 November 2026. He is told; with carrier strikes on, its own page offers the strike.)
+  if (keptByHand(g, c)) {
+    headline(g, 'info', `The staff's plan has ${fleetName(c)} strike ${r.name} from the air as war comes. You keep it under your own orders, so the plan's strike is not flown.`, nat);
+    return false;
+  }
+  const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
+  if (!lead || lead.bmr <= 0 || lead.flew === g.turn || lead.mission !== 'support') return false;
+  const can = (): boolean => whyNotMission(g, lead, 'harbour', r.id) === null && !assessAir(g, [lead], 'harbour', r.id).why;
+  const keep = { zone: c.zone, stance: c.stance };
+  let at = atSea(c) && can() ? c.zone : -1;
+  if (at < 0) {
+    // (The reach is told nearest first.)
+    for (const z of fleetReach(g, c)) {
+      c.zone = z; c.stance = 'patrol';
+      const ok = can();
+      c.zone = keep.zone; c.stance = keep.stance;
+      if (ok) { at = z; break; }
+    }
+    if (at < 0 || !sail(g, c, at, 'patrol')) return false;
+  }
+  let fleets = [lead];
+  const a = assessAir(g, fleets, 'harbour', r.id);
+  if (a.why) return false;
+  if (a.D >= 1 && cap && cap.ftr > 0 && cap.flew !== g.turn && cap.mission === 'support' && whyNotMission(g, cap, 'harbour', r.id) === null) fleets = [lead, cap];
+  const rep = fly(g, nat, 'harbour', r.id, fleets, ':plan');
+  if (!rep) return false;
+  for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
+  if (home) orderedTo(g, c, home);
+  return true;
+}
+
+/**
  * The computer's strikes on ships for one nation, flown at once as the player's are. Each carrier fleet's strike
  * wing goes for the best fleet its side has found in reach, or for ships in a harbour; a carrier fleet lying in
  * harbour with nothing in reach puts to sea for the month to strike, where its side would be much the stronger.
  * A few of the land bombers may go for ships too. A strike is flown only where the forecast says it should pay.
+ * 'not' are the land groups a landing plan has named for its sky this month: they fly nothing else (air.ts, planSky).
  */
-export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all'): void {
+export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all', not?: Set<number>): void {
   // The player's carriers go with his navy and his land bombers with his air force: each flies for him only where
   // he has handed that desk to his staff (depth.ts), and then it is asked for by itself.
   const his = what === 'decks' ? byHand(g, nat, 'navy') : what === 'land' ? byHand(g, nat, 'air') : nat === g.human;
@@ -765,7 +876,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const trade = !!A.trade;
   const hit = new Set<string>();
   let flown = what === 'land' ? 100 : 0;
-  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f);
+  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f) && !not?.has(f.id);
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
     hit.add(`${b.m}:${b.t}`);

@@ -1231,6 +1231,8 @@ struct FCampaignView
 	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)
 	bool bSeekOnce = false; // (release 2, navy.ts) a fleet seeks battle at most once a month
 	bool bAtomBomb = false; // (release 2, atom.ts) the atomic project: research rows, plants, a bomb carried by a raid
+	bool bCarrierStrike = false; // (release 2, harbourstrike.ts) a carrier fleet's page offers a strike on an enemy harbour (the switch as set)
+	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.

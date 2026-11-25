@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareOf, keptAfloat, keptByHand, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, fuelLine, torpedoWords, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, harbourPatrol, huntShareOf, huntShareSunk, huntersIn, keptAfloat, keptByHand, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -27,6 +27,7 @@ import { joinStars, splitStars, starRow, type StarRow } from './stars';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 import { seaWhat, seaWhere } from './sea-words';
+import { FAR_SEAS_FIRST } from './world';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -68,6 +69,14 @@ export interface FleetCard {
   ready: number;
   power: number;
   ships: number;
+  /** The far side's one measure: how many of its submarines are out on patrol, for a fleet at sea where the measure reads it (`boatsOut`, `patrolRow`); none and all are said too. */
+  boatsOut?: number;
+  /** The fleet's fuel line (sheet 24, box 4): fuelled from the wells of a named field, or short of fuel by this many per cent of its fitness for sea. `fuelLine`. */
+  fuel?: { kind: 'wells'; field: string } | { kind: 'short'; less: number };
+  /** Faulty torpedoes (sheet 24, box 3): the sentence for a fleet whose boats raid at a share of their worth, shown to its own side. `torpedoWords`. */
+  torpedoes?: string;
+  /** The far side's harbour patrols: the share of its destroyers that hunt submarines in the sea off its port while a fleet laid for harbour lies there. `harbourPatrol`. */
+  harbour?: number;
   /** One card for each class it has ships of, heaviest first. */
   cards: ShipCard[];
   /** The weight of its guns against a coast, its worth with a convoy, and its weight hunting submarines. */
@@ -121,6 +130,10 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     port: f.port, base: f.base, zone: f.zone, sea: g.seas[f.zone]?.name ?? '', stance: f.stance,
     order: FLEETS.orders[f.stance].label, lane: f.stance === 'escort' ? f.lane ?? null : null, doing: fleetDoing(g, f),
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
+    ...(atSea(f) && f.ships.ss > 0 && patrolRow(g, f) ? { boatsOut: Math.round(boatsOut(g, f)) } : {}),
+    ...(fuelLine(g, f) ? { fuel: fuelLine(g, f)! } : {}),
+    ...(seaWar(g) && harbourPatrol(g, f) ? { harbour: FLEETS.hunt.loose } : {}),
+    ...(f.ships.ss > 0 && f.zone >= FAR_SEAS_FIRST && torpedoWords(g, f.nat, 'these boats') ? { torpedoes: torpedoWords(g, f.nat, 'these boats')! } : {}),
     cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
       const card: ShipCard = { cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] };
       const stars = starRow(g, f, c);
@@ -239,6 +252,8 @@ export interface SeaOption {
   huntNow: number;
   /** The chance this fleet loses a heavy ship to a submarine there this month. */
   torpedo: number;
+  /** True for a sea beyond any fleet's reach that this fleet's submarines can still be sent to raid in (navy.ts ownBoatsReach; the far side's beats alone). */
+  raidOnly?: boolean;
 }
 
 /**
@@ -248,7 +263,9 @@ export interface SeaOption {
 export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): SeaOption[] {
   const mine = fleetPower(g, f);
   const fog = viewer !== null && carrierRules(g) && fogOn(g, viewer);
-  return fleetReach(g, f).map((z) => {
+  // (The player's boats raid farther than any fleet patrols, where his navy's group does from that base: those seas follow the others.)
+  const near = fleetReach(g, f), far = fleetReach(g, f, false, true).filter((z) => !near.includes(z));
+  return [...near, ...far].map((z) => {
     const here = atSea(f) && f.zone === z;
     const us = seaSide(g, z, f.nat, false), them = seaSide(g, z, f.nat, true);
     const pic = fog ? seaPicture(g, z, viewer) : null;
@@ -259,7 +276,7 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
       if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
       const k = fog ? fleetKnown(g, x, viewer) : 'exact';
       if (k !== 'exact') { if (k === 'report') reported++; continue; }
-      subs += x.ships.ss;
+      subs += boatsOut(g, x);
       if (x.ships.ss > 0) quarry.push(x);
       surface += CLASSES.reduce((n, c) => n + (c === 'ss' ? 0 : x.ships[c]), 0);
     }
@@ -276,9 +293,11 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
       if (keep.lane !== undefined) f.lane = keep.lane;
     }
     return {
-      zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs, reported, search: pic?.word ?? '',
+      // (The far side's one measure gives boats out in parts of a boat: the card counts whole boats, never none where some are out.)
+      zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs: subs > 0 ? Math.max(1, Math.round(subs)) : 0, reported, search: pic?.word ?? '',
       meet: surface <= 0 ? 'clear' : own >= NAVY.battle.seek * Math.max(1, them.total) ? 'battle' : 'shy',
       hunt, huntNow, torpedo: seaWar(g) ? torpedoRisk(g, f, z) : 0,
+      ...(far.includes(z) ? { raidOnly: true } : {}),
     };
   });
 }
