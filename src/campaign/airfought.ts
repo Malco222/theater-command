@@ -13,6 +13,7 @@
 
 import type { VictoryLevel } from '../core/ticket';
 import { fleetsNamed, keptAfloat, keptAfloatPast, shipCount } from './navy';
+import { strafedLine } from './strafers';
 import type { AirFleet, AirReport, BomberRow, BomberShot, Game, SeaSide, ShipClass, Ships } from './types';
 
 export interface FoughtAir {
@@ -366,6 +367,11 @@ export function afterCard(g: Game, rep: AirReport, fought: FoughtAir): AfterCard
   // The raid card's chance was the raider's: a defender reads the other side of it.
   const won = me === 'att' ? rep.won : !rep.won;
   const reckoning = fought.chance !== undefined ? reckoned(won, me === 'att' ? fought.chance : 1 - fought.chance) : undefined;
+  // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report says who went
+  // down, after what the bombers did and before the bill, to the side that flew it only. '' for anyone else, and for a
+  // report without the field; a raid on troops strikes no ships, so no kept lines stand between.)
+  const strafe = strafedLine(rep, g.human);
+  if (strafe) lines.splice((fought.staff ? 1 : 0) + (B > 0 ? 1 : 0), 0, strafe);
   return {
     lines, level: me === 'att' ? rep.level : FLIP[rep.level], ...(reckoning ? { reckoning } : {}),
     groups: [...rep.att.map(card('att')), ...rep.def.map(card('def'))],

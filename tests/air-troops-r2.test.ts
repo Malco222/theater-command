@@ -78,6 +78,11 @@ describe('the switch (off by default, bit for bit as before)', () => {
       const ra = launchRaid(a.g, 'ground', a.target, bombers, a.nat)!;
       flyKinds(['ground']);
       const rb = launchRaid(b.g, 'ground', b.target, bombers, b.nat)!;
+      // (Changed in the air lanes' fourth round, the UI director's words of 15:04Z: with the switch on the report keeps
+      // who went down, AirReport.strafed, here none. That one field apart, the raid books exactly as off.)
+      expect(rb.strafed).toEqual([]);
+      expect('strafed' in ra).toBe(false);
+      delete rb.strafed;
       expect(JSON.stringify(rb)).toBe(JSON.stringify(ra));
       expect(saveGame(b.g)).toBe(saveGame(a.g));
     }

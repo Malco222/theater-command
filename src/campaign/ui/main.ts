@@ -85,6 +85,7 @@ import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, ringStretch, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, gunsTo, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
+import { strafedLine, type StrafeSection } from '../strafers';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
@@ -6609,6 +6610,15 @@ const MOON_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><pa
 const typeLines = (t: { types: string; edge: string | null; pilots?: string } | undefined | null): string =>
   t ? `<div class="sub" title="${esc(FIGHTERS.words.tooltip)}">${esc(t.types)}${t.edge ? `<br>${esc(t.edge)}` : ''}${t.pilots ? `<br>${esc(t.pilots)}` : ''}</div>` : '';
 
+/**
+ * (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z.) The card's section at
+ * the foot of the raid's forces: the heading, the muted line once and the groups a row each, or the line for none.
+ * No colour: no icon, no tag, the card's own muted and empty lines.
+ */
+const strafeHtml = (x: StrafeSection): string => `<h3>${esc(x.heading)}</h3>${x.names.length
+  ? `<p class="sub" style="margin:-2px 0 6px">${esc(x.note)}</p>${x.names.map((n) => `<div class="pickrow"><span class="grow"><b>${esc(n)}</b></span></div>`).join('')}`
+  : `<div class="empty">${esc(x.none)}</div>`}`;
+
 function raidCard(): string {
   const m = ui.modal!;
   const kind = m.raid as RaidKind;
@@ -6662,6 +6672,7 @@ function raidCard(): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Raid planner · ${date(g.turn)}</div><h2>${esc(p.title)}</h2></header>
     <div class="body">${p.sky ? `<div class="note"><b>The sky.</b> ${esc(p.sky)}</div>` : ''}${head}
       <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}${stayers}
+      ${p.strafe && !p.why ? strafeHtml(p.strafe) : ''}
       ${could.length || daytime ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}${daytime}` : ''}
       ${p.why ? '' : `<h3>Rising to meet them</h3>${meets}<h3>Battle Ticket</h3>${ticketTable(p.lines)}`}
       ${cannot.length ? `<details class="cannot"><summary>${cannot.length} group${cannot.length === 1 ? '' : 's'} cannot go</summary>${cannot.map((s) => `<div class="pickrow">${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(s.baseName)} · ${esc(s.why ?? '')}</span></span></div>`).join('')}</details>` : ''}
@@ -6744,7 +6755,7 @@ function airReportCard(r: AirReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · ${aw ? 'air raid' : 'air campaign'}, ${what} · ${date(r.turn)}</div><h2>${esc(airTitle(r))}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${esc(r.result)}${sky}</div>
+      <div class="sub">${esc(r.result)}${sky}${strafedLine(r, g.human) ? ` ${esc(strafedLine(r, g.human))}` : ''}</div>
       <div class="vs"><div><h4>${chip(r.attNat)} ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} ${r.defNat ? chip(r.defNat) : ''}</h4>${side(r.def)}</div></div>
       <h3>What the campaign map fed into the battle</h3>
       ${ticketTable(r.lines)}

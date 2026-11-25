@@ -2988,6 +2988,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let atomLine: { text: string; hit: boolean; tell: boolean } | null = null;
   // Airfields as targets (fieldstate.ts): what the bombs did to a field, where they hit one.
   let fh: FieldHit | null = null;
+  // (A raid on troops with the strafers' rule on, strafers.ts: the names of the groups that went down, for the report.)
+  let strafed: string[] | undefined;
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -3222,6 +3224,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     if (rule) {
       const route = battle && !staff ? 'fought' : 'settled';
       strafeWatch.tell?.({ route, target, nat, strafers: route === 'fought' ? [...(battle?.strafers ?? [])] : strafers, fire: route === 'fought' ? battle?.strafeFire ?? 0 : fired, weight: low, cut });
+      // (The words, the UI director 15:04Z: the report says who went down, by the same ids the hook hears, named as
+      // the report names its groups and in the raid's order. Nothing is drawn: a record only.)
+      const down = route === 'fought' ? battle?.strafers ?? [] : strafers;
+      strafed = a.att.flatMap((x, i) => (down.includes(x.f.id) ? [att[i].fleet] : []));
     }
     let divs = 0;
     for (const c of foes) {
@@ -3324,6 +3330,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (city) rep.city = { region: city.region, added: city.added, now: city.now };
   if (fh) rep.field = { region: fh.region, shut: fh.shut, levels: fh.levels, ground: fh.ground };
   if (transit) rep.ferry = transit.to;
+  if (strafed) rep.strafed = strafed;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the
