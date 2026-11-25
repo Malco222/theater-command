@@ -430,7 +430,7 @@ export function sideTypes(g: Game, side: Weighed[]): string[] {
  * escort first, and which side's aircraft are stronger, as one figure. Null when the switch is off, at night, or
  * with no defenders to meet.
  */
-export function raidCardLines(g: Game, a: { att: { f: AirFleet; ftr: number }[]; def: { f: AirFleet; w: number }[]; typeEdge?: number }, m: AirMission): { types: string; edge: string | null } | null {
+export function raidCardLines(g: Game, a: { att: { f: AirFleet; ftr: number }[]; def: { f: AirFleet; w: number }[]; typeEdge?: number; pilotsLine?: string }, m: AirMission): { types: string; edge: string | null; pilots?: string } | null {
   if (!fighterTypesOn(g)) return null;
   const band = bandOf(m);
   if (!band) return null;
@@ -440,7 +440,8 @@ export function raidCardLines(g: Game, a: { att: { f: AirFleet; ftr: number }[];
   if (!esc.length) return { types: `Defending fighters at ${height(band)} m: ${namesOf(def)}.`, edge: null };
   const E = a.typeEdge ?? 0, x = Math.exp(Math.abs(E) / 2) - 1;
   const edge = x < 0.02 ? 'The aircraft are about even.' : `The ${E > 0 ? "escort's" : "defenders'"} aircraft are about ${Math.round(x * 100)}% stronger.`;
-  return { types: `Fighters at ${height(band)} m: ${namesOf(esc)} against ${namesOf(def)}.`, edge };
+  // Under Units decide, the pilots' training beside the types line, where it is read on both sides (the UI director 24 Nov 18:10Z).
+  return { types: `Fighters at ${height(band)} m: ${namesOf(esc)} against ${namesOf(def)}.`, edge, ...(a.pilotsLine ? { pilots: a.pilotsLine } : {}) };
 }
 
 /** The air group panel: the types a group flies, with the share of each, the short and full names and the two kinds of words. */

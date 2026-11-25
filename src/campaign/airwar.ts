@@ -22,7 +22,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -208,6 +208,12 @@ export interface GroupRow {
   mine: boolean;
   /** Weather (ruling 143): only when the sky over its airfield is closed, why it is grounded and next month's chances. */
   sky?: string[];
+  /** Under Units decide (the UI director 24 Nov 18:10Z): its pilots in a sentence, "Seasoned pilots, 250 hours' training."; '' off. */
+  pilots: string;
+  /** The refit note, only in the month new pilots took its grade down a step: "14 new pilots joined this month."; else ''. */
+  joined: string;
+  /** The viewer's own group only, under Units decide: its nation's schools and fighter doctrine, said first on its page; else ''. */
+  schools: string;
 }
 
 /** A sea patrol's line on its group's row (Q8, the UI director's words): the sea, and the share of the waters it reaches that its side's patrols watch. */
@@ -248,6 +254,7 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     doing, job: away || isOffensive(f.mission) ? 'raid' : f.mission === 'rest' ? 'rest' : with_ ? 'escort' : 'patrol',
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
+    ...pilotWords(g, f), schools: own ? schoolWords(g, f) : '',
     // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
     ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : {}),
   };
@@ -722,7 +729,7 @@ export function gunsOfThem(guns: RaidGuns): string {
 
 export interface RaidPlan {
   /** The fighter types at the raid's height and whose aircraft are stronger (fighters.ts): only with the switch 'Fighter types' on. */
-  fighterTypes?: { types: string; edge: string | null };
+  fighterTypes?: { types: string; edge: string | null; pilots?: string };
   kind: RaidKind;
   target: number;
   place: string;

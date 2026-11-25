@@ -6382,7 +6382,7 @@ function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
     ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${x.ashore >= 0 ? ' <span class="tag">Carrier wing</span>' : ''}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
     <span class="meta">${whose ? `${g.nations[x.nat].adj} · ` : ''}${esc(capital(kindWord(x.kind, x.aircraft)))}${x.command ? ` · ${esc(x.command)}` : ''}${x.ship >= 0 && whose ? ` · aboard the ${esc(x.baseName)}` : ''} · reach ${num(x.range)} km</span>
     ${x.ship >= 0 || x.ashore >= 0 ? `<span class="meta wingat">${inkSign(x.ship >= 0 ? 'cv' : 'ftr')}${esc(x.where)}${x.ashore >= 0 && x.fleetName ? ` · of the ${esc(x.fleetName)}` : ''}</span>` : ''}
-    <span class="meta">${esc(x.doing)}</span>${x.sky ? `<span class="meta">${x.sky.map(esc).join(' ')}</span>` : ''}
+    <span class="meta">${esc(x.doing)}</span>${x.sky ? `<span class="meta">${x.sky.map(esc).join(' ')}</span>` : ''}${x.pilots ? `<span class="meta">${esc(x.pilots)}${x.joined ? ` ${esc(x.joined)}` : ''}</span>` : ''}
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${x.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(x.ready * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${f && (ui.air === x.id || Object.keys(f.rec ?? {}).length > 0 || (f.hon?.length ?? 0) > 0) ? recStrip('air', f) : ''}`;
 }
@@ -6421,7 +6421,7 @@ function groupOrders(x: GroupRow): string {
     const ts = raidTargetsFor(g, 'recon', x.id).slice(0, 8);
     body = `<p class="sub" style="margin:8px 0 6px">Click a marked province on the map, or pick one of the nearest. ${AIRWAR_RECON} aircraft go; fighters on patrol there may bring some down.</p>${ts.map((t) => `<button class="pickrow" data-act="scoutpick" data-id="${t.id}"><span class="grow"><b>${esc(t.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(t.km)} km · ${esc(t.what)}</span></span></button>`).join('') || '<div class="empty">Nothing in its reach is hidden from you.</div>'}`;
   }
-  return `<div class="orders"><p class="sub" style="margin:0 0 5px">Between raids:</p><div class="jobs">${jobs}</div>${acts}${body}</div>`;
+  return `<div class="orders">${x.schools ? `<p class="sub" style="margin:0 0 5px">${esc(x.schools)}</p>` : ''}<p class="sub" style="margin:0 0 5px">Between raids:</p><div class="jobs">${jobs}</div>${acts}${body}</div>`;
 }
 
 const AIRWAR_RECON = 12;
@@ -6520,7 +6520,7 @@ function airWarPane(me: string): string {
 /** Any air group as a row for a list, whoever it belongs to. */
 const myGroupRow = (f: AirFleet): GroupRow => (f.ship !== undefined ? groupRow(g, f) : airfieldAt(g, f.base)?.rows.find((x) => x.id === f.id) ?? {
   id: f.id, nat: f.nat, name: f.name, command: '', kind: f.bmr <= 0 ? 'ftr' : f.ftr <= 0 ? 'bmr' : 'mixed', ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
-  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, port: -1, ashore: f.ashore ?? -1, fleetName: '', where: `At ${g.regions[f.base].name}`, wingMove: null, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
+  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, port: -1, ashore: f.ashore ?? -1, fleetName: '', where: `At ${g.regions[f.base].name}`, wingMove: null, ship: f.ship ?? -1, sea: -1, x: g.regions[f.base].x, y: g.regions[f.base].y, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false, pilots: '', joined: '', schools: '',
 });
 
 /** The art director's signs for a raid by day and a raid by night: a sun and a moon, one filled path each in a 24 by 16 box. */
@@ -6529,8 +6529,8 @@ const MOON_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><pa
 
 /** The raid planner's card: the target, the chance of success and the losses to expect, and who flies it. Ticking groups works the odds out again. */
 /** The fighter types at the raid's height, and whose aircraft are stronger (the switch 'Fighter types'; nothing when off). Plain text: the odds carry the colour. */
-const typeLines = (t: { types: string; edge: string | null } | undefined | null): string =>
-  t ? `<div class="sub" title="${esc(FIGHTERS.words.tooltip)}">${esc(t.types)}${t.edge ? `<br>${esc(t.edge)}` : ''}</div>` : '';
+const typeLines = (t: { types: string; edge: string | null; pilots?: string } | undefined | null): string =>
+  t ? `<div class="sub" title="${esc(FIGHTERS.words.tooltip)}">${esc(t.types)}${t.edge ? `<br>${esc(t.edge)}` : ''}${t.pilots ? `<br>${esc(t.pilots)}` : ''}</div>` : '';
 
 function raidCard(): string {
   const m = ui.modal!;
