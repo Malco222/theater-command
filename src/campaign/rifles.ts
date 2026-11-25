@@ -299,6 +299,19 @@ export function needsFrom(fn: Need): () => void {
 /** What a nation's own arming asks this month, in its divisions' worth. */
 export const ownNeed = (g: Game, nat: string): number => NEEDS.reduce((s, fn) => s + pos(fn(g, nat)), 0);
 
+/**
+ * A seller arms its own corps first (15C; the director's answer 2: "a seller counts its own drafts' refill this month
+ * only"): where a nation carries, what its drafts would draw refilling every foot corps this month, to its level where
+ * it binds and to its full where its row only counts (whose drafts are not capped). 0 for a nation with no row.
+ */
+needsFrom((g, nat) => {
+  if (!carries(g, nat)) return 0;
+  const refit = pos(riflesRow(g, nat)!.refit), bound = binds(g, nat);
+  let short = 0;
+  for (const c of g.corps) if (c.nat === nat && !c.dead && isFoot(g, c)) short += Math.max(0, (bound ? levelOf(g, c) : c.full ?? 1) - c.str) * c.divs;
+  return short * refit;
+});
+
 /** What a seller with a rifles shelf can spare this month, in its own divisions' worth: its stock less its own need, never below 0. */
 export const spareOf = (g: Game, nat: string): number => Math.max(0, stockOf(g, nat, 'rifles') - ownNeed(g, nat));
 
