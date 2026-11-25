@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 8b556bae 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 413baed5 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11074,7 +11074,11 @@
         }
         if (!u.met) {
           u.met = true;
-          if (u.side === "att" || !t.met) this.say({ what: "contact", unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
+          const unseen = u.team === "snp" && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
+          if (u.side === "att" || !t.met) {
+            if (unseen) this.say({ what: "contact", side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
+            else this.say({ what: "contact", unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
+          }
         }
         if (u.team === "snp" && t.kind === "arm") {
           if (!blind) t.closedTo = Math.round((this.t + LAND.closed.secs) * 1e3) / 1e3;
