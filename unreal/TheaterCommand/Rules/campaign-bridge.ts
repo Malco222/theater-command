@@ -5234,7 +5234,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? '', sort: raidSort(s, kind, target), act: '', now: true, picture: picture(target, here?.holder ?? ''), ...titled(here, p.place) },
       // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
       what: here?.what ?? '', effect: p.why ? '' : ((t: string): string => { const i = t.indexOf('. '); return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t; })(p.effects[0] ?? ''),
-      effects: p.why ? '' : p.effects.join(' '),
+      // (Release 1.5.2: a fight for the sky sent with too few fighters to hold one says so, after what the fight should do.)
+      effects: p.why ? '' : [...p.effects, p.tooFew ?? ''].filter(Boolean).join(' '),
       // (The art director's card: up to three boxes, each one number and a few words on what a hit does. The rules
       // give these as sentences today, so the figures are read out of the rules' own words; a sentence that fits
       // none of these gets no box, and the whole of it is on the pointer.)

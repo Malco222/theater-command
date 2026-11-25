@@ -4,7 +4,7 @@
 // air force was only a rating raises it as air groups once at war, and the rating then no longer tilts its battles.
 import { describe, expect, it } from 'vitest';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { AIRWAR, airAI, airRange, cover, defendBattles, fightBack, km, ratedAir, raiseAirForce } from '../src/campaign/air';
+import { AIRWAR, airAI, airRange, cover, defendBattles, fightBack, km, ratedAir, raiseAirForce, smallArm } from '../src/campaign/air';
 import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -82,6 +82,10 @@ describe('the fight back', () => {
       for (const nat of Object.keys(g.nations)) {
         const held = defendBattles(g, nat);
         if (!held.length || !g.nations[nat].alive) continue;
+        // (Release 1.5.2, the design director's ruling of 25 November: an arm too small to hold any sky, its land
+        // fighters under sky.least, is not bound by this rule, and fights over its army: tests/small-air-152.test.ts.
+        // Every other arm is bound by it exactly as before.)
+        if (smallArm(g, nat)) continue;
         // The staff's month as it plans it, on a copy: its ground support, then its sweeps and raids.
         const h = loadGame(saveGame(g))!;
         airAI(h, nat, null);

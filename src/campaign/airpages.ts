@@ -195,7 +195,7 @@ function planPage(g: Game, kind: RaidKind, target: number, picked: number[]): Pa
   return {
     id: `plan:${kind}:${target}:${p.picked.join('.')}`, title: p.title.toUpperCase(),
     headline: p.why ?? `${p.verdict}: ${pct(p.success)}`,
-    note: p.why ? '' : [lossLine(p), ...p.effects, p.massed, p.offPatrol].filter(Boolean).join(' '),
+    note: p.why ? '' : [lossLine(p), ...p.effects, p.tooFew ?? '', p.massed, p.offPatrol].filter(Boolean).join(' '),
     top: [
       { label: 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: up && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
       { label: 'ANOTHER TARGET', act: `open:raid:${kind}`, ok: true, tip: '' },

@@ -22,7 +22,7 @@ import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
   AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir,
+  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -634,6 +634,11 @@ export interface RaidPlan {
   title: string;
   /** Why it cannot be flown as picked, or null. */
   why: string | null;
+  /**
+   * A fight for the sky sent with too few fighters over the target to hold any sky (release 1.5.2, airwar.json
+   * ai.back.small): the card's line that says so, with the figures. Left out otherwise.
+   */
+  tooFew?: string;
   /** Every group of the nation, those that can go first, nearest first. */
   seats: RaidSeat[];
   /** The groups going: the ones asked for that can, and the escorts ordered to stick with them. */
@@ -692,6 +697,12 @@ export interface RaidFigures {
 }
 
 const VERDICT: [number, string][] = [[0.8, 'Very likely to succeed'], [0.6, 'Likely to succeed'], [0.4, 'It could go either way'], [0.2, 'Likely to fail'], [0, 'Very likely to fail']];
+/**
+ * The same chance, worded for the fight alone, for a fight for the sky sent with too few fighters to hold any sky
+ * (release 1.5.2, airwar.json ai.back.small): its chance of success is the chance the fight costs the enemy more than
+ * it costs you, and the sky itself cannot be won on the numbers sent, so the words claim the fight and no more.
+ */
+const FIGHT_VERDICT: [number, string][] = [[0.8, 'Very likely to win the air fight'], [0.6, 'Likely to win the air fight'], [0.4, 'The air fight could go either way'], [0.2, 'Likely to lose the air fight'], [0, 'Very likely to lose the air fight']];
 
 function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): string[] {
   const out: string[] = [];
@@ -847,6 +858,13 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.fighterLossN = Math.round(fc.ftrLoss);
   plan.foeLossN = Math.round(fc.foeLoss);
   plan.effects = effectsOf(g, kind, target, fc, nat);
+  // (Release 1.5.2: a fight for the sky sent with fewer fighters over the target than hold a sky, air.json sky.least,
+  // cannot win it whatever the odds. The card says so in a line of its own, and words its chance for the fight alone.)
+  if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least) {
+    const over = Math.floor(a.E), sent = Math.round(plan.fighters);
+    plan.tooFew = `Too few fighters to hold this sky: it takes ${AIR.sky.least} over it at the end, you send ${sent > over ? `${sent}, and ${over} of them can be over it` : over}.`;
+    plan.verdict = FIGHT_VERDICT.find(([least]) => fc.success >= least)![1];
+  }
   plan.figures = figuresOf(g, kind, target, fc, nat);
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
@@ -1015,7 +1033,7 @@ export function launchRaid(g: Game, kind: RaidKind, target: number, ids: number[
   if (plan.why) return null;
   const fleets = plan.picked.map((id) => g.airFleets.find((f) => f.id === id)!);
   const m = missionOf(kind);
-  const rep = fly(g, nat, m, target, fleets, `:${(g.flags.airBattles ?? 0) + 1}`, fought);
+  const rep = fly(g, nat, m, target, fleets, `:${(g.flags.airBattles ?? 0) + 1}`, fought, true);
   if (!rep) return null;
   for (const f of fleets) { f.mission = m; f.target = target; f.flew = g.turn; }
   return rep;
