@@ -625,3 +625,94 @@ describe('the fuel to go down (the design director, 19:09Z, item 1: "reach is fu
     }
   });
 });
+
+// The design director, 25 November 2026 20:55Z, on the fight's half of ruling 1 (C1): "Bingo is where the settled raid
+// prices the fight's fuel: a group turns for home with what it takes to get there. So a group within the rule's reach that
+// turned at bingo is not asked for fuel again at its go-down; asking twice counts the fight twice. Beyond the reach, fuel
+// is asked as before." Two raids whose defence outlasts each group's kill ledger, with groups near the rule's reach: the
+// Soviet raid on Wilno (the gate's: three fighter divisions at 0.88 of their range) and the British raid on Frankfurt from
+// Alsace (No. 11 Group at 0.89, against 2. Jagddivision set to 20). Fought as the gate flies them, every group the settled
+// raid sends down goes down; bingo is as it is, so a group may still turn for home short of fuel on its passes.
+describe('the fuel to go down after a fight (the design director, 20:55Z, C1): a group within the rule\'s reach is not asked for fuel again at its go-down', () => {
+  afterEach(() => { strafeWatch.tell = undefined; });
+  type Raid = { nat: string; wars: string[]; target: string; ids?: number[]; move: Record<number, string>; def?: [number, number][] };
+  const WILNO: Raid = { nat: 'SOV', wars: ['POL'], target: 'Wilno', move: { 14: 'Wilno' } };
+  const FRANKFURT: Raid = { nat: 'UK', wars: ['GER'], target: 'Frankfurt', ids: [35, 5], move: { 5: 'Alsace', 35: 'Alsace' }, def: [[3, 20]] };
+  const SAAR200: Raid = { nat: 'FRA', wars: ['GER'], target: 'Saar', ids: [38, 10, 36, 9], move: { 36: 'Verdun', 9: 'Namur' } };
+  /** The raid as the gate sets it up, the k-th battle's own luck. */
+  function setUp(r: Raid, k: number) {
+    const g = startOpen(createGame(7, r.nat));
+    for (const w of r.wars) setWar(g, r.nat, w);
+    for (const [id, at] of Object.entries(r.move)) g.airFleets.find((f) => f.id === +id)!.base = g.regions.find((x) => x.name === at)!.id;
+    for (const [id, n] of r.def ?? []) { const d = g.airFleets.find((f) => f.id === id)!; d.ftr = n; d.est.ftr = Math.max(d.est.ftr, n); }
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    flyKinds(['ground']);
+    const target = raidTargets(g, 'ground', r.nat).find((x) => g.regions[x.id].name === r.target)!.id;
+    return { g, target, ids: r.ids ?? raidGroups(g, 'ground', target, r.nat) };
+  }
+  /** Settled with no battle: the groups the staff's own raid sends down. */
+  function settled(r: Raid, k: number): number[] {
+    const { g, target, ids } = setUp(r, k);
+    const heard: { route: string; strafers: number[] }[] = [];
+    strafeWatch.tell = (x) => { heard.push(JSON.parse(JSON.stringify(x))); };
+    launchRaid(g, 'ground', target, ids, r.nat);
+    return [...heard.find((x) => x.route === 'settled')!.strafers].sort((x, y) => x - y);
+  }
+  /** Fought to the end by the computer on both sides: the groups that went down (began a pass) and the field's strafers. */
+  function flown(r: Raid, k: number) {
+    const { g, target, ids } = setUp(r, k);
+    const t = ticketOf(g, target, ids, r.nat);
+    const s = airBattle(t);
+    const S = s as unknown as { strafing: Map<number, { done: number }> };
+    fight(s);
+    const down = s.units.filter((u) => u.side === 'att' && u.air === 'ftr' && (S.strafing.get(u.id)?.done ?? 0) >= 1).map((u) => u.corps).sort((x, y) => x - y);
+    return { s, t, down, strafers: s.outcome().strafers ?? [] };
+  }
+
+  it('Wilno, fought as the gate flies it: the three Soviet fighter divisions go down on every seed, as the settled raid sends them', () => {
+    const want = settled(WILNO, 0);
+    expect(want.length).toBe(3);
+    for (const k of [0, 1, 2]) {
+      const f = flown(WILNO, k);
+      expect([...f.t.place.marks!.law.reach!].sort((x, y) => x - y)).toEqual(want);
+      expect(f.down).toEqual(want);
+      expect([...f.strafers].sort((x, y) => x - y)).toEqual(want);
+      // Each says so in the battle's own words.
+      for (const u of f.s.units.filter((x) => x.side === 'att' && want.includes(x.corps))) {
+        expect(f.s.history().some((e) => e.what === 'air:strafe' && e.unit === u.id && /goes down to strafe the troops at Wilno\.$/.test(e.text ?? ''))).toBe(true);
+      }
+    }
+  });
+
+  it('the British raid on Frankfurt from Alsace (No. 11 Group near the edge of its reach): it goes down on every seed, as the settled raid sends it', () => {
+    const want = settled(FRANKFURT, 0);
+    expect(want).toEqual([5]);
+    for (const k of [0, 1]) {
+      const f = flown(FRANKFURT, k);
+      expect(f.down).toEqual(want);
+      expect([...f.strafers].sort((x, y) => x - y)).toEqual(want);
+    }
+  });
+
+  it('with the rule on, a group without the rule\'s reach never goes down, and is never asked for fuel to go down (Groupement de Chasse 1 at Namur, 0.98 of its range)', () => {
+    const want = settled(SAAR200, 0);
+    expect(want).not.toContain(9);
+    for (const k of [0, 1]) {
+      const { g, target, ids } = setUp(SAAR200, k);
+      const t = ticketOf(g, target, ids, 'FRA');
+      expect(t.place.marks!.law.reach).not.toContain(9);
+      const s = airBattle(t);
+      const S = s as unknown as { fuelFor(u: { corps: number }): boolean; strafing: Map<number, { done: number }> };
+      const asked: number[] = [];
+      const own = S.fuelFor.bind(s);
+      S.fuelFor = (u) => { asked.push(u.corps); return own(u); };
+      const far = s.units.find((u) => u.side === 'att' && u.corps === 9)!;
+      fight(s, () => { expect(far.job.do).not.toBe('strafe'); });
+      expect(asked).not.toContain(9);
+      expect(S.strafing.get(far.id)).toBeUndefined();
+      expect(s.outcome().strafers).not.toContain(9);
+      expect([...s.outcome().strafers!].sort((x, y) => x - y)).toEqual(want);
+    }
+  });
+});

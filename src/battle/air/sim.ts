@@ -847,10 +847,15 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * Whether a group has the fuel left over the board to reach the troops and fly its passes: one that has not is short
    * of fuel, and goes home as it is. (The board's fuel is time over it, as for every group: at none a group turns for
-   * home, bingo, and the way home is the campaign's reach, already weighed.)
+   * home, bingo, and the way home is the campaign's reach, already weighed.) With the strafers' rule a group within the
+   * rule's reach is not asked for fuel at its go-down (the design director, 25 November 2026 20:55Z, C1: "Bingo is where
+   * the settled raid prices the fight's fuel: a group turns for home with what it takes to get there. So a group within
+   * the rule's reach that turned at bingo is not asked for fuel again at its go-down; asking twice counts the fight
+   * twice."); bingo is as it is. Beyond the reach, or without the rule, fuel is asked as before.
    */
   private fuelFor(u: AirUnit): boolean {
     if (u.fuel0 >= SKY.fuel.home) return true;
+    if (this.troops?.law.reach?.includes(u.corps)) return true;
     const L = this.lane, S = TROOPS.strafe;
     const there = dist(u.x, u.y, L.x, L.y), passes = (S.passes - (this.strafing.get(u.id)?.done ?? 0)) * 2 * S.half;
     return u.fuel >= (there + passes) / SKY.speed.ftr;
