@@ -565,6 +565,13 @@ bool WholeLook::WornOn()
 	return CVarWorn.GetValueOnGameThread() != 0;
 }
 
+FLinearColor WholeLook::FieldDust(const FLinearColor& Mean)
+{
+	FLinearColor Out = Boxed(Mean);
+	Out.A = 1.0f;
+	return Out;
+}
+
 void WholeLook::WornOpen(UMaterialInstanceDynamic* Steel)
 {
 	WornInks.Reset();

@@ -4155,6 +4155,23 @@ void ALandBattle::BankOut(FManDrawn& D)
 
 // ---- The tanks, guns and lorries -------------------------------------------------------------------------------
 
+namespace
+{
+	/** The field's mean paint as linear light (WholeLook::GroundMean on the painted field's own size, as the cloud block
+	 * reads it): water not counted, as rivers, ponds and flooded ground mirror the sky. Release 2, the whole picture: the
+	 * bounce (tc.Look.Bounce) and the ground on the vehicles' lower third (tc.Look.Worn). */
+	FLinearColor FieldMeanPaint(const LandField::Ground& Painted, const LandFeed::Field& Plan)
+	{
+		return WholeLook::GroundMean([&Painted](double X, double Y)
+		{
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			Painted.HeightAt(X, Y, &What);
+			const auto C = Painted.ColourAt(X, Y);
+			return FColor(C.R, C.G, C.B, static_cast<uint8>(What == LandField::Drawn::Water ? 0 : 255)); // (alpha 0: not counted)
+		}, Plan.Cols * Plan.Cell, Plan.Rows * Plan.Cell);
+	}
+}
+
 void ALandBattle::MakeArmour()
 {
 	FLandBattleState& S = *State;
@@ -4265,6 +4282,18 @@ void ALandBattle::MakeArmour()
 	// Army's red star, the British flash before July 1943. Off: none, as before.
 	Armour->bMarks = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMarks"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: national marks %s"), Armour->bMarks ? TEXT("painted on (-TheaterLandMarks, release 2)") : TEXT("off"));
+	// (release 2, the whole picture's worn paint, tc.Look.Worn: the field's own ground on every vehicle's lower third and
+	// running gear, a third layer over her dust (LandKit's Dress::FieldDust), its mean paint read as the bounce reads it
+	// and its hue held inside the art director's box. Off: none, as before. Look/WholeLook.h)
+	if (WholeLook::WornOn())
+	{
+		const FLinearColor Dust = WholeLook::FieldDust(FieldMeanPaint(*FieldPtr, S.Rec.Ground));
+		Armour->FieldDust[0] = Dust.R;
+		Armour->FieldDust[1] = Dust.G;
+		Armour->FieldDust[2] = Dust.B;
+		UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' lower third takes the field's own ground, %.3f, %.3f, %.3f (linear), some 44 in 100 of it"),
+			Dust.R, Dust.G, Dust.B);
+	}
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
@@ -6156,15 +6185,8 @@ void ALandBattle::HideTheTable()
 			FLinearColor Bounce(0.0f, 0.0f, 0.0f, 1.0f);
 			if (bBounceAll)
 			{
-				const LandFeed::Field& Plan = State->Rec.Ground;
 				const auto* Painted = State->Field.get();
-				const FLinearColor Mean = WholeLook::GroundMean([Painted](double X, double Y)
-				{
-					LandField::Drawn What = LandField::Drawn::Pasture;
-					Painted->HeightAt(X, Y, &What);
-					const auto C = Painted->ColourAt(X, Y);
-					return FColor(C.R, C.G, C.B, static_cast<uint8>(What == LandField::Drawn::Water ? 0 : 255)); // (alpha 0: not counted)
-				}, Plan.Cols * Plan.Cell, Plan.Rows * Plan.Cell); // (the painted field's own size, as the cloud block reads it)
+				const FLinearColor Mean = FieldMeanPaint(*Painted, State->Rec.Ground);
 				// (the sun's true height at the hour it was laid, not the picture's sun, which is held 8 degrees up)
 				float SunHour = static_cast<float>(Hour);
 				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHour="), SunHour))

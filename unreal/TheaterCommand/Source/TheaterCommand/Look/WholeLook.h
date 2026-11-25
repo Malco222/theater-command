@@ -111,6 +111,11 @@ namespace WholeLook
 	/** tc.Look.Worn is on (its variable as it stands). */
 	bool WornOn();
 
+	/** The field's own ground as dirt (release 2, tc.Look.Worn): its mean paint (GroundMean, linear) with the hue pulled
+	 * inside the art director's box and the value kept, as the bounce's, so Normandy's grass does not paint a hull's lower
+	 * third or a man's boots green. Alpha 1. */
+	FLinearColor FieldDust(const FLinearColor& Mean);
+
 	/** A ground battle loads its inks (Steel its vehicles' plain ink, all its settings laid): whether this battle's
 	 * vehicles wear their paint is settled here, once (the switch on and M_LandWorn built), and the last battle's worn
 	 * inks forgotten. Steel itself is never changed. */
