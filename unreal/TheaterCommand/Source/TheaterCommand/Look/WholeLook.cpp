@@ -5,8 +5,8 @@
 #include "Containers/Ticker.h"
 #include "Engine/Engine.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Components/SkyLightComponent.h"
 #include "Engine/PostProcessVolume.h"
-#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
@@ -46,9 +46,6 @@ namespace
 
 	/** The engine's world units in a metre (the battles are laid at 100, as the engine's own measure is). */
 	constexpr float UnitsPerMetre = 100.0f;
-
-	/** The clock has begun: a change to the filtering after this is carried to the pictures already made. */
-	bool bStarted = false;
 
 	/** A ground battle is laid (FieldLaid to FieldGone): the far shade is the ground battle's alone, the only scene that
 	 * draws ambient occlusion (the map's trims keep it off; with -TheaterOldLight they do not, and the map, the air and the
@@ -104,28 +101,6 @@ namespace
 
 	int32 FilteringLaid = -1; // (-1: none laid)
 
-	/** The pictures already made that read through their group's filter (TF_Default: the ground battle's field pictures,
-	 * the air battle's ground) take the filtering now, not only the pictures made after it: their samplers are made again.
-	 * Only once the clock has begun, never at the module's start (no picture of the game's is made yet). */
-	void RefreshSlanted()
-	{
-		if (!bStarted || IsEngineExitRequested())
-		{
-			return;
-		}
-		int32 Refreshed = 0;
-		for (TObjectIterator<UTexture2D> It; It; ++It)
-		{
-			UTexture2D* Picture = *It;
-			if (Picture && Picture->Filter == TF_Default && Picture->GetResource())
-			{
-				Picture->RefreshSamplerStates();
-				++Refreshed;
-			}
-		}
-		UE_LOG(LogTheater, Display, TEXT("Whole look: %d pictures read through their group's filter took the new filtering"), Refreshed);
-	}
-
 	/** The world the game is being played in (none while it loads). */
 	UWorld* PlayWorld()
 	{
@@ -169,9 +144,10 @@ namespace
 					Filtering, KeptFiltering.Name, Laid->GetInt());
 				return;
 			}
+			// (the engine makes the samplers of the pictures already made again as the setting changes, by its own callback on
+			// r.MaxAnisotropy: the ground battle's field pictures and the air battle's ground take it at once)
 			UE_LOG(LogTheater, Display, TEXT("Whole look: the crisp picture's filtering ON: the ground's pictures filtered %d-fold at a slant (it was %s); tc.Look.Crisp 0 puts it back"),
 				Filtering, *KeptFiltering.Was);
-			RefreshSlanted();
 		}
 		else if (KeptFiltering.bKept)
 		{
@@ -179,7 +155,6 @@ namespace
 			PutBack(KeptFiltering);
 			FilteringLaid = -1;
 			UE_LOG(LogTheater, Display, TEXT("Whole look: the crisp picture's filtering off: as it was"));
-			RefreshSlanted();
 		}
 	}
 
@@ -290,6 +265,14 @@ namespace
 		{
 			LensSaid = Said;
 			UE_LOG(LogTheater, Display, TEXT("Whole look: the lens ON: %s (the engine's own: no sharpening; shade 0.50, 30 to 80 m, its radius a share of the view, quality 50)"), *Said);
+			// (the engine's own setting, when anything has set it to 0 or more, overrides every volume's and camera's
+			// sharpening: the picture then is sharpened at that, not at this)
+			const IConsoleVariable* Engine = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Tonemapper.Sharpen"));
+			if (bCrisp && Engine && Engine->GetFloat() >= 0.0f)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Whole look: r.Tonemapper.Sharpen is set to %.2f, which overrides the crisp picture's %.2f (set by the console, an ini or a timing round; -1 lets the look's own number hold)"),
+					Engine->GetFloat(), Sharpen);
+			}
 		}
 	}
 
@@ -329,6 +312,11 @@ namespace
 		}
 	}
 
+	// ---- The bounce held through a night before the attack (BounceAtDawn to Dawn) --------------------------------------
+
+	TArray<TWeakObjectPtr<USkyLightComponent>> DawnSkies;
+	FLinearColor DawnBounce(0.0f, 0.0f, 0.0f, 1.0f);
+
 	// ---- The bounce's colour -----------------------------------------------------------------------------------------
 
 	float ToPicture(float Light) // (linear light to the sRGB a picture keeps)
@@ -354,13 +342,13 @@ namespace
 	FLinearColor Boxed(const FLinearColor& Light)
 	{
 		const float R = ToPicture(Light.R), G = ToPicture(Light.G), B = ToPicture(Light.B);
-		if (G <= KINDA_SMALL_NUMBER)
+		if (G <= UE_KINDA_SMALL_NUMBER)
 		{
 			return Light; // (a black ground gives nothing back to pull)
 		}
 		FLinearColor Out(ToLight(G * FMath::Clamp(R / G, 0.90f, 1.15f)), ToLight(G), ToLight(G * FMath::Clamp(B / G, 0.80f, 1.05f)), 1.0f);
 		const float Was = ValueOf(Light), Now = ValueOf(Out);
-		if (Now > KINDA_SMALL_NUMBER)
+		if (Now > UE_KINDA_SMALL_NUMBER)
 		{
 			Out *= Was / Now;
 		}
@@ -392,7 +380,6 @@ void WholeLook::Start()
 		CVarBounceHue->Set(0, ECVF_SetByCode);
 	}
 	// (the filtering and the lens both wait for the game's world: the clock lays them)
-	bStarted = true;
 	if (!Clock.IsValid())
 	{
 		Clock = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&Turn), 0.25f);
@@ -407,7 +394,6 @@ void WholeLook::Stop()
 		FTSTicker::GetCoreTicker().RemoveTicker(Clock);
 		Clock.Reset();
 	}
-	bStarted = false;
 }
 
 bool WholeLook::BounceOn()
@@ -417,7 +403,8 @@ bool WholeLook::BounceOn()
 
 FLinearColor WholeLook::GroundMean(TFunctionRef<FColor(double X, double Y)> ColourAt, double Wide, double Deep)
 {
-	// (the paint is sRGB, as a picture keeps it; light adds in linear, so each is made linear before the mean)
+	// (the paint is sRGB, as a picture keeps it; light adds in linear, so each is made linear before the mean. A point
+	// given alpha 0 is not counted: water, which mirrors the sky and throws no diffuse light back, the art director)
 	constexpr int32 Across = 24;
 	FLinearColor Sum(0.0f, 0.0f, 0.0f, 0.0f);
 	int32 Count = 0;
@@ -426,9 +413,18 @@ FLinearColor WholeLook::GroundMean(TFunctionRef<FColor(double X, double Y)> Colo
 		for (int32 Col = 0; Col < Across; ++Col)
 		{
 			const double X = (Col + 0.5) / Across * Wide, Y = (Row + 0.5) / Across * Deep;
-			Sum += FLinearColor::FromSRGBColor(ColourAt(X, Y));
+			const FColor Paint = ColourAt(X, Y);
+			if (Paint.A == 0)
+			{
+				continue;
+			}
+			Sum += FLinearColor::FromSRGBColor(FColor(Paint.R, Paint.G, Paint.B, 255));
 			++Count;
 		}
+	}
+	if (Count < Across * Across)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce: %d of the field's %d points are water, not counted"), Across * Across - Count, Across * Across);
 	}
 	return Count > 0 ? FLinearColor(Sum.R / Count, Sum.G / Count, Sum.B / Count, 1.0f) : FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
 }
@@ -449,14 +445,63 @@ FLinearColor WholeLook::BounceLight(const FLinearColor& Mean, bool bClosedCanopy
 	return Out;
 }
 
+double WholeLook::SunHeight(double Lat, int32 Month, double Hour)
+{
+	// (as LandBattle's SunWay reckons it, the middle of the month, without its floor of 8 degrees)
+	const double Day = (Month - 1) * 30.4 + 15.0;
+	const double Decl = FMath::DegreesToRadians(23.44) * FMath::Sin(2.0 * UE_DOUBLE_PI * (284.0 + Day) / 365.0);
+	const double Phi = FMath::DegreesToRadians(Lat);
+	const double H = FMath::DegreesToRadians(15.0 * (Hour - 12.0));
+	return FMath::Clamp(FMath::Sin(Phi) * FMath::Sin(Decl) + FMath::Cos(Phi) * FMath::Cos(Decl) * FMath::Cos(H), -1.0, 1.0);
+}
+
+void WholeLook::BounceAtDawn(const TArray<USkyLightComponent*>& Skies, const FLinearColor& Bounce)
+{
+	DawnSkies.Reset();
+	for (USkyLightComponent* Sky : Skies)
+	{
+		if (Sky)
+		{
+			DawnSkies.Add(Sky);
+		}
+	}
+	DawnBounce = FLinearColor(Bounce.R, Bounce.G, Bounce.B, 1.0f);
+	UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce waits for the dawn: the night before the attack keeps the sky's lower half as shipped (%d sky lights)"), DawnSkies.Num());
+}
+
+void WholeLook::Dawn()
+{
+	if (DawnSkies.Num() == 0)
+	{
+		return;
+	}
+	int32 Laid = 0;
+	for (const TWeakObjectPtr<USkyLightComponent>& Each : DawnSkies)
+	{
+		if (USkyLightComponent* Sky = Each.Get())
+		{
+			// (as the ground battle lays it by day: the lower half a solid colour, the flag the engine still calls "black")
+			Sky->bLowerHemisphereIsBlack = true;
+			Sky->SetLowerHemisphereColor(DawnBounce);
+			Sky->RecaptureSky();
+			++Laid;
+		}
+	}
+	DawnSkies.Reset();
+	UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce laid at the dawn: %.3f, %.3f, %.3f under %d sky lights"), DawnBounce.R, DawnBounce.G, DawnBounce.B, Laid);
+}
+
 void WholeLook::FieldLaid(bool bClosedCanopy)
 {
 	bFieldOn = true;
 	bClosedField = bClosedCanopy;
+	KeepLens(); // (at once, not on the clock's next turn)
 }
 
 void WholeLook::FieldGone()
 {
 	bFieldOn = false;
 	bClosedField = false;
+	DawnSkies.Reset();
+	KeepLens();
 }

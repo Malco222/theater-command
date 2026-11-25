@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+class USkyLightComponent;
+
 /**
  * The whole picture's look (Brian, 25 November 2026 03:58Z: "can we work on better overall graphics in the background?").
  *
@@ -19,7 +21,7 @@
  *   paints with its own cameras, the map's portraits and showpiece, are told no sharpening); the filtering is
  *   r.MaxAnisotropy, laid once the game's world is up (after the engine has laid the player's own quality settings, so
  *   what is put back is the player's), which reaches the ground battle's field pictures, the air battle's ground and
- *   every picture made as seen at a slant, the ones already made with them. The campaign map's land pictures are made
+ *   every picture made as seen at a slant (the engine makes the samplers of those already made again as it changes). The campaign map's land pictures are made
  *   plain (trilinear) today, so on the map only the sharpening shows. tc.Look.CrispSharpen (0.4; the art director's ceiling 0.6 until a pan clip
  *   shows no rim) and tc.Look.CrispFiltering (16) tune it.
  * - tc.Look.Depth (-TheaterLookDepth): the soft shade where things meet and stand close (ambient occlusion) reaching
@@ -35,9 +37,11 @@
  *   man's legs took the table cubemap's dark ground on every field but snow: the desert's sand gave no warm fill and
  *   the steppe's grass no green. Read once as the field is laid (the mean of its paint on a grid), its hue pulled inside
  *   the art director's box with its value kept (red/green 0.90 to 1.15, blue/green 0.80 to 1.05: Normandy's green and
- *   the Mediterranean's red would cast faces and hulls), following the sun (none with the sun under the horizon, whole
- *   from 15 degrees up), at half under a closed canopy, and laid under the battle's sky light by LandBattle's
- *   HideTheTable. Snow keeps its own, as shipped. tc.Look.BounceStrength (1.0), tc.Look.BounceClosed (0.5) and
+ *   the Mediterranean's red would cast faces and hulls), following the sun's true height (none with it under the horizon,
+ *   whole from 15 degrees up; the picture's own sun is held 8 degrees up), at half under a closed canopy, none from water
+ *   (rivers, ponds and flooded ground mirror the sky), and laid under the battle's sky light by LandBattle's
+ *   HideTheTable; through a night before the attack the sky's lower half stays as shipped and the bounce is laid as the
+ *   picture comes up from black on the battle (Dawn). Snow keeps its own, as shipped. tc.Look.BounceStrength (1.0), tc.Look.BounceClosed (0.5) and
  *   tc.Look.BounceHue (1; 0 leaves the hue as the field's, -TheaterLookBounceUnclamped) tune it.
  *
  * The whole look's lens: one post-process volume over the whole play world (the map and every battle are laid in the one
@@ -61,8 +65,13 @@ namespace WholeLook
 	bool BounceOn();
 
 	/** The mean of a field's paint (sRGB bytes, read by ColourAt) on a 24 by 24 grid over Wide by Deep metres from its
-	 * south-west corner, as linear light. Once a battle, as the field is laid. */
+	 * south-west corner, as linear light; a point ColourAt gives alpha 0 (water) is not counted. Once a battle, as the
+	 * field is laid. */
 	FLinearColor GroundMean(TFunctionRef<FColor(double X, double Y)> ColourAt, double Wide, double Deep);
+
+	/** The sine of the sun's true height for a latitude, a month (its middle) and a local solar hour, as LandBattle's
+	 * SunWay reckons it but without its 8-degree floor: under 0 the sun is under the horizon. */
+	double SunHeight(double Lat, int32 Month, double Hour);
 
 	/** The light a field gives back from below, from its mean paint (GroundMean, linear): the hue pulled inside the art
 	 * director's box with the value kept (unless tc.Look.BounceHue is 0), times tc.Look.BounceStrength, times
@@ -75,4 +84,12 @@ namespace WholeLook
 	 * is laid at tc.Look.DepthClosed under a closed canopy. */
 	void FieldLaid(bool bClosedCanopy);
 	void FieldGone();
+
+	/** A night before the attack plays first: the battle's sky lights keep the lower half as shipped, and Bounce is laid
+	 * under them at Dawn. FieldGone forgets it. */
+	void BounceAtDawn(const TArray<USkyLightComponent*>& Skies, const FLinearColor& Bounce);
+
+	/** The battle's own picture is up (the night over, the picture still black from the dip): the bounce BounceAtDawn
+	 * held is laid, once. Nothing when none waits. */
+	void Dawn();
 }
