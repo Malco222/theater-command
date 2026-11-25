@@ -169,6 +169,14 @@ namespace LandMen
 		std::vector<PropKeys> Props;
 		/** The clip's prop keys by name, or none. */
 		const PropKeys* PropOf(const std::string& Track) const;
+		/** Bullet hits (Crowd::SetHits): where a fall or a wound of the soldiers thread's struck him (its "hit": {bone,
+		 * side, from}: the bone's name, left or right where it has one, and the shot's side, front, back, left or right),
+		 * empty where the clip does not say. */
+		struct HitPlace
+		{
+			std::string Bone, Side, From;
+		};
+		HitPlace Hit;
 		float Speed() const { return Long > 0.f && Stride > 0.f ? Stride / Long : 0.f; }
 	};
 
@@ -435,6 +443,17 @@ namespace LandMen
 		 * forces one. Read only with the mix on, and part of what keys his sets (BankKey, BodyKey): men drawn alike share
 		 * one W. */
 		float Wear = 0.8f;
+		// Bullet hits (Crowd::SetHits; all as before while it is off):
+		float FallRate = 1.f;           // his fall's clip played this much faster than life (bVariety: 0.85 to 1.15 where no other clip was left)
+		float FallSkip = 0.f;           // and started this far in (0 to 0.1 s of the clip)
+		std::string HitPart;            // where a rifle or mg round struck him, by his own dice: head, gut, leg, or empty (the chest)
+		double Wounded = -1.0;          // wd: struck and not killed, and not carried (bWounded), -1 never
+		double Back = -1.0;             // back: on his feet again, -1 never
+		double WoundStarted = -1.0;     // when he went down wounded, as played
+		std::string WoundClip;          // the fall he went down in
+		std::string WoundLoop;          // what he does down there: a loop clip's name, or "hold" (its last frame, breathing)
+		float WoundPhase = 0.f;         // his own place in that loop (a share), and its rate, or the breathing's
+		float WoundRate = 1.f;
 	};
 
 	/** His drawn look at one level of detail: the triangles, each point's paint and its colour (sRGB, 0 to 255). */
@@ -578,6 +597,40 @@ namespace LandMen
 		void LeftUnseen(int Man);
 		/** Men who fell as their file's gore twin so far in this play. */
 		int Gored() const;
+		/**
+		 * Bullet hits (-TheaterLandHits; Brian, 25 November: "if a soldier gets hit by a bullet can we have some effect
+		 * showing him hit", "right now the just drop"; and his rule, no two men doing the same thing at the same time).
+		 * Each part alone; all off (the default) every man is posed and falls as before, to the bit.
+		 *  bJolt: a man killed by a rifle or mg round (or wounded, bWounded) is jolted away from the shot for a third of a
+		 *   second as his fall begins, a layer over his pose: spine_01, spine_02 and chest bent away and twisted toward the
+		 *   struck shoulder, neck and head turned back half as much and lagging 40 ms, the rifle (bone 'weapon', on the
+		 *   root) moved with the chest so his fists keep it; never the pelvis nor the clavicles. A leg fall (die_leg_*)
+		 *   buckles a knee instead of the twist. A*wt*e^(1-wt), none at all from 0.33 s; an mg's second kick 70-110 ms on.
+		 *  bVariety: no fall a body within 15 m showed in the last 8 s where another is left (sections or none); where none
+		 *   is, the same clip at his own rate (0.85 to 1.15) and start (0 to 0.1 s in). Head, gut and leg falls four times
+		 *   as likely for a rifle's or an mg's kill by his own dice; a man walking or just halted takes the standing falls;
+		 *   no man lying goes limp where his file has falls.
+		 *  bWounded: a man struck and not killed (wd, not carried) goes down with the jolt in a fall chosen as a dead
+		 *   man's is (Fates and neighbours), and lies breathing, or in his loop, till back.
+		 *  bFlinch: kept for the graze flinch; nothing yet (misses are not booked per man here).
+		 */
+		struct Hits
+		{
+			bool bJolt = false, bVariety = false, bWounded = false, bFlinch = false;
+			bool Any() const { return bJolt || bVariety || bWounded || bFlinch; }
+		};
+		void SetHits(const Hits& H);
+		const Hits& HitsOf() const;
+		/**
+		 * Bullet hits: where on the field the round that killed or wounded him struck him, and the part (the bone's name,
+		 * or "body" where he is not known): by his fall's clip ("hit" in the soldier file, else die_head_* the head,
+		 * die_gut_* spine_01, die_leg_* a thigh, else the chest a hand toward the shooter), as posed now; a man not falling
+		 * at his stance's height over his place (standing 1.35, running 1.3, kneeling or in cover 0.85, lying 0.25 m).
+		 * False for no such man. Ask it after Update (the effects read it the frame his fall starts).
+		 */
+		bool StruckPlace(int Man, Vec3& OutAt, std::string& OutPart) const;
+		/** His pose as last posed (each bone's turn and move), for tests. */
+		bool PoseOf(int Man, Pose& Out) const;
 		/** Changes when his mesh becomes another (a gore fall, or back at a replay from the start): his triangles and
 		 * colours are made again (LookOf), so a drawn man's must be too. */
 		uint32_t MeshNo(int Man) const;
