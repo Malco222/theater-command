@@ -1012,6 +1012,31 @@ function fieldToSea(g: Game, base: number, z: number): number {
   return d;
 }
 
+const nearSeas = new WeakMap<object, (Int8Array | undefined)[]>();
+/**
+ * (Speed, the far map: the playtest's finding 41.) For one sea, which fields lie within the longest reach in the
+ * tables (longestReach): a row over the provinces, -1 until a field is first measured, then 1 within it and 0 beyond.
+ * A group on a field beyond it puts nothing over the sea (groupOverSea), so the sums over every group (groupsOver,
+ * navy.ts besideIn and SeaPicture) pass it by at once instead of asking its side and its field's distance for each sea
+ * the month looks at. Kept like fieldToSea: a field's distance from a sea never changes on one chart.
+ */
+export function nearRow(g: Game, z: number): Int8Array {
+  let m = nearSeas.get(g.seas);
+  if (!m) { m = []; nearSeas.set(g.seas, m); }
+  return (m[z] ??= new Int8Array(g.regions.length).fill(-1));
+}
+/** True when a group's field may put aircraft over the sea of this row (nearRow): false for a field beyond the longest reach, or no field. */
+export function fieldNear(g: Game, row: Int8Array, base: number, z: number): boolean {
+  const k = row[base];
+  // (Past the row's end: no such province, where groupOverSea puts nothing over the sea; or, should the chart ever
+  // gain provinces after the row was made, one measured afresh each time.)
+  if (k === undefined) return !!g.regions[base] && !(fieldToSea(g, base, z) > longestReach());
+  if (k >= 0) return k === 1;
+  const near = !(fieldToSea(g, base, z) > longestReach());
+  row[base] = near ? 1 : 0;
+  return near;
+}
+
 /**
  * The aircraft one land air group puts over a sea whose air is counted from the groups in reach (pacific.json
  * 'skies'): its fighters by how far its field lies from the sea's nearest shore (nothing to fly if the field stands on
@@ -1043,9 +1068,11 @@ export function groupOverSea(g: Game, f: AirFleet, z: number, S: { cover?: Recor
  */
 export function groupsOver(g: Game, z: number, nat: string, hostile: boolean, S: { per: number; cover?: Record<string, number> }, beside?: ((x: string) => boolean) | null): number {
   let s = 0;
+  const near = nearRow(g, z);
   for (const f of g.airFleets) {
     // (`beside`: of its friends, those who count beside it in this sea: navy.ts besideIn. None is left out with the far side off.)
-    if (f.ship !== undefined || !(hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) continue;
+    // (A group whose field is beyond every reach in the tables adds nothing: fieldNear. Asked first, as it is the cheapest.)
+    if (f.ship !== undefined || !fieldNear(g, near, f.base, z) || !(hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) continue;
     s += groupOverSea(g, f, z, S);
   }
   return (s / S.per) * g.seas[z].air;

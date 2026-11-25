@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f18610c3 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 34dede8c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -19816,6 +19816,7 @@
     effortBattles: () => effortBattles,
     fieldClass: () => fieldClass,
     fieldFed: () => fieldFed,
+    fieldNear: () => fieldNear,
     fieldOrder: () => fieldOrder,
     fieldRoom: () => fieldRoom,
     fieldServes: () => fieldServes,
@@ -19852,6 +19853,7 @@
     levelOf: () => levelOf3,
     lineWear: () => lineWear,
     moveTargets: () => moveTargets,
+    nearRow: () => nearRow,
     nearestRung: () => nearestRung,
     openAirWar: () => openAirWar,
     openPilots: () => openPilots,
@@ -53473,6 +53475,23 @@
     }
     return d;
   }
+  var nearSeas = /* @__PURE__ */ new WeakMap();
+  function nearRow(g2, z) {
+    let m = nearSeas.get(g2.seas);
+    if (!m) {
+      m = [];
+      nearSeas.set(g2.seas, m);
+    }
+    return m[z] ?? (m[z] = new Int8Array(g2.regions.length).fill(-1));
+  }
+  function fieldNear(g2, row2, base, z) {
+    const k = row2[base];
+    if (k === void 0) return !!g2.regions[base] && !(fieldToSea(g2, base, z) > longestReach());
+    if (k >= 0) return k === 1;
+    const near2 = !(fieldToSea(g2, base, z) > longestReach());
+    row2[base] = near2 ? 1 : 0;
+    return near2;
+  }
   function groupOverSea(g2, f, z, S3) {
     if (f.ship !== void 0 || f.mission === "rest" || f.unfed || f.ftr + f.bmr <= 0 || !g2.regions[f.base]) return 0;
     const n = g2.nations[f.nat];
@@ -53489,8 +53508,9 @@
   }
   function groupsOver(g2, z, nat, hostile, S3, beside) {
     let s = 0;
+    const near2 = nearRow(g2, z);
     for (const f of g2.airFleets) {
-      if (f.ship !== void 0 || !(hostile ? atWar(g2, f.nat, nat) : allied(g2, f.nat, nat) && (!beside || beside(f.nat)))) continue;
+      if (f.ship !== void 0 || !fieldNear(g2, near2, f.base, z) || !(hostile ? atWar(g2, f.nat, nat) : allied(g2, f.nat, nat) && (!beside || beside(f.nat)))) continue;
       s += groupOverSea(g2, f, z, S3);
     }
     return s / S3.per * g2.seas[z].air;
@@ -57301,7 +57321,8 @@
     const zone = g2.seas[z];
     const S3 = skiesOver(g2, z);
     if (S3) {
-      for (const f of g2.airFleets) if (atWar(g2, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g2, f, z, S3) > 0) foe(f.nat);
+      const near2 = nearRow(g2, z);
+      for (const f of g2.airFleets) if (fieldNear(g2, near2, f.base, z) && atWar(g2, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g2, f, z, S3) > 0) foe(f.nat);
     } else if (zone.coast.length && seaSkyMul(g2, z) !== 0) {
       for (const id of zone.coast) {
         const r = g2.regions[id];
@@ -57489,7 +57510,9 @@
       let gs = this.groups[z];
       if (!gs) {
         gs = [];
+        const near2 = nearRow(g2, z);
         for (const f of g2.airFleets) {
+          if (!fieldNear(g2, near2, f.base, z)) continue;
           const n = groupOverSea(g2, f, z, S3);
           if (n > 0) gs.push({ nat: f.nat, n });
         }
@@ -104738,11 +104761,11 @@
       ...(() => {
         if (!groundRules(s)) return { cut: [], cuts: [] };
         try {
-          const known = [...cutsKnown(s).entries()];
+          const known = [...cutsKnown(s, s.human, seen2).entries()];
           return {
             cut: known.map(([id]) => id),
             cuts: known.map(([id, k]) => {
-              const said = cutSays(s, id);
+              const said = cutSays(s, id, s.human, seen2);
               return { region: id, how: k.how, head: said?.head ?? "", line: said?.line ?? "", short: said?.short ?? "" };
             })
           };

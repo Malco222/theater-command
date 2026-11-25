@@ -711,10 +711,12 @@ function drawView() {
     ...((): { cut: number[]; cuts: { region: number; how: string; head: string; line: string; short: string }[] } => {
       if (!groundRules(s)) return { cut: [], cuts: [] };
       try {
-        const known = [...cutsKnown(s).entries()];
+        // (The player's sight as this picture worked it out above, for the list and for each cut's words: asked afresh
+        // for every cut, it was the sight of the whole map again each time. The far map's playtest, finding 41.)
+        const known = [...cutsKnown(s, s.human, seen).entries()];
         return {
           cut: known.map(([id]) => id),
-          cuts: known.map(([id, k]) => { const said = cutSays(s, id); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
+          cuts: known.map(([id, k]) => { const said = cutSays(s, id, s.human, seen); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
         };
       } catch { return { cut: s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id), cuts: [] }; }
     })(),

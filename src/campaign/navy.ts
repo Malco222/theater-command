@@ -19,7 +19,7 @@ import { clamp } from '../core/math';
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, airPool, assessAir, carrierRules, groupOverSea, groupsOver, skyDenies, skyOver, skyReach } from './air';
+import { AIR, CARRIERS, airPool, assessAir, carrierRules, fieldNear, groupOverSea, groupsOver, nearRow, skyDenies, skyOver, skyReach } from './air';
 import { dayShare, oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
 import { capOver, deckWorth, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
@@ -550,7 +550,8 @@ export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(
   const zone = g.seas[z];
   const S = skiesOver(g, z);
   if (S) {
-    for (const f of g.airFleets) if (atWar(g, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g, f, z, S) > 0) foe(f.nat);
+    const near = nearRow(g, z);
+    for (const f of g.airFleets) if (fieldNear(g, near, f.base, z) && atWar(g, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g, f, z, S) > 0) foe(f.nat);
   } else if (zone.coast.length && seaSkyMul(g, z) !== 0) {
     for (const id of zone.coast) {
       const r = g.regions[id];
@@ -782,7 +783,8 @@ export class SeaPicture {
     let gs = this.groups[z];
     if (!gs) {
       gs = [];
-      for (const f of g.airFleets) { const n = groupOverSea(g, f, z, S); if (n > 0) gs.push({ nat: f.nat, n }); }
+      const near = nearRow(g, z);
+      for (const f of g.airFleets) { if (!fieldNear(g, near, f.base, z)) continue; const n = groupOverSea(g, f, z, S); if (n > 0) gs.push({ nat: f.nat, n }); }
       this.groups[z] = gs;
     }
     return gs;
