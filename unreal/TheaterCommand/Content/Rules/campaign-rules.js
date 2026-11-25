@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e2e37f18 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a527fdc4 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -299,6 +299,8 @@
     legions: false,
     _winChance: "The honest win chance on land (release 2; auto-resolve fix 1, Brian's yes of 23 November 2026 07:11Z and the design director's orders of 07:06Z, 07:27Z and 10:14Z; data/campaign/winchance.json). Its own step inside Units decide: it needs 'unitsDecide' too, and stays off, card and field both, until the 3D field's win share by odds band is within a tenth of the card's curve. Off: every battle throws today's luck and nothing changes. On: the grand campaigns opened from now on with Units decide carry the flag 'winChance' as well, and an attack in the field carries the ground at the record's rate for its odds (wider luck, losses unchanged). A test turns it on for its own games by setting both flags; a run outside the browser by TC_UNITS=1 TC_WINCHANCE=1.",
     winChance: false,
+    _trueReach: "True reach (audit item 41; the design director's ruling of 13:58Z, 'Withering garrisons' 1, and 14:26Z, 'Ports fed by an ally's paper reach', 25 November 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever the flag, so an ally's ships feed a port only where they could truly sail there with that nation's stores (game.ts trueReach). On wherever the far side is on. On the old chart its own step inside Units decide: it needs 'unitsDecide' too, and stays off, bench only, until its 96-war gate passes (Malta's and Tripoli's months in supply, Britain's corps lost there, how often each is besieged and taken, Italy's months to fall). Off: the supply picture is today's. On: the grand campaigns opened from now on with Units decide carry the flag 'trueReach' as well. A test turns it on by setTrueReach; a run outside the browser by TC_UNITS=1 TC_TRUEREACH=1.",
+    trueReach: false,
     _unitsDecide: "Units decide (release 2; Brian 23 November 2026 07:11Z and 07:13Z, the core theme; the design director's audit of 07:17Z): battles come from the units each side built, researched and trained, never from a nation's flag or the date (src/campaign/units.ts). Off: nothing behind it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'unitsDecide' (set at a campaign's start only). Its steps so far: the convoy war by cause (data/campaign/convoycause.json). A run outside the browser can force it: TC_UNITS=1 or TC_UNITS=0.",
     unitsDecide: false,
     _nicknames: "Earned nicknames (release 2; Brian's yes of 23 November 2026 12:05Z; src/campaign/nicknames.ts, data/campaign/nicknames.json): a corps that wins several hard fights is given a name by its own army, in its nation's own style, and the name is shown on its flag. Every nation alike; a name changes no number. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'nicknames' (the player can also turn it on or off in a campaign under way: a name is only a name). A run outside the browser can force it: TC_NICKNAMES=1 or TC_NICKNAMES=0.",
@@ -369,6 +371,8 @@
   var LEGIONS_STAGE = legionsForced !== void 0 ? !!legionsForced && legionsForced !== "0" : stage_default.legions === true;
   var winForced = globalThis.TC_WINCHANCE ?? G.process?.env?.TC_WINCHANCE;
   var WINCHANCE_STAGE = winForced !== void 0 ? !!winForced && winForced !== "0" : stage_default.winChance === true;
+  var reachForced = globalThis.TC_TRUEREACH ?? G.process?.env?.TC_TRUEREACH;
+  var TRUEREACH_STAGE = reachForced !== void 0 ? !!reachForced && reachForced !== "0" : stage_default.trueReach === true;
   var units = globalThis.TC_UNITS ?? G.process?.env?.TC_UNITS;
   var UNITS_STAGE = units !== void 0 ? !!units && units !== "0" : stage_default.unitsDecide === true;
   var nicks = globalThis.TC_NICKNAMES ?? G.process?.env?.TC_NICKNAMES;
@@ -30905,15 +30909,17 @@
     }
     return false;
   }
+  var feedsBy = (g2, r, x, z, truly) => !closedTo(g2, z, x) && (!truly || garrisonOf(r).every((c) => c.nat === x || !closedTo(g2, z, c.nat)));
   function fedBySea(g2, r) {
-    return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+    if (!trueReach(g2)) return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+    return feeders(g2, r).some((x) => r.seas.some((z) => feedsBy(g2, r, x, z, true)));
   }
   var fed = (g2, r) => fedBySea(g2, r) || fedByBook(g2, r);
   var fedFrom = fed;
   var fedByBook = (g2, r) => besieged(g2, r) && bookFed(g2, r.name, r.ctrl, [...new Set(besiegers(g2, r).map(armyOf))]);
   function feedingSeas(g2, r) {
-    const who = feeders(g2, r);
-    return r.seas.filter((z) => who.some((id) => !closedTo(g2, z, id)));
+    const who = feeders(g2, r), truly = trueReach(g2);
+    return r.seas.filter((z) => who.some((id) => feedsBy(g2, r, id, z, truly)));
   }
   var strength = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
   function ringClosed(g2, r) {
@@ -48718,6 +48724,7 @@
     openTrade(g2);
     if (CONVOY_STAGE) g2.flags.convoyBattle = 1;
     if (WINCHANCE_STAGE) g2.flags.winChance = 1;
+    if (UNITS_STAGE && TRUEREACH_STAGE) g2.flags.trueReach = 1;
     openBargains(g2);
     openGovernment(g2);
     openFooting(g2);
@@ -65024,11 +65031,12 @@
       if (!gt || gateHolder(g2, gt) !== nat) delete g2.flags[k];
     }
   }
-  function openSeas(g2, nat, seas, homeward = farOn(g2), asked3, starts2) {
+  function openSeas(g2, nat, seas, homeward = farOn(g2), asked3, starts2, carrying) {
     const open3 = new Uint8Array(g2.seas.length);
     const shutAt = asked3 ?? new Int8Array(g2.seas.length).fill(-1);
+    const closedFor = (z, who) => seas ? seas.closed(z, who) : closedTo(g2, z, who);
     const shut = (z) => {
-      if (shutAt[z] < 0) shutAt[z] = (seas ? seas.closed(z, nat) : closedTo(g2, z, nat)) ? 1 : 0;
+      if (shutAt[z] < 0) shutAt[z] = closedFor(z, nat) || carrying !== void 0 && carrying !== nat && closedFor(z, carrying) ? 1 : 0;
       return shutAt[z] === 1;
     };
     const q = [];
@@ -73955,6 +73963,7 @@
     }
     return { ok: ok2, reach: reach3, east };
   }
+  var trueReach = (g2) => farOn(g2) || unitsDecide(g2) && g2.flags.trueReach === 1;
   function computeSupply(g2) {
     const active = new Set(g2.corps.map((c) => c.nat));
     const withShips = Object.values(g2.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -74126,6 +74135,35 @@
       }
       return lanes2.get(id);
     };
+    const truly = trueReach(g2);
+    const asIf2 = /* @__PURE__ */ new Map();
+    const carrying = (a, id, theirs) => {
+      const key7 = a + ">" + id;
+      let o = asIf2.get(key7);
+      if (!o) {
+        o = theirs;
+        for (let z = 0; z < theirs.length; z++) {
+          if (!theirs[z] || !seasNow.closed(z, id)) continue;
+          o = openSeas(g2, a, seasNow, void 0, void 0, kept0.lanes.get(a).starts, id);
+          break;
+        }
+        if (supplyCheck && !sameBytes(openSeas(g2, a, seasNow, void 0, void 0, void 0, id), o)) throw new Error(`sea lanes of ${a} carrying for ${id} in month ${g2.turn} differ from fresh ones`);
+        asIf2.set(key7, o);
+      }
+      return o;
+    };
+    const feeds = (a, id, r) => {
+      const theirs = lanesOf(a);
+      if (!theirs || !r.seas.some((z) => theirs[z])) return false;
+      if (!truly) return true;
+      const o = carrying(a, id, theirs);
+      return r.seas.some((z) => o[z]);
+    };
+    const forHolder = (a, r) => {
+      if (a === r.ctrl) return true;
+      const o = carrying(a, r.ctrl, lanesOf(a));
+      return r.seas.some((z) => o[z]);
+    };
     const sourcesFor = (friend2) => {
       let one2 = null;
       for (let k = 0; k < sourcesBy.length; k++) {
@@ -74152,17 +74190,13 @@
         const home2 = !shut && r.ctrl === id && r.owner === id;
         const depot = home2 && (r.cap || r.fac >= 3 || !!g2.flags[depotKey(r.id)]);
         let quay = !!open3 && r.port && r.seas.some((z) => open3[z]);
-        if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) {
-          const theirs = lanesOf(r.ctrl);
-          quay = !!theirs && r.seas.some((z) => theirs[z]);
-        }
-        if (!quay && r.theatre >= 0 && r.port) quay = (mates ?? (mates = shippers(id))).some((a) => {
-          const theirs = lanesOf(a);
-          return !!theirs && r.seas.some((z) => theirs[z]);
-        });
+        let by2 = quay ? 1 : 0;
+        if (!quay && !shut && r.overseas && r.port && r.ctrl !== id && (quay = feeds(r.ctrl, id, r))) by2 = 2;
+        if (!quay && r.theatre >= 0 && r.port && (quay = (mates ?? (mates = shippers(id))).some((a) => feeds(a, id, r)))) by2 = 3;
         if (!shut && r.overseas && r.port && worksKept(r)) {
-          if (quay) g2.flags[storesKey(r.id)] = g2.turn;
-          else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
+          if (quay) {
+            if (!truly || (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r)))) g2.flags[storesKey(r.id)] = g2.turn;
+          } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
         }
         if (!depot && !quay) continue;
         if (field4 && r.ctrl === id && pocketDry(g2, r, id)) continue;
