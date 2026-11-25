@@ -1249,8 +1249,19 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
         origin and his man flat and rigid; a second review found that, lifted onto the ground under it as this had
         lifted it, the lines from the harness drawn cut up to 0.23 m into hummocks), each point lifted by its share of
         slack but by no less than 0.01 of it (held to 0.05, a make at a slump of 0.35, 0.028 slack, had left them in
-        the ground). Over its edge where its top there is not found (a steep skirt as it falls in: `TopAt` passes over
-        steep triangles) a line still comes down 3 cm out, not 0.6 m out over the grass. Which seams' lines are thrown
+        the ground). A third review found them flung up like poles off a bank, 5 to 7.7 m up, and 1.9 m off hummocks:
+        the scene draws him flat at his feet's height, so that there his harness lies up to 0.37 m in the ground, and the
+        straight from it ran under the ground most of the way to its silk, the grass next to it lifted five times that and
+        more to clear it. So the lines across its silk run taut from the ground over his harness where he lies sunk into
+        it (`SilkMesh::HarnessLow`, which `LineLies` draws them from; his harness itself is where the scene draws it, and
+        the straight from it comes up out of the ground by him, as those to its gathered hem always had), and those lifts
+        (the straight from his harness, and the grass while not yet slack) are made over the ground as it is, read where
+        they are, but never more than 0.1 m under the quarter-metre grid's (whose allowance for a crest between its points
+        stands a bank 1 m wide 0.6 to 0.8 m higher than it is, and a ditch's lip 0.4 m: lifted over that, they had still
+        been flung up to 4 m off the bank; the 0.1 m keeps them clear between makes as that allowance had, where 0.05
+        had left one 3 cm in a ditch's lip): some 70 more ground reads a make, 960 on the mean over a fall. Over its
+        edge where its top there is not found (a steep skirt as it falls in: `TopAt` passes over steep triangles) a
+        line still comes down 3 cm out, not 0.6 m out over the grass. Which seams' lines are thrown
         over it is picked from those nearest its top's middle first by whole half-seams round from it, mirror seams in
         the order glibc's sines had put them for 24, 26 and 28 gores (by the sine's size they had tied to the last bit,
         so that the libm chose which line lay where, a Mac's apart from a PC's); and LandAir.cpp is built with no
@@ -1387,10 +1398,19 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   none of his lines under the ground, drawn from his harness where the scene draws it (not lifted onto the ground under
   it, which had hidden lines 0.23 m into hummocks), for the verdict's four and, each 0.05 of its fall, 300 pilots'
   numbers (their canopies' points too): the lines across its silk 0.015 m over it at the lowest (before this round's
-  second review, 0.23 m under it). At 45 fps his lines as drawn move up to 0.52 m a frame between makes and 0.43 m at
-  one (their run across the grass swinging as where they come onto its silk moves, at a slump of about 0.4): printed,
-  not checked, being over the silk's 0.3 m. The planes' hash is
-  printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
+  second review, 0.23 m under it); and for the 300, made as the scene makes them (`SilkStep`) and looked at each 0.0125
+  of the fall, between makes as well: none of his lines' middles more than 3 mm under the ground there (those across
+  its silk 0.0148 m over it at the lowest; before the third review 0.0004 m under it on hummocks, 0.0007 at 45 fps),
+  and the points his lines across its silk go through across the grass no more than 1.75 m over both the taut
+  straight from his harness and the ground, at makes and between, on every field (now 0.39 to 0.54 m at most on the
+  slopes, the step and the sharp crest, 0.50 on hummocks, 0.46 on the crater, 0.72 across the ditch, 0.85 over the
+  hedgerow bank and 1.39 along the bank, where they come up onto a silk the grid's allowance for its crest lifts 0.7 m
+  over it; before the third review 7.0 m along the bank and 1.9 on hummocks, 4,400 looks over 1.5 m). At 45 fps his
+  lines as drawn move up to 0.52 m a frame between makes and 0.43 m at one (their run across the grass swinging as
+  where they come onto its silk moves, at a slump of about 0.4): printed, not checked, being over the silk's 0.3 m. For
+  the 300 (measured, not in the test) 0.56 m on the flat field, up to 0.63 m on the other fields but the bank's, and
+  0.91 m along the bank, as its taut lines follow its silk falling in (1.74 m before the third review). The planes'
+  hash is printed against release 1's (`e258eaf3320235ff`). `chutes.py` draws each pilot's first seconds, his way through
   the air and his seconds on the field, and the canopy as the scene draws it: side-on full through a long lens with
   his lines to him, from under with its glow and without, falling in across the wind, lying from 40 m at a man's eye
   height, and lying from above (his and a second pilot's, his lines a little slack as the scene draws them),

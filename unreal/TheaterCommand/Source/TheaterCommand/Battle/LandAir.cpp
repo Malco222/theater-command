@@ -834,6 +834,7 @@ namespace LandAir
 		Across.clear();
 		Over.clear();
 		MidLow.clear();
+		HarnessLow = -1e9;
 		Kept = LyingKept();
 	}
 
@@ -2359,6 +2360,19 @@ namespace LandAir
 		Out.Across.clear();
 		Out.Over.clear();
 		Out.MidLow.assign(static_cast<size_t>(Seams), -1e9);
+		// (and the ground those across it are kept over from his harness, and while they are not yet slack (LineGround):
+		// read where they are, but never more than 0.1 m under the grid's. The grid's allowance for a crest between its
+		// points (UnderGrid) stands a bank 1 m wide 0.6 to 0.8 m higher than it is, and a ditch's lip 0.4 m: lifted over
+		// that, five times a rise from his harness and the more the less slack they are, his lines had still been flung
+		// up to 4 m off a bank (a third review). The 0.1 m keeps them clear as they move between makes, as the grid's
+		// allowance had: 0.05 had left one 3 cm in a ditch's lip. And the lowest those across it start from at his
+		// harness (HarnessLow: LineLies))
+		const auto LineGround = [&](double X, double Y)
+		{
+			const double Read = Ground ? Ground(C.Landed.X + Fw.X * X + Rt.X * Y, C.Landed.Y + Fw.Y * X + Rt.Y * Y) - C.Landed.Z : 0.0;
+			return std::min(G.At(X, Y), Read + 0.1);
+		};
+		Out.HarnessLow = LineGround(Hn.X, Hn.Y) + Rope;
 		for (int Sm = 0; Sm < Seams; ++Sm)
 		{
 			if (!LineBack(static_cast<size_t>(Sm), static_cast<size_t>(Seams))) continue;
@@ -2669,6 +2683,12 @@ namespace LandAir
 			};
 			Out.Over.resize(Lines * static_cast<size_t>(LineVia));
 			const double Hh = std::max(0.0, Hn.Z - G.At(Hn.X, Hn.Y));
+			// (where the straights from his harness are kept over the ground from: his harness, or the ground over it where he
+			// lies sunk into a bank or a hummock (HarnessLow, as LineLies draws them taut from). The man is drawn flat at his
+			// feet's height, his harness up to 0.37 m in such ground: from there the point next to it had been lifted by five
+			// times that or more, and a line across its silk had stood up 5 to 7 m off the grass, a pole (a third review). The
+			// straight from his harness itself comes up out of the ground by him)
+			const V3 Hl{ Hn.X, Hn.Y, std::max(Hn.Z, Out.HarnessLow) };
 			// (along the straight from A to B, each 2 cm: the top of its silk there and Rise over it, or the ground and Rope
 			// over it; where its silk ends or begins between two (found to 3 mm), over its edge 1.5 cm out from it, as a
 			// cord's thickness hangs off it, and on the ground 3 cm out, none of the ground's nearer; added to Pts, A not,
@@ -2977,18 +2997,19 @@ namespace LandAir
 					double Lift[LineVia] = {};
 					for (int J = -1; J + 1 < LineVia; ++J)
 					{
-						const V3& A = J < 0 ? Hn : P[J];
+						const V3& A = J < 0 ? Hl : P[J];
 						const V3& B = P[J + 1];
 						const int Subs = std::max(2, static_cast<int>(std::hypot(B.X - A.X, B.Y - A.Y) / 0.05));
 						for (int Q = 1; Q < Subs; ++Q)
 						{
 							const double T = Q / static_cast<double>(Subs);
-							const double Short = G.At(A.X + (B.X - A.X) * T, A.Y + (B.Y - A.Y) * T) + Rope - (A.Z + (B.Z - A.Z) * T);
+							const double Ux = A.X + (B.X - A.X) * T, Uy = A.Y + (B.Y - A.Y) * T;
+							const double Short = (J < 0 ? LineGround(Ux, Uy) : G.At(Ux, Uy)) + Rope - (A.Z + (B.Z - A.Z) * T);
 							if (Short <= 0.0) continue;
 							if (J < 0)
 							{
-								// (from his harness, which stays: the next point lifted, where the ground rises a fifth of the
-								// way on or more)
+								// (from his harness, which stays (on the ground over it, should he lie sunk into it): the next
+								// point lifted, where the ground itself rises a fifth of the way on or more (LineGround))
 								if (T >= 0.2) Lift[0] = std::max(Lift[0], Short / T);
 								continue;
 							}
@@ -3006,10 +3027,13 @@ namespace LandAir
 				// ditch they had cut 0.2 m into the ground as it fell in. From his harness where the scene draws it (DownShape:
 				// in the mesh's own space, his feet at its origin and his man flat and rigid, Hn), not lifted by the ground
 				// under it: a second review found the lines from the harness drawn cutting up to 0.23 m into hummocks that
-				// those from a harness lifted onto them had cleared)
+				// those from a harness lifted onto them had cleared. But taut from the ground over it where he lies sunk into
+				// it (Hl, as LineLies draws them), and over the ground itself (LineGround): a third review found the straight
+				// from his harness in a bank running 0.3 m under the ground most of the way to its silk as it fell in, and the
+				// grass lifted over it 5 to 7 m)
 				if (Ground && Slack < 1.0)
 				{
-					const V3& Harness = Hn;
+					const V3& Harness = Hl;
 					V3 Q[LineGrass + 2];
 					Q[0] = Harness;
 					for (int J = 1; J <= LineGrass; ++J)
@@ -3027,7 +3051,7 @@ namespace LandAir
 						for (int Sq = 1; Sq <= Subs; ++Sq)
 						{
 							const double T = Sq / static_cast<double>(Subs);
-							const double Short = G.At(A.X + (B.X - A.X) * T, A.Y + (B.Y - A.Y) * T) + Rope - (A.Z + (B.Z - A.Z) * T);
+							const double Short = LineGround(A.X + (B.X - A.X) * T, A.Y + (B.Y - A.Y) * T) + Rope - (A.Z + (B.Z - A.Z) * T);
 							if (Short <= 0.0) continue;
 							if (J == 0) { if (T >= 0.2) Need[1] = std::max(Need[1], Short / T); continue; }
 							if (J == LineGrass) { if (T <= 0.8) Need[J] = std::max(Need[J], Short / (1.0 - T)); continue; }
@@ -3075,12 +3099,15 @@ namespace LandAir
 		}
 		// (across its silk: across the grass from taut, straight from his harness to where it is drawn onto its silk from,
 		// to lying, through its first Over points; and on over its silk and its edge through the rest, as HeapShape laid
-		// them for its slump)
+		// them for its slump. Taut from the ground over his harness where he lies sunk into a bank or a hummock
+		// (HarnessLow), as HeapShape keeps them over the ground from: the first straight comes up out of the ground by him,
+		// and the rest run on over it, not through it)
 		const V3* Via = &Silk.Over[Slot * static_cast<size_t>(LineVia)];
+		const V3 From{ Harness.X, Harness.Y, std::max(Harness.Z, Silk.HarnessLow) };
 		Out[0] = Harness;
 		for (int K = 1; K <= LineGrass; ++K)
 		{
-			const V3 Taut = Plus(Harness, Times(Minus(Via[LineGrass], Harness), K / (LineGrass + 1.0)));
+			const V3 Taut = Plus(From, Times(Minus(Via[LineGrass], From), K / (LineGrass + 1.0)));
 			Out[K] = Plus(Taut, Times(Minus(Via[K - 1], Taut), Sl));
 		}
 		for (int K = LineGrass + 1; K < LinePoints; ++K) Out[K] = Via[K - 1];
@@ -3150,10 +3177,12 @@ namespace LandAir
 			Out.Facings[K] = Unit({ Fa.X + (Fb.X - Fa.X) * M, Fa.Y + (Fb.Y - Fa.Y) * M, Fa.Z + (Fb.Z - Fa.Z) * M }, Fa);
 		}
 		Out.Seams = From.Seams;
-		// (its lines across it, moved with it, and the lowest its other lines' middles lie)
+		// (its lines across it, moved with it, and the lowest its other lines' middles lie and they start from at his
+		// harness (each make reads the ground under it afresh))
 		Out.MidLow.resize(From.MidLow.size());
 		const bool bLow = bTo && To.MidLow.size() == From.MidLow.size();
 		for (size_t K = 0; K < From.MidLow.size(); ++K) Out.MidLow[K] = bLow ? From.MidLow[K] + (To.MidLow[K] - From.MidLow[K]) * M : From.MidLow[K];
+		Out.HarnessLow = bTo ? From.HarnessLow + (To.HarnessLow - From.HarnessLow) * M : From.HarnessLow;
 		Out.Across = From.Across;
 		Out.Over.resize(From.Over.size());
 		const bool bOver = bTo && To.Over.size() == From.Over.size() && To.Across == From.Across;

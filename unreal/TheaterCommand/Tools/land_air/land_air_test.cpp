@@ -827,15 +827,29 @@ namespace
 		return Least;
 	}
 
-	/** The 300 pilots' numbers on every field (FieldUnder), falling in and lying, each 0.05 of its fall as the scene makes
-	 * it: how many of its points are 5 mm or more under the ground (and the deepest), how many of his lines as the scene
-	 * draws them (LineLies, as slack as they are then, from DrawnHarness) have their cord's middle under it anywhere
-	 * (LineOver), and the least those across its silk and the rest stand over it. Pilots First, First + Every and on. */
+	/** The 300 pilots' numbers on every field (FieldUnder), falling in and lying, made as the scene makes them (SilkStep:
+	 * made each 0.05 of its fall and moved in place between) and looked at each 0.0125 of it. At each make: how many of its
+	 * points are 5 mm or more under the ground (and the deepest), how many of his lines as the scene draws them (LineLies,
+	 * as slack as they are then, from DrawnHarness) have their cord's middle under it anywhere (LineOver), and the least
+	 * those across its silk and the rest stand over it. Between makes: how many have it more than 3 mm under (inside the
+	 * 12 mm cord: a third review found one 0.7 mm under there on hummocks), and the least. And at makes and between, on
+	 * each field, how far the points his lines across its silk go through across the grass stand over both the taut
+	 * straight from his harness to where it comes onto its silk and the ground there (Flung: a third review found them
+	 * flung 5 to 7 m up off a bank), the most and how many looks had one over 1.5 m. Pilots First, First + Every and on. */
 	struct GroundTally
 	{
-		int Under = 0, LinesUnder = 0;
-		double Deepest = -1e9, AcrossLeast = 1e9, RestLeast = 1e9;
+		int Under = 0, LinesUnder = 0, LinesUnderBetween = 0;
+		double Deepest = -1e9, AcrossLeast = 1e9, RestLeast = 1e9, BetweenLeast = 1e9;
 		int AcrossAt[3] = { -1, -1, -1 };    // (the pilot, field and step of its least, across)
+		double Flung[GroundFields], FlungSlump[GroundFields];
+		int FlungPilot[GroundFields], FlungHigh[GroundFields];
+		GroundTally()
+		{
+			std::fill(Flung, Flung + GroundFields, -1e9);
+			std::fill(FlungSlump, FlungSlump + GroundFields, -1.0);
+			std::fill(FlungPilot, FlungPilot + GroundFields, -1);
+			std::fill(FlungHigh, FlungHigh + GroundFields, 0);
+		}
 	};
 	void GroundSweep(int First, int Every, GroundTally& T)
 	{
@@ -848,21 +862,44 @@ namespace
 			for (int Field = 0; Field < GroundFields; ++Field)
 			{
 				const GroundFn Board = FieldBoard(Field, Dn);
-				for (int Sk = 0; Sk <= 20; ++Sk)
+				SilkStep Step;
+				for (int Q = 0; Q <= 80; ++Q)
 				{
-					HeapShape(Dn, Sk / 20.0, Off, M, Board);
-					for (const V3& Pt : M.Points)
+					const int Sk = Q / 4;
+					const bool bMake = Q % 4 == 0;
+					const double Slump = Q / 80.0;
+					if (bMake) Step.Make(Dn, Slump, Off, Board);
+					Step.At(Slump, M);
+					if (bMake)
 					{
-						const double Short = FieldUnder(Field, Pt.X, Pt.Y) - Pt.Z;
-						T.Under += Short + 0.005 > 0.0;
-						T.Deepest = std::max(T.Deepest, Short);
+						for (const V3& Pt : M.Points)
+						{
+							const double Short = FieldUnder(Field, Pt.X, Pt.Y) - Pt.Z;
+							T.Under += Short + 0.005 > 0.0;
+							T.Deepest = std::max(T.Deepest, Short);
+						}
 					}
+					double Highest = -1e9;
 					for (size_t Sm = 0; Sm < M.Seams.size(); ++Sm)
 					{
 						if (!LineBack(Sm, M.Seams.size())) continue;
 						V3 Way[LinePoints];
-						const int Points = LineLies(M, Sm, H, LineSlack(Sk / 20.0), Way);
+						const int Points = LineLies(M, Sm, H, LineSlack(Slump), Way);
 						const double Least = LineOver(Field, Way, Points);
+						if (Points > 3)
+						{
+							for (int Pt = 1; Pt <= LineGrass; ++Pt)
+							{
+								const double TautZ = H.Z + (Way[LineGrass + 1].Z - H.Z) * Pt / (LineGrass + 1.0);
+								Highest = std::max(Highest, Way[Pt].Z - std::max(TautZ, FieldUnder(Field, Way[Pt].X, Way[Pt].Y)));
+							}
+						}
+						if (!bMake)
+						{
+							T.LinesUnderBetween += Least < -0.003;
+							if (Points > 3) T.BetweenLeast = std::min(T.BetweenLeast, Least);
+							continue;
+						}
 						T.LinesUnder += Least < 0.0;
 						if (Points > 3 && Least < T.AcrossLeast)
 						{
@@ -872,6 +909,13 @@ namespace
 							T.AcrossAt[2] = Sk;
 						}
 						if (Points <= 3) T.RestLeast = std::min(T.RestLeast, Least);
+					}
+					T.FlungHigh[Field] += Highest > 1.5;
+					if (Highest > T.Flung[Field])
+					{
+						T.Flung[Field] = Highest;
+						T.FlungPilot[Field] = K;
+						T.FlungSlump[Field] = Slump;
 					}
 				}
 			}
@@ -1985,8 +2029,13 @@ int main(int Argc, char** Argv)
 			// (and on the same fields as the verdict's four below, over the 300 pilots' numbers, falling in and lying: its
 			// points, and his lines as the scene draws them (GroundSweep), a share of the pilots on each thread there is. A
 			// second review: drawn from his harness where the scene draws it, his lines across its silk had cut up to 0.23 m
-			// into hummocks, and while barely slack (a slump of 0.30 to 0.36) up to 0.07 m still, on pilots the four did not show)
+			// into hummocks, and while barely slack (a slump of 0.30 to 0.36) up to 0.07 m still, on pilots the four did not
+			// show. A third: looked at between makes too, as the scene moves them, one had gone 0.7 mm under on hummocks; and
+			// from his harness in a bank or a hummock (his man drawn flat at his feet's height) the grass of his lines across
+			// its silk had been flung 5 to 7 m up off the bank, 1.9 m off hummocks)
 			GroundTally Swept;
+			double FlungMost = -1e9;
+			std::string FlungEach;
 			{
 				const int Threads = static_cast<int>(std::clamp(std::thread::hardware_concurrency(), 1u, 16u));
 				std::vector<GroundTally> Tallies(static_cast<size_t>(Threads));
@@ -1997,8 +2046,20 @@ int main(int Argc, char** Argv)
 				{
 					Swept.Under += Tl.Under;
 					Swept.LinesUnder += Tl.LinesUnder;
+					Swept.LinesUnderBetween += Tl.LinesUnderBetween;
 					Swept.Deepest = std::max(Swept.Deepest, Tl.Deepest);
 					Swept.RestLeast = std::min(Swept.RestLeast, Tl.RestLeast);
+					Swept.BetweenLeast = std::min(Swept.BetweenLeast, Tl.BetweenLeast);
+					for (int Field = 0; Field < GroundFields; ++Field)
+					{
+						Swept.FlungHigh[Field] += Tl.FlungHigh[Field];
+						if (Tl.Flung[Field] > Swept.Flung[Field] || (Tl.Flung[Field] == Swept.Flung[Field] && Tl.FlungPilot[Field] < Swept.FlungPilot[Field]))
+						{
+							Swept.Flung[Field] = Tl.Flung[Field];
+							Swept.FlungPilot[Field] = Tl.FlungPilot[Field];
+							Swept.FlungSlump[Field] = Tl.FlungSlump[Field];
+						}
+					}
 					// (the first pilot of those as low, whatever the threads)
 					if (Tl.AcrossLeast < Swept.AcrossLeast || (Tl.AcrossLeast == Swept.AcrossLeast && Tl.AcrossAt[0] < Swept.AcrossAt[0]))
 					{
@@ -2008,6 +2069,15 @@ int main(int Argc, char** Argv)
 				}
 				std::printf("     over 300 pilots' numbers on the same %d fields, falling in and lying (each 0.05 of its fall): %d of its points 5 mm under the ground or more (%.3f m at the deepest); %d of his lines under it, those across its silk %.3f m over it at the lowest (pilot %d, field %d, %.2f of its fall) and the rest %.3f\n",
 					GroundFields, Swept.Under, Swept.Deepest, Swept.LinesUnder, Swept.AcrossLeast, Swept.AcrossAt[0], Swept.AcrossAt[1], Swept.AcrossAt[2] / 20.0, Swept.RestLeast);
+				for (int Field = 0; Field < GroundFields; ++Field)
+				{
+					FlungMost = std::max(FlungMost, Swept.Flung[Field]);
+					char Each2[96];
+					std::snprintf(Each2, sizeof(Each2), "%s%d: %.3f (pilot %d, %.4f; %d over 1.5 m)", Field ? ", " : "", Field, Swept.Flung[Field], Swept.FlungPilot[Field], Swept.FlungSlump[Field], Swept.FlungHigh[Field]);
+					FlungEach += Each2;
+				}
+				std::printf("     and between makes (each 0.0125 of its fall, moved in place as the scene moves it): %d of his lines' middles more than 3 mm under the ground, those across its silk %.4f m over it at the lowest; the points those go through across the grass over both the taut straight from his harness and the ground, at makes and between, on each field at most %s\n",
+					Swept.LinesUnderBetween, Swept.BetweenLeast, FlungEach.c_str());
 			}
 			int Nth = 0;
 			for (const auto& Each : All)
@@ -2242,6 +2312,7 @@ int main(int Argc, char** Argv)
 			Check(FallBad == 0, "chutes: falling in it blows downwind and down, longer along the wind, never back toward him nor rising (her verdict, (b))");
 			Check(SettleBad == 0, "chutes: as it settles falling in (0.8 to 0.95 of its fall) none of his lines is under its silk's top by 8 mm, those across it nor the rest (a review of 24 November 17:40Z, after a second look: they had sunk into its folds, then risen through them)");
 			Check(LinesUnder == 0 && Swept.LinesUnder == 0, "chutes: none of his lines is under the ground falling in or lying, those across his canopy nor the rest, drawn from his harness where the scene draws it, on the same fields (a review of 24 November 17:40Z, after a second look; the verdict's four and 300 pilots' numbers)");
+			Check(Swept.LinesUnderBetween == 0 && FlungMost <= 1.75, "chutes: between makes too, as the scene moves them, none of his lines' middles more than 3 mm under the ground; and his lines across its silk run from his harness along or over the grass to it, never flung up off it like a pole (a third review: from his harness in a bank they had stood 5 to 7 m up): the points they go through across the grass no more than 1.75 m over both the taut straight from his harness and the ground, at makes and between, on the same fields (300 pilots' numbers, each 0.0125 of the fall)");
 			Check(UnderBad == 0 && Swept.Under == 0 && Floats < 0.08, "chutes: none of his canopy is under the ground falling in or lying, its points nor its triangles' edges, on a slope of 1 in 4 either way along the wind or across it, on hummocks, across a hedgerow bank, a step, a ditch, a sharp crest, a crater's rim or along a bank (the verdict's four; its points on 300 pilots' numbers too); and lying on a slope its underside on the ground, not floating (her verdict, (b))");
 		}
 
