@@ -32,7 +32,11 @@
  *   the lanes' junctions and the village's edge, and along the battle's own axis. Each is pushed off the lanes (the
  *   engineers cleared those), never in a hedge, a house, a yard, a wood, water, marsh or standing corn, never on an old
  *   shell hole, a trench, an old rut or a cattle's path, clear of every recorded vehicle's way by 8 m and every man's by
- *   1.5 m, and clear of the others.
+ *   1.5 m, and clear of the others. A live battle opens with no ways yet: FieldOf reads its header instead (Field::Likely:
+ *   its start areas, its fronts and the ground between them, its joiners' edges), and they are laid off that ground,
+ *   along the old lines outside it and out on its flanks, still facing the other side's; Yard::Reached then reads each
+ *   live piece as it comes, and a wreck a live man or machine is to come near all the same is cleared away before he
+ *   is drawn there (Yard::Cleared), as the scene's GuardOldWrecks does.
  * - How each looks (Yard::Dress, Yard::Patch): the game's own model of her (the miniature the battle draws, posed by
  *   LandKit), knocked out and burnt through: her turret turned, or blown off and lying near, upturned or on its side;
  *   her gun drooped to its stop; her hatches open; a track run off beside her, snaking a little and folded back on
@@ -74,6 +78,27 @@ namespace LandHulk
 	/** And from every piece of a cattle's path's trodden earth (a path is not laid across a wreck), and from every field
 	 * telephone's wire (a lineman lays his wire round a wreck, not under her). */
 	constexpr double PathClear = 1.0, WireClear = 1.0;
+
+	/**
+	 * A live battle (release 2: every battle the campaign plays, fought by the rules as it is shown) opens with nothing
+	 * fought, so there are no ways to keep the wrecks off: they are laid instead off the ground its men and machines are
+	 * likely to cross (Field::Likely, filled by FieldOf from the header): each side's start area (its zone, and the setup
+	 * step's room) grown by StartClear; the advance between them (the ground between the two sides' fronts as they draw
+	 * up, each as wide as its blocks side by side, AdvanceMargin round it); the lanes LiveLaneClear from a lane's middle
+	 * (the columns drive them); with a corps coming up from next door, JoinClear in from every edge of the field (it
+	 * walks on by one, any but the enemy's back edge); and EdgeClear in from the field's own edges. The rules' drill has no way round a still machine (it drives
+	 * this battle's own wrecks through), so nothing there keeps a live man or machine off one: the scene's guard (Yard::
+	 * Reached) clears a wreck away before a vehicle's middle comes within VehicleReach of her outline or a man within
+	 * ManReach, the clearances a recorded battle's wrecks are laid at (Lay's, with its half metre and 40 cm over her
+	 * rings), so every wreck left standing is as clear of the live battle's ways as a recorded battle's are of its own
+	 * (the live pieces come at least a second of battle ahead of what is drawn).
+	 */
+	constexpr double StartClear = 60.0, AdvanceMargin = 100.0, LiveLaneClear = 15.0, JoinClear = 300.0, EdgeClear = 60.0;
+	constexpr double VehicleReach = VehicleClear + 0.5, ManReach = ManClear + 0.4;
+	/** A live battle's groups lie this far apart at least (the ground it leaves is strips along its flanks: without it the
+	 * groups crowded a strip's inner edge, Prokhorovka's twenty in a patch 100 by 260 m; a recorded battle's lie some 140
+	 * to 190 m apart on the average). */
+	constexpr double LiveGroupApart = 100.0;
 
 	/**
 	 * The share of a field's burnt-out armour still lying there Months after the battle (the recovery companies took
@@ -194,6 +219,29 @@ namespace LandHulk
 		bool bSides = false;
 		double AttX = 0.0, AttY = 0.0, DefX = 0.0, DefY = 0.0;
 		std::string AttNat, DefNat;
+		/**
+		 * A live battle's (bOn: FieldOf of a live header; off for a recording read whole, which lays as before): the
+		 * ground its men and machines are likely to cross, kept clear of each wreck's outline (FromLikely). Fought is
+		 * then the ground between the two start areas off it, Vehicles and Men empty, and the axis the line between the
+		 * zones' middles.
+		 */
+		struct Likely
+		{
+			bool bOn = false;
+			/** Each side's start area grown by StartClear, the setup step's room grown the same, and the edges' strips
+			 * where a corps from next door walks on: [x0, y0, x1, y1] each. */
+			std::vector<std::vector<double>> Areas;
+			/** The advance: the four corners of the ground between the two fronts (the attacker's across its start area's
+			 * middle, the defender's across its town where it has one, as the rules draw them up), AdvanceMargin round it. */
+			std::vector<std::pair<double, double>> Advance;
+			/** The field less EdgeClear: [x0, y0, x1, y1]. */
+			double Inside[4] = { 0.0, 0.0, 0.0, 0.0 };
+			/** Each side's front as drawn up (its blocks' widths side by side, the header's; a corps from next door left
+			 * out), and whether one comes up from next door. */
+			double FrontAtt = 0.0, FrontDef = 0.0;
+			bool bJoins = false;
+		};
+		Likely Live;
 		/** The cattle's paths' trodden earth in a box (LandField's near clutter, its Trodden pieces; none: no paths). */
 		std::function<void(double X0, double Y0, double X1, double Y1, std::vector<std::pair<double, double>>& Out)> Trodden;
 		/** Where a wreck and her scorched patch may lie (a field, a pasture, rough ground: not a lane, a bank, a house, a
@@ -221,6 +269,13 @@ namespace LandHulk
 	 */
 	Field FieldOf(const LandFeed::Recording& Rec, const LandField::Ground& G, const LandCrater::Field* Holes,
 		const std::vector<std::vector<std::pair<double, double>>>& OldRuts);
+
+	/**
+	 * How far a place lies from the ground a live battle's men and machines are likely to cross (F.Live: its start areas,
+	 * its advance and AdvanceMargin round it, the edges a corps from next door walks on by, the field's edges; the
+	 * lanes are kept by their own squares): under 0 inside it, 1e9 for a recording read whole (F.Live off).
+	 */
+	double FromLikely(const Field& F, double X, double Y);
 
 	/**
 	 * What a point of a dressed wreck shows (the coat on its side of each band's middle where her coats blend): soot,
@@ -311,8 +366,24 @@ namespace LandHulk
 		 * burnt grass, her fuel's stain), browning, then greener than the field. Note as Dress's. */
 		void Patch(size_t K, LandField::Mesh& Out, Dressing* Note = nullptr) const;
 		/** Whether the grass and corn round the eye stand at a place (false under a wreck, her hull's corners and all, or a
-		 * thrown turret, on a run-off track, and on the scorched patch while it is fresh). */
+		 * thrown turret, on a run-off track, and on the scorched patch while it is fresh; a wreck cleared away, Reached,
+		 * none). */
 		bool Covers(double X, double Y) const;
+
+		/**
+		 * A live battle's guard (release 2): the wrecks a live vehicle's middle comes within VehicleReach of, or a man
+		 * within ManReach of (her outline: her rings), along the recording's tracks from Seen on (each track's kept points
+		 * from Seen[T], the straight line between them as they are drawn, and a knocked-out machine's pin), each wreck
+		 * once: cleared from then on (the scene hides her and her patch). Seen is grown to the tracks and moved on (a
+		 * track's provisional last point, Track::bTail, read again with the next piece); the caller empties it when the men
+		 * are placed again (LandFeed::Grown::bReset). Nothing for a yard with none laid.
+		 */
+		std::vector<size_t> Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen);
+		/** Wreck K cleared away by the guard. */
+		bool Cleared(size_t K) const { return K < Swept.size() && Swept[K] != 0; }
+		/** Whether a place lies under a wreck not cleared away, within Margin of her outline, her footprint or her scorched
+		 * patch at its ragged edge's widest (a live battle's shell hole is not dug there: it would open under her). */
+		bool Over(double X, double Y, double Margin) const;
 
 		/** What was asked and what came of it, for the scene's log line ("12 laid of 18 left of 30 ..."). */
 		std::string Said() const;
@@ -322,9 +393,13 @@ namespace LandHulk
 		/** Models read for the wrecks (none where the battle had them already), and one line for each drawn as another. */
 		int Read = 0;
 		std::vector<std::string> StandIns;
+		/** Laid for a live battle (Field::Likely on), for Said. */
+		bool bLive = false;
 
 	private:
 		std::vector<Hulk> List;
+		/** Each wreck cleared away by the guard (Reached). */
+		std::vector<uint8_t> Swept;
 		std::map<std::string, std::shared_ptr<LandKit::Model>> Loaded;
 		std::map<std::string, const LandKit::Model*> Models;
 		std::vector<std::string> KeyOf;

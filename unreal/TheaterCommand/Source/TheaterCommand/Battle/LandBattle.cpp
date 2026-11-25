@@ -941,7 +941,8 @@ namespace LandParts
 		{
 			const LandHulk::Hulk& H = S.OldWrecks.Hulks()[K];
 			const LandKit::Model* Look = S.OldWrecks.ModelOf(K);
-			if (!Look)
+			// (none for a wreck a live battle's guard cleared away: GuardOldWrecks)
+			if (!Look || S.OldWrecks.Cleared(K))
 			{
 				continue;
 			}
@@ -8452,7 +8453,11 @@ void ALandBattle::LayOldWrecks()
 	// wrecks" is on (count / per of them drawn: one wreck for as many real machines as a tank in the battle);
 	// -TheaterLandOldWrecks=N (N laid) and -TheaterLandOldWreckMonths=M (how long since they burnt) stand in for it on
 	// any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
-	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said.
+	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said. A live battle (every
+	// battle the campaign plays) opens with nothing fought: LandHulk::FieldOf reads its header's start areas, fronts and
+	// lanes and lays them off the ground its men and machines are likely to cross (LandHulk::Field::Likely), along the
+	// field's old lines, at its junctions and out on its flanks, facing the other side's ground; its shell holes are not
+	// dug under one, and GuardOldWrecks clears away any one a live man or machine is to come near all the same.
 	FLandBattleState& S = *State;
 	if (!S.Field)
 	{
@@ -8479,17 +8484,11 @@ void ALandBattle::LayOldWrecks()
 		UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: none laid (-TheaterLandNoOldWrecks; %d asked)"), Count);
 		return;
 	}
-	if (S.Rec.bLive)
-	{
-		// (a live battle opens with no tracks fought yet, so no ground fought over to lay them on: an open question for
-		// the art director, LAND-SCENE.md)
-		UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: none laid (a live battle: no tracks at its open; %d asked)"), Count);
-		return;
-	}
 	const double Took = LandParts::Seconds();
 	// The field as LandHulk reads it (the cloud test, Tools/land_hulk, the same): the recording's ways, this battle's
 	// blasts, the field's lines and what stands on it, the scars' holes and the old ruts laid just before, the field
-	// telephones' wires (the recording's, or -TheaterLandPhones's made from the battle in Open) and the snow lying.
+	// telephones' wires (the recording's, or -TheaterLandPhones's made from the battle in Open) and the snow lying; for
+	// a live battle, its header's start areas, fronts and lanes instead of the ways (LandHulk::Field::Likely).
 	const LandHulk::Field Lay = LandHulk::FieldOf(S.Rec, *S.Field, &S.Holes, S.OldRutWays);
 	LandHulk::Ask Asked;
 	Asked.Count = Count;
@@ -8537,7 +8536,7 @@ void ALandBattle::LayOldWrecks()
 	for (size_t K = 0; K < All.size(); ++K)
 	{
 		const LandHulk::Hulk& H = All[K];
-		UStaticMeshComponent* Levels[2] = { nullptr, nullptr };
+		UStaticMeshComponent* Levels[3] = { nullptr, nullptr, nullptr };
 		for (int32 Level = 0; Level < 3; ++Level)
 		{
 			if (Level < 2)
@@ -8570,15 +8569,22 @@ void ALandBattle::LayOldWrecks()
 			GroundKept.Add(Mesh);
 			Points += static_cast<int32>(M.Points());
 			++Made;
-			if (Level < 2)
-			{
-				Levels[Level] = Mesh;
-			}
+			Levels[Level] = Mesh;
 		}
 		OldWreckNear.Add(Levels[0]);
 		OldWreckFar.Add(Levels[1]);
+		OldWreckPatch.Add(Levels[2]);
 		OldWreckShownNear.Add(1);
 	}
+	// (a live battle's shells land where its rules send them, not kept off the wrecks as a recording's are: none dug
+	// under a wreck or her patch, a metre round, the round bursting there all the same; one the guard cleared away keeps
+	// none off. A recording's holes are dug as before.)
+	if (S.Rec.bLive && !All.empty() && S.Holes.Dig)
+	{
+		const LandHulk::Yard* Wrecks = &S.OldWrecks;
+		S.Holes.Dig = [Was = S.Holes.Dig, Wrecks](double X, double Y) { return Was(X, Y) && !Wrecks->Over(X, Y, 1.0); };
+	}
+	S.OldWreckSeen.clear();
 	// (the grass and corn already laid round the eye laid again without what stands under a wreck)
 	if (Carpet.IsValid())
 	{
@@ -8610,6 +8616,11 @@ void ALandBattle::ShowOldWrecks(const FVector& EyeWorld)
 	const double Ex = EyeWorld.Y / UnitsPerMetre, Ey = EyeWorld.X / UnitsPerMetre, Ez = EyeWorld.Z / UnitsPerMetre;
 	for (int32 K = 0; K < OldWreckShownNear.Num() && K < static_cast<int32>(All.size()); ++K)
 	{
+		// (one a live battle's guard cleared away stays hidden: GuardOldWrecks)
+		if (State->OldWrecks.Cleared(static_cast<size_t>(K)))
+		{
+			continue;
+		}
 		const LandHulk::Hulk& H = All[static_cast<size_t>(K)];
 		const bool bNear = FMath::Square(H.X - Ex) + FMath::Square(H.Y - Ey) + FMath::Square(H.Z - Ez) < FMath::Square(LandHulk::NearTo);
 		if ((OldWreckShownNear[K] != 0) == bNear)
@@ -8625,6 +8636,51 @@ void ALandBattle::ShowOldWrecks(const FVector& EyeWorld)
 		{
 			Far->SetVisibility(!bNear);
 		}
+	}
+}
+
+void ALandBattle::GuardOldWrecks(bool bReset)
+{
+	// Old wrecks in a live battle (release 2): the rules' drill has no way round a still machine (it drives this battle's
+	// own wrecks through), so a live man or machine may be sent across one all the same. Each piece is read here as it
+	// comes, before it is drawn (the screen keeps LiveMargin behind the rules), and a wreck any of its ways comes near
+	// (LandHulk::Yard::Reached: her outline within 8.5 m of a vehicle's middle, 1.9 m of a man's, the clearances a
+	// recorded battle's wrecks are laid at) is cleared away before he gets there, her patch with her, and the grass laid
+	// again where she lay. Nothing where none was laid.
+	if (!State.IsValid() || State->OldWrecks.Hulks().empty())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	if (bReset)
+	{
+		S.OldWreckSeen.clear();
+	}
+	const std::vector<size_t> Cleared = S.OldWrecks.Reached(S.Rec, S.OldWreckSeen);
+	for (const size_t K : Cleared)
+	{
+		const int32 I = static_cast<int32>(K);
+		const auto Hide = [I](const TArray<TObjectPtr<UStaticMeshComponent>>& Of)
+		{
+			if (UStaticMeshComponent* Mesh = Of.IsValidIndex(I) ? Of[I].Get() : nullptr)
+			{
+				Mesh->SetVisibility(false);
+			}
+		};
+		Hide(OldWreckNear);
+		Hide(OldWreckFar);
+		Hide(OldWreckPatch);
+		const LandHulk::Hulk& H = S.OldWrecks.Hulks()[K];
+		if (Carpet.IsValid())
+		{
+			for (const LandHulk::Ring& R : H.Rings)
+			{
+				Carpet->Mark(R.X, R.Y, R.R + 0.5);
+			}
+			Carpet->Mark(H.X, H.Y, 1.12 * FMath::Max(H.PatchLong, H.PatchWide) + 0.5);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): old wreck %d (the %s %s) cleared away at %.1f s: a live man or machine is to come near her"), I + 1,
+			*LandParts::Wide(H.Nation), *LandParts::Wide(H.Model), S.Rec.Fought);
 	}
 }
 

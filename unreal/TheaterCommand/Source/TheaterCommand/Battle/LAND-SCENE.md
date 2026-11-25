@@ -1375,7 +1375,9 @@ men, no rifle/pack, pistol at most", built as infantry with the rifle hidden and
 
 Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next battle there. Looks only,
 as the scars and the old ruts are: nothing the rules fight reads them, no round strikes one, no man takes cover behind
-one, and they are kept off every way the recording's men and vehicles go, so nothing the battle shows is moved by them.
+one, and they are kept off every way the recording's men and vehicles go, so nothing the battle shows is moved by them
+(a live battle's ways are not known at its open: they are kept off the ground its men and machines are likely to
+cross, and one any of them is sent near all the same is cleared away before he gets there; "In a live battle" below).
 
 - **What asks for them.** The campaign writes the recording's root `"oldWrecks": {"count": n, "months": m, "nats":
   {"GER": n1, "SOV": n2, ...}, "per": p}`: the real armoured vehicles burnt out here before (60 at most), the months
@@ -1392,8 +1394,10 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   the switch was first written to read N as the key's count, and lay 6 of `=40` at two years). **With neither the key
   nor the stand-in nothing is made, read or said**: `LayOldWrecks` returns before anything, the grass's `Covers` and
   `ShowOldWrecks` find an empty yard, and no die of the battle, the scars or the ruts is moved (the wrecks throw their
-  own, seeded on their own constants). A live battle lays none (it opens with no tracks: nothing fought over yet), and
-  says so.
+  own, seeded on their own constants). A live battle (every battle the campaign plays) lays them too, read from its
+  header as below; the campaign's live header carries the key from the TS side's 8ddab648 and 7ec111e2 (live.ts,
+  on `claude/project-thread-pi6nal`), which this branch's `src` (07bf753a) does not have yet, so here a live battle
+  lays them on the stand-in alone till the two meet. (Before 25 November a live battle laid none and said so.)
 - **How many** (`LandHulk::Models`, `Left`, `Kept`). First the battle's scale (Brian's rule: one model stands for as
   many real things in every part of a battle): the count's real machines are drawn `per` to a wreck, `Models(count,
   per)` = count / per rounded, at least one where any burnt (an armoured division's 150 drawn as 20 tanks is 7.5 to a
@@ -1423,6 +1427,51 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   lays his round her), 2 m from another wreck. Her scorched patch, which reaches some 2.4 m past her outline, lies on
   open ground too, every point of it (the steppe's first lay had three patches over a trench's works and one over a
   garden).
+- **In a live battle** (25 November; `LandHulk::Field::Likely`, `FromLikely`, `Yard::Reached`, `Cleared` and `Over`,
+  `ALandBattle::GuardOldWrecks`). A live battle opens with its header alone: the two zones, the blocks (each one's
+  frontage, side, and whether it joins later), the town, the setup step's room; no way, round or blast yet. And the
+  rules' drill has no way round a still machine (it drives this battle's own wrecks through), so the wrecks are kept
+  off the ground its men and machines are likely to cross, and any one a live piece sends someone near all the same is
+  cleared away before he gets there. `FieldOf` reads that ground from the header: each side's zone grown 60 m
+  (`StartClear`), and the setup room grown so where the header gives one; the ground between the two fronts as the
+  rules draw the sides up (units.ts `deploy`: the attacker's front across its zone's middle, the defender's on its
+  town kept 300 m inside its zone's ends, each its blocks' frontages side by side) and 100 m round it
+  (`AdvanceMargin`; every point of both recordings' ways between their start areas lies within 18 m of that ground);
+  where a block joins later, a 300 m strip along every edge of the field (`JoinClear`; sim.ts `joinEdge` and `walkOn`:
+  the corps from next door walks on some 200 m by the edge facing where it comes from or by its own back edge, never
+  the enemy's back edge, so every edge is someone's); and 60 m in from the field's edges (`EdgeClear`). The ground
+  between the grown start areas off all that, every 25 m, stands for the ground fought over (the box the groups are
+  laid in). They are laid as on a recorded field, but: the old lines' runs, the junctions and the village's edge only
+  off the likely ground; each wreck's every ring off it by her own reach and half a metre; 15 m from a lane's middle,
+  not 6 (`LiveLaneClear`: the live battle's machines drive its lanes); their groups at least 100 m apart
+  (`LiveGroupApart`; the first lay on Prokhorovka put all of them in one patch some 100 by 260 m); and the axis's
+  groups out on its flanks, either side, 15 to 250 m past the likely ground's edge, still facing the other side's
+  ground. So they read as an earlier battle's: along the hedges and walls beside the advance's path, out on its flanks
+  and strewn, facing the other side. None at a junction or the village's edge on either recording: both lie within
+  the ground the live battle is likely to cross.
+  The guard (`GuardOldWrecks`, from `PumpLive` after `MapLive`): each live piece read as it comes, before it is drawn
+  (the screen keeps `LiveMargin`, a second or more, behind the rules); each track's new points from where it was last
+  read, as the straight lines the screen draws between them, and a knocked-out machine's pin; a wreck any of them comes
+  within 8.5 m of (her rings, from a vehicle's middle: `VehicleReach`, the recorded battle's 8 m and half a metre) or
+  1.9 m of (from a man's, `ManReach`) is cleared away: her near and far levels and her patch hidden, the grass laid
+  again where she lay, the camera no longer kept out of her, no shell hole kept off her; one log line, "Land battle
+  (live): old wreck N (the GER Tiger) cleared away at T s: a live man or machine is to come near her". A man's
+  provisional last point is read again with the next piece; when the men are placed again (the setup step) every
+  track is read afresh, and a wreck once cleared stays so. So nothing live passes through one. If the eye is on her as
+  a piece sends someone at her, she goes from view a second or more before he arrives (none did on either recording
+  as fought, below). A live battle's shells land where its rules send them: none is dug under a standing wreck or her
+  patch, a metre round (`Yard::Over`, wrapped round `S.Holes.Dig`), the round bursting there all the same. A recorded
+  battle lays and digs as before, bit for bit.
+  Measured (the test's case 9: each recording opened as a live battle, its tracks, rounds, events and the rest taken
+  out, its setup room its attacker's zone; forty burnt out a month before, at most 20 laid): Normandy 20 laid (3 groups
+  on the old lines, 7 on the axis's flanks, 1 strewn), every point of them 18.5 m and more off the likely ground and
+  282 m from the box of where its units stood at the start; Prokhorovka 12 (5 on the axis's flanks, 3 strewn; 8 found
+  no room: its fronts, 1,750 and 1,340 m, cross most of the field, and its 5 old lines lie in the advance), 1.6 m and
+  more off it, 265 m from the start's box. With a corps from next door coming up (each recording's last block made
+  a joiner): 20 and 11 laid, every point of them 519 and 402 m in from the field's edges. The battles as fought, read
+  piece by piece as the guard reads them (30 s pieces, each man's last point provisional) and read whole: none of
+  either's wrecks cleared, every one at least 30 m from a vehicle's way and 10 m from a man's (the measure's reach).
+  Laid in some 0.3 to 0.5 s here.
 - **How each looks** (`Yard::Dress`; the art director's to judge, round 2 below). Her own model, knocked out and burnt
   through: her turret turned (mostly within 50 degrees of ahead) and her gun drooped to its stop, or, one in five, her
   turret blown off and lying 1 to 4 m off her side, tail or bow (clear of her hull's corners, its gun turned away from
@@ -1533,7 +1582,12 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   it stands as tall as a man, and a tilted one holds its gun up two metres). One log line: "Land battle:
   old wrecks: 20 laid of 40 the scrap men left of 40 burnt out here, 1 month since the last ...: 10 GER (...); 10 USA
   (...); 2 turrets thrown, 1 track run off; 5 groups along the old lines, ...; N meshes, N points, made in N s" (the
-  stand-in's "20 laid of 40 asked (the stand-in: none taken by the scrap men), 6 months since they burnt ...").
+  stand-in's "20 laid of 40 asked (the stand-in: none taken by the scrap men), 6 months since they burnt ..."; a live
+  battle's ends "laid for a live battle, clear of its start areas, the ground between its fronts and its lanes", and
+  where some found no room, "N found no room clear of the lanes, hedges and the ground the live battle is likely to
+  cross"). In a live battle each wreck's patch is kept too (`OldWreckPatch`), for `GuardOldWrecks` to hide with her
+  near and far levels; `ShowOldWrecks` and `PlaceMovers` pass over one cleared (`Yard::Cleared`), the grass's `Covers`
+  and the holes' `Over` no longer read her, and `FLandBattleState::OldWreckSeen` holds how far each track was read.
 - **Test**: `Tools/land_hulk/run.sh [recording.json ...]` (`LAND_HULK_OUT`). Built with `-Wconversion` by both
   compilers; the clang build must lay every wreck where the gcc build laid it. On every recording, laid as the scene
   lays them: the same twice (every wreck, her pose and her near, far and patch meshes, hashed); every point of every
@@ -1541,7 +1595,7 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   corn, none over a cattle's path; 8 m from every vehicle's way, 1.5 m from every man's; no half-metre square held by
   two; every wreck and thrown turret settled on the ground, not floating; fewer as the months go (twenty burnt out:
   20, 17, 10, 3 and 1 at 1, 6, 12, 24 and 60 months); the nats' shares (GER 30, USA 10: 15 and 5 of twenty); the cap;
-  none with nothing asked or on a live battle's open; the key read ten ways; the meshes finite and whole; the rust
+  none with nothing asked; the key read ten ways; the meshes finite and whole; the rust
   spreading over the same twenty wrecks as they age; and on an old field (two battles' scars and old ruts laid first)
   none on an old hole or rut. Since the review of 24 November: every point of every scorched patch read where it lies,
   as her own are; the grass kept out of every hull's footprint, every 10 cm; each thrown turret clear of her own hull
@@ -1642,15 +1696,44 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   Prokhorovka near 0.54, 0.37, 0.19, 0.04 and 0.03 (0.55, 0.43, 0.23, 0.06 and 0.03), side 2.03, 1.52, 0.60, 0.14
   and 0.08 (2.01, 1.80, 0.62, 0.15 and 0.09). Pictures: `/tmp/claude-0/ad-round/wrecks/final3/` (the first try's in
   `/tmp/claude-0/ad-round/wrecks/carries1/`, 1e56500d's in `/tmp/claude-0/ad-round/wrecks/before_carries/`).
-- **Not yet.** Wrecks on a live battle (none: no tracks at its open); the guns' and soft vehicles' own wrecks beyond the
-  half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
+  Since 25 November, each recording opened as a live battle too (case 9: its header alone, as above): none laid with
+  none asked; laid as the scene lays them, every point of every wreck read as a recorded field's are (open ground, no
+  cattle's path, settled, no square shared, her patch, her thrown turret and run-off track as above) and 15 m from a
+  lane's middle; every point off the ground it is likely to cross; every one clear of the box of where the battle's
+  units stood at its start (their first points, every one in its own side's zone) by 60 m and more; the same twice;
+  every point of every wreck and her patch read by `Over` (no hole dug there) and none of the battle's own shells,
+  bombs and grenades landing on one; with a corps from next door coming up, every point 300 m and more in from every
+  edge; the battle as fought read as the guard reads its pieces (30 s pieces, each moving man's last point
+  provisional, a pin only from its time) and read whole, the same wrecks cleared, once each, and every one left
+  standing 8 m from a vehicle's way and 1.5 m from a man's (as drawn: every kept point to the next, every 0.25 m,
+  and the pins); one cleared no longer keeping the grass or a hole off; and the guard made to work (the battles as
+  fought send no one near one): a tank's pieces up to 30 m short of a wreck's reach leave her and its next piece,
+  through her, read from its provisional last point again, clears her; a man 0.3 m outside his reach of another
+  leaves her and through her clears her; a lorry pinned on a third clears her, far off leaves her; the men placed
+  again (fewer tracks) read afresh, clearing none twice. The clang build lays them where the gcc build does (their
+  lines are among those compared). It paints `placement_live_<recording>` (the whole field: the likely ground tinted
+  red, the start zones, the ground between the fronts, the battle's ways as it was fought, where its units stood at
+  its start, the wrecks ringed by nation, a red cross on any the guard cleared, four close looks). Pictures:
+  `/tmp/claude-0/livewrecks/run/` (`placement_live_normandy-1944.png`, `placement_live_prokhorovka-1943.png`, the
+  measures in `gcc.log`). `LAND_HULK_JOBS=N` holds `run.sh` to N compiles at once (all at once by default).
+- **Not yet.** In a live battle: a way round a wreck for the rules' drill (the guard clears her away instead: she goes
+  from view, a second or more before he gets there, where the eye is on her); a wreck at a junction or the village's
+  edge (on both recordings they lie in the ground the battle is likely to cross); the scars and the old ruts (they read
+  the battle's tracks, none at a live battle's open, so its wrecks lie on ground without them: `Field::Likely` could
+  stand for their fought-over ground too); Prokhorovka's 12 of 20 (its fronts cross most of the field). The guns' and soft
+  vehicles' own wrecks beyond the half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
 - **Owed.** The Mac compile (the names to check: `LayOldWrecks`, `ShowOldWrecks`, `OldWreckNear`, `OldWreckFar`,
   `OldWreckShownNear`, `FLandBattleState::OldWrecks` and `OldRutWays`, with `LandParts::GroundMesh`,
   `UStaticMeshComponent`'s `SetRelativeLocation` and `SetVisibility`, `FParse::Value` and `Param`; and since the
   review of 24 November, `LandHulk::Ask::bAsLaid`, `LandHulk::Hulk`'s `TurretYaw`, `TurretBoxLo`, `TurretBoxHi`,
   `TurretMuzzle` and `bTurretGun`, and `LandSight::Machine`'s `Root`, `Heading`, `HullLo`, `HullHi`, `bTurret`,
   `bMuzzle` and `Muzzle` for the thrown turret; and `LandHulk::Ask::Per` with `Recording::OldWreckPer` for the battle's
-  scale), the art director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
+  scale; and since 25 November, a live battle's: `ALandBattle::GuardOldWrecks(bool)` called from `PumpLive` with
+  `Grown::bReset`, `OldWreckPatch` (a `UPROPERTY` `TArray<TObjectPtr<UStaticMeshComponent>>`, filled beside
+  `OldWreckNear` and `OldWreckFar` from the patch's mesh, `Levels[2]`), `FLandBattleState::OldWreckSeen`
+  (`std::vector<size_t>`), `LandHulk::Yard::Reached`, `Cleared` and `Over`, `LandCarpet::Squares::Mark`, `LandParts::Wide`,
+  `TObjectPtr::Get` and `TArray::IsValidIndex`, and `S.Holes.Dig`, a `std::function<bool(double, double)>`, wrapped
+  in a lambda that captures the old one by value and a `const LandHulk::Yard*`), the art director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
   gate with twenty wrecks
   laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
   `=6` and `=18` months (the same twenty, aged): from 300 m up over the old lines; a group from 40 m and from a man's
@@ -1663,7 +1746,13 @@ one, and they are kept off every way the recording's men and vehicles go, so not
   her); a thrown turret on its side, from the camera at a man's height (the camera kept out of it and its gun); and
   with `-TheaterLandPhones` on, the wires laid round the wrecks. And once the campaign's row is on (sgfei1 b0a47250,
   "Old wrecks" off by default), one campaign battle on a field fought over before, its log line saying how many were
-  drawn for how many burnt out at the battle's scale ("one for every 7.5"). Since round 2 of the look: the Mac compile
+  drawn for how many burnt out at the battle's scale ("one for every 7.5"). Since 25 November, a live battle with
+  `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` (or, once this branch meets the TS side's 8ddab648 and
+  7ec111e2, the campaign's own key in the live header): from 300 m up as it opens (the wrecks off the start areas and
+  the advance, along the old lines and out on the flanks, facing the other side), and the battle played out with the
+  eye on a group by the advance's edge: no man or machine through one; any the guard clears, its log line, and how
+  the moment she goes from view reads (none cleared on either recording as fought here); a shell landing on a wreck
+  (its burst, no hole under her). Since round 2 of the look: the Mac compile
   of `LandKit::Mesh::Paints` and `LandKit::Model::PaintNames` (filled in `Model::Load`; the scene's own calls,
   `Yard::Dress(K, bNear, M)` and `Yard::Patch(K, M)`, are as they were, the new `Dressing` note left out); the cost
   against the 45 fps gate and the battle's open. Measured here (the test's twenty, the cloud machine, one core): round 1

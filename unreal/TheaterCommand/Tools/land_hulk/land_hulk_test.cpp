@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <map>
 #include <sstream>
 #include <string>
@@ -634,7 +635,9 @@ int main(int Argc, char** Argv)
 			F.Fought.size(), F.Vehicles.size(), F.Men.size(), F.Blasts.size(), F.Lanes.size(), F.Hedges.size(), F.Standing.size(), F.Lines.Lines.size(), F.Lines.Spots.size());
 
 		// Where they lie: every point of every wreck (its near level), read where it lies.
-		const auto CheckPlaces = [&](const LandHulk::Yard& Y, const std::string& Label, const LandCrater::Field* Holes, const std::vector<Line>* Ruts)
+		// (bLive: laid for a live battle, which knows none of the recorded ways at its open: how near they come is told, not
+		// faulted, and is the scene's guard's to clear (case 9); its lanes are kept LiveLaneClear)
+		const auto CheckPlaces = [&](const LandHulk::Yard& Y, const std::string& Label, const LandCrater::Field* Holes, const std::vector<Line>* Ruts, bool bLive = false)
 		{
 			const std::vector<Spot> All = SpotsOf(Y, 3);
 			std::map<std::string, int> Wrong;
@@ -853,10 +856,11 @@ int main(int Argc, char** Argv)
 				Label.c_str(), Y.Hulks().size(), All.size(), WrongText.empty() ? "every one on open ground" : WrongText.c_str(), OnPath, VehicleMin, ManMin, LaneMin, BlastMin,
 				Ruts ? (", an old rut " + std::to_string(RutMin).substr(0, 4) + " m").c_str() : "", Lowest, Shared);
 			if (!Wrong.empty()) Fault(Label + ": a wreck on " + WrongText);
-			if (VehicleMin < LandHulk::VehicleClear) Fault(Label + ": a wreck within 8 m of a recorded vehicle's way");
-			if (ManMin < LandHulk::ManClear) Fault(Label + ": a wreck within 1.5 m of a recorded man's way");
-			if (LaneMin < LandHulk::LaneClear - 0.5) Fault(Label + ": a wreck within 5.5 m of a lane's middle");
-			if (BlastMin < LandHulk::BlastClear - 0.5) Fault(Label + ": a wreck where a shell of this battle lands");
+			if (!bLive && VehicleMin < LandHulk::VehicleClear) Fault(Label + ": a wreck within 8 m of a recorded vehicle's way");
+			if (!bLive && ManMin < LandHulk::ManClear) Fault(Label + ": a wreck within 1.5 m of a recorded man's way");
+			if (!bLive && LaneMin < LandHulk::LaneClear - 0.5) Fault(Label + ": a wreck within 5.5 m of a lane's middle");
+			if (bLive && LaneMin < LandHulk::LiveLaneClear - 0.5) Fault(Label + ": a wreck within 14.5 m of a lane's middle (a live battle's columns drive them)");
+			if (!bLive && BlastMin < LandHulk::BlastClear - 0.5) Fault(Label + ": a wreck where a shell of this battle lands");
 			if (Ruts && RutMin < LandHulk::WayClear - 0.5) Fault(Label + ": a wreck on an old rut");
 			if (OnHole > 0) Fault(Label + ": " + std::to_string(OnHole) + " points of wrecks on an old shell hole");
 			if (Below > 0 || Above > 0) Fault(Label + ": " + std::to_string(Below) + " points sunk deep, " + std::to_string(Above) + " floating");
@@ -1848,7 +1852,7 @@ int main(int Argc, char** Argv)
 			const int N1 = Live.Lay(Bare, AskOf(30, 1.0), ReadModel, Have);
 			int Covered = 0;
 			for (const auto& P : F.Fought) Covered += None.Covers(P.first, P.second) || Live.Covers(P.first, P.second) ? 1 : 0;
-			std::printf("none asked: %d laid, %d read, %d places covered; a live battle (no tracks at its open): %d laid\n", N0, None.Read, Covered, N1);
+			std::printf("none asked: %d laid, %d read, %d places covered; nothing fought over and no live battle's ground (case 9 lays a live battle's): %d laid\n", N0, None.Read, Covered, N1);
 			if (N0 != 0 || N1 != 0 || Covered != 0 || None.Read != 0) Fault(Name + ": wrecks with none asked");
 		}
 
@@ -2239,6 +2243,504 @@ int main(int Argc, char** Argv)
 			}
 			std::printf("pictures: %s/placement_%s.ppm, %s/look_%s.ppm, %s/look_far_%s.ppm, %s/look_side_%s.ppm, %s/scorch_%s.ppm, %s/lorry_%s.ppm%s (their words beside them, .txt)\n", OutDir.c_str(), Name.c_str(),
 				OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), Tracked.empty() ? "" : (", " + OutDir + "/track_" + Name + ".ppm").c_str());
+		}
+
+		// 9. A live battle (release 2: every battle the campaign plays, the rules fighting it as it is shown): the same
+		// battle as its header opens it, nothing fought (its tracks, rounds, events, air notes, craters, cuts, wires,
+		// views and phases taken away, bLive set, the setup step's room the attacker's zone, as live.ts opens it), laid as
+		// the scene lays it (LandHulk::FieldOf reads a live header's Likely). Off the ground its men and machines are likely
+		// to cross: its start areas, the ground between its fronts, its lanes LiveLaneClear; clear of where every unit of
+		// the battle stood at its start (the box of each side's first positions) by StartClear; every point on open ground
+		// as above; the same twice. Then the battle as it was fought read against them piece by piece, as the scene's
+		// guard reads the live pieces (Yard::Reached): each wreck it comes near cleared away, the same as read whole, and
+		// every wreck left standing as clear of its ways as a recorded battle's wrecks are of its own.
+		{
+			LandFeed::Recording LiveRec = Rec;
+			LiveRec.bLive = true;
+			LiveRec.Tracks.clear();
+			LiveRec.Rounds.clear();
+			LiveRec.Events.clear();
+			LiveRec.Air.clear();
+			LiveRec.Craters.clear();
+			LiveRec.Cuts.clear();
+			LiveRec.Wires.clear();
+			LiveRec.WireCuts.clear();
+			LiveRec.WireMends.clear();
+			LiveRec.Held.clear();
+			LiveRec.Aid.clear();
+			LiveRec.Views.clear();
+			LiveRec.Phases.clear();
+			LiveRec.Contact = -1.0;
+			LiveRec.End = 0.0;
+			LiveRec.Fought = 0.0;
+			LiveRec.bOver = false;
+			LiveRec.bSetup = true;
+			for (int K = 0; K < 4; ++K) LiveRec.Room[K] = Rec.Ground.ZoneAtt[K];
+			const LandHulk::Field FL = LandHulk::FieldOf(LiveRec, G, nullptr, {});
+			std::printf("\n-- %s, a live battle (its header alone, nothing fought): %zu points stand for the ground fought over; %zu vehicles' ways, %zu men's, %zu blasts; fronts %.0f m (the attacker's) and %.0f m drawn up%s; %zu old lines and %zu places a fight gathers\n",
+				Name.c_str(), FL.Fought.size(), FL.Vehicles.size(), FL.Men.size(), FL.Blasts.size(), FL.Live.FrontAtt, FL.Live.FrontDef, FL.Live.bJoins ? ", a corps from next door coming up" : "",
+				FL.Lines.Lines.size(), FL.Lines.Spots.size());
+			if (!FL.Live.bOn || !FL.Vehicles.empty() || !FL.Men.empty() || FL.bAxis) Fault(Name + ": a live header not read as a live battle's field");
+			{
+				LandHulk::Yard None;
+				const int N0 = None.Lay(FL, AskOf(0, 1.0), ReadModel, Have);
+				std::printf("%s, a live battle with none asked: %d laid, %d read\n", Name.c_str(), N0, None.Read);
+				if (N0 != 0 || None.Read != 0) Fault(Name + ": a live battle's wrecks with none asked");
+			}
+			if (!LiveRec.Blocks.empty())
+			{
+				// (a corps from next door coming up, its last block's: it walks on by an edge, so every edge kept JoinClear)
+				LandFeed::Recording Joined = LiveRec;
+				Joined.Blocks.back().bJoins = true;
+				const LandHulk::Field FJ = LandHulk::FieldOf(Joined, G, nullptr, {});
+				LandHulk::Yard YJ;
+				const int NJ = YJ.Lay(FJ, AskOf(40, 1.0), ReadModel, Have);
+				double EdgeMin = 1e9;
+				for (const Spot& S : SpotsOf(YJ, 3)) EdgeMin = std::min({ EdgeMin, S.X, Rec.Ground.W - S.X, S.Y, Rec.Ground.H - S.Y });
+				std::printf("%s, a live battle with a corps from next door coming up: %d laid, every point of them at least %.1f m in from the field's edges (it walks on some 200 m)\n",
+					Name.c_str(), NJ, EdgeMin);
+				if (!FJ.Live.bJoins || EdgeMin < LandHulk::JoinClear) Fault(Name + ": a live battle's wreck on a corps from next door's way on");
+			}
+			LandHulk::Yard YL;
+			const auto LiveT0 = std::chrono::steady_clock::now();
+			const int LiveLaid = YL.Lay(FL, AskOf(40, 1.0), ReadModel, Have);
+			std::printf("live laid: %s (%.0f ms, %d models read)\n", YL.Said().c_str(), Since(LiveT0), YL.Read);
+			for (size_t K = 0; K < YL.Hulks().size(); ++K)
+				std::printf("  %2zu  (live) %s at (%.0f, %.0f), group %d\n", K + 1, Describe(YL.Hulks()[K]).c_str(), YL.Hulks()[K].X, YL.Hulks()[K].Y, YL.Hulks()[K].Group + 1);
+			if (LiveLaid == 0) Fault(Name + ": none laid on a live battle");
+			if (!YL.bLive || YL.Said().find("live battle") == std::string::npos) Fault(Name + ": the live battle's lay not said");
+			CheckPlaces(YL, Name + ", a live battle", nullptr, nullptr, true);
+
+			// (off the likely ground; clear of each side's first positions' box by StartClear; and where the units stood)
+			double LikelyMin = 1e9, StartMin = 1e9;
+			std::vector<std::vector<double>> Starts(2, std::vector<double>{ 1e18, 1e18, -1e18, -1e18 });
+			int Stood = 0, InZone = 0;
+			for (const LandFeed::Track& T : Rec.Tracks)
+			{
+				const LandFeed::Block* B = Rec.BlockOf(T.Block);
+				if (T.At.empty() || !B || B->Side < 0 || B->Side > 1 || B->bJoins) continue;
+				std::vector<double>& Box = Starts[static_cast<size_t>(B->Side)];
+				const double X = T.At[0].X, Y = T.At[0].Y;
+				Box[0] = std::min(Box[0], X);
+				Box[1] = std::min(Box[1], Y);
+				Box[2] = std::max(Box[2], X);
+				Box[3] = std::max(Box[3], Y);
+				++Stood;
+				const double* Z = B->Side == 0 ? Rec.Ground.ZoneAtt : Rec.Ground.ZoneDef;
+				InZone += X >= Z[0] && X <= Z[2] && Y >= Z[1] && Y <= Z[3] ? 1 : 0;
+			}
+			for (const Spot& S : SpotsOf(YL, 3))
+			{
+				LikelyMin = std::min(LikelyMin, LandHulk::FromLikely(FL, S.X, S.Y));
+				for (const std::vector<double>& Box : Starts)
+				{
+					if (Box[2] < Box[0]) continue;
+					StartMin = std::min(StartMin, std::hypot(std::max({ Box[0] - S.X, 0.0, S.X - Box[2] }), std::max({ Box[1] - S.Y, 0.0, S.Y - Box[3] })));
+				}
+			}
+			std::printf("%s, a live battle: every point at least %.1f m off the ground it is likely to cross (its start areas grown %.0f m, the ground between its fronts and %.0f m round it, the field's edges)%s; %.1f m from the box of where its units stood at its start (%d of %d of them in their own side's zone)\n",
+				Name.c_str(), LikelyMin, LandHulk::StartClear, LandHulk::AdvanceMargin, FL.Live.bJoins ? ", the side edges a corps from next door walks on by" : "", StartMin, InZone, Stood);
+			if (LiveLaid > 0 && LikelyMin < 0.0) Fault(Name + ": a live battle's wreck on the ground it is likely to cross");
+			if (LiveLaid > 0 && StartMin < LandHulk::StartClear) Fault(Name + ": a live battle's wreck within " + std::to_string(static_cast<int>(LandHulk::StartClear)) + " m of where its units stood at its start");
+
+			// (the same twice: every wreck, her pose and her near, far and patch meshes)
+			{
+				LandHulk::Yard Again;
+				Again.Lay(FL, AskOf(40, 1.0), ReadModel, Have);
+				bool bSame = Again.Hulks().size() == YL.Hulks().size() && Again.Said() == YL.Said();
+				for (size_t K = 0; bSame && K < YL.Hulks().size(); ++K)
+				{
+					const LandHulk::Hulk &P = YL.Hulks()[K], &Q = Again.Hulks()[K];
+					bSame = P.X == Q.X && P.Y == Q.Y && P.Z == Q.Z && P.Heading == Q.Heading && P.Model == Q.Model && P.Nation == Q.Nation && P.Turret == Q.Turret
+						&& P.bTurretOff == Q.bTurretOff && P.TrackOff == Q.TrackOff && P.Open == Q.Open && P.Seed == Q.Seed;
+					for (int Level = 0; bSame && Level < 3; ++Level)
+					{
+						LandField::Mesh Mp, Mq;
+						if (Level < 2)
+						{
+							YL.Dress(K, Level == 0, Mp);
+							Again.Dress(K, Level == 0, Mq);
+						}
+						else
+						{
+							YL.Patch(K, Mp);
+							Again.Patch(K, Mq);
+						}
+						bSame = HashOf(Mp) == HashOf(Mq);
+					}
+				}
+				std::printf("%s, a live battle, the same twice: %s\n", Name.c_str(), bSame ? "yes (every wreck, its pose and its meshes, near, far and its patch)" : "NO");
+				if (!bSame) Fault(Name + ": a live battle's wrecks not the same twice");
+			}
+
+			// (her outline and patch for a live battle's shell holes, Over: every point of her near level and her patch
+			// within half a metre of what it reads; and how many of the battle's own shells, bombs and grenades, as it was
+			// fought, land on a wreck or her patch, their holes then not dug: the scene's Dig)
+			{
+				size_t Points = 0, Missed = 0;
+				for (size_t K = 0; K < YL.Hulks().size(); ++K)
+				{
+					const LandHulk::Hulk& Hk = YL.Hulks()[K];
+					for (int Level = 0; Level < 2; ++Level)
+					{
+						LandField::Mesh M;
+						if (Level == 0) YL.Dress(K, true, M);
+						else YL.Patch(K, M);
+						for (size_t I = 0; I < M.Colours.size(); I += 2)
+						{
+							++Points;
+							if (!YL.Over(Hk.X + M.Positions[I * 3], Hk.Y + M.Positions[I * 3 + 1], 0.5)) ++Missed;
+						}
+					}
+				}
+				int OnHer = 0;
+				for (const auto& P : F.Blasts) OnHer += YL.Over(P.first, P.second, 1.0) ? 1 : 0;
+				std::printf("%s, a live battle: %zu of %zu points of the wrecks and their patches outside what Over reads; %d of the battle's %zu shells, bombs and grenades land on a wreck or her patch (their holes not dug there)\n",
+					Name.c_str(), Missed, Points, OnHer, F.Blasts.size());
+				if (Missed > 0) Fault(Name + ": a live battle's wreck or patch outside what Over reads (a hole would open under her)");
+			}
+
+			// The battle as it was fought, read as the scene's guard reads the live pieces (every 30 s of battle, each
+			// moving man's last point provisional, as a live piece gives it), and read whole: the same wrecks cleared.
+			LandHulk::Yard Pieces = YL, Whole = YL;
+			std::vector<size_t> Seen, SeenWhole;
+			std::vector<size_t> ByPiece;
+			int PieceCount = 0;
+			double Last = 0.0;
+			for (const LandFeed::Track& T : Rec.Tracks)
+				if (!T.At.empty()) Last = std::max(Last, T.At.back().T);
+			for (double Cut = 30.0; Cut < Last + 30.0; Cut += 30.0)
+			{
+				LandFeed::Recording Part;
+				Part.Tracks.reserve(Rec.Tracks.size());
+				for (const LandFeed::Track& T : Rec.Tracks)
+				{
+					LandFeed::Track P;
+					P.Block = T.Block;
+					P.K = T.K;
+					P.J = T.J;
+					P.Role = T.Role;
+					size_t Kept = 0;
+					while (Kept < T.At.size() && T.At[Kept].T <= Cut) ++Kept;
+					P.At.assign(T.At.begin(), T.At.begin() + static_cast<std::ptrdiff_t>(Kept));
+					if (Kept > 0 && Kept < T.At.size())
+					{
+						// (where he stands at the cut, between his last kept point and the next: provisional)
+						const LandFeed::Point& A0 = T.At[Kept - 1];
+						const LandFeed::Point& B0 = T.At[Kept];
+						const double U = B0.T > A0.T ? (Cut - A0.T) / (B0.T - A0.T) : 0.0;
+						LandFeed::Point Tail;
+						Tail.T = Cut;
+						Tail.X = A0.X + (B0.X - A0.X) * U;
+						Tail.Y = A0.Y + (B0.Y - A0.Y) * U;
+						Tail.F = A0.F;
+						P.At.push_back(Tail);
+						P.bTail = true;
+					}
+					P.bPinned = T.bPinned && T.PinFrom <= Cut;
+					P.PinFrom = T.PinFrom;
+					P.PinX = T.PinX;
+					P.PinY = T.PinY;
+					Part.Tracks.push_back(std::move(P));
+				}
+				for (const size_t K : Pieces.Reached(Part, Seen)) ByPiece.push_back(K);
+				++PieceCount;
+			}
+			for (const size_t K : Pieces.Reached(Rec, Seen)) ByPiece.push_back(K);
+			std::vector<size_t> ByWhole = Whole.Reached(Rec, SeenWhole);
+			std::vector<size_t> PieceSet = ByPiece, WholeSet = ByWhole;
+			std::sort(PieceSet.begin(), PieceSet.end());
+			std::sort(WholeSet.begin(), WholeSet.end());
+			std::string Which;
+			for (const size_t K : WholeSet) Which += (Which.empty() ? "" : ", ") + std::to_string(K + 1);
+			// (every wreck left standing against the battle's ways as drawn: each kept point to the next, every 0.25 m, and
+			// a knocked-out machine's pin; her every point, as a recorded battle's wrecks are read)
+			Near LiveVehicles, LiveMen;
+			for (const LandFeed::Track& T : Rec.Tracks)
+			{
+				Line L;
+				for (const LandFeed::Point& P : T.At) L.emplace_back(P.X, P.Y);
+				Near& To = T.IsVehicle() ? LiveVehicles : LiveMen;
+				To.AddLine(L, 0.25);
+				if (T.bPinned) To.Add(T.PinX, T.PinY);
+			}
+			double StandVehicle = 1e9, StandMan = 1e9, GoneVehicle = 1e9, GoneMan = 1e9;
+			for (const Spot& S : SpotsOf(YL, 3))
+			{
+				const bool bGone = Whole.Cleared(S.K);
+				double& V = bGone ? GoneVehicle : StandVehicle;
+				double& M = bGone ? GoneMan : StandMan;
+				V = std::min(V, LiveVehicles.To(S.X, S.Y, 30.0));
+				M = std::min(M, LiveMen.To(S.X, S.Y, 10.0));
+			}
+			char Gone[96] = "none cleared";
+			if (!WholeSet.empty())
+				std::snprintf(Gone, sizeof(Gone), "those cleared came within %.1f and %.1f m", GoneVehicle < 1e8 ? GoneVehicle : 0.0, GoneMan < 1e8 ? GoneMan : 0.0);
+			std::printf("%s, a live battle fought as recorded, read as the guard reads its pieces (%d pieces of 30 s, then whole): %zu of %zu wrecks cleared away (%s), %s; those left standing at least %.1f m from a vehicle's way and %.1f m from a man's (read out to 30 and 10 m; %s)\n",
+				Name.c_str(), PieceCount, WholeSet.size(), YL.Hulks().size(), Which.empty() ? "none" : Which.c_str(), PieceSet == WholeSet ? "the same as read whole" : "NOT the same as read whole",
+				StandVehicle, StandMan, Gone);
+			if (PieceSet != WholeSet || ByPiece.size() != PieceSet.size()) Fault(Name + ": the guard read piece by piece not as read whole (or a wreck cleared twice)");
+			if (StandVehicle < LandHulk::VehicleClear) Fault(Name + ": a wreck left standing within 8 m of a live vehicle's way");
+			if (StandMan < LandHulk::ManClear) Fault(Name + ": a wreck left standing within 1.5 m of a live man's way");
+			{
+				// (cleared: the grass stands where she lay, Covers; Over no longer keeps a hole off her)
+				int StillCovers = 0;
+				for (const size_t K : WholeSet)
+				{
+					const LandHulk::Hulk& Hk = YL.Hulks()[K];
+					StillCovers += Whole.Covers(Hk.X, Hk.Y) || Whole.Over(Hk.X, Hk.Y, 0.0) ? 1 : 0;
+				}
+				if (StillCovers > 0) Fault(Name + ": a wreck the guard cleared still kept the grass or a hole off");
+			}
+			if (YL.Hulks().size() >= 3)
+			{
+				// The guard made to work (the battles as fought come near none), each on its own copy of the yard so only
+				// what it sends counts: a tank sent along x straight through wreck 1 in three pieces (the first two
+				// ending on a provisional point, the second's 30 m short of her reach, the third's next point past her);
+				// a man walking past wreck 2 just out of his reach, then through her middle; a knocked-out lorry far off,
+				// then pinned on wreck 3; then the men placed again (fewer tracks), one standing on wreck 3 cleared before.
+				const LandHulk::Hulk& H1 = YL.Hulks()[0];
+				const LandHulk::Hulk& H2 = YL.Hulks()[1];
+				const LandHulk::Hulk& H3 = YL.Hulks()[2];
+				const auto Way = [](const char* Role, std::initializer_list<LandFeed::Point> Points)
+				{
+					LandFeed::Track T;
+					T.Role = Role;
+					T.At.assign(Points.begin(), Points.end());
+					return T;
+				};
+				const auto At = [](double T, double X, double Y)
+				{
+					LandFeed::Point P;
+					P.T = T;
+					P.X = X;
+					P.Y = Y;
+					return P;
+				};
+				const auto Has = [](const std::vector<size_t>& L, size_t K) { return std::find(L.begin(), L.end(), K) != L.end(); };
+				// (the tank: her westmost ring's edge, then 30 m and a vehicle's reach short of it)
+				double West = H1.X;
+				for (const LandHulk::Ring& R : H1.Rings) West = std::min(West, R.X - R.R);
+				const double Short = West - LandHulk::VehicleReach - 30.0;
+				LandHulk::Yard Tank = YL;
+				std::vector<size_t> TankSeen;
+				LandFeed::Recording T1, T2, T3;
+				T1.Tracks.push_back(Way("tank", { At(0, Short - 200.0, H1.Y), At(30, Short - 100.0, H1.Y) }));
+				T1.Tracks[0].bTail = true;
+				T2.Tracks.push_back(Way("tank", { At(0, Short - 200.0, H1.Y), At(30, Short - 100.0, H1.Y), At(60, Short, H1.Y) }));
+				T2.Tracks[0].bTail = true;
+				T3.Tracks.push_back(Way("tank", { At(0, Short - 200.0, H1.Y), At(30, Short - 100.0, H1.Y), At(90, H1.X + 60.0, H1.Y) }));
+				const std::vector<size_t> CT1 = Tank.Reached(T1, TankSeen);
+				const std::vector<size_t> CT2 = Tank.Reached(T2, TankSeen);
+				const bool bTankShort = !Tank.Cleared(0) && !Has(CT1, 0) && !Has(CT2, 0);
+				const std::vector<size_t> CT3 = Tank.Reached(T3, TankSeen);
+				const bool bTankThrough = Has(CT3, 0) && Tank.Cleared(0) && !Tank.Over(H1.X, H1.Y, 0.0) && !Tank.Covers(H1.X, H1.Y);
+				// (the man: past wreck 2 at her rings' farthest reach and his own, and 0.3 m more; then through her)
+				double Round2 = 0.0;
+				for (const LandHulk::Ring& R : H2.Rings) Round2 = std::max(Round2, std::hypot(R.X - H2.X, R.Y - H2.Y) + R.R);
+				const double Past = H2.Y + Round2 + LandHulk::ManReach + 0.3;
+				LandHulk::Yard Man = YL;
+				std::vector<size_t> ManSeen;
+				LandFeed::Recording M1, M2;
+				M1.Tracks.push_back(Way("rifle", { At(0, H2.X - 10.0, Past), At(30, H2.X + 10.0, Past) }));
+				M2.Tracks.push_back(Way("rifle", { At(0, H2.X - 10.0, Past), At(30, H2.X + 10.0, Past), At(60, H2.X, H2.Y) }));
+				const std::vector<size_t> CM1 = Man.Reached(M1, ManSeen);
+				const bool bManPast = !Has(CM1, 1) && !Man.Cleared(1);
+				const std::vector<size_t> CM2 = Man.Reached(M2, ManSeen);
+				const bool bManThrough = Has(CM2, 1) && Man.Cleared(1);
+				// (the lorry: far off, then knocked out and pinned on wreck 3; then the men placed again)
+				LandHulk::Yard Pin = YL;
+				std::vector<size_t> PinSeen;
+				LandFeed::Recording L1, L2, Again;
+				L1.Tracks.push_back(Way("lorry", { At(0, H3.X + 300.0, H3.Y + 300.0) }));
+				L1.Tracks.push_back(Way("rifle", { At(0, H3.X - 300.0, H3.Y + 300.0) }));
+				L2 = L1;
+				L2.Tracks[0].bPinned = true;
+				L2.Tracks[0].PinFrom = 60.0;
+				L2.Tracks[0].PinX = H3.X;
+				L2.Tracks[0].PinY = H3.Y;
+				Again.Tracks.push_back(Way("rifle", { At(0, H3.X, H3.Y) }));
+				const std::vector<size_t> CL1 = Pin.Reached(L1, PinSeen);
+				const bool bPinFar = !Has(CL1, 2) && !Pin.Cleared(2);
+				const std::vector<size_t> CL2 = Pin.Reached(L2, PinSeen);
+				const bool bPinned = Has(CL2, 2) && Pin.Cleared(2);
+				const std::vector<size_t> CL3 = Pin.Reached(Again, PinSeen);
+				const bool bAgain = !Has(CL3, 2) && PinSeen.size() == 1;
+				const bool bOk = bTankShort && bTankThrough && bManPast && bManThrough && bPinFar && bPinned && bAgain;
+				std::printf("%s, a live battle, the guard made to work: %s (a tank's pieces to 30 m short of wreck 1's reach left her: %s; its next piece through her cleared her: %s; a man %.1f m outside his reach of wreck 2 left her: %s, then through her cleared her: %s; a lorry far off left wreck 3: %s, pinned on her cleared her: %s; the men placed again, one on her, cleared her no second time: %s)\n",
+					Name.c_str(), bOk ? "each cleared when a piece came near her, none before" : "NOT as it should be",
+					bTankShort ? "yes" : "NO", bTankThrough ? "yes" : "NO", Past - H2.Y - Round2 - LandHulk::ManReach, bManPast ? "yes" : "NO", bManThrough ? "yes" : "NO",
+					bPinFar ? "yes" : "NO", bPinned ? "yes" : "NO", bAgain ? "yes" : "NO");
+				if (!bOk) Fault(Name + ": the live guard did not clear the wrecks sent through (or cleared one too soon)");
+			}
+
+			// The field from above, all of it: the start areas, the ground between the fronts and its margin (tinted red),
+			// the battle's ways as it was fought, where its units stood at its start, and the live battle's wrecks ringed
+			// in their nation's colour and numbered (a red cross: cleared by the guard as the battle was fought); four close.
+			{
+				const double FieldW = Rec.Ground.W > 0.0 ? Rec.Ground.W : 3000.0, FieldH = Rec.Ground.H > 0.0 ? Rec.Ground.H : 2000.0;
+				const int Size = 1400, Key = 600;
+				const double Scale = Size / FieldW;
+				const int MapH = static_cast<int>(std::ceil(FieldH * Scale));
+				const int CanvasH = std::max(MapH, 1280);
+				Image Map(Size + Key, CanvasH);
+				Map.ClipW = Size;
+				Map.ClipH = MapH;
+				Map.Fill(Size, 0, Size + Key, CanvasH, 30, 30, 32);
+				Map.Fill(0, MapH, Size, CanvasH, 30, 30, 32);
+				const auto ToPx = [&](double X, double Y, double& Px, double& Py)
+				{
+					Px = X * Scale;
+					Py = (FieldH - Y) * Scale;
+				};
+				for (int J = 0; J < MapH; ++J)
+					for (int I = 0; I < Size; ++I)
+					{
+						const double X = (I + 0.5) / Scale, Y = FieldH - (J + 0.5) / Scale;
+						LandField::Drawn What = LandField::Drawn::Pasture;
+						G.HeightAt(X, Y, &What);
+						const LandField::Rgb8 C = G.ColourAt(X, Y);
+						double R = C.R, Gr = C.G, B = C.B;
+						const auto Tint = [&](double Tr, double Tg, double Tb, double Amount) { R += (Tr - R) * Amount; Gr += (Tg - Gr) * Amount; B += (Tb - B) * Amount; };
+						switch (What)
+						{
+						case LandField::Drawn::Lane: Tint(214, 196, 150, 0.85); break;
+						case LandField::Drawn::Bank: Tint(40, 66, 34, 0.8); break;
+						case LandField::Drawn::Floor: Tint(150, 70, 60, 0.9); break;
+						case LandField::Drawn::Wall: Tint(120, 120, 120, 0.9); break;
+						case LandField::Drawn::Village:
+						case LandField::Drawn::Yard: Tint(170, 150, 120, 0.45); break;
+						case LandField::Drawn::Woods: Tint(30, 56, 30, 0.75); break;
+						case LandField::Drawn::Water: Tint(60, 110, 170, 0.9); break;
+						case LandField::Drawn::Marsh: Tint(80, 120, 110, 0.7); break;
+						case LandField::Drawn::Crop:
+							if (G.CornAt(X, Y)) Tint(222, 196, 96, 0.55);
+							break;
+						default: break;
+						}
+						if (LandHulk::FromLikely(FL, X, Y) <= 0.0) Tint(200, 60, 50, 0.35);
+						Map.Put(I, J, 0.62 * R + 40.0, 0.62 * Gr + 40.0, 0.62 * B + 40.0);
+					}
+				for (const Line& L : F.Men)
+					for (size_t K = 0; K + 1 < L.size(); K += 2)
+					{
+						double Ax, Ay, Bx, By;
+						ToPx(L[K].first, L[K].second, Ax, Ay);
+						ToPx(L[K + 1].first, L[K + 1].second, Bx, By);
+						Map.Segment(Ax, Ay, Bx, By, 250, 250, 250, 0.08);
+					}
+				for (const Line& L : F.Vehicles)
+					for (size_t K = 0; K + 1 < L.size(); ++K)
+					{
+						double Ax, Ay, Bx, By;
+						ToPx(L[K].first, L[K].second, Ax, Ay);
+						ToPx(L[K + 1].first, L[K + 1].second, Bx, By);
+						Map.Segment(Ax, Ay, Bx, By, 20, 20, 20, 0.6);
+					}
+				// (the start areas as the header gives them, white; the ground between the fronts, yellow)
+				for (const double* Z : { Rec.Ground.ZoneAtt, Rec.Ground.ZoneDef })
+				{
+					double Ax, Ay, Bx, By;
+					ToPx(Z[0], Z[1], Ax, Ay);
+					ToPx(Z[2], Z[3], Bx, By);
+					Map.Segment(Ax, Ay, Bx, Ay, 255, 255, 255, 0.9);
+					Map.Segment(Bx, Ay, Bx, By, 255, 255, 255, 0.9);
+					Map.Segment(Bx, By, Ax, By, 255, 255, 255, 0.9);
+					Map.Segment(Ax, By, Ax, Ay, 255, 255, 255, 0.9);
+				}
+				for (size_t K = 0; K < FL.Live.Advance.size(); ++K)
+				{
+					const auto& A0 = FL.Live.Advance[K];
+					const auto& B0 = FL.Live.Advance[(K + 1) % FL.Live.Advance.size()];
+					double Ax, Ay, Bx, By;
+					ToPx(A0.first, A0.second, Ax, Ay);
+					ToPx(B0.first, B0.second, Bx, By);
+					Map.Segment(Ax, Ay, Bx, By, 250, 220, 60, 0.9);
+				}
+				// (where each unit stood at the battle's start: the attacker's blue-white, the defender's orange)
+				for (const LandFeed::Track& T : Rec.Tracks)
+				{
+					const LandFeed::Block* B = Rec.BlockOf(T.Block);
+					if (T.At.empty() || !B) continue;
+					double Px, Py;
+					ToPx(T.At[0].X, T.At[0].Y, Px, Py);
+					if (B->Side == 0) Map.Blend(static_cast<int>(Px), static_cast<int>(Py), 170, 200, 255, 0.9);
+					else Map.Blend(static_cast<int>(Px), static_cast<int>(Py), 255, 160, 60, 0.9);
+				}
+				std::string Labels;
+				int Line0 = 16;
+				Labels += std::to_string(Size + 14) + " " + std::to_string(Line0) + " " + Name + " as a live battle: 40 burnt out here a month ago, laid from its header alone\n";
+				Line0 += 20;
+				{
+					const std::string WholeSaid = YL.Said();
+					size_t From = 0;
+					while (From < WholeSaid.size())
+					{
+						size_t To = std::min(WholeSaid.size(), From + 90);
+						if (To < WholeSaid.size())
+						{
+							const size_t Space = WholeSaid.rfind(' ', To);
+							if (Space != std::string::npos && Space > From) To = Space;
+						}
+						Labels += std::to_string(Size + 14) + " " + std::to_string(Line0) + " " + WholeSaid.substr(From, To - From) + "\n";
+						Line0 += 18;
+						From = To < WholeSaid.size() && WholeSaid[To] == ' ' ? To + 1 : To;
+					}
+				}
+				Line0 += 8;
+				const V3 Sun = V3(-0.45, 0.35, 0.82).Unit();
+				for (size_t K = 0; K < YL.Hulks().size(); ++K)
+				{
+					const LandHulk::Hulk& H = YL.Hulks()[K];
+					double R, Gr, B, Px, Py;
+					NationColour(H.Nation, R, Gr, B);
+					ToPx(H.X, H.Y, Px, Py);
+					Map.Ring(Px, Py, 7.0, 1.4, R, Gr, B);
+					Map.Fill(static_cast<int>(Px) - 1, static_cast<int>(Py) - 1, static_cast<int>(Px) + 2, static_cast<int>(Py) + 2, R, Gr, B);
+					const bool bGone = Whole.Cleared(K);
+					if (bGone)
+					{
+						Map.Segment(Px - 8, Py - 8, Px + 8, Py + 8, 255, 40, 40, 1.0);
+						Map.Segment(Px - 8, Py + 8, Px + 8, Py - 8, 255, 40, 40, 1.0);
+					}
+					Labels += std::to_string(static_cast<int>(Px) + 8) + " " + std::to_string(static_cast<int>(Py) - 20) + " " + std::to_string(K + 1) + "\n";
+					Labels += std::to_string(Size + 14) + " " + std::to_string(Line0) + " " + std::to_string(K + 1) + "  " + Describe(H) + ", group " + std::to_string(H.Group + 1)
+						+ (bGone ? ", cleared by the guard" : "") + "\n";
+					Line0 += 18;
+				}
+				Map.Fill(20, MapH - 30, 20 + static_cast<int>(500.0 * Scale), MapH - 26, 255, 255, 255);
+				Labels += "20 " + std::to_string(MapH - 52) + " 500 m\n";
+				Line0 += 10;
+				const char* Keys[] = { "rings: GER blue, USA green, SOV red, GBR yellow; a red cross: cleared by the guard as the battle was fought",
+					"tinted red: the ground a live battle is likely to cross, kept clear (start areas, between the fronts, edges)",
+					"white boxes the start areas (the header's zones), yellow the ground between the fronts as drawn up",
+					"dark lines the vehicles' ways, faint white the men's, as the battle was fought; dots where its units stood at its start" };
+				for (const char* K : Keys)
+				{
+					Labels += std::to_string(Size + 14) + " " + std::to_string(Line0) + " " + K + "\n";
+					Line0 += 18;
+				}
+				// (four close looks, from the south-east, under the key)
+				const int Close = 270;
+				const int CloseTop = std::max(Line0 + 10, CanvasH - 2 * Close - 10);
+				for (size_t K = 0; K < std::min<size_t>(4, YL.Hulks().size()); ++K)
+				{
+					const LandHulk::Hulk& H = YL.Hulks()[K];
+					const int X0p = Size + static_cast<int>(K % 2) * Close + 20, Y0p = CloseTop + static_cast<int>(K / 2) * Close;
+					const V3 Anchor(H.X, H.Y, H.Z);
+					const View V = View::Looking(V3(H.X, H.Y, H.Z + 0.8), 2.35, 0.52, 20.0, X0p, Y0p, X0p + Close - 6, Y0p + Close - 6);
+					Draw(Map, V, GroundAround(G, H.X, H.Y, 14.0, 0.5, Anchor), Anchor, Sun);
+					LandField::Mesh M;
+					YL.Patch(K, M);
+					Draw(Map, V, M, Anchor, Sun);
+					YL.Dress(K, true, M);
+					Draw(Map, V, M, Anchor, Sun);
+					Labels += std::to_string(X0p + 4) + " " + std::to_string(Y0p + 4) + " " + std::to_string(K + 1) + "\n";
+				}
+				Map.Save(OutDir + "/placement_live_" + Name + ".ppm");
+				std::ofstream(OutDir + "/placement_live_" + Name + ".txt") << Labels;
+				std::printf("picture: %s/placement_live_%s.ppm (its words beside it, .txt)\n", OutDir.c_str(), Name.c_str());
+			}
 		}
 	}
 	std::printf("\n%s (%d faults)\n", Faults == 0 ? "old wrecks: all checks passed" : "old wrecks: FAILED", Faults);
