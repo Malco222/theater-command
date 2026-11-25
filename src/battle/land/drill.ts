@@ -362,7 +362,7 @@ const DR = data as unknown as {
     rush: { spread: number; wave: number; len: [number, number]; roll: number; knee: number; sprint: number; upright: number };
     drift: { across: number; along: number; every: [number, number] };
     rout: [number, number];
-    react: { rise: number; leash: number; ground: [number, number]; raw: number; up: [number, number]; settle: [number, number]; back: [number, number]; break: [number, number]; rally: [number, number] };
+    react: { rise: number; leash: number; calm: number; ground: [number, number]; raw: number; up: [number, number]; settle: [number, number]; back: [number, number]; break: [number, number]; rally: [number, number] };
     watch: { open: number; cover: number; works: number; keep: [number, number]; sentries: number; turn: [number, number]; far: number; easy: number; glasses: number };
     scan: { own: number; every: [number, number]; arc: number; rest: number; lying: number; rate: number; back: number };
     pause: { every: [number, number]; for: [number, number]; gun: [number, number]; gunFor: [number, number] };
@@ -529,6 +529,8 @@ interface Squad {
   /** Strength last step, and the share of strength it is losing a second (smoothed). */
   lastStr: number;
   harm: number;
+  /** Squad life: how long the phase before this one lasted (a block whose phase flickers is not given fresh lags, Drill.lags). */
+  lastFor?: number;
   shelledAt: number;
   /**
    * Shell blasts (release 2, LandBattle.blast): the battle time its first loss to a shell became due while held for the
@@ -631,6 +633,8 @@ interface Memo {
 
 /** Whom each kind of man who keeps by another keeps by (Drill.leadOf). */
 const LEADS: Partial<Record<Role, Role[]>> = { loader: ['mg', 'at', 'hmg', 'mortar'], crew: ['gun'], rifle: ['officer'], holder: ['holder'] };
+  /** Squad life (Drill.sentryList): each group's men who can stand sentry, in their order. */
+  sentries?: Map<number, Man[]>;
 /** A field gun's crew at their places round it, metres across and along from the gun, facing as it faces (Drill.pairs). */
 /**
  * Room between men (drawn as sections): no man's place within SPACE.men metres of a mate's, a gun's crew SPACE.crew of
@@ -2006,7 +2010,11 @@ export class Drill {
   private lags(sq: Squad, was: Phase): [Man, Partial<Man>][] | null {
     const t = this.b.t, u = sq.u, ph = sq.phase, R = DR.life.react, up = this.memo(sq).up;
     this.freshNow.clear();
-    if (sq.since === t && was !== ph) {
+    // A block whose phase flickers (creeping forward in a firefight it flips between fight and bound each half second) is
+    // given no fresh lags: a change within 'calm' seconds of the last is taken up by all at once, as without squad life,
+    // and the moments already set run out. Else every flip would set each man's moment back and hold him for as long
+    // as the flicker lasts.
+    if (sq.since === t && was !== ph && (sq.lastFor === undefined || sq.lastFor >= R.calm)) {
       const still = (p: Phase): boolean => p === 'hold' || p === 'rest' || p === 'startline' || p === 'fight' || p === 'pinned' || p === 'rally';
       const kind: 'ground' | 'up' | 'settle' | 'back' | 'break' | 'rally' | null = ph === 'flee' ? 'break' : ph === 'fallback' ? 'back' : ph === 'rally' ? 'rally' : ph === 'pinned' ? 'ground'
         : (ph === 'bound' || ph === 'fight') && (was === 'column' || was === 'deploy') ? 'ground'
@@ -2047,14 +2055,16 @@ export class Drill {
     if (!this.life || VEHICLE.has(m.role) || CREWED.has(m.role) || m.role === 'holder' || m.role === 'officer') return plain;
     m.sentry = undefined;
     if (m.role === 'mg') return 'hide';
-    const W = DR.life.watch, u = sq.u, t = this.b.t, g = grp(m), [, , i] = this.teamOf(sq, m);
+    const W = DR.life.watch, u = sq.u, t = this.b.t, g = grp(m);
     if (m.lead || (m.j === undefined && !!m.hasSec)) {
       const win = Math.floor((t + 8 * roll(this.seed, u.id, m.n, 111)) / 8);
       return roll(this.seed, u.id, m.n, win, 112) < W.glasses ? 'observe' : 'wait';
     }
-    const n = Math.max(1, (this.memo(sq).bySec.get(g)?.length ?? 0) + 1);
+    // The duty passes round the men who can stand it (not the leader, nor the gun), one place on each turn, so every one
+    // of them serves and no turn falls on a man who cannot.
+    const can = this.sentryList(sq, g), n = can.length, at = can.indexOf(m);
     const turn = W.turn[0] + (W.turn[1] - W.turn[0]) * roll(this.seed, u.id, g, 113), rota = Math.floor((t + turn * roll(this.seed, u.id, g, 114)) / turn);
-    for (let k = 0; k < W.sentries && n > 2; k++) if ((rota * 3 + Math.floor((k * n) / W.sentries) + 1) % n === i % n) { m.sentry = true; return 'wait'; }
+    for (let k = 0; k < W.sentries && n > W.sentries && at >= 0; k++) if ((rota + Math.floor((k * n) / W.sentries)) % n === at) { m.sentry = true; return 'wait'; }
     const keep = W.keep[0] + (W.keep[1] - W.keep[0]) * roll(this.seed, u.id, m.n, 115), win = Math.floor((t + keep * roll(this.seed, u.id, m.n, 116)) / keep);
     if (near >= W.far && roll(this.seed, u.id, m.n, win, 118) < W.easy) return 'idle';
     const lying = m.cover === 'works' || m.cover === 'building' ? W.works : m.cover === 'woods' || m.cover === 'rock' || m.cover === 'wreck' || m.cover === 'rough' || m.cover === 'crest' ? W.cover : W.open;
@@ -2083,6 +2093,17 @@ export class Drill {
     if (!this.life) return undefined;
     const P = DR.life.pause, u = sq.u, t = this.b.t, gun = m.role === 'mg';
     const [e0, e1] = gun ? P.gun : P.every, [f0, f1] = gun ? P.gunFor : P.for;
+  /** Squad life: the men of a group who can stand sentry (on foot, not its leader, not its gun), in their order. */
+  private sentryList(sq: Squad, g: number): Man[] {
+    const M = this.memo(sq);
+    let l = (M.sentries ??= new Map<number, Man[]>()).get(g);
+    if (!l) {
+      l = M.up.filter((x) => grp(x) === g && !VEHICLE.has(x.role) && !CREWED.has(x.role) && x.role !== 'holder' && x.role !== 'officer' && x.role !== 'mg' && !(x.lead || (x.j === undefined && !!x.hasSec)));
+      l.sort((a, c) => (a.j ?? 0) - (c.j ?? 0));
+      M.sentries.set(g, l);
+    }
+    return l;
+  }
     const every = e0 + (e1 - e0) * roll(this.seed, u.id, m.n, 141), at = t + every * roll(this.seed, u.id, m.n, 142), win = Math.floor(at / every);
     const len = f0 + (f1 - f0) * roll(this.seed, u.id, m.n, win, 143), ph = at - win * every;
     return ph < len ? t + (len - ph) : undefined;
@@ -2171,7 +2192,7 @@ export class Drill {
       else if (sq.boarding !== undefined && sq.slow >= MOUNT.stayAfter) { got = true; this.alight(sq); }
     }
     // Just down: each man goes from his lorry or his horse to his place, as on a fresh phase.
-    if (ph !== was || got) { sq.phase = ph; sq.since = t; }
+    if (ph !== was || got) { if (this.life) sq.lastFor = sq.since > 0 ? t - sq.since : Infinity; sq.phase = ph; sq.since = t; }
     ph = sq.phase;
     sq.ran = u.state === 'routing' || (sq.ran && u.state === 'wavering' && t - sq.since < 8);
     if (ph === 'gone') return;
@@ -2213,16 +2234,16 @@ export class Drill {
   private arrive(sq: Squad, m: Man): void {
     m.v = 0;
     // One who keeps by a weapon or an officer waits there for it (pairs gives him his pose).
-    if (m.pr) { m.pose = m.pose === 'flee' ? 'cower' : 'wait'; return; }
+    if (m.pr) { m.pose = routed ? 'cower' : 'wait'; return; }
     switch (m.role) {
       case 'tank': m.pose = 'halt'; return;
       case 'lorry': m.pose = 'parked'; return;
       case 'gun': if (m.pose === 'towed' && sq.phase === 'battery') m.pose = 'deployed'; return;
       // A support team's crew sets its weapon up in the line, or down a moment on the march; a routing one crouches.
-      case 'hmg': case 'mortar': m.pose = m.pose === 'flee' ? 'cower' : sq.phase === 'battery' ? 'deployed' : 'wait'; return;
+      case 'hmg': case 'mortar': m.pose = routed ? 'cower' : sq.phase === 'battery' ? 'deployed' : 'wait'; return;
       default: {
         m.until = Math.max(m.until, this.b.t + 1.5);
-        if (m.pose === 'flee') { m.pose = 'cower'; return; }
+        if (routed) { m.pose = 'cower'; return; }
         if (m.aid !== undefined) { m.pose = 'wait'; m.aim = undefined; return; } // kneeling over his fallen mate
         if (!m.aim && m.role !== 'officer' && (sq.phase === 'fight' || sq.phase === 'pinned')) m.aim = this.aimAt(m, this.threat(sq.u));
         if (m.aim && m.role !== 'officer') m.pose = this.firePose(m);
@@ -2252,6 +2273,8 @@ export class Drill {
     if (sq.memo && sq.memo.fig === u.figures && sq.memo.on === on) return sq.memo;
     const up: Man[] = [], keys: Man[] = [], keyOf = new Map<number, Man>(), bySec = new Map<number, Man[]>(), stand: Man[] = [];
     for (const m of sq.men) {
+    // (squad life: a routing man may run upright or bent low; he is known by his block's rout as well as his pose)
+    const routed = m.pose === 'flee' || (this.life && sq.phase === 'flee');
       if (!this.stands(sq, m)) continue;
       stand.push(m);
       if (m.j === undefined) { keys.push(m); keyOf.set(m.k, m); }
@@ -2896,7 +2919,7 @@ export class Drill {
       }
       // The base of fire: its place at the front, in cover (sought afresh as the block halts to fight); a fresh place now and
       // then (a gun that has fired long moves).
-      const moved = fresh || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 6;
+      const moved = (this.life ? this.fresh(sq, m) : fresh) || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 6;
       if (moved || t >= m.until + (m.role === 'mg' ? 20 : 30) * (0.6 + 0.8 * roll(this.seed, u.id, m.n, Math.floor(t / 20)))) {
         this.go(sq, m, s, sq.harm > DR.pin.harm * 0.6 ? 'crawl' : 'creep', sq.harm > DR.pin.harm * 0.6 ? 1.2 : 2.5, t + 1, dir);
         m.aim = undefined;
