@@ -8,6 +8,7 @@ import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyNotBase } from './air';
 import { aiProduction, aiTeams, armyWorn, gunsWanted, income } from './economy';
+import { planSet } from './plannow';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify, aiProgramme, isCity } from './arsenal';
@@ -782,6 +783,8 @@ function overseas(g: Game, nat: string): void {
       for (const id of ids[k]) { const r = g.regions[id]; if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl); }
       // An army overseas brings its guns up as the main army does: the guns go where the works are (the grand campaign).
       if (enemies.size) { gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null); teamsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null); }
+      // (The support teams' reckoning reads where this theatre's plan attacks this month: plannow.ts.)
+      planSet(g, nat, k, ids[k], { attack: ph?.posture === 'attack' && enemies.size > 0, only: ph?.targets ? new Set(ph.targets) : null });
       if (ph?.posture === 'attack' && enemies.size) {
         const only = ph.targets ? new Set(ph.targets) : null;
         // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
@@ -1042,6 +1045,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   fallBack(g, nat);
   relieve(g, nat);
   if (posture === 'defend') {
+    planSet(g, nat, -1, null, { attack: false, only: null });
     gather(g, nat, ph); mass(g, nat, ph);
     if (!scope && isOpen(g)) localAttacks(g, nat);
     if (n.alive) defend(g, nat);
@@ -1051,6 +1055,8 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const follow = posture === 'attack' && !ph!.force;
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
+  // (The support teams' reckoning reads where the plan attacks this month: plannow.ts.)
+  planSet(g, nat, -1, null, { attack: true, only });
   gunsUp(g, nat, enemies, only);
   teamsUp(g, nat, enemies, only);
   // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)

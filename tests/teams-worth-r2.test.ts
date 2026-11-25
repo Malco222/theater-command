@@ -1,12 +1,15 @@
-// The support teams' value test (release 2; the design director's rulings of 25 November 2026, 19:48Z and 20:08Z): a
-// staff orders a brigade only when, at its own sight, it buys more on the card for its price than the corps or refit the
-// same money would, by one reckoning for every order: the battle card read with the order and without it where it would
-// stand (src/campaign/orderworth.ts). The quota (one per five fighting corps) is gone and the price is untouched.
+// The support teams' value test (release 2; the design director's rulings of 25 November 2026, 19:48Z, 20:08Z and
+// 21:33Z): a staff orders a brigade only when, at its own sight, it buys more on the card for its price than the corps
+// or refit the same money would, by one reckoning for every order: the battle card read with the order and without it
+// where it would stand, each front on the one card its plan fights there this month (src/campaign/orderworth.ts). The
+// quota (one per five fighting corps) is gone and the price is untouched.
 import { describe, expect, it } from 'vitest';
 import { aiTeams, buildPick, corpsCost, lineFactories, PRODUCTION } from '../src/campaign/economy';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
 import { Reckoning } from '../src/campaign/orderworth';
+import { planAt, planSet } from '../src/campaign/plannow';
 import { startOpen } from '../src/campaign/staff';
+import { runTurnAI } from '../src/campaign/turn';
 import { setTeams, TEAMS } from '../src/campaign/teams';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -33,7 +36,13 @@ const only = (g: Game, keep: Corps[]): void => {
   for (const c of g.corps) if (c.nat === 'GER' && !ids.has(c.id) && !c.dead) { c.dead = true; const r = g.regions[c.reg]; r.units = r.units.filter((u) => u !== c); }
 };
 
-const worth = (g: Game, order: Parameters<Reckoning['worth']>[0], role: 'atk' | 'def', spend = 0): number => new Reckoning(g, 'GER').worth(order, role, spend);
+/** The staff's plan this month: attacking (at these places only, or anywhere) or holding. */
+const plan = (g: Game, attack: boolean, only: string[] | null = null): void => planSet(g, 'GER', -1, null, { attack, only: only ? new Set(only) : null });
+/** An order's worth with the plan attacking ('atk') or holding ('def') on the main front. */
+const worth = (g: Game, order: Parameters<Reckoning['worth']>[0], card: 'atk' | 'def', spend = 0): number => {
+  plan(g, card === 'atk');
+  return new Reckoning(g, 'GER').worth(order, spend);
+};
 
 describe('one reckoning for every order: the card with the order and without it', () => {
   it('no front, no worth: an order is worth what it adds to a fight the staff can see', () => {
@@ -109,8 +118,11 @@ describe('one reckoning for every order: the card with the order and without it'
     for (const c of own) c.str = 0.6;
     g.nations.GER.pp = TEAMS.mg.cost + 1;
     const units = [...from.units], strs = own.map((c) => c.str);
-    const k = new Reckoning(g, 'GER');
-    for (const o of ['inf', 'mg', 'mor', 'refit'] as const) for (const r of ['atk', 'def'] as const) k.worth(o, r, TEAMS.mg.cost);
+    for (const attack of [true, false]) {
+      plan(g, attack);
+      const k = new Reckoning(g, 'GER');
+      for (const o of ['inf', 'mg', 'mor', 'refit'] as const) k.worth(o, TEAMS.mg.cost);
+    }
     expect(from.units).toEqual(units);
     expect(own.map((c) => c.str)).toEqual(strs);
   });
@@ -130,6 +142,57 @@ describe('one reckoning for every order: the card with the order and without it'
     // A division's worth of drafts is far cheaper than a division raised new: it buys more on the card a point.
     expect(refit).toBeGreaterThan(worth(g, 'inf', 'def'));
     expect(PRODUCTION.replacementCost).toBeLessThan(corpsCost(g, 'GER', 'inf') / 3);
+  });
+});
+
+describe('one card, not a sum: the front decides the card, not the order\'s kind', () => {
+  const set = (g: Game): Region => {
+    const { from, target } = sector(g);
+    only(g, line(g, 'GER', from, 3));
+    line(g, 'POL', target, 2);
+    return from;
+  };
+
+  it('the attack card where the plan attacks there; the defence card where it holds, or attacks elsewhere, or ran no campaign this month', () => {
+    const g = grand();
+    const from = set(g);
+    const card = (): string | undefined => new Reckoning(g, 'GER').cards().get(from.name);
+    expect(card()).toBe('def');
+    plan(g, true);
+    expect(card()).toBe('atk');
+    plan(g, false);
+    expect(card()).toBe('def');
+    plan(g, true, ['Nowhere Near']);
+    expect(card()).toBe('def');
+    plan(g, true);
+    g.turn++;
+    expect(planAt(g, 'GER', from.id)).toBeNull();
+    expect(card()).toBe('def');
+  });
+
+  it('every order is read on that one card, whatever its kind: a machine gun is worth only what it adds to the attack where the plan attacks', () => {
+    const g = grand();
+    set(g);
+    const held = { mg: worth(g, 'mg', 'def'), mor: worth(g, 'mor', 'def') };
+    const going = { mg: worth(g, 'mg', 'atk'), mor: worth(g, 'mor', 'atk') };
+    // The machine guns stiffen a defence and add little to an attack; the mortars the other way about.
+    expect(held.mg).toBeGreaterThan(going.mg);
+    expect(going.mor).toBeGreaterThan(held.mor);
+    // Never both: what an order is worth is one card's reading, not the two added.
+    plan(g, true);
+    expect(new Reckoning(g, 'GER').worth('mg')).toBeCloseTo(going.mg, 12);
+  });
+
+  it('the campaign sets the plan as it reads the month: a staff at war has one when its month is over', () => {
+    const g = grand();
+    setWar(g, 'GER', 'POL');
+    const month = g.turn;
+    runTurnAI(g);
+    const ger = g.regions.find((r) => r.units.some((u) => u.nat === 'GER' && !u.dead))!;
+    // Read in the month it was set (the turn has moved on since; a month later it is no plan at all).
+    expect(planAt(g, 'GER', ger.id)).toBeNull();
+    g.turn = month;
+    expect(planAt(g, 'GER', ger.id)).not.toBeNull();
   });
 });
 
@@ -163,9 +226,25 @@ describe('the staff orders by the test, not by a quota', () => {
     ready(g);
     const pick = buildPick(g, 'GER', lineFactories(g, 'GER'), g.nations.GER.capital).kind;
     const k = new Reckoning(g, 'GER');
-    expect(k.worth('mg', 'def')).toBeGreaterThan(k.worth(pick, 'def'));
+    expect(k.worth('mg')).toBeGreaterThan(k.worth(pick));
     aiTeams(g, 'GER');
     expect(ordered(g)).toEqual(['mg']);
+  });
+
+  it('the same line, where the plan attacks from it this month, is read on the attack card: no machine guns for a defence it will not fight', () => {
+    const g = grand();
+    const { from, target } = sector(g);
+    from.terrain = 'mountain';
+    const own = line(g, 'GER', from, 4);
+    only(g, own);
+    dig(own);
+    line(g, 'POL', target, 3);
+    for (const c of own) { c.xp = 0.8; c.org = 1; }
+    ready(g);
+    plan(g, true);
+    expect(new Reckoning(g, 'GER').cards().get(from.name)).toBe('atk');
+    aiTeams(g, 'GER');
+    expect(ordered(g)).not.toContain('mg');
   });
 
   it('switched off, nothing is ordered, whatever the test would say', () => {

@@ -26,7 +26,7 @@ import { damageOf } from './citydamage';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { isTeam, TEAM_KINDS, TEAMS, teamName, teamsOn, type TeamKind } from './teams';
-import { Reckoning, type Role } from './orderworth';
+import { Reckoning } from './orderworth';
 import { TECH, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
@@ -830,12 +830,12 @@ export function aiProduction(g: Game, nat: string): void {
 /**
  * The support teams (release 2, src/campaign/teams.ts): a staff at war orders a machine-gun or mortar brigade only
  * when, at its own sight, it buys more on the card for its price than the corps its build pick would raise or the refit
- * the same money would pay for (the design director's rulings of 25 November 2026, 19:48Z and 20:08Z; orderworth.ts:
- * one reckoning for every order, the battle card read with the order and without it where it would stand): the
- * machine guns weighed in defence, the mortars in attack. Of the two, the one that leads the
- * other orders by most; one order a month at most, outside the army's programme (as engineers are), and only with the
- * money, the upkeep and the men to spare. Nothing while the teams are off, or while the army is being worn away and
- * wants men in the line first.
+ * the same money would pay for (the design director's rulings of 25 November 2026, 19:48Z, 20:08Z and 21:33Z;
+ * orderworth.ts: one reckoning for every order, the battle card read with the order and without it where it would
+ * stand, each front on the one card its plan fights there this month, whatever the order's kind). Of the two, the one
+ * that leads the other orders by most; one order a month at most, outside the army's programme (as engineers are),
+ * and only with the money, the upkeep and the men to spare. Nothing while the teams are off, or while the army is
+ * being worn away and wants men in the line first.
  */
 export function aiTeams(g: Game, nat: string): void {
   if (!teamsOn(g)) return;
@@ -851,9 +851,8 @@ export function aiTeams(g: Game, nat: string): void {
   const pick = buildPick(g, nat, lineFactories(g, nat), n.capital).kind;
   let kind: TeamKind | null = null, lead = 1;
   for (const k of can) {
-    const role: Role = k === 'mg' ? 'def' : 'atk';
-    const mine = card.worth(k, role);
-    const other = Math.max(card.worth(pick, role), card.worth('refit', role, corpsCost(g, nat, k)));
+    const mine = card.worth(k);
+    const other = Math.max(card.worth(pick), card.worth('refit', corpsCost(g, nat, k)));
     const by = other > 0 ? mine / other : mine > 0 ? Infinity : 0;
     if (by > lead) { kind = k; lead = by; }
   }
