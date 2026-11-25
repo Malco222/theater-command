@@ -5370,6 +5370,12 @@ export function takeOffer(g: Game, id: number): string | null {
   const why = offerView(g, nat, row, id).why;
   if (why) return why;
   expeditions(g, nat, id);
+  // (A trap, found when the Pacific fold met the map's head 1125p: `sent` 1 is also what a row that laid nothing
+  // writes, every division it names standing already in a corps of his it does not take (a division is laid once,
+  // drawn.ts `formsAny`). Taken so, it is closed as done, the corps the offer named stay, and his one word of it is
+  // the row's line, `heldLine`. `offerView`'s `why` does not read the held divisions. It is not reached on today's
+  // data: no corps of his comes to hold such a division while the offer stands, since `sourceAsked` and `menKept`
+  // hold the rows that would name it back. A row that could, added to the data, wants its own answer here.)
   if (g.flags[`sent:${id}`] !== 1) return 'It cannot be formed this month.';
   offerShut(g, id);
   g.supplyDirty = true;
