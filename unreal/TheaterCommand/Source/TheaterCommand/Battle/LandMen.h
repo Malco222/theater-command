@@ -482,8 +482,9 @@ namespace LandMen
 		 * side (as when he was read by his gun's side for a man standing with it ahead or behind, or running with it
 		 * ahead; somewhat more often than then otherwise, where the matching kind weighed 3.9 to 6). His falls from under
 		 * read against his gun as a limb is against a burst: with one each stance it moved his lower leg toward the gun
-		 * about half the time; with the deaths thread's mirrors (a fall from under for each leg) only one that does not,
-		 * or where both do (his gun behind him: both legs may fly back) the one that moves it least so. The same
+		 * about half the time; with the deaths thread's mirrors (a fall from under for each leg) only those that do not
+		 * (with his gun ahead mostly both, at his side the leg flung the other way), or where both do (his gun behind
+		 * him: both legs may fly back) the one that moves it least so. The same
 		 * battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he falls
 		 * changes. Off unless set: every man falls as before.
 		 */

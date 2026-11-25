@@ -1322,9 +1322,14 @@ int main(int Argc, char** Argv)
 			+ "take falls in one, or by a field gun's or a howitzer's shell in the throw his gun's side gives him (every limb at least as far from the gun as that "
 			+ "side's falls set; " + std::to_string(Sd.Under) + " so struck, " + std::to_string(Sd.UnderFrom) + " from under, " + std::to_string(Sd.UnderThrown)
 			+ " thrown, " + std::to_string(Sd.UnderWrong) + " not)");
-		Check(Sd.UnderToward == 0, L + ": no gored man the burst was under, his gun known, falls from under in a fall that moves a limb toward his gun where another "
-			+ "fall from under he may take does not, nor where all do in one that moves it more than the least of them so (the test's reading, from the falls' first "
-			+ "frames and last; " + std::to_string(Sd.UnderLegs) + " in a fall from under with his gun known, " + std::to_string(Sd.UnderToward) + " so)");
+		// (asked only of a battle with a man in a fall from under, his gun known: the first battle's and the sides' rounds
+		// have no gun known (bBy), and 7caf9453's twins no fall from under on his feet or a knee)
+		if (Sd.UnderLegs > 0)
+			Check(Sd.UnderToward == 0, L + ": no gored man the burst was under, his gun known, falls from under in a fall that moves a limb toward his gun where "
+				+ "another fall from under he may take does not, nor where all do in one that moves it more than the least of them so (the test's reading, from the "
+				+ "falls' first frames and last; " + std::to_string(Sd.UnderLegs) + " in a fall from under with his gun known, " + std::to_string(Sd.UnderToward) + " so)");
+		else
+			std::printf("     %s: none in a fall from under with his gun known: his falls from under not read against it\n", Label);
 		Lot Up;
 		for (const char* St : { "stand", "run" })
 		{
@@ -1535,6 +1540,13 @@ int main(int Argc, char** Argv)
 		// least so; his gun not known, the cells (with two or more from under) and of them those given other than every
 		// one; any stance with one from under he may take (lying, the prone throw), the cells and of them those not given it)
 		int LegAway = 0, LegToward = 0, LegGaps = 0, LegGapWrong = 0, LegBlind = 0, LegBlindTwo = 0, LegBlindWrong = 0, OneUnder = 0, OneUnderWrong = 0;
+		// (whether any twin's falls for a man on his feet or a knee hold one from under, not a throw (a lower leg off: the
+		// deaths thread's, 24 Nov): the checks of them ask for cells only so, 7caf9453's twins holding none)
+		bool bLegFalls = false;
+		for (const auto& KV : TwinOf)
+			for (const char* St : GoreStances)
+				if (std::strcmp(St, "prone") != 0)
+					for (const FallRead& Fr : ReadFalls(*KV.second, St)) bLegFalls = bLegFalls || (!Fr.bThrow && Fr.From == "under");
 		struct Gap
 		{
 			int Cells = 0;
@@ -1951,12 +1963,15 @@ int main(int Argc, char** Argv)
 		Check(UnderThrow.Toward == 0 && UnderThrow.BodyToward == 0, "sweep: the burst under him, no throw from his gun's side moves a limb or his body toward the gun ("
 			+ std::to_string(UnderThrew) + " cells thrown, " + std::to_string(UnderThrow.Toward) + " with a limb toward, " + std::to_string(UnderThrow.BodyToward)
 			+ " with his body)");
-		Check(LegAway > 0 && LegToward == 0, "sweep: the burst under a man standing, running, kneeling or in cover, his gun known, no fall from under given moves his "
-			"limb toward the gun where one he may take does not (" + std::to_string(LegAway) + " cells, " + std::to_string(LegToward) + " so)");
+		const std::string NoLegFalls = bLegFalls ? "" : "; no twin's falls on his feet or a knee hold one from under";
+		Check((LegAway > 0 || !bLegFalls) && LegToward == 0, "sweep: the burst under a man standing, running, kneeling or in cover, his gun known, no fall from "
+			"under given moves his limb toward the gun where one he may take does not (" + std::to_string(LegAway) + " cells, " + std::to_string(LegToward) + " so"
+			+ NoLegFalls + ")");
 		Check(LegGapWrong == 0, "sweep: the burst under him so, his gun known, where every fall from under he may take moves his limb toward the gun, given those that "
 			"move it least so (" + std::to_string(LegGaps) + " such cells, the gaps above, " + std::to_string(LegGapWrong) + " not)");
-		Check(LegBlind > 0 && LegBlindWrong == 0, "sweep: the burst under him so, his gun not known, given every fall from under he may take (" + std::to_string(LegBlind)
-			+ " cells, " + std::to_string(LegBlindTwo) + " of them with two or more, " + std::to_string(LegBlindWrong) + " not)");
+		Check((LegBlind > 0 || !bLegFalls) && LegBlindWrong == 0, "sweep: the burst under him so, his gun not known, given every fall from under he may take ("
+			+ std::to_string(LegBlind) + " cells, " + std::to_string(LegBlindTwo) + " of them with two or more, " + std::to_string(LegBlindWrong) + " not"
+			+ NoLegFalls + ")");
 		Check(OneUnderWrong == 0, "sweep: the burst under him, any stance with one fall from under he may take (twins of 24 Nov; lying, the prone throw) given it "
 			"whatever his gun's side (" + std::to_string(OneUnder) + " cells, " + std::to_string(OneUnderWrong) + " not)");
 	}

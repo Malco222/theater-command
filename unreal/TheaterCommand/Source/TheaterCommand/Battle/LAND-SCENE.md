@@ -908,10 +908,11 @@ for fall and skin for skin the same as with none).
   gun's side gives him (every limb as far from the gun as that side's falls set); his gun known, none in a fall from
   under that moves its limb toward the gun where another from under he may take does not, nor where all do in one that
   moves it more than the least of them (read from the falls' first frames and last, 0.01 m allowed: the test reads his
-  place and heading in its own sums), and printed, his fall from under read against his gun as played, by stance, and
-  the men such a shell offered both a fall from under and a throw, with
-  how many were thrown (no check of the kind's weight: the Fates rule sways a choice of two too far, the band's 43 of
-  73 thrown against 8 in 11 before it); no limb off a man standing or running moving toward the burst or the gun as it
+  place and heading in its own sums; asked only of a battle with a man so, the guns' and the band's, for the first
+  battle's and the sides' rounds have no gun known), and printed, his fall from under read against his gun as played,
+  by stance, and the men such a shell offered both a fall from under and a throw, with how many were thrown (no check
+  of the kind's weight: the Fates rule sways a choice of two too far, the band's 43 of 73 thrown against 8 in 11
+  before it); no limb off a man standing or running moving toward the burst or the gun as it
   moved (the least and those under half a metre counted), nor off a man of a stance whose gore falls hold one from each
   side that is not a throw (with the twins of 24 November kneeling, in cover and lying too; in those before a note), nor
   his body (his pelvis), standing or running, more than 0.1 m where another fall he may take moves it away (kneeling, in
@@ -937,10 +938,12 @@ for fall and skin for skin the same as with none).
   moving a limb or his body toward the gun; of the falls from under of a man standing, running, kneeling or in cover,
   his gun known, none given that moves his limb toward it where one he may take does not (the cells counted), where
   every one does those that move it least so (the cells counted and printed as gaps, by stance and side with where his
-  gun was and how far toward it, not failures), his gun not known every one, and any stance with one from under (the
-  twins of 24 November, or lying) given it whatever his gun's side; and a table, for each stance on his feet or a knee
-  and his gun on each side or not known, of which falls from under are given (of the twins, his gun 400 m off in the
-  side's middle, and of the sweep's cells) and how far each moves its limb along the line toward the gun. Built against
+  gun was and how far toward it, not failures), his gun not known every one (that none toward it and this asking for
+  cells only where some twin's falls on his feet or a knee hold one from under: 7caf9453's hold none), and any stance
+  with one from under (the twins of 24 November, or lying) given it whatever his gun's side; and a table, for each
+  stance on his feet or a knee and his gun on each side or not known, of which falls from under are given (of the
+  twins, his gun 400 m off in the side's middle, and of the sweep's cells) and how far each moves its limb along the
+  line toward the gun. Built against
   35ffc951's rule it failed six of its then 52 checks: falls given where another he may take moves every limb farther
   (the sides' battle 1, the guns' 3, the band's 136, the sweep 926 cells); the band's battle 60 of its 1006 standing and
   running limbs toward the burst or the gun (as much as 0.58 m, 80 under half a metre away); the sweep 290 cells toward,
@@ -966,12 +969,12 @@ for fall and skin for skin the same as with none).
   cover in 58 cells each (as much as 0.30 m), lying in 454 (0.04 m); the burst under him, 36,873 cells with falls from
   under he may take, in 7928 of them a throw from the gun's side (none toward it), 4080 with none from under read by the
   gun's side, 17 with the gun not known (lying, by a smaller round: all his lying falls). Given 7caf9453's twins all 74
-  pass (the lying and the under battles' two checks need their falls), as under b470998e but that the burst under a man
+  passed (the lying and the under battles' two checks need their falls), as under b470998e but that the burst under a man
   with no gun known throws him no more (the first battle's thrown 8 of 22 where a424a37e had 13, the sides' battle's 11
   of 52 where 19; the same men gored, the men not gored and the switch off the same): kneeling and in cover a note, 650
   of the sweep's cells with a limb toward it (as much as 0.59 m), 8878 with the body toward it (as much as 1.02 m).
   With the rule of the falls from under against the gun, given the twins of 25 November (17 twins, 26 gore falls each:
-  the mirrors), all 84 checks pass, no note: the switch off, the men not gored and who is gored the same as under
+  the mirrors), all 82 checks pass, no note: the switch off, the men not gored and who is gored the same as under
   3efa6a0c with the same twins (every battle's digests); in the band's battle 433 men in a fall from under with the gun
   known, none moving the leg toward it where the other leg would not (as played none at all; under 3efa6a0c 186 of 434
   toward, as much as 1.50 m), 43 of its 73 offered both a fall from under and a throw thrown where 42 (the Fates rule,
@@ -983,10 +986,16 @@ for fall and skin for skin the same as with none).
   it least so; his gun not known, both legs in all 136 cells. Read against the gun the falls from under given move the
   leg toward it in 1022 of the 8160 cells standing or running (7132 under 3efa6a0c) and 550 kneeling or in cover
   (7602), the body in 2008 and 1058 (7638 and 7400; not held). Given the twins of 24 November (one fall from under each
-  stance) every fall is as before: all 84 pass, the output 3efa6a0c's but for the new lines and the reworded labels
+  stance) every fall is as before: all 82 pass, the output 3efa6a0c's but for the new lines and the reworded labels
   (every digest and every count the same, the band's gored men's too), its gaps printed (standing or running 1518 cells
   behind him, 448 ahead on his right, 2108 at his right; kneeling or in cover 1296 behind, 672 ahead on his left, 2108
-  at his left). The repo's Content holds no twins: there the test stops at its first line, no USA or GER twin, as under
+  at his left). Given 7caf9453's twins (14 gore falls each, none from under on his feet or a knee) all 79 pass, their
+  own 43 notes as under 3efa6a0c, the output 3efa6a0c's but for the new lines and the reworded labels (every digest
+  and every count the same): the sweep's checks of the falls from under on his feet or a knee find no cells, asked for
+  cells only where some twin holds one, and of the battles' checks of the falls from under against his gun only the
+  guns' battle's is asked (its 2 men lying thrown from under, by `die_blast_d`). With every set the first battle and
+  the sides' print instead that none there is in a fall from under with his gun known (their rounds have no gun
+  known). The repo's Content holds no twins: there the test stops at its first line, no USA or GER twin, as under
   3efa6a0c. The same output from g++ and clang++; 9 to 12 s here. Pictures: `/mnt/project-files/battle-fx/gore/` (r3:
   the joined skin, fresh twins 29ad7cfe).
 - **Owed.** The Mac shots behind the switch, and gore twins for every soldier file (the soldiers folder's `GER_panzer`
