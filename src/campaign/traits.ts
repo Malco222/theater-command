@@ -364,7 +364,7 @@ const KIND_WORD: Record<string, string> = { inf: 'infantry', mot: 'motorised tro
 const DIV_WORD: Record<string, string> = { inf: 'infantry', mot: 'motorised', arm: 'armoured', cav: 'cavalry', mtn: 'mountain', art: 'artillery', eng: 'engineer' };
 const ORDER_WORD: Record<string, string> = {
   'corps:inf': 'infantry corps', 'corps:mtn': 'mountain corps', 'corps:mot': 'motorised corps', 'corps:arm': 'armoured corps', 'corps:cav': 'cavalry', 'corps:art': 'artillery corps', 'corps:eng': 'engineer corps',
-  'work:fort': 'fortifications', 'work:aa': 'anti-aircraft guns', 'ship:dd': 'destroyers', 'ship:ss': 'submarines', 'ship:ca': 'cruisers', 'ship:bb': 'battleships', 'ship:cv': 'carriers', 'ship:tp': 'troopships',
+  'work:fort': 'fortifications', 'work:aa': 'anti-aircraft guns', 'work:lights': 'searchlights', 'ship:dd': 'destroyers', 'ship:ss': 'submarines', 'ship:ca': 'cruisers', 'ship:bb': 'battleships', 'ship:cv': 'carriers', 'ship:tp': 'troopships',
   'air:ftr': 'fighter wings', 'air:bmr': 'bomber wings',
 };
 const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);

@@ -15,8 +15,10 @@ import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
 import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
+import { cityDefences, lightsAt, nightRaided } from './citydefences';
+import { AC } from './aircampaigns';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsList, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
-import { TECH, locked, paraCount, whyNoPara } from './tech';
+import { TECH, hasTech, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { allied, atWar, headline, theName } from './game';
 import { majorsOf } from './diplomacy';
@@ -31,7 +33,7 @@ import { fighterTypesOn, joinBought, sellerType } from './fighters';
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
-export type Work = 'factory' | 'yard' | 'aa' | 'field';
+export type Work = 'factory' | 'yard' | 'aa' | 'field' | 'lights';
 
 interface WingSpec { label: string; count: number; cost: number; months: number; factories: number; blurb: string }
 interface HullSpec { label: string; count: number; cost: number; months: number; yard: number; blurb: string }
@@ -49,6 +51,8 @@ export const ARSENAL = data as unknown as {
     field: LevelSpec & { upkeep: number; holds: number };
     /** Airfields as targets: a field strip (grass, steel mat, coral), offered only with that switch. */
     strip: LevelSpec & { upkeep: number; holds: number };
+    /** City defences (release 2): searchlights, offered, built and billed only with that switch (citydefences.ts). */
+    lights: LevelSpec & { upkeep: number };
   };
   yards: Record<string, number>;
   guns: { soften: number; softenMost: number; thicken: number; thickenMost: number };
@@ -72,8 +76,9 @@ const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 // Levels are kept as marks on the game ('wk:aa:17' = 2), so a save carries them and a game that never builds
 // any is exactly the game it was before.
 
-/** The level of anti-aircraft guns or airfields built in a province. */
-export const workLevel = (g: Game, what: 'aa' | 'field', region: number): number => g.flags[`wk:${what}:${region}`] ?? 0;
+/** The level of anti-aircraft guns, airfields or searchlights built in a province. (Searchlights are read for a rule
+ * through citydefences.ts lightsAt, which asks the switch first: this is the bare mark.) */
+export const workLevel = (g: Game, what: 'aa' | 'field' | 'lights', region: number): number => g.flags[`wk:${what}:${region}`] ?? 0;
 
 /** How many factories have been added to a province since the game began. */
 export const factoriesBuilt = (g: Game, region: number): number => g.flags[`wk:fac:${region}`] ?? 0;
@@ -101,9 +106,11 @@ export function workLabel(g: Game, item: string, kind?: string): string {
   return (ARSENAL.works as unknown as Record<string, { label: string }>)[item]?.label ?? 'Works';
 }
 
-/** What guns and airfields cost a nation to man each month, as lines for its ledger. */
+/** What guns and airfields (and, with city defences, searchlights) cost a nation to man each month, as lines for its ledger. */
 export function worksUpkeep(g: Game, nat: string): LedgerLine[] {
-  let aa = 0, field = 0, strip = 0;
+  let aa = 0, field = 0, strip = 0, lights = 0;
+  // (City defences: the searchlights are counted only with the switch on; off, a mark left on the ground costs nothing.)
+  const lit = cityDefences(g);
   // Province by province: the levels are whole numbers, so the order they are added in changes nothing.
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue;
@@ -111,10 +118,12 @@ export function worksUpkeep(g: Game, nat: string): LedgerLine[] {
     field += g.flags[`wk:field:${r.id}`] ?? 0;
     // (Airfields as targets: the levels laid as strips cost a strip's upkeep. Never set with the switch off.)
     strip += g.flags[`wk:strip:${r.id}`] ?? 0;
+    if (lit) lights += g.flags[`wk:lights:${r.id}`] ?? 0;
   }
   const out: LedgerLine[] = [];
   if (aa > 0) out.push({ key: 'works:aa', label: 'Anti-aircraft guns', amount: aa * ARSENAL.works.aa.upkeep, count: aa });
   if (field > 0) out.push({ key: 'works:field', label: 'Airfields', amount: strip > 0 ? (field - strip) * ARSENAL.works.field.upkeep + strip * ARSENAL.works.strip.upkeep : field * ARSENAL.works.field.upkeep, count: field });
+  if (lights > 0) out.push({ key: 'works:lights', label: ARSENAL.works.lights.label, amount: lights * ARSENAL.works.lights.upkeep, count: lights });
   return out;
 }
 
@@ -565,7 +574,7 @@ export function liftView(g: Game, nat: string): LiftView {
 // ---- The offers -------------------------------------------------------------------------------------
 
 export interface Offer {
-  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort', 'elite' (the special formation), 'para' (an airborne corps), 'cadre:<corps id>' (a folded corps raised again). Pass it to orderOffer. */
+  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:lights' (city defences), 'work:fort', 'elite' (the special formation), 'para' (an airborne corps), 'cadre:<corps id>' (a folded corps raised again). Pass it to orderOffer. */
   key: string;
   /** For a cadre: the kind of corps it is, for its picture. */
   kind?: Kind;
@@ -738,9 +747,9 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const said = carry !== null && carry > 0 && !ceiling ? ` ${g.nations[nat].name} has ${factoriesHeld(g, nat).held + factoriesHeld(g, nat).building} of the ${plural(carry, 'factory', 'factories')} its industry can carry in this war.` : '';
     out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.${said}` : '', why });
   }
-  const FULL = { yard: 'The shipyard at % is as large as a yard can be.', aa: 'The guns at % are as heavy as they can be.', field: 'The airfields at % are as large as they can be.' };
-  const NONE = { yard: 'no shipyard', aa: 'no guns', field: 'only rough landing grounds' };
-  const level = (what: 'yard' | 'aa' | 'field', spec: LevelSpec, now: number, upkeep: number, why: string | null): void => {
+  const FULL = { yard: 'The shipyard at % is as large as a yard can be.', aa: 'The guns at % are as heavy as they can be.', field: 'The airfields at % are as large as they can be.', lights: 'The searchlights at % are as many as they can be.' };
+  const NONE = { yard: 'no shipyard', aa: 'no guns', field: 'only rough landing grounds', lights: 'no searchlights' };
+  const level = (what: 'yard' | 'aa' | 'field' | 'lights', spec: LevelSpec, now: number, upkeep: number, why: string | null): void => {
     const next = now + (r ? queued(g, nat, what, r.id) : 0) + 1;
     const cost = priceOf(g, nat, `work:${what}`, spec.cost[Math.min(TOP, next)]);
     out.push({
@@ -751,6 +760,9 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   };
   level('yard', W.yard, r ? yardLevel(g, r) : 0, 0, !r ? pick : whyNotWorksHere(g, nat, r, 'Shipyards are built in the home country.', !r.port ? `${r.name} has no harbour.` : null) ?? (!r.port ? `${r.name} has no harbour.` : null));
   level('aa', W.aa, r ? workLevel(g, 'aa', r.id) : 0, W.aa.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
+  // City defences (release 2; the design director's ruling of 25 Nov 2026 02:23Z): searchlights straight after the
+  // guns, by the guns' own rule (any ground the nation holds). Offered only with the switch on.
+  if (cityDefences(g)) level('lights', W.lights, r ? lightsAt(g, r.id) : 0, W.lights.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
   if (!fieldRules(g)) level('field', W.field, r ? workLevel(g, 'field', r.id) : 0, W.field.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
   else {
     // Airfields as targets: two offers on the one counter of built levels. A field strip in a month, for fighters, on
@@ -917,6 +929,9 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     return;
   }
   if (r.ctrl !== nat) return; // lost before the works were finished
+  // City defences: searchlights go up only with the switch on. An order the switch was turned off under waits in
+  // the book, paid for, and is delivered in the first month it is on again; off, no mark is written.
+  if (what === 'lights' && !cityDefences(g)) { n.queue.push(b); return; }
   // Airfields as targets: a strip level adds to the field's built levels (and is counted as a strip's); a concrete level marks the field concrete.
   if (what === 'field' && isStripBuild(b) && fieldRules(g)) {
     if (workLevel(g, 'field', r.id) >= TOP) return;
@@ -928,6 +943,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
   if (what === 'field') setConcrete(g, r.id);
   g.flags[`wk:${what}:${r.id}`] = Math.min(TOP, workLevel(g, what, r.id) + 1);
   tell(what === 'aa' ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g, 'aa', r.id)}.`
+    : what === 'lights' ? `The searchlights at ${r.name} are in place: level ${workLevel(g, 'lights', r.id)}.`
     : fieldRules(g) ? `The concrete airfield at ${r.name} is ready: level ${workLevel(g, 'field', r.id)}, serving ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft.`
     : `The airfields at ${r.name} are ready: level ${workLevel(g, 'field', r.id)}.`);
 }
@@ -1025,6 +1041,11 @@ export function bareFront(g: Game, nat: string): [number, number][] {
  */
 function aiGuns(g: Game, nat: string): void {
   const n = g.nations[nat];
+  // City defences: searchlights asked for before more guns, where a night raid has found them wanting and they count.
+  // The guns' own order then goes ahead as it would have, in the same month: a player may order searchlights and guns
+  // in one town in one month, money allowing, and the computer is held to no tighter limit (the design director, 25 Nov
+  // 2026 12:18Z, on the order of asking).
+  if (cityDefences(g)) aiLights(g, nat);
   const raided = g.raids[nat];
   if (!raided || g.turn - raided.turn > 2) return;
   if (n.queue.some((b) => b.what === 'work' && b.item === 'aa')) return;
@@ -1036,6 +1057,37 @@ function aiGuns(g: Game, nat: string): void {
   if (!best) return;
   const o = offers(g, nat, best.id).find((x) => x.key === 'work:aa');
   if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:aa', best.id);
+}
+
+/**
+ * The computer's order of searchlights (city defences, the design director's ruling of 25 Nov 2026 02:23Z, 'Also';
+ * form section 7), before its guns order, with the switch on: among its home provinces where a night raid's bombs
+ * fell within the last months (citydefences.json ai.months), with more levels of guns built than of searchlights
+ * (those on order counted), and where the lights count, for it holds Fighter control's radar (aircampaigns.json
+ * radar.control: the lights lift the guns) or one of its fighter groups has the province in reach (the night
+ * fighters' floor), it orders a level of searchlights at the one with the most levels of guns (ties: the most
+ * factories), one order of searchlights at a time and above the staff's reserve, as its guns. It is asked first; the
+ * guns' order follows it in the same month as it would without it. True where a level was ordered, or one is already
+ * on order while more are wanted.
+ */
+function aiLights(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  const radar = hasTech(g, nat, AC.radar.control);
+  const fighters = radar ? [] : landFighters(g, nat);
+  let best: Region | null = null;
+  for (const r of g.regions) {
+    if (!isHome(g, nat, r) || !nightRaided(g, r.id)) continue;
+    const guns = workLevel(g, 'aa', r.id);
+    if (guns <= lightsAt(g, r.id) + queued(g, nat, 'lights', r.id)) continue;
+    if (!radar && !fighters.some((f) => km(g, f.base, r.id) <= airRange(f, g).ftr)) continue;
+    const bg = best ? workLevel(g, 'aa', best.id) : -1;
+    if (!best || guns > bg || (guns === bg && r.fac > best.fac)) best = r;
+  }
+  if (!best) return false;
+  if (n.queue.some((b) => b.what === 'work' && b.item === 'lights')) return true;
+  const o = offers(g, nat, best.id).find((x) => x.key === 'work:lights');
+  if (!o || o.why !== null || n.pp < o.cost + PRODUCTION.aiReserve) return false;
+  return !!orderOffer(g, nat, 'work:lights', best.id);
 }
 
 /** The aircraft a nation has bought over its air force's own establishment, with the wings on order, and that establishment, by kind. */

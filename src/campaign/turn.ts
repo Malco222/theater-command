@@ -62,6 +62,7 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { damageRules, openDamage } from './citydamage';
+import { flakFog, isFlakLine } from './citydefences';
 import { FIELD, fieldRepairView as fieldRepairViewOf, fieldRules as fieldRulesOf, fieldView, fieldsDamaged, fieldsMonth, openFields, orderFieldRepair as repairFieldFor, undoFieldRepair as undoFieldFor, type FieldRepairView, type FieldView } from './fieldstate';
 import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
@@ -618,6 +619,9 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     if (l.label === 'Armor' && /without armor/.test(l.value) && k.none.length) return { ...l, value: 'No tanks have been seen among the defenders', effect: 'Tank attack up 25% if there are none' };
     // (The grand campaign: the guns of a defence that is not identified are not known, and neither is what they take from the tanks.)
     if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
+    // (City defences: the town's heavy guns against the tanks are not known while the garrison is not identified; the line
+    // says the most they could take, as the line above does for the guns of a defence in the field.)
+    if (isFlakLine(l) && k.none.length) return flakFog();
     return l;
   // (Guns alone, ruling 211(a): before the battle the row is left out while any defender is not identified, and the
   // odds speak alone; the fog wins, the design director's log b357. After it they have been seen.)

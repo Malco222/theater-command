@@ -1353,6 +1353,7 @@ struct FCampaignView
 	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
+	bool bCityDefences = false; // (release 2, citydefences.ts) searchlights, the guns by night by what they see, a garrison's town works, the town's guns on tanks
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;

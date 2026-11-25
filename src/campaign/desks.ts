@@ -89,7 +89,7 @@ function research(g: Game, nat: string): string | null {
 const orderWords = (g: Game, b: Build): string =>
   b.what === 'civic' ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}`
     : b.what === 'air' ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}`
-    : b.what === 'work' ? `${b.item === 'aa' ? 'anti-aircraft guns' : b.item ?? 'works'} at ${g.regions[b.region].name}`
+    : b.what === 'work' ? `${b.item === 'aa' ? 'anti-aircraft guns' : b.item === 'lights' ? 'searchlights' : b.item ?? 'works'} at ${g.regions[b.region].name}`
       : b.what === 'ship' ? `${b.name[0].toLowerCase()}${b.name.slice(1)}`
         : `${b.name} at ${g.regions[b.region].name}`;
 
