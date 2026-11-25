@@ -30,7 +30,7 @@ import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
-import { growCorps, numberCorps, numbersUnderFlag } from './armies';
+import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
 import { DRAWN, formsAny, heldAlready, heldLine, joinNames, joinsAlone, layOnce, namesNow, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
@@ -4790,7 +4790,9 @@ function expeditions(g: Game, nat: string): void {
         // (A row whose record ends in a surrender lays down its arms whole, as before: nothing of it goes back.)
         if (c && g.flags.open === 1 && (c.drew || c.rowed) && !(o.ends === 'surrender' && farOn(g))) {
           // (Where every division it holds is one it drew from a corps that takes it back, nothing leaves.)
-          const drawn = !!c.drew?.length && !!c.names && c.names.slice(0, c.divs).every(([full]) => c.drew!.some((r) => r.name[0] === full && r.from !== c.id && !r.conv));
+          // (Read from the divisions it holds, each by the name it carries: one a later row added reads by its number where
+          // no name was free for it, and is not one the corps drew.)
+          const drawn = !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
           if (rowOver(g, c, leaving)) stood.push({ id: c.id, name: c.name, reg: c.reg });
           else (drawn ? back : gone).push(c);
         }
@@ -4926,14 +4928,22 @@ function expeditions(g: Game, nat: string): void {
     const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || leaving(x), fixed) : [];
     // (A row another row took a share of before it landed, o.takes: a division of it that stays with its corps is the
     // weaker by that share there, as one that comes or is raised new is where the row lands.)
-    const cutStays = (share: number): void => { for (const q of claims) if (q.from && q.stays) { q.from.str *= 1 - share / q.from.divs; g.supplyDirty = true; } };
+    // (Once for each corps, by the number of its divisions the row names: two of one corps are not cut one after the other.)
+    const cutStays = (share: number): void => {
+      const stay = claims.filter((q) => q.from && q.stays);
+      for (const h of new Set(stay.map((q) => q.from!))) { h.str *= Math.max(0, 1 - (share * stay.filter((q) => q.from === h).length) / h.divs); g.supplyDirty = true; }
+    };
     // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
-    const standDown = (at: Region): void => {
+    // (`laid` false, a row that laid nothing because every division it names stands already: the row that stands in
+    // for it never comes after it, and one landed already stands on as it is. No corps goes where none came: the
+    // design director's condition of 16:39Z, 25 November 2026.)
+    const standDown = (at: Region, laid = true): void => {
       if (g.flags.open !== 1 || !UNLESS.has(row[2])) return;
       g.flags[`came:${i}`] = g.turn;
       ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => {
         if (r2[6]?.unless !== row[2] || r2[1] !== nat) return;
         if (!g.flags[`sent:${j}`]) g.flags[`sent:${j}`] = 2;
+        if (!laid) return;
         const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2]);
         if (!x) return;
         // (The player is told where his corps has gone, in the row's own words: the UI director's.)
@@ -4948,13 +4958,14 @@ function expeditions(g: Game, nat: string): void {
       const line = nat === g.human ? heldLine(g, row, claims) : null;
       if (line && g.flags[`offer:${i}`] === undefined) { g.flags[`offer:${i}`] = g.turn; headline(g, 'info', line, nat, reg.id); }
       // A row with nothing new to form, and nobody to bring, has landed: every division it names stands already.
-      // (Its stand-in goes all the same, and a share another row took of it is taken where its divisions stand. The
-      // corps its `from` lists were to be broken up to find its divisions, and it found them elsewhere: they stand on.)
+      // (The row that stands in for it never comes after it, and a share another row took of it is taken where its
+      // divisions stand. A stand-in landed already stands on, and so do the corps its `from` lists: they were to be
+      // broken up to find its divisions, and it found them elsewhere. Regrouping what stands is the staff's own business.)
       if (!formsAny(claims, n)) {
         g.flags[`sent:${i}`] = 1;
         const share = takenShare(g, i);
         if (share !== undefined) { delete g.flags[`takecut:${i}`]; if (g.flags[`cut:${i}`] === share) delete g.flags[`cut:${i}`]; cutStays(share); }
-        standDown(reg);
+        standDown(reg, false);
         return;
       }
     }

@@ -13,9 +13,10 @@
 // which no draft touches in a corps at full strength.)
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
-import { divisionsOf, keepNumbers } from '../src/campaign/armies';
+import { divisionsOf, growCorps, keepNumbers, numberCorps, numberSpokenFor } from '../src/campaign/armies';
 import { DRAWN, drawnWatch, formationName, rowOver } from '../src/campaign/drawn';
 import { breakUp, rejoin, setBreakUp } from '../src/campaign/breakup';
+import { foldCorps } from '../src/campaign/fold';
 import { createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -632,6 +633,154 @@ describe('what a second review, of the mends themselves, found (25 November 2026
     expect(l.fresh).toBe(0);
     expect(l.after).toBeCloseTo(l.before, 9);
     expect(names(g, corps(g, NAME)!)).toEqual(['901st Panzer Division', '902nd Panzer Division']);
+  });
+});
+
+describe('what a third review, of the second review\'s mends, found (25 November 2026)', () => {
+  const left = (g: Game): string[] => g.headlines.filter((h) => /leave for other fronts/.test(h.text)).map((h) => h.text);
+  /** Two places at home on the main front, neither where this corps stands. */
+  const elsewhere = (g: Game, c: Corps): string[] => ['Berlin', 'Hamburg', 'Munich', 'Leipzig'].filter((n) => g.byName[n] && g.byName[n].id !== c.reg && g.byName[n].ctrl === 'GER');
+
+  it('a division a lent corps drew goes back to the corps it first came out of, though another loan had it in between', () => {
+    const { g } = balkans();
+    const xxii = corps(g, 'XXII Corps')!;
+    const [one, two] = elsewhere(g, xxii);
+    const iA = addRow([10, 'GER', '2nd and 901st Panzer Divisions', 'arm', 2, one, { until: 16 }]);
+    const iC = addRow([11, 'GER', '2nd Panzer Division', 'arm', 1, two, { until: 13 }]);
+    month(g, 10);
+    const p = g.corps.find((x) => x.id === g.flags[`lent:${iA}`])!;
+    expect(names(g, p)).toEqual(['2nd Panzer Division', '901st Panzer Division']);
+    expect(p.drew!.map((r) => [r.name[0], r.from])).toEqual([['2nd Panzer Division', xxii.id]]);
+    month(g, 11);
+    const c = g.corps.find((x) => x.id === g.flags[`lent:${iC}`])!;
+    expect(c).not.toBe(p);
+    expect(names(g, c)).toEqual(['2nd Panzer Division']);
+    expect(names(g, p)).toEqual(['901st Panzer Division']);
+    month(g, 12);
+    month(g, 13);
+    // The second loan's time is up: the 2nd is back with the corps it was drawn from, which owes it to XXII Corps still.
+    expect(c.dead).toBe(true);
+    expect(names(g, p).sort()).toEqual(['2nd Panzer Division', '901st Panzer Division']);
+    expect(p.drew!.find((r) => r.name[0] === '2nd Panzer Division')!.from).toBe(xxii.id);
+    for (let t = 14; t <= 16; t++) month(g, t);
+    // And the first loan's: XXII Corps has its division again; only the one the row raised new leaves.
+    expect(names(g, xxii).sort()).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+    expect(p.dead).toBe(true);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('a lent corps folded into a cadre has ended its loan: raised again, it is not sent off when the row\'s time is up', () => {
+    const { g } = balkans();
+    const xxii = corps(g, 'XXII Corps')!, xv = corps(g, 'XV Corps')!;
+    const [one] = elsewhere(g, xxii);
+    const iA = addRow([10, 'GER', '2nd Panzer Division', 'arm', 1, one, { until: 14 }]);
+    month(g, 10);
+    const a = g.corps.find((x) => x.id === g.flags[`lent:${iA}`])!;
+    expect(a.drew).toBeDefined();
+    // Both worn, standing together: the lent corps is folded into XV Corps and goes home as a cadre.
+    relocate(g, xv, g.regions[a.reg]);
+    a.str = 0.3; xv.str = 0.3; a.supplied = true; xv.supplied = true;
+    expect(foldCorps(g, xv, a)).toBe(true);
+    expect(a.dead).toBe(true);
+    expect(a.drew).toBeUndefined();
+    expect(g.flags[`lent:${iA}`]).toBe(-1);
+    // Raised again from the arsenal (economy.ts, reform: the same corps, with its number), it is its own corps.
+    const cadres = g.nations.GER.cadres!;
+    cadres.splice(cadres.indexOf(a), 1);
+    a.dead = false; a.str = 1;
+    g.corps.push(a);
+    g.regions[a.reg].units.push(a);
+    for (let t = 11; t <= 15; t++) month(g, t);
+    expect(a.dead).toBe(false);
+    expect(g.corps.includes(a)).toBe(true);
+    expect(left(g)).toEqual([]);
+  });
+
+  it('a lent corps that a later row added a division to leaves with a line when its time is up: what it drew goes back, the new one goes', () => {
+    const { g } = balkans();
+    const xxii = corps(g, 'XXII Corps')!;
+    const [one] = elsewhere(g, xxii);
+    const iA = addRow([10, 'GER', '2nd Panzer Division', 'arm', 1, one, { until: 14 }]);
+    month(g, 10);
+    const a = g.corps.find((x) => x.id === g.flags[`lent:${iA}`])!;
+    // The row that adds to it lists only names living corps hold: its new division reads by its number, and no name is written for it.
+    const NAME = '9th and 2nd Panzer Divisions';
+    addRow([11, 'GER', NAME, 'arm', 1, one, { joins: '2nd Panzer Division' }]);
+    month(g, 11);
+    expect(a.name).toBe(NAME);
+    expect(a.divs).toBe(2);
+    expect(a.names!.length).toBe(1);
+    expect(names(g, a)[0]).toBe('2nd Panzer Division');
+    expect(names(g, a)[1]).not.toBe('9th Panzer Division');
+    for (let t = 12; t <= 14; t++) month(g, t);
+    expect(a.dead).toBe(true);
+    expect(names(g, xxii).sort()).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+    // It held a division that was nobody's to take back: it left for other fronts, and the line says so.
+    expect(left(g).some((t) => t.includes(NAME))).toBe(true);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('a share another row took of a row is taken once from a corps that keeps two of its divisions', () => {
+    const { g } = balkans();
+    const xxii = corps(g, 'XXII Corps')!;
+    const here = place(g, xxii);
+    // Both of the row's divisions stand where the row is for: they stay, and the row lays nothing.
+    const iR = addRow([10, 'GER', '9th and 2nd Panzer Divisions', 'arm', 2, here, {}]);
+    // (A second row of the month that names one of them: its watch reads the corps as the first row left it, before the month's drafts.)
+    addRow([10, 'GER', '2nd Panzer Division', 'arm', 1, here, {}]);
+    g.flags[`takecut:${iR}`] = 0.5;
+    const seen: [string, number][] = [];
+    drawnWatch.tell = (e) => seen.push([e.row, xxii.str]);
+    const was = xxii.str;
+    month(g, 10);
+    expect(seen.map((x) => x[0])).toEqual(['9th and 2nd Panzer Divisions', '2nd Panzer Division']);
+    expect(seen[0][1]).toBe(was);
+    // Half of each of its two divisions: half of the corps, not three quarters of three quarters of it.
+    expect(seen[1][1]).toBeCloseTo(was * 0.5, 9);
+    expect(g.flags[`takecut:${iR}`]).toBeUndefined();
+    expect(xxii.divs).toBe(2);
+  });
+
+  it('a row that names a division and forms another out of it asks for its place once: the named one comes, the other is found elsewhere', () => {
+    const { g, told, laid } = balkans();
+    const iv = holders(g, '4th Infantry Division')[0];
+    const [one] = elsewhere(g, iv);
+    const NAME = '901st and 4th Infantry Divisions';
+    addRow([10, 'GER', NAME, 'inf', 2, one, { was: { '901st Infantry Division': '4th Infantry Division' } }]);
+    month(g, 10);
+    const t = told.find((x) => x.row === NAME)!;
+    expect(t.claims.map((q) => q.name)).toEqual(['901st Infantry Division', '4th Infantry Division']);
+    expect(t.claims[1].id).toBe(iv.id);
+    expect(t.claims[1].conv).toBeNull();
+    expect(t.claims[0].conv).toBe('4th Infantry Division');
+    expect(t.claims[0].id).not.toBe(iv.id);
+    expect(t.claims[0].id).not.toBeNull();
+    const l = laid.find((x) => x.row === NAME)!;
+    expect(l.fresh).toBe(0);
+    expect(l.after).toBeCloseTo(l.before, 9);
+    expect(names(g, corps(g, NAME)!)).toEqual(['901st Infantry Division', '4th Infantry Division']);
+    expect(holders(g, '4th Infantry Division')).toHaveLength(1);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
+  it('a corps that grows counts on from its nation\'s numbers: the places it has yet to fill hold nobody\'s number', () => {
+    const g = startOpen(createGame(1, null));
+    const key = 'dn:GER:inf';
+    // A corps numbered last carries its arm's highest numbers, running on one from the next.
+    let c: Corps | undefined;
+    for (const x of g.corps.filter((u) => u.nat === 'GER' && u.kind === 'inf' && !u.dead && u.dn !== undefined && !u.names)) {
+      delete x.dn; delete x.nos;
+      numberCorps(g, x);
+      if (x.nos === undefined && x.dn! + x.divs - 1 === g.flags[key]) { c = x; break; }
+    }
+    expect(c).toBeDefined();
+    const top = g.flags[key];
+    const want: number[] = [];
+    for (let n = top + 1; want.length < 2; n++) if (!numberSpokenFor(g, 'GER', 'inf', n)) want.push(n);
+    const had = divisionsOf(g, c!).map((d) => d.no);
+    growCorps(g, c!, 2, 'inf');
+    expect(divisionsOf(g, c!).map((d) => d.no)).toEqual([...had, ...want]);
+    expect(g.flags[key]).toBe(want[1]);
   });
 });
 

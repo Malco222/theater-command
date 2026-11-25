@@ -153,9 +153,10 @@ function rowNames(grand: boolean): Map<string, Set<string>> {
 /**
  * The next stand-in number above `from` for a nation's arm whose name is no other division's own: none a row of the
  * country gives, and none a living named division of the country carries (a corps broken up by hand keeps its
- * divisions' names on itself, and they count). The living are read once for each corps numbered.
+ * divisions' names on itself, and they count). The living are read once for each corps numbered. `own` a corps that is
+ * being numbered now, with the numbers it keeps: the places it has yet to fill hold no number of anybody's.
  */
-function standIns(g: Game, nat: string, kind: Kind, numbers = true): (from: number) => number {
+function standIns(g: Game, nat: string, kind: Kind, numbers = true, own?: { c: Corps; nos: number[] }): (from: number) => number {
   const words = divisionWords(nat, kind).name;
   const grand = g.flags.open === 1;
   const rows = rowNames(grand).get(nat);
@@ -168,7 +169,7 @@ function standIns(g: Game, nat: string, kind: Kind, numbers = true): (from: numb
         for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind, grand)) living.add(full);
         // (`numbers`: nor any number a living division of the arm carries. A nation's own count never comes back to
         // one; a corps that came under its flag from another country's army may carry one the count has yet to reach.)
-        if (numbers && o.kind === kind && o.dn !== undefined) for (const n of numbersOf(o)) living.add(`${ordinal(n)} ${words}`);
+        if (numbers && o.kind === kind && o.dn !== undefined) for (const n of own?.c === o ? own.nos : numbersOf(o)) living.add(`${ordinal(n)} ${words}`);
       }
     }
     return living.has(name);
@@ -226,8 +227,9 @@ export function growCorps(g: Game, c: Corps, divs: number, kind: Kind): void {
   if (!was) return;
   const key = counter(c.nat, kind);
   let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
-  const free = standIns(g, c.nat, kind);
+  // (It has grown already: the numbers it keeps count, the places it has yet to fill and an arm it has left do not.)
   const list = same ? was : [];
+  const free = standIns(g, c.nat, kind, true, { c, nos: [...list] });
   while (list.length < c.divs) list.push(next = free(next));
   g.flags[key] = next;
   keepNumbers(c, list);
