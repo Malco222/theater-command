@@ -3323,10 +3323,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   /** A piece in a sentence, by what it is and whose, the fleet taking "the" only where English does (log b370, b458 6):
    *  "a battleship of the Home Fleet", "3 destroyers of Force H". */
-  private told(u: SeaUnit, start = false): string {
+  private told(u: SeaUnit, start = false, words = false): string {
     const c = RULES_CLASSES[u.extra.cls as SeaClass], n = Math.max(1, u.extra.ships);
-    // At a sentence's head one to nine are words (the UI director, b476 3): "Four destroyers of the Home Fleet ...".
-    const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${start ? headCount(n) : n} ${c.many} ${ofFleet(u.extra.fleet)}`;
+    // At a sentence's head one to nine are words (the UI director, b476 3): "Four destroyers of the Home Fleet ...". In
+    // own water's look fields ('words') one to ten are words wherever they stand, as the news writes them, figures from
+    // 11 up; the log keeps its figures (the UI director, 25 November 17:48Z): "four destroyers of Force H".
+    const count = start ? headCount(n) : words ? (n <= 10 ? headCount(n).toLowerCase().replace(/^10$/, 'ten') : String(n)) : String(n);
+    const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${count} ${c.many} ${ofFleet(u.extra.fleet)}`;
     return start ? s[0].toUpperCase() + s.slice(1) : s;
   }
 
@@ -3403,9 +3406,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // 'clearFromName'; and 'ordered', with either, when she is under an order of the player's own, which stands.
       if (this.ownWater) {
         const hd = on ? this.holding.get(u.id) : undefined, hb = hd && hd.t >= this.t - 1 - 1e-9 ? this.byId.get(hd.by) : undefined;
-        if (hd && hb) { x.heldFor = hd.by; x.heldForName = this.told(hb); } else { delete x.heldFor; delete x.heldForName; }
+        if (hd && hb) { x.heldFor = hd.by; x.heldForName = this.told(hb, false, true); } else { delete x.heldFor; delete x.heldForName; }
         const cl = on && this.clearSteered.has(u.id) ? this.clearing.get(u.id) : undefined, cb2 = cl ? this.byId.get(cl.from) : undefined;
-        if (cl && cb2) { x.clearFrom = cl.from; x.clearUntil = Math.round(this.passedAt(u, cl) * 10) / 10; x.clearFromName = this.told(cb2); } else { delete x.clearFrom; delete x.clearUntil; delete x.clearFromName; }
+        if (cl && cb2) { x.clearFrom = cl.from; x.clearUntil = Math.round(this.passedAt(u, cl) * 10) / 10; x.clearFromName = this.told(cb2, false, true); } else { delete x.clearFrom; delete x.clearUntil; delete x.clearFromName; }
         if ((x.heldFor !== undefined || x.clearFrom !== undefined) && this.orders.has(u.id)) x.ordered = true; else delete x.ordered;
       }
       const at = on && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
