@@ -2,6 +2,7 @@
 
 #include "Battle/LandField.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -225,6 +226,25 @@ namespace LandCrater
 		 * its spoil. Rise: the banks' rise (the gap's floor is Begin's Height less it). Ground: the effects kit's word
 		 * for the soil. False with no Rise, a gap of no width, or past the guard. */
 		bool AddBreach(const Breach& B, const RiseFn& Rise, const std::string& Ground);
+		/**
+		 * Scorched ground round a burnt-out vehicle (release 2, the "scorch" look on trial, off until the art director
+		 * and the Mac pass it), laid as a hole is, in its patch's section: a film a centimetre over what lies there (the
+		 * ground drawn, an older hole's soil, her own browned grass), its edge the ground's own colour and lit as the
+		 * ground. Burnt under 1 (the fire taking hold): the grass round her browned and burnt off, a ring
+		 * ScorchReach(Long) out, ragged, darker toward her; 1 (she has burnt a while): her soot core laid over it, her
+		 * footprint and 0.8 m more, carried downwind up to 1.6 times as far, black-brown with ash in it. Of: her number;
+		 * X, Y: her middle; AlongX, AlongY: her hull's way (a unit way); Long, Wide: her hull, metres; WindX, WindY:
+		 * the way the wind blows (any length; 0, 0 none); Ground: the effects kit's word for the soil under her. False
+		 * with no ground, a hull of no size, water, past the guard, or when her scorch is already laid that far
+		 * (Scorched). Nothing of the holes already laid changes but their sections listed again where it lies over them.
+		 */
+		bool AddScorch(int Of, double X, double Y, double AlongX, double AlongY, double Long, double Wide, double WindX, double WindY, double Burnt,
+			const std::string& Ground);
+		/** How far a vehicle's scorch is laid: the most of her records' Burnt (0: none). */
+		double Scorched(int Of) const;
+		/** How far round her middle a burnt-out vehicle's browned grass reaches, metres (its ring's radius, ragged a tenth
+		 * either way): half her length and 2 m. */
+		static double ScorchReach(double Long) { return 0.5 * std::max(0.0, Long) + 2.0; }
 		/** The floor a vehicle drives on inside a breach's cut (its torn earth, without the clods): false outside every
 		 * breach's cut. */
 		bool BreachFloor(double X, double Y, double& OutZ) const;
@@ -329,6 +349,14 @@ namespace LandCrater
 			bool bBreach = false;
 			double Yaw = 0.0, U0 = 0.0, V0 = 0.0, Step = 0.3, CutU = 0.0, CutV = 0.0, SpoilOut = 0.0, BackOut = 0.0;
 			int NU = 0, NV = 0, Through = 1;
+			/** Scorched ground (AddScorch), not a shell's hole: the ground round a burnt-out vehicle, its points a film
+			 * laid as a hole's rings are (TopAt and SoilAt read it so), no cut, no clods. Burnt: how far her fire had got
+			 * when it was laid (0: none, a shell's hole or a breach; under 1 the grass browned round her as the fire took
+			 * hold; 1 her soot core, laid over that once she had burnt a while). BurntOf: her number + 1 (0: none).
+			 * BurntX, BurntY: the way the wind laid her soot (a unit way; 0, 0: no wind). */
+			double Burnt = 0.0;
+			int BurntOf = 0;
+			double BurntX = 0.0, BurntY = 0.0;
 		};
 		const std::vector<Hole>& All() const { return Holes; }
 
@@ -344,6 +372,8 @@ namespace LandCrater
 		/** The breaches among them (Holes' indexes, in the order laid): BreachFloor looks only at these, never the
 		 * squares' lists, since the ground under every eye ray and every tank's footprint asks it. */
 		std::vector<int> Breaches;
+		/** The scorched ground among them (Holes' indexes, in the order laid): Scorched looks only at these. */
+		std::vector<int> Scorches;
 		/** The patches by number, and their numbers by square. */
 		std::vector<Patch> PatchList;
 		std::unordered_map<int64_t, int> PatchOf;

@@ -1380,7 +1380,13 @@ int main(int Argc, char** Argv)
 		std::vector<LandField::Placed> A, B;
 		G.Clutter(CX - 30.0, CY - 30.0, CX + 10.0, CY + 10.0, A);
 		G.Clutter(CX - 10.0, CY - 10.0, CX + 30.0, CY + 30.0, B);
-		auto Inside = [&](const LandField::Placed& P) { return P.X >= CX - 10.0 && P.X < CX + 10.0 && P.Y >= CY - 10.0 && P.Y < CY + 10.0; };
+		// (the desert's ruts, the trial "trigh": a piece lies at its station on the rut, up to 2 m from the try that lays
+		// it, so the pieces are matched 4 m inside the overlap, where every try that lays one lies within it)
+		const bool bRuts = F.Tried("trigh") && LookLaid == "desert";
+		auto Inside = [&](const LandField::Placed& P) {
+			const double M = bRuts && (P.Kind == LandField::Base::Clut5 || P.Kind == LandField::Base::Trodden || P.Kind == LandField::Base::Stubble) ? 6.0 : 10.0;
+			return P.X >= CX - M && P.X < CX + M && P.Y >= CY - M && P.Y < CY + M;
+		};
 		std::vector<std::pair<float, float>> PA, PB;
 		for (const LandField::Placed& P : A)
 			if (Inside(P)) PA.push_back({ P.X, P.Y });
@@ -1390,6 +1396,294 @@ int main(int Argc, char** Argv)
 		std::sort(PB.begin(), PB.end());
 		std::printf("checks\n");
 		Check(PA == PB && !PA.empty(), "clutter boxes that overlap lay the same things", Fmt("%.0f and %.0f in the overlap", static_cast<double>(PA.size()), static_cast<double>(PB.size())));
+	}
+
+	// The desert's braided tracks at a man's eye (the trial "trigh"): each strand's two wheel ruts laid in pieces end to
+	// end at stations along their lines, square-ended where a piece has both neighbours (Clut5's slot), else fading
+	// toward the one it lacks (Trodden's slot fading ahead as built, Stubble's behind). In the 120 m square round the eye
+	// (LAND_FIELD_EYE's place where it is given): every try at a station lays the same piece in the same place; each
+	// piece's middle on its rut's line (its neighbours') and its way the line's, one width a rut, no piece doubling
+	// another; neighbours meeting end to end, neither apart nor overlapping by more than a centimetre, the gaps between
+	// pieces a station or more and most of a rut's length within 30 m covered, a square end only where a neighbour meets
+	// it; built with its edges the ground's own colour, its pressed floor one tone, mirrored across its line; and each
+	// lying on the drawn ground, not under it nor floating over it.
+	if (F.Tried("trigh") && LookLaid == "desert")
+	{
+		double EX = F.bTown ? F.TownX : F.Width() / 2.0, EY = F.bTown ? F.TownY - 500.0 : F.Depth() / 2.0;
+		if (const char* E = std::getenv("LAND_FIELD_EYE"))
+		{
+			double X = 0.0, Y = 0.0, A = 0.0;
+			if (std::sscanf(E, "%lf %lf %lf", &X, &Y, &A) == 3)
+			{
+				EX = X;
+				EY = Y;
+			}
+		}
+		std::vector<LandField::Placed> Out;
+		G.Clutter(EX - 60.0, EY - 60.0, EX + 60.0, EY + 60.0, Out);
+		// (the three meshes as built: their length and width, their edge points', floor points' and fades' greys)
+		const LandField::Mesh* Built[3] = { &G.BaseOf(LandField::Base::Clut5).Near, &G.BaseOf(LandField::Base::Trodden).Near, &G.BaseOf(LandField::Base::Stubble).Near };
+		double Long[3] = { 0.0, 0.0, 0.0 }, Wide[3] = { 0.0, 0.0, 0.0 };
+		bool bMirror = true;
+		std::string Shape;
+		for (int K = 0; K < 3; ++K)
+		{
+			const LandField::Mesh& M = *Built[K];
+			double X0 = 1e9, X1 = -1e9, Y0 = 1e9, Y1 = -1e9;
+			for (size_t I = 0; I < M.Points(); ++I)
+			{
+				X0 = std::min(X0, static_cast<double>(M.Positions[I * 3]));
+				X1 = std::max(X1, static_cast<double>(M.Positions[I * 3]));
+				Y0 = std::min(Y0, static_cast<double>(M.Positions[I * 3 + 1]));
+				Y1 = std::max(Y1, static_cast<double>(M.Positions[I * 3 + 1]));
+			}
+			Long[K] = X1 - X0;
+			Wide[K] = Y1 - Y0;
+			// (mirrored across its middle line: each point's mirror a point of the same grey, each triangle's mirror a
+			// triangle, so its diagonals turn the same way both sides)
+			auto Find = [&M](double X, double Y) {
+				for (size_t I = 0; I < M.Points(); ++I)
+					if (std::fabs(M.Positions[I * 3] - X) < 1e-4 && std::fabs(M.Positions[I * 3 + 1] - Y) < 1e-4) return static_cast<long>(I);
+				return -1L;
+			};
+			std::vector<std::vector<long>> Tris;
+			for (size_t Q = 0; Q + 2 < M.Triangles.size(); Q += 3)
+			{
+				std::vector<long> V = { static_cast<long>(M.Triangles[Q]), static_cast<long>(M.Triangles[Q + 1]), static_cast<long>(M.Triangles[Q + 2]) };
+				std::sort(V.begin(), V.end());
+				Tris.push_back(V);
+			}
+			for (int Flip = 0; Flip < 1; ++Flip)
+			{
+				std::vector<long> Map(M.Points(), -1);
+				for (size_t I = 0; I < M.Points(); ++I)
+				{
+					const double X = M.Positions[I * 3], Y = M.Positions[I * 3 + 1];
+					Map[I] = Find(X, -Y);
+					if (Map[I] < 0 || M.Colours[static_cast<size_t>(Map[I])].G != M.Colours[I].G) bMirror = false;
+				}
+				for (const std::vector<long>& Tr : Tris)
+				{
+					if (!bMirror) break;
+					std::vector<long> V = { Map[static_cast<size_t>(Tr[0])], Map[static_cast<size_t>(Tr[1])], Map[static_cast<size_t>(Tr[2])] };
+					std::sort(V.begin(), V.end());
+					if (std::find(Tris.begin(), Tris.end(), V) == Tris.end()) bMirror = false;
+				}
+			}
+			Shape += Fmt(" %.2f by %.3f m,", Long[K], Wide[K]) + Fmt(" %.0f points, %.0f triangles;", static_cast<double>(M.Points()), static_cast<double>(M.Tris()));
+		}
+		// The pieces (a station's copies, one a try that lays it, taken once).
+		struct Rut
+		{
+			double X, Y, Z, Yaw, Scale, ScaleZ;
+			int Odd; // (its mesh: 0 square-ended, 1 fading ahead as built, 2 behind)
+			LandField::Rgb8 Tint;
+			std::vector<size_t> Next;
+		};
+		std::vector<Rut> Ps;
+		std::map<std::pair<float, float>, size_t> Where;
+		int Unlike = 0, TintApart = 0;
+		size_t Laid = 0;
+		for (const LandField::Placed& P : Out)
+		{
+			const int Odd = P.Kind == LandField::Base::Trodden ? 1 : P.Kind == LandField::Base::Stubble ? 2 : 0;
+			if (!Odd && P.Kind != LandField::Base::Clut5) continue;
+			++Laid;
+			const auto Found = Where.find({ P.X, P.Y });
+			if (Found == Where.end())
+			{
+				Where[{ P.X, P.Y }] = Ps.size();
+				Ps.push_back({ P.X, P.Y, P.Z, P.Yaw, P.Scale, P.ScaleZ, Odd, P.Tint, {} });
+				continue;
+			}
+			const Rut& R = Ps[Found->second];
+			if (static_cast<float>(R.Z) != P.Z || static_cast<float>(R.Yaw) != P.Yaw || static_cast<float>(R.Scale) != P.Scale || static_cast<float>(R.ScaleZ) != P.ScaleZ || R.Odd != Odd) ++Unlike;
+			TintApart = std::max(TintApart, std::abs(R.Tint.R - P.Tint.R) + std::abs(R.Tint.G - P.Tint.G) + std::abs(R.Tint.B - P.Tint.B));
+		}
+		auto Dec = [](double C) { return std::pow((std::clamp(C, 0.0, 255.0) / 255.0 + 0.055) / 1.055, 2.4); };
+		auto Enc = [](double L) { return 255.0 * (1.055 * std::pow(std::clamp(L, 0.0, 1.0), 1.0 / 2.4) - 0.055); };
+		auto Luma = [](double R, double G_, double B) { return 0.2126 * R + 0.7152 * G_ + 0.0722 * B; };
+		auto DrawnTop = [&G](double X, double Y) {
+			double Z = std::nan("");
+			for (const LandField::Tile& C : G.Tiles())
+				if (X >= C.X0 - 4.0 && X < C.X1 + 4.0 && Y >= C.Y0 - 4.0 && Y < C.Y1 + 4.0)
+				{
+					const double Q = MeshTop(C.Near, X, Y);
+					if (!std::isnan(Q) && (std::isnan(Z) || Q > Z)) Z = Q;
+				}
+			return Z;
+		};
+		// Each piece as drawn: its mesh placed, its height over the drawn ground at its ends, quarters, middle and sides
+		// (13 along it by 3 across, its edges' 0.48 of its width out); its edges' colour against the ground's there, its
+		// floor's light against the ground's.
+		std::vector<double> Over, EdgeOff, FloorUnder;
+		for (const Rut& R : Ps)
+		{
+			const LandField::Mesh& M = *Built[R.Odd];
+			LandField::Mesh W = M;
+			const double Ca = std::cos(R.Yaw), Sa = std::sin(R.Yaw);
+			double Grey = 0.0;
+			for (size_t I = 0; I < M.Points(); ++I)
+			{
+				const double X = M.Positions[I * 3] * R.Scale, Y = M.Positions[I * 3 + 1] * R.Scale;
+				W.Positions[I * 3] = static_cast<float>(R.X + X * Ca - Y * Sa);
+				W.Positions[I * 3 + 1] = static_cast<float>(R.Y + X * Sa + Y * Ca);
+				W.Positions[I * 3 + 2] = static_cast<float>(R.Z + M.Positions[I * 3 + 2] * R.ScaleZ);
+				Grey = std::max(Grey, static_cast<double>(M.Colours[I].G));
+			}
+			const double L = 0.5 * Long[R.Odd] * R.Scale, H = 0.5 * Wide[R.Odd] * R.Scale;
+			for (int A = 0; A < 13; ++A)
+				for (int C = -1; C <= 1; ++C)
+				{
+					const double U = (-1.0 + A / 6.0) * (L - 0.01), V = C * 0.96 * H;
+					const double X = R.X + U * Ca - V * Sa, Y = R.Y + U * Sa + V * Ca;
+					const double Zp = MeshTop(W, X, Y), Zg = DrawnTop(X, Y);
+					if (!std::isnan(Zp) && !std::isnan(Zg)) Over.push_back(Zp - Zg);
+				}
+			for (size_t I = 0; I < M.Points(); ++I)
+			{
+				const LandField::Rgb8 Gr = G.ColourAt(W.Positions[I * 3], W.Positions[I * 3 + 1]);
+				const double Cr = Enc(Dec(M.Colours[I].R) * R.Tint.R / 128.0), Cg = Enc(Dec(M.Colours[I].G) * R.Tint.G / 128.0), Cb = Enc(Dec(M.Colours[I].B) * R.Tint.B / 128.0);
+				if (std::fabs(std::fabs(M.Positions[I * 3 + 1]) - 0.5 * Wide[R.Odd]) < 1e-4)
+					EdgeOff.push_back(std::fabs(Cr - Gr.R) + std::fabs(Cg - Gr.G) + std::fabs(Cb - Gr.B));
+				else if (M.Colours[I].G < Grey)
+					FloorUnder.push_back(Luma(Gr.R, Gr.G, Gr.B) - Luma(Cr, Cg, Cb));
+			}
+		}
+		// The joints: each piece's neighbour ahead and behind on its rut (the nearest of the pieces within 25 m whose way
+		// is its way, the line between their middles the mean of their ways: on one gently bending line); overlaps where
+		// they meet, gaps where they do not, the sideways step between their lines at the joint, their widths and tints.
+		auto Ahead = [](const Rut& A, const Rut& B, double& Along, double& Turn) {
+			Turn = std::remainder(B.Yaw - A.Yaw, 3.141592653589793); // (a piece is laid either way round: its line's way, mod a half turn)
+			const double Mean = A.Yaw + 0.5 * Turn, Dx = B.X - A.X, Dy = B.Y - A.Y;
+			Along = Dx * std::cos(Mean) + Dy * std::sin(Mean);
+			const double Side = -Dx * std::sin(Mean) + Dy * std::cos(Mean);
+			return std::fabs(Turn) < 0.2 && std::fabs(Along) > 0.5 && std::fabs(Along) < 25.0 && std::fabs(Side) < 0.25;
+		};
+		for (size_t I = 0; I < Ps.size(); ++I)
+		{
+			long Best[2] = { -1, -1 };
+			double BestAt[2] = { 1e9, 1e9 };
+			for (size_t J = 0; J < Ps.size(); ++J)
+			{
+				double Along = 0.0, Turn = 0.0;
+				if (J == I || !Ahead(Ps[I], Ps[J], Along, Turn)) continue;
+				const int Way = Along > 0.0 ? 0 : 1;
+				if (std::fabs(Along) < BestAt[Way])
+				{
+					BestAt[Way] = std::fabs(Along);
+					Best[Way] = static_cast<long>(J);
+				}
+			}
+			for (int Way = 0; Way < 2; ++Way)
+				if (Best[Way] >= 0) Ps[I].Next.push_back(static_cast<size_t>(Best[Way]));
+		}
+		auto Near = [&](const Rut& R, double Within) { return std::hypot(R.X - EX, R.Y - EY) <= Within; };
+		std::vector<double> Laps, Gaps, Steps, Jitter, OffLine, WidthOff, TintStep;
+		int HardEnds = 0, Ends = 0, Doubled = 0, ShortGaps = 0;
+		double Covered30 = 0.0, Missing30 = 0.0;
+		for (size_t I = 0; I < Ps.size(); ++I)
+		{
+			const Rut& A = Ps[I];
+			const double La = 0.5 * Long[A.Odd] * A.Scale;
+			// (its ends: each covered by a neighbour, or bare; a bare end square is a hard end)
+			int Covered[2] = { 0, 0 };
+			for (const size_t J : A.Next)
+			{
+				const Rut& B = Ps[J];
+				double Along = 0.0, Turn = 0.0;
+				Ahead(A, B, Along, Turn);
+				const double Lb = 0.5 * Long[B.Odd] * B.Scale, Lap = La + Lb - std::fabs(Along);
+				if (Lap > -0.01) Covered[Along > 0.0 ? 0 : 1] = 1;
+				if (J < I) continue; // (each joint once)
+				const bool bMutual = std::find(B.Next.begin(), B.Next.end(), I) != B.Next.end();
+				if (!bMutual) continue;
+				if (Lap > -0.01)
+				{
+					if (Near(A, 25.0) || Near(B, 25.0)) Laps.push_back(Lap);
+				}
+				else
+				{
+					if (Near(A, 30.0) || Near(B, 30.0)) Gaps.push_back(-Lap);
+					if (-Lap < 1.8) ++ShortGaps;
+					if (Near(A, 30.0) && Near(B, 30.0)) Missing30 += -Lap;
+				}
+				// (the step at the joint: the joint's middle off each piece's line, the difference; B's end the one nearer A's,
+				// either piece laid either way round)
+				const double Sg = Along > 0.0 ? 1.0 : -1.0;
+				const double Ax_ = A.X + Sg * La * std::cos(A.Yaw), Ay_ = A.Y + Sg * La * std::sin(A.Yaw);
+				const double B1x = B.X + Lb * std::cos(B.Yaw), B1y = B.Y + Lb * std::sin(B.Yaw), B2x = B.X - Lb * std::cos(B.Yaw), B2y = B.Y - Lb * std::sin(B.Yaw);
+				const bool bOne = std::hypot(B1x - Ax_, B1y - Ay_) < std::hypot(B2x - Ax_, B2y - Ay_);
+				const double Ex = 0.5 * (Ax_ + (bOne ? B1x : B2x)), Ey = 0.5 * (Ay_ + (bOne ? B1y : B2y));
+				const double Sa = -(Ex - A.X) * std::sin(A.Yaw) + (Ey - A.Y) * std::cos(A.Yaw);
+				const double Sb = -(Ex - B.X) * std::sin(B.Yaw) + (Ey - B.Y) * std::cos(B.Yaw);
+				const double Flip = std::cos(B.Yaw - A.Yaw) < 0.0 ? -1.0 : 1.0;
+				if (Lap > -0.01 && (Near(A, 25.0) || Near(B, 25.0))) Steps.push_back(std::fabs(Sa - Flip * Sb));
+				if (Lap > -0.01) WidthOff.push_back(std::fabs(B.Scale / A.Scale - 1.0));
+				const double Ta = Luma(A.Tint.R, A.Tint.G, A.Tint.B), Tb = Luma(B.Tint.R, B.Tint.G, B.Tint.B);
+				TintStep.push_back(std::fabs(Ta - Tb) / std::max(1.0, 0.5 * (Ta + Tb)));
+			}
+			if (Near(A, 30.0)) Covered30 += 2.0 * La;
+			// (a square end: both of a square-ended piece's, the end a fading piece fades from; Way 0 its +x as laid; only
+			// where its neighbour would lie in the square too)
+			const bool bInside = std::max(std::fabs(A.X - EX), std::fabs(A.Y - EY)) < 56.0;
+			for (int Way = 0; Way < 2; ++Way)
+				if (!Covered[Way] && bInside)
+				{
+					++Ends;
+					if (A.Odd == 0 || (A.Odd == 1 && Way == 1) || (A.Odd == 2 && Way == 0)) ++HardEnds;
+				}
+			// (its middle and way against the line its two neighbours lie on, one either side a station off: the arc
+			// between them, bending as they turn; its middle the chord's, out by its sagitta, its way the chord's)
+			if (A.Next.size() == 2 && Near(A, 25.0))
+			{
+				double Along[2] = { 0.0, 0.0 }, Turn[2] = { 0.0, 0.0 };
+				for (int K = 0; K < 2; ++K) Ahead(A, Ps[A.Next[static_cast<size_t>(K)]], Along[K], Turn[K]);
+				const int Fw = Along[0] > 0.0 ? 0 : 1, Bk = 1 - Fw;
+				if (Along[Fw] > 0.0 && Along[Bk] < 0.0 && std::fabs(Along[Fw] + Along[Bk]) < 0.3)
+				{
+					const Rut& P = Ps[A.Next[static_cast<size_t>(Bk)]];
+					const Rut& Q = Ps[A.Next[static_cast<size_t>(Fw)]];
+					const double Cx = Q.X - P.X, Cy = Q.Y - P.Y, Tn = 0.5 * std::tan(0.25 * (Turn[Fw] - Turn[Bk]));
+					const double Mx = 0.5 * (P.X + Q.X) + Cy * Tn, My = 0.5 * (P.Y + Q.Y) - Cx * Tn;
+					OffLine.push_back(std::hypot(A.X - Mx, A.Y - My));
+					Jitter.push_back(std::fabs(std::remainder(A.Yaw - std::atan2(Cy, Cx), 3.141592653589793)) * 57.29577951308232);
+				}
+			}
+			// (another piece doubling it: one alongside, its way the same, overlapping it but not on its line)
+			for (size_t J = I + 1; J < Ps.size(); ++J)
+			{
+				const Rut& B = Ps[J];
+				if ((!Near(A, 25.0) && !Near(B, 25.0)) || std::find(A.Next.begin(), A.Next.end(), J) != A.Next.end() || std::find(B.Next.begin(), B.Next.end(), I) != B.Next.end()) continue;
+				const double Turn = std::remainder(B.Yaw - A.Yaw, 3.141592653589793), Dx = B.X - A.X, Dy = B.Y - A.Y;
+				const double Along = Dx * std::cos(A.Yaw) + Dy * std::sin(A.Yaw), Side = -Dx * std::sin(A.Yaw) + Dy * std::cos(A.Yaw);
+				const double Hb = 0.5 * Wide[B.Odd] * B.Scale, Ha = 0.5 * Wide[A.Odd] * A.Scale;
+				if (std::fabs(Turn) < 0.2 && std::fabs(Side) > 0.03 && std::fabs(Side) < Ha + Hb && std::fabs(Along) < La + 0.5 * Long[B.Odd] * B.Scale) ++Doubled;
+			}
+		}
+		const double Under_ = static_cast<double>(std::count_if(Over.begin(), Over.end(), [](double O) { return O < -0.002; })) / std::max<size_t>(1, Over.size());
+		const double Inside = static_cast<double>(std::count_if(Over.begin(), Over.end(), [](double O) { return O >= -0.002 && O <= 0.025; })) / std::max<size_t>(1, Over.size());
+		const double Worst = Over.empty() ? 0.0 : *std::max_element(Over.begin(), Over.end());
+		const double Cover = Covered30 + Missing30 > 0.0 ? Covered30 / (Covered30 + Missing30) : 0.0;
+		double EdgeMean = 0.0;
+		for (const double E : EdgeOff) EdgeMean += E / static_cast<double>(EdgeOff.size());
+		int Odds = 0;
+		for (const Rut& R : Ps) Odds += R.Odd == 0;
+		std::printf("  ruts round %.0f, %.0f: %zu laid, %zu pieces (%d square-ended, %zu fading), copies apart %d (tints by %d at most); built%s mirrored %s\n", EX, EY, Laid, Ps.size(), Odds,
+			Ps.size() - static_cast<size_t>(Odds), Unlike, TintApart, Shape.c_str(), bMirror ? "yes" : "no");
+		std::printf("  ruts on their lines (within 25 m): middles off the line by median %.3f, worst %.3f m, ways by worst %.2f degrees (%zu); joints' sideways step median %.3f, worst %.3f m; widths apart %.1f%% at worst; tint steps median %.1f%%, worst %.1f%%; doubled %d\n",
+			Pctl(OffLine, 0.5), Pctl(OffLine, 1.0), Pctl(Jitter, 1.0), OffLine.size(), Pctl(Steps, 0.5), Pctl(Steps, 1.0), 100.0 * Pctl(WidthOff, 1.0), 100.0 * Pctl(TintStep, 0.5), 100.0 * Pctl(TintStep, 1.0), Doubled);
+		std::printf("  ruts' joints: met (within 25 m) %zu, overlapping least %.3f, most %.3f m; gaps (within 30 m) %zu, shortest %.2f m, under 1.8 m %d in all; covered within 30 m %.1f%% of %.0f m; bare ends %d, square %d\n",
+			Laps.size(), Pctl(Laps, 0.0), Pctl(Laps, 1.0), Gaps.size(), Pctl(Gaps, 0.0), ShortGaps, 100.0 * Cover, Covered30 + Missing30, Ends, HardEnds);
+		std::printf("  rut pieces over the drawn ground: 5%% %.3f, median %.3f, 95%% %.3f m, worst %.3f m, %.1f%% inside 0 to 2.5 cm, %.2f%% under it (%zu places); edges off the ground's colour by mean %.2f, 95%% %.1f; floor under the ground's light by median %.1f luma (5%% %.1f, 95%% %.1f)\n",
+			Pctl(Over, 0.05), Pctl(Over, 0.5), Pctl(Over, 0.95), Worst, 100.0 * Inside, 100.0 * Under_, Over.size(), EdgeMean,
+			Pctl(EdgeOff, 0.95), Pctl(FloorUnder, 0.5), Pctl(FloorUnder, 0.05), Pctl(FloorUnder, 0.95));
+		Check(!Ps.empty() && Unlike == 0 && bMirror && Pctl(OffLine, 1.0) <= 0.02 && Pctl(Jitter, 1.0) <= 0.5 && Pctl(Steps, 1.0) <= 0.02 && Pctl(WidthOff, 1.0) <= 0.05 && Doubled == 0,
+			"a track's ruts lie on their lines, one width a rut, no piece doubling another, built mirrored", Fmt("%.0f pieces, middles off by %.3f m, ways by %.2f degrees, steps %.3f m", static_cast<double>(Ps.size()), Pctl(OffLine, 1.0), Pctl(Jitter, 1.0), Pctl(Steps, 1.0)));
+		Check(!Laps.empty() && Pctl(Laps, 0.0) >= -0.01 && Pctl(Laps, 1.0) <= 0.01 && ShortGaps == 0 && HardEnds == 0 && Cover >= 0.85, "a track's ruts run on unbroken, end to end, their gaps a station or more, ending faded",
+			Fmt("joints %.3f to %.3f m over, ", Pctl(Laps, 0.0), Pctl(Laps, 1.0)) + Fmt("%.0f gaps under 1.8 m, %.0f square ends bare, ", ShortGaps, HardEnds) + Fmt("%.1f%% covered within 30 m", 100.0 * Cover));
+		Check(!Over.empty() && Pctl(Over, 0.05) >= -0.002 && Pctl(Over, 0.95) <= 0.025 && Inside >= 0.95 && Under_ < 0.005 && Worst <= 0.04, "a track's ruts lie on the drawn ground",
+			Fmt("%.1f%% inside 0 to 2.5 cm, %.2f%% under it, worst %.3f m over", 100.0 * Inside, 100.0 * Under_, Worst));
 	}
 
 	// The bracken keeps to the hedge banks (the art director's cut 5 note): none in the open grass or a field's rough
@@ -1812,7 +2106,8 @@ int main(int Argc, char** Argv)
 			const char* Name;
 			LandShade::Shape S;
 		};
-		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
+		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "car", LandShade::Car(-1.7, -0.8, 1.7, 0.8) },
+			{ "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
 			{ "standing man", LandShade::Standing() }, { "prone man", LandShade::Prone() }, { "body", LandShade::Body() } };
 		for (const Kind& K : Kinds)
 		{
@@ -1863,6 +2158,18 @@ int main(int Argc, char** Argv)
 				(std::string("the ") + K.Name + "'s footprint shade fades out over its feather, its edge wavering, in under 1,500 points").c_str(),
 				Fmt("%.2f to ", NearestOut) + Fmt("%.2f m out, ", FarthestOut) + Fmt("%.0f points", static_cast<double>(N)));
 		}
+		// (a car's whole shade no longer than 1.2 of her, and on full snow no share darker than L 100 on snow at L 158:
+		// the art director's Mac pass 1, B4)
+		const LandShade::Shape Car = LandShade::Car(-1.7, -0.8, 1.7, 0.8);
+		const double CarLong = (3.4 + 2.0 * Car.Feather * (1.0 + Car.Wander)) / 3.4;
+		const auto OnSnow = [](double Share, double Strength) {
+			const double Lin = std::pow(Share, 2.2), Left = 1.0 - Strength * (1.0 - Lin);
+			return 158.0 * std::pow(Left, 1.0 / 2.2);
+		};
+		const double Full = LandShade::SnowStrength(1.0), Lying = LandShade::SnowStrength(0.87);
+		Check(CarLong <= 1.25 && OnSnow(LandShade::Tank(-3, -1.6, 3, 1.6).Belly, Lying) >= 100.0 && OnSnow(Car.Belly, Lying) >= 100.0 && Full < 1.0 && LandShade::SnowStrength(0.0) == 1.0,
+		      "a car's footprint shade no longer than about 1.2 of her, and on snow no shade under L 100",
+		      Fmt("%.2f of her length, ", CarLong) + Fmt("a tank's belly L %.0f, ", OnSnow(LandShade::Tank(-3, -1.6, 3, 1.6).Belly, Lying)) + Fmt("a car's L %.0f on snow at 158", OnSnow(Car.Belly, Lying)));
 	}
 
 	Check(Build < 2.0, "built in under two seconds", Fmt("%.2f s", Build));

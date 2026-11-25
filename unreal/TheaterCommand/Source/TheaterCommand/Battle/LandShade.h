@@ -223,6 +223,30 @@ namespace LandShade
 		return S;
 	}
 
+	/** A car, a jeep or an armoured car: high on her wheels, so lighter than a lorry, and soft to nothing a tenth of
+	 * her length past her outline (0.25 to 0.45 m), so that the whole shade is no longer than about 1.2 of her (the art
+	 * director's Mac pass 1, B4: a tank's shade under a jeep read as a near-black patch about twice her size). */
+	inline Shape Car(double LoX, double LoY, double HiX, double HiY)
+	{
+		Shape S = Tank(LoX, LoY, HiX, HiY);
+		const double Long = std::fabs(HiX - LoX), Wide = std::fabs(HiY - LoY);
+		S.Corner = std::clamp(0.25 * std::min(Long, Wide), 0.1, 0.45);
+		S.Deep = S.Corner;
+		S.Belly = 0.55;
+		S.Edge = 0.7;
+		S.Feather = std::clamp(0.1 * Long, 0.25, 0.45);
+		S.Wander = 0.1;
+		return S;
+	}
+
+	/** The shade's strength where snow lies (0 none to 1 the whole field): the snow throws the sun back up under a
+	 * vehicle, so less of it is lost there; at full snow 0.6 of the shade, which keeps a tank's belly over L 100 on
+	 * snow at L 158 (the material lays it as 1 - Strength x (1 - the share, linear)). */
+	inline double SnowStrength(double SnowLying)
+	{
+		return 1.0 - 0.4 * std::clamp(SnowLying, 0.0, 1.0);
+	}
+
 	/** A gun: its shield, wheels and trails, about 0.6 at most. */
 	inline Shape Gun(double LoX, double LoY, double HiX, double HiY)
 	{

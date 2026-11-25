@@ -282,6 +282,9 @@ private:
 	/** Each cut's stage (the recording's order): 0 the hedge whole, 1 she is pushing into it (from T0), 2 torn (T1). */
 	TArray<uint8> CutStage;
 	int32 CutsTorn = 0;
+	/** Scorched ground round the burning vehicles (release 2, "-TheaterLandTrial=scorch", off until the art director and
+	 * the Mac pass it): read once in Open, laid in MakeCraters (LandCrater::Field::AddScorch). */
+	bool bScorch = false;
 
 	/** Release 2's field telephones (the recording's wires): every wire's lengths of a metre or so, copies of one piece
 	 * of wire laid on the ground (WireCopies, drawn out to some 60 m), and the field telephones at each wire's two

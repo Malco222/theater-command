@@ -253,6 +253,302 @@ namespace
 		std::printf("  %s  %s (%s)\n", bOk ? "ok  " : "FAIL", What, Detail.c_str());
 		if (!bOk) ++Failures;
 	}
+
+	// Scorched ground (release 2, the "scorch" look, Field::AddScorch): a burnt-out tank's ground, laid with no fire
+	// (as the game is with the look off), as the fire takes hold (her grass browned), and once she has burnt a while
+	// (her soot core over it); a 105's hole laid before she burnt, a mortar bomb's after, torn into her scorch.
+	struct Wreck
+	{
+		double X = 0.0, Y = 0.0, Ax = 0.8, Ay = 0.6, Long = 6.3, Wide = 3.6;
+	};
+	const double WindX = 2.6, WindY = 1.2; // (the game's wind when the recording has none: LandBattle's)
+
+	void LayWreck(Laid& Out, const std::string& Word, const Wreck& W, int Stage)
+	{
+		Out.Holes = LandCrater::Field();
+		Out.Holes.bVariety = true;
+		Out.Holes.Begin(GroundZ, 777u, [Word](double X, double Y) { return GroundColour(Word, X, Y); });
+		Out.Holes.Add(9.0, -5.0, "howitzer", 0.0, Word, 0.7, 0.7);
+		if (Stage >= 1) Out.Holes.AddScorch(0, W.X, W.Y, W.Ax, W.Ay, W.Long, W.Wide, WindX, WindY, 0.35, Word);
+		if (Stage >= 2) Out.Holes.AddScorch(0, W.X, W.Y, W.Ax, W.Ay, W.Long, W.Wide, WindX, WindY, 1.0, Word);
+		Out.Holes.Add(-5.0, 4.0, "mortar", 0.0, Word, -0.7, 0.7);
+		Out.Ground = MakeGround(Word, -24.0, 24.0, -20.0, 24.0);
+		for (const std::vector<double>& Cut : Out.Holes.TakeCuts())
+		{
+			LandCrater::CutOut(Out.Ground, Cut);
+		}
+	}
+
+	/** A box, each face its own points (lit flat): along A, Ay her way, HalfL by HalfW, Z0 to Z0 + High. */
+	void AddBox(LandField::Mesh& M, double Cx, double Cy, double Z0, double Ax, double Ay, double HalfL, double HalfW, double High, LandField::Rgb8 C)
+	{
+		const double Lx = -Ay, Ly = Ax;
+		double P[8][3];
+		for (int K = 0; K < 8; ++K)
+		{
+			const double U = (K & 1) ? HalfL : -HalfL, V = (K & 2) ? HalfW : -HalfW;
+			P[K][0] = Cx + Ax * U + Lx * V;
+			P[K][1] = Cy + Ay * U + Ly * V;
+			P[K][2] = (K & 4) ? Z0 + High : Z0;
+		}
+		const int Faces[6][4] = { { 4, 5, 7, 6 }, { 1, 3, 7, 5 }, { 0, 4, 6, 2 }, { 2, 6, 7, 3 }, { 0, 1, 5, 4 }, { 0, 2, 3, 1 } };
+		for (const auto& F : Faces)
+		{
+			const double* A = P[F[0]];
+			const double* B = P[F[1]];
+			const double* Cc = P[F[2]];
+			double Nx = (B[1] - A[1]) * (Cc[2] - A[2]) - (B[2] - A[2]) * (Cc[1] - A[1]);
+			double Ny = (B[2] - A[2]) * (Cc[0] - A[0]) - (B[0] - A[0]) * (Cc[2] - A[2]);
+			double Nz = (B[0] - A[0]) * (Cc[1] - A[1]) - (B[1] - A[1]) * (Cc[0] - A[0]);
+			const double L = std::sqrt(Nx * Nx + Ny * Ny + Nz * Nz);
+			Nx /= L, Ny /= L, Nz /= L;
+			const uint32_t First = static_cast<uint32_t>(M.Colours.size());
+			for (int K = 0; K < 4; ++K)
+			{
+				M.Positions.insert(M.Positions.end(), { static_cast<float>(P[F[K]][0]), static_cast<float>(P[F[K]][1]), static_cast<float>(P[F[K]][2]) });
+				M.Normals.insert(M.Normals.end(), { static_cast<float>(Nx), static_cast<float>(Ny), static_cast<float>(Nz) });
+				M.Colours.push_back(C);
+			}
+			M.Triangles.insert(M.Triangles.end(), { First, First + 1, First + 2, First, First + 2, First + 3 });
+		}
+	}
+
+	Picture PaintWreck(const Laid& L, const Camera& Cam, const Wreck* Hull)
+	{
+		Picture P(1200, 640);
+		Paint(P, Cam, L.Ground);
+		for (int K = 0; K < L.Holes.Patches(); ++K)
+		{
+			for (const LandField::Mesh& M : L.Holes.PatchAt(K).Sections) Paint(P, Cam, M);
+		}
+		if (Hull)
+		{
+			// (a stand-in for her burnt-out hull and turret: the soot black-brown a wreck goes to, LandKit's BurntColour)
+			LandField::Mesh Box;
+			const LandField::Rgb8 Burnt = { 38, 33, 29 };
+			const double Z = GroundZ(Hull->X, Hull->Y);
+			AddBox(Box, Hull->X, Hull->Y, Z, Hull->Ax, Hull->Ay, 0.5 * Hull->Long, 0.5 * Hull->Wide, 1.3, Burnt);
+			AddBox(Box, Hull->X - 0.4 * Hull->Ax, Hull->Y - 0.4 * Hull->Ay, Z + 1.3, Hull->Ax, Hull->Ay, 1.3, 1.15, 0.8, Burnt);
+			Paint(P, Cam, Box);
+		}
+		return P;
+	}
+
+	/** The picture's luma (Rec. 709 on its sRGB) round where a field point is drawn, 3 by 3 pixels; -1 off the picture. */
+	double LumaAt(const Picture& P, const Camera& Cam, double X, double Y, double Z)
+	{
+		double Sx = 0.0, Sy = 0.0, D = 0.0;
+		if (!Cam.Project(X, Y, Z, P.W, P.H, Sx, Sy, D)) return -1.0;
+		const int Cx = static_cast<int>(Sx), Cy = static_cast<int>(Sy);
+		if (Cx < 1 || Cy < 1 || Cx >= P.W - 1 || Cy >= P.H - 1) return -1.0;
+		double Sum = 0.0;
+		for (int J = -1; J <= 1; ++J)
+		{
+			for (int I = -1; I <= 1; ++I)
+			{
+				const size_t K = static_cast<size_t>((Cy + J) * P.W + Cx + I);
+				Sum += 0.2126 * Srgb(P.Rgb[K * 3]) + 0.7152 * Srgb(P.Rgb[K * 3 + 1]) + 0.0722 * Srgb(P.Rgb[K * 3 + 2]);
+			}
+		}
+		return Sum / 9.0;
+	}
+
+	double Median(std::vector<double> V)
+	{
+		if (V.empty()) return -1.0;
+		std::nth_element(V.begin(), V.begin() + static_cast<std::ptrdiff_t>(V.size() / 2), V.end());
+		return V[V.size() / 2];
+	}
+
+	void ScorchSheet(const std::string& Dir, const std::string& Word)
+	{
+		Wreck W;
+		Laid None, Hold, Out;
+		LayWreck(None, Word, W, 0);
+		LayWreck(Hold, Word, W, 1);
+		LayWreck(Out, Word, W, 2);
+		// (from a man's height some 22 m off, her hull stood in; and from above with her hull lifted away)
+		const double Ex = -14.0, Ey = -17.0;
+		const Camera Low(Ex, Ey, 5.5, 0.0, 0.0, 0.0, 52.0, 1200);
+		const Camera Above(0.0, -0.5, 40.0, 0.0, 0.0, 0.0, 34.0, 1200);
+		const char* Names[3] = { "off", "hold", "burnt" };
+		const Laid* Ls[3] = { &None, &Hold, &Out };
+		Picture Tops[3] = { Picture(1, 1), Picture(1, 1), Picture(1, 1) };
+		for (int K = 0; K < 3; ++K)
+		{
+			const Picture Side = PaintWreck(*Ls[K], Low, &W);
+			if (!Write(Side, Dir + "/scorch-" + Word + "-" + Names[K] + ".ppm", 260.0)) std::fprintf(stderr, "could not write\n");
+			Tops[K] = PaintWreck(*Ls[K], Above, nullptr);
+			if (!Write(Tops[K], Dir + "/scorch-" + Word + "-" + Names[K] + "-above.ppm", 1e9)) std::fprintf(stderr, "could not write\n");
+		}
+		// Each look's laying, and the switch's: laid only so far, once (no doubling).
+		{
+			LandCrater::Field& F = Out.Holes;
+			const double Has = F.Scorched(0);
+			const bool bAgain = F.AddScorch(0, W.X, W.Y, W.Ax, W.Ay, W.Long, W.Wide, WindX, WindY, 1.0, Word);
+			const bool bLess = F.AddScorch(0, W.X, W.Y, W.Ax, W.Ay, W.Long, W.Wide, WindX, WindY, 0.35, Word);
+			int Records = 0;
+			for (const LandCrater::Field::Hole& H : F.All()) Records += H.Burnt > 0.0 ? 1 : 0;
+			int NoneRecords = 0;
+			for (const LandCrater::Field::Hole& H : None.Holes.All()) NoneRecords += (H.Burnt != 0.0 || H.BurntOf != 0 || H.BurntX != 0.0 || H.BurntY != 0.0) ? 1 : 0;
+			char Buf[200];
+			std::snprintf(Buf, sizeof Buf, "laid to %.2f in %d records; again %s, less %s; with none laid %d holes carry any of it", Has, Records, bAgain ? "laid" : "refused", bLess ? "laid" : "refused", NoneRecords);
+			Check(Has == 1.0 && Records == 2 && !bAgain && !bLess && NoneRecords == 0, "her scorch laid once each way, and nothing of it on a hole with none", Buf);
+		}
+		// Its film lies on what is there and is read as a face: TopAt at least its height at each triangle's middle, and
+		// no triangle of it under the ground (but in a dug hole's cut).
+		{
+			long Tris = 0, Missed = 0, Under = 0, Sunk = 0;
+			const LandCrater::Field& F = Out.Holes;
+			for (const LandCrater::Field::Hole& H : F.All())
+			{
+				if (!(H.Burnt > 0.0)) continue;
+				const LandField::Mesh& M = F.Section(H.In);
+				// (its triangles: the middle's fan and the rings' quads, as AddScorch lays them)
+				const uint32_t Last = H.First + 1u + static_cast<uint32_t>(9 * H.Sides);
+				for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+				{
+					const uint32_t A = M.Triangles[T], B = M.Triangles[T + 1], C = M.Triangles[T + 2];
+					if (A < H.First || A >= Last || B < H.First || B >= Last || C < H.First || C >= Last) continue;
+					const double Px = (M.Positions[A * 3] + M.Positions[B * 3] + M.Positions[C * 3]) / 3.0;
+					const double Py = (M.Positions[A * 3 + 1] + M.Positions[B * 3 + 1] + M.Positions[C * 3 + 1]) / 3.0;
+					const double Pz = (M.Positions[A * 3 + 2] + M.Positions[B * 3 + 2] + M.Positions[C * 3 + 2]) / 3.0;
+					++Tris;
+					double Top = 0.0;
+					if (!F.TopAt(Px, Py, Top)) ++Missed;
+					else if (Top < Pz - 0.002) ++Under;
+					if (!F.InCut(Px, Py) && Pz < GroundZ(Px, Py) + 0.001)
+					{
+						++Sunk;
+						std::printf("  sunk: %.2f %.2f, %.4f over the ground; corners %.4f %.4f %.4f over\n", Px, Py, Pz - GroundZ(Px, Py), M.Positions[A * 3 + 2] - GroundZ(M.Positions[A * 3], M.Positions[A * 3 + 1]),
+							M.Positions[B * 3 + 2] - GroundZ(M.Positions[B * 3], M.Positions[B * 3 + 1]), M.Positions[C * 3 + 2] - GroundZ(M.Positions[C * 3], M.Positions[C * 3 + 1]));
+					}
+				}
+			}
+			double Bowl = 0.0;
+			const bool bBowl = F.TopAt(-5.0, 4.0, Bowl);
+			char Buf[220];
+			std::snprintf(Buf, sizeof Buf, "%ld triangles, %ld with no face, %ld under it, %ld under the ground; the later mortar bomb's bowl %.2f m under the ground", Tris, Missed, Under, Sunk, bBowl ? GroundZ(-5.0, 4.0) - Bowl : -1.0);
+			Check(Tris > 400 && Missed == 0 && Under == 0 && Sunk == 0 && bBowl && GroundZ(-5.0, 4.0) - Bowl > 0.15, "her scorch lies on the ground as a face, and a later hole is torn through it", Buf);
+		}
+		if (Word != "earth")
+		{
+			return;
+		}
+		// The art director's marks for it, on earth, read from above: her soot core dark (median luma 60 or less), her
+		// browned ring between (85 to 120), the ground untouched (within 10) by 1.2 m past it, and the ring half her
+		// length and 2 m out (within 15%). Read only where no shell hole reaches.
+		const auto NearHole = [&](const LandCrater::Field& F, double X, double Y)
+		{
+			for (const LandCrater::Field::Hole& H : F.All())
+			{
+				if (H.Burnt > 0.0) continue;
+				if (std::hypot(X - H.X, Y - H.Y) < H.Out + 0.3) return true;
+			}
+			return false;
+		};
+		const double Reach = LandCrater::Field::ScorchReach(W.Long);
+		const LandCrater::Field::Hole* Brown = nullptr;
+		for (const LandCrater::Field::Hole& H : Hold.Holes.All()) if (H.Burnt > 0.0) Brown = &H;
+		if (!Brown)
+		{
+			Check(false, "her browned grass laid", "none");
+			return;
+		}
+		const LandField::Mesh& BM = Hold.Holes.Section(Brown->In);
+		const LandCrater::Field::Hole* Soot = nullptr;
+		for (const LandCrater::Field::Hole& H : Out.Holes.All()) if (H.Burnt >= 1.0) Soot = &H;
+		if (!Soot)
+		{
+			Check(false, "her soot core laid", "none");
+			return;
+		}
+		const LandField::Mesh& SM = Out.Holes.Section(Soot->In);
+		// (where her soot's feather ends on a way: its last ring)
+		const auto SootOut = [&](int K)
+		{
+			const uint32_t I = Soot->First + 1u + static_cast<uint32_t>(8 * Soot->Sides + K);
+			return std::hypot(SM.Positions[I * 3] - W.X, SM.Positions[I * 3 + 1] - W.Y);
+		};
+		const int N = Brown->Sides;
+		const auto EdgeAt = [&](int K)
+		{
+			const uint32_t I = Brown->First + 1u + static_cast<uint32_t>(5 * N + K);
+			return std::hypot(BM.Positions[I * 3] - W.X, BM.Positions[I * 3 + 1] - W.Y);
+		};
+		std::vector<double> Core, RingHold, RingOut, Past, Radii;
+		double WorstPast = 0.0;
+		const double Lx = -W.Ay, Ly = W.Ax;
+		for (double Y = -10.0; Y <= 10.0; Y += 0.25)
+		{
+			for (double X = -10.0; X <= 10.0; X += 0.25)
+			{
+				if (NearHole(Out.Holes, X, Y)) continue;
+				const double U = (X - W.X) * W.Ax + (Y - W.Y) * W.Ay, V = (X - W.X) * Lx + (Y - W.Y) * Ly;
+				if (std::fabs(U) <= 0.5 * W.Long + 0.6 && std::fabs(V) <= 0.5 * W.Wide + 0.6)
+				{
+					Core.push_back(LumaAt(Tops[2], Above, X, Y, GroundZ(X, Y)));
+				}
+			}
+		}
+		for (int K = 0; K < N; ++K)
+		{
+			const double A = 2.0 * Pi * K / N, Ca = std::cos(A), Sa = std::sin(A);
+			const double E = EdgeAt(K);
+			const double Down = (Ca * WindX + Sa * WindY) / std::hypot(WindX, WindY);
+			double Ring = 0.0;
+			int RingN = 0;
+			for (double R = 0.55 * E; R <= 0.9 * E; R += 0.05)
+			{
+				const double X = W.X + Ca * R, Y = W.Y + Sa * R;
+				if (NearHole(Out.Holes, X, Y)) continue;
+				const double U = (X - W.X) * W.Ax + (Y - W.Y) * W.Ay, V = (X - W.X) * Lx + (Y - W.Y) * Ly;
+				if (std::fabs(U) <= 0.5 * W.Long + 0.9 && std::fabs(V) <= 0.5 * W.Wide + 0.9) continue; // (under her hull)
+				const double Z = GroundZ(X, Y);
+				const double Lh = LumaAt(Tops[1], Above, X, Y, Z), L0 = LumaAt(Tops[0], Above, X, Y, Z);
+				RingHold.push_back(Lh);
+				if (Down < 0.2 && R > SootOut(K) + 0.1) RingOut.push_back(LumaAt(Tops[2], Above, X, Y, Z)); // (past her soot's feather)
+				Ring += std::fabs(Lh - L0);
+				++RingN;
+			}
+			for (const double R : { E + 1.2, E + 1.35, E + 1.5 })
+			{
+				const double X = W.X + Ca * R, Y = W.Y + Sa * R;
+				if (NearHole(Out.Holes, X, Y)) continue;
+				const double Z = GroundZ(X, Y);
+				const double L0 = LumaAt(Tops[0], Above, X, Y, Z);
+				for (int S = 1; S <= 2; ++S)
+				{
+					const double D = std::fabs(LumaAt(Tops[S], Above, X, Y, Z) - L0);
+					Past.push_back(D);
+					WorstPast = std::max(WorstPast, D);
+				}
+			}
+			// (where the browning shows to: the farthest point still half as far from the ground's own luma as the ring)
+			if (RingN < 3) continue;
+			const double Half = 0.5 * Ring / RingN;
+			double Seen = 0.0;
+			bool bClear = true;
+			for (double R = 0.5 * E; R <= E + 2.0; R += 0.05)
+			{
+				const double X = W.X + Ca * R, Y = W.Y + Sa * R;
+				if (NearHole(Out.Holes, X, Y)) { bClear = false; break; }
+				const double Z = GroundZ(X, Y);
+				if (std::fabs(LumaAt(Tops[1], Above, X, Y, Z) - LumaAt(Tops[0], Above, X, Y, Z)) >= Half) Seen = R;
+			}
+			if (bClear) Radii.push_back(Seen / Reach);
+		}
+		char Buf[240];
+		const double CoreL = Median(Core), HoldL = Median(RingHold), OutL = Median(RingOut), RadiusR = Median(Radii);
+		std::snprintf(Buf, sizeof Buf, "median luma %.0f over %zu points", CoreL, Core.size());
+		Check(Core.size() > 100 && CoreL >= 0.0 && CoreL <= 60.0, "burnt out: her soot core dark", Buf);
+		std::snprintf(Buf, sizeof Buf, "median luma %.0f as the fire takes hold (%zu points), %.0f burnt out, upwind (%zu)", HoldL, RingHold.size(), OutL, RingOut.size());
+		Check(RingHold.size() > 100 && RingOut.size() > 20 && HoldL >= 85.0 && HoldL <= 120.0 && OutL >= 85.0 && OutL <= 120.0, "her browned ring between the soot and the grass", Buf);
+		std::snprintf(Buf, sizeof Buf, "%zu points 1.2 to 1.5 m past it, median %.1f off, at most %.1f", Past.size(), Median(Past), WorstPast);
+		Check(Past.size() > 60 && WorstPast <= 10.0, "the ground untouched 1.2 m past her ring", Buf);
+		std::snprintf(Buf, sizeof Buf, "browning seen to %.2f of %.2f m (median of %zu ways)", RadiusR, Reach, Radii.size());
+		Check(Radii.size() >= 10 && RadiusR >= 0.85 && RadiusR <= 1.15, "her ring half her length and 2 m out", Buf);
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -387,6 +683,8 @@ int main(int Argc, char** Argv)
 		std::sscanf(std::getenv("CRATER_ZOOM"), "%lf %lf", &Zx, &Zy);
 		PaintLaid(On, Dir + "/zoom-" + Word + ".ppm", Zx, Zy - 0.3, 9.0, Zx, Zy, 50.0, 1e9);
 	}
+	// Scorched ground round a burnt-out tank (release 2, the "scorch" look): its pictures on every ground, its checks.
+	ScorchSheet(Dir, Word);
 	std::printf("%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
 	return Failures ? 1 : 0;
 }
