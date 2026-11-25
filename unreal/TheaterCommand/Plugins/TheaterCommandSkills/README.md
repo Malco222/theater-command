@@ -16,7 +16,7 @@ That pulls in the engine's Toolset Registry. For an outside assistant to reach t
 
 ## Check it
 
-With the editor open, list the skills: `TheaterCommandHouseRulesSkill` should appear with its description. Read it back and check that the text is the one in `Content/Python/theater_command_skills/skills/house_rules.py`.
+With the editor open and its Claude link awake (`Tools/open_editor_with_link.sh`), run `python3 Plugins/TheaterCommandSkills/check_skill.py` from `unreal/TheaterCommand`. It asks the editor for its skills the way an assistant would, finds `TheaterCommandHouseRulesSkill`, and checks its text against `house_rules.py`. Read-only; it prints PASS or FAIL lines.
 
 ## Add or change a skill
 
