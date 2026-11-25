@@ -6813,9 +6813,9 @@ void ASeaBattle::Beds()
 	// The sound director's sea beds (mix.json sea.beds): the sea by day always, the battle's own bed from contact.
 	if (!DayBed)
 	{
-		if (USoundBase* Day = SoundOf(TEXT("sea_day_loop"), true))
+		if (USoundBase* DayLoop = SoundOf(TEXT("sea_day_loop"), true))
 		{
-			DayBed = UGameplayStatics::SpawnSound2D(this, Day, SeaParts::FromDb(-10.0), 1.0f, 0.0f, nullptr, false, false);
+			DayBed = UGameplayStatics::SpawnSound2D(this, DayLoop, SeaParts::FromDb(-10.0), 1.0f, 0.0f, nullptr, false, false);
 		}
 	}
 	if (!bBattleBedUp && State.IsValid() && State->Show.ContactAt() >= 0.0 && State->BattleT >= State->Show.ContactAt())
