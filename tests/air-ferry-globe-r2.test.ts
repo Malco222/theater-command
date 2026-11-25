@@ -11,7 +11,10 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { AIR, airRange, assessAir, groupAt, km, legKm, legKmAt } from '../src/campaign/air';
-import { legCovered, pointLeg, setFerry } from '../src/campaign/ferry';
+import { ferryRoute, legCovered, pointLeg, realKm, setFerry } from '../src/campaign/ferry';
+import { airAct } from '../src/campaign/airpages';
+import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, Game, Region } from '../src/campaign/types';
@@ -178,5 +181,47 @@ describe('a leg never reads one of its ends differently from km()', () => {
       }
     }
     expect(ends).toBeGreaterThanOrEqual(20);
+  });
+});
+
+// A ferry hop on the far chart, seen in a played war (the review of the air follow-on, note 5: the proofs never saw one).
+// The Soviet player sends the 1st Fighter Aviation Division from Leningrad to Chita through the bridge's own door, as
+// the page does (airAct 'ferry:<id>:<field>'), and the months are stepped as a player steps them. The way crosses from
+// the old chart to the far side at Kirov and flies on across Siberia.
+describe('a group ordered across the far side in a played war', () => {
+  it('flies the card\'s hops in order, each as long as the card said, and arrives when the card said', () => {
+    let g = startOpen(createGame(2, 'SOV'));
+    setFerry(g, true);
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 400) stepAI(g);
+    beginHuman(g);
+    g = loadGame(saveGame(g))!;
+    const f = () => g.airFleets.find((x) => x.name === '1st Fighter Aviation Division')!;
+    expect(g.regions[f().base].name).toBe('Leningrad');
+    const to = at(g, 'Chita').id;
+    const card = ferryRoute(g, f(), to)!;
+    expect(card.how).toBe('air');
+    const names = card.hops.map((h) => g.regions[h.to].name);
+    expect(names).toEqual(['Kirov', 'Tyumen', 'Tomsk', 'Irkutsk', 'Chita']);
+    expect(card.turns).toBe(2);
+    expect(card.risky).toEqual([]);
+    expect(card.words).toBe('2 turns by Kirov, Tyumen, Tomsk and Irkutsk. No enemy fighters known on the way.');
+    // Each leg's length on the card is the great circle between its fields, and so is what it flies.
+    for (const h of card.hops) expect(h.km).toBe(realKm(g, h.from, h.to));
+    const reports = g.airReports.length;
+    const res = airAct(g, `ferry:${f().id}:${to}`)!;
+    expect(res.ok).toBe(true);
+    // This month's four hops at once: it stands at Irkutsk with Chita to go.
+    expect(g.regions[f().base].name).toBe('Irkutsk');
+    expect(f().way!.stops.map((x) => g.regions[x].name)).toEqual(['Chita']);
+    endHuman(g);
+    guard = 0;
+    while (!humanUp(g) && guard++ < 400) stepAI(g);
+    expect(g.regions[f().base].name).toBe('Irkutsk');
+    beginHuman(g);
+    // The fifth hop as the player's next month opens, and it is there: no enemy came up on the way (nobody is at war with it).
+    expect(g.regions[f().base].name).toBe('Chita');
+    expect(f().way).toBeUndefined();
+    expect(g.airReports.slice(reports).some((r) => r.ferry !== undefined)).toBe(false);
   });
 });
