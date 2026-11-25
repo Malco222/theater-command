@@ -6055,6 +6055,27 @@ namespace LandField
 							}
 						return false;
 					};
+					// (a sheaf's lower edge in its course: how far up the slope it lies, how far each of its corners stands proud,
+					// and whether its top is the roof's or a hole's edge)
+					struct Butt
+					{
+						double Te = 0.0, RA = 0.0, RB = 0.0;
+						bool bHead = false;
+					};
+					auto ButtOf = [&](int Ip, int Jp, int Csp, int Bhp) {
+						const int Rwp = Jp * 4 + Csp, Sfp = 2 * Ip + Bhp;
+						const double TAp = static_cast<double>(Jp) / NV, TBp = static_cast<double>(Jp + 1) / NV, Tap = Lerp(TAp, TBp, Csp / 4.0);
+						const bool bEaveP = Csp == 0 && Jp == 0, bFootP = Csp == 0 && Jp > 0 && Missing(S, Ip, Jp - 1);
+						const bool bSideA = Bhp == 0 && (Ip == 0 || Missing(S, Ip - 1, Jp)), bSideB = Bhp == 1 && (Ip == NU - 1 || Missing(S, Ip + 1, Jp));
+						// (a corner over a hole's corner lies flat as its neighbour's does)
+						const bool bCornerA = Bhp == 0 && Csp == 0 && Jp > 0 && Ip > 0 && Missing(S, Ip - 1, Jp - 1), bCornerB = Bhp == 1 && Csp == 0 && Jp > 0 && Ip + 1 < NU && Missing(S, Ip + 1, Jp - 1);
+						Butt Bt;
+						Bt.Te = bEaveP ? -Hang(Sfp) / SlopeLen : bFootP ? Tap : Tap + Jog(Sfp, Rwp) / SlopeLen;
+						Bt.RA = bEaveP || bFootP || bSideA || bCornerA ? 0.0 : -0.04;
+						Bt.RB = bEaveP || bFootP || bSideB || bCornerB ? 0.0 : -0.04;
+						Bt.bHead = Csp == 3 && (Jp + 1 >= NV || Missing(S, Ip, Jp + 1));
+						return Bt;
+					};
 					for (int I = 0; I < NU; ++I)
 						for (int J = 0; J < NV; ++J)
 						{
@@ -6069,6 +6090,9 @@ namespace LandField
 							const Col Under = H.bBoards ? Rgb(50, 44, 38) : Rgb(70, 60, 52); // (a shed on trial: its roof's underside as dark as its inside)
 							if (bThatch)
 							{
+								// (straw under the sheaves, 3 cm down: what shows under a course's butts and at any hair's width between
+								// two sheaves is straw in shade, never the dark under the roof or the sky)
+								B.Quad1(RP(UA, TA, 0.03), RP(UB, TA, 0.03), RP(UB, TB, 0.03), RP(UA, TB, 0.03), Scaled(C, 0.8), Up);
 								for (int Cs = 0; Cs < 4; ++Cs)
 									for (int Bh = 0; Bh < 2; ++Bh)
 									{
@@ -6079,13 +6103,32 @@ namespace LandField
 										const int Rw = J * 4 + Cs, Sf = 2 * I + Bh;
 										const double UL = Edge(I, J, Rw), UR = Edge(I + 1, J, Rw), UM = Lerp(UL, UR, Split(I, Rw)), Ua = Bh == 0 ? UL : UM, Ub = Bh == 0 ? UM : UR;
 										const double Ta = Lerp(TA, TB, Cs / 4.0), Tb = Lerp(TA, TB, (Cs + 1) / 4.0);
-										const bool bEave = Cs == 0 && J == 0, bFoot = Cs == 0 && J > 0 && Missing(S, I, J - 1), bHead = Cs == 3 && (J + 1 >= NV || Missing(S, I, J + 1));
-										const double Te = bEave ? -Hang(Sf) / SlopeLen : bFoot ? Ta : Ta + Jog(Sf, Rw) / SlopeLen;
+										const Butt Me = ButtOf(I, J, Cs, Bh);
+										const bool bEave = Cs == 0 && J == 0, bHead = Me.bHead;
+										const double Te = Me.Te;
 										const double Tu = bHead ? Tb : std::min(1.0, Tb + 0.3 * (Tb - Ta) + 0.07 / SlopeLen);
 										const bool bEdgeA = Bh == 0 && (I == 0 || Missing(S, I - 1, J)), bEdgeB = Bh == 1 && (I == NU - 1 || Missing(S, I + 1, J));
-										// (a corner over a hole's corner lies flat as its neighbour's does)
-										const bool bDiagA = Bh == 0 && Cs == 0 && J > 0 && I > 0 && Missing(S, I - 1, J - 1), bDiagB = Bh == 1 && Cs == 0 && J > 0 && I + 1 < NU && Missing(S, I + 1, J - 1);
-										const double RA = bEave || bFoot || bEdgeA || bDiagA ? 0.0 : -0.04, RB = bEave || bFoot || bEdgeB || bDiagB ? 0.0 : -0.04, Sink = bHead ? 0.0 : 0.012;
+										const double Sink = bHead ? 0.0 : 0.012;
+										// (where two sheaves lie side by side their sides are one line from the lower butts up to the top they
+										// share: the one whose butts lie higher up the slope takes its corner from its neighbour's side, so
+										// no light shows between them)
+										auto Shared = [&](double Mine, double Theirs, double TeTheirs) { return Te > TeTheirs ? Lerp(Theirs, Sink, (Te - TeTheirs) / (Tu - TeTheirs)) : Mine; };
+										double RA = Me.RA, RB = Me.RB, RN = 0.0;
+										if (!bEdgeA)
+										{
+											const Butt Nb = Bh == 0 ? ButtOf(I - 1, J, Cs, 1) : ButtOf(I, J, Cs, 0);
+											if (Nb.bHead == bHead) RA = Shared(RA, Nb.RB, Nb.Te);
+										}
+										if (!bEdgeB)
+										{
+											const Butt Nb = Bh == 1 ? ButtOf(I + 1, J, Cs, 0) : ButtOf(I, J, Cs, 1);
+											if (Nb.bHead == bHead)
+											{
+												RB = Shared(RB, Nb.RA, Nb.Te);
+												// (and its neighbour's corner on that side, for the eave's side below)
+												RN = Nb.Te > Te ? Lerp(Me.RB, Sink, (Nb.Te - Te) / (Tu - Te)) : Nb.RA;
+											}
+										}
 										// (its tone: the streak down the slope from each side of it, the stronger; a little of its course's own;
 										// moss on the lowest third, thickest at the eave; a place mended with newer straw a step lighter and
 										// yellower, by the same step on a dark roof as on a pale one, and no moss on it yet)
@@ -6101,14 +6144,14 @@ namespace LandField
 										if (!bEave) continue;
 										// (the eave: the sheaf's cut butts, the thatch's underside out to them, and its side where its
 										// neighbour hangs shorter or longer, or the roof ends)
-										B.Quad1(RP(Ua, Te, 0.0), RP(Ub, Te, 0.0), RP(Ub, Te, Th), RP(Ua, Te, Th), Scaled(RoofC, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
+										B.Quad1(RP(Ua, Te, RA), RP(Ub, Te, RB), RP(Ub, Te, Th), RP(Ua, Te, Th), Scaled(RoofC, 0.7), V3{ V.X * S, V.Y * S, -0.3 });
 										B.Quad1(RP(Ua, Te, Th), RP(Ub, Te, Th), RP(Ub, TB, Th), RP(Ua, TB, Th), Under, Up * -1.0);
 										if (bEdgeA) B.Quad1(RP(Ua, Te, 0.0), RP(Ua, 0.0, 0.0), RP(Ua, 0.0, Th), RP(Ua, Te, Th), Scaled(RoofC, 0.75), V3{ -U.X, -U.Y, 0.0 });
 										if (bEdgeB) B.Quad1(RP(Ub, Te, 0.0), RP(Ub, 0.0, 0.0), RP(Ub, 0.0, Th), RP(Ub, Te, Th), Scaled(RoofC, 0.75), V3{ U.X, U.Y, 0.0 });
 										else
 										{
 											const double Tn = -Hang(Sf + 1) / SlopeLen, Way = Te < Tn ? 1.0 : -1.0;
-											B.Quad1(RP(Ub, Te, 0.0), RP(Ub, Tn, 0.0), RP(Ub, Tn, Th), RP(Ub, Te, Th), Scaled(RoofC, 0.75), V3{ U.X * Way, U.Y * Way, 0.0 });
+											B.Quad1(RP(Ub, Te, RB), RP(Ub, Tn, RN), RP(Ub, Tn, Th), RP(Ub, Te, Th), Scaled(RoofC, 0.75), V3{ U.X * Way, U.Y * Way, 0.0 });
 										}
 									}
 							}
