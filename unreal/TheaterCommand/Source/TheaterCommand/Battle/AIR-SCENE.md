@@ -14,6 +14,9 @@ battle screen over it.
 | `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
 | `AirBattleState.h` | The plain state above, kept out of the actor's header. |
 | `AirBattleMarks.cpp` | The strikes on the aircraft (Brian, 22 November): each of the core's hits kept on the aircraft it struck, in its own frame, and laid on its skin as a decal (`M_HitMark`) while it is near the eye. |
+| `AirMarks.h/.cpp` | What stands on the ground under a raid on troops, plain C++ (release 2, item 51): the column (`place.marks`), each piece's footprint, a bomb's blast, where a counted hit's bomb comes down on its piece and every other bomb clear of them all, what a hit makes of a piece, a strafing lane and the pass flown down it, the column's light flak's bursts. |
+| `AirShowTroops.cpp` | The flight core's half of a raid on troops (item 51): each `air:mark-hit` held until a drawn bomb or a strafing pass's rounds reach its piece and shown then (`MarkHit`), the bombs steered onto or off the pieces, the strafing pass flown (`air:strafe`), the column's flak (`MarkGun`). Plain C++. |
+| `AirBattleTroops.cpp` | The scene's half (item 51): the column drawn on the land as copies of its army's models, its fires, wrecks and scattered men, its flak in the effects kit; `AAirBattle::CampaignLiveOn(Kind)`. |
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
@@ -1228,3 +1231,49 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    second 40; `-TheaterAirRulesFailEnd` fails the end.
    Look for: the note after about 2 s of a frozen raid, the map 4 s later with the raid card up and a note under it;
    the month can be ended and the raid sent with FLY THE RAID.
+
+51. **A raid on troops, flown in 3D** (release 2; Brian, 24 November 2026: "i want every air battle playable" and "if a
+   bomber group is bombing troops instead of a factory or town and they get intercepted than i want that playable"; the
+   every-kind contract, `/mnt/project-files/air-battles/every-kind/CONTRACT.md`, sections 1 to 4). Where the sky has
+   marks (`place.kind` "ground", `place.marks`: the army's column the rules placed, at most 64 pieces), the scene stands
+   it on the land under the planes, faced along its road: each tank, lorry, half-track and towed gun as its army's model
+   (the rules' own name where the game has it, else the nation's line tank, lorry, carrier or field gun, in its paint;
+   a light flak gun stands as the field gun until one is modelled), each block of men as a few of its riflemen, one
+   for each `per` men left in it, two files along the road. One instanced mesh a model, shadows on for the vehicles,
+   none past 12 km from the eye (`AirBattleTroops.cpp`). The flight core (`AirShowTroops.cpp`) holds each counted hit
+   (`air:mark-hit`) until a drawn bomb of its group can be steered onto its piece in the air it has left (inside it for
+   a wreck, a burn or a blast; beside it, within its blast, for a near miss or men scattered), or a strafing pass's
+   rounds reach it, and shows it then; every other bomb of the stick comes down clear of every piece by its blast ("most
+   shots miss, but every hit shows on what it struck"). An `air:strafe` sends up to four of the group down the lane:
+   run in, a plunge with the guns on from 900 m to 250 m slant and the aim walking down the road, a 4 g pull-out and a
+   climb away, within the flight's limits; their rounds miss every piece but the one they struck. As each hit shows, a
+   vehicle set burning or wrecked goes up (FuelBall) and burns on (Burn, 600 s), a wreck wears its burnt shape, a
+   damaged one smokes, a strafing pass's burn or wreck leaves a scorch (a bomb's crater is laid where it fell), a block
+   of men thins and scatters; the views' words (`view.marks`) have the last say, but a wreck never changes again. The
+   column's light flak (`aa` pieces, the share `view.marks.fire` mans) lays short streams on the nearest raider in its
+   reach, through the effects kit as every gun, heard with the mix's cannon take. The screen speaks of the column: the
+   title and the after card ("The raid on the British I Corps near Hampshire"; a card line's "the target" becomes "the
+   column"), the top bar ("their column's organisation cut by 1.2% so far", from `view.marks.cut`), the aim slip ("The
+   British I Corps on the march near Hampshire", "On the column so far: 1 vehicle or gun wrecked, 2 burning, 3 damaged,
+   22 men lost", as the views count them); and with his fighter groups in hand, STRAFE THE COLUMN in the orders strip
+   sends `{ do: 'air:strafe', units: [...] }`. Drawn only: the rules decide every hit, state and loss.
+   The switch: the Battle rules card's **Fly raids on troops yourself** (FLandLive's rule `flyTroops`, OFF; never sent
+   to the land rules: `FLandLive::Start` skips every rule whose key starts "fly"), read by
+   `AAirBattle::CampaignLiveOn(Kind)` ("bomb" and "superiority" read `flyLive`, "ground" `flyTroops`).
+   `-TheaterAirRuleTroops` turns it on for one run, `-TheaterAirNoRuleTroops` off. With it on, FLY IT YOURSELF is offered
+   on a raid on troops only where TC.airLook gives a ticket (today's rules fight only `bomb` and `superiority`, so it is
+   not offered yet); with it off nothing changes. A raid with no marks never reaches any of this. The cloud test
+   (`Tools/air_show/air_marks_test`, run by `run.sh` on every recording) plays a marked recording and checks every hit,
+   every bomb, the pass and the words; `Tools/air_show/make_marks_recording.py` made the test's own recording from the
+   day raid on Hampshire (`troops-test.json.gz` in the every-kind folder's `troops/`, with its pictures).
+   Look for (the recording: gunzip it into `Content/Data/AirBattles/troops-test.json`, then `-TheaterAirBattle=troops-test`):
+   the log's "a raid on troops: the column under it, 44 pieces (34 vehicles and guns, 10 blocks of men, 0 drawn as
+   nothing)"; the column on its road through the aim, Matildas, lorries, 25-pounders and men, standing on the land (not
+   sunk, not floating) and driving nose first along the road (if every one faces backwards, the half turn in
+   `DrawTroops` is the mend); the two boxes' sticks from 394 s mostly clear of the column, and the ten hits each where
+   its bomb lands: gun 30 wrecked (burnt shape, fire), lorry 28 going up and burning, near misses smoking (lorries 18 and
+   27, flak gun 29), men blocks 15, 34 and 35 thinned and scattered; at 408 s four Bf 109s down the road, guns firing on the way down, pulling out some 70 m
+   up, lorry 25 set burning by them, men 14 scattered; the four light flak guns' short streams at the nearest raider,
+   heard; gun 30 still wrecked after the stale word at 420 s; the aim slip, the top bar and the after card as above;
+   45 fps or better with the whole column in view and burning; the Battle rules card's new row, OFF, its tip in full;
+   FLY IT YOURSELF still on a day raid with the row off.

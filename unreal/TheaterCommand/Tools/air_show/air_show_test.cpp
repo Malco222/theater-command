@@ -117,6 +117,8 @@ namespace
 		case AirShow::FxKind::ShipHit: return "shiphit";
 		case AirShow::FxKind::ShipSunk: return "shipsunk";
 		case AirShow::FxKind::ShipGun: return "shipgun";
+		case AirShow::FxKind::MarkHit: return "markhit";
+		case AirShow::FxKind::MarkGun: return "markgun";
 		case AirShow::FxKind::Smoke: return "smoke";
 		}
 		return "?";
@@ -927,7 +929,7 @@ int main(int Argc, char** Argv)
 	auto TakeNext = [&]()
 	{
 		const AirFeed::Frame& F = Rec.Views[Taken++];
-		Show.Take(F.Head.T, F.Groups, F.Events, F.Ships);
+		Show.Take(F.Head.T, F.Groups, F.Events, F.Ships, &F.Marks);
 		for (const AirShow::Ship& Sh : F.Ships) ShipsSeen[Sh.Id] = Sh;
 	};
 	TakeNext();

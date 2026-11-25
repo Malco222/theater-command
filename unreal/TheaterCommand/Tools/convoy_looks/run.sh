@@ -25,7 +25,7 @@ $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$S
 # (against the show: the game's own SeaShow and its feed, as the sea show's cloud test builds them)
 $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/convoy_looks_show.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" \
-  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   "$SRC/Battle/DeckCrewCore.cpp" "$SRC/Battle/SeaSailors.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/convoy_looks_show"
 # (the gun crews against the show: the sailor files the scene reads, from the game's Content)
 export CONVOY_LOOKS_CONTENT="$ROOT/Content"

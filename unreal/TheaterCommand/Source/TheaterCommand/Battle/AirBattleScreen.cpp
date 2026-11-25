@@ -817,6 +817,12 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			X = Button(TEXT("STAY CLOSE"), TEXT("close"), X, SY, false, bLive, 3);
 			X = Button(TEXT("RANGE AHEAD"), TEXT("ahead"), X, SY, false, bLive, 3);
 			X = Button(TEXT("HUNT"), TEXT("hunt"), X, SY, false, bLive, 3);
+			// (release 2, a raid on troops: Brian, 24 November 2026, "if a bomber group is bombing troops instead of a factory
+			// or town and they get intercepted than i want that playable"; his fighter groups sent down the column's road)
+			if (S.Desk.OnTroops())
+			{
+				X = Button(TEXT("STRAFE THE COLUMN"), TEXT("strafe"), X, SY, false, bLive, 3);
+			}
 		}
 		X += 10.0;
 		Button(S.bClose ? TEXT("STRATEGY VIEW") : TEXT("CLOSE VIEW"), TEXT("ride"), X, SY, S.bClose, true, 3);
