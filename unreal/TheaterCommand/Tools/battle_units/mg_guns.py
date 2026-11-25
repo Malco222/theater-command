@@ -432,7 +432,157 @@ def mg42():
     return g
 
 
-GUNS = {"mg42": mg42}
+# ------------------------------------------------------------------------------------------ parts the guns share ----
+def belt_drum(g, level, cx, cz, R, cy0=-0.030, cy1=-0.104, n=12):
+    """A belt drum hung on the left of the feed: its round side, both faces, the lid's hinge and latch, the strap
+    ring (the ring and latch only near)."""
+    side = Piece("steel")
+    r0 = [side.pt((cx + R * math.cos(2 * math.pi * k / n), cy0, cz + R * math.sin(2 * math.pi * k / n))) for k in range(n)]
+    r1 = [side.pt((cx + R * math.cos(2 * math.pi * k / n), cy1, cz + R * math.sin(2 * math.pi * k / n))) for k in range(n)]
+    for k in range(n):
+        side.quad(r0[k], r0[(k + 1) % n], r1[(k + 1) % n], r1[k])
+    out = [orient(side)]
+    for yy, sg in ((cy0, 1.0), (cy1, -1.0)):
+        cp = Piece("steel")
+        rr = [cp.pt((cx + R * math.cos(2 * math.pi * k / n), yy, cz + R * math.sin(2 * math.pi * k / n))) for k in range(n)]
+        for k in range(1, n - 1):
+            cp.tri(rr[0], rr[k], rr[k + 1])
+        out.append(orient(cp, normal=(0.0, sg, 0.0)))
+    if level == "near":
+        out.append(box((cx - 0.006, cy1 - 0.004, cz - 0.030), (cx + 0.006, cy1 + 0.001, cz + 0.030), "steel"))
+        out.extend(loft_path([np.array((cx - 0.020, (cy0 + cy1) / 2, cz + R - 0.002)),
+                              np.array((cx, (cy0 + cy1) / 2, cz + R + 0.014)),
+                              np.array((cx + 0.020, (cy0 + cy1) / 2, cz + R - 0.002))], [(0, 1, 0)] * 3,
+                             [(0.0025, 0.0025)] * 3, 4, "steel", cap0=False, cap1=False))
+    g.add(level, out)
+
+
+def folded_bipod(g, level, b, under, sides=4):
+    """The bipod: a hinge block under the barrel at HINGE (near only) and two legs folded back to LEG_END, a foot on
+    each (near), all on the `bipod` bone. `under` is the barrel's underside's height over the bore (negative)."""
+    if level == "near":
+        g.add(level, box((HINGE[0] - 0.012, -0.016, b + under - 0.010), (HINGE[0] + 0.012, 0.016, b + under + 0.002),
+                         "steel", "bipod"))
+    for s in (-1.0, 1.0):
+        top = np.array((HINGE[0] - 0.004, 0.011 * s, b + under - 0.008))
+        end = np.array((LEG_END, 0.014 * s, b + under - 0.015))
+        if level == "near":
+            mid = 0.5 * (top + end)
+            g.add(level, loft_path([top, mid, end], [(0, 0, 1)] * 3,
+                                   [(0.0045, 0.0055), (0.004, 0.005), (0.0045, 0.005)], sides, "steel", "bipod",
+                                   cap0=False, cap1=False))
+            g.add(level, oriented_box(end + np.array((-0.008, 0.0, -0.002)), np.eye(3), (0.010, 0.007, 0.004), "steel",
+                                      "bipod"))
+        elif level == "mid":
+            g.add(level, loft_path([top, end], [(0, 0, 1)] * 2, [(0.005, 0.006)] * 2, 3, "steel", "bipod",
+                                   cap0=False, cap1=False))
+        else:
+            for up in (1.0, -1.0):
+                lg = Piece("steel", "bipod")
+                p0 = lg.pt(top)
+                p1 = lg.pt(end + np.array((0.0, -0.006, 0.0)))
+                p2 = lg.pt(end + np.array((0.0, 0.006, 0.0)))
+                lg.tri(p0, p1, p2)
+                g.add(level, orient(lg, normal=(0.0, 0.0, up)))
+
+
+# ---------------------------------------------------------------------------------------------------- the MG 34 ----
+def mg34():
+    """The German machine gun of 1934 on (still carried beside the MG 42 to the end), on its bipod: 1.22 m, a rounded
+    receiver with the hinged feed cover on top, the round barrel jacket pierced all round with rows of oval holes, the
+    front sight on its post at the jacket's front, the muzzle cone, the sloped butt and the pistol grip in dark brown
+    plastic, the rocking trigger, the rear sight on the jacket's back end, the bipod, a 50-round belt drum on the left."""
+    g = Gun("mg34", "MG 34")
+    g.hinge = HINGE
+    b = BORE
+    g.paints = {"bakelite": "3A2B22", "brass": "9C7A3C"}
+    g.muzzle = np.array((0.852, 0.0, b))
+    JA = 0.0205                                            # (the round jacket's radius)
+    # --- the butt: sloped, its comb falling from the receiver toward the heel, a hand's hollow under it
+    butt = [(-0.360, 0.0, b - 0.020, 0.0210, 0.058), (-0.300, 0.0, b - 0.017, 0.0218, 0.055),
+            (-0.200, 0.0, b - 0.010, 0.0195, 0.040), (-0.120, 0.0, b - 0.004, 0.0170, 0.030),
+            (-0.040, 0.0, b + 0.004, 0.0210, 0.032)]
+    g.add("near", loft_x(butt, 8, "bakelite", e=3.0, cap0=False, cap1=False))
+    g.add("near", loft_x([(-0.366, 0.0, b - 0.020, 0.0215, 0.059), (-0.359, 0.0, b - 0.020, 0.0218, 0.060)], 8,
+                         "steel", e=3.0, cap1=False))
+    # --- the receiver: rounded, the feed cover over its fore part, the trigger housing under its rear
+    g.add("near", loft_x([(-0.040, 0.0, b + 0.008, 0.0240, 0.034), (0.270, 0.0, b + 0.008, 0.0240, 0.034)], 12,
+                         "steel", e=2.8))
+    g.add("near", loft_x([(0.000, 0.0, b + 0.036, 0.0255, 0.012), (0.175, 0.0, b + 0.036, 0.0255, 0.012)], 8,
+                         "steel", e=3.5))
+    g.add("near", hole((0.09, 0.0, b + 0.0485), (0, 0, 1), (1, 0, 0), 0.075, 0.003, n=6))
+    g.add("near", box((-0.034, -0.0175, b - 0.046), (0.046, 0.0175, b - 0.022), "steel"))   # (trigger housing)
+    g.add("near", box((0.150, 0.0235, b - 0.004), (0.178, 0.044, b + 0.010), "steel"))      # (cocking handle)
+    # (the feed tray's mouth on the left, the links' way out on the right)
+    g.add("near", box((0.050, -0.033, b + 0.014), (0.150, -0.0235, b + 0.040), "steel"))
+    g.add("near", hole((0.100, 0.0242, b + 0.024), (0, 1, 0), (1, 0, 0), 0.030, 0.007, n=6))
+    # --- the pistol grip, the trigger guard, the rocking trigger
+    gt = np.array((-0.020, 0.0, b - 0.040))
+    ga = np.array((-0.36, 0.0, -0.933))
+    ga /= np.linalg.norm(ga)
+    g.add("near", loft_path([gt, gt + ga * 0.055, gt + ga * 0.105], [(1, 0, 0.40)] * 3,
+                            [(0.0138, 0.0175), (0.0150, 0.0192), (0.0140, 0.0180)], 8, "bakelite", e=2.6, cap0=False))
+    tg = [np.array((0.044, 0.0, b - 0.044)), np.array((0.024, 0.0, b - 0.084)), np.array((-0.008, 0.0, b - 0.080)),
+          np.array((-0.026, 0.0, b - 0.064))]
+    g.add("near", loft_path(tg, [(0, 1, 0)] * 4, [(0.003, 0.0055)] * 4, 4, "steel", cap0=False, cap1=False))
+    g.add("near", loft_path([np.array((0.012, 0.0, b - 0.045)), np.array((0.010, 0.0, b - 0.060)),
+                             np.array((0.003, 0.0, b - 0.070))], [(0, 1, 0)] * 3, [(0.0026, 0.0045)] * 3, 4, "steel",
+                            cap0=False, cap1=False))
+    g.grips["pistol"] = {"at": gt + ga * 0.056, "axis": ga}
+    # --- the round jacket pierced all round; the rear sight on its back end; the front sight post; the muzzle cone
+    J0, J1 = 0.270, 0.715
+    g.add("near", loft_x([(J0, 0.0, b, JA + 0.0035, JA + 0.0035), (J0 + 0.030, 0.0, b, JA + 0.0035, JA + 0.0035),
+                          (J0 + 0.032, 0.0, b, JA, JA), (J1, 0.0, b, JA, JA)], 12, "steel", cap0=False))
+    for k in range(6):
+        x = 0.345 + 0.062 * k
+        for ang in (90.0, 30.0, 150.0):                    # (top, and either upper side)
+            th = math.radians(ang)
+            n_ = np.array((0.0, math.cos(th), math.sin(th)))
+            g.add("near", hole((x, JA * n_[1], b + JA * n_[2]), n_, (1, 0, 0), 0.016, 0.0065, n=5))
+    g.add("near", box((J0 + 0.004, -0.0095, b + JA + 0.003), (J0 + 0.028, 0.0095, b + JA + 0.011), "steel"))
+    g.add("near", box((J0 + 0.012, -0.0065, b + JA + 0.011), (J0 + 0.020, 0.0065, b + JA + 0.045), "steel"))
+    g.add("near", loft_x([(0.586, 0.0, b, JA + 0.0025, JA + 0.0025), (0.614, 0.0, b, JA + 0.0025, JA + 0.0025)], 10,
+                         "steel", cap0=False, cap1=False))
+    g.add("near", box((0.684, -0.008, b + JA - 0.001), (0.706, 0.008, b + JA + 0.008), "steel"))
+    g.add("near", box((0.692, -0.0026, b + JA + 0.008), (0.699, 0.0026, b + JA + 0.044), "steel"))
+    g.add("near", loft_x([(J1, 0.0, b, JA, JA), (0.745, 0.0, b, 0.0165, 0.0165), (0.818, 0.0, b, 0.0150, 0.0150),
+                          (0.852, 0.0, b, 0.0185, 0.0185)], 10, "steel", cap0=True, cap1=True, dark_caps=(False, True)))
+    folded_bipod(g, "near", b, -JA)
+    belt_drum(g, "near", 0.100, b - 0.024, 0.052)
+    g.add("near", box((0.082, -0.039, b + 0.020), (0.120, -0.0235, b + 0.036), "brass"))
+    g.add("near", box((0.084, -0.0445, b + 0.006), (0.118, -0.033, b + 0.032), "brass"))
+    g.grips["legs"] = [(np.array((0.300, 0.0, b - JA - 0.004)), np.array((LEG_END, 0.0, b - JA - 0.010))),
+                       (np.array((LEG_END, 0.0, b - JA - 0.012)), np.array((0.580, 0.0, b - JA - 0.006)))]
+    g.grips["under"] = [(np.array((-0.330, 0.0, b - 0.076)), np.array((-0.170, 0.0, b - 0.050))),
+                        (np.array((-0.170, 0.0, b - 0.050)), np.array((-0.040, 0.0, b - 0.028))),
+                        (np.array((0.046, 0.0, b - 0.046)), np.array((0.270, 0.0, b - 0.026)))] + g.grips["legs"]
+    g.grips["butt"] = [(np.array((-0.330, 0.0, b - 0.076)), np.array((-0.100, 0.0, b - 0.034)))]
+    # ------------------------------------------------------------------------------------------- mid (LOD1) ----
+    g.add("mid", loft_x([(-0.362, 0.0, b - 0.020, 0.021, 0.058), (-0.200, 0.0, b - 0.010, 0.0195, 0.040),
+                         (-0.040, 0.0, b + 0.004, 0.021, 0.032)], 6, "bakelite", e=3.0, cap1=False))
+    g.add("mid", loft_x([(-0.040, 0.0, b + 0.012, 0.0245, 0.040), (0.270, 0.0, b + 0.012, 0.0245, 0.040)], 6, "steel",
+                        e=3.0, cap0=False))
+    g.add("mid", loft_path([gt - ga * 0.016, gt + ga * 0.105], [(1, 0, 0.40)] * 2, [(0.0145, 0.0185)] * 2, 4,
+                           "bakelite", cap0=False))
+    g.add("mid", loft_x([(J0, 0.0, b, JA + 0.003, JA + 0.003), (J1, 0.0, b, JA, JA)], 6, "steel", cap0=False,
+                        cap1=False))
+    g.add("mid", hole((0.49, 0.0, b + JA), (0, 0, 1), (1, 0, 0), 0.17, 0.007, n=6))
+    g.add("mid", loft_x([(J1, 0.0, b, 0.019, 0.019), (0.852, 0.0, b, 0.017, 0.017)], 6, "steel", cap0=True, cap1=True,
+                        dark_caps=(False, True)))
+    folded_bipod(g, "mid", b, -JA)
+    belt_drum(g, "mid", 0.100, b - 0.024, 0.052, n=8)
+    # ------------------------------------------------------------------------------------------- far (LOD2) ----
+    g.add("far", loft_x([(-0.362, 0.0, b - 0.020, 0.021, 0.056), (-0.040, 0.0, b + 0.004, 0.021, 0.032)], 4,
+                        "bakelite", e=2.0, cap0=False, cap1=False, phase=math.pi / 4))
+    g.add("far", loft_x([(-0.040, 0.0, b + 0.008, 0.026, 0.036), (0.270, 0.0, b + 0.008, 0.026, 0.036),
+                         (0.852, 0.0, b, 0.019, 0.019)], 4, "steel", e=2.0, cap0=False, cap1=False, phase=math.pi / 4))
+    g.add("far", loft_path([gt - ga * 0.016, gt + ga * 0.102], [(1, 0, 0.40)] * 2, [(0.015, 0.0185)] * 2, 3,
+                           "bakelite", cap0=False, cap1=False))
+    folded_bipod(g, "far", b, -JA)
+    return g
+
+
+GUNS = {"mg42": mg42, "mg34": mg34}
 
 
 def report():

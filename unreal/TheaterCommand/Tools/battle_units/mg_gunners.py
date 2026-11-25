@@ -53,6 +53,9 @@ ARMIES = {
     "GER": {"base": "soldier_GER", "out": "soldier_GER_lmg", "gun": "mg42",
             "name": "Section machine gunner, GER, MG 42 (our own design)",
             "date": ["1942-01", "1945-05"]},
+    "GER_lmg34": {"base": "soldier_GER", "out": "soldier_GER_lmg34", "gun": "mg34",
+                  "name": "Section machine gunner, GER, MG 34 (our own design)",
+                  "date": ["1936-01", "1945-05"]},
 }
 
 WET = {"steel": 0.15, "bakelite": 0.22, "brass": 0.12}
@@ -688,7 +691,7 @@ def build(army, out_dir=STAGE, log=print):
     D["clips"] = gun_clips(fit, D["clips"], notes)
     tw_notes = []
     Tw["clips"] = gun_clips(fit, Tw["clips"], tw_notes)
-    about = (f"The section's machine gunner: soldier_{army}'s rifleman with the {gun.about} in place of his rifle "
+    about = (f"The section's machine gunner: {spec['base']}'s rifleman with the {gun.about} in place of his rifle "
              f"(mg_gunners.py, mg_guns.py; our own drawing). The gun's points and triangles are where the rifle's were "
              f"at every level; its spare places are parked inside the receiver. His hands hold the gun in every clip "
              f"where he held the rifle (right fist on the pistol grip, the other under the gun), fire_stand and "
