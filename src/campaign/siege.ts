@@ -22,7 +22,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
 import { farGuard, farGuardRow, type FarGuardRow } from './economy';
 import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
@@ -288,9 +288,19 @@ export function portElsewhere(g: Game, nat: string, not: number[]): boolean {
   return false;
 }
 
+/**
+ * True where a sea off the harbour lets this feeder's ships bring the town food. Under true reach (game.ts trueReach;
+ * the design director's 13:58Z and 14:26Z of 25 November 2026) a sea closed to a nation of the garrison is closed to
+ * every ship carrying it stores, whatever the flag: the sea must be open to the feeder and to every nation inside, as
+ * the supply picture asks of an ally's quay. Off, open to the feeder is enough.
+ */
+const feedsBy = (g: Game, r: Region, x: string, z: number, truly: boolean): boolean =>
+  !closedTo(g, z, x) && (!truly || garrisonOf(r).every((c) => c.nat === x || !closedTo(g, z, c.nat)));
+
 /** True where the defenders' ships can still bring food into the harbour: such a town is never starved. */
 export function fedBySea(g: Game, r: Region): boolean {
-  return feeders(g, r).some((id) => seaOpenAt(g, id, r));
+  if (!trueReach(g)) return feeders(g, r).some((id) => seaOpenAt(g, id, r));
+  return feeders(g, r).some((x) => r.seas.some((z) => feedsBy(g, r, x, z, true)));
 }
 
 /** True where the town's stores do not run down however closely it is ringed: ships still reach it, or the book feeds it (history.json 'restraint'). */
@@ -303,8 +313,8 @@ export const fedByBook = (g: Game, r: Region): boolean => besieged(g, r) && book
 
 /** The seas the town's food comes in by: those off its harbour that are still open to someone who feeds it. Close them all and it starves like any other. */
 export function feedingSeas(g: Game, r: Region): number[] {
-  const who = feeders(g, r);
-  return r.seas.filter((z) => who.some((id) => !closedTo(g, z, id)));
+  const who = feeders(g, r), truly = trueReach(g);
+  return r.seas.filter((z) => who.some((id) => feedsBy(g, r, id, z, truly)));
 }
 
 const strength = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
