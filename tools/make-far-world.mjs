@@ -394,6 +394,10 @@ const out = {
     arrivals: [...arrivals, ...pacific.arrivals].sort((a, b) => a[0] - b[0]),
     building: [...pacific.building, ...japanBuilding],
     moves: usMoves,
+    // The design director's B1 of 25 November 2026, 02:35Z (pacific-japan-1125.md): ship quality for the two Pacific
+    // navies, which had none and fought at navy.json's 0.7 default. USA 1.0 and JAP 1.1, laid as G and flagged until the
+    // historian's 1939 middles replace them; whole world only, so the old chart's wars do not move.
+    quality: { USA: 1, JAP: 1.1 },
   },
   // Japan's character as a staff (paper 14, section 8, item 13; ruled with 181 to 202): where its budget leans. Its temper
   // (ruling 202(l)) is laid by china-line.json already; the two files must say the same thing.

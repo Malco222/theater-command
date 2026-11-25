@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7f08b733 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ada288de 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -8521,7 +8521,11 @@
             2
           ]
         }
-      ]
+      ],
+      quality: {
+        USA: 1,
+        JAP: 1.1
+      }
     },
     rivals: {
       lean: {
