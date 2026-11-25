@@ -820,14 +820,16 @@ private:
 	void LayOldWrecks();
 	/** Each old wreck's near level shown within LandHulk::NearTo of the eye, its far beyond (each frame; nothing where
 	 * none was laid, nor for one the guard cleared away). In a live battle first the guard's clearing (LandHulk::Yard::
-	 * Clear, on this frame's S.Pose and the viewport): each wreck GuardOldWrecks marked, or a moving man or machine is
+	 * Clear, on the camera as posed this frame, the player's drag aside and the hand's jolt with it, LandHulk::SightAlong,
+	 * and the viewport; a cut from S.Pose): each wreck GuardOldWrecks marked, or a moving man or machine is
 	 * heading for, cleared away the first frame the eye cannot see her go (out of its picture, too small in it, a cut),
 	 * or LandHulk::ClearLead before he comes near her where it is on her all along: her near and far levels and her
 	 * patch hidden, the grass laid again where she lay. */
 	void ShowOldWrecks(const FVector& EyeWorld);
 	/** A live battle's guard over the old wrecks (each piece read, PumpLive, before it is drawn): a wreck any live
-	 * man's or machine's way comes near, a knocked-out tank's crew bailing out (-TheaterLandBailOut) or a man leaving
-	 * the field with his block (LandHulk::Yard::Reached), marked with the battle time he comes near her, for
+	 * man's or machine's way comes near (a tank rolled smoothly, -TheaterLandSmoothTanks, the farther), a knocked-out
+	 * machine where she stands from her fall, her tank's crew bailing out from there (-TheaterLandBailOut), or a man
+	 * leaving the field with his block (LandHulk::Yard::Reached), marked with the battle time he comes near her, for
 	 * ShowOldWrecks to clear her away before then. bReset: the men were placed again (the setup step), every track read
 	 * afresh. */
 	void GuardOldWrecks(bool bReset);

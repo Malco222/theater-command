@@ -99,9 +99,10 @@ namespace LandHulk
 	 * them). The rules' drill has no way round a still machine (it drives this battle's own wrecks through), so nothing
 	 * keeps a live man or machine off one: the scene's guard (Yard::Reached) marks a wreck before a vehicle's middle
 	 * comes within VehicleReach of her outline or a man within ManReach, the clearances a recorded battle's wrecks are
-	 * laid at (Lay's, with its half metre and 40 cm over her rings), and Yard::Clear clears her away before he gets
-	 * there (the live pieces come at least a second of battle ahead of what is drawn), so every wreck left standing is
-	 * as clear of the live battle's ways as a recorded battle's are of its own.
+	 * laid at (Lay's, with its half metre and 40 cm over her rings; a smoothly rolling tank's BlendLead more, and a
+	 * knocked-out tank's crews' BailReach where they bail out), and Yard::Clear clears her away before he gets there (the
+	 * live pieces come at least a second of battle ahead of what is drawn), so every wreck left standing is as clear of
+	 * the live battle's ways as a recorded battle's are of its own.
 	 */
 	constexpr double StartClear = 60.0, AdvanceMargin = 100.0, LiveLaneClear = 15.0, JoinClear = 300.0, EdgeClear = 60.0;
 	constexpr double VehicleReach = VehicleClear + 0.5, ManReach = ManClear + 0.4;
@@ -122,11 +123,24 @@ namespace LandHulk
 	/**
 	 * What else the scene draws that walks: a knocked-out tank's crew bailing out (-TheaterLandBailOut, LandBail: off her
 	 * deck, 8 to 12 m back in her lee, then 18 to 38 m to her rear, cover or a crater, her rear 4 m back from her middle),
-	 * read as reaching BailReach from her pin from her kill on, where the scene asks it (Reached's Crews); a man who
-	 * leaves the field with his block, drawn on at his last speed and facing for the second he fades (LandMen), read as
-	 * walking LeaveDrift on.
+	 * read as reaching BailReach from where she is drawn from her kill on, where the scene asks it (Reached's Crews): her
+	 * place at her fall, as LandKit's PlaceAt holds her (a hair before it, on her kept points joined straight; a live
+	 * battle's machine is never pinned, the live drill stopping her where she is hit, "she burns where she stood"), and
+	 * her pin where the reading pinned her (a recorded battle's jump to her formation place); a man who leaves the field
+	 * with his block, drawn on at his last speed and facing for the second he fades (LandMen), read as walking LeaveDrift
+	 * on.
 	 */
 	constexpr double BailReach = 60.0, LeaveDrift = 7.0;
+	/**
+	 * Tanks rolling smoothly (-TheaterLandSmoothTanks, release 2; LandKit::Vehicle::SmoothTanks at the merge with the
+	 * joined build): LandKit draws a tank's place each step as the recording's places blended by a bell over Sigma battle
+	 * seconds either way (0.4 asked plain, 0.45 at the most; cut at 2.5 Sigma), so she is drawn off her kept points'
+	 * straight lines at a corner, or ahead or behind as her speed changes, by at most her fastest over the bell's reach
+	 * times the bell's mean lead, under BlendLead Sigma (0.73 to 0.78 Sigma at its 0.05 s steps). Reached's Blend widens a
+	 * tank's reach by that much along each piece of her way (her fastest over the kept points within 2.5 Sigma and a step
+	 * of it, a step faster than 25 m/s not counted: the screen puts her there, unblended).
+	 */
+	constexpr double BlendLead = 0.8;
 
 	/**
 	 * The share of a field's burnt-out armour still lying there Months after the battle (the recovery companies took
@@ -317,8 +331,9 @@ namespace LandHulk
 	 * round it, the edges a corps from next door walks on by, the field's edges). */
 	double FromCore(const Field& F, double X, double Y);
 
-	/** The eye as the scene draws this frame (LandEye::Pose's, field metres), for the guard to choose when a wreck goes
-	 * (Yard::Clear): out of its picture, too small in it to see, or on a cut. */
+	/** The eye as the scene draws this frame (field metres: the camera as posed, LandEye::Pose's shot with the player's
+	 * look aside and the hand's jolt, SightAlong), for the guard to choose when a wreck goes (Yard::Clear): out of its
+	 * picture, too small in it to see, or on a cut. */
 	struct Sight
 	{
 		double EyeX = 0.0, EyeY = 0.0, EyeZ = 0.0, LookX = 0.0, LookY = 1.0, LookZ = 0.0;
@@ -328,6 +343,13 @@ namespace LandHulk
 		/** A cut this frame: the picture starts afresh, so nothing is seen to go. */
 		bool bCut = false;
 	};
+	/**
+	 * The eye of a camera posed at Eye looking along Ahead (field metres; any length), its lens WideFov degrees across
+	 * the picture (Unreal's, the horizontal one) on a picture Aspect wide over tall, Lines high: the scene's own camera as
+	 * it is drawn this frame (AimEye's pose turned by the player's drag aside, up to 50 degrees round and 30 up or down,
+	 * and the hand-held jolt), not the shot's pose alone. Its roll, under a degree, is left to InSight's tenth wider.
+	 */
+	Sight SightAlong(double EyeX, double EyeY, double EyeZ, double AheadX, double AheadY, double AheadZ, double WideFov, double Aspect, double Lines, bool bCut);
 
 	/**
 	 * What a point of a dressed wreck shows (the coat on its side of each band's middle where her coats blend): soot,
@@ -426,14 +448,17 @@ namespace LandHulk
 		 * A live battle's guard (release 2), each piece: marks the wrecks a live vehicle's middle comes within
 		 * VehicleReach of, or a man within ManReach of (her outline: her rings), along the recording's tracks from Seen on
 		 * (each track's kept points from Seen[T], the straight line between them as they are drawn; a knocked-out
-		 * machine's pin from her fall, and her crew's way out to Crews from it where the scene's crews bail out, 0: they
-		 * do not; a man who left with his block LeaveDrift on), each wreck once, with the battle time he first comes near
+		 * machine where she is drawn from her fall on, her place at her fall and her pin where she has one, and a tank's
+		 * crew's way out to Crews from them where the scene's crews bail out, 0: they do not; a man who left with his
+		 * block LeaveDrift on; a tank drawn rolling smoothly over a bell of Blend battle seconds, 0: on her kept points'
+		 * lines, her reach BlendLead Blend her fastest more), each wreck once, with the battle time he first comes near
 		 * her (Due); returns those newly marked. And afresh each piece, the wrecks a moving man or machine is heading for
 		 * (Heading: his last way straight on SoonAhead, SoonFar at most, his reach and SoonWiden round it). Seen is grown
-		 * to the tracks and moved on (a track's provisional last point, Track::bTail, read again with the next piece); the
-		 * caller empties it when the men are placed again (LandFeed::Grown::bReset). Nothing for a yard with none laid.
+		 * to the tracks and moved on (a track's provisional last point, Track::bTail, read again with the next piece; a
+		 * smoothly rolling tank's way back over the bell's reach of her new points too); the caller empties it when the
+		 * men are placed again (LandFeed::Grown::bReset). Nothing for a yard with none laid.
 		 */
-		std::vector<size_t> Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen, double Crews = 0.0);
+		std::vector<size_t> Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen, double Crews = 0.0, double Blend = 0.0);
 		/**
 		 * Each frame: the marked wrecks cleared away now, at battle time Now (the screen's) with the eye as it is: a
 		 * marked one or one a man or machine is heading for the moment Eye cannot see her go (out of its picture, too

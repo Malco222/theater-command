@@ -1474,17 +1474,30 @@ below, with what the guard does not read).
   The guard: `GuardOldWrecks` (from `PumpLive`, after `MapLive`) marks, `ShowOldWrecks` (each frame) clears. Each live
   piece is read as it comes, before it is drawn (the screen keeps `LiveMargin`, a second or more, behind the rules):
   each track's new points from where it was last read, as the straight lines the screen draws between them; a
-  knocked-out machine's pin, from its time; where the crews bail out (`-TheaterLandBailOut`, `S.Bails.bOn`), a
-  knocked-out tank's pin out to 60 m (`BailReach`: `LandBail`'s men run 8 to 12 m in her lee, then 18 to 38 m on, some
-  54 m at the farthest); and a man who left the field with his block, 7 m more round where he left (`LeaveDrift`:
-  `LandMen` draws him on at his last speed for a second as he fades). A wreck any of them comes within 8.5 m of (her
-  rings, from a vehicle's middle: `VehicleReach`, the recorded battle's 8 m and half a metre) or 1.9 m (from a man's,
-  `ManReach`) is marked, due at the battle time he first comes that near; one log line, "Land battle (live): old wreck N
+  knocked-out machine where she stands from her fall on: her place at her fall, as `LandKit`'s `PlaceAt` holds her (a
+  live battle's machine is never pinned: the live drill stops her where she is hit, "she burns where she stood", so her
+  track never jumps and `LandFeed`'s pin never comes), and her pin, from its time, where a recorded battle's reading
+  pinned her; where the crews bail out (`-TheaterLandBailOut`, `S.Bails.bOn`; on in release 2's ship list), a
+  knocked-out tank's place and pin out to 60 m from her fall (`BailReach`: `LandBail`'s men run 8 to 12 m in her lee,
+  then 18 to 38 m on, some 54 m at the farthest; a tank, an armoured car or a self-propelled gun, the rules' role "tank"; a
+  lorry's men are the crowd's own already); a tank drawn rolling smoothly (`-TheaterLandSmoothTanks`, on in release
+  2's ship list: `LandKit` draws her place each step as the recording's blended over a bell of 0.4 s either way, so
+  she cuts a corner, or runs ahead of her kept points or behind them as her speed changes), her reach `BlendLead` (0.8)
+  times the bell's spread times her fastest within its reach more along each piece of her way (2.6 m at 8 m/s; the bell
+  leads by 0.73 to 0.78 of its spread at its 0.05 s steps; her way read again back over the bell's reach of each
+  piece's new points; `GuardOldWrecks` reads the switch from the command line as the armour does); and a man who left
+  the field with his block, 7 m more round where he left (`LeaveDrift`: `LandMen` draws him on at his last speed for a
+  second as he fades). A wreck any of them comes within 8.5 m of (her rings, from a vehicle's middle: `VehicleReach`,
+  the recorded battle's 8 m and half a metre) or 1.9 m (from a man's, `ManReach`) is marked, due at the battle time he
+  first comes that near; one log line, "Land battle (live): old wreck N
   (the GER Tiger) to be cleared away: a live man or machine comes near her at T s (the rules at R s, the screen at S
   s)". One a man or machine moving as the piece ends is heading for (his last way straight on for 8 s, 120 m at the
   most: `SoonAhead`, `SoonFar`; his reach and 2 m round it, `SoonWiden`) is marked as coming, till the next piece.
-  `Yard::Clear` then reads the frame's own eye (`S.Pose`: where it is, what it looks at, its lens, a cut; the viewport's
-  shape and its lines): a marked wreck, or one coming, goes the first frame the eye cannot see her go: on a cut, out of
+  `Yard::Clear` then reads the frame's own eye, the camera as it is posed (`LandHulk::SightAlong`: where `Eye` stands
+  and looks once `AimEye` has turned it by the player's drag aside, `LookAside`, up to 50 degrees round and 30 up or
+  down, and the effects kit has jolted it; its lens, Unreal's across the picture, by the viewport's shape and lines; a
+  cut from `S.Pose`. The shot's pose alone missed the drag: a wreck on the screen could be judged out of it and cleared
+  in plain view): a marked wreck, or one coming, goes the first frame the eye cannot see her go: on a cut, out of
   its picture (her reach round her middle, her rings or her patch's ragged edge, against the picture's edges a tenth
   wider for an eye that turns: `InSight`), or under 2 of its lines (`SightPx`); one due, the eye on her all along, half
   a second before the screen shows him coming near her (`ClearLead`). One coming and not yet due stays while the eye is
@@ -1494,9 +1507,12 @@ below, with what the guard does not read).
   eye's sight, her time come"; "a man or machine heading for her"). A man's provisional last point is read again with
   the next piece; when the men are placed again (the setup step) every track is read afresh, and a wreck once cleared
   stays so. So no man or machine the rules move passes through one, nor a crew bailing out of a tank or a man leaving
-  the field with his block. What the guard does not read can: a downed airman under his chute and walking off
-  (`-TheaterLandChutes` with `-TheaterLandAirSupport`, both off unless asked), what a blast throws (the dead, earth, a
-  turret of this battle's), a man drifting out farther than 7 m (one leaving at 7 m/s or more), smoke and dust. Where
+  the field with his block, a tank rolled smoothly too (a late kept point's ease under the screen, a tenth of a metre
+  on the joined build, lies within `VehicleReach`'s half metre). What the guard does not read can: a downed airman
+  under his chute and walking off (`-TheaterLandChutes` with `-TheaterLandAirSupport`), what a blast throws (the dead
+  and the men thrown, `-TheaterLandGore`; earth; a turret of this battle's), a man drifting out farther than 7 m (one
+  leaving at 7 m/s or more), smoke and dust; the chutes, the aircraft and the gore are all on in release 2's ship list
+  (`Release2Ship.cpp` on `claude/project-thread-pi6nal`), so in Brian's play an airman may yet come down on one. Where
   the eye watches her from the moment someone turns for her to half a second before he reaches her, she goes from view
   in its sight (her steel and patch are the vehicles' and the ground's shared `SteelInk` and `GroundInk`, so she cannot
   fade alone). A live battle's shells land where its rules send them: none is dug under a standing wreck or her patch, a
@@ -1516,10 +1532,13 @@ below, with what the guard does not read).
   fought, read piece by piece as the guard reads them (30 s pieces, each man's last point provisional) and read whole,
   the same marks at the same times: none on Normandy; on Prokhorovka its junction's two behind the defence's foot,
   wrecks 11 and 12, due at 272.7 and 275.1 s, a man or machine heading for both first; every other at least 30 m from a
-  vehicle's way and 10 m from a man's (the measure's reach). The guard's cost at a live piece's cadence (every track's
-  last two kept points read against every wreck, and each moving one's way on): 0.40 ms a piece on Normandy and 0.53 on
-  Prokhorovka on the average, 0.44 and 1.05 at the most (the shared machine's clock: two runs before it 0.33 to 0.44 and
-  0.44 to 0.46 on the average). Laid in some 0.4 to 0.5 s here.
+  vehicle's way and 10 m from a man's (the measure's reach). Read again as release 2 plays a live battle (no machine
+  pinned, the crews bailing out to 60 m of the 3 and 5 tanks knocked out, the tanks rolled smoothly over 0.4 s): the
+  same marks at the same times, piece by piece as whole (none on Normandy, 11 and 12 on Prokhorovka at 272.7 and 275.1
+  s), every wreck left standing more than 100 m from where a knocked-out tank stands. The guard's cost at a live
+  piece's cadence (every track's last two kept points read against every wreck, and each moving one's way on): 0.44 ms
+  a piece on Normandy and 0.40 on Prokhorovka on the average, 0.71 and 0.43 at the most (the shared machine's clock:
+  the runs before it 0.33 to 0.53 on the average, 0.44 to 1.05 at the most). Laid in some 0.4 to 0.5 s here.
 - **How each looks** (`Yard::Dress`; the art director's to judge, round 2 below). Her own model, knocked out and burnt
   through: her turret turned (mostly within 50 degrees of ahead) and her gun drooped to its stop, or, one in five, her
   turret blown off and lying 1 to 4 m off her side, tail or bow (clear of her hull's corners, its gun turned away from
@@ -1762,6 +1781,10 @@ below, with what the guard does not read).
   blocks) and read whole: the same wrecks marked, once each, each due at the same time, no way within its reach of one
   before her time, every one left standing 8 m from a vehicle's way and 1.5 m from a man's (as drawn: every kept point
   to the next, every 0.25 m, and the pins), and those a man or machine was heading for at a piece's end all marked; the
+  same battle read again as release 2 plays a live one (no machine pinned, her points from the pin on standing there as
+  a live battle's do; the crews bailing out, `BailReach`; the tanks rolled smoothly over 0.4 s): the same piece by
+  piece as whole, every wreck the first read marks marked too and none later, and every one left standing 60 m and more
+  (her rings) from where a knocked-out tank stands; the
   guard's cost a piece at a live piece's cadence (each track's last two kept points); each marked one cleared with the
   eye looking away, no longer keeping the grass or a hole off; and the guard made to work (the battles as fought send
   few near one): a tank's pieces up to 30 m short of a wreck's reach leave her and its next piece, through her, read
@@ -1771,19 +1794,27 @@ below, with what the guard does not read).
   through her marks her; a lorry pinned on a third marks her from her fall, far off leaves her; the men placed again
   (fewer tracks) read afresh, marking none twice; a tank coming on at one 60 m short of her reach is heading for her,
   not due, kept while the eye is on her, no longer heading once turned away, cleared with the eye away; a tank knocked
-  out 40 m off one marks her where the crews bail out (`BailReach`), not where they stay in, nor for a lorry; a man
-  leaving the field with his block 5 m outside his reach of one marks her as he leaves (`LeaveDrift`), and not where he
-  stays. The clang build lays them where the gcc build does (their lines are among those compared). It paints
+  out 40 m off one marks her where the crews bail out (`BailReach`), not where they stay in, nor for a lorry; the same
+  tank as a live battle knocks her out (no pin, her fall between two kept points 100 m either side of the wreck) marks
+  her from her place at her fall where the crews bail out, and not where they stay in; a man leaving the field with his
+  block 5 m outside his reach of one marks her as he leaves (`LeaveDrift`), and not where he stays; a tank creeping by
+  1.5 m outside her reach of one, then off at 8 m/s, leaves her on her kept points' line and, rolled smoothly over 0.4
+  s, marks her before she sets off, read whole or in two pieces (the first, ending as she sets off, leaves her; the
+  second reads her creep again); and the shot's pose looking 50 degrees off a wreck on a 40 degree lens, the camera
+  dragged back onto her: in the camera's picture (`SightAlong`, its lens across the picture turned back to 40 degrees
+  top to bottom), not in the pose's. The clang build lays them where the gcc build does (their lines are among those compared). It paints
   `placement_live_<recording>` (the whole field: the likely ground's core tinted red and the rest of it orange, the
   start zones, its blocks as the rules draw them up in cyan, the ground between the fronts, the battle's ways as it was
   fought, where its units stood at its start, the wrecks ringed by nation, a red cross on any the guard marked, four
-  close looks). Pictures: `/tmp/claude-0/livewrecks/run2/` (`placement_live_normandy-1944.png`,
-  `placement_live_prokhorovka-1943.png`, the measures in `gcc.log`; round 1's in `/tmp/claude-0/livewrecks/run/`).
+  close looks). Pictures: `/tmp/claude-0/livewrecks/run3/` (`placement_live_normandy-1944.png`,
+  `placement_live_prokhorovka-1943.png`, the measures in `gcc.log`; the wrecks laid where round 2's `run2/` laid
+  them; round 1's in `/tmp/claude-0/livewrecks/run/`).
   `LAND_HULK_JOBS=N` holds `run.sh` to N compiles at once (all at once by default).
 - **Not yet.** In a live battle: a way round a wreck for the rules' drill (the guard clears her away instead: where the
   eye watches her from the moment someone turns for her, she goes from view in its sight, half a second before he is
   shown near her; a fade would need her own materials, not the shared `SteelInk` and `GroundInk`); the guard reading a
-  downed airman's chute and walk (`-TheaterLandChutes`), what a blast throws, smoke and dust; the rules' drawing up
+  downed airman's chute and walk (`-TheaterLandChutes`), what a blast throws (`-TheaterLandGore`'s men), smoke and dust
+  (the chutes and the gore on in release 2's ship list); the rules' drawing up
   modelled on a river's bend, a stream, a second river or a city's streets (there each whole zone is kept, so fewer
   groups find room); the scars and the old ruts (they read the battle's tracks, none at a live battle's open, so its
   wrecks lie on ground without them: `Field::Likely` could stand for their fought-over ground too); Prokhorovka's 18 of
@@ -1807,10 +1838,20 @@ below, with what the guard does not read).
   `Fov`; `bCut`), `GEngine->GameViewport->GetViewportSize(FVector2D&)` as `DrawMen` reads it,
   `LandHulk::Yard::Clear(double, const Sight&, std::vector<int>*)` with `S.Battle` and `Yard::DueOf`, `FMath::Clamp`,
   `FString::Printf` and `FString(TEXT(...))` for its log line; and in `GuardOldWrecks`, which now only marks,
-  `Yard::Reached(S.Rec, S.OldWreckSeen, S.Bails.bOn ? LandHulk::BailReach : 0.0)` (`FLandBattleState::Bails`, a
-  `LandBail::Book`) and `S.Rec.Fought`. On merging with `claude/project-thread-pi6nal` (b6e80cee): there `PumpLive`
-  times its steps, so `GuardOldWrecks(G.bReset)` goes after `MapLive` and before `Lap(MsMap)`, and its
-  `LayOldWrecks` still returns at once for a live battle (`S.Rec.bLive`), which the merge must drop. And the art
+  `Yard::Reached(S.Rec, S.OldWreckSeen, S.Bails.bOn ? LandHulk::BailReach : 0.0, Blend)` (`FLandBattleState::Bails`, a
+  `LandBail::Book`) and `S.Rec.Fought`; and since its second review, the eye read from the camera as posed:
+  `Eye->GetCameraComponent()` (as the effects kit's `TickBegin` call reads it) and its `FieldOfView`,
+  `Eye->GetActorLocation()`, `Eye->GetActorRotation().Vector()` (`FRotator::Vector`, as `AirBattle.cpp` uses it) and
+  `LandHulk::SightAlong`, the pose's `Sight` kept where there is no `Eye`; and in `GuardOldWrecks`, `Blend` read from
+  `-TheaterLandSmoothTanks=` (`FParse::Value` into an `FString`, `FCString::Atod`, `FMath::Clamp` to 0.45) or
+  `-TheaterLandSmoothTanks` (`FParse::Param`, 0.4), as the joined build's `LandBattle.cpp` reads it for
+  `Armour->SmoothTanks`. On merging with `claude/project-thread-pi6nal` (b6e80cee; `git merge-tree` finds two
+  conflicts): `LandBattleLive.cpp`, where `PumpLive` times its steps, so `GuardOldWrecks(G.bReset)` goes after
+  `MapLive` and before `Lap(MsMap)`; and `Tools/land_hulk/run.sh`, where the joined build adds `LandHouse` to
+  `CORES` (after `LandField`) beside this branch's `LAND_HULK_JOBS` and its build loop: keep this branch's file with
+  the joined build's `CORES` line. `LayOldWrecks`' return for a live battle (`S.Rec.bLive`) is dropped by the
+  merge's own reading of `LandBattle.cpp` (it auto-merges); check it is gone. After the merge `S.Armour->SmoothTanks`
+  holds the same number as `GuardOldWrecks`' own reading of the switch, and may stand for it. And the art
   director's look of her two carries (the look passed at 1e56500d, 24 November 21:01Z), and the 45 fps
   gate with twenty wrecks
   laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
@@ -1831,8 +1872,10 @@ below, with what the guard does not read).
   eye on a group by the advance's edge and on one by the village: no man or machine through one; any the guard marks
   and clears, its two log lines, and how the moment she goes from view reads (out of sight, on a cut or, the eye on her
   all along, in sight: none marked on Normandy as fought here, two on Prokhorovka at 273 and 275 s); with
-  `-TheaterLandBailOut`, a tank knocked out by one (the crew's run clear of her or her gone first); a shell landing on
-  a wreck (its burst and torn earth by her, no hole under her). Since round 2 of the look: the Mac compile
+  `-TheaterLandBailOut`, a tank knocked out by one (the crew's run clear of her or her gone first); with
+  `-TheaterLandSmoothTanks`, a tank turning by one; the film view dragged aside (a left drag) onto a marked wreck or
+  one a man is heading for (she stays while she is on the screen); a shell landing on a wreck (its burst and torn
+  earth by her, no hole under her). Since round 2 of the look: the Mac compile
   of `LandKit::Mesh::Paints` and `LandKit::Model::PaintNames` (filled in `Model::Load`; the scene's own calls,
   `Yard::Dress(K, bNear, M)` and `Yard::Patch(K, M)`, are as they were, the new `Dressing` note left out); the cost
   against the 45 fps gate and the battle's open. Measured here (the test's twenty, the cloud machine, one core): round 1

@@ -148,6 +148,46 @@ namespace LandHulk
 			return std::hypot(X - Ax - T * Dx, Y - Ay - T * Dy);
 		}
 
+		/** Where a track is drawn at battle time T, as LandKit's Vehicle::PlaceAt draws a machine: her kept points joined
+		 * straight, her first before it and her last after it, and a step faster than 25 m/s (the recording putting her
+		 * somewhere, not her driving there) held at its start. False where none of her points there is a number. */
+		bool PlaceOf(const LandFeed::Track& Tr, double T, double& X, double& Y)
+		{
+			const auto Ok = [](const LandFeed::Point& P) { return P.X == P.X && P.Y == P.Y && P.T == P.T; };
+			const std::vector<LandFeed::Point>& A = Tr.At;
+			if (A.empty()) return false;
+			size_t Hi = 0;
+			while (Hi < A.size() && A[Hi].T <= T) ++Hi;
+			if (Hi == 0 || Hi == A.size())
+			{
+				const LandFeed::Point& P = A[Hi == 0 ? 0 : A.size() - 1];
+				if (!Ok(P)) return false;
+				X = P.X;
+				Y = P.Y;
+				return true;
+			}
+			const LandFeed::Point& L = A[Hi - 1];
+			const LandFeed::Point& H = A[Hi];
+			if (!Ok(L) || !Ok(H))
+			{
+				if (!Ok(L) && !Ok(H)) return false;
+				X = Ok(L) ? L.X : H.X;
+				Y = Ok(L) ? L.Y : H.Y;
+				return true;
+			}
+			const double Span = H.T - L.T;
+			if (Span <= 1e-9 || std::hypot(H.X - L.X, H.Y - L.Y) > 25.0 * Span)
+			{
+				X = L.X;
+				Y = L.Y;
+				return true;
+			}
+			const double U = (T - L.T) / Span;
+			X = L.X + (H.X - L.X) * U;
+			Y = L.Y + (H.Y - L.Y) * U;
+			return true;
+		}
+
 		/** How far a place lies from a convex outline's edge (its corners in order, either way round): under 0 inside. */
 		double FromConvex(const std::vector<std::pair<double, double>>& P, double X, double Y)
 		{
@@ -3196,7 +3236,7 @@ namespace LandHulk
 		return false;
 	}
 
-	std::vector<size_t> Yard::Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen, double Crews)
+	std::vector<size_t> Yard::Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen, double Crews, double Blend)
 	{
 		std::vector<size_t> Out;
 		if (List.empty()) return Out;
@@ -3259,19 +3299,58 @@ namespace LandHulk
 			const double Far = Tr.IsVehicle() ? VehicleReach : ManReach;
 			const size_t N = Tr.At.size();
 			const auto Ok = [](const LandFeed::Point& P) { return P.X == P.X && P.Y == P.Y && P.T == P.T; };
-			// (a track shorter than read before was made again: read it whole)
-			const size_t From = Seen[T] <= N ? Seen[T] : 0;
+			// (a tank drawn rolling smoothly, Blend: her reach along a piece of her way BlendLead Blend her fastest more,
+			// over the kept points within the bell's reach of it and a step, 2.5 Blend and 0.1 s; a step faster than 25 m/s
+			// not counted, the screen putting her there unblended)
+			const bool bBlend = Blend > 0.0 && Blend == Blend && Tr.Role == "tank";
+			const double Bell = bBlend ? 2.5 * Blend + 0.1 : 0.0;
+			const auto Wide = [&](size_t I) -> double
+			{
+				if (!bBlend || I == 0 || I >= N) return Far;
+				const double Lo = Tr.At[I - 1].T - Bell, Hi = Tr.At[I].T + Bell;
+				size_t A = I, B = I;
+				while (A > 1 && Tr.At[A - 1].T > Lo) --A;
+				while (B + 1 < N && Tr.At[B].T < Hi) ++B;
+				double Fastest = 0.0;
+				for (size_t J = A; J <= B; ++J)
+				{
+					const LandFeed::Point& P = Tr.At[J - 1];
+					const LandFeed::Point& Q = Tr.At[J];
+					const double Dt = Q.T - P.T;
+					if (!Ok(P) || !Ok(Q) || Dt <= 1e-9) continue;
+					const double Speed = std::hypot(Q.X - P.X, Q.Y - P.Y) / Dt;
+					if (Speed <= 25.0) Fastest = std::max(Fastest, Speed);
+				}
+				return Far + BlendLead * Blend * Fastest;
+			};
+			// (a track shorter than read before was made again: read it whole; a smoothly rolling tank's way read again back
+			// over the bell's reach of her new points, as they widen it)
+			size_t From = Seen[T] <= N ? Seen[T] : 0;
+			if (bBlend && From > 1 && From < N)
+			{
+				const double Back = Tr.At[From - 1].T - Bell;
+				while (From > 1 && Tr.At[From - 1].T > Back) --From;
+			}
 			for (size_t I = From; I < N; ++I)
 			{
 				const LandFeed::Point& P = Tr.At[I];
 				const LandFeed::Point& Was = Tr.At[I > 0 ? I - 1 : 0];
-				if (Ok(P) && Ok(Was)) Touch(Was.X, Was.Y, Was.T, P.X, P.Y, P.T, Far);
+				if (Ok(P) && Ok(Was)) Touch(Was.X, Was.Y, Was.T, P.X, P.Y, P.T, Wide(I));
 			}
-			// (a knocked-out machine is drawn at her pin from her fall on, where she was hit; where the scene's crews bail
-			// out, a tank's run from her as far as Crews from her kill on)
-			if (Tr.bPinned && Tr.PinX == Tr.PinX && Tr.PinY == Tr.PinY && Tr.PinFrom == Tr.PinFrom)
+			// (a knocked-out machine is drawn where she was at her fall from then on: LandKit's PlaceAt holds her a hair
+			// before it, on her kept points joined straight, and a live battle's machine is never pinned, the live drill
+			// stopping her where she is hit; and at her pin from its time where the reading pinned her (a recorded battle's
+			// jump to her formation place). Where the scene's crews bail out, a tank's run from her as far as Crews from her
+			// kill on.)
+			const bool bFell = Tr.IsVehicle() && Tr.Fell >= 0.0 && Tr.Fell == Tr.Fell;
+			const bool bPin = Tr.bPinned && Tr.PinX == Tr.PinX && Tr.PinY == Tr.PinY && Tr.PinFrom == Tr.PinFrom;
+			if (bFell || bPin)
 			{
-				Touch(Tr.PinX, Tr.PinY, Tr.PinFrom, Tr.PinX, Tr.PinY, Tr.PinFrom, Crews > 0.0 && Tr.Role == "tank" ? std::max(Far, Crews) : Far);
+				const double Dead = Crews > 0.0 && Tr.Role == "tank" ? std::max(Far, Crews) : Far;
+				const double Since = bFell && bPin ? std::min(Tr.Fell, Tr.PinFrom) : bFell ? Tr.Fell : Tr.PinFrom;
+				if (bPin) Touch(Tr.PinX, Tr.PinY, Since, Tr.PinX, Tr.PinY, Since, Dead);
+				double Sx = 0.0, Sy = 0.0;
+				if (bFell && PlaceOf(Tr, Tr.Fell - 1e-3, Sx, Sy)) Touch(Sx, Sy, Since, Sx, Sy, Since, Dead);
 			}
 			// (a man who left the field with his block is drawn on at his last speed and facing for a second as he fades:
 			// read as reaching LeaveDrift more from where he left, whichever way he faced)
@@ -3304,12 +3383,35 @@ namespace LandHulk
 						for (size_t K = 0; K < List.size(); ++K)
 						{
 							if (Swept[K] != 0) continue;
-							SoonAt[K] = std::min(SoonAt[K], When(K, B.X, B.Y, B.T, B.X + Vx * Ahead, B.Y + Vy * Ahead, B.T + Ahead, Far + SoonWiden));
+							SoonAt[K] = std::min(SoonAt[K], When(K, B.X, B.Y, B.T, B.X + Vx * Ahead, B.Y + Vy * Ahead, B.T + Ahead, Wide(N - 1) + SoonWiden));
 						}
 					}
 				}
 			}
 		}
+		return Out;
+	}
+
+	Sight SightAlong(double EyeX, double EyeY, double EyeZ, double AheadX, double AheadY, double AheadZ, double WideFov, double Aspect, double Lines, bool bCut)
+	{
+		Sight Out;
+		Out.EyeX = EyeX;
+		Out.EyeY = EyeY;
+		Out.EyeZ = EyeZ;
+		const double Long = std::sqrt(AheadX * AheadX + AheadY * AheadY + AheadZ * AheadZ);
+		const double Scale = Long > 1e-9 && Long == Long ? 100.0 / Long : 0.0;
+		Out.LookX = EyeX + AheadX * Scale;
+		Out.LookY = EyeY + AheadY * Scale;
+		Out.LookZ = EyeZ + AheadZ * Scale;
+		if (Aspect > 0.0 && Aspect == Aspect) Out.Aspect = Aspect;
+		if (Lines > 0.0 && Lines == Lines) Out.Lines = Lines;
+		// (the lens across the picture to the lens from its top to its bottom, by the picture's shape)
+		if (WideFov > 0.0 && WideFov < 180.0)
+		{
+			const double HalfWide = 0.5 * WideFov * Pi / 180.0;
+			Out.Fov = 2.0 * std::atan(std::tan(HalfWide) / std::max(0.1, Out.Aspect)) * 180.0 / Pi;
+		}
+		Out.bCut = bCut;
 		return Out;
 	}
 

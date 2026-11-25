@@ -8643,6 +8643,16 @@ void ALandBattle::ShowOldWrecks(const FVector& EyeWorld)
 				Seeing.Lines = Size.Y;
 			}
 		}
+		// (the camera as it is posed this frame, not the shot's pose alone: AimEye has turned it by the player's drag
+		// aside, LookAside, up to 50 degrees round and 30 up or down, and the effects kit has jolted it; its lens is
+		// Unreal's, across the picture)
+		if (Eye && Eye->GetCameraComponent())
+		{
+			const FVector Posed = Eye->GetActorLocation();
+			const FVector Ahead = Eye->GetActorRotation().Vector();
+			Seeing = LandHulk::SightAlong(Posed.Y / UnitsPerMetre, Posed.X / UnitsPerMetre, Posed.Z / UnitsPerMetre, Ahead.Y, Ahead.X, Ahead.Z,
+				Eye->GetCameraComponent()->FieldOfView, Seeing.Aspect, Seeing.Lines, S.Pose.bCut);
+		}
 		std::vector<int> How;
 		const std::vector<size_t> Gone = S.OldWrecks.Clear(S.Battle, Seeing, &How);
 		for (size_t N = 0; N < Gone.size(); ++N)
@@ -8708,8 +8718,9 @@ void ALandBattle::GuardOldWrecks(bool bReset)
 	// own wrecks through), so a live man or machine may be sent across one all the same. Each piece is read here as it
 	// comes, before it is drawn (the screen keeps LiveMargin behind the rules): a wreck any of its ways comes near
 	// (LandHulk::Yard::Reached: her outline within 8.5 m of a vehicle's middle, 1.9 m of a man's, the clearances a
-	// recorded battle's wrecks are laid at; where crews bail out, -TheaterLandBailOut, within LandHulk::BailReach of a
-	// knocked-out tank's pin) is marked with the battle time he comes near her, and ShowOldWrecks clears her away before
+	// recorded battle's wrecks are laid at, a smoothly rolling tank's the more; where crews bail out, -TheaterLandBailOut,
+	// within LandHulk::BailReach of where a knocked-out tank stands from her fall, her place at her fall: a live battle's
+	// machine is never pinned) is marked with the battle time he comes near her, and ShowOldWrecks clears her away before
 	// then, the first moment the eye cannot see her go. Nothing where none was laid.
 	if (!State.IsValid() || State->OldWrecks.Hulks().empty())
 	{
@@ -8720,7 +8731,22 @@ void ALandBattle::GuardOldWrecks(bool bReset)
 	{
 		S.OldWreckSeen.clear();
 	}
-	const std::vector<size_t> Marked = S.OldWrecks.Reached(S.Rec, S.OldWreckSeen, S.Bails.bOn ? LandHulk::BailReach : 0.0);
+	// (tanks rolling smoothly, release 2's -TheaterLandSmoothTanks, read as the scene's armour reads it: 0.4 battle seconds
+	// asked plain, -TheaterLandSmoothTanks=<seconds> up to 0.45; LandKit draws a tank off her kept points' line by up to
+	// LandHulk::BlendLead of that times her speed, so the guard reaches that much farther round a tank's way)
+	double Blend = 0.0;
+	{
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSmoothTanks="), Asked))
+		{
+			Blend = FMath::Clamp(FCString::Atod(*Asked), 0.0, 0.45);
+		}
+		else if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSmoothTanks")))
+		{
+			Blend = 0.4;
+		}
+	}
+	const std::vector<size_t> Marked = S.OldWrecks.Reached(S.Rec, S.OldWreckSeen, S.Bails.bOn ? LandHulk::BailReach : 0.0, Blend);
 	for (const size_t K : Marked)
 	{
 		const LandHulk::Hulk& H = S.OldWrecks.Hulks()[K];

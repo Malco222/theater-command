@@ -2478,6 +2478,14 @@ int main(int Argc, char** Argv)
 			LandHulk::Yard Pieces = YL, Whole = YL, Cost = YL;
 			std::vector<size_t> Seen, SeenWhole;
 			std::vector<size_t> ByPiece;
+			// (and as release 2 plays a live battle: no machine pinned (the live drill stops a knocked-out one where she is
+			// hit, so her track never jumps: here her points from the pin on already stand there), the crews bailing out
+			// (the ship list's bail-out, on) and the tanks rolled smoothly (smoothtanks, on: 0.4 s))
+			constexpr double ShipBlend = 0.4;
+			LandHulk::Yard PiecesR2 = YL, WholeR2 = YL;
+			std::vector<size_t> SeenR2, SeenWholeR2, ByPieceR2;
+			LandFeed::Recording RecR2 = Rec;
+			for (LandFeed::Track& T : RecR2.Tracks) T.bPinned = false;
 			std::vector<uint8_t> EverHeading(YL.Hulks().size(), 0);
 			int PieceCount = 0;
 			double Last = 0.0, CostMs = 0.0, CostMost = 0.0;
@@ -2521,6 +2529,11 @@ int main(int Argc, char** Argv)
 				}
 				for (const size_t K : Pieces.Reached(Part, Seen)) ByPiece.push_back(K);
 				for (size_t K = 0; K < EverHeading.size(); ++K) EverHeading[K] = EverHeading[K] != 0 || Pieces.Heading(K) ? 1 : 0;
+				{
+					LandFeed::Recording PartR2 = Part;
+					for (LandFeed::Track& T : PartR2.Tracks) T.bPinned = false;
+					for (const size_t K : PiecesR2.Reached(PartR2, SeenR2, LandHulk::BailReach, ShipBlend)) ByPieceR2.push_back(K);
+				}
 				// (a live piece's cost: each track read from its last kept point before the provisional one)
 				std::vector<size_t> Cadence(Part.Tracks.size(), 0);
 				for (size_t T = 0; T < Part.Tracks.size(); ++T) Cadence[T] = Part.Tracks[T].At.size() >= 2 ? Part.Tracks[T].At.size() - 2 : 0;
@@ -2533,6 +2546,8 @@ int main(int Argc, char** Argv)
 			}
 			for (const size_t K : Pieces.Reached(Rec, Seen)) ByPiece.push_back(K);
 			std::vector<size_t> ByWhole = Whole.Reached(Rec, SeenWhole);
+			for (const size_t K : PiecesR2.Reached(RecR2, SeenR2, LandHulk::BailReach, ShipBlend)) ByPieceR2.push_back(K);
+			const std::vector<size_t> ByWholeR2 = WholeR2.Reached(RecR2, SeenWholeR2, LandHulk::BailReach, ShipBlend);
 			std::vector<size_t> PieceSet = ByPiece, WholeSet = ByWhole;
 			std::sort(PieceSet.begin(), PieceSet.end());
 			std::sort(WholeSet.begin(), WholeSet.end());
@@ -2609,6 +2624,67 @@ int main(int Argc, char** Argv)
 			std::printf("%s, a live battle: the guard's cost at a live piece's cadence (every track's last two kept points read against every wreck, and each moving one's way on): %.3f ms a piece on the average, %.3f ms at the most, over %d pieces\n",
 				Name.c_str(), PieceCount > 0 ? CostMs / PieceCount : 0.0, CostMost, PieceCount);
 			if (PieceSet != WholeSet || ByPiece.size() != PieceSet.size() || !bSameDue) Fault(Name + ": the guard read piece by piece not as read whole (or a wreck marked twice, or at another time)");
+			{
+				// (release 2's read: the same piece by piece as whole; every wreck the read above marks marked too, none
+				// later; and every wreck left standing at least BailReach from where a knocked-out tank stands, her place
+				// at her fall, and as clear of the ways as above)
+				std::vector<size_t> PieceSetR2 = ByPieceR2, WholeSetR2 = ByWholeR2;
+				std::sort(PieceSetR2.begin(), PieceSetR2.end());
+				std::sort(WholeSetR2.begin(), WholeSetR2.end());
+				bool bSameDueR2 = true, bCovers = true;
+				for (const size_t K : WholeSetR2) bSameDueR2 = bSameDueR2 && std::fabs(PiecesR2.DueOf(K) - WholeR2.DueOf(K)) < 1e-6;
+				for (const size_t K : WholeSet) bCovers = bCovers && WholeR2.Marked(K) && WholeR2.DueOf(K) <= Whole.DueOf(K) + 1e-9;
+				std::string WhichR2;
+				for (const size_t K : WholeSetR2)
+				{
+					char One[64];
+					std::snprintf(One, sizeof(One), "%zu at %.1f s", K + 1, WholeR2.DueOf(K));
+					WhichR2 += (WhichR2.empty() ? "" : ", ") + std::string(One);
+				}
+				Near DeadTanks;
+				int DeadCount = 0;
+				for (const LandFeed::Track& T : RecR2.Tracks)
+				{
+					if (T.Role != "tank" || T.Fell < 0.0 || T.At.empty()) continue;
+					// (her place a hair before her fall, her kept points joined straight, as LandKit's PlaceAt holds her)
+					const double When = T.Fell - 1e-3;
+					size_t Hi = 0;
+					while (Hi < T.At.size() && T.At[Hi].T <= When) ++Hi;
+					double Px = T.At[Hi == 0 ? 0 : Hi - 1].X, Py = T.At[Hi == 0 ? 0 : Hi - 1].Y;
+					if (Hi > 0 && Hi < T.At.size())
+					{
+						const LandFeed::Point& L = T.At[Hi - 1];
+						const LandFeed::Point& H = T.At[Hi];
+						const double Span = H.T - L.T;
+						if (Span > 1e-9 && std::hypot(H.X - L.X, H.Y - L.Y) <= 25.0 * Span)
+						{
+							Px = L.X + (H.X - L.X) * (When - L.T) / Span;
+							Py = L.Y + (H.Y - L.Y) * (When - L.T) / Span;
+						}
+					}
+					DeadTanks.Add(Px, Py);
+					++DeadCount;
+				}
+				double StandVehicleR2 = 1e9, StandManR2 = 1e9, StandCrew = 1e9;
+				for (const Spot& S : SpotsOf(YL, 3))
+				{
+					if (WholeR2.Marked(S.K)) continue;
+					StandVehicleR2 = std::min(StandVehicleR2, LiveVehicles.To(S.X, S.Y, 30.0));
+					StandManR2 = std::min(StandManR2, LiveMen.To(S.X, S.Y, 10.0));
+				}
+				// (the crews' reach from her outline, her rings, as the guard reads it)
+				for (size_t K = 0; K < YL.Hulks().size(); ++K)
+				{
+					if (WholeR2.Marked(K)) continue;
+					for (const LandHulk::Ring& R : YL.Hulks()[K].Rings) StandCrew = std::min(StandCrew, DeadTanks.To(R.X, R.Y, 100.0 + R.R) - R.R);
+				}
+				std::printf("%s, a live battle fought as recorded, as release 2 plays it (no machine pinned, crews bailing out to %.0f m of a knocked-out tank, %d of them, tanks rolled smoothly over %.1f s), read as the guard reads its pieces: %zu of %zu wrecks marked to be cleared (%s), %s, %s; every one the read above marks marked too, none later: %s; those left standing at least %.1f m from a knocked-out tank (her outline, read out to 100 m), %.1f m from a vehicle's way and %.1f m from a man's (read out to 30 and 10 m)\n",
+					Name.c_str(), LandHulk::BailReach, DeadCount, ShipBlend, WholeSetR2.size(), YL.Hulks().size(), WhichR2.empty() ? "none" : WhichR2.c_str(),
+					PieceSetR2 == WholeSetR2 && ByPieceR2.size() == PieceSetR2.size() ? "the same as read whole" : "NOT the same as read whole", bSameDueR2 ? "each at the same time" : "NOT at the same times",
+					bCovers ? "yes" : "NO", StandCrew, StandVehicleR2, StandManR2);
+				if (PieceSetR2 != WholeSetR2 || ByPieceR2.size() != PieceSetR2.size() || !bSameDueR2) Fault(Name + ": release 2's guard read piece by piece not as read whole (or a wreck marked twice, or at another time)");
+				if (StandCrew < LandHulk::BailReach) Fault(Name + ": a wreck left standing within the crews' reach of a knocked-out tank (release 2's read)");
+			}
 			if (StandVehicle < LandHulk::VehicleClear) Fault(Name + ": a wreck left standing within 8 m of a live vehicle's way");
 			if (StandMan < LandHulk::ManClear) Fault(Name + ": a wreck left standing within 1.5 m of a live man's way");
 			if (BeforeDue < -0.01) Fault(Name + ": a way within its reach of a marked wreck before her time");
@@ -2806,13 +2882,57 @@ int main(int Argc, char** Argv)
 				std::vector<size_t> StaySeen;
 				Stays.Reached(Stay, StaySeen);
 				const bool bLeave = Leave.Marked(1) && Leave.DueOf(1) == 45.0 && !Stays.Marked(1);
+				// (the same tank as a live battle gives her: no pin (the live drill stops her where she is hit, so her track
+				// never jumps), knocked out at 10 s between kept points 100 m either side of wreck 3, 40 m off her: her crews
+				// reach her from where she is at her fall, not her first or last kept point's place; nor where they stay in)
+				LandHulk::Yard LiveCrew = YL, LiveNoCrew = YL;
+				std::vector<size_t> LiveCrewSeen, LiveNoCrewSeen;
+				LandFeed::Recording LiveKill;
+				LiveKill.Tracks.push_back(Way("tank", { At(0, H3.X + 40.0, H3.Y + 100.0), At(20, H3.X + 40.0, H3.Y - 100.0) }));
+				LiveKill.Tracks[0].Fell = 10.0;
+				LiveCrew.Reached(LiveKill, LiveCrewSeen, LandHulk::BailReach);
+				LiveNoCrew.Reached(LiveKill, LiveNoCrewSeen);
+				const bool bLiveCrews = !LiveKill.Tracks[0].bPinned && LiveCrew.Marked(2) && LiveCrew.DueOf(2) == 10.0 && !LiveNoCrew.Marked(2);
+				// (a tank creeping north at 2 m/s past wreck 1, her way 1.5 m outside her reach of the westmost ring, then off
+				// at 8 m/s 20 m on: left as drawn on her kept points' line; drawn rolling smoothly over 0.4 s, marked, her bell
+				// reaching the faster piece, BlendLead 0.4 8 = 2.56 m more; read in two pieces, the first ending as she sets
+				// off: left by the first, BlendLead 0.4 2 = 0.64 m more, and marked by the second, which reads her creep
+				// again, at the same time as read whole)
+				const double Passing = West - LandHulk::VehicleReach - 1.5;
+				LandFeed::Recording Smooth;
+				Smooth.Tracks.push_back(Way("tank", { At(0, Passing, H1.Y - 20.0), At(20, Passing, H1.Y + 20.0), At(20.5, Passing, H1.Y + 24.0), At(45, Passing, H1.Y + 220.0) }));
+				LandHulk::Yard Plain = YL, Blended = YL;
+				std::vector<size_t> PlainSeen, BlendedSeen;
+				Plain.Reached(Smooth, PlainSeen);
+				Blended.Reached(Smooth, BlendedSeen, 0.0, 0.4);
+				LandFeed::Recording Smooth1 = Smooth;
+				Smooth1.Tracks[0].At.resize(2);
+				LandHulk::Yard BlendedPieces = YL;
+				std::vector<size_t> BlendedPiecesSeen;
+				BlendedPieces.Reached(Smooth1, BlendedPiecesSeen, 0.0, 0.4);
+				const bool bFirstLeft = !BlendedPieces.Marked(0);
+				BlendedPieces.Reached(Smooth, BlendedPiecesSeen, 0.0, 0.4);
+				const bool bBlend = !Plain.Marked(0) && Blended.Marked(0) && Blended.DueOf(0) < 20.0 && bFirstLeft && BlendedPieces.Marked(0)
+					&& std::fabs(BlendedPieces.DueOf(0) - Blended.DueOf(0)) < 1e-9;
+				// (the eye as the camera is posed: the shot's pose looking 50 degrees west of wreck 1 on a 40 degree lens, the
+				// player's drag turning the camera 50 degrees back onto her: in the camera's picture, not in the pose's)
+				LandHulk::Sight Pose = On(H1);
+				Pose.Fov = 40.0;
+				const double Turn = 50.0 * 3.14159265358979323846 / 180.0;
+				const double PoseX = H1.X - std::sin(Turn) * 120.0, PoseY = Pose.EyeY + std::cos(Turn) * 120.0;
+				Pose.LookX = PoseX;
+				Pose.LookY = PoseY;
+				const double Wide = 2.0 * std::atan(std::tan(20.0 * 3.14159265358979323846 / 180.0) * Pose.Aspect) * 180.0 / 3.14159265358979323846;
+				const LandHulk::Sight Camera = LandHulk::SightAlong(Pose.EyeX, Pose.EyeY, Pose.EyeZ, H1.X - Pose.EyeX, H1.Y - Pose.EyeY, H1.Z - Pose.EyeZ, Wide, Pose.Aspect, Pose.Lines, false);
+				const bool bCamera = YL.InSight(0, Camera) && !YL.InSight(0, Pose) && std::fabs(Camera.Fov - 40.0) < 1e-6;
 				const bool bOk = bTankShort && bTankThrough && bEyeOn && bAtTime && bAway && bOnCut && bSmall && bManPast && bManThrough && bPinFar && bPinned && bAgain && bHeading
-					&& bHeadStays && bTurned && bHeadAway && bCrews && bLeave;
-				std::printf("%s, a live battle, the guard made to work: %s (a tank's pieces to 30 m short of wreck 1's reach left her: %s; its next piece through her marked her at %.1f s: %s; the eye on her 5 s before kept her: %s, and cleared her %.1f s before: %s; the eye away 20 s before cleared her at once: %s, a cut: %s; 6 km off she is too small to see go: %s; a man %.1f m outside his reach of wreck 2 left her: %s, then through her marked her: %s; a lorry far off left wreck 3: %s, pinned on her marked her from her fall: %s; the men placed again, one on her, marked her no second time: %s; a tank coming on at wreck 1 60 m short of her reach: heading, not marked: %s, kept with the eye on her: %s, turned away no longer heading: %s, cleared with the eye away: %s; a tank knocked out 40 m off wreck 3 marked her where crews bail out, not where they stay in, nor for a lorry: %s; a man leaving the field 5 m outside his reach of wreck 2 marked her as he left: %s)\n",
+					&& bHeadStays && bTurned && bHeadAway && bCrews && bLeave && bLiveCrews && bBlend && bCamera;
+				std::printf("%s, a live battle, the guard made to work: %s (a tank's pieces to 30 m short of wreck 1's reach left her: %s; its next piece through her marked her at %.1f s: %s; the eye on her 5 s before kept her: %s, and cleared her %.1f s before: %s; the eye away 20 s before cleared her at once: %s, a cut: %s; 6 km off she is too small to see go: %s; a man %.1f m outside his reach of wreck 2 left her: %s, then through her marked her: %s; a lorry far off left wreck 3: %s, pinned on her marked her from her fall: %s; the men placed again, one on her, marked her no second time: %s; a tank coming on at wreck 1 60 m short of her reach: heading, not marked: %s, kept with the eye on her: %s, turned away no longer heading: %s, cleared with the eye away: %s; a tank knocked out 40 m off wreck 3 marked her where crews bail out, not where they stay in, nor for a lorry: %s; the same as a live battle knocks her out, no pin, her place at her fall between kept points: %s; a man leaving the field 5 m outside his reach of wreck 2 marked her as he left: %s; a tank creeping by 1.5 m outside her reach of wreck 1, then off fast, left her on her kept points' line and marked her rolled smoothly over 0.4 s, read whole or in two pieces: %s; a drag turning the camera 50 degrees from the shot's pose onto wreck 1 read from the camera as posed, not the pose: %s)\n",
 					Name.c_str(), bOk ? "each marked when a piece came near her, cleared at the first moment the eye could not see her go or at her time" : "NOT as it should be",
 					bTankShort ? "yes" : "NO", TankDue, bTankThrough ? "yes" : "NO", bEyeOn ? "yes" : "NO", LandHulk::ClearLead, bAtTime ? "yes" : "NO", bAway ? "yes" : "NO", bOnCut ? "yes" : "NO",
 					bSmall ? "yes" : "NO", Past - H2.Y - Round2 - LandHulk::ManReach, bManPast ? "yes" : "NO", bManThrough ? "yes" : "NO", bPinFar ? "yes" : "NO", bPinned ? "yes" : "NO",
-					bAgain ? "yes" : "NO", bHeading ? "yes" : "NO", bHeadStays ? "yes" : "NO", bTurned ? "yes" : "NO", bHeadAway ? "yes" : "NO", bCrews ? "yes" : "NO", bLeave ? "yes" : "NO");
+					bAgain ? "yes" : "NO", bHeading ? "yes" : "NO", bHeadStays ? "yes" : "NO", bTurned ? "yes" : "NO", bHeadAway ? "yes" : "NO", bCrews ? "yes" : "NO", bLiveCrews ? "yes" : "NO",
+					bLeave ? "yes" : "NO", bBlend ? "yes" : "NO", bCamera ? "yes" : "NO");
 				if (!bOk) Fault(Name + ": the live guard did not mark or clear the wrecks as it should (or cleared one too soon)");
 			}
 
