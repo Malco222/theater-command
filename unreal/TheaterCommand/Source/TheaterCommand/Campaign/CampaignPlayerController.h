@@ -1338,6 +1338,7 @@ private:
 	// town that no order brings out with a move stays inside: RefreshOrders takes that corps out of the hand and says so.
 	FString HandStays;
 	int32 HandStaysDepth = 0; // (RefreshOrders looking again at the hand without it: the reason is said once, by the first look)
+	FString HandStaysSaid; // (and the reason last said so, for an order of the town's whose own note comes after: TrayTownOrder)
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
 	// (One voice after a press; the UI director's brief, 17 November.) An order has been given to the army in hand since
 	// it was picked up: the slip stays put away, and the tray's foot no longer speaks of next month.
@@ -1391,8 +1392,9 @@ private:
 	 */
 	FString StaysAshore() const;
 	/**
-	 * (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, the last corps of the hand inside a town
-	 * that no order would bring out with a move (not in HandComesOut): it would be left behind without a word.
+	 * (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, or beside corps of the garrison that come
+	 * out with a move, the last corps of the hand inside a town that no order would bring out with a move (not in
+	 * HandComesOut): it would be left behind without a word, or taken out of the town onto a march kept for next month.
 	 * INDEX_NONE where there is none, by sea or by rail, and while it is not the player's turn.
 	 */
 	int32 LeftInside() const;

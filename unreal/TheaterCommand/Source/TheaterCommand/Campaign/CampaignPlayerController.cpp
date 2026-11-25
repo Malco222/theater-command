@@ -7764,11 +7764,15 @@ void ACampaignPlayerController::TrayTownOrder(int32 Which)
 		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 		CampaignSounds::Play(this, TEXT("marching"), 0.5f);
 	}
+	HandStaysSaid.Reset();
 	RefreshOrders();
 	RefreshRegionPanel(Here);
-	if (!Said.IsEmpty())
+	// (The 1.5.3 review.) A corps the order leaves in the town that RefreshOrders took out of the hand: its reason follows
+	// the order's own note, which would otherwise hide it.
+	const FString Told = HandStaysSaid.IsEmpty() ? Said : Said.IsEmpty() ? HandStaysSaid : Said + TEXT(" ") + HandStaysSaid;
+	if (!Told.IsEmpty())
 	{
-		Notify(Said, 6.0);
+		Notify(Told, HandStaysSaid.IsEmpty() ? 6.0 : 9.0);
 	}
 }
 
@@ -8560,9 +8564,10 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	// (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, a corps of the town's garrison that no
 	// order would bring out with a move would be left behind without a word: the rules bring the garrison in hand out
-	// all or none (two inside with room outside for one), and one that went in this month has no move once out. It is
-	// taken out of the hand, the last picked first, the hand is looked at again without it, and the rules' reason is
-	// said once, by the first look.
+	// all or none (two inside with room outside for one), and one that went in this month has no move once out. Beside
+	// older corps of the garrison that come out, such a one would be taken out of the town onto a march kept for next
+	// month (LeftInside). It is taken out of the hand, the last picked first, the hand is looked at again without it,
+	// and the rules' reason is said once, by the first look.
 	if (const int32 Stays = LeftInside(); Stays != INDEX_NONE)
 	{
 		FString StaysWhy = HandStays;
@@ -8577,6 +8582,7 @@ void ACampaignPlayerController::RefreshOrders()
 		--HandStaysDepth;
 		if (HandStaysDepth == 0 && !StaysWhy.IsEmpty())
 		{
+			HandStaysSaid = StaysWhy; // (for an order of the town's that says its own note after: TrayTownOrder)
 			Notify(StaysWhy, 8.0);
 		}
 		return;
@@ -9105,7 +9111,10 @@ int32 ACampaignPlayerController::LeftInside() const
 			Last = Id; // (rules that do not say a garrison's moves once out do not say who comes out either: the hand stays as it was)
 		}
 	}
-	return bInField ? Last : INDEX_NONE;
+	// (The 1.5.3 review.) Or beside corps of the garrison that do come out with a move, in a hand that is all garrison (an
+	// older corps and one that went in this month, as GARRISON <TOWN> leaves a hand that held both): the order would take
+	// the one that went in this month out of the town onto a march kept for next month, and leave the town empty.
+	return (bInField || HandComesOut.Num() > 0) ? Last : INDEX_NONE;
 }
 
 FString ACampaignPlayerController::GarrisonWhere() const
