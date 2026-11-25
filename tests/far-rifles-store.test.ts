@@ -20,7 +20,7 @@ import { FAR_LAID } from '../src/campaign/far-rows';
 import { addCorps, capitulate, createGame, industryHeld, setWar } from '../src/campaign/game';
 import { demand } from '../src/campaign/pacific';
 import { RES, laneKey, lanesTo, seaLanes } from '../src/campaign/resources';
-import { RIFLES, needsFrom, rifleRoads, riflesMonth, riflesRow, riflesSeen, riflesView, roadsNow } from '../src/campaign/rifles';
+import { RIFLES, needsFrom, rifleRoads, riflesMonth, riflesRow, riflesSeen, riflesView, roadsNow, spareOf } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -38,6 +38,8 @@ const rifles = (g: Game): number => Math.round(stockOf(g, 'CHN', 'rifles') * PER
 const month = (g: Game): number => { const was = rifles(g); g.turn++; riflesMonth(g, 'CHN'); return Math.round((rifles(g) - was) * 1000) / 1000; };
 const hold = (g: Game, place: string, nat: string): void => { g.byName[place].ctrl = nat; };
 const road = (g: Game, id: string) => roadsNow(g, 'CHN').find((r) => r.id === id)!;
+/** Two nations at war make peace, and nothing else changes. */
+const peace = (g: Game, a: string, b: string): void => { g.nations[a].atWar = g.nations[a].atWar.filter((x) => x !== b); g.nations[b].atWar = g.nations[b].atWar.filter((x) => x !== a); };
 const ours = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^(sa|sac|sag|saw|sam|rflm|rflc):/.test(k)).sort();
 
 describe('far off: the rule binds nobody', () => {
@@ -151,6 +153,16 @@ describe('the Burma Road', () => {
     expect(q.headlines.length).toBe(n);
     expect(q.flags['rflc:burma-road']).toBe(q.turn);
   });
+
+  it("a played China's first month brings no news from this module, though the road from Hong Kong is cut that day", () => {
+    const g = grand('CHN');
+    const n = g.headlines.length;
+    month(g);
+    expect(road(g, 'hongkong-canton').state).toBe('cut');
+    expect(g.headlines.slice(n).map((h) => h.text)).toEqual([]);
+    month(g);
+    expect(g.headlines.slice(n).map((h) => h.text)).toEqual([]);
+  });
 });
 
 describe('Haiphong and Hong Kong', () => {
@@ -188,7 +200,13 @@ describe('the roads on the chart', () => {
         if (i > 0) expect(here.nb.includes(g.byName[r.past[i - 1]].id), `${r.id}: ${r.past[i - 1]} to ${r.past[i]}`).toBe(true);
       }
     }
-    expect(RIFLES.roads.find((r) => r.id === 'sinkiang-road')!.past).toEqual(['Ayaguz', 'Tihwa', 'Turfan', 'Hami', 'Anhsi', 'Yumen', 'Changyeh', 'Liangchow', 'Lanchow']);
+    // (Each road's order is pinned: the first enemy-held place in it is the one the news names.)
+    expect(Object.fromEntries(RIFLES.roads.map((r) => [r.id, r.past]))).toEqual({
+      'burma-road': ['Rangoon', 'Prome', 'Yenangyaung', 'Mandalay', 'Lashio', 'Paoshan', 'Tali', 'Kunming'],
+      'sinkiang-road': ['Ayaguz', 'Tihwa', 'Turfan', 'Hami', 'Anhsi', 'Yumen', 'Changyeh', 'Liangchow', 'Lanchow'],
+      'haiphong-rail': ['Haiphong', 'Hanoi', 'Lao Kay', 'Mengtsz', 'Kunming'],
+      'hongkong-canton': ['Hong Kong', 'Tungkun', 'Canton'],
+    });
   });
 });
 
@@ -202,6 +220,62 @@ describe('the Sinkiang road', () => {
     expect(month(g)).toBe(4500 + 2500);
     setWar(g, 'SOV', 'CHN');
     expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'cut', rifles: 0, why: 'China is at war with the Soviet Union, which sold the cargoes.', by: 'seller' });
+  });
+
+  it('the interim test reads the great powers only: a war with a minor nation sends the whole, a war with Japan alone nothing', () => {
+    const g = grand();
+    expect([g.nations.SOV.atWar, g.nations.FIN.atWar.includes('SOV')]).toEqual([[], false]);
+    setWar(g, 'SOV', 'FIN');
+    expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'open', rifles: 1300 });
+    peace(g, 'SOV', 'FIN');
+    setWar(g, 'SOV', 'JAP');
+    expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'dry', rifles: 0, why: 'The Soviet Union is at war with Japan and sells nothing.' });
+  });
+
+  it("an enemy of China holding a place on it cuts it; an enemy of the seller's alone does not", () => {
+    const g = grand();
+    expect(g.nations.JAP.atWar.includes('SOV')).toBe(false);
+    hold(g, 'Lanchow', 'JAP');
+    expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'cut', rifles: 0, by: 'place', at: 'Lanchow', why: 'Japan holds Lanchow and lets nothing past.' });
+    hold(g, 'Lanchow', 'CHN');
+    // (Germany at war with the Soviet Union and at peace with China: the seller's war dries the road, its hold cuts nothing.)
+    expect(g.nations.GER.atWar.includes('CHN')).toBe(false);
+    setWar(g, 'SOV', 'GER');
+    hold(g, 'Tihwa', 'GER');
+    expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'dry', rifles: 0 });
+    expect(road(g, 'sinkiang-road').by).toBeUndefined();
+  });
+
+  it('a seller that has fallen sends nothing', () => {
+    const g = grand();
+    capitulate(g, 'SOV', 'GER');
+    expect([g.nations.SOV.alive, g.nations.SOV.atWar]).toEqual([false, []]);
+    expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'dry', rifles: 0, why: 'The Soviet Union has fallen and sells nothing.' });
+    expect(month(g)).toBe(4500 + 2500);
+  });
+
+  it('cut, then dry: no news of running again; dry, then cut: no rifles counted lost; dry, then open again after a cut: running again', () => {
+    const said = (g: Game): string[] => g.headlines.filter((h) => /Sinkiang/.test(h.text)).map((h) => `T${h.turn} ${h.text}`);
+    const g = grand('CHN');
+    month(g);
+    hold(g, 'Lanchow', 'JAP'); month(g);
+    setWar(g, 'SOV', 'GER'); hold(g, 'Lanchow', 'CHN'); month(g);
+    expect(road(g, 'sinkiang-road')).toMatchObject({ state: 'dry', rifles: 0 });
+    month(g);
+    peace(g, 'SOV', 'GER'); month(g); month(g);
+    expect(said(g)).toEqual([
+      'T3 The Sinkiang road is cut: Japan holds Lanchow. 1,300 fewer rifles reach your store each month.',
+      'T6 The Sinkiang road runs again: 1,300 rifles a month can reach your store.',
+    ]);
+    const h = grand('CHN');
+    month(h);
+    setWar(h, 'SOV', 'GER'); month(h);
+    hold(h, 'Lanchow', 'JAP'); month(h); month(h);
+    expect(said(h)).toEqual(['T4 The Sinkiang road is cut: Japan holds Lanchow. It carried no rifles to your store.']);
+    // (Running dry and running again with no cut between is no news, as before.)
+    const q = grand('CHN');
+    month(q); setWar(q, 'SOV', 'GER'); month(q); peace(q, 'SOV', 'GER'); month(q);
+    expect(said(q)).toEqual([]);
   });
 
   it('with a Soviet shelf: only the spare is sent, the shelf falls by it in its own divisions\' worth, and a need takes the spare to nothing', () => {
@@ -224,6 +298,14 @@ describe('the Sinkiang road', () => {
     expect(sov()).toBe(3);
     start = 0;
   });
+
+  it('the spare is never below 0, whatever a need asks', () => {
+    undo.push(rowsFrom((_g, nat) => (nat === 'SOV' ? { rifles: { start: 1 } } : undefined)));
+    const g = grand();
+    expect(spareOf(g, 'SOV')).toBe(1);
+    undo.push(needsFrom((_g, nat) => (nat === 'SOV' ? 3 : 0)));
+    expect(spareOf(g, 'SOV')).toBe(0);
+  });
 });
 
 describe('the month', () => {
@@ -243,6 +325,14 @@ describe('the month', () => {
     for (const k of ours(g)) expect(h.flags[k], k).toBe(g.flags[k]);
     expect(rifles(h)).toBe(rifles(g));
     expect(month(h)).toBe(4500 + 1300);
+  });
+
+  it('a fallen China is paid nothing and nothing is written', () => {
+    const g = grand();
+    g.nations.CHN.alive = false;
+    const before = JSON.stringify(g.flags);
+    expect(month(g)).toBe(0);
+    expect(JSON.stringify(g.flags)).toBe(before);
   });
 
   it('nobody else is written: only China\'s and its roads\' flags', () => {
@@ -276,6 +366,18 @@ describe('the views', () => {
     expect(Math.round(s.inflow.total)).toBe(8300);
     expect(s.card).toBe('China arms its new corps from its arsenals, the Burma Road and the Sinkiang road: about 8,300 rifles a month, a new infantry corps about every 8 months.');
     expect(riflesSeen(g, 'JAP', 'CHN')).toBeNull();
+    // (Only the known fields, so no figure of the stock can ride in under another name.)
+    expect(Object.keys(s).sort()).toEqual(['card', 'inflow', 'line', 'nat']);
+    expect(Object.keys(s.inflow).sort()).toEqual(['arsenals', 'roads', 'total', 'works']);
+    for (const w of s.inflow.works) expect(Object.keys(w).sort()).toEqual(['held', 'place', 'rifles']);
+    const known = ['id', 'name', 'tons', 'full', 'rifles', 'state', 'why', 'by', 'at', 'who'];
+    for (const r of s.inflow.roads) expect(Object.keys(r).filter((k) => !known.includes(k)), r.id).toEqual([]);
+  });
+
+  it('the picture line leaves out a works whose place is lost', () => {
+    const g = grand();
+    hold(g, 'Chungking', 'JAP');
+    expect(riflesView(g, 'CHN')!.picture.line).toBe("Rifles in store □□□□□□□□□□ 0 of the 64,000 an infantry corps takes · +5,300 a month: Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300");
   });
 });
 

@@ -12,7 +12,10 @@
 //
 // State is kept in g.flags, so it is saved with the campaign. Written only for a nation the rows name:
 //   rflm:<nat>   the last month its rifles were put on the shelf (riflesMonth)
-//   rflc:<road>  0 while the road ran when last read, else the month it was found cut (for the news, once)
+//   rflc:<road>  for the news, once: 0 while the road ran with its load when last read (a road of 0 tons, running);
+//                minus the month it was found running dry (its seller sent nothing), which is no news; else the month
+//                it was found cut, kept while a cut road comes back dry, so that "runs again" is told only when
+//                its rifles can come
 // and the shelves' own flags (arms.ts: sa:<nat>, sam:<nat>).
 
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -121,6 +124,9 @@ function roadNow(g: Game, road: RoadRow, sell?: { draw: number }): RoadNow {
   if (stop) return { ...out, ...stop };
   const seller = road.seller;
   if (!seller || full <= 0) return { ...out, rifles: full };
+  // A seller that has fallen sells nothing, shelf or none: a capitulated nation's wars are ended, so the interim test
+  // below would read it as at peace.
+  if (!g.nations[seller]?.alive) return { ...out, state: 'dry', why: `${nameOf(g, seller, true)} has fallen and sells nothing.` };
   if (has(g, seller, 'rifles')) {
     // The seller's own new corps and drafts are armed first; what is left can be sold (05:44Z, point C).
     const per = perDivOf(g, seller);
@@ -172,24 +178,43 @@ export function riflesMonth(g: Game, nat: string): void {
   }
 }
 
-/** The news of a road, once: the month it goes from running to cut, and the month it runs again. Told to the receiver's seat, as the books tell a seat. */
+/**
+ * The news of a road, once: the month it goes from running to cut, and the month a cut road runs again with its load.
+ * A road running dry (its seller sends nothing) is no news either way, and a cut road that comes back dry is not told
+ * as running: it is told when its rifles can come. Told to the receiver's seat only, as the books tell a seat.
+ *
+ * (So a war nobody plays gains only the rflc: flags, and a whole-save print of one, as the identity runs make, can
+ * never show a headline of this module's. A played receiver's save gains one headline at each change told here.)
+ */
 function roadNews(g: Game, nat: string, road: RoadRow, now: RoadNow): void {
   const k = kCut(road.id), was = g.flags[k];
-  const cut = now.state === 'cut';
-  if (was !== undefined && (was > 0) === cut) return;
-  g.flags[k] = cut ? g.turn : 0;
+  const mark = now.state === 'cut' ? g.turn : now.state === 'dry' ? -g.turn : 0;
   // (The first reading of a road is no change: a road cut on the first day is not news.)
-  if (was === undefined || nat !== g.human) return;
-  headline(g, 'info', cut ? cutWords(g, road, now) : runsWords(g, road), nat);
+  if (was === undefined) { g.flags[k] = mark; return; }
+  const wasCut = was > 0, wasDry = was < 0;
+  let says = '';
+  if (now.state === 'cut') {
+    if (wasCut) return;
+    says = cutWords(g, road, now, wasDry);
+  } else if (now.state === 'dry') {
+    // (Kept as cut while a cut road comes back dry; open to dry is marked, and told nothing.)
+    if (wasCut || wasDry) return;
+  } else {
+    if (was === 0) return;
+    if (wasCut) says = runsWords(g, road);
+  }
+  g.flags[k] = mark;
+  if (says && nat === g.human) headline(g, 'info', says, nat);
 }
 
 /**
  * Words to the UI director: the news of a cut (the form's section 7, "The Burma Road is cut: Japan holds Lashio.
  * 5,000 fewer rifles reach your store each month."), figures from the data.
  */
-function cutWords(g: Game, road: RoadRow, now: RoadNow): string {
+function cutWords(g: Game, road: RoadRow, now: RoadNow, wasDry = false): string {
   const why = now.by === 'place' ? `${nameOf(g, now.who!, true)} holds ${now.at}.` : now.why;
-  const lost = now.full > 0 ? ` ${n100(now.full)} fewer rifles reach your store each month.` : ' It carried no rifles to your store.';
+  // (A road that was running dry brought nothing, so nothing is counted lost.)
+  const lost = now.full > 0 && !wasDry ? ` ${n100(now.full)} fewer rifles reach your store each month.` : ' It carried no rifles to your store.';
   return `${cap(road.name)} is cut: ${why}${lost}`;
 }
 
@@ -255,6 +280,12 @@ export interface RiflesSeen { nat: string; inflow: Inflow; line: string; card: s
 /**
  * Another seat's view of a nation's rifles: its roads and its monthly inflow, never its stock. Null for a nation the
  * rows do not name.
+ *
+ * (Two things another seat can still work out, for the UI director to rule on. A road whose seller has a rifles shelf
+ * and less to spare than the road's load shows rifles equal to the seller's spare: a third nation's stock, read off
+ * the road. No seller has a shelf on this line, so it is not live yet. And while nothing draws from the store, the
+ * inflows another seat has read since the first day add up to the stock exactly; that ends when the next stage's
+ * corps and drafts draw from it.)
  */
 export function riflesSeen(g: Game, nat: string, by: string | null): RiflesSeen | null {
   const row = riflesRow(g, nat);
