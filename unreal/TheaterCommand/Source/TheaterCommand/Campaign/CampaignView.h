@@ -1326,6 +1326,7 @@ struct FCampaignView
 	bool bTaskForce = false; // (release 2, taskforce.ts) a fleet can be made a task force: a standing job, refit, and back
 	bool bFleetWhy = false; // (release 2, fleetwhy.ts) the admirals give a reason for each fleet they order
 	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
+	bool bSupportTeams = false; // (release 2, teams.ts) machine-gun and mortar brigades can be raised, by every power
 	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
