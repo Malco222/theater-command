@@ -29,6 +29,7 @@ import { COMMAND, corpsOf, popular, rankOf, serving } from './commanders';
 import { raisable } from './manpower';
 import { BUDGET, corpsCost, corpsName, income, specOf, upkeepTotal } from './economy';
 import { allied, assess, atWar, corpsBase, frontage, headline, homeLost, hostileUnits, limitAttackers, theName, DEFENCE } from './game';
+import { stationShut, whyStationBars } from './far';
 import { DIPLOMACY, pcIncome } from './diplomacy';
 import { CIVIC, civicLevel, civicOffers, civicSum } from './buildings';
 import { besieged, besiegerOf, garrisonOf, townHeld } from './siege';
@@ -992,6 +993,8 @@ export function promiseTerms(g: Game, nat: string, region: number, months: numbe
 
 function whyNotTown(g: Game, nat: string, st: GovState, r: Region, depth: number | undefined): string | null {
   if (!atWar(g, nat, r.ctrl)) return allied(g, nat, r.ctrl) ? `${townName(r)} is in your side's hands already.` : `You are not at war with ${theName(g.nations[r.ctrl])}.`;
+  // (Ground an agreement shuts to him for good is no town to promise: no order of his can take it. far.ts `stationShut`.)
+  if (stationShut(g, nat, r)) return whyStationBars(g, nat, r);
   if (st.dir && (st.dir.kind === 'take' || st.dir.kind === 'relief') && st.dir.region === r.id) return `${townName(r)} is the cabinet's own directive already: a promise would add nothing.`;
   if (besieged(g, r)) { const by = besiegerOf(g, r); if (by && (by === nat || allied(g, nat, by))) return `Your side stands round ${townName(r)} already: the cabinet expects it to fall, and a promise would impress nobody.`; }
   if (depth === undefined || depth < 1) return `${townName(r)} lies more than ${GOV.promise.reach} provinces beyond your ground and your troops: the cabinet will not hear of it yet.`;

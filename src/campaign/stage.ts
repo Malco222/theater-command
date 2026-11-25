@@ -163,3 +163,12 @@ export const SEEKONCE_STAGE: boolean = staged('TC_SEEKONCE', 'seekOnce');
 // carry the flag 'atom'. Forced by TC_ATOM.
 /** True where new grand campaigns open with the atomic project (stage.json 'atomBomb'). */
 export const ATOM_STAGE: boolean = staged('TC_ATOM', 'atomBomb');
+// Carrier strikes on harbours by the player's own hand (release 2; Brian 24 November 2026 21:45Z, "Resume the Pacific
+// for release 2"; harbourstrike.ts): the grand campaigns opened while it is true carry its flag. Forced by TC_CARRIERSTRIKE.
+/** True where new grand campaigns open with the carrier strike on a harbour on a carrier fleet's page (stage.json 'carrierStrike'). */
+export const CARRIERSTRIKE_STAGE: boolean = staged('TC_CARRIERSTRIKE', 'carrierStrike');
+
+// Carrier wings by date (release 2; the rider to rulings 189 and 202; carriers.ts): the grand campaigns opened while it
+// is true carry its flag. Forced by TC_WINGBYDATE.
+/** True where new grand campaigns open with a navy's carrier wing by date (stage.json 'wingByDate'). */
+export const WINGBYDATE_STAGE: boolean = staged('TC_WINGBYDATE', 'wingByDate');

@@ -21,12 +21,12 @@ import { clamp } from '../core/math';
 import { turnToDate } from '../core/ticket';
 import { armyCard } from './armies';
 import { specOf } from './economy';
-import { COLLAPSE, allied, armySize, atWar, capitalLost, exhausted, fights, gunsRule, homeLost, railReachFor, theName, victorOf } from './game';
+import { COLLAPSE, allied, armySize, atWar, capitalLost, exhausted, fights, gunsRule, homeLost, homeTaken, railReachFor, termsOf, theName, victorOf } from './game';
 import { armyOf } from './joint';
 import { sightOf } from './intel';
 import { standsFreed } from './liberation';
 import { farGround, planMarch, type GroundOf } from './marches';
-import { willLost } from './resources';
+import { RES, willLost } from './resources';
 import { SIEGE, besieged, besiegerOf, investedOn, ringClosed, siegeRules, siegeView, whyNotStorm } from './siege';
 import { townName } from './towns';
 import { yieldBand } from './yield';
@@ -620,4 +620,48 @@ export function gunsAlone(g: Game, nat: string | null = g.human): GunsAlone[] {
       : `Only ${what} are left round ${town}. No infantry or tanks of yours can reach them this month: the siege will be raised.` });
   }
   return out;
+}
+
+// ---- How near a country is to asking for terms (ruling 196(h); the UI director's sheet 25, box 5) -----------------
+
+/** One condition of a country's terms as a card says it: met or not, and no figure. */
+export interface TermsRow { text: string; met: boolean }
+export interface TermsCard { label: string; rows: TermsRow[]; then: string | null }
+
+/**
+ * The two conditions on which a country with a row of terms asks for them (game.ts termsOf), as both interfaces say
+ * them under the bar that shows how much fight it has left: a label, a line for each condition, and what follows.
+ * A condition is met or not yet: no share of the home ground and no count of privation is printed, so the lines
+ * give away nothing the bar does not. To another country's player, the month both hold: "Japan asks for terms as
+ * next month opens." Its own player is spared the rule and reads them as the measure of his war: the label says
+ * what the country would do led by the computer, and the last line that he decides when he is beaten. Null for a
+ * country with no row, and for one at peace or fallen.
+ */
+export function termsCard(g: Game, nat: string, reader: string | null = g.human): TermsCard | null {
+  const n = g.nations[nat], t = n?.alive && n.atWar.length ? termsOf(g, nat) : null;
+  if (!t) return null;
+  const own = reader === nat;
+  return {
+    label: own ? `Led by the computer, ${theName(n)} would ask for terms when both hold` : 'It asks for terms when both hold',
+    rows: [
+      { text: `The war has reached ${own ? 'your' : 'its'} home ground`, met: t.ground },
+      { text: `${own ? 'Your' : 'Its'} people can bear no more`, met: t.privation },
+    ],
+    then: own ? 'You decide when you are beaten.' : t.ground && t.privation ? `${theName(n, true)} asks for terms as next month opens.` : null,
+  };
+}
+
+/**
+ * The landing card's row for a place whose holding would bring the war to a country's home ground (ruling 196, the
+ * planner's third line; sheet 25, box 5, point 7): a row of ONCE IT IS YOURS under the key "Holding it", shown only
+ * where holding the place would make the first condition hold (Okinawa; not Iwo Jima alone, and Iwo Jima once
+ * Karafuto is held). Its bracket says what is still wanted, or that nothing is. Null anywhere else, once the
+ * condition holds already, and against a player's own country, which asks for no terms.
+ */
+export function warHome(g: Game, by: string, r: Region): { nat: string; key: string; text: string; note: string } | null {
+  const nat = r.owner, n = g.nations[nat];
+  if (!RES.will.terms?.[nat] || !n?.alive || nat === g.human || r.overseas || !atWar(g, by, nat) || atWar(g, nat, r.ctrl)) return null;
+  const t = termsOf(g, nat);
+  if (!t || t.ground || homeTaken(g, nat, r) < t.share - 1e-9) return null;
+  return { nat, key: 'Holding it', text: `brings the war to ${theName(n)}'s home ground`, note: `${theName(n, true)} asks for terms ${t.privation ? 'as the next month opens' : 'when its people can bear no more'}` };
 }

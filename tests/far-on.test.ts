@@ -19,11 +19,11 @@ import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
-import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
+import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farGuard, farGuardRow, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
-import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
+import { allied, armySize, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small, threatened } from '../src/campaign/league';
 import { MANPOWER, classNow, homeShare } from '../src/campaign/manpower';
@@ -31,8 +31,9 @@ import { NAVY, navalUpkeep } from '../src/campaign/navy';
 import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { SIEGE, guardOf } from '../src/campaign/siege';
 import { joinsOn, stalemates, startOpen } from '../src/campaign/staff';
-import { prizeOf, townAt, townName, worthOf } from '../src/campaign/towns';
+import { prizeOf, townAt, townName, townSize, worthOf } from '../src/campaign/towns';
 import { TRAITS, traitMoney } from '../src/campaign/traits';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -47,8 +48,8 @@ const at = (g: Game, f: Fleet): string => g.regions[f.base].name;
 const SEATS = ['SAF', 'IRN', 'IRQ', 'SAU', 'AFG', 'YEM', 'NEP', 'LBR', 'CHN', 'AUS', 'NZL', 'THA', 'MAN', 'MGL'];
 
 describe("the far side with its switch on: the rows that are nobody's seat", () => {
-  it('lays the six files over the data, in order, and the game reads them as its own', () => {
-    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'china-line', 'china-setup', 'china-stop3']);
+  it('lays the fourteen files over the data, in order, and the game reads them as its own', () => {
+    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-guards', 'far-africa', 'far-books', 'far-japan-seat', 'far-shores']);
     expect(WD.nations.JAP.name).toBe('Japan');
     expect(WD.great).toEqual(['USA', 'JAP']);
     expect(Object.keys(WD.clients)).toEqual(['MAN', 'MGL']);
@@ -56,7 +57,11 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     expect((leagueData as any).never).toContain('JAP');
     for (const id of ['MAN', 'MGL']) { expect((leagueData as any).never, id).not.toContain(id); expect(small(id), id).toBe(true); }
     expect(small('JAP')).toBe(false);
-    expect(NAVY.moves!.length).toBe(FW.navy.moves.length);
+    // (The far world's fleet bases by date, and the Pacific war file's own: the carrier striking force's two and the
+    // Asiatic Fleet's four, the design director's rulings of 03:55Z and 04:25Z, 22 November 2026.)
+    expect(NAVY.moves!.length).toBe(FW.navy.moves.length + 6);
+    expect(NAVY.moves!.filter((m) => m.fleet === 'Asiatic Fleet' && m.nat === 'USA').map((m) => m.base)).toEqual(['Panay', 'Soerabaja', 'Semarang', 'Perth']);
+    expect(NAVY.moves!.filter((m) => m.fleet === 'Mobile Fleet' && m.nat === 'JAP').map((m) => m.base).slice(-2)).toEqual(['Etorofu', 'Hiroshima']);
   });
 
   it('puts Japan on the door as the seventh great power, and the fourteen seats on its second row', () => {
@@ -75,8 +80,11 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     const g = grand();
     expect(farOn(g)).toBe(true);
     expect(g.regions.length).toBe(WORLD_FIRST + WORLD_REGIONS);
+    // (Tibet is the one bare country, by ruling: rider b632 to ruling 234 gives its five provinces the game's form
+    // for a neutral's ground, an owner's code with no row. far-tibet.test.ts holds it. No other code may be bare.)
     for (const id of new Set(g.regions.flatMap((r) => [r.owner, r.ctrl]))) {
       expect(g.nations[id], id).toBeDefined();
+      if (id === 'TIB') continue;
       expect((nationsData as any)[id] ?? (nationsData as any).nations?.[id] ?? WD.nations[id], `${id} has no row: it would be a bare stand-in`).toBeDefined();
     }
     const J = g.nations.JAP;
@@ -103,7 +111,7 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     // Japan's army in China stands on the ground Japan holds; nothing of anybody's stands on ground at war with it.
     for (const c of g.corps) expect(atWar(g, c.nat, g.regions[c.reg].ctrl), c.name).toBe(false);
     expect(g.fleets.filter((f) => f.nat === 'JAP').length).toBe(9);
-    expect(g.fleets.filter((f) => f.nat === 'USA').map((f) => f.name).sort()).toEqual(['Asiatic Fleet', 'Atlantic Fleet', 'Pacific Fleet', 'Pacific Submarine Fleet']);
+    expect(g.fleets.filter((f) => f.nat === 'USA').map((f) => f.name).sort()).toEqual(['Asiatic Fleet', 'Atlantic Fleet', 'Pacific Carrier Fleet', 'Pacific Fleet', 'Pacific Submarine Fleet']);
   });
 
   it('lands the rows by date as thin as their rows say, and never fills one past its fullest', () => {
@@ -125,7 +133,8 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
   it("holds and stays the rows of the book's own operations where the war does not follow the book (ruling b423)", () => {
     const list = (setupData as any).bookOnly as { stops: number[]; rows: [string, string][] };
     expect(list.stops).toEqual([3, 4, 5]);
-    expect(list.rows.length).toBe(7);
+    // (Seven of ruling b423's, and the 38th Division's three regimental rows, which stand in its place at these stops: far-shores.json.)
+    expect(list.rows.length).toBe(10);
     // Every row named is a dated row of Japan's that the far side lays, once.
     const dated = (setupData as any).expeditions as [number, string, string, string, number, string, any][];
     for (const [nat, name] of list.rows) expect(dated.filter((r) => r[1] === nat && r[2] === name).length, name).toBe(1);
@@ -230,12 +239,16 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
 
   it('sends ships from one fleet to another by date, never more than are there, and forms a later fleet in its month', () => {
     const g = grand();
-    const pf = fleet(g, 'USA', 'Pacific Fleet'), af = fleet(g, 'USA', 'Atlantic Fleet');
-    const before = { pb: pf.ships.bb, pc: pf.ships.cv, ab: af.ships.bb, ac: af.ships.cv };
+    // (The Pacific's carriers are a row of their own, ruling 234(d): every carrier comes and goes on it.)
+    const pf = fleet(g, 'USA', 'Pacific Fleet'), cf = fleet(g, 'USA', 'Pacific Carrier Fleet'), af = fleet(g, 'USA', 'Atlantic Fleet');
+    const before = { pb: pf.ships.bb, pc: cf.ships.cv, ab: af.ships.bb, ac: af.ships.cv };
+    expect(pf.ships.cv).toBe(0);
     g.turn = 21;
     startPhase(g, 'USA');
-    expect([pf.ships.bb, pf.ships.cv, af.ships.bb, af.ships.cv]).toEqual([before.pb - 3, before.pc - 1, before.ab + 3, before.ac + 1]);
-    expect(g.headlines.some((h) => h.text === 'The battleships Idaho, Mississippi and New Mexico and the carrier Yorktown leave for the Atlantic.')).toBe(true);
+    expect([pf.ships.bb, cf.ships.cv, af.ships.bb, af.ships.cv]).toEqual([before.pb - 3, before.pc - 1, before.ab + 3, before.ac + 1]);
+    expect(pf.ships.cv).toBe(0);
+    expect(g.headlines.some((h) => h.text === 'The battleships Idaho, Mississippi and New Mexico leave for the Atlantic.')).toBe(true);
+    expect(g.headlines.some((h) => h.text === 'The carrier Yorktown leaves for the Atlantic.')).toBe(true);
     const few = grand();
     fleet(few, 'USA', 'Pacific Fleet').ships.bb = 1;
     few.turn = 21;
@@ -469,7 +482,8 @@ describe("the whole world's oil (rulings 194 and 231)", () => {
     const g = grand();
     // What each power's own fields and its wells at home gave on the first day with the far side off: fields, home.
     const old: Record<string, [number, number]> = { GER: [0, 14], UK: [0, 0], FRA: [0, 1], ITA: [0, 2.5], SOV: [56, 8], USA: [100, 20] };
-    expect(Object.keys(old).sort()).toEqual([...RES.nations].sort());
+    // (Japan keeps stocks too with the far side on, ruling 194 point 5: tests/far-oil-book.test.ts.)
+    expect([...Object.keys(old), 'JAP'].sort()).toEqual([...RES.nations].sort());
     for (const [nat, [fields, home]] of Object.entries(old)) {
       const now = (line(g, nat, 'fields')?.amount ?? 0) + (line(g, nat, 'home')?.amount ?? 0);
       expect(now, nat).toBe(fields + home + (nat === 'SOV' ? 1 : 0));
@@ -627,7 +641,9 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
 
   it("pays Japan for Korea, Formosa and Karafuto as her home ground does (the historian's exception)", () => {
     const g = grand();
-    const named = new Set(BUDGET.farColony.home);
+    // (The list names America's Hawaii too, ruling 234(e)3: below.)
+    const named = new Set(BUDGET.farColony.home.filter((name) => g.byName[name]?.owner === 'JAP'));
+    expect(named.size).toBe(12);
     // Twenty-two of Japan's provinces carry the colony mark: the Mandates' nine, Dairen, and the twelve named.
     const marked = g.regions.filter((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && r.overseas);
     expect(marked.length).toBe(22);
@@ -659,12 +675,126 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     for (const r of man) expect(r.overseas, r.name).toBe(false);
   });
 
+  it("Hawaii is America's home ground, an incorporated territory and no colony (ruling 234(e)3)", () => {
+    const g = grand();
+    const hawaii = ['Pearl Harbor', 'Honolulu', 'Maui', 'Hawaii', 'Kauai'];
+    expect(BUDGET.farColony.home.filter((name) => g.byName[name]?.owner === 'USA')).toEqual(hawaii);
+    for (const name of hawaii) {
+      const r = g.byName[name];
+      expect(r, name).toMatchObject({ owner: 'USA', ctrl: 'USA', overseas: true });
+      expect(colonyPurse(r) || farColony(r), name).toBe(false);
+      const y = provinceYield(g, r, 'USA');
+      // As home ground pays: land and a harbour with no share taken, and no tenth.
+      expect(y.land, name).toBeCloseTo(BUDGET.land[r.terrain] * landShare(r), 9);
+      expect(y.port, name).toBeCloseTo(r.port ? BUDGET.port : 0, 9);
+      expect(y.fac, name).toBe(r.fac);
+    }
+    // Alaska, Guam, Wake, Midway, Samoa and the Philippines are a purse still: a tenth.
+    for (const name of ['Anchorage', 'Guam', 'Wake', 'Midway', 'Samoa', 'Manila']) {
+      const r = g.byName[name];
+      expect(farColony(r), name).toBe(true);
+      expect(provinceYield(g, r, 'USA').port, name).toBeCloseTo(BUDGET.port * BUDGET.overseas * 0.1, 9);
+    }
+  });
+
+  it("a far post's guard is its record garrison, counted once; other far colonial towns keep a tenth of a town's guard; home ground keeps it whole (ruling 234's rider b547)", () => {
+    const g = grand();
+    expect(BUDGET.farColony.guard).toBe(0.1);
+    // (Riders b561(d) and b563: "counted once" reaches the far colonial cities whose defenders the rows already hold.)
+    // (Rider b614: Japan's island garrisons are rows at the record's worth, so her islands are posts too; three of them
+    // are her own home ground. tests/far-garrisons.test.ts has the rows.)
+    const HOME_POSTS = ['Marcus Island', 'Iwo Jima', 'Chichi Jima'];
+    expect(BUDGET.farColony.posts).toEqual(['Guam', 'Kuching', 'Tarakan', 'Balikpapan', 'Rabaul', 'Ambon', 'Port Moresby', 'Hong Kong', 'Manila', 'Rangoon', 'Batavia', 'Koepang', 'Palembang', 'Medan', 'Wake', 'Hanoi', 'Saigon', 'Hue', 'Vientiane', 'Colombo', 'Singapore',
+      'Truk', 'Palau', 'Saipan', 'Kwajalein', 'Eniwetok', 'Eastern Marshalls', 'Ulithi', 'Yap', 'Ponape', ...HOME_POSTS]);
+    // A town's guard as siege.json reckons it for any town: by its size, capped by its country's army.
+    const whole = (name: string): number => { const r = g.byName[name], n = g.nations[r.owner]; return Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))); };
+    // The posts whose garrison the historian has given (ruling 234(b)1, rider b541): the record's figure is the whole
+    // defence, and the town keeps no guard beside it.
+    for (const name of BUDGET.farColony.posts!) {
+      const r = g.byName[name];
+      expect(r, name).toBeTruthy();
+      expect(farColony(r), name).toBe(!HOME_POSTS.includes(name));
+      expect(farGuard(r), name).toBe(0);
+      expect(guardOf(g, r), name).toBe(0);
+    }
+    // Elsewhere on far colonial ground the far side's one number is the tenth: Malaya, the Philippines, Burma and India
+    // outside the cities named, Midway beside its fort and the Pacific's islands.
+    // (Since the guard table of 21 November 2026 a land with a row stands at the record's figure for the place, with no
+    // tenth and no cap: far-guards.json, tests/far-guards.test.ts. The tenth, and home ground's whole guard, are the
+    // reckoning of far ground under no row yet, and those are the places the guard itself is read at here.)
+    const tenth: string[] = [];
+    for (const name of ['Kota Bharu', 'Legaspi', 'Penang', 'Johore', 'Moulmein', 'Lingayen', 'Calcutta', 'Midway', 'Guadalcanal', 'Tarawa', 'Fiji', 'New Caledonia']) {
+      const r = g.byName[name];
+      expect(farColony(r), name).toBe(true);
+      expect(r.ctrl, name).toBe(r.owner);
+      expect(farGuard(r), name).toBe(0.1);
+      expect(whole(name), name).toBeGreaterThan(0.2);
+      if (farGuardRow(g, r)) continue;
+      tenth.push(name);
+      expect(guardOf(g, r), name).toBeCloseTo(whole(name) * 0.1, 9);
+    }
+    expect(tenth).toEqual(['Midway', 'Guadalcanal', 'Tarawa', 'Fiji', 'New Caledonia']);
+    // Home ground keeps its guard whole: Hawaii (home by ruling 234(e)3), Japan's own and Korea and Formosa,
+    // Australia's, New Zealand's, China's and Siam's; and the near side's game is untouched.
+    const wholly: string[] = [];
+    for (const name of ['Honolulu', 'Tokyo', 'Okinawa', 'Seoul', 'Formosa', 'Brisbane', 'Darwin', 'Chungking', 'Bangkok', 'Pearl Harbor', 'Karafuto', 'Auckland', 'Wellington', 'London', 'Berlin', 'Paris', 'Moscow']) {
+      const r = g.byName[name];
+      expect(farColony(r), name).toBe(false);
+      expect(farGuard(r), name).toBe(1);
+      expect(whole(name), name).toBeGreaterThan(0);
+      if (farGuardRow(g, r)) continue;
+      wholly.push(name);
+      expect(guardOf(g, r), name).toBeCloseTo(whole(name), 9);
+    }
+    expect(wholly).toEqual(['Pearl Harbor', 'Karafuto', 'Auckland', 'Wellington', 'London', 'Berlin', 'Paris', 'Moscow']);
+    // Everywhere: the share is under 1 on far colonial ground and at the three home posts, and nowhere else, the old
+    // chart's colonies included.
+    let near = 0;
+    for (const r of g.regions) {
+      expect(farGuard(r) < 1, r.name).toBe(farColony(r) || HOME_POSTS.includes(r.name));
+      if (r.overseas && shoreOf(r) !== 2) { near++; expect(farGuard(r), r.name).toBe(1); }
+    }
+    expect(near).toBeGreaterThan(0);
+  });
+
+  it("one cut, not two: on a far colony the tenth stands in place of ruling 214's factor, which falls on the rest of that country's ground (ruling 234(e)3)", () => {
+    const g = grand();
+    const rows: [string, string, string][] = [['NED', 'Batavia', 'Holland'], ['POR', 'Goa', 'Lisbon'], ['AUS', 'Port Moresby', 'Sydney'], ['NZL', 'Apia', 'Wellington'], ['SAF', 'Windhoek', 'Cape Town']];
+    for (const [nat, colony, home] of rows) {
+      const c = g.byName[colony], h = g.byName[home];
+      expect(landFactor(c), colony).toBe(BUDGET.landFactor[nat]);
+      expect(landFactor(c), colony).toBeLessThan(1);
+      expect([c.owner, farColony(c)], colony).toEqual([nat, true]);
+      const y = provinceYield(g, c, nat);
+      // The colony: the colony's half and the tenth, as Britain's Singapore pays, and no factor.
+      expect(y.land, colony).toBeCloseTo(BUDGET.land[c.terrain] * BUDGET.overseas * landShare(c, true) * 0.1, 9);
+      expect(y.port, colony).toBeCloseTo(c.port ? BUDGET.port * BUDGET.overseas * 0.1 : 0, 9);
+      // The town card says the same.
+      expect(worthOf(g, c), colony).toBe(Math.max(1, Math.round((y.land + y.port + y.oil + y.fac) * BUDGET.scale)));
+      // The rest of its ground: the factor, as before.
+      expect(h, home).toMatchObject({ owner: nat });
+      expect(farColony(h), home).toBe(false);
+      expect(provinceYield(g, h, nat).land, home).toBeCloseTo(BUDGET.land[h.terrain] * BUDGET.landFactor[nat], 9);
+    }
+    // A conqueror takes no tenth, and the factor goes with the ground as it did.
+    const batavia = g.byName['Batavia'];
+    if (!atWar(g, 'JAP', 'NED')) declareWar(g, 'JAP', 'NED');
+    capture(g, batavia, 'JAP');
+    expect(provinceYield(g, batavia, 'JAP', true).port).toBeCloseTo(BUDGET.port * BUDGET.occupied * BUDGET.landFactor.NED, 9);
+    // Trade reads the land bare, as before: no factor and no change.
+    const goa = g.byName['Goa'];
+    expect(provinceYield(g, goa, 'POR', false, true).land).toBeCloseTo(BUDGET.land[goa.terrain] * BUDGET.overseas * landShare(goa, true) * 0.1, 9);
+  });
+
   it("pays an ally that keeps it for a fallen country a tenth of a keeper's share: the Indies are no purse of London's", () => {
     const g = grand();
     const palembang = g.byName['Palembang'], batavia = g.byName['Batavia'];
     expect(palembang).toMatchObject({ owner: 'NED', ctrl: 'NED', overseas: true, oil: true });
     expect(batavia).toMatchObject({ owner: 'NED', overseas: true, port: true });
-    const whole = g.regions.filter((r) => r.owner === 'NED' && farColony(r)).reduce((t, r) => t + provinceYield(g, r, 'UK', true).total, 0);
+    const indies = g.regions.filter((r) => r.owner === 'NED' && farColony(r));
+    const whole = indies.reduce((t, r) => t + provinceYield(g, r, 'UK', true).total, 0);
+    // (One cut, not two: a keeper's tenth is of the ground's pay with no factor of ruling 214 on it. Ruling 234(e)3.)
+    const unfactored = indies.reduce((t, r) => { const y = provinceYield(g, r, 'UK', true), f = landFactor(r); return t + (y.land / f) * landShare(r, true) + y.port / f + y.oil + y.fac; }, 0);
     // May 1940: the Netherlands fall to Germany, and their colonies beyond the old chart pass into Britain's keeping.
     // (Attacked, they stand with Germany's enemies: that is what makes Britain their keeper and no conqueror.)
     if (!atWar(g, 'UK', 'GER')) setWar(g, 'UK', 'GER');
@@ -675,12 +805,13 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     expect(allied(g, 'UK', 'NED')).toBe(true);
     const kept = provinceYield(g, palembang, 'UK');
     expect(kept.oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied * 0.1, 9);
-    expect(kept.port).toBeCloseTo(palembang.port ? BUDGET.port * BUDGET.occupied * landFactor(palembang) * 0.1 : 0, 9);
-    expect(provinceYield(g, batavia, 'UK').port).toBeCloseTo(BUDGET.port * BUDGET.occupied * landFactor(batavia) * 0.1, 9);
+    expect(kept.port).toBeCloseTo(palembang.port ? BUDGET.port * BUDGET.occupied * 0.1 : 0, 9);
+    expect(provinceYield(g, batavia, 'UK').port).toBeCloseTo(BUDGET.port * BUDGET.occupied * 0.1, 9);
     // All the Indies together: under one a month to their keeper, where a conqueror's share was near seven.
     const keeping = g.regions.filter((r) => r.owner === 'NED' && r.ctrl === 'UK' && farColony(r)).reduce((t, r) => t + provinceYield(g, r, 'UK').total, 0);
     expect(whole).toBeGreaterThan(6);
-    expect(keeping).toBeCloseTo(whole * 0.1, 6);
+    expect(keeping).toBeCloseTo(unfactored * 0.1, 6);
+    expect(keeping).toBeLessThan(1.5);
     // A conqueror is paid as ever: Japan is no ally of the Netherlands.
     expect(allied(g, 'JAP', 'NED')).toBe(false);
     expect(provinceYield(g, palembang, 'JAP').oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied, 9);

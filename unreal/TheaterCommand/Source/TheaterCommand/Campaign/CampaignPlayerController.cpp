@@ -421,6 +421,12 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, atom.ts; Brian 25 November 2026 01:14Z) The atomic project, a moonshot any large industry can attempt.
 			Add(TEXT("atomrule"), TEXT("The atomic project"), TEXT("Three steps of the Industry branch, then atomic plants that take a share of your earnings every month for years: a large industry finishes them in about two years, a small one never. Then a bomb or two, each carried by an ordinary raid of four-engined bombers on an enemy city that is not a capital. The city is left in ruins and the country loses much of its will to fight. Spies, bombing and capture set the plants back. Every country plays by the same rules. Off, the atomic rows leave the research tree and nobody builds the bomb. It can be switched in any month."),
 				Now.bAtomBomb ? TEXT("ON") : TEXT("OFF"), Now.bAtomBomb);
+			// (Release 2, harbourstrike.ts; Brian 24 November 2026 21:45Z, the Pacific resumed) A carrier fleet strikes an enemy harbour in one order.
+			Add(TEXT("carrierstrikerule"), TEXT("Carrier strikes on harbours"), TEXT("A carrier fleet's page lists the enemy harbours where warships lie at anchor that its aircraft can reach, and STRIKE FROM THE AIR sails it to the nearest sea in range and sends its wings in with the month's air war. A harbour too far names a base of yours from which they reach it. A strike flown in the month war is declared goes in without warning. Your own order only: the computer's admirals plan their strikes as before. It can be switched in any month."),
+				Now.bCarrierStrike ? TEXT("ON") : TEXT("OFF"), Now.bCarrierStrike);
+			// (Release 2, carriers.ts; the rider to rulings 189 and 202) A navy's carriers change their mix of aircraft by date.
+			Add(TEXT("wingbydaterule"), TEXT("Carrier wings by date"), TEXT("A navy's carriers change their mix of aircraft on the dates the record gives: Britain's carry more fighters from August 1942, and more aircraft a deck in 1944 and 1945. Aircraft over the new room go to the reserve; new room fills as losses are made good, while the carriers lie in harbour. It applies to every side, the computer's too. It can be switched in any month."),
+				Now.bWingByDate ? TEXT("ON") : TEXT("OFF"), Now.bWingByDate);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
@@ -661,7 +667,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -670,7 +676,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
 				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors
-				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Now.bColumnsOn;
+				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				const bool bBreakUpRow = Id == TEXT("breakuprule");

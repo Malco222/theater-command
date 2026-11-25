@@ -8,10 +8,13 @@
 // The Unreal side calls these by name through a global object, TC:
 //
 //   TC.starts()                         -> { years: [{ year, title, from, note }], groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
-//   TC.grand(from, seed)                -> { from, nations: [{ nat, name, major, blurb, standing, corps, regions }] }: who can be led in the grand campaign from that month
+//                                          (with the whole world on, `years` is September 1939 alone and `only` is the line that says so; else `only` is '')
+//   TC.grand(from, seed, world)         -> { from, chart, beyond, nations: [{ nat, name, major, small, blurb, door, standing, corps, regions }], absent: [{ nat, name, years, line }] }: who can be led in the grand campaign from that month; 'door' is a far seat's own words under its blurb, 'absent' the seats of other years, 'beyond' the line about the map this game is not on
+//   TC.nationsBook(world)               -> [{ tag, name, adjective, colour, alignment }]: every country the rules know (the running campaign's, else a first day's on that chart)
 //   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
 //   TC.save()                           -> { text }: the whole campaign as text
 //   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
+//   TC.peekChart(text)                  -> { chart: 'europe' | 'americas' | 'whole', now, fits, why }: the map a saved war was made on, whether this game can continue it, and the sentence to show when it cannot; null if the text is no save
 //   TC.load(text)                       -> view, or null if the save cannot be read
 //   TC.view()                           -> view
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
@@ -84,7 +87,7 @@ import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { airPiece } from '../../../src/campaign/airversion';
-import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
+import { crossesToWhole, loadGame, peekSave, saveChart, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
 import { carried } from '../../../src/campaign/support';
@@ -95,7 +98,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, bookBaseOf, fleetReach, landingTargets, seaAt as seaUnder, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -117,6 +120,9 @@ import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '
 import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
 import { ATOM as ATOM_DATA, PACES as ATOM_PACES, armedAt as atomArmedAt, atomOn, atomView, finishWords as atomFinishWords, setAtom, type AtomView } from '../../../src/campaign/atom';
 import type { AtomPace } from '../../../src/campaign/types';
+import { anchorLine, carrierStrikeOn, setCarrierStrike, strikeHarbours } from '../../../src/campaign/harbourstrike';
+import { setWingByDate, wingByDateOn } from '../../../src/campaign/carriers';
+import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { sailorsOn, setSailors } from '../../../src/battle/sea/ticket';
@@ -139,7 +145,10 @@ import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
+import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
+import { FAR_PATHS } from '../../../src/campaign/far-rows';
+// (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
+import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
@@ -1033,6 +1042,9 @@ function drawView() {
     // (Release 2, heavyseas.ts) Whether gales blow at sea, and the seas in a gale this month.
     heavySeas: heavySeasOn(s),
     gales: [...galeSeas(s)],
+    // (Release 2, harbourstrike.ts) Whether a carrier fleet's page offers a strike on an enemy harbour from the air.
+    carrierStrike: carrierStrikeOn(s),
+    wingByDate: wingByDateOn(s),
     // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
     shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
     // (Release 2, navy.ts) Whether a fleet seeks battle at most once a month, by order or at a month's end.
@@ -1916,10 +1928,18 @@ function arrive(s: Game): string | null {
   return lost;
 }
 
+/** With the whole world on: the one day its war begins from, said under the years (the owner's answer of 25 November 2026: 1939 first, December 1941 next). */
+const WHOLE_FROM_1939 = 'On the whole-world map the war begins in September 1939.';
+
 /** The places a campaign can begin, with each playable nation's aims for the campaigns that start in September 1939. */
 function starts() {
+  // (Release 2, Japan and the Pacific.) On the whole-world map a later year is no start at all yet: history up to it is
+  // played on Europe's chart and the far side is laid over it as of September 1939, so January 1942 opened with America
+  // at peace with Japan and the Pacific Fleet still at San Diego. Only the first day is offered there, and `only` says so.
+  const whole = CHART_NOW === 'whole';
   return {
-    years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    years: GRAND.years.filter((y) => !whole || y.turn <= 1).map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    only: whole ? WHOLE_FROM_1939 : '',
     // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
     levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
     level: DIFFICULTY.start,
@@ -1994,6 +2014,8 @@ function grandGame(from: number, seed: number, human: string | null): Game {
  * the shared data come first, each with the data's word about what the player is taking on that year, and
  * are offered only in the years the data gives them. Every other country is offered whenever it is still there.
  */
+/** With the whole world off: where Japan is. The door shows it under the countries (the owner's question of 24 November 2026, "why can't you play as Japan?"). */
+const BEYOND_THE_CHART = 'Japan, China and the Pacific are on the whole-world map. Switch the whole world on under OPTIONS to lead them.';
 function grand(from = 1, seed = 1939, world = false) {
   wideWorld = world === true;
   const h = grandGame(from, seed, null);
@@ -2001,8 +2023,10 @@ function grand(from = 1, seed = 1939, world = false) {
   const order = GRAND.nations.map((n) => n.id);
   // The small countries whose path is their own to choose: led like any other, with a word about each in 1939.
   const smallOnes = new Set(GRAND.nations.filter((n) => n.small).map((n) => n.id));
+  // (Release 2, Japan and the Pacific.) A country of closed ground is nobody's seat: Tibet has no army and no army
+  // enters it, and it stood among the other countries on the door.
   const nations = Object.entries(h.nations)
-    .filter(([nat, n]) => n.alive && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
+    .filter(([nat, n]) => n.alive && !closedCountry(nat) && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
     .map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
       return {
@@ -2013,6 +2037,8 @@ function grand(from = 1, seed = 1939, world = false) {
         // What makes the country fight, build and earn in its own way, and its special formation, in words.
         abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
+        // A far seat's own words for the door (a client's tie, a dominion's place): the browser shows them after the blurb.
+        door: FAR_PATHS[nat] ?? '',
         standing: foes.length ? theWords(`At war with ${listNames(foes.map((f) => h.nations[f].name))}`) : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length,
@@ -2020,7 +2046,41 @@ function grand(from = 1, seed = 1939, world = false) {
     })
     .filter((n) => n.corps > 0 || n.regions > 0)
     .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1) : a.major ? -1 : 1));
-  return { from, nations };
+  // The great powers that can be led, but not from this year: the door greys them and says when (Japan is led from
+  // September 1939 for now; France not after 1940). A seat with no year at all is not listed.
+  const absent = GRAND.nations
+    .filter((n) => !n.small && n.years[year] === undefined && Object.keys(n.years).length > 0 && h.nations[n.id] && !nations.some((x) => x.nat === n.id))
+    .map((n) => {
+      const years = Object.keys(n.years).map(Number).sort((a, b) => a - b);
+      return { nat: n.id, name: h.nations[n.id].name, years, line: `${h.nations[n.id].name} can be led from ${listNames(years.map(String)).replace(/ and /, ' or ')}.` };
+    });
+  return { from, chart: wideWorld ? CHART_NOW : 'europe', beyond: wideWorld && CHART_NOW !== 'whole' ? BEYOND_THE_CHART : '', nations, absent };
+}
+
+/**
+ * (Release 2, Japan and the Pacific, 24 November 2026) Every country the rules know, for the 3D table's own list: its
+ * tag, name, adjective, colour ('#rrggbb') and where it stands, in the rules' own words as the data files write
+ * `align`: 'allies', 'allies_cobelligerent', 'leaning_allies', 'independent', 'leaning_axis', 'axis_cobelligerent'
+ * or 'axis'. The table kept its own list from the data files, and so lagged the rules wherever a chart added
+ * countries (the far side's fourteen; Tibet stands in no file at all). With a campaign running it is that campaign's
+ * countries as they stand today, so it may be asked again after one changes sides. With none, it is the countries of
+ * a first day on the chart asked for: `world` as TC.grand and TC.start take it (the wider chart, which is the whole
+ * world where the far switch is on). That first day is laid once and kept. It changes nothing.
+ */
+const bookDays = new Map<boolean, Game>();
+/** A first day on the chart asked for, laid once and kept: the countries the rules know before any campaign is begun. */
+function bookDay(wide: boolean): Game {
+  let s = bookDays.get(wide);
+  if (!s) {
+    s = createGame(1, null);
+    if (wide) attachWorld(s);
+    bookDays.set(wide, s);
+  }
+  return s;
+}
+function nationsBook(world = false) {
+  const s = g ?? bookDay(world === true);
+  return Object.values(s.nations).map((n) => ({ tag: n.id, name: n.name, adjective: n.adj, colour: n.color, alignment: n.align }));
 }
 
 function listNames(names: string[]): string {
@@ -2126,16 +2186,37 @@ function reportOfSave(s: Game): { report: typeof lastMonth; card: MonthCard | nu
   return { report: fine ? m! : null, card: card ? c! : null };
 }
 
+/**
+ * (Release 2, Japan and the Pacific.) A war is continued on the map it was saved on. The game knew a save's map only
+ * by its province count: with the whole world off, a whole-world save was "a save that could not be read", and with
+ * it on, a war saved on Europe and the Americas loaded with the far side laid over it as of September 1939, whatever
+ * its month, and the next autosave kept it so. Now the save says which map it is, the game says the true sentence,
+ * and peek and load leave a war of the other map alone.
+ */
+const SAVED_ON_WHOLE = 'This war was saved on the whole-world map. Switch the whole world on under OPTIONS to continue it.';
+const SAVED_ON_AMERICAS = 'This war was saved on the map of Europe and the Americas. Switch the whole world off under OPTIONS to continue it.';
+function peekChart(text: string) {
+  const chart = saveChart(text);
+  if (!chart) return null;
+  const other = chart === 'whole' ? CHART_NOW !== 'whole' : crossesToWhole(text);
+  const fits = !other && !!peekSave(text);
+  return { chart, now: CHART_NOW, fits, why: fits ? '' : chart === 'whole' && other ? SAVED_ON_WHOLE : other ? SAVED_ON_AMERICAS : 'That saved war could not be read.' };
+}
+
 /** A line about a saved campaign for the opening screen, without loading it. */
 function peek(text: string) {
+  if (crossesToWhole(text)) return null; // (a war of the other map is not offered: TC.peekChart says why)
   const p = peekSave(text);
   if (!p) return null;
-  const sample = g ?? createGame(1, null);
-  return { human: p.human, name: p.human ? sample.nations[p.human]?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
+  // (The seat's name from the war in play, else from a first day on the wider chart: a sample of Europe alone knew no
+  // Japan, and the line read "JAP".)
+  const seat = p.human ? g?.nations[p.human] ?? bookDay(true).nations[p.human] : undefined;
+  return { human: p.human, name: p.human ? seat?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
 }
 
 function load(text: string) {
-  const loaded = loadGame(text);
+  // (A war saved on Europe and the Americas is never laid over the whole world by the player's CONTINUE or LOAD.)
+  const loaded = crossesToWhole(text) ? null : loadGame(text);
   if (!loaded) return null;
   g = loaded;
   startGunsLoaded(g);
@@ -5398,6 +5479,32 @@ function fleetPage(s: Game, id: number): Page | null {
     ].filter(Boolean);
     return { nat: card.nat, title: cap1(seaWhat(name)), lines, buttons: [{ label: 'LAY MINES', act: `fleetmines:${id}:${z}`, ok: up, tip: 'It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months.' }] };
   });
+  // (Release 2, harbourstrike.ts) The enemy harbours its carriers' aircraft reach, or would from another base, with what lies there.
+  const may = new Set(s.human && up ? declarable(s) : []);
+  const harbours: PageRow[] = (card.ships > 0 ? strikeHarbours(s, id, (nat) => may.has(nat)) : []).map((h) => {
+    const who = s.nations[h.holder];
+    const base = h.forward >= 0 ? s.regions[h.forward] : undefined;
+    const lines = [
+      `At anchor: ${h.fleets.join(', ')}${anchorLine(h) ? ` (${anchorLine(h)})` : ''}.`,
+      h.launch >= 0 ? `Its aircraft reach it from ${seaWhat(s.seas[h.launch]?.name ?? 'sea')}.` : base ? `Beyond its aircraft from ${s.fleets.find((x) => x.id === id)?.port ?? 'its base'}: from ${base.name} they reach it.` : '',
+      h.atWar ? '' : `${who ? upFirst(theName(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`,
+    ].filter(Boolean);
+    const buttons = h.launch >= 0
+      ? [{ label: 'STRIKE FROM THE AIR', act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? 'It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month\'s air war. Ships at anchor cannot manoeuvre.' }]
+      : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
+    return { nat: h.holder, title: `${h.name}${who ? ` (${who.adj ?? who.name})` : ''}`, lines, buttons };
+  });
+  // (The far side's dated rows) A base move of the staff's plan that waits on him: he keeps the fleet, or runs the navy.
+  const fb = s.fleets.find((x) => x.id === id);
+  const waits = fb ? bookBaseOf(s, fb) : null;
+  const plan: PageRow[] = waits ? [{
+    nat: card.nat, title: waits.region.name,
+    lines: [
+      `${waits.words} (${turnToDate(waits.turn).label}).`,
+      staffRunsDesk(s, 'navy') ? 'You keep it under your own orders: hand it back to your admirals and it goes there with their next month.' : 'You run the navy yourself: the move is yours to make.',
+    ],
+    buttons: [{ label: `MOVE BASE TO ${waits.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: 'Its new home port, where the staff\'s plan has it. It spends the month in harbour there.' }],
+  }] : [];
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
@@ -5430,6 +5537,8 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'SHADOWING', text: shadowing, rows: [] },
       { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
       { heading: 'SEAS TO MINE', text: '', rows: minable },
+      { heading: 'ENEMY HARBOURS TO STRIKE', text: '', rows: harbours },
+      { heading: 'THE STAFF\'S PLAN', text: '', rows: plan },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
@@ -6793,6 +6902,46 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'One battle sought a month is off: a fleet at sea can seek battle again in its allies\' months.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'carrierstrikerule') {
+    // (Release 2, harbourstrike.ts) Carrier strikes on harbours from a fleet's page, switched in any month.
+    setCarrierStrike(s, part[1] === 'on');
+    ok = true;
+    note = carrierStrikeOn(s) ? 'Carrier strikes on harbours are on: a carrier fleet\'s page lists the enemy harbours its aircraft reach, and one order sails it there and sends its wings in.' : 'Carrier strikes on harbours are off.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'wingbydaterule') {
+    // (Release 2, carriers.ts) Carrier wings by date (the rider to rulings 189 and 202), switched in any month.
+    setWingByDate(s, part[1] === 'on');
+    ok = true;
+    note = wingByDateOn(s) ? 'Carrier wings by date are on: a navy\'s carriers change their mix of aircraft on the dates the record gives (Britain\'s from August 1942). New room fills as losses are made good, in harbour.' : 'Carrier wings by date are off: every navy\'s carriers keep one mix of aircraft for the whole war.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'fleetstrike') {
+    // (Release 2, harbourstrike.ts) 'fleetstrike:<fleet>:<harbour>' sails it into reach and sends its wings at the harbour.
+    const id = Number(part[1]), r = Number(part[2]);
+    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    const done = orderCarrierStrikeFleet(s, id, r);
+    ok = !!done;
+    note = done
+      ? `The ${name} sails ${seaWhere(s.seas[done.zone]?.name ?? 'sea')}, and its aircraft will strike ${s.regions[r]?.name ?? 'the harbour'} with this month's air war.`
+      : (strikeHarbours(s, id, () => true).find((h) => h.region === r)?.why ?? 'It cannot strike that harbour now.');
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
+  if (part[0] === 'fleetbookbase') {
+    // (The far side's dated rows) 'fleetbookbase:<fleet>' moves its base where the staff's plan has it (navy.ts, bookWaits).
+    const id = Number(part[1]), f = s.fleets.find((x) => x.id === id);
+    const to = f ? bookBaseOf(s, f) : null;
+    ok = !!to && orderRebase(s, id, to.region.id);
+    note = ok ? `Its new home port is ${to!.region.name}.` : 'It cannot move its base there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
+  if (part[0] === 'fleetstrikebase') {
+    // (Release 2, harbourstrike.ts) 'fleetstrikebase:<fleet>:<port>' moves its base forward, to where its aircraft reach the harbour.
+    const id = Number(part[1]), r = Number(part[2]);
+    ok = orderRebase(s, id, r);
+    note = ok ? `Its new home port is ${s.regions[r]?.name ?? 'there'}.` : 'It cannot move its base there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
   if (part[0] === 'fleetmines') {
     // (Release 2, mines.ts) 'fleetmines:<fleet>:<sea>' sails it there and lays a field.
     const id = Number(part[1]), z = Number(part[2]);
@@ -7135,7 +7284,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetstaff') {
     ok = handBackFleet(s, Number(part[1]));
-    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month.` : 'It cannot be handed back now.';
+    const fw = s.fleets.find((x) => x.id === Number(part[1])), plan = fw ? bookBaseOf(s, fw) : null;
+    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month${plan ? `, and goes to ${plan.region.name} as the staff's plan has it` : ''}.` : 'It cannot be handed back now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetescort') {
     ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));
@@ -7260,7 +7410,8 @@ function diplomacy() {
       nat: n.id, name: n.name, alive: n.alive, divs: n.alive ? fieldArmy(s, n.id) : 0,
       will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
       side: n.id === me.id ? 'own' : atWar(s, me.id, n.id) ? 'enemy' : allied(s, me.id, n.id) ? 'ally' : 'other',
-      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms`,
+      // (Ruling 201, point 4: a fallen great power's own card closes with the line that the war goes on, while it does.)
+      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms${((on) => (on ? `. ${on.news}` : ''))(warGoesOn(s, n.id))}`,
       war: can.has(n.id),
       // (Version 65) Its general staff as the player knows it: its character, what it is doing in a sentence, and
       // whether a main effort of its is aimed at the player or his allies, with the place it is aimed at.
@@ -7333,7 +7484,10 @@ function diplomacy() {
   return {
     nation: me.name, date: turnToDate(s.turn).label, bloc: side, up,
     capital: Math.floor(me.pc), income: pcIncome(me.id), cap: DIPLOMACY.pcCap, partners: partners.size, cost: DIPLOMACY.court.cost,
-    wind,
+    // (Ruling 201, point 4: at the head of the Powers tab, while a great power has fallen and the war is not decided,
+    // the line that names the powers still at war. Only on the whole-world chart; `undecided` carries it alone.)
+    wind: ((on) => (on ? `${on.line} ${wind}` : wind))(warGoesOn(s)),
+    undecided: warGoesOn(s)?.line ?? '',
     help: mine === 'league' ? 'The League courts nobody: it wins members by invitation, and only those who feel the danger say yes.' : mine
       ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth} a month to your treasury` : ''}; one that is fully won over joins your side.`
       : 'Your country belongs to neither bloc, so it has nobody to win the neutrals over to.',
@@ -8021,7 +8175,7 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's
@@ -8067,6 +8221,10 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
 // (Release 2, navy.ts) One battle sought a month: TC.seekOnce(on) at any time; the options page uses act('seekoncerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seekOnce = (on: boolean) => { const s = game(); setSeekOnce(s, !!on); return { on: seekOnceOn(s) }; };
+// (Release 2, carriers.ts) TC.wingByDate(on) at any time; the options page uses act('wingbydaterule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wingByDate = (on: boolean) => { const s = game(); setWingByDate(s, !!on); return { on: wingByDateOn(s) }; };
+// (Release 2, harbourstrike.ts) TC.carrierStrike(on) at any time; the options page uses act('carrierstrikerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).carrierStrike = (on: boolean) => { const s = game(); setCarrierStrike(s, !!on); return { on: carrierStrikeOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').

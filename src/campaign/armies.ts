@@ -26,6 +26,7 @@ import { turnToDate } from '../core/ticket';
 import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
 import { allied, atWar, men } from './game';
 import { generalOf } from './commanders';
+import { postWords } from './pacific';
 import { grade, STORIES } from './stories';
 import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
 import { armyOf } from './joint';
@@ -315,6 +316,9 @@ export const FORT_NO_ORDERS = 'Fortress troops man their works and do not move.'
  */
 export function whyNotOrder(g: Game, c: Corps): string | null {
   if (c.dead || g.human === null || c.nat !== g.human) return null;
+  // (The far side: Vichy's corps that kept their posts in Indochina on the demand answer to their own officers, pacific.ts atItsPost.)
+  const post = postWords(c, 'card');
+  if (post) return post;
   if (c.kind === 'fort') return FORT_NO_ORDERS;
   if (c.leave !== undefined) return `It is at home, out of the line, and takes no orders until ${turnToDate(c.leave).label}.`;
   if (c.school) return 'It is at the battle schools this month, and takes no orders until it is back. Call it back to march or fight now; it will have had no term.';

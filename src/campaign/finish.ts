@@ -36,6 +36,7 @@ import { DIPLOMACY, majorsOf } from './diplomacy';
 import { allied, atWar, bloc, declareWar, headline, relocate, retreatTarget, sendHome, theName, warning } from './game';
 import { LIB, handBack, recordFall, rejoinWars, warsAtFall } from './liberation';
 import { fleetsOnFall } from './navy';
+import { bookKeepsAgreement, owedNotBefore } from './pacific';
 import { dropSieges } from './siege';
 import { launch } from './staff';
 import type { Game } from './types';
@@ -44,6 +45,12 @@ import type { Game } from './types';
 export const finishRules = (g: Game): boolean => g.flags.open === 1 && !g.flags.dom && !!LIB.finish;
 
 const noticeKey = (who: string, on: string): string => `fin:${who}:${on}`;
+/**
+ * The month a war comes that notice was given of in month `given`: so many months after, and, where the far side's
+ * book names a month for that war, not before it (pacific.ts `owedNotBefore`: the Soviet Union's war with Japan at
+ * the stops that keep the book).
+ */
+const dueOf = (g: Game, who: string, on: string, given: number): number => Math.max(given + LIB.finish.notice, owedNotBefore(g, who, on));
 const sideOf = (g: Game, id: string): 'allies' | 'axis' | null => { const b = g.nations[id] ? bloc(g.nations[id]) : null; return b === 'allies' || b === 'axis' ? b : null; };
 
 /**
@@ -65,7 +72,7 @@ export function warNotices(g: Game): WarNotice[] {
   for (const k of Object.keys(g.flags)) {
     if (!k.startsWith('fin:')) continue;
     const [, who, on] = k.split(':');
-    if (g.nations[who] && g.nations[on]) out.push({ who, on, given: g.flags[k], due: g.flags[k] + LIB.finish.notice });
+    if (g.nations[who] && g.nations[on]) out.push({ who, on, given: g.flags[k], due: dueOf(g, who, on, g.flags[k]) });
   }
   return out.sort((a, b) => a.due - b.due || (a.who + a.on < b.who + b.on ? -1 : 1));
 }
@@ -109,7 +116,7 @@ export function finishMonthEnd(g: Game): void {
       for (const on of majors) {
         if (!owesWar(g, who, on) || g.flags[noticeKey(who, on)]) continue;
         g.flags[noticeKey(who, on)] = g.turn;
-        const when = turnToDate(g.turn + LIB.finish.notice).label;
+        const when = turnToDate(dueOf(g, who, on, g.turn)).label;
         const said = `With ${theName(X)} beaten, ${theName(G)} stands by its allies`;
         if (on === g.human) warning(g, 'War is coming', `${said}, who are still at war with you: it gives notice that it will declare war on you in ${when}, unless you are at peace with them by then.`, on, undefined, who);
         else headline(g, 'event', `${said}: it gives ${theName(g.nations[on])} notice that it will be at war with it in ${when}.`, who);
@@ -153,7 +160,8 @@ function endVichy(g: Game): void {
   dropSieges(g, 'VIC');
   const was = holdersNow(g); // settled towns (release 2): ground handed to France starts settling this month
   for (const r of g.regions) {
-    if (r.owner === 'VIC') { r.owner = 'FRA'; r.cap = false; }
+    // (Ground an agreement with Vichy keeps under the book stays Vichy's to that agreement's end: pacific.ts. Never with the far side off.)
+    if (r.owner === 'VIC' && !bookKeepsAgreement(g, r)) { r.owner = 'FRA'; r.cap = false; }
     if (r.ctrl === 'VIC') r.ctrl = 'FRA';
   }
   handedOver(g, was);

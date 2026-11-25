@@ -4,6 +4,7 @@
 // Everything lives in data/campaign/tech.json, so every version of the game reads the same tree. A historical
 // scenario never sees it: there, research runs on history's clock (research.ts).
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
 import supportData from '../../data/campaign/support.json';
@@ -11,8 +12,9 @@ import carrierData from '../../data/campaign/carriers.json';
 import { turnToDate } from '../core/ticket';
 import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
+import { liftByRecord } from './pacific';
 import { traitRule, type Trait, type When } from './traits';
-import { RES, keepsStores, oilMonths } from './resources';
+import { RES, keepsStores, oilMonths, plantsMost, plantsSpent } from './resources';
 import { researchSpeed } from './buildings';
 import { govMul } from './government';
 import { PLANS, planRules, whyNoTechPlans } from './plans';
@@ -349,8 +351,9 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   const s = n.tech!, t = BY_ID[id];
   if (!t || s.done.includes(id)) return;
   s.done.push(id);
-  // (The shipping may wait for the record's month for this nation: ruling 234, rider b630, lift.json.)
-  if (t.sealift) techLift(g, n.id, id, t.sealift);
+  // (A country whose lift is the record's own count has its landing craft in that count already: pacific.ts, rider b630.
+  // For the others the shipping may wait for the record's month: lift.json.)
+  if (t.sealift && !liftByRecord(g, n.id)) techLift(g, n.id, id, t.sealift);
   // (With the laboratories in his advisers' hands the free team is theirs to set to work: desks.ts.)
   if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t, g, n.id)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }
@@ -401,7 +404,8 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     if (atom === null) continue;
     const place = order.indexOf(t.branch);
     // A staff watching its oil run down puts the fuel chemists first.
-    const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
+    // (The far side: a staff whose plants already make all the record allows them gains no oil by more of it.)
+    const fuel = t.oil && thirsty && !plantsSpent(g, nat) ? A.fuel ?? 0 : 0;
     // A small country buys its oil abroad and has no use for fuel chemistry.
     const idle = t.oil && !keepsStores(g, nat) ? A.later : 0;
     // The player's advisers take up winter equipment as soon as a winter in the east is in sight.
@@ -655,9 +659,20 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
   const atom = t.atom ? ATOM_RULE[t.atom] : undefined;
   if (atom) out.push(atom);
+  // (The far side: a nation whose plants never made what the tree gives reads the record's yield, `plantsMost`.)
+  const most = t.oil && g && nat ? plantsMost(g, nat) : null;
+  // (The UI director's words of 20:45Z and 20:48Z, 22 November 2026: "your" to its own player, the country's name to anyone
+  // else; a step that adds nothing says so; and the fact the design director ruled at 20:46Z in a sentence of its own:
+  // submarines cannot touch this oil, but bombers can hit the plants.)
+  if (t.oil && most !== null && g && nat) {
+    const whose = g.human === nat ? 'your' : `${g.nations[nat].name}'s`;
+    out.push(plantsSpent(g, nat, t.id)
+      ? `${whose[0].toUpperCase()}${whose.slice(1)} fuel plants already make all they can: this adds no oil.`
+      : `With every factory at home working, ${whose} fuel plants make ${most} oil a month between them, far less than was planned for them. Submarines cannot touch this oil, but bombers can hit the plants.`);
+  }
   // (The design director, 22 November 20:46Z, in the UI director's words of 20:48Z: the air campaigns' oil raids cut a
   // bombed plant's yield (ruling 236.2), so this oil is safe from submarines, not from bombers.)
-  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
+  else if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
   // The Intelligence branch (rider b542): what it does for the nation's agents (intel.ts).
   const x = t.spy;
   if (x?.caught !== undefined) out.push(`Its agents abroad are caught ${pct(1 - x.caught)} less often.`);
