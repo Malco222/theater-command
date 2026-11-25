@@ -98,6 +98,7 @@ namespace
 		};
 		std::vector<Box> Feet; // the ground footprints of bodies that touch the ground (the earth darkens under them)
 		double GroundSnow = 0.0; // (a burnt-out house's winter panels: the snow lying on the ground round it, 0 to 1)
+		double GroundSand = 0.0; // (the desert's houses: pale sand and grit for the plain earth)
 		V3 Lo = V3(1e9, 1e9, 1e9), Hi = V3(-1e9, -1e9, -1e9);
 	};
 
@@ -555,7 +556,8 @@ namespace
 				{
 					const double Patch = Noise2(Ground.X * 0.35, Ground.Y * 0.35) * 0.6 + Noise2(Ground.X * 1.3, Ground.Y * 1.3) * 0.4;
 					const double Grain = 0.9 + 0.2 * Noise2(Ground.X * 9.0, Ground.Y * 9.0);
-					const Colour Soil = Mix(Mix(Earth, EarthDark, Smooth(0.25, 0.85, Patch)) * Grain, FromPicture(240, 242, 246) * (0.97 + 0.03 * Grain), S.GroundSnow);
+					const Colour Loam = Mix(Mix(Earth, EarthDark, Smooth(0.25, 0.85, Patch)) * Grain, FromPicture(196, 170, 128) * (0.92 + 0.08 * Smooth(0.25, 0.85, Patch)) * (0.6 + 0.4 * Grain), S.GroundSand);
+					const Colour Soil = Mix(Loam, FromPicture(240, 242, 246) * (0.97 + 0.03 * Grain), S.GroundSnow);
 					double Under = 1.0;
 					for (const Scene::Box& B : S.Feet)
 					{
@@ -756,6 +758,7 @@ int main(int argc, char** argv)
 	const bool bChurchSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "church";
 	const bool bVillageSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "village";
 	const bool bEastSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "east";
+	const bool bDesertSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "desert";
 	auto HouseSpec = [](const Panel& P)
 	{
 		LandHouse::Spec H;
@@ -796,7 +799,7 @@ int main(int argc, char** argv)
 			double AimDistance;
 			const char* Caption;
 			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house, 7 the east's izba, 8 the
-			          // steppe's khata, 9 a burnt-out house
+			          // steppe's khata, 9 a burnt-out house, 10 the desert's flat-roofed house
 			double Long = 12.4, Deep = 6.8; // (a village house's)
 			int Storeys = 2;
 			double Snow = 0.0; // (the east's: the snow lying on its roof, 0 to 1)
@@ -996,9 +999,39 @@ int main(int argc, char** argv)
 			{ "burnt_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "burnt out at 300 m: middle level", 9, 7.5, 7.2, 1 },
 			{ "burnt_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "burnt out at 300 m: far level", 9, 7.5, 7.2, 1 },
 		};
+		// (the desert's houses: LAND_KIT_HOUSE=desert; the flat-roofed house, Kind 10, Roof 0 limewashed, 1 its bare mud, 2 its
+		// main room of two storeys, its footprint LandDesert's 11 m square; aim 27 its yard's gate; 100 and over: the first
+		// thing of that kind less 100 that LandHouse::Holes lists, 200 and over the second)
+		const HouseLook DesertLooks[] = {
+			{ "dsr_white", 0, 0, 0, 7, 32.0, 20.0, 62.0, -1, 0.0, "the desert: a limewashed house round its walled yard", 10, 11.0, 11.0, 1 },
+			{ "dsr_mud", 0, 0, 1, 3, 32.0, 20.0, 62.0, -1, 0.0, "another: bare mud plaster, the yard wall's bricks bare", 10, 11.0, 11.0, 1 },
+			{ "dsr_two", 0, 0, 2, 5, 32.0, 20.0, 62.0, -1, 0.0, "another: its main room of two storeys", 10, 11.0, 11.0, 2 },
+			{ "dsr_back", 0, 0, 0, 7, 205.0, 14.0, 250.0, -1, 0.0, "from behind", 10, 11.0, 11.0, 1 },
+			{ "dsr_above", 0, 0, 0, 7, -30.0, 48.0, 62.0, -1, 0.0, "from above: the roofs, the stair, the yard", 10, 11.0, 11.0, 1 },
+			{ "dsr_mud_back", 0, 0, 1, 3, 160.0, 12.0, 110.0, -1, 0.0, "the mud house from behind", 10, 11.0, 11.0, 1 },
+			{ "dsr_door", 0, 0, 0, 7, 16.0, 8.0, 62.0, 1, 5.0, "close: the door, its lintel, the water jars", 10, 11.0, 11.0, 1 },
+			{ "dsr_window", 0, 0, 0, 7, -14.0, 6.0, 62.0, 0, 3.2, "close: a window, its shutter or its bars", 10, 11.0, 11.0, 1 },
+			{ "dsr_gate", 0, 0, 0, 7, 14.0, 7.0, 62.0, 27, 6.0, "close: the yard's gate", 10, 11.0, 11.0, 1 },
+			{ "dsr_spout", 0, 0, 0, 7, 196.0, 10.0, 250.0, 121, 4.5, "close: a spout, the run under it, the beam ends", 10, 11.0, 11.0, 1 },
+			{ "dsr_scab", 0, 0, 0, 7, 205.0, 6.0, 250.0, 124, 3.0, "close: the plaster come away, the mud bricks", 10, 11.0, 11.0, 1 },
+			{ "dsr_foot", 0, 0, 1, 3, 160.0, 8.0, 110.0, 127, 3.6, "close: a wall's foot the damp has stripped", 10, 11.0, 11.0, 1 },
+			{ "dsr_oven", 0, 0, 0, 7, 150.0, 24.0, 62.0, 119, 3.6, "close: the bread oven, its brushwood", 10, 11.0, 11.0, 1 },
+			{ "dsr_stair", 0, 0, 0, 7, 10.0, 22.0, 62.0, 120, 6.5, "close: the stair to the roof", 10, 11.0, 11.0, 1 },
+			{ "dsr_shade", 0, 0, 0, 7, -60.0, 30.0, 62.0, 122, 7.0, "close: the shade of palm fronds", 10, 11.0, 11.0, 1 },
+			{ "dsr_roof", 0, 0, 0, 7, 10.0, 40.0, 62.0, 125, 5.0, "close: the wing's roof, its parapet", 10, 11.0, 11.0, 1 },
+			{ "dsr_mud_door", 0, 0, 1, 3, 16.0, 8.0, 62.0, 1, 5.0, "the mud house: its door, limewash brushed round it", 10, 11.0, 11.0, 1 },
+			{ "dsr_mud_wall", 0, 0, 1, 3, 24.0, 8.0, 62.0, 126, 4.0, "the mud house: the yard wall's bare bricks", 10, 11.0, 11.0, 1 },
+			{ "dsr_mid", 0, 1, 0, 7, 32.0, 20.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 10, 11.0, 11.0, 1 },
+			{ "dsr_far", 0, 2, 0, 7, 32.0, 20.0, 62.0, -1, 0.0, "the far level (from 300 m)", 10, 11.0, 11.0, 1 },
+			{ "dsr_switch90_near", 0, 0, 0, 7, 32.0, 5.0, 62.0, 3, 55.0, "at 90 m: near level", 10, 11.0, 11.0, 1 },
+			{ "dsr_switch90_mid", 0, 1, 0, 7, 32.0, 5.0, 62.0, 3, 55.0, "at 90 m: middle level", 10, 11.0, 11.0, 1 },
+			{ "dsr_switch300_mid", 0, 1, 0, 7, 32.0, 5.0, 62.0, 3, 184.0, "at 300 m: middle level", 10, 11.0, 11.0, 1 },
+			{ "dsr_switch300_far", 0, 2, 0, 7, 32.0, 5.0, 62.0, 3, 184.0, "at 300 m: far level", 10, 11.0, 11.0, 1 },
+		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
-		const std::vector<HouseLook> Looks = bEastSheet ? std::vector<HouseLook>(std::begin(EastLooks), std::end(EastLooks))
+		const std::vector<HouseLook> Looks = bDesertSheet ? std::vector<HouseLook>(std::begin(DesertLooks), std::end(DesertLooks))
+			: bEastSheet ? std::vector<HouseLook>(std::begin(EastLooks), std::end(EastLooks))
 			: bVillageSheet ? std::vector<HouseLook>(std::begin(VillageLooks), std::end(VillageLooks))
 			: bChurchSheet ? std::vector<HouseLook>(std::begin(ChurchLooks), std::end(ChurchLooks))
 			: bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
@@ -1092,6 +1125,15 @@ int main(int argc, char** argv)
 				if (K.Aim == 24) At = V3(0.5 * K.Long - 0.6, 0.5 * K.Deep - 0.6, 0.35);
 				// (26: a khata's front wall's broken top, along from its corner)
 				if (K.Aim == 26) At = V3(0.5 * K.Long - 2.4, 0.5 * K.Deep - 0.3, 1.5);
+				// (the desert house's: 27 its yard's gate; 100 and over, the first of a kind; 200 and over, the second)
+				{
+					int Seen = 0;
+					for (const LandHouse::Hole& H : Holes)
+					{
+						if (K.Aim == 27 && H.What == 18) At = V3(H.X, H.Y, 1.1);
+						if (K.Aim >= 100 && H.What == K.Aim % 100 && Seen++ == K.Aim / 100 - 1) At = V3(H.X, H.Y, 0.04 + 0.5 * (H.Z0 + H.Z1));
+					}
+				}
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);
@@ -1208,10 +1250,12 @@ int main(int argc, char** argv)
 			const LandField::Mesh& M = P.HouseLevel == 0 ? L.Near : P.HouseLevel == 1 ? L.Mid : L.Far;
 			Scene S;
 			// (a burnt-out house lies in the yard, with no floor to stand over it; in winter the yard's snow round it)
-			AddHouse(M, P.HouseKind == 9 ? 0.0 : 0.15, S);
+			// (a desert house's yard is the ground's own level, a step over it)
+			AddHouse(M, P.HouseKind == 9 ? 0.0 : P.HouseKind == 10 ? 0.04 : 0.15, S);
 			{
 				const LandHouse::Spec Hs = HouseSpec(P);
 				if (Hs.Kind == 9) S.GroundSnow = Smooth(0.03, 0.5, Hs.Snow);
+				if (Hs.Kind == 10) S.GroundSand = 1.0;
 				S.Feet.push_back({ -0.5 * Hs.Long, -0.5 * Hs.Deep, 0.5 * Hs.Long, 0.5 * Hs.Deep });
 				if (Hs.Kind == 3)
 				{
