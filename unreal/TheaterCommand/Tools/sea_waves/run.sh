@@ -19,7 +19,15 @@
 #     stand-ins (marks_shim.h), played today's way and kept over every recorded action and stand-in, frame by frame, with
 #     the wake ink and without: kept draws today's, never sends more points or makes its proxy afresh more often, and
 #     every kind of mark is found in today's own meshes; the recordings MARKS_JOBS at once (default 4: about 8 minutes on
-#     the cloud's four cores alone, half an hour beside other runs), each one's log in OUT/marks, then their sum.
+#     the cloud's four cores alone, half an hour beside other runs), each one's log in OUT/marks, then their sum;
+#   - step 2, the wave core (Battle/FleetWaves.{h,cpp}, the chip's Battle/FleetWavesGpu.inl; nothing wired into the game):
+#     fold_table writes the whitecaps' gate by wind again (about a minute and a half), byte for byte
+#     Battle/FleetWavesFold.inl; sea_waves_test holds the core to the plan's section 6 (the spectrum and its pairs, the
+#     seeds, no folding, the whitecaps, the slopes and the road against a dense BRDF average, no pops across any wrap or
+#     snap, the weights, the clipmap watertight, the patch, over a sweep of cuts and on held walks, the chord bound, the
+#     references, SeaNear at rest and at world points against DrawnSurfaceZ, the .inl in float against the double core,
+#     the whitecaps at every depth, the MPC's numbers for material_check, the lanes) and the ride's cost on the battles'
+#     own recordings, played through the show (about a minute), its log in OUT/waves.
 # Usage: Tools/sea_waves/run.sh   (SEA_WAVES_OUT: where the test writes; default $TMPDIR/sea_waves)
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -85,6 +93,43 @@ if [ -x "$OUT/marks_pool_test" ]; then
   }
   step "marks_pool_test (every recording and stand-in, ${MARKS_JOBS:-4} at once)" marks_every
   step "marks_pool_test" "$OUT/marks_pool_test" "$SRC" --sum "${KINDS[@]}"
+fi
+
+# Step 2: the wave core (the release 2 ocean plan; Battle/FleetWaves.{h,cpp}, Battle/FleetWavesGpu.inl, Battle/FleetWavesFold.inl)
+WAVES="$OUT/waves"
+rm -rf "$WAVES" "$OUT/fold_table" "$OUT/sea_waves_test"
+mkdir -p "$WAVES"
+step "fold_table (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/fold_table.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" -o "$OUT/fold_table"
+if [ -x "$OUT/fold_table" ]; then
+  fold_again() {
+    "$OUT/fold_table" "$WAVES/FleetWavesFold.inl" || return 1
+    if cmp "$WAVES/FleetWavesFold.inl" "$SRC/Battle/FleetWavesFold.inl"; then
+      echo "the whitecaps' gate by wind, written again: byte for byte Battle/FleetWavesFold.inl ($(grep -c '^{' "$WAVES/FleetWavesFold.inl") winds)"
+    else
+      echo "the whitecaps' gate by wind, written again, is not Battle/FleetWavesFold.inl:"
+      diff "$WAVES/FleetWavesFold.inl" "$SRC/Battle/FleetWavesFold.inl" | head -20
+      return 1
+    fi
+  }
+  step "fold_table (written again, byte for byte Battle/FleetWavesFold.inl)" fold_again
+fi
+step "sea_waves_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/sea_waves_test.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" \
+  "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" \
+  "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/sea_waves_test"
+if [ -x "$OUT/sea_waves_test" ]; then
+  # (the ride's cost on the battles' own recorded actions; none found is a failure, not a skip)
+  shopt -s nullglob
+  BATTLES=("$ROOT"/Content/Data/SeaBattles/*.json)
+  shopt -u nullglob
+  waves_test() {
+    if [ "${#BATTLES[@]}" -eq 0 ]; then
+      echo "no recorded battles in Content/Data/SeaBattles"
+      return 1
+    fi
+    "$OUT/sea_waves_test" "$SRC" "$WAVES" "${BATTLES[@]}" 2>&1 | tee "$WAVES/sea_waves_test.log"
+    return "${PIPESTATUS[0]}"
+  }
+  step "sea_waves_test (${#BATTLES[@]} recorded battles)" waves_test
 fi
 echo "written in $OUT"
 if [ "$STATUS" -eq 0 ]; then
