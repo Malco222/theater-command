@@ -7,6 +7,7 @@
 // Pages: 'airfield' (the province selected), 'group:<id>', 'raids', 'raid:<kind>', 'raid:<kind>:<group id>',
 // 'plan:<kind>:<target>:<ids joined by dots>', 'scout:<group id>', 'rebase:<group id>', and for the carriers
 // 'wings:<fleet id>' (the aircraft one fleet's carriers bring) and 'search:<group id>' (the seas a group could search).
+// A raid that has been flown: 'airreport:<report id>' (its report) and 'airreports' (the month's raids, each with its report).
 // Actions: 'raid:<kind>:<target>:<ids joined by dots>', 'job:<group id>:<job key>', 'scout:<group id>:<target>',
 // 'airbase:<group id>:<region>', 'search:<group id>:<sea>', 'aboard:<group id>:<fleet id>'.
 // A carrier wing is sent ashore by 'airbase' (its 'rebase' page lists the fields on the shore where its fleet is),
@@ -14,8 +15,8 @@
 // A carrier wing is an air group: 'group:<its id>' is its page, and the kinds 'fleet' (target: a fleet id) and
 // 'harbour' (target: a province) are raids like the rest.
 
-import type { AirFleet, Game } from './types';
-import { SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
+import type { AirFleet, AirReport, AirSide, Game } from './types';
+import { AIR, SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
 import { offers } from './arsenal';
 import { turnToDate } from '../core/ticket';
 import { fieldCanBeLaid, isEngineer } from './engineers';
@@ -25,12 +26,15 @@ import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
   raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
-import { afterCard, type AfterCard, type FoughtAir } from './airfought';
+import { FLIP, afterCard, type AfterCard, type FoughtAir } from './airfought';
+import { allied } from './game';
+import { shipList } from './navy';
+import { townName } from './towns';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
 export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
 export interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
-/** What came of something pressed: `open` is the page to show next, `fly` aircraft to draw leaving for their target, `report` the id of the air report just filed. */
+/** What came of something pressed: `open` is the page to show next, `fly` aircraft to draw leaving for their target, `report` the id of the air report just filed (its page is 'airreport:<that id>'). */
 export interface AirActResult {
   ok: boolean;
   note: string;
@@ -70,7 +74,7 @@ function airfieldPage(g: Game, region: number): Page | null {
     id: 'airfield', title: `${(c.field?.word ?? 'NO AIRFIELD').toUpperCase()} AT ${c.name.toUpperCase()}`,
     headline: !c.field ? 'No aircraft can be based here' : c.hidden ? 'What flies from here is not known' : rows.length ? `${rows.length} air group${rows.length === 1 ? '' : 's'} based here` : 'No air group is based here',
     note: `${c.note} ${c.build} Aircraft take off from an airfield and come back to it. A fighter group patrols its sky, sticks with a bomber group as escort, ${closeRules(g) ? 'flies ground support for the armies, ' : ''}or rests; any group can fly one raid a month, planned from its target.`,
-    top: [{ label: 'PLAN A RAID', act: 'open:raids', ok: up, tip: 'Pick the kind of raid, then the target: you see the chance of success and the losses to expect, then choose which groups fly it together.' }],
+    top: [{ label: 'PLAN A RAID', act: 'open:raids', ok: up, tip: 'Pick the kind of raid, then the target: you see the chance of success and the losses to expect, then choose which groups fly it together.' }, reportsDoor(g)],
     sections: [{ heading: 'THE AIR GROUPS', text: rows.length || c.hidden ? '' : c.field ? 'Order aircraft from the ARSENAL, or move a group here from another airfield.' : '', rows }],
   };
 }
@@ -125,7 +129,7 @@ function raidsPage(g: Game): Page | null {
   return {
     id: 'raids', title: 'PLAN A RAID', headline: 'Pick the kind of raid, then its target',
     note: 'You pick the target and see the chance of success and the losses to expect. Then you choose which groups fly it, from one airfield or several: bombers that meet up lose fewer of their number, and fighters in range go with them.',
-    top: [BACK],
+    top: [BACK, reportsDoor(g)],
     sections: [{ heading: 'KINDS OF RAID', text: '', rows: menu.map((k) => ({ nat: '', title: k.label, lines: [k.blurb, k.why ?? `${k.targets} target${k.targets === 1 ? '' : 's'} in reach this month.`], buttons: [{ label: 'PICK A TARGET', act: `open:raid:${k.key}`, ok: up && !k.why, tip: k.why ?? '' }] })) }],
   };
 }
@@ -434,6 +438,147 @@ function searchPage(g: Game, id: number): Page | null {
   };
 }
 
+// ---- A raid that has been flown: its report ---------------------------------------------------------------
+//
+// (Brian, 24 November 2026: "i did a fighter raid from germany and it was intercepted by the UK but it didnt't tell
+// me the results of the battle.") A raid his crews fly is settled the moment it is ordered and its report is filed
+// (g.airReports), but the 3D game showed him one line under the map for twelve seconds and nothing more. The report
+// is now a page of its own, in the words the battles list of the browser game has always used for it.
+
+const ours = (g: Game, nat: string): boolean => !!g.human && !!nat && (nat === g.human || allied(g, nat, g.human));
+
+/** The side a raid's report is read from: 'att' a raid his side flew, 'def' one that fell on his side, null a raid that is neither's (not his to read). */
+function raidSide(g: Game, r: AirReport): 'att' | 'def' | null {
+  if (ours(g, r.attNat) || r.att.some((u) => u.nat === g.human)) return 'att';
+  return ours(g, r.defNat) || r.def.some((u) => ours(g, u.nat)) ? 'def' : null;
+}
+
+/**
+ * How it went, as that side reads it. The rules judge a raid by what it did against what it cost (the harm done and
+ * the defenders shot down, against the raiders lost), which is not whether the bombs fell: a raid can strike its
+ * target and still cost more than it was worth, so a raid that did not pay is never said to have been "beaten off"
+ * above a note that says where its bombs landed. One that no fighter rose to meet was no battle. Only a fight for
+ * the sky is won or lost outright, on its losses; and since a sweep can win its fight and still not win the sky it
+ * was flown for (it takes fighters enough left over it), the verdict says both, the fight and the sky.
+ */
+function raidVerdict(r: AirReport, side: 'att' | 'def'): string {
+  if (r.mission === 'superiority') return `${side === 'def' ? FLIP[r.level] ?? r.level : r.level}, sky ${side === 'def' ? (r.sky ? 'lost' : 'held') : r.sky ? 'won' : 'not won'}`;
+  if (!r.def.length) return side === 'def' ? 'Not intercepted' : 'Unopposed';
+  return r.won ? (side === 'def' ? 'Raid got through' : 'Raid succeeded') : side === 'def' ? 'Raid made to pay' : 'Raid cost too much';
+}
+
+function raidTitle(g: Game, r: AirReport): string {
+  if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
+  if (r.mission === 'harbour') return `Raid on the harbour of ${r.place}`;
+  if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
+  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raid on ${r.place}`
+    : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+}
+
+/** "1 fighter, 53 bombers": aircraft counted with their nouns, the singular where it is one. */
+const planes = (ftr: number, bmr: number): string => ([[ftr, 'fighter'], [bmr, 'bomber']] as [number, string][]).filter(([n]) => n >= 1).map(([n, w]) => `${num(n)} ${w}${Math.round(n) === 1 ? '' : 's'}`).join(', ') || 'no aircraft';
+const fell = (ss: AirSide[]): number => ss.reduce((n, x) => n + x.lostFtr + x.lostBmr, 0);
+const lostWord = (n: number): string => (n >= 1 ? num(n) : 'no');
+/**
+ * What each side lost, in a sentence or two. Never "of" a number sent: a report keeps each group's whole strength,
+ * not the share of it that flew or rose (a night raid is met by a few of a group's fighters), so "lost 0 of 476"
+ * would say that 476 fought. The groups and their strengths are in the rows below.
+ */
+const raidBill = (r: AirReport): string => `The raid lost ${lostWord(fell(r.att))} aircraft. ${r.def.length ? `The defence lost ${lostWord(fell(r.def))}.` : 'No fighters came up.'}`;
+
+/**
+ * The raids whose reports are the player's to read now, newest first: every raid flown by his side or against it
+ * since he last ended a month. The 3D game's bridge marks the last report filed as he ends his month
+ * (flags.raidsFrom), so the raids his own side flies as his month closes (an air campaign's, a standing order's,
+ * the escorts that follow) are his to read with those the other nations fly after it and those he orders next month.
+ * A war with no mark yet (its first month, or one saved before the mark) reads by the month: this month's raids, and
+ * last month's by the nations that move after him.
+ */
+export function raidsToRead(g: Game): { r: AirReport; side: 'att' | 'def' }[] {
+  const me = g.human;
+  if (!me) return [];
+  const at = g.order.indexOf(me);
+  const from: number | undefined = g.flags.raidsFrom;
+  const out: { r: AirReport; side: 'att' | 'def' }[] = [];
+  for (const r of g.airReports) {
+    if (from !== undefined ? r.id <= from : r.turn !== g.turn && !(r.turn === g.turn - 1 && g.order.indexOf(r.attNat) > at)) continue;
+    const side = raidSide(g, r);
+    if (side) out.push({ r, side });
+  }
+  return out.reverse();
+}
+
+/** The door to the month's raids and their reports: dim, and saying why, while there is none to read. */
+function reportsDoor(g: Game): PageButton {
+  const n = raidsToRead(g).length;
+  return { label: "THE MONTH'S RAIDS", act: 'open:airreports', ok: n > 0, tip: n ? 'Every raid flown by your side or against it since you last ended a month, each with its report.' : 'No raid has been flown by your side or against it since you last ended a month.' };
+}
+
+function raidReportPage(g: Game, id: number): Page | null {
+  const r = g.airReports.find((x) => x.id === id);
+  const side = r ? raidSide(g, r) : null;
+  if (!r || !side) return null;
+  const adj = (n: string): string => g.nations[n]?.adj ?? n;
+  const row = (x: AirSide): PageRow => ({
+    // (the group's strength beside its name: the row is the report's, not the group's own page)
+    nat: x.nat, title: `${x.fleet}  ·  ${planes(x.ftr, x.bmr)}`,
+    lines: [`${x.leader ? `${x.leader} commands. ` : ''}${x.lostFtr + x.lostBmr >= 1 ? `Lost ${planes(x.lostFtr, x.lostBmr)}.` : 'No losses.'}`],
+    buttons: [],
+  });
+  const ships: PageRow[] = (r.ships ?? []).map((x) => {
+    const had = shipList(x.ships), sunk = shipList(x.sunk);
+    return { nat: x.nat, title: x.fleet, lines: [`${had[0].toUpperCase()}${had.slice(1)}${x.admiral ? `. ${x.admiral} commands` : ''}. ${sunk === 'no ships' ? 'No ships lost.' : `Lost ${sunk}.`}`], buttons: [] };
+  });
+  // A fight for the sky: how the fighters stood at its end, against what it takes to win it. The sky is not won
+  // without fighters enough still over it at the end, however few the defence has left: a sweep flown by bombers
+  // alone, or by a handful of fighters, is told that and not a ratio (which the rules write as 99 where nothing
+  // defends).
+  const left = r.att.reduce((n, x) => n + x.ftr - x.lostFtr, 0);
+  const sky = r.mission !== 'superiority' ? ''
+    : r.sky ? ` The ${adj(r.attNat)} air force won the sky over ${r.place}: its fighters ended with ${r.hold >= 9 ? 'no opposition left' : `${r.hold.toFixed(2)} times what the defenders could still put up`}.`
+      : left < AIR.sky.least || r.hold >= AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end${left < 1 ? ', and none flew' : ''}.`
+        : ` The sky was not won: the attackers ended with ${r.hold.toFixed(2)} times the fighters the defenders could still put up, and it takes ${AIR.sky.win}.`;
+  const unready = r.surprise ? ' Caught unready: war was declared this month, so the harbour had no warning, its fighters and guns were not manned, and the ships lay at their moorings.' : '';
+  const where: PageButton[] = r.zone >= 0 ? [{ label: `GO TO ${r.place.replace(/^the /i, 'THE ').toUpperCase()}`, act: `goto:sea:${r.zone}`, ok: true, tip: 'Looks at the place on the map.' }]
+    : r.region >= 0 ? [{ label: `GO TO ${r.place.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: 'Looks at the place on the map.' }] : [];
+  return {
+    id: `airreport:${id}`, title: `THE RAID REPORT  ·  ${r.place.replace(/^the /i, '').toUpperCase()}`,
+    headline: `${raidTitle(g, r)}: ${raidVerdict(r, side).toLowerCase()}`,
+    note: `${turnToDate(r.turn).label}. ${[r.result, raidBill(r)].filter(Boolean).join(' ')}${sky}${unready}`,
+    top: [
+      reportsDoor(g),
+      { label: 'PLAN A RAID', act: 'open:raids', ok: humanUp(g), tip: humanUp(g) ? '' : 'It is not your month.' },
+      ...where,
+    ],
+    sections: [
+      { heading: side === 'att' ? 'FLEW THE RAID' : 'THE RAIDERS', text: '', rows: r.att.map(row) },
+      { heading: 'ROSE TO MEET THEM', text: r.def.length ? '' : 'No fighters came up.', rows: r.def.map(row) },
+      { heading: 'THE SHIPS UNDER ATTACK', text: '', rows: ships },
+      { heading: 'THE BATTLE TICKET', text: r.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'), rows: [] },
+    ].filter((s) => s.rows.length || s.text),
+  };
+}
+
+function raidReportsPage(g: Game): Page | null {
+  const all = raidsToRead(g);
+  const row = ({ r, side }: { r: AirReport; side: 'att' | 'def' }): PageRow => ({
+    nat: r.attNat, title: raidTitle(g, r), lines: [`${raidVerdict(r, side)}. ${raidBill(r)}`],
+    buttons: [{ label: 'READ THE REPORT', act: `open:airreport:${r.id}`, ok: true, tip: 'Who flew, who rose to meet them, what each lost, and the battle ticket.' }],
+  });
+  const flown = all.filter((x) => x.side === 'att'), met = all.filter((x) => x.side === 'def');
+  const up = humanUp(g);
+  return {
+    id: 'airreports', title: "THE MONTH'S RAIDS",
+    headline: all.length ? `${flown.length} flown by your side, ${met.length} flown against it` : 'No raid to read',
+    note: 'Every raid flown by your side, and every raid flown against it, since you last ended a month. Each has its report: who flew, who rose to meet them, and what each lost.',
+    top: [{ label: 'PLAN A RAID', act: 'open:raids', ok: up, tip: up ? '' : 'It is not your month.' }],
+    sections: [
+      { heading: 'FLOWN BY YOUR SIDE', text: flown.length ? '' : 'None yet.', rows: flown.map(row) },
+      { heading: 'FLOWN AGAINST YOUR SIDE', text: met.length ? '' : 'None.', rows: met.map(row) },
+    ],
+  };
+}
+
 /** One of the air war's pages, or null if the id is not one of them (or the game is not a grand campaign). region is the province selected on the map. */
 export function airPage(g: Game, id: string, region = -1): Page | null {
   if (!airWar(g) || !g.human) return null;
@@ -448,6 +593,8 @@ export function airPage(g: Game, id: string, region = -1): Page | null {
   if (part[0] === 'aboard') return aboardPage(g, Number(part[1]));
   if (part[0] === 'wings') return wingsPage(g, Number(part[1]));
   if (part[0] === 'search') return searchPage(g, Number(part[1]));
+  if (id === 'airreports') return raidReportsPage(g);
+  if (part[0] === 'airreport') return raidReportPage(g, Number(part[1]));
   return null;
 }
 

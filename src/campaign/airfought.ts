@@ -257,7 +257,8 @@ export function afterLost(card: Pick<AfterCard, 'groups'>): AfterLost {
   return out;
 }
 
-const FLIP: Record<VictoryLevel, VictoryLevel> = {
+/** A verdict as the other side reads it. */
+export const FLIP: Record<VictoryLevel, VictoryLevel> = {
   'Heroic victory': 'Crushing defeat', 'Decisive victory': 'Decisive defeat', 'Close victory': 'Close defeat', 'Pyrrhic victory': 'Close defeat',
   'Close defeat': 'Close victory', 'Decisive defeat': 'Decisive victory', 'Crushing defeat': 'Heroic victory',
 };

@@ -2878,6 +2878,9 @@ function endMonth() {
     else {
       judgeGoals(s, s.human);
       try { if (monthBook) monthBook.orders = monthOrders(s); } catch { /* the card tells of home without it */ }
+      // The raids to read next month are those filed from here on (airpages.ts raidsToRead): his own side's as his
+      // month closes, the other nations', and those he orders then.
+      s.flags.raidsFrom = air0;
       endHuman(s);
     }
     const air = raidsSince(s, air0, [month, s.turn]);
@@ -5481,6 +5484,11 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
       const told = flown.notes.filter(Boolean).join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
+      // (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) A raid his crews flew: the page
+      // that comes next is its report (airpages.ts), which the 3D game opens once the aircraft have been seen to fly
+      // it. A raid he flew himself has its after card in the air battle, and keeps the page it had; so does a raid
+      // with no aircraft to be seen flying it, which has nothing to wait for (its report is in the month's raids).
+      if (!fought && flies.length > 0 && airPage(s, `airreport:${air.report}`)) open = `airreport:${air.report}`;
     }
     // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.
     if (air.ok && part[0] === 'search') {
