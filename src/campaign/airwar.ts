@@ -860,11 +860,13 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.effects = effectsOf(g, kind, target, fc, nat);
   // (Release 1.5.2: a fight for the sky sent with fewer fighters over the target than hold a sky, air.json sky.least,
   // cannot win it whatever the odds. The card says so in a line of its own, and words its chance for the fight alone.)
-  if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least) {
+  // (With no fighters going it is a raid on the airfields and no fight for the sky at all: the card stands as it was.
+  // With nobody to come up there is no air fight to word a chance for: the verdict says so, in the group card's words.)
+  if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least && plan.fighters > 0) {
     const over = Math.floor(a.E), sent = Math.round(plan.fighters);
     // (Words ruled by the UI director, 04:55Z: the short line where every fighter sent can be over the target.)
     plan.tooFew = `Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`;
-    plan.verdict = FIGHT_VERDICT.find(([least]) => fc.success >= least)![1];
+    plan.verdict = a.D <= 0 ? 'No fighters will come up' : FIGHT_VERDICT.find(([least]) => fc.success >= least)![1];
   }
   plan.figures = figuresOf(g, kind, target, fc, nat);
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)

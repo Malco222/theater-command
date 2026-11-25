@@ -7,7 +7,7 @@
 // are untouched (tests/small-air-identity-152.test.ts). Every rule goes by the size of the force, never by nation.
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  AIR, AIRWAR, airAI, airFleetsOf, airRange, airWeight, assessAir, cover, defendBattles, fly, foundAirFleet, kmTo, landFighters, meetRaids, smallArm, smallOn,
+  AIR, AIRWAR, SMALL_SEEN, airAI, airFleetsOf, airRange, airWeight, assessAir, brokeOff, cover, defendBattles, fly, foundAirFleet, kmTo, landFighters, meetRaids, smallArm, smallOn,
 } from '../src/campaign/air';
 import { campaignOrders, openCampaign } from '../src/campaign/aircampaigns';
 import { airPage } from '../src/campaign/airpages';
@@ -18,7 +18,7 @@ import { setStop } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
-import type { AirFleet, AirReport, Game } from '../src/campaign/types';
+import type { AirFleet, AirReport, BattleReport, Game, PlanPhase } from '../src/campaign/types';
 
 const SM = AIRWAR.ai.back!.small!;
 afterEach(() => { SM.on = true; });
@@ -124,6 +124,198 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     expect(many.airFleets.find((x) => x.id === id2)!.close).toBeFalsy();
   });
 
+  it('of two groups on two fields, the one nearer the raided place is held first, whatever their ids', () => {
+    // (The case above is a tie: both on one field. Here the second group stands on a field found for it by hand across
+    // the Sound, in Scania, farther from Zealand but in its fighters' full reach, and it is given the lower id, so that
+    // only the distance can put the nearer one first.)
+    const enemy = g.nations[nat].atWar[0];
+    const [f] = landGroups(g, nat);
+    const zealand = g.byName.Zealand.id, scania = g.byName.Scania.id;
+    expect(f.base).toBe(zealand);
+    const h = copy(g);
+    const far = foundAirFleet(h, nat, h.regions[scania], 'Far', 'ftr', 10);
+    far.ftr = 10; far.est = { ftr: 10, bmr: 0 };
+    far.id = Math.min(...h.airFleets.map((x) => x.id)) - 1;
+    expect(far.id).toBeLessThan(f.id);
+    expect(kmTo(h, far, zealand)).toBeGreaterThan(kmTo(h, f, zealand));
+    expect(cover(kmTo(h, far, zealand), airRange(far, h).ftr)).toBeGreaterThan(0);
+    // A raid on its troops on Zealand smaller than either group: one is enough, and it is the nearer.
+    h.airReports.push(raidOn(h, zealand, enemy, nat, 5 / (airWeight(h, enemy) ?? 1)));
+    const held = meetRaids(h, nat, landGroups(h, nat), defendBattles(h, nat));
+    expect([...held]).toEqual([f.id]);
+  });
+
+  // (The design director, 04:55Z: the cause is its own army, not who controls the ground. A raid on its own troops
+  // counts wherever they stand, a province an ally controls included. Here Zealand, where its corps stand and its
+  // group is based, is set British-controlled, and the enemy raids it with 30 aircraft; a second group of 10 stands
+  // on a field found for it by hand in Scania, in reach of Zealand but across the sea from it. With 20 + 10 fighters,
+  // a raid of 30 asks for both.)
+  const alliedZealand = (mission: AirReport['mission']): { h: Game; near: AirFleet; far: AirFleet; held: Set<number> } => {
+    const enemy = g.nations[nat].atWar[0];
+    const zealand = g.byName.Zealand.id;
+    const h = copy(g);
+    h.regions[zealand].ctrl = 'UK';
+    const far = foundAirFleet(h, nat, h.regions[g.byName.Scania.id], 'Far', 'ftr', 10);
+    far.ftr = 10; far.est = { ftr: 10, bmr: 0 };
+    h.airReports.push({ ...raidOn(h, zealand, enemy, 'UK', 30 / (airWeight(h, enemy) ?? 1)), mission });
+    const near = landGroups(h, nat).find((x) => x.base === zealand)!;
+    return { h, near, far, held: meetRaids(h, nat, landGroups(h, nat), defendBattles(h, nat)) };
+  };
+
+  it('a raid on its own troops, or the fieldworks they hold, in a province an ally controls holds its groups to meet it', () => {
+    for (const mission of ['ground', 'line'] as const) {
+      const { h, near, far, held } = alliedZealand(mission);
+      expect(h.regions[g.byName.Zealand.id].ctrl).toBe('UK');
+      expect(defendBattles(h, nat)).toContain(g.byName.Zealand.id);
+      // (every fighter in reach comes up against a raid on troops, whoever holds the ground: both are held)
+      expect([...held].sort()).toEqual([near.id, far.id].sort());
+      // and in the staff's month neither flies ground support
+      const after = month(h, nat, true);
+      expect(after.airFleets.filter((x) => x.id === near.id || x.id === far.id).map((x) => !!x.close)).toEqual([false, false]);
+    }
+  });
+
+  it('a raid on a place there that is not its troops, the British-held town, is not its army\'s fight: nothing is held', () => {
+    const { held, near, h } = alliedZealand('bomb');
+    expect(held.size).toBe(0);
+    expect(month(h, nat, true).airFleets.find((x) => x.id === near.id)!.close).toBe(true);
+  });
+
+  it('a raid on the town\'s defences there holds only a group that would come up over the ally\'s ground, not one that would not', () => {
+    // (A raid on a town shakes the troops inside it, so it counts; but it is met only by the groups that guard that
+    // ground for whoever holds it, guardsLand with the province's real holder: the group on the British-held field
+    // does, the one across the sea in Scania does not, and holding it back would keep it from the army for nothing.)
+    const { held, near, far } = alliedZealand('town');
+    expect([...held]).toEqual([near.id]);
+    expect(held.has(far.id)).toBe(false);
+  });
+
+  it('a battle an ally fights with none of its corps in or beside it is not its army\'s fight', () => {
+    // (The design director, 04:55Z: a battle an ally defends with none of its corps in it is not its army's fight. In
+    // this month Holland and Oslo are fought over and defended by allies, with none of its corps there or next to it;
+    // its own battle is for Jutland, beside its corps on Zealand. Set that one aside and only the allies' are left.)
+    const mine = (h: Game, id: number): boolean => h.regions[id].units.some((u) => !u.dead && u.nat === nat && u.kind !== 'fort');
+    const allyOnly = (h: Game): void => { h.reports = h.reports.filter((r) => r.defNat !== nat); };
+    const h0 = copy(g); allyOnly(h0);
+    const theirs = defendBattles(h0, nat);
+    expect(theirs.length).toBeGreaterThan(0);
+    for (const b of theirs) {
+      expect(h0.regions[b].ctrl).not.toBe(nat);
+      expect(mine(h0, b) || h0.regions[b].nb.some((j) => mine(h0, j))).toBe(false);
+    }
+    // A heavy raid on the ally's troops there holds nothing, and its own battle (Zealand) is flown over as before.
+    const enemy = g.nations[nat].atWar[0];
+    const oslo = g.byName.Oslo.id;
+    expect(defendBattles(g, nat)).toContain(oslo);
+    let seen = null as number[] | null;
+    SMALL_SEEN.fn = (_h, n, held) => { if (n === nat) seen = held; };
+    try {
+      const raided = month(g, nat, true, (h) => { h.airReports.push(raidOn(h, oslo, enemy, h.regions[oslo].ctrl, 500)); });
+      expect(seen).toEqual([]);
+      expect(landGroups(raided, nat)[0].close).toBe(true);
+      // With only the allies' battles fought over, the small-arm rule stands aside: nobody is brought up to them, and
+      // the month is the switch-off month to the last group.
+      seen = null;
+      const on = month(g, nat, true, allyOnly), off = month(g, nat, false, allyOnly);
+      expect(seen).toBeNull();
+      expect(landGroups(on, nat).map((f) => [f.id, !!f.close, f.base])).toEqual(landGroups(g, nat).map((f) => [f.id, false, f.base]));
+      expect(saveGame(on)).toBe(saveGame(off));
+    } finally { SMALL_SEEN.fn = undefined; }
+  });
+
+  // (The design director, 05:38Z, after the review: "read the battle itself, not the map. A battle is its army's when
+  // its own corps take part in it, attacking or defending, plus any battle on its home ground. Where the battle lists
+  // its attackers, use that list. A field corps standing next to an enemy province whose battle it is not in is a
+  // neighbour, not a fighter. The adjacency test stands in only where the rules do not record who attacked." The
+  // staff's air month comes before its army's orders, so this month's blow is not yet on record: last month's is.
+  // Here its army is on the attack and nothing of its own is being defended: last month's battle reports are set
+  // aside, so the only ground fought over is the attack's.)
+  /** The battle its side fought for a province last month, as the reports file it: `by` attacking with corps of `corps`' nations. */
+  const battleFor = (h: Game, region: number, by: string, corps: string[], guard = false): BattleReport => ({
+    id: 900000 + h.reports.length, turn: h.turn - 1, week: 3, region, regionName: h.regions[region].name, attNat: by, defNat: h.regions[region].ctrl,
+    attackers: corps.map((n, i) => ({ name: `${i + 1}. Corps`, nat: n, kind: 'inf', divs: 2, men: 24000, lost: 900, fate: '', ...(guard ? { guard: true } : {}) })),
+    defenders: [], lines: [], aPower: 1, dPower: 1, odds: 1, level: 'Close victory', taken: false, attLost: 900, defLost: 900, prisoners: 0,
+  }) as BattleReport;
+  /** Its staff's month with its army attacking `place`: whether its group flies ground support, and over the place. */
+  const flies = (place: string, on: boolean, fix?: (h: Game) => void): boolean => {
+    SM.on = on;
+    const h = copy(g);
+    try {
+      h.reports = [];
+      fix?.(h);
+      airAI(h, nat, { from: 0, to: 9999, posture: 'attack', main: [place] } as PlanPhase);
+    } finally { SM.on = true; }
+    const [f] = landGroups(h, nat);
+    if (f.close) expect(cover(kmTo(h, f, h.byName[place].id), airRange(f, h).ftr)).toBeGreaterThan(0);
+    return !!f.close;
+  };
+
+  it('attacking, a battle whose report lists its own corps among the attackers is its army\'s fight, and its group flies over it', () => {
+    // Schleswig-Holstein: German ground in its fighters' reach, with none of its corps beside it.
+    const sh = g.byName['Schleswig-Holstein'].id;
+    const [f] = landGroups(g, nat);
+    expect(g.nations[nat].atWar).toContain(g.regions[sh].ctrl);
+    expect(cover(kmTo(g, f, sh), airRange(f, g).ftr)).toBeGreaterThan(0);
+    expect(g.regions[sh].nb.some((j) => g.regions[j].units.some((u) => !u.dead && u.nat === nat))).toBe(false);
+    // Its corps attacked it last month, on its own or beside an ally's: its army's fight.
+    expect(flies('Schleswig-Holstein', true, (h) => { h.reports.push(battleFor(h, sh, nat, [nat])); })).toBe(true);
+    expect(flies('Schleswig-Holstein', true, (h) => { h.reports.push(battleFor(h, sh, 'UK', ['UK', nat])); })).toBe(true);
+    // An ally's corps alone attacked it, or only a town guard of its own: not its army's fight (and the ordinary rule's
+    // share, 0.34 of its fighters, is less than its one group: it stays home, as in 1.5.1).
+    expect(flies('Schleswig-Holstein', true, (h) => { h.reports.push(battleFor(h, sh, 'UK', ['UK'])); })).toBe(false);
+    expect(flies('Schleswig-Holstein', true, (h) => { h.reports.push(battleFor(h, sh, nat, [nat], true)); })).toBe(false);
+    // A battle older than last month is not read.
+    expect(flies('Schleswig-Holstein', true, (h) => { const b = battleFor(h, sh, nat, [nat]); b.turn = h.turn - 2; h.reports.push(b); })).toBe(false);
+    // No battle on record and none of its corps beside it: not its army's fight.
+    expect(flies('Schleswig-Holstein', true)).toBe(false);
+    // Switched off, release 1.5.1 keeps it home whatever the report says.
+    expect(flies('Schleswig-Holstein', false, (h) => { h.reports.push(battleFor(h, sh, nat, [nat])); })).toBe(false);
+  });
+
+  it('a field corps beside a battle it is not in is a neighbour, not a fighter; beside enemy ground with no battle yet on record, the blow is its own', () => {
+    // Jutland, German-held, is set German-owned too, so that it is not its home ground; its corps stand on Zealand
+    // beside it.
+    const jut = g.byName.Jutland.id;
+    const enemy = g.regions[jut].ctrl;
+    expect(g.nations[nat].atWar).toContain(enemy);
+    const german = (h: Game): void => { h.regions[jut].owner = enemy; };
+    expect(g.regions[jut].nb.some((j) => g.regions[j].units.some((u) => !u.dead && u.nat === nat && u.kind !== 'fort'))).toBe(true);
+    expect(g.regions[jut].units.some((u) => !u.dead && u.nat === nat)).toBe(false);
+    // No battle for it on record yet: the corps beside it stand for the blow about to fall. Its group flies.
+    expect(flies('Jutland', true, german)).toBe(true);
+    // Its own corps on last month's report: its group flies.
+    expect(flies('Jutland', true, (h) => { german(h); h.reports.push(battleFor(h, jut, nat, [nat])); })).toBe(true);
+    // Last month's battle for it was an ally's, its own corps not among the attackers: a neighbour, not a fighter.
+    expect(flies('Jutland', true, (h) => { german(h); h.reports.push(battleFor(h, jut, 'UK', ['UK'])); })).toBe(false);
+    // No corps of its own beside it, and no battle on record: not its army's fight.
+    expect(flies('Jutland', true, (h) => { german(h); for (const r of h.regions) for (const u of r.units) if (u.nat === nat) u.dead = true; })).toBe(false);
+  });
+
+  it('where no battle is its own army\'s, the staff\'s month is the switch-off month: never less than 1.5.1', () => {
+    // (The design director, 05:38Z: "where no battle is its army's, the small-arm rule stands aside and 1.5.1's
+    // ordinary staff rule runs, so no case is ever worse than 1.5.1. The rule only adds; it never takes away what
+    // shipped." A second group of 5 fighters on Zealand is under the ordinary rule's share, 0.34 of its 25, so 1.5.1
+    // sends it on ground support over Jutland, which an ally's corps alone attacked last month.)
+    const jut = g.byName.Jutland.id;
+    const fix = (h: Game): void => {
+      h.regions[jut].owner = h.regions[jut].ctrl;
+      const x = foundAirFleet(h, nat, h.regions[g.byName.Zealand.id], 'Small', 'ftr', 5); x.ftr = 5; x.est = { ftr: 5, bmr: 0 };
+      h.reports = [battleFor(h, jut, 'UK', ['UK'])];
+    };
+    const run = (on: boolean): Game => {
+      SM.on = on;
+      const h = copy(g);
+      try { fix(h); airAI(h, nat, { from: 0, to: 9999, posture: 'attack', main: ['Jutland'] } as PlanPhase); } finally { SM.on = true; }
+      return h;
+    };
+    const on = run(true), off = run(false);
+    const orders = (h: Game): unknown[] => landGroups(h, nat).map((f) => [f.id, f.ftr, !!f.close, f.base, f.mission]);
+    expect(orders(on)).toEqual(orders(off));
+    // (1.5.1 sends the small group, so the comparison is not of two empty months)
+    expect(landGroups(off, nat).filter((f) => f.close).map((f) => f.ftr)).toEqual([5]);
+    expect(saveGame(on)).toBe(saveGame(off));
+  });
+
   it('binds the player\'s own staff the same: a player of this country who leaves his staff the air war gets the same orders', () => {
     const computer = month(g, nat, true);
     const player = month(g, nat, true, (h) => { h.human = nat; expect(setDesk(h, 'air', true)).toBe(true); });
@@ -215,9 +407,81 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     // (The UI director ruled these words at 04:55Z: the same two figures as the plan card's own line.)
     expect(r.result).toMatch(new RegExp(`^${esc(who)} flies over ${esc(r.place)}, but no enemy fighters came up to meet it, and the sky is not won: it takes 50 still over it at the end, and only \\d+ (?:(?:was|were) there|of the \\d+ sent could be over it)\\.$`));
     expect(Number(r.result.match(/and only (\d+)/)![1])).toBeLessThanOrEqual(there);
+    // Where fewer could be over the target than were sent, the line gives the fighters sent; where it does not, every
+    // fighter sent was over it, and the one figure is theirs.
     const flew = r.result.match(/of the (\d+) sent/);
-    if (flew) expect(Number(flew[1])).toBe(there);
+    expect(Number(flew ? flew[1] : r.result.match(/and only (\d+) (?:was|were) there/)![1])).toBe(there);
     expect(on.news).toEqual([r.result]);
+    // Nobody met anybody, so the news item is set out as neither side's: no won, no lost.
+    const item = on.h.headlines[on.h.headlines.length - 1];
+    expect(item.text).toBe(r.result);
+    expect(item.arm).toBe('air');
+    expect(item.won).toBeUndefined();
+    expect(item.lost).toBeUndefined();
+  });
+
+  it('his own fight for the sky that the enemy did come up to meet is still set out in the news as won and lost', () => {
+    const h = copy(g);
+    h.human = nat;
+    const t = raidTargets(h, 'superiority', nat).find((x) => planRaid(h, 'superiority', x.id, undefined, nat).meets.length > 0)!;
+    expect(t).toBeTruthy();
+    const p = planRaid(h, 'superiority', t.id, undefined, nat);
+    const n0 = h.headlines.length;
+    const rep = launchRaid(h, 'superiority', t.id, p.picked, nat)!;
+    expect(rep.def.length).toBeGreaterThan(0);
+    const lost = rep.att.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0) + rep.def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
+    expect(lost).toBeGreaterThan(0);
+    const items = h.headlines.slice(n0);
+    expect(items.length).toBe(1);
+    expect([items[0].won, items[0].lost].sort()).toEqual([nat, rep.defNat].sort());
+  });
+
+  it('the report of a fight for the sky broken off before it met the enemy reads as broken off, and an ordinary one does not', () => {
+    // (The browser's raid report card, ui/main.ts airReportCard, gives "the raid was broken off" as the reason a sky
+    // was not won where brokeOff reads so. The card itself is drawn inside the browser client and cannot be reached
+    // from here; brokeOff, the one thing it reads for it, can.)
+    const t = raidTargets(g, 'superiority', nat).find((x) => planRaid(g, 'superiority', x.id, undefined, nat).meets.length > 0)!;
+    const sweep = (gaveUp?: 'att'): AirReport => {
+      const h = copy(g);
+      h.human = nat;
+      const p = planRaid(h, 'superiority', t.id, undefined, nat);
+      return fly(h, nat, 'superiority', t.id, p.picked.map((id) => h.airFleets.find((x) => x.id === id)!), ':own', gaveUp ? { lost: {}, dropped: 0, gaveUp } : undefined, true)!;
+    };
+    const broke = sweep('att');
+    expect(broke.result).toBe('The fighters broke off and turned for home before they met the enemy.');
+    expect(broke.sky).toBe(false);
+    expect(brokeOff(broke)).toBe(true);
+    const fought = sweep();
+    expect(fought.def.length).toBeGreaterThan(0);
+    expect(brokeOff(fought)).toBe(false);
+  });
+
+  it('a fight for the sky with only bombers sent is a raid on the airfields: no too-few line, and the chance in the ordinary words', () => {
+    const h = copy(g);
+    h.human = 'GER';
+    let p = null as null | ReturnType<typeof planRaid>;
+    for (const t of raidTargets(h, 'superiority', 'GER')) {
+      const bmr = planRaid(h, 'superiority', t.id, undefined, 'GER').seats.find((s) => !s.why && s.kind === 'bmr' && h.airFleets.find((x) => x.id === s.id)!.ftr === 0);
+      if (bmr) { p = planRaid(h, 'superiority', t.id, [bmr.id], 'GER'); break; }
+    }
+    expect(p).not.toBeNull();
+    expect(p!.why).toBeNull();
+    expect(p!.fighters).toBe(0);
+    expect(p!.tooFew).toBeUndefined();
+    expect(['Very likely to succeed', 'Likely to succeed', 'It could go either way', 'Likely to fail', 'Very likely to fail']).toContain(p!.verdict);
+  });
+
+  it('with every enemy fighter group resting, his card says no fighters will come up, and still that the sky cannot be held', () => {
+    const h = copy(g);
+    h.human = nat;
+    for (const e of h.airFleets) if (e.nat !== nat && e.ftr > 0 && h.nations[nat].atWar.includes(e.nat)) e.mission = 'rest';
+    const t = raidTargets(h, 'superiority', nat)[0];
+    const p = planRaid(h, 'superiority', t.id, undefined, nat);
+    expect(p.why).toBeNull();
+    expect(p.meets).toEqual([]);
+    expect(p.fighters).toBeGreaterThan(0);
+    expect(p.verdict).toBe('No fighters will come up');
+    expect(p.tooFew).toMatch(/^Too few fighters to hold this sky: it takes 50 still over it at the end, and you are sending \d+(\.|, of which only \d+ can be over it\.)$/);
   });
 
   it('a staff\'s fight for the sky that met nobody is still not news', () => {
@@ -270,7 +534,12 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
 });
 
 describe('release 1.5.2: no staff sends an arm under sky.least on a fight for the sky', () => {
-  it('in a war nobody plays, every fight for the sky a staff flies has sky.least fighters or more', () => {
+  // (A guard against going back, not a proof of the mend: release 1.5.1's staffs already hold to this, since a staff's
+  // own sweeps go only where the fighters over the target can win it, air.ts raidStaff. Wars nobody plays were looked
+  // through with the mend off for a small arm's fight for the sky, and none was found: seeds 23, 5 and 17 for 16
+  // months, with and without the historian's campaigns (setStop 1), and seeds 1, 2, 3 and 7 for 24 months with them.
+  // The mend's own case, the historian's campaign flown by an arm too small, is the next test, built by hand.)
+  it('regression guard, holding in 1.5.1 too: in a war nobody plays, every fight for the sky a staff flies has sky.least fighters or more', () => {
     const g = war(23);
     let sweeps = 0;
     for (let t = 0; t < 16; t++) {

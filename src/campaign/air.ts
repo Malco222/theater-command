@@ -2058,12 +2058,15 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   else if (m === 'line') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the ${adj} fieldworks at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'ground') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
+  // (Release 1.5.2: set where the player's own fight for the sky met nobody and is told all the same; below.)
+  let nobody = false;
   // A fight for the sky in which nobody met anybody is not news (the grand campaign).
   // Flown, it always is: the player's own battle leaves its note on the map.
   if (g.flags.open === 1 && m === 'superiority' && !sky && aLost + dLost === 0 && !(battle && !staff)) {
     // (Release 1.5.2, airwar.json ai.back.small: but a fight for the sky the player ordered himself, `own`, in which no
     // enemy fighter came up, is told to him in one plain sentence, with why the sky is not won. The staffs' are not.)
     if (!(own && smallOn(g) && !df(def))) return rep;
+    nobody = true;
     // (The UI director ruled these words at 04:55Z: the same two figures as the plan card's own line, so that the card
     // the player read before the raid and the line he reads after it agree.)
     const n = Math.floor(over), flew = Math.round(a.att.reduce((s, x) => s + x.f.ftr, 0));
@@ -2081,13 +2084,17 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
     : `${a.place} bombed${night ? ' by night' : ''}`;
   // Who had the better of it, for an interface that sets the news out as won and lost (Version 80, display only).
-  const fought = { arm: 'air' as const, ...(defNat ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
+  // (Release 1.5.2: where nobody met anybody neither side had the better of it, so the item is set out as neither.)
+  const fought = { arm: 'air' as const, ...(defNat && !nobody ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
   if (full) headline(g, 'battle', text, nat, sea ? undefined : target, fought);
   else routineNews(g, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, 'battle', text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ''}`, nat, sea ? undefined : target, fought);
   return rep;
 }
 
 const df = (sides: AirSide[]): number => sides.reduce((s, x) => s + x.ftr, 0);
+
+/** Whether a raid's report is of one broken off before it met the enemy (fly's own result for it, "... broke off and turned for home before ..."): a card reads it to give the true reason a sky was not won. */
+export const brokeOff = (r: AirReport): boolean => r.result.includes(' broke off and turned for home before ');
 
 /** The air campaigns a nation ordered this month, flown once all its orders are given. */
 export function airBattles(g: Game, nat: string): AirReport[] {
@@ -2346,7 +2353,7 @@ function closeStaff(g: Game, mine: AirFleet[], battles: number[], back = false, 
   if (!((back && closeRules(g)) || closeStaffRules(g)) || !battles.length) return;
   const land = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined && !afloat(f));
   // (Release 1.5.2: an arm too small to hold any sky fights over its army instead, smallClose. Every other arm below.)
-  if (back && smallArm(g, nat)) { smallClose(g, nat, land, battles); return; }
+  if (back && smallArm(g, nat) && smallClose(g, nat, land, battles)) return;
   let left = (back ? AIRWAR.ai.back!.close : CLOSE.ai.share) * land.reduce((s, f) => s + f.ftr, 0);
   const near = (f: AirFleet): number => Math.min(...battles.map((b) => kmTo(g, f, b)));
   const can = land
@@ -2401,14 +2408,17 @@ function closeStaff(g: Game, mine: AirFleet[], battles: number[], back = false, 
  * where it or an ally was the one raided, by a nation it is at war with, each raid at the raider's weight in the air,
  * airwar.json 'weight', times ai.back.raided).
  */
-function raidedSince(g: Game, nat: string): Map<number, number> {
+function raidedSince(g: Game, nat: string, troops?: Set<number>): Map<number, number> {
   const raided = new Map<number, number>();
   // (Release 1.5.2, the design director 04:55Z: a raid on a small arm's OWN TROOPS counts wherever they stand, a
   // province an ally controls included, because it is a raid on its army. A raid on the troops there is the mission
-  // 'ground'; a raid on a town's defences, 'town', shakes the troops inside it, so it counts the same way.)
+  // 'ground', and on the fieldworks they are dug into, 'line'; a raid on a town's defences, 'town', shakes the troops
+  // inside it, so it counts the same way. `troops`, where given, collects the places raided on the troops or their
+  // works: every fighter in reach comes up against those, whoever holds the ground (comesUp).)
+  const onArmy = (m: AirMission): boolean => m === 'ground' || m === 'line';
   const onItsOwn = (g2: Game, r: AirReport, n: string): boolean =>
     g2.regions[r.region].ctrl === n ||
-    ((r.mission === 'ground' || r.mission === 'town') && g2.regions[r.region].units.some((u) => !u.dead && u.nat === n && u.kind !== 'fort'));
+    ((onArmy(r.mission) || r.mission === 'town') && g2.regions[r.region].units.some((u) => !u.dead && u.nat === n && u.kind !== 'fort'));
   const FB = AIRWAR.ai.back;
   if (!FB) return raided;
   for (let i = g.airReports.length - 1; i >= 0 && g.airReports[i].turn >= g.turn - 1; i--) {
@@ -2416,12 +2426,19 @@ function raidedSince(g: Game, nat: string): Map<number, number> {
     if (r.region < 0 || !g.regions[r.region] || !onItsOwn(g, r, nat) || !(r.defNat === nat || allied(g, r.defNat, nat)) || !atWar(g, nat, r.attNat)) continue;
     const sent = r.att.reduce((s, x) => s + x.ftr + x.bmr, 0) * (airWeight(g, r.attNat) ?? 1);
     raided.set(r.region, (raided.get(r.region) ?? 0) + sent * FB.raided);
+    if (troops && onArmy(r.mission)) troops.add(r.region);
   }
   return raided;
 }
 
-/** The groups that come up over a place on a nation's own ground from where they stand: those that guard it (guardsLand), in their fighters' reach of it. */
-const guardsHere = (g: Game, f: AirFleet, t: number, nat: string): boolean => guardsLand(g, f, t, nat) && cover(kmTo(g, f, t), reach(f, g).ftrRange) > 0;
+/**
+ * The groups that come up over a raided place from where they stand, in their fighters' reach of it, as comesUp sends
+ * them: against a raid on the troops there or their works (`onTroops`), every group in reach, whoever holds the ground;
+ * against any other raid, the groups that guard that ground for whoever holds it (guardsLand), so that in a province an
+ * ally controls no group is held that would not come up.
+ */
+const guardsHere = (g: Game, f: AirFleet, t: number, onTroops = false): boolean =>
+  cover(kmTo(g, f, t), reach(f, g).ftrRange) > 0 && (onTroops || guardsLand(g, f, t, g.regions[t].ctrl));
 
 /**
  * "Except those needed to meet a raid that month", for an air arm too small to hold any sky whose own ground is fought
@@ -2429,7 +2446,7 @@ const guardsHere = (g: Game, f: AirFleet, t: number, nat: string): boolean => gu
  * alone). The army comes first, and a raid on the army counts as the army's fight. A group on ground support does not
  * come up against a raid (fightersOver, assessAir), so, in this order:
  * (i) for each province of `battles` (the ground fought over) the enemy raided since last month, on the troops there or
- * on a place inside it (raidedSince), the groups that guard it from where they stand stay on patrol, nearest first and
+ * on a place inside it (raidedSince), the groups that would come up over it from where they stand (guardsHere) stay on patrol, nearest first and
  * the lowest id first on a tie, until the fighters held there are at least the aircraft the enemy sent, or no such
  * group is left; the provinces are taken in order of their id. These are the groups returned.
  * (ii) Every fit group left in reach of a battle then flies ground support (smallClose).
@@ -2438,10 +2455,11 @@ const guardsHere = (g: Game, f: AirFleet, t: number, nat: string): boolean => gu
  */
 export function meetRaids(g: Game, nat: string, land: AirFleet[], battles: number[]): Set<number> {
   const held = new Set<number>();
-  const raided = raidedSince(g, nat);
+  const troops = new Set<number>();
+  const raided = raidedSince(g, nat, troops);
   for (const [t, sent] of [...raided].filter(([t]) => battles.includes(t)).sort((a, b) => a[0] - b[0])) {
     const guards = land
-      .filter((f) => f.mission === 'support' && f.flew !== g.turn && guardsHere(g, f, t, nat))
+      .filter((f) => f.mission === 'support' && f.flew !== g.turn && guardsHere(g, f, t, troops.has(t)))
       .sort((a, b) => kmTo(g, a, t) - kmTo(g, b, t) || a.id - b.id);
     let have = guards.reduce((s, f) => s + (held.has(f.id) ? f.ftr : 0), 0);
     for (const f of guards) {
@@ -2475,15 +2493,37 @@ export const SMALL_SEEN: {
  * it, since both keep fighters back for a sky it can never win; they are all that ever kept a small arm's groups from
  * being brought up.
  */
-function smallClose(g: Game, nat: string, land: AirFleet[], all: number[]): void {
-  // (Release 1.5.2, the design director 04:55Z: "its own fought-over ground" is its home ground under attack, or a
-  // battle where its own corps fight. A battle an ally defends with none of its corps in it is not its army's fight:
-  // no group is held for it, and none is brought up to it. With no battle of its own army, a small arm does nothing
-  // here: the share and patrol-first, which the ruling lifts off it, are all the old path would have done.)
-  const itsArmy = (b: number): boolean =>
-    g.regions[b].owner === nat || g.regions[b].units.some((u) => !u.dead && u.nat === nat && u.kind !== 'fort');
+function smallClose(g: Game, nat: string, land: AirFleet[], all: number[]): boolean {
+  // (Release 1.5.2, the design director 04:55Z and 05:38Z: "its own fought-over ground" is its home ground under
+  // attack, or a battle its own corps take part in, attacking or defending. Read the battle itself, not the map:
+  // where a battle for the place has been fought since last month, its attackers are on its report, and the place is
+  // its army's fight only if its own corps were among them; a field corps standing next to a battle it is not in is a
+  // neighbour, not a fighter. Standing next to enemy-held ground stands in only where no battle for it is on record
+  // yet, a blow about to fall: the staff's air month comes before its army's orders. Defending, its corps fight
+  // where they stand. A battle an ally fights without them is not its army's fight: no group is held for it, and
+  // none is brought up to it by this rule. With no battle of its own army this rule stands aside (false), and the
+  // staff's ordinary rule, the fight back's share and patrol-first, runs as in 1.5.1: it only adds, never takes away.)
+  const mine = (id: number): boolean => g.regions[id].units.some((u) => !u.dead && u.nat === nat && u.kind !== 'fort');
+  // The battles its side fought for a place since last month: true where its own corps were among the attackers,
+  // false where they were not, null where none is on record.
+  const attacked = (b: number): boolean | null => {
+    let seen: boolean | null = null;
+    for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn >= g.turn - 1; i--) {
+      const rep = g.reports[i];
+      if (rep.region !== b || !(rep.attNat === nat || allied(g, rep.attNat, nat))) continue;
+      if (rep.attackers.some((u) => u.nat === nat && !u.guard)) return true;
+      seen = false;
+    }
+    return seen;
+  };
+  const itsArmy = (b: number): boolean => {
+    const r = g.regions[b];
+    if (r.owner === nat || mine(b)) return true;
+    if (!atWar(g, nat, fieldCtrl(g, r))) return false;
+    return attacked(b) ?? r.nb.some(mine);
+  };
   const battles = all.filter(itsArmy);
-  if (!battles.length) return;
+  if (!battles.length) return false;
   const held = meetRaids(g, nat, land, battles);
   const ftrR = (f: AirFleet): number => reach(f, g).ftrRange;
   const fit = (f: AirFleet): boolean => f.mission === 'support' && !f.close && f.flew !== g.turn && f.ready >= CLOSE.least && !held.has(f.id);
@@ -2503,10 +2543,12 @@ function smallClose(g: Game, nat: string, land: AirFleet[], all: number[]): void
   far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
   for (const { f, to } of far) if (rebaseAir(g, f, to)) put(f);
   if (SMALL_SEEN.fn) {
-    const away = [...raidedSince(g, nat).keys()].filter((t) => !battles.includes(t));
-    const elsewhere = land.filter((f) => f.mission === 'support' && !f.close && f.flew !== g.turn && !held.has(f.id) && away.some((t) => guardsHere(g, f, t, nat))).map((f) => f.id);
+    const troops = new Set<number>();
+    const away = [...raidedSince(g, nat, troops).keys()].filter((t) => !battles.includes(t));
+    const elsewhere = land.filter((f) => f.mission === 'support' && !f.close && f.flew !== g.turn && !held.has(f.id) && away.some((t) => guardsHere(g, f, t, troops.has(t)))).map((f) => f.id);
     SMALL_SEEN.fn(g, nat, [...held], close, elsewhere);
   }
+  return true;
 }
 
 /**

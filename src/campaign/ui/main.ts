@@ -74,7 +74,7 @@ import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../ca
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
-  km as airKm, overOcean, seaKm, skyOver, smallOn, whyNotMoveAir, whyNotMission, type AirOrder,
+  brokeOff, km as airKm, overOcean, seaKm, skyOver, smallOn, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
   FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
@@ -6333,11 +6333,19 @@ function airPlanCard(): string {
     if (mission === 'superiority') {
       // (1.5.2, the UI director 04:55Z: an arm that cannot hold the sky whatever the odds is told so here too, not
       // promised a sky on the group's own card and refused it on the raid card.)
-      const tooFew = smallOn(g) && a.E < AIR.sky.least;
-      const word = tooFew ? `The sky is within reach, but not enough fighters to hold it: it takes ${AIR.sky.least} still over it at the end`
-        : a.D <= 0 ? 'No fighters will come up' : fc.odds >= AIR.sky.win * 1.25 ? 'The sky is within reach' : fc.odds >= AIR.sky.win ? 'The sky can be won, at a price' : fc.odds >= 1.2 ? 'A hard fight that wears them down' : fc.odds >= 0.8 ? 'An even fight' : 'The defenders have the edge';
+      // (Mended after the review: the too-few words stand only where the odds alone would have promised the sky. At
+      // any other odds the band keeps its own words, and the line below the bar says the sky cannot be held; the
+      // verdict is never coloured as a win while it cannot be.)
+      const tooFew = smallOn(g) && a.E < AIR.sky.least && a.E > 0;
+      const short = `not enough fighters to hold it: it takes ${AIR.sky.least} still over it at the end`;
+      const word = a.D <= 0 ? 'No fighters will come up'
+        : fc.odds >= AIR.sky.win ? (tooFew ? `The sky is within reach, but ${short}` : fc.odds >= AIR.sky.win * 1.25 ? 'The sky is within reach' : 'The sky can be won, at a price')
+        : fc.odds >= 1.2 ? 'A hard fight that wears them down' : fc.odds >= 0.8 ? 'An even fight' : 'The defenders have the edge';
+      // (The UI director's second read, 05:38Z: the note ends as the raid card's own line does, with the player's number.)
+      const over = Math.floor(a.E), sent = Math.round(a.att.reduce((n, x) => n + x.f.ftr, 0));
+      const few = tooFew && !(a.D > 0 && fc.odds >= AIR.sky.win) ? `<div class="note"><b>The sky.</b> Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.</div>` : '';
       const share = a.Epow + a.Dpow > 0 ? a.Epow / (a.Epow + a.Dpow) : 1;
-      head = `<div class="verdict ${fc.odds >= AIR.sky.win ? 'win' : fc.odds >= 1.2 ? '' : 'loss'}" style="font-size:24px">${word}</div>
+      head = `<div class="verdict ${fc.odds >= AIR.sky.win && !tooFew ? 'win' : fc.odds >= 1.2 ? '' : 'loss'}" style="font-size:24px">${word}</div>${few}
         <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[f.nat].color}"></i><i style="flex:1;background:${defNat ? g.nations[defNat].color : 'var(--panel-3)'}"></i></div>
         <div class="sub">Fighter odds ${fc.odds.toFixed(2)} to 1 going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up once his losses are made good.${a.B > 0 ? ` About ${lossPct}% of the bombers are likely to be lost.` : ''}${fc.cut > 0 ? ` Those that get through should cut the readiness of the fighters based there by about ${Math.round(fc.cut * 100)}%, and that carries over to next month.` : ''}</div>`;
     } else if (sea) {
@@ -6364,7 +6372,19 @@ function airReportCard(r: AirReport): string {
   const list = (ss: AirSide[]): string => ss.length ? `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.leader ? `, ${esc(x.leader)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(craft(x.ftr, x.bmr)))}</span></span><span>${x.lostFtr + x.lostBmr ? `lost ${esc(craft(x.lostFtr, x.lostBmr))}` : 'no losses'}</span></li>`).join('')}</ul>` : '<div class="empty">None.</div>';
   // (1.5.2, the UI director 04:55Z: the same words as the raid report's own page, so the two cards agree, and no
   // reading of "99 times" where nobody was left.)
-  const sky = r.mission === 'superiority' ? (r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: at the end ${r.hold >= 9 ? 'no opposition was left' : `its fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`}.` : ` The sky was not won: at the end ${r.hold >= 9 ? 'no opposition was left' : `the attackers' fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`}, and it takes ${AIR.sky.win} to 1.`) : '';
+  // (Mended after the review, in the UI director's words of 05:38Z: the reason given is the one that held. A fight
+  // broken off wins nothing. Under the odds it takes, the odds. At or over them, the fighters still over the target
+  // at the end, air.json sky.least, the only other thing that keeps a sky unwon: the report keeps no count of those,
+  // so the card names the floor, and gives the attackers' fighters left where even they fall short of it.)
+  const stood = (whose: string): string => `${whose} fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`;
+  const leftOver = sum(r.att, 'ftr') - sum(r.att, 'lostFtr');
+  const floor = `but it takes ${AIR.sky.least} fighters still over the target as well${leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? num(leftOver) : 'none'} left` : ''}`;
+  const sky = r.mission !== 'superiority' ? ''
+    : r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: at the end ${r.hold >= 9 ? 'no opposition was left' : stood('its')}.`
+    : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
+    : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
+    : r.hold >= 9 ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.`
+    : ` The sky was not won: at the end ${stood('the attackers\'')}, which is enough, ${floor}.`;
   const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : r.mission === 'ground' ? 'a raid on troops' : r.mission === 'line' ? 'bombing the line' : r.mission === 'fleet' ? 'a strike on a fleet' : r.mission === 'harbour' ? 'a raid on a harbour' : r.mission === 'town' ? 'a raid on a town' : 'strikes on shipping';
   const aw = airWar(g);
   // The ships under the bombs, fleet by fleet, as they were before the strike and with what each lost.
