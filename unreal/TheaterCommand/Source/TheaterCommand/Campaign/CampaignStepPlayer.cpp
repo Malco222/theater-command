@@ -171,7 +171,8 @@ namespace
 
 	/**
 	 * (1.5.3) True where a line of the button's own, one not on a button inside it, reads exactly these words (as Plain
-	 * gives both): a card's name on the card, though the card holds buttons of its own.
+	 * gives both): a card's name on the card, though the card holds buttons of its own. A corps that has earned a nickname
+	 * shows it on the same line, in quotes after the name (MakeCard), and the name alone still names it.
 	 */
 	bool HasLine(const TSharedRef<SWidget>& Widget, const FString& Want, bool bTop = true)
 	{
@@ -183,7 +184,8 @@ namespace
 		}
 		if (Widget->GetType() == TextType)
 		{
-			return Plain(StaticCastSharedRef<STextBlock>(Widget)->GetText().ToString()) == Want;
+			const FString Line = Plain(StaticCastSharedRef<STextBlock>(Widget)->GetText().ToString());
+			return Line == Want || Line.StartsWith(Want + TEXT(" \u201C"), ESearchCase::CaseSensitive);
 		}
 		if (FChildren* Children = Widget->GetChildren())
 		{
@@ -413,7 +415,8 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 		}
 	}
 	// (1.5.3) The buttons named by the words: where no button's words are these and no more, one with a line of its own
-	// (not on a button inside it) that reads exactly them, as Plain gives both. II Corps' card is named by "II Corps".
+	// (not on a button inside it) that reads exactly them, as Plain gives both, or them and a nickname in quotes after
+	// them. II Corps' card is named by "II Corps", and still is once the corps has earned a nickname.
 	TArray<int32> ByName;
 	if (!bWhole && !Want.IsEmpty())
 	{
@@ -430,8 +433,9 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 	// own. Where no inner button matches, the outer one is pressed, as before.
 	// (1.5.3) But a button named by the words keeps the press, and the buttons inside it give way to it instead: after a
 	// split, "press II Corps" is II Corps' card, not REJOIN II CORPS DETACHMENT on it. Only a named button and the ones
-	// inside it are weighed so. The rest keep their screen order as in 1.5.2, and "#2" counts among them as it did:
-	// "press II Corps#2" is still REJOIN II CORPS on the detachment's card, which "II Corps" does not name.
+	// inside it are weighed so. The rest keep their screen order as in 1.5.2, and "#2" counts among them as it did where a
+	// named card holds at most one such button, as a corps' card does (it shows one REJOIN): "press II Corps#2" is still
+	// REJOIN II CORPS on the detachment's card, which "II Corps" does not name.
 	TArray<const FFoundButton*> Alike;
 	for (const int32 Index : Matched)
 	{
