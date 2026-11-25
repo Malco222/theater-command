@@ -22,19 +22,23 @@
 // Teams only, for now (21:47Z, C): the guns' own early fire stays in the card's soften and thicken until it moves into
 // this place as its own release 2 item, with its own switch and gate. Nothing is priced twice.
 //
-// The field is laid at the power BEFORE this term (Reckoning.teams, sim.ts): the card's odds are what the field's fight
+// The field is laid at the power BEFORE this term (Reckoning.teamFire, sim.ts): the card's odds are what the field's fight
 // then comes to, teams and all. Laid at the odds after it, the field would take the two points off a second time.
 import { LAND, type Team } from '../battle/land/rules';
 import { OWN_TEAM_KINDS, OWN_TEAM_SHARE } from '../battle/land/own-teams';
 import type { Game } from './types';
 
-/** True in a campaign whose battles are fought with every infantry force's own teams (the Battle rules card's `teams`). */
-export const teamsOn = (g: Game): boolean => g.flags.teams === 1;
+/**
+ * True in a campaign whose battles are fought with every infantry force's own teams (the Battle rules card's `teams`).
+ * Its own key, `teamfire`: the campaign's `teams` flag is the buildable machine-gun and mortar brigades' (teams.ts,
+ * another switch with its own gate), and the two must never ride one key.
+ */
+export const teamFireOn = (g: Game): boolean => g.flags.teamfire === 1;
 
 /** Sets the switch: the 3D game as its Battle rules card's row stands, and tests. Off, the card is the card it was. */
-export function setTeams(g: Game, on: boolean): void {
-  if (on) g.flags.teams = 1;
-  else delete g.flags.teams;
+export function setTeamFire(g: Game, on: boolean): void {
+  if (on) g.flags.teamfire = 1;
+  else delete g.flags.teamfire;
 }
 
 export const TEAM_FIRE = {

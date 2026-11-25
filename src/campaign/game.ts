@@ -39,7 +39,7 @@ import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
-import { teamFire, teamFireLine, teamsOn, type TeamFire } from './teamfire';
+import { teamFire, teamFireLine, teamFireOn, type TeamFire } from './teamfire';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
@@ -1066,10 +1066,10 @@ export interface Assessment {
   air?: CloseAir;
   /**
    * Support teams (release 2, behind `teams`; teamfire.ts): what each side's strength was multiplied by for its own
-   * machine-gun and mortar teams, already in A, D and odds. The field is laid at the power before it (Reckoning.teams).
+   * machine-gun and mortar teams, already in A, D and odds. The field is laid at the power before it (Reckoning.teamFire).
    * Unset with the switch off, in a fight that is not a field battle, and where neither side brings teams.
    */
-  teams?: TeamFire;
+  teamFire?: TeamFire;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -1343,7 +1343,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // battle in the field, as the field will share each side out (ticket.ts sideOf: a corps' own weight, the defence's by
   // its works, the town's guard a block of its own). Each side's teams count at their worth after the lines meet, and
   // their fire before the lines meet wears the line it falls on. Last of all, so the power before it is the field's.
-  const teamFx = teamsOn(g) && land && !town && !opts.sally && defenders.length > 0 ? teamFire({
+  const teamFx = teamFireOn(g) && land && !town && !opts.sally && defenders.length > 0 ? teamFire({
     att: attackers.filter((c) => !(wide && (barred(g, c, target) || noCrossing(g, c.kind, c.reg, target.id)))).map((c) => [c.kind, corpsBase(g, c) * KIND[c.kind].atk]),
     def: defenders.map((d) => [d.kind, corpsBase(g, d) * KIND[d.kind].def * (1 + 0.25 * Math.min(1, worksOf(d)))]),
     guard: guarded > 0 ? guardPower(g, target) * 1.25 : 0,
@@ -1622,7 +1622,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // (The town's guard fighting beside them (ruling 232) stands in front of them.)
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
   if (overrun) lines.push(GUNS_OVERRUN);
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(teamFx ? { teams: teamFx } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(teamFx ? { teamFire: teamFx } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {

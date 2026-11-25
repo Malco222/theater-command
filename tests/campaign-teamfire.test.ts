@@ -16,8 +16,9 @@ import { LandBattle } from '../src/battle/land/sim';
 import type { FieldTicket, SideTicket } from '../src/battle/core/types';
 import type { LandPlace } from '../src/battle/land/field';
 import { FIELD_DICE, addCorps, assess, createGame, relocate } from '../src/campaign/game';
+import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { TEAM_FIRE, earlySeconds, setTeams, teamFire, teamFireLine, teamsOn } from '../src/campaign/teamfire';
+import { TEAM_FIRE, earlySeconds, setTeamFire, teamFire, teamFireLine, teamFireOn } from '../src/campaign/teamfire';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -58,18 +59,54 @@ describe('the switch', () => {
   it('is off in a new campaign, and off the card is the card it was', () => {
     const g = playing();
     const l = line(g);
-    expect(teamsOn(g)).toBe(false);
+    expect(teamFireOn(g)).toBe(false);
     const before = assess(g, l.att, l.target);
-    expect(before.teams).toBeUndefined();
+    expect(before.teamFire).toBeUndefined();
     expect(before.lines.some((x) => x.label === 'Support teams')).toBe(false);
-    setTeams(g, true);
-    expect(teamsOn(g)).toBe(true);
+    setTeamFire(g, true);
+    expect(teamFireOn(g)).toBe(true);
     const on = assess(g, l.att, l.target);
-    expect(on.teams).toBeDefined();
-    setTeams(g, false);
+    expect(on.teamFire).toBeDefined();
+    // its own key: the campaign's `teams` flag is the buildable brigades' switch, and neither moves the other
     expect(g.flags.teams).toBeUndefined();
+    setTeamFire(g, false);
+    expect(g.flags.teamfire).toBeUndefined();
+    g.flags.teams = 1;
+    expect(teamFireOn(g)).toBe(false);
+    expect(assess(g, l.att, l.target).teamFire).toBeUndefined();
+    delete g.flags.teams;
     // on and off again: the same card, to the last figure and the last line
     expect(JSON.stringify(assess(g, l.att, l.target))).toBe(JSON.stringify(before));
+  });
+});
+
+describe('one row, two readers: the card\'s key is its own, never the brigades\'', () => {
+  it('on, the whole save differs by the one key; off again, it is the save it was', () => {
+    const g = playing();
+    line(g);
+    const before = saveGame(g);
+    setTeamFire(g, true);
+    const on = saveGame(g);
+    expect(on).not.toBe(before);
+    expect(JSON.parse(on).flags.teamfire).toBe(1);
+    // the brigades' switch (the campaign's `teams` flag, the ship list's `teamsrule`) is not touched by it
+    expect(JSON.parse(on).flags.teams).toBeUndefined();
+    setTeamFire(g, false);
+    expect(saveGame(g)).toBe(before);
+  });
+
+  it('the brigades\' flag on alone leaves the card\'s term off, and the term on alone leaves the brigades\' flag off', () => {
+    const g = playing();
+    const l = line(g);
+    const plain = JSON.stringify(assess(g, l.att, l.target).A);
+    g.flags.teams = 1;
+    expect(teamFireOn(g)).toBe(false);
+    expect(assess(g, l.att, l.target).teamFire).toBeUndefined();
+    expect(JSON.stringify(assess(g, l.att, l.target).A)).toBe(plain);
+    delete g.flags.teams;
+    setTeamFire(g, true);
+    expect(g.flags.teams).toBeUndefined();
+    expect(assess(g, l.att, l.target).teamFire).toBeDefined();
   });
 });
 
@@ -78,9 +115,9 @@ describe('the card with the switch on', () => {
     const g = playing();
     const l = line(g);
     const off = assess(g, l.att, l.target);
-    setTeams(g, true);
+    setTeamFire(g, true);
     const on = assess(g, l.att, l.target);
-    const k = on.teams!;
+    const k = on.teamFire!;
     expect(k.share).toEqual({ att: 1, def: 1 });
     expect(on.A).toBeCloseTo(off.A * k.att, 9);
     expect(on.D).toBeCloseTo(off.D * k.def, 9);
@@ -102,20 +139,20 @@ describe('the card with the switch on', () => {
   it('prices nothing where the fight is not a field battle: a town stormed, a landing, a sortie', () => {
     const g = playing();
     const l = line(g);
-    setTeams(g, true);
-    expect(assess(g, l.att, l.target).teams).toBeDefined();
-    expect(assess(g, l.att, l.target, { town: true }).teams).toBeUndefined();
-    expect(assess(g, l.att, l.target, { sea: 0.5 }).teams).toBeUndefined();
-    expect(assess(g, l.att, l.target, { sally: true }).teams).toBeUndefined();
+    setTeamFire(g, true);
+    expect(assess(g, l.att, l.target).teamFire).toBeDefined();
+    expect(assess(g, l.att, l.target, { town: true }).teamFire).toBeUndefined();
+    expect(assess(g, l.att, l.target, { sea: 0.5 }).teamFire).toBeUndefined();
+    expect(assess(g, l.att, l.target, { sally: true }).teamFire).toBeUndefined();
   });
 
   it('prices only the corps that bring teams: tanks against tanks is the card as it was', () => {
     const g = playing();
     const l = line(g, 'arm', 'arm');
     const off = assess(g, l.att, l.target);
-    setTeams(g, true);
+    setTeamFire(g, true);
     const on = assess(g, l.att, l.target);
-    expect(on.teams).toBeUndefined();
+    expect(on.teamFire).toBeUndefined();
     expect(JSON.stringify(on)).toBe(JSON.stringify(off));
   });
 });
@@ -282,7 +319,7 @@ describe('the field is laid at the power before the term', () => {
   it('with the term on the ticket and the teams on the field, the blocks share out the power before it', () => {
     const t = campaign('normandy-1944');
     const k = { att: 0.95, def: 0.96 };
-    const priced: Ticket = { ...t, reckoning: { ...t.reckoning, teams: k } };
+    const priced: Ticket = { ...t, reckoning: { ...t.reckoning, teamFire: k } };
     const plain = new LandBattle(ownTeams(t).ticket as never), on = new LandBattle(ownTeams(priced).ticket as never);
     const power = (s: LandBattle): { att: number; def: number } => (s as unknown as { power: { att: number; def: number } }).power;
     expect(ownTeams(priced).ticket.att.forces.some(isOwnTeam)).toBe(true);
@@ -294,7 +331,7 @@ describe('the field is laid at the power before the term', () => {
 
   it('priced but fought without the teams on the field, it is laid at the card\'s odds as it always was', () => {
     const t = campaign('normandy-1944');
-    const priced: Ticket = { ...t, reckoning: { ...t.reckoning, teams: { att: 0.95, def: 0.96 } } };
+    const priced: Ticket = { ...t, reckoning: { ...t.reckoning, teamFire: { att: 0.95, def: 0.96 } } };
     const power = (s: LandBattle): { att: number; def: number } => (s as unknown as { power: { att: number; def: number } }).power;
     expect(power(new LandBattle(priced as never))).toEqual(power(new LandBattle(t as never)));
   });
