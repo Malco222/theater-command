@@ -181,7 +181,10 @@ describe('supply columns', () => {
     expect(back!.columns).toEqual(g.columns);
   }, 240_000);
   it('on, over a longer war: some columns are caught, by partisans on occupied ground and by aircraft', () => {
-    const g = war({ cols: true }, 2);
+    // (Staged again, 25 November 2026: with the computer's air forces fighting back, 1.5.1's rule, seed 2's war runs
+    // another course, and in its 26 months aircraft catch columns, 3,790 lorries of them, and partisans none. Seeds 1,
+    // 3 and 4 have both: 32, 28 and 17 lorries to partisans. The war is seed 3's; what is asked of it is unchanged.)
+    const g = war({ cols: true }, 3);
     const by = { air: 0, partisans: 0 };
     for (let m = 0; m < 26; m++) {
       months(g, 1);
