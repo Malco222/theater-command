@@ -697,6 +697,11 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     lay({ ...FIG, attacks: { kit: 2, none: 2 }, kill: { kit: 1, none: 1 } });
     AIRWAR.ai.raids.share = 1;
     const g = open(), wapp = zoneOf(g, 'wapp');
+    // (The join onto release 2's guns, 25 November 2026. A war now opens with heavy guns round each great power's
+    // capital and two chief factory towns (ruling 124), and this month was measured against bare ground. With Berlin,
+    // the Ruhr and Bohemia gunned the staff's raids are worth less and the two groups change places: No. 1 Group
+    // patrols and No. 2 Group flies the night raid. So the start guns are taken away here, as arsenal.test.ts does.)
+    for (const k of Object.keys(g.flags)) if (k.startsWith('wk:aa:')) delete g.flags[k];
     g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
     const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
     f.duty = 'raid'; f.station = wapp; f.tied = false;
