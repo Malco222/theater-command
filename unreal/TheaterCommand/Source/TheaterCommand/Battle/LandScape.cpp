@@ -306,6 +306,9 @@ namespace LandScape
 	{
 		if (L != Look::Farmland || SnowLying > 0.3 || Month < 5 || Month > 9) return false;
 		if (Lat < 44.0 || Lat > 62.0 || Lon < 23.5 || Lon > 60.0) return false;
+		// (the northern forest belt keeps the farmland's own air: Leningrad, the Volkhov and the Svir, Karelia, where the
+		// look picker sends the taiga to Farmland; no steppe dust over their swamps and spruce)
+		if (Is(ClimateAt(Lat, Lon), "taiga")) return false;
 		LandField::Field Words;
 		Words.Trial = Trial;
 		return Words.Tried("eastgold");
@@ -377,13 +380,15 @@ namespace LandScape
 			{
 				// (the east's summer on trial "eastgold" (EastGold): Normandy's grade and haze washed its ripe strips to a
 				// near-blown cream, the art director's Voronezh read (236,228,195 against her gold). The summer steppe's dust
-				// hanging warm over the corn: the east set's steppe.json, C2B99E at 4,200 m, its hue at about the bocage's
-				// brightness (the plain grey-warm 0.70,0.68,0.62 first tried greyed the far band further in the cloud
-				// painter, its blue over green 0.99 to 0.93 where this takes it to 0.78); a little more dust in the sky;
-				// her T2 grade as ruled (the look bible's T2 row, theatres-sheet-rulings-1122.md item 1: middles 0.55,
-				// darks 0.50, contrast 1.35, half a stop down, toe 0.55, red 1.01 and blue 0.99), which keeps more of the
-				// gold in the middle tones than Normandy's 0.48)
-				Ink(A.HazeInk, 0.73, 0.66, 0.41);
+				// hanging warm over the corn: the east set's steppe.json, C2B99E at 4,200 m, its own hue (linear red over
+				// green 1.11, blue over green 0.71, by the 2.2 power the desert's and the Med's inks keep) at about the
+				// bocage's brightness. In the cloud painter, blue over green: the far band 0.98 to 0.83, the near woods 0.94 to
+				// 0.71, the sky 1.06 to 1.01; the yellower 0.41 first tried for blue took them to 0.79, an olive 0.66 and a
+				// grey 0.99 (the art director's mend, 25 November), and the plain grey-warm 0.70,0.68,0.62 hardly warmed the
+				// band (0.92). A little more dust in the sky; her T2 grade as ruled (the look bible's T2 row,
+				// theatres-sheet-rulings-1122.md item 1: middles 0.55, darks 0.50, contrast 1.35, half a stop down, toe 0.55,
+				// red 1.01 and blue 0.99), which keeps more of the gold in the middle tones than Normandy's 0.48)
+				Ink(A.HazeInk, 0.73, 0.66, 0.47);
 				A.HazeDensity = 0.0058;
 				A.SkyDust = 0.8;
 				Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
