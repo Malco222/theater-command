@@ -788,9 +788,10 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  *   its side's, or ground its side held on the first day) on the row's own province or beside it (`entered`). The
  *   old chart's fronts are joined, as they always were (Germany has one front from Poland to France), so the war
  *   alone freed rows held against another enemy: seed 17, 138 row-answers with no enemy near, the Berlin garrison
- *   sent to Moravia in the first month, the Saar's corps freed by a war with Poland. "Holds" is who holds the field:
- *   an enemy army laid round a town of its side that still holds is on that ground, as the front's ground already
- *   counts it (ground "the enemy has taken from its side or stands round"). The cause is read each month: the month
+ *   sent to Moravia in the first month, the Saar's corps freed by a war with Poland. "Holds" reads the town and the
+ *   field alike: an enemy army laid round a town of its side that still holds is on that ground, as the front's
+ *   ground already counts it (ground "the enemy has taken from its side or stands round"); and a town of its side
+ *   the enemy holds is his, though an army of its side stands round it, as the form's count read it. The cause is read each month: the month
  *   it is gone the row does not answer and its hold stands. A row next behind the front answers by it too, once the
  *   enemy holds ground of its side beside it (the Paris garrison when Champagne is lost); one two provinces back does
  *   not.
@@ -900,14 +901,16 @@ function landAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
   const side = (r: Region): boolean => allied(g, nat, r.owner) || allied(g, nat, heldFirst(r));
   const ours = (r: Region): boolean => answersHere(g, r) && side(r);
   // (On the old chart, what frees a row: an enemy at war with its country holds ground of its side on the row's own
-  // province or beside it, and that ground is no beach, which is a landing's and no entry by land. "Holds" reads who
-  // holds the field (`ctl`), so an army laid round a town of its side that still holds is on that ground, as the
-  // front's ground below counts it. The design director's ruling of 15:09Z, 25 November 2026, point 1: "a row answers
+  // province or beside it, and that ground is no beach, which is a landing's and no entry by land. "Holds" reads the
+  // town and the field alike: an army laid round a town of its side that still holds is on that ground, as the front's
+  // ground below counts it; and a town of its side the enemy holds is his, though an army of its side stands round it
+  // (the form's count of the 6,108 row-months read who holds the town, and the cause is true wherever that count is).
+  // The design director's ruling of 15:09Z, 25 November 2026, point 1: "a row answers
   // when an enemy holds ground of its side on its own province or beside it". The far side keeps its built trigger,
   // the war itself on the front that faces that enemy. Read each month: the month it is gone the row does not answer.)
   const entered = (c: Corps): boolean => [c.reg, ...g.regions[c.reg].nb].some((id) => {
     const r = g.regions[id];
-    return atWar(g, nat, ctl(g, r)) && side(r) && !beach(g, nat, r);
+    return (atWar(g, nat, r.ctrl) || atWar(g, nat, ctl(g, r))) && side(r) && !beach(g, nat, r);
   });
   const grounds = new Map<Corps, Set<number>>();
   for (const f of fronts(g, nat, { skip: (r) => aside(g, r, nat) })) {

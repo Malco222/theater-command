@@ -22,7 +22,7 @@
 // reads only the far side today (ai.ts `answering`), so on the old chart nobody answers a beach (reported, not widened).
 import { describe, expect, it } from 'vitest';
 import { answerWatch, answering, frontAnswering, homeBars, withAnswer } from '../src/campaign/ai';
-import { addCorps, allied, atWar, createGame, relocate } from '../src/campaign/game';
+import { addCorps, allied, atWar, createGame, declareWar, relocate } from '../src/campaign/game';
 import { heldFirst } from '../src/campaign/far';
 import { setStop, stopDef } from '../src/campaign/history';
 import { landCorps } from '../src/campaign/navy';
@@ -81,12 +81,14 @@ describe('held armies answer an attack by land on the old chart, under Units dec
     expect(held.length).toBeGreaterThan(10);
     expect(held.filter((c) => entered(g, c))).toEqual([]);
     expect(everyone(g)).toEqual([]);
-    // Germany's month and Poland's: Germany marches into Poland, and Poland's rows answer only where Polish ground
-    // beside them is now his; Germany's own ground is entered by nobody, and France's neither.
-    const seen: { nat: string; corps: Corps }[] = [];
-    answerWatch.tell = (e) => { for (const x of e.rows) seen.push({ nat: e.nat, corps: x.corps }); };
+    // Germany's month and Poland's: Germany marches into Poland, but when Poland's month opens no held Polish row
+    // stands on or beside Polish ground he holds, so nobody answers, Poland included; Germany's own ground is entered
+    // by nobody, and France's neither. (A row that did answer would have to be entered: checked as each month opens.)
+    const seen: { nat: string; corps: Corps; entered: boolean }[] = [];
+    answerWatch.tell = (e) => { for (const x of e.rows) seen.push({ nat: e.nat, corps: x.corps, entered: entered(g, x.corps) }); };
     try { upTo(g, 'FRA'); } finally { answerWatch.tell = null; }
-    expect(seen.filter((x) => x.nat !== 'POL')).toEqual([]);
+    expect(seen.filter((x) => !x.entered)).toEqual([]);
+    expect(seen).toEqual([]);
     expect(everyone(g).filter((k) => !k.startsWith('POL '))).toEqual([]);
   }, 300000);
 
@@ -204,6 +206,48 @@ describe('held armies answer an attack by land on the old chart, under Units dec
     expect(now).toEqual([...rows, plain.name].sort());
   });
 
+  it('a town of France\'s the enemy holds is his though a French army stands round it: the 4th Army in the Vosges answers, on its own province', () => {
+    // (The cause is true wherever the form's count of the 6,108 row-months was, save a beach: that count read who
+    // holds the town. As first built the cause read only who holds the field, and here nobody answered.)
+    const g = war(true);
+    const vosges = g.byName['Vosges'], fourth = called(g, '4th Army');
+    expect(fourth.reg).toBe(vosges.id);
+    vosges.prev = vosges.ctrl; vosges.ctrl = 'GER'; vosges.since = g.turn;
+    expect([fieldCtrl(g, vosges), vosges.units.map((u) => u.name)]).toEqual(['FRA', ['4th Army']]);
+    // Nothing beside the Vosges is the enemy's: the 4th Army's cause is its own province alone.
+    expect(vosges.nb.map((j) => g.regions[j]).filter((r) => atWar(g, 'FRA', r.ctrl) || atWar(g, 'FRA', fieldCtrl(g, r)))).toEqual([]);
+    const rows = names(frontAnswering(g, 'FRA'));
+    expect(rows).toEqual(['3rd Army', '4th Army', '5th Army', '8th Army', 'XVIII Corps']);
+  });
+
+  it('ground its side held on the first day is ground of its side: Karelia ceded to the Soviet Union, its town his and Finland\'s army round it, frees Finland\'s rows', () => {
+    const g = war(true);
+    const karelia = g.byName['Karelia'];
+    karelia.owner = 'SOV';
+    expect([heldFirst(karelia), allied(g, 'FIN', karelia.owner)]).toEqual(['FIN', false]);
+    expect(frontAnswering(g, 'FIN')).toEqual([]);
+    declareWar(g, 'SOV', 'FIN');
+    // The war alone frees nobody on the old chart.
+    expect(frontAnswering(g, 'FIN')).toEqual([]);
+    karelia.prev = karelia.ctrl; karelia.ctrl = 'SOV'; karelia.since = g.turn;
+    expect([fieldCtrl(g, karelia), karelia.units.map((u) => u.name)]).toEqual(['FIN', ['Army of the Isthmus']]);
+    const rows = frontAnswering(g, 'FIN');
+    expect(names(rows)).toEqual(['Army of the Isthmus', 'Helsinki reserve']);
+    for (const c of rows) expect([c.name, c.reg === karelia.id || g.regions[c.reg].nb.includes(karelia.id)]).toEqual([c.name, true]);
+  });
+
+  it('an enemy at war with its country, not a neutral: a Soviet corps in German Lower Silesia frees nobody; a Polish one frees the Protectorate garrison', () => {
+    const g = war(true);
+    const silesia = g.byName['Lower Silesia'], prot = called(g, 'Protectorate garrison');
+    take(g, silesia, 'SOV', 'Berlin');
+    addCorps(g, 'SOV', 'Test Soviet corps in Lower Silesia', 'inf', 2, silesia.id, {});
+    expect([atWar(g, 'GER', 'SOV'), allied(g, 'GER', 'SOV'), fieldCtrl(g, silesia)]).toEqual([false, false, 'SOV']);
+    expect(frontAnswering(g, 'GER')).toEqual([]);
+    for (const u of [...silesia.units]) relocate(g, u, g.byName['Moscow']);
+    silesia.ctrl = 'POL';
+    expect(names(frontAnswering(g, 'GER'))).toContain(prot.name);
+  });
+
   it('the same position with Units decide off: nobody answers on the old chart', () => {
     const g = war(false);
     upTo(g, 'FRA');
@@ -296,8 +340,8 @@ describe('held armies answer an attack by land on the old chart, under Units dec
     expect(frontAnswering(g, 'POL')).toContain(row);
   });
 
-  it('with Units decide off, or at stop 1 with it on, the same landing leaves no mark', () => {
-    for (const [units, stop] of [[false, 3], [true, 1]] as const) {
+  it('with Units decide off, or at stop 1 or 2 with it on, the same landing leaves no mark', () => {
+    for (const [units, stop] of [[false, 3], [true, 1], [true, 2]] as const) {
       const g = war(units, stop);
       const { shore, party } = corridor(g);
       const res = landCorps(g, [party], shore);
