@@ -4791,20 +4791,22 @@ const rowTakes = (g: Game, nat: string, o: any): Corps[] => (Array.isArray(o?.fr
  * Who is not read, and keeps the rule it had: a posting on the old chart (ruling 229, 1c: the side theatres' own
  * near harbour); a posting its side holds, its own or an ally's or a client's (it forms there, or at home where the
  * friend is at peace, as before); a local levy, a row that came overland, a row with no home but one ground
- * (`shore`), a fort, a row that joins a standing corps, a row made out of a defeat. A row that takes corps already on
- * the board (`from`) keeps the old rule for a computer (they stay where they stand, and only what the row adds from
- * home, `adds`, comes); the player's is an offer (ruling B8, `rowOffers`), and the offer forms by this rule.
+ * (`shore`), a fort, a row that joins a standing corps, a row made out of a defeat. A computer's row that takes corps
+ * already on the board (`from`) moves no living corps off to an unheld posting: they stay where they stand, and only
+ * what the row adds from home (`adds`) comes; the player's is an offer (ruling B8, `rowOffers`), and the offer forms
+ * by this rule.
  *
- * (So a row that takes corps on the board is placed by two rules, by who sits in the seat, and the reviewer of
- * 25 November 2026 asked for one. It is left as it is, and put to the design director as a departure from the
- * letter of B7, because ruling B8 speaks of exactly these rows and says "the computer's rows as today", and three of
- * his earlier rulings stand on today's rule, each pinned by a test: the 18th Division is not brought to Rangoon's
- * coast (17:10Z, 19 November); with Hsuchow lost the garrison stays whole and its detachment waits its half year
- * and is struck (17:23Z); a row let go by a live front has its half year for its posting from that month, and its
- * corps stays as it is (05:35Z, 21 November). Tried: read by this rule a computer's 18th Division left the south for
- * Japan's home islands the month after Singapore fell, with Rangoon still Britain's. The player's offer loses
- * nothing by it: it stands open, so he may take it at home at once or wait for the posting and take it there, which
- * is every move the computer has and one more.)
+ * (That is B7's own reading, not a departure from it: the design director's ruling of 13:39Z, 25 November 2026, on
+ * the batch 1 readings, point 1 of the dated rows: "B7 says where a row FORMS. A row that moves a living corps moves
+ * it only to ground its side holds; to unheld ground the corps stays where it stands." A row made of corps already
+ * on the board forms nothing new where it is posted: it moves the corps that are its men, and to a posting its side
+ * does not hold they are not moved. The earlier rulings pinned by tests stand on the same reading: the 18th Division
+ * is not brought to Rangoon's coast (17:10Z, 19 November); with Hsuchow lost the garrison stays whole and its
+ * detachment waits its half year and is struck (17:23Z); a row let go by a live front has its half year for its
+ * posting from that month, and its corps stays as it is (05:35Z, 21 November). Read the other way, a computer's
+ * 18th Division left the south for Japan's home islands the month after Singapore fell, with Rangoon still
+ * Britain's. The player's offer forms by the harbour rule because taking it is his own order: he may take it at home
+ * at once or wait for the posting and take it there, which is every move the computer has and one more.)
  *
  * Returns null where the row is not read. Else `waits` (its war has not begun), or the place (`at`, null where its
  * country holds neither a harbour in the theatre nor its capital), the worth that comes where that is not the whole
