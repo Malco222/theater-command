@@ -114,6 +114,16 @@ namespace
 		return bOnTheLine || CVarFlakRing.GetValueOnGameThread() != 0;
 	}
 
+	// (Release 2, 25 November 2026.) Ruling 107's night look of a raid: the hour falls to night while a raid flown by
+	// night is watched, and the place raided shows its searchlights. It was built for release 1 and never seen in
+	// play, because no flight the rules sent ever said night; the air rules thread's bridge now says it. A look that
+	// comes on in play has its switch (Brian, 25 November 01:10Z: every release 2 feature keeps one in OPTIONS): off
+	// as it comes, a night raid is watched by day as in every release before, until the Mac and the art director
+	// pass it. "-TheaterNightRaid" still flies every raid by night for a picture, switch or no switch.
+	TAutoConsoleVariable<int32> CVarNightRaid(
+		TEXT("tc.Look.NightRaid"), 0,
+		TEXT("1 watches a raid flown by night in the dark, the place raided showing its searchlights (ruling 107); 0 watches it by day, as before. Release 2; off as it comes."));
+
 	// (Release 2, the far side: the art director's seam-2, 25 November 2026.) With the whole world on the table, what
 	// lies within sight of the chart's seam is shown from both sides of it: the screen's names and plates, the lines and
 	// towns laid on the table, and the pieces. On as it comes, and it does nothing without the far side. 0 is the table
@@ -14935,6 +14945,10 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 		{
 			Flight.Sortie.bNight = true;
 			Flight.Sortie.bEscort = false; // (no fighters go with the night bombers)
+		}
+		else if (CVarNightRaid.GetValueOnGameThread() == 0)
+		{
+			Flight.Sortie.bNight = false; // (tc.Look.NightRaid off: a raid the rules flew by night is watched by day, as before)
 		}
 	}
 	{
