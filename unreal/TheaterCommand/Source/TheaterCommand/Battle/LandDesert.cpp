@@ -54,7 +54,7 @@ namespace LandScape
 			CSlab = 2,    // a flat stone a forearm across
 			CTwigs = 3,   // a small dead shrub on its sand hummock, its sand tail behind it
 			CGravel = 4,  // a scatter of gravel, thumbnail-sized: the serir's speckle round the eye
-			CRuts = 5     // a piece of one wheel's or track's rut in the broken crust, 3.4 m long (the trial "trigh" only)
+			CRuts = 5     // a piece of one wheel's or track's rut in the broken crust, 2.4 m long (the trial "trigh" only)
 		};
 
 		LandField::Base KitOf(int K) { return static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K); }
@@ -78,6 +78,26 @@ namespace LandScape
 		const Tone TrackDust = Rgb(204, 190, 164);
 		/** A rut's piece as built: grey, its tint the ground's (Dress). */
 		constexpr double RutGrey = 200.0;
+		/** A rut's pieces (the trial "trigh"; metres, at Scale 1): each RutStep long, laid end to end at stations RutStep
+		 * apart along its rut, so a piece meets each neighbour laid at its end and the rut runs on unbroken; a piece with
+		 * one neighbour fades along its length to the ground's own colour toward the side it has none, and a piece with
+		 * none is not laid. Across: RutWide of pressed floor and its lips, and RutFeather either side fading into the
+		 * ground; RutPress the floor's share of the ground's light, RutLip the crushed lips' (linear). RutRamp the rise
+		 * built along one (its copy's ScaleZ sets its slope). A try within RutBy of a rut's line lays its station's piece
+		 * (so wide that some nine tries fall in a station's stretch and one is seldom missed). A piece lies where its
+		 * strand is worn RutWorn or more, its line bending no tighter than a RutBend circle, at least RutClear over the
+		 * ground under it and nowhere more than RutFloat over it; each strand's pieces RutLift and a little more over
+		 * their line (the more the wider its vehicles' gauge), so two strands' ruts crossing are a few millimetres apart. */
+		constexpr double RutStep = 2.4, RutWide = 0.26, RutFeather = 0.12, RutRamp = 0.01, RutPress = 0.84, RutLip = 1.02;
+		constexpr double RutBy = 0.85, RutWorn = 0.35, RutBend = 70.0;
+		constexpr double RutLift = 0.006, RutClear = 0.002, RutFloat = 0.023;
+		/** The most the ground may bend under a rut's piece (its height 4 m either side of the piece's middle, along it
+		 * and across, against twice the middle's), so the drawn ground's 4 m grid lies on the ground's own height
+		 * there and the piece on it. */
+		constexpr double RutKink = 0.03;
+		/** sRGB (0 to 1) to linear light and back. */
+		double Decode(double C) { return std::pow((std::clamp(C, 0.0, 1.0) + 0.055) / 1.055, 2.4); }
+		double Encode(double L) { return 1.055 * std::pow(std::clamp(L, 0.0, 1.0), 1.0 / 2.4) - 0.055; }
 		const Tone LimeUnder = Rgb(150, 136, 110);
 		const Tone VarnishUnder = Rgb(112, 96, 76);
 		/** Where the prevailing north-west wind lays a sand tail: south-east of each stone and bush (radians from east). */
@@ -414,22 +434,17 @@ namespace LandScape
 			Grown Grow(const Spot& S, double Pick) const override
 			{
 				if (S.Kind == KWater || S.Drawn == 9 /*floor*/ || S.Drawn == 10 /*wall*/) return Grown{};
+				// (on trial: the wheels' pair of ruts along each braided track's strand, every try near a rut's line laying its
+				// station's piece, the gravel they crushed gone; their stations only on open, field or rough ground clear of
+				// the lane's own worn edge (MakeTracks), and any try near one laying it, so that one is seldom missed. Thick
+				// enough that no recorded way thins the tries)
+				if (bTracks)
+				{
+					RutLaid Rl;
+					if (RutPiece(S.X, S.Y, Rl)) return Grown{ ClutOf(CRuts), 6.0 };
+				}
 				if (S.Kind == KLane) return S.Lane > -0.4 ? Grown{ ClutOf(Pick < 0.5 ? CGravel : CPebbles), 0.3 } : Grown{};
 				if (S.Kind == KVillage || S.Kind == KYard) return Pick < 0.7 ? Grown{ ClutOf(CPebbles), 0.15 } : Grown{ ClutOf(CTwigs), 0.05 };
-				// (on trial: the vehicles' paired ruts along a braided track's strands, a pair astride its middle line and, where
-				// it is wide, a pair either side of it; each rut laid in pieces end to end along its line, their ends overlapping
-				// or a gap between, each piece on its own ground, so a pair never floats on a slope across it; off the steeper
-				// slopes along it, and clear of the lane's own worn edge; the gravel they crushed gone)
-				if (bTracks && (S.Kind == KOpen || S.Kind == KField || S.Kind == KRough) && S.Lane > 2.5)
-				{
-					Track Tr;
-					if (Nearest(S.X, S.Y, 6.0, Tr) && Tr.bFlat && Tr.Strength > 0.3)
-					{
-						const double Mid = std::fabs(Tr.D - Tr.Gauge);
-						const double Off = Tr.Side > 0.0 ? std::min({ Mid, std::fabs(Tr.D - Tr.Side + Tr.Gauge), std::fabs(Tr.D - Tr.Side - Tr.Gauge) }) : Mid;
-						if (Off < 0.13) return Grown{ ClutOf(CRuts), (Off == Mid ? 2.0 : 1.6) * Tr.Strength * (S.Kind == KRough ? 0.5 : 1.0) };
-					}
-				}
 				if (S.Kind == KRough)
 				{
 					if (Pick < 0.4) return Grown{ ClutOf(CGravel), 1.1 };
@@ -463,19 +478,29 @@ namespace LandScape
 				{
 				case CRuts:
 				{
-					// (along its strand, either way round; a tyre's narrower and a track's wider; built grey, tinted to the
-					// ground it lies on as the paint has it here, so its edge is the ground's own and its middle the ground
-					// pressed darker: the tint multiplies the linear colour)
-					Track Tr;
-					Nearest(S.X, S.Y, 6.0, Tr);
-					P.Yaw = static_cast<float>(Tr.Yaw + 0.04 * (U6 - 0.5) + (U7 < 0.5 ? 0.0 : Pi));
-					P.Scale = static_cast<float>(0.85 + 0.35 * U4);
-					P.ScaleZ = static_cast<float>(0.8 + 0.4 * U5);
-					const Tone Under = Colour(S);
-					const double Shade = 0.94 + 0.08 * U6;
-					auto Lin = [](double C) { return std::pow((std::clamp(C, 0.0, 255.0) / 255.0 + 0.055) / 1.055, 2.4); };
-					const double Built = Lin(RutGrey);
-					P.Tint = Tint(Shade * Lin(Under.R) / Built, Shade * Lin(Under.G) / Built, Shade * Lin(Under.B) / Built);
+					// (its station's piece, laid where its station is and the same whichever try lays it: square-ended where
+					// it has both neighbours, else the mesh fading toward the one it lacks; built grey, tinted to the
+					// ground's colour at its middle as the paint has it, so its edges are the ground's own and its floor the
+					// ground pressed darker: the tint multiplies the linear colour)
+					RutLaid Rl;
+					if (!RutPiece(S.X, S.Y, Rl))
+					{
+						P.Scale = P.ScaleZ = 0.001f; // (never: Grow asked the same)
+						return true;
+					}
+					P.Kind = Rl.Fade == 0 ? ClutOf(CRuts) : Rl.Fade > 0 ? LandField::Base::Trodden : LandField::Base::Stubble;
+					P.X = static_cast<float>(Rl.X);
+					P.Y = static_cast<float>(Rl.Y);
+					P.Z = static_cast<float>(Rl.Z);
+					P.Yaw = static_cast<float>(Rl.Yaw);
+					P.Scale = static_cast<float>(Rl.Scale);
+					P.ScaleZ = static_cast<float>(Rl.ScaleZ);
+					Spot At = S;
+					At.X = Rl.X;
+					At.Y = Rl.Y;
+					const Tone Under = Colour(At);
+					const double Built = Decode(RutGrey / 255.0);
+					P.Tint = Tint(Decode(Under.R / 255.0) / Built, Decode(Under.G / 255.0) / Built, Decode(Under.B / 255.0) / Built);
 					return true;
 				}
 				case CPebbles:
@@ -598,35 +623,30 @@ namespace LandScape
 				case CRuts:
 				{
 					if (!bTracks) break;
-					// a piece of one rut, 3.4 m long and a tyre's 0.24 m wide (8 triangles): the crust pressed darker, built grey
-					// (its tint the ground's colour, Dress), darkest along its middle, its tapered ends fading to the ground's
-					// own; flat across, a centimetre up, its ends sunk, so a run of pieces end to end reads as one rut fading in
-					// and out
-					{
-						const Tone Pressed = Rgb(RutGrey * 0.74, RutGrey * 0.73, RutGrey * 0.72), Side = Rgb(RutGrey * 0.92, RutGrey * 0.91, RutGrey * 0.9);
-						const Tone End = Rgb(RutGrey * 0.97, RutGrey * 0.97, RutGrey * 0.97);
-						const uint32_t A = W.Vert(-1.7, 0.0, -0.015, 0.0, 0.0, 1.0, End);
-						const uint32_t C1 = W.Vert(-1.4, 0.0, 0.008, 0.0, 0.0, 1.0, Pressed);
-						const uint32_t C2 = W.Vert(1.4, 0.0, 0.008, 0.0, 0.0, 1.0, Pressed);
-						const uint32_t B = W.Vert(1.7, 0.0, -0.015, 0.0, 0.0, 1.0, End);
-						const uint32_t L1 = W.Vert(-1.4, 0.12, 0.008, 0.0, 0.0, 1.0, Side);
-						const uint32_t R1 = W.Vert(-1.4, -0.12, 0.008, 0.0, 0.0, 1.0, Side);
-						const uint32_t L2 = W.Vert(1.4, 0.12, 0.008, 0.0, 0.0, 1.0, Side);
-						const uint32_t R2 = W.Vert(1.4, -0.12, 0.008, 0.0, 0.0, 1.0, Side);
-						W.Tri(A, R1, C1);
-						W.Tri(A, C1, L1);
-						W.Tri(C1, R1, R2);
-						W.Tri(C1, R2, C2);
-						W.Tri(C1, C2, L2);
-						W.Tri(C1, L2, L1);
-						W.Tri(C2, R2, B);
-						W.Tri(C2, B, L2);
-					}
+					// a piece of a rut with both its neighbours, square to its ends (RutMesh); the end pieces, fading
+					// ahead or behind, are the Trodden and Stubble bases' (OwnClutter)
+					RutMesh(W, 0);
 					M.FarFrom = 50.0f;
 					break;
 				}
 				default: break;
 				}
+			}
+
+			bool OwnClutter(LandField::Base B, LandField::BaseMesh& M) const override
+			{
+				// (on trial: a rut's end pieces, fading ahead (+x as built) in the cow path's slot and behind in the stubble's,
+				// which the desert never lays; drawn as the ground's clutter, as the rut's other pieces are)
+				if ((B != LandField::Base::Trodden && B != LandField::Base::Stubble) || !bTracks) return false;
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				M.Mid = LandField::Mesh();
+				M.Cards = LandField::Mesh();
+				M.Sprigs = LandField::Mesh();
+				Writer W(M.Near);
+				RutMesh(W, B == LandField::Base::Trodden ? 1 : -1);
+				M.FarFrom = 50.0f;
+				return true;
 			}
 
 			// ---------------------------------------------------------------- the kit
@@ -923,8 +943,8 @@ namespace LandScape
 			 * across of pale strands of broken crust, where the vehicles spread out over the plain beside the worn way to
 			 * keep out of each other's dust and ruts, splitting and rejoining, and drawing in again where the way meets
 			 * another, enters the town, turns hard or crosses a wadi. Each lane carries three to seven strands 6 to 10 m
-			 * wide, wandering across its band, coming and going along it; along a strand at a man's eye, the wheels' paired
-			 * ruts (CRuts). Out past the field the track's dusty corridor runs on into the haze.
+			 * wide, wandering across its band, coming and going along it. Out past the field the track's dusty corridor
+			 * runs on into the haze.
 			 *
 			 * The strands are laid once as lines of points 2 m apart, and an 8 m raster over the field and some 870 m round
 			 * it holds each square's nearest point (a two-pass chamfer sweep, the nearest point carried, its own distance
@@ -932,16 +952,47 @@ namespace LandScape
 			 * place. (The strands themselves are the raster's seeds, not the lanes: a place's distance to the union of the
 			 * strands has no seam where two tracks' bands meet or a track's own band folds round a bend, which a frame
 			 * taken from the nearest lane point would.)
+			 *
+			 * At a man's eye each strand carries one vehicle's pair of wheel ruts astride its middle (CRuts), each rut one
+			 * width all its length (0.22 to 0.30 m of pressed floor, the strand's own, and a feathered edge either side)
+			 * and laid in pieces end to end at stations along its line, each piece reaching from the rut's place half a
+			 * station behind its own to the place half a station ahead, so neighbours share their ends: no gap, no
+			 * overlap, no step between them. Each lies straight between those two places, tilted to the fall of the ground
+			 * between them (a ramp built in, its copy's ScaleZ setting the slope) and lifted just clear of it. A rut gives
+			 * out where the ground is too steep, too rough under a straight piece, where the line bends too hard, or where
+			 * its strand is worn faint; the piece either side of a gap fades over its length to the ground's own colour,
+			 * so a rut runs on unbroken where it runs and fades in and out where it does not, never a square end. (The
+			 * clutter's tries fall at random: a station's piece is laid by each try within some 0.85 m of its stretch of
+			 * the rut, all of them the same piece in the same place; some nine tries a station, so one is seldom
+			 * missed, and the gravel the wheels crushed is gone from under and beside them.)
 			 */
 			struct Track
 			{
 				double D = 1e9;        // metres from the nearest strand's middle line
+				double Lat = 0.0;      // the same, signed: to the left of its way positive
 				double Half = 0.0;     // its half width
 				double Strength = 0.0; // 0 to 1: how worn it is here (strands come and go)
 				double Yaw = 0.0;      // its way (radians from east)
-				double Gauge = 0.85;   // half its vehicles' gauge: its middle pair of ruts this far either side of its middle
-				double Side = 0.0;     // its side pairs' middles, metres either side of its middle (0: none)
-				bool bFlat = false;    // level enough for a flat rut piece to lie on it
+				double Gauge = 0.85;   // half its vehicle's gauge: its ruts this far either side of its middle
+				double Wide = 0.26;    // its ruts' width
+				double Arc = 0.0;      // metres along its middle line from where it starts
+				size_t Seg = 0;        // the strand point its nearest stretch of line runs on from
+			};
+
+			/** One piece of a rut as laid: its middle and height, its way (turned half round where the ground falls along
+			 * the rut, so its built ramp rises with it), its size, the ramp's tilt, and its fade as built: 0 none (square
+			 * to both ends), 1 toward its +x end, -1 toward its -x end. */
+			struct RutLaid
+			{
+				double X = 0.0, Y = 0.0, Z = 0.0, Yaw = 0.0, Scale = 1.0, ScaleZ = 1.0;
+				int Fade = 0;
+			};
+
+			/** A rut's piece as it would lie at a station: its middle and way, its length (its two ends' places apart), and
+			 * the line under it (its height at its middle and the ground's fall along it). */
+			struct RutFit
+			{
+				double X = 0.0, Y = 0.0, Yaw = 0.0, Long = 0.0, Z = 0.0, Fall = 0.0;
 			};
 
 			/** The nearest strand within Reach metres of its edge to a place: false where there is none. */
@@ -991,15 +1042,45 @@ namespace LandScape
 					}
 				}
 				if (Best < 0) return false;
+				// (the raster holds each square's nearest point, some 8 m apart along a strand, and the stretches either side
+				// of it reach only 2 m: walk on along the strand while a stretch ahead or behind lies nearer, so a place's own
+				// stretch is found, not the end of the held point's, and its distance and its way along it are its own)
+				for (int Walk = 0; Walk < 24; ++Walk)
+				{
+					bool bMoved = false;
+					for (int Dir = -1; Dir <= 1 && !bMoved; Dir += 2)
+					{
+						const int A = Best + Dir;
+						if (A < 0 || static_cast<size_t>(A) + 1 >= SX.size() || !SLink[static_cast<size_t>(A)]) continue;
+						if (Dir > 0 && !SLink[static_cast<size_t>(Best)]) continue;
+						const size_t Ai = static_cast<size_t>(A);
+						const double Ax = SX[Ai], Ay = SY[Ai], Dx = SX[Ai + 1] - Ax, Dy = SY[Ai + 1] - Ay, L2 = Dx * Dx + Dy * Dy;
+						const double T = L2 > 1e-9 ? std::clamp(((X - Ax) * Dx + (Y - Ay) * Dy) / L2, 0.0, 1.0) : 0.0;
+						const double Ex = Ax + T * Dx - X, Ey = Ay + T * Dy - Y, D2 = Ex * Ex + Ey * Ey;
+						if (D2 < BestD - 1e-9)
+						{
+							BestD = D2;
+							Best = A;
+							BestT = T;
+							bMoved = true;
+						}
+					}
+					if (!bMoved) break;
+				}
 				const size_t B = static_cast<size_t>(Best), B1 = BestT > 0.0 ? B + 1 : B;
 				Out.D = std::sqrt(BestD);
 				Out.Half = Lerp(SHalf[B], SHalf[B1], BestT);
 				if (Out.D > Out.Half + Reach) return false;
 				Out.Strength = Lerp(SStrength[B], SStrength[B1], BestT);
 				Out.Yaw = SYaw[B];
-				Out.Side = SSide[B];
 				Out.Gauge = SGauge[B];
-				Out.bFlat = SFlat[B] && SFlat[B1];
+				Out.Wide = SWide[B];
+				Out.Arc = Lerp(SArc[B], SArc[B1], BestT);
+				Out.Seg = B;
+				// (which side of its line: by the stretch it lies off, or at a strand's end by its way)
+				const bool bOn = SLink[B] && B + 1 < SX.size();
+				const double Wx = bOn ? SX[B + 1] - SX[B] : std::cos(SYaw[B]), Wy = bOn ? SY[B + 1] - SY[B] : std::sin(SYaw[B]);
+				Out.Lat = Wx * (Y - SY[B]) - Wy * (X - SX[B]) >= 0.0 ? Out.D : -Out.D;
 				return true;
 			}
 
@@ -1026,6 +1107,205 @@ namespace LandScape
 				return Mixed(T, Rut, On * One * 0.25 * Smooth(0.7 * Tr.Half + 1.0, 0.0, Tr.D) * Smooth(2.0, 8.0, S.Lane));
 			}
 
+			/** A place on a rut: its strand walked from point Seg to Arc metres along its middle line, then Side (1 the left
+			 * rut, -1 the right) its gauge out; the ground under it as MakeTracks read it, its way and its wear. False off
+			 * the strand's ends or where its ground was not read. (Wherever the walk starts on the strand it ends in the same
+			 * stretch, so every try asking for a station gets the same numbers.) */
+			bool OnRut(size_t Seg, double Arc, int Side, double& X, double& Y, double& Z, double& Yaw, double& Worn) const
+			{
+				size_t P = Seg;
+				while (SArc[P] > Arc)
+				{
+					if (P == 0 || !SLink[P - 1]) return false;
+					--P;
+				}
+				while (SLink[P] && SArc[P + 1] <= Arc) ++P;
+				const size_t Q = SLink[P] ? P + 1 : P;
+				if (Q == P && Arc > SArc[P]) return false;
+				const double T = Q == P ? 0.0 : (Arc - SArc[P]) / std::max(1e-6, static_cast<double>(SArc[Q] - SArc[P]));
+				const size_t Which = Side > 0 ? 0 : 1;
+				const float ZP = SZ[2 * P + Which], ZQ = SZ[2 * Q + Which];
+				if (std::isnan(ZP) || std::isnan(ZQ)) return false;
+				Yaw = SYaw[P] + T * std::remainder(static_cast<double>(SYaw[Q] - SYaw[P]), 2.0 * Pi);
+				const double G = Side * static_cast<double>(SGauge[P]);
+				X = Lerp(SX[P], SX[Q], T) - std::sin(Yaw) * G;
+				Y = Lerp(SY[P], SY[Q], T) + std::cos(Yaw) * G;
+				Z = Lerp(ZP, ZQ, T);
+				Worn = Lerp(SStrength[P], SStrength[Q], T);
+				return true;
+			}
+
+			/** A rut's piece at station N as it would lie: from the rut's place at (N - 1/2) stations' spacing along its
+			 * strand's middle line to its place at (N + 1/2), straight between them, so it meets its neighbours at their
+			 * ends; false where none lies there (the rut's ground not read or off its strand, the strand worn faint, the
+			 * ground too steep along or across, too rough under a straight piece to keep it both clear and close at Lift
+			 * over its line, or the line bending too hard). */
+			bool Station(size_t Seg, long N, int Side, double Scale, double Lift, RutFit& Out) const
+			{
+				if (N < 0) return false;
+				const double Step = RutStep * Scale, A = static_cast<double>(N) * Step;
+				// (its ends, its quarters and its middle: the ends give its line, the rest the ground under it)
+				const double U[5] = { -0.5 * Step, -0.25 * Step, 0.0, 0.25 * Step, 0.5 * Step };
+				double X[5], Y[5], Z[5], Yaw[5], Worn = 0.0;
+				for (int K = 0; K < 5; ++K)
+				{
+					double Wk = 0.0;
+					if (!OnRut(Seg, A + U[K], Side, X[K], Y[K], Z[K], Yaw[K], Wk)) return false;
+					if (K == 2) Worn = Wk;
+				}
+				if (Worn < RutWorn) return false;
+				Out.Long = std::hypot(X[4] - X[0], Y[4] - Y[0]);
+				if (!(Out.Long > 0.5 * Step)) return false;
+				Out.X = 0.5 * (X[0] + X[4]);
+				Out.Y = 0.5 * (Y[0] + Y[4]);
+				Out.Yaw = std::atan2(Y[4] - Y[0], X[4] - X[0]);
+				Out.Z = 0.5 * (Z[0] + Z[4]);
+				Out.Fall = (Z[4] - Z[0]) / Out.Long;
+				if (std::fabs(Out.Fall) > 0.04) return false;
+				if (std::fabs(std::remainder(Yaw[4] - Yaw[0], 2.0 * Pi)) * RutBend > Step) return false;
+				// (the ground across it, from the other rut's beside it)
+				double Xo = 0.0, Yo = 0.0, Zo = 0.0, Ao = 0.0, Wo = 0.0;
+				if (!OnRut(Seg, A, -Side, Xo, Yo, Zo, Ao, Wo)) return false;
+				const double Across = (Z[2] - Zo) / std::max(0.5, std::hypot(X[2] - Xo, Y[2] - Yo));
+				if (std::fabs(Across) > 0.03) return false;
+				// (clear of the ground's highest under its line and its edge's rise across it, and nowhere floating more
+				// than RutFloat over it)
+				const double Edge = std::fabs(Across) * (0.5 * RutWide + RutFeather) * Scale;
+				double Hi = -1e9, Lo = 1e9;
+				for (int K = 0; K < 5; ++K)
+				{
+					const double Dev = Z[K] - (Out.Z + Out.Fall * U[K] * Out.Long / Step);
+					Hi = std::max(Hi, Dev);
+					Lo = std::min(Lo, Dev);
+				}
+				return Lift >= Hi + Edge + RutClear && Lift - Lo + Edge <= RutFloat;
+			}
+
+			/** The rut's piece a clutter try at a place lays: false where it lays none. The try's station is the one whose
+			 * stretch of its nearest strand it falls in, within RutBy of the nearer rut's line (MakeRuts laid them). */
+			bool RutPiece(double X, double Y, RutLaid& Out) const
+			{
+				Track Tr;
+				if (RutSt.empty() || !Nearest(X, Y, 0.0, Tr)) return false;
+				if (std::fabs(std::fabs(Tr.Lat) - Tr.Gauge) > RutBy) return false;
+				const uint32_t Sn = SNum[Tr.Seg];
+				const long N = std::lround(Tr.Arc / (RutStep * Tr.Wide / RutWide));
+				if (N < 0 || N >= static_cast<long>(RutCount[Sn])) return false;
+				const RutLaid& R = RutSt[RutFirst[Sn] + (Tr.Lat >= 0.0 ? 0u : RutCount[Sn]) + static_cast<uint32_t>(N)];
+				if (!(R.Scale > 0.0)) return false;
+				Out = R;
+				return true;
+			}
+
+			/** Each strand's ruts' pieces, once (after the raster: a station lies only where its strand is the nearest, at
+			 * its middle and ends and out to the edge of the tries that lay it, so those tries are its own strand's; and
+			 * where the ground bends no more than RutKink under it): a station's piece where it lies with one of its
+			 * neighbours or both, fading toward the one it lacks. */
+			void MakeRuts(Host& H)
+			{
+				RutSt.clear();
+				RutFirst.clear();
+				RutCount.clear();
+				for (size_t P0 = 0; P0 < SX.size();)
+				{
+					size_t P1 = P0;
+					while (SLink[P1]) ++P1;
+					const double Scale = SWide[P0] / RutWide, Step = RutStep * Scale;
+					const double Lift = RutLift + 0.006 * std::clamp((SGauge[P0] - 0.7) / 0.35, 0.0, 1.0);
+					const uint32_t Count = static_cast<uint32_t>(std::floor(SArc[P1] / Step)) + 1;
+					RutFirst.push_back(static_cast<uint32_t>(RutSt.size()));
+					RutCount.push_back(Count);
+					const uint32_t Sn = SNum[P0];
+					auto Mine = [&](double X, double Y) {
+						Track T;
+						return Nearest(X, Y, 0.0, T) && SNum[T.Seg] == Sn;
+					};
+					for (int Side = 1; Side >= -1; Side -= 2)
+					{
+						std::vector<RutFit> Fit(Count);
+						std::vector<uint8_t> Ok(Count, 0);
+						size_t Cur = P0;
+						for (uint32_t N = 0; N < Count; ++N)
+						{
+							const double A = static_cast<double>(N) * Step;
+							while (Cur > P0 && SArc[Cur] > A - Step) --Cur;
+							while (SLink[Cur] && SArc[Cur + 1] <= A - Step) ++Cur;
+							RutFit& F = Fit[N];
+							if (!Station(Cur, static_cast<long>(N), Side, Scale, Lift, F)) continue;
+							const double Ca = std::cos(F.Yaw), Sa = std::sin(F.Yaw), Hl = 0.5 * F.Long, Out = Side * RutBy;
+							if (!(Mine(F.X, F.Y) && Mine(F.X + Hl * Ca, F.Y + Hl * Sa) && Mine(F.X - Hl * Ca, F.Y - Hl * Sa) && Mine(F.X - Sa * Out, F.Y + Ca * Out))) continue;
+							const double Zm = 2.0 * H.Top(F.X, F.Y), Ax = 4.0 * Ca, Ay = 4.0 * Sa;
+							Ok[N] = std::fabs(H.Top(F.X + Ax, F.Y + Ay) + H.Top(F.X - Ax, F.Y - Ay) - Zm) <= RutKink
+								&& std::fabs(H.Top(F.X - Ay, F.Y + Ax) + H.Top(F.X + Ay, F.Y - Ax) - Zm) <= RutKink;
+						}
+						for (uint32_t N = 0; N < Count; ++N)
+						{
+							RutLaid R;
+							R.Scale = 0.0;
+							const bool bBefore = N > 0 && Ok[N - 1], bAfter = N + 1 < Count && Ok[N + 1];
+							if (Ok[N] && (bBefore || bAfter))
+							{
+								// (laid the other way round where the ground falls along its way, so its built ramp falls with it;
+								// its fade toward the neighbour it lacks, ahead along its way or behind, as built)
+								const RutFit& F = Fit[N];
+								const bool bTurn = F.Fall < 0.0;
+								R.X = F.X;
+								R.Y = F.Y;
+								R.Z = F.Z + Lift;
+								R.Yaw = F.Yaw + (bTurn ? Pi : 0.0);
+								R.Scale = F.Long / RutStep;
+								R.ScaleZ = std::max(0.02, std::fabs(F.Fall) * R.Scale / RutRamp);
+								R.Fade = bBefore && bAfter ? 0 : (bAfter ? -1 : 1) * (bTurn ? -1 : 1);
+							}
+							RutSt.push_back(R);
+						}
+					}
+					P0 = P1 + 1;
+				}
+			}
+
+			/** A rut's piece as built (Scale 1): RutStep long, grey, rising RutRamp along its length (its normals the
+			 * ramp's, so a copy tilted by its ScaleZ is lit as the ground under it), flat across. Across it, from its
+			 * middle out: a flat pressed floor (RutPress of the ground's light), the crushed lips (RutLip) at RutWide's
+			 * edges, and RutFeather beyond them to its edges, the ground's own colour (the grey: the tint makes it the
+			 * ground's). Fade 0: square to both ends; 1 or -1: fading along its whole length, eased, from whole at one end
+			 * to the ground's own colour at its +x end (1) or its -x end (-1). Its quads split mirrored across its middle
+			 * line (a row of points along it). */
+			void RutMesh(Writer& W, int Fade) const
+			{
+				const double Hw = 0.5 * RutWide, L = 0.5 * RutStep;
+				const double Ys[7] = { -(Hw + RutFeather), -Hw, -0.45 * Hw, 0.0, 0.45 * Hw, Hw, Hw + RutFeather };
+				const double Share[7] = { 1.0, RutLip, RutPress, RutPress, RutPress, RutLip, 1.0 };
+				const int Rows = Fade == 0 ? 2 : 5;
+				const double Nz = 1.0 / std::hypot(RutRamp, 1.0), Ground = Decode(RutGrey / 255.0);
+				uint32_t V[5][7];
+				for (int R = 0; R < Rows; ++R)
+				{
+					const double T = static_cast<double>(R) / (Rows - 1), X = -L + 2.0 * L * T;
+					const double F = Fade > 0 ? T : 1.0 - T, On = Fade == 0 ? 1.0 : 1.0 - F * F * (3.0 - 2.0 * F);
+					for (int C = 0; C < 7; ++C)
+					{
+						const double Grey = 255.0 * Encode((1.0 + On * (Share[C] - 1.0)) * Ground);
+						V[R][C] = W.Vert(X, Ys[C], RutRamp * X, -RutRamp * Nz, 0.0, Nz, Rgb(Grey, Grey, Grey));
+					}
+				}
+				for (int R = 0; R + 1 < Rows; ++R)
+					for (int C = 0; C < 6; ++C)
+					{
+						const uint32_t A = V[R][C], B = V[R + 1][C], Cc = V[R + 1][C + 1], D = V[R][C + 1];
+						if (C < 3)
+						{
+							W.Tri(A, B, Cc);
+							W.Tri(A, Cc, D);
+						}
+						else
+						{
+							W.Tri(A, B, D);
+							W.Tri(B, Cc, D);
+						}
+					}
+			}
+
 			void MakeTracks(Host& H)
 			{
 				const double Wd = H.Width(), Dp = H.Depth(), Bd = H.Band();
@@ -1037,6 +1317,7 @@ namespace LandScape
 				TNY = static_cast<int>((Dp + 2.0 * Margin) / TrackStep) + 1;
 				double TwX = 0.0, TwY = 0.0, TwR = 0.0;
 				const bool bTown = H.Town(TwX, TwY, TwR);
+				uint32_t Strands = 0;
 				for (size_t K = 0; K < H.Lanes(); ++K)
 				{
 					const std::vector<std::pair<double, double>>& L = H.LaneLine(K);
@@ -1128,11 +1409,9 @@ namespace LandScape
 						const double Base = -0.85 + 1.7 * (I + 0.5) / Count;
 						const double Bias = I == Count / 2 ? 0.35 : 0.1;
 						const double HalfW = 3.0 + 2.0 * Unit(Hash(Seed ^ 0x7B21, K, static_cast<uint64_t>(I)));
-						// (its ruts: a pair astride its middle, a lorry's gauge to a tank's, and where it is wide enough a
-						// pair either side)
+						// (its ruts: a pair astride its middle, a lorry's gauge to a tank's, each its tyres' width)
 						const double Gauge = 0.7 + 0.35 * Unit(Hash(Seed ^ 0x7B23, K, static_cast<uint64_t>(I)));
-						const double SideAt = 2.0 * Gauge + 0.5 + 0.8 * Unit(Hash(Seed ^ 0x7B22, K, static_cast<uint64_t>(I)));
-						const double Side = SideAt + Gauge + 0.2 <= HalfW + 0.3 ? SideAt : 0.0;
+						const double Wide = 0.22 + 0.08 * Unit(Hash(Seed ^ 0x7B24, K, static_cast<uint64_t>(I)));
 						std::vector<double> QX(static_cast<size_t>(N)), QY(static_cast<size_t>(N)), QS(static_cast<size_t>(N));
 						for (int P = 0; P < N; ++P)
 						{
@@ -1144,7 +1423,7 @@ namespace LandScape
 							QS[Pi0] = Smooth(TrackOn, 0.25 * TrackOn, Past[Pi0]) * Smooth(-0.25, 0.2, Noise(Along[Pi0] / 380.0 + 7.7 * I, 5.1 * I + 2.3 * static_cast<double>(K), Seed ^ 0x7B12) + Bias);
 						}
 						bool bOpen = false;
-						double LastX = 0.0, LastY = 0.0;
+						double LastX = 0.0, LastY = 0.0, Arc = 0.0;
 						for (int P = 0; P < N; ++P)
 						{
 							const size_t Pi0 = static_cast<size_t>(P);
@@ -1158,37 +1437,39 @@ namespace LandScape
 							if (bOpen && std::hypot(X - LastX, Y - LastY) < 0.5) continue; // (bunched on the inside of a bend)
 							const size_t A = static_cast<size_t>(std::max(0, P - 1)), B = static_cast<size_t>(std::min(N - 1, P + 1));
 							if (bOpen) SLink.back() = 1;
+							Arc = bOpen ? Arc + std::hypot(X - LastX, Y - LastY) : 0.0;
 							SX.push_back(static_cast<float>(X));
 							SY.push_back(static_cast<float>(Y));
 							SYaw.push_back(static_cast<float>(std::atan2(QY[B] - QY[A], QX[B] - QX[A])));
 							SHalf.push_back(static_cast<float>(HalfW));
 							SStrength.push_back(static_cast<float>(QS[Pi0]));
-							SSide.push_back(static_cast<float>(Side));
 							SGauge.push_back(static_cast<float>(Gauge));
+							SWide.push_back(static_cast<float>(Wide));
+							SArc.push_back(static_cast<float>(Arc));
+							if (!bOpen) ++Strands;
+							SNum.push_back(Strands - 1);
 							SLink.push_back(0);
-							SFlat.push_back(0);
 							bOpen = true;
 							LastX = X;
 							LastY = Y;
 						}
 					}
 				}
-				// Level enough for a rut's piece (within the band, where the eye goes): the surface's fall along the strand
-				// under 2 in 100 (a piece's sunk end no higher than the ground falls under it) and across it under 3 in 100,
-				// read every third point.
+				// The ground under each point's two ruts, where the eye goes (the field and its band) and the strand is worn
+				// enough to carry them: the ruts' pieces lie on it (Station).
+				SZ.assign(2 * SX.size(), std::nanf(""));
 				for (size_t P = 0; P < SX.size(); ++P)
 				{
-					if (P % 3 != 0 && SLink[P - 1])
+					if (SStrength[P] < RutWorn - 0.15 || Outside(SX[P], SY[P]) > Bd - 5.0) continue;
+					const double Nx = -std::sin(SYaw[P]) * SGauge[P], Ny = std::cos(SYaw[P]) * SGauge[P];
+					for (int Side = 0; Side < 2; ++Side)
 					{
-						SFlat[P] = SFlat[P - 1];
-						continue;
+						// (open, field or rough ground, clear of the lane's own worn edge: nowhere else a rut)
+						const double Rx = SX[P] + (Side == 0 ? Nx : -Nx), Ry = SY[P] + (Side == 0 ? Ny : -Ny);
+						const Spot Sp = H.At(Rx, Ry);
+						if ((Sp.Kind != KOpen && Sp.Kind != KField && Sp.Kind != KRough) || Sp.Lane <= 2.5) continue;
+						SZ[2 * P + static_cast<size_t>(Side)] = static_cast<float>(H.Top(Rx, Ry));
 					}
-					const double X = SX[P], Y = SY[P];
-					if (Outside(X, Y) > Bd - 5.0) continue;
-					const double Ca = std::cos(SYaw[P]), Sa = std::sin(SYaw[P]);
-					const double Along = std::fabs(H.Top(X + 1.5 * Ca, Y + 1.5 * Sa) - H.Top(X - 1.5 * Ca, Y - 1.5 * Sa)) / 3.0;
-					const double Across = std::fabs(H.Top(X - 1.5 * Sa, Y + 1.5 * Ca) - H.Top(X + 1.5 * Sa, Y - 1.5 * Ca)) / 3.0;
-					SFlat[P] = Along < 0.02 && Across < 0.03 ? 1 : 0;
 				}
 				// The raster: each square's nearest strand point, carried in two sweeps (forward, then back), each square
 				// measuring its own distance to its neighbours' points; none past TrackReach.
@@ -1243,6 +1524,7 @@ namespace LandScape
 						Take(I, J, I, J + 1);
 						Take(I, J, I - 1, J + 1);
 					}
+				MakeRuts(H);
 			}
 
 			int Fx(const std::string& Ground, int Else) const override
@@ -1255,13 +1537,19 @@ namespace LandScape
 
 		private:
 			bool bSpring = false, bPalms = false, bTracks = false;
-			// (the braided tracks, on trial: their strands' points, each with its way, half width, wear, side ruts' line,
-			// whether level for a rut, and whether the next point is of its strand; the raster of each square's nearest)
+			// (the braided tracks, on trial: their strands' points, each with its way, half width, wear, its ruts' gauge and
+			// width, the metres along it, the ground under its two ruts (left, right; NaN unread), and whether the next
+			// point is of its strand; the raster of each square's nearest)
 			static constexpr double TrackStep = 8.0;
 			static constexpr double TrackOn = 400.0;    // (metres a track runs on past its lane's end beyond the field)
 			static constexpr double TrackReach = 64.0;  // (metres from a strand's middle the raster carries it)
-			std::vector<float> SX, SY, SYaw, SHalf, SStrength, SSide, SGauge;
-			std::vector<uint8_t> SLink, SFlat;
+			std::vector<float> SX, SY, SYaw, SHalf, SStrength, SGauge, SWide, SArc, SZ;
+			std::vector<uint8_t> SLink;
+			std::vector<uint32_t> SNum;
+			// (each strand's ruts' pieces at their stations, left rut then right, from its first point's station 0: as laid,
+			// or not; RutFirst the strand's first, RutCount the stations a rut)
+			std::vector<RutLaid> RutSt;
+			std::vector<uint32_t> RutFirst, RutCount;
 			double TX0 = 0.0, TY0 = 0.0;
 			int TNX = 0, TNY = 0;
 			std::vector<int> TCell;
