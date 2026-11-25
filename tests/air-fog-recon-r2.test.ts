@@ -86,7 +86,7 @@ describe('fog on raids: the switch on', () => {
     // The card's figures are the high end's: the defence the side must allow for.
     expect(p.bomberLoss).toBe(p.fog!.loss[1]);
     // The list of targets and the pages say the same.
-    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/guns not known and 60 light, fighters not known/);
+    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/built guns not known and 60 light, fighters not known/);
     const page = JSON.stringify(airPage(g, `plan:bomb:${t}:${p.picked.join('.')}`));
     expect(page).toContain('Fighters: unknown');
     expect(page).toContain('(not scouted)');
@@ -237,7 +237,7 @@ describe('fog on raids: the switch on', () => {
     // The guns are the high end's reckoning: the ticket may not say they ring the factories.
     for (const l of p.lines) expect(l.value).not.toMatch(/^Level \d guns ring /);
     expect(line('Anti-aircraft guns')!.value).toMatch(/may ring/);
-    expect(line('Flak')!.value).toMatch(/may stand/);
+    expect(line('Flak')!.value).toMatch(/^Not scouted, so reckoned at the worst: about [\d,]+ guns built round /);
     // The forecast counts the fighters last seen near it: the ticket may not say none are in range.
     expect(line('In range to intercept')!.value).not.toBe('No enemy fighters');
     expect(line('Forces')!.value).not.toMatch(/against no fighters$/);
