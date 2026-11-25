@@ -72,6 +72,14 @@ class USkyLightComponent;
  * -TheaterLookCrispFiltering=, -TheaterLookDepthStrength=, -TheaterLookDepthReach= (metres), -TheaterLookDepthRadius=
  * (metres), -TheaterLookDepthQuality=, -TheaterLookDepthClosed=, -TheaterLookBounceStrength=, -TheaterLookBounceClosed=, -TheaterLookWornStrength=, -TheaterLookWornRepeat= (metres),
  * -TheaterLookWornRepeat2= (metres), -TheaterLookWornMix=, -TheaterLookWornRoughness=, -TheaterLookWornSheen=.
+ *
+ * Their cost in a ground battle, "-TheaterLookTime=off:tc.Look.Crisp=0,tc.Look.Depth=0|crisp:tc.Look.Crisp=1|depth:
+ * tc.Look.Depth=1" (the look reel, 25 Nov: three whole runs of Normandy, timed one after another, could not tell a 3 fps
+ * cost from the battle's own swings and the Mac's warming). The settings take turns every 2.5 s (0.5 settled, 2 timed;
+ * -TheaterLookTimeSettle=, -TheaterLookTimeMeasure=) through the whole battle, the first, the baseline, between every
+ * two others, and each other window is read against the mean of the baseline's on either side of it, as the field goes
+ * and every 24 windows ("Whole look timing:"): its graphics chip time's difference, the middle and the middle half of
+ * them, and their mean give or take its standard error. Frames over a tenth of a second (a still, a bake) are left out.
  */
 namespace WholeLook
 {

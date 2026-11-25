@@ -12,6 +12,8 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "RenderTimer.h" // (GRenderThreadTime, as TheaterSpeed reads it: the in-battle timing)
+#include "RHI.h" // (RHIGetGPUFrameCycles: the in-battle timing)
 #include "UObject/UObjectIterator.h"
 
 namespace
@@ -291,6 +293,285 @@ namespace
 		}
 	}
 
+	// ---- "-TheaterLookTime=": the looks timed against one another inside one ground battle ----------------------------
+	//
+	// The map's timing rounds (the photographer's "-TheaterTime=") hold one view; a ground battle cannot be held, and its
+	// cost swings from one shot to the next and as the fanless Mac warms (the look reel's R1: two windows five seconds
+	// apart differ by about 3 ms a frame, and the runs off differed from one another by 1 to 7 ms in the same battle
+	// seconds). So here the baseline (the first setting) and the others take turns every few seconds through the whole
+	// battle, the baseline between every two others (A B A C A D A B ...), and each other window is read against the mean
+	// of the baseline's windows on either side of it: the battle's swing and the warming fall on both alike. Frames longer
+	// than a tenth of a second (a still being written, a field being baked) are counted and left out.
+	//   -TheaterLookTime=off:tc.Look.Crisp=0,tc.Look.Depth=0|crisp:tc.Look.Crisp=1|depth:tc.Look.Depth=1
+	//   -TheaterLookTimeSettle= (seconds, 0.5), -TheaterLookTimeMeasure= (seconds, 2)
+	// Between two windows every setting any of them names goes back to what the launch made it, so each names only its
+	// own. It begins 3 s after the field is laid, reports every 24 windows and as the field goes ("Whole look timing:").
+
+	struct FLookTimeSet
+	{
+		FString Name;
+		TArray<TPair<FString, FString>> Vars;
+	};
+
+	/** One window timed: which setting, and its readings (Frames 0: none to time). */
+	struct FLookTimeWindow
+	{
+		int32 Set = 0;
+		int32 Frames = 0;
+		float Fps = 0.0f, Game = 0.0f, Draw = 0.0f, Chip = 0.0f;
+	};
+
+	TArray<FLookTimeSet> LookTimeSets;
+	TArray<FLookTimeWindow> LookTimeWindows;
+	TMap<FString, FString> LookTimeKept; // (each setting's value before the first window laid it: the launch's own)
+	FTSTicker::FDelegateHandle LookTimeClock;
+	float LookTimeSettle = 0.5f, LookTimeMeasure = 2.0f, LookTimeWait = 0.0f, LookTimeIn = 0.0f;
+	int32 LookTimeSlot = -1, LookTimeAt = INDEX_NONE, LookTimeFrames = 0, LookTimeLong = 0;
+	double LookTimeSum = 0.0, LookTimeGame = 0.0, LookTimeDraw = 0.0, LookTimeChip = 0.0;
+	bool bLookTimeDone = false;
+
+	/** The setting timed in a slot: the baseline in every even one, the others in turn in the odd ones. */
+	int32 LookTimeSetOf(int32 Slot)
+	{
+		return Slot % 2 == 0 ? 0 : 1 + (Slot / 2) % (LookTimeSets.Num() - 1);
+	}
+
+	/** Every setting any window has laid put back to the launch's own, then the setting's laid (none: INDEX_NONE). */
+	void LayLookTimeSet(int32 Index)
+	{
+		for (const TPair<FString, FString>& Was : LookTimeKept)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Was.Key))
+			{
+				Variable->Set(*Was.Value, ECVF_SetByConsole);
+			}
+		}
+		if (LookTimeSets.IsValidIndex(Index))
+		{
+			for (const TPair<FString, FString>& Each : LookTimeSets[Index].Vars)
+			{
+				IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Each.Key);
+				if (!Variable)
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Whole look timing: no such setting: %s (in %s)"), *Each.Key, *LookTimeSets[Index].Name);
+					continue;
+				}
+				if (!LookTimeKept.Contains(Each.Key))
+				{
+					LookTimeKept.Add(Each.Key, Variable->GetString());
+				}
+				Variable->Set(*Each.Value, ECVF_SetByConsole);
+			}
+		}
+		// (at once, not on the clock's next turn: the settle starts from the setting as laid)
+		KeepFiltering();
+		KeepLens();
+	}
+
+	float LookTimeShare(TArray<float> Values, float Share) // (the value a share of the way up the sorted values; 0.5 the middle)
+	{
+		Values.Sort();
+		if (Values.Num() == 0)
+		{
+			return 0.0f;
+		}
+		const float At = Share * static_cast<float>(Values.Num() - 1);
+		const int32 Low = FMath::FloorToInt(At);
+		const int32 High = FMath::Min(Low + 1, Values.Num() - 1);
+		return FMath::Lerp(Values[Low], Values[High], At - static_cast<float>(Low));
+	}
+
+	/** The mean of some values and its standard error (the spread of the values over the root of their count). */
+	void LookTimeMean(const TArray<float>& Values, float& OutMean, float& OutError)
+	{
+		OutMean = OutError = 0.0f;
+		const int32 Num = Values.Num();
+		if (Num == 0)
+		{
+			return;
+		}
+		double Sum = 0.0, Squares = 0.0;
+		for (const float Each : Values)
+		{
+			Sum += Each;
+		}
+		const double Mean = Sum / Num;
+		for (const float Each : Values)
+		{
+			Squares += (Each - Mean) * (Each - Mean);
+		}
+		OutMean = static_cast<float>(Mean);
+		OutError = Num > 1 ? static_cast<float>(FMath::Sqrt(Squares / (Num - 1)) / FMath::Sqrt(static_cast<double>(Num))) : 0.0f;
+	}
+
+	/** Each setting's middle reading; and each other one's difference from the baseline, each of its windows against the
+	 * mean of the baseline's windows on either side of it: the middle of them and their middle half, and their mean and
+	 * its standard error. */
+	void ReportLookTime(bool bLast)
+	{
+		const int32 Windows = LookTimeWindows.Num();
+		for (int32 Index = 0; Index < LookTimeSets.Num(); ++Index)
+		{
+			TArray<float> Chip, Fps, Game, Draw, ChipDiff, FpsDiff;
+			for (int32 At = 0; At < Windows; ++At)
+			{
+				const FLookTimeWindow& Here = LookTimeWindows[At];
+				if (Here.Set != Index || Here.Frames == 0)
+				{
+					continue;
+				}
+				Chip.Add(Here.Chip);
+				Fps.Add(Here.Fps);
+				Game.Add(Here.Game);
+				Draw.Add(Here.Draw);
+				if (Index != 0 && At > 0 && At + 1 < Windows)
+				{
+					const FLookTimeWindow& Before = LookTimeWindows[At - 1];
+					const FLookTimeWindow& After = LookTimeWindows[At + 1];
+					if (Before.Set == 0 && After.Set == 0 && Before.Frames > 0 && After.Frames > 0)
+					{
+						ChipDiff.Add(Here.Chip - 0.5f * (Before.Chip + After.Chip));
+						FpsDiff.Add(Here.Fps - 0.5f * (Before.Fps + After.Fps));
+					}
+				}
+			}
+			float Mean = 0.0f, Error = 0.0f;
+			LookTimeMean(ChipDiff, Mean, Error);
+			const FString Against = Index == 0 ? FString(TEXT("the baseline"))
+				: FString::Printf(TEXT("against %s on either side: graphics chip %+.2f ms a frame (the middle; the middle half %+.2f to %+.2f), mean %+.2f give or take %.2f, from %d windows; %+.1f frames a second (the middle)"),
+					*LookTimeSets[0].Name, LookTimeShare(ChipDiff, 0.5f), LookTimeShare(ChipDiff, 0.25f), LookTimeShare(ChipDiff, 0.75f), Mean, Error,
+					ChipDiff.Num(), LookTimeShare(FpsDiff, 0.5f));
+			UE_LOG(LogTheater, Display, TEXT("Whole look timing: %s%d windows, %s: graphics chip %.2f ms a frame, %.1f frames a second, game %.2f ms, draw %.2f ms (the middle of its %d); %s"),
+				bLast ? TEXT("THE WHOLE BATTLE, ") : TEXT("so far, "), Windows, *LookTimeSets[Index].Name, LookTimeShare(Chip, 0.5f), LookTimeShare(Fps, 0.5f),
+				LookTimeShare(Game, 0.5f), LookTimeShare(Draw, 0.5f), Chip.Num(), *Against);
+		}
+	}
+
+	/** The timing's end: the last report, and every setting back to the launch's own. */
+	void EndLookTime()
+	{
+		if (bLookTimeDone || LookTimeSlot < 0)
+		{
+			return;
+		}
+		bLookTimeDone = true;
+		ReportLookTime(true);
+		LayLookTimeSet(INDEX_NONE);
+	}
+
+	bool TickLookTime(float DeltaSeconds)
+	{
+		if (bLookTimeDone)
+		{
+			LookTimeClock.Reset();
+			return false;
+		}
+		if (!bFieldOn)
+		{
+			return true; // (FieldGone ends it; until a field is laid, nothing)
+		}
+		if (LookTimeSlot < 0)
+		{
+			LookTimeWait += DeltaSeconds;
+			if (LookTimeWait < 3.0f)
+			{
+				return true;
+			}
+			LookTimeSlot = 0;
+			LookTimeAt = LookTimeSetOf(0);
+			LayLookTimeSet(LookTimeAt);
+			UE_LOG(LogTheater, Display, TEXT("Whole look timing: begun, %d settings (the first, %s, the baseline, between every two others), each settled %.1f s and timed %.1f s, until the battle ends"),
+				LookTimeSets.Num(), *LookTimeSets[0].Name, LookTimeSettle, LookTimeMeasure);
+			return true;
+		}
+		LookTimeIn += DeltaSeconds;
+		if (LookTimeIn > LookTimeSettle)
+		{
+			if (DeltaSeconds > 0.1f)
+			{
+				++LookTimeLong; // (a still being written, a field being baked: counted, left out)
+			}
+			else
+			{
+				++LookTimeFrames;
+				LookTimeSum += DeltaSeconds;
+				LookTimeGame += FPlatformTime::ToMilliseconds(GGameThreadTime);
+				LookTimeDraw += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+				LookTimeChip += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+			}
+		}
+		if (LookTimeIn < LookTimeSettle + LookTimeMeasure)
+		{
+			return true;
+		}
+		FLookTimeWindow& Window = LookTimeWindows.AddDefaulted_GetRef();
+		Window.Set = LookTimeAt;
+		if (LookTimeFrames > 0 && LookTimeSum > 0.0)
+		{
+			Window.Frames = LookTimeFrames;
+			Window.Fps = static_cast<float>(LookTimeFrames / LookTimeSum);
+			Window.Game = static_cast<float>(LookTimeGame / LookTimeFrames);
+			Window.Draw = static_cast<float>(LookTimeDraw / LookTimeFrames);
+			Window.Chip = static_cast<float>(LookTimeChip / LookTimeFrames);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Whole look timing: window %d, %s: %.1f frames a second (game %.2f ms, draw %.2f ms, graphics chip %.2f ms), %d frames timed, %d longer than 0.1 s left out"),
+			LookTimeWindows.Num(), *LookTimeSets[LookTimeAt].Name, Window.Fps, Window.Game, Window.Draw, Window.Chip, LookTimeFrames, LookTimeLong);
+		LookTimeFrames = LookTimeLong = 0;
+		LookTimeSum = LookTimeGame = LookTimeDraw = LookTimeChip = 0.0;
+		LookTimeIn = 0.0f;
+		if (LookTimeWindows.Num() % 24 == 0)
+		{
+			ReportLookTime(false);
+		}
+		LookTimeAt = LookTimeSetOf(++LookTimeSlot);
+		LayLookTimeSet(LookTimeAt);
+		return true;
+	}
+
+	/** "-TheaterLookTime=name:setting=value,setting=value|name:...", read as the game starts. */
+	void StartLookTime()
+	{
+		FString Asked;
+		if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterLookTime="), Asked, false))
+		{
+			return;
+		}
+		TArray<FString> Sets;
+		Asked.ParseIntoArray(Sets, TEXT("|"), true);
+		for (const FString& Each : Sets)
+		{
+			FLookTimeSet Set;
+			FString Vars;
+			if (!Each.Split(TEXT(":"), &Set.Name, &Vars))
+			{
+				Set.Name = Each;
+			}
+			TArray<FString> Pairs;
+			Vars.ParseIntoArray(Pairs, TEXT(","), true);
+			for (const FString& Pair : Pairs)
+			{
+				FString Key, Value;
+				if (Pair.Split(TEXT("="), &Key, &Value))
+				{
+					Set.Vars.Emplace(Key.TrimStartAndEnd(), Value.TrimStartAndEnd());
+				}
+			}
+			LookTimeSets.Add(MoveTemp(Set));
+		}
+		if (LookTimeSets.Num() < 2)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Whole look timing: %d settings asked; a baseline and one or more others are timed against it (none timed)"), LookTimeSets.Num());
+			LookTimeSets.Reset();
+			return;
+		}
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLookTimeSettle="), LookTimeSettle);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLookTimeMeasure="), LookTimeMeasure);
+		LookTimeSettle = FMath::Clamp(LookTimeSettle, 0.25f, 10.0f);
+		LookTimeMeasure = FMath::Clamp(LookTimeMeasure, 1.0f, 30.0f);
+		LookTimeClock = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&TickLookTime), 0.0f);
+		UE_LOG(LogTheater, Display, TEXT("Whole look timing: %d settings read; they take turns once a ground battle's field is laid"), LookTimeSets.Num());
+	}
+
 	// ---- The clock -----------------------------------------------------------------------------------------------------
 
 	FTSTicker::FDelegateHandle Clock;
@@ -401,6 +682,7 @@ void WholeLook::Start()
 	{
 		CVarBounceHue->Set(0, ECVF_SetByCode);
 	}
+	StartLookTime();
 	// (the filtering and the lens both wait for the game's world: the clock lays them)
 	if (!Clock.IsValid())
 	{
@@ -410,11 +692,16 @@ void WholeLook::Start()
 
 void WholeLook::Stop()
 {
-	// (the clock only: the engine is going, and its settings and pictures with it)
+	// (the clocks only: the engine is going, and its settings and pictures with it)
 	if (Clock.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(Clock);
 		Clock.Reset();
+	}
+	if (LookTimeClock.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(LookTimeClock);
+		LookTimeClock.Reset();
 	}
 }
 
@@ -705,6 +992,7 @@ void WholeLook::FieldLaid(bool bClosedCanopy)
 
 void WholeLook::FieldGone()
 {
+	EndLookTime(); // (the timing's last report, its settings put back, while the field's looks still stand)
 	bFieldOn = false;
 	bClosedField = false;
 	DawnSkies.Reset();
