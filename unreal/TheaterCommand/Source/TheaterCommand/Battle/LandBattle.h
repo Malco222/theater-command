@@ -1031,8 +1031,8 @@ private:
 	void LogSound() const;
 	void PlayEngines();
 	/** The fighters on call over the field heard (release 2 sound check, -TheaterLandAirSound): before the frame's noises
-	 * are mixed, as FlyOver has drawn them. */
-	void SoundOverhead();
+	 * are mixed, as FlyOver has drawn them; distances from the mix's ear (EarX, EarY, EarZ in the battle's metres). */
+	void SoundOverhead(double EarX, double EarY, double EarZ);
 	UAudioComponent* StartTake(const TCHAR* Name, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const FName& Name);

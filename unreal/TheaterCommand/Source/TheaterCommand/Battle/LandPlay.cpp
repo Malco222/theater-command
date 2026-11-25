@@ -465,6 +465,8 @@ namespace LandPlay
 		N.Side = By ? By->Side : -1;
 		N.Track = S;
 		N.Role = Role;
+		N.bSniper = R.bSn;
+		N.bHidden = R.bSn && R.bHd;
 		// (the same gun the muzzle was put on: TankMg rolls the same for the same round)
 		if (R.W == "mg" && Role == "tank") N.Mount = TankMg(S, R.T, R.N, To, R.G);
 		N.bMiss = R.R == Result::Miss;

@@ -10318,7 +10318,7 @@ void ALandBattle::PlaySound(double RealDt)
 	Ear.Yaw = LandFeed::FacingTo(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Look.X, S.Pose.Look.Y);
 	// (the fighters on call, as FlyOver drew them: their own takes, and the ground's guns firing up at them as this
 	// frame's noises; release 2 sound check, -TheaterLandAirSound)
-	SoundOverhead();
+	SoundOverhead(Ear.At.X, Ear.At.Y, Ear.At.Z);
 	for (const LandPlay::Noise& N : S.Noises)
 	{
 		S.Mix.Hear(N, S.Real, S.Battle, FMath::Max(0.25 / S.Life, S.SpeedNow / S.Life), Ear, S.Takes);
@@ -10767,10 +10767,25 @@ void ALandBattle::PlayEngines()
 		// one passes Brian's ear); "Heads up, hatches down" (the drill's hatches row) shuts and opens it as fire comes
 		// and goes.
 		{
+			// (kept as shut 0 or open 1, first from how it stands, and changed only when the lid reaches its rim or its
+			// stop: a lid that eases down over many frames is heard once as it lands, one that stops halfway not at all)
 			double& Was = S.HatchWas[static_cast<size_t>(K)];
 			const double Now = V.HatchOpen;
-			const char* HatchCue = Was < 0.0 || V.bDead ? nullptr : Was > 0.05 && Now <= 0.02 ? "hatch_shut" : Was < 0.9 && Now >= 0.97 ? "hatch_open" : nullptr;
-			Was = Now;
+			const char* HatchCue = nullptr;
+			if (Was < 0.0)
+			{
+				Was = Now >= 0.5 ? 1.0 : 0.0;
+			}
+			else if (Was < 0.5 && Now >= 0.97)
+			{
+				Was = 1.0;
+				HatchCue = V.bDead ? nullptr : "hatch_open";
+			}
+			else if (Was >= 0.5 && Now <= 0.02)
+			{
+				Was = 0.0;
+				HatchCue = V.bDead ? nullptr : "hatch_shut";
+			}
 			if (HatchCue)
 			{
 				const std::string Take = S.Mix.CueTake(HatchCue);
@@ -10831,7 +10846,7 @@ void ALandBattle::PlayEngines()
 	}
 }
 
-void ALandBattle::SoundOverhead()
+void ALandBattle::SoundOverhead(double EarX, double EarY, double EarZ)
 {
 	// The release 2 sound check (25 Nov 2026): the fighters on call over the field, which FlyOver draws diving, firing,
 	// fired on and going down, were heard not at all. With -TheaterLandAirSound beside -TheaterLandAirSupport they are
@@ -10873,12 +10888,16 @@ void ALandBattle::SoundOverhead()
 		}
 		return Else;
 	};
-	const LandPlay::Vec EarAt = S.Pose.Eye;
+	// (the mix's own ear, as every other noise of the frame is heard from: the camera when low, else above where it looks)
+	const LandPlay::Vec EarAt(EarX, EarY, EarZ);
 	auto Far = [&EarAt](const LandAir::V3& P)
 	{
 		return std::sqrt((P.X - EarAt.X) * (P.X - EarAt.X) + (P.Y - EarAt.Y) * (P.Y - EarAt.Y) + (P.Z - EarAt.Z) * (P.Z - EarAt.Z));
 	};
 	const double PassWithin = Number(TEXT("passWithin"), 350.0);
+	// (the guns fire only while the battle's clock runs: paused, held for the live front, behind the card, no new burst)
+	const bool bRunning = S.SpeedNow > 0.0 && S.Battle > A.SoundBattleWas;
+	A.SoundBattleWas = S.Battle;
 	const float LoopGain = LandParts::Gain(BusDb(TEXT("loops")) + LiftDb + Number(TEXT("engineDb"), 0.0));
 	const float CloseGain = LandParts::Gain(BusDb(TEXT("close")) + LiftDb);
 
@@ -10968,6 +10987,10 @@ void ALandBattle::SoundOverhead()
 			A.GunDue.erase(P.Key);
 			continue;
 		}
+		if (!bRunning)
+		{
+			continue;
+		}
 		const auto Due = A.GunDue.find(P.Key);
 		if (Due != A.GunDue.end() && RealT < Due->second)
 		{
@@ -11043,6 +11066,10 @@ void ALandBattle::SoundOverhead()
 	for (const LandAir::Gunner& G : A.Guns)
 	{
 		GunsNow.insert(G.Key);
+		if (!bRunning)
+		{
+			continue;
+		}
 		const auto Due = A.GunnerDue.find(G.Key);
 		if (Due != A.GunnerDue.end() && RealT < Due->second)
 		{

@@ -118,6 +118,9 @@ namespace LandPlay
 		 * sound (the Sherman's roof gun is a .50, her others .30s); a support team's (role "hmg"): her gun's file as drawn
 		 * (LandTeamGun::FileFor, "HmgMG34"), for its own row in land.teamMg; empty for any other shot. */
 		std::string Mount;
+		/** A sniper's aimed round (the round's sn), and whether he lies hidden as he fires it (its hd): its sound is a
+		 * sniper's (distance.sniper), and while hidden heard where it arrives, never from his spot. */
+		bool bSniper = false, bHidden = false;
 		int Side = -1;
 		int Rounds = 1;
 		double PerSecond = 1.0;

@@ -6480,21 +6480,48 @@ UAudioComponent* ASeaBattle::Sound(const FName& Name, const FVector& Where, cons
 	const double Spread = SeaParts::MixNumber(Mix, TEXT("variety.pitchPercent.") + Varied, 0.0) / 100.0;
 	const float Pitch = static_cast<float>(1.0 + (FMath::FRand() * 2.0 - 1.0) * FMath::Clamp(Spread, 0.0, 0.1));
 	UAudioComponent* Heard = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, Pitch, 0.0f, FamilyOf(Family));
-	if (Heard && Eye)
+	if (Heard && Eye && SeaParts::TableLpf(Mix, Family, 0.0) > 0.0f)
 	{
-		// (near sharp, far a dull roll: the family's whole low-pass table at the distance it starts from, SeaParts::TableLpf)
-		const float Hz = SeaParts::TableLpf(Mix, Family, FVector::Dist(Where, Eye->GetActorLocation()) / UnitsPerMetre);
-		if (Hz > 0.0f && Hz < 19000.0f)
+		// (near sharp, far a dull roll: the family's whole low-pass table at the eye's distance, set again each frame as the
+		// eye moves or cuts, RefilterSounds; a family with no table keeps the attenuation's alone)
+		if (Filtered.Num() >= 96)
 		{
-			Heard->SetLowPassFilterEnabled(true);
-			Heard->SetLowPassFilterFrequency(Hz);
+			Filtered.RemoveAt(0);
 		}
+		FFiltered& Kept = Filtered.AddDefaulted_GetRef();
+		Kept.Player = Heard;
+		Kept.Family = Family;
+		Kept.Where = Where;
+		Heard->SetLowPassFilterEnabled(true);
+		Heard->SetLowPassFilterFrequency(FMath::Min(20000.0f, SeaParts::TableLpf(Mix, Family, FVector::Dist(Where, Eye->GetActorLocation()) / UnitsPerMetre)));
 	}
 	if (Under)
 	{
 		Under->Muffle(Heard); // U1 hook (under water): a sound from above the sea dulled under it
 	}
 	return Heard;
+}
+
+void ASeaBattle::RefilterSounds()
+{
+	// Each filtered take's low-pass from the eye's distance now (the family's table, SeaParts::TableLpf), so a take started
+	// far off opens up when the picture cuts in close; let go once it has played out. While the eye is under water the
+	// takes are left as they are (one started under it keeps the muffle's lower filter, FSeaUnder::Muffle, from its start).
+	// (from EyeAt, the camera's place as its shot sets it, without the under-water shake)
+	for (int32 K = Filtered.Num() - 1; K >= 0; --K)
+	{
+		UAudioComponent* Player = Filtered[K].Player.Get();
+		if (!Player || !Player->IsPlaying() || !Eye)
+		{
+			Filtered.RemoveAtSwap(K);
+			continue;
+		}
+		if (Under && Under->IsUnder())
+		{
+			continue;
+		}
+		Player->SetLowPassFilterFrequency(FMath::Min(20000.0f, SeaParts::TableLpf(Mix, Filtered[K].Family, FVector::Dist(Filtered[K].Where, EyeAt) / UnitsPerMetre)));
+	}
 }
 
 void ASeaBattle::GunFired(int32 Key, int32 Slot, const FVector& At)
@@ -6758,6 +6785,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 			Sound(Due.Name, Due.Where, Due.Family, Due.Volume, false);
 		}
 	}
+	RefilterSounds();
 	Beds();
 	if (RealT - RoomCheckedAt >= 1.0)
 	{

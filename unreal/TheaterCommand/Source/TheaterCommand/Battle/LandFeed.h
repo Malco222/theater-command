@@ -171,6 +171,9 @@ namespace LandFeed
 		 * lands, battle seconds, as the rules' sight block holds it (the rules' "hang"); -1 where the round does not say
 		 * (the calibre's own time). */
 		double Hang = -1.0;
+		/** A sniper's one aimed round (release 2's sniper teams, the rules' sn: 1), and whether he still lies hidden as he
+		 * fires it (hd: 1): heard as a sniper's, and while hidden from where it arrives, never from his spot. */
+		bool bSn = false, bHd = false;
 	};
 
 	struct Event
