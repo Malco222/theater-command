@@ -13,6 +13,7 @@
 //   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
 //   TC.save()                           -> { text }: the whole campaign as text
 //   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
+//   TC.peekChart(text)                  -> { chart: 'europe' | 'americas' | 'whole', now, fits, why }: the map a saved war was made on, whether this game can continue it, and the sentence to show when it cannot; null if the text is no save
 //   TC.load(text)                       -> view, or null if the save cannot be read
 //   TC.view()                           -> view
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
@@ -85,7 +86,7 @@ import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { airPiece } from '../../../src/campaign/airversion';
-import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
+import { crossesToWhole, loadGame, peekSave, saveChart, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
 import { carried } from '../../../src/campaign/support';
@@ -137,7 +138,7 @@ import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { answersOf, attachWorld, motherLine, patronOf } from '../../../src/campaign/world';
+import { CHART_NOW, answersOf, attachWorld, motherLine, patronOf } from '../../../src/campaign/world';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
@@ -1958,17 +1959,18 @@ function grand(from = 1, seed = 1939, world = false) {
  * world where the far switch is on). That first day is laid once and kept. It changes nothing.
  */
 const bookDays = new Map<boolean, Game>();
-function nationsBook(world = false) {
-  let s = g;
+/** A first day on the chart asked for, laid once and kept: the countries the rules know before any campaign is begun. */
+function bookDay(wide: boolean): Game {
+  let s = bookDays.get(wide);
   if (!s) {
-    const wide = world === true;
-    s = bookDays.get(wide) ?? null;
-    if (!s) {
-      s = createGame(1, null);
-      if (wide) attachWorld(s);
-      bookDays.set(wide, s);
-    }
+    s = createGame(1, null);
+    if (wide) attachWorld(s);
+    bookDays.set(wide, s);
   }
+  return s;
+}
+function nationsBook(world = false) {
+  const s = g ?? bookDay(world === true);
   return Object.values(s.nations).map((n) => ({ tag: n.id, name: n.name, adjective: n.adj, colour: n.color, alignment: n.align }));
 }
 
@@ -2053,16 +2055,37 @@ function save() {
   return { text: saveGame(game()) };
 }
 
+/**
+ * (Release 2, Japan and the Pacific.) A war is continued on the map it was saved on. The game knew a save's map only
+ * by its province count: with the whole world off, a whole-world save was "a save that could not be read", and with
+ * it on, a war saved on Europe and the Americas loaded with the far side laid over it as of September 1939, whatever
+ * its month, and the next autosave kept it so. Now the save says which map it is, the game says the true sentence,
+ * and peek and load leave a war of the other map alone.
+ */
+const SAVED_ON_WHOLE = 'This war was saved on the whole-world map. Switch the whole world on under OPTIONS to continue it.';
+const SAVED_ON_AMERICAS = 'This war was saved on the map of Europe and the Americas. Switch the whole world off under OPTIONS to continue it.';
+function peekChart(text: string) {
+  const chart = saveChart(text);
+  if (!chart) return null;
+  const other = chart === 'whole' ? CHART_NOW !== 'whole' : crossesToWhole(text);
+  const fits = !other && !!peekSave(text);
+  return { chart, now: CHART_NOW, fits, why: fits ? '' : chart === 'whole' && other ? SAVED_ON_WHOLE : other ? SAVED_ON_AMERICAS : 'That saved war could not be read.' };
+}
+
 /** A line about a saved campaign for the opening screen, without loading it. */
 function peek(text: string) {
+  if (crossesToWhole(text)) return null; // (a war of the other map is not offered: TC.peekChart says why)
   const p = peekSave(text);
   if (!p) return null;
-  const sample = g ?? createGame(1, null);
-  return { human: p.human, name: p.human ? sample.nations[p.human]?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
+  // (The seat's name from the war in play, else from a first day on the wider chart: a sample of Europe alone knew no
+  // Japan, and the line read "JAP".)
+  const seat = p.human ? g?.nations[p.human] ?? bookDay(true).nations[p.human] : undefined;
+  return { human: p.human, name: p.human ? seat?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
 }
 
 function load(text: string) {
-  const loaded = loadGame(text);
+  // (A war saved on Europe and the Americas is never laid over the whole world by the player's CONTINUE or LOAD.)
+  const loaded = crossesToWhole(text) ? null : loadGame(text);
   if (!loaded) return null;
   g = loaded;
   startGunsLoaded(g);
@@ -7761,7 +7784,7 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's

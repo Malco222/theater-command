@@ -20,7 +20,7 @@ import { openMorale } from './morale';
 import { openTrade } from './trade';
 import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
-import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
+import { CHART_NOW, CHART_REGIONS, WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
 import { openWinter } from './winter';
 import { unitsDecide } from './units';
 import type { Corps, Game, General } from './types';
@@ -121,6 +121,33 @@ export function peekSave(text: string): { human: string | null; turn: number; op
     return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length, wide(d)) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1, level: d.flags?.open === 1 ? d.flags?.level ?? FAIR : null } : null;
   } catch { return null; }
 }
+
+/** The charts a campaign can have been saved on: Europe alone, Europe and the Americas, the whole world. */
+export type SaveChart = 'europe' | 'americas' | 'whole';
+
+/**
+ * The chart a campaign was saved on, read from its province count without loading it: Europe alone; Europe and the
+ * Americas, at any stage of their drawing; or the whole world. Null where the text is no save of this game's, or its
+ * count is no chart's. It answers the same with the far stage on or off, which fits() cannot: a whole-world save in a
+ * game on the Americas chart was only ever "a different map".
+ */
+export function saveChart(text: string): SaveChart | null {
+  try {
+    const d = JSON.parse(text);
+    if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
+    if (!wide(d)) return fits(d.regions.length) ? 'europe' : null;
+    const n = d.regions.length - MAP_REGIONS;
+    return n === CHART_REGIONS.whole ? 'whole' : n === CHART_REGIONS.americas || [104, 201].includes(n) ? 'americas' : null;
+  } catch { return null; }
+}
+
+/**
+ * True for a campaign saved on Europe and the Americas, in a game that is on the whole world. The rules can lay the
+ * far side over such a save as it stood on its first day (world.ts settleNewGround, far.ts farSettle), which is right
+ * for a campaign's first month and wrong for any later one, and the next save then keeps it on the whole world for
+ * good. So a caller that continues the player's own wars asks this first (the 3D game's bridge does).
+ */
+export const crossesToWhole = (text: string): boolean => CHART_NOW === 'whole' && saveChart(text) === 'americas';
 
 /** True for a campaign saved on an earlier, smaller map: it reads as a save but cannot be continued on this one. */
 export function staleSave(text: string): boolean {

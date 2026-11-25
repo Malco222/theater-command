@@ -87,6 +87,15 @@ export const WORLD_REGIONS = WORLD_MAP.regions.length;
 export const WORLD_STAGES = FAR_STAGE ? [104, 201, 540] : [104, 201];
 
 /**
+ * The wider world's two charts by their province counts, whichever the game was started on: Europe and the Americas,
+ * and the whole world. A saved campaign is known by its count (save.ts saveChart), so a game on one chart can say
+ * which chart a save of the other was made on.
+ */
+export const CHART_REGIONS = { americas: (americasMap as unknown as WorldMap).regions.length, whole: (wholeMap as unknown as WorldMap).regions.length };
+/** The chart a campaign on the wider world is played on in this game. */
+export const CHART_NOW: 'americas' | 'whole' = FAR_STAGE ? 'whole' : 'americas';
+
+/**
  * The first province of the far side: the Pacific, then the globe, then their cities, laid after the Americas' cities
  * (the rules builder's numbering, 17 November 2026: 915 to 1226, 1227 to 1593, 1594 to 2065).
  */

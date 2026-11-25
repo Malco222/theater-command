@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 58bea0f3 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c1b935db 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -58892,6 +58892,8 @@
   var WORLD_FIRST = WORLD_MAP.first;
   var WORLD_REGIONS = WORLD_MAP.regions.length;
   var WORLD_STAGES = FAR_STAGE ? [104, 201, 540] : [104, 201];
+  var CHART_REGIONS = { americas: world_americas_default.regions.length, whole: world_whole_default.regions.length };
+  var CHART_NOW = FAR_STAGE ? "whole" : "americas";
   var FAR_FIRST = WORLD_FIRST + world_whole_default.stages[1];
   var FAR_SEAS_FIRST = world_americas_default.seas.zones.length;
   var worldOn = (g2) => g2.flags.world === 1;
@@ -73306,6 +73308,18 @@
       return null;
     }
   }
+  function saveChart(text) {
+    try {
+      const d = JSON.parse(text);
+      if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
+      if (!wide2(d)) return fits(d.regions.length) ? "europe" : null;
+      const n = d.regions.length - MAP_REGIONS;
+      return n === CHART_REGIONS.whole ? "whole" : n === CHART_REGIONS.americas || [104, 201].includes(n) ? "americas" : null;
+    } catch {
+      return null;
+    }
+  }
+  var crossesToWhole = (text) => CHART_NOW === "whole" && saveChart(text) === "americas";
   var FLEETS_RENAMED = [
     [/\bWestern Approaches Command\b/g, "Western Approaches Fleet"],
     [/\bDover Command\b/g, "Dover Fleet"],
@@ -103934,17 +103948,17 @@
     return { from: from2, nations };
   }
   var bookDays = /* @__PURE__ */ new Map();
-  function nationsBook(world = false) {
-    let s = g;
+  function bookDay(wide3) {
+    let s = bookDays.get(wide3);
     if (!s) {
-      const wide3 = world === true;
-      s = bookDays.get(wide3) ?? null;
-      if (!s) {
-        s = createGame(1, null);
-        if (wide3) attachWorld(s);
-        bookDays.set(wide3, s);
-      }
+      s = createGame(1, null);
+      if (wide3) attachWorld(s);
+      bookDays.set(wide3, s);
     }
+    return s;
+  }
+  function nationsBook(world = false) {
+    const s = g ?? bookDay(world === true);
     return Object.values(s.nations).map((n) => ({ tag: n.id, name: n.name, adjective: n.adj, colour: n.color, alignment: n.align }));
   }
   function listNames2(names) {
@@ -104030,14 +104044,24 @@
   function save() {
     return { text: saveGame(game()) };
   }
+  var SAVED_ON_WHOLE = "This war was saved on the whole-world map. Switch the whole world on under OPTIONS to continue it.";
+  var SAVED_ON_AMERICAS = "This war was saved on the map of Europe and the Americas. Switch the whole world off under OPTIONS to continue it.";
+  function peekChart(text) {
+    const chart = saveChart(text);
+    if (!chart) return null;
+    const other4 = chart === "whole" ? CHART_NOW !== "whole" : crossesToWhole(text);
+    const fits2 = !other4 && !!peekSave(text);
+    return { chart, now: CHART_NOW, fits: fits2, why: fits2 ? "" : chart === "whole" && other4 ? SAVED_ON_WHOLE : other4 ? SAVED_ON_AMERICAS : "That saved war could not be read." };
+  }
   function peek(text) {
+    if (crossesToWhole(text)) return null;
     const p = peekSave(text);
     if (!p) return null;
-    const sample = g ?? createGame(1, null);
-    return { human: p.human, name: p.human ? sample.nations[p.human]?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
+    const seat5 = p.human ? g?.nations[p.human] ?? bookDay(true).nations[p.human] : void 0;
+    return { human: p.human, name: p.human ? seat5?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
   }
   function load(text) {
-    const loaded = loadGame(text);
+    const loaded = crossesToWhole(text) ? null : loadGame(text);
     if (!loaded) return null;
     g = loaded;
     startGunsLoaded(g);
@@ -109750,6 +109774,7 @@ ${standing5}`,
     start,
     save,
     peek,
+    peekChart,
     load,
     view: view2,
     reach: lookOut(reachOf2),
