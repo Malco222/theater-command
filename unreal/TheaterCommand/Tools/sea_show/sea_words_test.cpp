@@ -4,12 +4,16 @@
 // is and are as the phrase counts the ships where it does); an enemy piece never has words; no fields, nothing; held wins
 // over turning clear; the line is the camera's subject's own or none. Where the tags stand (SeaWords::Lay): never on one
 // another, the subject's first and on her ship, then the nearest; none over the bar, the line, the month scene's caption
-// or its way back; a lifted tag's stalk down to its ship behind the plates it passes. Then each recording played through the very code the game runs (SeaFeed, SeaShow, SeaWordsCore), at 32
-// frames a second: the tags stand over the player's own pieces exactly while the views (read here apart, from the JSON
-// itself) set their fields; a recording without the fields (every one the battle has made so far) shows no words at
-// all; with them the show is the same ship for ship as without; and the stand-in (stand-ins/two-lines-torpedoes.json,
-// made by stand-ins/torpedo_words.py) shows the very lines it was made to; and the tags, through the eyes the scene's
-// shots put the camera at (a Fleets shot, the Line shot, the overview), stand laid apart on the screen.
+// or its way back; a lifted tag's stalk down to its ship behind the plates it passes. The fields as SeaFeed reads them
+// and the show carries them, through a few views written here (the player's order, one ship, the count's last second and
+// past it: what the computer's sides never record). Then each recording played through the very code the game runs (SeaFeed, SeaShow, SeaWordsCore), at 32
+// frames a second: SeaFeed reads every field the views set (read here apart, from the JSON itself); the tags stand over
+// the player's own pieces exactly while the views set their fields, each of his pieces given one tagged; a recording
+// without the fields shows no words at all; with them the show is the same ship for ship as without; where the views set
+// fields on the other side's pieces, a second play takes the player as that side; the naval rules' own-water
+// recordings (recordings/own-water-r2, the "Friendly torpedoes" switch on) show the very lines pinned for them, string
+// for string, and samar nothing at any frame; and the tags, through the eyes the scene's shots put the camera at (a
+// Fleets shot, the Line shot, the overview), stand laid apart on the screen.
 //
 //   Tools/sea_show/run.sh   (builds and runs it over every recording)
 //
@@ -445,8 +449,8 @@ namespace
 			Expect(bOk && Wrong(Spots, None, L).empty(), "one tag alone: on its ship, its stalk whole", Stood(Spots, L), "6");
 		}
 		{
-			// Two in one column, nearly on one another (the 430.5 s of the stand-in: Cruiser 1 and Cruiser 4 up the column
-			// from a Fleets shot's eye): the nearer on her ship, the farther lifted just over it, its stalk behind it.
+			// Two in one column, nearly on one another (two ships up one column, as a Fleets shot's eye sees them): the nearer
+			// on her ship, the farther lifted just over it, its stalk behind it.
 			const std::vector<SeaWords::Spot> Spots = { SpotAt(806.0, 396.0, Clear, 1585.0, 7), SpotAt(800.0, 400.0, Clear, 1000.0, 6) };
 			const std::vector<SeaWords::Laid> L = Lay(Spots, None, TagHigh, TagStalk);
 			const bool bOk = L.size() == 2 && L[0].Of == 1 && L[0].Lifts == 0 && L[1].Of == 0 && L[1].Lifts == 1 &&
@@ -463,7 +467,7 @@ namespace
 			Expect(bOk && Wrong(Spots, None, L).empty(), "the subject's tag first, on her ship, though farther", Stood(Spots, L), "7, 6^1");
 		}
 		{
-			// Four together (pieces 1, 3, 6 and 7 at 430.5 s): all four stand, none on another.
+			// Four together (four pieces turning clear at once): all four stand, none on another.
 			const std::vector<SeaWords::Spot> Spots = { SpotAt(700.0, 420.0, Clear, 1400.0, 1), SpotAt(760.0, 430.0, Clear, 900.0, 3), SpotAt(706.0, 414.0, Clear, 1800.0, 6),
 			                                            SpotAt(650.0, 425.0, Clear, 1100.0, 7) };
 			const std::vector<SeaWords::Laid> L = Lay(Spots, BarAndLine, TagHigh, TagStalk);
@@ -611,63 +615,35 @@ namespace
 	}
 
 	/** A piece as the views' JSON says it, read here apart from SeaFeed: its side and ships as last told, and whether its
-	 * view sets the words' fields (heldFor; clearFrom with its clearUntil). */
+	 * view sets the words' fields (heldFor; clearFrom with its clearUntil), with their names, ordered, and the second its
+	 * salvo lands. */
 	struct RawPiece
 	{
 		int Side = 0;
 		int Ships = 1;
 		bool bHeld = false, bClear = false;
+		bool bHeldNamed = false, bClearNamed = false, bOrdered = false;
+		double ClearUntil = -1.0;
 	};
 	struct RawView
 	{
 		double T = 0.0;
 		std::map<int, RawPiece> Pieces;
 	};
-
-	/** A line the stand-in must show: at battle time T with piece Piece the camera's subject (off the views' own seconds,
-	 * so the view reached is never in doubt), its tag and its line (both empty: none). */
-	struct Shown
+	/** What the views set, all told, read apart from SeaFeed to hold its reading to: the piece-views holding and turning
+	 * clear, and the views with any; those without a name; ordered; turning clear past their salvo's landing; each side's
+	 * pieces given a field in some view (0 the attacker, 1 the defender); and the turns clear the views end while their
+	 * salvo is still running (the rules let a ship go once the heads are past her), with the most seconds the count had
+	 * left then. */
+	struct RawCount
 	{
-		double T;
-		int Piece;
-		const char* Tag;
-		const char* Line;
+		long Held = 0, Clear = 0, HeldViews = 0, ClearViews = 0, HeldUnnamed = 0, ClearUnnamed = 0, Ordered = 0, PastUntil = 0, EndedEarly = 0;
+		double MostLeft = 0.0;
+		std::set<int> Fielded[2];
 	};
 
-	const std::vector<Shown>& StandInLines()
-	{
-		static const std::vector<Shown> Lines = {
-			{ 300.5, 1, "", "" },
-			{ 366.5, 2, "Torpedoes held", "Holding their torpedoes while a battleship of the Home Fleet is in the line of fire. Your order stands: they fire the moment the water is clear." },
-			{ 390.5, 4, "Torpedoes held", "Holding her torpedoes while four destroyers of the Home Fleet are in the line of fire. She fires the moment the water is clear." },
-			{ 390.5, 1, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by two destroyers of the Home Fleet. They take up their orders again in 61 seconds, once the torpedoes have passed." },
-			{ 410.5, 1, "Torpedoes held", "Holding their torpedoes while a cruiser of the Home Fleet is in the line of fire. Your order stands: they fire the moment the water is clear." },
-			{ 430.5, 1, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by two destroyers of the Home Fleet. They take up your orders again in 21 seconds, once the torpedoes have passed." },
-			{ 430.5, 7, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by two destroyers of the Home Fleet. She takes up her orders again in 21 seconds, once the torpedoes have passed." },
-			{ 430.5, 3, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by four destroyers of the Home Fleet. She takes up your orders again in 68 seconds, once the torpedoes have passed." },
-			{ 430.5, 6, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by four destroyers of the Home Fleet. She takes up her orders again in 68 seconds, once the torpedoes have passed." },
-			{ 444.5, 6, "Torpedoes held", "Holding her torpedoes while a cruiser of the Home Fleet is in the line of fire. Your order stands: she fires the moment the water is clear." },
-			{ 450.5, 1, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by two destroyers of the Home Fleet. They take up your orders again in 1 second, once the torpedoes have passed." },
-			{ 452.5, 1, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by two destroyers of the Home Fleet. They take up your orders again in 0 seconds, once the torpedoes have passed." },
-			{ 454.5, 1, "", "" },
-			{ 499.5, 3, "Turning clear of torpedoes",
-			  "Turning clear of torpedoes fired by four destroyers of the Home Fleet. She takes up your orders again in 0 seconds, once the torpedoes have passed." },
-			{ 362.5, 11, "", "" },
-			{ 385.5, 19, "", "" },
-			{ 420.5, 14, "", "" },
-		};
-		return Lines;
-	}
-
 	/** The recording as the views' JSON says it, apart from SeaFeed. */
-	bool ReadRaw(const std::string& Text, std::vector<RawView>& Out, std::string& Me, bool& bAnyFields)
+	bool ReadRaw(const std::string& Text, std::vector<RawView>& Out, std::string& Me, bool& bAnyFields, RawCount& Count)
 	{
 		AirFeed::Json J;
 		std::string Error;
@@ -675,12 +651,14 @@ namespace
 		const AirFeed::Json& Views = J["views"];
 		Me = Views.At(0)["me"].Str("att");
 		bAnyFields = false;
+		Count = RawCount();
 		std::map<int, RawPiece> Kept;
 		for (size_t K = 0; K < Views.Count(); ++K)
 		{
 			const AirFeed::Json& V = Views.At(K);
 			RawView R;
 			R.T = V["t"].Num();
+			bool bHeldHere = false, bClearHere = false;
 			const AirFeed::Json& Units = V["units"];
 			for (size_t U = 0; U < Units.Count(); ++U)
 			{
@@ -692,15 +670,355 @@ namespace
 				P.Ships = std::clamp(X["ships"].IsNumber() ? X["ships"].Int() : Unit["figures"].Int(P.Ships), 0, 64);
 				P.bHeld = X["heldFor"].IsNumber() && X["heldFor"].Int() >= 0;
 				P.bClear = X["clearFrom"].IsNumber() && X["clearFrom"].Int() >= 0 && X["clearUntil"].IsNumber();
+				P.bHeldNamed = P.bHeld && X["heldForName"].IsString() && !X["heldForName"].Str().empty();
+				P.bClearNamed = P.bClear && X["clearFromName"].IsString() && !X["clearFromName"].Str().empty();
+				P.bOrdered = X["ordered"].Truth(false);
+				P.ClearUntil = P.bClear ? X["clearUntil"].Num() : -1.0;
 				bAnyFields = bAnyFields || !X["heldFor"].IsNull() || !X["clearFrom"].IsNull() || !X["clearUntil"].IsNull() || !X["heldForName"].IsNull() ||
 				             !X["clearFromName"].IsNull() || !X["ordered"].IsNull();
+				if (P.bHeld)
+				{
+					++Count.Held;
+					Count.HeldUnnamed += P.bHeldNamed ? 0 : 1;
+					bHeldHere = true;
+				}
+				if (P.bClear)
+				{
+					++Count.Clear;
+					Count.ClearUnnamed += P.bClearNamed ? 0 : 1;
+					Count.PastUntil += R.T > P.ClearUntil + 1e-9 ? 1 : 0;
+					bClearHere = true;
+				}
+				Count.Ordered += P.bOrdered ? 1 : 0;
+				if (P.bHeld || P.bClear) Count.Fielded[P.Side].insert(Id);
 				Kept[Id] = P;
 				R.Pieces[Id] = P;
 			}
+			Count.HeldViews += bHeldHere ? 1 : 0;
+			Count.ClearViews += bClearHere ? 1 : 0;
 			Out.push_back(R);
+		}
+		// (a turn clear the next view ends, or a piece it leaves out, while its salvo has yet to land)
+		for (size_t K = 0; K + 1 < Out.size(); ++K)
+		{
+			for (const auto& Pair : Out[K].Pieces)
+			{
+				if (!Pair.second.bClear) continue;
+				const auto Next = Out[K + 1].Pieces.find(Pair.first);
+				if (Next != Out[K + 1].Pieces.end() && Next->second.bClear) continue;
+				const double Left = Pair.second.ClearUntil - Out[K + 1].T;
+				if (Left > 1e-9)
+				{
+					++Count.EndedEarly;
+					Count.MostLeft = std::max(Count.MostLeft, Left);
+				}
+			}
 		}
 		return !Out.empty();
 	}
+
+	/** A line a recording must show: at battle time T with piece Piece the camera's subject (a second into a view's two, so
+	 * the view reached is never in doubt), its tag and its line (both empty: none). Piece -1: the tags then, each "piece
+	 * tag", in the Tag. */
+	struct Shown
+	{
+		double T;
+		int Piece;
+		const char* Tag;
+		const char* Line;
+	};
+
+	/** What one of the naval rules' own-water recordings must show (recordings/own-water-r2: the "Friendly torpedoes" switch
+	 * on, the computer on both sides, so never "ordered"), known by its key, seed and views, the player Mine (the scene's
+	 * own, the views' me, att; or the other side, where its pieces are given fields): its lines string for string;
+	 * Quiet, nothing at any frame whatever the subject (its views set no field); Meet, its tags meet through the shots'
+	 * eyes, unlaid, and are lifted apart; EnemyOnly, the views give fields to the enemy's pieces only, and none shows. */
+	struct Pinned
+	{
+		const char* Key;
+		uint64_t Seed;
+		size_t Views;
+		int Mine;
+		bool bQuiet, bMeet, bEnemyOnly;
+		std::vector<Shown> Lines;
+	};
+
+	const std::vector<Pinned>& Pins()
+	{
+		static const char* const Held = "Torpedoes held";
+		static const char* const Clear = "Turning clear of torpedoes";
+		// (Force H's destroyers, the player's, divisions of four and of two: "their", "they"; the piece in the way as the
+		// rules name it, its count in figures, so "are")
+		static const char* const For4 = "Holding their torpedoes while 4 destroyers of Force H are in the line of fire. They fire the moment the water is clear.";
+		static const char* const For2 = "Holding their torpedoes while 2 destroyers of Force H are in the line of fire. They fire the moment the water is clear.";
+		// (two battle lines: the Battle Fleet's Destroyers 3, three afloat, holding for its Destroyers 2)
+		static const char* const ForBattle = "Holding their torpedoes while 4 destroyers of the Battle Fleet are in the line of fire. They fire the moment the water is clear.";
+		static const std::vector<Shown> TwoLinesAtt = { { 377.0, 12, "", "" }, { 377.0, -1, "", "" } };
+		static const std::vector<Shown> TwoLinesDef = { { 371.0, 12, "", "" }, { 377.0, 12, Held, ForBattle }, { 377.0, -1, "12 Torpedoes held", "" }, { 377.0, 1, "", "" },
+		                                                 { 383.0, 12, "", "" } };
+		static const std::vector<Pinned> All = {
+			// Light ships against battleships: Force H's destroyers hold and turn clear (35 piece-views held, 40 turning clear);
+			// the 1st Fleet's none. Destroyers 2 and 3 each hold for the other 382 to 388 s; Destroyers 4 holds and turns
+			// clear at once 410 to 416 s (held wins); each turn clear ends before its salvo lands (the heads past her), so the
+			// count never runs out: Destroyers 3 at 408 s, Destroyers 5 at 430 s (routing), Destroyers 4 at 444 s (routing).
+			{ "light-ships", 63591, 289, 0, false, true, false,
+			  { { 352.5, 6, "", "" },
+			    { 355.0, 6, Held, For4 },
+			    { 361.0, 6, "", "" },
+			    { 379.0, 2, Held, For4 },
+			    { 385.0, 2, Held, For4 },
+			    { 385.0, 3, Held, For4 },
+			    { 393.0, 4, Held, For2 },
+			    { 393.0, 5, Clear, "Turning clear of torpedoes fired by 4 destroyers of Force H. They take up their orders again in 72 seconds, once the torpedoes have passed." },
+			    { 393.0, -1, "3 Torpedoes held, 4 Torpedoes held, 5 Turning clear of torpedoes", "" },
+			    { 393.0, 1, "", "" },
+			    { 393.0, 16, "", "" },
+			    { 405.0, 3, Clear, "Turning clear of torpedoes fired by 4 destroyers of Force H. They take up their orders again in 60 seconds, once the torpedoes have passed." },
+			    { 409.0, 3, "", "" },
+			    { 411.0, 4, Held, For2 },
+			    { 415.0, 4, Held, For4 },
+			    { 419.0, 4, Clear, "Turning clear of torpedoes fired by 4 destroyers of Force H. They take up their orders again in 46 seconds, once the torpedoes have passed." },
+			    { 427.0, 5, Clear, "Turning clear of torpedoes fired by 4 destroyers of Force H. They take up their orders again in 38 seconds, once the torpedoes have passed." },
+			    { 441.0, 4, Clear, "Turning clear of torpedoes fired by 4 destroyers of Force H. They take up their orders again in 24 seconds, once the torpedoes have passed." },
+			    { 445.0, 4, "", "" },
+			    { 445.0, -1, "", "" } } },
+			// Two battle lines, and the same with the sailors' rules: only the Battle Fleet's Destroyers 3 holds (372 to 380 s,
+			// for its Destroyers 2), the enemy's as the scene takes the player (att); his own as the defender.
+			{ "two-lines", 23996, 305, 0, false, false, true, TwoLinesAtt },
+			{ "two-lines", 23996, 305, 1, false, false, false, TwoLinesDef },
+			{ "two-lines-sailors", 71510, 315, 0, false, false, true, TwoLinesAtt },
+			{ "two-lines-sailors", 71510, 315, 1, false, false, false, TwoLinesDef },
+			// The action off Samar, and the same with the sailors' rules: recorded with the switch on, no piece holds or turns
+			// clear, and nothing shows.
+			{ "samar", 16077, 220, 0, true, false, false, {} },
+			{ "samar-sailors", 16077, 220, 0, true, false, false, {} },
+		};
+		return All;
+	}
+
+	/** The pins for a recording with the player Mine (null: none). */
+	const Pinned* PinFor(const SeaFeed::Recording& Rec, int Mine)
+	{
+		for (const Pinned& P : Pins())
+		{
+			if (Rec.Key == P.Key && Rec.Seed == P.Seed && Rec.Views.size() == P.Views && P.Mine == Mine) return &P;
+		}
+		return nullptr;
+	}
+
+	/** The tags of the moment, "piece tag", in order. */
+	std::string TagsOf(const SeaWords::Words& W)
+	{
+		std::string Out;
+		for (const SeaWords::Tag& T : W.Tags) Out += (Out.empty() ? "" : ", ") + std::to_string(T.Piece) + " " + T.Text;
+		return Out;
+	}
+
+	/** A line pinned for the moment shown: its tag and its line with its piece the subject (or, Piece -1, the tags). */
+	void CheckShown(const std::map<int, SeaShow::Piece>& Pieces, int Mine, double Now, double T, const Shown& C, const std::string& Who)
+	{
+		char Name[128];
+		std::snprintf(Name, sizeof Name, "%sat %.1f s, %s", Who.c_str(), C.T, C.Piece >= 0 ? ("piece " + std::to_string(C.Piece) + " the subject:").c_str() : "the tags:");
+		Expect(std::fabs(T - C.T) < 1e-9, std::string(Name) + " on a frame", std::to_string(T), "on it");
+		const SeaWords::Words On = SeaWords::Write(Pieces, Mine, C.Piece, Now);
+		if (C.Piece < 0)
+		{
+			Same(std::string(Name) + " each", TagsOf(On), C.Tag);
+			return;
+		}
+		std::string Tag;
+		for (const SeaWords::Tag& Tg : On.Tags)
+			if (Tg.Piece == C.Piece) Tag = Tg.Text;
+		Same(std::string(Name) + " the tag", Tag, C.Tag);
+		Same(std::string(Name) + " the line", On.Line, C.Line);
+	}
+
+	// ---- The fields as SeaFeed reads them and the show carries them: views written here ------------------------------
+
+	/** Six views written here (100 to 110 s), for what the computer's sides never record (the own-water recordings are
+	 * fought by the computer on both sides): the player's order, a ship alone holding and turning clear, a division turning
+	 * clear under his order, held winning over turning clear under his order, the count's last second and a turn clear the
+	 * views keep past its salvo's landing; what SeaFeed leaves unread (a turn clear without its clearUntil, an id below 0);
+	 * a view without the fields clearing them, ordered too; and the enemy's pieces holding and turning clear under an
+	 * order. Each piece's fields as the rules write them into its extra. */
+	std::string WrittenViews()
+	{
+		struct Is
+		{
+			int Id;
+			const char* Side;
+			const char* Kind;
+			const char* Name;
+			int Ships;
+			double X, Y;
+		};
+		const Is Pieces[] = { { 1, "att", "dd", "Destroyers 1", 4, 9000.0, 9000.0 },   { 2, "att", "ca", "Cruiser 2", 1, 9000.0, 9600.0 },
+		                      { 3, "att", "dd", "Destroyers 3", 2, 9400.0, 9000.0 },   { 5, "att", "ca", "Cruiser 3", 1, 9400.0, 9600.0 },
+		                      { 11, "def", "dd", "Destroyers 2", 4, 11000.0, 9000.0 }, { 12, "def", "ca", "Cruiser 1", 1, 11000.0, 9600.0 } };
+		auto Fields = [](double T, int Id) -> std::string
+		{
+			switch (Id)
+			{
+				// (Destroyers 1, a division: holds for Cruiser 3 under his order, 100 and 102 s; nothing after)
+				case 1: return T <= 102.0 ? ",\"heldFor\":5,\"heldForName\":\"a cruiser of the Home Fleet\",\"ordered\":true" : "";
+				// (Cruiser 2, a ship alone: turns clear of Destroyers 1's salvo, landing at 105.4 s, under his order to 102 s;
+				// the views keep the turn past the landing)
+				case 2: return std::string(",\"clearFrom\":1,\"clearUntil\":105.4,\"clearFromName\":\"4 destroyers of the Home Fleet\"") + (T <= 102.0 ? ",\"ordered\":true" : "");
+				// (Destroyers 3, a division of two: a turn clear without its clearUntil at 100 s, held for an id below 0 at 102 s,
+				// turning clear under his order at 104 s, its salvo landing at 115.4 s, and let go at 106 s)
+				case 3:
+					return T <= 100.0   ? ",\"clearFrom\":1,\"clearFromName\":\"4 destroyers of the Home Fleet\""
+					       : T <= 102.0 ? ",\"heldFor\":-3,\"heldForName\":\"a cruiser of the Home Fleet\""
+					       : T <= 104.0 ? ",\"clearFrom\":1,\"clearUntil\":115.4,\"clearFromName\":\"4 destroyers of the Home Fleet\",\"ordered\":true"
+					                    : "";
+				// (Cruiser 3, a ship alone: holds for Destroyers 3 at 104 and 106 s; at 108 and 110 s holds for Destroyers 1 and
+				// turns clear of its salvo at once, under his order)
+				case 5:
+					return T <= 102.0   ? ""
+					       : T <= 106.0 ? ",\"heldFor\":3,\"heldForName\":\"2 destroyers of the Home Fleet\""
+					                    : ",\"heldFor\":1,\"heldForName\":\"4 destroyers of the Home Fleet\",\"clearFrom\":1,\"clearUntil\":109.4,"
+					                      "\"clearFromName\":\"4 destroyers of the Home Fleet\",\"ordered\":true";
+				// (the enemy's: Destroyers 2 holds for Cruiser 1, Cruiser 1 turns clear of Destroyers 2's salvo, both ordered)
+				case 11: return ",\"heldFor\":12,\"heldForName\":\"a cruiser of the Battle Fleet\",\"ordered\":true";
+				case 12: return ",\"clearFrom\":11,\"clearUntil\":130.4,\"clearFromName\":\"4 destroyers of the Battle Fleet\",\"ordered\":true";
+				default: return "";
+			}
+		};
+		std::string Out = "{\"what\":\"views written by sea_words_test\",\"recording\":true,\"key\":\"written-views\",\"seed\":239,\"step\":2,"
+		                  "\"field\":{\"size\":20000,\"edge\":5000,\"zoneName\":\"North Sea\",\"title\":\"Views written here\",\"date\":\"Practice\","
+		                  "\"att\":{\"nat\":\"UK\",\"adj\":\"British\"},\"def\":{\"nat\":\"GER\",\"adj\":\"German\"},"
+		                  "\"classes\":{\"ca\":{\"len\":180,\"beam\":20,\"speed\":13,\"turn\":0.08,\"reach\":5000},\"dd\":{\"len\":110,\"beam\":11,\"speed\":14,\"turn\":0.12,\"reach\":5000}},"
+		                  "\"torp\":{\"travel\":75,\"radius\":800}},\"views\":[";
+		char Buf[640];
+		for (int K = 0; K < 6; ++K)
+		{
+			const double T = 100.0 + 2.0 * K;
+			std::snprintf(Buf, sizeof Buf, "%s{\"t\":%.0f,\"limit\":1500,\"speed\":1,\"me\":\"att\",\"units\":[", K ? "," : "", T);
+			Out += Buf;
+			for (size_t P = 0; P < sizeof Pieces / sizeof Pieces[0]; ++P)
+			{
+				const Is& I = Pieces[P];
+				std::snprintf(Buf, sizeof Buf,
+				              "%s{\"id\":%d,\"side\":\"%s\",\"kind\":\"%s\",\"name\":\"%s\",\"nat\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":0,\"str\":1,\"mor\":1,"
+				              "\"state\":\"steady\",\"figures0\":%d,\"figures\":%d,\"act\":\"fight\",\"speed\":5,\"engaged\":-1,\"extra\":{\"cls\":\"%s\",\"ships0\":%d,\"ships\":%d",
+				              P ? "," : "", I.Id, I.Side, I.Kind, I.Name, I.Side[0] == 'a' ? "UK" : "GER", I.X, I.Y + 10.0 * K, I.Ships, I.Ships, I.Kind, I.Ships, I.Ships);
+				Out += Buf;
+				Out += Fields(T, I.Id) + "}}";
+			}
+			Out += "]}";
+		}
+		return Out + "]}";
+	}
+
+	std::string Told(const SeaShow::Piece* P)
+	{
+		if (!P) return "(not in the view)";
+		char Buf[256];
+		std::snprintf(Buf, sizeof Buf, "held for %d \"%s\", clear of %d until %.1f \"%s\", %s", P->HeldFor, P->HeldForName.c_str(), P->ClearFrom, P->ClearUntil,
+		              P->ClearFromName.c_str(), P->bOrdered ? "ordered" : "not ordered");
+		return Buf;
+	}
+
+	void Feed()
+	{
+		std::printf("the fields as SeaFeed reads them and the show carries them (views written here: his order, a ship alone, the last second, past the landing)\n");
+		SeaFeed::Recording Rec;
+		std::string Error;
+		if (!SeaFeed::ReadRecording(WrittenViews(), Rec, Error) || Rec.Views.size() != 6)
+		{
+			Expect(false, "the views written here read", Error.empty() ? std::to_string(Rec.Views.size()) + " views" : Error, "6 views");
+			return;
+		}
+		auto PieceIn = [&Rec](size_t View, int Id) -> const SeaShow::Piece*
+		{
+			for (const SeaShow::Piece& P : Rec.Views[View].Pieces)
+				if (P.Id == Id) return &P;
+			return nullptr;
+		};
+		{
+			const SeaShow::Piece* P = PieceIn(0, 1);
+			Expect(P && P->HeldFor == 5 && P->HeldForName == "a cruiser of the Home Fleet" && P->bOrdered && P->ClearFrom < 0, "held, under his order: read", Told(P),
+			       "held for 5, its name, ordered");
+			P = PieceIn(0, 2);
+			Expect(P && P->ClearFrom == 1 && std::fabs(P->ClearUntil - 105.4) < 1e-9 && P->ClearFromName == "4 destroyers of the Home Fleet" && P->bOrdered && P->HeldFor < 0,
+			       "turning clear, under his order: read", Told(P), "clear of 1 until 105.4, its name, ordered");
+			P = PieceIn(0, 3);
+			Expect(P && P->ClearFrom == -1 && P->ClearFromName.empty() && P->ClearUntil < 0.0, "turning clear without its clearUntil: not read", Told(P), "none");
+			P = PieceIn(1, 3);
+			Expect(P && P->HeldFor == -1 && P->HeldForName.empty(), "held for an id below 0: none", Told(P), "none");
+			P = PieceIn(2, 1);
+			Expect(P && P->HeldFor == -1 && P->HeldForName.empty() && !P->bOrdered, "a view without the fields clears them, ordered too", Told(P), "none, not ordered");
+			P = PieceIn(2, 2);
+			Expect(P && P->ClearFrom == 1 && P->ClearFromName == "4 destroyers of the Home Fleet" && !P->bOrdered, "his order off, the turn clear standing: read", Told(P),
+			       "clear of 1, not ordered");
+			P = PieceIn(4, 2);
+			Expect(P && P->ClearFrom == 1 && std::fabs(P->ClearUntil - 105.4) < 1e-9, "a turn clear the views keep past its salvo's landing: read", Told(P), "clear of 1 until 105.4");
+			P = PieceIn(4, 5);
+			Expect(P && P->HeldFor == 1 && P->ClearFrom == 1 && std::fabs(P->ClearUntil - 109.4) < 1e-9 && P->bOrdered, "held and turning clear at once, under his order: both read",
+			       Told(P), "held for 1, clear of 1 until 109.4, ordered");
+			P = PieceIn(0, 11);
+			Expect(P && P->HeldFor == 12 && P->bOrdered, "the enemy's held, ordered: read (the words leave it)", Told(P), "held for 12, ordered");
+		}
+		// Through the show, as the recordings are played (32 frames a second), the words of the moment shown.
+		static const char* const Held = "Torpedoes held";
+		static const char* const Clear = "Turning clear of torpedoes";
+		const std::vector<Shown> Att = {
+			{ 101.0, -1, "1 Torpedoes held, 2 Turning clear of torpedoes", "" },
+			{ 101.0, 1, Held, "Holding their torpedoes while a cruiser of the Home Fleet is in the line of fire. Your order stands: they fire the moment the water is clear." },
+			{ 101.0, 2, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. She takes up your orders again in 5 seconds, once the torpedoes have passed." },
+			{ 101.0, 3, "", "" },
+			{ 101.0, 11, "", "" },
+			{ 101.0, 12, "", "" },
+			{ 103.0, 2, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. She takes up your orders again in 3 seconds, once the torpedoes have passed." },
+			{ 103.0, 3, "", "" },
+			{ 104.5, -1, "2 Turning clear of torpedoes, 3 Turning clear of torpedoes, 5 Torpedoes held", "" },
+			{ 104.5, 1, "", "" },
+			{ 104.5, 2, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. She takes up her orders again in 1 second, once the torpedoes have passed." },
+			{ 104.5, 3, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. They take up your orders again in 11 seconds, once the torpedoes have passed." },
+			{ 104.5, 5, Held, "Holding her torpedoes while 2 destroyers of the Home Fleet are in the line of fire. She fires the moment the water is clear." },
+			{ 106.5, -1, "2 Turning clear of torpedoes, 5 Torpedoes held", "" },
+			{ 106.5, 2, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Home Fleet. She takes up her orders again in 0 seconds, once the torpedoes have passed." },
+			{ 106.5, 3, "", "" },
+			{ 108.5, -1, "2 Turning clear of torpedoes, 5 Torpedoes held", "" },
+			{ 108.5, 5, Held, "Holding her torpedoes while 4 destroyers of the Home Fleet are in the line of fire. Your order stands: she fires the moment the water is clear." },
+		};
+		const std::vector<Shown> Def = {
+			{ 101.0, -1, "11 Torpedoes held, 12 Turning clear of torpedoes", "" },
+			{ 101.0, 11, Held, "Holding their torpedoes while a cruiser of the Battle Fleet is in the line of fire. Your order stands: they fire the moment the water is clear." },
+			{ 101.0, 12, Clear, "Turning clear of torpedoes fired by 4 destroyers of the Battle Fleet. She takes up your orders again in 30 seconds, once the torpedoes have passed." },
+			{ 101.0, 1, "", "" },
+			{ 101.0, 2, "", "" },
+		};
+		for (const int Mine : { 0, 1 })
+		{
+			SeaShow::Show Show(Rec.Seed);
+			Show.SetField(Rec.Board);
+			Show.SetMine(Mine);
+			Show.Eye = SeaShow::Vec(10000.0, 7000.0, 900.0);
+			size_t Taken = 0;
+			auto TakeNext = [&]()
+			{
+				const SeaFeed::Frame& F = Rec.Views[Taken++];
+				Show.Take(F.Head.T, F.Pieces, F.Events, F.bZones ? &F.Zones : nullptr, F.Head.Contact);
+			};
+			TakeNext();
+			TakeNext();
+			const std::vector<Shown>& Want = Mine == 0 ? Att : Def;
+			size_t Next = 0;
+			for (long K = 0; Next < Want.size(); ++K)
+			{
+				const double T = Rec.Views.front().Head.T + static_cast<double>(K) / 32.0;
+				if (T > Rec.Views.back().Head.T + 1e-9) break;
+				while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
+				Show.Advance(T);
+				while (Next < Want.size() && Want[Next].T <= T + 1e-9) CheckShown(Show.Pieces(), Mine, Show.Shown(), T, Want[Next++], Mine == 0 ? "written, " : "written, the player def, ");
+			}
+			Expect(Next == Want.size(), std::string("written, the player ") + (Mine == 0 ? "att" : "def") + ": every line checked",
+			       std::to_string(Next) + " of " + std::to_string(Want.size()), "all");
+		}
+	}
+
+	// ---- The recordings, played ----------------------------------------------------------------------------------
 
 	/** The ships as the show draws them, for two shows to be held the same. */
 	std::string ShipsOf(const SeaShow::Show& Show)
@@ -715,33 +1033,10 @@ namespace
 		return Out;
 	}
 
-	bool PlayRecording(const std::string& Path)
+	/** One play of a recording through the show, the player Mine (the scene's own, the first view's me; or the other side,
+	 * where the views give fields to its pieces), and what is pinned for it then (null: nothing). */
+	void PlayAs(const SeaFeed::Recording& Rec, const std::vector<RawView>& Raw, bool bFields, int Mine, const Pinned* Pin)
 	{
-		std::ifstream In(Path, std::ios::binary);
-		if (!In)
-		{
-			std::printf("%s: cannot read\n", Path.c_str());
-			++Failures;
-			return false;
-		}
-		std::stringstream Buffer;
-		Buffer << In.rdbuf();
-		SeaFeed::Recording Rec;
-		std::string Error;
-		std::vector<RawView> Raw;
-		std::string Me;
-		bool bFields = false;
-		if (!SeaFeed::ReadRecording(Buffer.str(), Rec, Error) || !ReadRaw(Buffer.str(), Raw, Me, bFields))
-		{
-			std::printf("%s: %s\n", Path.c_str(), Error.empty() ? "not a recording" : Error.c_str());
-			++Failures;
-			return false;
-		}
-		// (the player's side as the scene takes it, ASeaBattle::PlaceTorpedoWords: the first view's "me")
-		const int Mine = SeaFeed::SideOf(Rec.Views.front().Head.Me);
-		const bool bStandIn = Rec.Key == "two-lines-torpedoes";
-		std::printf("%s: %s, the player %s; %s\n", Rec.Key.c_str(), Rec.Board.Title.c_str(), Me.c_str(), bFields ? "the views carry the torpedo words' fields" : "no torpedo words' fields");
-
 		// The same recording with every field taken off: the show must be the same, ship for ship (the fields change
 		// nothing but the words).
 		SeaFeed::Recording Bare = Rec;
@@ -779,24 +1074,31 @@ namespace
 		for (const SeaFeed::Frame& F : Rec.Views)
 			for (const SeaShow::Piece& P : F.Pieces)
 				if (!P.Name.empty()) Names.insert(P.Name);
+		// (each of his own pieces some view gives a field, with a ship afloat then: each must be tagged)
+		std::set<int> OwnFielded;
+		for (const RawView& V : Raw)
+			for (const auto& Pair : V.Pieces)
+				if ((Pair.second.bHeld || Pair.second.bClear) && Pair.second.Side == Mine && Pair.second.Ships >= 1) OwnFielded.insert(Pair.first);
 
 		// The show's own fixed step: within it of a view's second, the view the picture has reached is in doubt (the show
 		// takes it at its own step, not the frame's), so those frames are not held to the views read apart.
 		constexpr double Doubt = 0.06;
 		const double T0 = Rec.Views.front().Head.T, EndT = Rec.Views.back().Head.T;
-		long Frames = 0, Judged = 0, TagFrames = 0, Tags = 0, Lines = 0, TagsOff = 0, TextOff = 0, LinesOff = 0, EnemySet = 0, EnemySaid = 0, Unled = 0, Dirty = 0, Named = 0, Apart = 0;
-		std::map<std::string, long> Looks, RawOn;
+		long Frames = 0, Judged = 0, TagFrames = 0, Tags = 0, Lines = 0, Subjects = 0, TagsOff = 0, TextOff = 0, LinesOff = 0, EnemySet = 0, EnemySaid = 0, Unled = 0, Dirty = 0,
+		     Named = 0, Apart = 0;
+		std::map<std::string, long> Looks, RawOn, LiftedLooks;
 		long LaidLifted = 0, LaidWrong = 0, LookSubjectOff = 0;
 		std::string FirstLaidWrong;
 		std::string FirstOff;
 		std::map<int, long> TaggedFrames;
 		size_t NextCheck = 0;
-		std::vector<Shown> Checks = bStandIn ? StandInLines() : std::vector<Shown>();
-		std::sort(Checks.begin(), Checks.end(), [](const Shown& L, const Shown& R) { return L.T < R.T; });
+		std::vector<Shown> Checks = Pin ? Pin->Lines : std::vector<Shown>();
+		std::stable_sort(Checks.begin(), Checks.end(), [](const Shown& L, const Shown& R) { return L.T < R.T; });
+		const std::string Who = Mine != SeaFeed::SideOf(Rec.Views.front().Head.Me) ? std::string("the player ") + (Mine == 1 ? "def" : "att") + ", " : std::string();
 		size_t RawAt = 0;
 		for (long K = 0;; ++K)
 		{
-			// (32 frames a second: a frame's second is exact, so the stand-in's checks fall on frames)
+			// (32 frames a second: a frame's second is exact, so the pinned lines fall on frames)
 			const double T = T0 + static_cast<double>(K) / 32.0;
 			if (T > EndT + 1e-9) break;
 			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
@@ -858,6 +1160,7 @@ namespace
 			// The line with each piece the camera's subject: its own words or none (never another's), clean, naming no ship.
 			for (const auto& Pair : Pieces)
 			{
+				++Subjects;
 				const SeaWords::Words On = SeaWords::Write(Pieces, Mine, Pair.first, Now);
 				const SeaWords::Said Own = SeaWords::Of(Pair.second, Pieces, Mine, Now);
 				if (On.Line != Own.Line || (!On.Line.empty() && On.LinePiece != Pair.first)) ++LinesOff;
@@ -868,20 +1171,8 @@ namespace
 				for (const std::string& Name : Names)
 					if (On.Line.find(Name) != std::string::npos) ++Named;
 			}
-			// The stand-in's own lines, string for string.
-			while (NextCheck < Checks.size() && Checks[NextCheck].T <= T + 1e-9)
-			{
-				const Shown& C = Checks[NextCheck++];
-				const SeaWords::Words On = SeaWords::Write(Pieces, Mine, C.Piece, Now);
-				std::string Tag;
-				for (const SeaWords::Tag& Tg : On.Tags)
-					if (Tg.Piece == C.Piece) Tag = Tg.Text;
-				char Name[96];
-				std::snprintf(Name, sizeof Name, "at %.1f s, piece %d the subject:", C.T, C.Piece);
-				Expect(std::fabs(T - C.T) < 1e-9, std::string(Name) + " on a frame", std::to_string(T), "on it");
-				Same(std::string(Name) + " the tag", Tag, C.Tag);
-				Same(std::string(Name) + " the line", On.Line, C.Line);
-			}
+			// The lines pinned for this recording, string for string.
+			while (NextCheck < Checks.size() && Checks[NextCheck].T <= T + 1e-9) CheckShown(Pieces, Mine, Now, T, Checks[NextCheck++], Who);
 			if (bFields && ShipsOf(Show) != ShipsOf(BareShow)) ++Apart;
 			// The tags on the screen through the eyes ShotEye puts the camera at (a Fleets shot on each tagged piece, the Line
 			// shot from ahead of his line's guide, the overview), each over the top of its leading ship
@@ -990,7 +1281,10 @@ namespace
 						}
 					if (bRawOn) ++RawOn[Eye.Name];
 					const std::vector<SeaWords::Laid> L = SeaWords::Lay(Spots, Kept, TagHigh, TagStalk);
-					for (const SeaWords::Laid& One : L) LaidLifted += One.Lifts > 0 ? 1 : 0;
+					long LiftedHere = 0;
+					for (const SeaWords::Laid& One : L) LiftedHere += One.Lifts > 0 ? 1 : 0;
+					LaidLifted += LiftedHere;
+					if (LiftedHere > 0) ++LiftedLooks[Eye.Name];
 					const std::string Why = Wrong(Spots, Kept, L);
 					if (!Why.empty())
 					{
@@ -1014,7 +1308,8 @@ namespace
 		}
 		const bool bEnded = !bFields || Show.Describe() == BareShow.Describe();
 
-		std::printf("  %ld frames (%ld held to the views), %ld with tags (%ld tags), %ld lines; enemy piece-views with a field set %ld\n", Frames, Judged, TagFrames, Tags, Lines, EnemySet);
+		std::printf("  %ld frames (%ld held to the views), %ld with tags (%ld tags), %ld lines of %ld subjects tried; enemy piece-views with a field set %ld\n", Frames, Judged,
+		            TagFrames, Tags, Lines, Subjects, EnemySet);
 		Expect(TagsOff == 0 && TextOff == 0, "the tags stand over his own pieces exactly while a field is set",
 		       std::to_string(TagsOff) + " frames off, " + std::to_string(TextOff) + " worded off" + (FirstOff.empty() ? "" : " (" + FirstOff + ")"), "0");
 		Expect(EnemySaid == 0, "an enemy piece never has words (tag or line)", std::to_string(EnemySaid), "0");
@@ -1030,40 +1325,127 @@ namespace
 		{
 			Expect(Apart == 0 && bEnded, "the fields change nothing in the show (ship for ship as without them)", std::to_string(Apart) + " frames apart" + (bEnded ? "" : ", ending apart"), "0");
 		}
+		if (!OwnFielded.empty())
+		{
+			// (each of his own pieces the views give a field, with a ship afloat then, is tagged)
+			std::string Each;
+			bool bAll = true;
+			for (const int Id : OwnFielded)
+			{
+				Each += (Each.empty() ? "" : ", ") + std::to_string(Id) + ": " + std::to_string(TaggedFrames[Id]);
+				bAll = bAll && TaggedFrames[Id] > 0;
+			}
+			Expect(bAll, "each of his own pieces the views give a field is tagged (frames)", Each, "each some");
+		}
+		long AllLooks = 0, AllOn = 0;
 		if (!Looks.empty())
 		{
-			long AllLooks = 0, AllOn = 0;
 			std::string Each;
 			for (const auto& Pair : Looks)
 			{
 				AllLooks += Pair.second;
 				AllOn += RawOn[Pair.first];
-				Each += (Each.empty() ? "" : ", ") + Pair.first + " " + std::to_string(Pair.second) + " (" + std::to_string(RawOn[Pair.first]) + " met)";
+				Each += (Each.empty() ? "" : ", ") + Pair.first + " " + std::to_string(Pair.second) + " (" + std::to_string(RawOn[Pair.first]) + " met, " +
+				        std::to_string(LiftedLooks[Pair.first]) + " with a tag lifted)";
 			}
-			std::printf("  looks with two tags or more, and those whose tags would meet unlaid: %s; %ld tags lifted\n", Each.c_str(), LaidLifted);
+			std::printf("  looks with two tags or more, those whose tags would meet unlaid and those laid with a tag lifted: %s; %ld tags lifted\n", Each.c_str(), LaidLifted);
 			Expect(LaidWrong == 0, "the tags laid through the shots' eyes: never on one another nor on the bar or the line",
 			       std::to_string(LaidWrong) + " looks wrong of " + std::to_string(AllLooks) + (FirstLaidWrong.empty() ? "" : " (" + FirstLaidWrong + ")"), "0");
 			Expect(LookSubjectOff == 0, "the subject's tag on her ship in every look", std::to_string(LookSubjectOff) + " off", "0");
-			if (bStandIn)
-			{
-				// (the stand-in does put tags on one another, unlaid: its divisions turn clear together)
-				Expect(AllOn > 0 && LaidLifted > 0, "the stand-in's tags meet on the screen, and are lifted apart",
-				       std::to_string(AllOn) + " looks met, " + std::to_string(LaidLifted) + " lifted", "some, some");
-			}
 		}
-		if (bStandIn)
+		if (!Pin) return;
+		// What is pinned for this recording.
+		const std::string Of = std::string(Pin->Key) + (Who.empty() ? "" : " (" + Who.substr(0, Who.size() - 2) + ")");
+		Expect(NextCheck == Checks.size(), Of + ": every pinned line checked", std::to_string(NextCheck) + " of " + std::to_string(Checks.size()), "all");
+		if (Pin->bMeet)
 		{
-			// (not empty: each own piece given spans was tagged, and the enemy had spans of its own to stay quiet through)
-			std::string Each;
-			bool bAll = true;
-			for (const int Id : { 1, 2, 3, 4, 6, 7 })
-			{
-				Each += (Each.empty() ? "" : ", ") + std::to_string(Id) + ": " + std::to_string(TaggedFrames[Id]);
-				bAll = bAll && TaggedFrames[Id] > 0;
-			}
-			Expect(bAll && EnemySet > 0 && NextCheck == Checks.size(), "the stand-in's spans each tagged, the enemy's untagged, every line checked",
-			       Each + "; enemy " + std::to_string(EnemySet) + "; " + std::to_string(NextCheck) + " of " + std::to_string(Checks.size()) + " lines", "every own span, enemy spans, all lines");
+			// (its divisions hold and turn clear side by side: their tags meet on the screen, unlaid, and are lifted apart)
+			Expect(AllOn > 0 && LaidLifted > 0 && LaidWrong == 0, Of + ": its tags meet on the screen, and are lifted apart",
+			       std::to_string(AllOn) + " looks met of " + std::to_string(AllLooks) + ", " + std::to_string(LaidLifted) + " lifted", "some, some");
 		}
+		if (Pin->bEnemyOnly)
+		{
+			Expect(bFields && EnemySet > 0 && Tags == 0 && Lines == 0 && EnemySaid == 0, Of + ": the enemy's fields set in the views, and no words at all",
+			       std::to_string(EnemySet) + " enemy piece-views set (frames), " + std::to_string(Tags) + " tags, " + std::to_string(Lines) + " lines", "some set, none");
+		}
+		if (Pin->bQuiet)
+		{
+			Expect(!bFields && Tags == 0 && Lines == 0 && Subjects > 0, Of + ": recorded with the switch on, no field: nothing at any frame, whatever the subject",
+			       std::to_string(Frames) + " frames, " + std::to_string(Subjects) + " subjects tried, " + std::to_string(Tags) + " tags, " + std::to_string(Lines) + " lines",
+			       "nothing");
+		}
+	}
+
+	bool PlayRecording(const std::string& Path)
+	{
+		std::ifstream In(Path, std::ios::binary);
+		if (!In)
+		{
+			std::printf("%s: cannot read\n", Path.c_str());
+			++Failures;
+			return false;
+		}
+		std::stringstream Buffer;
+		Buffer << In.rdbuf();
+		SeaFeed::Recording Rec;
+		std::string Error;
+		std::vector<RawView> Raw;
+		std::string Me;
+		bool bFields = false;
+		RawCount Count;
+		if (!SeaFeed::ReadRecording(Buffer.str(), Rec, Error) || !ReadRaw(Buffer.str(), Raw, Me, bFields, Count))
+		{
+			std::printf("%s: %s\n", Path.c_str(), Error.empty() ? "not a recording" : Error.c_str());
+			++Failures;
+			return false;
+		}
+		// (the player's side as the scene takes it, ASeaBattle::PlaceTorpedoWords: the first view's "me")
+		const int Mine = SeaFeed::SideOf(Rec.Views.front().Head.Me);
+		std::printf("%s: %s, the player %s; %s\n", Rec.Key.c_str(), Rec.Board.Title.c_str(), Me.c_str(), bFields ? "the views carry the torpedo words' fields" : "no torpedo words' fields");
+
+		// SeaFeed reads every field the views set, as the JSON read apart has them.
+		long Held = 0, Clear = 0, HeldUnnamed = 0, ClearUnnamed = 0, Ordered = 0;
+		for (const SeaFeed::Frame& F : Rec.Views)
+			for (const SeaShow::Piece& P : F.Pieces)
+			{
+				Held += P.HeldFor >= 0 ? 1 : 0;
+				HeldUnnamed += P.HeldFor >= 0 && P.HeldForName.empty() ? 1 : 0;
+				Clear += P.ClearFrom >= 0 ? 1 : 0;
+				ClearUnnamed += P.ClearFrom >= 0 && P.ClearFromName.empty() ? 1 : 0;
+				Ordered += P.bOrdered ? 1 : 0;
+			}
+		char Buf[400];
+		std::snprintf(Buf, sizeof Buf,
+		              "  the views set %ld piece-views held (in %ld views), %ld turning clear (in %ld views); held without a name %ld, turning clear without one %ld, "
+		              "ordered %ld; turning clear past the landing %ld; turns ended before their salvo landed %ld (the count at most %.1f s from its end)\n",
+		              Count.Held, Count.HeldViews, Count.Clear, Count.ClearViews, Count.HeldUnnamed, Count.ClearUnnamed, Count.Ordered, Count.PastUntil, Count.EndedEarly, Count.MostLeft);
+		std::printf("%s", Buf);
+		Expect(Held == Count.Held && Clear == Count.Clear && HeldUnnamed == Count.HeldUnnamed && ClearUnnamed == Count.ClearUnnamed && Ordered == Count.Ordered,
+		       "SeaFeed reads every field the views set (held, turning clear, their names, ordered)",
+		       std::to_string(Held) + " held, " + std::to_string(Clear) + " turning clear, " + std::to_string(HeldUnnamed + ClearUnnamed) + " unnamed, " + std::to_string(Ordered) +
+		           " ordered",
+		       std::to_string(Count.Held) + ", " + std::to_string(Count.Clear) + ", " + std::to_string(Count.HeldUnnamed + Count.ClearUnnamed) + ", " + std::to_string(Count.Ordered));
+
+		// As the scene takes the player; and, where the views give fields to the other side's pieces, as that side too (the
+		// scene never does for this recording, its player the first view's me: this play reads those fields as his own, so
+		// the real fields of either side reach the words).
+		size_t Played = 0, PinPlays = 0;
+		for (const Pinned& P : Pins()) PinPlays += Rec.Key == P.Key && Rec.Seed == P.Seed && Rec.Views.size() == P.Views ? 1 : 0;
+		const Pinned* Pin = PinFor(Rec, Mine);
+		PlayAs(Rec, Raw, bFields, Mine, Pin);
+		Played += Pin ? 1 : 0;
+		if (Mine == 0 || Mine == 1)
+		{
+			const int Other = 1 - Mine;
+			if (!Count.Fielded[Other].empty())
+			{
+				std::printf("%s as if the player were the %s (his own: the views' fields on that side's pieces)\n", Rec.Key.c_str(), Other == 1 ? "defender" : "attacker");
+				const Pinned* OtherPin = PinFor(Rec, Other);
+				PlayAs(Rec, Raw, bFields, Other, OtherPin);
+				Played += OtherPin ? 1 : 0;
+			}
+		}
+		if (PinPlays > 0) Expect(Played == PinPlays, Rec.Key + ": every pinned play played", std::to_string(Played) + " of " + std::to_string(PinPlays), "all");
 		return true;
 	}
 }
@@ -1072,6 +1454,7 @@ int main(int Argc, char** Argv)
 {
 	Words();
 	Placing();
+	Feed();
 	for (int K = 1; K < Argc; ++K) PlayRecording(Argv[K]);
 	std::printf("%d checks: %d passed, %d failed\n", Passes + Failures, Passes, Failures);
 	std::printf(Failures ? "SOME CHECKS FAILED\n" : "ALL CHECKS PASSED\n");
