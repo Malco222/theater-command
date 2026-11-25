@@ -23,6 +23,7 @@
 #include "RHI.h"
 #include "UnrealClient.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -219,6 +220,66 @@ namespace
 			Gather(Window.ToSharedRef(), true, Out, bDeep);
 		}
 		return Out;
+	}
+
+	/** Every button in the window with words on it, drawn or not: those below the foot of a list that scrolls too. */
+	void GatherAll(const TSharedRef<SWidget>& Widget, TArray<TSharedRef<SWidget>>& Out)
+	{
+		static const FName ButtonType(TEXT("SButton"));
+		if (!Widget->GetVisibility().IsVisible())
+		{
+			return;
+		}
+		if (Widget->GetType() == ButtonType)
+		{
+			Out.Add(Widget);
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 Index = 0; Index < Children->Num(); ++Index)
+			{
+				GatherAll(Children->GetChildAt(Index), Out);
+			}
+		}
+	}
+
+	/**
+	 * Brings into view the first button carrying the words, in the list that scrolls round it. (Release 2, the Mac's pass
+	 * 1b, 25 November 2026: a button below the foot of a page or a province panel that scrolls is never drawn, so it has no
+	 * size and a press cannot find it: the town row under the PROVINCE tab and a fleet's LAY MINES both read MISSING
+	 * though the game had them. A player scrolls with the wheel; a step file says scroll-to first.) Returns 1 where it was
+	 * scrolled to, 0 where it was found with no list round it, -1 where no button carries the words.
+	 */
+	int32 ScrollTo(const FString& Words)
+	{
+		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
+		if (!Window.IsValid())
+		{
+			return -1;
+		}
+		const FString Want = Plain(Words);
+		TArray<TSharedRef<SWidget>> All;
+		GatherAll(Window.ToSharedRef(), All);
+		static const FName ScrollType(TEXT("SScrollBox"));
+		for (const TSharedRef<SWidget>& Each : All)
+		{
+			FString Lettered;
+			Lettering(Each, Lettered);
+			if (Lettered.IsEmpty() || !Plain(Lettered).Contains(Want))
+			{
+				continue;
+			}
+			for (TSharedPtr<SWidget> Up = Each->GetParentWidget(); Up.IsValid(); Up = Up->GetParentWidget())
+			{
+				if (Up->GetType() == ScrollType)
+				{
+					StaticCastSharedPtr<SScrollBox>(Up)->ScrollDescendantIntoView(Each, false, EDescendantScrollDestination::Center);
+					return 1;
+				}
+			}
+			return 0;
+		}
+		return -1;
 	}
 
 	/**
@@ -848,6 +909,20 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 		Press(Player, Step.Target);
 		bMonth = bMonth || (bScrambleUp && !Player.GetScramble().bVisible && !Player.IsFightingLive());
 	}
+	else if (Verb == TEXT("scroll-to"))
+	{
+		// (release 2: a button below the foot of a list that scrolls is brought into view, for the next step's press)
+		const int32 Scrolled = ScrollTo(Step.Target);
+		if (Scrolled < 0)
+		{
+			bMissing = true;
+			Note = FString::Printf(TEXT("no button in the window carries the words \"%s\", drawn or not"), *Step.Target);
+		}
+		else if (Scrolled == 0)
+		{
+			Note = TEXT("found with no list that scrolls round it: nothing to do");
+		}
+	}
 	else if (Verb == TEXT("press-each"))
 	{
 		Sweep(Player, Step);
@@ -913,7 +988,7 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 				Context.RemoveAt(0);
 			}
 		}
-		else if (Verb != TEXT("press-each") && Verb != TEXT("point-at") && Verb != TEXT("check-province") && Verb != TEXT("snapshot"))
+		else if (Verb != TEXT("press-each") && Verb != TEXT("point-at") && Verb != TEXT("check-province") && Verb != TEXT("snapshot") && Verb != TEXT("scroll-to"))
 		{
 			Context.Reset();
 		}
