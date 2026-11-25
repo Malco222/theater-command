@@ -8,12 +8,15 @@
 #include "Components/SkyLightComponent.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h" // (SetGamePaused: the in-battle timing's held views)
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "RenderTimer.h" // (GRenderThreadTime, as TheaterSpeed reads it: the in-battle timing)
 #include "RHI.h" // (RHIGetGPUFrameCycles: the in-battle timing)
+#include "UnrealClient.h" // (FScreenshotRequest: the in-battle timing's held views)
 #include "UObject/UObjectIterator.h"
 
 namespace
@@ -44,6 +47,8 @@ namespace
 		TEXT("tc.Look.Bounce: the field's mean paint, as light, times this (0 to 4; snow's own is 2; the art director's sweep 0.6 / 1.0 / 1.6)."));
 	TAutoConsoleVariable<float> CVarBounceClosed(TEXT("tc.Look.BounceClosed"), 0.5f,
 		TEXT("tc.Look.Bounce: its share under a closed canopy, the jungle (the art director: half to start)."));
+	TAutoConsoleVariable<float> CVarBounceMost(TEXT("tc.Look.BounceMost"), 0.17f,
+		TEXT("tc.Look.Bounce: the most light the bounce may give, as its luminance (0.2126 red + 0.7152 green + 0.0722 blue, linear), after the hue box and the strength: a pale field (the steppe, the desert, a chalk down) is held to it so a shaded wall keeps its shade (the art director, 25 Nov 19:25Z: 0.17; Normandy's 0.162 is under it)."));
 	TAutoConsoleVariable<int32> CVarBounceHue(TEXT("tc.Look.BounceHue"), 1,
 		TEXT("tc.Look.Bounce: 1 pulls the bounce's hue inside the art director's box (red/green 0.90 to 1.15, blue/green 0.80 to 1.05) with its value kept; 0 leaves the field's own hue."));
 	TAutoConsoleVariable<int32> CVarWorn(TEXT("tc.Look.Worn"), 0,
@@ -59,7 +64,9 @@ namespace
 	TAutoConsoleVariable<float> CVarWornMix(TEXT("tc.Look.WornMix"), 0.5f,
 		TEXT("tc.Look.Worn: the second layer's share of the patches (0 the first alone, 1 the second alone; the blend is lifted so it keeps one layer's contrast)."));
 	TAutoConsoleVariable<float> CVarWornSheen(TEXT("tc.Look.WornSheen"), 1.3f,
-		TEXT("tc.Look.Worn: how far the roughness moves with the patches (the art director: dark, oily patches about 0.7, pale, dusty ones about 0.95; 0 keeps one roughness)."));
+		TEXT("tc.Look.Worn: how far the roughness moves with the patches (the art director: dark, oily patches about 0.7, pale, dusty ones about 0.95; 0 keeps one roughness). Read against the patches' first depth: tc.Look.WornContrast deepens the patches, not the roughness's swing."));
+	TAutoConsoleVariable<float> CVarWornContrast(TEXT("tc.Look.WornContrast"), 1.8f,
+		TEXT("tc.Look.Worn: how much deeper the patches are than the paint's own mottle at a strength (the art director, 25 Nov 19:24Z: 1.6 to 2.0 of the first depth, which measured 9 of 255 on a sunlit Sherman's hull side; she asks 14 to 20, never over 24). M_LandWorn holds them inside 0.78 to 1.22 of the paint. The chips and the paler top keep the strength's own depth."));
 
 	/** The engine's world units in a metre (the battles are laid at 100, as the engine's own measure is). */
 	constexpr float UnitsPerMetre = 100.0f;
@@ -306,6 +313,9 @@ namespace
 	//   -TheaterLookTimeSettle= (seconds, 0.5), -TheaterLookTimeMeasure= (seconds, 2)
 	// Between two windows every setting any of them names goes back to what the launch made it, so each names only its
 	// own. It begins 3 s after the field is laid, reports every 24 windows and as the field goes ("Whole look timing:").
+	// Held views, for the art director's pairs: "-TheaterLookTimeHold=20,60,117" (seconds after the field is laid) pauses
+	// the battle there, lays each setting in turn on the one still view and takes a still of it, full size, into
+	// "-TheaterLookTimeStills=<folder>" (held-<n>-<setting>.png), then lets the battle go; no window is timed meanwhile.
 
 	struct FLookTimeSet
 	{
@@ -329,6 +339,11 @@ namespace
 	int32 LookTimeSlot = -1, LookTimeAt = INDEX_NONE, LookTimeFrames = 0, LookTimeLong = 0;
 	double LookTimeSum = 0.0, LookTimeGame = 0.0, LookTimeDraw = 0.0, LookTimeChip = 0.0;
 	bool bLookTimeDone = false;
+	TArray<float> LookTimeHolds; // (seconds after the field is laid, in order)
+	FString LookTimeStills; // (the held views' stills' folder)
+	float LookTimeField = 0.0f, LookTimeHoldIn = 0.0f; // (seconds since the field was laid, holds not counted; into this step)
+	int32 LookTimeHoldAt = -1, LookTimeHoldStep = 0, LookTimeHoldsDone = 0; // (the hold under way, -1 none)
+	bool bLookTimeHoldShot = false, bLookTimePaused = false;
 
 	/** The setting timed in a slot: the baseline in every even one, the others in turn in the odd ones. */
 	int32 LookTimeSetOf(int32 Slot)
@@ -457,6 +472,75 @@ namespace
 		bLookTimeDone = true;
 		ReportLookTime(true);
 		LayLookTimeSet(INDEX_NONE);
+		if (bLookTimePaused)
+		{
+			bLookTimePaused = false;
+			if (UWorld* World = PlayWorld())
+			{
+				UGameplayStatics::SetGamePaused(World, false);
+			}
+		}
+	}
+
+	/** The held views: at each second asked, the battle paused, each setting laid in turn on the one view and a still
+	 * taken of it, then the battle let go and the timing taken up again from a fresh window. True while one is under way. */
+	bool TickLookHold(float DeltaSeconds)
+	{
+		UWorld* World = PlayWorld();
+		if (LookTimeHoldAt < 0)
+		{
+			if (!World || !LookTimeHolds.IsValidIndex(LookTimeHoldsDone) || LookTimeField < LookTimeHolds[LookTimeHoldsDone])
+			{
+				return false;
+			}
+			LookTimeHoldAt = LookTimeHoldsDone;
+			LookTimeHoldStep = 0;
+			LookTimeHoldIn = 0.0f;
+			bLookTimeHoldShot = false;
+			UGameplayStatics::SetGamePaused(World, true);
+			bLookTimePaused = true;
+			LayLookTimeSet(0);
+			UE_LOG(LogTheater, Display, TEXT("Whole look timing: view %d held, %.0f s after the field was laid (the battle %s): a still under each of the %d settings into %s"),
+				LookTimeHoldAt + 1, LookTimeField, World->IsPaused() ? TEXT("paused") : TEXT("NOT paused: the view may move"), LookTimeSets.Num(), *LookTimeStills);
+			return true;
+		}
+		// (each setting laid, then 1.5 s for the picture to settle on it (the filtering's samplers made again, the
+		// upscaler's history filled on a still view), the still asked, and 0.5 s for it to be written)
+		LookTimeHoldIn += DeltaSeconds;
+		if (LookTimeHoldStep < LookTimeSets.Num())
+		{
+			if (!bLookTimeHoldShot && LookTimeHoldIn >= 1.5f)
+			{
+				bLookTimeHoldShot = true;
+				const FString File = FPaths::Combine(LookTimeStills, FString::Printf(TEXT("held-%d-%s.png"), LookTimeHoldAt + 1, *LookTimeSets[LookTimeHoldStep].Name));
+				FScreenshotRequest::RequestScreenshot(File, false, false);
+				UE_LOG(LogTheater, Display, TEXT("Whole look timing: view %d, %s: still %s"), LookTimeHoldAt + 1, *LookTimeSets[LookTimeHoldStep].Name, *File);
+			}
+			if (LookTimeHoldIn >= 2.0f)
+			{
+				LookTimeHoldIn = 0.0f;
+				bLookTimeHoldShot = false;
+				if (++LookTimeHoldStep < LookTimeSets.Num())
+				{
+					LayLookTimeSet(LookTimeHoldStep);
+				}
+			}
+			return true;
+		}
+		if (World)
+		{
+			UGameplayStatics::SetGamePaused(World, false);
+		}
+		bLookTimePaused = false;
+		++LookTimeHoldsDone;
+		LookTimeHoldAt = -1;
+		// (the timing's window begun afresh under its own setting; before the timing begins, the launch's own)
+		LookTimeFrames = LookTimeLong = 0;
+		LookTimeSum = LookTimeGame = LookTimeDraw = LookTimeChip = 0.0;
+		LookTimeIn = 0.0f;
+		LayLookTimeSet(LookTimeSlot >= 0 ? LookTimeAt : INDEX_NONE);
+		UE_LOG(LogTheater, Display, TEXT("Whole look timing: view %d let go, the battle on"), LookTimeHoldsDone);
+		return false;
 	}
 
 	bool TickLookTime(float DeltaSeconds)
@@ -469,6 +553,14 @@ namespace
 		if (!bFieldOn)
 		{
 			return true; // (FieldGone ends it; until a field is laid, nothing)
+		}
+		if (LookTimeHoldAt < 0)
+		{
+			LookTimeField += DeltaSeconds;
+		}
+		if (TickLookHold(DeltaSeconds))
+		{
+			return true;
 		}
 		if (LookTimeSlot < 0)
 		{
@@ -568,6 +660,22 @@ namespace
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLookTimeMeasure="), LookTimeMeasure);
 		LookTimeSettle = FMath::Clamp(LookTimeSettle, 0.25f, 10.0f);
 		LookTimeMeasure = FMath::Clamp(LookTimeMeasure, 1.0f, 30.0f);
+		FString Holds;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLookTimeHold="), Holds, false))
+		{
+			TArray<FString> Each;
+			Holds.ParseIntoArray(Each, TEXT(","), true);
+			for (const FString& At : Each)
+			{
+				LookTimeHolds.Add(FMath::Max(3.0f, FCString::Atof(*At)));
+			}
+			LookTimeHolds.Sort();
+			if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterLookTimeStills="), LookTimeStills, false) || LookTimeStills.IsEmpty())
+			{
+				LookTimeStills = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LookTime"));
+			}
+			UE_LOG(LogTheater, Display, TEXT("Whole look timing: %d views to hold, their stills into %s"), LookTimeHolds.Num(), *LookTimeStills);
+		}
 		LookTimeClock = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&TickLookTime), 0.0f);
 		UE_LOG(LogTheater, Display, TEXT("Whole look timing: %d settings read; they take turns once a ground battle's field is laid"), LookTimeSets.Num());
 	}
@@ -678,6 +786,8 @@ void WholeLook::Start()
 	Tuned(TEXT("TheaterLookWornRepeat2="), CVarWornRepeat2);
 	Tuned(TEXT("TheaterLookWornMix="), CVarWornMix);
 	Tuned(TEXT("TheaterLookWornSheen="), CVarWornSheen);
+	Tuned(TEXT("TheaterLookWornContrast="), CVarWornContrast);
+	Tuned(TEXT("TheaterLookBounceMost="), CVarBounceMost);
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLookBounceUnclamped")))
 	{
 		CVarBounceHue->Set(0, ECVF_SetByCode);
@@ -748,9 +858,21 @@ FLinearColor WholeLook::BounceLight(const FLinearColor& Mean, bool bClosedCanopy
 	const float Sun = static_cast<float>(FMath::Clamp(SunHeight / FMath::Sin(FMath::DegreesToRadians(15.0)), 0.0, 1.0));
 	FLinearColor Out = (bHue ? Boxed(Mean) : Mean) * (Strength * Closed * Sun);
 	Out.A = 1.0f;
-	UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce: the field's mean paint %.3f, %.3f, %.3f (linear), %s, times %.2f strength%s, the sun's share %.2f: %.3f, %.3f, %.3f"),
+	// (held to the most it may give, as its luminance, with its hue kept: a pale field's bounce otherwise filled a shaded
+	// wall to 0.91 of its sunlit gable and turned field grey to khaki, the art director, 25 Nov 19:25Z)
+	const float Most = FMath::Clamp(CVarBounceMost.GetValueOnGameThread(), 0.0f, 4.0f);
+	const float Given = ValueOf(Out);
+	const bool bHeld = Given > Most && Given > UE_KINDA_SMALL_NUMBER;
+	if (bHeld)
+	{
+		Out *= Most / Given;
+		Out.A = 1.0f;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce: the field's mean paint %.3f, %.3f, %.3f (linear), %s, times %.2f strength%s, the sun's share %.2f%s: %.3f, %.3f, %.3f"),
 		Mean.R, Mean.G, Mean.B, bHue ? TEXT("its hue pulled inside the art director's box") : TEXT("its own hue (unclamped)"), Strength,
-		bClosedCanopy ? *FString::Printf(TEXT(", times %.2f under a closed canopy"), Closed) : TEXT(""), Sun, Out.R, Out.G, Out.B);
+		bClosedCanopy ? *FString::Printf(TEXT(", times %.2f under a closed canopy"), Closed) : TEXT(""), Sun,
+		bHeld ? *FString::Printf(TEXT(", held to %.2f luminance (it would have given %.3f: %.2f of it)"), Most, Given, Most / Given) : *FString::Printf(TEXT(", luminance %.3f (the most %.2f)"), Given, Most),
+		Out.R, Out.G, Out.B);
 	return Out;
 }
 
@@ -839,13 +961,26 @@ namespace
 		const float Lift = 1.0f / FMath::Sqrt(FMath::Square(Mix) + FMath::Square(1.0f - Mix));
 		FRandomStream Stream(static_cast<int32>(Seed));
 		const float A = Stream.FRand(), B = Stream.FRand(), C = Stream.FRand(), D = Stream.FRand();
+		const float Contrast = FMath::Clamp(CVarWornContrast.GetValueOnGameThread(), 0.25f, 4.0f);
+		// (an M_LandWorn built before the patches had their own depth has no "PatchMost": its patches take Wear's, the
+		// first depth, until build_content.sh is run with TC_REBUILD=M_LandWorn. Said once)
+		static bool bToldOldWorn = false;
+		const bool bOwnDepth = Ink->K2_GetScalarParameterValue(TEXT("PatchMost")) > 0.0f;
+		if (!bToldOldWorn && !bOwnDepth)
+		{
+			bToldOldWorn = true;
+			UE_LOG(LogTheater, Warning, TEXT("Whole look: M_LandWorn is older than the patches' own depth (no PatchMost): its patches stay at the first depth; run TC_REBUILD=M_LandWorn Tools/build_content.sh"));
+		}
 		Ink->SetScalarParameterValue(TEXT("Wear"), Strength * Lift);
+		Ink->SetScalarParameterValue(TEXT("Patches"), Strength * Lift * Contrast);
 		Ink->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (Repeat * UnitsPerMetre));
 		Ink->SetScalarParameterValue(TEXT("Blot2Tiling"), 1.0f / (Repeat2 * UnitsPerMetre));
 		Ink->SetScalarParameterValue(TEXT("Blot2Mix"), Mix);
 		Ink->SetVectorParameterValue(TEXT("BlotShift"), FLinearColor(A, B, C, D));
 		Ink->SetScalarParameterValue(TEXT("Roughness"), FMath::Clamp(CVarWornRoughness.GetValueOnGameThread(), 0.0f, 1.0f));
-		Ink->SetScalarParameterValue(TEXT("WearRough"), FMath::Clamp(CVarWornSheen.GetValueOnGameThread(), 0.0f, 4.0f));
+		// (the roughness moves with the deeper patches by the sheen over the contrast: the same 0.72 to 0.98 as before; on
+		// an older M_LandWorn the patches keep the first depth, so the sheen is laid whole)
+		Ink->SetScalarParameterValue(TEXT("WearRough"), FMath::Clamp(CVarWornSheen.GetValueOnGameThread(), 0.0f, 4.0f) / (bOwnDepth ? Contrast : 1.0f));
 	}
 }
 
@@ -891,12 +1026,15 @@ void WholeLook::WornOpen(UMaterialInstanceDynamic* Steel)
 	const float Roughness = FMath::Clamp(CVarWornRoughness.GetValueOnGameThread(), 0.0f, 1.0f);
 	const float Sheen = FMath::Clamp(CVarWornSheen.GetValueOnGameThread(), 0.0f, 4.0f);
 	const float Was = Steel ? Steel->K2_GetScalarParameterValue(TEXT("Roughness")) : 0.0f;
-	// (the mottle's swing at strength 1 runs from about 0.9 to 1.1 of the paint: the roughness moves by its own swing
-	// times the sheen, and is held inside 0 to 1)
+	// (the first depth's swing at strength 1 ran from about 0.9 to 1.1 of the paint, 9 of 255 on a sunlit hull side at
+	// 105 (the art director's measure): the patches run that times the contrast, held inside 0.78 to 1.22 by
+	// M_LandWorn; the roughness moves by the first swing times the sheen, held inside 0 to 1)
+	const float Contrast = FMath::Clamp(CVarWornContrast.GetValueOnGameThread(), 0.25f, 4.0f);
+	const float Patch = FMath::Min(0.1f * Strength * Contrast, 0.22f);
 	const float Swing = 0.1f * Strength * Sheen;
-	UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON for this battle: the vehicles' paint broken in patches, two layers repeating every %.1f and %.1f m (the second's share %.2f), wear %.2f, each vehicle her own shift of them; roughness %.2f (the plain steel's %.2f), about %.2f on the dark patches and %.2f on the pale; the planes over the field and the old wrecks keep the plain steel"),
-		FMath::Clamp(CVarWornRepeat.GetValueOnGameThread(), 0.2f, 20.0f), FMath::Clamp(CVarWornRepeat2.GetValueOnGameThread(), 0.2f, 40.0f), Mix, Strength, Roughness, Was,
-		FMath::Clamp(Roughness - Swing, 0.0f, 1.0f), FMath::Clamp(Roughness + Swing, 0.0f, 1.0f));
+	UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON for this battle: the vehicles' paint broken in patches, two layers repeating every %.1f and %.1f m (the second's share %.2f), wear %.2f, the patches %.2f deeper (about %.2f to %.2f of the paint), each vehicle her own shift of them; roughness %.2f (the plain steel's %.2f), about %.2f on the dark patches and %.2f on the pale; the planes over the field and the old wrecks keep the plain steel"),
+		FMath::Clamp(CVarWornRepeat.GetValueOnGameThread(), 0.2f, 20.0f), FMath::Clamp(CVarWornRepeat2.GetValueOnGameThread(), 0.2f, 40.0f), Mix, Strength, Contrast,
+		1.0f - Patch, 1.0f + Patch, Roughness, Was, FMath::Clamp(Roughness - Swing, 0.0f, 1.0f), FMath::Clamp(Roughness + Swing, 0.0f, 1.0f));
 }
 
 UMaterialInterface* WholeLook::VehicleInk(UMaterialInstanceDynamic* Steel, int32 Vehicle, UObject* Outer)

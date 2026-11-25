@@ -44,7 +44,10 @@ class USkyLightComponent;
  *   whole from 15 degrees up; the picture's own sun is held 8 degrees up), at half under a closed canopy, none from water
  *   (rivers, ponds and flooded ground mirror the sky), and laid under the battle's sky light by LandBattle's
  *   HideTheTable; through a night before the attack the sky's lower half stays as shipped and the bounce is laid as the
- *   picture comes up from black on the battle (Dawn). Snow keeps its own, as shipped. tc.Look.BounceStrength (1.0), tc.Look.BounceClosed (0.5) and
+ *   picture comes up from black on the battle (Dawn). Snow keeps its own, as shipped. Its luminance (0.2126 red + 0.7152
+ *   green + 0.0722 blue, linear) is held to tc.Look.BounceMost (0.17) with its hue kept, so a pale field (the steppe,
+ *   the desert) no longer fills a shaded wall to its sunlit side (the art director, 25 Nov 19:25Z; Normandy's 0.162 is
+ *   under it). tc.Look.BounceStrength (1.0), tc.Look.BounceClosed (0.5), tc.Look.BounceMost (0.17) and
  *   tc.Look.BounceHue (1; 0 leaves the hue as the field's, -TheaterLookBounceUnclamped) tune it.
  *
  * - tc.Look.Worn (-TheaterLookWorn): the ground battle's tanks, guns and lorries carry weathered paint, broken in patches
@@ -62,7 +65,12 @@ class USkyLightComponent;
  *   from their points' alpha (M_LandManWorn, M_LandCrowdWorn), which the men's looks write with it on: the soldiers'
  *   half, with their boots and knees taking the field's colour. tc.Look.WornStrength (1), tc.Look.WornRepeat (metres,
  *   2.5), tc.Look.WornRepeat2 (metres, 6.1), tc.Look.WornMix (the second layer's share, 0.5), tc.Look.WornRoughness
- *   (0.85) and tc.Look.WornSheen (how far the roughness moves with the patches, 1.3) tune it.
+ *   (0.85), tc.Look.WornSheen (how far the roughness moves with the patches, 1.3) and tc.Look.WornContrast (1.8) tune it.
+ *   The patches have their own depth, "Patches", the strength's times tc.Look.WornContrast, held inside 0.78 to 1.22 of
+ *   the paint by M_LandWorn ("PatchLeast", "PatchMost"), while the chips and the paler top keep the strength's own (the
+ *   art director, 25 Nov 19:24Z: the first depth gave 9 of 255 between dark and pale on a sunlit hull side; she asks 14
+ *   to 20, never over 24). The roughness's swing is laid over the contrast so it stays 0.72 to 0.98. An M_LandWorn built
+ *   before this has no "PatchMost": its patches keep the first depth and the sheen is laid whole, said once.
 
  * The whole look's lens: one post-process volume over the whole play world (the map and every battle are laid in the one
  * world), above the ground battle's grade volume, carrying only the sharpening and the ambient occlusion fields. No other
@@ -71,7 +79,8 @@ class USkyLightComponent;
  * The tunings can be set from the launch line too, for the Mac's sweeps: -TheaterLookCrispSharpen=,
  * -TheaterLookCrispFiltering=, -TheaterLookDepthStrength=, -TheaterLookDepthReach= (metres), -TheaterLookDepthRadius=
  * (metres), -TheaterLookDepthQuality=, -TheaterLookDepthClosed=, -TheaterLookBounceStrength=, -TheaterLookBounceClosed=, -TheaterLookWornStrength=, -TheaterLookWornRepeat= (metres),
- * -TheaterLookWornRepeat2= (metres), -TheaterLookWornMix=, -TheaterLookWornRoughness=, -TheaterLookWornSheen=.
+ * -TheaterLookWornRepeat2= (metres), -TheaterLookWornMix=, -TheaterLookWornRoughness=, -TheaterLookWornSheen=,
+ * -TheaterLookWornContrast=, -TheaterLookBounceMost=.
  *
  * Their cost in a ground battle, "-TheaterLookTime=off:tc.Look.Crisp=0,tc.Look.Depth=0|crisp:tc.Look.Crisp=1|depth:
  * tc.Look.Depth=1" (the look reel, 25 Nov: three whole runs of Normandy, timed one after another, could not tell a 3 fps
@@ -80,6 +89,10 @@ class USkyLightComponent;
  * two others, and each other window is read against the mean of the baseline's on either side of it, as the field goes
  * and every 24 windows ("Whole look timing:"): its graphics chip time's difference, the middle and the middle half of
  * them, and their mean give or take its standard error. Frames over a tenth of a second (a still, a bake) are left out.
+ * Held views for the art director's pairs: "-TheaterLookTimeHold=20,60,117" (seconds after the field is laid, by the
+ * clock, not the battle's own time) pauses the battle at each, lays every setting in turn on the one still view (1.5 s
+ * to settle, then a still, full size, no interface) into "-TheaterLookTimeStills=<folder>" (Saved/LookTime by default)
+ * as held-<view>-<setting>.png, then lets the battle go and takes the timing up from a fresh window.
  */
 namespace WholeLook
 {
