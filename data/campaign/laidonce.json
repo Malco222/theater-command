@@ -11,8 +11,8 @@
   "_rows": "Keyed nation:row name. Each holder: [its corps' name, divisions it gives, their numbers where the record knows them (a holder that carries none of them gives nothing); otherwise its last ones; and, where two holders stand for the same division, a key they share: the first of them alive is read, the other not]. The 14th Panzer was formed out of the 4th Infantry: IV Corps gives its 4th, which takes the row's own number. W Force gives the New Zealand Division and keeps the 1st Armoured Brigade; where W Force never formed, the 2nd New Zealand Division (the row that stands in for it) holds that division; the Tobruk garrison gives the 9th Australian and keeps the rest.",
   "from": "{names} was due in {place} this month, drawn from your {army} {at}. No division is raised twice: it is not formed, and your {army} keeps every division it has.",
   "fromMany": "{count} divisions were due in {place} this month to make up the {formation}, drawn from your {army} {at}. No division is raised twice: they are not formed, and your {army} keeps every division it has.",
-  "held": "{names} was due in {place} this month, and you hold it already, {at}. No division is raised twice: it is not formed, and it goes to {place} only if you send it.",
-  "heldMany": "{names} were due in {place} this month, and you hold them already, {at}. No division is raised twice: they are not formed, and they go to {place} only if you send them.",
+  "held": "{names} was due in {place} this month, and you hold it already, {at}. No division is raised twice: no second one is formed, and yours goes to {place} only if you send it.",
+  "heldMany": "{names} were due in {place} this month, and you hold them already, {at}. No division is raised twice: none is formed again, and yours go to {place} only if you send them.",
   "ashore": "in {where}",
   "afloat": "at sea, bound for {to}"
 }

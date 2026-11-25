@@ -16,7 +16,7 @@ import data from '../../data/campaign/laidonce.json';
 import setup from '../../data/campaign/setup-1939.json';
 import { divisionsOf, growCorps, keepNumbers, numbersOf } from './armies';
 import { atWar, removeCorps } from './game';
-import { stopDef } from './history';
+import { onBook } from './history';
 import type { Corps, Game, Region, Voyage } from './types';
 
 /**
@@ -67,12 +67,13 @@ function inContact(g: Game, nat: string, c: Corps): boolean {
  * True where a corps keeps the division where it stands and the row forms without it: the player's own; one on a
  * passage at sea (it lands with its divisions); one already in the side theatre the row is for, or at its place (a row
  * never pulls a division out of its own theatre: her ruling 2 of 14:28Z); one in a fight; one shut in a town the enemy
- * stands round. The fight acts at stops 3 to 5 only: at the book's stops the book's rows keep their book and draw a held
- * division at its date, fight or not, still laid once (the design director's rulings of 21:25Z and 21:50Z).
+ * stands round. The fight acts at stops 3 to 5, or where the west's book is closed (the book every later one on this
+ * chart hangs on): while the book is kept, the book's rows keep their book and draw a held division at its date, fight
+ * or not, still laid once (the design director's rulings of 21:25Z, 21:50Z, 22:05Z and 22:12Z).
  */
 function keeps(g: Game, nat: string, row: any[], place: Region, c: Corps, afloat: boolean): boolean {
   const k = g.byName[row[5]]?.theatre ?? -1;
-  return nat === g.human || afloat || c.reg === place.id || (k >= 0 && g.regions[c.reg].theatre === k) || (!stopDef(g).book && inContact(g, nat, c))
+  return nat === g.human || afloat || c.reg === place.id || (k >= 0 && g.regions[c.reg].theatre === k) || (!onBook(g, 'west') && inContact(g, nat, c))
     || (c.town !== undefined && g.regions[c.reg].units.some((u) => !u.dead && atWar(g, nat, u.nat)));
 }
 

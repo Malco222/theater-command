@@ -332,7 +332,7 @@ describe('what a second review found (25 November 2026, evening)', () => {
     expect(lines[0]).toContain('The 9th Panzer Division was due');
     expect(lines[0]).toContain('your XXII Corps');
     // (His part is named after the division it carries: the line says he holds it, in the tense of the line beside it.)
-    expect(lines[0]).toContain(`The 2nd Panzer Division was due in Sofia this month, and you hold it already, in ${g.regions[part.reg].name}. No division is raised twice: it is not formed, and it goes to Sofia only if you send it.`);
+    expect(lines[0]).toContain(`The 2nd Panzer Division was due in Sofia this month, and you hold it already, in ${g.regions[part.reg].name}. No division is raised twice: no second one is formed, and yours goes to Sofia only if you send it.`);
   });
 
   it('put back into the part he broke off it, the holder is gone, and the part keeps both divisions: the row comes without them', () => {
@@ -397,6 +397,17 @@ describe("the dial: a holder in a fight keeps its division at stops 3 to 5; at t
     expect(corps(g, 'GER', 'III Corps')!.divs).toBe(2);
     expect(corps(g, 'GER', INFANTRY)!.divs).toBe(3);
     expect(holders(g, 'GER', '50th Infantry Division')).toEqual([corps(g, 'GER', INFANTRY)]);
+  });
+  it.each([1, 2])('at stop %i with the west\'s book closed it acts as at stop 3: the 50th stays and fights (the design director, 22:05Z)', (stop) => {
+    // (Germany's first wars go on: Neumark, where III Corps stands, lies beside Poznan.)
+    const g = balkans(null, true, false);
+    expect(setStop(g, stop, true)).toBe(true);
+    g.flags['hist:off:west'] = 12;
+    only(g, 'GER', INFANTRY);
+    month(g, 'GER', 19);
+    expect(corps(g, 'GER', 'III Corps')!.divs).toBe(3);
+    expect(corps(g, 'GER', INFANTRY)!.divs).toBe(2);
+    expect(holders(g, 'GER', '50th Infantry Division')).toHaveLength(1);
   });
   it.each([4, 5])('at stop %i it acts as at stop 3: the 50th stays and fights, and the row forms without it', (stop) => {
     const g = fight(stop);
