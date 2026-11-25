@@ -23,7 +23,7 @@ import { PRODUCTION, aiProduction, aiTeams, canBuildYet, cadreTerms, cancelBuild
 import { aiEngineers } from '../src/campaign/engineers';
 import { foldCorps } from '../src/campaign/fold';
 import { addCorps, capitulate, capture, corpsBase, createGame, declareWar, lineStrength, removeCorps, startPhase } from '../src/campaign/game';
-import { RIFLES, armDrafts, armShares, armWants, binds, canArm, carries, carve, carved, levelOf, noRifles, ownNeed, riflesMonth, riflesView, riflesWatch, roadsNow, type RiflesRow } from '../src/campaign/rifles';
+import { RIFLES, armDrafts, armShares, armWants, binds, canArm, carries, carve, carved, levelOf, noRifles, ownNeed, riflesFormed, riflesMonth, riflesView, riflesWatch, roadsNow, type RiflesRow } from '../src/campaign/rifles';
 import { breakUp, rejoin, setBreakUp } from '../src/campaign/breakup';
 import { divisionsOf } from '../src/campaign/armies';
 import { liberate } from '../src/campaign/liberation';
@@ -847,6 +847,12 @@ describe('the men', () => {
     // Japan, with no row: exactly the old sum.
     for (const c of corpsOf(g, 'JAP').slice(0, 5)) c.str = 0.5;
     expect(menSpare(g, 'JAP')).toBe(old('JAP'));
+    // A Chinese corps at sea is counted to its level too: armed to 0.6, at 0.3, 2 divisions short by 0.6.
+    const ship = { ...cs[0], id: g.nextCorps + 1000, divs: 2, str: 0.3 } as Corps;
+    g.flags[`rfa:${ship.id}`] = 0.6;
+    const before = menSpare(g, 'CHN');
+    (g.atSea ??= []).push({ nat: 'CHN', corps: ship, from: ship.reg, to: ship.reg, due: g.turn + 1 });
+    expect(before - menSpare(g, 'CHN')).toBeCloseTo(0.6, 12);
   });
 
   it('19. nobody else moves', () => {
@@ -975,6 +981,11 @@ describe('the men', () => {
     c.str = 0.77;
     for (let t = 0; t < 3; t++) { g.turn++; startPhase(g, 'POL'); expect(c.str).toBeLessThanOrEqual(0.8 + 1e-12); }
     expect(c.str).toBeCloseTo(0.8, 9);
+    // Formed at its full: no flag (a level is written only below the corps' full).
+    const whole = corpsOf(g, 'POL').find((x) => x !== c)!;
+    whole.str = whole.full ?? 1;
+    riflesFormed(g, whole);
+    expect(`rfa:${whole.id}` in g.flags).toBe(false);
     // A nation with no row: its liberation army carries no flag.
     expect(Object.keys(g.flags).filter((k) => k.startsWith('rfa:') && corpsOf(g, 'UK').some((u) => k === `rfa:${u.id}`))).toEqual([]);
   });
