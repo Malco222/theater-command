@@ -1153,10 +1153,18 @@ void ALandBattle::LoadInks()
 		}
 		if (bWindOn)
 		{
-			// How hard it blows, from its speed: a breeze of 3 m a second sways the corn a little, a fresh wind of 8 a lot.
-			// A calm day (under a metre a second) stands near still (the art director's round 1).
-			const float Gusty = FMath::Clamp(static_cast<float>((Speed - 0.5) / 5.0), 0.03f, 1.6f) * FMath::Clamp(WindAsked, 0.0f, 3.0f);
-			const float Travel = static_cast<float>(FMath::Max(2.5, 1.3 * Speed));
+			// How hard it blows, from its speed: a breeze of 3 m a second sways the corn a little, a fresh wind of 8 more.
+			// A calm day (under a metre a second) stands near still (the art director's round 1). Brian, 25 November ("i
+			// live the new grass blowing in the wind but it blows to much and is distracting"): a light breeze, not a gale.
+			// So every sway is 0.6 of what was passed on 23 November and stops growing at 5.5 m a second (it grew to 8.5),
+			// a lull still leans 0.45 of a gust (it was 0.3, so less sweep between them), each thing's own swing back and
+			// forth is 0.6 of its share and 0.7 of its pace, the leaves shake at 0.8 of theirs, and the gusts run over the
+			// field at 0.9 of the wind (they ran at 1.3, at least 2.5 m a second; now at least 1.8). The sheen follows the
+			// sway, so it is gentler too. At the summer breeze of 2.9 m a second the grass's sweep is some 45% of what it
+			// was and its beat two thirds as quick; "-TheaterLandWind=" still sets the strength (1 as here).
+			constexpr float Breeze = 0.6f, Lull = 0.45f, SwingShare = 0.6f, SwingPace = 0.7f, ShakePace = 0.8f;
+			const float Gusty = Breeze * FMath::Clamp(static_cast<float>((Speed - 0.5) / 5.0), 0.03f, 1.0f) * FMath::Clamp(WindAsked, 0.0f, 3.0f);
+			const float Travel = static_cast<float>(FMath::Max(1.8, 0.9 * Speed));
 			// (Bend: radians at a full gust from the root, or with Curve 1 growing toward the top as the height over Tall
 			// metres; Spring: the share it swings back and forth in a gust, SpringHz a second; Flutter: a leaf card's own
 			// shake, metres; Sheen and Ripe: the gusts' light patches on the grass and on ripe grain)
@@ -1173,14 +1181,14 @@ void ALandBattle::LoadInks()
 				M->SetVectorParameterValue(TEXT("WindWay"), FLinearColor(static_cast<float>(Way.X), static_cast<float>(Way.Y), 0.0f, 0.0f));
 				M->SetScalarParameterValue(TEXT("WindTravel"), Travel);
 				M->SetScalarParameterValue(TEXT("GustSize"), 150.0f);
-				M->SetScalarParameterValue(TEXT("WindCalm"), 0.3f);
+				M->SetScalarParameterValue(TEXT("WindCalm"), Lull);
 				M->SetScalarParameterValue(TEXT("Bend"), B.Bend * Gusty);
 				M->SetScalarParameterValue(TEXT("BendCurve"), B.Curve);
 				M->SetScalarParameterValue(TEXT("BendHeight"), B.Tall);
-				M->SetScalarParameterValue(TEXT("Spring"), B.Spring);
-				M->SetScalarParameterValue(TEXT("SpringHz"), B.SpringHz);
+				M->SetScalarParameterValue(TEXT("Spring"), B.Spring * SwingShare);
+				M->SetScalarParameterValue(TEXT("SpringHz"), B.SpringHz * SwingPace);
 				M->SetScalarParameterValue(TEXT("Flutter"), B.Flutter * Gusty);
-				M->SetScalarParameterValue(TEXT("FlutterHz"), B.FlutterHz);
+				M->SetScalarParameterValue(TEXT("FlutterHz"), B.FlutterHz * ShakePace);
 				M->SetScalarParameterValue(TEXT("Sheen"), B.Sheen * FMath::Min(Gusty, 1.2f));
 				M->SetScalarParameterValue(TEXT("SheenRipe"), B.Ripe * FMath::Min(Gusty, 1.2f));
 			};
