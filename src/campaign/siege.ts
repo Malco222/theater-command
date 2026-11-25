@@ -38,6 +38,7 @@ import { islandOf, roomAt } from './islands';
 import { KIND, MEN_PER_DIV, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
 import { flagName } from './flagnames';
+import { withered } from './wither';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -898,7 +899,8 @@ export function storm(g: Game, corps: Corps[], r: Region): BattleReport | null {
 /** The corps of a garrison fit to come out against the army round the town. */
 export function salliers(g: Game, r: Region, nat: string): Corps[] {
   if (!besieged(g, r)) return NONE;
-  return garrisonOf(r).filter((c) => !c.dead && armyOf(c) === nat && c.kind !== 'fort' && c.org >= 0.25);
+  // (Ruling 173(e), the whole-world chart: a withered island garrison only defends. It makes no sortie.)
+  return garrisonOf(r).filter((c) => !c.dead && armyOf(c) === nat && c.kind !== 'fort' && c.org >= 0.25 && !withered(g, c));
 }
 
 /** Why a garrison cannot sally out, or null if it can. One sortie a month from each town. */
@@ -908,7 +910,7 @@ export function whyNotSally(g: Game, r: Region, nat: string): string | null {
   if (!garrisonOf(r).some((c) => armyOf(c) === nat)) return `You have no garrison in ${townName(r)}.`;
   if (g.flags[`sally:${r.id}`] === g.turn) return `The garrison of ${townName(r)} has made its sortie this month.`;
   const out = salliers(g, r, nat);
-  if (!out.length) return 'The garrison is too shaken to come out.';
+  if (!out.length) return garrisonOf(r).some((c) => !c.dead && armyOf(c) === nat && withered(g, c)) ? 'The garrison is cut off and out of stores: it holds the town, and makes no sortie.' : 'The garrison is too shaken to come out.';
   // A garrison of guns alone makes no sortie (ruling 211(a)).
   if (!out.some(fights)) return aloneLine(out);
   return null;

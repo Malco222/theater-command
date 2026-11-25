@@ -75,6 +75,7 @@ import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
 import { islandOf, roomAt, roomSays } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
 import { bookKept } from './stations';
+import { floorWords, witherAt, witherFed, witherMonth, withered } from './wither';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -589,6 +590,11 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
 }
 
 export const hostileUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => atWar(g, u.nat, nat));
+/**
+ * True where an enemy of this corps stands on its own province: an army round the town it holds, or a town held
+ * against the field it stands in. (The far side's islands ask it: ruling 173(e) is for an island with no enemy ashore.)
+ */
+export const enemyAshore = (g: Game, c: Corps): boolean => { const r = g.regions[c.reg]; return atWar(g, c.nat, r.ctrl) || r.units.some((u) => !u.dead && atWar(g, u.nat, c.nat)); };
 
 /** Who dug a place's works: the nation that built them; the works on the map from the first day are their country's. */
 export const worksBy = (r: Region): string => r.fort?.by ?? r.owner;
@@ -4123,6 +4129,8 @@ export function sailOn(g: Game, nat: string): void {
 export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
+  // (Ruling 173(e), the whole-world chart: a withered island garrison does not sail. No ship of its side reaches it.)
+  if (withered(g, c)) return false;
   if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0 || !seaOpenAt(g, c.nat, r)) return false;
   const dest = refugeHeld(g, c, r);
   if (!dest) return false;
@@ -4143,6 +4151,7 @@ export function evacuate(g: Game, c: Corps): boolean {
 export function whyNotEvacuate(g: Game, c: Corps): string | null {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
+  if (withered(g, c)) return `${c.name} is cut off and out of stores on ${placeName(r.name)}: no ship of ${N.name}'s can reach it to lift it off.`;
   if (!N.seaSupply) return `${N.name} has no ships to lift an army off a beach.`;
   if (!r.port) return `${r.name} has no port to lift an army from.`;
   if (r.owner === c.nat) return `${r.name} is home ground: there is nowhere to be lifted off to.`;
@@ -5424,7 +5433,8 @@ function digIn(g: Game, nat: string): void {
       delete c.relief;
       if (c.dug && c.town === undefined && !c.yields && !c.fought) { if (c.pressed) delete c.pressed; continue; }
     }
-    if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
+    // (A withered island garrison has no moves to spend and marched nowhere: it keeps its works. Ruling 173(e).)
+    if (c.town === undefined && !c.yields && (c.ap >= c.apMax || withered(g, c)) && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
       const late = digsLate(g.regions[c.reg]) ? DESERT.digLate : 0;
@@ -5602,6 +5612,9 @@ export function startPhase(g: Game, nat: string): void {
   let drafted_ = 0, freeLeft = heldMen;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
   const starved = new Map<number, { names: string[]; men: number }>();
+  // (Ruling 173(e), the whole-world chart alone: on an island of the historian's table a cut-off garrison withers to
+  // a floor and does not lay down its arms from hunger. wither.ts; with the far side off nothing of it is read.)
+  const far = farOn(g);
   army.forEach((c, i) => {
     // What it knew before the month's drafts: a corps back from the battle schools is a grade better than when it went.
     // And its strength before them: the drafts come in new uniforms (wearMonth).
@@ -5611,6 +5624,9 @@ export function startPhase(g: Game, nat: string): void {
     if (c.supplied && !stored.has(c)) {
       // (A fortress crew fed all month is restocked: its own stores' count starts again, 09:06Z (b).)
       if (fortRow(g, c)) crewFed(g, c);
+      // (A withered island garrison mends when a ship of its side can reach it again: fed from outside, its count is
+      // struck off. A town's own stores under siege, or a pocket's, are not a ship.)
+      if (far && !shutIn(g, c) && !inPocket(g, c)) witherFed(g, c);
       const give = want[i] * share;
       if (give > 0) {
         // Green drafts thin out what a corps of the player's has learned.
@@ -5632,9 +5648,18 @@ export function startPhase(g: Game, nat: string): void {
       // (A fortress crew under the fortress rows lives on its works' own stores, counted apart from its organisation
       // (09:06Z): it holds its organisation and its strength while they last, and goes in the month they run out; a
       // row with no clock yields only with its army.)
-      const crew = fortRow(g, c) ? crewMonth(g, c) : 'fed';
+      // (The whole-world chart: the island of the table this corps is cut off on, where its rule holds this month, and
+      // what the corps was before the month's hunger. A crew already withered has no stores left to count.)
+      const isle = far ? witherAt(g, c, enemyAshore(g, c)) : null;
+      const was = isle ? { org: c.org, str: c.str } : null;
+      const crew = fortRow(g, c) ? (isle && withered(g, c) ? 'held' : crewMonth(g, c)) : 'fed';
       if (crew === 'fed') { c.org -= UNFED; c.str *= 0.85; }
-      if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
+      if (isle && was) {
+        // Hunger takes it to the island's floor and no further; the month its stores are gone, its own player is told.
+        if (witherMonth(g, c, isle, was, crew === 'fed' ? monthsUnfed(was.org) : crew) === 'withers' && nat === g.human) {
+          headline(g, 'info', `Cut off and out of stores, ${c.name} withers on ${placeName(g.regions[c.reg].name)}: it holds on at ${floorWords(isle)} of its strength and will not lay down its arms, but it can no longer attack. It mends when a ship of ours can reach it again.`, nat, c.reg);
+        }
+      } else if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };
         lost.names.push(c.name);
         lost.men += men(c);
@@ -5656,6 +5681,8 @@ export function startPhase(g: Game, nat: string): void {
     if (jointHold(g, c)) c.ap = 0;
     // A garrison keeps to its town until it is ordered out.
     if (c.town) c.ap = 0;
+    // A withered island garrison only defends: it neither attacks, marches nor sails (ruling 173(e), rider (o)(3)).
+    if (far && withered(g, c)) c.ap = 0;
   });
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {

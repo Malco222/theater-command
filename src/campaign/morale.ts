@@ -16,9 +16,10 @@
 import data from '../../data/campaign/morale.json';
 import { clamp } from '../core/math';
 import type { Corps, Game, Region } from './types';
-import { allied, atWar, fortRow, onPortStores } from './game';
+import { allied, atWar, enemyAshore, fortRow, monthsUnfed, onPortStores } from './game';
 import { crewStores, storesLeft } from './fortrows';
 import { cmdRally } from './commanders';
+import { floorWords, witherAt, witherStores } from './wither';
 
 export const MORALE = data as unknown as {
   start: number;
@@ -203,7 +204,14 @@ export function corpsMood(g: Game, c: Corps): Mood {
   const quiet = resting(g, c);
   const left = fortRow(g, c) && (!c.supplied || onPortStores(g, c)) ? storesLeft(g, c) : null;
   const stores = left !== null ? { left, months: crewStores(c)! } : undefined;
-  const restLine = stores ? `${restWord(rest)}: living on its works' own stores, ${stores.left === 1 ? 'one month' : `${stores.left} months`} of them left. It holds its rest while they last, but gets no more; when they run out it is starved into surrender.`
+  // (Ruling 173(e), the whole-world chart: cut off on an island of the historian's table, a garrison withers to the
+  // island's floor and does not lay down its arms from hunger. Its card says where it stands. wither.ts.)
+  const isle = !c.supplied || stores ? witherAt(g, c, enemyAshore(g, c)) : null;
+  const kept = isle ? witherStores(g, c) : undefined;
+  const months = (n: number): string => (n === 1 ? 'one month' : `${n} months`);
+  const restLine = isle && kept === 0 ? `Cut off and out of stores: it has withered to ${floorWords(isle)} of its strength and holds on there. It gets no rest and no drafts, and it cannot attack, until a ship of its side can reach it.`
+    : stores ? `${restWord(rest)}: living on its works' own stores, ${stores.left === 1 ? 'one month' : `${stores.left} months`} of them left. It holds its rest while they last, but gets no more; when they run out it ${isle ? `withers to ${floorWords(isle)} of its strength and holds on` : 'is starved into surrender'}.`
+    : isle ? `Cut off from supply: it gets no rest at all, and its stores last ${months(kept ?? monthsUnfed(c.org))} more. After that it withers to ${floorWords(isle)} of its strength: it holds on, but cannot attack.`
     : !c.supplied ? 'Cut off from supply: it gets no rest at all.'
     : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.`
     : quiet ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.`
