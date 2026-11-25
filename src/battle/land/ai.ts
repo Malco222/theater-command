@@ -556,7 +556,9 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
     if (away > 40 && !u.order) { b.command({ do: 'move', units: [u.id], x: u.home[0], y: u.home[1], face: Math.PI }, side); continue; }
     const shaky = foes.find((f) => f.state === 'wavering' && b.gap(u, f) < finish && !outside(f));
     if (shaky) { by(b, side, u, shaky); continue; }
-    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => m.engaged === f.id && m !== u));
+    // (Support teams in battle, sim.teamsRule: a team block is no neighbour in a fight. It fires from far back, as the
+    // guns do, so what it fires on has not come round anyone's flank: the design director, 25 November 17:52Z, mend T.)
+    const round = foes.find((f) => dist(f.x, f.y, u.home[0], u.home[1]) < leash && !outside(f) && mine.some((m) => !(b.teamsRule && m.team) && m.engaged === f.id && m !== u));
     if (round) by(b, side, u, round);
   }
 }
