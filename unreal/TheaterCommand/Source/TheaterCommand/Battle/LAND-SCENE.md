@@ -396,10 +396,14 @@ the cloud's order, green is the gusts.
 
 `-TheaterLandWind`, or `=strength`: 1 is as worked out from the recording's wind, 0 is off.
 
-- Gusts of 20 to 75 m run downwind over the field at about 1.3 times the wind's speed. A calm day, under a metre a
-  second, stands near still.
-- The grass, the flowers and a region's blades lean from the root, about 8 degrees in a gust at a fresh breeze.
-- The ripe wheat bends toward the ear and nods back over about 1.7 s. The corn's and the gaoliang's stalks do the same,
+- A light breeze, not a gale (Brian, 25 November: the first wind "blows to much and is distracting"). Every sway is
+  0.6 of the art director's 23 November pass and stops growing at 5.5 m a second; a lull still leans 0.45 of a gust;
+  each thing's own swing is 0.6 of its share at 0.7 of its pace; leaves shake at 0.8 of their pace. At the summer
+  breeze (2.9 m a second) the grass sweeps some 45% as far as it did, two thirds as quickly.
+- Gusts of 20 to 75 m run downwind over the field at about 0.9 times the wind's speed (at least 1.8 m a second). A calm
+  day, under a metre a second, stands near still.
+- The grass, the flowers and a region's blades lean from the root, about 5 degrees in a gust at a fresh breeze (it was 9).
+- The ripe wheat bends toward the ear and nods back over about 2.4 s. The corn's and the gaoliang's stalks do the same,
   taller.
 - A region's low leafy plants and the bushes lean less.
 - An oak, an elm or a shrub bends toward its top, some 20 cm at 18 m, slowly, and each leaf card shakes 2 to 3 cm.
