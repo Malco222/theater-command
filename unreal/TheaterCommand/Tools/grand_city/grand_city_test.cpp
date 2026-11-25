@@ -345,6 +345,69 @@ int main()
 			Towns, WithSuburb, PlotsAll, static_cast<double>(CapitalPlots) / Capitals, static_cast<double>(CityPlots) / Cities, MostPlots, VillasAll, VillaBeyond, NearRoad);
 	}
 
+	// ---- The far side's own kits (7 to 10).
+	{
+		Check(FarKit(7) && FarKit(8) && FarKit(9) && FarKit(10) && !FarKit(6) && !FarKit(11) && !FarKit(0), "the far side is the four kits 7 to 10 and no other");
+		Check(EavesKit(7) && EavesKit(8) && !EavesKit(9) && !EavesKit(10) && !EavesKit(3), "tiers under eaves are the walled town's and the timber town's");
+		Check(LowKit(9) && !LowKit(7) && !LowKit(8) && !LowKit(10) && !LowKit(2), "only thatch and tin keeps the heart it has");
+		bool bUnder = true, bShows = true, bNone = true;
+		for (int K = 0; K <= 20; ++K)
+		{
+			const double Tall = HeartTall(K / 20.0);
+			for (int Look = 7; Look <= 10; ++Look)
+			{
+				bNone = bNone && KitAccentTop(Look, EAccent::None, Tall) == 0.0;
+				for (const EAccent Kind : { EAccent::Turret, EAccent::Dome })
+				{
+					const double Top = KitAccentTop(Look, Kind, Tall);
+					bUnder = bUnder && Top <= AccentTop(EAccent::Dome, Tall) + 1.0e-12;
+					// (the highest ridge a wing of the block may have: its tallest wall and its steeper roof)
+					bShows = bShows && (LowKit(Look) ? Top == 0.0 : Top > Tall * WingMost + HeartRoof + 0.05);
+				}
+			}
+		}
+		Check(bUnder, "no accent of the far side stands higher than a block's dome does in Europe, so each is under its capital's own");
+		Check(bShows, "and each stands clear over the highest ridge its own block may have (thatch and tin carries none)");
+		Check(bNone, "a block that carries nothing has nothing over it there either");
+		Check(std::fabs(EavesTowerTop(1.2) - (1.2 * WingMost + TurretOver + EaveStep + UpperTall + UpperCap)) < 1.0e-12, "the corner tower: its shaft, a step, an upper storey and its roof");
+		Check(UpperWide < TurretWide && UpperCapWide * 2.0 > UpperWide && EaveOut > 0.0 && EaveStep < EaveDeep, "it narrows as it rises, under eaves wider than its walls, the upper storey starting inside its eave");
+		Check(std::fabs(HallTop(1.2) - (DrumTall(1.2) + HallRoof)) < 1.0e-12 && HallTop(1.2) < EavesTowerTop(1.2), "the hall roof stands lower than the corner tower");
+		Check(KitAccentTop(10, EAccent::Turret, 1.2) == AccentTop(EAccent::Dome, 1.2) && KitAccentTop(10, EAccent::Dome, 1.2) == AccentTop(EAccent::Dome, 1.2), "under the Indian town's flat roofs every accent is a dome");
+		Check(KitAccentTop(7, EAccent::Turret, 1.2) == EavesTowerTop(1.2) && KitAccentTop(8, EAccent::Dome, 1.2) == HallTop(1.2), "the walled town and the timber town take the tower and the hall");
+		// The walled town's wall: a lawn is wholly inside or wholly outside, never within the margin of it.
+		Check(ClearOfWall(-3.0, -1.0, 2.0, 4.0, 10.0, 0.4), "a lawn well inside the walls is clear of them");
+		Check(!ClearOfWall(8.0, 11.0, 0.0, 2.0, 10.0, 0.4) && !ClearOfWall(7.0, 9.8, 0.0, 2.0, 10.0, 0.4) && !ClearOfWall(10.2, 12.0, 0.0, 2.0, 10.0, 0.4), "one across the wall, or within the margin of it on either side, is not");
+		Check(ClearOfWall(10.5, 12.0, 0.0, 2.0, 10.0, 0.4) && ClearOfWall(-12.0, -10.5, 0.0, 2.0, 10.0, 0.4) && ClearOfWall(0.0, 2.0, -12.0, -10.5, 10.0, 0.4) && ClearOfWall(11.0, 12.0, 11.0, 12.0, 10.0, 0.4), "one wholly beyond a side, or beyond a corner, is clear");
+		std::uint32_t State = 2463534242u;
+		auto Next = [&State]() { State ^= State << 13; State ^= State >> 17; State ^= State << 5; return (State >> 8) / 16777216.0; };
+		int Clear = 0, Near = 0;
+		for (int K = 0; K < 20000; ++K)
+		{
+			const double MidA = -16.0 + 32.0 * Next(), MidB = -16.0 + 32.0 * Next(), HalfA = 0.5 + 1.2 * Next(), HalfB = 0.4 + 0.9 * Next();
+			if (!ClearOfWall(MidA - HalfA, MidA + HalfA, MidB - HalfB, MidB + HalfB, 10.0, 0.4))
+			{
+				continue;
+			}
+			++Clear;
+			for (int Step = 0; Step <= 16; ++Step)
+			{
+				for (int Side = 0; Side < 4; ++Side)
+				{
+					const double T = -1.0 + Step / 8.0;
+					const double PA = MidA + HalfA * (Side == 0 ? -1.0 : Side == 1 ? 1.0 : T), PB = MidB + HalfB * (Side == 2 ? -1.0 : Side == 3 ? 1.0 : T);
+					// (how far that point of the lawn's edge is from the wall's line: the wall is the square's own outline)
+					const double Out = std::fmax(std::fabs(PA), std::fabs(PB)) - 10.0;
+					Near += std::fabs(Out) < 0.4 - 1.0e-9 ? 1 : 0;
+				}
+			}
+		}
+		Check(Clear > 4000, "of lawns laid anywhere by chance, many are clear of the wall");
+		Check(Near == 0, "and no edge of one of them comes within the margin of the wall's line");
+		Check(VerandaAt > 0.5 && VerandaAt < 1.0 && VerandaOut > 0.1 && VerandaThick < 0.05, "a bungalow's veranda roof is wider than its walls and stands below its eaves");
+		std::printf("The far side: %d lawns of 20000 laid by chance lie clear of a wall; a corner tower tops out %.2f and a hall roof %.2f over the square's blocks (a dome in Europe %.2f)\n",
+			Clear, EavesTowerTop(HeartTall(0.0)), HallTop(HeartTall(0.0)), AccentTop(EAccent::Dome, HeartTall(0.0)));
+	}
+
 	std::printf("%d checks, %d faults\n", Checks, Faults);
 	return Faults == 0 ? 0 : 1;
 }

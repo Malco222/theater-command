@@ -265,6 +265,8 @@ struct FMiniatureMesh
 		// (release 2, grander great cities: Campaign/GrandCity.h) a city or a capital with a fuller heart, turrets and small
 		// domes over it, and a garden suburb at its edge: the same town, every house where it stood, and no dice thrown for it
 		bool bGrand = false;
+		// (and the same for the far side's own kits, looks 7 to 10, each in its own manner of building: "tc.Map.GrandCitiesFar")
+		bool bGrandFar = false;
 	};
 	/**
 	 * A town as a place with a plan. A small place: a chapel and a street. A town: a church, a main street and a

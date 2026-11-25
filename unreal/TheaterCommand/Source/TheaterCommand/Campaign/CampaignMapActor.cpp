@@ -9036,6 +9036,7 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	Site.Ruined = FMath::Clamp(WreckedIn.FindRef(Region.Id), 0, Region.Factories); // (bombed-out works: the first of them are wrecks)
 	Site.Seed = Region.Id;
 	Site.bGrand = GrandCitiesWanted(); // (release 2, grander great cities: the builder keeps it to cities and capitals)
+	Site.bGrandFar = GrandCitiesFarWanted(); // (and the far side's own kits, behind their own switch)
 	{
 		// Roofs and walls by where it lies (the map is forty units to the degree of latitude).
 		const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
@@ -9249,7 +9250,7 @@ void ACampaignMapActor::BuildTowns()
 	// mesh for the world. With the switch at 0 there is one square, and it is TownMesh and TownFarMesh as they were.
 	const bool bSquares = TheaterSpeed::TownSquares();
 	TownsCut = bSquares ? 1 : 0;
-	TownsGrand = GrandCitiesWanted() ? 1 : 0; // (release 2, grander great cities: how the towns are built this time)
+	TownsGrand = (GrandCitiesWanted() ? 1 : 0) + (GrandCitiesFarWanted() ? 2 : 0); // (release 2, grander great cities: how the towns are built this time)
 	const double SquareSide = 260.0; // (in map units: twice a square of the woods, a few to the width of the view from playing height)
 	TMap<FIntPoint, int32> SquareOf;
 	TArray<FMiniatureMesh> NearModels, FarModels; // (FarModels: the same towns for the eye high up, see FTownSite::bFar)
@@ -9409,7 +9410,8 @@ void ACampaignMapActor::BuildTowns()
 	}
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up), in %d square%s of country"), Count, NearPoints, FarPoints,
 		bSquares ? NearModels.Num() : 1, bSquares && NearModels.Num() != 1 ? TEXT("s") : TEXT(""));
-	UE_LOG(LogTheater, Log, TEXT("Grander great cities (tc.Map.GrandCities): %s"), TownsGrand == 1 ? TEXT("on, the cities and capitals stand in their grander form") : TEXT("off"));
+	UE_LOG(LogTheater, Log, TEXT("Grander great cities (tc.Map.GrandCities): %s"), (TownsGrand & 1) != 0 ? TEXT("on, the cities and capitals stand in their grander form") : TEXT("off"));
+	UE_LOG(LogTheater, Log, TEXT("Grander great cities, the far side (tc.Map.GrandCitiesFar): %s"), (TownsGrand & 2) != 0 ? TEXT("on, the walled, timber, thatch and Indian towns stand in theirs") : TEXT("off"));
 
 	// The windows, each a small warm pane a hair proud of its wall: dark by day, lit as night comes on.
 	if (!LightsMesh)
@@ -18419,7 +18421,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		}
 		// (Release 2, grander great cities: "tc.Map.GrandCities" turned since the towns were built: they are built again
 		// to match, in the same way.)
-		if (TownMesh && TownsGrand != -1 && TownsGrand != (GrandCitiesWanted() ? 1 : 0) && Data.IsLoaded())
+		if (TownMesh && TownsGrand != -1 && TownsGrand != (GrandCitiesWanted() ? 1 : 0) + (GrandCitiesFarWanted() ? 2 : 0) && Data.IsLoaded())
 		{
 			BuildTowns();
 			ShownNight = -1.0f;
