@@ -2640,7 +2640,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
       // (Under the field spread's army ledger its own split, as before; else tally, which keeps support teams' harm apart
-      // under teamsRule. The two are never on together in the game: the ledger is bench-only.)
+      // under teamsRule. The two are never on together in the game: the ledger is bench-only. Under the ledger the teams'
+      // nerve split is off, so a bench run with both on is not a reading of `teams`.)
       // Under the field spread's army ledger (step 1b, choice 13) each part of m is read at the army or at the block, never both.
       if (this.led && blow.parts) {
         h.dmg += blow.dmg;

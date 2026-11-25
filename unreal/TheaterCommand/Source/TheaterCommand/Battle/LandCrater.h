@@ -608,7 +608,9 @@ namespace LandCrater
 	 * Field::Most so the battle's own rounds keep their room. Where Lines are given, most of the clusters lie along a
 	 * few old lines (the art director, 23 November: found from 300 m up in two seconds, not strewn evenly): each old
 	 * line a run of hedges or lanes across the fought-over ground in one heading, its holes mostly on one side of it;
-	 * some at the Spots; a few strewn. GroundWord: the effects kit's word for the ground at a
+	 * some at the Spots; a few strewn. (A line stepped finer than 4 m, as a lane's is, has its steps joined into pieces
+	 * that long; and the old lines take no more holes than about one to 3 m of them, so a field with one lane across
+	 * it keeps the rest for its junctions and its open ground.) GroundWord: the effects kit's word for the ground at a
 	 * place, empty where no old hole is left (a floor, a wall, water, a lane or a yard mended since: the scene's). An
 	 * earlier battle's holes are older still. Seeded: the same field and seed, the same holes. Returns how many.
 	 */

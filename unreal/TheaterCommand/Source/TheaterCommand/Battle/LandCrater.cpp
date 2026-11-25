@@ -3330,7 +3330,10 @@ namespace LandCrater
 		Dice D(Mix(Seed, 0x5CA25ull));
 		const auto InBox = [&](double X, double Y) { return X >= X0 && X <= X1 && Y >= Y0 && Y <= Y1; };
 
-		// The old lines: the pieces of hedge, wall and lane over the fought-over ground, 4 m long at least.
+		// The old lines: the pieces of hedge, wall and lane over the fought-over ground, 4 m long at least. A line
+		// stepped finer than that has its steps joined until a piece is (a lane's line is stepped every 2 m: taken a
+		// step at a time it gave no piece at all, so a field whose only old lines are lanes, the open steppe before
+		// Prokhorovka, had none to find and its holes fell strewn). A line stepped at 4 m or more is as it was.
 		struct Piece
 		{
 			double AX, AY, BX, BY, Long, Ux, Uy;
@@ -3338,14 +3341,22 @@ namespace LandCrater
 		std::vector<Piece> Pieces;
 		for (const std::vector<std::pair<double, double>>& Line : Lines.Lines)
 		{
-			for (size_t K = 0; K + 1 < Line.size(); ++K)
+			for (size_t A = 0; A + 1 < Line.size(); )
 			{
-				const double AX = Line[K].first, AY = Line[K].second, BX = Line[K + 1].first, BY = Line[K + 1].second;
-				const double Long = std::hypot(BX - AX, BY - AY);
+				size_t B = A + 1;
+				const double AX = Line[A].first, AY = Line[A].second;
+				double Long = std::hypot(Line[B].first - AX, Line[B].second - AY);
+				while (Long < 4.0 && B + 1 < Line.size())
+				{
+					++B;
+					Long = std::hypot(Line[B].first - AX, Line[B].second - AY);
+				}
+				const double BX = Line[B].first, BY = Line[B].second;
 				if (Long >= 4.0 && Long < 1e5 && InBox(0.5 * (AX + BX), 0.5 * (AY + BY)))
 				{
 					Pieces.push_back({ AX, AY, BX, BY, Long, (BX - AX) / Long, (BY - AY) / Long });
 				}
+				A = B;
 			}
 		}
 		std::vector<std::pair<double, double>> Spots;
@@ -3389,6 +3400,27 @@ namespace LandCrater
 				if (Fr.Long >= 60.0) Fronts.push_back(std::move(Fr));
 			}
 		}
+		// (how much old line the fronts are, each piece counted once: a field with one lane across it gives the same
+		// front again and again, and all the fronts' holes laid along it would pave it, a hole to every metre and a
+		// half. A front holds about a hole to 3 m, as the hedgerow country's do; what the fronts cannot hold falls at
+		// the junctions and strewn, as an open field's does.)
+		double FrontLong = 0.0;
+		{
+			std::vector<char> Counted(Pieces.size(), 0);
+			for (const Front& Fr : Fronts)
+			{
+				for (size_t K : Fr.Of)
+				{
+					if (!Counted[K])
+					{
+						Counted[K] = 1;
+						FrontLong += Pieces[K].Long;
+					}
+				}
+			}
+		}
+		const double OnFronts = Fronts.empty() ? 0.0 : 0.68 * std::min(1.0, FrontLong / (3.0 * 0.68 * Wanted));
+		const double OnSpots = Fronts.empty() ? 0.6 : OnFronts + 0.2;
 
 		int Laid = 0;
 		// (clusters: a barrage's dozen, a mortar's few; tried a while longer than wanted, since open ground is not all)
@@ -3401,7 +3433,7 @@ namespace LandCrater
 			// (along a front: the cluster's middle a few metres off a piece of it, the barrage walked along it, not across)
 			double Ux = 1.0, Uy = 0.0, Along = 1.0, Across = 1.0;
 			const double Where = D.U();
-			if (!Fronts.empty() && Where < 0.68)
+			if (Where < OnFronts)
 			{
 				const Front& Fr = Fronts[std::min(Fronts.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Fronts.size())))];
 				double Pick = D.U() * Fr.Long;
@@ -3418,7 +3450,7 @@ namespace LandCrater
 				Along = 1.2;
 				Across = 0.3;
 			}
-			else if (!Spots.empty() && Where < (Fronts.empty() ? 0.6 : 0.88))
+			else if (!Spots.empty() && Where < OnSpots)
 			{
 				// (at a junction or the village's edge: a tighter knot)
 				const std::pair<double, double>& P = Spots[std::min(Spots.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Spots.size())))];

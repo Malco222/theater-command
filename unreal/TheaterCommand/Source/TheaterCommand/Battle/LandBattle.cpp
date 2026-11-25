@@ -4715,6 +4715,11 @@ void ALandBattle::MakeRiders()
 {
 	FLandBattleState& S = *State;
 	using FRider = FLandBattleState::FRider;
+	// (the commanders made again: their glasses' copies go with them, and are made as they are next held)
+	if (GlassCopies && GlassCopies->GetInstanceCount() > 0)
+	{
+		GlassCopies->ClearInstances();
+	}
 	S.Riders.clear();
 	S.RoofManned.assign(S.Armour ? S.Armour->Vehicles().size() : 0, 1);
 	if (!S.Men || !S.Armour || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCommanders")))
@@ -4861,6 +4866,65 @@ void ALandBattle::RideTanks()
 	{
 		S.RoofManned.resize(All.size(), 1);
 	}
+	// His field glasses (release 2, on trial "glasses"; Brian, 25 November 16:35Z, a Sherman commander "holding a weapon
+	// raised at an odd angle across his face"): his hatch clips raise his hands to his eyes, and the soldiers' files
+	// now say where the glasses are in them (the clip's prop keys "binoculars", Crowd::PropFrame), so they are drawn
+	// there: the tank modeller's prop, Content/Models/Battle's Binoculars, one copy a commander, put away while he
+	// is at his roof gun, down inside, or his keys say they are not in his hands. Off: his hands as before.
+	if (!GlassCopies && !bGlassTried && ThingInk && LandParts::OnTrial("glasses") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoGlasses")))
+	{
+		bGlassTried = true;
+		FString Text;
+		LandKit::Model Prop;
+		std::string Why;
+		UStaticMesh* Made = nullptr;
+		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models/Battle/Binoculars.json"))) && Prop.Load(LandParts::Narrow(Text), LandKit::Dress(), Why))
+		{
+			Made = LandParts::PropMesh(this, TEXT("LandFieldGlasses"), Prop, false, ThingInk, UnitsPerMetre);
+		}
+		if (!Made)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Models/Battle/Binoculars.json not read (%s): the tank commanders look about without their glasses"), *LandParts::Wide(Why));
+		}
+		else
+		{
+			PropMeshes.Add(Made);
+			GlassCopies = NewObject<UInstancedStaticMeshComponent>(this, TEXT("LandFieldGlasses"));
+			GlassCopies->SetupAttachment(Root);
+			GlassCopies->SetStaticMesh(Made);
+			GlassCopies->SetMaterial(0, ThingInk);
+			GlassCopies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			GlassCopies->SetCanEverAffectNavigation(false);
+			// (16 cm of glasses: gone past where a man's hands can be told from his face)
+			GlassCopies->SetCullDistances(FMath::RoundToInt32(70.0 * UnitsPerMetre), FMath::RoundToInt32(100.0 * UnitsPerMetre));
+			GlassCopies->RegisterComponent();
+			UE_LOG(LogTheater, Log, TEXT("Land battle: the tank commanders' field glasses made (%d commanders)"), static_cast<int32>(S.Riders.size()));
+		}
+	}
+	UInstancedStaticMeshComponent* Glasses = GlassCopies.Get();
+	bool bGlassesTouched = false;
+	const FTransform GlassGone(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	// (a commander's glasses where his clip has them now, after his seat is set; put away when it has none)
+	const auto PutGlasses = [&S, Glasses, &bGlassesTouched, &GlassGone, this](FRider& R, bool bUp)
+	{
+		if (!Glasses)
+		{
+			return;
+		}
+		LandMen::Xform Held;
+		const bool bHeld = bUp && S.Men->PropFrame(R.Man, "binoculars", Held);
+		if (!bHeld && !R.bGlass)
+		{
+			return;
+		}
+		if (R.Glass < 0)
+		{
+			R.Glass = Glasses->AddInstance(GlassGone, true);
+		}
+		Glasses->UpdateInstanceTransform(R.Glass, bHeld ? LandParts::BankedAt(Held, UnitsPerMetre) : GlassGone, true, false, true);
+		R.bGlass = bHeld;
+		bGlassesTouched = true;
+	};
 	const double Now = S.Battle;
 	const double Life = S.Life;
 	for (FRider& R : S.Riders)
@@ -4933,6 +4997,7 @@ void ALandBattle::RideTanks()
 			// (out of sight: what he played is forgotten, so he comes back up as he is, unblended)
 			R.Now = R.Was = -1;
 			S.Men->SetRide(R.Man, Ride);
+			PutGlasses(R, false);
 			continue;
 		}
 		if (Want != R.Now)
@@ -4973,6 +5038,13 @@ void ALandBattle::RideTanks()
 		Ride.Clip = R.Clips[Want];
 		Ride.Time = Time;
 		S.Men->SetRide(R.Man, Ride);
+		// (his glasses by the clip he is taking up, never the one he blends out of; not while he is still rising
+		// through the hatch's ring, where his hands are below the rim)
+		PutGlasses(R, Rise > 0.6);
+	}
+	if (bGlassesTouched && Glasses)
+	{
+		Glasses->MarkRenderInstancesDirty();
 	}
 }
 

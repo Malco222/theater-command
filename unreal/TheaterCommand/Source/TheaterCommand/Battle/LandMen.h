@@ -856,6 +856,11 @@ namespace LandMen
 		 * after the time into Out, in his own axes (WorldFrame takes them to the field). False: he is not on his feet in
 		 * a clip that has them. */
 		bool PropAt(int Man, const std::string& Track, std::vector<float>& Out) const;
+		/** A prop he holds, on the field now: prop keys Track of the clip he shows (a rider's the clip his seat gives
+		 * him, SetRide) with a place (x, y, z) and a turn (qw, qx, qy, qz) in his own axes, taken to the field as his
+		 * WorldFrame is (place its mesh as a banked man's, x forward). False: his clip has no such keys, or its `shown`
+		 * is 0 now (put away), or he is not shown. The tank commander's field glasses: "binoculars". */
+		bool PropFrame(int Man, const std::string& Track, Xform& Out) const;
 		/** His bone frames on the field now (the soldier's bones in order), for tests and pictures. */
 		const Xform* FramesOf(int Man) const;
 		const Soldier* SoldierOf(int Man) const;

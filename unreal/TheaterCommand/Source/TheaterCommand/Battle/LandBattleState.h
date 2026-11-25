@@ -193,6 +193,9 @@ struct FLandBattleState
 		double SwitchedAt = -1e9;       // battle time the clip changed
 		float WasTime = 0.f;            // the left clip's time when it changed (life seconds)
 		float Rise = 0.f;               // how far up out of the hatch he stood when last alive (0 down inside, 1 up)
+		/** His field glasses' copy (the scene's GlassCopies; -1 none made yet), and whether it is in his hands now. */
+		int Glass = -1;
+		bool bGlass = false;
 	};
 	std::vector<FRider> Riders;
 	/** Each vehicle's roof gun manned now (the German MG 34 is drawn only while it is: the tank modeller's rule); true

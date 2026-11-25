@@ -1246,7 +1246,11 @@ int main(int Argc, char** Argv)
 			std::ostringstream R;
 			R << "{\"seed\": 7, \"date\": \"" << Date << "\", \"sky\": {\"latLon\": [49.1, -1.1]}, \"blocks\": [{\"id\": 1, \"army\": \"GER\", \"nat\": \"GER\"}], \"men\": ["
 			  << "{\"b\": 1, \"k\": 0, \"r\": \"mg\", \"at\": [[0, 0, 0, 0], [20, 0, 0, 0]], \"ch\": [[0, \"lmg_burst\", \"none\", 0, 300, 0, 0]]},"
-			  << "{\"b\": 1, \"k\": 1, \"r\": \"rifle\", \"at\": [[0, 10, 0, 0], [20, 10, 0, 0]], \"ch\": [[0, \"fire_prone\", \"none\", 10, 300, 0, 0]]}"
+			  << "{\"b\": 1, \"k\": 1, \"r\": \"rifle\", \"at\": [[0, 10, 0, 0], [20, 10, 0, 0]], \"ch\": [[0, \"fire_prone\", \"none\", 10, 300, 0, 0]]},"
+			  // (a second gunner and a rifleman by him, halted and waiting: in the open, then with fieldworks before
+			  // them, then the gunner's burst on his feet)
+			  << "{\"b\": 1, \"k\": 2, \"r\": \"mg\", \"at\": [[0, 0, 20, 0], [20, 0, 20, 0]], \"ch\": [[0, \"wait\", \"none\", 0, 300, 0, 0], [6, \"wait\", \"works\", 0, 300, 0, 0], [12, \"fire_stand\", \"none\", 0, 300, 0, 0]]},"
+			  << "{\"b\": 1, \"k\": 3, \"r\": \"rifle\", \"at\": [[0, 10, 20, 0], [20, 10, 20, 0]], \"ch\": [[0, \"wait\", \"none\", 10, 300, 0, 0], [6, \"wait\", \"works\", 10, 300, 0, 0]]}"
 			  << "], \"rounds\": []}";
 			Crowd Section;
 			Section.AddSoldier("GER", Files["GER"]);
@@ -1275,8 +1279,29 @@ int main(int Argc, char** Argv)
 				++Faults;
 				Fail("%s: the section gunner's muzzle is %.2f m from his place and %.2f m up (lying behind his gun: 0.3 to 2 m, 0.05 to 0.9 m)", Date, Off, bMuzzle ? static_cast<double>(MuzzleAt.Z) - GunnerZ : -1.0);
 			}
-			std::printf("the sections' machine gunners (release 2, %s): the gunner from soldier_%s, lmg_burst, his muzzle %.2f m before him and %.2f m up; his rifleman from soldier_GER: %s\n",
-				Date, GunFile.c_str(), Off, bMuzzle ? static_cast<double>(MuzzleAt.Z) - GunnerZ : -1.0, Faults ? "FAIL" : "ok");
+			// (Brian, 25 November 16:06Z, "a soldier would never shoot this like a rifle position": halted and waiting in
+			// the open the gunner lies behind his gun on her bipod; with fieldworks before him he kneels, her butt at
+			// his hip; on his feet only for the burst on the move. His rifleman kneels to wait, as he did.)
+			const int Waiting = Section.Find(1, 2), WaitingRifle = Section.Find(1, 3);
+			std::string Halted[3] = { "?", "?", "?" }, RifleHalted = "?";
+			if (Waiting < 0 || WaitingRifle < 0) { ++Faults; Fail("%s: the section's waiting gunner and his rifleman are not both made", Date); }
+			else
+			{
+				RifleHalted = Section.PlayingOf(WaitingRifle).Clip;
+				Halted[0] = Section.PlayingOf(Waiting).Clip;
+				for (int Fr = static_cast<int>(3.0 / Dt) + 1; Fr * Dt <= 10.0; ++Fr) Section.Update(Fr * Dt);
+				Halted[1] = Section.PlayingOf(Waiting).Clip;
+				for (int Fr = static_cast<int>(10.0 / Dt) + 1; Fr * Dt <= 16.0; ++Fr) Section.Update(Fr * Dt);
+				Halted[2] = Section.PlayingOf(Waiting).Clip;
+				if (GunFile != "GER" && (Halted[0] != "fire_prone" || Halted[1] != "fire_kneel" || Halted[2] != "fire_stand"))
+				{
+					++Faults;
+					Fail("%s: the section's gunner halted shows %s in the open, %s behind fieldworks and %s for his burst on his feet (fire_prone, fire_kneel, fire_stand)", Date, Halted[0].c_str(), Halted[1].c_str(), Halted[2].c_str());
+				}
+				if (RifleHalted != "fire_kneel") { ++Faults; Fail("%s: the section's rifleman waiting in the open shows %s, not fire_kneel as before", Date, RifleHalted.c_str()); }
+			}
+			std::printf("the sections' machine gunners (release 2, %s): the gunner from soldier_%s, lmg_burst, his muzzle %.2f m before him and %.2f m up; his rifleman from soldier_GER; halted in the open %s, behind fieldworks %s, on his feet %s, a rifleman waiting %s: %s\n",
+				Date, GunFile.c_str(), Off, bMuzzle ? static_cast<double>(MuzzleAt.Z) - GunnerZ : -1.0, Halted[0].c_str(), Halted[1].c_str(), Halted[2].c_str(), RifleHalted.c_str(), Faults ? "FAIL" : "ok");
 		}
 	}
 
@@ -1442,11 +1467,82 @@ int main(int Argc, char** Argv)
 					if (!Finite(Mid)) Fail("%s %s: NaN blended", KV.first.c_str(), Name);
 				}
 			}
+			// (his field glasses, release 2's "glasses": where his hatch clip's prop keys "binoculars" hold them, as the
+			// scene draws them, Crowd::PropFrame: in his hands the whole loop, at his eyes at least once in it, never
+			// far from his head, their frame a plain turn; none while he is at his roof gun)
+			{
+				const int Hatch = S.ClipIndex("commander_hatch"), Roof = S.ClipIndex("commander_roof_mg");
+				const Clip* HC = Hatch >= 0 ? &S.Clips[static_cast<size_t>(Hatch)] : nullptr;
+				const int HandL = S.BoneIndex("hand_l"), HandR = S.BoneIndex("hand_r");
+				if (!HC || !HC->PropOf("binoculars") || HC->Seats.empty() || HandL < 0 || HandR < 0)
+				{
+					std::printf("  soldier_%s.json: no field glasses in commander_hatch yet (no \"binoculars\" keys): passed over\n", KV.first.c_str());
+				}
+				else
+				{
+					Crowd::Ride R;
+					R.bShown = true;
+					R.Clip = Hatch;
+					float* M = R.Seat.R;
+					M[0] = 1.f; M[1] = 0.f; M[2] = 0.f;
+					M[3] = 0.f; M[4] = -1.f; M[5] = 0.f;
+					M[6] = 0.f; M[7] = 0.f; M[8] = 1.f;
+					R.Seat.T[0] = 300.f + HC->Seats[0].Offset.X;
+					R.Seat.T[1] = 200.f - HC->Seats[0].Offset.Y;
+					R.Seat.T[2] = 2.4f + HC->Seats[0].Offset.Z;
+					const auto Gap = [](const Vec3& A, const float* B) { return std::sqrt(static_cast<double>((A.X - B[0]) * (A.X - B[0]) + (A.Y - B[1]) * (A.Y - B[1]) + (A.Z - B[2]) * (A.Z - B[2]))); };
+					double HeadNear = 1e9, HeadFar = 0.0, HandFar = 0.0, Skew = 0.0;
+					int Held = 0;
+					const int Steps = 60;
+					for (int K = 0; K < Steps; ++K)
+					{
+						R.Time = HC->Long * static_cast<float>(K) / static_cast<float>(Steps);
+						C3.SetRide(Man, R);
+						C3.Update(2.05 + 0.9 * K / Steps);
+						Xform G;
+						if (!C3.PropFrame(Man, "binoculars", G)) continue;
+						++Held;
+						const Xform* F = C3.FramesOf(Man);
+						const double ToHead = Gap(F[Head].Point(S.Bones[static_cast<size_t>(Head)].Head), G.T);
+						HeadNear = std::min(HeadNear, ToHead);
+						HeadFar = std::max(HeadFar, ToHead);
+						HandFar = std::max(HandFar, std::min(Gap(F[HandL].Point(S.Bones[static_cast<size_t>(HandL)].Head), G.T), Gap(F[HandR].Point(S.Bones[static_cast<size_t>(HandR)].Head), G.T)));
+						// (a plain turn: each axis a unit long, the three square to one another)
+						for (int A = 0; A < 3; ++A)
+						{
+							for (int B = A; B < 3; ++B)
+							{
+								const double Dot = static_cast<double>(G.R[A]) * G.R[B] + static_cast<double>(G.R[3 + A]) * G.R[3 + B] + static_cast<double>(G.R[6 + A]) * G.R[6 + B];
+								Skew = std::max(Skew, std::fabs(Dot - (A == B ? 1.0 : 0.0)));
+							}
+						}
+					}
+					if (Held != Steps) Fail("%s commander_hatch: his field glasses in his hands at %d of %d moments of the loop", KV.first.c_str(), Held, Steps);
+					if (Held > 0 && (HeadNear > 0.25 || HeadFar > 0.8 || HandFar > 0.3 || Skew > 1e-3))
+						Fail("%s commander_hatch: his field glasses %.2f m from his head at the nearest (at his eyes: 0.25 at most) and %.2f at the farthest (0.8), %.2f m from the nearer hand at the most (0.3), their frame off a plain turn by %.4f",
+							KV.first.c_str(), HeadNear, HeadFar, HandFar, Skew);
+					Xform None;
+					bool bAtGun = false;
+					if (Roof >= 0)
+					{
+						R.Clip = Roof;
+						R.Time = 1.f;
+						C3.SetRide(Man, R);
+						C3.Update(2.97);
+						bAtGun = C3.PropFrame(Man, "binoculars", None);
+						if (bAtGun) Fail("%s commander_roof_mg: his field glasses are still in his hands at the roof gun", KV.first.c_str());
+					}
+					std::printf("  soldier_%s.json: his field glasses in his hands the whole of commander_hatch, %.2f m from his head at his eyes and %.2f lowered, %.2f m from the nearer hand at the most; none at the roof gun: %s\n",
+						KV.first.c_str(), HeadNear, HeadFar, HandFar, Held == Steps && HeadNear <= 0.25 && HeadFar <= 0.8 && HandFar <= 0.3 && Skew <= 1e-3 && !bAtGun ? "ok" : "FAIL");
+				}
+			}
 			// (hidden when the scene says: his hatch shut, his tank hidden)
 			Crowd::Ride Off;
 			C3.SetRide(Man, Off);
 			C3.Update(3.0);
 			if (C3.Visible(Man)) Fail("%s: shown when the scene hides him", KV.first.c_str());
+			Xform Hidden;
+			if (C3.PropFrame(Man, "binoculars", Hidden)) Fail("%s: his field glasses shown when the scene hides him", KV.first.c_str());
 		}
 		// (the battle's own men unchanged by the riders: each still found as he was, none of them a rider)
 		bool bSame = true;
