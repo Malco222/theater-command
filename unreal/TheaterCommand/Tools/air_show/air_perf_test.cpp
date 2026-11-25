@@ -7,14 +7,19 @@
 //    AirBattle's ModelFor, the ground and sea scenes), every model the recordings fly, and every model doctrine.ts and
 //    ships.ts name (the plain "Fighter:<nation>" and its kind for every nation) finds a row;
 //  - each type's limits lie inside physical bounds (a fighter's tightest turn 150 to 450 m and its roll 40 to 200 degrees
-//    a second; a bomber's roll 15 to 70), and the worked-out turn agrees with the turns the record documents;
+//    a second; a bomber's roll 15 to 70), checked on the figures as worked out before Limits holds them, so that the row
+//    can fail (the reviewer of 25 November: on the held figures it could not); the two the hold catches are named;
+//  - the stalls: VMin from the type's weight and lift, and every quoted stall's lift that of the field it sits in;
+//  - the worked-out turn agrees with the turns the table gives;
 //  - the orderings the record is sure of hold, each with its source beside it;
-//  - a model's plain name flies the mark of the battle's date, as guns.ts arms it.
+//  - a model's plain name flies the mark of the battle's date as the record dates it, a mark named outright as named;
+//  - every tactic names its sources, and a fact one beside the rules' own doctrine.ts.
 // Then a line a type: the limits, for the historian's page (historian/air-performance-1124.md).
 // Usage: air_perf_test <performance.json> <Content/Models> [<rules' src/battle/air>] [recording.json ...]
 #include "Battle/AirFeed.h"
 #include "Battle/AirPerf.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -80,14 +85,27 @@ namespace
 		}
 	}
 
-	/** Every model name a group flies in a recording (its model and nation). */
-	void RecordedModels(const std::string& Path, std::set<std::pair<std::string, std::string>>& Out, std::string& Why)
+	/** Every model name a group flies in a recording (its model and nation); false (and why) if it does not read. */
+	bool RecordedModels(const std::string& Path, std::set<std::pair<std::string, std::string>>& Out, std::string& Why)
 	{
 		AirFeed::Recording Rec;
-		if (!AirFeed::ReadRecording(Slurp(Path), Rec, Why)) return;
+		std::string Fault;
+		if (!AirFeed::ReadRecording(Slurp(Path), Rec, Fault))
+		{
+			Why += (Why.empty() ? "" : "; ") + Path + " does not read: " + Fault;
+			return false;
+		}
 		for (const AirFeed::Frame& F : Rec.Views)
 			for (const AirShow::Group& G : F.Groups)
 				if (!G.Model.empty()) Out.insert({ G.Model, G.Nation });
+		return true;
+	}
+
+	/** The lift a quoted stall implies at the row's weight: CL = 2 m g / (1.225 S V^2). */
+	double StallLift(double MassKg, double WingM2, double StallKmh)
+	{
+		const double V = StallKmh / 3.6;
+		return WingM2 > 0.0 && V > 0.0 ? 2.0 * MassKg * 9.81 / (1.225 * WingM2 * V * V) : 0.0;
 	}
 }
 
@@ -114,7 +132,7 @@ int main(int Argc, char** Argv)
 		AirFeed::Parse(Text, J, ParseWhy);
 		const AirFeed::Json& Sources = J["sources"];
 		static const std::set<std::string> Marks = { "measured", "manufacturer", "derived", "uncertain" };
-		static const char* Figures[] = { "span_m", "wing_m2", "mass_kg", "power_hp", "power_m", "power_low_hp", "power_low_m", "thrust_kn", "top_kmh", "top_m", "cruise_kmh", "stall_kmh",
+		static const char* Figures[] = { "span_m", "wing_m2", "mass_kg", "power_hp", "power_m", "power_low_hp", "power_low_m", "thrust_kn", "top_kmh", "top_m", "cruise_kmh", "stall_kmh", "stall_flaps_kmh",
 			"climb_ms", "to_height_min", "ceiling_m", "turn_m", "turn_s", "roll_dps", "roll_fast_dps", "g_limit", "dive_kmh", "bomb_kg", "range_km", "clmax" };
 		int Count = 0, Wrong = 0;
 		std::string First;
@@ -143,6 +161,52 @@ int main(int Argc, char** Argv)
 		for (const auto& [Mark, N] : ByMark) Tally += " " + Mark + " " + std::to_string(N);
 		Bad += Check(Wrong == 0 && Count > 0, "every figure names its source and how sure it is, inside its own range",
 			std::to_string(Count) + " figures:" + Tally + (First.empty() ? "" : "; first wrong: " + First));
+
+		// The stalls (the reviewer of 25 November: the quoted stalls were on mixed bases, their lift 1.26 to 2.45). A
+		// clean stall as the pilot's notes give it reads low near the stall (a lift of 1.2 to 1.8 at the row's weight); one
+		// whose lift is more is a flaps-down or landing stall and sits in stall_flaps_kmh; neither is flown.
+		std::string Stalls;
+		int Clean = 0, Flaps = 0;
+		for (size_t I = 0; I < Rows.Count(); ++I)
+		{
+			const AirFeed::Json& X = Rows.At(I);
+			const double Mass = X["mass_kg"].At(0).Num(), Wing = X["wing_m2"].At(0).Num();
+			if (!X["stall_kmh"].IsNull())
+			{
+				++Clean;
+				const double Cl = StallLift(Mass, Wing, X["stall_kmh"].At(0).Num());
+				if (Cl < 1.2 || Cl > 1.8) Stalls += " " + X["key"].Str("") + " clean " + Num(Cl, 2);
+			}
+			if (!X["stall_flaps_kmh"].IsNull())
+			{
+				++Flaps;
+				const double Cl = StallLift(Mass, Wing, X["stall_flaps_kmh"].At(0).Num());
+				if (Cl <= 1.8 || Cl > 3.5) Stalls += " " + X["key"].Str("") + " flaps " + Num(Cl, 2);
+			}
+		}
+		Bad += Check(Stalls.empty() && Clean + Flaps >= 70, "every quoted stall's lift fits its field (clean 1.2 to 1.8; flaps down over 1.8)",
+			std::to_string(Clean) + " clean, " + std::to_string(Flaps) + " flaps down" + (Stalls.empty() ? "" : "; off:" + Stalls));
+
+		// The tactics: each names sources the file lists; a fact names one beside the rules' own doctrine.ts, which is
+		// the game's reading, not the record (the reviewer of 25 November: doctrine.ts alone is circular).
+		std::string Tactics;
+		const AirFeed::Json& Tac = J["tactics"];
+		for (size_t I = 0; I < Tac.Count(); ++I)
+		{
+			const AirFeed::Json& X = Tac.At(I);
+			const std::string Kind = X["kind"].Str("");
+			bool bKnown = X["by"].Count() > 0, bBeyond = false;
+			for (size_t K = 0; K < X["by"].Count(); ++K)
+			{
+				const std::string By = X["by"].At(K).Str("");
+				bKnown = bKnown && !Sources[By].IsNull();
+				bBeyond = bBeyond || By != "doctrine";
+			}
+			if (!bKnown || (Kind != "fact" && Kind != "reading") || (Kind == "fact" && !bBeyond))
+				Tactics += " " + X["topic"].Str("") + " " + X["who"].Str("") + " " + X["when"].Str("") + ";";
+		}
+		Bad += Check(Tactics.empty() && Tac.Count() >= 40, "every tactic names its sources, and a fact one beside doctrine.ts",
+			std::to_string(Tac.Count()) + " tactics" + (Tactics.empty() ? "" : "; wrong:" + Tactics));
 	}
 
 	// Every name a model is drawn or named by finds a row.
@@ -169,15 +233,17 @@ int main(int Argc, char** Argv)
 		// (the recordings' groups, by their models and nations)
 		std::set<std::pair<std::string, std::string>> Flown;
 		std::string RecWhy;
-		int Recordings = 0;
+		int Recordings = 0, Unread = 0;
 		std::string Rules;
 		for (int A = 3; A < Argc; ++A)
 		{
 			const std::string Path = Argv[A];
 			if (std::filesystem::is_directory(Path)) { Rules = Path; continue; }
-			RecordedModels(Path, Flown, RecWhy);
+			// (a recording that does not read is a failure of its own, not a recording with nothing in it)
+			if (!RecordedModels(Path, Flown, RecWhy)) ++Unread;
 			++Recordings;
 		}
+		Bad += Check(Unread == 0, "every recording given reads", std::to_string(Recordings) + " recordings" + (RecWhy.empty() ? "" : "; " + RecWhy));
 		// (the rules': doctrine.ts's fighterOf, bomberOf and its single-engined set; ships.ts's deckModels)
 		std::set<std::string> Ruled;
 		if (!Rules.empty())
@@ -220,30 +286,51 @@ int main(int Argc, char** Argv)
 		}
 		Bad += Check(Missing.empty() && Files >= 25, "every model the files, the scene, the recordings and the rules name finds a row",
 			std::to_string(Files) + " model files, " + std::to_string(Recordings) + " recordings (" + std::to_string(Flown.size()) + " models flown), "
-			+ std::to_string(Found) + " found" + (Missing.empty() ? std::string() : "; none for" + Missing) + (RecWhy.empty() ? "" : "; " + RecWhy));
+			+ std::to_string(Found) + " found" + (Missing.empty() ? std::string() : "; none for" + Missing));
 	}
 
-	// Each type's limits inside physical bounds; the worked-out turn against the turns the record documents.
+	// Each type's limits inside physical bounds; the worked-out turn against the turns the table gives.
 	{
-		std::string Out, Off;
+		std::string Out, Off, Held, Cache, Stall;
 		int Turns = 0;
+		// (the two the hold catches, and why: the Me 262A's jet thrust is weak at a fighting speed and its wing loading
+		// high, about 495 m worked out, flown at 450 as the brief's fighter bound; the Swordfish I is a biplane, its two
+		// wings' area on a short span, about 136 m worked out, flown at 150. Any other caught, or either of these let go,
+		// fails the row)
+		static const std::set<std::string> HeldOnes = { "Me 262A", "Swordfish I" };
 		for (const AirPerf::Row& R : T.Rows)
 		{
 			const AirPerf::Flight F = AirPerf::Limits(R);
 			const double Roll = F.RollMax / Deg;
-			bool bOk = F.VMin > 20.0 && F.VMin < F.VMax && F.VMax < F.VTop && F.VTop <= F.VDive && F.VTop < 260.0 && F.GMax >= 2.0 && F.GMax <= 6.5
-				&& F.RollTime >= 0.08 && F.RollTime <= 1.2 && F.Ceiling >= 3000.0 && F.Ceiling <= 14000.0 && F.ClimbMost > 2.0 && F.ClimbMost < 25.0;
 			// (a hair's allowance, Eps, for a figure on the bound itself: 15 degrees a second comes back as 14.999999)
 			constexpr double Eps = 1e-6;
-			if (R.IsFighter()) bOk = bOk && F.RMin >= 150.0 - Eps && F.RMin <= 450.0 + Eps && Roll >= 40.0 - Eps && Roll <= 200.0 + Eps;
-			else bOk = bOk && Roll >= 15.0 - Eps && Roll <= 70.0 + Eps && F.RMin >= 150.0 - Eps;
-			if (!bOk) Out += " " + R.Key + " (" + Num(F.VMin) + "/" + Num(F.VMax) + "/" + Num(F.VTop) + "/" + Num(F.VDive) + " m/s, " + Num(F.RMin) + " m, " + Num(Roll) + " deg/s)";
+			// (worked out before the hold: the turn, the roll's settling time)
+			const double Worked = AirPerf::RadiusWorked(R), Settle = AirPerf::RollSettle(R, F.VMax);
+			const double TurnLo = 150.0, TurnHi = R.IsFighter() ? 450.0 : 2500.0;
+			bool bOk = F.VMin > 20.0 && F.VMin < F.VMax && F.VMax < F.VTop && F.VTop <= F.VDive && F.VTop < 260.0 && F.GMax >= 2.0 && F.GMax <= 6.5
+				&& Settle >= 0.08 && Settle <= 1.2 && F.Ceiling >= 3000.0 && F.Ceiling <= 14000.0 && F.ClimbMost > 2.0 && F.ClimbMost < 25.0;
+			if (R.IsFighter()) bOk = bOk && Roll >= 40.0 - Eps && Roll <= 200.0 + Eps;
+			else bOk = bOk && Roll >= 15.0 - Eps && Roll <= 70.0 + Eps;
+			const bool bInside = Worked >= TurnLo - Eps && Worked <= TurnHi + Eps;
+			if (!bInside) Held += " " + R.Key + " " + Num(Worked) + " m";
+			bOk = bOk && Worked > 0.0 && (bInside || HeldOnes.count(R.Key)) && (!bInside || !HeldOnes.count(R.Key));
+			// (and what it flies is the worked-out turn held to the bounds, nothing else)
+			bOk = bOk && std::fabs(F.RMin - std::clamp(Worked, TurnLo, TurnHi)) < 1e-9 && std::fabs(F.RollTime - std::clamp(Settle, 0.08, 1.2)) < 1e-12;
+			if (!bOk) Out += " " + R.Key + " (" + Num(F.VMin) + "/" + Num(F.VMax) + "/" + Num(F.VTop) + "/" + Num(F.VDive) + " m/s, " + Num(Worked) + " m worked, " + Num(F.RMin) + " flown, " + Num(Roll) + " deg/s, "
+					+ Num(Settle, 2) + " s)";
+			// (VMin 1.15 times the stall from its weight and its lift, not the quoted stall)
+			if (std::fabs(F.VMin - 1.15 * AirPerf::StallSpeed(R)) > 1e-9) Stall += " " + R.Key;
+			// (the table's own limits, worked out once by Read, are Limits' own)
+			const AirPerf::Flight Kept = T.LimitsOf(R);
+			if (Kept.VMin != F.VMin || Kept.VMax != F.VMax || Kept.VTop != F.VTop || Kept.VDive != F.VDive || Kept.RMin != F.RMin || Kept.GMax != F.GMax || Kept.RollMax != F.RollMax
+				|| Kept.RollTime != F.RollTime || Kept.ClimbMost != F.ClimbMost || Kept.Ceiling != F.Ceiling)
+				Cache += " " + R.Key;
 			// (a documented radius or turn time, within three tenths of the worked-out one at its height)
 			if (R.TurnRadius > 0.0)
 			{
-				const double Worked = AirPerf::TurnRadius(R, R.TurnM > 0.0 ? R.TurnM : AirPerf::FightM);
+				const double AtHeight = AirPerf::TurnRadius(R, R.TurnM > 0.0 ? R.TurnM : AirPerf::FightM);
 				++Turns;
-				if (std::fabs(Worked - R.TurnRadius) > 0.3 * R.TurnRadius) Off += " " + R.Key + " " + Num(Worked) + " m against " + Num(R.TurnRadius);
+				if (std::fabs(AtHeight - R.TurnRadius) > 0.3 * R.TurnRadius) Off += " " + R.Key + " " + Num(AtHeight) + " m against " + Num(R.TurnRadius);
 			}
 			if (R.TurnTime > 0.0)
 			{
@@ -253,9 +340,11 @@ int main(int Argc, char** Argv)
 				if (std::fabs(Seconds - R.TurnTime) > 0.3 * R.TurnTime) Off += " " + R.Key + " " + Num(Seconds, 1) + " s against " + Num(R.TurnTime, 1);
 			}
 		}
-		Bad += Check(Out.empty(), "every type's limits inside physical bounds (fighters: turn 150 to 450 m, roll 40 to 200 deg/s; bombers: roll 15 to 70)",
-			Out.empty() ? std::to_string(T.Rows.size()) + " types" : "out:" + Out);
-		Bad += Check(Off.empty() && Turns >= 10, "the worked-out turn within three tenths of every documented turn", std::to_string(Turns) + " documented" + (Off.empty() ? "" : "; off:" + Off));
+		Bad += Check(Out.empty(), "every type's limits inside physical bounds, as worked out before the hold (fighters: turn 150 to 450 m, roll 40 to 200 deg/s; bombers: roll 15 to 70)",
+			std::to_string(T.Rows.size()) + " types; held:" + Held + (Out.empty() ? "" : "; out:" + Out));
+		Bad += Check(Stall.empty(), "VMin is 1.15 times the stall worked out from the type's weight, wing and lift", Stall.empty() ? "" : "not:" + Stall);
+		Bad += Check(Cache.empty() && T.Flights.size() == T.Rows.size(), "the limits Read keeps are Limits' own", Cache.empty() ? std::to_string(T.Flights.size()) + " kept" : "differ:" + Cache);
+		Bad += Check(Off.empty() && Turns >= 10, "the worked-out turn within three tenths of every turn the table gives", std::to_string(Turns) + " given" + (Off.empty() ? "" : "; off:" + Off));
 	}
 
 	// The orderings the record is sure of.
@@ -263,7 +352,7 @@ int main(int Argc, char** Argv)
 		auto L = [&T](const char* Key)
 		{
 			const AirPerf::Row* R = T.Named(Key);
-			return R ? AirPerf::Limits(*R) : AirPerf::Flight();
+			return R ? T.LimitsOf(*R) : AirPerf::Flight();
 		};
 		auto Has = [&T](std::initializer_list<const char*> Keys)
 		{
@@ -285,9 +374,10 @@ int main(int Argc, char** Argv)
 			&& L("Fw 190A-4").RollMax > L("Spitfire IX").RollMax,
 			"the Fw 190 out-rolls the Bf 109 and the Spitfire", Num(L("Fw 190A-4").RollMax / Deg) + " deg/s against " + Num(L("Bf 109F").RollMax / Deg) + " and " + Num(L("Spitfire V").RollMax / Deg));
 		// The Spitfire out-turns the Bf 109: the RAE's trials of the captured Bf 109E (Morgan and Morris, 1940: 885 ft
-		// against the Spitfire's 696 ft at 12,000 ft, as commonly quoted); Ackroyd and Lamont, Aeronautical Journal,
-		// February 2000 (its abstract). The Mk V against the F and the IX against the G likewise: a reading, from their
-		// wing loadings (the 109's slats allowed for: the table's clmax).
+		// against the Spitfire's 696 ft at 12,000 ft, as commonly quoted; not read on the page). The Mk V against the F
+		// and the IX against the G likewise: a reading, from their wing loadings (the 109's slats allowed for: the table's
+		// clmax). (Ackroyd and Lamont's paper compares the four of 1940, but only its abstract was read, which gives no
+		// radii and no ranking: it is not this ordering's source.)
 		Bad += Check(L("Spitfire I").RMin < L("Bf 109E").RMin && L("Spitfire V").RMin < L("Bf 109F").RMin && L("Spitfire IX").RMin < L("Bf 109G").RMin,
 			"the Spitfire out-turns the Bf 109", Num(L("Spitfire I").RMin) + " m against " + Num(L("Bf 109E").RMin) + "; V " + Num(L("Spitfire V").RMin) + " against F " + Num(L("Bf 109F").RMin));
 		// The P-47 and the P-51 out-dive the Bf 109: their pilot's flight operating instructions' limits (500 and 505 mph
@@ -313,7 +403,7 @@ int main(int Argc, char** Argv)
 			for (const AirPerf::Row& R : T.Rows)
 			{
 				if (R.Key == "Me 262A") continue;
-				const AirPerf::Flight F = AirPerf::Limits(R);
+				const AirPerf::Flight F = T.LimitsOf(R);
 				if (F.VTop >= Jet.VTop) Faster += " " + R.Key;
 				if (R.IsFighter() && (F.RMin >= Jet.RMin || AirPerf::TurnRadius(R, AirPerf::FightM) >= JetWorked)) Tighter += " " + R.Key;
 			}
@@ -323,7 +413,12 @@ int main(int Argc, char** Argv)
 		}
 	}
 
-	// A model's plain name flies the mark of its date, as guns.ts arms it; a stand-in its nation's type.
+	// A model's plain name flies the mark of its date, as the record dates the marks (guns.ts's where they agree: the
+	// Spitfire V from 1941, the Fw 190A-8 from 1944, the P-51D from June 1944, the Zero's, the Yak's and the Betty's, the
+	// B-17G from September 1943; the record's where guns.ts has no mark: the Bf 109G from mid-1942, the G-2 replacing the
+	// F-4 from about June 1942; the Spitfire IX from 1943, the V being most of Fighter Command's Spitfires through 1942,
+	// both readings of the date); a mark named outright flies as named (the reviewer of 25 November found "Bf 109E-4" of
+	// 1943 flying as an F); a stand-in its nation's type.
 	{
 		struct Date
 		{
@@ -335,7 +430,11 @@ int main(int Argc, char** Argv)
 		static const Date Dates[] = {
 			{ "Spitfire", "", 1940.6, "Spitfire I" }, { "Spitfire", "", 1941.5, "Spitfire V" }, { "Spitfire", "UK", 1943.0, "Spitfire IX" },
 			{ "Spitfire", "", 0.0, "Spitfire I" }, { "Spitfire IX", "", 1940.0, "Spitfire IX" }, { "Bf109", "GER", 1940.6, "Bf 109E" },
-			{ "Bf 109", "", 1942.0, "Bf 109F" }, { "Me 109", "", 1944.0, "Bf 109F" }, { "Fw190", "", 1943.0, "Fw 190A-4" }, { "Fw190", "", 1944.3, "Fw 190A-8" },
+			{ "Bf 109", "", 1942.0, "Bf 109F" }, { "Bf 109", "", 1942.6, "Bf 109G" }, { "Me 109", "", 1944.0, "Bf 109G" }, { "Fw190", "", 1943.0, "Fw 190A-4" }, { "Fw190", "", 1944.3, "Fw 190A-8" },
+			{ "Spitfire", "", 1942.6, "Spitfire V" }, { "Bf 109E-4", "", 1943.0, "Bf 109E" }, { "Bf 109E-3", "GER", 1941.5, "Bf 109E" }, { "Emil", "", 1942.0, "Bf 109E" },
+			{ "Fw 190A-3", "", 1944.5, "Fw 190A-4" }, { "Spitfire Mk I", "", 1943.0, "Spitfire I" }, { "Spitfire IA", "", 1942.0, "Spitfire I" }, { "A6M2 model 21", "", 1944.5, "A6M2" },
+			{ "G4M1 model 11", "", 1944.0, "G4M1" }, { "Bf 109E", "", 1944.0, "Bf 109E" }, { "P-51D", "", 1944.0, "P-51D" }, { "B17", "USA", 1943.3, "B-17F" }, { "B17", "", 1944.0, "B-17G" },
+			{ "B17", "", 0.0, "B-17G" }, { "B-17F", "", 1945.0, "B-17F" }, { "B-17E", "", 1942.5, "B-17F" },
 			{ "Mustang", "", 1944.0, "P-51B" }, { "Mustang", "", 1944.6, "P-51D" }, { "Mustang", "", 0.0, "P-51D" }, { "Zero", "JAP", 1942.0, "A6M2" },
 			{ "Zero", "", 1943.0, "A6M3" }, { "Zero", "", 1944.2, "A6M5" }, { "Yak", "SOV", 1942.2, "Yak-1" }, { "Yak", "", 1942.9, "Yak-1B" },
 			{ "Yak", "", 1943.5, "Yak-9" }, { "Yak", "", 1944.8, "Yak-3" }, { "Betty", "", 1942.0, "G4M1" }, { "Betty", "", 1944.0, "G4M2" },
@@ -352,7 +451,7 @@ int main(int Argc, char** Argv)
 			const AirPerf::Row* R = T.Of(D.Model, D.Nation, D.Year);
 			if (!R || R->Key != D.Wants) Wrong += std::string(" ") + D.Model + " " + Num(D.Year, 1) + ": " + (R ? R->Key : std::string("none")) + " (wants " + D.Wants + ")";
 		}
-		Bad += Check(Wrong.empty(), "a model's plain name flies its date's mark (guns.ts's), a plain model its nation's type", std::to_string(std::size(Dates)) + " asked" + Wrong);
+		Bad += Check(Wrong.empty(), "a model's plain name flies its date's mark, a mark named outright as named, a plain model its nation's type", std::to_string(std::size(Dates)) + " asked" + Wrong);
 	}
 
 	// A line a type: the limits as the flight core would fly them.
@@ -361,7 +460,7 @@ int main(int Argc, char** Argv)
 	std::printf("  %-14s %-15s %6s %6s %6s %6s %6s %5s %6s %6s %6s %7s\n", "", "", "m/s", "m/s", "m/s", "m/s", "m", "g", "deg/s", "s", "m/s", "m");
 	for (const AirPerf::Row& R : T.Rows)
 	{
-		const AirPerf::Flight F = AirPerf::Limits(R);
+		const AirPerf::Flight F = T.LimitsOf(R);
 		double Seconds = 0.0;
 		const double Worked = AirPerf::TurnRadius(R, AirPerf::FightM, &Seconds);
 		std::printf("  %-14s %-15s %6.1f %6.1f %6.1f %6.1f %6.0f %5.1f %6.0f %6.2f %6.1f %7.0f  (turn %.0f m, %.1f s)\n", R.Key.c_str(), R.Role.c_str(), F.VMin, F.VMax, F.VTop,
