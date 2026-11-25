@@ -532,29 +532,61 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	const FString& Verb = Step.Verb;
 	if (Verb == TEXT("start"))
 	{
-		// "USA 1939-09 seed 25 colonel"
+		// "USA 1939-09 seed 25 colonel", "UK 1939-09 seed 4 theatre colonel": after the date, in any order, the dice, a level
+		// of difficulty and a depth, each as the opening screen offers them. (1.5.3: a depth was read as a level, matched
+		// none, and a run that takes pictures played the full game whatever the line said. A word that is neither is named
+		// in the step's note, and left out.)
 		TArray<FString> Words;
 		Step.Target.ParseIntoArray(Words, TEXT(" "), true);
 		FString Year, Month;
 		const bool bDated = Words.Num() > 1 && Words[1].Split(TEXT("-"), &Year, &Month);
 		const int32 From = bDated ? (FCString::Atoi(*Year) - 1939) * 12 + FCString::Atoi(*Month) - 9 + 1 : 1;
 		int32 Seed = 0;
-		FString Level;
-		for (int32 Index = 2; Index < Words.Num(); ++Index)
+		FString Level, Depth;
+		TArray<FString> Neither;
+		const FOpening& Offered = Player.GetOpening();
+		auto Offers = [](const TArray<FGrandLevel>& List, const FString& Word)
+		{
+			return List.ContainsByPredicate([&Word](const FGrandLevel& One) { return One.Id.Equals(Word, ESearchCase::IgnoreCase); });
+		};
+		// (a second word that is no date is read with the rest, so that it is named if it means nothing: before, it was let go)
+		for (int32 Index = bDated ? 2 : 1; Index < Words.Num(); ++Index)
 		{
 			if (Words[Index] == TEXT("seed") && Words.IsValidIndex(Index + 1))
 			{
 				Seed = FCString::Atoi(*Words[++Index]);
 			}
-			else
+			else if (Offers(Offered.Depths, Words[Index]))
+			{
+				Depth = Words[Index];
+			}
+			else if (Offers(Offered.Levels, Words[Index]))
 			{
 				Level = Words[Index];
 			}
+			else
+			{
+				Neither.Add(TEXT("\"") + Words[Index] + TEXT("\""));
+			}
 		}
-		if (Words.Num() == 0 || !Player.BeginGrandFor(Words[0], From, Seed, Level))
+		if (Words.Num() == 0 || !Player.BeginGrandFor(Words[0], From, Seed, Level, Depth))
 		{
 			bMissing = true;
 			Note = TEXT("no such campaign could be begun");
+		}
+		if (Neither.Num() > 0)
+		{
+			auto Ids = [](const TArray<FGrandLevel>& List)
+			{
+				TArray<FString> Out;
+				for (const FGrandLevel& One : List)
+				{
+					Out.Add(One.Id);
+				}
+				return FString::Join(Out, TEXT(", "));
+			};
+			Note += (Note.IsEmpty() ? FString() : FString(TEXT("; "))) + FString::Printf(TEXT("left out, as neither a level nor a depth: %s (the levels: %s; the depths: %s)"),
+				*FString::Join(Neither, TEXT(", ")), *Ids(Offered.Levels), *Ids(Offered.Depths));
 		}
 		Context.Reset();
 	}

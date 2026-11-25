@@ -776,7 +776,7 @@ void ACampaignPlayerController::PressDesk(const FString& Id)
 	}
 }
 
-void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
+void ACampaignPlayerController::BeginGrandCampaign(bool bWatch, const FString& DepthWord)
 {
 	ACampaignGameMode* Mode = GetMode();
 	if (!Mode || Opening.bWorking || !Opening.Years.IsValidIndex(Opening.YearIndex) || (!bWatch && !Opening.Nations.IsValidIndex(Opening.NationIndex)))
@@ -786,7 +786,13 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	const FString Human = bWatch ? FString() : Opening.Nations[Opening.NationIndex].Tag;
 	const FString Level = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Id : FString();
 	FString Depth = !bWatch && Opening.Depths.IsValidIndex(Opening.DepthIndex) ? Opening.Depths[Opening.DepthIndex].Id : FString();
-	if (FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr)
+	if (!bWatch && !DepthWord.IsEmpty())
+	{
+		// (1.5.3, dev only: a step file's start line that names a depth is played at it, in a run that takes pictures too.
+		// Before, "start UK 1939-09 seed 4 theatre" played the full game unless the launch said -TheaterDepth=theatre.)
+		Depth = DepthWord;
+	}
+	else if (FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr)
 	{
 		// (a run that takes pictures plays the full game, with every desk in the player's hands, as it always has:
 		// "-TheaterDepth=theatre" asks for another depth)
@@ -9561,8 +9567,17 @@ bool ACampaignPlayerController::RestoreCampaign(const FString& SaveText)
 	return true;
 }
 
-bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord)
+bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord, const FString& DepthWord)
 {
+	// (1.5.3) The depth asked for, as the rules name it; a depth they do not offer begins nothing, rather than a war at
+	// another depth than the step file says.
+	const int32 DepthAt = DepthWord.IsEmpty() ? INDEX_NONE
+		: Opening.Depths.IndexOfByPredicate([&DepthWord](const FGrandLevel& Each) { return Each.Id.Equals(DepthWord, ESearchCase::IgnoreCase); });
+	if (!DepthWord.IsEmpty() && DepthAt == INDEX_NONE)
+	{
+		return false;
+	}
+	const FString DepthId = DepthAt != INDEX_NONE ? Opening.Depths[DepthAt].Id : FString();
 	int32 Year = INDEX_NONE;
 	for (int32 Index = 0; Index < Opening.Years.Num(); ++Index)
 	{
@@ -9593,8 +9608,12 @@ bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn
 			PickLevel(Index);
 		}
 	}
+	if (DepthAt != INDEX_NONE)
+	{
+		PickDepth(DepthAt);
+	}
 	Opening.AskKind = 0;
-	BeginGrandCampaign(false);
+	BeginGrandCampaign(false, DepthId);
 	return !Opening.bVisible;
 }
 

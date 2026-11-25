@@ -556,8 +556,12 @@ public:
 	void PickGrandNation(int32 Index);
 	void PickGrandNation(const FString& Tag);
 
-	/** Starts the grand campaign as the country chosen, or with nobody leading. */
-	void BeginGrandCampaign(bool bWatch);
+	/**
+	 * Starts the grand campaign as the country chosen, or with nobody leading. DepthWord (the step player's start line, 1.5.3)
+	 * is the depth it is played at, in a run that takes pictures too. Without one the screen's depth is played, and a run
+	 * that takes pictures plays the full game unless "-TheaterDepth=" asks for another.
+	 */
+	void BeginGrandCampaign(bool bWatch, const FString& DepthWord = FString());
 
 	/** Picks up the campaign saved on this computer. */
 	void ContinueCampaign();
@@ -1107,8 +1111,12 @@ public:
 	/** Answers what a month's end puts in the way, as a player in a hurry would: the question, the newsreel, the announcements, the replay. */
 	void StepThroughMonth();
 	bool RestoreCampaign(const FString& SaveText);
-	/** Begins a grand campaign as this country from this month, with these dice and this level, as the opening screen would. */
-	bool BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord);
+	/**
+	 * Begins a grand campaign as this country from this month, with these dice, this level and this depth, as the opening
+	 * screen would. With no level the screen's stands; with no depth, as BeginGrandCampaign has it. A depth the rules do not
+	 * offer begins nothing.
+	 */
+	bool BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord, const FString& DepthWord);
 	const TArray<int32>& StepPicked() const { return PickedCorps; }
 	int32 StepFleet() const { return FleetInHand; }
 	/** How many sentences the paper line has been given so far: a sentence said again is still an answer. */
