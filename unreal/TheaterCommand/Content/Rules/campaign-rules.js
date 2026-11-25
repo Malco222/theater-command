@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e059a3de 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6a523a7a 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -282,589 +282,6 @@
       [61, "GER", "West Wall fortress battalions, Baden", "Baden", 0.3, { mark: "unsure" }]
     ]
   };
-
-  // ../../data/campaign/divisions.json
-  var divisions_default = {
-    _about: {
-      what: "The divisions inside a corps, as both interfaces show them: what each kind is called, the numbers they carry, and how a corps' strength and experience are shared out among its divisions.",
-      rule: "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
-      kinds: "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
-      names: "What a nation calls its own divisions of a kind, where it differs: [name, short].",
-      historic: "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358). A division whose kind the corps does not hold is left to its number (b371: I Corps' third, Panzer Division Kempf, waits until the corps holds armour).",
-      order: "The order the kinds are listed in when an army is summed up.",
-      spread: "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
-      hardened: "The experience (0 to 1) at which a division counts as battle-hardened.",
-      record: "Real division numbers of 1939 that no first-day corps carries (setup-1939.json's 'nos' holds those that do), by nation and arm, from the historian's divisions-1939-ger.md (18 November 2026): divisions in no corps that day, and those of another arm than the game's corps. A stand-in division is numbered from above the highest real number of its nation's arm, so that no stand-in ever takes a real number and no name is carried twice (the design director, 18 November)."
-    },
-    record: {
-      GER: { arm: [5, 6], mot: [2, 20], cav: [1], inf: [14, 26, 31, 56, 57, 62, 72, 73, 76, 86, 208, 209, 212, 214, 215, 216, 223, 227, 231, 246, 251, 252, 253, 254, 255, 256, 257, 258, 260, 262, 263, 267, 268, 269] },
-      POL: { inf: [24, 36, 39, 45, 50] }
-    },
-    kinds: {
-      inf: { word: "infantry", name: "Infantry Division", short: "Infantry" },
-      mot: { word: "motorised", name: "Motorised Division", short: "Motorised" },
-      arm: { word: "armoured", name: "Armoured Division", short: "Armoured" },
-      cav: { word: "cavalry", name: "Cavalry Division", short: "Cavalry" },
-      mtn: { word: "mountain", name: "Mountain Division", short: "Mountain" },
-      fort: { word: "fortress", name: "Fortress Division", short: "Fortress" },
-      art: { word: "artillery", name: "Artillery Division", short: "Artillery" },
-      eng: { word: "engineer", name: "Engineer Brigade", short: "Engineers" },
-      mg: { word: "machine-gun", name: "Machine-Gun Brigade", short: "Machine-Gun" },
-      mor: { word: "mortar", name: "Mortar Brigade", short: "Mortar" }
-    },
-    historic: {
-      GER: {
-        "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"]],
-        "Corps Wodrig": [["1st Infantry Division", "1st Infantry"], ["12th Infantry Division", "12th Infantry"]]
-      }
-    },
-    names: {
-      GER: { arm: ["Panzer Division", "Panzer"] },
-      SOV: { inf: ["Rifle Division", "Rifles"], arm: ["Tank Division", "Tanks"], mot: ["Motor Rifle Division", "Motor Rifles"] },
-      USA: { arm: ["Armored Division", "Armored"], mot: ["Motorized Division", "Motorized"] },
-      ITA: { mtn: ["Alpine Division", "Alpini"] },
-      POL: { mtn: ["Mountain Brigade", "Mountain"] },
-      FRA: { mtn: ["Alpine Division", "Alpine"] }
-    },
-    order: ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort", "mg", "mor"],
-    spread: { str: 0.6, xp: 0.7 },
-    hardened: 0.4
-  };
-
-  // ../../data/campaign/setup-1939.json
-  var setup_1939_default = {
-    _about: "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'formations' are the same again, but are armies and fronts put together later in the war from men already under arms: they arrive like reinforcements and do not hold up the building of new corps, which a computer-run nation begins only once its last reinforcement has arrived. 'expeditions' are the same, but go to a war away from the main fronts: they arrive only at a place still in friendly hands with room for them (the move is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all. 'until' marks formations only lent to a campaign: in that month they go back to the main army, whose order of battle already counts them. 'joins' names a corps already at the front that the divisions go into: it keeps its general and what it has learned, and takes the row's name and kind (if that corps is gone, the divisions form up on their own at the place named). 'news' is a line for the dispatches in place of the bare notice of arrival. 'airborne' marks parachute and glider troops (see navy.json). 'nos' on a first-day corps gives its divisions their real numbers of 1 September 1939, one a division in order (the historian's divisions-1939-ger.md, 18 November 2026, for Germany and Poland: XIX Corps the 10th Panzer, which joined it in mid-September; the light divisions their panzer numbers of that winter, the 2nd Light the 7th, the 3rd the 8th, the 4th the 9th; VIII Corps the 239th, which followed it); null where the corps holds a division the record has none for, or of another arm than the game's, which then takes a stand-in number (armies.ts). The grand campaign alone reads them. 'from' names a theatre whose army the formation is put together from: as it arrives, as many divisions leave the corps already there, the largest first ('of' names the nation whose army gives them up, if it is not the formation's own). 'from' can also be a list of corps names: those corps are broken up to make the new one, and are struck off as it forms. 'ifLost' makes a formation wait on a defeat: it forms only once the enemy holds every place named, and until then the corps it would be made from fight on where they stand. 'after' (ruling 229, part 3, the grand campaign) counts a country's own call-up from its war's start and not from the book's month: it comes this many months after the war its 'war' names began, however early that war comes ('*' as the second name: a war with anyone). Greece's reserves come over the war's first three months; Yugoslavia, whose paper army was three times what stood ready in April 1941, calls up twelve divisions over its war's second and third months, in the grand campaign only. Ruling 229, part 1c, the grand campaign: a formation whose place its side no longer holds when it is due lands at the nearest harbour its side holds on that front (in the same side theatre, or else in the same country), clear of the enemy and with room, and does not hold in place there, as ruling 221's F lands troops lifted off a coast; it is not cancelled for the loss. 'unless' names another row: once that row has landed, this one never comes (the New Zealanders stand in the desert only in a war where W Force did not sail), and if this one has landed already its corps leaves as the other lands, with 'leaves' as the player's news when the corps is his ({place} where it stood). 'openDivs' is a row's size in the grand campaign, where the historian's earlier rows bring part of its men (XIII and XXX Corps, 1 division each: the South Africans and New Zealanders come by June 1941, as in the record); 'carried' names the corps row whose full-size history row already brought a row's men, so that a grand campaign begun after that corps landed under history does not bring them again. Add new expeditions at the end of the list: saved games remember them by their place in it.",
-    corps: [
-      ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", { gen: "Heinz Guderian", trait: "panzer", xp: 0.4, nos: [3, 10] }],
-      ["GER", "II Corps", "inf", 3, "Grenzmark", { xp: 0.3, nos: [3, 32, 23] }],
-      ["GER", "III Corps", "inf", 3, "Neumark", { xp: 0.3, nos: [50, 218, 207] }],
-      ["GER", "I Corps", "inf", 3, "Masuria", { xp: 0.3, nos: [11, 61, null] }],
-      ["GER", "Corps Wodrig", "inf", 2, "Masuria", { xp: 0.3, nos: [1, 12] }],
-      ["GER", "XXI Corps", "inf", 3, "Elbing", { xp: 0.3, nos: [21, 228, 206] }],
-      ["GER", "Konigsberg garrison", "inf", 1, "Konigsberg", { hold: 1, nos: [217] }],
-      ["GER", "X Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [24, 30, 221] }],
-      ["GER", "XIII Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [10, 17, 213] }],
-      ["GER", "XVI Corps", "arm", 2, "Upper Silesia", { gen: "Erich Hoepner", trait: "attacker", xp: 0.4, nos: [1, 4] }],
-      ["GER", "XV Corps", "arm", 2, "Upper Silesia", { gen: "Hermann Hoth", trait: "panzer", xp: 0.4, nos: [7, 8] }],
-      ["GER", "XIV Corps", "mot", 2, "Lower Silesia", { xp: 0.35, nos: [13, 29] }],
-      ["GER", "IV Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [4, 46, 27] }],
-      ["GER", "XI Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [18, 19, 68] }],
-      ["GER", "XXII Corps", "arm", 2, "Moravia", { gen: "Ewald von Kleist", trait: "attacker", xp: 0.4, nos: [2, 9] }],
-      ["GER", "VIII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [8, 28, 239] }],
-      ["GER", "XVII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [7, 44, 45] }],
-      ["GER", "XVIII Corps", "mtn", 3, "Slovakia", { xp: 0.3, nos: [3, 2, 1] }],
-      ["GER", "XII Corps", "inf", 4, "Saar", { hold: 1, nos: [15, 34, 52, 79] }],
-      ["GER", "IX Corps", "inf", 4, "Eifel", { hold: 1, nos: [25, 33, 71, 75] }],
-      ["GER", "XXV Corps", "inf", 4, "Baden", { hold: 1, nos: [5, 35, 205, 78] }],
-      ["GER", "V Corps", "inf", 4, "Rhineland", { hold: 1, nos: [22, 225, 58, 87] }],
-      ["GER", "VI Corps", "inf", 3, "Frankfurt", { nos: [16, 69, 211] }],
-      ["GER", "XXIV Corps", "inf", 3, "Westphalia", { nos: [6, 9, 36] }],
-      ["GER", "Berlin garrison", "inf", 1, "Berlin", { hold: 1 }],
-      ["GER", "Vienna garrison", "inf", 1, "Vienna", { hold: 1 }],
-      ["GER", "Protectorate garrison", "inf", 2, "Bohemia", { hold: 1 }],
-      ["GER", "Hamburg garrison", "inf", 1, "Hamburg", { hold: 1 }],
-      ["POL", "Army Pomorze", "inf", 3, "Pomorze", { gen: "Wladyslaw Bortnowski", nos: [4, 15, 16] }],
-      ["POL", "Corridor Group", "inf", 2, "Danzig Corridor", { nos: [9, 27] }],
-      ["POL", "Army Modlin", "inf", 3, "Mlawa", { nos: [8, 20, 5] }],
-      ["POL", "Narew Group", "inf", 2, "Bialystok", { nos: [18, 33] }],
-      ["POL", "Army Poznan", "inf", 4, "Poznan", { gen: "Tadeusz Kutrzeba", trait: "attacker", nos: [14, 17, 25, 26] }],
-      ["POL", "Wielkopolska Cavalry", "cav", 1, "Poznan", {}],
-      ["POL", "Army Lodz", "inf", 4, "Lodz", { gen: "Juliusz Rommel", nos: [2, 10, 28, 30] }],
-      ["POL", "Army Krakow (Silesia)", "inf", 3, "Polish Silesia", { gen: "Antoni Szylling", trait: "defender", nos: [23, 55, 7] }],
-      ["POL", "Army Krakow (Bielsko)", "inf", 3, "Krakow", { nos: [21, 6, 22] }],
-      ["POL", "Army Karpaty", "mtn", 2, "Przemysl", { nos: [2, 3] }],
-      ["POL", "Army Prusy", "inf", 3, "Kielce", { nos: [13, 19, 29] }],
-      ["POL", "Wyszkow Group", "inf", 3, "Warsaw", { nos: [1, 35, 41] }],
-      ["POL", "Warsaw garrison", "inf", 2, "Warsaw", { hold: 1, nos: [44, null] }],
-      ["POL", "Lublin reserve", "inf", 2, "Lublin", { nos: [3, 12] }],
-      ["POL", "Lwow garrison", "inf", 1, "Lwow", { hold: 1, nos: [11] }],
-      ["POL", "Wilno garrison", "inf", 1, "Wilno", { hold: 1, nos: [38] }],
-      ["POL", "Polesie Group", "inf", 1, "Brest", { hold: 1, nos: [60] }],
-      ["POL", "Border Protection Corps", "inf", 1, "Volhynia", { hold: 1 }],
-      ["FRA", "Metz fortified region", "fort", 3, "Lorraine", { hold: 1 }],
-      ["FRA", "3rd Army", "inf", 4, "Lorraine", { hold: 1 }],
-      ["FRA", "Lauter fortified region", "fort", 3, "Alsace", { hold: 1 }],
-      ["FRA", "5th Army", "inf", 4, "Alsace", { hold: 1 }],
-      ["FRA", "4th Army", "inf", 3, "Vosges", { hold: 1 }],
-      ["FRA", "8th Army", "inf", 3, "Belfort", { hold: 1 }],
-      ["FRA", "Montmedy sector", "fort", 1, "Verdun", { hold: 1 }],
-      ["FRA", "XVIII Corps", "inf", 2, "Verdun", { hold: 1 }],
-      ["FRA", "2nd Army", "inf", 3, "Sedan", { gen: "Charles Huntziger", hold: 1, xp: 0 }],
-      ["FRA", "9th Army", "inf", 3, "Champagne", { gen: "Andre Corap", dyle: "Namur", xp: 0 }],
-      ["FRA", "1st Army", "inf", 4, "Lille", { gen: "Georges Blanchard", dyle: "Brussels", xp: 0.25 }],
-      ["FRA", "Cavalry Corps", "arm", 2, "Lille", { gen: "Rene Prioux", trait: "defender", dyle: "Namur", xp: 0.3 }],
-      ["FRA", "7th Army", "mot", 3, "Calais", { gen: "Henri Giraud", dyle: "Antwerp", xp: 0.25 }],
-      ["FRA", "Paris garrison", "inf", 2, "Paris", { hold: 1 }],
-      ["FRA", "General reserve", "inf", 3, "Aube", {}],
-      ["FRA", "6th Army", "inf", 3, "Burgundy", {}],
-      ["FRA", "10th Army", "inf", 2, "Somme", {}],
-      ["FRA", "Army of the Alps", "mtn", 3, "Savoy", { hold: 1 }],
-      ["FRA", "XV Corps", "inf", 2, "Riviera", { hold: 1 }],
-      ["FRA", "Marseille garrison", "inf", 1, "Marseille", { hold: 1 }],
-      ["FRA", "Bordeaux garrison", "inf", 1, "Bordeaux", { hold: 1 }],
-      ["UK", "London District", "inf", 2, "London", { hold: 1 }],
-      ["UK", "Eastern Command", "inf", 2, "Kent", { hold: 1 }],
-      ["UK", "Southern Command", "inf", 1, "Hampshire", { hold: 1 }],
-      ["UK", "Northern Command", "inf", 1, "Yorkshire", { hold: 1 }],
-      ["UK", "Scottish Command", "inf", 1, "Lothian", { hold: 1 }],
-      ["BEL", "I Corps", "inf", 4, "Liege", { hold: 1 }],
-      ["BEL", "II Corps", "inf", 4, "Antwerp", { hold: 1 }],
-      ["BEL", "III Corps", "inf", 4, "Brussels", {}],
-      ["BEL", "VII Corps", "inf", 3, "Namur", { hold: 1 }],
-      ["BEL", "Chasseurs Ardennais", "mtn", 2, "Ardennes", {}],
-      ["BEL", "V Corps", "inf", 3, "Flanders", {}],
-      ["NED", "I Corps", "inf", 3, "Holland", { hold: 1 }],
-      ["NED", "II Corps", "inf", 3, "Gelderland", {}],
-      ["NED", "III Corps", "inf", 2, "Brabant", {}],
-      ["NED", "Territorial Command", "inf", 1, "Friesland", {}],
-      ["NED", "Rotterdam garrison", "inf", 1, "Rotterdam", { hold: 1 }],
-      ["DEN", "Jutland Division", "inf", 1, "Jutland", {}],
-      ["DEN", "Zealand Division", "inf", 1, "Zealand", { hold: 1 }],
-      ["NOR", "1st and 2nd Divisions", "inf", 2, "Oslo", { hold: 1 }],
-      ["NOR", "3rd Division", "inf", 1, "Sorlandet", {}],
-      ["NOR", "4th Division", "inf", 1, "Bergen", {}],
-      ["NOR", "6th Division", "inf", 1, "Finnmark", {}],
-      ["ITA", "1st Army", "inf", 4, "Liguria", {}],
-      ["ITA", "4th Army", "mtn", 3, "Piedmont", {}],
-      ["ITA", "Army of the Po", "mot", 3, "Lombardy", {}],
-      ["ITA", "2nd Army", "inf", 3, "Friuli", { hold: 1 }],
-      ["ITA", "8th Army", "inf", 3, "Veneto", {}],
-      ["ITA", "Rome garrison", "inf", 3, "Rome", { hold: 1 }],
-      ["ITA", "3rd Army", "inf", 2, "Naples", { hold: 1 }],
-      ["ITA", "Sicily Command", "inf", 2, "Sicily", { hold: 1 }],
-      ["ITA", "Sardinia Command", "inf", 2, "Sardinia", { hold: 1 }],
-      ["ITA", "Albania Command", "inf", 4, "Albania", { hold: 1 }],
-      ["SVK", "Army Bernolak", "inf", 2, "Slovakia", { hold: 1 }],
-      ["SOV", "Belorussian Front", "inf", 5, "Minsk", {}],
-      ["SOV", "15th Tank Corps", "arm", 2, "Minsk", {}],
-      ["SOV", "3rd Army", "inf", 3, "Polotsk", {}],
-      ["SOV", "Ukrainian Front", "inf", 5, "Zhitomir", {}],
-      ["SOV", "25th Tank Corps", "arm", 2, "Vinnitsa", {}],
-      ["SOV", "Kiev Military District", "inf", 4, "Kiev", { hold: 1 }],
-      ["SOV", "Leningrad Military District", "inf", 5, "Leningrad", { hold: 1 }],
-      ["SOV", "Odessa Military District", "inf", 3, "Odessa", { hold: 1 }],
-      ["SOV", "Western reserve", "inf", 4, "Smolensk", { hold: 1 }],
-      ["SUI", "1st Army Corps", "mtn", 3, "Bern", { hold: 1 }],
-      ["SUI", "2nd Army Corps", "mtn", 3, "Zurich", { hold: 1 }],
-      ["ESP", "Army of the Centre", "inf", 4, "Madrid", { hold: 1 }],
-      ["ESP", "Army of Catalonia", "inf", 3, "Catalonia", { hold: 1 }],
-      ["ESP", "Army of the North", "inf", 2, "Basque Country", { hold: 1 }],
-      ["POR", "Lisbon garrison", "inf", 2, "Lisbon", { hold: 1 }],
-      ["IRL", "Irish Army", "inf", 1, "Dublin", { hold: 1 }],
-      ["SWE", "Eastern Army", "inf", 3, "Stockholm", { hold: 1 }],
-      ["SWE", "Southern Army", "inf", 2, "Scania", { hold: 1 }],
-      ["FIN", "Army of the Isthmus", "inf", 4, "Karelia", { hold: 1 }],
-      ["FIN", "Helsinki reserve", "inf", 2, "Helsinki", { hold: 1 }],
-      ["EST", "Estonian Army", "inf", 2, "Estonia", { hold: 1 }],
-      ["LAT", "Latvian Army", "inf", 2, "Latvia", { hold: 1 }],
-      ["LIT", "Lithuanian Army", "inf", 2, "Lithuania", { hold: 1 }],
-      ["HUN", "1st Army", "inf", 3, "Budapest", { hold: 1 }],
-      ["HUN", "3rd Army", "inf", 2, "Debrecen", { hold: 1 }],
-      ["ROM", "1st Army", "inf", 3, "Bucharest", { hold: 1 }],
-      ["ROM", "3rd Army", "inf", 3, "Bukovina", { hold: 1 }],
-      ["ROM", "4th Army", "inf", 3, "Bessarabia", { hold: 1 }],
-      ["ROM", "Ploiesti guard", "inf", 1, "Ploiesti", { hold: 1 }],
-      ["YUG", "1st Army Group", "inf", 3, "Croatia", { hold: 1 }],
-      ["YUG", "2nd Army Group", "inf", 3, "Belgrade", { hold: 1 }],
-      ["YUG", "3rd Army Group", "inf", 3, "Macedonia", { hold: 1 }],
-      ["BUL", "1st Army", "inf", 3, "Sofia", { hold: 1 }],
-      ["GRE", "Epirus Army", "mtn", 3, "Epirus", { hold: 1 }],
-      ["GRE", "Macedonia Army", "inf", 3, "Salonika", { hold: 1 }],
-      ["GRE", "Athens garrison", "inf", 1, "Athens", { hold: 1 }],
-      ["TUR", "1st Army", "inf", 4, "Istanbul", { hold: 1 }],
-      ["TUR", "2nd Army", "inf", 3, "Bursa", { hold: 1 }],
-      ["TUR", "3rd Army", "inf", 3, "Erzurum", { hold: 1 }],
-      ["TUR", "Ankara garrison", "inf", 2, "Ankara", { hold: 1 }],
-      ["SOV", "Moscow Military District", "inf", 5, "Moscow", { hold: 1 }],
-      ["SOV", "Moscow tank reserve", "arm", 2, "Tula", { hold: 1 }],
-      ["SOV", "Orel Military District", "inf", 3, "Orel", { hold: 1 }],
-      ["SOV", "Kharkov Military District", "inf", 4, "Kharkov", { hold: 1 }],
-      ["SOV", "North Caucasus Military District", "inf", 3, "Rostov", { hold: 1 }],
-      ["SOV", "Transcaucasus Military District", "mtn", 4, "Tbilisi", { hold: 1 }],
-      ["SOV", "Volga Military District", "inf", 3, "Saratov", { hold: 1 }],
-      ["SOV", "Crimea garrison", "inf", 1, "Crimea", { hold: 1 }],
-      ["SOV", "14th Army", "inf", 3, "Murmansk", { hold: 1 }],
-      ["SOV", "Kandalaksha Group", "inf", 2, "Kandalaksha", { hold: 1 }],
-      ["SOV", "Karelian garrison", "inf", 2, "Petrozavodsk", { hold: 1 }],
-      ["FRA", "Army of the Levant", "inf", 2, "Syria", { hold: 1 }],
-      ["IRQ", "Iraqi Army", "inf", 1, "Iraq", { hold: 1 }],
-      ["IRN", "Iranian Army", "inf", 2, "Iran", { hold: 1 }],
-      ["ITA", "XXI Corps, 10th Army", "inf", 2, "Bardia", { gen: "Mario Berti", xp: 0.05 }],
-      ["ITA", "XXIII Corps, 10th Army", "inf", 2, "Bardia", { xp: 0.05 }],
-      ["ITA", "Libyan Group", "mot", 1, "Tobruk", { xp: 0.05 }],
-      ["ITA", "Tobruk garrison", "inf", 1, "Tobruk", { hold: 1, xp: 0.05 }],
-      ["ITA", "XX Corps, 10th Army", "inf", 2, "Benghazi", { xp: 0.05 }],
-      ["ITA", "5th Army", "inf", 3, "Nalut", { hold: 1, xp: 0.05 }],
-      ["ITA", "Aegean Command", "inf", 1, "Rhodes", { hold: 1 }],
-      ["UK", "7th Armoured Division", "arm", 1, "Mersa Matruh", { gen: "Richard O'Connor", trait: "attacker", xp: 0.4 }],
-      ["UK", "4th Indian Division", "inf", 1, "Mersa Matruh", { xp: 0.35 }],
-      ["UK", "British Troops in Egypt", "inf", 1, "Cairo", { hold: 1 }],
-      ["UK", "Alexandria garrison", "inf", 1, "Alexandria", { hold: 1 }],
-      ["UK", "Palestine garrison", "inf", 1, "Palestine", { hold: 1 }],
-      ["UK", "Malta garrison", "inf", 1, "Malta", { hold: 1, xp: 0.2 }],
-      ["UK", "Gibraltar garrison", "fort", 1, "Gibraltar", { hold: 1 }],
-      ["FRA", "Army of Africa", "inf", 3, "Algiers", { hold: 1 }],
-      ["FRA", "Tunisia Command", "inf", 3, "Mareth", { hold: 1 }],
-      ["FRA", "Morocco Command", "inf", 2, "Casablanca", { hold: 1 }]
-    ],
-    reinforcements: [
-      [1, "UK", "I Corps (BEF)", "inf", 3, "Lille", { gen: "John Dill", dyle: "Brussels", xp: 0.2 }],
-      [2, "UK", "II Corps (BEF)", "inf", 3, "Lille", { gen: "Alan Brooke", trait: "defender", dyle: "Brussels", xp: 0.2 }],
-      [2, "FRA", "XXI Corps", "inf", 3, "Champagne", {}],
-      [3, "FRA", "Colonial Corps", "inf", 3, "Orleans", {}],
-      [3, "GER", "XXVI Corps", "inf", 3, "Hanover", {}],
-      [3, "GER", "XXVII Corps", "inf", 3, "Hesse", {}],
-      [4, "FRA", "XVII Corps", "inf", 3, "Berry", {}],
-      [4, "SOV", "10th Army", "inf", 5, "Bialystok", {}],
-      [4, "SOV", "4th Army", "inf", 4, "Brest", {}],
-      [4, "SOV", "5th Army", "inf", 4, "Volhynia", {}],
-      [4, "SOV", "6th Army", "inf", 4, "Lwow", {}],
-      [5, "GER", "XXXXI Corps", "arm", 2, "Frankfurt", { gen: "Georg-Hans Reinhardt", trait: "attacker", xp: 0.3 }],
-      [5, "GER", "XXXVIII Corps", "inf", 3, "Wurttemberg", {}],
-      [5, "GER", "XXXX Corps", "inf", 3, "Franconia", {}],
-      [6, "FRA", "Armoured reserve", "arm", 2, "Champagne", { xp: 0.1 }],
-      [6, "FRA", "XXIII Corps", "inf", 3, "Aube", {}],
-      [7, "GER", "XXXIX Corps", "arm", 2, "Hesse", { gen: "Rudolf Schmidt", xp: 0.3 }],
-      [7, "GER", "Group XXI", "inf", 3, "Schleswig-Holstein", { gen: "Nikolaus von Falkenhorst", hold: 1, xp: 0.2 }],
-      [7, "GER", "Mountain Corps Norway", "mtn", 1, "Bremen", { gen: "Eduard Dietl", trait: "defender", hold: 1, xp: 0.3 }],
-      [7, "GER", "Trondheim Landing Group", "mtn", 1, "Bremen", { hold: 1, xp: 0.2 }],
-      [7, "GER", "Bergen Landing Group", "inf", 1, "Bremen", { hold: 1, xp: 0.2 }],
-      [7, "GER", "XXXXII Corps", "inf", 3, "Hanover", {}],
-      [7, "GER", "XXXXIII Corps", "inf", 3, "Saxony", {}],
-      [8, "UK", "III Corps (BEF)", "inf", 3, "Lille", { dyle: "Flanders", xp: 0.1 }],
-      [8, "UK", "North Western Expeditionary Force", "inf", 2, "Clydeside", { gen: "Claude Auchinleck", hold: 1, xp: 0.1 }],
-      [8, "GER", "XXXXIV Corps", "inf", 3, "Magdeburg", {}],
-      [9, "UK", "1st Armoured Division", "arm", 1, "Rouen", {}],
-      [9, "FRA", "XXV Corps", "inf", 3, "Paris", {}],
-      [10, "SOV", "23rd Army", "inf", 4, "Leningrad", {}],
-      [10, "SOV", "7th Army", "inf", 3, "Tikhvin", {}],
-      [12, "GER", "XXXXVI Panzer Corps", "arm", 2, "Saxony", { gen: "Heinrich von Vietinghoff", xp: 0.3 }],
-      [12, "GER", "XXVIII Corps", "inf", 3, "Hanover", {}],
-      [12, "GER", "XXIX Corps", "inf", 3, "Hesse", {}],
-      [12, "SOV", "26th Army", "inf", 3, "Lwow", {}],
-      [12, "SOV", "12th Army", "inf", 4, "Bukovina", {}],
-      [13, "GER", "XXXXVII Panzer Corps", "arm", 2, "Franconia", { gen: "Joachim Lemelsen", xp: 0.3 }],
-      [13, "GER", "XXX Corps", "inf", 3, "Bavaria", {}],
-      [14, "GER", "XXXIV Corps", "inf", 3, "Magdeburg", {}],
-      [14, "GER", "XXXV Corps", "inf", 3, "Saxony", {}],
-      [15, "GER", "XXXXVIII Panzer Corps", "arm", 2, "Lower Silesia", { gen: "Werner Kempf", xp: 0.3 }],
-      [15, "GER", "VII Corps", "inf", 3, "Bavaria", {}],
-      [16, "GER", "III Motorized Corps", "mot", 2, "Berlin", { gen: "Eberhard von Mackensen", xp: 0.3 }],
-      [16, "GER", "XX Corps", "inf", 3, "Stettin", {}],
-      [16, "SOV", "27th Army", "inf", 3, "Estonia", {}],
-      [17, "GER", "XXIII Corps", "inf", 3, "Hanover", {}],
-      [17, "GER", "L Corps", "inf", 3, "Wurttemberg", {}],
-      [17, "SOV", "6th Mechanized Corps", "arm", 3, "Bialystok", {}],
-      [17, "SOV", "4th Mechanized Corps", "arm", 3, "Lwow", {}],
-      [17, "SOV", "8th Mechanized Corps", "arm", 3, "Volhynia", {}],
-      [18, "GER", "XXIV Motorized Corps", "mot", 2, "Upper Silesia", { gen: "Leo Geyr von Schweppenburg", xp: 0.3 }],
-      [18, "GER", "XXXXIX Mountain Corps", "mtn", 2, "Vienna", {}],
-      [18, "SOV", "12th Mechanized Corps", "arm", 2, "Latvia", {}],
-      [18, "SOV", "3rd Mechanized Corps", "arm", 2, "Lithuania", {}],
-      [18, "SOV", "1st Mechanized Corps", "arm", 2, "Pskov", {}],
-      [19, "GER", "LII Corps", "inf", 3, "Dresden", {}],
-      [19, "GER", "LIII Corps", "inf", 3, "Hesse", {}],
-      [19, "SOV", "13th Army", "inf", 3, "Minsk", {}],
-      [19, "SOV", "14th Mechanized Corps", "arm", 2, "Brest", {}],
-      [19, "SOV", "9th Mechanized Corps", "arm", 2, "Zhitomir", {}],
-      [19, "SOV", "2nd Mechanized Corps", "arm", 2, "Odessa", {}],
-      [20, "GER", "LIV Corps", "inf", 3, "Bavaria", {}],
-      [20, "GER", "LV Corps", "inf", 3, "Franconia", {}],
-      [20, "GER", "LVI Panzer Corps", "arm", 2, "Stettin", { gen: "Erich von Manstein", trait: "attacker", xp: 0.3 }],
-      [20, "GER", "LVII Panzer Corps", "arm", 2, "Dresden", { gen: "Adolf-Friedrich Kuntzen", xp: 0.3 }],
-      [21, "ROM", "Mountain Corps", "mtn", 2, "Moldavia", {}],
-      [21, "ROM", "Cavalry Corps", "cav", 2, "Moldavia", {}],
-      [21, "ROM", "II Corps", "inf", 3, "Moldavia", {}],
-      [21, "ROM", "V Corps", "inf", 3, "Dobruja", {}],
-      [21, "HUN", "Mobile Corps", "mot", 1, "Debrecen", {}],
-      [21, "SOV", "21st Army", "inf", 4, "Gomel", {}],
-      [21, "SOV", "22nd Army", "inf", 3, "Vitebsk", {}],
-      [21, "SOV", "19th Army", "inf", 3, "Kiev", {}],
-      [21, "SOV", "18th Army", "inf", 3, "Vinnitsa", {}],
-      [21, "SOV", "16th Army", "inf", 3, "Kiev", {}],
-      [21, "SOV", "20th Army", "inf", 4, "Smolensk", {}],
-      [27, "SOV", "1st Shock Army", "inf", 4, "Moscow", { xp: 0.3, trait: "attacker" }],
-      [27, "SOV", "20th Army (re-formed)", "inf", 4, "Vladimir", {}],
-      [27, "SOV", "10th Army (re-formed)", "inf", 4, "Ryazan", {}],
-      [27, "SOV", "26th Army (re-formed)", "inf", 3, "Tula", {}],
-      [27, "SOV", "60th Army", "inf", 3, "Yaroslavl", {}],
-      [27, "SOV", "61st Army", "inf", 3, "Tambov", {}],
-      [28, "SOV", "Far East rifle divisions", "inf", 4, "Moscow", { xp: 0.4 }],
-      [28, "SOV", "Siberian rifle divisions", "inf", 4, "Vladimir", { xp: 0.4 }],
-      [28, "SOV", "Ural rifle divisions", "inf", 3, "Ryazan", { xp: 0.3 }],
-      [28, "SOV", "39th Army", "inf", 3, "Kalinin", {}],
-      [28, "SOV", "59th Army", "inf", 3, "Vologda", {}],
-      [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", { xp: 0.3 }]
-    ],
-    formations: [
-      [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", { hold: 1, str: 0.3, est: 0.3, xp: 0.05, open: 1 }],
-      [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", { hold: 1, str: 0.7, est: 0.7, xp: 0.15, open: 1 }],
-      [46, "SOV", "Central Front", "inf", 12, "Kursk", { gen: "Konstantin Rokossovsky", hold: 1, xp: 0.4 }],
-      [46, "SOV", "Voronezh Front", "inf", 12, "Kursk", { gen: "Nikolai Vatutin", trait: "attacker", hold: 1, xp: 0.4 }],
-      [46, "SOV", "1st Tank Army", "arm", 2, "Kursk", { gen: "Mikhail Katukov", trait: "panzer", hold: 1, xp: 0.4 }],
-      [46, "SOV", "2nd Tank Army", "arm", 2, "Kursk", { gen: "Aleksei Rodin", hold: 1, xp: 0.3 }],
-      [46, "SOV", "Steppe Front", "inf", 10, "Voronezh", { gen: "Ivan Konev", xp: 0.3 }],
-      [46, "SOV", "5th Guards Tank Army", "arm", 2, "Voronezh", { gen: "Pavel Rotmistrov", trait: "panzer", xp: 0.4 }],
-      [46, "SOV", "3rd Guards Tank Army", "arm", 2, "Tula", { gen: "Pavel Rybalko", trait: "panzer", xp: 0.4 }],
-      [46, "SOV", "4th Tank Army", "arm", 2, "Tula", { gen: "Vasily Badanov", xp: 0.3 }]
-    ],
-    book: {
-      _note: "Ruling 233, rider b612 (4). At these stops of the history dial, in the grand campaign, a computer's staff is sent the dated rows below ('expeditions') whose place is home ground of the second country named, though the theatre is a scripted one whose rows free play does not send: Germany's moves into Italy in 1943 and 1944 are the book's. Each row waits until an enemy holds or stands on one of the grounds Italy's armistice names (the ward's trigger, open.json), and then comes at its date, or at once if the date has passed: a quiet Italy draws no German corps. 'from' keeps anything from being counted twice (b609): a row named here breaks up the corps listed, where they still live, to find its divisions (the Hermann Goring Division of Tunisia and the 15th Panzer Division of the desert, re-formed in Sicily as XIV Panzer Corps's two).",
-      stops: [1, 2],
-      scripted: [["GER", "ITA"]],
-      from: { "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)": ["Hermann Goring Division", "15th Panzer Division"] }
-    },
-    expeditions: [
-      [13, "UK", "6th Australian Division", "inf", 1, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
-      [17, "UK", "2nd Armoured Division", "arm", 1, "Alexandria", { xp: 0, war: ["UK", "ITA"] }],
-      [18, "UK", "Tobruk garrison (9th Australian Division)", "inf", 3, "Tobruk", { hold: 1, xp: 0.25, war: ["UK", "ITA"] }],
-      [24, "UK", "XIII Corps, Eighth Army", "inf", 2, "Alexandria", { xp: 0.3, war: ["UK", "ITA"], openDivs: 1 }],
-      [26, "UK", "XXX Corps, Eighth Army", "arm", 2, "Alexandria", { xp: 0.15, war: ["UK", "ITA"], openDivs: 1 }],
-      [17, "ITA", "Ariete Armoured Division", "arm", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
-      [18, "ITA", "Trento Motorized Division", "mot", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
-      [19, "ITA", "Brescia and Pavia Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [23, "ITA", "Bologna and Savona Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [18, "GER", "5th Light Division", "arm", 1, "Tripoli", { gen: "Erwin Rommel", trait: "panzer", hold: 1, xp: 0.4, war: ["UK", "ITA"] }],
-      [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", { gen: "Ludwig Cruwell", xp: 0.4, war: ["UK", "ITA"] }],
-      [24, "GER", "90th Light Division", "mot", 1, "Tripoli", { xp: 0.3, war: ["UK", "ITA"] }],
-      [13, "ITA", "Ciamuria Corps and Julia Alpine Division", "inf", 3, "Albania", { gen: "Sebastiano Visconti Prasca", xp: 0.1, war: ["ITA", "UK"] }],
-      [13, "ITA", "XXVI Corps", "inf", 2, "Albania", { xp: 0.1, war: ["ITA", "UK"] }],
-      [15, "ITA", "9th Army", "inf", 4, "Albania", { xp: 0.05, war: ["ITA", "GRE"] }],
-      [17, "ITA", "11th Army reserves", "inf", 4, "Albania", { gen: "Ugo Cavallero", xp: 0.05, war: ["ITA", "GRE"] }],
-      [14, "GRE", "West Macedonia Army Section", "inf", 3, "Salonika", { xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
-      [14, "GRE", "I Corps", "inf", 2, "Epirus", { gen: "Alexandros Papagos", trait: "defender", xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
-      [15, "GRE", "II Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 1 }],
-      [16, "GRE", "III Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 2 }],
-      [15, "UK", "Creforce", "inf", 1, "Crete", { gen: "Bernard Freyberg", trait: "defender", hold: 1, xp: 0.2, war: ["GRE", "ITA"] }],
-      [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", { gen: "Henry Maitland Wilson", hold: 1, xp: 0.25, war: ["GRE", "ITA"], takes: { name: "2nd Armoured Division", share: 0.5, leaves: "The 1st Armoured Brigade sails from {place} for Greece with W Force. The 2nd Armoured Division stays in the desert with its other brigade." } }],
-      [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
-      [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
-      [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", { hold: 1, xp: 0.35, war: ["ITA", "GRE"] }],
-      [19, "GER", "50th, 72nd and 164th Infantry Divisions", "inf", 3, "Plovdiv", { hold: 1, xp: 0.3, war: ["ITA", "GRE"] }],
-      [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
-      [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", { hold: 1, xp: 0.35, war: ["ITA", "GRE"], until: 22 }],
-      [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", { hold: 1, xp: 0.2, war: ["ITA", "GRE"] }],
-      [21, "GER", "XI Air Corps", "inf", 3, "Athens", { gen: "Kurt Student", trait: "attacker", airborne: 1, hold: 1, xp: 0.7, war: ["GER", "UK"] }],
-      [35, "HUN", "2nd Army: III Corps", "inf", 3, "Voronezh", { gen: "Gusztav Jany", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
-      [35, "HUN", "2nd Army: IV and VII Corps", "inf", 4, "Voronezh", { hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
-      [36, "ITA", "8th Army: II Corps", "inf", 3, "Millerovo", { gen: "Italo Gariboldi", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
-      [36, "ITA", "8th Army: XXXV Corps", "inf", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
-      [36, "ITA", "Alpine Corps", "mtn", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.2, war: ["ITA", "SOV"] }],
-      [37, "ROM", "3rd Army: I and II Corps", "inf", 4, "Don Bend", { gen: "Petre Dumitrescu", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [37, "ROM", "3rd Army: IV and V Corps", "inf", 4, "Don Bend", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [38, "ROM", "4th Army: VI Corps", "inf", 3, "Kalmyk Steppe", { gen: "Constantin Constantinescu-Claps", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [38, "ROM", "4th Army: VII Corps", "inf", 3, "Kalmyk Steppe", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
-      [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", { xp: 0.4, war: ["GER", "SOV"] }],
-      [31, "UK", "1st South African and 50th Divisions", "inf", 2, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
-      [32, "UK", "1st Armoured Division", "arm", 1, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
-      [34, "UK", "New Zealand and 9th Australian Divisions", "inf", 2, "Alexandria", { xp: 0.35, war: ["UK", "ITA"] }],
-      [36, "UK", "X Corps (8th and 10th Armoured Divisions)", "arm", 2, "Alexandria", { gen: "Bernard Montgomery", xp: 0.2, war: ["UK", "ITA"] }],
-      [37, "UK", "44th and 51st Divisions", "inf", 2, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
-      [31, "ITA", "Littorio Armoured Division", "arm", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
-      [36, "GER", "164th Light Division and Ramcke Brigade", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
-      [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
-      [39, "UK", "First Army: 78th Division", "inf", 1, "Gibraltar", { gen: "Kenneth Anderson", trait: "defender", xp: 0.2, war: ["UK", "GER"] }],
-      [39, "USA", "II Corps (1st Infantry and 1st Armored Divisions)", "mot", 2, "Gibraltar", { gen: "Lloyd Fredendall", xp: 0.05, war: ["USA", "GER"] }],
-      [39, "USA", "Western Task Force (2nd Armored and 9th Infantry Divisions)", "mot", 2, "Gibraltar", { gen: "George S. Patton", trait: "attacker", xp: 0.05, war: ["USA", "GER"] }],
-      [41, "UK", "First Army: 6th Armoured Division", "arm", 1, "Algiers", { xp: 0.1, war: ["UK", "GER"] }],
-      [41, "UK", "French XIX Corps", "inf", 2, "Constantine", { xp: 0.05, war: ["UK", "GER"] }],
-      [42, "USA", "34th Infantry Division", "inf", 1, "Oran", { xp: 0.05, war: ["USA", "GER"] }],
-      [42, "UK", "First Army: V Corps", "inf", 2, "Algiers", { xp: 0.15, war: ["UK", "GER"] }],
-      [40, "GER", "10th Panzer Division", "arm", 1, "Tunis", { gen: "Hans-Jurgen von Arnim", trait: "defender", xp: 0.4, war: ["GER", "USA"] }],
-      [41, "GER", "334th Infantry Division", "inf", 1, "Tunis", { xp: 0.2, war: ["GER", "USA"] }],
-      [41, "GER", "Hermann Goring Division", "mot", 1, "Tunis", { xp: 0.3, war: ["GER", "USA"] }],
-      [42, "ITA", "Pistoia and La Spezia Divisions", "inf", 2, "Tunis", { gen: "Giovanni Messe", xp: 0.15, war: ["ITA", "USA"] }],
-      [39, "USA", "3rd Infantry Division", "inf", 1, "Gibraltar", { xp: 0.05, war: ["USA", "GER"] }],
-      [47, "ITA", "6th Army", "inf", 3, "Sicily", { gen: "Alfredo Guzzoni", trait: "defender", hold: 1, join: 1, xp: 0.05, war: ["ITA", "USA"] }],
-      [47, "GER", "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)", "mot", 2, "Calabria", { gen: "Hans-Valentin Hube", trait: "defender", join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [47, "UK", "Eighth Army: XIII Corps (5th, 50th and 78th Divisions)", "inf", 3, "Malta", { gen: "Bernard Montgomery", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
-      [47, "UK", "Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)", "inf", 3, "Malta", { gen: "Oliver Leese", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
-      [47, "USA", "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "inf", 3, "Malta", { gen: "Omar Bradley", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
-      [47, "USA", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)", "mot", 3, "Malta", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
-      [48, "GER", "LXXVI Panzer Corps (26th Panzer, 29th Panzergrenadier and 1st Parachute Divisions)", "mot", 2, "Calabria", { gen: "Traugott Herr", join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [48, "GER", "16th Panzer Division", "arm", 1, "Naples", { hold: 1, join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [48, "GER", "2nd Parachute and 3rd Panzergrenadier Divisions", "mot", 2, "Rome", { join: 1, xp: 0.3, war: ["GER", "USA"] }],
-      [49, "GER", "LI Mountain Corps (44th and 305th Divisions)", "mtn", 2, "Abruzzo", { gen: "Heinrich von Vietinghoff", trait: "defender", join: 1, xp: 0.2, war: ["GER", "USA"] }],
-      [50, "GER", "5th Mountain and 65th Divisions", "mtn", 2, "Abruzzo", { join: 1, xp: 0.2, war: ["GER", "USA"] }],
-      [49, "UK", "Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)", "inf", 2, "Malta", { join: 1, xp: 0.3, from: "North Africa", war: ["UK", "GER"] }],
-      [49, "USA", "Fifth Army: VI Corps (36th and 34th Infantry Divisions)", "inf", 2, "Malta", { gen: "Mark Clark", join: 1, xp: 0.1, from: "North Africa", war: ["USA", "GER"] }],
-      [49, "USA", "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)", "mot", 3, "Malta", { gen: "Richard McCreery", join: 1, xp: 0.2, from: "North Africa", of: "UK", war: ["USA", "GER"] }],
-      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", "inf", 1, "Naples", { joins: "Fifth Army: VI Corps (36th and 34th Infantry Divisions)" }],
-      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry, 1st Armored and British 1st and 5th Divisions)", "mot", 2, "Naples", { joins: "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", until: 60 }],
-      [53, "USA", "Fifth Army: II Corps (34th and 36th Infantry Divisions)", "inf", 2, "Naples", { gen: "Geoffrey Keyes", join: 1, xp: 0.3, from: ["Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], war: ["USA", "GER"], news: "Eisenhower, Montgomery, Bradley and Patton have left the Mediterranean for England, and seven veteran divisions have gone with them for the invasion of France. Alexander fights on in Italy with what is left." }],
-      [53, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", "mtn", 2, "Naples", { gen: "Alphonse Juin", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
-      [53, "UK", "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)", "inf", 3, "Naples", { gen: "Oliver Leese", join: 1, xp: 0.4, from: ["Eighth Army: XIII Corps (5th, 50th and 78th Divisions)"], war: ["UK", "GER"] }],
-      [53, "UK", "Eighth Army: I Canadian Corps (1st Canadian Infantry and 5th Canadian Armoured Divisions)", "mot", 2, "Apulia", { gen: "E. L. M. Burns", join: 1, xp: 0.35, from: ["Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)"], war: ["UK", "GER"] }],
-      [53, "UK", "Eighth Army: V Corps (4th and 10th Indian Divisions)", "inf", 2, "Apulia", { gen: "Charles Allfrey", join: 1, xp: 0.3, from: ["Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)"], war: ["UK", "GER"] }],
-      [53, "GER", "I Parachute Corps (4th Parachute and 715th Divisions)", "mot", 2, "Rome", { gen: "Alfred Schlemm", join: 1, xp: 0.25, war: ["USA", "GER"] }],
-      [54, "GER", "14th Army: 114th Jager and 362nd Divisions", "inf", 2, "Rome", { gen: "Eberhard von Mackensen", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [54, "UK", "New Zealand Corps (2nd New Zealand and 4th Indian Divisions)", "inf", 2, "Naples", { gen: "Bernard Freyberg", join: 1, xp: 0.45, war: ["UK", "GER"] }],
-      [56, "USA", "Fifth Army: II Corps (34th, 36th, 85th and 88th Infantry Divisions)", "inf", 2, "Naples", { joins: "Fifth Army: II Corps (34th and 36th Infantry Divisions)", from: ["Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)"], news: "Two new American divisions, the 85th and the 88th, join the Fifth Army below Cassino. The British X Corps leaves it for the Eighth Army." }],
-      [56, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan, 3rd Algerian, 4th Moroccan Mountain and 1st Free French Divisions)", "mtn", 2, "Naples", { joins: "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", until: 60 }],
-      [56, "UK", "Eighth Army: Polish II Corps (3rd Carpathian and 5th Kresowa Divisions)", "inf", 2, "Naples", { gen: "Wladyslaw Anders", trait: "attacker", join: 1, xp: 0.35, from: ["New Zealand Corps (2nd New Zealand and 4th Indian Divisions)"], war: ["UK", "GER"], news: "General Anders brings the Polish II Corps into the line opposite Monte Cassino: men who came out of Soviet camps by way of Persia to fight for a country they cannot go home to." }],
-      [56, "UK", "Eighth Army: XIII Corps (4th, 78th, 8th Indian and 6th Armoured Divisions)", "inf", 1, "Naples", { joins: "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)" }],
-      [56, "GER", "Group Hauck (305th and 334th Divisions)", "inf", 2, "Abruzzo", { join: 1, hold: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [58, "USA", "Fifth Army: IV Corps (91st Infantry, 6th South African Armoured and Brazilian 1st Divisions)", "mot", 3, "Naples", { gen: "Willis Crittenberger", join: 1, xp: 0.25, war: ["USA", "GER"] }],
-      [59, "GER", "14th Army: LXXV Corps (16th SS Panzergrenadier, 19th and 20th Luftwaffe Field Divisions)", "inf", 3, "Emilia", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [61, "UK", "Eighth Army: V Corps (46th, 56th, 4th Indian and 1st Armoured Divisions)", "inf", 2, "Marche", { joins: "Eighth Army: V Corps (4th and 10th Indian Divisions)" }],
-      [57, "GER", "Seventh Army: LXXXIV Corps (352nd and 716th Divisions)", "inf", 2, "Normandy", { join: 1, gen: "Erich Marcks", trait: "defender", xp: 0.2, war: ["USA", "GER"] }],
-      [57, "GER", "Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)", "arm", 3, "Maine", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.45, war: ["USA", "GER"] }],
-      [57, "GER", "Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "arm", 2, "Somme", { join: 1, gen: "Hans von Funck", xp: 0.45, war: ["USA", "GER"] }],
-      [57, "GER", "Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "inf", 3, "Rennes", { join: 1, gen: "Eugen Meindl", trait: "defender", xp: 0.4, war: ["USA", "GER"] }],
-      [57, "GER", "Fifteenth Army: LXXXI and LXXXII Corps", "inf", 4, "Calais", { join: 1, gen: "Hans von Salmuth", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [57, "GER", "Fifteenth Army: LXVII and LXXXIX Corps", "inf", 4, "Flanders", { join: 1, hold: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [57, "GER", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)", "arm", 2, "Toulouse", { join: 1, xp: 0.4, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: 11th Panzer Division", "arm", 1, "Languedoc", { join: 1, hold: 1, xp: 0.45, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: 242nd and 244th Divisions", "inf", 1, "Marseille", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "inf", 3, "Languedoc", { join: 1, gen: "Friedrich Wiese", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [57, "GER", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)", "inf", 2, "Riviera", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
-      [57, "UK", "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", "inf", 3, "Hampshire", { gen: "Miles Dempsey", join: 1, xp: 0.3, from: "the West", war: ["UK", "GER"] }],
-      [57, "UK", "Second Army: XXX Corps (50th, 49th and 7th Armoured Divisions)", "mot", 3, "Hampshire", { gen: "Bernard Montgomery", trait: "attacker", join: 1, xp: 0.4, from: "the West", war: ["UK", "GER"] }],
-      [57, "USA", "First Army: V Corps (1st, 2nd and 29th Infantry Divisions)", "inf", 3, "Cornwall", { gen: "Omar Bradley", xp: 0.3, war: ["USA", "GER"] }],
-      [57, "USA", "First Army: VII Corps (4th, 9th and 90th Infantry, 82nd and 101st Airborne Divisions)", "inf", 5, "Cornwall", { gen: "J. Lawton Collins", trait: "attacker", xp: 0.3, war: ["USA", "GER"] }],
-      [59, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions)", "arm", 2, "Rouen", { join: 1, gen: "Paul Hausser", trait: "panzer", xp: 0.5, news: "The II SS Panzer Corps is pulled out of the Eastern Front and sent across Europe to Normandy.", war: ["USA", "GER"] }],
-      [59, "GER", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)", "inf", 3, "Rouen", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [59, "UK", "Second Army: VIII Corps (11th Armoured, Guards Armoured and 15th Scottish Divisions)", "arm", 3, "Normandy", { gen: "Richard O'Connor", trait: "attacker", xp: 0.25, war: ["UK", "GER"] }],
-      [59, "USA", "First Army: XIX Corps (30th and 35th Infantry, 2nd and 3rd Armored Divisions)", "mot", 4, "Cotentin", { gen: "Charles Corlett", xp: 0.2, war: ["USA", "GER"] }],
-      [59, "USA", "First Army: VIII Corps (8th, 79th and 83rd Infantry, 4th and 6th Armored Divisions)", "mot", 5, "Cotentin", { gen: "Troy Middleton", xp: 0.2, war: ["USA", "GER"] }],
-      [60, "UK", "First Canadian Army: II Canadian Corps and British I Corps (2nd and 3rd Canadian, 4th Canadian Armoured, 1st Polish Armoured and 51st Highland Divisions)", "mot", 3, "Normandy", { joins: "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", news: "The First Canadian Army takes over the left of the line in Normandy, with the Polish 1st Armoured Division under its command.", war: ["UK", "GER"] }],
-      [60, "USA", "Third Army: XV Corps (5th Armored, French 2nd Armored and 79th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.3, news: "General Patton's Third Army becomes operational in Normandy. Its orders are to go through the gap at Avranches and keep going.", war: ["USA", "GER"] }],
-      [60, "USA", "Third Army: XX Corps (7th Armored, 5th and 90th Infantry Divisions)", "mot", 3, "Cotentin", { gen: "Walton Walker", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [60, "USA", "Third Army: XII Corps (4th Armored, 35th and 80th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "Manton Eddy", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [60, "USA", "Seventh Army: VI Corps (3rd, 36th and 45th Infantry Divisions)", "inf", 3, "Naples", { gen: "Lucian Truscott", trait: "attacker", join: 1, xp: 0.5, war: ["USA", "GER"] }],
-      [60, "USA", "French Army B: II Corps (1st Free French, 3rd Algerian and 1st Armoured Divisions)", "mot", 3, "Naples", { gen: "Jean de Lattre de Tassigny", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
-      [61, "GER", "First Parachute Army: II Parachute Corps and LXXXVI Corps", "inf", 3, "Gelderland", { join: 1, gen: "Kurt Student", trait: "defender", xp: 0.3, from: ["Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)"], news: "General Student is given the First Parachute Army, which exists so far only on paper, and told to hold the line of the Dutch canals.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions), refitting", "arm", 2, "Gelderland", { join: 1, gen: "Wilhelm Bittrich", xp: 0.5, from: ["II SS Panzer Corps (9th and 10th SS Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Fifteenth Army: LXVII and LXXXVIII Corps", "inf", 4, "Rotterdam", { join: 1, gen: "Gustav-Adolf von Zangen", xp: 0.2, from: ["Fifteenth Army: LXXXI and LXXXII Corps", "Fifteenth Army: LXVII and LXXXIX Corps"], news: "The German Fifteenth Army, cut off on the Channel coast, is ferried across the mouth of the Scheldt by night and gets away into Holland.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Seventh Army: LXXXI and XII SS Corps (the West Wall at Aachen)", "inf", 4, "Rhineland", { join: 1, xp: 0.2, from: ["Seventh Army: LXXXIV Corps (352nd and 716th Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Seventh Army: LXXIV Corps (the Hurtgen Forest)", "inf", 3, "Eifel", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "First Parachute Army: LXXXVIII Corps", "inf", 3, "Gelderland", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Seventh Army: I SS Panzer Corps", "mot", 3, "Eifel", { join: 1, xp: 0.35, from: ["Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "First Army: LXXXII and XIII SS Corps (the forts of Metz)", "inf", 3, "Lorraine", { join: 1, gen: "Otto von Knobelsdorff", xp: 0.25, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "First Army: LXXX Corps", "inf", 2, "Saar", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps", "arm", 2, "Lorraine", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Nineteenth Army: IV Luftwaffe Field Corps and LXIV Corps", "inf", 3, "Vosges", { join: 1, xp: 0.15, from: ["Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "Nineteenth Army: 242nd and 244th Divisions"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "GER", "Nineteenth Army: LXXXV Corps and 11th Panzer Division", "inf", 3, "Belfort", { join: 1, xp: 0.2, from: ["Nineteenth Army: 11th Panzer Division", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [61, "USA", "French First Army: I Corps (2nd Moroccan, 4th Moroccan Mountain and 9th Colonial Divisions)", "inf", 3, "Marseille", { join: 1, xp: 0.35, war: ["USA", "GER"] }],
-      [60, "UK", "Second Army: XII Corps (43rd Wessex, 53rd Welsh and 59th Divisions)", "inf", 3, "Normandy", { gen: "Neil Ritchie", xp: 0.25, war: ["UK", "GER"] }],
-      [61, "UK", "First Allied Airborne Army: I Airborne Corps (1st Airborne, US 82nd and 101st Airborne Divisions)", "inf", 3, "Brussels", { gen: "Frederick Browning", join: 1, xp: 0.4, war: ["UK", "GER"] }],
-      [62, "USA", "Ninth Army: XIII and XIX Corps (29th, 30th, 84th and 102nd Infantry and 2nd Armored Divisions)", "inf", 5, "Liege", { gen: "William Simpson", join: 1, xp: 0.2, war: ["USA", "GER"] }],
-      [63, "USA", "Third Army: III Corps (26th and 95th Infantry, 6th and 10th Armored Divisions)", "mot", 4, "Verdun", { gen: "John Millikin", join: 1, xp: 0.15, war: ["USA", "GER"] }],
-      [63, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)", "arm", 2, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps"], news: "The Fifth Panzer Army is taken out of Lorraine and sent north behind the river Roer. Nobody on the Allied side asks why.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Sixth Panzer Army: I SS Panzer Corps (1st and 12th SS Panzer Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.4, from: ["Seventh Army: I SS Panzer Corps"], news: "Behind the Eifel the Germans have gathered two panzer armies in secret: a quarter of a million men and the last tanks and fuel the Reich can find.", war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Fifth Panzer Army: XLVII Panzer Corps (2nd Panzer, Panzer Lehr and 26th Volksgrenadier Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.4, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Fifth Panzer Army: LVIII Panzer Corps (116th Panzer and 560th Volksgrenadier Divisions)", "arm", 2, "Eifel", { join: 1, xp: 0.3, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [64, "GER", "Seventh Army: LXXXV Corps (5th Parachute and 352nd Volksgrenadier Divisions)", "inf", 2, "Eifel", { join: 1, gen: "Erich Brandenberger", xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
-      [35, "UK", "Royal Artillery, Eighth Army", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
-      [37, "UK", "Royal Artillery, X Corps", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
-      [1, "YUG", "Sixth Army", "inf", 3, "Belgrade", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
-      [1, "YUG", "Third Army", "inf", 3, "Montenegro", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
-      [1, "YUG", "Seventh Army", "inf", 3, "Slovenia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
-      [1, "YUG", "Coastal Army", "inf", 3, "Dalmatia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
-      [21, "UK", "1st South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.2, war: ["UK", "ITA"] }],
-      [22, "UK", "2nd South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.05, war: ["UK", "ITA"] }],
-      [19, "UK", "2nd New Zealand Division", "inf", 1, "Alexandria", { open: 1, carried: "XIII Corps, Eighth Army", xp: 0.25, war: ["UK", "ITA"], unless: "W Force (New Zealand Division and 1st Armoured Brigade)", leaves: "The 2nd New Zealand Division sails from {place} for Greece. It goes as part of W Force, which has landed there with the 1st Armoured Brigade." }],
-      [32, "UK", "5th Indian Division", "inf", 1, "Alexandria", { open: 1, xp: 0.3, war: ["UK", "ITA"] }],
-      [34, "UK", "10th Indian Division", "inf", 1, "Mersa Matruh", { open: 1, xp: 0.2, war: ["UK", "ITA"] }]
-    ]
-  };
-
-  // ../../src/core/rng.ts
-  var Rng = class _Rng {
-    constructor(seed) {
-      __publicField(this, "s");
-      this.s = seed >>> 0 || 2654435769;
-    }
-    /** Uniform in [0, 1). mulberry32. */
-    next() {
-      let t = this.s = this.s + 1831565813 >>> 0;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
-    range(a, b) {
-      return a + (b - a) * this.next();
-    }
-    int(n) {
-      return Math.floor(this.next() * n);
-    }
-    chance(p) {
-      return this.next() < p;
-    }
-    pick(arr) {
-      return arr[this.int(arr.length)];
-    }
-    /** Roughly normal, mean 0, sd 1 (sum of uniforms; cheap and deterministic). */
-    normal() {
-      return (this.next() + this.next() + this.next() + this.next() - 2) * 1.7320508;
-    }
-    /** Turns an expected count into a whole number of events. */
-    roll(expected) {
-      const whole2 = Math.floor(expected);
-      return whole2 + (this.next() < expected - whole2 ? 1 : 0);
-    }
-    /**
-     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
-     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
-     * that would have gone down without damage control). A larger expectation never gives the smaller count.
-     */
-    rollBoth(expected, other4) {
-      const u = this.next();
-      const at4 = (x) => {
-        const whole2 = Math.floor(x);
-        return whole2 + (u < x - whole2 ? 1 : 0);
-      };
-      return [at4(expected), at4(other4)];
-    }
-    /** An independent stream, so adding rolls in one system does not shift another. */
-    fork(label) {
-      return new _Rng(Math.imul(this.s ^ 2246822507, 3266489909) + label * 668265263 >>> 0);
-    }
-    get state() {
-      return this.s;
-    }
-  };
-  function hashString(str) {
-    let h = 2166136261;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return h >>> 0;
-  }
-
-  // ../../src/core/ticket.ts
-  function turnToDate(turn2) {
-    const idx2 = 8 + (turn2 - 1);
-    const year = 1939 + Math.floor(idx2 / 12);
-    const month3 = idx2 % 12;
-    const names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    return { year, month: month3, label: `${names[month3]} ${year}` };
-  }
-
-  // ../../src/campaign/types.ts
-  var MEN_PER_DIV = 15e3;
-  var KIND = {
-    inf: { label: "Infantry", atk: 10, def: 14, move: 2, mobile: false },
-    mot: { label: "Motorised", atk: 12, def: 12, move: 1, mobile: true },
-    arm: { label: "Armor", atk: 24, def: 11, move: 1, mobile: true },
-    cav: { label: "Cavalry", atk: 8, def: 8, move: 1, mobile: true },
-    mtn: { label: "Mountain", atk: 9, def: 15, move: 2, mobile: false },
-    fort: { label: "Fortress", atk: 1, def: 15, move: 99, mobile: false },
-    // Massed guns, raised only in the grand campaign: see the artillery rule in the battle assessment.
-    art: { label: "Artillery", atk: 14, def: 8, move: 2, mobile: false },
-    // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
-    eng: { label: "Engineers", atk: 4, def: 9, move: 2, mobile: false },
-    // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
-    // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
-    // attack card. Never raised while the teams are off.
-    mg: { label: "Machine guns", atk: 3, def: 7, move: 2, mobile: false },
-    mor: { label: "Mortars", atk: 6, def: 4, move: 2, mobile: false }
-  };
-  var TERRAIN_DEF = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };
-  var FORT_MUL = [1, 1.3, 1.7, 2.6];
-  var STACK = 5;
 
   // ../../data/campaign/stage.json
   var stage_default = {
@@ -2619,6 +2036,445 @@
       FIN: [{ id: "east", name: "With Germany into Russia", side: true, declare: ["SOV"], if: ["war:GER,SOV", "flag:event:finland"], chance: 0.7 }],
       BUL: [{ id: "balkans", name: "With Germany into the Balkans", side: true, declare: ["YUG", "GRE"], if: ["war:GER,YUG", "inBloc:BUL,axis"], chance: 0.1 }]
     }
+  };
+
+  // ../../data/campaign/setup-1939.json
+  var setup_1939_default = {
+    _about: "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'formations' are the same again, but are armies and fronts put together later in the war from men already under arms: they arrive like reinforcements and do not hold up the building of new corps, which a computer-run nation begins only once its last reinforcement has arrived. 'expeditions' are the same, but go to a war away from the main fronts: they arrive only at a place still in friendly hands with room for them (the move is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all. 'until' marks formations only lent to a campaign: in that month they go back to the main army, whose order of battle already counts them. 'joins' names a corps already at the front that the divisions go into: it keeps its general and what it has learned, and takes the row's name and kind (if that corps is gone, the divisions form up on their own at the place named). 'news' is a line for the dispatches in place of the bare notice of arrival. 'airborne' marks parachute and glider troops (see navy.json). 'nos' on a first-day corps gives its divisions their real numbers of 1 September 1939, one a division in order (the historian's divisions-1939-ger.md, 18 November 2026, for Germany and Poland: XIX Corps the 10th Panzer, which joined it in mid-September; the light divisions their panzer numbers of that winter, the 2nd Light the 7th, the 3rd the 8th, the 4th the 9th; VIII Corps the 239th, which followed it); null where the corps holds a division the record has none for, or of another arm than the game's, which then takes a stand-in number (armies.ts). The grand campaign alone reads them. 'from' names a theatre whose army the formation is put together from: as it arrives, as many divisions leave the corps already there, the largest first ('of' names the nation whose army gives them up, if it is not the formation's own). 'from' can also be a list of corps names: those corps are broken up to make the new one, and are struck off as it forms. 'ifLost' makes a formation wait on a defeat: it forms only once the enemy holds every place named, and until then the corps it would be made from fight on where they stand. 'after' (ruling 229, part 3, the grand campaign) counts a country's own call-up from its war's start and not from the book's month: it comes this many months after the war its 'war' names began, however early that war comes ('*' as the second name: a war with anyone). Greece's reserves come over the war's first three months; Yugoslavia, whose paper army was three times what stood ready in April 1941, calls up twelve divisions over its war's second and third months, in the grand campaign only. Ruling 229, part 1c, the grand campaign: a formation whose place its side no longer holds when it is due lands at the nearest harbour its side holds on that front (in the same side theatre, or else in the same country), clear of the enemy and with room, and does not hold in place there, as ruling 221's F lands troops lifted off a coast; it is not cancelled for the loss. 'unless' names another row: once that row has landed, this one never comes (the New Zealanders stand in the desert only in a war where W Force did not sail), and if this one has landed already its corps leaves as the other lands, with 'leaves' as the player's news when the corps is his ({place} where it stood). 'openDivs' is a row's size in the grand campaign, where the historian's earlier rows bring part of its men (XIII and XXX Corps, 1 division each: the South Africans and New Zealanders come by June 1941, as in the record); 'carried' names the corps row whose full-size history row already brought a row's men, so that a grand campaign begun after that corps landed under history does not bring them again. Add new expeditions at the end of the list: saved games remember them by their place in it.",
+    corps: [
+      ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", { gen: "Heinz Guderian", trait: "panzer", xp: 0.4, nos: [3, 10] }],
+      ["GER", "II Corps", "inf", 3, "Grenzmark", { xp: 0.3, nos: [3, 32, 23] }],
+      ["GER", "III Corps", "inf", 3, "Neumark", { xp: 0.3, nos: [50, 218, 207] }],
+      ["GER", "I Corps", "inf", 3, "Masuria", { xp: 0.3, nos: [11, 61, null] }],
+      ["GER", "Corps Wodrig", "inf", 2, "Masuria", { xp: 0.3, nos: [1, 12] }],
+      ["GER", "XXI Corps", "inf", 3, "Elbing", { xp: 0.3, nos: [21, 228, 206] }],
+      ["GER", "Konigsberg garrison", "inf", 1, "Konigsberg", { hold: 1, nos: [217] }],
+      ["GER", "X Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [24, 30, 221] }],
+      ["GER", "XIII Corps", "inf", 3, "Lower Silesia", { xp: 0.3, nos: [10, 17, 213] }],
+      ["GER", "XVI Corps", "arm", 2, "Upper Silesia", { gen: "Erich Hoepner", trait: "attacker", xp: 0.4, nos: [1, 4] }],
+      ["GER", "XV Corps", "arm", 2, "Upper Silesia", { gen: "Hermann Hoth", trait: "panzer", xp: 0.4, nos: [7, 8] }],
+      ["GER", "XIV Corps", "mot", 2, "Lower Silesia", { xp: 0.35, nos: [13, 29] }],
+      ["GER", "IV Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [4, 46, 27] }],
+      ["GER", "XI Corps", "inf", 3, "Upper Silesia", { xp: 0.3, nos: [18, 19, 68] }],
+      ["GER", "XXII Corps", "arm", 2, "Moravia", { gen: "Ewald von Kleist", trait: "attacker", xp: 0.4, nos: [2, 9] }],
+      ["GER", "VIII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [8, 28, 239] }],
+      ["GER", "XVII Corps", "inf", 3, "Moravia", { xp: 0.3, nos: [7, 44, 45] }],
+      ["GER", "XVIII Corps", "mtn", 3, "Slovakia", { xp: 0.3, nos: [3, 2, 1] }],
+      ["GER", "XII Corps", "inf", 4, "Saar", { hold: 1, nos: [15, 34, 52, 79] }],
+      ["GER", "IX Corps", "inf", 4, "Eifel", { hold: 1, nos: [25, 33, 71, 75] }],
+      ["GER", "XXV Corps", "inf", 4, "Baden", { hold: 1, nos: [5, 35, 205, 78] }],
+      ["GER", "V Corps", "inf", 4, "Rhineland", { hold: 1, nos: [22, 225, 58, 87] }],
+      ["GER", "VI Corps", "inf", 3, "Frankfurt", { nos: [16, 69, 211] }],
+      ["GER", "XXIV Corps", "inf", 3, "Westphalia", { nos: [6, 9, 36] }],
+      ["GER", "Berlin garrison", "inf", 1, "Berlin", { hold: 1 }],
+      ["GER", "Vienna garrison", "inf", 1, "Vienna", { hold: 1 }],
+      ["GER", "Protectorate garrison", "inf", 2, "Bohemia", { hold: 1 }],
+      ["GER", "Hamburg garrison", "inf", 1, "Hamburg", { hold: 1 }],
+      ["POL", "Army Pomorze", "inf", 3, "Pomorze", { gen: "Wladyslaw Bortnowski", nos: [4, 15, 16] }],
+      ["POL", "Corridor Group", "inf", 2, "Danzig Corridor", { nos: [9, 27] }],
+      ["POL", "Army Modlin", "inf", 3, "Mlawa", { nos: [8, 20, 5] }],
+      ["POL", "Narew Group", "inf", 2, "Bialystok", { nos: [18, 33] }],
+      ["POL", "Army Poznan", "inf", 4, "Poznan", { gen: "Tadeusz Kutrzeba", trait: "attacker", nos: [14, 17, 25, 26] }],
+      ["POL", "Wielkopolska Cavalry", "cav", 1, "Poznan", {}],
+      ["POL", "Army Lodz", "inf", 4, "Lodz", { gen: "Juliusz Rommel", nos: [2, 10, 28, 30] }],
+      ["POL", "Army Krakow (Silesia)", "inf", 3, "Polish Silesia", { gen: "Antoni Szylling", trait: "defender", nos: [23, 55, 7] }],
+      ["POL", "Army Krakow (Bielsko)", "inf", 3, "Krakow", { nos: [21, 6, 22] }],
+      ["POL", "Army Karpaty", "mtn", 2, "Przemysl", { nos: [2, 3] }],
+      ["POL", "Army Prusy", "inf", 3, "Kielce", { nos: [13, 19, 29] }],
+      ["POL", "Wyszkow Group", "inf", 3, "Warsaw", { nos: [1, 35, 41] }],
+      ["POL", "Warsaw garrison", "inf", 2, "Warsaw", { hold: 1, nos: [44, null] }],
+      ["POL", "Lublin reserve", "inf", 2, "Lublin", { nos: [3, 12] }],
+      ["POL", "Lwow garrison", "inf", 1, "Lwow", { hold: 1, nos: [11] }],
+      ["POL", "Wilno garrison", "inf", 1, "Wilno", { hold: 1, nos: [38] }],
+      ["POL", "Polesie Group", "inf", 1, "Brest", { hold: 1, nos: [60] }],
+      ["POL", "Border Protection Corps", "inf", 1, "Volhynia", { hold: 1 }],
+      ["FRA", "Metz fortified region", "fort", 3, "Lorraine", { hold: 1 }],
+      ["FRA", "3rd Army", "inf", 4, "Lorraine", { hold: 1 }],
+      ["FRA", "Lauter fortified region", "fort", 3, "Alsace", { hold: 1 }],
+      ["FRA", "5th Army", "inf", 4, "Alsace", { hold: 1 }],
+      ["FRA", "4th Army", "inf", 3, "Vosges", { hold: 1 }],
+      ["FRA", "8th Army", "inf", 3, "Belfort", { hold: 1 }],
+      ["FRA", "Montmedy sector", "fort", 1, "Verdun", { hold: 1 }],
+      ["FRA", "XVIII Corps", "inf", 2, "Verdun", { hold: 1 }],
+      ["FRA", "2nd Army", "inf", 3, "Sedan", { gen: "Charles Huntziger", hold: 1, xp: 0 }],
+      ["FRA", "9th Army", "inf", 3, "Champagne", { gen: "Andre Corap", dyle: "Namur", xp: 0 }],
+      ["FRA", "1st Army", "inf", 4, "Lille", { gen: "Georges Blanchard", dyle: "Brussels", xp: 0.25 }],
+      ["FRA", "Cavalry Corps", "arm", 2, "Lille", { gen: "Rene Prioux", trait: "defender", dyle: "Namur", xp: 0.3 }],
+      ["FRA", "7th Army", "mot", 3, "Calais", { gen: "Henri Giraud", dyle: "Antwerp", xp: 0.25 }],
+      ["FRA", "Paris garrison", "inf", 2, "Paris", { hold: 1 }],
+      ["FRA", "General reserve", "inf", 3, "Aube", {}],
+      ["FRA", "6th Army", "inf", 3, "Burgundy", {}],
+      ["FRA", "10th Army", "inf", 2, "Somme", {}],
+      ["FRA", "Army of the Alps", "mtn", 3, "Savoy", { hold: 1 }],
+      ["FRA", "XV Corps", "inf", 2, "Riviera", { hold: 1 }],
+      ["FRA", "Marseille garrison", "inf", 1, "Marseille", { hold: 1 }],
+      ["FRA", "Bordeaux garrison", "inf", 1, "Bordeaux", { hold: 1 }],
+      ["UK", "London District", "inf", 2, "London", { hold: 1 }],
+      ["UK", "Eastern Command", "inf", 2, "Kent", { hold: 1 }],
+      ["UK", "Southern Command", "inf", 1, "Hampshire", { hold: 1 }],
+      ["UK", "Northern Command", "inf", 1, "Yorkshire", { hold: 1 }],
+      ["UK", "Scottish Command", "inf", 1, "Lothian", { hold: 1 }],
+      ["BEL", "I Corps", "inf", 4, "Liege", { hold: 1 }],
+      ["BEL", "II Corps", "inf", 4, "Antwerp", { hold: 1 }],
+      ["BEL", "III Corps", "inf", 4, "Brussels", {}],
+      ["BEL", "VII Corps", "inf", 3, "Namur", { hold: 1 }],
+      ["BEL", "Chasseurs Ardennais", "mtn", 2, "Ardennes", {}],
+      ["BEL", "V Corps", "inf", 3, "Flanders", {}],
+      ["NED", "I Corps", "inf", 3, "Holland", { hold: 1 }],
+      ["NED", "II Corps", "inf", 3, "Gelderland", {}],
+      ["NED", "III Corps", "inf", 2, "Brabant", {}],
+      ["NED", "Territorial Command", "inf", 1, "Friesland", {}],
+      ["NED", "Rotterdam garrison", "inf", 1, "Rotterdam", { hold: 1 }],
+      ["DEN", "Jutland Division", "inf", 1, "Jutland", {}],
+      ["DEN", "Zealand Division", "inf", 1, "Zealand", { hold: 1 }],
+      ["NOR", "1st and 2nd Divisions", "inf", 2, "Oslo", { hold: 1 }],
+      ["NOR", "3rd Division", "inf", 1, "Sorlandet", {}],
+      ["NOR", "4th Division", "inf", 1, "Bergen", {}],
+      ["NOR", "6th Division", "inf", 1, "Finnmark", {}],
+      ["ITA", "1st Army", "inf", 4, "Liguria", {}],
+      ["ITA", "4th Army", "mtn", 3, "Piedmont", {}],
+      ["ITA", "Army of the Po", "mot", 3, "Lombardy", {}],
+      ["ITA", "2nd Army", "inf", 3, "Friuli", { hold: 1 }],
+      ["ITA", "8th Army", "inf", 3, "Veneto", {}],
+      ["ITA", "Rome garrison", "inf", 3, "Rome", { hold: 1 }],
+      ["ITA", "3rd Army", "inf", 2, "Naples", { hold: 1 }],
+      ["ITA", "Sicily Command", "inf", 2, "Sicily", { hold: 1 }],
+      ["ITA", "Sardinia Command", "inf", 2, "Sardinia", { hold: 1 }],
+      ["ITA", "Albania Command", "inf", 4, "Albania", { hold: 1 }],
+      ["SVK", "Army Bernolak", "inf", 2, "Slovakia", { hold: 1 }],
+      ["SOV", "Belorussian Front", "inf", 5, "Minsk", {}],
+      ["SOV", "15th Tank Corps", "arm", 2, "Minsk", {}],
+      ["SOV", "3rd Army", "inf", 3, "Polotsk", {}],
+      ["SOV", "Ukrainian Front", "inf", 5, "Zhitomir", {}],
+      ["SOV", "25th Tank Corps", "arm", 2, "Vinnitsa", {}],
+      ["SOV", "Kiev Military District", "inf", 4, "Kiev", { hold: 1 }],
+      ["SOV", "Leningrad Military District", "inf", 5, "Leningrad", { hold: 1 }],
+      ["SOV", "Odessa Military District", "inf", 3, "Odessa", { hold: 1 }],
+      ["SOV", "Western reserve", "inf", 4, "Smolensk", { hold: 1 }],
+      ["SUI", "1st Army Corps", "mtn", 3, "Bern", { hold: 1 }],
+      ["SUI", "2nd Army Corps", "mtn", 3, "Zurich", { hold: 1 }],
+      ["ESP", "Army of the Centre", "inf", 4, "Madrid", { hold: 1 }],
+      ["ESP", "Army of Catalonia", "inf", 3, "Catalonia", { hold: 1 }],
+      ["ESP", "Army of the North", "inf", 2, "Basque Country", { hold: 1 }],
+      ["POR", "Lisbon garrison", "inf", 2, "Lisbon", { hold: 1 }],
+      ["IRL", "Irish Army", "inf", 1, "Dublin", { hold: 1 }],
+      ["SWE", "Eastern Army", "inf", 3, "Stockholm", { hold: 1 }],
+      ["SWE", "Southern Army", "inf", 2, "Scania", { hold: 1 }],
+      ["FIN", "Army of the Isthmus", "inf", 4, "Karelia", { hold: 1 }],
+      ["FIN", "Helsinki reserve", "inf", 2, "Helsinki", { hold: 1 }],
+      ["EST", "Estonian Army", "inf", 2, "Estonia", { hold: 1 }],
+      ["LAT", "Latvian Army", "inf", 2, "Latvia", { hold: 1 }],
+      ["LIT", "Lithuanian Army", "inf", 2, "Lithuania", { hold: 1 }],
+      ["HUN", "1st Army", "inf", 3, "Budapest", { hold: 1 }],
+      ["HUN", "3rd Army", "inf", 2, "Debrecen", { hold: 1 }],
+      ["ROM", "1st Army", "inf", 3, "Bucharest", { hold: 1 }],
+      ["ROM", "3rd Army", "inf", 3, "Bukovina", { hold: 1 }],
+      ["ROM", "4th Army", "inf", 3, "Bessarabia", { hold: 1 }],
+      ["ROM", "Ploiesti guard", "inf", 1, "Ploiesti", { hold: 1 }],
+      ["YUG", "1st Army Group", "inf", 3, "Croatia", { hold: 1 }],
+      ["YUG", "2nd Army Group", "inf", 3, "Belgrade", { hold: 1 }],
+      ["YUG", "3rd Army Group", "inf", 3, "Macedonia", { hold: 1 }],
+      ["BUL", "1st Army", "inf", 3, "Sofia", { hold: 1 }],
+      ["GRE", "Epirus Army", "mtn", 3, "Epirus", { hold: 1 }],
+      ["GRE", "Macedonia Army", "inf", 3, "Salonika", { hold: 1 }],
+      ["GRE", "Athens garrison", "inf", 1, "Athens", { hold: 1 }],
+      ["TUR", "1st Army", "inf", 4, "Istanbul", { hold: 1 }],
+      ["TUR", "2nd Army", "inf", 3, "Bursa", { hold: 1 }],
+      ["TUR", "3rd Army", "inf", 3, "Erzurum", { hold: 1 }],
+      ["TUR", "Ankara garrison", "inf", 2, "Ankara", { hold: 1 }],
+      ["SOV", "Moscow Military District", "inf", 5, "Moscow", { hold: 1 }],
+      ["SOV", "Moscow tank reserve", "arm", 2, "Tula", { hold: 1 }],
+      ["SOV", "Orel Military District", "inf", 3, "Orel", { hold: 1 }],
+      ["SOV", "Kharkov Military District", "inf", 4, "Kharkov", { hold: 1 }],
+      ["SOV", "North Caucasus Military District", "inf", 3, "Rostov", { hold: 1 }],
+      ["SOV", "Transcaucasus Military District", "mtn", 4, "Tbilisi", { hold: 1 }],
+      ["SOV", "Volga Military District", "inf", 3, "Saratov", { hold: 1 }],
+      ["SOV", "Crimea garrison", "inf", 1, "Crimea", { hold: 1 }],
+      ["SOV", "14th Army", "inf", 3, "Murmansk", { hold: 1 }],
+      ["SOV", "Kandalaksha Group", "inf", 2, "Kandalaksha", { hold: 1 }],
+      ["SOV", "Karelian garrison", "inf", 2, "Petrozavodsk", { hold: 1 }],
+      ["FRA", "Army of the Levant", "inf", 2, "Syria", { hold: 1 }],
+      ["IRQ", "Iraqi Army", "inf", 1, "Iraq", { hold: 1 }],
+      ["IRN", "Iranian Army", "inf", 2, "Iran", { hold: 1 }],
+      ["ITA", "XXI Corps, 10th Army", "inf", 2, "Bardia", { gen: "Mario Berti", xp: 0.05 }],
+      ["ITA", "XXIII Corps, 10th Army", "inf", 2, "Bardia", { xp: 0.05 }],
+      ["ITA", "Libyan Group", "mot", 1, "Tobruk", { xp: 0.05 }],
+      ["ITA", "Tobruk garrison", "inf", 1, "Tobruk", { hold: 1, xp: 0.05 }],
+      ["ITA", "XX Corps, 10th Army", "inf", 2, "Benghazi", { xp: 0.05 }],
+      ["ITA", "5th Army", "inf", 3, "Nalut", { hold: 1, xp: 0.05 }],
+      ["ITA", "Aegean Command", "inf", 1, "Rhodes", { hold: 1 }],
+      ["UK", "7th Armoured Division", "arm", 1, "Mersa Matruh", { gen: "Richard O'Connor", trait: "attacker", xp: 0.4 }],
+      ["UK", "4th Indian Division", "inf", 1, "Mersa Matruh", { xp: 0.35 }],
+      ["UK", "British Troops in Egypt", "inf", 1, "Cairo", { hold: 1 }],
+      ["UK", "Alexandria garrison", "inf", 1, "Alexandria", { hold: 1 }],
+      ["UK", "Palestine garrison", "inf", 1, "Palestine", { hold: 1 }],
+      ["UK", "Malta garrison", "inf", 1, "Malta", { hold: 1, xp: 0.2 }],
+      ["UK", "Gibraltar garrison", "fort", 1, "Gibraltar", { hold: 1 }],
+      ["FRA", "Army of Africa", "inf", 3, "Algiers", { hold: 1 }],
+      ["FRA", "Tunisia Command", "inf", 3, "Mareth", { hold: 1 }],
+      ["FRA", "Morocco Command", "inf", 2, "Casablanca", { hold: 1 }]
+    ],
+    reinforcements: [
+      [1, "UK", "I Corps (BEF)", "inf", 3, "Lille", { gen: "John Dill", dyle: "Brussels", xp: 0.2 }],
+      [2, "UK", "II Corps (BEF)", "inf", 3, "Lille", { gen: "Alan Brooke", trait: "defender", dyle: "Brussels", xp: 0.2 }],
+      [2, "FRA", "XXI Corps", "inf", 3, "Champagne", {}],
+      [3, "FRA", "Colonial Corps", "inf", 3, "Orleans", {}],
+      [3, "GER", "XXVI Corps", "inf", 3, "Hanover", {}],
+      [3, "GER", "XXVII Corps", "inf", 3, "Hesse", {}],
+      [4, "FRA", "XVII Corps", "inf", 3, "Berry", {}],
+      [4, "SOV", "10th Army", "inf", 5, "Bialystok", {}],
+      [4, "SOV", "4th Army", "inf", 4, "Brest", {}],
+      [4, "SOV", "5th Army", "inf", 4, "Volhynia", {}],
+      [4, "SOV", "6th Army", "inf", 4, "Lwow", {}],
+      [5, "GER", "XXXXI Corps", "arm", 2, "Frankfurt", { gen: "Georg-Hans Reinhardt", trait: "attacker", xp: 0.3 }],
+      [5, "GER", "XXXVIII Corps", "inf", 3, "Wurttemberg", {}],
+      [5, "GER", "XXXX Corps", "inf", 3, "Franconia", {}],
+      [6, "FRA", "Armoured reserve", "arm", 2, "Champagne", { xp: 0.1 }],
+      [6, "FRA", "XXIII Corps", "inf", 3, "Aube", {}],
+      [7, "GER", "XXXIX Corps", "arm", 2, "Hesse", { gen: "Rudolf Schmidt", xp: 0.3 }],
+      [7, "GER", "Group XXI", "inf", 3, "Schleswig-Holstein", { gen: "Nikolaus von Falkenhorst", hold: 1, xp: 0.2 }],
+      [7, "GER", "Mountain Corps Norway", "mtn", 1, "Bremen", { gen: "Eduard Dietl", trait: "defender", hold: 1, xp: 0.3 }],
+      [7, "GER", "Trondheim Landing Group", "mtn", 1, "Bremen", { hold: 1, xp: 0.2 }],
+      [7, "GER", "Bergen Landing Group", "inf", 1, "Bremen", { hold: 1, xp: 0.2 }],
+      [7, "GER", "XXXXII Corps", "inf", 3, "Hanover", {}],
+      [7, "GER", "XXXXIII Corps", "inf", 3, "Saxony", {}],
+      [8, "UK", "III Corps (BEF)", "inf", 3, "Lille", { dyle: "Flanders", xp: 0.1 }],
+      [8, "UK", "North Western Expeditionary Force", "inf", 2, "Clydeside", { gen: "Claude Auchinleck", hold: 1, xp: 0.1 }],
+      [8, "GER", "XXXXIV Corps", "inf", 3, "Magdeburg", {}],
+      [9, "UK", "1st Armoured Division", "arm", 1, "Rouen", {}],
+      [9, "FRA", "XXV Corps", "inf", 3, "Paris", {}],
+      [10, "SOV", "23rd Army", "inf", 4, "Leningrad", {}],
+      [10, "SOV", "7th Army", "inf", 3, "Tikhvin", {}],
+      [12, "GER", "XXXXVI Panzer Corps", "arm", 2, "Saxony", { gen: "Heinrich von Vietinghoff", xp: 0.3 }],
+      [12, "GER", "XXVIII Corps", "inf", 3, "Hanover", {}],
+      [12, "GER", "XXIX Corps", "inf", 3, "Hesse", {}],
+      [12, "SOV", "26th Army", "inf", 3, "Lwow", {}],
+      [12, "SOV", "12th Army", "inf", 4, "Bukovina", {}],
+      [13, "GER", "XXXXVII Panzer Corps", "arm", 2, "Franconia", { gen: "Joachim Lemelsen", xp: 0.3 }],
+      [13, "GER", "XXX Corps", "inf", 3, "Bavaria", {}],
+      [14, "GER", "XXXIV Corps", "inf", 3, "Magdeburg", {}],
+      [14, "GER", "XXXV Corps", "inf", 3, "Saxony", {}],
+      [15, "GER", "XXXXVIII Panzer Corps", "arm", 2, "Lower Silesia", { gen: "Werner Kempf", xp: 0.3 }],
+      [15, "GER", "VII Corps", "inf", 3, "Bavaria", {}],
+      [16, "GER", "III Motorized Corps", "mot", 2, "Berlin", { gen: "Eberhard von Mackensen", xp: 0.3 }],
+      [16, "GER", "XX Corps", "inf", 3, "Stettin", {}],
+      [16, "SOV", "27th Army", "inf", 3, "Estonia", {}],
+      [17, "GER", "XXIII Corps", "inf", 3, "Hanover", {}],
+      [17, "GER", "L Corps", "inf", 3, "Wurttemberg", {}],
+      [17, "SOV", "6th Mechanized Corps", "arm", 3, "Bialystok", {}],
+      [17, "SOV", "4th Mechanized Corps", "arm", 3, "Lwow", {}],
+      [17, "SOV", "8th Mechanized Corps", "arm", 3, "Volhynia", {}],
+      [18, "GER", "XXIV Motorized Corps", "mot", 2, "Upper Silesia", { gen: "Leo Geyr von Schweppenburg", xp: 0.3 }],
+      [18, "GER", "XXXXIX Mountain Corps", "mtn", 2, "Vienna", {}],
+      [18, "SOV", "12th Mechanized Corps", "arm", 2, "Latvia", {}],
+      [18, "SOV", "3rd Mechanized Corps", "arm", 2, "Lithuania", {}],
+      [18, "SOV", "1st Mechanized Corps", "arm", 2, "Pskov", {}],
+      [19, "GER", "LII Corps", "inf", 3, "Dresden", {}],
+      [19, "GER", "LIII Corps", "inf", 3, "Hesse", {}],
+      [19, "SOV", "13th Army", "inf", 3, "Minsk", {}],
+      [19, "SOV", "14th Mechanized Corps", "arm", 2, "Brest", {}],
+      [19, "SOV", "9th Mechanized Corps", "arm", 2, "Zhitomir", {}],
+      [19, "SOV", "2nd Mechanized Corps", "arm", 2, "Odessa", {}],
+      [20, "GER", "LIV Corps", "inf", 3, "Bavaria", {}],
+      [20, "GER", "LV Corps", "inf", 3, "Franconia", {}],
+      [20, "GER", "LVI Panzer Corps", "arm", 2, "Stettin", { gen: "Erich von Manstein", trait: "attacker", xp: 0.3 }],
+      [20, "GER", "LVII Panzer Corps", "arm", 2, "Dresden", { gen: "Adolf-Friedrich Kuntzen", xp: 0.3 }],
+      [21, "ROM", "Mountain Corps", "mtn", 2, "Moldavia", {}],
+      [21, "ROM", "Cavalry Corps", "cav", 2, "Moldavia", {}],
+      [21, "ROM", "II Corps", "inf", 3, "Moldavia", {}],
+      [21, "ROM", "V Corps", "inf", 3, "Dobruja", {}],
+      [21, "HUN", "Mobile Corps", "mot", 1, "Debrecen", {}],
+      [21, "SOV", "21st Army", "inf", 4, "Gomel", {}],
+      [21, "SOV", "22nd Army", "inf", 3, "Vitebsk", {}],
+      [21, "SOV", "19th Army", "inf", 3, "Kiev", {}],
+      [21, "SOV", "18th Army", "inf", 3, "Vinnitsa", {}],
+      [21, "SOV", "16th Army", "inf", 3, "Kiev", {}],
+      [21, "SOV", "20th Army", "inf", 4, "Smolensk", {}],
+      [27, "SOV", "1st Shock Army", "inf", 4, "Moscow", { xp: 0.3, trait: "attacker" }],
+      [27, "SOV", "20th Army (re-formed)", "inf", 4, "Vladimir", {}],
+      [27, "SOV", "10th Army (re-formed)", "inf", 4, "Ryazan", {}],
+      [27, "SOV", "26th Army (re-formed)", "inf", 3, "Tula", {}],
+      [27, "SOV", "60th Army", "inf", 3, "Yaroslavl", {}],
+      [27, "SOV", "61st Army", "inf", 3, "Tambov", {}],
+      [28, "SOV", "Far East rifle divisions", "inf", 4, "Moscow", { xp: 0.4 }],
+      [28, "SOV", "Siberian rifle divisions", "inf", 4, "Vladimir", { xp: 0.4 }],
+      [28, "SOV", "Ural rifle divisions", "inf", 3, "Ryazan", { xp: 0.3 }],
+      [28, "SOV", "39th Army", "inf", 3, "Kalinin", {}],
+      [28, "SOV", "59th Army", "inf", 3, "Vologda", {}],
+      [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", { xp: 0.3 }]
+    ],
+    formations: [
+      [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", { hold: 1, str: 0.3, est: 0.3, xp: 0.05, open: 1 }],
+      [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", { hold: 1, str: 0.7, est: 0.7, xp: 0.15, open: 1 }],
+      [46, "SOV", "Central Front", "inf", 12, "Kursk", { gen: "Konstantin Rokossovsky", hold: 1, xp: 0.4 }],
+      [46, "SOV", "Voronezh Front", "inf", 12, "Kursk", { gen: "Nikolai Vatutin", trait: "attacker", hold: 1, xp: 0.4 }],
+      [46, "SOV", "1st Tank Army", "arm", 2, "Kursk", { gen: "Mikhail Katukov", trait: "panzer", hold: 1, xp: 0.4 }],
+      [46, "SOV", "2nd Tank Army", "arm", 2, "Kursk", { gen: "Aleksei Rodin", hold: 1, xp: 0.3 }],
+      [46, "SOV", "Steppe Front", "inf", 10, "Voronezh", { gen: "Ivan Konev", xp: 0.3 }],
+      [46, "SOV", "5th Guards Tank Army", "arm", 2, "Voronezh", { gen: "Pavel Rotmistrov", trait: "panzer", xp: 0.4 }],
+      [46, "SOV", "3rd Guards Tank Army", "arm", 2, "Tula", { gen: "Pavel Rybalko", trait: "panzer", xp: 0.4 }],
+      [46, "SOV", "4th Tank Army", "arm", 2, "Tula", { gen: "Vasily Badanov", xp: 0.3 }]
+    ],
+    book: {
+      _note: "Ruling 233, rider b612 (4). At these stops of the history dial, in the grand campaign, a computer's staff is sent the dated rows below ('expeditions') whose place is home ground of the second country named, though the theatre is a scripted one whose rows free play does not send: Germany's moves into Italy in 1943 and 1944 are the book's. Each row waits until an enemy holds or stands on one of the grounds Italy's armistice names (the ward's trigger, open.json), and then comes at its date, or at once if the date has passed: a quiet Italy draws no German corps. 'from' keeps anything from being counted twice (b609): a row named here breaks up the corps listed, where they still live, to find its divisions (the Hermann Goring Division of Tunisia and the 15th Panzer Division of the desert, re-formed in Sicily as XIV Panzer Corps's two).",
+      stops: [1, 2],
+      scripted: [["GER", "ITA"]],
+      from: { "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)": ["Hermann Goring Division", "15th Panzer Division"] }
+    },
+    expeditions: [
+      [13, "UK", "6th Australian Division", "inf", 1, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
+      [17, "UK", "2nd Armoured Division", "arm", 1, "Alexandria", { xp: 0, war: ["UK", "ITA"] }],
+      [18, "UK", "Tobruk garrison (9th Australian Division)", "inf", 3, "Tobruk", { hold: 1, xp: 0.25, war: ["UK", "ITA"] }],
+      [24, "UK", "XIII Corps, Eighth Army", "inf", 2, "Alexandria", { xp: 0.3, war: ["UK", "ITA"], openDivs: 1 }],
+      [26, "UK", "XXX Corps, Eighth Army", "arm", 2, "Alexandria", { xp: 0.15, war: ["UK", "ITA"], openDivs: 1 }],
+      [17, "ITA", "Ariete Armoured Division", "arm", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
+      [18, "ITA", "Trento Motorized Division", "mot", 1, "Tripoli", { hold: 1, xp: 0.1, war: ["UK", "ITA"] }],
+      [19, "ITA", "Brescia and Pavia Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [23, "ITA", "Bologna and Savona Divisions", "inf", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [18, "GER", "5th Light Division", "arm", 1, "Tripoli", { gen: "Erwin Rommel", trait: "panzer", hold: 1, xp: 0.4, war: ["UK", "ITA"] }],
+      [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", { gen: "Ludwig Cruwell", xp: 0.4, war: ["UK", "ITA"] }],
+      [24, "GER", "90th Light Division", "mot", 1, "Tripoli", { xp: 0.3, war: ["UK", "ITA"] }],
+      [13, "ITA", "Ciamuria Corps and Julia Alpine Division", "inf", 3, "Albania", { gen: "Sebastiano Visconti Prasca", xp: 0.1, war: ["ITA", "UK"] }],
+      [13, "ITA", "XXVI Corps", "inf", 2, "Albania", { xp: 0.1, war: ["ITA", "UK"] }],
+      [15, "ITA", "9th Army", "inf", 4, "Albania", { xp: 0.05, war: ["ITA", "GRE"] }],
+      [17, "ITA", "11th Army reserves", "inf", 4, "Albania", { gen: "Ugo Cavallero", xp: 0.05, war: ["ITA", "GRE"] }],
+      [14, "GRE", "West Macedonia Army Section", "inf", 3, "Salonika", { xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
+      [14, "GRE", "I Corps", "inf", 2, "Epirus", { gen: "Alexandros Papagos", trait: "defender", xp: 0.15, war: ["GRE", "ITA"], after: 0 }],
+      [15, "GRE", "II Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 1 }],
+      [16, "GRE", "III Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 2 }],
+      [15, "UK", "Creforce", "inf", 1, "Crete", { gen: "Bernard Freyberg", trait: "defender", hold: 1, xp: 0.2, war: ["GRE", "ITA"] }],
+      [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", { gen: "Henry Maitland Wilson", hold: 1, xp: 0.25, war: ["GRE", "ITA"], takes: { name: "2nd Armoured Division", share: 0.5, leaves: "The 1st Armoured Brigade sails from {place} for Greece with W Force. The 2nd Armoured Division stays in the desert with its other brigade." } }],
+      [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
+      [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
+      [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", { hold: 1, xp: 0.35, war: ["ITA", "GRE"] }],
+      [19, "GER", "50th, 72nd and 164th Infantry Divisions", "inf", 3, "Plovdiv", { hold: 1, xp: 0.3, war: ["ITA", "GRE"] }],
+      [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
+      [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", { hold: 1, xp: 0.35, war: ["ITA", "GRE"], until: 22 }],
+      [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", { hold: 1, xp: 0.2, war: ["ITA", "GRE"] }],
+      [21, "GER", "XI Air Corps", "inf", 3, "Athens", { gen: "Kurt Student", trait: "attacker", airborne: 1, hold: 1, xp: 0.7, war: ["GER", "UK"] }],
+      [35, "HUN", "2nd Army: III Corps", "inf", 3, "Voronezh", { gen: "Gusztav Jany", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
+      [35, "HUN", "2nd Army: IV and VII Corps", "inf", 4, "Voronezh", { hold: 1, join: 1, until: 45, xp: 0.05, war: ["GER", "SOV"] }],
+      [36, "ITA", "8th Army: II Corps", "inf", 3, "Millerovo", { gen: "Italo Gariboldi", trait: "defender", hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
+      [36, "ITA", "8th Army: XXXV Corps", "inf", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.1, war: ["ITA", "SOV"] }],
+      [36, "ITA", "Alpine Corps", "mtn", 3, "Millerovo", { hold: 1, join: 1, until: 45, xp: 0.2, war: ["ITA", "SOV"] }],
+      [37, "ROM", "3rd Army: I and II Corps", "inf", 4, "Don Bend", { gen: "Petre Dumitrescu", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [37, "ROM", "3rd Army: IV and V Corps", "inf", 4, "Don Bend", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [38, "ROM", "4th Army: VI Corps", "inf", 3, "Kalmyk Steppe", { gen: "Constantin Constantinescu-Claps", trait: "defender", hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [38, "ROM", "4th Army: VII Corps", "inf", 3, "Kalmyk Steppe", { hold: 1, join: 1, xp: 0.1, war: ["GER", "SOV"] }],
+      [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", { xp: 0.4, war: ["GER", "SOV"] }],
+      [31, "UK", "1st South African and 50th Divisions", "inf", 2, "Alexandria", { xp: 0.2, war: ["UK", "ITA"] }],
+      [32, "UK", "1st Armoured Division", "arm", 1, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
+      [34, "UK", "New Zealand and 9th Australian Divisions", "inf", 2, "Alexandria", { xp: 0.35, war: ["UK", "ITA"] }],
+      [36, "UK", "X Corps (8th and 10th Armoured Divisions)", "arm", 2, "Alexandria", { gen: "Bernard Montgomery", xp: 0.2, war: ["UK", "ITA"] }],
+      [37, "UK", "44th and 51st Divisions", "inf", 2, "Alexandria", { xp: 0.1, war: ["UK", "ITA"] }],
+      [31, "ITA", "Littorio Armoured Division", "arm", 1, "Tripoli", { xp: 0.1, war: ["UK", "ITA"] }],
+      [36, "GER", "164th Light Division and Ramcke Brigade", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
+      [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", { xp: 0.3, war: ["UK", "ITA"] }],
+      [39, "UK", "First Army: 78th Division", "inf", 1, "Gibraltar", { gen: "Kenneth Anderson", trait: "defender", xp: 0.2, war: ["UK", "GER"] }],
+      [39, "USA", "II Corps (1st Infantry and 1st Armored Divisions)", "mot", 2, "Gibraltar", { gen: "Lloyd Fredendall", xp: 0.05, war: ["USA", "GER"] }],
+      [39, "USA", "Western Task Force (2nd Armored and 9th Infantry Divisions)", "mot", 2, "Gibraltar", { gen: "George S. Patton", trait: "attacker", xp: 0.05, war: ["USA", "GER"] }],
+      [41, "UK", "First Army: 6th Armoured Division", "arm", 1, "Algiers", { xp: 0.1, war: ["UK", "GER"] }],
+      [41, "UK", "French XIX Corps", "inf", 2, "Constantine", { xp: 0.05, war: ["UK", "GER"] }],
+      [42, "USA", "34th Infantry Division", "inf", 1, "Oran", { xp: 0.05, war: ["USA", "GER"] }],
+      [42, "UK", "First Army: V Corps", "inf", 2, "Algiers", { xp: 0.15, war: ["UK", "GER"] }],
+      [40, "GER", "10th Panzer Division", "arm", 1, "Tunis", { gen: "Hans-Jurgen von Arnim", trait: "defender", xp: 0.4, war: ["GER", "USA"] }],
+      [41, "GER", "334th Infantry Division", "inf", 1, "Tunis", { xp: 0.2, war: ["GER", "USA"] }],
+      [41, "GER", "Hermann Goring Division", "mot", 1, "Tunis", { xp: 0.3, war: ["GER", "USA"] }],
+      [42, "ITA", "Pistoia and La Spezia Divisions", "inf", 2, "Tunis", { gen: "Giovanni Messe", xp: 0.15, war: ["ITA", "USA"] }],
+      [39, "USA", "3rd Infantry Division", "inf", 1, "Gibraltar", { xp: 0.05, war: ["USA", "GER"] }],
+      [47, "ITA", "6th Army", "inf", 3, "Sicily", { gen: "Alfredo Guzzoni", trait: "defender", hold: 1, join: 1, xp: 0.05, war: ["ITA", "USA"] }],
+      [47, "GER", "XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)", "mot", 2, "Calabria", { gen: "Hans-Valentin Hube", trait: "defender", join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [47, "UK", "Eighth Army: XIII Corps (5th, 50th and 78th Divisions)", "inf", 3, "Malta", { gen: "Bernard Montgomery", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
+      [47, "UK", "Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)", "inf", 3, "Malta", { gen: "Oliver Leese", join: 1, xp: 0.4, from: "North Africa", war: ["UK", "ITA"] }],
+      [47, "USA", "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "inf", 3, "Malta", { gen: "Omar Bradley", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
+      [47, "USA", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)", "mot", 3, "Malta", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.2, from: "North Africa", war: ["USA", "ITA"] }],
+      [48, "GER", "LXXVI Panzer Corps (26th Panzer, 29th Panzergrenadier and 1st Parachute Divisions)", "mot", 2, "Calabria", { gen: "Traugott Herr", join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [48, "GER", "16th Panzer Division", "arm", 1, "Naples", { hold: 1, join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [48, "GER", "2nd Parachute and 3rd Panzergrenadier Divisions", "mot", 2, "Rome", { join: 1, xp: 0.3, war: ["GER", "USA"] }],
+      [49, "GER", "LI Mountain Corps (44th and 305th Divisions)", "mtn", 2, "Abruzzo", { gen: "Heinrich von Vietinghoff", trait: "defender", join: 1, xp: 0.2, war: ["GER", "USA"] }],
+      [50, "GER", "5th Mountain and 65th Divisions", "mtn", 2, "Abruzzo", { join: 1, xp: 0.2, war: ["GER", "USA"] }],
+      [49, "UK", "Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)", "inf", 2, "Malta", { join: 1, xp: 0.3, from: "North Africa", war: ["UK", "GER"] }],
+      [49, "USA", "Fifth Army: VI Corps (36th and 34th Infantry Divisions)", "inf", 2, "Malta", { gen: "Mark Clark", join: 1, xp: 0.1, from: "North Africa", war: ["USA", "GER"] }],
+      [49, "USA", "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)", "mot", 3, "Malta", { gen: "Richard McCreery", join: 1, xp: 0.2, from: "North Africa", of: "UK", war: ["USA", "GER"] }],
+      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", "inf", 1, "Naples", { joins: "Fifth Army: VI Corps (36th and 34th Infantry Divisions)" }],
+      [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry, 1st Armored and British 1st and 5th Divisions)", "mot", 2, "Naples", { joins: "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", until: 60 }],
+      [53, "USA", "Fifth Army: II Corps (34th and 36th Infantry Divisions)", "inf", 2, "Naples", { gen: "Geoffrey Keyes", join: 1, xp: 0.3, from: ["Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], war: ["USA", "GER"], news: "Eisenhower, Montgomery, Bradley and Patton have left the Mediterranean for England, and seven veteran divisions have gone with them for the invasion of France. Alexander fights on in Italy with what is left." }],
+      [53, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", "mtn", 2, "Naples", { gen: "Alphonse Juin", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
+      [53, "UK", "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)", "inf", 3, "Naples", { gen: "Oliver Leese", join: 1, xp: 0.4, from: ["Eighth Army: XIII Corps (5th, 50th and 78th Divisions)"], war: ["UK", "GER"] }],
+      [53, "UK", "Eighth Army: I Canadian Corps (1st Canadian Infantry and 5th Canadian Armoured Divisions)", "mot", 2, "Apulia", { gen: "E. L. M. Burns", join: 1, xp: 0.35, from: ["Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)"], war: ["UK", "GER"] }],
+      [53, "UK", "Eighth Army: V Corps (4th and 10th Indian Divisions)", "inf", 2, "Apulia", { gen: "Charles Allfrey", join: 1, xp: 0.3, from: ["Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)"], war: ["UK", "GER"] }],
+      [53, "GER", "I Parachute Corps (4th Parachute and 715th Divisions)", "mot", 2, "Rome", { gen: "Alfred Schlemm", join: 1, xp: 0.25, war: ["USA", "GER"] }],
+      [54, "GER", "14th Army: 114th Jager and 362nd Divisions", "inf", 2, "Rome", { gen: "Eberhard von Mackensen", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [54, "UK", "New Zealand Corps (2nd New Zealand and 4th Indian Divisions)", "inf", 2, "Naples", { gen: "Bernard Freyberg", join: 1, xp: 0.45, war: ["UK", "GER"] }],
+      [56, "USA", "Fifth Army: II Corps (34th, 36th, 85th and 88th Infantry Divisions)", "inf", 2, "Naples", { joins: "Fifth Army: II Corps (34th and 36th Infantry Divisions)", from: ["Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)"], news: "Two new American divisions, the 85th and the 88th, join the Fifth Army below Cassino. The British X Corps leaves it for the Eighth Army." }],
+      [56, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan, 3rd Algerian, 4th Moroccan Mountain and 1st Free French Divisions)", "mtn", 2, "Naples", { joins: "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", until: 60 }],
+      [56, "UK", "Eighth Army: Polish II Corps (3rd Carpathian and 5th Kresowa Divisions)", "inf", 2, "Naples", { gen: "Wladyslaw Anders", trait: "attacker", join: 1, xp: 0.35, from: ["New Zealand Corps (2nd New Zealand and 4th Indian Divisions)"], war: ["UK", "GER"], news: "General Anders brings the Polish II Corps into the line opposite Monte Cassino: men who came out of Soviet camps by way of Persia to fight for a country they cannot go home to." }],
+      [56, "UK", "Eighth Army: XIII Corps (4th, 78th, 8th Indian and 6th Armoured Divisions)", "inf", 1, "Naples", { joins: "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)" }],
+      [56, "GER", "Group Hauck (305th and 334th Divisions)", "inf", 2, "Abruzzo", { join: 1, hold: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [58, "USA", "Fifth Army: IV Corps (91st Infantry, 6th South African Armoured and Brazilian 1st Divisions)", "mot", 3, "Naples", { gen: "Willis Crittenberger", join: 1, xp: 0.25, war: ["USA", "GER"] }],
+      [59, "GER", "14th Army: LXXV Corps (16th SS Panzergrenadier, 19th and 20th Luftwaffe Field Divisions)", "inf", 3, "Emilia", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [61, "UK", "Eighth Army: V Corps (46th, 56th, 4th Indian and 1st Armoured Divisions)", "inf", 2, "Marche", { joins: "Eighth Army: V Corps (4th and 10th Indian Divisions)" }],
+      [57, "GER", "Seventh Army: LXXXIV Corps (352nd and 716th Divisions)", "inf", 2, "Normandy", { join: 1, gen: "Erich Marcks", trait: "defender", xp: 0.2, war: ["USA", "GER"] }],
+      [57, "GER", "Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)", "arm", 3, "Maine", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.45, war: ["USA", "GER"] }],
+      [57, "GER", "Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "arm", 2, "Somme", { join: 1, gen: "Hans von Funck", xp: 0.45, war: ["USA", "GER"] }],
+      [57, "GER", "Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "inf", 3, "Rennes", { join: 1, gen: "Eugen Meindl", trait: "defender", xp: 0.4, war: ["USA", "GER"] }],
+      [57, "GER", "Fifteenth Army: LXXXI and LXXXII Corps", "inf", 4, "Calais", { join: 1, gen: "Hans von Salmuth", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [57, "GER", "Fifteenth Army: LXVII and LXXXIX Corps", "inf", 4, "Flanders", { join: 1, hold: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [57, "GER", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)", "arm", 2, "Toulouse", { join: 1, xp: 0.4, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: 11th Panzer Division", "arm", 1, "Languedoc", { join: 1, hold: 1, xp: 0.45, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: 242nd and 244th Divisions", "inf", 1, "Marseille", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "inf", 3, "Languedoc", { join: 1, gen: "Friedrich Wiese", hold: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [57, "GER", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)", "inf", 2, "Riviera", { join: 1, hold: 1, xp: 0.1, war: ["USA", "GER"] }],
+      [57, "UK", "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", "inf", 3, "Hampshire", { gen: "Miles Dempsey", join: 1, xp: 0.3, from: "the West", war: ["UK", "GER"] }],
+      [57, "UK", "Second Army: XXX Corps (50th, 49th and 7th Armoured Divisions)", "mot", 3, "Hampshire", { gen: "Bernard Montgomery", trait: "attacker", join: 1, xp: 0.4, from: "the West", war: ["UK", "GER"] }],
+      [57, "USA", "First Army: V Corps (1st, 2nd and 29th Infantry Divisions)", "inf", 3, "Cornwall", { gen: "Omar Bradley", xp: 0.3, war: ["USA", "GER"] }],
+      [57, "USA", "First Army: VII Corps (4th, 9th and 90th Infantry, 82nd and 101st Airborne Divisions)", "inf", 5, "Cornwall", { gen: "J. Lawton Collins", trait: "attacker", xp: 0.3, war: ["USA", "GER"] }],
+      [59, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions)", "arm", 2, "Rouen", { join: 1, gen: "Paul Hausser", trait: "panzer", xp: 0.5, news: "The II SS Panzer Corps is pulled out of the Eastern Front and sent across Europe to Normandy.", war: ["USA", "GER"] }],
+      [59, "GER", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)", "inf", 3, "Rouen", { join: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [59, "UK", "Second Army: VIII Corps (11th Armoured, Guards Armoured and 15th Scottish Divisions)", "arm", 3, "Normandy", { gen: "Richard O'Connor", trait: "attacker", xp: 0.25, war: ["UK", "GER"] }],
+      [59, "USA", "First Army: XIX Corps (30th and 35th Infantry, 2nd and 3rd Armored Divisions)", "mot", 4, "Cotentin", { gen: "Charles Corlett", xp: 0.2, war: ["USA", "GER"] }],
+      [59, "USA", "First Army: VIII Corps (8th, 79th and 83rd Infantry, 4th and 6th Armored Divisions)", "mot", 5, "Cotentin", { gen: "Troy Middleton", xp: 0.2, war: ["USA", "GER"] }],
+      [60, "UK", "First Canadian Army: II Canadian Corps and British I Corps (2nd and 3rd Canadian, 4th Canadian Armoured, 1st Polish Armoured and 51st Highland Divisions)", "mot", 3, "Normandy", { joins: "Second Army: I Corps (3rd British, 3rd Canadian and 6th Airborne Divisions)", news: "The First Canadian Army takes over the left of the line in Normandy, with the Polish 1st Armoured Division under its command.", war: ["UK", "GER"] }],
+      [60, "USA", "Third Army: XV Corps (5th Armored, French 2nd Armored and 79th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "George S. Patton", trait: "attacker", join: 1, xp: 0.3, news: "General Patton's Third Army becomes operational in Normandy. Its orders are to go through the gap at Avranches and keep going.", war: ["USA", "GER"] }],
+      [60, "USA", "Third Army: XX Corps (7th Armored, 5th and 90th Infantry Divisions)", "mot", 3, "Cotentin", { gen: "Walton Walker", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [60, "USA", "Third Army: XII Corps (4th Armored, 35th and 80th Infantry Divisions)", "arm", 3, "Cotentin", { gen: "Manton Eddy", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [60, "USA", "Seventh Army: VI Corps (3rd, 36th and 45th Infantry Divisions)", "inf", 3, "Naples", { gen: "Lucian Truscott", trait: "attacker", join: 1, xp: 0.5, war: ["USA", "GER"] }],
+      [60, "USA", "French Army B: II Corps (1st Free French, 3rd Algerian and 1st Armoured Divisions)", "mot", 3, "Naples", { gen: "Jean de Lattre de Tassigny", trait: "attacker", join: 1, xp: 0.35, war: ["USA", "GER"] }],
+      [61, "GER", "First Parachute Army: II Parachute Corps and LXXXVI Corps", "inf", 3, "Gelderland", { join: 1, gen: "Kurt Student", trait: "defender", xp: 0.3, from: ["Seventh Army: II Parachute Corps (3rd Parachute, 353rd and 17th SS Panzergrenadier Divisions)", "Seventh Army: LXXXVI Corps (346th, 711th and 16th Luftwaffe Field Divisions)"], news: "General Student is given the First Parachute Army, which exists so far only on paper, and told to hold the line of the Dutch canals.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "II SS Panzer Corps (9th and 10th SS Panzer Divisions), refitting", "arm", 2, "Gelderland", { join: 1, gen: "Wilhelm Bittrich", xp: 0.5, from: ["II SS Panzer Corps (9th and 10th SS Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Fifteenth Army: LXVII and LXXXVIII Corps", "inf", 4, "Rotterdam", { join: 1, gen: "Gustav-Adolf von Zangen", xp: 0.2, from: ["Fifteenth Army: LXXXI and LXXXII Corps", "Fifteenth Army: LXVII and LXXXIX Corps"], news: "The German Fifteenth Army, cut off on the Channel coast, is ferried across the mouth of the Scheldt by night and gets away into Holland.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Seventh Army: LXXXI and XII SS Corps (the West Wall at Aachen)", "inf", 4, "Rhineland", { join: 1, xp: 0.2, from: ["Seventh Army: LXXXIV Corps (352nd and 716th Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Seventh Army: LXXIV Corps (the Hurtgen Forest)", "inf", 3, "Eifel", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "First Parachute Army: LXXXVIII Corps", "inf", 3, "Gelderland", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Seventh Army: I SS Panzer Corps", "mot", 3, "Eifel", { join: 1, xp: 0.35, from: ["Panzer Group West: I SS Panzer Corps (21st Panzer, 12th SS Panzer and Panzer Lehr Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "First Army: LXXXII and XIII SS Corps (the forts of Metz)", "inf", 3, "Lorraine", { join: 1, gen: "Otto von Knobelsdorff", xp: 0.25, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "First Army: LXXX Corps", "inf", 2, "Saar", { join: 1, xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps", "arm", 2, "Lorraine", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Panzer Group West: XLVII Panzer Corps (2nd and 116th Panzer Divisions)", "Army Group G: LVIII Panzer Corps (2nd SS Panzer and 9th Panzer Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Nineteenth Army: IV Luftwaffe Field Corps and LXIV Corps", "inf", 3, "Vosges", { join: 1, xp: 0.15, from: ["Nineteenth Army: IV Luftwaffe Field Corps (198th, 716th and 189th Divisions)", "Nineteenth Army: 242nd and 244th Divisions"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "GER", "Nineteenth Army: LXXXV Corps and 11th Panzer Division", "inf", 3, "Belfort", { join: 1, xp: 0.2, from: ["Nineteenth Army: 11th Panzer Division", "Nineteenth Army: LXII Corps (148th and 157th Reserve Divisions)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [61, "USA", "French First Army: I Corps (2nd Moroccan, 4th Moroccan Mountain and 9th Colonial Divisions)", "inf", 3, "Marseille", { join: 1, xp: 0.35, war: ["USA", "GER"] }],
+      [60, "UK", "Second Army: XII Corps (43rd Wessex, 53rd Welsh and 59th Divisions)", "inf", 3, "Normandy", { gen: "Neil Ritchie", xp: 0.25, war: ["UK", "GER"] }],
+      [61, "UK", "First Allied Airborne Army: I Airborne Corps (1st Airborne, US 82nd and 101st Airborne Divisions)", "inf", 3, "Brussels", { gen: "Frederick Browning", join: 1, xp: 0.4, war: ["UK", "GER"] }],
+      [62, "USA", "Ninth Army: XIII and XIX Corps (29th, 30th, 84th and 102nd Infantry and 2nd Armored Divisions)", "inf", 5, "Liege", { gen: "William Simpson", join: 1, xp: 0.2, war: ["USA", "GER"] }],
+      [63, "USA", "Third Army: III Corps (26th and 95th Infantry, 6th and 10th Armored Divisions)", "mot", 4, "Verdun", { gen: "John Millikin", join: 1, xp: 0.15, war: ["USA", "GER"] }],
+      [63, "GER", "Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)", "arm", 2, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.35, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps"], news: "The Fifth Panzer Army is taken out of Lorraine and sent north behind the river Roer. Nobody on the Allied side asks why.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Sixth Panzer Army: I SS Panzer Corps (1st and 12th SS Panzer Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Sepp Dietrich", trait: "panzer", xp: 0.4, from: ["Seventh Army: I SS Panzer Corps"], news: "Behind the Eifel the Germans have gathered two panzer armies in secret: a quarter of a million men and the last tanks and fuel the Reich can find.", war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Fifth Panzer Army: XLVII Panzer Corps (2nd Panzer, Panzer Lehr and 26th Volksgrenadier Divisions)", "arm", 3, "Eifel", { join: 1, gen: "Hasso von Manteuffel", trait: "panzer", xp: 0.4, from: ["Fifth Panzer Army: XLVII and LVIII Panzer Corps (behind the Roer)"], war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Fifth Panzer Army: LVIII Panzer Corps (116th Panzer and 560th Volksgrenadier Divisions)", "arm", 2, "Eifel", { join: 1, xp: 0.3, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [64, "GER", "Seventh Army: LXXXV Corps (5th Parachute and 352nd Volksgrenadier Divisions)", "inf", 2, "Eifel", { join: 1, gen: "Erich Brandenberger", xp: 0.2, war: ["USA", "GER"], ifLost: ["Paris"] }],
+      [35, "UK", "Royal Artillery, Eighth Army", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
+      [37, "UK", "Royal Artillery, X Corps", "art", 2, "Alexandria", { open: 1, xp: 0.2, war: ["UK", "ITA"] }],
+      [1, "YUG", "Sixth Army", "inf", 3, "Belgrade", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
+      [1, "YUG", "Third Army", "inf", 3, "Montenegro", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 1 }],
+      [1, "YUG", "Seventh Army", "inf", 3, "Slovenia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
+      [1, "YUG", "Coastal Army", "inf", 3, "Dalmatia", { open: 1, xp: 0.05, war: ["YUG", "*"], after: 2 }],
+      [21, "UK", "1st South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.2, war: ["UK", "ITA"] }],
+      [22, "UK", "2nd South African Division", "inf", 1, "Alexandria", { open: 1, carried: "XXX Corps, Eighth Army", xp: 0.05, war: ["UK", "ITA"] }],
+      [19, "UK", "2nd New Zealand Division", "inf", 1, "Alexandria", { open: 1, carried: "XIII Corps, Eighth Army", xp: 0.25, war: ["UK", "ITA"], unless: "W Force (New Zealand Division and 1st Armoured Brigade)", leaves: "The 2nd New Zealand Division sails from {place} for Greece. It goes as part of W Force, which has landed there with the 1st Armoured Brigade." }],
+      [32, "UK", "5th Indian Division", "inf", 1, "Alexandria", { open: 1, xp: 0.3, war: ["UK", "ITA"] }],
+      [34, "UK", "10th Indian Division", "inf", 1, "Mersa Matruh", { open: 1, xp: 0.2, war: ["UK", "ITA"] }]
+    ]
   };
 
   // ../../data/campaign/history.json
@@ -19052,390 +18908,53 @@
     for (const [name, a] of amends) amendRow(TARGETS, name, a);
   }
 
-  // ../../src/campaign/commanders.ts
-  var COMMAND = commanders_default;
-  var SKILLS = ["offense", "defense", "logistics", "leadership"];
-  var blank = () => ({ battles: 0, won: 0, attacks: 0, defences: 0, wounds: 0, fast: 0, close: 0, enc: 0, held: 0, winter: 0, costly: 0, streak: 0 });
-  function generalOf(g2, c) {
-    return c.general === null ? null : g2.generals[c.general] ?? null;
-  }
-  function corpsOf(g2, gen) {
-    return gen.corps < 0 ? null : g2.corps.find((c) => c.id === gen.corps) ?? null;
-  }
-  var serving = (gen) => gen.status === "active" || gen.status === "wounded";
-  function newGeneral(g2, nat, name, o) {
-    const gen = {
-      id: g2.generals.length,
-      nat,
-      name,
-      historical: o.historical ?? true,
-      level: o.level ?? 1,
-      xp: 0,
-      points: 0,
-      skills: { offense: 0, defense: 0, logistics: 0, leadership: 0, ...o.skills },
-      traits: [...o.traits ?? []],
-      corps: -1,
-      status: "active",
-      backOn: 0,
-      joined: g2.turn,
-      moved: 0,
-      rec: blank()
-    };
-    gen.points = Math.max(0, gen.level - 1 - SKILLS.reduce((s, k) => s + gen.skills[k], 0));
-    g2.generals.push(gen);
-    return gen;
-  }
-  function appoint(g2, gen, c) {
-    const old = corpsOf(g2, gen);
-    if (old && old.general === gen.id) old.general = null;
-    gen.corps = -1;
-    if (!c) return;
-    const sitting = generalOf(g2, c);
-    if (sitting && sitting !== gen) sitting.corps = -1;
-    c.general = gen.id;
-    gen.corps = c.id;
-  }
-  function seat(g2, c, name, label) {
-    const known = g2.generals.find((x) => x.nat === c.nat && x.name === name);
-    if (known) {
-      if (serving(known) && known.status === "active" && (c.nat !== g2.human || known.corps < 0)) appoint(g2, known, c);
-      return known;
-    }
-    const l = COMMAND.legacy[label ?? "none"] ?? COMMAND.legacy.none;
-    const gen = newGeneral(g2, c.nat, name, { level: l.level, skills: l.skills, traits: l.traits, historical: true });
-    appoint(g2, gen, c);
-    return gen;
-  }
-  function traitsFor(gen, c) {
-    const out = [];
-    for (const id of gen.traits) {
-      const d = COMMAND.traits[id];
-      if (d && (!d.mobile || KIND[c.kind].mobile)) out.push(d);
-    }
-    return out;
-  }
-  function cmdAttack(g2, c, pocket) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1 + COMMAND.skills.offense.per * gen.skills.offense;
-    for (const d of traitsFor(gen, c)) {
-      if (d.attack) m *= d.attack;
-      if (pocket && d.pocket) m *= d.pocket;
-    }
-    return m;
-  }
-  function cmdDefence(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1 + COMMAND.skills.defense.per * gen.skills.defense;
-    for (const d of traitsFor(gen, c)) if (d.defence) m *= d.defence;
-    return m;
-  }
-  function cmdAp(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 0;
-    let ap = 0;
-    for (const d of traitsFor(gen, c)) ap += d.ap ?? 0;
-    return ap;
-  }
-  function cmdLoss(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1;
-    for (const d of traitsFor(gen, c)) m *= d.loss ?? 1;
-    return m;
-  }
-  function cmdSteady(g2, c) {
-    const gen = generalOf(g2, c);
-    return gen ? 1 - COMMAND.skills.leadership.steady * gen.skills.leadership : 1;
-  }
-  function cmdRally(g2, c) {
-    const gen = generalOf(g2, c);
-    return gen ? 1 + COMMAND.skills.leadership.rally * gen.skills.leadership : 1;
-  }
-  function cmdWinter(g2, c) {
-    const gen = generalOf(g2, c);
-    if (!gen) return 1;
-    let m = 1;
-    for (const d of traitsFor(gen, c)) if (d.winter !== void 0) m = Math.min(m, d.winter);
-    return m;
-  }
-  function cmdLine(g2, c, mul2) {
-    const gen = generalOf(g2, c);
-    if (!gen || mul2 >= 1 || !gen.skills.logistics) return mul2;
-    return 1 - (1 - mul2) * (1 - COMMAND.skills.logistics.per * gen.skills.logistics);
-  }
-  function cmdCutOff(g2, c) {
-    const gen = generalOf(g2, c);
-    return 0.5 + (gen ? COMMAND.skills.logistics.cutOff * gen.skills.logistics : 0);
-  }
-  function commandersIn(g2, cs) {
-    const names = [];
-    for (const c of cs) {
-      const gen = generalOf(g2, c);
-      if (gen) names.push(`${gen.name} (level ${gen.level})`);
-    }
-    return names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
-  }
-  var xpToNext = (gen) => gen.level >= COMMAND.maxLevel ? Infinity : COMMAND.levelXp[gen.level] ?? Infinity;
-  var notable = (g2, gen) => gen.nat === g2.human || gen.historical || gen.level >= 5;
-  function rankOf(gen) {
-    const rows = COMMAND.ranks[gen.nat] ?? COMMAND.ranks._default;
-    let out = rows[0][1];
-    for (const [from2, title] of rows) if (gen.level >= from2) out = title;
-    return out;
-  }
-  function gainXp(g2, gen, amount) {
-    if (gen.level >= COMMAND.maxLevel) return;
-    let mul2 = 1;
-    for (const t of gen.traits) mul2 *= COMMAND.traits[t]?.xp ?? 1;
-    gen.xp += Math.round(amount * mul2);
-    while (gen.xp >= xpToNext(gen)) {
-      gen.xp -= xpToNext(gen);
-      const was = rankOf(gen);
-      gen.level++;
-      gen.points++;
-      if (gen.nat === g2.human) headline(g2, "info", `${gen.name} reaches level ${gen.level} and has a skill point to spend.`, gen.nat);
-      const now = rankOf(gen);
-      if (now !== was && notable(g2, gen)) headline(g2, "info", `${gen.name} is promoted to ${now}.`, gen.nat);
-    }
-    if (gen.level >= COMMAND.maxLevel) gen.xp = 0;
-    if (gen.nat !== g2.human) autoSpend(gen);
-  }
-  function spendPoint(gen, skill) {
-    if (gen.points < 1 || gen.skills[skill] >= COMMAND.skillMax || !serving(gen)) return false;
-    gen.skills[skill]++;
-    gen.points--;
-    return true;
-  }
-  function autoSpend(gen) {
-    while (gen.points > 0) {
-      const w = {
-        offense: 2 + gen.rec.attacks,
-        defense: 2 + gen.rec.defences,
-        logistics: 1.5 + 0.3 * gen.rec.battles,
-        leadership: 1.5 + 0.3 * gen.rec.battles
-      };
-      let best = null, bs = -1;
-      for (const k of SKILLS) {
-        if (gen.skills[k] >= COMMAND.skillMax) continue;
-        const s = w[k] / (1 + gen.skills[k]);
-        if (s > bs) {
-          bs = s;
-          best = k;
-        }
+  // ../../data/campaign/divisions.json
+  var divisions_default = {
+    _about: {
+      what: "The divisions inside a corps, as both interfaces show them: what each kind is called, the numbers they carry, and how a corps' strength and experience are shared out among its divisions.",
+      rule: "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
+      kinds: "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
+      names: "What a nation calls its own divisions of a kind, where it differs: [name, short].",
+      historic: "The divisions a corps of the 1939 order of battle (setup-1939.json) actually had, by nation and corps name, in its own order: [name, short]. A division past the end of a list, or of a corps not listed, takes its nation's number for its kind. From the historian, for the field battles (the design director, b358). A division whose kind the corps does not hold is left to its number (b371: I Corps' third, Panzer Division Kempf, waits until the corps holds armour).",
+      order: "The order the kinds are listed in when an army is summed up.",
+      spread: "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
+      hardened: "The experience (0 to 1) at which a division counts as battle-hardened.",
+      record: "Real division numbers of 1939 that no first-day corps carries (setup-1939.json's 'nos' holds those that do), by nation and arm, from the historian's divisions-1939-ger.md (18 November 2026): divisions in no corps that day, and those of another arm than the game's corps. A stand-in division is numbered from above the highest real number of its nation's arm, so that no stand-in ever takes a real number and no name is carried twice (the design director, 18 November)."
+    },
+    record: {
+      GER: { arm: [5, 6], mot: [2, 20], cav: [1], inf: [14, 26, 31, 56, 57, 62, 72, 73, 76, 86, 208, 209, 212, 214, 215, 216, 223, 227, 231, 246, 251, 252, 253, 254, 255, 256, 257, 258, 260, 262, 263, 267, 268, 269] },
+      POL: { inf: [24, 36, 39, 45, 50] }
+    },
+    kinds: {
+      inf: { word: "infantry", name: "Infantry Division", short: "Infantry" },
+      mot: { word: "motorised", name: "Motorised Division", short: "Motorised" },
+      arm: { word: "armoured", name: "Armoured Division", short: "Armoured" },
+      cav: { word: "cavalry", name: "Cavalry Division", short: "Cavalry" },
+      mtn: { word: "mountain", name: "Mountain Division", short: "Mountain" },
+      fort: { word: "fortress", name: "Fortress Division", short: "Fortress" },
+      art: { word: "artillery", name: "Artillery Division", short: "Artillery" },
+      eng: { word: "engineer", name: "Engineer Brigade", short: "Engineers" },
+      mg: { word: "machine-gun", name: "Machine-Gun Brigade", short: "Machine-Gun" },
+      mor: { word: "mortar", name: "Mortar Brigade", short: "Mortar" }
+    },
+    historic: {
+      GER: {
+        "I Corps": [["11th Infantry Division", "11th Infantry"], ["61st Infantry Division", "61st Infantry"]],
+        "Corps Wodrig": [["1st Infantry Division", "1st Infantry"], ["12th Infantry Division", "12th Infantry"]]
       }
-      if (!best) break;
-      gen.skills[best]++;
-      gen.points--;
-    }
-  }
-  function earn(g2, gen, c) {
-    for (const [id, d] of Object.entries(COMMAND.traits)) {
-      if (!d.needs || gen.traits.includes(id)) continue;
-      if (gen.rec[d.needs[0]] < d.needs[1]) continue;
-      if (d.not?.some((x) => gen.traits.includes(x))) continue;
-      if (d.mobile && !KIND[c.kind].mobile) continue;
-      gen.traits.push(id);
-      if (notable(g2, gen)) headline(g2, "info", `${gen.name} has earned a reputation: ${d.label}. ${d.earned}`, gen.nat);
-    }
-  }
-  function inventName(g2, nat, rng) {
-    const pool = COMMAND.names[nat];
-    if (!pool) return null;
-    for (let tries = 0; tries < 12; tries++) {
-      const name = `${rng.pick(pool.first)} ${rng.pick(pool.last)}`;
-      if (!g2.generals.some((x) => x.nat === nat && x.name === name)) return name;
-    }
-    return null;
-  }
-  function room(g2, nat) {
-    let have = 0, corps = 0;
-    for (const x of g2.generals) if (x.nat === nat && serving(x)) have++;
-    for (const c of g2.corps) if (c.nat === nat && c.kind !== "fort") corps++;
-    return have < Math.ceil(COMMAND.rise.share * corps);
-  }
-  function rise(g2, c, rng, place3) {
-    if (c.kind === "fort" || c.general !== null || !COMMAND.names[c.nat]) return;
-    if (!rng.chance(COMMAND.rise.chance) || !room(g2, c.nat)) return;
-    const name = inventName(g2, c.nat, rng);
-    if (!name) return;
-    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
-    appoint(g2, gen, c);
-    gen.moved = g2.turn;
-    if (c.nat === g2.human) headline(g2, "info", `${name} makes his name at ${place3} and is given command of ${c.name}.`, c.nat, c.reg);
-  }
-  function lose(g2, gen, status, text, region) {
-    appoint(g2, gen, null);
-    gen.status = status;
-    if (notable(g2, gen)) headline(g2, "battle", text, gen.nat, region, { arm: "land", lost: gen.nat });
-  }
-  function hazard(g2, gen, c, lossFrac, rng, rep) {
-    const H = COMMAND.hazard;
-    const roll3 = rng.next();
-    if (c.dead) {
-      if (roll3 < H.lost.captured) lose(g2, gen, "captured", `${gen.name} is taken prisoner with ${c.name} at ${rep.regionName}.`, rep.region);
-      else if (roll3 < H.lost.captured + H.lost.killed) lose(g2, gen, "dead", `${gen.name} is killed as ${c.name} is destroyed at ${rep.regionName}.`, rep.region);
-      else {
-        gen.corps = -1;
-        if (gen.nat === g2.human) headline(g2, "info", `${gen.name} gets away from the disaster at ${rep.regionName} and is waiting for a new command.`, gen.nat, rep.region);
-      }
-      return;
-    }
-    const p = H.base + H.perLoss * lossFrac;
-    if (roll3 < p * H.killedShare) lose(g2, gen, "dead", `${gen.name} is killed in action at ${rep.regionName}.`, rep.region);
-    else if (roll3 < p) {
-      const months4 = H.woundMonths[0] + rng.int(H.woundMonths[1] - H.woundMonths[0] + 1);
-      appoint(g2, gen, null);
-      gen.status = "wounded";
-      gen.backOn = g2.turn + months4;
-      gen.rec.wounds++;
-      if (notable(g2, gen)) headline(g2, "battle", `${gen.name} is wounded at ${rep.regionName} and will be out for ${months4} months.`, gen.nat, rep.region, { arm: "land" });
-    }
-  }
-  function afterBattle(g2, rep, target, preOdds, attackers2, attGens, defenders, defGens, luck = `${rep.id}`, even = 1.2) {
-    const rng = new Rng(hashString(`command:${g2.seed}:${luck}`));
-    const X = COMMAND.xp;
-    const decisive = rep.level === "Decisive victory" || rep.level === "Heroic victory";
-    const side5 = (cs, gens, us, attacking) => cs.forEach((c, i) => {
-      const won = attacking ? rep.taken : !rep.taken;
-      const againstOdds = attacking ? preOdds < COMMAND.closeOdds : preOdds >= 1;
-      const gen = gens[i];
-      if (!gen) {
-        if (!c.dead && won && (attacking ? decisive : againstOdds)) rise(g2, c, rng, rep.regionName);
-        return;
-      }
-      const lossFrac = us[i].men > 0 ? Math.min(1, us[i].lost / us[i].men) : 0;
-      const r = gen.rec;
-      let xp = X.fought;
-      r.battles++;
-      if (attacking) r.attacks++;
-      else r.defences++;
-      if (frozen(g2, c.nat, target)) r.winter++;
-      if (won) {
-        r.won++;
-        r.streak = 0;
-        if (r.lost) delete r.lost;
-        xp += attacking ? X.won : X.held;
-        if (againstOdds) xp += X.odds;
-        if (attacking) {
-          if (decisive) xp += X.decisive;
-          if (decisive && KIND[c.kind].mobile) r.fast++;
-          if (againstOdds) r.close++;
-          if (rep.prisoners > 0) r.enc++;
-          if (target.cap && target.owner === rep.defNat) xp += X.capital;
-        } else if (againstOdds) r.held++;
-      } else {
-        r.streak++;
-        if (attacking && lossFrac >= COMMAND.costly) r.costly++;
-        if (g2.flags.open === 1) {
-          (r.lost ?? (r.lost = [])).push({ t: g2.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking, even: Math.round(even * 100) / 100 });
-          if (r.lost.length > 6) r.lost.shift();
-        }
-      }
-      gainXp(g2, gen, xp);
-      earn(g2, gen, c);
-      hazard(g2, gen, c, lossFrac, rng, rep);
-    });
-    side5(attackers2, attGens, rep.attackers, true);
-    side5(defenders, defGens, rep.defenders, false);
-  }
-  function monthlyCommand(g2, nat) {
-    for (const [from2, name, level, skills, traits] of COMMAND.roster[nat] ?? []) {
-      if (from2 > g2.turn || g2.generals.some((x) => x.nat === nat && x.name === name)) continue;
-      newGeneral(g2, nat, name, { level, skills, traits, historical: true });
-      if (nat === g2.human && g2.turn > 1) headline(g2, "info", `${name} reports for duty and is waiting for a command.`, nat);
-    }
-    for (const gen of g2.generals) {
-      if (gen.nat !== nat || gen.status !== "wounded" || gen.backOn > g2.turn) continue;
-      gen.status = "active";
-      if (nat === g2.human) headline(g2, "info", `${gen.name} is fit for duty again and is waiting for a command.`, nat);
-    }
-    if (nat !== g2.human) aiAssign(g2, nat);
-  }
-  function waiting(g2, nat) {
-    return g2.generals.filter((x) => x.nat === nat && x.status === "active" && x.corps < 0).sort((a, b) => b.level - a.level || a.id - b.id);
-  }
-  function fit(g2, gen, c) {
-    const fastMan = gen.rec.fast > 0 || gen.traits.some((t) => COMMAND.traits[t]?.mobile);
-    const fast = KIND[c.kind].mobile;
-    const front = g2.regions[c.reg].nb.some((j) => atWar(g2, c.nat, g2.regions[j].ctrl));
-    return (fastMan ? fast ? c.kind === "arm" ? 8 : 6 : 0 : fast ? 1 : 2) + (front ? 2 : 0) - (c.hold ? 3 : 0) + c.divs * 0.3 + c.xp;
-  }
-  function vacant(g2, nat) {
-    return g2.corps.filter((c) => c.nat === nat && c.general === null && c.kind !== "fort");
-  }
-  function aiAssign(g2, nat) {
-    const free2 = waiting(g2, nat);
-    if (!free2.length) return;
-    const open3 = vacant(g2, nat);
-    for (const gen of free2) {
-      let best = null, bs = -1e9;
-      for (const c of open3) {
-        if (c.general !== null) continue;
-        const s = fit(g2, gen, c);
-        if (s > bs) {
-          bs = s;
-          best = c;
-        }
-      }
-      if (!best) break;
-      appoint(g2, gen, best);
-      gen.moved = g2.turn;
-    }
-  }
-  function whyNotAssign(g2, gen, c) {
-    if (gen.status !== "active") return gen.status === "wounded" ? "He is recovering from his wounds." : "He is no longer serving.";
-    if (gen.nat !== c.nat) return "He serves another nation.";
-    if (c.dead || c.kind === "fort") return "This formation takes no general.";
-    if (gen.corps === c.id) return "He already commands this corps.";
-    if (gen.moved === g2.turn) return "He took up a new command this month already.";
-    return "";
-  }
-  function assignGeneral(g2, gen, c) {
-    if (whyNotAssign(g2, gen, c)) return false;
-    appoint(g2, gen, c);
-    gen.moved = g2.turn;
-    return true;
-  }
-  function relieve(g2, gen) {
-    if (gen.status !== "active" || gen.corps < 0) return false;
-    appoint(g2, gen, null);
-    return true;
-  }
-  var popular = (gen) => gen.level >= COMMAND.sack.popularLevel || gen.rec.won >= COMMAND.sack.popularWins;
-  function sack(g2, gen) {
-    if (!serving(gen)) return false;
-    const loved = popular(gen);
-    const c = corpsOf(g2, gen);
-    if (loved) {
-      if (c) c.org = Math.max(0, c.org - COMMAND.sack.org);
-      const n = g2.nations[gen.nat];
-      n.pc = Math.max(0, n.pc - COMMAND.sack.pc);
-    }
-    appoint(g2, gen, null);
-    gen.status = "sacked";
-    headline(g2, "info", loved ? `${gen.name} is dismissed. He was popular with his men, and the army takes it badly.` : `${gen.name} is dismissed.`, gen.nat);
-    return true;
-  }
-  function whyNotPromote(g2, c) {
-    if (c.general !== null) return "The corps already has a general.";
-    if (c.dead || c.kind === "fort") return "This formation takes no general.";
-    if (!COMMAND.names[c.nat]) return "There is no officer ready to step up.";
-    if (g2.nations[c.nat].pc < COMMAND.promote.pc) return `It takes ${COMMAND.promote.pc} political capital to promote a man over his seniors.`;
-    return "";
-  }
-  function promote(g2, c) {
-    if (whyNotPromote(g2, c)) return null;
-    const rng = new Rng(hashString(`promote:${g2.seed}:${g2.turn}:${c.id}:${g2.generals.length}`));
-    const name = inventName(g2, c.nat, rng);
-    if (!name) return null;
-    g2.nations[c.nat].pc -= COMMAND.promote.pc;
-    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
-    appoint(g2, gen, c);
-    gen.moved = g2.turn;
-    return gen;
-  }
+    },
+    names: {
+      GER: { arm: ["Panzer Division", "Panzer"] },
+      SOV: { inf: ["Rifle Division", "Rifles"], arm: ["Tank Division", "Tanks"], mot: ["Motor Rifle Division", "Motor Rifles"] },
+      USA: { arm: ["Armored Division", "Armored"], mot: ["Motorized Division", "Motorized"] },
+      ITA: { mtn: ["Alpine Division", "Alpini"] },
+      POL: { mtn: ["Mountain Brigade", "Mountain"] },
+      FRA: { mtn: ["Alpine Division", "Alpine"] }
+    },
+    order: ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort", "mg", "mor"],
+    spread: { str: 0.6, xp: 0.7 },
+    hardened: 0.4
+  };
 
   // ../../data/campaign/pacific.json
   var pacific_default = {
@@ -19831,6 +19350,514 @@
       agreedHolder: "Belongs to {owner}. Your troops are stationed here by agreement, and the French garrison keeps its posts under its own officers."
     }
   };
+
+  // ../../data/campaign/legions.json
+  var legions_default = {
+    _about: "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC; the record is the historian's table, historian/volunteer-legions-1939-45.md). A country at peace outside both alliances may send one legion at a time, of a division at most, to fight under the flag and staff of a country at war: its patron. The legion is a corps of the patron's army with its own name and its home's flag. Its men come from its home's reserve (manpower.ts), first to raise it and then as its drafts; the patron pays its upkeep and its drafts' equipment. It goes home on recall or at its tour's end, and its men go back to the reserve and teach the home army what they learned. Switched by stage.json 'legions'.",
+    _cost: "Political capital a country pays to send a legion: as courting (diplomacy.json court.cost).",
+    cost: 6,
+    _leanAt: "The player may send one to a patron his public opinion leans toward by at least this many points (opinion is -100 for the Allies to +100 for the Axis), or to a friend (relations.json) that has been attacked.",
+    leanAt: 30,
+    _send: "A computer-run country at stops 3 to 5 sends one when it leans this far toward the patron and leans against the enemy, or when a friend has been attacked. At stops 1 and 2 it sends the record's legions by their dates and no others.",
+    send: 50,
+    _backAt: "A computer-run country at stops 3 to 5 calls its legion home when its leaning toward the patron falls under this.",
+    backAt: 20,
+    _tour: "Months a legion serves before it comes home (the historian: the Blue Division's 28 months, the Eagle Squadrons' 24, the AVG's contracts of 12; tour 24 fits). At stops 1 and 2 the record's dates instead.",
+    tour: 24,
+    _train: "A legion home again teaches the army: every corps of its home gains this share of the legion's experience, never more than the legion's own.",
+    train: 0.25,
+    _legionFall: "Each month a legion fights a great power, that power's patience with its home falls by this many points (bargains.ts patience, with the bargains switched on; a claim at stops 4 and 5).",
+    legionFall: 2,
+    _generic: "A legion the record does not name: 'share' of the reserve its country opened the war with (manpower.ts), rounded to a twentieth of a division, at least 'least' and at most 'est', a division (Spain's reserve of about 17 divisions' worth gives a division, Sweden's a little under one, Denmark's a third); 'xp' its experience when raised; 'spare' divisions' worth a computer-run country's reserve must still hold beyond it; and its name after the home's adjective.",
+    generic: { est: 1, share: 0.1, least: 0.1, xp: 0.15, spare: 2, name: "{adj} Volunteer Legion" },
+    _rows: "The record's legions (the historian's table): 'est' the share of a division it was (worth = men / 15,000 x quality), 'from' and 'to' the months it was in the line (turn 1 = September 1939), 'then' the row that carried on with its men the month after, 'no' its division's number. A legion is sent the month before 'from' and is in the line from 'from'.",
+    rows: [
+      { id: "esp-blue", home: "ESP", patron: "GER", against: "SOV", name: "Blue Division", est: 1, xp: 0.25, from: 23, to: 51, then: "esp-legion", no: 250, _why: "18,946 men when formed, kept near 17,000; about 45,000 served in all, by 27 marching battalions. Jul 1941 to Nov 1943 (H men, L quality)." },
+      { id: "esp-legion", home: "ESP", patron: "GER", against: "SOV", name: "Blue Legion", est: 0.12, from: 52, to: 55, _why: "2,269 men who stayed when the division went home; ordered home 3 Mar 1944 (M)." },
+      { id: "swe-corps", home: "SWE", patron: "FIN", against: "SOV", name: "Swedish Volunteer Corps", est: 0.4, xp: 0.15, from: 6, to: 7, _why: "9,640 men; in the line on the Salla front 28 Feb to 13 Mar 1940 (H-M)." }
+    ]
+  };
+
+  // ../../src/core/rng.ts
+  var Rng = class _Rng {
+    constructor(seed) {
+      __publicField(this, "s");
+      this.s = seed >>> 0 || 2654435769;
+    }
+    /** Uniform in [0, 1). mulberry32. */
+    next() {
+      let t = this.s = this.s + 1831565813 >>> 0;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+    range(a, b) {
+      return a + (b - a) * this.next();
+    }
+    int(n) {
+      return Math.floor(this.next() * n);
+    }
+    chance(p) {
+      return this.next() < p;
+    }
+    pick(arr) {
+      return arr[this.int(arr.length)];
+    }
+    /** Roughly normal, mean 0, sd 1 (sum of uniforms; cheap and deterministic). */
+    normal() {
+      return (this.next() + this.next() + this.next() + this.next() - 2) * 1.7320508;
+    }
+    /** Turns an expected count into a whole number of events. */
+    roll(expected) {
+      const whole2 = Math.floor(expected);
+      return whole2 + (this.next() < expected - whole2 ? 1 : 0);
+    }
+    /**
+     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
+     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
+     * that would have gone down without damage control). A larger expectation never gives the smaller count.
+     */
+    rollBoth(expected, other4) {
+      const u = this.next();
+      const at4 = (x) => {
+        const whole2 = Math.floor(x);
+        return whole2 + (u < x - whole2 ? 1 : 0);
+      };
+      return [at4(expected), at4(other4)];
+    }
+    /** An independent stream, so adding rolls in one system does not shift another. */
+    fork(label) {
+      return new _Rng(Math.imul(this.s ^ 2246822507, 3266489909) + label * 668265263 >>> 0);
+    }
+    get state() {
+      return this.s;
+    }
+  };
+  function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  // ../../src/core/ticket.ts
+  function turnToDate(turn2) {
+    const idx2 = 8 + (turn2 - 1);
+    const year = 1939 + Math.floor(idx2 / 12);
+    const month3 = idx2 % 12;
+    const names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return { year, month: month3, label: `${names[month3]} ${year}` };
+  }
+
+  // ../../src/campaign/types.ts
+  var MEN_PER_DIV = 15e3;
+  var KIND = {
+    inf: { label: "Infantry", atk: 10, def: 14, move: 2, mobile: false },
+    mot: { label: "Motorised", atk: 12, def: 12, move: 1, mobile: true },
+    arm: { label: "Armor", atk: 24, def: 11, move: 1, mobile: true },
+    cav: { label: "Cavalry", atk: 8, def: 8, move: 1, mobile: true },
+    mtn: { label: "Mountain", atk: 9, def: 15, move: 2, mobile: false },
+    fort: { label: "Fortress", atk: 1, def: 15, move: 99, mobile: false },
+    // Massed guns, raised only in the grand campaign: see the artillery rule in the battle assessment.
+    art: { label: "Artillery", atk: 14, def: 8, move: 2, mobile: false },
+    // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
+    eng: { label: "Engineers", atk: 4, def: 9, move: 2, mobile: false },
+    // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
+    // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
+    // attack card. Never raised while the teams are off.
+    mg: { label: "Machine guns", atk: 3, def: 7, move: 2, mobile: false },
+    mor: { label: "Mortars", atk: 6, def: 4, move: 2, mobile: false }
+  };
+  var TERRAIN_DEF = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };
+  var FORT_MUL = [1, 1.3, 1.7, 2.6];
+  var STACK = 5;
+
+  // ../../src/campaign/commanders.ts
+  var COMMAND = commanders_default;
+  var SKILLS = ["offense", "defense", "logistics", "leadership"];
+  var blank = () => ({ battles: 0, won: 0, attacks: 0, defences: 0, wounds: 0, fast: 0, close: 0, enc: 0, held: 0, winter: 0, costly: 0, streak: 0 });
+  function generalOf(g2, c) {
+    return c.general === null ? null : g2.generals[c.general] ?? null;
+  }
+  function corpsOf(g2, gen) {
+    return gen.corps < 0 ? null : g2.corps.find((c) => c.id === gen.corps) ?? null;
+  }
+  var serving = (gen) => gen.status === "active" || gen.status === "wounded";
+  function newGeneral(g2, nat, name, o) {
+    const gen = {
+      id: g2.generals.length,
+      nat,
+      name,
+      historical: o.historical ?? true,
+      level: o.level ?? 1,
+      xp: 0,
+      points: 0,
+      skills: { offense: 0, defense: 0, logistics: 0, leadership: 0, ...o.skills },
+      traits: [...o.traits ?? []],
+      corps: -1,
+      status: "active",
+      backOn: 0,
+      joined: g2.turn,
+      moved: 0,
+      rec: blank()
+    };
+    gen.points = Math.max(0, gen.level - 1 - SKILLS.reduce((s, k) => s + gen.skills[k], 0));
+    g2.generals.push(gen);
+    return gen;
+  }
+  function appoint(g2, gen, c) {
+    const old = corpsOf(g2, gen);
+    if (old && old.general === gen.id) old.general = null;
+    gen.corps = -1;
+    if (!c) return;
+    const sitting = generalOf(g2, c);
+    if (sitting && sitting !== gen) sitting.corps = -1;
+    c.general = gen.id;
+    gen.corps = c.id;
+  }
+  function seat(g2, c, name, label) {
+    const known = g2.generals.find((x) => x.nat === c.nat && x.name === name);
+    if (known) {
+      if (serving(known) && known.status === "active" && (c.nat !== g2.human || known.corps < 0)) appoint(g2, known, c);
+      return known;
+    }
+    const l = COMMAND.legacy[label ?? "none"] ?? COMMAND.legacy.none;
+    const gen = newGeneral(g2, c.nat, name, { level: l.level, skills: l.skills, traits: l.traits, historical: true });
+    appoint(g2, gen, c);
+    return gen;
+  }
+  function traitsFor(gen, c) {
+    const out = [];
+    for (const id of gen.traits) {
+      const d = COMMAND.traits[id];
+      if (d && (!d.mobile || KIND[c.kind].mobile)) out.push(d);
+    }
+    return out;
+  }
+  function cmdAttack(g2, c, pocket) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1 + COMMAND.skills.offense.per * gen.skills.offense;
+    for (const d of traitsFor(gen, c)) {
+      if (d.attack) m *= d.attack;
+      if (pocket && d.pocket) m *= d.pocket;
+    }
+    return m;
+  }
+  function cmdDefence(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1 + COMMAND.skills.defense.per * gen.skills.defense;
+    for (const d of traitsFor(gen, c)) if (d.defence) m *= d.defence;
+    return m;
+  }
+  function cmdAp(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 0;
+    let ap = 0;
+    for (const d of traitsFor(gen, c)) ap += d.ap ?? 0;
+    return ap;
+  }
+  function cmdLoss(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1;
+    for (const d of traitsFor(gen, c)) m *= d.loss ?? 1;
+    return m;
+  }
+  function cmdSteady(g2, c) {
+    const gen = generalOf(g2, c);
+    return gen ? 1 - COMMAND.skills.leadership.steady * gen.skills.leadership : 1;
+  }
+  function cmdRally(g2, c) {
+    const gen = generalOf(g2, c);
+    return gen ? 1 + COMMAND.skills.leadership.rally * gen.skills.leadership : 1;
+  }
+  function cmdWinter(g2, c) {
+    const gen = generalOf(g2, c);
+    if (!gen) return 1;
+    let m = 1;
+    for (const d of traitsFor(gen, c)) if (d.winter !== void 0) m = Math.min(m, d.winter);
+    return m;
+  }
+  function cmdLine(g2, c, mul2) {
+    const gen = generalOf(g2, c);
+    if (!gen || mul2 >= 1 || !gen.skills.logistics) return mul2;
+    return 1 - (1 - mul2) * (1 - COMMAND.skills.logistics.per * gen.skills.logistics);
+  }
+  function cmdCutOff(g2, c) {
+    const gen = generalOf(g2, c);
+    return 0.5 + (gen ? COMMAND.skills.logistics.cutOff * gen.skills.logistics : 0);
+  }
+  function commandersIn(g2, cs) {
+    const names = [];
+    for (const c of cs) {
+      const gen = generalOf(g2, c);
+      if (gen) names.push(`${gen.name} (level ${gen.level})`);
+    }
+    return names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
+  }
+  var xpToNext = (gen) => gen.level >= COMMAND.maxLevel ? Infinity : COMMAND.levelXp[gen.level] ?? Infinity;
+  var notable = (g2, gen) => gen.nat === g2.human || gen.historical || gen.level >= 5;
+  function rankOf(gen) {
+    const rows = COMMAND.ranks[gen.nat] ?? COMMAND.ranks._default;
+    let out = rows[0][1];
+    for (const [from2, title] of rows) if (gen.level >= from2) out = title;
+    return out;
+  }
+  function gainXp(g2, gen, amount) {
+    if (gen.level >= COMMAND.maxLevel) return;
+    let mul2 = 1;
+    for (const t of gen.traits) mul2 *= COMMAND.traits[t]?.xp ?? 1;
+    gen.xp += Math.round(amount * mul2);
+    while (gen.xp >= xpToNext(gen)) {
+      gen.xp -= xpToNext(gen);
+      const was = rankOf(gen);
+      gen.level++;
+      gen.points++;
+      if (gen.nat === g2.human) headline(g2, "info", `${gen.name} reaches level ${gen.level} and has a skill point to spend.`, gen.nat);
+      const now = rankOf(gen);
+      if (now !== was && notable(g2, gen)) headline(g2, "info", `${gen.name} is promoted to ${now}.`, gen.nat);
+    }
+    if (gen.level >= COMMAND.maxLevel) gen.xp = 0;
+    if (gen.nat !== g2.human) autoSpend(gen);
+  }
+  function spendPoint(gen, skill) {
+    if (gen.points < 1 || gen.skills[skill] >= COMMAND.skillMax || !serving(gen)) return false;
+    gen.skills[skill]++;
+    gen.points--;
+    return true;
+  }
+  function autoSpend(gen) {
+    while (gen.points > 0) {
+      const w = {
+        offense: 2 + gen.rec.attacks,
+        defense: 2 + gen.rec.defences,
+        logistics: 1.5 + 0.3 * gen.rec.battles,
+        leadership: 1.5 + 0.3 * gen.rec.battles
+      };
+      let best = null, bs = -1;
+      for (const k of SKILLS) {
+        if (gen.skills[k] >= COMMAND.skillMax) continue;
+        const s = w[k] / (1 + gen.skills[k]);
+        if (s > bs) {
+          bs = s;
+          best = k;
+        }
+      }
+      if (!best) break;
+      gen.skills[best]++;
+      gen.points--;
+    }
+  }
+  function earn(g2, gen, c) {
+    for (const [id, d] of Object.entries(COMMAND.traits)) {
+      if (!d.needs || gen.traits.includes(id)) continue;
+      if (gen.rec[d.needs[0]] < d.needs[1]) continue;
+      if (d.not?.some((x) => gen.traits.includes(x))) continue;
+      if (d.mobile && !KIND[c.kind].mobile) continue;
+      gen.traits.push(id);
+      if (notable(g2, gen)) headline(g2, "info", `${gen.name} has earned a reputation: ${d.label}. ${d.earned}`, gen.nat);
+    }
+  }
+  function inventName(g2, nat, rng) {
+    const pool = COMMAND.names[nat];
+    if (!pool) return null;
+    for (let tries = 0; tries < 12; tries++) {
+      const name = `${rng.pick(pool.first)} ${rng.pick(pool.last)}`;
+      if (!g2.generals.some((x) => x.nat === nat && x.name === name)) return name;
+    }
+    return null;
+  }
+  function room(g2, nat) {
+    let have = 0, corps = 0;
+    for (const x of g2.generals) if (x.nat === nat && serving(x)) have++;
+    for (const c of g2.corps) if (c.nat === nat && c.kind !== "fort") corps++;
+    return have < Math.ceil(COMMAND.rise.share * corps);
+  }
+  function rise(g2, c, rng, place3) {
+    if (c.kind === "fort" || c.general !== null || !COMMAND.names[c.nat]) return;
+    if (!rng.chance(COMMAND.rise.chance) || !room(g2, c.nat)) return;
+    const name = inventName(g2, c.nat, rng);
+    if (!name) return;
+    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    if (c.nat === g2.human) headline(g2, "info", `${name} makes his name at ${place3} and is given command of ${c.name}.`, c.nat, c.reg);
+  }
+  function lose(g2, gen, status, text, region) {
+    appoint(g2, gen, null);
+    gen.status = status;
+    if (notable(g2, gen)) headline(g2, "battle", text, gen.nat, region, { arm: "land", lost: gen.nat });
+  }
+  function hazard(g2, gen, c, lossFrac, rng, rep) {
+    const H = COMMAND.hazard;
+    const roll3 = rng.next();
+    if (c.dead) {
+      if (roll3 < H.lost.captured) lose(g2, gen, "captured", `${gen.name} is taken prisoner with ${c.name} at ${rep.regionName}.`, rep.region);
+      else if (roll3 < H.lost.captured + H.lost.killed) lose(g2, gen, "dead", `${gen.name} is killed as ${c.name} is destroyed at ${rep.regionName}.`, rep.region);
+      else {
+        gen.corps = -1;
+        if (gen.nat === g2.human) headline(g2, "info", `${gen.name} gets away from the disaster at ${rep.regionName} and is waiting for a new command.`, gen.nat, rep.region);
+      }
+      return;
+    }
+    const p = H.base + H.perLoss * lossFrac;
+    if (roll3 < p * H.killedShare) lose(g2, gen, "dead", `${gen.name} is killed in action at ${rep.regionName}.`, rep.region);
+    else if (roll3 < p) {
+      const months4 = H.woundMonths[0] + rng.int(H.woundMonths[1] - H.woundMonths[0] + 1);
+      appoint(g2, gen, null);
+      gen.status = "wounded";
+      gen.backOn = g2.turn + months4;
+      gen.rec.wounds++;
+      if (notable(g2, gen)) headline(g2, "battle", `${gen.name} is wounded at ${rep.regionName} and will be out for ${months4} months.`, gen.nat, rep.region, { arm: "land" });
+    }
+  }
+  function afterBattle(g2, rep, target, preOdds, attackers2, attGens, defenders, defGens, luck = `${rep.id}`, even = 1.2) {
+    const rng = new Rng(hashString(`command:${g2.seed}:${luck}`));
+    const X = COMMAND.xp;
+    const decisive = rep.level === "Decisive victory" || rep.level === "Heroic victory";
+    const side5 = (cs, gens, us, attacking) => cs.forEach((c, i) => {
+      const won = attacking ? rep.taken : !rep.taken;
+      const againstOdds = attacking ? preOdds < COMMAND.closeOdds : preOdds >= 1;
+      const gen = gens[i];
+      if (!gen) {
+        if (!c.dead && won && (attacking ? decisive : againstOdds)) rise(g2, c, rng, rep.regionName);
+        return;
+      }
+      const lossFrac = us[i].men > 0 ? Math.min(1, us[i].lost / us[i].men) : 0;
+      const r = gen.rec;
+      let xp = X.fought;
+      r.battles++;
+      if (attacking) r.attacks++;
+      else r.defences++;
+      if (frozen(g2, c.nat, target)) r.winter++;
+      if (won) {
+        r.won++;
+        r.streak = 0;
+        if (r.lost) delete r.lost;
+        xp += attacking ? X.won : X.held;
+        if (againstOdds) xp += X.odds;
+        if (attacking) {
+          if (decisive) xp += X.decisive;
+          if (decisive && KIND[c.kind].mobile) r.fast++;
+          if (againstOdds) r.close++;
+          if (rep.prisoners > 0) r.enc++;
+          if (target.cap && target.owner === rep.defNat) xp += X.capital;
+        } else if (againstOdds) r.held++;
+      } else {
+        r.streak++;
+        if (attacking && lossFrac >= COMMAND.costly) r.costly++;
+        if (g2.flags.open === 1) {
+          (r.lost ?? (r.lost = [])).push({ t: g2.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking, even: Math.round(even * 100) / 100 });
+          if (r.lost.length > 6) r.lost.shift();
+        }
+      }
+      gainXp(g2, gen, xp);
+      earn(g2, gen, c);
+      hazard(g2, gen, c, lossFrac, rng, rep);
+    });
+    side5(attackers2, attGens, rep.attackers, true);
+    side5(defenders, defGens, rep.defenders, false);
+  }
+  function monthlyCommand(g2, nat) {
+    for (const [from2, name, level, skills, traits] of COMMAND.roster[nat] ?? []) {
+      if (from2 > g2.turn || g2.generals.some((x) => x.nat === nat && x.name === name)) continue;
+      newGeneral(g2, nat, name, { level, skills, traits, historical: true });
+      if (nat === g2.human && g2.turn > 1) headline(g2, "info", `${name} reports for duty and is waiting for a command.`, nat);
+    }
+    for (const gen of g2.generals) {
+      if (gen.nat !== nat || gen.status !== "wounded" || gen.backOn > g2.turn) continue;
+      gen.status = "active";
+      if (nat === g2.human) headline(g2, "info", `${gen.name} is fit for duty again and is waiting for a command.`, nat);
+    }
+    if (nat !== g2.human) aiAssign(g2, nat);
+  }
+  function waiting(g2, nat) {
+    return g2.generals.filter((x) => x.nat === nat && x.status === "active" && x.corps < 0).sort((a, b) => b.level - a.level || a.id - b.id);
+  }
+  function fit(g2, gen, c) {
+    const fastMan = gen.rec.fast > 0 || gen.traits.some((t) => COMMAND.traits[t]?.mobile);
+    const fast = KIND[c.kind].mobile;
+    const front = g2.regions[c.reg].nb.some((j) => atWar(g2, c.nat, g2.regions[j].ctrl));
+    return (fastMan ? fast ? c.kind === "arm" ? 8 : 6 : 0 : fast ? 1 : 2) + (front ? 2 : 0) - (c.hold ? 3 : 0) + c.divs * 0.3 + c.xp;
+  }
+  function vacant(g2, nat) {
+    return g2.corps.filter((c) => c.nat === nat && c.general === null && c.kind !== "fort");
+  }
+  function aiAssign(g2, nat) {
+    const free2 = waiting(g2, nat);
+    if (!free2.length) return;
+    const open3 = vacant(g2, nat);
+    for (const gen of free2) {
+      let best = null, bs = -1e9;
+      for (const c of open3) {
+        if (c.general !== null) continue;
+        const s = fit(g2, gen, c);
+        if (s > bs) {
+          bs = s;
+          best = c;
+        }
+      }
+      if (!best) break;
+      appoint(g2, gen, best);
+      gen.moved = g2.turn;
+    }
+  }
+  function whyNotAssign(g2, gen, c) {
+    if (gen.status !== "active") return gen.status === "wounded" ? "He is recovering from his wounds." : "He is no longer serving.";
+    if (gen.nat !== c.nat) return "He serves another nation.";
+    if (c.dead || c.kind === "fort") return "This formation takes no general.";
+    if (gen.corps === c.id) return "He already commands this corps.";
+    if (gen.moved === g2.turn) return "He took up a new command this month already.";
+    return "";
+  }
+  function assignGeneral(g2, gen, c) {
+    if (whyNotAssign(g2, gen, c)) return false;
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    return true;
+  }
+  function relieve(g2, gen) {
+    if (gen.status !== "active" || gen.corps < 0) return false;
+    appoint(g2, gen, null);
+    return true;
+  }
+  var popular = (gen) => gen.level >= COMMAND.sack.popularLevel || gen.rec.won >= COMMAND.sack.popularWins;
+  function sack(g2, gen) {
+    if (!serving(gen)) return false;
+    const loved = popular(gen);
+    const c = corpsOf(g2, gen);
+    if (loved) {
+      if (c) c.org = Math.max(0, c.org - COMMAND.sack.org);
+      const n = g2.nations[gen.nat];
+      n.pc = Math.max(0, n.pc - COMMAND.sack.pc);
+    }
+    appoint(g2, gen, null);
+    gen.status = "sacked";
+    headline(g2, "info", loved ? `${gen.name} is dismissed. He was popular with his men, and the army takes it badly.` : `${gen.name} is dismissed.`, gen.nat);
+    return true;
+  }
+  function whyNotPromote(g2, c) {
+    if (c.general !== null) return "The corps already has a general.";
+    if (c.dead || c.kind === "fort") return "This formation takes no general.";
+    if (!COMMAND.names[c.nat]) return "There is no officer ready to step up.";
+    if (g2.nations[c.nat].pc < COMMAND.promote.pc) return `It takes ${COMMAND.promote.pc} political capital to promote a man over his seniors.`;
+    return "";
+  }
+  function promote(g2, c) {
+    if (whyNotPromote(g2, c)) return null;
+    const rng = new Rng(hashString(`promote:${g2.seed}:${g2.turn}:${c.id}:${g2.generals.length}`));
+    const name = inventName(g2, c.nat, rng);
+    if (!name) return null;
+    g2.nations[c.nat].pc -= COMMAND.promote.pc;
+    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    return gen;
+  }
 
   // ../../data/campaign/depth.json
   var depth_default = {
@@ -47970,33 +47997,6 @@
     return whyNotWinterPeace(g2, up) === null && makeWinterPeace(g2, false);
   }
 
-  // ../../data/campaign/legions.json
-  var legions_default = {
-    _about: "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC; the record is the historian's table, historian/volunteer-legions-1939-45.md). A country at peace outside both alliances may send one legion at a time, of a division at most, to fight under the flag and staff of a country at war: its patron. The legion is a corps of the patron's army with its own name and its home's flag. Its men come from its home's reserve (manpower.ts), first to raise it and then as its drafts; the patron pays its upkeep and its drafts' equipment. It goes home on recall or at its tour's end, and its men go back to the reserve and teach the home army what they learned. Switched by stage.json 'legions'.",
-    _cost: "Political capital a country pays to send a legion: as courting (diplomacy.json court.cost).",
-    cost: 6,
-    _leanAt: "The player may send one to a patron his public opinion leans toward by at least this many points (opinion is -100 for the Allies to +100 for the Axis), or to a friend (relations.json) that has been attacked.",
-    leanAt: 30,
-    _send: "A computer-run country at stops 3 to 5 sends one when it leans this far toward the patron and leans against the enemy, or when a friend has been attacked. At stops 1 and 2 it sends the record's legions by their dates and no others.",
-    send: 50,
-    _backAt: "A computer-run country at stops 3 to 5 calls its legion home when its leaning toward the patron falls under this.",
-    backAt: 20,
-    _tour: "Months a legion serves before it comes home (the historian: the Blue Division's 28 months, the Eagle Squadrons' 24, the AVG's contracts of 12; tour 24 fits). At stops 1 and 2 the record's dates instead.",
-    tour: 24,
-    _train: "A legion home again teaches the army: every corps of its home gains this share of the legion's experience, never more than the legion's own.",
-    train: 0.25,
-    _legionFall: "Each month a legion fights a great power, that power's patience with its home falls by this many points (bargains.ts patience, with the bargains switched on; a claim at stops 4 and 5).",
-    legionFall: 2,
-    _generic: "A legion the record does not name: 'share' of the reserve its country opened the war with (manpower.ts), rounded to a twentieth of a division, at least 'least' and at most 'est', a division (Spain's reserve of about 17 divisions' worth gives a division, Sweden's a little under one, Denmark's a third); 'xp' its experience when raised; 'spare' divisions' worth a computer-run country's reserve must still hold beyond it; and its name after the home's adjective.",
-    generic: { est: 1, share: 0.1, least: 0.1, xp: 0.15, spare: 2, name: "{adj} Volunteer Legion" },
-    _rows: "The record's legions (the historian's table): 'est' the share of a division it was (worth = men / 15,000 x quality), 'from' and 'to' the months it was in the line (turn 1 = September 1939), 'then' the row that carried on with its men the month after, 'no' its division's number. A legion is sent the month before 'from' and is in the line from 'from'.",
-    rows: [
-      { id: "esp-blue", home: "ESP", patron: "GER", against: "SOV", name: "Blue Division", est: 1, xp: 0.25, from: 23, to: 51, then: "esp-legion", no: 250, _why: "18,946 men when formed, kept near 17,000; about 45,000 served in all, by 27 marching battalions. Jul 1941 to Nov 1943 (H men, L quality)." },
-      { id: "esp-legion", home: "ESP", patron: "GER", against: "SOV", name: "Blue Legion", est: 0.12, from: 52, to: 55, _why: "2,269 men who stayed when the division went home; ordered home 3 Mar 1944 (M)." },
-      { id: "swe-corps", home: "SWE", patron: "FIN", against: "SOV", name: "Swedish Volunteer Corps", est: 0.4, xp: 0.15, from: 6, to: 7, _why: "9,640 men; in the line on the Salla front 28 Feb to 13 Mar 1940 (H-M)." }
-    ]
-  };
-
   // ../../src/campaign/legions.ts
   var LEGIONS = legions_default;
   var legionRules = (g2) => g2.flags.open === 1 && g2.flags.legions === 1 && !!g2.legions;
@@ -70394,6 +70394,55 @@
     if (list5.some((n, i) => n !== list5[0] + i)) c.nos = list5;
     else delete c.nos;
   }
+  var NAMED = /* @__PURE__ */ new Map();
+  function ownNames(name, nat, kind) {
+    const k = `${nat}:${kind}:${name}`;
+    let got = NAMED.get(k);
+    if (!got) NAMED.set(k, got = DIVISIONS.historic[nat]?.[name] ?? namedDivisions(name, nat, kind));
+    return got;
+  }
+  var ROW_NAMES = null;
+  function rowNames() {
+    if (ROW_NAMES) return ROW_NAMES;
+    const out = /* @__PURE__ */ new Map();
+    const note4 = (nat, name, kind) => {
+      const own = ownNames(name, nat, kind);
+      if (!own.length) return;
+      let set = out.get(nat);
+      if (!set) out.set(nat, set = /* @__PURE__ */ new Set());
+      for (const [full] of own) set.add(full);
+    };
+    const walk2 = (x) => {
+      if (Array.isArray(x)) {
+        const at4 = typeof x[0] === "number" ? 1 : 0;
+        const nat = x[at4], name = x[at4 + 1], kind = x[at4 + 2];
+        if (typeof nat === "string" && /^[A-Z]{2,3}$/.test(nat) && typeof name === "string" && typeof kind === "string" && kind in KIND) note4(nat, name, kind);
+        for (const y of x) if (y && typeof y === "object") walk2(y);
+      } else if (x && typeof x === "object") {
+        for (const y of Object.values(x)) if (y && typeof y === "object") walk2(y);
+      }
+    };
+    for (const file of [setup_1939_default, world_default, diplomacy_default, siege_default, open_default, pacific_default, legions_default]) walk2(file);
+    return ROW_NAMES = out;
+  }
+  function standIns(g2, nat, kind) {
+    const words = divisionWords(nat, kind).name;
+    const rows = rowNames().get(nat);
+    let living2 = null;
+    const taken2 = (name) => {
+      if (rows?.has(name)) return true;
+      if (!living2) {
+        living2 = /* @__PURE__ */ new Set();
+        for (const o of g2.corps) if (o.nat === nat && !o.dead) for (const [full] of o.names ?? ownNames(o.name, o.nat, o.kind)) living2.add(full);
+      }
+      return living2.has(name);
+    };
+    return (from2) => {
+      let n = from2 + 1;
+      while (taken2(`${ordinal3(n)} ${words}`)) n++;
+      return n;
+    };
+  }
   function numberCorps(g2, c, real) {
     if (g2.flags.open !== 1 || c.dn !== void 0) return;
     const key7 = counter(c.nat, c.kind);
@@ -70402,13 +70451,14 @@
     if (real) {
       for (const o of g2.corps) if (o !== c && !o.dead && o.nat === c.nat && o.kind === c.kind && o.dn !== void 0) for (const n of numbersOf(o)) held3.add(n);
     }
+    const free2 = standIns(g2, c.nat, c.kind);
     const list5 = [];
     for (let i = 0; i < c.divs; i++) {
       const n = real?.[i];
       if (n && !held3.has(n)) {
         held3.add(n);
         list5.push(n);
-      } else list5.push(++next);
+      } else list5.push(next = free2(next));
     }
     if (next > (g2.flags[key7] ?? 0)) g2.flags[key7] = next;
     keepNumbers(c, list5);
@@ -70425,8 +70475,9 @@
     if (!was) return;
     const key7 = counter(c.nat, kind);
     let next = Math.max(g2.flags[key7] ?? 0, TOP3.get(key7) ?? 0);
+    const free2 = standIns(g2, c.nat, kind);
     const list5 = same4 ? was : [];
-    while (list5.length < c.divs) list5.push(++next);
+    while (list5.length < c.divs) list5.push(next = free2(next));
     g2.flags[key7] = next;
     keepNumbers(c, list5);
   }
@@ -75940,6 +75991,12 @@
     return farOn(g2) && !!row2[6]?.levy && !!own && !own.alive && !!reg && reg.owner === row2[1] && reg.ctrl === nat && !!keepersOf(g2, reg)?.includes(nat);
   }
   var struckWatch = { tell: null };
+  function takenShare(g2, i) {
+    const share = g2.flags[`takecut:${i}`];
+    if (share !== void 0) return share;
+    const old = g2.flags[`cut:${i}`];
+    return old !== void 0 && old > 0 && old < 1 ? old : void 0;
+  }
   function expeditions(g2, nat) {
     const gone = [], down = [];
     (setup_1939_default.expeditions ?? []).forEach((row2, i) => {
@@ -76057,9 +76114,11 @@
       if (kept3) c.raised = row2[1];
       if (ashore?.adds) c.str = Math.min(c.str, ashore.adds);
       if (own) c.str = Math.min(c.str, o.adds);
-      if (g2.flags.open === 1 && g2.flags[`cut:${i}`] !== void 0) {
-        c.str *= 1 - g2.flags[`cut:${i}`];
-        delete g2.flags[`cut:${i}`];
+      const taken2 = g2.flags.open === 1 ? takenShare(g2, i) : void 0;
+      if (taken2 !== void 0) {
+        c.str *= 1 - taken2;
+        delete g2.flags[`takecut:${i}`];
+        if (g2.flags[`cut:${i}`] === taken2) delete g2.flags[`cut:${i}`];
       }
       if (g2.flags.open === 1 && o.takes) {
         const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
@@ -76067,7 +76126,7 @@
         if (x) {
           x.str *= 1 - o.takes.share;
           if (nat === g2.human && o.takes.leaves) headline(g2, "event", o.takes.leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
-        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`cut:${j}`] = o.takes.share;
+        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`takecut:${j}`] = o.takes.share;
       }
       if (g2.flags.open === 1 && UNLESS.has(row2[2])) {
         g2.flags[`came:${i}`] = g2.turn;
