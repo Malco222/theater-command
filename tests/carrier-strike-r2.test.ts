@@ -11,6 +11,7 @@ import { setDesk } from '../src/campaign/depth';
 import { createGame } from '../src/campaign/game';
 import { carrierStrikeOn, setCarrierStrike, strikeHarbours, whyNotCarrierStrike } from '../src/campaign/harbourstrike';
 import { atSea, keptByHand, shipCount } from '../src/campaign/navy';
+import { monthCard, monthMark } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { CARRIERSTRIKE_STAGE } from '../src/campaign/stage';
 import { startOpen } from '../src/campaign/staff';
@@ -120,10 +121,23 @@ describe('the strike, in the month war is declared', () => {
     const mf = fleet(g, 'JAP', 'Mobile Fleet'), pearl = g.byName['Pearl Harbor'];
     const before = atPearl(g);
     expect(orderCarrierStrikeFleet(g, mf.id, pearl.id)).toBeTruthy();
+    const mark = monthMark(g);
     month(g);
     expect(g.headlines.some((x) => /raid Pearl Harbor without warning/.test(x.text))).toBe(true);
     expect(atPearl(g)).toBeLessThan(before);
+    // The month card names the place once (the playtest's #49): "Pearl Harbor", never "Pearl Harbor harbour".
+    const card = JSON.stringify(monthCard(g, mark));
+    expect(card).toMatch(/Pearl Harbor/);
+    expect(card).not.toMatch(/Harbor harbour/);
   }, 300000);
+  it('once at war, the fleets at anchor are named, or counted where only reported: never the same words twice', () => {
+    const g = loadGame(after)!;
+    const mf = fleet(g, 'JAP', 'Mobile Fleet'), pearl = g.byName['Pearl Harbor'];
+    const h = strikeHarbours(g, mf.id).find((x) => x.region === pearl.id)!;
+    expect(h.fleets.length).toBeGreaterThan(0);
+    expect(new Set(h.fleets).size).toBe(h.fleets.length);
+    for (const f of h.fleets) expect(f).toMatch(/^(the |[A-Z][a-z]+ ships reported$|(two|three|four|five) [A-Z][a-z]+ fleets reported$)/);
+  });
   it('the page offers STRIKE FROM THE AIR, and its act gives the order', () => {
     TC.load(after);
     const mf = fleet(sent, 'JAP', 'Mobile Fleet');

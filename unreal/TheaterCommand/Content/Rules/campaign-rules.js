@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 18f5fd25 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0bb6bc9c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -7621,6 +7621,38 @@
             dd: 0,
             ss: 0
           }
+        },
+        {
+          nat: "UK",
+          name: "British Pacific Fleet",
+          base: "Trincomalee",
+          port: "Trincomalee",
+          home: "ceylon",
+          zone: "ceylon",
+          duty: "port",
+          ships: {
+            bb: 0,
+            cv: 0,
+            ca: 0,
+            dd: 0,
+            ss: 0
+          },
+          admiral: "Bruce Fraser",
+          from: 99,
+          book: {
+            stops: [
+              1,
+              2
+            ],
+            from: 63,
+            ships: {
+              bb: 0,
+              cv: 0,
+              ca: 0,
+              dd: 0,
+              ss: 0
+            }
+          }
         }
       ],
       arrivals: [
@@ -7668,6 +7700,37 @@
             dd: 1
           },
           "a new destroyer"
+        ],
+        [
+          8,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            dd: 5
+          },
+          "five of the China Station's destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          10,
+          "UK",
+          "China Fleet",
+          {
+            ca: -5
+          },
+          "Five cruisers of the China Station leave to hunt raiders in the Indian Ocean and the South Atlantic",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           12,
@@ -7813,7 +7876,7 @@
           {
             ss: 23
           },
-          "twenty-three submarines reach Manila"
+          "twenty-three submarines, come out to Manila,"
         ],
         [
           28,
@@ -7823,6 +7886,39 @@
             dd: 1
           },
           "a new destroyer"
+        ],
+        [
+          28,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            dd: 2
+          },
+          "Force Z, the battleship Prince of Wales, the battlecruiser Repulse and two destroyers,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          28,
+          "UK",
+          "China Fleet",
+          {
+            dd: 2
+          },
+          "two more of Force Z's destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
         ],
         [
           29,
@@ -7862,6 +7958,25 @@
           "the battleships Mississippi and New Mexico, back from the Atlantic"
         ],
         [
+          29,
+          "UK",
+          "China Fleet",
+          {
+            ca: 5
+          },
+          "the cruisers Cornwall and Dorsetshire and three more, back from hunting raiders,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            back: [
+              10,
+              "China Fleet"
+            ]
+          }
+        ],
+        [
           30,
           "JAP",
           "Combined Fleet",
@@ -7889,6 +8004,56 @@
           "the battleship Idaho, back from the Atlantic"
         ],
         [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            dd: 8
+          },
+          "the battleships Royal Sovereign and Ramillies and eight destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1,
+            dd: 8
+          },
+          "the battleship Warspite, repaired in America, and eight destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
+          30,
+          "UK",
+          "China Fleet",
+          {
+            bb: 2,
+            ca: 2
+          },
+          "the old battleships Revenge and Resolution and the cruisers Emerald and Caledon",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           31,
           "USA",
           "Pacific Carrier Fleet",
@@ -7898,6 +8063,23 @@
           "the new carrier Hornet"
         ],
         [
+          31,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Formidable, repaired in America,",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet",
+            by: 19
+          }
+        ],
+        [
           33,
           "JAP",
           "Mobile Fleet",
@@ -7905,6 +8087,22 @@
             cv: 1
           },
           "the carrier Junyo, converted from a liner"
+        ],
+        [
+          33,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
         ],
         [
           35,
@@ -7934,6 +8132,21 @@
           "the new battleship North Carolina"
         ],
         [
+          36,
+          "UK",
+          "China Fleet",
+          {
+            cv: -1
+          },
+          "The carrier Indomitable leaves the China Fleet for the Malta convoy",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           37,
           "USA",
           "Pacific Fleet",
@@ -7952,6 +8165,22 @@
           "the new light cruiser Agano"
         ],
         [
+          38,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Formidable",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
           41,
           "JAP",
           "Combined Fleet",
@@ -7968,6 +8197,54 @@
             bb: 1
           },
           "the new battleship Indiana"
+        ],
+        [
+          41,
+          "UK",
+          "Home Fleet",
+          {
+            bb: 2,
+            cv: 1
+          },
+          "the battleships Royal Sovereign and Ramillies and the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          41,
+          "UK",
+          "Mediterranean Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Warspite",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          41,
+          "UK",
+          "China Fleet",
+          {
+            bb: -2
+          },
+          "The old battleships Revenge and Resolution go home to the reserve",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           42,
@@ -8012,7 +8289,7 @@
           {
             cv: 1
           },
-          "the new carrier Yorktown, named for the one lost at Midway"
+          "another new Essex-class carrier"
         ],
         [
           48,
@@ -8021,7 +8298,7 @@
           {
             cv: 1
           },
-          "the new carrier Lexington, named for the one lost in the Coral Sea"
+          "another new Essex-class carrier"
         ],
         [
           48,
@@ -8114,6 +8391,69 @@
           "the new battleships Iowa and New Jersey"
         ],
         [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Valiant",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Mediterranean Fleet"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battlecruiser Renown",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Force H"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Illustrious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          53,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the battleship Queen Elizabeth, repaired,",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           55,
           "JAP",
           "Mobile Fleet",
@@ -8129,7 +8469,7 @@
           {
             cv: 1
           },
-          "the new carrier Hornet, named for the one lost at Santa Cruz"
+          "another new Essex-class carrier"
         ],
         [
           57,
@@ -8138,7 +8478,7 @@
           {
             cv: 1
           },
-          "the new carrier Wasp, named for the one lost off Guadalcanal"
+          "another new Essex-class carrier"
         ],
         [
           57,
@@ -8168,6 +8508,41 @@
           "the new carrier Franklin"
         ],
         [
+          59,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Victorious",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          59,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "the carrier Indomitable",
+          {
+            stops: [
+              1,
+              2
+            ],
+            back: [
+              36,
+              "China Fleet"
+            ]
+          }
+        ],
+        [
           60,
           "JAP",
           "Mobile Fleet",
@@ -8175,6 +8550,21 @@
             cv: 1
           },
           "the new carriers Unryu and Amagi, short of aircraft to fly from them"
+        ],
+        [
+          60,
+          "UK",
+          "China Fleet",
+          {
+            bb: 1
+          },
+          "the new battleship Howe",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           62,
@@ -8213,6 +8603,72 @@
           "the new carrier Ticonderoga"
         ],
         [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            bb: 1,
+            cv: 3,
+            ca: 6
+          },
+          "the battleship Howe, the carriers Indomitable, Victorious and Illustrious and six cruisers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "China Fleet"
+          }
+        ],
+        [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            bb: 1,
+            dd: 15
+          },
+          "the battleship King George V and fifteen destroyers",
+          {
+            stops: [
+              1,
+              2
+            ],
+            from: "Home Fleet"
+          }
+        ],
+        [
+          63,
+          "UK",
+          "British Pacific Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Indefatigable",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          63,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1,
+            ca: 2
+          },
+          "escort carriers with about a fleet carrier's aircraft, and two cruisers, for the East Indies Fleet,",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           64,
           "USA",
           "Pacific Fleet",
@@ -8249,6 +8705,36 @@
           "the new battleship Missouri"
         ],
         [
+          66,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "more of the escort carriers",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          68,
+          "UK",
+          "China Fleet",
+          {
+            cv: 1
+          },
+          "more of the escort carriers",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
+        ],
+        [
           69,
           "USA",
           "Pacific Carrier Fleet",
@@ -8265,6 +8751,21 @@
             cv: 1
           },
           "the new carrier Bon Homme Richard"
+        ],
+        [
+          70,
+          "UK",
+          "British Pacific Fleet",
+          {
+            cv: 1
+          },
+          "the new carrier Implacable",
+          {
+            stops: [
+              1,
+              2
+            ]
+          }
         ],
         [
           31,
@@ -8520,11 +9021,65 @@
             1,
             2
           ]
+        },
+        {
+          turn: 33,
+          nat: "UK",
+          fleet: "China Fleet",
+          base: "Mombasa",
+          port: "Kilindini",
+          home: "zanzibar",
+          words: "After the raid on Ceylon the China Fleet withdraws to Kilindini",
+          stops: [
+            1,
+            2
+          ]
+        },
+        {
+          turn: 49,
+          nat: "UK",
+          fleet: "China Fleet",
+          base: "Trincomalee",
+          port: "Trincomalee",
+          home: "ceylon",
+          words: "The China Fleet returns to Trincomalee",
+          stops: [
+            1,
+            2
+          ]
+        },
+        {
+          turn: 66,
+          nat: "UK",
+          fleet: "British Pacific Fleet",
+          base: "Sydney",
+          port: "Sydney",
+          home: "tasman",
+          words: "The British Pacific Fleet moves to Sydney",
+          stops: [
+            1,
+            2
+          ],
+          ally: true
+        },
+        {
+          turn: 67,
+          nat: "UK",
+          fleet: "British Pacific Fleet",
+          base: "Admiralty Islands",
+          port: "Manus",
+          home: "bismarck",
+          words: "The British Pacific Fleet moves forward to Manus, for Okinawa",
+          stops: [
+            1,
+            2
+          ],
+          ally: true
         }
       ],
       quality: {
-        USA: 1,
-        JAP: 1.1
+        USA: 0.95,
+        JAP: 1.15
       }
     },
     rivals: {
@@ -57841,7 +58396,7 @@
         if (dial?.waits && n2 > 0) fill6(g2, f, c, n2);
       }
       if (dial && leaving2 && !gone || (src || dial?.most) && !came || turn2 < g2.turn && !dial?.waits) continue;
-      const many = / and /.test(what) || /s$/.test(what.split(" ")[0]) || /\bof\b/.test(what) && /s$/.test(what);
+      const many = / and /.test(what) || /s$/.test(what.split(" ")[0]) || /\bof\b/.test(what) && /s$/.test(what) || /^(?:\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty)\b/i.test(what);
       const words = leaving2 ? `${cap9(what)}.` : src ? `${cap9(what)} ${many ? "leave" : "leaves"} ${fleetName(src)} for ${fleetName(f)}.` : `${cap9(what)} ${many ? "join" : "joins"} ${fleetName(f)}.`;
       headline(g2, "info", words, nat);
     }
@@ -75385,7 +75940,7 @@
         name: r.name,
         holder: r.ctrl,
         atWar: war,
-        fleets: there.map((x) => fleetKnown(g2, x, viewer) === "exact" ? fleetName(x) : `${g2.nations[x.nat]?.adj ?? x.nat} ships reported`),
+        fleets: anchorNames(g2, there, viewer),
         ships,
         launch: launch2,
         forward: forward?.id ?? -1,
@@ -75393,6 +75948,19 @@
       });
     }
     return out.sort((a, b) => Number(b.atWar) - Number(a.atWar) || Number(b.launch >= 0) - Number(a.launch >= 0) || a.name.localeCompare(b.name));
+  }
+  var FLEETS_COUNTED = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  function anchorNames(g2, there, viewer) {
+    const named5 = [], seen2 = /* @__PURE__ */ new Map();
+    for (const x of there) {
+      if (fleetKnown(g2, x, viewer) === "exact") named5.push(fleetName(x));
+      else seen2.set(x.nat, (seen2.get(x.nat) ?? 0) + 1);
+    }
+    for (const [nat, n] of seen2) {
+      const adj = g2.nations[nat]?.adj ?? nat;
+      named5.push(n === 1 ? `${adj} ships reported` : `${FLEETS_COUNTED[n] ?? n} ${adj} fleets reported`);
+    }
+    return named5;
   }
   function whyNotCarrierStrike(g2, id, region) {
     if (!carrierStrikeOn(g2)) return "Carrier strikes on harbours are given from a fleet's page only where that is switched on.";
@@ -101947,7 +102515,7 @@
       } else {
         row2.sign = "bmr";
         row2.tag = att ? r.won ? "HIT" : "MISSED" : r.won ? "HIT" : "HELD";
-        const [pic, place2, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap16(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap16(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
+        const [pic, place2, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap16(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap16(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
         row2.picture = pic;
         row2.place = place2;
         row2.line = r.won ? att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, "Their $2") : miss;

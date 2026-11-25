@@ -302,6 +302,14 @@ for (const b of japanBuilding) need(fleetNames.has(`${b.nat}|${b.fleet}`), `buil
 // The Atlantic Fleet is world.json's own row: three battleships and a carrier cross to it in May 1941 and come back (ruling 189(1)).
 fleetNames.add('USA|Atlantic Fleet');
 for (const a of pacific.arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
+// The playtest's #50 (25 Nov): the words of America's rows as the news reads them. A carrier "named for the one lost at
+// Midway" names a battle this war may never have (sandbox law: nothing in the news is the record's unless it happened
+// here), so those four come plainly, by their class ("Another new Essex-class carrier joins the Pacific Fleet"). And a row's words are the subject of "join(s) <the fleet>": a
+// verb of their own reads twice. The planner's file is left as it is; these are laid over it here.
+const usWords = (w) => (/, named for the one lost\b/.test(w) ? 'another new Essex-class carrier'
+  : w === 'twenty-three submarines reach Manila' ? 'twenty-three submarines, come out to Manila,' : w);
+const usArrivals = pacific.arrivals.map((a) => [a[0], a[1], a[2], a[3], usWords(a[4]), ...a.slice(5)]);
+for (const a of usArrivals) need(!/named for the one lost|\b(reach|reaches)\b/.test(a[4]), `arrival "${a[4]}": words the news cannot read`);
 for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
 // Ruling 234(d): a move with 'sea' in place of a base is the record's month at sea in a month of peace (the Pacific
 // Fleet's carriers in December 1941, at the stops that keep the book). The script's own marks beside it: 'with', the
@@ -457,7 +465,7 @@ const out = {
   },
   navy: {
     fleets: [...usFleets.filter((f) => f.from !== undefined), ...britainEastFleets],
-    arrivals: [...arrivals, ...pacific.arrivals, ...britainEast].sort((a, b) => a[0] - b[0]),
+    arrivals: [...arrivals, ...usArrivals, ...britainEast].sort((a, b) => a[0] - b[0]),
     building: [...pacific.building, ...japanBuilding],
     moves: [...usMoves, ...britainEastMoves],
     // The design director's B1 of 25 November 2026, 02:35Z (pacific-japan-1125.md): ship quality for the two Pacific

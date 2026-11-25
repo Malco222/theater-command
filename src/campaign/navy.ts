@@ -2309,7 +2309,9 @@ export function navalUpkeep(g: Game, nat: string): void {
     // finds none of its ships. Nor does one read late: its month is past. (A waiting row's month is the one it is read in.)
     if ((dial && leaving && !gone) || ((src || dial?.most) && !came) || (turn < g.turn && !dial?.waits)) continue;
     // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
-    const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
+    // (And a phrase that opens with a count of two or more: "Two new fleet carriers join", the playtest's #50.)
+    const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what))
+      || /^(?:\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty)\b/i.test(what);
     const words = leaving ? `${cap(what)}.`
       : src ? `${cap(what)} ${many ? 'leave' : 'leaves'} ${fleetName(src)} for ${fleetName(f)}.`
       : `${cap(what)} ${many ? 'join' : 'joins'} ${fleetName(f)}.`;
