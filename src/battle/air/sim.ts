@@ -1918,7 +1918,9 @@ export class AirSim implements BattleSim<AirUnit> {
       // the bombers that drop and the fighters that strafe, not by which part of the column is hit.
       case 'air:strafe': {
         if (!this.troops) return false;
-        const us = fighters(c.units).filter((u) => u.side === 'att' && u.job.do !== 'home' && !this.strafing.get(u.id)?.over);
+        // (With the strafers' rule a group gone for the raid, the design director 19:09Z item 2, is on its way home, and an
+        // order to send it down is still answered, below.)
+        const us = fighters(c.units).filter((u) => u.side === 'att' && (u.job.do !== 'home' || (c.hold !== true && !!this.gone?.has(u.id))) && !this.strafing.get(u.id)?.over);
         if (c.hold === true) {
           for (const u of us) {
             this.keepUp.add(u.id);
@@ -1929,7 +1931,12 @@ export class AirSim implements BattleSim<AirUnit> {
           }
           return us.length > 0;
         }
-        for (const u of us) { this.keepUp.delete(u.id); this.goDown(u, u.job.do === 'escort' ? u.job.on : this.strafing.get(u.id)?.box ?? null); }
+        for (const u of us) {
+          this.keepUp.delete(u.id);
+          // (The strafers' rule: a group that carries nothing as it is sent down, or is gone for the raid, turns for home,
+          // and the order is answered in place of a silent yes: the UI director, 19:10Z A6.)
+          if (!this.goDown(u, u.job.do === 'escort' ? u.job.on : this.strafing.get(u.id)?.box ?? null)) this.say('air:no-strafe', u, told(this.called(u), '{N} [has|have] no fight left to strafe with and [turns|turn] for home.'));
+        }
         return us.length > 0;
       }
       case 'air:band': {

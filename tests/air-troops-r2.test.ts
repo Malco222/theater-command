@@ -19,6 +19,7 @@ import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 import { SKY } from '../src/battle/air/book';
 import { AirSim, airBattle } from '../src/battle/air/sim';
+import type { FieldEvent } from '../src/battle/core/types';
 import { airTicket, flyKinds, foughtAir, raidGroups } from '../src/battle/air/ticket';
 import { TROOPS } from '../src/battle/air/troops';
 import { battleCalls } from '../unreal/TheaterCommand/Rules/battle-bridge';
@@ -522,10 +523,16 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     expect([...S.met.get(unit.id)]).toEqual([foe.id]);
     for (const u of others) expect(S.met.get(u.id)).toBeUndefined();
     expect(S.carries(unit)).toBe(0);
-    // Its go-down, by the player's order: it reads 0 there, turns for home and is gone for the raid.
+    // Its go-down, by the player's order: it reads 0 there, turns for home and is gone for the raid. The order is answered
+    // (the UI director, 19:10Z A6), once, to the side that flies it as the battle's other lines are.
+    // ({Group} as the battle names a group at the head of its other lines, names.ts told: "The Groupement de Chasse 3".)
+    const A6 = 'The Groupement de Chasse 3 has no fight left to strafe with and turns for home.';
+    const said = (): FieldEvent[] => s.history().filter((e) => e.what === 'air:no-strafe');
+    expect(said()).toEqual([]);
     expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
     expect(unit.job.do).toBe('home');
     expect(S.strafing.get(unit.id)).toBeUndefined();
+    expect(said().map((e) => [e.text, e.unit, e.side])).toEqual([[A6, unit.id, 'att']]);
     // (Setup: its kill ledger spent, as a group's that has fought itself out, so that every other thing the staff asks
     // before it sends a group down, strafeDue, can hold for it on the ticks below.)
     unit.vig = SKY.spent / 2;
@@ -537,8 +544,13 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     // The player's later order, its share above 0: another order first, then down to strafe. It turns for home again.
     expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
     expect(unit.job.do).toBe('hunt');
-    s.command({ do: 'air:strafe', units: [unit.id] }, 'att');
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
     expect(unit.job.do).toBe('home');
+    expect(said().map((e) => e.text)).toEqual([A6, A6]);
+    // And sent down again on its way home: the same answer.
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('home');
+    expect(said().length).toBe(3);
     // The staff's later ticks, to the end of the raid: never sent down again.
     let most = risen;
     while (!s.over && guard++ < 40_000) { s.step(); most = Math.max(most, S.carries(unit)); expect(unit.job.do).not.toBe('strafe'); }
@@ -549,5 +561,7 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     expect(S.strafing.get(unit.id)).toBeUndefined();
     expect(s.outcome().strafers).not.toContain(GC3);
     expect(s.outcome().strafers!.length).toBeGreaterThan(0);
+    // Said only on the player's orders, never by the staff's go-downs.
+    expect(said().length).toBe(3);
   });
 });
