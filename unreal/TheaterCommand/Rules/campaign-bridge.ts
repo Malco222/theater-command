@@ -92,7 +92,7 @@ import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, cutSays, cutsKnown } from '../../../src/campaign/intel';
-import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, cutOff, fleetReach, harbourFor, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, moveTargets, overOcean, whyNotMission } from '../../../src/campaign/air';
@@ -661,7 +661,8 @@ function drawView() {
       wingFtr: Math.round(wings.filter((w) => w.kind === 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       wingStrike: Math.round(wings.filter((w) => w.kind !== 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
-      reach: f.nat === s.human && up ? fleetReach(s, f) : [],
+      // (1.5.2) A fleet cut off beyond a shut strait reaches no sea: only a harbour on its side (bases).
+      reach: f.nat === s.human && up && !cutOff(s, f) ? fleetReach(s, f) : [],
       // (Ruling 86.) And the seas it would reach but for a gate shut to it, each with that gate: sea, gate, sea, gate.
       barred: f.nat === s.human && up ? barredSeas(s, f) : [],
       // And the friendly ports it could make its new home. (1.5.1) None for a fleet held where its battle left it this
@@ -3719,7 +3720,9 @@ function force(kind: string, id: number) {
       // (1.5.1; the playtester, 25 November) A fleet sent at the enemy this month stays where the battle left it: its
       // seas and its harbour are shown, refused, with the reason, and not offered only to be turned down.
       const held = heldWhy(s, f);
-      const reach = fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
+      // (1.5.2) Cut off at sea beyond a shut strait, it can go to no sea in its reach: only to a harbour on its side.
+      const cut = cutOff(s, f), haven = cut ? harbourFor(s, f) : null;
+      const reach = cut ? [] : fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
       for (const z of reach) {
         const here = f.zone === z && f.stance === 'patrol';
         options.push({ key: `fleet:${id}:${z}:patrol`, label: `Patrol the ${s.seas[z].name}`, detail: 'Seeks out enemy warships there and guards the convoys.', ok: up && !here && !held, why: here ? 'It is doing so now.' : notNow || held });
@@ -3728,7 +3731,10 @@ function force(kind: string, id: number) {
         const here = f.zone === z && f.stance === 'raid';
         options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: 'Goes for merchant ships and avoids a fight with the enemy fleet.', ok: up && !here && !held, why: here ? 'It is doing so now.' : notNow || held });
       }
-      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${f.port}`, detail: 'Safe from the enemy fleet, and takes no part at sea.', ok: up && f.stance !== 'port' && !held, why: f.stance === 'port' ? 'It is in harbour now.' : notNow || held });
+      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${haven?.name ?? f.port}`,
+        detail: cut && haven ? `It is cut off beyond a shut strait: it makes for ${haven.name}, the nearest friendly harbour it can reach, which becomes its base.` : 'Safe from the enemy fleet, and takes no part at sea.',
+        ok: up && f.stance !== 'port' && !held && (!cut || !!haven),
+        why: f.stance === 'port' ? 'It is in harbour now.' : notNow || held || (cut && !haven ? 'It is cut off beyond a shut strait, and no friendly harbour on its side can take it.' : '') });
       if (staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: 'Hand it back to your admirals', detail: HAND_BACK_TIP, ok: up, why: notNow });
     }
     const who = mine ? whoSails(s, id) : '';
@@ -4536,7 +4542,13 @@ function fleetPage(s: Game, id: number): Page | null {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
     note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
     top: [
-      { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held, tip: o?.held || 'Safe from the enemy fleet, and takes no part at sea.' },
+      ...(() => {
+        // (1.5.2) Cut off at sea beyond a shut strait, it makes for the nearest friendly harbour on its side, or has none.
+        // (1.5.1) A fleet held where this month's battle left it is refused, with the reason, before either.
+        const f = s.fleets.find((x) => x.id === id), cut = !!f && cutOff(s, f), haven = cut ? harbourFor(s, f!) : null;
+        return [{ label: 'RETURN TO HARBOUR', act: `fleet:${id}:${f?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held && (!cut || !!haven),
+          tip: o?.held || (cut ? (haven ? `Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.` : 'Cut off beyond a shut strait, and no friendly harbour on its side can take it.') : 'Safe from the enemy fleet, and takes no part at sea.') }];
+      })(),
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
       ...(wingsOfFleet(s, id).length ? [{ label: 'CARRIER AIRCRAFT', act: `open:wings:${id}`, ok: true, tip: 'The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour.' }] : []),
     ],
