@@ -28,12 +28,13 @@ NEAR = 5e-2  # metres a deck may differ from the row
 ROW = re.compile(
     r'\{\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*'
     r"([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*"
-    r"([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*(true|false)\s*\}"
+    r"([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*(true|false)\s*,\s*([0-9.]+)\s*\}"
 )
 
 
 def rows():
-    """The Decks table of FleetRideGale.h: (name, model, long, beam, speed, bow, waist, stern, waist out, stern out, boat)."""
+    """The Decks table of FleetRideGale.h: (name, model, long, beam, speed, bow, waist, stern, waist out, stern out, boat).
+    (Each row's last number, her trim as the game draws her, is gale_test's to check: it runs the convoy looks' StepBoat.)"""
     text = open(HEADER, encoding="utf-8").read()
     start = text.find("Deck Decks[] = {")
     end = text.find("};", start)

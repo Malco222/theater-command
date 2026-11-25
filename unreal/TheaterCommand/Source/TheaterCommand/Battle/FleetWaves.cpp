@@ -2667,48 +2667,115 @@ namespace FleetWaves
 		return S >= 0.0 ? 1.0 - A * A : 1.0 - A * A * A;
 	}
 
-	double HullInside(const LaneHull& H, double X, double Y)
+	namespace
 	{
-		const double Half = 0.5 * std::max(H.Long, 1e-3), Bh = 0.5 * std::max(H.Beam, 0.0);
-		const double Sx = std::sin(H.Hdg), Cy = std::cos(H.Hdg);
-		const double A = (X - H.X) * Sx + (Y - H.Y) * Cy; // (along her, forward plus)
-		const double C = std::fabs((X - H.X) * Cy - (Y - H.Y) * Sx); // (across her, either side)
-		if (std::fabs(A) >= Half) return -std::hypot(std::fabs(A) - Half, C); // (past her stem or her stern)
-		const double S = A / Half;
-		const double Slope = (S >= 0.0 ? -2.0 * S : 3.0 * S * S) * Bh / Half; // (the half-breadth's slope along her)
-		return (Bh * HalfBreadthShare(S) - C) / std::sqrt(1.0 + Slope * Slope);
+		/** A hull as the footprint reads her: her middle, her heading's sine and cosine, her half length and half beam
+		 * (taken once a hull, not once a texel). */
+		struct HullFrame
+		{
+			double X = 0.0, Y = 0.0, Sx = 0.0, Cy = 1.0, Half = 0.5, Bh = 0.0;
+		};
+		HullFrame FrameOfHull(const LaneHull& H)
+		{
+			HullFrame F;
+			F.X = H.X;
+			F.Y = H.Y;
+			F.Half = 0.5 * std::max(H.Long, 1e-3);
+			F.Bh = 0.5 * std::max(H.Beam, 0.0);
+			F.Sx = std::sin(H.Hdg);
+			F.Cy = std::cos(H.Hdg);
+			return F;
+		}
+		double InsideOf(const HullFrame& F, double X, double Y)
+		{
+			const double A = (X - F.X) * F.Sx + (Y - F.Y) * F.Cy; // (along her, forward plus)
+			const double C = std::fabs((X - F.X) * F.Cy - (Y - F.Y) * F.Sx); // (across her, either side)
+			if (std::fabs(A) >= F.Half) return -std::hypot(std::fabs(A) - F.Half, C); // (past her stem or her stern)
+			const double S = A / F.Half;
+			const double Slope = (S >= 0.0 ? -2.0 * S : 3.0 * S * S) * F.Bh / F.Half; // (the half-breadth's slope along her)
+			return (F.Bh * HalfBreadthShare(S) - C) / std::sqrt(1.0 + Slope * Slope);
+		}
+		/** The texels a hull's footprint reaches (her square, with FootReach round her: beyond it the distance is clamped to
+		 * -FootReach, which is blue 0). */
+		struct TexelBox
+		{
+			int I0 = 0, I1 = -1, J0 = 0, J1 = -1;
+		};
+		TexelBox BoxOf(const LaneHull& H, const LaneWindow& W, int N, double Texel)
+		{
+			const double Reach = 0.5 * std::hypot(H.Long, H.Beam) + FootReach + Texel;
+			TexelBox B;
+			B.I0 = std::max(0, static_cast<int>(std::floor((H.X - Reach - W.X0) / Texel)));
+			B.I1 = std::min(N - 1, static_cast<int>(std::floor((H.X + Reach - W.X0) / Texel)));
+			B.J0 = std::max(0, static_cast<int>(std::floor((H.Y - Reach - W.Y0) / Texel)));
+			B.J1 = std::min(N - 1, static_cast<int>(std::floor((H.Y + Reach - W.Y0) / Texel)));
+			return B;
+		}
 	}
+
+	double HullInside(const LaneHull& H, double X, double Y) { return InsideOf(FrameOfHull(H), X, Y); }
 
 	void PaintLanesGale(const std::vector<LanePoint>& Wake, const std::vector<OilDisc>& Oil, const std::vector<LaneHull>& Hulls, const LaneWindow& W, double WindU,
 		std::vector<uint8_t>& RGBA)
 	{
-		std::vector<uint8_t> RG;
+		// (the step 12 lane's red and green, into a buffer the thread keeps, so a paint allocates nothing once warm)
+		thread_local std::vector<uint8_t> RG;
+		thread_local std::vector<float> In;
 		PaintLanes(Wake, Oil, W, WindU, RG);
 		const int N = std::max(W.Texels, 1);
 		const double Texel = W.Size / N;
 		const size_t Count = static_cast<size_t>(N) * N;
-		std::vector<float> In(Count, static_cast<float>(-FootReach));
-		for (const LaneHull& H : Hulls)
-		{
-			// (the texels her square reaches, with FootReach round her: the distance is clamped there)
-			const double Reach = 0.5 * std::hypot(H.Long, H.Beam) + FootReach + Texel;
-			const int I0 = std::max(0, static_cast<int>(std::floor((H.X - Reach - W.X0) / Texel))), I1 = std::min(N - 1, static_cast<int>(std::floor((H.X + Reach - W.X0) / Texel)));
-			const int J0 = std::max(0, static_cast<int>(std::floor((H.Y - Reach - W.Y0) / Texel))), J1 = std::min(N - 1, static_cast<int>(std::floor((H.Y + Reach - W.Y0) / Texel)));
-			for (int J = J0; J <= J1; ++J)
-			{
-				for (int I = I0; I <= I1; ++I)
-				{
-					const size_t At = static_cast<size_t>(J) * N + I;
-					In[At] = std::max(In[At], static_cast<float>(std::clamp(HullInside(H, W.X0 + (I + 0.5) * Texel, W.Y0 + (J + 0.5) * Texel), -FootReach, FootReach)));
-				}
-			}
-		}
-		RGBA.assign(Count * 4, 0);
+		RGBA.resize(Count * 4);
 		for (size_t K = 0; K < Count; ++K)
 		{
 			RGBA[4 * K] = RG[2 * K];
 			RGBA[4 * K + 1] = RG[2 * K + 1];
-			RGBA[4 * K + 2] = static_cast<uint8_t>(std::lround(255.0 * Sat(0.5 + In[K] / (2.0 * FootReach))));
+			RGBA[4 * K + 2] = 0; // (-FootReach and beyond: blue 0, as lround(255 x 0) is)
+			RGBA[4 * K + 3] = 0;
+		}
+		if (In.size() != Count) In.assign(Count, static_cast<float>(-FootReach));
+		// Each hull's box: cleared, then the most inside of every hull that reaches each texel, then its blue byte; the boxes
+		// alone are touched, and left cleared for the next paint
+		for (const LaneHull& H : Hulls)
+		{
+			const TexelBox B = BoxOf(H, W, N, Texel);
+			for (int J = B.J0; J <= B.J1; ++J)
+			{
+				for (int I = B.I0; I <= B.I1; ++I) In[static_cast<size_t>(J) * N + I] = static_cast<float>(-FootReach);
+			}
+		}
+		for (const LaneHull& H : Hulls)
+		{
+			const TexelBox B = BoxOf(H, W, N, Texel);
+			const HullFrame F = FrameOfHull(H);
+			for (int J = B.J0; J <= B.J1; ++J)
+			{
+				for (int I = B.I0; I <= B.I1; ++I)
+				{
+					const size_t At = static_cast<size_t>(J) * N + I;
+					In[At] = std::max(In[At], static_cast<float>(std::clamp(InsideOf(F, W.X0 + (I + 0.5) * Texel, W.Y0 + (J + 0.5) * Texel), -FootReach, FootReach)));
+				}
+			}
+		}
+		for (const LaneHull& H : Hulls)
+		{
+			const TexelBox B = BoxOf(H, W, N, Texel);
+			for (int J = B.J0; J <= B.J1; ++J)
+			{
+				for (int I = B.I0; I <= B.I1; ++I)
+				{
+					const size_t At = static_cast<size_t>(J) * N + I;
+					RGBA[4 * At + 2] = static_cast<uint8_t>(std::lround(255.0 * Sat(0.5 + In[At] / (2.0 * FootReach))));
+				}
+			}
+		}
+		for (const LaneHull& H : Hulls)
+		{
+			const TexelBox B = BoxOf(H, W, N, Texel);
+			for (int J = B.J0; J <= B.J1; ++J)
+			{
+				for (int I = B.I0; I <= B.I1; ++I) In[static_cast<size_t>(J) * N + I] = static_cast<float>(-FootReach);
+			}
 		}
 	}
 

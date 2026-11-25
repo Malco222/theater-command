@@ -9,15 +9,18 @@
 //  - SeaFace::MakeStreaks: the streaks along the wind, no seams, the share by wind (WMO's "in streaks", "well-marked",
 //    "dense"), and deterministic;
 //  - FleetRideGale's limits (data the step 5 ride will read, never ride code): the art director's own table read again
-//    from SeaShow.cpp, the rule that makes the gale's steps from it, and the limits' shape;
-//  - the freeboard tests at Beaufort 7, 8 and 9: the gale's crests against the deck heights of destroyers, corvettes,
-//    frigates and surfaced submarines (the ship models' own decks, Content/Models/Ships, held by gale_decks.py), at every
-//    heading to the sea and at two speeds, with the ride at its limits, stating how often green water reaches each deck;
+//    from SeaShow.cpp, the limits equal to it at every wind to the 13.8 m/s cap, the rule that makes the gale's steps
+//    above it, and no heave limit;
+//  - the freeboard tests at Beaufort 7, 8 and 9 and below them: the sea the scene draws against the deck heights of
+//    destroyers, corvettes, frigates and surfaced submarines (the ship models' own decks, Content/Models/Ships, held by
+//    gale_decks.py; a boat at the trim the convoy looks draw her at), at four headings to the sea and two speeds, with the
+//    ride as step 5 lays it, stating how often green water reaches each deck (each instant once), pinned as measured;
 //  - the wake lane's blue as each hull's footprint (FleetWaves::PaintLanesGale), red and green byte for byte PaintLanes';
 //  - a source scan: FleetRideGale.h holds data alone, the gale's own functions are new, and nothing the show decides
 //    reads any of it.
 // Below 13.8 m/s nothing is changed: Tools/sea_waves/gale_pin.cpp holds the core's outputs to 942d9295's, byte for byte.
 // Plain C++20, no engine. Usage: gale_test <Source/TheaterCommand> <out dir>
+#include "Battle/ConvoyLooksCore.h"
 #include "Battle/FleetRideGale.h"
 #include "Battle/FleetWaves.h"
 #include "Battle/SeaFace.h"
@@ -29,6 +32,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -88,7 +92,7 @@ namespace
 	{
 		double LeastJ = 9.0, WorstLean = 0.0;
 		std::string Each;
-		int MostD = 0, Seas = 0;
+		int MostD = 0, Seas = 0, Gridded = 0;
 		double ShortestDisplaced = 1e9;
 		// J over a 1 km square at 2 m, every wind from the cap to the gale's, three seeds, with a swell and without
 		for (double U = 14.0; U <= GaleCap + 1e-9; U = std::min(U + 1.0, U < GaleCap - 1e-9 ? GaleCap : GaleCap + 1.0))
@@ -111,18 +115,17 @@ namespace
 						}
 						for (int J = 0; J < S.NP; ++J) Lean += S.P[J].Q * S.P[J].K * S.P[J].A;
 						WorstLean = std::max(WorstLean, Lean - S.Qb);
-						if (Seed != 239 || Swell == 1) continue; // (the dense grid on one seed a wind: the others' leans alone)
-						for (double T : { 61.3, 517.7 })
+						// (every sea's J over the square, one instant each: the seeds take turns at three)
+						const double T = Seed == 7 ? 61.3 : (Seed == 239 ? 517.7 : 1234.5);
+						for (int Jy = 0; Jy <= 500; ++Jy)
 						{
-							for (int Jy = 0; Jy <= 500; ++Jy)
+							for (int I = 0; I <= 500; ++I)
 							{
-								for (int I = 0; I <= 500; ++I)
-								{
-									const double X = -500.0 + I * 2.0 + 0.37, Y = -500.0 + Jy * 2.0 + 0.71;
-									LeastHere = std::min(LeastHere, SlopesAt(S, X, Y, T).J);
-								}
+								const double X = -500.0 + I * 2.0 + 0.37, Y = -500.0 + Jy * 2.0 + 0.71;
+								LeastHere = std::min(LeastHere, SlopesAt(S, X, Y, T).J);
 							}
 						}
+						++Gridded;
 					}
 				}
 			}
@@ -130,9 +133,9 @@ namespace
 			Each += Num(U, 1) + " m/s " + Num(LeastHere, 3) + "; ";
 			if (U >= GaleCap) break;
 		}
-		Check("the gale's spectrum to 24.4 m/s: the least J over a 1 km square at 2 m is above 0.15 (the plan's named test for step 14(c); "
-			  "fetch-limited and fully raised, with a swell and without)",
-			LeastJ > 0.15, "least " + Num(LeastJ, 4) + " over " + std::to_string(Seas) + " gale seas: " + Each);
+		Check("the gale's spectrum to 24.4 m/s: the least J over a 1 km square at 2 m is above 0.15 (the plan's named test for step 14(c); every wind from 14 m/s "
+			  "to the cap, three seeds, fetch-limited and fully raised, with a 4 m 14 s swell and without)",
+			LeastJ > 0.15 && Gridded == Seas, "least " + Num(LeastJ, 4) + " over " + std::to_string(Gridded) + " gale seas of " + std::to_string(Seas) + ": " + Each);
 		Check("the gale's spectrum: sum(Q k a) over every train is still at most Qb, and no displaced train is shorter than 8 m, at gale winds",
 			WorstLean <= 1e-12 && MostD <= MostDrawn && ShortestDisplaced >= ShortestDrawn,
 			"worst over " + Num(WorstLean * 1e15, 3) + "e-15, " + std::to_string(MostD) + " trains at most, shortest displaced " + Num(ShortestDisplaced, 2) + " m");
@@ -198,9 +201,17 @@ namespace
 			bUp && bFloor && StepTp < 0.02, Worst.empty() ? "13.8 m/s: " + Num(CapHs, 2) + " m, Tp " + Num(Cap.Tp, 2) + " s; the step at the cap " +
 					Num(100 * StepTp, 2) + "% of the period; 24.4 m/s: " + Num(Last, 2) + " m, Tp " + Num(LastTp, 1) + " s"
 															: "falls at " + Worst);
-		Check("the gale's sea at the cap is exactly the cap's own sea (0.021 x 13.8^2 = 4.00 m: the fetch-limited sea and the show's meet there, so nothing jumps "
-			  "when the switch raises the cap)",
-			std::fabs(CapHs - 0.021 * Raised * Raised) <= 0.01, Num(CapHs, 4) + " m against " + Num(0.021 * Raised * Raised, 4) + " m");
+		// (GaleFetchOf gives no fetch at the cap itself, so the cap's sea is the show's by construction; what holds the two seas
+		// together is GaleHours: the duration-limited law's own sea at 13.8 m/s, and the gale's just over it)
+		double CapLaw = 0.0, CapW = 0.0;
+		FetchLaw(Raised, FetchOfHours(Raised, GaleHours), CapLaw, CapW);
+		const Sea JustOver = GaleSea(Raised + 1e-6, 4242, true);
+		const double Show = 0.021 * Raised * Raised;
+		Check("the gale's sea meets the show's at the cap (0.021 x 13.8^2 = 4.00 m), so nothing jumps when the switch raises it: the duration-limited sea of a gale of " +
+				  Num(GaleHours, 1) + " hours at 13.8 m/s, and the gale's sea a micrometre a second over it, within 0.5% of the show's",
+			std::fabs(CapLaw / Show - 1.0) <= 0.005 && std::fabs(JustOver.Hs / Show - 1.0) <= 0.005,
+			"the law's " + Num(CapLaw, 4) + " m (fetch " + Num(FetchOfHours(Raised, GaleHours) / 1000.0, 1) + " km), just over the cap " + Num(JustOver.Hs, 4) + " m, the show's " +
+				Num(Show, 4) + " m");
 		// The periods: the fetch-limited sea's peak against JONSWAP's own law
 		double WorstTp = 0.0;
 		for (double U = 14.0; U <= GaleCap + 1e-9; U += 0.5)
@@ -210,8 +221,8 @@ namespace
 			const Sea S = GaleSea(U, 4242, true);
 			WorstTp = std::max(WorstTp, std::fabs(S.Tp / (TwoPi / Wj) - 1.0));
 		}
-		Check("the gale's periods: the fetch-limited sea's peak period is JONSWAP's fetch law's within 5% (the core takes the longer of it and the fully raised "
-			  "sea's, so the peak never shortens)",
+		Check("the gale's periods: the fetch-limited sea's peak period is JONSWAP's fetch law's within 5% (Make takes the higher of its peak frequency and the fully "
+			  "raised sea's, so a younger sea's peak is never longer than a fully raised one's)",
 			WorstTp <= 0.05, "worst " + Num(100 * WorstTp, 2) + "%");
 	}
 
@@ -367,16 +378,20 @@ namespace
 	// ---------------------------------------------------------------------------------------------------------------
 	// FleetRideGale: the limits as data.
 
-	/** A number named in SeaShow.cpp's own Ride table (the art director's), read from its text: Small, Middle and Big rows. */
-	bool ShowTable(const std::string& Text, double (&Roll5)[3], double (&Roll6)[3], double (&Pitch5)[3], double (&Pitch6)[3], double (&RollT)[3])
+	/** A row of the art director's table as SeaShow.cpp's own text holds it (RideOf's Small, Middle and Big): roll and pitch
+	 * at Beaufort 3, 4, 5 and 6, and the roll period. */
+	struct ShowRow
+	{
+		double Roll[4] = {}, Pitch[4] = {}, RollT = 0.0;
+	};
+	bool ShowTable(const std::string& Text, ShowRow (&Out)[3])
 	{
 		static const std::regex Row("static const Ride (Small|Middle|Big) = \\{ \\{ ([^}]*)\\}, \\{ ([^}]*)\\}, ([0-9.]+), ([0-9.]+), ([0-9.]+) \\};");
 		int Seen = 0;
 		for (std::sregex_iterator It(Text.begin(), Text.end(), Row), End; It != End; ++It)
 		{
 			const std::string Which = (*It)[1];
-			const int K = Which == "Small" ? 0 : Which == "Middle" ? 1 : 2;
-			double Rolls[4] = {}, Pitches[4] = {};
+			ShowRow& R = Out[Which == "Small" ? 0 : Which == "Middle" ? 1 : 2];
 			for (int Pass = 0; Pass < 2; ++Pass)
 			{
 				std::istringstream In((*It)[2 + Pass].str());
@@ -384,46 +399,139 @@ namespace
 				int N = 0;
 				while (std::getline(In, Each, ',') && N < 4)
 				{
-					(Pass == 0 ? Rolls : Pitches)[N++] = std::atof(Each.c_str());
+					(Pass == 0 ? R.Roll : R.Pitch)[N++] = std::atof(Each.c_str());
 				}
 				if (N != 4) return false;
 			}
-			Roll5[K] = Rolls[2];
-			Roll6[K] = Rolls[3];
-			Pitch5[K] = Pitches[2];
-			Pitch6[K] = Pitches[3];
-			RollT[K] = std::atof((*It)[4].str().c_str());
+			R.RollT = std::atof((*It)[4].str().c_str());
 			++Seen;
 		}
 		return Seen == 3;
 	}
+	/** The show's RideOf and AtForce, written here again from SeaShow.cpp's text (not from FleetRideGale.h), over the table
+	 * as read: her row by her length, then the row at a Beaufort number. */
+	ShowRow ShowRideOf(const ShowRow (&Table)[3], double Long)
+	{
+		const double K = std::clamp((Long - 110.0) / 140.0, 0.0, 1.0) * 2.0;
+		const ShowRow& A = K < 1.0 ? Table[0] : Table[1];
+		const ShowRow& B = K < 1.0 ? Table[1] : Table[2];
+		const double T = K < 1.0 ? K : K - 1.0;
+		ShowRow R;
+		for (int I = 0; I < 4; ++I)
+		{
+			R.Roll[I] = A.Roll[I] + (B.Roll[I] - A.Roll[I]) * T;
+			R.Pitch[I] = A.Pitch[I] + (B.Pitch[I] - A.Pitch[I]) * T;
+		}
+		R.RollT = A.RollT + (B.RollT - A.RollT) * T;
+		return R;
+	}
+	double ShowAtForce(const double (&Row)[4], double Force)
+	{
+		if (Force <= 3.0) return Row[0] * std::clamp(Force / 3.0, 0.0, 1.0);
+		const double K = std::min(Force, 6.0) - 3.0;
+		const int I = std::min(static_cast<int>(K), 2);
+		return Row[I] + (Row[I + 1] - Row[I]) * (K - I);
+	}
+	/** The show's Beaufort number of a wind (SeaShow.cpp's Force, unrounded). */
+	double ShowForce(double U) { return std::pow(U / 0.836, 2.0 / 3.0); }
 
 	void Limits(const std::string& Src)
 	{
 		using namespace FleetRideGale;
-		double Roll5[3] = {}, Roll6[3] = {}, Pitch5[3] = {}, Pitch6[3] = {}, RollT[3] = {};
 		const std::string Show = ReadAll(Src + "/Battle/SeaShow.cpp");
-		const bool bRead = ShowTable(Show, Roll5, Roll6, Pitch5, Pitch6, RollT);
+		ShowRow Table[3];
+		const bool bRead = ShowTable(Show, Table);
 		bool bSame = bRead;
 		for (int K = 0; K < 3; ++K)
 		{
-			bSame = bSame && Roll5[K] == TableRoll5[K] && Roll6[K] == TableRoll6[K] && Pitch5[K] == TablePitch5[K] && Pitch6[K] == TablePitch6[K] && RollT[K] == TableRollT[K];
+			for (int I = 0; I < 4; ++I) bSame = bSame && Table[K].Roll[I] == TableRoll[K][I] && Table[K].Pitch[I] == TablePitch[K][I];
+			bSame = bSame && Table[K].RollT == TableRollT[K];
 		}
-		Check("the ride's limits: the art director's own Beaufort 5 and 6 columns and roll periods, read again from SeaShow.cpp's Ride table (Small, Middle, Big), "
-			  "are the ones FleetRideGale.h holds (it changes neither the table nor the show's Raised cap of 13.8 m/s)",
-			bSame, bRead ? "roll 6: " + Num(Roll6[0], 2) + ", " + Num(Roll6[1], 2) + ", " + Num(Roll6[2], 2) + "; pitch 6: " + Num(Pitch6[0], 2) + ", " +
-					Num(Pitch6[1], 2) + ", " + Num(Pitch6[2], 2)
-							: "SeaShow.cpp's Ride table not read");
-		Check("the ride's limits: SeaShow's own cap stays 13.8 m/s and its table stops at Beaufort 6 (the show does not move)",
-			Show.find("const double Raised = std::min(WindU, 13.8);") != std::string::npos && Show.find("std::min(Force, 6.0) - 3.0") != std::string::npos);
+		Check("the ride's limits: the art director's own table (roll and pitch at Beaufort 3 to 6, and the roll periods), read again from SeaShow.cpp's RideOf rows, "
+			  "is the one FleetRideGale.h mirrors (it changes neither the table nor the show's Raised cap of 13.8 m/s)",
+			bSame, bRead ? "a destroyer's roll " + Num(Table[0].Roll[0], 2) + ", " + Num(Table[0].Roll[1], 2) + ", " + Num(Table[0].Roll[2], 2) + ", " + Num(Table[0].Roll[3], 2) +
+						 "; roll periods " + Num(Table[0].RollT, 1) + ", " + Num(Table[1].RollT, 1) + ", " + Num(Table[2].RollT, 1) + " s"
+						   : "SeaShow.cpp's Ride table not read");
+		// The show's own formulas, which the mirror and this test's ShowRideOf and ShowAtForce follow, word for word
+		const char* Lines[] = { "const double Raised = std::min(WindU, 13.8);", "const double Force = std::pow(WindU / 0.836, 2.0 / 3.0)",
+			"const double K = Clamp((Long - 110.0) / 140.0, 0.0, 1.0) * 2.0;", "R.Roll[I] = A.Roll[I] + (B.Roll[I] - A.Roll[I]) * T;",
+			"R.RollT = A.RollT + (B.RollT - A.RollT) * T;", "if (Force <= 3.0) return Row[0] * Clamp(Force / 3.0, 0.0, 1.0);",
+			"const double K = std::min(Force, 6.0) - 3.0;", "const int I = std::min(static_cast<int>(K), 2);", "return Row[I] + (Row[I + 1] - Row[I]) * (K - I);",
+			"const double Swell = AtForce(R.Roll, Force)" };
+		std::string Missing;
+		for (const char* Line : Lines)
+		{
+			if (Show.find(Line) == std::string::npos) Missing += std::string(Line) + " ";
+		}
+		Check("the ride's limits: SeaShow's cap stays 13.8 m/s, its Beaufort number (U / 0.836)^(2/3), RideOf's rows between lengths and AtForce between columns, "
+			  "flat over 6, as the mirror has them (the show does not move)",
+			Missing.empty(), Missing.empty() ? std::to_string(std::size(Lines)) + " lines of SeaShow.cpp as they were" : "not found: " + Missing);
+		// Up to the show's cap the gale's limits are the art director's own, exactly, at every wind and length
+		const double CapForce = ShowForce(Raised);
+		const double Lengths[] = { 40.0, 62.5, 67.0, 80.0, 91.9, 95.0, 110.0, 114.0, 118.5, 123.0, 145.0, 180.0, 215.0, 250.0, 300.0 };
+		double WorstBelow = 0.0, WorstT = 0.0;
+		long long Cases = 0;
+		for (double Long : Lengths)
+		{
+			const ShowRow R = ShowRideOf(Table, Long);
+			WorstT = std::max(WorstT, std::fabs(RollTAt(Long) - R.RollT));
+			for (int K = 0; K <= 1380; ++K)
+			{
+				const double F = ShowForce(0.01 * K);
+				WorstBelow = std::max({ WorstBelow, std::fabs(LimitAt(Long, F, true) - ShowAtForce(R.Roll, F)), std::fabs(LimitAt(Long, F, false) - ShowAtForce(R.Pitch, F)) });
+				Cases += 2;
+			}
+		}
+		Check("the ride's limits are the art director's own (AtForce over RideOf's row) at every wind to the 13.8 m/s cap, every hundredth of a metre a second, for "
+			  "hulls of 40 to 300 m, and her roll period RideOf's: the gale moves nothing the show's table gives",
+			WorstBelow == 0.0 && WorstT == 0.0 && std::fabs(ForceCap - CapForce) <= 1e-12,
+			std::to_string(Cases) + " cases, worst " + Num(WorstBelow, 12) + " deg; the roll period within " + Num(WorstT, 12) + " s; the cap at Beaufort " +
+				Num(ForceCap, 6) + " against the show's " + Num(CapForce, 6) + " (a destroyer's roll at 10 m/s " + Num(LimitAt(114.0, ShowForce(10.0), true), 2) +
+				", at 13.0 and 13.8 m/s " + Num(LimitAt(114.0, ShowForce(13.0), true), 2) + " and " + Num(LimitAt(114.0, CapForce, true), 2) + " deg)");
+		// Above it they climb, with no jump at the cap, to the gale's rows at 7, 8 and 9, and hold 9's over it
+		double Jump = 0.0, WorstRow = 0.0;
+		bool bRises = true, bStops = true, bSmallMore = true;
+		for (double Long : Lengths)
+		{
+			int A = 0;
+			double T = 0.0;
+			RowsOf(Long, A, T);
+			for (int bRoll = 0; bRoll < 2; ++bRoll)
+			{
+				const double AtCap = LimitAt(Long, CapForce, bRoll == 1);
+				Jump = std::max(Jump, std::fabs(LimitAt(Long, CapForce + 1e-9, bRoll == 1) - AtCap));
+				double Last = AtCap;
+				for (double F = CapForce; F <= 10.0; F += 0.01)
+				{
+					const double Now = LimitAt(Long, F, bRoll == 1);
+					bRises = bRises && Now >= Last - 1e-12;
+					Last = Now;
+				}
+				bRises = bRises && LimitAt(Long, 7.0, bRoll == 1) > AtCap;
+				bStops = bStops && LimitAt(Long, 9.0, bRoll == 1) == LimitAt(Long, 12.0, bRoll == 1);
+				for (int F = 0; F < Forces; ++F)
+				{
+					const double Lo = bRoll ? Gale[A].Roll[F] : Gale[A].Pitch[F], Hi = bRoll ? Gale[A + 1].Roll[F] : Gale[A + 1].Pitch[F];
+					WorstRow = std::max(WorstRow, std::fabs(LimitAt(Long, 7.0 + F, bRoll == 1) - (Lo + (Hi - Lo) * T)));
+				}
+			}
+			for (double F : { 7.0, 8.0, 9.0 }) bSmallMore = bSmallMore && LimitAt(95.0, F, true) >= LimitAt(Long, F, true) - 1e-12;
+		}
+		Check("the ride's limits climb only above the cap: no jump there, rising to the gale's rows at Beaufort 7, 8 and 9, held over 9, and a small hull held to more "
+			  "than a big one",
+			Jump <= 1e-6 && bRises && bStops && bSmallMore && WorstRow <= 1e-12,
+			"over a billionth of a Beaufort at the cap " + Num(Jump, 9) + " deg; a destroyer (114 m) at 15.5, 18.9 and 22.6 m/s: roll " +
+				Num(LimitAt(114.0, ShowForce(15.5), true), 2) + ", " + Num(LimitAt(114.0, ShowForce(18.9), true), 2) + ", " + Num(LimitAt(114.0, ShowForce(22.6), true), 2) +
+				" deg, pitch " + Num(LimitAt(114.0, ShowForce(15.5), false), 2) + ", " + Num(LimitAt(114.0, ShowForce(18.9), false), 2) + ", " +
+				Num(LimitAt(114.0, ShowForce(22.6), false), 2) + "; a battleship's roll at 9 " + Num(LimitAt(250.0, 9.0, true), 2));
 		// The rule: the step from 6 to 7 is the art director's own step from 5 to 6, and each step after it three quarters of the one before
 		double WorstRule = 0.0;
 		for (int K = 0; K < 3; ++K)
 		{
 			for (int Pass = 0; Pass < 2; ++Pass)
 			{
-				const double* Of = Pass == 0 ? Rows[K]->Roll : Rows[K]->Pitch;
-				const double Six = Pass == 0 ? TableRoll6[K] : TablePitch6[K], Five = Pass == 0 ? TableRoll5[K] : TablePitch5[K];
+				const double* Of = Pass == 0 ? Gale[K].Roll : Gale[K].Pitch;
+				const double Six = Pass == 0 ? TableRoll[K][3] : TablePitch[K][3], Five = Pass == 0 ? TableRoll[K][2] : TablePitch[K][2];
 				double Step = Six - Five, Want = Six;
 				for (int F = 0; F < Forces; ++F)
 				{
@@ -435,68 +543,88 @@ namespace
 		}
 		Check("the ride's limits: Beaufort 7, 8 and 9 follow the rule (the art director's step from 5 to 6 carried on, each step three quarters of the one before)",
 			WorstRule <= 1e-9, "worst " + Num(WorstRule * 1e9, 3) + "e-9 deg");
-		// The shape: a hull rolls and pitches more as the gale rises, a small hull more than a big one, and the limits are
-		// continuous with the art director's at Beaufort 6
-		bool bRises = true, bSmallMore = true, bJoins = true;
-		for (double Long : { 95.0, 110.0, 118.5, 180.0, 250.0, 300.0 })
-		{
-			for (int bRoll = 0; bRoll < 2; ++bRoll)
-			{
-				double Last = LimitAt(Long, 6.0, bRoll == 1);
-				const int K = RowOf(Long) >= 1.0 ? 1 : 0;
-				const double T = RowOf(Long) - K;
-				const double Six = (bRoll ? TableRoll6[K] : TablePitch6[K]) + ((bRoll ? TableRoll6[K + 1] : TablePitch6[K + 1]) - (bRoll ? TableRoll6[K] : TablePitch6[K])) * T;
-				bJoins = bJoins && std::fabs(Last - Six) <= 1e-9 && std::fabs(LimitAt(Long, 5.5, bRoll == 1) - Six) <= 1e-9;
-				for (double F = 6.0; F <= 10.0; F += 0.05)
-				{
-					const double Now = LimitAt(Long, F, bRoll == 1);
-					bRises = bRises && Now >= Last - 1e-9;
-					Last = Now;
-				}
-				bRises = bRises && std::fabs(LimitAt(Long, 9.0, bRoll == 1) - LimitAt(Long, 12.0, bRoll == 1)) <= 1e-9;
-			}
-			bSmallMore = bSmallMore && (Long <= 95.0 || LimitAt(95.0, 8.0, true) >= LimitAt(Long, 8.0, true));
-		}
-		Check("the ride's limits: they join the art director's at Beaufort 6, rise with the gale, stop at 9, and a small hull is held to more than a big one",
-			bRises && bSmallMore && bJoins,
-			"a destroyer at 7, 8, 9: roll " + Num(LimitAt(114.0, 7.0, true), 2) + ", " + Num(LimitAt(114.0, 8.0, true), 2) + ", " + Num(LimitAt(114.0, 9.0, true), 2) +
-				" deg; pitch " + Num(LimitAt(114.0, 7.0, false), 2) + ", " + Num(LimitAt(114.0, 8.0, false), 2) + ", " + Num(LimitAt(114.0, 9.0, false), 2) +
-				"; a battleship's roll " + Num(LimitAt(250.0, 9.0, true), 2));
-		// Data alone: no ride code in the header (step 5 builds the ride; nothing is built twice)
+		// Data alone: no ride code in the header (step 5 builds the ride; nothing is built twice), and no heave limit
 		const std::string Header = ReadAll(Src + "/Battle/FleetRideGale.h");
 		const std::pair<const char*, const char*> Banned[] = { { "FleetWaves::", "the wave core" }, { "#include", "an include" }, { "SeaShow::", "the show" },
 			{ "RideAt", "the ride's own work" }, { "HullRide", "the ride's own work" }, { "virtual", "a rider" }, { "FMath", "the engine" }, { "Dice", "a draw" },
-			{ "std::", "the library" } };
+			{ "std::", "the library" }, { "HeaveMost", "a heave limit (step 5: heave is not limited)" }, { "tanh", "a soft limit's own work" } };
 		std::string Found;
 		for (const auto& [Word, Why] : Banned)
 		{
 			if (Header.find(Word) != std::string::npos) Found += std::string(Word) + " (" + Why + "); ";
 		}
-		Check("the ride's limits are data (Battle/FleetRideGale.h: numbers and the readers of them alone, no ride, no include, nothing of FleetWaves or SeaShow), "
-			  "so step 5's ride reads them and nothing is built twice",
+		Check("the ride's limits are data (Battle/FleetRideGale.h: numbers and the readers of them alone, no ride, no include, nothing of FleetWaves or SeaShow, "
+			  "and no heave limit), so step 5's ride reads them and nothing is built twice",
 			Found.empty() && Header.size() > 2000, Found.empty() ? std::to_string(Header.size()) + " bytes" : Found);
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// The freeboard tests.
 
-	/** One run: a hull of a row's class, at a heading to the sea and a speed, in a sea; how often the water stood over each
-	 * deck, and what her ride did. */
+	/** One run: a hull of a row's class, at a heading to the sea and a speed, in a sea; the share of the time the water stood
+	 * over each deck (each instant once: a deck is wet when the water stands over it on either side), how deep, and what her
+	 * ride did; and the rms of her heave against the water's at her middle. */
 	struct Run
 	{
-		double Bow = 0.0, Waist = 0.0, Stern = 0.0; // the share of the time the water stood over each deck
+		double Bow = 0.0, Waist = 0.0, Stern = 0.0;
 		double MostRoll = 0.0, MostPitch = 0.0, MostHeave = 0.0, OverBow = 0.0, OverWaist = 0.0, OverStern = 0.0;
+		double HeaveRms = 0.0, WaterRms = 0.0;
+		// (her heave's rms over an hour as she goes, and what her transfer function gives at her encounter frequencies,
+		// sqrt(sum |C|^2 / 2): over 400 s two trains met at nearly one frequency need not have beaten through, over an hour
+		// they have)
+		double HeaveHour = 0.0, HeaveTf = 0.0;
+		double LongestMet = 0.0; // (the longest period she meets any of her trains at, seconds)
 	};
 
-	Run Freeboard(const FleetRideGale::Deck& D, const Sea& S, double Force, double OffWind, double Speed)
+	/** [EST] The hull reference: a hull's own heave and pitch at a natural period of 5.75 s, damping 0.25 (a destroyer's,
+	 * 5.5-6 s and 0.2-0.3 in the sea scene's review), in place of the look's light low-pass; her roll the look's. Not what
+	 * is drawn: what the sea does to a hull, to show what the look's filter leaves out at her bow. (No bow swell-up either,
+	 * so its bow is still a floor.) */
+	constexpr double HullPeriod = 5.75, HullDamping = 0.25;
+
+	/** Her ride as the look draws it, at her middle and the sea clock: RideAt's sum, roll and pitch soft-limited as step 5
+	 * lays them (RollMax tanh(R / RollMax)), heave not ("water on her side is exactly what the tests catch"). */
+	void LookRide(const Sea& S, const HullRide& H, double X, double Y, double T, double RollMax, double PitchMax, double& Heave, double& Pitch, double& Roll)
+	{
+		RideAt(S, H, X, Y, T, nullptr, Heave, Pitch, Roll);
+		Roll = RollMax * std::tanh(Roll / RollMax);
+		Pitch = PitchMax * std::tanh(Pitch / PitchMax);
+	}
+
+	Run Freeboard(const FleetRideGale::Deck& D, const Sea& S, double Force, double OffWind, double Speed, double Trim, bool bHull)
 	{
 		using namespace FleetRideGale;
 		Run Out;
 		const double Hdg = S.Downwind + Pi + OffWind; // (off head to the sea: 0 head, pi/2 beam, as she meets it)
 		HullRide H;
-		RideTrains(S, D.Long, D.Beam, Hdg, Speed, TableRollT[RowOf(D.Long) >= 1.0 ? 1 : 0], H);
+		if (!bHull)
+		{
+			// (the ride as step 5 lays it: RideTrains' filters, her roll period by RideOf)
+			RideTrains(S, D.Long, D.Beam, Hdg, Speed, RollTAt(D.Long), H);
+		}
+		else
+		{
+			RideFilter F = FilterFor(S, RollTAt(D.Long));
+			F.HeaveW = TwoPi / HullPeriod;
+			F.HeaveZeta = HullDamping;
+			H.N = 0;
+			for (int J = 0; J < S.ND; ++J)
+			{
+				if (S.D[J].L < RideShortest * D.Long) continue;
+				H.Of[H.N] = J;
+				H.C[H.N] = RideCoef(S.D[J], D.Long, D.Beam, Hdg, Speed, F);
+				++H.N;
+			}
+		}
 		const double RollMax = SoftOver * LimitAt(D.Long, Force, true), PitchMax = SoftOver * LimitAt(D.Long, Force, false);
-		const double HeaveMax = HeaveMost * std::max(S.Hs, 1e-3); // (the gale's own heave limit: see FleetRideGale.h)
+		for (int I = 0; I < H.N; ++I)
+		{
+			Out.HeaveTf += 0.5 * std::norm(H.C[I].Heave);
+			const Train& Tr = S.D[H.Of[I]];
+			const double We = std::fabs(Tr.W - (Tr.Kx * std::sin(Hdg) + Tr.Ky * std::cos(Hdg)) * Speed);
+			Out.LongestMet = std::max(Out.LongestMet, We > 1e-9 ? TwoPi / We : 1e30);
+		}
+		Out.HeaveTf = std::sqrt(Out.HeaveTf);
 		const double Sx = std::sin(Hdg), Cy = std::cos(Hdg);
 		const double Step = 0.25, Span = 400.0;
 		const int Steps = static_cast<int>(Span / Step);
@@ -506,13 +634,13 @@ namespace
 			const double T = 31.0 + K * Step;
 			const double X = 400.0 + Speed * (T - 31.0) * Sx, Y = -250.0 + Speed * (T - 31.0) * Cy;
 			double Heave = 0.0, Pitch = 0.0, Roll = 0.0;
-			RideAt(S, H, X, Y, T, nullptr, Heave, Pitch, Roll);
-			Roll = RollMax * std::tanh(Roll / RollMax);
-			Pitch = PitchMax * std::tanh(Pitch / PitchMax);
-			Heave = HeaveMax * std::tanh(Heave / HeaveMax);
+			LookRide(S, H, X, Y, T, RollMax, PitchMax, Heave, Pitch, Roll);
 			Out.MostRoll = std::max(Out.MostRoll, std::fabs(Roll));
 			Out.MostPitch = std::max(Out.MostPitch, std::fabs(Pitch));
 			Out.MostHeave = std::max(Out.MostHeave, std::fabs(Heave));
+			const double Middle = HeightAt(S, X, Y, T);
+			Out.HeaveRms += Heave * Heave;
+			Out.WaterRms += Middle * Middle;
 			const double Sp = std::sin(Pitch * Pi / 180.0), Cp = std::cos(Pitch * Pi / 180.0);
 			const double Sr = std::sin(Roll * Pi / 180.0), Cr = std::cos(Roll * Pi / 180.0);
 			struct Station
@@ -525,19 +653,23 @@ namespace
 				{ -0.4 * D.Long, D.SternOut, D.Stern, &Out.Stern, &Out.OverStern } };
 			for (const Station& St : Three)
 			{
-				// (either side: the weather side is where the sea heels her down, and a quartering sea takes each in turn)
+				// (either side, the instant counted once: the weather side is where the sea heels her down, and a quartering
+				// sea takes each in turn. Her model turned about her waterline amidships, then lowered by her trim, as the
+				// convoy looks draw a boat)
+				bool bWet = false;
 				for (const double Side : { St.Across, -St.Across })
 				{
 					const double Px = X + St.Along * Sx + Side * Cy, Py = Y + St.Along * Cy - Side * Sx;
-					const double Deck = Heave + St.Along * Sp + St.Deck * Cp * Cr - Side * Sr;
+					const double Deck = Heave - Trim + St.Along * Sp + St.Deck * Cp * Cr - Side * Sr;
 					const double Water = HeightAt(S, Px, Py, T);
 					if (Water > Deck)
 					{
-						*St.Share += 1.0;
+						bWet = true;
 						*St.Over = std::max(*St.Over, Water - Deck);
 					}
 					if (St.Across == 0.0) break; // (the bow's station is on her middle line: once)
 				}
+				*St.Share += bWet ? 1.0 : 0.0;
 			}
 			++N;
 		}
@@ -545,136 +677,277 @@ namespace
 		Out.Bow /= Of;
 		Out.Waist /= Of;
 		Out.Stern /= Of;
+		Out.HeaveRms = std::sqrt(Out.HeaveRms / Of);
+		Out.WaterRms = std::sqrt(Out.WaterRms / Of);
+		for (int K = 0; K < 7200; ++K)
+		{
+			const double T = 31.0 + K * 0.5;
+			double Heave = 0.0, Pitch = 0.0, Roll = 0.0;
+			LookRide(S, H, 400.0 + Speed * (T - 31.0) * Sx, -250.0 + Speed * (T - 31.0) * Cy, T, RollMax, PitchMax, Heave, Pitch, Roll);
+			Out.HeaveHour += Heave * Heave;
+		}
+		Out.HeaveHour = std::sqrt(Out.HeaveHour / 7200.0);
 		return Out;
+	}
+
+	/** The trim the convoy looks draw a surfaced boat at, from the game's own StepBoat: her casing's drawn height over the
+	 * still sea blown (her model's waterline) less awash (as she runs surfaced). 0 for a model it has no row for. */
+	double DrawnTrim(const std::string& Model)
+	{
+		const ConvoyLook::BoatModel M = ConvoyLook::SculptedOf(Model);
+		if (M.Name.empty()) return 0.0;
+		const ConvoyLook::Drawn Up{}; // (the stage draws the modeller's boat at its own size: its stretch 1)
+		ConvoyLook::BoatIn In;
+		In.T = 10.0;
+		In.Dive = "surfaced";
+		In.Keel = 4.7;
+		In.Dived = 0.0;
+		In.Speed = 7.0;
+		ConvoyLook::BoatState Awash, Blown;
+		ConvoyLook::Blow(Blown, true);
+		const ConvoyLook::BoatOut A = ConvoyLook::StepBoat(Awash, In, M, Up), B = ConvoyLook::StepBoat(Blown, In, M, Up);
+		return B.DeckZ - A.DeckZ;
 	}
 
 	void Freeboards(const std::string& Out)
 	{
 		using namespace FleetRideGale;
 		std::string Report = "# The gale's freeboard tests (the release 2 ocean plan, step 14(c); risk 14: \"at Beaufort 7 and up, crests can rise through a\n"
-							 "# destroyer's low decks\"). How often the gale's sea stood over each deck, with the ride at FleetRideGale's limits: the share of the\n"
-							 "# time over 400 s at 4 Hz, the most of every heading to the sea (head, bow, beam and quartering) and of both speeds (her class's and\n"
-							 "# hove to, 3 m/s), in the gale's own sea (GaleFetchOf) and in the sea the wind has fully raised. The decks are the ship models' own\n"
-							 "# (Content/Models/Ships; a corvette's and a frigate's are estimates until the modeller makes them).\n";
-		double WorstOver = 0.0;
-		std::string WorstWhere, Made;
-		int Rows = 0;
-		bool bGrows = true, bSmallWetter = true, bQuietBelow = true;
-		double SmallShare[Forces] = {}, BigShare[Forces] = {};
-		for (int Which = 0; Which < DeckCount; ++Which)
+							 "# destroyer's low decks\"). How often the sea the scene draws stood over each deck: the share of the time over 400 s at 4 Hz, each\n"
+							 "# instant counted once (a deck is wet when the water stands over it on either side), the most of four headings to the sea (head,\n"
+							 "# bow, beam and quartering) and both speeds (her class's and hove to, 3 m/s). The sea: at Beaufort 7, 8 and 9 the gale's own, at\n"
+							 "# each row's middle wind with GaleFetchOf's fetch (never a fully raised sea the scene does not ask for); at the show's cap, 13.8 m/s,\n"
+							 "# and at 12.3 m/s the show's own sea (fully raised), which is the one drawn there. The ride: as step 5 lays it (its light low-pass\n"
+							 "# at 0.4 Tp for heave and pitch, her roll oscillator at RideOf's period, full weights), roll and pitch soft-limited at 1.1 x\n"
+							 "# FleetRideGale's LimitAt, heave not limited. A boat at the trim the game draws her at (ConvoyLooksCore: trim awash, her casing\n"
+							 "# 0.5 m over the still sea, unless her tanks are blown). The decks are the ship models' own (Content/Models/Ships; a corvette's\n"
+							 "# and a frigate's are estimates until the modeller makes them). These are the look's; for a destroyer the hull reference (a hull's\n"
+							 "# own heave and pitch, 5.75 s and damping 0.25 [EST], in place of the look's low-pass) is given beside them.\n";
+		// The boats' trim, as the game draws them
+		std::string Trims;
+		double WorstTrim = 0.0;
+		for (const Deck& D : Decks)
 		{
-			const Deck& D = Decks[Which];
-			Report += "\n" + std::string(D.Name) + " (" + Num(D.Long, 1) + " m x " + Num(D.Beam, 1) + " m" + (D.Model[0] ? std::string(", ") + D.Model + ".json" : std::string()) +
-				"; decks over her waterline: bow " + Num(D.Bow, 2) + " m, waist " + Num(D.Waist, 2) + " m at " + Num(D.WaistOut, 1) + " m out, stern " + Num(D.Stern, 2) +
-				" m at " + Num(D.SternOut, 1) + " m out)\n";
-			double Last[3] = { -1.0, -1.0, -1.0 }, Measured[3][Forces] = {};
-			for (int F = 0; F < Forces; ++F)
+			const double Want = D.bBoat ? DrawnTrim(D.Model) : 0.0;
+			WorstTrim = std::max(WorstTrim, std::fabs(Want - D.Trim));
+			if (D.bBoat) Trims += std::string(D.Model) + " " + Num(Want, 3) + " m; ";
+		}
+		Check("freeboard: a surfaced boat is held at the trim the game draws her at (ConvoyLooksCore's StepBoat: awash, her casing 0.5 m over the still sea, her "
+			  "model lowered by FleetRideGale's Trim; blown, at her model's waterline)",
+			WorstTrim <= 0.005, Trims + "worst " + Num(100 * WorstTrim, 2) + " cm from the rows");
+
+		const double Headings[4] = { 0.0, Pi / 4.0, Pi / 2.0, 3.0 * Pi / 4.0 };
+		double LeastRatio = 9.0, MostRatio = 0.0, WorstTf = 0.0;
+		int TfRuns = 0, TfSlow = 0, TfOver5 = 0;
+		double SumHour = 0.0, SumTf = 0.0;
+		std::string RatioLeast, RatioMost, TfWhere;
+		// The worst of four headings and two speeds: each deck's most, and the run that was wettest over all three
+		auto Worst = [&](const Deck& D, const Sea& S, double Force, double Trim, bool bHull, std::string& Where)
+		{
+			Run Most;
+			double Wettest = -1.0;
+			for (double Off : Headings)
 			{
-				const BeaufortSea& R = FleetWaves::WmoGale[F];
-				const double U = 0.5 * (R.From + R.To);
-				Run Most;
-				std::string Worst;
-				for (int Fetch = 0; Fetch < 2; ++Fetch)
+				for (double Speed : { D.Speed, HoveTo })
 				{
-					const Sea S = GaleSea(U, 4242, Fetch == 1);
-					for (double Off : { 0.0, Pi / 4.0, Pi / 2.0, 3.0 * Pi / 4.0 })
+					const Run One = Freeboard(D, S, Force, Off, Speed, Trim, bHull);
+					const double Sum = One.Bow + One.Waist + One.Stern;
+					if (Sum > Wettest)
 					{
-						for (double Speed : { D.Speed, HoveTo })
+						Wettest = Sum;
+						Where = Num(Off * 180.0 / Pi, 0) + " deg off head, " + Num(Speed, 1) + " m/s";
+					}
+					Most.Bow = std::max(Most.Bow, One.Bow);
+					Most.Waist = std::max(Most.Waist, One.Waist);
+					Most.Stern = std::max(Most.Stern, One.Stern);
+					Most.MostRoll = std::max(Most.MostRoll, One.MostRoll);
+					Most.MostPitch = std::max(Most.MostPitch, One.MostPitch);
+					Most.MostHeave = std::max(Most.MostHeave, One.MostHeave);
+					Most.OverBow = std::max(Most.OverBow, One.OverBow);
+					Most.OverWaist = std::max(Most.OverWaist, One.OverWaist);
+					Most.OverStern = std::max(Most.OverStern, One.OverStern);
+					// (only where she meets every train of hers at least ten times in the hour: running before a quartering sea she
+					// keeps pace with some, and an hour does not average a train met once)
+					if (!bHull && One.LongestMet > 360.0) ++TfSlow;
+					if (!bHull && One.LongestMet <= 360.0)
+					{
+						++TfRuns;
+						SumHour += One.HeaveHour * One.HeaveHour;
+						SumTf += One.HeaveTf * One.HeaveTf;
+						const double Off1 = std::fabs(One.HeaveHour / std::max(One.HeaveTf, 1e-9) - 1.0);
+						TfOver5 += Off1 > 0.05 ? 1 : 0;
+						if (Off1 > WorstTf)
 						{
-							const Run One = Freeboard(D, S, R.Force, Off, Speed);
-							if (One.Bow + One.Waist + One.Stern > Most.Bow + Most.Waist + Most.Stern)
-							{
-								Worst = Num(Off * 180.0 / Pi, 0) + " deg off head, " + Num(Speed, 1) + " m/s, " + (Fetch ? "the gale's sea" : "fully raised");
-							}
-							Most.Bow = std::max(Most.Bow, One.Bow);
-							Most.Waist = std::max(Most.Waist, One.Waist);
-							Most.Stern = std::max(Most.Stern, One.Stern);
-							Most.MostRoll = std::max(Most.MostRoll, One.MostRoll);
-							Most.MostPitch = std::max(Most.MostPitch, One.MostPitch);
-							Most.MostHeave = std::max(Most.MostHeave, One.MostHeave);
-							Most.OverBow = std::max(Most.OverBow, One.OverBow);
-							Most.OverWaist = std::max(Most.OverWaist, One.OverWaist);
-							Most.OverStern = std::max(Most.OverStern, One.OverStern);
-							// (the limits themselves: the ride never past its soft limit, and look heave at most 0.5 Hs)
-							const double RollMax = SoftOver * LimitAt(D.Long, static_cast<double>(R.Force), true);
-							const double PitchMax = SoftOver * LimitAt(D.Long, static_cast<double>(R.Force), false);
-							if (One.MostRoll > RollMax + 1e-9 || One.MostPitch > PitchMax + 1e-9) bGrows = false;
-							if (One.MostHeave > HeaveMost * S.Hs + 1e-9)
-							{
-								const double Over = One.MostHeave / (HeaveMost * S.Hs);
-								if (Over > WorstOver)
-								{
-									WorstOver = Over;
-									WorstWhere = std::string(D.Name) + " at B" + std::to_string(R.Force);
-								}
-							}
+							WorstTf = Off1;
+							TfWhere = std::string(D.Name) + " at Beaufort " + Num(Force, 1) + ", " + Num(Off * 180.0 / Pi, 0) + " deg off head, " + Num(Speed, 1) + " m/s";
+						}
+					}
+					if (!bHull && Force > ForceCap)
+					{
+						const double Ratio = One.HeaveRms / std::max(One.WaterRms, 1e-9);
+						if (Ratio < LeastRatio)
+						{
+							LeastRatio = Ratio;
+							RatioLeast = std::string(D.Name) + " at Beaufort " + Num(Force, 0) + ", " + Num(Off * 180.0 / Pi, 0) + " deg off head, " + Num(Speed, 1) + " m/s";
+						}
+						if (Ratio > MostRatio)
+						{
+							MostRatio = Ratio;
+							RatioMost = std::string(D.Name) + " at Beaufort " + Num(Force, 0) + ", " + Num(Off * 180.0 / Pi, 0) + " deg off head, " + Num(Speed, 1) + " m/s";
 						}
 					}
 				}
+			}
+			if (Wettest <= 0.0) Where = "dry at every heading and speed";
+			return Most;
+		};
+		auto Shares = [](const Run& R) { return "bow " + Num(100 * R.Bow, 2) + "% (deepest " + Num(R.OverBow, 2) + " m), waist " + Num(100 * R.Waist, 2) + "% (" + Num(R.OverWaist, 2) +
+										" m), stern " + Num(100 * R.Stern, 2) + "% (" + Num(R.OverStern, 2) + " m)"; };
+		// (pinned as measured: within 0.003 and a twentieth of the pin, either way)
+		int Pins = 0;
+		std::string Moved;
+		auto Pin = [&](const std::string& What, double Got, double Want)
+		{
+			++Pins;
+			if (std::fabs(Got - Want) > 0.003 + 0.05 * Want) Moved += What + " " + Num(100 * Got, 2) + "% against its pin " + Num(100 * Want, 2) + "%; ";
+		};
+		bool bGrows = true, bDryBelow = true, bHullBow = true, bHullWetter = true;
+		std::string Drier, WetBelow, HullBows;
+		double SmallShare[Forces] = {}, BigShare[Forces] = {};
+		std::string MadeMost, MadeBelow;
+		const char* Names[3] = { "bow", "waist", "stern" };
+		for (int Which = 0; Which < DeckCount; ++Which)
+		{
+			const Deck& D = Decks[Which];
+			const bool bDestroyer = Which < 4;
+			Report += "\n" + std::string(D.Name) + " (" + Num(D.Long, 1) + " m x " + Num(D.Beam, 1) + " m" + (D.Model[0] ? std::string(", ") + D.Model + ".json" : std::string()) +
+				"; decks over her model's waterline: bow " + Num(D.Bow, 2) + " m, waist " + Num(D.Waist, 2) + " m at " + Num(D.WaistOut, 1) + " m out, stern " + Num(D.Stern, 2) +
+				" m at " + Num(D.SternOut, 1) + " m out" +
+				(D.bBoat ? "; drawn at trim awash " + Num(D.Trim, 2) + " m lower: bow " + Num(D.Bow - D.Trim, 2) + ", waist " + Num(D.Waist - D.Trim, 2) + ", stern " +
+							   Num(D.Stern - D.Trim, 2) + " m over the still sea"
+						 : std::string()) +
+				")\n";
+			double Last[3] = { -1.0, -1.0, -1.0 }, LastSum = -1.0, Measured[3][Forces] = {};
+			for (int F = 0; F < Forces; ++F)
+			{
+				const BeaufortSea& R = FleetWaves::WmoGale[F];
+				const double U = 0.5 * (R.From + R.To), Force = ShowForce(U);
+				const Sea S = GaleSea(U, 4242, true);
+				std::string Where;
+				const Run Most = Worst(D, S, Force, D.Trim, false, Where);
+				Report += "  B" + std::to_string(R.Force) + " (" + Num(U, 1) + " m/s, Hs " + Num(S.Hs, 2) + " m, Tp " + Num(S.Tp, 1) + " s): " + Shares(Most) +
+					"; her ride at most " + Num(Most.MostRoll, 1) + " deg of roll, " + Num(Most.MostPitch, 1) + " of pitch, " + Num(Most.MostHeave, 2) +
+					" m of heave; wettest at " + Where + "\n";
 				const double Share[3] = { Most.Bow, Most.Waist, Most.Stern };
+				const double Pinned[3] = { GreenMost[Which].Bow[F], GreenMost[Which].Waist[F], GreenMost[Which].Stern[F] };
 				for (int K = 0; K < 3; ++K)
 				{
-					bGrows = bGrows && Share[K] >= Last[K] - 0.02; // (more green water as the gale rises, within the runs' own noise)
+					Pin(std::string(D.Name) + " " + Names[K] + " at B" + std::to_string(R.Force), Share[K], Pinned[K]);
+					if (!D.bBoat && Share[K] < Last[K] - 0.005)
+					{
+						bGrows = false;
+						Drier += std::string(D.Name) + " " + Names[K] + " at B" + std::to_string(R.Force) + "; ";
+					}
 					Last[K] = Share[K];
+					Measured[K][F] = Share[K];
+				}
+				if (D.bBoat)
+				{
+					const double Sum = Share[0] + Share[1] + Share[2];
+					if (Sum < LastSum - 0.005)
+					{
+						bGrows = false;
+						Drier += std::string(D.Name) + " at B" + std::to_string(R.Force) + "; ";
+					}
+					LastSum = Sum;
 				}
 				const double Mine = Most.Bow + Most.Waist + Most.Stern;
 				if (Which == 0) SmallShare[F] = Mine;
 				if (std::string(D.Name) == "destroyer (USA)") BigShare[F] = Mine;
-				Report += "  B" + std::to_string(R.Force) + " (" + Num(U, 1) + " m/s, Hs " + Num(GaleSea(U, 4242, true).Hs, 2) + " to " + Num(GaleSea(U, 4242, false).Hs, 2) +
-					" m): green water over her bow " + Num(100 * Most.Bow, 2) + "% of the time (deepest " + Num(Most.OverBow, 2) + " m), her waist " +
-					Num(100 * Most.Waist, 2) + "% (" + Num(Most.OverWaist, 2) + " m), her stern " + Num(100 * Most.Stern, 2) + "% (" + Num(Most.OverStern, 2) +
-					" m); her ride at most " + Num(Most.MostRoll, 1) + " deg of roll, " + Num(Most.MostPitch, 1) + " of pitch, " + Num(Most.MostHeave, 2) +
-					" m of heave; worst at " + Worst + "\n";
-				for (int K = 0; K < 3; ++K) Measured[K][F] = Share[K];
-				const Green& Cap = GreenMost[Which];
-				const double Caps[3] = { Cap.Bow[F], Cap.Waist[F], Cap.Stern[F] };
-				const char* Names[3] = { "bow", "waist", "stern" };
-				for (int K = 0; K < 3; ++K)
+				if (D.bBoat)
 				{
-					++Rows;
-					if (Share[K] > Caps[K] + 1e-12)
+					std::string Blown;
+					const Run Up = Worst(D, S, Force, 0.0, false, Blown);
+					Report += "      her tanks blown (forced up, or striking: at her model's waterline): " + Shares(Up) + "\n";
+				}
+				if (bDestroyer)
+				{
+					std::string Ref;
+					const Run Hull = Worst(D, S, Force, D.Trim, true, Ref);
+					Report += "      the hull reference (her own heave and pitch at 5.75 s, damping 0.25 [EST]; not drawn): " + Shares(Hull) + "\n";
+					if (F == 2)
 					{
-						Report += "    OVER the row's " + std::string(Names[K]) + " cap " + Num(100 * Caps[K], 2) + "%\n";
-						bQuietBelow = false;
+						bHullBow = bHullBow && Hull.Bow > 0.0;
+						bHullWetter = bHullWetter && Hull.Bow > Most.Bow;
+						HullBows += std::string(D.Name) + " " + Num(100 * Hull.Bow, 2) + "% against the look's " + Num(100 * Most.Bow, 2) + "%; ";
 					}
 				}
 			}
 			{
-				// (the row as FleetRideGale::GreenMost would pin it: each measured share times 1.25 and 0.005 more)
 				char Row[240];
-				std::snprintf(Row, sizeof(Row), "\t\t{ { %.4f, %.4f, %.4f }, { %.4f, %.4f, %.4f }, { %.4f, %.4f, %.4f } }, // %s\n",
-					1.25 * Measured[0][0] + 0.005, 1.25 * Measured[0][1] + 0.005, 1.25 * Measured[0][2] + 0.005, 1.25 * Measured[1][0] + 0.005,
-					1.25 * Measured[1][1] + 0.005, 1.25 * Measured[1][2] + 0.005, 1.25 * Measured[2][0] + 0.005, 1.25 * Measured[2][1] + 0.005,
-					1.25 * Measured[2][2] + 0.005, D.Name);
-				Made += Row;
+				std::snprintf(Row, sizeof(Row), "\t\t{ { %.4f, %.4f, %.4f }, { %.4f, %.4f, %.4f }, { %.4f, %.4f, %.4f } }, // %s\n", Measured[0][0], Measured[0][1],
+					Measured[0][2], Measured[1][0], Measured[1][1], Measured[1][2], Measured[2][0], Measured[2][1], Measured[2][2], D.Name);
+				MadeMost += Row;
 			}
-			// Below Beaufort 7 her deck edge stays dry (step 5's own limit, which the gale's rows take over from)
-			const Sea Six = GaleSea(12.3, 4242, false);
-			const Run Dry = Freeboard(D, Six, 6.0, Pi / 2.0, D.Speed);
-			if (Dry.Waist > 0.0 || Dry.Stern > 0.0) bQuietBelow = false;
-			Report += "  B6 (12.3 m/s, Hs " + Num(Six.Hs, 2) + " m, the show's own sea at its cap, beam on): her waist " + Num(100 * Dry.Waist, 2) + "%, her stern " +
-				Num(100 * Dry.Stern, 2) + "%, her bow " + Num(100 * Dry.Bow, 2) + "%\n";
+			// Below Beaufort 7: at the show's cap, 13.8 m/s, and at 12.3 m/s (Beaufort 6), the show's own sea, the one drawn there
+			for (const double U : { Raised, 12.3 })
+			{
+				const Sea S = GaleSea(U, 4242, true); // (GaleFetchOf gives no fetch at or under the cap: the show's sea, fully raised)
+				std::string Where;
+				const Run Most = Worst(D, S, ShowForce(U), D.Trim, false, Where);
+				Report += "  " + std::string(U == Raised ? "at the cap" : "B6") + " (" + Num(U, 1) + " m/s, Hs " + Num(S.Hs, 2) + " m, Tp " + Num(S.Tp, 1) + " s): " +
+					Shares(Most) + "; wettest at " + Where + "\n";
+				if (bDestroyer && (Most.Bow > 0.0 || Most.Waist > 0.0 || Most.Stern > 0.0))
+				{
+					bDryBelow = false;
+					WetBelow += std::string(D.Name) + " at " + Num(U, 1) + " m/s; ";
+				}
+				if (U == Raised)
+				{
+					const GreenCap& Want = GreenBelow[Which];
+					Pin(std::string(D.Name) + " bow at the cap", Most.Bow, Want.Bow);
+					Pin(std::string(D.Name) + " waist at the cap", Most.Waist, Want.Waist);
+					Pin(std::string(D.Name) + " stern at the cap", Most.Stern, Want.Stern);
+					char Row[160];
+					std::snprintf(Row, sizeof(Row), "\t\t{ %.4f, %.4f, %.4f }, // %s\n", Most.Bow, Most.Waist, Most.Stern, D.Name);
+					MadeBelow += Row;
+				}
+			}
 		}
-		for (int F = 0; F < Forces; ++F) bSmallWetter = bSmallWetter && SmallShare[F] >= BigShare[F] - 0.05;
-		Check("freeboard: every deck's green water keeps to FleetRideGale::GreenMost, the row it is held to at Beaufort 7, 8 and 9 (" + std::to_string(Rows) +
-				  " rows: 9 classes x 3 forces x 3 decks, the most of 4 headings, 2 speeds and 2 seas)",
-			bQuietBelow, "written to " + Out + "/gale_freeboard.txt");
-		Check("freeboard: more green water as the gale rises, and below Beaufort 7 her deck edge and quarterdeck stay dry (step 5's own limit, which the gale's rows "
-			  "take over from)",
-			bGrows, bGrows ? "every class" : "a class got drier, or the ride passed its soft limit");
-		Check("freeboard: look heave keeps to 0.5 Hs in the gale too (step 5's limit; the gale's rows give heave the same soft limit as roll and pitch, since the "
-			  "trains' crests sum to about 0.8 Hs at gale winds)",
-			WorstOver <= 1.0, WorstOver <= 1.0 ? "every run of every class" : WorstWhere + " by " + Num(WorstOver, 2) + "x");
-		Check("freeboard: a low-sided destroyer ships more green water than a drier one of the same length (the USA model's 4.02 m weather deck against the 3.42 m one)",
-			bSmallWetter, "destroyer " + Num(100 * SmallShare[2], 1) + "% against " + Num(100 * BigShare[2], 1) + "% at Beaufort 9 (the three decks summed)");
+		Check("freeboard: every deck's green water is FleetRideGale's pin, as measured (GreenMost at Beaufort 7, 8 and 9, and GreenBelow at the 13.8 m/s cap: " +
+				  std::to_string(Pins) + " shares, each within 0.003 and a twentieth of its pin, either way)",
+			Moved.empty(), Moved.empty() ? "written to " + Out + "/gale_freeboard.txt" : Moved);
+		Check("freeboard: more green water as the gale rises (at Beaufort 8 and 9 a ship's every deck, and a boat's three summed, at least the force before's, "
+			  "less 0.005; a boat's casing awash is under water near half the time from Beaufort 6, so deck by deck it no longer grows)",
+			bGrows,
+			bGrows ? "every class and deck" : "drier at " + Drier);
+		Check("freeboard: below Beaufort 7 (at the show's 13.8 m/s cap and at 12.3 m/s, at every heading and speed) every destroyer's forecastle, weather deck and "
+			  "quarterdeck stay dry (step 5's own check, as amended for destroyers and bigger); a boat's casing and bow and a corvette's waist wash there, and are "
+			  "pinned as measured",
+			bDryBelow, bDryBelow ? "the four destroyers" : "wet: " + WetBelow);
+		Check("freeboard: heave is not limited (step 5): her heave's rms over an hour is what her transfer function gives at her encounter frequencies (step 5's own "
+			  "check, as amended), within 2% over every run together and 15% in each, no more than one run in twenty over 5% (two trains met at nearly one "
+			  "frequency need not beat through in an hour), where she meets each of her trains at least ten times in the hour",
+			std::fabs(std::sqrt(SumHour / std::max(SumTf, 1e-12)) - 1.0) <= 0.02 && WorstTf <= 0.15 && TfOver5 * 20 <= TfRuns && TfRuns > 10 * TfSlow,
+			std::to_string(TfRuns) + " runs (" + std::to_string(TfSlow) + " left out, keeping pace with a train), all together " +
+				Num(100 * (std::sqrt(SumHour / std::max(SumTf, 1e-12)) - 1.0), 2) + "%, " + std::to_string(TfOver5) + " runs over 5%, worst " + Num(100 * WorstTf, 1) + "% (" + TfWhere + "); against the water's rms at her middle in the gale, " + Num(LeastRatio, 2) + " (" + RatioLeast + ") to " +
+				Num(MostRatio, 2) + " (" + RatioMost + "): a hull heaves less than the water where she meets the waves fast or they are short against her");
+		Check("freeboard: a low-sided destroyer ships more green water than a drier one of her length (the 3.42 m weather deck against the USA model's 4.02 m) at "
+			  "Beaufort 8 and 9",
+			SmallShare[1] > BigShare[1] && SmallShare[2] > BigShare[2],
+			"destroyer " + Num(100 * SmallShare[1], 2) + "% and " + Num(100 * SmallShare[2], 2) + "% against " + Num(100 * BigShare[1], 2) + "% and " +
+				Num(100 * BigShare[2], 2) + "% (the three decks summed)");
+		Check("freeboard: the look's dry forecastle is its filter's, not the sea's: with a hull's own heave and pitch (5.75 s, damping 0.25 [EST]) in place of the "
+			  "look's low-pass, every destroyer's forecastle ships green water at Beaufort 9, as real destroyers did, and more than the look's",
+			bHullBow && bHullWetter, HullBows);
 		std::ofstream File(Out + "/gale_freeboard.txt");
 		File << Report;
-		// (the rows as FleetRideGale::GreenMost holds them, each measured share with its margin: GALE_ROWS=1 prints them,
-		// so a change in the sea or the ride is re-pinned by hand, in the same commit as the change)
+		// (the rows as FleetRideGale::GreenMost and GreenBelow hold them, as measured: GALE_ROWS=1 writes them, so a change in
+		// the sea or the ride is re-pinned by hand, in the same commit as the change)
 		if (const char* bRows = std::getenv("GALE_ROWS"); bRows && *bRows == '1')
 		{
-			std::ofstream Out2(Out + "/gale_rows.inc");
-			Out2 << Made;
+			std::ofstream Rows(Out + "/gale_rows.inc");
+			Rows << "GreenMost:\n" << MadeMost << "GreenBelow:\n" << MadeBelow;
 		}
 		Note("the freeboard report is in " + Out + "/gale_freeboard.txt");
 	}
