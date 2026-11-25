@@ -8,10 +8,11 @@ import stage from '../data/campaign/stage.json';
 import { checkCollapse, collapseScore, createGame, homeOf } from '../src/campaign/game';
 import { setFog } from '../src/campaign/intel';
 import {
-  ATOM, aiAtom, aiStrikePick, armStrike, armedAt, atomBill, atomMonth, atomOn, atomPress, atomRaidWorth, atomSabotage, atomView, atomWanted, atomWorn,
-  beginPlants, carriersFor, drawAt, monthsLeft, pausePlants, plantsAt, sabotageWeight, safestSite, seesPlants, setAtom, siteChoices, strikeFlown,
+  ATOM, aiAtom, aiStrikePick, armStrike, armedAt, atomBill, atomFallen, atomMonth, atomOn, atomPress, atomRaidWorth, atomSabotage, atomView, atomWanted, atomWorn,
+  beginPlants, carriersFor, chosenSite, drawAt, monthsLeft, pausePlants, plantsAt, sabotageWeight, safestSite, seesPlants, setAtom, siteChoices, strikeFlown,
   strikeBar, strikeTargets, strikeWords, whyNotPlants, whyNotStrike,
 } from '../src/campaign/atom';
+import { dayOrNight } from '../src/campaign/airwar';
 import { openDamage, damageOf } from '../src/campaign/citydamage';
 import { income, upkeep } from '../src/campaign/economy';
 import { setStop } from '../src/campaign/history';
@@ -426,7 +427,7 @@ describe('saves', () => {
 
 describe('through the bridge', () => {
   type Call = (...a: unknown[]) => unknown;
-  type PageLike = { title: string; headline: string; top: { label: string; act: string; ok: boolean }[]; sections: { heading: string; text: string; rows: { title: string; buttons: { label: string; act: string; ok: boolean }[] }[] }[] };
+  type PageLike = { title: string; headline: string; note?: string; top: { label: string; act: string; ok: boolean }[]; sections: { heading: string; text: string; rows: { title: string; lines?: string[]; buttons: { label: string; act: string; ok: boolean }[] }[] }[] };
   it('the room is listed only with the switch on; the plants are begun, a bomb is armed and the raid card opens', () => {
     const TC = (globalThis as unknown as { TC: Record<string, Call> }).TC;
     const off = seat('UK', 4, false);
@@ -478,5 +479,122 @@ describe('through the bridge', () => {
     expect((TC.page('atom') as PageLike).headline).toBe('An atomic bomb is ready');
     expect((TC.act('atomrule:off') as { ok: boolean }).ok).toBe(true);
     expect((TC.view() as { atomBomb: boolean }).atomBomb).toBe(false);
+  });
+});
+
+describe('the review\'s mends (25 November)', () => {
+  function armedUK(): Game {
+    const g = seat('UK', 4, true);
+    openDamage(g, true);
+    allRows(g, 'UK');
+    grantTech(g, 'UK', 'mediumbombers');
+    grantTech(g, 'UK', 'heavybombers');
+    const s = (g.nations.UK.atom ??= {});
+    s.plants = ATOM.plants.bill; s.done = g.turn; s.ready = g.turn; s.bombs = 1; s.site = safestSite(g, 'UK')!;
+    return g;
+  }
+
+  it('finished plants are lost with their ground too: the captor takes the papers, and the bombs already made stay in hand', () => {
+    const g = seat('GER', 4, true);
+    allRows(g, 'GER');
+    orderAtomPlants(g);
+    const s = g.nations.GER.atom!, site = g.regions[s.site!];
+    s.plants = ATOM.plants.bill; s.done = g.turn - 1; s.ready = g.turn - 1; s.bombs = 1; s.next = 1;
+    site.ctrl = 'SOV';
+    atomMonth(g, 'GER');
+    expect(s.plants).toBeUndefined();
+    expect(s.done).toBeUndefined();
+    expect(s.site).toBeUndefined();
+    expect(s.bombs).toBe(1);
+    expect(hasTech(g, 'SOV', ATOM.rows.chain)).toBe(true);
+    // (no plants, no more bombs)
+    s.next = ATOM.plants.every + 5;
+    atomMonth(g, 'GER');
+    expect(s.bombs).toBe(1);
+  });
+
+  it('a country that gives in loses its project: the plants go to the victor with their papers, and the bombs and any strike with it', () => {
+    const g = seat('UK', 4, true);
+    allRows(g, 'GER');
+    expect(beginPlants(g, 'GER')).toBe(true);
+    const s = g.nations.GER.atom!;
+    s.plants = ATOM.plants.bill; s.done = g.turn; s.ready = g.turn; s.bombs = 2; s.armed = [g.turn, R(g, 'London')];
+    atomFallen(g, 'GER', 'UK');
+    for (const k of ['plants', 'site', 'done', 'bombs', 'armed', 'next', 'paused', 'stopMaking'] as const) expect(s[k], k).toBeUndefined();
+    expect(hasTech(g, 'UK', ATOM.rows.chain)).toBe(true);
+    expect(g.nations.UK.atom?.papers).toContain('GER');
+    expect(armedAt(g, 'GER')).toBeNull();
+    // Off, it does nothing.
+    const h = seat('UK', 4, false);
+    const before = saveGame(h);
+    atomFallen(h, 'GER', 'UK');
+    expect(saveGame(h)).toBe(before);
+  });
+
+  it('switched off, the atomic rows leave every staff\'s work at once', () => {
+    const g = seat('GER', 4, true);
+    g.nations.UK.tech!.work.push({ id: ATOM.rows.physics, left: 5, of: 8 });
+    g.nations.GER.tech!.work.push({ id: ATOM.rows.physics, left: 5, of: 8 });
+    setAtom(g, false);
+    for (const n of Object.values(g.nations)) expect((n.tech?.work ?? []).some((w) => ROWS.includes(w.id)), n.id).toBe(false);
+  });
+
+  it('a raid card that carries the bomb lists no hits and no stop note, and its chance is that the bomber reaches the city', () => {
+    const g = armedUK();
+    const ham = R(g, 'Hamburg');
+    expect(orderAtomStrike(g, ham)).toBe(true);
+    const ids = carriersFor(g, 'UK', ham).map((f) => f.id);
+    const dn = dayOrNight(g, 'bomb', ham, ids, 'UK')!;
+    let flown = 0;
+    for (const w of [dn.day, dn.night]) {
+      if (w.why) continue;
+      flown++;
+      expect(w.hits).toEqual([]);
+      expect(w.stopNote).toBe('');
+      expect(w.figures).toEqual({});
+      expect(w.success).toBeCloseTo(Math.max(0, Math.min(1, 1 - w.bomberLoss)), 9);
+      expect(w.prose).toMatch(/^This raid carries the atomic bomb\./);
+    }
+    expect(flown).toBeGreaterThan(0);
+    // Not armed, the same raid reads as any raid.
+    g.nations.UK.atom!.armed = undefined;
+    const plain = dayOrNight(g, 'bomb', ham, ids, 'UK')!;
+    expect(plain.day.hits.length + plain.night.hits.length).toBeGreaterThan(0);
+  });
+
+  it('a chosen site that no longer fits gives way to the safest', () => {
+    const g = seat('GER', 4, true);
+    allRows(g, 'GER');
+    const sites = siteChoices(g, 'GER');
+    const pick = sites[sites.length - 1].region;
+    (g.nations.GER.atom ??= {}).site = pick;
+    expect(chosenSite(g, 'GER')).toBe(pick);
+    g.regions[pick].ctrl = 'FRA';
+    expect(chosenSite(g, 'GER')).toBe(safestSite(g, 'GER'));
+    expect(whyNotPlants(g, 'GER')).toBeNull();
+    expect(beginPlants(g, 'GER')).toBe(true);
+    expect(g.nations.GER.atom!.site).toBe(safestSite(g, 'GER'));
+  });
+
+  it('the page tells plants that stand idle from plants that draw, and from plants started after the month\'s draw', () => {
+    const TC = (globalThis as unknown as { TC: Record<string, (...a: unknown[]) => unknown> }).TC;
+    const g = seat('UK', 4, true);
+    allRows(g, 'UK');
+    expect(orderAtomPlants(g)).toBe(true);
+    let v = atomView(g, 'UK')!;
+    expect(v.drawn).toBe(false);
+    expect(v.idle).toBe(false);
+    expect(v.draw).toBeGreaterThan(0);
+    const text = (h: Game): string => { TC.load(saveGame(h)); return (TC.page('atom') as { sections: { heading: string; text: string }[] }).sections.find((x) => x.heading === 'THE ATOMIC PLANTS')!.text; };
+    expect(text(g)).toMatch(/^From next month they take /);
+    g.nations.UK.atom!.paid = [g.turn, v.draw];
+    v = atomView(g, 'UK')!;
+    expect(v.drawn).toBe(true);
+    expect(text(g)).toMatch(/^This month they take /);
+    delete g.nations.UK.atom!.paid;
+    g.flags['atom:idle:UK'] = g.turn;
+    v = atomView(g, 'UK')!;
+    expect(v.idle).toBe(true);
+    expect(text(g)).toMatch(/^They stand idle: the treasury is in debt\. They start again once it is out of debt\./);
   });
 });

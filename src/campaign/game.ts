@@ -67,7 +67,7 @@ import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse, screenWeeks, weeksWords } from './rearguard';
 import { clientWar, tiedPair } from './far';
-import { atomMonth, atomPress } from './atom';
+import { atomFallen, atomMonth, atomPress } from './atom';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -3658,6 +3658,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
     }
   }
   handedOver(g, was);
+  // (Release 2, atom.ts) Its atomic project ends with it, and whoever holds the plants' ground takes the papers.
+  atomFallen(g, nat, by);
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
   // The grand campaign: this fall may have put another country's capital into the hands of that country's friends.

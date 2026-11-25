@@ -5671,7 +5671,7 @@ function atomPage(s: Game): Page | null {
   } else if (!v.done) {
     sections.push({
       heading: 'THE ATOMIC PLANTS',
-      text: `${v.paused ? 'Stopped by your order: they draw nothing, and their work stands.' : `This month they take ${moneyWords(v.draw)} of your earnings.`} ${v.months === null ? "At today's earnings they would never be finished." : v.months > 60 ? "At this pace and today's earnings they need more than five years more." : `At this pace and today's earnings they need about ${v.months <= 1 ? 'a month' : `${v.months} months`} more.`} Bombing the town and sabotage there set them back; if the province is lost, so are they.`,
+      text: `${v.paused ? 'Stopped by your order: they draw nothing, and their work stands.' : v.idle ? 'They stand idle: the treasury is in debt. They start again once it is out of debt.' : v.drawn ? `This month they take ${moneyWords(v.draw)} of your earnings.` : `From next month they take ${moneyWords(v.draw)} of your earnings.`} ${v.months === null ? "At today's earnings they would never be finished." : v.months > 60 ? "At this pace and today's earnings they need more than five years more." : `At this pace and today's earnings they need about ${v.months <= 1 ? 'a month' : `${v.months} months`} more.`} Bombing the town and sabotage there set them back; if the province is lost, so are they.`,
       rows: [{ nat, title: `AT ${where(v.site).toUpperCase()}  \u00B7  ${pct(v.plants / v.bill)} DONE`, lines: [`Pace: ${PACE_WORD[v.pace].toLowerCase()}.`], buttons: [], meter: Math.min(1, v.plants / v.bill) }],
     });
     top.push(...paceButtons());
@@ -6777,6 +6777,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     // (The UI director under ruling 134(f): BACK on the raid card of a bomb raid, the safe answer, which Enter and Esc
     // give. The bomb stays in hand and nothing is set aside, so no other raid on that city can carry it by surprise.)
     if (part[1] === 'back') { if (nat) cancelAtomStrike(s); ok = true; note = 'The bomb stays in hand.'; }
+    // (THE ATOMIC PROJECT opened by the 3D page, which does not ask for the page by TC.page: the chip has done its work.)
+    else if (part[1] === 'seen') { const a = nat ? s.nations[nat]?.atom : undefined; if (a && (a.bombs ?? 0) > 0) a.seen = s.turn; ok = true; note = ''; return { ok, note, fly, flies, open: '', view: view() }; }
     else if (!nat || !humanUp(s) || onEve(s)) { ok = false; note = 'It is not your month.'; }
     else if (part[1] === 'begin') { const why = whyNotAtomPlants(s); ok = !why && orderAtomPlants(s); note = ok ? '' : why ?? 'The plants cannot be started now.'; }
     else if (part[1] === 'site') { ok = orderAtomSite(s, r); note = ok ? `The plants will stand at ${townName(s.regions[r])}.` : 'The plants cannot stand there.'; }

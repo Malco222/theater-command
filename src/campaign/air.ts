@@ -2235,6 +2235,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // The air war: output is weighed by the province's own factories (ruling 227), so one with no industry has none to
     // stop, and the raid is judged on its railway alone.
     value += outputWorth(g, r, cut);
+    // (The atomic project, release 2: what the forecast weighed for an enemy's unfinished atomic plants there, where the
+    // raiders' side had seen them, is booked as the raid's worth too, so that the card and the result describe one raid.)
+    value += atomRaidWorth(g, nat, r, cut);
     // (No line where no bombs fell.)
     result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
@@ -3168,6 +3171,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   const foeGuns = gunsDown(g, a, m === 'night', bmrLoss, m, target);
   const foeLoss = C.fighters * I * clash * 2 * share + foeGuns;
   let cut = 0, nation = 0, value = 0;
+  let atomReach: number | null = null;
   let rail: number | undefined, ruin: number | undefined;
   let ships: Ships | undefined, hits: number | undefined;
   let lumps: [number, number][] | undefined, expected = 0;
@@ -3184,6 +3188,10 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     field = planFieldHit(g, target, 'raid', fieldBlow(g, a, nat, target, through, Math.max(0, a.E - ftrLoss)));
     cut = field?.closed ? 1 : 0;
     value = field?.worth ?? 0;
+  } else if ((m === 'bomb' || m === 'night') && armedAt(g, nat) === target) {
+    // (The atomic project, release 2, atom.ts) A raid that carries the bomb does nothing else to the city (priced once):
+    // its one chance is that the bomber with the bomb reaches the release, as often as the raid's bombers do (fly).
+    atomReach = Math.max(0, Math.min(1, 1 - a.bomberLoss));
   } else if (m === 'bomb' || m === 'night') {
     const r = g.regions[target];
     const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
@@ -3265,6 +3273,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     }
     value = expected;
   }
+  if (atomReach !== null) success = atomReach;
   const fc: AirForecast = { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
   if (city !== undefined) fc.city = city;
   if (field) fc.field = { shut: field.closed, levels: field.levels, ground: field.ground, grounded: field.grounded, room: field.room, built: field.built };

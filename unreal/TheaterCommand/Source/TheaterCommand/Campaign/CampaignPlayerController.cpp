@@ -1868,6 +1868,13 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	if (bPageOpen && Id == TEXT("atom"))
+	{
+		// (Release 2, atom.ts; the UI director's marks.) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END
+		// THE MONTH has done its work, and the view is taken again at once so that it goes now, not at the next order.
+		FString SeenNote;
+		Session->Act(TEXT("atom:seen"), SelectedRegion, SeenNote);
+	}
 	if (bPageOpen && Id == TEXT("airfield"))
 	{
 		AdviserSaw(3);
@@ -5860,6 +5867,7 @@ void ACampaignPlayerController::Escape()
 	{
 		if (Page.Card.bValid && Page.Card.bBomb)
 		{
+			AtomBackAt = FPlatformTime::Seconds();
 			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
 		}
 		else
@@ -12297,7 +12305,14 @@ void ACampaignPlayerController::EndMonth()
 	// Enter is BACK, the lit answer: the bomb is kept, and the raid takes a click. (END THE MONTH clicked goes on as ever.)
 	if (bEnterByKey && !bScripted && bPageOpen && Page.Card.bValid && Page.Card.bBomb)
 	{
+		AtomBackAt = FPlatformTime::Seconds();
 		PressPage(Page.Card.Back.Act);
+		return;
+	}
+	// (BACK opens THE ATOMIC PROJECT again: a held or doubled Enter takes no key for its first half second, so that it
+	// cannot end the month the bomb was kept in before he has seen the page.)
+	if (bEnterByKey && !bScripted && FPlatformTime::Seconds() - AtomBackAt < 0.5)
+	{
 		return;
 	}
 	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never

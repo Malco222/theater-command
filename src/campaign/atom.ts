@@ -61,6 +61,8 @@ export const atomOn = (g: Game): boolean => g.flags.open === 1 && g.flags.atom =
 export function setAtom(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
   if (on) g.flags.atom = 1; else delete g.flags.atom;
+  // (Off: the rows leave the tree at once, and a team at work on one is free for other work this same month.)
+  if (!on) for (const n of Object.values(g.nations)) if (n.tech?.work.some((w) => isAtomRow(techById(w.id)))) n.tech.work = n.tech.work.filter((w) => !isAtomRow(techById(w.id)));
   return true;
 }
 
@@ -98,6 +100,12 @@ export function siteChoices(g: Game, nat: string): { region: number; hops: numbe
 
 /** The staff's choice of site: the safest home province with industry, or null if there is none. */
 export const safestSite = (g: Game, nat: string): number | null => siteChoices(g, nat)[0]?.region ?? null;
+
+/** Where the plants will stand: the site chosen, while it still fits, else the staff's choice (the safest). */
+export function chosenSite(g: Game, nat: string): number | null {
+  const s = g.nations[nat]?.atom?.site;
+  return s !== undefined && siteFits(g, nat, g.regions[s]) ? s : safestSite(g, nat);
+}
 
 /** The nation whose plants stand in this province and are not yet finished, or null. */
 export function plantsAt(g: Game, r: Region): string | null {
@@ -145,7 +153,7 @@ export function whyNotPlants(g: Game, nat: string, site?: number): string | null
   if (!n?.alive) return 'The nation is out of the war.';
   if (n.atom?.plants !== undefined) return 'The plants are already started.';
   if (!hasTech(g, nat, ATOM.rows.chain)) return 'Needs Chain reaction first.';
-  const at = site ?? n.atom?.site ?? safestSite(g, nat);
+  const at = site ?? chosenSite(g, nat);
   if (at === null || at === undefined || !siteFits(g, nat, g.regions[at])) return 'There is no province of your own at home with industry to build them in.';
   return null;
 }
@@ -154,7 +162,7 @@ export function whyNotPlants(g: Game, nat: string, site?: number): string | null
 export function beginPlants(g: Game, nat: string, site?: number, pace?: AtomPace): boolean {
   if (whyNotPlants(g, nat, site) !== null) return false;
   const s = stateOf(g.nations[nat]);
-  s.site = site ?? s.site ?? safestSite(g, nat)!;
+  s.site = site ?? chosenSite(g, nat)!;
   s.plants = 0;
   if (pace) s.pace = pace;
   if (nat === g.human) headline(g, 'info', `Work has started on the atomic plants ${inAt(g.regions[s.site])}. They take ${pct(shareOf(s))} of the nation's earnings every month and, at today's earnings, ${finishWords(monthsLeft(g, nat))}.`, nat, s.site);
@@ -206,16 +214,9 @@ export function atomMonth(g: Game, nat: string): void {
   if (onBook(g, nat)) { bookMonth(g, n); if (!n.atom) return; }
   const s = n.atom;
   if (!s) return;
-  // A site lost: the plants stand on the ground, so they go with it, and the captor takes the papers.
-  if (s.plants !== undefined && s.done === undefined && s.site !== undefined && !allied(g, nat, g.regions[s.site].ctrl)) {
-    const r = g.regions[s.site], by = r.ctrl;
-    // (Told at the player's sight, 133(a): his own side's plants, plants he knew of, or ground his side has taken. The
-    // captor's own line, where the papers give him rows he lacked, in place of the other.)
-    const told = !!g.human && (seesPlants(g, g.human, nat) || allied(g, g.human, by));
-    const gave = papersTo(g, by, nat);
-    if (by === g.human && gave.length) headline(g, 'event', `You have taken the ${n.adj} atomic plants ${inAt(r)}. Their papers give you ${gave.map((id) => techById(id)?.name ?? id).join(' and ')}.`, by, r.id);
-    else if (told) headline(g, 'event', `${upFirst(theName(n))} has lost its atomic plants ${inAt(r)} to ${theName(g.nations[by])}. All their work is lost with the province.`, nat, r.id);
-    delete s.plants; delete s.site; delete s.paused;
+  // A site lost: the plants stand on the ground, so they go with it, finished or not, and the captor takes the papers.
+  if (s.plants !== undefined && s.site !== undefined && !allied(g, nat, g.regions[s.site].ctrl)) {
+    plantsLost(g, n, g.regions[s.site], g.regions[s.site].ctrl);
     return;
   }
   // (On the book's clock the plants are the record's; once done, the bombs come as anyone's.)
@@ -235,6 +236,36 @@ export function atomMonth(g: Game, nat: string): void {
     }
   }
   bombMonth(g, n);
+}
+
+/**
+ * The plants lost with their ground, finished or not: the papers to the one who holds it now, told at the player's
+ * sight (133(a): his own side's plants, plants he knew of, or ground his side has taken; the captor's own line, where
+ * the papers give him rows he lacked, in place of the other). Bombs already made stay in hand.
+ */
+function plantsLost(g: Game, n: Nation, r: Region, by: string): void {
+  const s = n.atom!;
+  const told = !!g.human && (seesPlants(g, g.human, n.id) || allied(g, g.human, by));
+  const gave = papersTo(g, by, n.id);
+  if (by === g.human && gave.length) headline(g, 'event', `You have taken the ${n.adj} atomic plants ${inAt(r)}. Their papers give you ${gave.map((id) => techById(id)?.name ?? id).join(' and ')}.`, by, r.id);
+  else if (told) headline(g, 'event', `${upFirst(theName(n))} has lost its atomic plants ${inAt(r)} to ${theName(g.nations[by])}. All their work is lost with the province.`, n.id, r.id);
+  delete s.plants; delete s.site; delete s.paused; delete s.done; delete s.next;
+}
+
+/**
+ * A country that falls loses its project with it (game.ts capitulate; the plan: a fallen country's project ends): the
+ * one who holds the plants' ground takes the papers, and the plants, the bombs in hand and a strike set aside are gone.
+ * A country freed later starts again from its research.
+ */
+export function atomFallen(g: Game, nat: string, by: string): void {
+  if (!atomOn(g)) return;
+  const n = g.nations[nat], s = n?.atom;
+  if (!s) return;
+  if (s.plants !== undefined && s.site !== undefined) {
+    const r = g.regions[s.site];
+    plantsLost(g, n, r, r.ctrl !== nat && !allied(g, nat, r.ctrl) ? r.ctrl : by);
+  }
+  delete s.plants; delete s.site; delete s.paused; delete s.done; delete s.next; delete s.bombs; delete s.armed; delete s.stopMaking;
 }
 
 /** The bombs: the first once the plants and the weapon are done, then one more every few months of making, never more than a couple in hand. */
@@ -574,6 +605,10 @@ export interface AtomView {
   sites: { region: number; hops: number }[];
   pace: AtomPace;
   paused: boolean;
+  /** Idle this month: the treasury was in debt as the month opened, and the plants drew nothing. */
+  idle: boolean;
+  /** Drawn this month already (as the month opened); false the month they are started, when the draw is next month's. */
+  drawn: boolean;
   draw: number;
   months: number | null;
   done: boolean;
@@ -597,8 +632,9 @@ export function atomView(g: Game, nat: string): AtomView | null {
     .map((x) => ({ nat: x.id, plants: x.atom!.plants ?? null, done: x.atom!.done !== undefined, bombs: x.atom!.bombs ?? 0, used: x.atom!.used ?? 0 }));
   return {
     on: true, rows, canPlants: whyNotPlants(g, nat), plants: s?.plants ?? null, bill: ATOM.plants.bill,
-    site: s?.site ?? safestSite(g, nat), sites: s?.plants === undefined ? siteChoices(g, nat).slice(0, 6) : [],
-    pace: paceOf(s), paused: !!s?.paused, draw: atomBill(g, nat) || (s?.plants !== undefined && s.done === undefined && !s.paused ? drawAt(g, nat, paceOf(s)) : 0),
+    site: s?.plants !== undefined ? s.site ?? null : chosenSite(g, nat), sites: s?.plants === undefined ? siteChoices(g, nat).slice(0, 6) : [],
+    pace: paceOf(s), paused: !!s?.paused, idle: s?.plants !== undefined && s.done === undefined && !s.paused && g.flags[`atom:idle:${nat}`] === g.turn, drawn: atomBill(g, nat) > 0,
+    draw: atomBill(g, nat) || (s?.plants !== undefined && s.done === undefined && !s.paused ? drawAt(g, nat, paceOf(s)) : 0),
     months: s?.done === undefined ? monthsLeft(g, nat) : 0, done: s?.done !== undefined, bombs: s?.bombs ?? 0, making: !s?.stopMaking, next: s?.next ?? 0,
     armed: armedAt(g, nat),
     targets: (s?.bombs ?? 0) > 0 ? strikeTargets(g, nat).map((region) => ({ region, why: strikeBar(g, nat, region) })) : [],
