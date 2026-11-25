@@ -3083,21 +3083,26 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const strafers: number[] = [];
     let fired = 0;
     if (rule) a.att.forEach((x, i) => {
+      // (The same-key rule, the design director 12:59Z question 4: the raid's own stream is thrown exactly as with the
+      // rule off, every group's ground-fire throw drawn and set aside, so no later throw of the raid moves; each group
+      // that goes down then throws its own ground fire on a stream keyed by its own id, so a group that no longer throws
+      // moves no one else's.)
+      if (!battle || staff) {
+        const k0 = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G.fire * luck() * (staff ? staff.rest.ftr : 1))));
+        if (k0) rng.roll(k0 * saved(false));
+      }
       const left = x.f.ftr * x.esc * x.crowd;
       if (!(x.ftr > 0 && canStrafe(g, x)) || left <= 0) return;
       strafers.push(x.f.id);
       if (battle && !staff) return;
-      const was = att[i].lostFtr;
-      if (!battle) down(x.f, att[i], left * G.fire * luck(), false);
-      else {
-        const k = Math.min(x.f.ftr, rng.roll(Math.max(0, left * G.fire * luck() * staff!.rest.ftr)));
-        if (k) {
-          const p = airPool(g, x.f.nat), back = rng.roll(k * saved(false));
-          x.f.ftr -= k; x.f.lost.ftr += k; att[i].lostFtr += k;
-          p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
-        }
+      const own = airRng(g, `${m}:${target}:${nat}${salt}:low:${x.f.id}`);
+      const k = Math.min(x.f.ftr, own.roll(Math.max(0, left * G.fire * own.range(1 - C.luck, 1 + C.luck) * (staff ? staff.rest.ftr : 1))));
+      if (k) {
+        const p = airPool(g, x.f.nat), back = own.roll(k * saved(false));
+        x.f.ftr -= k; x.f.lost.ftr += k; att[i].lostFtr += k;
+        p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
       }
-      fired += att[i].lostFtr - was;
+      fired += k;
     });
     else if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
     else if (staff) a.att.forEach((x, i) => {
@@ -4176,20 +4181,53 @@ export function canStrafe(g: Game, x: { f: AirFleet; d: number }): boolean {
 }
 
 /**
- * The card's strafers (the strafers' rule): of the groups with the reach to strafe, the fighters expected to be left
- * after the air fight, each group losing its share of the fighters the card expects lost there (air); and the ground
- * fire those draw (ground.fire on each). A group expected to have none left is not among them.
+ * The card's strafers (the strafers' rule): the exact expectation of what the staff's settled raid (fly(), no battle)
+ * charges, given the air fight the card itself expects (air: the escort's losses at even luck). The design director,
+ * 12:59Z question 4: "the card is the exact expectation of the settled raid; where a term is not linear in survivors,
+ * the card computes the expectation of the outcome, not the outcome at the expected count".
+ *
+ * The settled raid, group by group: the air fight takes k = min(F, roll(air x luck x share)) of the group's F fighters
+ * (share = its x.ftr over the raid's E; luck even between 1 - combat.luck and 1 + combat.luck, one throw for the raid);
+ * those left count (F - k) x esc x crowd; of those, a group with the reach to strafe pays ground.fire x its own luck
+ * (mean 1), and the rest weigh on the troops. A roll's mean is its argument and never passes the whole group, so
+ * E[k | luck] = min(F, air x luck x share), and over the luck that is the mean of a clipped line: not linear, which is
+ * where the card's old "even spread of losses, keep = 1 - air / E" went wrong (the clip at F, and losses counted on the
+ * whole group F against a share counted on F x esc x crowd). The ground fire and the weight are linear in what is left,
+ * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left.
  */
-export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number } {
-  const keep = a.E > 0 ? Math.max(0, 1 - air / a.E) : 0;
+export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number } {
+  const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, fire = AIRWAR.ground.fire;
   const ids: number[] = [];
-  let left = 0;
+  let left = 0, weight = 0;
   for (const x of a.att) {
-    if (!(x.ftr > 0) || !canStrafe(g, x) || x.ftr * keep <= 0) continue;
-    ids.push(x.f.id);
-    left += x.ftr * keep;
+    if (!(x.ftr > 0) || !canStrafe(g, x)) continue;
+    const F = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air * (x.ftr / a.E) : 0;
+    // E[min(F, m u)] for u even on [lo, hi]; and the chance a fighter is left, P(roll(m u) < F).
+    const lost = m <= 0 ? 0 : clipMean(m, F, lo, hi);
+    const some = m <= 0 ? 1 : chanceBelow(m, F, lo, hi);
+    const l = c * Math.max(0, F - lost);
+    if (some > 0.5) ids.push(x.f.id);
+    left += l;
+    weight += l * (1 - c * fire);
   }
-  return { ids, left, fire: left * AIRWAR.ground.fire };
+  return { ids, left, fire: left * fire, weight };
+}
+
+/** The mean of min(F, m u) for u even on [lo, hi] (m > 0). */
+function clipMean(m: number, F: number, lo: number, hi: number): number {
+  if (m * hi <= F) return m * (lo + hi) / 2;
+  if (m * lo >= F) return F;
+  const u = F / m;
+  return ((m / 2) * (u * u - lo * lo) + F * (hi - u)) / (hi - lo);
+}
+
+/** The chance that roll(m u) < F for u even on [lo, hi] (m > 0, F whole): 1 below F - 1, F - y between, 0 from F. */
+function chanceBelow(m: number, F: number, lo: number, hi: number): number {
+  // P(roll(y) < F) = clamp(F - y, 0, 1) for whole F; integrate over y = m u, u even on [lo, hi].
+  const y0 = m * lo, y1 = m * hi;
+  if (y1 <= y0) return Math.max(0, Math.min(1, F - y0));
+  const prim = (y: number): number => (y <= F - 1 ? y : y >= F ? (F - 1) + 0.5 : (F - 1) + ((y - (F - 1)) - ((y - (F - 1)) ** 2) / 2));
+  return (prim(y1) - prim(y0)) / (y1 - y0);
 }
 
 /**
@@ -4395,8 +4433,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
       const s = strafersExpected(g, a, ftrLoss);
       ftrLoss += s.fire;
       fire = s.fire; strafers = s.ids;
-      cut = troopCut(r, foes, (through + Math.max(0, s.left - s.fire) * G.fighters) * troopWeight(g, nat));
-      strafeWatch.tell?.({ route: 'card', target, nat, strafers: s.ids, fire: s.fire, weight: Math.max(0, s.left - s.fire) });
+      cut = troopCut(r, foes, (through + s.weight * G.fighters) * troopWeight(g, nat));
+      strafeWatch.tell?.({ route: 'card', target, nat, strafers: s.ids, fire: s.fire, weight: s.weight });
     } else {
       const fire = a.E * G.fire;
       ftrLoss += fire;

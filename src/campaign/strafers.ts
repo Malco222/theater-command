@@ -12,34 +12,22 @@
 // that flew their passes. Each pays the ground fire (ground.fire) for each fighter that goes down, and counts on the
 // troops at ground.fighters.
 //
-// Behind lane (a)'s switch: on only where a raid on troops can be fought out (flyKinds(['ground']), TC_FLY=ground,
-// TC.airKinds(['ground'])) AND this rule's own key is turned (strafeRule(true), or TC_STRAFE=1 in the environment). Off
-// as shipped, and off with the lane's switch alone: the second key is there because lane (a)'s own test holds that the
-// staff's raid on troops books the same with the lane's switch on as off (tests/air-troops-r2.test.ts, "the staff's
-// raid on troops with no battle books the same with the switch on as off"), which this ruling changes; folding the key
-// into the lane's switch is the design director's to say. With either off nothing here is read and every raid is
-// priced, settled and fought as on d06286d4.
+// Behind lane (a)'s switch alone (the design director, 25 November 2026 12:59Z, question 1: "one switch"): on wherever a
+// raid on troops can be fought out (flyKinds(['ground']), TC_FLY=ground, TC.airKinds(['ground'])), off as shipped. With
+// it on, the staff's raid on troops books as before EXCEPT that the ground fire and the fighters' weight on the troops
+// fall only on the fighters left with the reach to strafe (tests/air-troops-r2.test.ts says so). With it off nothing here
+// is read and every raid is priced, settled and fought as on d06286d4.
 
 let flown = false;
-let turned = false;
 
 /** Lane (a)'s switch, as flyKinds (battle/air/ticket.ts) last set it: whether a raid on troops can be fought out. */
 export function groundFlown(on: boolean): void { flown = on; }
 
-/** The ruling's own key. Called with a value, it sets it; either way it answers whether the rule is in force. */
-export function strafeRule(on?: boolean): boolean {
-  if (on !== undefined) turned = on;
-  return strafeOn();
-}
-
-/** Whether the ruling is in force: lane (a)'s switch on for raids on troops, and the rule's own key turned. */
+/** Whether the ruling is in force: lane (a)'s switch on for raids on troops (the call, or TC_FLY=ground). */
 export function strafeOn(): boolean {
-  const G = globalThis as { TC_FLY?: unknown; TC_STRAFE?: unknown; process?: { env?: Record<string, string | undefined> } };
+  const G = globalThis as { TC_FLY?: unknown; process?: { env?: Record<string, string | undefined> } };
   const env = G.process?.env;
-  const fly = flown || String(G.TC_FLY ?? env?.TC_FLY ?? '').split(',').map((x) => x.trim()).includes('ground');
-  if (!fly) return false;
-  const key = String(G.TC_STRAFE ?? env?.TC_STRAFE ?? '').trim();
-  return turned || key === '1' || key === 'true';
+  return flown || String(G.TC_FLY ?? env?.TC_FLY ?? '').split(',').map((x) => x.trim()).includes('ground');
 }
 
 /**
