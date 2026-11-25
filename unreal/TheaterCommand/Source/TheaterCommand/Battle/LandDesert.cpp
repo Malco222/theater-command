@@ -977,6 +977,29 @@ namespace LandScape
 					if (!H.Free(X, Y, bBoulder ? 2.0 : 1.2)) continue;
 					H.Plant(KitOf(bBoulder ? KBoulder : KStones), X, Y, Yaw, bBoulder ? Big : Size, (bBoulder ? Big : Size) * Flat, Tint(1.0, 1.0, 1.0));
 				}
+				// The field's own wadi told by what grows and gathers along it (the art director, 25 Nov 15:11Z: "from 70 m the
+				// eye follows a line of bushes"; the wadi is under a metre deep, and a look does not change cover): camel thorn
+				// twice as thick within 3 m of its banks, a third bigger, broken now and then as scrub is, and dark stones along
+				// the banks' feet.
+				if (bLand)
+					for (double X = -B; X < W - B; X += 3.0)
+					{
+						double Off = 0.0, Half = 0.0, Ends = 0.0;
+						if (!FieldWadiAt(X, 0.0, Off, Half, Ends) || Ends < 0.5) continue;
+						const double Line = -Off;
+						for (int Side = -1; Side <= 1; Side += 2)
+						{
+							const double Pick = R.Next(), Out = R.Range(-2.5, 2.5), Jx = R.Range(-1.5, 1.5), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.7, 1.35), Tall = R.Range(0.75, 1.15), Grey = R.Range(0.92, 1.06);
+							const double Gap = Smooth(-0.45, -0.05, Noise(X / 55.0, 3.5 + Side, Seed ^ 0x7E));
+							const bool bThorn = Pick < 0.6 * Gap;
+							if (!bThorn && Pick >= 0.6 * Gap + 0.35) continue;
+							const double PX = X + Jx, PY = Line + Side * (bThorn ? Half + 0.5 + Out : Half - 1.5 + 0.4 * Out);
+							const Spot S = H.At(PX, PY);
+							if (S.Kind == KLane || S.Kind == KVillage || S.Kind == KYard || S.Kind == KWater || !H.Free(PX, PY, bThorn ? 0.8 : 1.0)) continue;
+							if (bThorn) H.Plant(KitOf(KThorn), PX, PY, Yaw, Size * 1.3, Size * 1.3 * Tall, Tint(Grey * ThornR, Grey, Grey * ThornB));
+							else H.Plant(KitOf(KStones), PX, PY, Yaw, Size, Size * Tall, Tint(0.62, 0.6, 0.58));
+						}
+					}
 				// Sangars of piled stone where the rules dig: some 20 m apart, their open backs to the field's middle.
 				{
 					const double Cx = 0.5 * H.Width(), Cy = 0.5 * H.Depth();
