@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 383767e7 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 88342311f 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -301,6 +301,8 @@
     winChance: false,
     _spread: "The field spread (release 2; rules-builder/release2/field-spread/form.md, ruled by the design director 24 November 2026 19:47Z, 'Go ahead with step 1'; src/campaign/spread.ts, data/campaign/spread.json): one draw per battle, keyed on the field ticket's own seed and attempt. It holds the fortune share the field already fights on and one break point per side, the share of its power a side will lose before it quits, drawn about a level that comes from the side's own units (organisation, morale, experience, the general), never from a nation's flag or the date. Its own step inside Units decide: it needs 'unitsDecide' too, and is never on with 'winChance' (setSpread refuses the pair). Bench-only through the form's steps 1-4: nothing reads this key, no grand start offers it, and only a measuring harness sets the flag (setSpread) or lays the draw on its own tickets (spreadKeys). At step 5, if the six bands pass, card and field switch together. Off: no ticket carries reckoning.spread, no die is thrown on the campaign's dice or the field's, and every war and every field is the one without it.",
     spread: false,
+    _trueReach: "True reach (audit item 41; the design director's ruling of 13:58Z, 'Withering garrisons' 1, and 14:26Z, 'Ports fed by an ally's paper reach', 25 November 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever the flag, so an ally's ships feed a port only where they could truly sail there with that nation's stores (game.ts trueReach). On wherever the far side is on. On the old chart its own step inside Units decide: it needs 'unitsDecide' too, and stays off, bench only, until its 96-war gate passes (Malta's and Tripoli's months in supply, Britain's corps lost there, how often each is besieged and taken, Italy's months to fall). Off: the supply picture is today's. On: the grand campaigns opened from now on with Units decide carry the flag 'trueReach' as well. A test turns it on by setTrueReach; a run outside the browser by TC_UNITS=1 TC_TRUEREACH=1.",
+    trueReach: false,
     _unitsDecide: "Units decide (release 2; Brian 23 November 2026 07:11Z and 07:13Z, the core theme; the design director's audit of 07:17Z): battles come from the units each side built, researched and trained, never from a nation's flag or the date (src/campaign/units.ts). Off: nothing behind it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'unitsDecide' (set at a campaign's start only). Its steps so far: the convoy war by cause (data/campaign/convoycause.json). A run outside the browser can force it: TC_UNITS=1 or TC_UNITS=0.",
     unitsDecide: false,
     _nicknames: "Earned nicknames (release 2; Brian's yes of 23 November 2026 12:05Z; src/campaign/nicknames.ts, data/campaign/nicknames.json): a corps that wins several hard fights is given a name by its own army, in its nation's own style, and the name is shown on its flag. Every nation alike; a name changes no number. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'nicknames' (the player can also turn it on or off in a campaign under way: a name is only a name). A run outside the browser can force it: TC_NICKNAMES=1 or TC_NICKNAMES=0.",
@@ -373,6 +375,8 @@
   var LEGIONS_STAGE = legionsForced !== void 0 ? !!legionsForced && legionsForced !== "0" : stage_default.legions === true;
   var winForced = globalThis.TC_WINCHANCE ?? G.process?.env?.TC_WINCHANCE;
   var WINCHANCE_STAGE = winForced !== void 0 ? !!winForced && winForced !== "0" : stage_default.winChance === true;
+  var reachForced = globalThis.TC_TRUEREACH ?? G.process?.env?.TC_TRUEREACH;
+  var TRUEREACH_STAGE = reachForced !== void 0 ? !!reachForced && reachForced !== "0" : stage_default.trueReach === true;
   var units = globalThis.TC_UNITS ?? G.process?.env?.TC_UNITS;
   var UNITS_STAGE = units !== void 0 ? !!units && units !== "0" : stage_default.unitsDecide === true;
   var nicks = globalThis.TC_NICKNAMES ?? G.process?.env?.TC_NICKNAMES;
@@ -27058,13 +27062,14 @@
     t.said.add(key7);
     return true;
   }
-  function bridgesOnCapture(g2, taken2, by2) {
+  function bridgesOnCapture(g2, taken2, by2, again) {
     if (!groundRules(g2)) return;
     for (const c of crossingsAt(taken2.id)) {
       if (bridgeDown(g2, c)) continue;
       const far = g2.regions[farBank(c, taken2.id)];
       if (!atWar(g2, by2, far.ctrl)) continue;
-      const roll3 = new Rng(hashString(`bridge:${g2.seed}:${g2.turn}:${c.a}:${c.b}`)).next();
+      const key7 = `bridge:${g2.seed}:${g2.turn}:${c.a}:${c.b}`;
+      const roll3 = new Rng(hashString(again?.(far) ? `${key7}:${by2}` : key7)).next();
       const name = riverName(c), holder = g2.nations[far.ctrl].adj, captor = g2.nations[by2].adj;
       const laid = chargesLaid(g2, taken2.id, (nat) => nat === far.ctrl || allied(g2, nat, far.ctrl));
       if (roll3 < (laid ? REARGUARD.bridges : blowChance(g2, c, taken2, by2))) {
@@ -30920,15 +30925,33 @@
     }
     return false;
   }
-  function fedBySea(g2, r) {
-    return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+  var seaReach = (g2, x, forNat) => openSeas(g2, x, void 0, void 0, void 0, void 0, x === forNat ? void 0 : forNat);
+  var walkedOnce = (g2) => {
+    const seen2 = /* @__PURE__ */ new Map();
+    return (x, forNat) => {
+      const k = `${x} ${forNat}`;
+      let o = seen2.get(k);
+      if (!o) seen2.set(k, o = seaReach(g2, x, forNat));
+      return o;
+    };
+  };
+  function fedBySea(g2, r, reach3) {
+    if (!trueReach(g2)) return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+    const by2 = reach3 ?? ((x, id) => seaReach(g2, x, id));
+    return feeders(g2, r).some((x) => {
+      const o = by2(x, r.ctrl);
+      return r.seas.some((z) => o[z] === 1);
+    });
   }
-  var fed = (g2, r) => fedBySea(g2, r) || fedByBook(g2, r);
+  var fed = (g2, r, reach3) => fedBySea(g2, r, reach3) || fedByBook(g2, r);
   var fedFrom = fed;
   var fedByBook = (g2, r) => besieged(g2, r) && bookFed(g2, r.name, r.ctrl, [...new Set(besiegers(g2, r).map(armyOf))]);
-  function feedingSeas(g2, r) {
+  function feedingSeas(g2, r, reach3) {
     const who = feeders(g2, r);
-    return r.seas.filter((z) => who.some((id) => !closedTo(g2, z, id)));
+    if (!trueReach(g2)) return r.seas.filter((z) => who.some((id) => !closedTo(g2, z, id)));
+    const by2 = reach3 ?? ((x, id) => seaReach(g2, x, id));
+    const open3 = who.map((x) => by2(x, r.ctrl));
+    return r.seas.filter((z) => open3.some((o) => o[z] === 1));
   }
   var strength = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
   function ringClosed(g2, r) {
@@ -30950,7 +30973,7 @@
     }
     return !road || out + SIEGE.ringNear * near2 >= need;
   }
-  var garrisonFed = (g2, r) => !besieged(g2, r) || monthsShut(g2, r) <= storesOf(g2, r) || fed(g2, r);
+  var garrisonFed = (g2, r, reach3) => !besieged(g2, r) || monthsShut(g2, r) <= storesOf(g2, r) || fed(g2, r, reach3);
   function joined2(g2, nat, from2, most) {
     const out = [from2];
     for (let i = 0; i < out.length; i++) {
@@ -31229,7 +31252,7 @@
     const inside2 = garrisonOf(r);
     const who = inside2.length ? `${inside2.length === 1 ? "one corps" : `${inside2.length} corps`} inside` : "only its guard inside";
     tell(g2, r, `${g2.nations[by2].adj} troops close round ${townName(r)}: ${placeWords(g2, r)} is under siege, with ${who}.`, r.ctrl, [by2, r.ctrl, ...inside2.map((c) => c.nat)], { won: by2, lost: r.ctrl });
-    prizesOnLoss(g2, r, by2, r.ctrl, "outside");
+    prizesOnLoss(g2, r, by2, r.ctrl, "outside", g2.flags[`relieved:${r.id}`] === g2.turn || takenInWarThisMonth(g2, r) && willBurn(g2, r.prev, r));
   }
   function lift(g2, r, by2 = null) {
     const key7 = `siege:${r.id}`;
@@ -31249,6 +31272,7 @@
     const since = g2.flags[`siege:${r.id}`];
     const lasted = since === void 0 ? 0 : g2.turn - since;
     const old = r.ctrl;
+    const again = takenInWarThisMonth(g2, r) && willBurn(g2, r.prev, r) || (since === void 0 && g2.flags[`relieved:${r.id}`] === g2.turn ? "outside" : false);
     tallySiege(g2, how);
     if (how !== "empty") tallySiege(g2, "months", lasted);
     tallySiege(g2, "taken", garrisonOf(r).length);
@@ -31265,7 +31289,7 @@
     clearPocket(g2, r);
     const adj = g2.nations[by2].adj;
     const cap17 = r.cap && r.owner === old;
-    prizesOnLoss(g2, r, by2, old, since === void 0 ? "all" : "inside");
+    prizesOnLoss(g2, r, by2, old, since === void 0 ? "all" : "inside", again);
     if (!cap17 && how !== "empty" && how !== "storm" && how !== "field") {
       const text = how === "gates" ? `${townName(r)} opens its gates to ${adj} troops without a fight.` : `Starved out after a siege of ${months(lasted)}, ${townName(r)} surrenders to ${adj} forces.`;
       tell(g2, r, text, old, [by2, old], { won: by2, lost: old });
@@ -31496,12 +31520,12 @@
       if (g2.nations[by2]?.alive && besiegers(g2, r).some(fights)) fall(g2, r, by2, "empty");
     }
   }
-  function siegeSupply(g2) {
+  function siegeSupply(g2, reach3) {
     if (!siegeRules(g2)) return;
     for (const r of g2.regions) {
       if (!r.garr || !r.garr.length || !besieged(g2, r)) continue;
-      const fed2 = garrisonFed(g2, r);
-      const outside = r.garr.some((c) => fortRow(g2, c)) ? fedFrom(g2, r) : false;
+      const fed2 = garrisonFed(g2, r, reach3);
+      const outside = r.garr.some((c) => fortRow(g2, c)) ? fedFrom(g2, r, reach3) : false;
       for (const c of r.garr) c.supplied = fortRow(g2, c) ? outside : fed2;
     }
   }
@@ -31549,11 +31573,12 @@
     const inside2 = garrisonOf(r).filter((c) => !c.dead && c.org >= 0.25);
     return { power: SIEGE.sortie * inside2.reduce((s, c) => s + corpsBase(g2, c) * KIND[c.kind].atk, 0), corps: inside2.length };
   }
-  function siegeView(g2, region) {
+  function siegeView(g2, region, reach3) {
     const r = g2.regions[region];
     if (!r || !siegeRules(g2)) return null;
     const size = townSize(g2, r), by2 = besiegerOf(g2, r);
-    const stores2 = storesOf(g2, r), shut = monthsShut(g2, r), bySea = fedBySea(g2, r), byBook = fedByBook(g2, r);
+    const walk2 = trueReach(g2) ? reach3 ?? walkedOnce(g2) : void 0;
+    const stores2 = storesOf(g2, r), shut = monthsShut(g2, r), bySea = !walk2 ? fedBySea(g2, r) : !!by2 && fedBySea(g2, r, walk2), byBook = fedByBook(g2, r);
     const inside2 = garrisonOf(r).length, guard = guardOf(g2, r), bonus = townBonus(g2, r), broken = breachOf(g2, r);
     const left = Math.max(0, stores2 - shut);
     const clock = by2 ? crewClock(g2, r) : null;
@@ -31565,7 +31590,7 @@
     if (driveOut(g2) && inside2 && !by2) lines2.push("The garrison will hold the town after the field is lost: it must then be stormed or starved out.");
     if (by2) {
       const closed = ringClosed(g2, r);
-      const seas = bySea ? feedingSeas(g2, r).map((z) => g2.seas[z].name) : [];
+      const seas = bySea ? feedingSeas(g2, r, walk2).map((z) => g2.seas[z].name) : [];
       lines2.push(bySea ? `Ships still reach the harbour${seas.length ? ` by ${seaWhatList(seas)}` : ""}: the town cannot be starved while they do.${byBook ? " Food comes in across the lake as well, so closing the sea would not starve it." : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? "those waters" : "that water"} to them, starts its stores running down.`}` : byBook ? "Food still comes in across the lake: however close the ring, the town is not starved while no player's troops stand in it." : !closed ? "The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it." : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? "one more month" : `${left} more months`}; after that they go hungry.` : inside2 ? "Its stores are gone: the garrison is starving, and loses men and heart every month." : "Its stores are gone: it is about to give in.");
       if (crew) lines2.push(`Its fortress crews live on their works' own stores: ${crew.left === 1 ? "one month" : `${crew.left} months`} of them left. When they run out the crews give in, whatever the town's own stores.`);
       if (closed && r.cap && r.owner === r.ctrl) {
@@ -31600,8 +31625,8 @@
   }
   function siegesNow(g2) {
     if (!siegeRules(g2)) return [];
-    const out = [];
-    for (const r of g2.regions) if (besieged(g2, r)) out.push(siegeView(g2, r.id));
+    const out = [], walk2 = trueReach(g2) ? walkedOnce(g2) : void 0;
+    for (const r of g2.regions) if (besieged(g2, r)) out.push(siegeView(g2, r.id, walk2));
     return out;
   }
 
@@ -31707,9 +31732,9 @@
     if (taken2.units.some((u) => !u.dead && allied(g2, u.nat, by2) && KIND[u.kind].mobile)) p += W2.fastCaptor;
     return Math.max(0.05, Math.min(0.95, p));
   }
-  function railOnCapture(g2, taken2, by2, from2) {
+  function railOnCapture(g2, taken2, by2, from2, again = false) {
     if (!groundRules(g2) || !onNet(taken2.id) || railCut(g2, taken2.id)) return;
-    const roll3 = new Rng(hashString(`rail:${g2.seed}:${g2.turn}:${taken2.id}`)).next();
+    const roll3 = new Rng(hashString(again ? `rail:${g2.seed}:${g2.turn}:${taken2.id}:${from2}` : `rail:${g2.seed}:${g2.turn}:${taken2.id}`)).next();
     if (roll3 >= wreckChance(g2, taken2, by2) || !cutRail(g2, taken2.id, "retreat", from2)) return;
     if (concerns2(g2, by2, from2)) headline(g2, "battle", `${g2.nations[from2].adj} troops tear up the railway at ${taken2.name} as they fall back.`, from2, taken2.id, { arm: "land", won: by2, lost: from2 });
   }
@@ -48734,6 +48759,7 @@
     openTrade(g2);
     if (CONVOY_STAGE) g2.flags.convoyBattle = 1;
     if (WINCHANCE_STAGE) g2.flags.winChance = 1;
+    if (UNITS_STAGE && TRUEREACH_STAGE) g2.flags.trueReach = 1;
     openBargains(g2);
     openGovernment(g2);
     openFooting(g2);
@@ -53903,7 +53929,7 @@
     if (r.units.some((u) => !u.dead && allied(g2, armyOf(u), by2) && (KIND[u.kind].mobile || u.airborne))) p -= B3.fastCaptor;
     return Math.max(0.05, Math.min(0.95, p));
   }
-  function prizesOnLoss(g2, r, by2, from2, which) {
+  function prizesOnLoss(g2, r, by2, from2, which, again = false) {
     const burnt = [];
     if (!prizeRules(g2) || !g2.nations[from2] || !atWar(g2, by2, from2) || !willBurn(g2, from2, r)) return burnt;
     const p = burnChance(g2, r, by2, from2);
@@ -53912,15 +53938,16 @@
       const inside2 = prizeInside(g2, r, kind);
       if (which === "outside" && inside2 || which === "inside" && !inside2) continue;
       if (kind === "junction") continue;
-      const roll3 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:${kind}`)).next();
+      const salt = again === true || again === "outside" && !inside2;
+      const roll3 = new Rng(hashString(salt ? `prize:${g2.seed}:${g2.turn}:${r.id}:${kind}:${from2}` : `prize:${g2.seed}:${g2.turn}:${r.id}:${kind}`)).next();
       if (roll3 < p && wreckPrize(g2, r, kind, PRIZES.burn.months[kind], void 0, "burn")) burnt.push(kind);
     }
     if (burnt.length) noteBurnt(g2, r, from2, by2, burnt);
     return burnt;
   }
-  function railOnScorch(g2, r, by2, from2) {
+  function railOnScorch(g2, r, by2, from2, again = false) {
     if (!prizeRules(g2) || !g2.nations[from2] || !atWar(g2, by2, from2) || !onNet(r.id) || railCut(g2, r.id) || !willBurn(g2, from2, r)) return false;
-    const roll3 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:rail`)).next();
+    const roll3 = new Rng(hashString(again ? `prize:${g2.seed}:${g2.turn}:${r.id}:rail:${from2}` : `prize:${g2.seed}:${g2.turn}:${r.id}:rail`)).next();
     if (roll3 >= burnChance(g2, r, by2, from2) || !cutRailHasty(g2, r.id, PRIZES.burn.months.rail, from2)) return false;
     noteBurnt(g2, r, from2, by2, ["rail"]);
     return true;
@@ -65180,11 +65207,12 @@
       if (!gt || gateHolder(g2, gt) !== nat) delete g2.flags[k];
     }
   }
-  function openSeas(g2, nat, seas, homeward = farOn(g2), asked3, starts2) {
+  function openSeas(g2, nat, seas, homeward = farOn(g2), asked3, starts2, carrying) {
     const open3 = new Uint8Array(g2.seas.length);
     const shutAt = asked3 ?? new Int8Array(g2.seas.length).fill(-1);
+    const closedFor = (z, who) => seas ? seas.closed(z, who) : closedTo(g2, z, who);
     const shut = (z) => {
-      if (shutAt[z] < 0) shutAt[z] = (seas ? seas.closed(z, nat) : closedTo(g2, z, nat)) ? 1 : 0;
+      if (shutAt[z] < 0) shutAt[z] = closedFor(z, nat) || carrying !== void 0 && carrying !== nat && closedFor(z, carrying) ? 1 : 0;
       return shutAt[z] === 1;
     };
     const q = [];
@@ -74111,6 +74139,7 @@
     }
     return { ok: ok2, reach: reach3, east };
   }
+  var trueReach = (g2) => farOn(g2) || unitsDecide(g2) && g2.flags.trueReach === 1;
   function computeSupply(g2) {
     const active = new Set(g2.corps.map((c) => c.nat));
     const withShips = Object.values(g2.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -74282,6 +74311,35 @@
       }
       return lanes2.get(id);
     };
+    const truly = trueReach(g2);
+    const asIf2 = /* @__PURE__ */ new Map();
+    const carrying = (a, id, theirs) => {
+      const key7 = a + ">" + id;
+      let o = asIf2.get(key7);
+      if (!o) {
+        o = theirs;
+        for (let z = 0; z < theirs.length; z++) {
+          if (!theirs[z] || !seasNow.closed(z, id)) continue;
+          o = openSeas(g2, a, seasNow, void 0, void 0, kept0.lanes.get(a).starts, id);
+          break;
+        }
+        if (supplyCheck && !sameBytes(openSeas(g2, a, seasNow, void 0, void 0, void 0, id), o)) throw new Error(`sea lanes of ${a} carrying for ${id} in month ${g2.turn} differ from fresh ones`);
+        asIf2.set(key7, o);
+      }
+      return o;
+    };
+    const feeds = (a, id, r) => {
+      const theirs = lanesOf(a);
+      if (!theirs || !r.seas.some((z) => theirs[z])) return false;
+      if (!truly) return true;
+      const o = carrying(a, id, theirs);
+      return r.seas.some((z) => o[z]);
+    };
+    const forHolder = (a, r) => {
+      if (a === r.ctrl) return true;
+      const o = carrying(a, r.ctrl, lanesOf(a));
+      return r.seas.some((z) => o[z]);
+    };
     const sourcesFor = (friend2) => {
       let one2 = null;
       for (let k = 0; k < sourcesBy.length; k++) {
@@ -74308,17 +74366,13 @@
         const home2 = !shut && r.ctrl === id && r.owner === id;
         const depot = home2 && (r.cap || r.fac >= 3 || !!g2.flags[depotKey(r.id)]);
         let quay = !!open3 && r.port && r.seas.some((z) => open3[z]);
-        if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) {
-          const theirs = lanesOf(r.ctrl);
-          quay = !!theirs && r.seas.some((z) => theirs[z]);
-        }
-        if (!quay && r.theatre >= 0 && r.port) quay = (mates ?? (mates = shippers(id))).some((a) => {
-          const theirs = lanesOf(a);
-          return !!theirs && r.seas.some((z) => theirs[z]);
-        });
+        let by2 = quay ? 1 : 0;
+        if (!quay && !shut && r.overseas && r.port && r.ctrl !== id && (quay = feeds(r.ctrl, id, r))) by2 = 2;
+        if (!quay && r.theatre >= 0 && r.port && (quay = (mates ?? (mates = shippers(id))).some((a) => feeds(a, id, r)))) by2 = 3;
         if (!shut && r.overseas && r.port && worksKept(r)) {
-          if (quay) g2.flags[storesKey(r.id)] = g2.turn;
-          else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
+          if (quay) {
+            if (!truly || (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r)))) g2.flags[storesKey(r.id)] = g2.turn;
+          } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
         }
         if (!depot && !quay) continue;
         if (field4 && r.ctrl === id && pocketDry(g2, r, id)) continue;
@@ -74344,7 +74398,18 @@
       book3.drawn.set(id, { mask: pass, friend: friend2, at: logEnd, seeds, heads, ...drawn, rail: drawn.east ? rail2 : null });
     }
     for (const c of g2.corps) c.supplied = !g2.nations[c.nat].atWar.length || !!g2.supply[c.nat]?.[c.reg];
-    if (field4) siegeSupply(g2);
+    const none4 = truly ? new Uint8Array(g2.seas.length) : null;
+    const townReach = truly ? (x, id) => {
+      const theirs = lanesOf(x);
+      return !theirs ? none4 : x === id ? theirs : carrying(x, id, theirs);
+    } : void 0;
+    if (field4) siegeSupply(g2, townReach);
+    if (field4 && townReach && supplyCheck) {
+      for (const r of g2.regions) {
+        if (!r.garr || !r.garr.length || !besieged(g2, r)) continue;
+        if (fedBySea(g2, r, townReach) !== fedBySea(g2, r) || !sameBytes(feedingSeas(g2, r, townReach), feedingSeas(g2, r))) throw new Error(`the besieged town of ${r.name} read from kept sea lanes in month ${g2.turn} differs from a fresh reading`);
+      }
+    }
     g2.supplyDirty = false;
     resetRailheads(g2);
   }
@@ -76005,9 +76070,17 @@
     if (mine4) headline(g2, "battle", `${g2.nations[nat].adj} troops probe your line at ${target.name} in strength. They know now who holds it${works2 > 0 ? `, and your fieldworks there are ${months4(wear2)} the worse` : ""}.`, mine4.nat, target.id, { arm: "land" });
     return rep;
   }
+  function changedThisMonth(g2, r) {
+    if (r.since !== g2.turn) return false;
+    return g2.flags.openFrom !== g2.turn || g2.flags[`fellP:${r.id}`] !== void 0;
+  }
+  function takenInWarThisMonth(g2, r) {
+    return changedThisMonth(g2, r) && r.prev != null && !!g2.nations[r.prev] && !!g2.nations[r.ctrl] && atWar(g2, r.ctrl, r.prev);
+  }
   function capture(g2, r, nat) {
     const old = r.ctrl;
     if (old === nat) return;
+    const prev = r.prev, again = takenInWarThisMonth(g2, r), burnt = again && willBurn(g2, prev, r);
     const owner = g2.nations[r.owner];
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
@@ -76021,10 +76094,11 @@
     }
     if (groundRules(g2)) {
       liftMines(g2, r);
+      const crossed = (far) => again && (atWar(g2, old, far.ctrl) || atWar(g2, prev, far.ctrl)) || takenInWarThisMonth(g2, far) && (atWar(g2, far.ctrl, old) || atWar(g2, far.prev, old));
       if (atWar(g2, nat, old)) {
-        bridgesOnCapture(g2, r, nat);
-        railOnCapture(g2, r, nat, old);
-        railOnScorch(g2, r, nat, old);
+        bridgesOnCapture(g2, r, nat, crossed);
+        railOnCapture(g2, r, nat, old, again);
+        railOnScorch(g2, r, nat, old, burnt);
       }
     }
     if (r.cap && r.owner === old) headline(g2, "fall", `${r.name} falls to ${g2.nations[nat].adj} forces.`, old, r.id, { arm: "land", won: nat, lost: old });
@@ -94291,7 +94365,7 @@
       /** The cells within LAND.mouth of a bridge, worked out once. */
       __publicField(this, "mouths", null);
       this.ticket = ticket;
-      this.rng = new Rng(ticket.seed);
+      this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
       this.power = { att: A, def: D2 };
@@ -102935,10 +103009,17 @@
       __publicField(this, "stragId", 1);
       /**
        * Bombers by name (AirPlace.bombers): each such box's seats, and the seat each straggler holds. Which bomber a loss
-       * is, and which of a box's bombers got a fighter booked to the box, is drawn from a stream of its own in shown and
-       * unshown battles alike, and is never a count: the same aircraft fall at the same moments with the names or without them.
+       * is (or falls out of formation) is drawn from a stream of its own, and which of a box's bombers got a fighter booked
+       * to the box from another (gunRng), in shown and unshown battles alike; neither is ever a count: the same aircraft
+       * fall at the same moments with the names or without them.
        */
       __publicField(this, "seatRng");
+      /**
+       * Which bomber's gunners are credited with a fighter booked to their box (gunnerOf): a stream of its own (fork 73), so
+       * that who is credited never re-throws which named bomber falls next on seatRng, and a change in how losses are
+       * booked leaves the same named crews falling (the design director, 25 November 2026 16:54Z; names carry tours).
+       */
+      __publicField(this, "gunRng");
       __publicField(this, "seated", /* @__PURE__ */ new Map());
       __publicField(this, "stragSeat", /* @__PURE__ */ new Map());
       /** The escort groups that have broken away from their bombers at least once (told once each). */
@@ -103017,6 +103098,7 @@
       this.hitRng = this.rng.fork(47);
       this.seatRng = this.rng.fork(59);
       this.beatRng = this.rng.fork(61);
+      this.gunRng = this.rng.fork(73);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
       const T = SKY.target;
       this.zones = [
@@ -103866,13 +103948,33 @@
      * an escort the defence has fought out, while it flies home, whatever the defence: its weight was spent on the
      * defenders, and the card counts the escort over its bombers for the whole raid (L.escort, 227), so the box it leaves
      * is not priced as one never escorted.
+     *
+     * M1 (the design director, 25 November 2026 16:24Z: "a held-off escort counts over every box within
+     * SKY.escort.near"): an escort HELD OFF counts not only over its own box but over every bomber box of its side
+     * flying with that box (flies): within SKY.escort.near of it on the map and within one height band of it, as cover()
+     * already lets the boxes of a stream share the escort near them. One escort group sent with two boxes no longer
+     * leaves the second priced as never escorted (the 2.5 times cap) once the hunters drag it away (the Hampshire trace,
+     * 25 November 2026: 64.2 bombers a raid against a card of 54.9). It moves only that shape: an escort fought out and
+     * flying home counts over its own box alone, as before the ruling. REUSED G: SKY.escort.near (4 km) and the one band
+     * are cover()'s own reach, made for another purpose (the escort near a box) and reused here for "flying with"; they
+     * were not measured for this.
      */
     tied(f, b) {
       if (f.air !== "ftr" || f.side !== "att") return false;
       const s = this.strafing.get(f.id);
       if (s && s.box === b.id && (f.job.do === "strafe" || s.over && f.job.do === "home")) return true;
-      if (f.job.do === "escort") return f.job.on === b.id && f.contacts.some((i) => this.unit(i)?.def === "escort");
+      if (f.job.do === "escort") return this.flies(f.job.on, b) && f.contacts.some((i) => this.unit(i)?.def === "escort");
       return f.job.do === "home" && f.vig < SKY.spent && this.foughtFor.get(f.id) === b.id;
+    }
+    /**
+     * Whether box b is the escort's own box (id 'own'), or a box of its side flying with it: the own box still flying,
+     * within SKY.escort.near (a REUSED G, see tied) of b on the map and within one height band of it (M1).
+     */
+    flies(own, b) {
+      if (own === void 0) return false;
+      if (own === b.id) return true;
+      const o = this.unit(own);
+      return !!o && o.air === "bmr" && o.side === b.side && flying2(o) && Math.abs(o.band - b.band) <= 1 && dist(o.x, o.y, b.x, b.y) <= SKY.escort.near;
     }
     /** A fighter group's fight left, and home once all but SKY.spent of it is gone. */
     tire(u) {
@@ -104423,7 +104525,8 @@
     /**
      * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
      * the box's that owed them (ruling 227): the loss's creditor ('by', booked by the ledger: creditor) is the box, and
-     * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
+     * the box is credited, one of its bombers by a stream of its own (gunRng, never seatRng: who is credited must not
+     * move which named bomber falls). A loss booked to an escort or to the guns is
      * theirs, and no lot moves it. Returns the box and the seat, or null.
      */
     gunnerOf(u, by2) {
@@ -104431,7 +104534,7 @@
       const box = this.unit(by2), B3 = this.seated.get(by2);
       const pool = B3.form.length ? B3.form : box.strag.map((s) => this.stragSeat.get(s.id)).filter((k2) => k2 !== void 0);
       if (!pool.length) return null;
-      const k = pool[this.seatRng.int(pool.length)];
+      const k = pool[this.gunRng.int(pool.length)];
       const got = B3.shot.get(k) ?? {};
       got[u.nat] = (got[u.nat] ?? 0) + 1;
       B3.shot.set(k, got);
@@ -108949,6 +109052,22 @@
       this.clearHeading.delete(u.id);
       return null;
     }
+    /**
+     * The second a salvo's heads come level with the last point of a piece's ships, as they lie now (notPast's own
+     * measure): when she is let go to take up her orders again (the 'clearUntil' look field; the sea scene's countdown,
+     * 25 November 17:40Z). Never later than the salvo lands.
+     */
+    passedAt(u, s) {
+      const L2 = dist(s.x0, s.y0, s.x, s.y);
+      if (L2 < 1) return s.at;
+      const ux = (s.x - s.x0) / L2, uy = (s.y - s.y0) / L2, len = SEA.classes[u.extra.cls].len;
+      let far = -Infinity;
+      for (const [hx, hy, hf] of this.hullsOf(u)) for (const k of HULL) {
+        const a = (hx + Math.sin(hf) * k * len - s.x0) * ux + (hy + Math.cos(hf) * k * len - s.y0) * uy;
+        if (a <= L2 && a > far) far = a;
+      }
+      return far === -Infinity ? s.at : Math.min(s.at, s.t0 + Math.max(0, far) * SEA.torp.travel / L2);
+    }
     /** Whether a salvo's heads have yet to come level with some point of one of a piece's ships (keepClear). */
     notPast(u, s) {
       const L2 = dist(s.x0, s.y0, s.x, s.y);
@@ -110475,9 +110594,10 @@
     // ---- What the screens draw --------------------------------------------------------------------------------------
     /** A piece in a sentence, by what it is and whose, the fleet taking "the" only where English does (log b370, b458 6):
      *  "a battleship of the Home Fleet", "3 destroyers of Force H". */
-    told(u, start2 = false) {
+    told(u, start2 = false, words = false) {
       const c = RULES_CLASSES[u.extra.cls], n = Math.max(1, u.extra.ships);
-      const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${start2 ? headCount(n) : n} ${c.many} ${ofFleet(u.extra.fleet)}`;
+      const count4 = start2 ? headCount(n) : words ? n <= 10 ? headCount(n).toLowerCase().replace(/^10$/, "ten") : String(n) : String(n);
+      const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${count4} ${c.many} ${ofFleet(u.extra.fleet)}`;
       return start2 ? s[0].toUpperCase() + s.slice(1) : s;
     }
     /**
@@ -110560,7 +110680,7 @@
           const hd = on2 ? this.holding.get(u.id) : void 0, hb = hd && hd.t >= this.t - 1 - 1e-9 ? this.byId.get(hd.by) : void 0;
           if (hd && hb) {
             x.heldFor = hd.by;
-            x.heldForName = this.told(hb);
+            x.heldForName = this.told(hb, false, true);
           } else {
             delete x.heldFor;
             delete x.heldForName;
@@ -110568,8 +110688,8 @@
           const cl = on2 && this.clearSteered.has(u.id) ? this.clearing.get(u.id) : void 0, cb2 = cl ? this.byId.get(cl.from) : void 0;
           if (cl && cb2) {
             x.clearFrom = cl.from;
-            x.clearUntil = Math.round(cl.at * 10) / 10;
-            x.clearFromName = this.told(cb2);
+            x.clearUntil = Math.round(this.passedAt(u, cl) * 10) / 10;
+            x.clearFromName = this.told(cb2, false, true);
           } else {
             delete x.clearFrom;
             delete x.clearUntil;
@@ -116805,7 +116925,7 @@
       return none4;
     }
   }
-  function seaReach(ids2) {
+  function seaReach2(ids2) {
     const s = game();
     const ports = /* @__PURE__ */ new Set();
     let beaches = [];
@@ -120308,7 +120428,7 @@ ${standing5}`,
     if (part[0] === "teamsrule") {
       setTeams(s, part[1] === "on");
       ok2 = true;
-      note4 = teamsOn(s) ? "Support teams are on: machine-gun and mortar brigades can be raised like artillery, by you and by every other power. The machine guns stiffen a defence against men on foot; the mortars break up the works an attack goes in against." : "Support teams are off: no new machine-gun or mortar brigades can be raised. Brigades already raised stay with their armies.";
+      note4 = teamsOn(s) ? "Machine gun and mortar brigades are on: you and every other power can raise them, the way artillery is raised. They fight beside your corps, never alone: the machine guns stiffen a defence against men on foot, the mortars break up the works an attack goes in against." : "Machine gun and mortar brigades are off: no new ones can be raised. Brigades already raised stay with their armies.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "fleetwhyrule") {
@@ -121537,7 +121657,7 @@ ${standing5}`,
     work: playerOrder(work),
     force: force2,
     forceOrder: playerOrder(forceOrder),
-    seaReach,
+    seaReach: seaReach2,
     bySeaWhy,
     ship,
     landingPlan,
