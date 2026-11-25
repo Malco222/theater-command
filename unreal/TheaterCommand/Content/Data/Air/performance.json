@@ -732,7 +732,7 @@
    ],
    "style": "turn",
    "style_why": "A steady gun platform with a thick wing that turned tightly; slower than the Bf 109E, it was set on the bombers while the Spitfires fought the escort (Fighter Command, 1940).",
-   "notes": "Its turn_m (245 m at 3,660 m) is this pass's estimate from its wing loading against the Spitfire's and the Bf 109E's RAE radii; Ackroyd and Lamont's figures were not read."
+   "notes": "Its turn_m (245 m at 3,660 m, 220 to 260) was credited to Ackroyd and Lamont, whose figures were not read: it is kept as an unsourced estimate, marked uncertain, as a cross-check only. What is flown is the worked-out turn (about 219 m at 3,000 m)."
   },
   {
    "key": "Fulmar",
@@ -1794,7 +1794,7 @@
    ],
    "style": "dive",
    "style_why": "Too heavy to turn with single-seat fighters: a long-range escort and bomber destroyer, falling back on the defensive circle when bounced (1940); with rockets against the American boxes in 1943.",
-   "notes": "Its turn_m (320 m at 3,660 m) is this pass's estimate from its wing and power loading; Ackroyd and Lamont's figures were not read."
+   "notes": "Its turn_m (320 m at 3,660 m, 290 to 360) was credited to Ackroyd and Lamont, whose figures were not read: it is kept as an unsourced estimate, marked uncertain, as a cross-check only. What is flown is the worked-out turn (about 313 m at 3,000 m)."
   },
   {
    "key": "Fw 190A-4",
