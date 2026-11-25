@@ -110,6 +110,13 @@ namespace TheaterFx
 			return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual;
 		}
 
+		/** A lamp every number of which is a number, its strength and reach none under 0 (SetLampRule's lamps). */
+		bool RealLamp(const Battle::Lamp& L)
+		{
+			return std::isfinite(L.At.X) && std::isfinite(L.At.Y) && std::isfinite(L.At.Z) && std::isfinite(L.Strength) && L.Strength >= 0.0 && std::isfinite(L.Radius) && L.Radius >= 0.0
+				&& std::isfinite(L.Col.R) && std::isfinite(L.Col.G) && std::isfinite(L.Col.B);
+		}
+
 		/** Effects (R2), -TheaterLandGunFlash: a gun named "mg:star" is the row mg drawn with the look star; the row's
 		 * name is kept in Base. A name with no colon, as ever (Look left empty). */
 		const char* LookSplit(const char* Gun, std::string& Base, std::string& Look)
@@ -233,6 +240,9 @@ namespace TheaterFx
 		// (set up again for another battle, it is no sea battle's until that one calls UseSea)
 		bSeaFar = false;
 		SeaGonePx = SeaHitFullPx = 0.0;
+		// (and its lamps are handed out as ever until that one asks: SetLampRule)
+		Rules = LampRule();
+		bLampRuled = false;
 		// (nor a land battle's until it asks: SetLensFade, SetScars, SetLandGrade, SetSoftContact)
 		LensGone = LensWhole = LensPlane = 0.0;
 		bScars = true;
@@ -3966,11 +3976,50 @@ namespace TheaterFx
 			Dice DL(PlaceKey(At) * 0x8EBC6AF09C88C6E3ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x6A2ull));
 			LookFlame(Now, At, Fw, Len, DL.U(0.03, 0.045), Far_, bHot ? &H : nullptr, DL);
 		}
+		if (Has(M + "fireball_m"))
+		{
+			GunFireball(Now, At, Fw, M); // (a naval gun's fireball and smoke ring, laid before the sea's far floor so a far one is held as one flash)
+		}
 		if (bSeaFar)
 		{
 			SeaFlash(Now, FlashFrom);
 		}
-		if (Has(M + "light_w"))
+		if (Has(M + "lamp_cd"))
+		{
+			// (a naval gun's lamp, the sea's night fight of 25 November (look bible S7: "gun flashes light the hulls"):
+			// lamp_cd candelas at night at full, whatever game.lamp_candela_at_full is, reaching lamp_reach_m (about her
+			// hull's length, so the flash lights its own ship and the water by her, not a 30 m patch by the turret), hung
+			// lamp_out_m out along the bore's level way and lamp_up_m up from the middle of its fireball (its flame's,
+			// without one) and going down over lamp_s; by day only a row with day_lamp lights anything, at
+			// game.day_lamp_share, as every gun's. Out and up: the look reviews of 25 November. A lamp by the fireball, a
+			// few metres off her side, burnt a white spot on the plating by the gun and left her ends 7 stops darker
+			// (inverse square, and the side plating taking it edge on); hung out and up it lights her whole side within
+			// about 1.5 stops. Hung high (two fifths of her length up) it lit her from overhead, as a star shell does, her
+			// decks and roofs as bright as her side; hung about half her length out and a quarter of it up, the light
+			// comes to her side some 30 degrees up, over the water, and her deck takes under half what her side does)
+			const double CdAtFull = SafeNum(Num("game.lamp_candela_at_full", 2000.0), 1.0, 1.0e9, 2000.0); // (the wrapper's own default)
+			const double BallLong = std::max(SafeNum(Num(M + "fireball_m", 0.0), 0.0, 150.0, 0.0), Len);
+			Flash F;
+			F.At = At + Fw * (BallLong * 0.5) + ZUp * SafeNum(Num(M + "lamp_up_m", 0.0), -20.0, 150.0, 0.0);
+			const double OutBy = SafeNum(Num(M + "lamp_out_m", 0.0), 0.0, 300.0, 0.0);
+			if (OutBy > 0.0)
+			{
+				F.At = F.At + Vec(Fw.X, Fw.Y, 0.0).Unit(Vec()) * OutBy; // (a bore straight up: no level way, hung over it)
+			}
+			// (the lamp rule's merge measures from the muzzle, not from the lamp hung out along the bore: two ships 500 m
+			// apart firing toward each other hang their lamps toward each other, never their guns. The review of 25 Nov)
+			F.Gun = At;
+			F.bGun = true;
+			F.Col = Picture(M + "lamp_colour", Picture("burst.flash.light.colour", Rgb::FromPicture(255, 196, 140)));
+			F.Born = Now;
+			F.Life = 0.03;
+			F.Strength = SafeNum(Num(M + "lamp_cd", 0.0), 0.0, 1.0e7, 0.0) / CdAtFull;
+			F.Radius = SafeNum(Num(M + "lamp_reach_m", 30.0), 1.0, 2000.0, 30.0);
+			F.LampS = SafeNum(Num(M + "lamp_s", 0.0), 0.0, 0.5, 0.0); // (0.5: a flash is pruned half a second after its birth)
+			F.bNightOnly = Num(M + "day_lamp", 0.0) <= 0.0;
+			Flashes.push_back(F);
+		}
+		else if (Has(M + "light_w"))
 		{
 			// (the lamp hangs above the muzzle, as a shell's does, so the ground at the gun's foot is lifted, never washed
 			// white: at the muzzle's own height a lamp of a shell's strength burns a white pool there. Its strength is cut
@@ -4004,7 +4053,7 @@ namespace TheaterFx
 		// then grey-brown smoke rolls out, hangs and drifts
 		const double SmokeLo = Num(M + "smoke_s.0", Num(M + "smoke_s", 2.0));
 		const double SmokeHi = Num(M + "smoke_s.1", SmokeLo);
-		const Rgb Grey = Picture("game.muzzle_smoke", Rgb::FromPicture(150, 140, 126));
+		const Rgb Grey = Picture(M + "smoke_colour", Picture("game.muzzle_smoke", Rgb::FromPicture(150, 140, 126))); // (smoke_colour: a row's own, a naval gun's browner cordite smoke; none: the game's)
 		// (art director 17:52Z, build 1746's test, a tank gun firing 4 m from two riflemen: its smoke lay over them as one
 		// even gauze, fog and not dust. With muzzle.billows a field gun's shot raises a cloud in three layers instead,
 		// each a scatter of lumps of its own size and thickness with gaps between, never one sheet. Low: dense mounds of
@@ -4015,7 +4064,7 @@ namespace TheaterFx
 		// tuft_share thin to haze_alpha and drift on as tufts for tuft_s. Counts are a tank gun's: a wider ring and a
 		// longer flame throw more. Dust goes by the ground's own (grounds.<g>.dust against earth's). Its own dice:
 		// without the key a gun smokes as it did)
-		const bool bBillows = Len >= 0.5 && Has("muzzle.billows.low");
+		const bool bBillows = Len >= 0.5 && Has("muzzle.billows.low") && Num(M + "billows", 1.0) > 0.0; // (billows 0: a row that never takes them, a naval gun's smoke over the sea)
 		const std::string Bl = "muzzle.billows.";
 		Dice DB(PlaceKey(At) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) ^ 0xB111ull);
 		auto BillowCount = [&](const char* Key, double Usual, double Share) { return static_cast<int>(std::lround(std::min(40.0, std::max(0.0, Num(Bl + Key, Usual))) * std::min(4.0, std::max(0.0, Share)))); };
@@ -4098,7 +4147,7 @@ namespace TheaterFx
 				}
 			}
 		}
-		const int NSmoke = bBillows ? 0 : Len < 0.5 ? 3 : static_cast<int>(10.0 + 6.0 * std::min(Len, 4.0)); // (a wild flame is still a few puffs)
+		const int NSmoke = bBillows || Has(M + "cloud_m") ? 0 : Len < 0.5 ? 3 : static_cast<int>(10.0 + 6.0 * std::min(Len, 4.0)); // (a wild flame is still a few puffs; a naval gun's cloud (cloud_m) is its own, GunFireball)
 		for (int I = 0; I < NSmoke; ++I)
 		{
 			Bit B;
@@ -4591,6 +4640,159 @@ namespace TheaterFx
 					}
 					Bits.push_back(B);
 				}
+			}
+		}
+	}
+
+	void Battle::GunFireball(double Now, const Vec& At, const Vec& Fw, const std::string& Row)
+	{
+		// (the sea's night fight, 25 November. A big naval gun's flash is no tongue but a fireball: the propellant's gas,
+		// rich in fuel not yet burnt, bursts into flame again where it mixes with the air a little ahead of the muzzle
+		// (the secondary flash: Klingenberg and Heimerl, "Gun Muzzle Blast and Flash", AIAA Progress in Astronautics and
+		// Aeronautics 139, 1992), a ball tens of metres long on a heavy gun, yellow-white at its root, orange through, its
+		// edge a deep orange, gone in a fifth of a second; the blast can blow a ring of smoke that rolls on down the line
+		// of fire for seconds (the 16-inch rings of the period's photographs); then the propellant's brown-grey cloud.
+		// Every number is the row's: fireball_m its length along the bore, fireball_wide its width as a share of that,
+		// fireball_s how long it burns, fireball_lobes its lobes, fireball_core, fireball_colour and fireball_edge its
+		// colours; ring_m the smoke ring's radius grown, ring_ahead_m how far it rolls, ring_s how long it lasts,
+		// ring_puffs, ring_alpha; cloud_m the smoke cloud's radius, cloud_puffs, cloud_alpha, its life smoke_s and colour
+		// smoke_colour (laid in place of the row's usual smoke puffs). Its own dice, one throw a statement)
+		Dice D(PlaceKey(At) * 0xA0761D6478BD642Full ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0xF1BEull));
+		const Vec Across = Fw.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Upward = Across.Cross(Fw).Unit(ZUp);
+		const Rgb Smoke = Picture(Row + "smoke_colour", Picture("game.muzzle_smoke", Rgb::FromPicture(150, 140, 126)));
+		const double Long = SafeNum(Num(Row + "fireball_m", 0.0), 0.0, 150.0, 0.0);
+		if (Long > 0.0)
+		{
+			const double Wide = SafeNum(Num(Row + "fireball_wide", 0.55), 0.1, 2.0, 0.55);
+			const double Life = SafeNum(Num(Row + "fireball_s", 0.15), 0.02, 0.25, 0.15); // (0.25: under the sea's far floor's 0.3 s, so a far one is still held as a flash)
+			const int Lobes = static_cast<int>(SafeNum(Num(Row + "fireball_lobes", 6.0), 1.0, 24.0, 6.0));
+			const Rgb Root = Picture(Row + "fireball_core", Rgb::FromPicture(255, 228, 172));
+			const Rgb Body = Picture(Row + "fireball_colour", Rgb::FromPicture(244, 142, 48));
+			const Rgb Rim_ = Picture(Row + "fireball_edge", Rgb::FromPicture(180, 72, 24));
+			// (fireball_hold_s: the lobes nearest the muzzle (the first third of its length) burn at the root's colour,
+			// white-hot, for this long before they cool, so the flash reads as the brightest thing on the screen; the look
+			// review of 25 November. 0: every lobe cools from its birth, as built)
+			const double HoldHot = SafeNum(Num(Row + "fireball_hold_s", 0.0), 0.0, 0.25, 0.0);
+			const double Half = 0.5 * Long * Wide;
+			for (int I = 0; I < Lobes; ++I)
+			{
+				// (lobes along the bore from an eighth of its length out, fattest in the middle; the far ones catch a moment
+				// later, so it swells out from the muzzle; each drifts on a little and swells as it burns)
+				const double T = (I + 0.5) / Lobes;
+				const double Side = D.Bell();
+				const double Lift = D.Bell();
+				const double Size = D.U(0.8, 1.15);
+				const double Lives = D.U(0.8, 1.2);
+				const double Late = D.U();
+				const double Drift = D.U(0.4, 1.0);
+				Bit B;
+				B.Born = Now + 0.15 * Life * T * Late;
+				B.From = At + Fw * (Long * (0.12 + 0.76 * T)) + Across * (Side * 0.18 * Half) + Upward * (Lift * 0.18 * Half);
+				B.Drag = 8.0;
+				B.Vel = Fw * (0.25 * Long * Drift * B.Drag);
+				B.Life = Life * Lives;
+				B.R0 = Half * Size * (0.45 + 0.4 * std::sin(Pi * T));
+				B.R1 = B.R0 * 1.3;
+				B.Grow = 0.3;
+				B.Col = Root.Mix(Body, 0.25 + 0.6 * T);
+				B.Col2 = Body.Mix(Rim_, 0.5);
+				if (HoldHot > 0.0 && T < 1.0 / 3.0)
+				{
+					B.Col = Root;
+					B.CoolFrom = std::min(0.9, HoldHot / B.Life);
+				}
+				B.Alpha = 1.0;
+				B.FadeIn = 0.004;
+				B.Hold = 0.45;
+				B.Heart = 0.95;
+				B.Rim = 0.45;
+				B.Inner = 0.65;
+				B.Edge = Rim_;
+				B.EdgeK = 0.4;
+				B.Rough = 0.3;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+				B.bLight = true;
+				Bits.push_back(B);
+			}
+		}
+		const double RingR = SafeNum(Num(Row + "ring_m", 0.0), 0.0, 100.0, 0.0);
+		if (RingR > 0.0)
+		{
+			// (the smoke ring: puffs round a ring across the bore, rolling down the line of fire and widening as they slow)
+			const double Ahead = SafeNum(Num(Row + "ring_ahead_m", 4.0 * RingR), 0.0, 1000.0, 4.0 * RingR);
+			const double RingLife = SafeNum(Num(Row + "ring_s", 4.0), 0.2, 60.0, 4.0);
+			const int NRing = static_cast<int>(SafeNum(Num(Row + "ring_puffs", 14.0), 3.0, 48.0, 14.0));
+			const double RingAlpha = SafeNum(Num(Row + "ring_alpha", 0.5), 0.0, 1.0, 0.5);
+			const double RingGrow = SafeNum(Num(Row + "ring_grow", 0.32), 0.05, 2.0, 0.32); // (each puff's radius grown, a share of the ring's: fat puffs read as one soft ring, thin ones as beads)
+			const Rgb RingCol = Picture(Row + "ring_colour", Smoke);
+			const double Start = D.U(0.0, 2.0 * Pi);
+			for (int I = 0; I < NRing; ++I)
+			{
+				const double A = Start + 2.0 * Pi * I / NRing;
+				const double Wobble = D.U(0.85, 1.15);
+				const double Shade = D.U(0.9, 1.08);
+				const double Thick = D.U(0.8, 1.0);
+				const Vec Out_ = Across * std::cos(A) + Upward * std::sin(A);
+				Bit B;
+				B.Born = Now + 0.03;
+				B.From = At + Fw * (0.1 * Ahead) + Out_ * (0.3 * RingR);
+				B.Drag = 1.2;
+				B.Vel = Fw * (0.9 * Ahead * B.Drag) + Out_ * (0.7 * RingR * B.Drag * Wobble);
+				B.Rise = 0.3;
+				B.Windage = 0.7;
+				B.Life = RingLife * Wobble;
+				B.R0 = 0.12 * RingR;
+				B.R1 = RingGrow * RingR;
+				B.Grow = 0.5;
+				B.Col = RingCol * Shade;
+				B.Col2 = B.Col;
+				B.Alpha = RingAlpha * Thick;
+				B.FadeIn = 0.08;
+				B.Hold = 0.35;
+				B.Heart = 0.6;
+				B.Inner = 0.55;
+				Bits.push_back(B);
+			}
+		}
+		const double CloudR = SafeNum(Num(Row + "cloud_m", 0.0), 0.0, 200.0, 0.0);
+		if (CloudR > 0.0)
+		{
+			// (the cloud: thrown down the line of fire, fewer and thinner the farther, swelling, climbing and drifting)
+			const int NCloud = static_cast<int>(SafeNum(Num(Row + "cloud_puffs", 14.0), 1.0, 60.0, 14.0));
+			const double CloudAlpha = SafeNum(Num(Row + "cloud_alpha", 0.5), 0.0, 1.0, 0.5);
+			const Span Lives = Range(Row + "smoke_s", 6.0, 10.0);
+			const double Reach = std::max(Long, CloudR);
+			for (int I = 0; I < NCloud; ++I)
+			{
+				const double Far = D.U();
+				const double Side = D.Bell();
+				const double Lift = D.Bell();
+				const double Wide = D.U(0.35, 0.6);
+				const double Life = SafeNum(Lives.Pick(D), 0.2, 120.0, 8.0);
+				const double Shade = D.U(0.88, 1.1);
+				const double Thick = D.U(0.7, 1.0);
+				const double Late = D.U(0.0, 0.08);
+				Bit B;
+				B.Born = Now + Late;
+				B.From = At + Fw * (0.2 * Reach);
+				B.Drag = 2.0;
+				B.Vel = (Fw * (Reach * (0.2 + 1.1 * Far)) + Across * (Side * 0.35 * CloudR) + Upward * (Lift * 0.25 * CloudR)) * B.Drag;
+				B.Rise = 0.4;
+				B.Windage = 0.8;
+				B.Life = Life;
+				B.R0 = 0.15 * CloudR;
+				B.R1 = Wide * CloudR;
+				B.Grow = 0.4;
+				B.Col = Smoke * Shade;
+				B.Col2 = B.Col;
+				B.Alpha = CloudAlpha * Thick * (1.0 - 0.4 * Far);
+				B.FadeIn = 0.06;
+				B.Hold = 0.15;
+				B.Heart = 0.5;
+				B.Inner = 0.5;
+				Bits.push_back(B);
 			}
 		}
 	}
@@ -14008,7 +14210,7 @@ namespace TheaterFx
 		TrailCuts.clear();
 		BallLamps.erase(std::remove_if(BallLamps.begin(), BallLamps.end(), [Now](const BallLamp& L) { return !(Now <= L.Born + L.Life + 1.0); }), BallLamps.end());
 		// (a flash goes once its lamp has had its two frames, or after half a second unseen)
-		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [this, Now](const Flash& F) { return (F.FirstFrame >= 0 && FrameNo - F.FirstFrame >= 2) || Now > F.Born + 0.5; }), Flashes.end());
+		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [this, Now](const Flash& F) { return (F.FirstFrame >= 0 && FrameNo - F.FirstFrame >= 2 && !(F.LampS > 0.0 && Now < F.Born + F.LampS)) || Now > F.Born + 0.5; }), Flashes.end()); // (a naval gun's, LampS: kept while its lamp goes down)
 		Firings.erase(std::remove_if(Firings.begin(), Firings.end(), [Now](const Firing& F) { return Now - F.Last > 30.0; }), Firings.end());
 		Trails.erase(std::remove_if(Trails.begin(), Trails.end(), [Now](const Trailing& T) { return Now - T.Last > 30.0; }), Trails.end()); // (stopped, or left on and never moved again)
 		Falls.erase(std::remove_if(Falls.begin(), Falls.end(), [Now](const Falling& Fa) { return Fa.Left <= 0 || Now - Fa.Last > 30.0; }), Falls.end()); // (all its pieces shed, or never moved again)
@@ -16513,6 +16715,15 @@ namespace TheaterFx
 		LastSun = Eye.Sun;
 		LastPpr = Eye.PixelsPerRadian;
 		bEyeKnown = true;
+		{
+			// (the lamp rule's view, SetLampRule's bByEye: a lamp whose light cannot reach the screen ranks nothing. Kept
+			// here and read only by the rule)
+			const double Up_ = Eye.HalfUp > 0.0 ? Eye.HalfUp : 0.5625 * Eye.HalfAcross;
+			const double Diag = std::sqrt(Eye.HalfAcross * Eye.HalfAcross + Up_ * Up_);
+			const double Ahead = Eye.Forward.Length();
+			SightAhead = Ahead > 1e-9 && std::isfinite(Ahead) ? Eye.Forward * (1.0 / Ahead) : Vec();
+			SightHalf = Eye.HalfAcross > 0.0 && std::isfinite(Diag) && Ahead > 1e-9 && std::isfinite(Ahead) ? std::atan(Diag) : 0.0;
+		}
 		// (FX9, game.smoke_budget: the screen's pixels, for the smoke's fill. The view's width not given: 0, and none of
 		// the big smoke is thinned)
 		{
@@ -17175,6 +17386,241 @@ namespace TheaterFx
 		return Clamp01((Lum - DayFrom) / (DayFull - DayFrom));
 	}
 
+	void Battle::SetLampRule(const LampRule& Rule)
+	{
+		// (the sea's night fight, 25 November: see LampRule in the header. Every knob held, one that is not a number its
+		// default; a rule of all defaults hands the lamps out as ever, to the byte)
+		const LampRule Usual;
+		const auto Held = [](double Is, double Least, double Most, double Otherwise) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Otherwise; };
+		Rules.Most = std::clamp(Rule.Most, 0, MostLamps);
+		Rules.bByEye = Rule.bByEye;
+		Rules.MergeM = Held(Rule.MergeM, 0.0, 2000.0, Usual.MergeM);
+		Rules.MergeS = Held(Rule.MergeS, 0.0, 2.0, Usual.MergeS);
+		Rules.MergeMost = Held(Rule.MergeMost, 1.0, 16.0, Usual.MergeMost);
+		Rules.Yield = Held(Rule.Yield, 1.0, 1.0e6, Usual.Yield);
+		bLampRuled = Rules.Asks();
+	}
+
+	int Battle::LampsWanted() const
+	{
+		if (Rules.Most > 0)
+		{
+			return Rules.Most;
+		}
+		return static_cast<int>(SafeNum(Num("game.max_lamps", 2.0), 0.0, static_cast<double>(MostLamps), 2.0));
+	}
+
+	double Battle::FlashShare(const Flash& F, double Now) const
+	{
+		// (art director 21:16Z: never before its flash; full on the flash's frame, about half the next, then out. A naval
+		// gun's (LampS, the sea's night fight): full on its frame, then down to nothing by LampS after its birth, never
+		// under that half on the next frame, so a big gun's lamp burns as long as its fireball does)
+		if (F.FirstFrame < 0 || Now < F.Born)
+		{
+			return -1.0;
+		}
+		const int Frames = FrameNo - F.FirstFrame;
+		if (Frames < 0)
+		{
+			return -1.0;
+		}
+		if (F.LampS > 0.0 && Frames > 0)
+		{
+			const double Down = Clamp01(1.0 - (Now - F.Born) / F.LampS);
+			const double Next = Frames == 1 && !F.bOneFrame ? 0.5 : 0.0;
+			const double Share = std::max(Down, Next);
+			return Share > 0.0 ? Share : -1.0; // (not a number: out)
+		}
+		if (Frames > 1)
+		{
+			return -1.0;
+		}
+		return Frames == 0 ? 1.0 : F.bOneFrame ? 0.0 : 0.5;
+	}
+
+	bool Battle::LampInSight(const Vec& At, double Reach) const
+	{
+		if (!bEyeKnown || !(SightHalf > 0.0))
+		{
+			return true;
+		}
+		const Vec To = At - LastEye;
+		const double Far = To.Length();
+		if (!(Far > Reach))
+		{
+			return true; // (the eye within its sphere, or not a number: in sight)
+		}
+		const double Cos = std::clamp(To.Dot(SightAhead) / Far, -1.0, 1.0);
+		const double Wide = std::asin(std::clamp(Reach / Far, 0.0, 1.0));
+		return std::acos(Cos) <= SightHalf + Wide;
+	}
+
+	bool Battle::LampFirst(const LampLit& A, const LampLit& B)
+	{
+		// (a strict order on every lamp the rule hands out: all of them are numbers by then, RealLamp)
+		if (A.Rank != B.Rank)
+		{
+			return A.Rank > B.Rank;
+		}
+		if (A.L.Strength != B.L.Strength)
+		{
+			return A.L.Strength > B.L.Strength;
+		}
+		if (A.Born != B.Born)
+		{
+			return A.Born < B.Born;
+		}
+		if (A.L.At.X != B.L.At.X)
+		{
+			return A.L.At.X < B.L.At.X;
+		}
+		if (A.L.At.Y != B.L.At.Y)
+		{
+			return A.L.At.Y < B.L.At.Y;
+		}
+		if (A.L.At.Z != B.L.At.Z)
+		{
+			return A.L.At.Z < B.L.At.Z;
+		}
+		if (A.L.Radius != B.L.Radius)
+		{
+			return A.L.Radius < B.L.Radius;
+		}
+		if (A.L.Col.R != B.L.Col.R)
+		{
+			return A.L.Col.R < B.L.Col.R;
+		}
+		if (A.L.Col.G != B.L.Col.G)
+		{
+			return A.L.Col.G < B.L.Col.G;
+		}
+		if (A.L.Col.B != B.L.Col.B)
+		{
+			return A.L.Col.B < B.L.Col.B;
+		}
+		return A.Seed < B.Seed;
+	}
+
+	double Battle::EyeRank(const Vec& At, double Strength, double Reach) const
+	{
+		if (!Rules.bByEye)
+		{
+			return Strength;
+		}
+		if (!LampInSight(At, Reach))
+		{
+			return 0.0; // (its light cannot reach the screen: a broadside behind the eye lights nothing it sees)
+		}
+		// (the light a lamp sends the eye: what it lands round it over the square of its distance from the eye. Its reach
+		// cancels: from afar its lit patch is as much dimmer a square metre as it is wider on the screen. 5 m at the least,
+		// as fire.lamp's steady lights (SteadyLamps' RankOf), so the two rank on one scale; the eye not yet known, 1 m)
+		const double Far = bEyeKnown ? (At - LastEye).Length() : 1.0;
+		const double Far2 = Far * Far;
+		return Strength / std::max(25.0, Far2 == Far2 ? Far2 : 1.0e18);
+	}
+
+	void Battle::MergeLamps(std::vector<LampLit>& Lits) const
+	{
+		// (a lamp that is not a number lights nothing, nor one whose gun is not a number: dropped, so no lamp the rule
+		// hands out is ever one, and no distance between guns is)
+		Lits.erase(std::remove_if(Lits.begin(), Lits.end(), [](const LampLit& Is) { return !RealLamp(Is.L) || !std::isfinite(Is.Born) || !std::isfinite(Is.Gun.X) || !std::isfinite(Is.Gun.Y) || !std::isfinite(Is.Gun.Z); }), Lits.end());
+		if (!(Rules.MergeM > 0.0) || Lits.size() < 2)
+		{
+			return;
+		}
+		// (strongest first, each the seed of a lamp; a flash joins it when it was born within MergeS and its gun lies
+		// within MergeM of every gun already in it, so no lamp's guns are more than MergeM apart nor MergeS apart in time,
+		// and a lamp never chains from ship to ship. The guns', never the lamps': a naval lamp hangs far out along its bore
+		// (lamp_out_m), so two ships 500 m apart firing toward each other bring their lamps within MergeM while their guns
+		// stay 300 m apart and more (Flash::Gun; a flash without a gun is measured from its lamp). Its strength is their
+		// sum held to MergeMost times its seed's (the strongest), at their lamps' strength-weighted middle, coloured as
+		// their strength-weighted mix, reaching as far as the farthest of their own reaches from there)
+		const size_t N = Lits.size();
+		std::vector<size_t> Seeds_(N);
+		for (size_t I = 0; I < N; ++I)
+		{
+			Seeds_[I] = I;
+		}
+		// (strongest first, a tie by the flash itself and never by the order it was laid in: LampFirst with every Rank
+		// alike, so the groups and every sum over them are the same whatever the order of the Muzzle calls)
+		std::sort(Seeds_.begin(), Seeds_.end(), [&Lits](size_t A, size_t B)
+		{
+			LampLit X = Lits[A], Y = Lits[B];
+			X.Rank = Y.Rank = 0.0;
+			return LampFirst(X, Y);
+		});
+		std::vector<uint8_t> Taken(N, 0);
+		std::vector<size_t> In;
+		std::vector<LampLit> Made;
+		Made.reserve(N);
+		const double Near2 = Rules.MergeM * Rules.MergeM;
+		for (const size_t A : Seeds_)
+		{
+			if (Taken[A] != 0)
+			{
+				continue;
+			}
+			Taken[A] = 1;
+			In.clear();
+			In.push_back(A);
+			for (const size_t B : Seeds_)
+			{
+				if (Taken[B] != 0)
+				{
+					continue;
+				}
+				bool bJoins = true;
+				for (const size_t K : In)
+				{
+					const Vec D = Lits[B].Gun - Lits[K].Gun;
+					if (D.Dot(D) > Near2 || std::fabs(Lits[B].Born - Lits[K].Born) > Rules.MergeS)
+					{
+						bJoins = false;
+						break;
+					}
+				}
+				if (bJoins)
+				{
+					Taken[B] = 1;
+					In.push_back(B);
+				}
+			}
+			LampLit Is = Lits[A];
+			double Sum = 0.0;
+			for (const size_t K : In)
+			{
+				Sum += Lits[K].L.Strength;
+			}
+			if (In.size() > 1 && Sum > 0.0)
+			{
+				Vec Mid;
+				double R = 0.0, G = 0.0, Bl = 0.0, Born = Lits[A].Born;
+				for (const size_t K : In)
+				{
+					const Lamp& L = Lits[K].L;
+					const double W = L.Strength / Sum;
+					Mid += L.At * W;
+					R += L.Col.R * W;
+					G += L.Col.G * W;
+					Bl += L.Col.B * W;
+					Born = std::min(Born, Lits[K].Born);
+				}
+				double Reach = 0.0;
+				for (const size_t K : In)
+				{
+					Reach = std::max(Reach, (Lits[K].L.At - Mid).Length() + Lits[K].L.Radius);
+				}
+				Is.L.At = Mid;
+				Is.L.Col = Rgb(static_cast<float>(R), static_cast<float>(G), static_cast<float>(Bl));
+				Is.L.Strength = std::min(Sum, Rules.MergeMost * Lits[A].L.Strength);
+				Is.L.Radius = Reach;
+				Is.Born = Born;
+			}
+			Made.push_back(Is);
+		}
+		Lits.swap(Made);
+	}
+
 	int Battle::Lamps(double Now, Lamp* Into, int Room, double Day) const
 	{
 		// Art director 21:16Z: never before its flash; full on the flash's frame, about half the next, then out. By day
@@ -17186,18 +17632,15 @@ namespace TheaterFx
 		Day = Clamp01(Day);
 		const double ByDay = 1.0 + (DayLampShare - 1.0) * Day;
 		std::vector<Lamp> All;
+		std::vector<LampLit> Fired; // (SetLampRule: the flashes kept apart, to be merged and ranked by the rule)
 		for (const Flash& F : Flashes)
 		{
-			if (F.FirstFrame < 0 || Now < F.Born)
+			const double Share = FlashShare(F, Now);
+			if (Share < 0.0)
 			{
 				continue;
 			}
-			const int Frames = FrameNo - F.FirstFrame;
-			if (Frames < 0 || Frames > 1)
-			{
-				continue;
-			}
-			const double Strength = F.Strength * (Frames == 0 ? 1.0 : F.bOneFrame ? 0.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
+			const double Strength = F.Strength * Share * (F.bNightOnly ? 1.0 - Day : ByDay);
 			if (Strength <= 1e-4)
 			{
 				continue;
@@ -17207,6 +17650,15 @@ namespace TheaterFx
 			L.Col = F.Col.Mix(DayLampCol, Day);
 			L.Strength = Strength;
 			L.Radius = F.Radius;
+			if (bLampRuled)
+			{
+				LampLit Is;
+				Is.L = L;
+				Is.Born = F.Born;
+				Is.Gun = F.bGun ? F.Gun : F.At;
+				Fired.push_back(Is);
+				continue;
+			}
 			All.push_back(L);
 		}
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
@@ -17273,6 +17725,34 @@ namespace TheaterFx
 				All.push_back(L);
 			}
 		}
+		if (bLampRuled)
+		{
+			// (SetLampRule without fire.lamp's steady lights: a salvo's flashes one lamp, then every lamp by the rule's
+			// rank, the first Room of them, never more than MostLamps)
+			MergeLamps(Fired);
+			for (const Lamp& L : All)
+			{
+				if (!RealLamp(L))
+				{
+					continue;
+				}
+				LampLit Is;
+				Is.L = L;
+				Is.bSteady = true;
+				Fired.push_back(Is);
+			}
+			for (LampLit& Is : Fired)
+			{
+				Is.Rank = EyeRank(Is.L.At, Is.L.Strength, Is.L.Radius);
+			}
+			std::sort(Fired.begin(), Fired.end(), LampFirst);
+			const int Most = std::min({ std::max(0, Room), MostLamps, static_cast<int>(Fired.size()) });
+			for (int I = 0; I < Most; ++I)
+			{
+				Into[I] = Fired[static_cast<size_t>(I)].L;
+			}
+			return Most;
+		}
 		std::sort(All.begin(), All.end(), [](const Lamp& L, const Lamp& R) { return L.Strength > R.Strength; });
 		const int N = std::min(Room, static_cast<int>(All.size()));
 		for (int I = 0; I < N; ++I)
@@ -17294,6 +17774,10 @@ namespace TheaterFx
 		// too; it flickers smoothly, flicker more or less, never in a beat
 		Day = Clamp01(Day);
 		Room = std::max(0, Room);
+		if (bLampRuled)
+		{
+			Room = std::min(Room, MostLamps); // (SetLampRule: never more than MostLamps)
+		}
 		const double ByDay = 1.0 + (DayLampShare - 1.0) * Day;
 		const std::string P = "fire.lamp.";
 		const double Ramp = SafeNum(Num(P + "ramp_s", 0.6), 0.02, 30.0, 0.6);
@@ -17313,25 +17797,16 @@ namespace TheaterFx
 		const int Steady = std::clamp(static_cast<int>(SafeNum(Num("game.steady_lamps", 1.0), 0.0, 64.0, 1.0)), 0, Room);
 		const LateRow LateNow = LateRowOf();
 		const double Since = Now == Now && Now >= LampsAt ? std::min(Now - LampsAt, 1.0) : 0.0;
-		struct Lit
-		{
-			Lamp L;
-			uint64_t Seed = 0;
-			double Rank = 0.0;
-		};
+		using Lit = LampLit;
 		std::vector<Lit> Steadies, Flashed;
 		for (const Flash& F : Flashes)
 		{
-			if (F.FirstFrame < 0 || Now < F.Born)
+			const double Share = FlashShare(F, Now);
+			if (Share < 0.0)
 			{
 				continue;
 			}
-			const int Frames = FrameNo - F.FirstFrame;
-			if (Frames < 0 || Frames > 1)
-			{
-				continue;
-			}
-			const double Strength = F.Strength * (Frames == 0 ? 1.0 : F.bOneFrame ? 0.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
+			const double Strength = F.Strength * Share * (F.bNightOnly ? 1.0 - Day : ByDay);
 			if (Strength <= 1e-4)
 			{
 				continue;
@@ -17342,8 +17817,20 @@ namespace TheaterFx
 			Is.L.Strength = Strength;
 			Is.L.Radius = F.Radius;
 			Is.Rank = Strength;
+			Is.Born = F.Born;
+			Is.Gun = F.bGun ? F.Gun : F.At;
 			Flashed.push_back(Is);
 		}
+		if (bLampRuled)
+		{
+			// (SetLampRule: a salvo's flashes one lamp, each ranked by the light it sends the eye, or its strength)
+			MergeLamps(Flashed);
+			for (Lit& Is : Flashed)
+			{
+				Is.Rank = EyeRank(Is.L.At, Is.L.Strength, Is.L.Radius);
+			}
+		}
+		const bool bRealOnly = bLampRuled; // (SetLampRule: a steady light that is not a number is never handed out either)
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		auto RankOf = [&](const Lit& Is, double Steadily)
 		{
@@ -17363,6 +17850,7 @@ namespace TheaterFx
 			const uint32_t Seed32 = static_cast<uint32_t>((S.Seed * 0xD1B54A32D192ED03ull) >> 32) | 1u;
 			Lit Is;
 			Is.Seed = S.Seed;
+			Is.bSteady = true;
 			if (S.Kind == 2 && Now >= S.Start && Now <= S.Flames && S.Oil.Lamp > 0.0)
 			{
 				const double Steadily = ByDay * S.Oil.Lamp * std::sqrt(S.Across);
@@ -17423,28 +17911,82 @@ namespace TheaterFx
 			// (a fuel ball's, FuelBall: steady while it burns, as a fire's is)
 			Lit Is;
 			Is.Seed = Ball.Seed;
+			Is.bSteady = true;
 			if (BallLampAt(Ball, Now, Day, Is.L))
 			{
 				Is.Rank = RankOf(Is, Is.L.Strength);
 				Steadies.push_back(Is);
 			}
 		}
-		auto ByRank = [](const Lit& L, const Lit& R) { return L.Rank > R.Rank; };
-		std::stable_sort(Steadies.begin(), Steadies.end(), ByRank);
-		std::stable_sort(Flashed.begin(), Flashed.end(), ByRank);
+		if (bRealOnly)
+		{
+			Steadies.erase(std::remove_if(Steadies.begin(), Steadies.end(), [](const Lit& Is) { return !RealLamp(Is.L) || !(Is.Rank == Is.Rank); }), Steadies.end());
+			if (Rules.bByEye)
+			{
+				for (Lit& Is : Steadies)
+				{
+					Is.Rank = LampInSight(Is.L.At, Is.L.Radius) ? Is.Rank : 0.0; // (as a flash's, EyeRank: a fire whose light cannot reach the screen ranks nothing)
+				}
+			}
+			// (SetLampRule: ties broken by the lamps themselves, never by the order they were laid in)
+			std::sort(Steadies.begin(), Steadies.end(), LampFirst);
+			std::sort(Flashed.begin(), Flashed.end(), LampFirst);
+		}
+		else
+		{
+			auto ByRank = [](const Lit& L, const Lit& R) { return L.Rank > R.Rank; };
+			std::stable_sort(Steadies.begin(), Steadies.end(), ByRank);
+			std::stable_sort(Flashed.begin(), Flashed.end(), ByRank);
+		}
 		std::vector<Lit> Chosen;
 		size_t NextSteady = 0, NextFlash = 0;
-		while (static_cast<int>(Chosen.size()) < Steady && NextSteady < Steadies.size())
+		if (bLampRuled && Rules.bByEye)
 		{
-			Chosen.push_back(Steadies[NextSteady++]);
+			// (SetLampRule's bByEye: the steady lights keep their own share; the rest go by rank, flash or steady alike, so
+			// a far flash takes no lamp from a fire by the eye; then a steady light's own lamp goes, for the frames it is
+			// outshone, to a flash left unlit that sends the eye Yield times its light: a slick burning 6 km off lights
+			// nothing the eye can see while a broadside 2 km off goes dark. It comes back up over ramp_s, as a new one)
+			const int Most = Room;
+			const int Own = std::min(Steady, Most);
+			while (static_cast<int>(Chosen.size()) < Own && NextSteady < Steadies.size())
+			{
+				Chosen.push_back(Steadies[NextSteady++]);
+			}
+			const size_t Kept = Chosen.size();
+			while (static_cast<int>(Chosen.size()) < Most && (NextFlash < Flashed.size() || NextSteady < Steadies.size()))
+			{
+				const bool bFlash = NextSteady >= Steadies.size() || (NextFlash < Flashed.size() && Flashed[NextFlash].Rank >= Steadies[NextSteady].Rank);
+				if (bFlash)
+				{
+					Chosen.push_back(Flashed[NextFlash++]);
+				}
+				else
+				{
+					Chosen.push_back(Steadies[NextSteady++]);
+				}
+			}
+			for (size_t I = Kept; I-- > 0 && NextFlash < Flashed.size();)
+			{
+				if (Chosen[I].bSteady && Flashed[NextFlash].Rank > Rules.Yield * Chosen[I].Rank)
+				{
+					Chosen[I] = Flashed[NextFlash++];
+				}
+			}
 		}
-		while (static_cast<int>(Chosen.size()) < Room && NextFlash < Flashed.size())
+		else
 		{
-			Chosen.push_back(Flashed[NextFlash++]);
-		}
-		while (static_cast<int>(Chosen.size()) < Room && NextSteady < Steadies.size())
-		{
-			Chosen.push_back(Steadies[NextSteady++]);
+			while (static_cast<int>(Chosen.size()) < Steady && NextSteady < Steadies.size())
+			{
+				Chosen.push_back(Steadies[NextSteady++]);
+			}
+			while (static_cast<int>(Chosen.size()) < Room && NextFlash < Flashed.size())
+			{
+				Chosen.push_back(Flashed[NextFlash++]);
+			}
+			while (static_cast<int>(Chosen.size()) < Room && NextSteady < Steadies.size())
+			{
+				Chosen.push_back(Steadies[NextSteady++]);
+			}
 		}
 		// (a steady lamp new to its place comes up over ramp_s; one that held its place keeps coming up)
 		std::vector<LampKept> Now_;

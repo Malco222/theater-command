@@ -7,7 +7,7 @@ sheet (art-director/explosions/explosions-look.md in the project files).
   `unreal/TheaterCommand/Content/Effects/battle-fx.json`; copy it across after each change.
 - The game kit: `unreal/TheaterCommand/Source/TheaterCommand/Effects/`.
   - `TheaterFxCore.*` is plain C++ with no Unreal in it. It does all the work.
-  - `BattleEffects.*` hangs the core's puffs on one procedural mesh with M_Highlight, and lights up to two shadowless lamps.
+  - `BattleEffects.*` hangs the core's puffs on one procedural mesh with M_Highlight, and lights up to two shadowless lamps (up to four when a scene asks: SetLampRule).
 - `preview/`: draws the core's own frames in the cloud, with no Unreal.
   ```
   SRC=unreal/TheaterCommand/Source/TheaterCommand
@@ -2073,3 +2073,50 @@ rock a low pale grey spray".
 - Switch: the word itself. Until the scene passes "rock" (the land field's FxWords table), nothing changes.
 - Preview: `FX_GROUND=138,132,122 ./fxpreview recipe out how105 rock 3,21,300 960x540`.
 - Stills: `battle-fx/stills/rock/rock-mend-*.png`.
+
+## Naval guns, and lamps by what the eye sees (SetLampRule, drawn only when a scene asks)
+
+The sea's night fight, 25 November (look bible S7: "gun flashes light the hulls"). A battleship's broadside lit a
+30 m patch by each turret with two lamps of 93 cd, and a slick burning 6 km off took one of the two lamps from it,
+because the lamps went to the strongest flashes alone.
+
+- Rows: `muzzle.naval_heavy` (280 mm and up), `naval_medium` (150 to 279 mm) and `naval_light` (under 150 mm). Each
+  has a short flame, a fireball ahead of the muzzle (the secondary flash, `fireball_m`, `_wide`, `_s`, `_lobes`, three
+  colours, and `fireball_hold_s`, how long the lobes by the muzzle stay near-white), a smoke ring on the big guns
+  (`ring_m`, `ring_ahead_m`, `ring_s`, `ring_puffs`, `ring_grow`), its own brown-grey cloud (`cloud_m`,
+  `smoke_colour`; no billows, no dust ring), and a lamp of `lamp_cd` candelas at night reaching `lamp_reach_m`, about
+  the band's hull (240, 190 and 115 m), held while the fireball burns (`lamp_s`).
+  - The lamp hangs `lamp_out_m` out along the bore's level way and `lamp_up_m` up from the fireball's middle, about
+    half her length out and a quarter of it up (110/64, 88/52 and 55/31 m). Hung by the fireball (as first built) it
+    burnt 40 to 110 lux on the plating by the gun and left her ends 6 to 8 stops darker. Hung two fifths of her length
+    up (the first review round) it lit her from overhead, 48 to 54 degrees up, her deck as bright as her side, as a
+    star shell does. Now a broadside lights her side about 1.9 to 2.3 lux by the gun and 0.8 at her ends, the light
+    coming 29 to 32 degrees up over the water, her deck under half her side, and the water under the lamp about
+    9.3 lux (the sea paint's overlit is 9.9).
+  - By day every naval row lights at `game.day_lamp_share` (about 0.4 lux on her side).
+  - Sources and estimates are in `muzzle._naval`. Every key is read with a default, and no other row has any of them.
+- Rule: `Battle::SetLampRule(LampRule)`, which `FBattleEffects::SetLampRule` passes on, once at open.
+  - `Most` lamps, up to 4. The wrapper makes the extra point lights only then, shadowless, and under a rule with no
+    Lumen bounce and no volumetric fog.
+  - `bByEye` ranks each lamp by its strength over its distance squared from the eye (5 m at the least), the scale
+    fire.lamp's steady lights already use; a lamp whose sphere lies wholly out of the view ranks nothing. The steady
+    lights keep their share, and give it up only to a flash that sends the eye `Yield` (100) times their light.
+  - A salvo's flashes whose guns lie within `MergeM` metres and `MergeS` seconds of every other gun in it light one
+    lamp, at their lamps' strength-weighted middle. Its strength is their sum, held to `MergeMost` times the
+    strongest, and its reach covers them all. The distance is the guns' (the muzzles passed to `Muzzle`), not the
+    hung lamps': two ships 500 m apart firing toward each other hang their lamps within 200 m of each other, while
+    their guns stay 310 m apart and more.
+  - Ties go by the lamps themselves, never by the order of the calls: the same flashes give the same lamps to the bit.
+  - `LampRule::Sea()` is 3 lamps, by the eye, 200 m and 0.3 s.
+  - With no call, or a rule of all defaults, every lamp is handed out as before, to the byte.
+- Test: `unreal/TheaterCommand/Tools/fx_lamps/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`).
+  - 75 checks, each new rule part with a control that shows the check can fail.
+  - The rows' table, night, dusk and day, and the light along each band's side plating: its shape whatever the level
+    (end to end, from over the water), and its levels at the shipped `lamp_cd`, so scaling the three `lamp_cd` on the
+    Mac never fails them.
+  - The cost with 40 ships firing, the fastest of 9 calls a frame, on time lines kept out of the compilers' comparison.
+  - A night picture: from above, the battle line close, and each firing battleship's side, for today's lamps, the
+    rule as first built and the rule now.
+  - Every default lamp of a scripted land and sea fight, held to the kit before the rule byte for byte.
+- Preview: `FX_GUN=naval_heavy` on the sea shot.
+- Notes for the sea scene: `/mnt/project-files/sea-storm-night/effects-lamps-for-sea.md`.

@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 
+class AActor;
 class FJsonValue;
 struct FPostProcessSettings;
 class UMaterialInstanceDynamic;
@@ -54,7 +55,8 @@ private:
  * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn, FuelBall); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
- * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
+ * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless (a scene may
+ * ask for up to four, handed out its own way: SetLampRule).
  *
  * Every number is in the recipe, so the look is tuned there without a code change. The work itself is plain C++
  * (TheaterFxCore), which the cloud preview draws too (tools/battle-fx/preview).
@@ -327,6 +329,27 @@ public:
 	 * pay nothing. False, with a log line, without M_BattlePuffs and M_BattlePuffsSoft (Tools/build_content.sh with
 	 * TC_REBUILD=M_BattlePuffsSoft), and the kit draws as before. */
 	bool SetSoftContact(float Metres = 0.1f);
+	/** How the flashes' lamps are handed out, for a scene that wants its own (the sea's night fight, 25 November: look
+	 * bible S7, "gun flashes light the hulls"). Call once at open, before Begin or after it, on this thread. Without it
+	 * (ground, air) nothing changes: game.max_lamps lamps, the strongest flashes first, and no point light more is made.
+	 * Rule.Most lamps are made (0: game.max_lamps; never over MostLamps, 4), shadowless as ever and, under a rule, with
+	 * no Lumen bounce and no volumetric fog (a flash lit for a tenth of a second is more than Lumen's surface cache can
+	 * follow); the kit ranks them by the light each sends the eye (bByEye: the eye and view Tick is given; a lamp that
+	 * can light nothing on the screen ranks nothing), lights a salvo's flashes as one lamp (MergeM, MergeS, MergeMost)
+	 * and lets a steady fire's own lamp go to a flash left unlit that outshines it Yield times: see
+	 * TheaterFx::Battle::LampRule. Kept until End.
+	 *
+	 * The sea battle's calls (the sea scene's lane wires them; nothing here knows the sea):
+	 *   - once at open, beside Effects->SetSun(...):
+	 *         Effects->SetLampRule(TheaterFx::Battle::LampRule::Sea()); // 3 lamps, by the eye, a salvo within 200 m and 0.3 s one lamp
+	 *   - each turret (or mount) that fires, its row by calibre, as any gun:
+	 *         Effects->Muzzle(MuzzleAt, Facing, CalibreMm >= 280.0 ? TEXT("naval_heavy") : CalibreMm >= 150.0 ? TEXT("naval_medium") : TEXT("naval_light"), TEXT("water"));
+	 *     (a light cruiser whose main guns are 127 to 149 mm, hull 139 to 163 m, may take naval_medium for its reach)
+	 *   - every frame, as today, Effects->Tick(Now, Eye, Facing, Fov, ViewW, HourLight, ViewH): with FLinearColor::White
+	 *     (today) it is full day to the kit, so every naval row lights at game.day_lamp_share (a quarter: about 0.4 lux
+	 *     on her side); with the hour's own light (step 11) at night every row lights at full (about 1.6 lux by the gun).
+	 * Rows and numbers: Content/Effects/battle-fx.json muzzle._naval, and the sea's effects-lamps-for-sea.md. */
+	void SetLampRule(const TheaterFx::Battle::LampRule& Rule);
 	/** Everything gone: a new battle. */
 	void Clear();
 
@@ -380,9 +403,13 @@ private:
 	TWeakObjectPtr<UMaterialInstanceDynamic> SpreadInk; // (M_FireSpread as last put in a lens, so it is taken out again)
 	float InkBrightness = 1.0f; // (the Brightness Begin gave Ink: picture.lit_gain)
 	bool bSoftInk = false; // (Ink is M_BattlePuffsSoft's: SetSoftContact)
-	static constexpr int32 MostLamps = 4;
+	static constexpr int32 MostLamps = TheaterFx::Battle::MostLamps;
 	TWeakObjectPtr<UPointLightComponent> LampLights[MostLamps];
 	int32 LampsInUse = 2;
+	TheaterFx::Battle::LampRule AskedRule; // (SetLampRule's, kept for Begin; the default until a scene asks)
+	UPointLightComponent* MakeLamp(AActor* Owner, USceneComponent* Parent);
+	int32 LampsAsked() const; // (the rule's Most, else game.max_lamps; never over MostLamps)
+	void LampsByRule(); // (under a scene's rule, its lamps light directly only: no Lumen bounce, no fog)
 	double LampCandela = 400.0; // at full, already scaled for the world's units
 	int32 LampsLitBefore = 0; // (-TheaterFxLampLog: how many were lit the frame before, so the first frame with none is logged)
 	TFunction<FVector(const FVector&)> GroundUnder;
