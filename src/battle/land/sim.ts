@@ -2035,7 +2035,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; scale?: boolean | number }): Drill {
+  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; scale?: boolean | number }): Drill {
     if (this.drill) return this.drill;
     const { scale, ...rest } = opts ?? {};
     // True: the battle's own N; a number: that N (a recording or a test that sets its own).

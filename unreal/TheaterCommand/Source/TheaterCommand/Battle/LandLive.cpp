@@ -109,6 +109,18 @@ namespace
 		// can see is not touched: that part changes results and waits for the design director's ruling under a switch of
 		// its own. Off until a Mac off/on line and the art director pass it; -TheaterLandRuleHatches turns it on for a run.)
 		{ TEXT("hatches"), TEXT("Heads up, hatches down"), TEXT("Each tank commander rides with his head out of the hatch for the view, and drops inside in his own time when rounds come at his tank or the enemy gets close: green crews early and for long, veterans late and briefly. Off: a platoon's tanks all close up together when the enemy is within 120 metres."), TEXT("TheaterLandNoHatches"), false, TEXT("TheaterLandRuleHatches") },
+		// (Experience you can see, release 2: Brian, 25 November 15:11Z, "do those 3 ideas": green squads bunch up and
+		// freeze under first fire, veterans spread out and get down fast. The drill's, looks only, by the block's training
+		// alone (never its nation or the date); it works only with squad life on, and a battle ends the same with it on or
+		// off (tests/land-seasoned). Off until a Mac off/on line and the art director pass it; -TheaterLandRuleSeasoned
+		// turns it on for a run.)
+		{ TEXT("seasoned"), TEXT("Experience you can see"), TEXT("A squad's training shows in how it moves. Green squads bunch together and freeze for a moment when first fired on; veterans keep wider gaps and get down at once. Needs Squads of individuals on. Off: every squad spaces itself and reacts alike."), TEXT("TheaterLandNoSeasoned"), false, TEXT("TheaterLandRuleSeasoned") },
+		// (When the leader falls, release 2: Brian, 25 November 15:11Z, "do those 3 ideas": the squad hesitates a few
+		// seconds, then the next man takes charge. The drill's, looks only: the acting leader is marked in the drill and
+		// no man's model is swapped; it works only with squad life on, and a battle ends the same with it on or off
+		// (tests/land-leaders). Off until a Mac off/on line and the art director pass it; -TheaterLandRuleLeaders turns it
+		// on for a run.)
+		{ TEXT("leaders"), TEXT("When the leader falls"), TEXT("When a squad's leader is hit, his men go to ground and hesitate for a few seconds, some looking his way, until the next man takes charge and leads them on. Green squads take longer. Needs Squads of individuals on. Off: a squad carries on as if nothing had happened."), TEXT("TheaterLandNoLeaders"), false, TEXT("TheaterLandRuleLeaders") },
 		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
 		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
 		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },

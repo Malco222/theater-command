@@ -714,6 +714,20 @@ export class Drill {
    * one with the enemy inside 120 m, as before.
    */
   readonly hatches: boolean;
+  /**
+   * Experience you can see (release 2; Brian, 25 November 2026, 15:11Z: "do those 3 ideas"): a squad's training shows
+   * in how it moves: green squads bunch up and freeze for a moment under first fire, veterans keep wider gaps and get
+   * down fast. By the block's training alone (u.xp, grade()), never its nation or the date. Looks only (the drill's
+   * own dice), and only with squad life on. Off unless asked (DR.seasoned).
+   */
+  readonly seasoned: boolean;
+  /**
+   * When the leader falls (release 2; Brian, 25 November 2026, 15:11Z: "do those 3 ideas"): a squad whose leader is
+   * hit goes to ground and hesitates a few seconds, then the next man takes charge. He is marked as acting leader in
+   * the drill only: the man the 3D game draws is never swapped. Looks only (the drill's own dice), and only with squad
+   * life on. Off unless asked (DR.leaders).
+   */
+  readonly leaders: boolean;
   /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
   private readonly freshNow = new Set<Man>();
   private readonly sup = new Suppression();
@@ -721,13 +735,15 @@ export class Drill {
   private tankMemo: { t: number; at: Partial<Record<Side, [number, number][]>> } = { t: -1, at: {} };
   private readonly priMemo = new Map<number, { t: number; men: Man[] }>();
 
-  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; scale?: number } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; scale?: number } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
     this.sections = !!opts.sections || !!opts.platoons;
     this.platoons = !!opts.platoons;
     this.life = !!opts.life;
     this.hatches = !!opts.hatches;
+    this.seasoned = this.life && !!opts.seasoned;
+    this.leaders = this.life && !!opts.leaders;
     this.byBook = opts.book ?? (this.platoons || this.life);
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
     for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
@@ -1335,6 +1351,7 @@ export class Drill {
    * Men the rules have lifted off the tray fall where they stand, a tank too: she burns where she stood (at one of her
    * posts, up to about 20 m from the place the rules lay her wreck, their own mark for its shelter; wreckSpot).
    */
+  // ---- When the leader falls (Drill.leaders): its helpers stand just above falls(), below this line ----
   private falls(sq: Squad): void {
     const u = sq.u, t = this.b.t;
     for (const m of sq.men) {
@@ -1790,6 +1807,7 @@ export class Drill {
   /** How readily its men go to ground: raw troops sooner, veterans later. */
   private pinScale(u: LandUnit): number { return 1 / DR.xp.pinned[this.band(u)]; }
   private band(u: LandUnit): 0 | 1 | 2 { return u.xp < DR.xp.raw ? 0 : u.xp >= DR.xp.veteran ? 2 : 1; }
+  // ---- Experience you can see (Drill.seasoned): its helpers follow this line ----
   private nums(u: LandUnit): Nums {
     const s = this.b.style[u.side];
     return DR.style[s && this.b.ai[u.side] ? s.id : 'plain'];
