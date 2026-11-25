@@ -10,7 +10,7 @@ import { setFog } from '../src/campaign/intel';
 import {
   ATOM, aiAtom, aiStrikePick, armStrike, armedAt, atomBill, atomMonth, atomOn, atomPress, atomRaidWorth, atomSabotage, atomView, atomWanted, atomWorn,
   beginPlants, carriersFor, drawAt, monthsLeft, pausePlants, plantsAt, sabotageWeight, safestSite, seesPlants, setAtom, siteChoices, strikeFlown,
-  strikeTargets, whyNotPlants, whyNotStrike,
+  strikeBar, strikeTargets, strikeWords, whyNotPlants, whyNotStrike,
 } from '../src/campaign/atom';
 import { openDamage, damageOf } from '../src/campaign/citydamage';
 import { income, upkeep } from '../src/campaign/economy';
@@ -20,7 +20,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { ATOM_STAGE } from '../src/campaign/stage';
 import { startOpen } from '../src/campaign/staff';
 import { TECH, grantTech, hasTech, outOfTree, staffPick, techById, techRule, techView } from '../src/campaign/tech';
-import { townSize } from '../src/campaign/towns';
+import { townName, townSize } from '../src/campaign/towns';
 import { beginHuman, humanUp, orderRaid, orderAtomPlants, orderAtomStrike, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -74,7 +74,9 @@ describe('the rows', () => {
     expect([a.branch, b.branch, c.branch]).toEqual(['industry', 'industry', 'industry']);
     expect(b.needs).toContain(a.id);
     expect(c.needs).toContain(b.id);
-    expect(techRule(b)).toMatch(/atomic plants can be begun/);
+    expect(techRule(b)).toMatch(/atomic plants can be started: .* towards one great bill/);
+    expect(b.text).toMatch(/can be started: a great share/);
+    expect(techRule(c)).toMatch(/one more every two months while the plants keep making them\. A bomb is carried by a raid of four-engined bombers/);
     expect(techRule(c)).toMatch(/not a capital/);
     for (const t of [a, b, c]) expect(t.text).not.toMatch(/\d%/);
     expect(TECH.techs.filter((t) => t.atom).length).toBe(3);
@@ -141,8 +143,12 @@ describe('the plants', () => {
     expect(plantsAt(g, site)).toBe('GER');
     s.plants = 300;
     const line = atomSabotage(g, site);
-    expect(line).toMatch(/German atomic plants there lose 3 months/);
+    // (his own plants: the line says whose without a name)
+    expect(line).toBe('The atomic plants there lose 3 months of their work.');
     expect(s.plants).toBeCloseTo(300 - 3 * drawAt(g, 'GER', 'full'), 6);
+    g.human = 'UK';
+    expect(atomSabotage(g, site)).toBe('The German atomic plants there lose 3 months of their work.');
+    g.human = 'GER';
     // Nowhere else.
     expect(atomSabotage(g, g.regions[R(g, 'Paris')])).toBeNull();
   });
@@ -160,6 +166,17 @@ describe('the plants', () => {
     expect(g.nations.SOV.atom?.papers).toContain('GER');
     // The papers let the captor's side see the project.
     expect(seesPlants(g, 'SOV', 'GER')).toBe(false); // nothing left standing to see
+    expect(g.headlines.some((h) => h.kind === 'event' && h.text === `Germany has lost its atomic plants at ${townName(site)} to the Soviet Union. All their work is lost with the province.`)).toBe(true);
+    // The captor's own line, where the papers give him rows he lacked.
+    const k = seat('SOV', 4, true);
+    allRows(k, 'GER');
+    expect(beginPlants(k, 'GER')).toBe(true);
+    const ks = k.nations.GER.atom!, kr = k.regions[ks.site!];
+    ks.plants = 400;
+    kr.ctrl = 'SOV';
+    atomMonth(k, 'GER');
+    expect(k.headlines.map((h) => h.text)).toContain(`You have taken the German atomic plants at ${townName(kr)}. Their papers give you Atomic physics and Chain reaction.`);
+    expect(k.headlines.some((h) => /has lost its atomic plants/.test(h.text))).toBe(false);
   });
 });
 
@@ -200,9 +217,13 @@ describe('the strike', () => {
     const g = armed();
     const t = strikeTargets(g, 'UK');
     expect(t.length).toBeGreaterThan(3);
-    for (const id of t) { const r = g.regions[id]; expect(townSize(g, r)).toBe('city'); expect(homeOf(g, r)).toBe(r.ctrl); }
-    expect(t).not.toContain(R(g, 'Berlin'));
+    for (const id of t) { const r = g.regions[id]; expect(['city', 'capital']).toContain(townSize(g, r)); expect(homeOf(g, r)).toBe(r.ctrl); }
+    // (a capital is listed, with its reason, and can never be struck)
+    expect(t).toContain(R(g, 'Berlin'));
     expect(whyNotStrike(g, 'UK', R(g, 'Berlin'))).toMatch(/Never a capital/);
+    expect(strikeBar(g, 'UK', R(g, 'Berlin'))).toBe('A capital');
+    expect(strikeBar(g, 'UK', R(g, 'Hamburg'))).toBeNull();
+    expect(strikeBar(g, 'UK', R(g, 'Vienna'))).toBe("Beyond your bombers' reach");
     expect(whyNotStrike(g, 'UK', R(g, 'Paris'))).not.toBeNull();
     expect(whyNotStrike(g, 'UK', R(g, 'Hamburg'))).toBeNull();
     expect(carriersFor(g, 'UK', R(g, 'Hamburg')).length).toBeGreaterThan(0);
@@ -211,6 +232,7 @@ describe('the strike', () => {
     // Without the heavy bombers.
     g.nations.UK.tech!.done = g.nations.UK.tech!.done.filter((x) => x !== 'heavybombers');
     expect(whyNotStrike(g, 'UK', R(g, 'Hamburg'))).toMatch(/Four-engined/);
+    expect(strikeBar(g, 'UK', R(g, 'Hamburg'))).toBe('Needs Four-engined bombers');
   });
 
   it('flies as a bombing raid through the air rules: reached, the city is ruined and the will is struck; nothing else is done to it', () => {
@@ -227,12 +249,18 @@ describe('the strike', () => {
     expect(armedAt(g, 'UK')).toBeNull();
     // No ordinary bombing: the raid takes nothing off the victim's output.
     expect(JSON.stringify(g.raids.GER ?? null)).toBe(raidsBefore);
+    // The strike is told in a plain line of its own; the raid's own line reads as any raid's.
+    const told = g.headlines.filter((h) => /atomic bomb/.test(h.text));
+    expect(told.length).toBe(1);
+    expect(told[0].kind).toBe('event');
+    expect(g.headlines.some((h) => h.kind === 'battle' && /atomic|  /.test(h.text))).toBe(false);
     if (s.used) {
-      expect(rep!.result).toMatch(/A single atomic bomb has destroyed most of Hamburg\./);
+      expect(rep!.result).toBe('A single atomic bomb has destroyed most of Hamburg. The United Kingdom has the atomic bomb.');
+      expect(told[0].text).toBe(rep!.result);
       expect(damageOf(g, g.regions[ham])).toBeGreaterThan(0.7);
       expect(atomWorn(g, 'GER')).toBeCloseTo(ATOM.will.first, 9);
     } else {
-      expect(rep!.result).toMatch(/lost before it reached Hamburg/);
+      expect(rep!.result).toBe('The bomber carrying the atomic bomb was lost on the way to Hamburg, and the bomb with it.');
       expect(atomWorn(g, 'GER')).toBe(0);
     }
     // One a month.
@@ -244,14 +272,35 @@ describe('the strike', () => {
     const g = armed();
     const ham = R(g, 'Hamburg'), ruhr = R(g, 'Ruhr'), rh = R(g, 'Rhineland');
     const base = willLost(g, 'GER');
-    const hit = (r: number): void => { const s = g.nations.UK.atom!; s.bombs = 1; s.armed = [g.turn, r]; strikeFlown(g, 'UK', r, 10, 10); delete s.struck; };
+    const words: string[] = [];
+    const hit = (r: number): void => { const s = g.nations.UK.atom!; s.bombs = 1; s.armed = [g.turn, r]; words.push(strikeWords(g, 'UK', r)); words.push(strikeFlown(g, 'UK', r, 10, 10).text); delete s.struck; };
     hit(ham);
+    expect(words[0]).toBe('This raid carries the atomic bomb. If its bomber reaches Hamburg, most of the city is destroyed and Germany loses 25% of its will to fight. If the bomber is shot down, the bomb goes with it.');
     expect(atomWorn(g, 'GER')).toBeCloseTo(ATOM.will.first, 9);
     hit(ruhr);
+    // (the card's figure is what the next strike takes; a later strike by the same country is not a tally)
+    expect(words[2]).toMatch(/loses 15% of its will to fight/);
+    expect(words[3]).toBe(`Another British atomic bomb has destroyed most of ${townName(g.regions[ruhr])}.`);
     expect(atomWorn(g, 'GER')).toBeCloseTo(ATOM.will.first + ATOM.will.second, 9);
     for (let k = 0; k < 6; k++) hit(rh);
     expect(atomWorn(g, 'GER')).toBeCloseTo(ATOM.will.most, 9);
     expect(willLost(g, 'GER')).toBeCloseTo(base + ATOM.will.most, 9);
+    expect(words[words.length - 2]).toMatch(/loses 0% of its will to fight/);
+  });
+
+  it('a bomb lost on the way is told to the striker\'s side only: the defender saw an ordinary raid', () => {
+    const g = armed();
+    const ham = R(g, 'Hamburg');
+    g.nations.UK.atom!.armed = [g.turn, ham];
+    expect(strikeFlown(g, 'UK', ham, 10, 0).tell).toBe(true);
+    const k = armed();
+    k.human = 'GER';
+    k.nations.UK.atom!.armed = [k.turn, ham];
+    const lost = strikeFlown(k, 'UK', ham, 10, 0);
+    expect(lost.hit).toBe(false);
+    expect(lost.tell).toBe(false);
+    k.nations.UK.atom!.bombs = 1; k.nations.UK.atom!.armed = [k.turn, ham];
+    expect(strikeFlown(k, 'UK', ham, 10, 10).tell).toBe(true);
   });
 
   it('opens the way to terms for a computer-run country for some months, never moves the player\'s seat', () => {
@@ -392,14 +441,16 @@ describe('through the bridge', () => {
     expect((TC.view() as { atomBomb: boolean }).atomBomb).toBe(true);
     expect((TC.view() as { pages: { id: string; label: string }[] }).pages).toContainEqual({ id: 'atom', label: 'THE ATOMIC PROJECT' });
     let page = TC.page('atom') as PageLike;
-    expect(page.headline).toBe('The plants can be begun');
-    expect(page.sections[1].heading).toBe('THE ATOMIC PLANTS: WHERE THEY WILL STAND');
+    expect(page.headline).toBe('The plants can be started');
+    expect(page.sections[1].heading).toBe('WHERE THE PLANTS WILL STAND');
+    expect(page.note).toMatch(/^A long gamble: /);
     const begin = page.top.find((b) => b.act === 'atom:begin')!;
     expect(begin.ok).toBe(true);
     expect((TC.act('atom:pace:crash') as { ok: boolean }).ok).toBe(true);
     expect((TC.act('atom:begin') as { ok: boolean }).ok).toBe(true);
     page = TC.page('atom') as PageLike;
     expect(page.headline).toBe('The plants are 0% done');
+    expect(page.top.map((b) => b.label)).toContain('STOP THE PLANTS');
     // Finished, with a bomb in hand: the chip, the targets, and the raid card with its line.
     const h = loadGame((TC.save() as { text: string }).text)!;
     const a = h.nations.UK.atom!;
@@ -407,6 +458,10 @@ describe('through the bridge', () => {
     TC.load(saveGame(h));
     expect((TC.view() as { todo: { k: string; t: string }[] }).todo).toContainEqual(expect.objectContaining({ k: 'page:atom', t: 'AN ATOMIC BOMB IS READY' }));
     page = TC.page('atom') as PageLike;
+    // (the chip has done its work once he has opened the page: a bomb kept in hand is a choice, not a chore)
+    expect((TC.view() as { todo: { k: string }[] }).todo.some((x) => x.k === 'page:atom')).toBe(false);
+    const berlin = page.sections.find((x) => x.heading === 'A STRIKE')!.rows.find((r) => r.title === 'BERLIN')!;
+    expect(berlin.lines).toEqual(['A capital']);
     const strike = page.sections.find((x) => x.heading === 'A STRIKE')!;
     expect(strike.text).toMatch(/Never a capital/);
     const ham = strike.rows.find((r) => r.title === 'HAMBURG')!;
@@ -414,7 +469,13 @@ describe('through the bridge', () => {
     expect(out.ok).toBe(true);
     expect(out.open.startsWith(`plan:bomb:${h.byName.Hamburg.id}:`)).toBe(true);
     const card = TC.page(out.open) as PageLike & { card?: { effects?: string[] } };
-    expect(JSON.stringify(card)).toMatch(/This raid carries the atomic bomb/);
+    expect(JSON.stringify(card)).toMatch(/This raid carries the atomic bomb\. If its bomber reaches Hamburg, most of the city is destroyed and Germany loses 25% of its will to fight\. If the bomber is shot down, the bomb goes with it\./);
+    expect(JSON.stringify(card)).toMatch(/"bomb":true/);
+    expect(JSON.stringify(card)).toMatch(/"back":\{"label":"BACK","act":"atom:back"/);
+    const back = TC.act('atom:back') as { ok: boolean; open: string };
+    expect(back.ok).toBe(true);
+    expect(back.open).toBe('atom');
+    expect((TC.page('atom') as PageLike).headline).toBe('An atomic bomb is ready');
     expect((TC.act('atomrule:off') as { ok: boolean }).ok).toBe(true);
     expect((TC.view() as { atomBomb: boolean }).atomBomb).toBe(false);
   });

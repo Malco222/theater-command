@@ -413,7 +413,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 					: TEXT("A shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. It works only with Shadowing on. It can be switched in any month."),
 				Now.bShadowRelay ? TEXT("ON") : TEXT("OFF"), Now.bShadowRelay);
 			// (Release 2, atom.ts; Brian 25 November 2026 01:14Z) The atomic project, a moonshot any large industry can attempt.
-			Add(TEXT("atomrule"), TEXT("The atomic project"), TEXT("Three steps of the Industry branch, then atomic plants that take a share of your earnings every month for years: a large industry finishes them in about two years, a small one never. Then a bomb or two, each carried by an ordinary bombing raid on an enemy city that is not a capital. The city is left in ruins and the country loses much of its will to fight. Spies, bombing and capture set the plants back. Every country plays by the same rules. It can be switched in any month."),
+			Add(TEXT("atomrule"), TEXT("The atomic project"), TEXT("Three steps of the Industry branch, then atomic plants that take a share of your earnings every month for years: a large industry finishes them in about two years, a small one never. Then a bomb or two, each carried by an ordinary raid of four-engined bombers on an enemy city that is not a capital. The city is left in ruins and the country loses much of its will to fight. Spies, bombing and capture set the plants back. Every country plays by the same rules. Off, the atomic rows leave the research tree and nobody builds the bomb. It can be switched in any month."),
 				Now.bAtomBomb ? TEXT("ON") : TEXT("OFF"), Now.bAtomBomb);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
@@ -5858,7 +5858,14 @@ void ACampaignPlayerController::Escape()
 	}
 	else if (bPageOpen)
 	{
-		ClosePage();
+		if (Page.Card.bValid && Page.Card.bBomb)
+		{
+			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
+		}
+		else
+		{
+			ClosePage();
+		}
 	}
 	else if (WarPrompt.bVisible)
 	{
@@ -12284,6 +12291,13 @@ void ACampaignPlayerController::EndMonth()
 	if (!bScripted && bPageOpen && Page.Month.bValid)
 	{
 		ClosePage();
+		return;
+	}
+	// (Release 2, atom.ts; the UI director under ruling 134(f).) On the raid card of a raid that carries the atomic bomb,
+	// Enter is BACK, the lit answer: the bomb is kept, and the raid takes a click. (END THE MONTH clicked goes on as ever.)
+	if (bEnterByKey && !bScripted && bPageOpen && Page.Card.bValid && Page.Card.bBomb)
+	{
+		PressPage(Page.Card.Back.Act);
 		return;
 	}
 	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never

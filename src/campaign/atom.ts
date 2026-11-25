@@ -30,7 +30,7 @@ import { Rng, hashString } from '../core/rng';
 import type { AtomPace, AtomState, Game, Nation, Region } from './types';
 import { allied, atWar, collapseScore, headline, homeOf, theName } from './game';
 import { income } from './economy';
-import { grantTech, hasTech, techOf, techRules } from './tech';
+import { grantTech, hasTech, techById, techOf, techRules } from './tech';
 import { DAMAGE, damageOf } from './citydamage';
 import { ruinHit, type CityHit } from './repairs';
 import { ruinedAt } from './rails';
@@ -143,7 +143,7 @@ export function whyNotPlants(g: Game, nat: string, site?: number): string | null
   if (!atomOn(g) || !techRules(g)) return 'The atomic project is not in this campaign.';
   const n = g.nations[nat];
   if (!n?.alive) return 'The nation is out of the war.';
-  if (n.atom?.plants !== undefined) return 'The plants are already begun.';
+  if (n.atom?.plants !== undefined) return 'The plants are already started.';
   if (!hasTech(g, nat, ATOM.rows.chain)) return 'Needs Chain reaction first.';
   const at = site ?? n.atom?.site ?? safestSite(g, nat);
   if (at === null || at === undefined || !siteFits(g, nat, g.regions[at])) return 'There is no province of your own at home with industry to build them in.';
@@ -157,11 +157,11 @@ export function beginPlants(g: Game, nat: string, site?: number, pace?: AtomPace
   s.site = site ?? s.site ?? safestSite(g, nat)!;
   s.plants = 0;
   if (pace) s.pace = pace;
-  if (nat === g.human) headline(g, 'info', `The atomic plants are begun ${inAt(g.regions[s.site])}. They take ${pct(shareOf(s))} of the nation's earnings every month${monthsWords(monthsLeft(g, nat))}.`, nat, s.site);
+  if (nat === g.human) headline(g, 'info', `Work has started on the atomic plants ${inAt(g.regions[s.site])}. They take ${pct(shareOf(s))} of the nation's earnings every month and, at today's earnings, ${finishWords(monthsLeft(g, nat))}.`, nat, s.site);
   return true;
 }
 
-/** Chooses where the plants will stand, before they are begun. */
+/** Chooses where the plants will stand, before they are started. */
 export function chooseSite(g: Game, nat: string, region: number): boolean {
   const n = g.nations[nat];
   if (!atomOn(g) || !n?.alive || n.atom?.plants !== undefined || !siteFits(g, nat, g.regions[region])) return false;
@@ -209,8 +209,12 @@ export function atomMonth(g: Game, nat: string): void {
   // A site lost: the plants stand on the ground, so they go with it, and the captor takes the papers.
   if (s.plants !== undefined && s.done === undefined && s.site !== undefined && !allied(g, nat, g.regions[s.site].ctrl)) {
     const r = g.regions[s.site], by = r.ctrl;
-    papersTo(g, by, nat);
-    headline(g, 'event', `${upFirst(theName(n))} has lost its atomic plants ${inAt(r)} to ${theName(g.nations[by])}. Their work is gone with the ground.`, nat, r.id);
+    // (Told at the player's sight, 133(a): his own side's plants, plants he knew of, or ground his side has taken. The
+    // captor's own line, where the papers give him rows he lacked, in place of the other.)
+    const told = !!g.human && (seesPlants(g, g.human, nat) || allied(g, g.human, by));
+    const gave = papersTo(g, by, nat);
+    if (by === g.human && gave.length) headline(g, 'event', `You have taken the ${n.adj} atomic plants ${inAt(r)}. Their papers give you ${gave.map((id) => techById(id)?.name ?? id).join(' and ')}.`, by, r.id);
+    else if (told) headline(g, 'event', `${upFirst(theName(n))} has lost its atomic plants ${inAt(r)} to ${theName(g.nations[by])}. All their work is lost with the province.`, nat, r.id);
     delete s.plants; delete s.site; delete s.paused;
     return;
   }
@@ -219,14 +223,15 @@ export function atomMonth(g: Game, nat: string): void {
   // The plants: a share of the month's earnings, worked as well as the town lets them.
   if (s.plants !== undefined && s.done === undefined) {
     if (s.paused) return;
-    if (n.pp < 0) { if (nat === g.human && g.flags[`atom:idle:${nat}`] !== g.turn - 1) headline(g, 'info', 'The atomic plants stand idle: the treasury is in debt.', nat); g.flags[`atom:idle:${nat}`] = g.turn; return; }
+    if (n.pp < 0) { if (nat === g.human && g.flags[`atom:idle:${nat}`] !== g.turn - 1) headline(g, 'info', 'The atomic plants stand idle: the treasury is in debt. They start again once it is out of debt.', nat); g.flags[`atom:idle:${nat}`] = g.turn; return; }
     const paid = drawAt(g, nat, paceOf(s));
     s.paid = [g.turn, paid];
     s.plants += paid * (1 - siteHarm(g, g.regions[s.site!]));
     if (s.plants >= ATOM.plants.bill - 1e-9) {
       s.plants = ATOM.plants.bill;
       s.done = g.turn;
-      if (nat === g.human) headline(g, 'info', hasTech(g, nat, ATOM.rows.weapon) ? 'The atomic plants are finished. The first bomb can be made.' : 'The atomic plants are finished. The bomb waits on Atomic weapon design.', nat, s.site);
+      // (With the design done the first bomb is ready this same month, and its line says it: the UI director.)
+      if (nat === g.human && !hasTech(g, nat, ATOM.rows.weapon)) headline(g, 'info', 'The atomic plants are finished. The bomb waits on Atomic weapon design.', nat, s.site);
     }
   }
   bombMonth(g, n);
@@ -240,7 +245,8 @@ function bombMonth(g: Game, n: Nation): void {
     s.ready = g.turn;
     s.bombs = 1;
     s.next = 0;
-    if (n.id === g.human) headline(g, 'info', 'An atomic bomb is ready. It can be carried by a bombing raid on an enemy city in reach of your bombers. Open THE ATOMIC PROJECT.', n.id);
+    s.fresh = g.turn;
+    if (n.id === g.human) headline(g, 'info', hasTech(g, n.id, ATOM.strike.need) ? 'An atomic bomb is ready. It can be carried by a raid of four-engined bombers on an enemy city in their reach that is not a capital. Open THE ATOMIC PROJECT.' : 'An atomic bomb is ready, but it needs Four-engined bombers to carry it.', n.id);
     return;
   }
   if (s.stopMaking || (s.bombs ?? 0) >= ATOM.plants.most || n.pp < 0) return;
@@ -250,6 +256,7 @@ function bombMonth(g: Game, n: Nation): void {
   if (s.next >= ATOM.plants.every - 1e-9) {
     s.next = 0;
     s.bombs = Math.min(ATOM.plants.most, (s.bombs ?? 0) + 1);
+    s.fresh = g.turn;
     if (n.id === g.human) headline(g, 'info', 'Another atomic bomb is ready.', n.id);
   }
 }
@@ -275,14 +282,14 @@ function bookMonth(g: Game, n: Nation): void {
   s.plants = ATOM.plants.bill * (g.turn - B.plants + 1) / (B.ready - B.plants + 1);
 }
 
-/** The papers of a country's project, taken with its plants' ground: the two research rows, where the captor has a tree. */
-function papersTo(g: Game, by: string, from: string): void {
+/** The papers of a country's project, taken with its plants' ground: the two research rows, where the captor has a tree. Returns the rows it gave. */
+function papersTo(g: Game, by: string, from: string): string[] {
   const n = g.nations[by];
-  if (!n?.alive || !techOf(g, by)) return;
-  grantTech(g, by, ATOM.rows.physics);
-  grantTech(g, by, ATOM.rows.chain);
+  if (!n?.alive || !techOf(g, by)) return [];
+  const gave = [ATOM.rows.physics, ATOM.rows.chain].filter((id) => grantTech(g, by, id));
   const s = stateOf(n);
   if (!(s.papers ??= []).includes(from)) s.papers.push(from);
+  return gave;
 }
 
 // ---- Who knows of whose plants ---------------------------------------------------------------------------
@@ -326,7 +333,7 @@ export function atomSabotage(g: Game, r: Region): string | null {
   const back = ATOM.sabotage.months * drawAt(g, owner, paceOf(s));
   if (back <= 0 || (s.plants ?? 0) <= 0) return null;
   s.plants = Math.max(0, (s.plants ?? 0) - back);
-  return `The ${g.nations[owner].adj} atomic plants there lose ${ATOM.sabotage.months} months of their work.`;
+  return owner === g.human ? `The atomic plants there lose ${ATOM.sabotage.months} months of their work.` : `The ${g.nations[owner].adj} atomic plants there lose ${ATOM.sabotage.months} months of their work.`;
 }
 
 /** How many more times the other side's saboteurs pick the player's plants province (intel.ts): only for plants they have seen. */
@@ -337,13 +344,14 @@ export function sabotageWeight(g: Game, foe: string, r: Region): number {
 
 // ---- The strike -----------------------------------------------------------------------------------------
 
-/** The cities a nation may strike: on the home ground of a country it is at war with, not a capital, not a mere town. */
+/** The cities on the home ground of a country this nation is at war with, not a mere town: capitals among them, which whyNotStrike rules out. */
 export function strikeTargets(g: Game, nat: string): number[] {
   const out: number[] = [];
   for (const r of g.regions) {
     const v = homeOf(g, r);
     if (!v || v !== r.ctrl || !atWar(g, nat, v) || !g.nations[v]?.alive) continue;
-    if (townSize(g, r) !== 'city') continue;
+    const size = townSize(g, r);
+    if (size !== 'city' && size !== 'capital') continue;
     out.push(r.id);
   }
   return out;
@@ -371,6 +379,18 @@ export function whyNotStrike(g: Game, nat: string, region: number): string | nul
   return null;
 }
 
+/** The reason a city cannot be struck, as the page sets it out beside the city (the UI director): a few words. */
+export function strikeBar(g: Game, nat: string, region: number): string | null {
+  const why = whyNotStrike(g, nat, region);
+  if (why === null) return null;
+  const r = g.regions[region], s = g.nations[nat]?.atom;
+  if (r && townSize(g, r) === 'capital') return 'A capital';
+  if (s?.struck === g.turn) return 'One strike this month already';
+  if (!hasTech(g, nat, ATOM.strike.need)) return 'Needs Four-engined bombers';
+  if (why === 'None of your bomber groups can reach it this month.') return "Beyond your bombers' reach";
+  return why;
+}
+
 /** Arms a strike: the next bombing raid this nation flies on that city this month carries the bomb. */
 export function armStrike(g: Game, nat: string, region: number): boolean {
   if (whyNotStrike(g, nat, region) !== null) return false;
@@ -381,7 +401,7 @@ export function armStrike(g: Game, nat: string, region: number): boolean {
 /** The raid card's line for a raid that carries the bomb (airwar.ts): what it does if the bomber reaches the release, and if not. */
 export function strikeWords(g: Game, nat: string, region: number): string {
   const r = g.regions[region], v = g.nations[r.ctrl];
-  return `This raid carries the atomic bomb. If the bomber that carries it reaches ${townName(r)}, most of the city is destroyed and ${v ? theName(v) : 'the enemy'} loses much of its will to fight. If that bomber is shot down, the bomb is lost with it.`;
+  return `This raid carries the atomic bomb. If its bomber reaches ${townName(r)}, most of the city is destroyed and ${v ? theName(v) : 'the enemy'} loses ${pct(v ? nextWorn(g, v.id) : ATOM.will.first)} of its will to fight. If the bomber is shot down, the bomb goes with it.`;
 }
 
 /** Takes an armed strike back before the raid flies. */
@@ -398,8 +418,12 @@ export function armedAt(g: Game, nat: string): number | null {
   return a && a[0] === g.turn && (g.nations[nat].atom?.bombs ?? 0) > 0 ? a[1] : null;
 }
 
-/** What an armed strike's raid came to: the one line of news, whether the bomb reached the city, and the ruin it left. */
-export interface StrikeResult { text: string; hit: boolean; city: CityHit | null }
+/**
+ * What an armed strike's raid came to: the one line of news, whether the bomb reached the city, the ruin it left, and
+ * whether the line is told (the UI director: a bomb that reached its city is told to every side; one lost on the way,
+ * to the striker's side only, for the defender saw an ordinary raid).
+ */
+export interface StrikeResult { text: string; hit: boolean; city: CityHit | null; tell: boolean }
 
 /**
  * The raid of an armed strike has flown (air.ts fly, a raid on the armed city): `reached` of its `flown` bombers reached
@@ -414,13 +438,15 @@ export function strikeFlown(g: Game, nat: string, region: number, flown: number,
   s.struck = g.turn;
   const p = flown > 0 ? Math.max(0, Math.min(1, reached / flown)) : 0;
   const roll = new Rng(hashString(`atom:${g.seed}:${g.turn}:${nat}:${region}`)).next();
-  if (roll >= p) return { text: `The bomber carrying the atomic bomb was lost before it reached ${townName(r)}. The bomb is lost with it.`, hit: false, city: null };
+  if (roll >= p) return { text: `The bomber carrying the atomic bomb was lost on the way to ${townName(r)}, and the bomb with it.`, hit: false, city: null, tell: !!g.human && allied(g, g.human, nat) };
   const city = ruinHit(g, r, Math.min(ATOM.strike.ruin, DAMAGE.most));
+  const first = !s.used;
   s.used = (s.used ?? 0) + 1;
   const V = g.nations[v];
   ((V.atom ??= {}).hits ??= []).push([g.turn, nat, region]);
   g.flags[`atom:hit:${region}`] = g.turn;
-  return { text: `A single atomic bomb has destroyed most of ${townName(r)}. ${upFirst(theName(n))} has the atomic bomb.`, hit: true, city };
+  const text = first ? `A single atomic bomb has destroyed most of ${townName(r)}. ${upFirst(theName(n))} has the atomic bomb.` : `Another ${n.adj} atomic bomb has destroyed most of ${townName(r)}.`;
+  return { text, hit: true, city, tell: true };
 }
 
 // ---- The will to fight, and terms ----------------------------------------------------------------------
@@ -428,8 +454,18 @@ export function strikeFlown(g: Game, nat: string, region: number, flown: number,
 /** What strikes have taken from a country's will to fight (resources.ts willLost): it does not wear off. */
 export function atomWorn(g: Game, nat: string): number {
   if (!atomOn(g)) return 0;
+  return wornAfter(g.nations[nat]?.atom?.hits?.length ?? 0);
+}
+
+/** What the next strike that reaches a city of this country would take from its will to fight (the raid card's figure). */
+export const nextWorn = (g: Game, nat: string): number => {
   const k = g.nations[nat]?.atom?.hits?.length ?? 0;
-  if (!k) return 0;
+  return wornAfter(k + 1) - wornAfter(k);
+};
+
+/** The will to fight that k strikes take, all told. */
+function wornAfter(k: number): number {
+  if (k <= 0) return 0;
   const W = ATOM.will;
   return Math.min(W.most, W.first + (k > 1 ? W.second : 0) + Math.max(0, k - 2) * W.later);
 }
@@ -565,7 +601,7 @@ export function atomView(g: Game, nat: string): AtomView | null {
     pace: paceOf(s), paused: !!s?.paused, draw: atomBill(g, nat) || (s?.plants !== undefined && s.done === undefined && !s.paused ? drawAt(g, nat, paceOf(s)) : 0),
     months: s?.done === undefined ? monthsLeft(g, nat) : 0, done: s?.done !== undefined, bombs: s?.bombs ?? 0, making: !s?.stopMaking, next: s?.next ?? 0,
     armed: armedAt(g, nat),
-    targets: (s?.bombs ?? 0) > 0 ? strikeTargets(g, nat).map((region) => ({ region, why: whyNotStrike(g, nat, region) })) : [],
+    targets: (s?.bombs ?? 0) > 0 ? strikeTargets(g, nat).map((region) => ({ region, why: strikeBar(g, nat, region) })) : [],
     worn: atomWorn(g, nat), known,
   };
 }
@@ -575,4 +611,5 @@ export function atomView(g: Game, nat: string): AtomView | null {
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const upFirst = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 const inAt = (r: Region): string => `at ${townName(r)}`;
-const monthsWords = (m: number | null): string => (m === null ? '' : m <= 1 ? ': at today\'s earnings, done within the month' : `: at today's earnings, about ${m} months`);
+/** How long the plants will take at today's earnings, in the news line's words: past five years it says so. */
+export const finishWords = (m: number | null): string => (m === null || m > 60 ? 'will take more than five years' : `will be finished in about ${m <= 1 ? 'a month' : `${m} months`}`);

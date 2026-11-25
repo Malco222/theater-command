@@ -114,9 +114,9 @@ export type AtomPace = 'steady' | 'full' | 'crash';
 
 /** A nation's atomic project (atom.ts), and the strikes it has taken. Absent for a country that has never touched it. */
 export interface AtomState {
-  /** The province the plants stand in, or will stand in once begun. */
+  /** The province the plants stand in, or will stand in once started. */
   site?: number;
-  /** The work done on the plants, toward the bill; absent until they are begun. */
+  /** The work done on the plants, towards the bill; absent until they are started. */
   plants?: number;
   /** The pace they draw at; 'full' when absent. */
   pace?: AtomPace;
@@ -144,6 +144,10 @@ export interface AtomState {
   hits?: [number, string, number][];
   /** Countries whose project papers this one took with their plants' ground. */
   papers?: string[];
+  /** The month the newest bomb was ready (the bridge's chip shows from then until the page is opened). */
+  fresh?: number;
+  /** The month the player last opened THE ATOMIC PROJECT with a bomb in hand (display only: no rule reads it). */
+  seen?: number;
 }
 
 /**

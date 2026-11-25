@@ -618,8 +618,8 @@ function causeWords(id: string): string | null {
 /** What the three rows of the atomic project do (atom.ts), in words. */
 const ATOM_RULE: Record<number, string> = {
   1: 'The first step of the atomic project. It does nothing at the front.',
-  2: 'The atomic plants can be begun: they take a share of the earnings every month for years toward one great bill. A large industry finishes them in about two years; a small one never does.',
-  3: 'Once the plants are finished, the atomic bomb is ready, and after it one more every few months. A bomb is carried by a bombing raid on an enemy city that is not a capital.',
+  2: 'The atomic plants can be started: they take a share of the earnings every month for years towards one great bill. A large industry finishes them in about two years; a small one never does.',
+  3: 'Once the plants are finished, the atomic bomb is ready, and after it one more every two months while the plants keep making them. A bomb is carried by a raid of four-engined bombers on an enemy city that is not a capital.',
 };
 
 export function techRule(t: Tech, g?: Game, nat?: string): string {

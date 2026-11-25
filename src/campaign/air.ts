@@ -2103,6 +2103,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
   // Damaged cities (citydamage.ts): what the bombs did to the town itself, where they did anything.
   let city: CityHit | null = null;
+  // (Release 2, atom.ts) The strike's own line, where this raid carried the atomic bomb.
+  let atomLine: { text: string; hit: boolean; tell: boolean } | null = null;
   // Airfields as targets (fieldstate.ts): what the bombs did to a field, where they hit one.
   let fh: FieldHit | null = null;
   const bookGround = (hit: FieldHit): void => {
@@ -2214,7 +2216,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // rules above decided how many bombers reached the release; the bomb is with one of them or lost. Nothing else is
     // done to the city: no ordinary bombing, no raid on its output, no air campaign's count (priced once).
     const hit = strikeFlown(g, nat, target, a.B, bombed);
-    result = hit.text;
+    atomLine = { text: hit.text, hit: hit.hit, tell: hit.tell };
+    // (the raid's after card says it where the line is told; the raid's own line of news reads as any raid, below)
+    result = hit.tell ? hit.text : '';
     notable = true;
     city = hit.city;
     if (city) value += city.worth;
@@ -2377,6 +2381,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
 
+  // (Release 2, atom.ts; the UI director under ruling 230 4e) A raid that carried the atomic bomb reads as any raid in
+  // its own line; the strike is told in a line of its own, plain, the same whoever struck whom.
+  if (atomLine) result = '';
   // Groups of one fleet name the fleet once: "The Mobile Fleet's strike wing and carrier fighters" (the UI director, mend 6).
   const flying = fleets.filter((f) => a.att.some((x) => x.f === f));
   const deck = flying.length > 1 ? carrierOf(g, flying[0]) : null;
@@ -2410,9 +2417,11 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
     : `${a.place} bombed${night ? ' by night' : ''}`;
   // Who had the better of it, for an interface that sets the news out as won and lost (Version 80, display only).
-  const fought = { arm: 'air' as const, ...(defNat ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
+  const fought = { arm: 'air' as const, ...(defNat && !atomLine?.hit ? (won ? { won: nat, lost: defNat } : { won: defNat, lost: nat }) : {}) };
+  if (atomLine) text = text.replace('.  ', '. ');
   if (full) headline(g, 'battle', text, nat, sea ? undefined : target, fought);
   else routineNews(g, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, 'battle', text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ''}`, nat, sea ? undefined : target, fought);
+  if (atomLine?.tell) headline(g, 'event', atomLine.text, nat, target);
   return rep;
 }
 

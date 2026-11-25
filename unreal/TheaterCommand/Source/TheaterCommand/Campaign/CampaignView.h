@@ -583,6 +583,10 @@ struct FRaidCard
 	float BomberShare = 0.0f;
 	FString Massed, OffPatrol, Ticket; // for the pointer: what meeting up is worth, what it costs at home, the battle ticket
 	FPageButton Fly;
+	// (Release 2, atom.ts; the UI director under ruling 134(f).) A raid that carries the atomic bomb: BACK, the safe
+	// answer, is the lit button and takes Enter and Esc; the raid takes a click only.
+	bool bBomb = false;
+	FPageButton Back;
 	// (Ruling 107(d).) A bombing raid by day and by night, side by side: empty for any other kind of raid.
 	TArray<FRaidWay> Ways;
 	FString WaysLabel, WaysFoes, WaysFoesWords;
