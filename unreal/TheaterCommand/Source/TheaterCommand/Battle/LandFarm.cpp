@@ -109,6 +109,7 @@ namespace LandScape
 				// (the trial "sprucedepth" takes in "spruce": its far crowns as that word's, the wood itself deep and ragged)
 				bDepthTrial = F.Tried("sprucedepth");
 				bSpruceTrial = F.Tried("spruce") || bDepthTrial;
+				bGrassTrial = F.Tried("farmgrass");
 				bGold = EastGold(Look::Farmland, SnowLying, F.Lat, F.Lon, F.Month, F.Trial);
 				bBare = Month >= 11 || Month <= 3;
 				// the share of the woods' blocks that are conifer: the Ardennes' spruce plantations most
@@ -463,11 +464,43 @@ namespace LandScape
 					if (Month >= 6 && Month <= 9) return Grown{ CGrass, 0.55 }; // (the beet's leaves, dressed broad and dark)
 					return Grown{ CClods, 0.45 };
 				case Meadow:
+					if (bGrassTrial && !bBare && SnowLying <= 0.15) return FieldGrass(S, Pick, C);
 					if ((Month == 5 || Month == 6) && Pick < 0.12) return Grown{ LandField::Base::Flowers, 0.3 };
 					return Pick < 0.94 ? Grown{ CGrass, 0.62 } : Grown{ CStalks, 0.2 };
-				case Fallow: return Pick < 0.6 ? Grown{ CGrass, 0.45 } : Grown{ CStalks, 0.35 };
+				case Fallow:
+					if (bGrassTrial && !bBare && SnowLying <= 0.15) return FieldGrass(S, Pick, C);
+					return Pick < 0.6 ? Grown{ CGrass, 0.45 } : Grown{ CStalks, 0.35 };
+				case Pasture:
+					if (bGrassTrial && !bBare && SnowLying <= 0.15) return FieldGrass(S, Pick, C);
+					return Pick < 0.95 ? Grown{ CGrass, 0.5 } : Grown{ CStalks, 0.25 };
 				default: return Pick < 0.95 ? Grown{ CGrass, 0.5 } : Grown{ CStalks, 0.25 };
 				}
+			}
+
+			/**
+			 * The grassland in the growing months (on trial, "farmgrass"): the bocage's own short sward between clumps of
+			 * tussocks, tall grass and flowers, so an eastern pasture is a pasture at a man's eye and not a bare floor with
+			 * a few grass cards on it. The clumps from two noises at odd angles, some 4.6 m and 1.7 m across (no lattice);
+			 * grazing short with a tussock here and there, the hay meadow standing tall and flowered, the fallow rank with
+			 * weeds. Flowers only May to August. No new mesh: LandField's own dressing tints the sward with the ground.
+			 */
+			Grown FieldGrass(const Spot& S, double Pick, int C) const
+			{
+				using B = LandField::Base;
+				const double Ax = 0.809 * S.X - 0.588 * S.Y, Ay = 0.588 * S.X + 0.809 * S.Y;
+				const double Wide = Noise(Ax / 4.6, Ay / 4.6, Seed ^ 0xF6A5);
+				const double Fine = Noise(S.X / 1.7, S.Y / 1.7, Seed ^ 0xF6A6);
+				const double In = Smooth(-0.3, 0.3, Wide + 0.4 * Fine);
+				double Sw = 0.58, Tu = 0.3, Ta = 0.05, Fl = 0.04, Total = 1.3; // (grazing: short, a tussock here and there)
+				B Weed = B::Rosette;
+				if (C == Meadow) { Sw = 0.22; Tu = 0.18; Ta = 0.45; Fl = 0.12; Total = 1.45; Weed = CStalks; }
+				else if (C == Fallow) { Sw = 0.25; Tu = 0.3; Ta = 0.2; Fl = 0.07; Total = 1.2; Weed = CStalks; }
+				const double Clumped = 0.15 + 1.7 * In, Between = 1.2 - 0.45 * In;
+				if (Pick < Sw) return Grown{ B::Sward, Total * Between };
+				if (Pick < Sw + Tu) return Grown{ B::Tuft, Total * Clumped };
+				if (Pick < Sw + Tu + Ta) return Grown{ B::TallGrass, Total };
+				if (Pick < Sw + Tu + Ta + Fl) return Grown{ Month >= 5 && Month <= 8 ? B::Flowers : B::Tuft, Total * Clumped };
+				return Grown{ Weed, Total * (Weed == B::Rosette ? Clumped : 1.0) };
 			}
 
 			bool Dress(LandField::Placed& P, const Spot& S, double U4, double U5, double U6, double U7) const override
@@ -1681,6 +1714,8 @@ namespace LandScape
 			bool bEast = false, bRussia = false, bArdennes = false, bSlate = true, bBare = false;
 			/** The winter spruce on trial (Field::Tried("spruce")): from above a dark mass flecked with snow (KitLook). */
 			bool bSpruceTrial = false;
+			/** The growing months' grassland on trial "farmgrass" (FieldGrass): the bocage's sward and tussocks, in clumps. */
+			bool bGrassTrial = false;
 			/** The east's summer on trial "eastgold" (LandScape::EastGold): its ripe corn and stubble a step darker
 			 * (CropTone), for its own grade. */
 			bool bGold = false;
