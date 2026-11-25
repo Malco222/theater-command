@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0efb7850d 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 61384b04 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -15891,7 +15891,7 @@
     const since = g2.flags[`siege:${r.id}`];
     const lasted = since === void 0 ? 0 : g2.turn - since;
     const old = r.ctrl;
-    const again = takenInWarThisMonth(g2, r) && (willBurn(g2, r.prev, r) || willBurn(g2, old, r)) || (since === void 0 && g2.flags[`relieved:${r.id}`] === g2.turn ? "outside" : false);
+    const again = takenInWarThisMonth(g2, r) && willBurn(g2, r.prev, r) || (since === void 0 && g2.flags[`relieved:${r.id}`] === g2.turn ? "outside" : false);
     tallySiege(g2, how);
     if (how !== "empty") tallySiege(g2, "months", lasted);
     tallySiege(g2, "taken", garrisonOf(r).length);
@@ -55135,7 +55135,7 @@
   function capture(g2, r, nat) {
     const old = r.ctrl;
     if (old === nat) return;
-    const prev = r.prev, again = takenInWarThisMonth(g2, r), burnt = again && (willBurn(g2, prev, r) || willBurn(g2, old, r));
+    const prev = r.prev, again = takenInWarThisMonth(g2, r), burnt = again && willBurn(g2, prev, r);
     const owner = g2.nations[r.owner];
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
