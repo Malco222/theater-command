@@ -143,8 +143,8 @@ describe('the half year reaches no offer of a row posted on the old chart', () =
     const naples = rows.findIndex((r) => r[1] === 'USA' && r[2] === 'Fifth Army: II Corps (34th and 36th Infantry Divisions)');
     expect(rows[naples][6].until).toBeUndefined();
     setWar(g, 'USA', 'GER');
-    g.flags[`offer:${naples}`] = rows[naples][0];
-    g.flags[`offer:n:${naples}`] = 0;
+    g.flags[`asked:${naples}`] = rows[naples][0];
+    g.flags[`asked:n:${naples}`] = 0;
     g.turn = rows[naples][0] + 10;
     const o = rowOffers(g).find((x) => x.id === naples)!;
     expect(o.last).toBeNull();

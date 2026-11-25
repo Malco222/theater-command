@@ -292,7 +292,7 @@ describe("the computer's rows are as they were", () => {
     expect(rowOffers(g)).toEqual([]);
     months(g, 3, 19);
     expect([row(g, FORMOSA), at(g, FORTY8)]).toEqual([undefined, 'Formosa']);
-    expect(Object.keys(g.flags).filter((k) => k.startsWith('offer:'))).toEqual([]);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('asked:'))).toEqual([]);
   });
 
   it("by the book the record's book stays the book: at stops 1 and 2 a computer's 65th Brigade comes on its date at Japan's nearest held port, with America at peace", () => {

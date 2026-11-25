@@ -4991,7 +4991,7 @@ function takenShare(g: Game, i: number): number | undefined {
 //            lapses, and the corps it would have been made from are still his, the row made from it never comes:
 //            its men are the corps he kept, and nobody is counted twice (`menKept`). The offer says which later
 //            rows he gives up by declining (`then`).
-// A computer's rows are as they were. The state is three flags a row: `offer:N` the month it was made, `offer:n:N`
+// A computer's rows are as they were. The state is three flags a row: `asked:N` the month it was made, `asked:n:N`
 // how many corps it named, and `unmade:N` the month he declined it or it lapsed. With the far side off no offer is
 // ever made and none of them is written or read.
 //
@@ -5025,8 +5025,11 @@ export const offersOn = (g: Game): boolean => farOn(g) && g.flags.offers === 1;
 /** True for the player's own country where his rows are offers (`offersOn`). */
 const hisOffers = (g: Game, nat: string | null): boolean => nat !== null && nat === g.human && offersOn(g);
 
-const offerKey = (i: number): string => `offer:${i}`;
-const offerCount = (i: number): string => `offer:n:${i}`;
+// (Not `offer:N`: that flag is the map line's, the month a row's line told the player it names divisions he holds
+// already (a division is laid once, drawn.ts: `expeditions`, below). The two were one key when the lines met, and a
+// row whose line had been told would have been read here as an offer open and unanswered.)
+const offerKey = (i: number): string => `asked:${i}`;
+const offerCount = (i: number): string => `asked:n:${i}`;
 const offerOpen = (g: Game, nat: string, i: number): boolean => hisOffers(g, nat) && g.flags[offerKey(i)] !== undefined;
 const offerShut = (g: Game, i: number): void => { delete g.flags[offerKey(i)]; delete g.flags[offerCount(i)]; };
 /**

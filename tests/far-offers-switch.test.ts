@@ -25,7 +25,7 @@ import { cardRowOf, offersLook } from '../unreal/TheaterCommand/Rules/offers-loo
 type Call = (...a: unknown[]) => any;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
 const months = (g: Game, nat: string, from: number, to: number): void => { for (let t = from; t <= to; t++) { g.turn = t; startPhase(g, nat); } };
-const offerFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^(offer|leave|kept|unmade):/.test(k));
+const offerFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^(asked|leave|kept|unmade):/.test(k));
 const names = (g: Game, nat: string): string[] => g.corps.filter((c) => c.nat === nat && !c.dead).map((c) => c.name);
 /** A player's Japan at war with Britain in December 1941 (month 28) with Singapore his: the month two loans end. */
 const singapore = (on: boolean): Game => {
