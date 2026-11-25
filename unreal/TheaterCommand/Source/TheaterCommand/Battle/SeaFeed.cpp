@@ -185,7 +185,7 @@ namespace SeaFeed
 			P.EchoKind = Echo.IsObject() ? Echo["kind"].Str("") : std::string();
 			// The torpedo words' fields (the naval rules behind their "Friendly torpedoes" switch; Battle/SeaWordsCore), as each
 			// view says: a view without them clears them, and without the switch there are none. A turn clear is read only with
-			// the second its salvo lands; an id below 0 is none.
+			// the second the heads pass her (clearUntil); an id below 0 is none.
 			P.HeldFor = X["heldFor"].IsNumber() ? std::max(-1, X["heldFor"].Int()) : -1;
 			P.HeldForName = P.HeldFor >= 0 ? X["heldForName"].Str("") : std::string();
 			P.ClearFrom = X["clearFrom"].IsNumber() && X["clearUntil"].IsNumber() && std::isfinite(X["clearUntil"].Num()) ? std::max(-1, X["clearFrom"].Int()) : -1;

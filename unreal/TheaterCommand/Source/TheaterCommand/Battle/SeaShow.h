@@ -148,9 +148,9 @@ namespace SeaShow
 		bool bScope = false;
 		int ConvoyColumn = -1;
 		/** The torpedo words' fields (the naval rules behind their "Friendly torpedoes" switch, 25 November; Battle/SeaWordsCore
-		 * words them): the own piece in its line of fire it holds its salvo for (heldFor, -1 none) and that piece as the log
-		 * names it; the own piece whose running salvo it turns clear of (clearFrom, -1 none), the battle second that salvo
-		 * lands and the launcher as the log names it; under an order of the player's own (ordered). As each view says (none
+		 * words them): the own piece in its line of fire it holds its salvo for (heldFor, -1 none) and that piece as the rules
+		 * name it; the own piece whose running salvo it turns clear of (clearFrom, -1 none), the battle second its heads
+		 * pass her and the launcher as the rules name it; under an order of the player's own (ordered). As each view says (none
 		 * without the switch); the show itself never reads them. */
 		int HeldFor = -1, ClearFrom = -1;
 		std::string HeldForName, ClearFromName;

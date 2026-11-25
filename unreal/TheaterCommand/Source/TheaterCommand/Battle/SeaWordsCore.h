@@ -15,13 +15,15 @@
  * of fire, and its own side's pieces turn clear of a salvo of their own running. The words are the UI director's, final
  * at 13:27Z (relayed by the naval thread): a tag over each of the player's own pieces while it holds or turns clear, and
  * one line at the foot of the screen while the camera's subject is that piece. ASeaBattle places them and SSeaBattleScreen
- * draws them; neither words them.
+ * draws them; neither words them. A piece routing that turns clear has no orders to take up again: its line breaks off
+ * (the UI director, 25 November, as the rules made clearUntil the second the heads pass her), by the state its view
+ * gives it (the show's piece has it already: no field of the rules').
  *
  * The fields are the piece's extra in each view, live or recorded (SeaFeed reads them into SeaShow::Piece, as each view
  * says): heldFor and heldForName, clearFrom, clearUntil and clearFromName, ordered. Without the switch there are none and
  * nothing shows. Only the player's own pieces have words: an enemy piece holds or turns clear with none. The words name a
- * piece as the log does (the names come from the rules, lower case: "a cruiser of the Home Fleet"), never a ship, and
- * never speak of dice or odds.
+ * piece as the rules name it (lower case, one to ten ships in words, figures from 11, where the log keeps figures: "four
+ * destroyers of the Home Fleet"), never a ship, and never speak of dice or odds.
  */
 namespace SeaWords
 {
@@ -36,16 +38,20 @@ namespace SeaWords
 	struct Fields
 	{
 		/** heldFor: the own piece in its line of fire (-1 none; the rules keep it a second past their last check), and that
-		 * piece as the log names it, lower case. */
+		 * piece as the rules name it, lower case. */
 		int HeldFor = -1;
 		std::string HeldForName;
-		/** clearFrom and clearUntil: the own piece whose running salvo it turns clear of (-1 none) and the battle second that
-		 * salvo lands; and the launcher as the log names it. A clearFrom without its clearUntil is not read (SeaFeed). */
+		/** clearFrom and clearUntil: the own piece whose running salvo it turns clear of (-1 none) and the battle second the
+		 * rules let her go, the heads past her where she lies (never later than the salvo lands); and the launcher as the
+		 * rules name it. A clearFrom without its clearUntil is not read (SeaFeed). */
 		int ClearFrom = -1;
 		double ClearUntil = -1.0;
 		std::string ClearFromName;
 		/** ordered: the piece is under an order of the player's own (with either). */
 		bool bOrdered = false;
+		/** Routing: the piece breaking off, as its view's state says ("routing"; not one of the rules' torpedo fields, the
+		 * show's piece has it: FieldsOf reads it). */
+		bool bRouting = false;
 
 		bool Held() const { return HeldFor >= 0; }
 		bool Clearing() const { return ClearFrom >= 0; }
@@ -61,8 +67,8 @@ namespace SeaWords
 	int SecondsLeft(double Until, double Now);
 	/** "1 second", "12 seconds", "0 seconds". */
 	std::string SecondsWords(int Seconds);
-	/** The ships a piece's name itself gives, as the log names it: 1 where it opens "a ", "an " or "one ", the count where
-	 * it opens with a count ("two " to "twenty ", or in figures: "12 "), 0 where it gives no number. */
+	/** The ships a piece's name itself gives, as the rules or the log name it: 1 where it opens "a ", "an " or "one ", the
+	 * count where it opens with a count ("two " to "twenty ", or in figures: "12 "), 0 where it gives no number. */
 	int ShipsByName(const std::string& Name);
 
 	/** A piece's words: its tag and its line (empty with none). */
@@ -76,8 +82,10 @@ namespace SeaWords
 	 * none), at battle time Now. NamedShips: the ships afloat now of the piece heldFor (below 1 not known). The verb after
 	 * heldForName agrees with the phrase itself where it gives a number ("a cruiser ... is", "two destroyers ... are", even
 	 * in the second the rules keep the name after a ship of it has gone down), else with NamedShips, else "are". Held wins
-	 * over turning clear. A piece with no ship afloat, or not the player's, says nothing; a line needs the name of the
-	 * piece it speaks of (the tag stands without it).
+	 * over turning clear. A piece routing turns clear with no count and no orders to take up: "Breaking off, and turning
+	 * clear of torpedoes fired by ...", ordered or not, one ship or more (its tag the same; held, its words the same). A
+	 * piece with no ship afloat, or not the player's, says nothing; a line needs the name of the piece it speaks of (the
+	 * tag stands without it).
 	 */
 	Said Of(const Fields& F, int Side, int Mine, int Ships, int NamedShips, double Now);
 	/** The same for a piece of the show, the piece it names looked up among Pieces (the show's pieces now). */

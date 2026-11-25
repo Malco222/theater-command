@@ -16,6 +16,7 @@ namespace SeaWords
 		F.ClearUntil = P.ClearUntil;
 		F.ClearFromName = P.ClearFromName;
 		F.bOrdered = P.bOrdered;
+		F.bRouting = P.State == "routing";
 		return F;
 	}
 
@@ -39,7 +40,7 @@ namespace SeaWords
 
 	int ShipsByName(const std::string& Name)
 	{
-		// (its first word, as the log writes a count: "a", "an" or "one", a count in words, or in figures)
+		// (its first word, as the rules or the log write a count: "a", "an" or "one", a count in words, or in figures)
 		const size_t Space = Name.find(' ');
 		if (Space == std::string::npos || Space == 0) return 0;
 		std::string First = Name.substr(0, Space);
@@ -84,7 +85,12 @@ namespace SeaWords
 		}
 		Out.What = Kind::Clearing;
 		Out.Tag = ClearingTag;
-		if (!F.ClearFromName.empty())
+		if (!F.ClearFromName.empty() && F.bRouting)
+		{
+			// (breaking off, she has no orders to take up again: no count, no orders)
+			Out.Line = "Breaking off, and turning clear of torpedoes fired by " + F.ClearFromName + ".";
+		}
+		else if (!F.ClearFromName.empty())
 		{
 			const std::string Orders = F.bOrdered ? std::string("your") : Her;
 			Out.Line = "Turning clear of torpedoes fired by " + F.ClearFromName + ". " + (bMany ? "They take" : "She takes") + " up " + Orders + " orders again in " +
