@@ -1088,6 +1088,15 @@ GORE = [
          blast=(0.0, -0.3, 1.1), cut=[(0.0, "calf_l")], fling=[("calf_l", (-0.4, -2.2, 4.4), 1.4)],
          tone={"legs": (0.0, 0.06), "trunk": (0.05, 0.25), "neck": (0.0, 0.15), "arms": (0.0, 0.1)},
          release=0.0, throw=(0.6, -1.2, 1.4)),
+    # (and one each whose leg goes forward and out: the gun behind him, neither of the pair would fly away from it)
+    dict(name="die_leg_off_h", stance="stand", kind="under", blast_from="under", start=("fire_stand", 0.6),
+         blast=(-0.4, 0.2, 1.3), cut=[(0.0, "calf_l")], fling=[("calf_l", (2.0, -1.2, 4.8), 1.4)],
+         tone={"legs": (0.0, 0.06), "trunk": (0.08, 0.25), "neck": (0.05, 0.2), "arms": (0.0, 0.12)},
+         release=0.05, throw=(-0.4, 1.4, 1.6)),
+    dict(name="die_leg_off_i", stance="kneel", kind="under", blast_from="under", start=("fire_kneel", 0.3),
+         blast=(-0.3, 0.3, 1.0), cut=[(0.0, "calf_l")], fling=[("calf_l", (2.0, -1.1, 4.4), 1.4)],
+         tone={"legs": (0.0, 0.06), "trunk": (0.05, 0.25), "neck": (0.0, 0.15), "arms": (0.0, 0.1)},
+         release=0.0, throw=(-0.4, 1.2, 1.4)),
 ]
 # (what the art director asked of each, for the checks: a limb's arc and reach by what took it off, the blast's lift
 # and throw)
@@ -1099,16 +1108,16 @@ GATE = dict(peak=(1.0, 3.0), dist_blast=(2.0, 8.0), dist_arm=(1.0, 4.0), dist_le
 GORE_TABLE = {
     "stand": {"thrown": ["die_blast_a", "die_blast_b", "die_blast_e", "die_blast_f"],
               "back": ["die_arm_off_b", "die_leg_off_a"], "forward": ["die_leg_off_b", "die_arm_off_d"],
-              "side": ["die_arm_off_a", "die_arm_off_c"], "under": ["die_leg_off_d", "die_leg_off_f"]},
+              "side": ["die_arm_off_a", "die_arm_off_c"], "under": ["die_leg_off_d", "die_leg_off_f", "die_leg_off_h"]},
     "run": {"thrown": ["die_blast_a", "die_blast_b"], "back": ["die_arm_off_b", "die_leg_off_a"],
             "forward": ["die_leg_off_b", "die_arm_off_d"], "side": ["die_arm_off_a", "die_arm_off_c"],
-            "under": ["die_leg_off_d", "die_leg_off_f"]},
+            "under": ["die_leg_off_d", "die_leg_off_f", "die_leg_off_h"]},
     "kneel": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e", "die_arm_off_l"],
               "forward": ["die_arm_off_f", "die_arm_off_m"], "side": ["die_arm_off_g", "die_arm_off_h"],
-              "under": ["die_leg_off_e", "die_leg_off_g"]},
+              "under": ["die_leg_off_e", "die_leg_off_g", "die_leg_off_i"]},
     "cover": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e", "die_arm_off_l"],
               "forward": ["die_arm_off_f", "die_arm_off_m"], "side": ["die_arm_off_g", "die_arm_off_h"],
-              "under": ["die_leg_off_e", "die_leg_off_g"]},
+              "under": ["die_leg_off_e", "die_leg_off_g", "die_leg_off_i"]},
     "prone": {"thrown": ["die_blast_d"], "back": ["die_arm_off_i"], "forward": ["die_leg_off_c"],
               "side": ["die_arm_off_j", "die_arm_off_k"]},
 }
