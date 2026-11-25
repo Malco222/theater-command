@@ -13,7 +13,7 @@
 // reach, and the first test says so.)
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
-import { AIR, AIRWAR, airRange, assessAir, canStrafe, forecastAir, kmTo, skyWon, strafersExpected } from '../src/campaign/air';
+import { AIR, AIRWAR, airRange, assessAir, canStrafe, forecastAir, kmTo, strafeCarry, strafersExpected } from '../src/campaign/air';
 import { createGame, setWar } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -80,7 +80,13 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       // no longer the even spread x.ftr x (1 - air / E); the 200-luck comparison below holds it to the settled raid.)
       const s0 = strafersExpected(c.g, a, air);
       expect(fc.fire!).toBeCloseTo(s0.fire, 12);
-      expect(fc.fire!).toBeCloseTo(s0.left * AIRWAR.ground.fire, 12);
+      // (Changed on the design director's ruling of 18:14Z: Groupement de Chasse 3 goes down with the fight it still
+      // carries after its air fight, 1 - D / E of the two sides' starting weights (strafeCarry, 0.44 here against the
+      // German group), and its ground fire is thrown on that share. Was s0.left x ground.fire.)
+      const carry = strafeCarry(a);
+      expect(carry).toBeGreaterThan(0);
+      expect(carry).toBeLessThan(1);
+      expect(fc.fire!).toBeCloseTo(s0.left * carry * AIRWAR.ground.fire, 12);
       // Not every fighter of the raid, and not before the air fight: less than the card charged on d06286d4.
       expect(fc.fire!).toBeLessThan(a.E * AIRWAR.ground.fire);
       expect(sorted(a.att.filter((x) => x.ftr > 0 && canStrafe(c.g, x)).map((x) => x.f.id))).toEqual(rule);
@@ -137,9 +143,10 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
     expect(AIRWAR.ground.reach).toBe(0.9);
     // Groupement de Chasse 1 (fighter range 220 km): at Belfort, 190 km off (0.86 of its range), inside 0.9 and beyond
     // the old 0.6; at Namur, 216 km off (0.98), beyond 0.9 though still within its range, so it flies the escort.
-    // (Changed on the sky gate, the design director 16:04Z: Groupement de Chasse 1 alone, 150 fighters, cannot win the sky
-    // from the German group over the Saar, so as the raid stands nobody goes down from either field. The reach is read
-    // again with the German fighters grounded in setup (none rose: the sky is won), where it alone decides.)
+    // (Changed on the sky gate, the design director 16:04Z, and again on her ruling of 18:14Z: Groupement de Chasse 1
+    // alone, 150 fighters of which about 60 reach the Saar, is outweighed by the German group, so it carries none of its
+    // fight after the air fight and as the raid stands nobody goes down from either field. The reach is read again with
+    // the German fighters grounded in setup (none rose: it carries all of its fight), where it alone decides.)
     for (const [field, strafes, clear] of [['Belfort', true, false], [FAR_FIELD, false, false], ['Belfort', true, true], [FAR_FIELD, false, true]] as const) {
       const c = saar(0, 'far');
       c.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = c.g.regions.find((r) => r.name === field)!.id;
@@ -156,7 +163,7 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       expect(a.att.some((x) => x.f.id === FAR_GROUP && x.ftr > 0)).toBe(true);
       expect(a.att.filter((x) => x.ftr > 0 && canStrafe(c.g, x)).map((x) => x.f.id)).toEqual(strafes ? [FAR_GROUP] : []);
       const fc = forecastAir(c.g, a, 'ground', c.target);
-      expect(skyWon(c.g, a)).toBe(clear);
+      expect(strafeCarry(a) > 0).toBe(clear);
       expect(fc.strafers).toEqual(strafes && clear ? [FAR_GROUP] : []);
       expect(fc.fire! > 0).toBe(strafes && clear);
       const s = saar(0, 'far');
@@ -433,8 +440,9 @@ describe('the card\'s cut on the troops is the expectation of the settled raid\'
     }
   });
 
-  it('the clip binding on part of the luck: the card against the settled mean over 200 lucks (escort and strafers, and bombers alone)', () => {
-    for (const [ids, mult] of [[REVIEW_IDS, 1], [REVIEW_IDS, 30], [[BOMBERS], 1]] as const) {
+  // One raid a test (the three in one test ran past the limit on a loaded box): the same raids, lucks and assertions.
+  for (const [what, ids, mult] of [['escort and strafers', REVIEW_IDS, 1], ['escort and strafers, the fighters weighing thirty times', REVIEW_IDS, 30], ['bombers alone', [BOMBERS], 1]] as const) {
+    it(`the clip binding on part of the luck: the card against the settled mean over 200 lucks (${what})`, () => {
       // The clip set at the cut the card expects with no clip: it binds on about half the raid's luck.
       const free = cuts([...ids], 1, 0, mult).card / cover();
       const r = cuts([...ids], free, 200, mult);
@@ -447,8 +455,8 @@ describe('the card\'s cut on the troops is the expectation of the settled raid\'
       near(r.mean, r.card, 0.01);
       // And nearer the settled mean than the cut at the expected weight is.
       expect(Math.abs(r.card - r.mean)).toBeLessThan(Math.abs(free * cover() - r.mean));
-    }
-  });
+    });
+  }
 });
 
 // The sky gate (the design director, 16:04Z): "A group goes down only when it is free of the air fight. Settled: its side
@@ -501,37 +509,53 @@ function gateAgainstSettled(defenders: number, seeds = 200) {
   return { fc, s, card: card[0], fire: fire / seeds, weight: weight / seeds, cut: cut / seeds, won, named, seeds };
 }
 
-describe('the sky gate (the design director, 16:04Z): a group goes down only where its side won the sky', () => {
-  it('the rules\' own test, read over the target: no defender, or every one lost, wins it; 1.65 to 1 of those left and sky.least of the raid\'s own', () => {
-    expect(AIR.sky.win).toBe(1.65);
-    expect(AIR.sky.least).toBe(50);
+// (Changed on the design director's ruling of 18:14Z, confirmed at 18:19Z: "carried = 1 - (the defenders' weight it met
+// / its own fighters' weight), floor 0" ... "On the settled raid each group carries 1 - D/E" ... "If the builder confirms
+// that the 50 floor and the 1.65 hold then decide nothing on a raid on troops, take them out of that use". The sky test
+// of 16:04Z (skyWon, AIR.sky.least and AIR.sky.win) is gone from the raid on troops: by the same measure the defenders
+// carry 1 - E / D, so where the raid's fighters carry any fight no defender is left fit to fight (ruling 3) and the sky
+// is won (ruling 2). Round five's tests of that gate are rewritten to the measure below; the raids are the same.)
+describe('the fight a group carries (the design director, 18:14Z): a group goes down with 1 - D / E of its fight, none with none', () => {
+  it('the measure, read over the target: 1 - D / E of the two sides\' starting weights, at least 0, the field\'s own weights; no defender, all of it; no floor and no 1.65', () => {
     const c = gateRaid(0, 200);
     const a = assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target);
     expect(a.def.length).toBe(1);
-    // As the review's raid stands (200 German fighters): won.
-    expect(skyWon(c.g, a)).toBe(true);
-    // Every defender that rose lost: won, however few of the raid's fighters are left.
-    const d = a.def[0].f, was = d.ftr;
-    d.ftr = 0;
-    for (const x of a.att) x.f.ftr = Math.min(x.f.ftr, 10);
-    expect(skyWon(c.g, a)).toBe(true);
-    // One defender left against fewer than sky.least of the raid's fighters: not won.
-    d.ftr = 1;
-    expect(skyWon(c.g, a)).toBe(false);
-    d.ftr = was;
-    // No defender rose at all: won.
-    const none = gateRaid(0, 200);
-    const b = assessAir(none.g, fleetsOf(none.g, REVIEW_IDS), 'ground', none.target);
-    b.def.length = 0;
-    expect(skyWon(none.g, b)).toBe(true);
-    // A strong defence (800): lost.
+    // The two sides' starting weights as the field weighs them (sim.ts weight: aircraft x worth, the raid's by its fuel
+    // to stay), the height taken out as the ticket takes it out of the worths: the field sums them to the same numbers,
+    // to its whole aircraft.
+    const hx = a.height ? Math.pow(a.height.h, a.height.x) : 1;
+    const E = a.Epow / hx, D = a.Dpow * hx;
+    expect(strafeCarry(a)).toBeCloseTo(1 - D / E, 12);
+    expect(strafeCarry(a)).toBeGreaterThan(0.5);
+    expect(strafeCarry(a)).toBeLessThan(0.6);
+    on();
+    const sim = airBattle(airTicket(c.g, 'ground', c.target, REVIEW_IDS, 'FRA').ticket!) as AirSim;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const W = (side: 'att' | 'def'): number => sim.units.filter((u) => u.side === side && u.air === 'ftr').reduce((t, u) => t + (sim as any).weight(u, u.n0), 0);
+    near(W('att'), E, 0.001);
+    near(W('def'), D, 0.002);
+    // No defender rose at all: all of it, at any raid size.
+    const none = gateRaid(0, 0);
+    expect(strafeCarry(assessAir(none.g, fleetsOf(none.g, REVIEW_IDS), 'ground', none.target))).toBe(1);
+    // A defence that outweighs the raid's fighters (800): none, and the floor binds at 0.
     const s = gateRaid(0, 800);
-    expect(skyWon(s.g, assessAir(s.g, fleetsOf(s.g, REVIEW_IDS), 'ground', s.target))).toBe(false);
+    const b = assessAir(s.g, fleetsOf(s.g, REVIEW_IDS), 'ground', s.target);
+    expect(b.Dpow * hx).toBeGreaterThan(b.Epow / hx);
+    expect(strafeCarry(b)).toBe(0);
+    // Fewer than sky.least (50) of the raid's fighters against one German fighter: the floor of a contested sky decides
+    // nothing here, they go down with what they carry.
+    const f = gateRaid(0, 1);
+    for (const x of fleetsOf(f.g, REVIEW_IDS)) if (x.ftr > 0) x.ftr = Math.min(x.ftr, 10);
+    const y = assessAir(f.g, fleetsOf(f.g, REVIEW_IDS), 'ground', f.target);
+    expect(y.E).toBeLessThan(AIR.sky.least);
+    expect(strafeCarry(y)).toBeGreaterThan(0.9);
+    heard = [];
+    launchRaid(f.g, 'ground', f.target, REVIEW_IDS, 'FRA');
+    expect(sorted(heard.find((x) => x.route === 'settled')!.strafers)).toEqual([LORRAINE, 36]);
   });
 
-  it('surely won (the review\'s raid as built): the card as before to the last digit, and the settled raid sends its strafers down on every luck', () => {
+  it('as built (200 German fighters): each group carries 0.58 of its fight, the card names both, and the settled raid sends them down on every luck', () => {
     const r = gateAgainstSettled(200);
-    expect(r.s.gate).toBeUndefined();
     expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
     expect(r.won).toBe(r.seeds);
     near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
@@ -539,7 +563,6 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
 
   it('surely lost (800 German fighters): the card names none and charges no ground fire; nobody goes down on any luck; the cut is the bombers\' alone', () => {
     const r = gateAgainstSettled(800);
-    expect(r.s.gate).toBeUndefined();
     expect(r.card.strafers).toEqual([]);
     expect(r.fc.strafers).toEqual([]);
     expect(r.fc.fire).toBe(0);
@@ -548,37 +571,69 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
     expect(r.fire).toBe(0);
     expect(r.weight).toBe(0);
     near(r.cut, r.fc.cut, 0.01);
-    // The reach is still there: it is the sky that keeps them up.
+    // The reach is still there: it is the fight they carry, none, that keeps them up.
     const c = gateRaid(0, 800);
     expect(byRule(c.g, c.target, REVIEW_IDS)).toEqual([LORRAINE, 36]);
   });
 
-  it('near the edge (309 German fighters): the card against the settled mean over 200 lucks, and the groups it names are those more likely than not to go down', () => {
+  it('round five\'s edge (309 German fighters): no edge now; each group carries 0.35 of its fight, is named, and goes down on every luck; the card the settled mean', () => {
     const r = gateAgainstSettled(309);
-    // Won on part of the luck only.
-    expect(r.s.gate).toBeDefined();
-    expect(r.won).toBeGreaterThan(20);
-    expect(r.won).toBeLessThan(r.seeds);
+    const c = gateRaid(0, 309);
+    const carry = strafeCarry(assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target));
+    expect(carry).toBeGreaterThan(0.3);
+    expect(carry).toBeLessThan(0.4);
+    expect(r.won).toBe(r.seeds);
     // The lane's own tolerances: fire and weight within 3%, the cut within 1%.
     near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
     expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
-    for (const id of [LORRAINE, 36]) expect(r.named[id]).toBeGreaterThan(r.seeds / 2);
+    for (const id of [LORRAINE, 36]) expect(r.named[id]).toBe(r.seeds);
   });
 
-  it('past the edge (315 German fighters): the sky won on about a quarter of the lucks; the card names none, and is the settled mean within the lane\'s 8%', () => {
+  it('past round five\'s edge (315 German fighters): a little less carried, the same groups on every luck, the card the settled mean within the lane\'s 3% and 1%', () => {
     const r = gateAgainstSettled(315);
-    expect(r.s.gate).toBeDefined();
-    expect(r.won).toBeGreaterThan(20);
-    expect(r.won).toBeLessThan(r.seeds / 2);
-    expect(r.card.strafers).toEqual([]);
+    const at = (n: number): number => { const c = gateRaid(0, n); return strafeCarry(assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target)); };
+    expect(at(315)).toBeGreaterThan(0);
+    expect(at(315)).toBeLessThan(at(309));
+    expect(r.won).toBe(r.seeds);
+    expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
     expect(r.fc.fire).toBeGreaterThan(0);
-    // (A step's mean over 200 lucks is the noisiest figure the lane proves: its own widest tolerance, the 8% of the
-    // thirty-times-deadlier raid.)
-    near(r.fire, r.card.fire, 0.08); near(r.weight, r.card.weight, 0.08); near(r.cut, r.fc.cut, 0.08);
-    for (const id of [LORRAINE, 36]) expect(r.named[id] ?? 0).toBeLessThan(r.seeds / 2);
+    near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
+    for (const id of [LORRAINE, 36]) expect(r.named[id]).toBe(r.seeds);
   });
 
-  it('fog on raids: the fighters last seen near the target, which the card\'s odds count as rising, are in its sky gate too', () => {
+  it('the edge of round six\'s first build (1, 2, 5 and 10 German fighters): each group goes down with nearly all its fight, on the card, every luck settled and the field', () => {
+    let was = 1, cut = Infinity;
+    for (const n of [1, 2, 5, 10]) {
+      const r = gateAgainstSettled(n, 100);
+      const c = gateRaid(0, n);
+      const a = assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target);
+      const carry = strafeCarry(a);
+      // The more of them up, the less the raid's fighters carry, and the less the cut: in proportion, no threshold.
+      expect(carry).toBeGreaterThan(0.97);
+      expect(carry).toBeLessThan(was);
+      expect(r.fc.cut).toBeLessThan(cut);
+      was = carry; cut = r.fc.cut;
+      expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
+      expect(r.won).toBe(r.seeds);
+      for (const id of [LORRAINE, 36]) expect(r.named[id]).toBe(r.seeds);
+      near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
+    }
+    // The field, one battle at 10 German fighters: both groups meet them, and each begins every pass with the share of
+    // the settled raid's carry, to the field's whole aircraft.
+    on();
+    const f = gateRaid(0, 10);
+    const sim = airBattle(airTicket(f.g, 'ground', f.target, REVIEW_IDS, 'FRA').ticket!) as AirSim;
+    const ks: number[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const S = sim as any, pass = S.pass.bind(S);
+    S.pass = (u: { id: number }) => { const st = S.strafing.get(u.id), run = st?.run; pass(u); if (st && !run && st.run) ks.push(st.k); };
+    fight(sim);
+    expect(ks.length).toBeGreaterThan(0);
+    for (const k of ks) near(k, was, 0.001);
+    expect(sorted(sim.outcome().strafers)).toEqual([LORRAINE, 36]);
+  });
+
+  it('fog on raids: the fighters last seen near the target, which the card\'s odds count as rising, weigh in the fight the strafers carry', () => {
     // (Round five's check: the gate read only the groups known by name, so a card whose odds counted 800 fighters last
     // seen near the Eifel still named a strafer. A hand-made knowledge, as airfog.ts would give one end of its band.)
     on();
@@ -591,29 +646,34 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
       expect(a.why).toBeNull();
       return { a, fc: forecastAir(g, a, 'ground', target) };
     };
-    // No group known for sure and none last seen: on that knowledge nothing rises, the sky is won, the group is named.
+    // No group known for sure and none last seen: on that knowledge nothing rises, all of the fight is carried, the
+    // group is named.
     const none = card(0);
     expect(none.a.def.length).toBe(0);
     expect(none.a.D).toBe(0);
-    expect(none.a.unseen).toBeUndefined();
-    expect(skyWon(g, none.a)).toBe(true);
+    expect(strafeCarry(none.a)).toBe(1);
     expect(none.fc.strafers).toEqual([LORRAINE]);
     expect(none.fc.fire!).toBeGreaterThan(0);
-    // 800 last seen near it: the odds count them as rising (no group by name), and the gate counts the same fighters:
-    // the sky is lost on every luck, nobody is named and no ground fire is charged.
+    // 800 last seen near it: the odds count them as rising (no group by name), and so does the fight carried: none,
+    // nobody is named and no ground fire is charged.
     const many = card(800);
     expect(many.a.def.length).toBe(0);
-    expect(many.a.unseen?.n).toBe(800);
-    expect(many.a.D).toBeCloseTo(800 * many.a.unseen!.w, 9);
-    expect(skyWon(g, many.a)).toBe(false);
+    expect(many.a.D).toBeGreaterThan(0);
+    expect(strafeCarry(many.a)).toBe(0);
     expect(many.fc.strafers).toEqual([]);
     expect(many.fc.fire).toBe(0);
-    // A handful last seen: still won on every luck, and the card is the card of a won sky.
+    // A handful last seen: they weigh, a little, and the group is still named.
     const few = card(20);
-    expect(few.a.unseen?.n).toBe(20);
-    expect(skyWon(g, few.a)).toBe(true);
+    expect(few.a.def.length).toBe(0);
+    expect(few.a.D).toBeGreaterThan(0);
+    // The same share of the fighters last seen meets the raid, many or few: they are inside D (and Dpow, which the
+    // fight carried reads), with no field of their own.
+    expect(many.a.D / 800).toBeCloseTo(few.a.D / 20, 9);
+    expect(strafeCarry(few.a)).toBeGreaterThan(0);
+    expect(strafeCarry(few.a)).toBeLessThan(1);
     expect(few.fc.strafers).toEqual([LORRAINE]);
     expect(few.fc.fire!).toBeGreaterThan(0);
+    expect(few.fc.fire!).toBeLessThan(none.fc.fire!);
   });
 
   it('switched off: the sky is not read, and every figure is as on the lane\'s switch off', () => {
