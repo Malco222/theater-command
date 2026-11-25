@@ -241,7 +241,8 @@ export interface MenView {
   line: string;
 }
 
-const round = (men: number): number => (men >= 100000 ? Math.round(men / 10000) * 10000 : Math.round(men / 1000) * 1000);
+// (1.5.2, playtest #48: under a thousand men the figure is given whole, so a small nation's 235 a month never reads as 0.)
+const round = (men: number): number => (men >= 100000 ? Math.round(men / 10000) * 10000 : men >= 1000 ? Math.round(men / 1000) * 1000 : Math.round(men));
 
 /** Men, in words: "1.2 million", "340,000". */
 export function menWords(men: number): string {

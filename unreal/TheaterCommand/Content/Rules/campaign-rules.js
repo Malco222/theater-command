@@ -40462,7 +40462,7 @@
       g2.flags[kp(n.id)] = start2 * (1 - gone);
     }
   }
-  var round = (men2) => men2 >= 1e5 ? Math.round(men2 / 1e4) * 1e4 : Math.round(men2 / 1e3) * 1e3;
+  var round = (men2) => men2 >= 1e5 ? Math.round(men2 / 1e4) * 1e4 : men2 >= 1e3 ? Math.round(men2 / 1e3) * 1e3 : Math.round(men2);
   function menWords(men2) {
     const m = round(Math.max(0, men2));
     return m >= 1e6 ? `${(m / 1e6).toFixed(m >= 1e7 ? 0 : 1).replace(/\.0$/, "")} million` : m.toLocaleString("en-US");
@@ -46046,9 +46046,9 @@
     const name = g2.seas[sea].name;
     const lines2 = [];
     if (e.ships >= 0.5) lines2.push({ label: `Enemy ships ${seaWhere(name)} now`, value: round2(e.ships), effect: "at sea there already" });
-    if (come >= 0.5) lines2.push({ label: "Enemy fleets that could come", value: round2(come), effect: "at their full strength: every fleet within a month of that sea that his admirals would send" });
-    if (kept2 >= 0.5) lines2.push({ label: "Enemy fleets your aircraft keep away", value: round2(kept2), effect: "no admiral takes his fleet under your bombers, except to save his own homeland" });
-    if (shy2 >= 0.5) lines2.push({ label: "Enemy fleets that will not risk it", value: round2(shy2), effect: "none of them will face what you have in that sea, while it stays there" });
+    if (come >= 0.5) lines2.push({ label: "Enemy ships that could come", value: round2(come), effect: "at their full strength: every fleet within a month of that sea that his admirals would send" });
+    if (kept2 >= 0.5) lines2.push({ label: "Enemy ships your aircraft keep away", value: round2(kept2), effect: "no admiral takes his fleet under your bombers, except to save his own homeland" });
+    if (shy2 >= 0.5) lines2.push({ label: "Enemy ships that will not risk it", value: round2(shy2), effect: "none of them will face what you have in that sea, while it stays there" });
     if (e.air >= 0.5) lines2.push({ label: `Enemy aircraft over ${seaWhat(name)}`, value: round2(e.air), effect: "count against the supply ships too" });
     lines2.push({ label: `Your ships and aircraft ${seaWhere(name)}`, value: `${round2(own.ships)} and ${round2(own.air)}`, effect: need <= 0 ? "the enemy has too little in reach to close it" : contested ? `more than the ${round2(need)} that keep it open today, and fewer than the ${round2(foe)} he can bring` : open2 ? `more than the ${round2(need)} that keep it open` : `${round2(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
     lines2.push({
@@ -46074,7 +46074,7 @@
     for (const d of ds) {
       if (d.ships >= 0.5) lines2.push({ label: `Enemy ships at sea ${seaWhere(name(d.z))}`, value: round2(d.ships), effect: "hunt the troopships" });
       if (d.air >= 0.5) lines2.push({ label: `Enemy aircraft over ${seaWhat(name(d.z))}`, value: round2(d.air), effect: "count for half against ships under way" });
-      if (d.last && d.sortie >= 0.5) lines2.push({ label: "Enemy fleets that will come out", value: round2(d.sortie), effect: "from harbours on these seas and the seas next to them" });
+      if (d.last && d.sortie >= 0.5) lines2.push({ label: "Enemy ships that will come out", value: round2(d.sortie), effect: "from harbours on these seas and the seas next to them" });
       if (d.last) lines2.push({ label: `The sky over ${to.name}`, value: sky === "ours" ? "yours" : sky === "denied" ? "held by enemy fighters" : "nobody holds it", effect: sky === "ours" ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === "denied" ? "no invasion fleet can cross under them" : fly2 ? "no help to either side" : "out of reach of your fighters from any airfield you hold" });
       if (d.hunters > 0 || d.last) lines2.push({ label: `Your ships and aircraft ${seaWhere(name(d.z))}`, value: `${round2(d.own.ships)} and ${round2(d.own.air)}`, effect: d.own.total >= 0.5 ? "each counts double against the hunters" : "nothing covers the troopships" });
     }
@@ -91298,7 +91298,7 @@
           first2 = false;
         }
         if (first2) continue;
-        notes.push(r.result);
+        if (r.result.trim()) notes.push(r.result.trim());
         if (r.region >= 0) focus.push(r.region);
         if (r.defNat === s.human || r.region >= 0 && s.regions[r.region].ctrl === s.human) mine4 = true;
       }
@@ -91625,7 +91625,27 @@
     return view2();
   }
   function save() {
-    return { text: saveGame(game()) };
+    const s = game();
+    if (!lastMonth && !lastCard) return { text: saveGame(s) };
+    const flags = s.flags;
+    if (lastMonth) flags.monthReport = lastMonth;
+    if (lastCard) flags.monthCard = lastCard;
+    try {
+      return { text: saveGame(s) };
+    } finally {
+      delete flags.monthReport;
+      delete flags.monthCard;
+    }
+  }
+  function reportOfSave(s) {
+    const flags = s.flags;
+    const m = flags.monthReport;
+    const c = flags.monthCard;
+    delete flags.monthReport;
+    delete flags.monthCard;
+    const fine = !!m && typeof m.date === "string" && Array.isArray(m.rows) && Array.isArray(m.news) && m.rows.every((r) => r && typeof r.nat === "string" && typeof r.note === "string" && typeof r.region === "number" && r.region < s.regions.length) && m.news.every((x) => typeof x === "string");
+    const card = !!c && typeof c === "object" && typeof c.date === "string" && Array.isArray(c.staff);
+    return { report: fine ? m : null, card: card ? c : null };
   }
   function peek(text) {
     const p = peekSave(text);
@@ -91642,10 +91662,11 @@
     swapAsked = "";
     wreckAsked = "";
     fallenNation = null;
-    lastMonth = null;
+    const kept2 = reportOfSave(g);
+    lastMonth = kept2.report;
     lastReel = -9;
     monthBook = null;
-    lastCard = null;
+    lastCard = kept2.card;
     if (g.human && !humanUp(g)) {
       runOthers(g, null);
       arrive3(g);
@@ -93143,7 +93164,7 @@
     const newsreel = big ? { date: turnToDate(month02).label, cards: reel.slice(0, 4) } : null;
     lastMonth = {
       date: turnToDate(month02).label,
-      rows: steps.filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
+      rows: steps.filter((x) => x.note?.trim() && !x.moved).map((x) => ({ nat: x.nat, note: x.note.trim(), region: x.focus?.[0] ?? -1, mine: !!x.mine })),
       news: events.map((e) => e.text)
     };
     if (s.human) for (const x of marched) lastMonth.rows.push({ nat: s.human, note: x.note, region: x.region, mine: true });
@@ -93452,21 +93473,33 @@ ${next.text}` : ""}` : next ? next.also : "";
       })(),
       budget: budgeted(s),
       // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
-      raise: raiseHere ? Object.keys(PRODUCTION.builds).map((kind) => {
-        const spec2 = PRODUCTION.builds[kind];
-        return {
-          kind,
-          label: spec2.label,
-          divs: spec2.divs,
-          cost: shown(spec2.cost),
-          months: spec2.months,
-          blurb: spec2.blurb,
-          // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
-          keep: budgeted(s) ? shown(corpsUpkeep(kind, spec2.divs, 1)) : 0,
-          ok: up && !!n && n.pp >= spec2.cost,
-          why: !up ? "It is not your month." : n && n.pp < spec2.cost ? `Needs ${shown(spec2.cost).toLocaleString("en-US")}; the treasury has ${inHand(n.pp).toLocaleString("en-US")}.` : ""
-        };
-      }) : [],
+      // (1.5.2, playtest #29: the price and the yes or no are the rules' own, the arsenal's offer for this province, so a
+      // button shown open is never refused and one the treasury can pay for is never shut: the nation's own price, the
+      // technology, the men, and whether this province can form up a corps of the kind at all.)
+      raise: raiseHere ? (() => {
+        const offers2 = new Map(arsenalOffers(s, id).map((o) => [o.key, o]));
+        return Object.keys(PRODUCTION.builds).map((kind) => {
+          const spec2 = PRODUCTION.builds[kind];
+          const o = offers2.get(`corps:${kind}`);
+          const price = o?.cost ?? spec2.cost;
+          const here = !!o && o.at === id;
+          const need = needsOf(s, kind);
+          const short = r.fac < need ? `${r.name} has not the ${need === 1 ? "1 factory" : `${need} factories`} it needs` : `${r.name} is too steep for tanks to form up`;
+          const why = !up ? "It is not your month." : !o ? "It cannot be ordered now." : o.poor && n ? `Needs ${shown(price).toLocaleString("en-US")}; the treasury has ${inHand(n.pp).toLocaleString("en-US")}.` : o.why ? o.why : !here ? `${short}.${o.at >= 0 ? ` Raise it at ${s.regions[o.at].name}.` : ""}` : "";
+          return {
+            kind,
+            label: spec2.label,
+            divs: spec2.divs,
+            cost: shown(price),
+            months: spec2.months,
+            blurb: spec2.blurb,
+            // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
+            keep: budgeted(s) ? shown(corpsUpkeep(kind, spec2.divs, 1)) : 0,
+            ok: up && !!o && !o.why && here,
+            why
+          };
+        });
+      })() : [],
       raiseNote: raiseHere ? "" : home ? "New corps are raised in the home country and sent out by sea." : "",
       // Fortifications: the next level, if there is one.
       // (fortCost is null off home ground, save a conquered town that has settled: release 2, buildings.ts.)
@@ -94682,9 +94715,10 @@ ${next.text}` : ""}` : next ? next.also : "";
         title: `${z.name}${z.here ? "  ·  it is here" : ""}`,
         lines: [`${enemy} ${meet}`, [hunt2, risk].filter(Boolean).join(" ")].filter(Boolean),
         buttons: [
-          { label: "PATROL", act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at4("patrol"), tip: "Seeks out the enemy's warships there and guards the convoys that cross it." },
-          { label: "RAID SHIPPING", act: `fleet:${id}:${z.zone}:raid`, ok: up && !at4("raid"), tip: "Goes for merchant ships and keeps clear of a fight with the enemy fleet." },
-          { label: "HUNT SUBMARINES", act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at4("hunt") && card.hunters > 0, tip: card.hunters > 0 ? "Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks." : "It has no destroyers to hunt with." }
+          // (1.5.2, playtest #37: a button shut because it is the fleet's order now says so, as the side panel does.)
+          { label: "PATROL", act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at4("patrol"), tip: `${at4("patrol") ? "It is doing so now. " : ""}Seeks out the enemy's warships there and guards the convoys that cross it.` },
+          { label: "RAID SHIPPING", act: `fleet:${id}:${z.zone}:raid`, ok: up && !at4("raid"), tip: `${at4("raid") ? "It is doing so now. " : ""}Goes for merchant ships and keeps clear of a fight with the enemy fleet.` },
+          { label: "HUNT SUBMARINES", act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at4("hunt") && card.hunters > 0, tip: card.hunters > 0 ? `${at4("hunt") ? "It is doing so now. " : ""}Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks.` : "It has no destroyers to hunt with." }
         ]
       };
     });
@@ -94763,7 +94797,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       headline: `${card.doing}`,
       note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
       top: [
-        { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: "Safe from the enemy fleet, and takes no part at sea." },
+        { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: `${card.stance === "port" ? "It is in harbour now. " : ""}Safe from the enemy fleet, and takes no part at sea.` },
         ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
         ...taskForceOn(s) && fl ? [fl.task ? { label: "RELEASE TASK FORCE", act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP } : { label: "MAKE IT A TASK FORCE", act: `taskforce:${id}:on`, ok: up && !whyTask, tip: whyTask ?? TASK_TIP }] : [],
         ...shadowing ? [{ label: "STOP SHADOWING", act: `fleetshadow:${id}:off`, ok: up, tip: "It stays where it is, under your orders, and no longer follows the enemy fleet." }] : [],
@@ -94912,13 +94946,14 @@ ${standing5}`,
       const gen = cs.map((c) => generalOf(s, c)?.name).find(Boolean);
       const kinds = /* @__PURE__ */ new Map();
       for (const c of field4) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
-      const what = [...kinds.entries()].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(", ");
+      const DIV_WORD2 = { Armor: "armoured", Engineers: "engineer", Fortress: "fortress" };
+      const what = [...kinds.entries()].map(([k, n]) => `${n} ${DIV_WORD2[k] ?? k.toLowerCase()} division${n === 1 ? "" : "s"}`).join(", ");
       return {
         sort: (moving.length ? 0 : 1) * 1e6 - cs.reduce((n, c) => n + men(c), 0) / 1e3,
         row: {
           nat: me,
           title: `${s.regions[reg].name}${gen ? `  ·  ${gen}` : ""}`,
-          lines: [`${cs.length} corps, ${num7(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what} divisions` : ""}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? "It has used its month, or holds its ground." : ""].filter(Boolean),
+          lines: [`${cs.length} corps, ${num7(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what}` : ""}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? "It has used its month, or holds its ground." : ""].filter(Boolean),
           buttons: [{ label: "GO THERE", act: `goto:army:${reg}`, ok: true, tip: "Looks at the army and picks it up." }]
         }
       };
@@ -95337,7 +95372,7 @@ ${standing5}`,
         d.again ? "The cabinet has asked for this before." : ""
       ].filter(Boolean),
       buttons: [
-        ...d.region !== void 0 && d.region >= 0 ? [{ label: "SHOW ON THE MAP", act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? "the place"}.` }] : [],
+        ...d.region !== void 0 && d.region >= 0 ? [{ label: "SHOW ON THE MAP", act: `goto:region:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? "the place"}.` }] : [],
         ...doorOf[d.kind] ? [{ ...doorOf[d.kind], ok: true }] : [],
         (() => {
           const why = up ? whyNotSetAsideDirective(s) : notNow;
@@ -95390,7 +95425,7 @@ ${standing5}`,
           title: `${x.promise.town}  ·  ${x.promise.left <= 1 ? "due this month" : `${months4(x.promise.left)} left`}`,
           lines: [`${x.promise.bandName}. ${x.promise.progress}`, `Kept: ${x.promise.reward}.`],
           buttons: [
-            ...x.promise.region !== void 0 && x.promise.region >= 0 ? [{ label: "SHOW ON THE MAP", act: `goto:${x.promise.region}`, ok: true, tip: "Goes to the town you promised." }] : [],
+            ...x.promise.region !== void 0 && x.promise.region >= 0 ? [{ label: "SHOW ON THE MAP", act: `goto:region:${x.promise.region}`, ok: true, tip: "Goes to the town you promised." }] : [],
             { label: "TAKE IT BACK", act: "cabinet:takeback", ok: pw === null, danger: true, tip: pw ?? `You tell the cabinet it cannot be done. Costs ${x.promise.back} of its trust, half of what breaking your word would.` }
           ]
         }] };
@@ -95450,7 +95485,10 @@ ${standing5}`,
       { heading: "DECREES", text: "One step up at a time, for political capital. A step down is free.", rows: decrees },
       comes
     ] : cabinetTab === "minutes" ? [
-      { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? "+" : ""}${m.amount.toFixed(1)}`).join("  ·  ") : "Nothing since it last read the news.", rows: [] },
+      { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => {
+        const x2 = Math.round(m.amount * 10) / 10;
+        return `${m.label} ${x2 > 0 ? "+" : x2 < 0 ? "−" : ""}${Math.abs(x2).toFixed(1)}`;
+      }).join("  ·  ") : "Nothing since it last read the news.", rows: [] },
       { heading: "MINUTES", text: v.log.length ? v.log.slice(-12).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join("\n") : "Nothing minuted yet.", rows: [] }
     ] : [
       { heading: "THE DIRECTIVE", text: d ? "" : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months4(v.nextIn)}.` : "The cabinet is weighing the next."}`, rows: directive },

@@ -100,7 +100,7 @@ describe('the reckoning of a crossing', () => {
     // The fleets that would come out are named with their strength, and the sky over the beach with who holds it.
     const sortie = sortieAgainst(g, 'GER', x.path);
     expect(sortie).toBeGreaterThan(0);
-    expect(acc.lines.find((l) => l.label === 'Enemy fleets that will come out')!.value).toBe(Math.round(sortie).toLocaleString('en-US'));
+    expect(acc.lines.find((l) => l.label === 'Enemy ships that will come out')!.value).toBe(Math.round(sortie).toLocaleString('en-US'));
     expect(acc.lines.some((l) => l.label === `The sky over ${x.to.name}`)).toBe(true);
     expect(x.path).toContain(acc.worst);
     // Nothing reads as a blank or a broken number.
