@@ -98,13 +98,14 @@ const warWith = (g: Game, a: string, b: string): boolean => !!g.nations[a] && !!
 /** Why nothing comes down a road this month, or null while it runs. */
 function stopOf(g: Game, road: RoadRow): Pick<RoadNow, 'state' | 'why' | 'by' | 'at' | 'who'> | null {
   const to = road.to;
+  // War with the seller, first, as the lanes read it (resources.ts laneStopBy): the seller's own ground on the road is
+  // the seller's, so its war is told in the seller's words, never as a place held.
+  if (road.seller && warWith(g, to, road.seller)) return { state: 'cut', why: `${nameOf(g, to, true)} is at war with ${nameOf(g, road.seller)}, which sold the cargoes.`, by: 'seller', who: road.seller };
   // An enemy at war with the receiver holding any place on it, the first in the road's order. A neutral or a friend lets it by.
   for (const name of road.past ?? []) {
     const r = g.byName[name];
     if (r && r.ctrl !== to && warWith(g, r.ctrl, to)) return { state: 'cut', why: `${nameOf(g, r.ctrl, true)} holds ${r.name} and lets nothing past.`, by: 'place', at: r.name, who: r.ctrl };
   }
-  // War with the seller.
-  if (road.seller && warWith(g, to, road.seller)) return { state: 'cut', why: `${nameOf(g, to, true)} is at war with ${nameOf(g, road.seller)}, which sold the cargoes.`, by: 'seller', who: road.seller };
   return null;
 }
 
