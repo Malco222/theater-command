@@ -19,7 +19,7 @@ import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { bomberGuns, fighterGuns, type GunKind } from './guns';
-import type { AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import type { AirAim, AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
@@ -180,10 +180,17 @@ export class AirSim implements BattleSim<AirUnit> {
   private stragId = 1;
   /**
    * Bombers by name (AirPlace.bombers): each such box's seats, and the seat each straggler holds. Which bomber a loss
-   * is, and which of a box's bombers got a fighter booked to the box, is drawn from a stream of its own in shown and
-   * unshown battles alike, and is never a count: the same aircraft fall at the same moments with the names or without them.
+   * is (or falls out of formation) is drawn from a stream of its own, and which of a box's bombers got a fighter booked
+   * to the box from another (gunRng), in shown and unshown battles alike; neither is ever a count: the same aircraft
+   * fall at the same moments with the names or without them.
    */
   private seatRng: Rng;
+  /**
+   * Which bomber's gunners are credited with a fighter booked to their box (gunnerOf): a stream of its own (fork 73), so
+   * that who is credited never re-throws which named bomber falls next on seatRng, and a change in how losses are
+   * booked leaves the same named crews falling (the design director, 25 November 2026 16:54Z; names carry tours).
+   */
+  private gunRng: Rng;
   private seated = new Map<number, Seated>();
   private stragSeat = new Map<number, number>();
   /** The escort groups that have broken away from their bombers at least once (told once each). */
@@ -263,9 +270,11 @@ export class AirSim implements BattleSim<AirUnit> {
     this.lookRng = this.rng.fork(41);
     this.stragLook = this.rng.fork(43);
     this.hitRng = this.rng.fork(47);
-    // 53 is the crews' (fates.ts: the men past the fifth). 59: which bomber by name a loss is.
+    // 53 is the crews' (fates.ts: the men past the fifth). 59: which bomber by name a loss is, or falls out.
     this.seatRng = this.rng.fork(59);
     this.beatRng = this.rng.fork(61);
+    // 67 is the troops' layout (troops.ts) and 71 their looks. 73: which bomber's gunners a fighter booked to a box is.
+    this.gunRng = this.rng.fork(73);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
@@ -1118,6 +1127,16 @@ export class AirSim implements BattleSim<AirUnit> {
    * an escort the defence has fought out, while it flies home, whatever the defence: its weight was spent on the
    * defenders, and the card counts the escort over its bombers for the whole raid (L.escort, 227), so the box it leaves
    * is not priced as one never escorted.
+   *
+   * M1 (the design director, 25 November 2026 16:24Z: "a held-off escort counts over every box within
+   * SKY.escort.near"): an escort HELD OFF counts not only over its own box but over every bomber box of its side
+   * flying with that box (flies): within SKY.escort.near of it on the map and within one height band of it, as cover()
+   * already lets the boxes of a stream share the escort near them. One escort group sent with two boxes no longer
+   * leaves the second priced as never escorted (the 2.5 times cap) once the hunters drag it away (the Hampshire trace,
+   * 25 November 2026: 64.2 bombers a raid against a card of 54.9). It moves only that shape: an escort fought out and
+   * flying home counts over its own box alone, as before the ruling. REUSED G: SKY.escort.near (4 km) and the one band
+   * are cover()'s own reach, made for another purpose (the escort near a box) and reused here for "flying with"; they
+   * were not measured for this.
    */
   private tied(f: AirUnit, b: AirUnit): boolean {
     if (f.air !== 'ftr' || f.side !== 'att') return false;
@@ -1126,8 +1145,19 @@ export class AirSim implements BattleSim<AirUnit> {
     // price the passes a second time in bombers.
     const s = this.strafing.get(f.id);
     if (s && s.box === b.id && (f.job.do === 'strafe' || (s.over && f.job.do === 'home'))) return true;
-    if (f.job.do === 'escort') return f.job.on === b.id && f.contacts.some((i) => this.unit(i)?.def === 'escort');
+    if (f.job.do === 'escort') return this.flies(f.job.on, b) && f.contacts.some((i) => this.unit(i)?.def === 'escort');
     return f.job.do === 'home' && f.vig < SKY.spent && this.foughtFor.get(f.id) === b.id;
+  }
+
+  /**
+   * Whether box b is the escort's own box (id 'own'), or a box of its side flying with it: the own box still flying,
+   * within SKY.escort.near (a REUSED G, see tied) of b on the map and within one height band of it (M1).
+   */
+  private flies(own: number | undefined, b: AirUnit): boolean {
+    if (own === undefined) return false;
+    if (own === b.id) return true;
+    const o = this.unit(own);
+    return !!o && o.air === 'bmr' && o.side === b.side && flying(o) && Math.abs(o.band - b.band) <= 1 && dist(o.x, o.y, b.x, b.y) <= SKY.escort.near;
   }
 
   /** A fighter group's fight left, and home once all but SKY.spent of it is gone. */
@@ -1695,7 +1725,8 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
    * the box's that owed them (ruling 227): the loss's creditor ('by', booked by the ledger: creditor) is the box, and
-   * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
+   * the box is credited, one of its bombers by a stream of its own (gunRng, never seatRng: who is credited must not
+   * move which named bomber falls). A loss booked to an escort or to the guns is
    * theirs, and no lot moves it. Returns the box and the seat, or null.
    */
   private gunnerOf(u: AirUnit, by: number | 'flak' | null | undefined): [number, number] | null {
@@ -1704,7 +1735,7 @@ export class AirSim implements BattleSim<AirUnit> {
     // Any bomber still in formation; failing that, one of the box's stragglers.
     const pool = B.form.length ? B.form : box.strag.map((s) => this.stragSeat.get(s.id)).filter((k): k is number => k !== undefined);
     if (!pool.length) return null;
-    const k = pool[this.seatRng.int(pool.length)];
+    const k = pool[this.gunRng.int(pool.length)];
     const got = B.shot.get(k) ?? {};
     got[u.nat] = (got[u.nat] ?? 0) + 1;
     B.shot.set(k, got);
@@ -1762,6 +1793,8 @@ export class AirSim implements BattleSim<AirUnit> {
         skill: this.skill.get(u.id) ?? SKY.pilots.base,
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
+        // R3: the leader's choice ('aim', 'threat', and an escort's 'answer'; types.ts AirAim), read off what the rules hold.
+        ...this.choiceOf(u),
         fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
       };
       return;
@@ -1778,6 +1811,54 @@ export class AirSim implements BattleSim<AirUnit> {
       flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
       ...this.heldLook(u, done),
     };
+  }
+
+  /**
+   * R3 (the design director, pilot-ai 25 November 2026: the leader's choice in the view, shown only): a fighter group's
+   * 'aim', 'threat' and, for an escort, 'answer' (types.ts AirAim). Read only: its job and quarry, the enemy each group
+   * is making for this tick ('after', set as each group moved), contacts and heights. It decides nothing, draws no throw
+   * and keeps nothing; the battle never reads it.
+   */
+  private choiceOf(u: AirUnit): AirAim {
+    const out: AirAim = {};
+    if (!flying(u)) return out;
+    const j = u.job;
+    if (!away(u)) {
+      // An interceptor's quarry; a hunter's or a patrol's, while it is making for one.
+      const q = j.do === 'intercept' ? (this.valid(u, j) ? this.unit(j.on) : undefined) : j.do === 'hunt' || j.do === 'patrol' ? this.unitAfter(u) : undefined;
+      if (q && q.side !== u.side) out.aim = q.air === 'bmr' ? 'bombers' : 'escort';
+      if (j.do === 'escort') {
+        const e = this.unitAfter(u);
+        if (e && e.side !== u.side && e.air === 'ftr') out.answer = { box: this.boxOn(e, u.side)?.id ?? j.on, on: e.id };
+      }
+    }
+    // The enemy fighter group coming down on it: the nearest of those making for it this tick.
+    let by: AirUnit | null = null, bd = Infinity;
+    for (const v of this.units) {
+      if (v.side === u.side || v.air !== 'ftr' || !flying(v) || away(v) || this.after.get(v.id) !== u.id) continue;
+      const d = dist(u.x, u.y, v.x, v.y);
+      if (d < bd) { bd = d; by = v; }
+    }
+    if (by) out.threat = { by: by.id, bounce: by.band > u.band || (by.bounce > 0 && u.contacts.includes(by.id)) };
+    return out;
+  }
+
+  /** The group a group is making for this tick (aim), if any. */
+  private unitAfter(u: AirUnit): AirUnit | undefined {
+    const id = this.after.get(u.id);
+    return id === undefined ? undefined : this.unit(id);
+  }
+
+  /**
+   * The bomber box of side 'side' an enemy fighter group is making for (its quarry), or failing that one it is in
+   * contact with; null for neither.
+   */
+  private boxOn(v: AirUnit, side: Side): AirUnit | null {
+    const isBox = (b: AirUnit | undefined): b is AirUnit => !!b && b.air === 'bmr' && b.side === side && flying(b);
+    const q = v.job.do === 'intercept' ? this.unit(v.job.on) : undefined;
+    if (isBox(q)) return q;
+    for (const i of v.contacts) { const b = this.unit(i); if (isBox(b)) return b; }
+    return null;
   }
 
   /** A strike on a fleet at sea: the bombs fall on the fleet, as the ticket's title names it ("the Mobile Force"), not

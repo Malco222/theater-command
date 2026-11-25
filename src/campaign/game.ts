@@ -31,7 +31,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, formsAny, heldAlready, heldLine, joinNames, joinsAlone, layOnce, namesNow, rowOver } from './drawn';
+import { DRAWN, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -52,7 +52,7 @@ import { isTeam, TEAMS, teamsIn } from './teams';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
-import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
+import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
@@ -61,7 +61,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, type SeaReach } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
@@ -1018,6 +1018,27 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
   return { ok, reach, east };
 }
 
+/**
+ * True reach (audit item 41; the design director's ruling of 13:58Z, "Withering garrisons" 1, and 14:26Z, 25 November
+ * 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever
+ * the flag. An ally's ships feed a port for another nation (the supply picture's holder's and mates' quays) only by a
+ * way that stays open with the seas closed to the nation fed closed to them too; paper reach is not reach. One rule
+ * for both charts: on wherever the far side is on, and on the old chart under Units decide with its own sub-flag
+ * 'trueReach' (stage.json), off until its gate passes. Every history stop alike.
+ */
+export const trueReach = (g: Game): boolean => farOn(g) || (unitsDecide(g) && g.flags.trueReach === 1);
+/**
+ * Sets the old chart's sub-flag of true reach, for tests and the bench: only in a grand campaign with Units decide
+ * (returns whether it was set). The supply picture is drawn afresh at its next asking.
+ */
+export function setTrueReach(g: Game, on: boolean): boolean {
+  if (!unitsDecide(g)) return false;
+  if (on) g.flags.trueReach = 1;
+  else delete g.flags.trueReach;
+  g.supplyDirty = true;
+  return true;
+}
+
 export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -1185,6 +1206,45 @@ export function computeSupply(g: Game): void {
     if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? lanesKept(id) : null); }
     return lanes.get(id)!;
   };
+  // True reach (trueReach): the seas ally a's ships could use carrying nation id's stores, every sea closed to id closed
+  // to them as well, asked afresh each call and kept for the call only (never in kept0.lanes, which keeps a's own
+  // lanes by the seas closed to a alone). Asked only where a's own lanes reach the port; where no sea of them is closed
+  // to id the walk would take the same seas, and they are a's own lanes.
+  const truly = trueReach(g);
+  const asIf = new Map<string, Uint8Array>();
+  const carrying = (a: string, id: string, theirs: Uint8Array): Uint8Array => {
+    const key = a + '>' + id;
+    let o = asIf.get(key);
+    if (!o) {
+      o = theirs;
+      for (let z = 0; z < theirs.length; z++) {
+        if (!theirs[z] || !seasNow.closed(z, id)) continue;
+        o = openSeas(g, a, seasNow, undefined, undefined, kept0.lanes.get(a)!.starts, id);
+        break;
+      }
+      if (supplyCheck && !sameBytes(openSeas(g, a, seasNow, undefined, undefined, undefined, id), o)) throw new Error(`sea lanes of ${a} carrying for ${id} in month ${g.turn} differ from fresh ones`);
+      asIf.set(key, o);
+    }
+    return o;
+  };
+  // An ally's ships feed a port of nation id's: its own lanes reach the port, and under true reach they reach it
+  // carrying id's stores.
+  const feeds = (a: string, id: string, r: Region): boolean => {
+    const theirs = lanesOf(a);
+    if (!theirs || !r.seas.some((z) => theirs[z])) return false;
+    if (!truly) return true;
+    const o = carrying(a, id, theirs);
+    return r.seas.some((z) => o[z]);
+  };
+  // Under true reach a fortified port's stores are filled only by ships that could carry them there for its holder:
+  // ships a, whose lanes reach the port, reach it as well with every sea closed to the holder closed to them.
+  // (Otherwise another country's ships, reaching the port by a sea the holder is shut out of, would keep the
+  // holder's stores full by the same paper: Norway's own quay at a British Malta.)
+  const forHolder = (a: string, r: Region): boolean => {
+    if (a === r.ctrl) return true;
+    const o = carrying(a, r.ctrl, lanesOf(a)!);
+    return r.seas.some((z) => o[z]);
+  };
   // The sources on a country's friends' roads, in order: one friend's own list when only one has any.
   const sourcesFor = (friend: Uint8Array): number[] => {
     let one: number[] | null = null;
@@ -1217,14 +1277,18 @@ export function computeSupply(g: Game): void {
       const home = !shut && r.ctrl === id && r.owner === id;
       const depot = home && (r.cap || r.fac >= 3 || !!g.flags[depotKey(r.id)]);
       let quay = !!open && r.port && r.seas.some((z) => open[z]);
+      // (Whose ships make the quay: the nation's own, the holder's, or the side theatre's shared shipping.)
+      let by = quay ? 1 : 0;
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
-      if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
+      if (!quay && !shut && r.overseas && r.port && r.ctrl !== id && (quay = feeds(r.ctrl, id, r))) by = 2;
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
-      if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
+      if (!quay && r.theatre >= 0 && r.port && (quay = (mates ??= shippers(id)).some((a) => feeds(a, id, r)))) by = 3;
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && worksKept(r)) {
-        if (quay) g.flags[storesKey(r.id)] = g.turn;
+        if (quay) {
+          if (!truly || (by === 1 ? forHolder(id, r) : by === 2 || mates!.some((a) => feeds(a, id, r) && forHolder(a, r)))) g.flags[storesKey(r.id)] = g.turn;
+        }
         else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
       }
       if (!depot && !quay) continue;
@@ -1255,8 +1319,19 @@ export function computeSupply(g: Game): void {
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
-  // A garrison shut in its town lives on the town's stores while they last.
-  if (field) siegeSupply(g);
+  // A garrison shut in its town lives on the town's stores while they last. Under true reach a besieged port town is
+  // fed by the very lanes drawn here (siege.ts fedBySea, SeaReach): a nation's own lanes, or its lanes carrying the
+  // holder's stores (carrying), and nothing for a nation with no ships. The siege walks nothing of its own.
+  const none = truly ? new Uint8Array(g.seas.length) : null;
+  const townReach: SeaReach | undefined = truly ? (x, id) => { const theirs = lanesOf(x); return !theirs ? none! : x === id ? theirs : carrying(x, id, theirs); } : undefined;
+  if (field) siegeSupply(g, townReach);
+  // (TC_SUPPLY_CHECK: every besieged town reads the same from the kept lanes as from a fresh walk.)
+  if (field && townReach && supplyCheck) {
+    for (const r of g.regions) {
+      if (!r.garr || !r.garr.length || !besieged(g, r)) continue;
+      if (fedBySea(g, r, townReach) !== fedBySea(g, r) || !sameBytes(feedingSeas(g, r, townReach), feedingSeas(g, r))) throw new Error(`the besieged town of ${r.name} read from kept sea lanes in month ${g.turn} differs from a fresh reading`);
+    }
+  }
   g.supplyDirty = false;
   resetRailheads(g);
 }
@@ -3274,9 +3349,42 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
 
 // ---- Moving, taking ground, and falling ---------------------------------------------
 
+/**
+ * Whether a province has already changed hands this month, read before anything in the present event touches it: the
+ * low keyed throws of a change of hands (the bridges, the track, scorched earth) keep their key for the month's first
+ * and take the missing side for any after it (the design director's ruling, 25 November 04:55Z), so a province taken
+ * twice in a month is not the same throw twice. Read from what the game holds, so a save in mid-month plays the same.
+ * In the opening month of a later start the ground history laid that month carries this month too (world.ts
+ * settleFallen): there only a province capture() has ever taken (its fellP mark) counts, so laying is no change.
+ * (Belt and braces: in the starts probed (seed 1, months 10 and 22) no laid province has a side at war with its holder
+ * as its r.prev, so takenInWarThisMonth reads such ground as no taking in war without this rule. It holds where one
+ * would: a laid province whose r.prev is an enemy of its holder.)
+ */
+export function changedThisMonth(g: Game, r: Region): boolean {
+  if (r.since !== g.turn) return false;
+  return g.flags.openFrom !== g.turn || g.flags[`fellP:${r.id}`] !== undefined;
+}
+
+/**
+ * Whether the province's change of hands earlier this month was a taking in war: its holder took it from a side it is
+ * still at war with (r.prev), the only change of hands that throws the low dice (capture() throws them only between
+ * sides at war). A peace's or a treaty's handing over, ground laid as a campaign opens, or a taking by a side at peace
+ * threw nothing, so the next throw there is still the month's first and keeps its key. Read before anything in the
+ * present event touches the province.
+ */
+export function takenInWarThisMonth(g: Game, r: Region): boolean {
+  return changedThisMonth(g, r) && r.prev != null && !!g.nations[r.prev] && !!g.nations[r.ctrl] && atWar(g, r.ctrl, r.prev);
+}
+
 export function capture(g: Game, r: Region, nat: string): void {
   const old = r.ctrl;
   if (old === nat) return;
+  // (Read before this capture marks the month: a province taken in war already this month threw the track's dice, and
+  // the scorch roll's where the side then driven out (r.prev) burns; a second taking throws its own. The side driven
+  // out now cannot stand for that: railOnScorch throws only where it burns, so it would salt every such throw, the
+  // month's first among them. Only the last change of hands is held, so a place taken three times, whose first loser
+  // burned and whose second did not, throws the first's key again: the residual.)
+  const prev = r.prev, again = takenInWarThisMonth(g, r), burnt = again && willBurn(g, prev!, r);
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
@@ -3292,7 +3400,12 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
-    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); railOnScorch(g, r, nat, old); }
+    // (A crossing was thrown for already this month where this bank was taken in war, by a side at war with the far
+    // bank's holder (its taker, or the side it drove out, which took it before); or where the far bank was, the same
+    // way round.)
+    const crossed = (far: Region): boolean =>
+      (again && (atWar(g, old, far.ctrl) || atWar(g, prev!, far.ctrl))) || (takenInWarThisMonth(g, far) && (atWar(g, far.ctrl, old) || atWar(g, far.prev!, old)));
+    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat, crossed); railOnCapture(g, r, nat, old, again); railOnScorch(g, r, nat, old, burnt); }
   }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
@@ -4785,7 +4898,12 @@ function expeditions(g: Game, nat: string): void {
     const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
     // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
     // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
-    const o0 = booked && BOOK!.from?.[row[2]] ? { ...(row[6] ?? {}), from: [...(row[6]?.from ?? []), ...BOOK!.from[row[2]]] } : row[6] ?? {};
+    const o00 = booked && BOOK!.from?.[row[2]] ? { ...(row[6] ?? {}), from: [...(row[6]?.from ?? []), ...BOOK!.from[row[2]]] } : row[6] ?? {};
+    // (The stood war rows, drawn.ts and counting.json: in the grand campaign such a row waits for the war the table
+    // names for it, and takes the share of a corps the table names, as W Force's row takes its brigade. The setup row
+    // keeps its own words, so no historical scenario moves.)
+    const counted = countingFor(g, nat, row);
+    const o0 = counted && (counted.war || counted.takes) ? { ...o00, ...(counted.war ? { war: counted.war } : {}), ...(counted.takes ? { takes: counted.takes } : {}) } : o00;
     const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
@@ -4819,6 +4937,18 @@ function expeditions(g: Game, nat: string): void {
         else if (c) { (o.ends === 'surrender' && farOn(g) ? down : gone).push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
         // (A corps ends its loan once: another lent row that added to it, `joins`, has nothing left to end.)
+        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
+      }
+      // (The stood war rows, drawn.ts: a row keyed to a war was lent for that war, every nation's. The war over, each
+      // division it drew goes back to the corps it came out of, or stands on where it is; what it raised new stays
+      // with it, and nothing leaves for other fronts. A corps every division of which went back is no more. No line
+      // tells it: nothing is lost, and the divisions stand where the player can see them.)
+      // (A corps on a long passage is off the map: its loan ends the month it lands.)
+      else if (!o.until && o.war && id > 0 && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id)) {
+        const c = g.corps.find((x) => x.id === id && x.nat === nat && !x.dead);
+        if (c && (c.drew || c.rowed) && !rowOver(g, c, leaving, true)) back.push(c);
+        g.supplyDirty = true;
+        g.flags[`lent:${i}`] = -1;
         ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
       }
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
@@ -4983,6 +5113,7 @@ function expeditions(g: Game, nat: string): void {
       // broken up to find its divisions, and it found them elsewhere. Regrouping what stands is the staff's own business.)
       if (!formsAny(claims, n)) {
         g.flags[`sent:${i}`] = 1;
+        keepCounted(claims);
         const share = takenShare(g, i);
         if (share !== undefined) { delete g.flags[`takecut:${i}`]; if (g.flags[`cut:${i}`] === share) delete g.flags[`cut:${i}`]; cutStays(share); }
         standDown(reg, false);
@@ -5012,7 +5143,8 @@ function expeditions(g: Game, nat: string): void {
       // ones, and where a corps is all the row's it comes itself under the row's name. drawn.ts, `layOnce`.)
       const at = reg;
       if (taken !== undefined) cutStays(taken);
-      const laid = layOnce(g, nat, row, n, at, as, claims, (o.str ?? 1) * (1 - (taken ?? 0)), !!o.until, (divs) => addCorps(g, nat, row[2], row[3], divs, at.id, as), taken ?? 0);
+      // (A row keyed to a war is lent for that war as an `until` row is for its months: where each division came from is remembered.)
+      const laid = layOnce(g, nat, row, n, at, as, claims, (o.str ?? 1) * (1 - (taken ?? 0)), !!o.until || !!o.war, (divs) => addCorps(g, nat, row[2], row[3], divs, at.id, as), taken ?? 0);
       c = laid.c;
       // (A living corps come itself under this row is no longer another row's to end.)
       if (laid.took) ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === c.id) g.flags[`lent:${j}`] = -1; });
@@ -5033,7 +5165,9 @@ function expeditions(g: Game, nat: string): void {
       const j = ((setup as any).expeditions as any[]).findIndex((r2) => r2[1] === nat && r2[2] === o.takes.name);
       if (x) {
         x.str *= 1 - o.takes.share;
-        if (nat === g.human && o.takes.leaves) headline(g, 'event', o.takes.leaves.replace('{place}', g.regions[x.reg].name), nat, reg.id);
+        // (Where the corps stands at the row's own place the place is said once: `leavesHere`, the UI director's of 17:46Z, 25 November 2026.)
+        const words: string | undefined = (g.regions[x.reg].name === row[5] ? o.takes.leavesHere : undefined) ?? o.takes.leaves;
+        if (nat === g.human && words) headline(g, 'event', words.replace('{place}', g.regions[x.reg].name), nat, reg.id);
       } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`takecut:${j}`] = o.takes.share;
     }
     standDown(reg);
@@ -5045,6 +5179,8 @@ function expeditions(g: Game, nat: string): void {
       draw(g, o.of ?? nat, o.from, claims.length ? Math.max(0, n - claims.length) : row[4], here ? c : undefined);
     }
     if (o.until) g.flags[`lent:${i}`] = c.id;
+    // (A war row that drew divisions from living corps is remembered by its corps until its war is over: above.)
+    else if (g.flags.open === 1 && o.war && (c.drew?.length || c.rowed)) g.flags[`lent:${i}`] = c.id;
     const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
     // Troops come ashore at a port across the sea: a colony's, or a foreign one for a nation that lives by its ships.
     // An army that marched there, or is forming up at home, simply arrives.
@@ -5320,7 +5456,9 @@ export function startPhase(g: Game, nat: string): void {
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
   // (A fortress crew living on its port's stores is cut off for its drafts and its rest, 07:12Z.)
   const stored = new Set(army.filter((c) => onPortStores(g, c)));
-  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * columnShare(g, c) * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+  // (A corps the stood war rows drew the record's divisions out of by share is made good only to the share still its
+  // own: drawn.ts ownShare, the design director's ruling of 19:03Z, 25 November 2026.)
+  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) * ownShare(c) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * columnShare(g, c) * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
   // A volunteer legion's drafts come from its own home's reserve, not the patron's (legions.ts; release 2, switched off in release 1).
   const want = army.map((c) => (c.vol ? 0 : wantOf(c)));
   const volWant = army.map((c) => (c.vol ? wantOf(c) : 0));

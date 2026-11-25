@@ -85,9 +85,13 @@ export function recordField(g: Game, region: number): number {
   let out = 0;
   for (const f of FAR_FIELDS.get(name) ?? []) if (f.from <= g.turn) out = Math.max(out, f.class);
   if (!acOn(g)) return out;
-  for (const f of AC.fields.rows) if (f.region === name && f.from <= g.turn) out = Math.max(out, f.class);
+  // (The Mediterranean's rows by province, sorted once: every airfield question asked the whole table.)
+  if (!MED_FIELDS) { MED_FIELDS = new Map(); for (const f of AC.fields.rows) MED_FIELDS.set(f.region, [...(MED_FIELDS.get(f.region) ?? []), f]); }
+  for (const f of MED_FIELDS.get(name) ?? []) if (f.from <= g.turn) out = Math.max(out, f.class);
   return out;
 }
+/** The Mediterranean's record fields (aircampaigns.json) by province, made on the first question with the air campaigns on. */
+let MED_FIELDS: Map<string, { from: number; class: number }[]> | undefined;
 
 /**
  * True when a new grand campaign opens with air campaigns flown (aircampaigns.json `on`; on as shipped: the design

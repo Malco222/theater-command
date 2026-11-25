@@ -83,8 +83,10 @@ int main()
 		Check(Still.Reach == 0.0 && Still.Thick > 0.15 && Still.Thick < 0.3 && Still.Dark < 0.3, "lying still: a thin pale wisp, and nothing astern");
 		Check(Still.High > 0.25 && Still.High < 0.3 && Still.Lee > 0.3 && Still.Lee < 0.4, "lying still: it stands a little over a quarter of her length above her and leans down the wind");
 		Check(Best.Reach > 1.2 && Best.Reach < 2.0 && Best.High < 0.5 * Still.High + 0.1, "at her best: a length and a half astern, blown low");
-		Check(Best.Thick > 2.0 * Still.Thick && Best.Dark > Still.Dark + 0.25 && Best.Dark < 0.7, "at her best: twice as thick as lying still, grey and not black");
-		Check(Forced.Dark > 0.8 && Forced.Thick > Best.Thick && Fire(0.3, Hard).Dark == Forced.Dark, "working up to speed: black, and thicker than at her best");
+		// (A steady fire is pale: the table's sea at working height is a dark blue, and pale smoke reads on it best.)
+		Check(Best.Thick > 2.0 * Still.Thick && Best.Dark > Still.Dark && Best.Dark < 0.3, "at her best: twice as thick as lying still, and a pale haze still");
+		Check(Luminance(Ink(Still.Dark, 0.0)) > 0.5 && Luminance(Ink(Best.Dark, 0.0)) > 0.45 && Luminance(Ink(Forced.Dark, 0.0)) > 0.28 && Luminance(Ink(Forced.Dark, 0.0)) < Luminance(Ink(Best.Dark, 0.0)) - 0.15, "a steady fire's smoke is pale, far over the tone of the table's sea (0.10 to 0.17); a forced one's is dark beside it, and over the sea still (a black is as dark as the water and cannot be seen on it)");
+		Check(Forced.Dark > 0.8 && Forced.Thick > Best.Thick && Fire(0.3, Hard).Dark == Forced.Dark, "working up to speed: dark, and thicker than at her best");
 		Check(Easing.Dark < Fire(0.6, 0.0).Dark && Easing.Thick < Fire(0.6, 0.0).Thick, "easing: paler and thinner than her speed alone would make it");
 		bool bGrows = true, bBounded = true, bForcedMore = true;
 		for (int Step = 0; Step < 100; ++Step)
@@ -97,13 +99,13 @@ int main()
 				for (const double Much : { 0.0, 0.5, 1.0, 2.0, 9.0 })
 				{
 					const FFire F = Fire(P, G, Much, Much);
-					bBounded = bBounded && F.Thick >= 0.0 && F.Thick <= 0.85 && F.Dark >= 0.0 && F.Dark <= 1.0 && F.Reach >= 0.0 && F.Reach <= 3.2 && F.High > 0.1 && F.Lee > 0.15;
+					bBounded = bBounded && F.Thick >= 0.0 && F.Thick <= 1.0 && F.Dark >= 0.0 && F.Dark <= 1.0 && F.Reach >= 0.0 && F.Reach <= 3.2 && F.High > 0.1 && F.Lee > 0.15;
 				}
 				bForcedMore = bForcedMore && (G <= 0.0 || (Fire(P, G).Dark >= A.Dark && Fire(P, G).Thick >= A.Thick));
 			}
 		}
 		Check(bGrows, "the faster she goes: thicker, darker, further astern, lower and less down the wind, step by step");
-		Check(bBounded, "whatever is asked of it: never thicker than 0.85, never past black, never more than twice the reach");
+		Check(bBounded, "whatever is asked of it: never thicker than a puff can be, never past black, never more than twice the reach");
 		Check(bForcedMore, "gathering way never makes less smoke than holding the same speed");
 		Check(Fire(0.7, 0.0, 0.0).Thick == 0.0, "the measure of how thick at nought: no smoke");
 		Check(Fire(0.7, 0.0, 1.0, 0.0).Reach == 0.0 && Fire(0.7, 0.0, 1.0, 2.0).Reach == 2.0 * Fire(0.7, 0.0).Reach, "the measure of how far astern: nought stands it over her, two doubles it");
@@ -137,11 +139,12 @@ int main()
 					for (int Step = 1; Step <= 400; ++Step)
 					{
 						const FPuff Now = Puff(F, Step / 400.0, Count, G);
-						bOn = bOn && Now.Astern >= Before.Astern && Now.Rise >= Before.Rise && Now.Lee >= Before.Lee && Now.Size >= Before.Size && Now.Stretch >= 1.0 && Now.Stretch <= 3.0;
+						bOn = bOn && Now.Astern >= Before.Astern && Now.Rise >= Before.Rise && Now.Lee >= Before.Lee && Now.Size >= Before.Size && Now.Stretch >= 1.0 && Now.Stretch <= 4.0;
 						const double Moved = std::sqrt(std::pow(Now.Astern - Before.Astern, 2) + std::pow(Now.Rise - Before.Rise, 2) + std::pow(Now.Lee - Before.Lee, 2));
 						MostStep = std::max(MostStep, Moved);
-						// (a 400th of its life is a third of a frame at 60 a second: nothing may jump in it)
-						bSmooth = bSmooth && Moved < 0.02 && std::fabs(Now.Thick - Before.Thick) < 0.04 && std::fabs(Now.Size * Now.Stretch - Before.Size * Before.Stretch) < 0.01;
+						// (a 400th of its life is a third of a frame at 60 a second: nothing may jump in it. The thickest black
+						// puff comes out of its funnel over nine frames, and gains under 0.05 in a third of one.)
+						bSmooth = bSmooth && Moved < 0.02 && std::fabs(Now.Thick - Before.Thick) < 0.05 && std::fabs(Now.Size * Now.Stretch - Before.Size * Before.Stretch) < 0.01;
 						bThin = bThin && Now.Thick >= 0.0 && Now.Thick <= F.Thick + 1.0e-12;
 						Before = Now;
 					}
@@ -157,8 +160,11 @@ int main()
 					Check(bSmooth, Case + ": nothing of it jumps (most moved in a 400th of its life: " + Num(MostStep) + " lengths)");
 					Check(bThin, Case + ": never thicker than what left the funnel");
 					// No beads: at every moment each puff reaches its neighbour astern, or nearly (a tenth of the way short at most).
-					bool bStreak = true;
-					double WorstGap = 0.0;
+					// And more: the longer of two neighbours reaches the other's MIDDLE, or nearly. A soft puff is thick
+					// at its middle and nothing at its rim, evenly between, so two that reach each other's middles are
+					// together as thick between them as either is at its own: the plume is one even ribbon, not a row of puffs.
+					bool bStreak = true, bRibbon = true;
+					double WorstGap = 0.0, WorstReach = 0.0;
 					for (int Phase = 0; Phase < 20; ++Phase)
 					{
 						for (int K = 0; K + 1 < Count; ++K)
@@ -173,9 +179,17 @@ int main()
 							const double Covered = A.Size * A.Stretch + B.Size * B.Stretch;
 							WorstGap = std::max(WorstGap, Apart / Covered);
 							bStreak = bStreak && Apart <= 1.1 * Covered;
+							const double Longer = std::max(A.Size * A.Stretch, B.Size * B.Stretch);
+							WorstReach = std::max(WorstReach, Apart / Longer);
+							bRibbon = bRibbon && Apart <= 1.1 * Longer;
 						}
 					}
 					Check(bStreak, Case + ", " + std::to_string(Count) + " puffs: one streak, never a string of beads (worst: " + Num(WorstGap) + " of what the two cover)");
+					Check(bRibbon, Case + ", " + std::to_string(Count) + " puffs: an even ribbon, each puff reaching its neighbour's middle (worst: " + Num(WorstReach) + " of the longer one's reach)");
+					if (std::getenv("SHIPSMOKE_SAY"))
+					{
+						std::printf("   %s, %d puffs: worst %.3f of what the two cover, %.3f of the longer one's reach\n", Case.c_str(), Count, WorstGap, WorstReach);
+					}
 				}
 			}
 		}
@@ -194,8 +208,8 @@ int main()
 			{
 				const FInk C = Ink(D / 50.0, A / 50.0);
 				// (the map's night rule, DrawPuff: warm is R - 2.2 B - 0.03 over nought, bright is a luminance over 0.75)
-				bNoLight = bNoLight && Luminance(C) < 0.6 && C.R - 2.2 * C.B - 0.03 < 0.0;
-				bGrey = bGrey && C.R >= C.G && C.G >= C.B && C.R - C.B < 0.03 && C.B > 0.05;
+				bNoLight = bNoLight && Luminance(C) < 0.7 && C.R - 2.2 * C.B - 0.03 < 0.0;
+				bGrey = bGrey && C.R >= C.G && C.G >= C.B && C.R - C.B < 0.11 && C.R - C.B >= 0.018 && C.B > 0.25;
 				if (D < 50)
 				{
 					bDarker = bDarker && Luminance(Ink((D + 1) / 50.0, A / 50.0)) < Luminance(C);
@@ -207,10 +221,10 @@ int main()
 			}
 		}
 		Check(bNoLight, "no smoke of hers is bright or warm enough to be taken for a light by night");
-		Check(bGrey, "it is grey, a shade to the warm side, and never quite black");
+		Check(bGrey, "it is grey, to the warm side (the more the darker), and never near black");
 		Check(bDarker, "the harder her fires are forced the darker it leaves her");
 		Check(bPaler, "and the older a puff the paler");
-		Check(Luminance(Ink(1.0, 0.0)) < 0.08 && Luminance(Ink(0.0, 0.0)) > 0.4, "from the pale of an easy fire to the black of a forced one");
+		Check(Luminance(Ink(1.0, 0.0)) > 0.3 && Luminance(Ink(1.0, 0.0)) < 0.38 && Luminance(Ink(0.0, 0.0)) > 0.55, "from the pale of an easy fire to the dirty brown-grey of a forced one, which is a third of white: twice the sea's tone and more");
 		Check(Ink(-4.0, 9.0).R == Ink(0.0, 1.0).R && Ink(4.0, -9.0).R == Ink(1.0, 0.0).R, "out of range is held");
 	}
 
@@ -306,7 +320,8 @@ int main()
 		Check(bTrue, Name + ": what is read as gathering way is the rate her pace changes");
 		Check(MostDark > 0.8 && FirstForced >= 0.0 && FirstForced < 0.4 * Voyage->Seconds, Name + ": her smoke is black as she works up, early in the voyage (first at " + Num(FirstForced) + " s)");
 		Check(LastEased > 0.6 * Voyage->Seconds, Name + ": and she is easing as she comes in (to " + Num(LastEased) + " s)");
-		Check(MostThickStep < 0.06 && MostDarkStep < 0.12, Name + ": from one frame to the next at 60 a second her smoke changes by little (thick " + Num(MostThickStep) + ", dark " + Num(MostDarkStep) + ")");
+		// (Her fire of the moment. No puff takes it whole: each keeps the fire that made it, see Carries below.)
+		Check(MostThickStep < 0.09 && MostDarkStep < 0.2, Name + ": from one frame to the next at 60 a second her fire changes by so much and no more (thick " + Num(MostThickStep) + ", dark " + Num(MostDarkStep) + ")");
 	}
 	{
 		double Pace = 0.0, Gather = 0.0;

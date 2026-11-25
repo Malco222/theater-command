@@ -400,7 +400,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			Add(TEXT("taskforcerule"), TEXT("Task forces"), TEXT("Send a fleet out on a job (a patrol, a raid, a submarine hunt or a convoy escort) and press MAKE IT A TASK FORCE on its page: that job becomes its standing order. Each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order. It can be switched in any month."),
 				Now.bTaskForce ? TEXT("ON") : TEXT("OFF"), Now.bTaskForce);
 			// (Release 2, teams.ts; Brian 21 November 2026 03:57Z, and his "Both" on 25 November) Machine-gun and mortar brigades.
-			Add(TEXT("teamsrule"), TEXT("Support teams"), TEXT("Machine-gun and mortar brigades can be raised like artillery, by you and by every other power. They never attack alone: they go in beside the corps they support. On the card the machine guns stiffen a defence against men on foot, and the mortars break up the works an attack goes in against. On the field each is a team that fires from behind the line. Turning it off stops new ones being raised; brigades already raised stay with their armies. It can be switched in any month."),
+			Add(TEXT("teamsrule"), TEXT("Machine gun and mortar brigades"), TEXT("You and every other power can raise machine gun and mortar brigades, the way artillery is raised. They fight beside your corps, never alone."),
 				Now.bSupportTeams ? TEXT("ON") : TEXT("OFF"), Now.bSupportTeams);
 			// (Release 2, fleetwhy.ts) The admirals say why each fleet is where it is.
 			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.

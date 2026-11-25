@@ -29,7 +29,7 @@ describe('the support teams switch through the bridge', () => {
     // Turned off afterwards, a second pass of the ship list leaves it off (the war is marked as having taken the list).
     const off = TC().act('teamsrule:off') as { ok: boolean; note: string };
     expect(off.ok).toBe(true);
-    expect(off.note).toMatch(/Support teams are off/);
+    expect(off.note).toMatch(/brigades are off/);
     expect(TC().r2Ship(['teamsrule'])).toBeNull();
     expect((TC().view() as { supportTeams: boolean }).supportTeams).toBe(false);
   });
@@ -39,7 +39,7 @@ describe('the support teams switch through the bridge', () => {
     TC().load(saveGame(g));
     const on = TC().act('teamsrule:on') as { ok: boolean; note: string; view: { supportTeams: boolean } };
     expect(on.ok).toBe(true);
-    expect(on.note).toMatch(/Support teams are on/);
+    expect(on.note).toMatch(/brigades are on/);
     expect(on.view.supportTeams).toBe(true);
     expect((TC().supportTeams(false) as { on: boolean }).on).toBe(false);
     expect((TC().supportTeams(true) as { on: boolean }).on).toBe(true);

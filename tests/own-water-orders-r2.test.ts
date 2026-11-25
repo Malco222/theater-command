@@ -55,14 +55,25 @@ describe("own water and the player's orders", () => {
       if (on) {
         expect(turned).toBe(true);
         expect(from).toBe(dd.id);
-        expect(until).toBeCloseTo(salvo.at, 1);
+        // 'clearUntil' is the second the heads pass her where she lies (when she is let go), never after the salvo lands.
+        expect(until).toBeGreaterThan(s.t);
+        expect(until).toBeLessThanOrEqual(salvo.at + 1e-9);
         expect(ordered).toBe(true);
         expect(typeof bb.extra.clearFromName).toBe('string');
+        // One to ten in words, as the news writes them (the UI director, 17:48Z): "four destroyers of the Home Fleet".
+        if ((dd.extra.ships as number) <= 10) expect(bb.extra.clearFromName).not.toMatch(/\d/);
         // Square off the tracks on her side: her heading has swung from west toward east (north-up, the tracks run north).
         expect(Math.abs(turnTo(bb.face, Math.PI / 2))).toBeLessThan(Math.abs(turnTo(-Math.PI / 2, Math.PI / 2)));
         expect((s.tally['att:clear'] ?? 0)).toBeGreaterThanOrEqual(1);
-        // Past the heads (and the salvo landed), she takes up the same order: she steers west for her point again.
-        steps(sim, salvo.at - s.t + 1);
+        // She is let go within a tick or two of the last 'clearUntil' she showed (the scene's countdown reaches 0 as she
+        // takes up her order), and past the heads (and the salvo landed), she steers west for her point again.
+        let shown = until, freed = -1;
+        steps(sim, salvo.at - s.t + 1, () => {
+          if (freed >= 0) return;
+          if (bb.extra.clearFrom !== undefined) shown = bb.extra.clearUntil as number; else freed = s.t;
+        });
+        expect(freed).toBeGreaterThan(0);
+        expect(Math.abs(freed - shown)).toBeLessThanOrEqual(0.2 + 1e-9);
         expect(sim.orderOf(bb.id)).toBe(order);
         expect(bb.extra.clearFrom).toBeUndefined();
         expect(bb.extra.ordered).toBeUndefined();
@@ -106,6 +117,7 @@ describe("own water and the player's orders", () => {
       expect(s.tally['att:torpHeld']).toBe(1);
       expect(dd.extra.heldFor).toBe(bb.id);
       expect(typeof dd.extra.heldForName).toBe('string');
+      expect(dd.extra.heldForName).not.toMatch(/\d/);
       expect(dd.extra.ordered).toBe(true);
       // She steams out of the line: the salvo goes the first tick the water is clear, at the ship the player named.
       put(bb, 9000, 6400, Math.PI / 2, 0);
