@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 28ebd83ae 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f8923b67c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -33629,6 +33629,8 @@
   }
   function harbourFor(g2, f) {
     const d = seasFrom(g2, f);
+    const own = f.base >= 0 ? g2.regions[f.base] : null;
+    if (own && own.port && allied(g2, f.nat, own.ctrl) && own.seas.some((z) => d[z] >= 0)) return own;
     let best = null, bestAt = Infinity;
     for (const r of g2.regions) {
       if (!r.port || !r.seas.length || !allied(g2, f.nat, r.ctrl)) continue;
