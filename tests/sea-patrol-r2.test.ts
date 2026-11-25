@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGame, declareWar } from '../src/campaign/game';
 import { allied } from '../src/campaign/game';
 import { CAUSE, FLEETS, NAVY, airKit, aswKit, atSea, convoyCount, huntersIn, laneLoss, navalAI, navalUpkeep, nearerPort, onStation, onWatch, passageSeas, quieterBeat, seaCover, seaLatitude, seaRoutes, seaSquares, subScene, zoneOf } from '../src/campaign/navy';
-import { AIR, AIRWAR, airAI, airPool, airRange, airfieldsHold, assessAir, fieldClass, isOffensive, kmToSea, setMission, whyNotMission } from '../src/campaign/air';
+import { AIR, AIRWAR, airAI, airPool, airRange, airfieldsHold, assessAir, fieldClass, forecastAir, isOffensive, kmToSea, setMission, whyNotMission } from '../src/campaign/air';
 import { groupJobs, groupRow } from '../src/campaign/airwar';
 import { byHand } from '../src/campaign/depth';
 import { patrolAircraft, patrolFigures, patrolLoss, patrolMet, patrolOn, patrolReach, patrolSeas, patrolStaff, patrolWorth, watchAgainst, watchFor } from '../src/campaign/seapatrol';
@@ -717,6 +717,106 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     expect(n1.mission).toBe('night');
     expect(n2.mission).toBe('seapatrol');
     expect(n2.flew).not.toBe(g.turn);
+  });
+
+  it('with the start guns standing a raid is worth less, and each group takes the higher of its patrol and its best raid: on these figures No. 1 Group patrols (the rule working; the companion of the test above)', () => {
+    // (The month of the test above, once on bare ground as there and once as a war now opens, with guns round each great
+    // power's capital and two chief factory provinces (ruling 124). The design director's ask of 25 November 2026 02:38Z,
+    // as he ruled it at 04:04Z: pin the cause, not the city. So three things: the guns lower a raid's worth; each group
+    // takes the higher of its patrol and its best raid; and on these figures No. 1 Group patrols. A group's best raid is
+    // the raid the raid staff flies for it when it is its side's only bomber group fit to fly and no patrol is weighed.)
+    lay({ ...FIG, attacks: { kit: 2, none: 2 }, kill: { kit: 1, none: 1 } });
+    AIRWAR.ai.raids.share = 1;
+    type Month = { g: Game; n1: AirFleet; n2: AirFleet; wapp: number; B: number };
+    const month = (guns: boolean, only?: string): Month => {
+      const g = open(), wapp = zoneOf(g, 'wapp');
+      if (!guns) for (const k of Object.keys(g.flags)) if (k.startsWith('wk:aa:')) delete g.flags[k];
+      g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
+      const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
+      f.duty = 'raid'; f.station = wapp; f.tied = false;
+      const n1 = group(g, 'No. 1 Group'), n2 = group(g, 'No. 2 Group');
+      n1.bmr = 300; n1.est.bmr = 300;
+      // (For a group's best raid: every other bomber group of its side has flown this month already, and stays away.)
+      if (only) for (const x of g.airFleets) if (x.nat === 'UK' && x.kind !== 'ftr' && x.name !== only) { x.mission = 'rest'; x.flew = g.turn; }
+      return { g, n1, n2, wapp, B: f.ships.ss * onWatch(g, f, wapp) };
+    };
+    // (The month flown by the whole air staff; with no patrol weighed, by the raid staff alone.)
+    const fly = (m: Month, patrol: boolean): void => {
+      sawAll(m.g, 'UK');
+      if (!patrol) CAUSE.patrol.live = false;
+      try { airAI(m.g, 'UK'); } finally { CAUSE.patrol.live = true; }
+    };
+    // (The raid staff's own score of a raid flown by the group alone (air.ts raidStaff, for a computer's staff): what it
+    // should do, counted in aircraft, less the aircraft it should cost.)
+    const score = (g: Game, f: AirFleet, mission: 'night', t: number): number => {
+      const a = assessAir(g, [f], mission, t);
+      expect(a.why).toBeNull();
+      const fc = forecastAir(g, a, mission, t);
+      return fc.worth + fc.foeLoss - fc.ftrLoss - fc.bmrLoss;
+    };
+    // (A group's best raid on either ground, scored in the month as it stands before its staff sits. On these figures
+    // each group's best raid is a night raid, flown alone.)
+    const best = (guns: boolean, name: string, on: Month, f: AirFleet): { t: number; v: number } => {
+      const alone = month(guns, name), g = group(alone.g, name);
+      fly(alone, false);
+      expect(g.flew).toBe(alone.g.turn);
+      expect(g.mission).toBe('night');
+      return { t: g.target, v: score(on.g, f, 'night', g.target) };
+    };
+    // (A group's patrol as its staff weighs it: over the boats its side expects in the Western Approaches, less those the
+    // groups sent there before it keep down, on top of their watch (seapatrol.ts patrolStaff, boatsExpected).)
+    const patrol = (m: Month, f: AirFleet, before: AirFleet[] = []): number => {
+      const was = before.map((x) => ({ x, mission: x.mission, target: x.target }));
+      for (const x of before) { x.mission = 'seapatrol'; x.target = m.wapp; }
+      try {
+        const w = watchFor(m.g, m.wapp, ukSide(m.g)), B = m.B * (w && w.none > 0 ? 1 - w.none : 1);
+        return patrolWorth(m.g, 'UK', f, m.wapp, atlantic, B, B);
+      } finally { for (const o of was) { o.x.mission = o.mission; o.x.target = o.target; } }
+    };
+    const bare = month(false), gunned = month(true);
+    const raid = {
+      bare: { n1: best(false, 'No. 1 Group', bare, bare.n1) },
+      gunned: { n1: best(true, 'No. 1 Group', gunned, gunned.n1), n2: best(true, 'No. 2 Group', gunned, gunned.n2) },
+    };
+    // (No. 1 Group is weighed first; on the guns' ground No. 2 Group is weighed next, with No. 1 Group on patrol.)
+    const worth = { bare: { n1: patrol(bare, bare.n1) }, gunned: { n1: patrol(gunned, gunned.n1), n2: patrol(gunned, gunned.n2, [gunned.n1]) } };
+    // (1) The guns lower a raid's worth. They stand where ruling 124 puts them, round the capital and the chief factory
+    // provinces; a night raid on each gunned place is worth less than on the same place bare, and so is No. 1 Group's
+    // best raid. A patrol is worth the same on either ground: the guns change only the raids.
+    const town = (g: Game, name: string): number => g.regions.find((r) => r.name === name)!.id;
+    const gunsAt = (g: Game, t: number): number => g.flags[`wk:aa:${t}`] ?? 0;
+    const gunnedTowns = ['Berlin', 'Ruhr'];
+    for (const name of gunnedTowns) {
+      const t = town(gunned.g, name);
+      expect(gunsAt(gunned.g, t)).toBeGreaterThan(0);
+      expect(gunsAt(bare.g, t)).toBe(0);
+      expect(score(gunned.g, gunned.n1, 'night', t)).toBeLessThan(score(bare.g, bare.n1, 'night', t));
+    }
+    expect(raid.gunned.n1.v).toBeLessThan(raid.bare.n1.v);
+    expect(worth.bare.n1).toBeCloseTo(worth.gunned.n1, 9);
+    for (const m of [bare, gunned]) fly(m, true);
+    // (2) Each group takes the higher of its patrol and its best raid: one worth more than its patrol is flown, and a
+    // patrol worth more than its best raid is flown instead. (On bare ground only No. 1 Group is weighed here: No. 2 Group
+    // is weighed there after No. 1 Group's raid has taken its target, and the test above has that month.)
+    const took = (m: Month, f: AirFleet, r: { t: number; v: number }, w: number): void => {
+      if (r.v > w) {
+        expect(f.flew).toBe(m.g.turn);
+        expect(f.mission).toBe('night');
+        expect(f.target).toBe(r.t);
+      } else {
+        expect(f.mission).toBe('seapatrol');
+        expect(f.target).toBe(m.wapp);
+        expect(f.flew).not.toBe(m.g.turn);
+      }
+    };
+    took(bare, bare.n1, raid.bare.n1, worth.bare.n1);
+    took(gunned, gunned.n1, raid.gunned.n1, worth.gunned.n1);
+    took(gunned, gunned.n2, raid.gunned.n2, worth.gunned.n2);
+    // (3) On these figures: on bare ground No. 1 Group's best raid is worth more than its patrol and it flies it; with the
+    // guns standing its best raid is worth less, and it patrols.
+    expect(raid.bare.n1.v).toBeGreaterThan(worth.bare.n1);
+    expect(raid.gunned.n1.v).toBeLessThan(worth.gunned.n1);
+    expect(gunned.n1.mission).toBe('seapatrol');
   });
 
   it('a group the raid staff leaves on support is weighed against nothing: with no raid flown this month, it patrols (17:49Z, 2 (a))', () => {
