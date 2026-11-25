@@ -2412,3 +2412,61 @@ Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers
    They are laid 3 cm over the ground's height, and a far tile's coarser mesh may differ from that by more. Their
    browns should read as earth beside the field's grass under the scene's light. Look also at picture 03 at the same
    moment as before: no dark disc, the 105 mm smoke beside the camera thinning as it passes the lens.
+
+## The burnt cottages' ground (release 2, LandScorch)
+
+Brian's steppe shot of 25 November showed black jagged blobs round the burnt cottages. They were the kit's
+BurntChimney: its 'melt' skirt (one flat 143 m2 mat), its 'ash' oval and its black 'soot' chimney. They were drawn
+over the grass, and where two met they piled up into black. `Battle/LandScorch.h` (header only, its own hash, no
+dice from any shared stream) now does this instead:
+
+- **The model** (`Look`, from LandField's two kit hooks: the steppe's `Base::Chimney` and a region kit's
+  "BurntChimney", the east village): the triangles of 'melt' and 'ash' are dropped by paint name at every level, and
+  the paints are checked against the points first. The chimney is recoloured by name: burnt brick (120,74,58), sooted
+  toward its top and in streaks (`0.05 + 0.6 Up`, streaks ±). The stove plate is sooted, the beams' char goes from
+  brown to black with dust on what faces up, and the stove is a burnt buff. If the file does not match, the fallback
+  is `Plain`: a brick stack, a sooted cap, the stove and a small brown slab (2.6 x 2.0 m), with no dark mat.
+- **The ground** (`Lay`/`Into`, from `Ground::Ground`): each cottage gets its own soft mark, laid as an extra piece
+  of its near tile's mesh. The mesh is a 0.6 m grid draped on the drawn ground, 4 cm over it, and its edge points
+  are 3 cm under it so the edge casts no line. Each mark is hashed from its place:
+  - one of three sizes, reaching 1.5, 3.6 or 5.8 m (x0.88 to 1.12) past the walls, never shorter than its soft fall
+    allows
+  - four lobes, and a tongue down the field's wind
+  - inside: ash drifts round the hearth, burnt brown and bare black earth, and broken char pieces
+  - past the walls: scorched earth going to singed grass, with grass islands and faint flecks
+  - it fades to `ColourAt` over 1.6 to 2.5 m
+  - under snow, wet earth and dirty snow instead
+  Overlapping marks are grouped onto one grid, and where two meet the darker of the two is drawn, never their
+  product or their sum. It is held off lanes, banks, floors, walls, water and marsh, fading 0.7 to 3.7 m from them.
+- **The off switch**: `-TheaterLandOldBurntGround` (LandBattle → `Field::bOldBurntGround`), or
+  `LAND_FIELD_OLD_BURNT=1` in the test. With it on, the field's digests equal 388ba015's on both compilers.
+
+Numbers (land_field_test, Prokhorovka, 21 cottages; the winter east village, normandy-1944 with LAND_FIELD_LOOK=farmland
+LATLON="51.0 36.5" SNOW=0.9 MONTH=1, 15 cottages):
+
+| | Prokhorovka | winter |
+|---|---|---|
+| cost a cottage | 8.9 ms, 2,414 triangles | 1,797 triangles |
+| mean lightness of a mark (share of the ground's) | 0.73 (darkest mark 0.70); the old skirt about 0.45 | 0.75 (0.73) |
+| darkest share / darkest / biggest dark piece | 3.5% / 0.42 / 2.7 m2 | 1.3% / 0.42 / 1.0 m2 |
+| biggest step across the fading edge (0.6 m) | 8.5% (1 of 38,289 pairs over 8%) | 8.7% (2 of 24,190) |
+| shows past its walls, small / middle / large | 3.3 / 5.0 / 7.2 m | 3.3 / 4.5 / 7.2 m |
+| where two meet | darkest 0.59, against a product of 0.53 | 0.42, against 0.32 |
+| chimney mean | 80,55,46 (the old 56,45,41); lower 112,70,55, top 67,50,42 | the same on its sides |
+
+Under a tank's footprint shade (LandShade multiplies: belly 0.35, edge 0.5), the mark's mean gives 0.25 and 0.36,
+and its darkest gives 0.15 and 0.21. The old skirt gave 0.16 and 0.23. The material multiplies, so this cannot be
+fixed on the ground's side.
+
+Not done here:
+- The grass clutter on a burn is neither thinned nor browned. Clutter skips only `OcHouse`, so an `OcCut` from this
+  side would change nothing. This needs a bit of the environments thread's own clutter test.
+- The model file still carries the skirt. The models thread is asked to drop 'melt' (or keep it for snow only) and to
+  colour the 'soot' shell as burnt brick sooted toward its top.
+
+Pictures are in battle-fx/scorch/:
+- cottage-before-after.png: 150 m off, 35° up, with haze. Both halves use one tone curve that puts the old mat at
+  0.46 of the grass, against 0.38 in Brian's crop.
+- cottage-close.png: 15 m.
+- cottage-variety.png: eight cottages.
+- cottage-winter.png

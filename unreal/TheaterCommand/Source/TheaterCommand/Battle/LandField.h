@@ -172,6 +172,10 @@ namespace LandField
 		};
 		std::vector<Cut> Cuts;
 
+		/** The burnt cottages' old look ("-TheaterLandOldBurntGround"): the kit's flat dark skirt and ash oval under each, no
+		 * burnt ground of its own (LandScorch). False: their brown, soft, each-its-own burnt ground (release 2, effects). */
+		bool bOldBurntGround = false;
+
 		double Width() const { return Cols * Cell; }
 		double Depth() const { return Rows * Cell; }
 	};

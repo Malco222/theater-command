@@ -7036,6 +7036,8 @@ namespace LandField
 	}
 }
 
+#include "Battle/LandScorch.h" // (the burnt cottages' look and ground, release 2)
+
 namespace LandField
 {
 	// ====================================================================== the base meshes
@@ -8560,6 +8562,8 @@ namespace LandField
 			}
 			At(Base::Trodden).FarFrom = 60.0f;
 		}
+		// (the steppe's burnt cottage, its look of release 2 unless the old is asked: LandScorch)
+		if (Fd.Steppe.bOn && !Fd.bOldBurntGround) LandScorch::Look(Fd.Steppe.Kit, At(Base::Chimney));
 		// A region's kit (each file's text in Fd.Kit, by the name its region gives the slot; a plain stand-in for a model
 		// not given) and its own clutter.
 		if (Rg)
@@ -8581,6 +8585,7 @@ namespace LandField
 				}
 				M.Name = Name;
 				Rg->KitLook(K, M);
+				if (!Fd.bOldBurntGround && M.Name == "BurntChimney") LandScorch::Look(Fd.Kit, M); // (the east village's burnt cottage)
 			}
 			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
 			for (int K = static_cast<int>(Base::Tuft); K < static_cast<int>(Base::Clut0); ++K) Rg->OwnClutter(static_cast<Base>(K), At(static_cast<Base>(K)));
@@ -8721,7 +8726,11 @@ namespace LandField
 		Count.MeshSeconds = std::chrono::duration<double>(T2 - T1).count();
 	}
 
-	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F)) {}
+	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F))
+	{
+		// (each burnt cottage's own burnt ground, in the near tiles, unless the old look is asked: LandScorch)
+		if (!F.bOldBurntGround) LandScorch::Into(In->TileList, LandScorch::Lay(*this, F));
+	}
 	Ground::~Ground() = default;
 
 	double Ground::HeightAt(double X, double Y, Drawn* OutWhat) const

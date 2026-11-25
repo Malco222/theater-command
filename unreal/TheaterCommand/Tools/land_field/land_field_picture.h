@@ -55,4 +55,9 @@ namespace LandFieldPicture
 
 	/** Paints <Key>-field-eye.png, <Key>-field-oblique.png and <Key>-field-map.png into Dir. False if one could not be written. */
 	bool Paint(const LandField::Ground& G, const LandField::Field& F, const Sky& S, const std::string& Key, const std::string& Dir);
+
+	/** One view of its own (the burnt cottages' sheets): the eye, the place it looks at, the field of view across (degrees), the
+	 * picture's size (pixels, painted at twice and averaged down), hazed or not; the clutter laid within Clutter metres of
+	 * the eye. False if it could not be written. */
+	bool PaintView(const LandField::Ground& G, const LandField::Field& F, const Sky& S, const double Eye[3], const double At[3], double FovDeg, int W, int H, bool bHaze, double Clutter, const std::string& Path);
 }

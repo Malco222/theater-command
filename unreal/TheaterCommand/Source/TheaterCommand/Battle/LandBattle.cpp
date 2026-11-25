@@ -1629,6 +1629,8 @@ bool ALandBattle::Open()
 		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there,
 		// and laid whole where a hedge cutter will tear it)
 		LandField::Field Lay = LandSight::FieldOf(Rec);
+		// (the burnt cottages' old look, the kit's flat dark skirt under each, for the Mac's off/on line: LandScorch)
+		Lay.bOldBurntGround = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandOldBurntGround"));
 		// (the campaign's weather word over the place, the recording's "weather": "mud" the thaw's mud over open ground;
 		// "-TheaterLandWeatherWord=mud" stands in for it on any field, for the Mac's off/on line,
 		// "-TheaterLandWeatherWord=clear" lays none. Not "-TheaterLandWeather=", the day's cover, deck and base, which
