@@ -8454,10 +8454,13 @@ void ALandBattle::LayOldWrecks()
 	// -TheaterLandOldWrecks=N (N laid) and -TheaterLandOldWreckMonths=M (how long since they burnt) stand in for it on
 	// any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
 	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said. A live battle (every
-	// battle the campaign plays) opens with nothing fought: LandHulk::FieldOf reads its header's start areas, fronts and
-	// lanes and lays them off the ground its men and machines are likely to cross (LandHulk::Field::Likely), along the
-	// field's old lines, at its junctions and out on its flanks, facing the other side's ground; its shell holes are not
-	// dug under one, and GuardOldWrecks clears away any one a live man or machine is to come near all the same.
+	// battle the campaign plays) opens with nothing fought: LandHulk::FieldOf reads its header (where its rules draw its
+	// blocks up, the setup room, its fronts, its joiners' edges, the rest of its start areas and the ground its blocks
+	// fall back over) and lays them off the ground its men and machines are likely to cross (LandHulk::Field::Likely: its
+	// core, and all of it but for the groups along the old lines and at its junctions and the village's edge), out on its
+	// flanks too, facing the other side's ground; its shell holes are not dug under one (the shallow torn earth laid
+	// there as on a lane), and GuardOldWrecks marks any one a live man or machine is to come near all the same, for
+	// ShowOldWrecks to clear away the moment the eye cannot see her go, or half a second before he comes near her.
 	FLandBattleState& S = *State;
 	if (!S.Field)
 	{
@@ -8577,8 +8580,9 @@ void ALandBattle::LayOldWrecks()
 		OldWreckShownNear.Add(1);
 	}
 	// (a live battle's shells land where its rules send them, not kept off the wrecks as a recording's are: none dug
-	// under a wreck or her patch, a metre round, the round bursting there all the same; one the guard cleared away keeps
-	// none off. A recording's holes are dug as before.)
+	// under a wreck or her patch, a metre round, the round bursting there all the same and its shallow torn earth laid
+	// as on a lane or a yard, under her patch; one the guard cleared away keeps none off. A recording's holes are dug as
+	// before.)
 	if (S.Rec.bLive && !All.empty() && S.Holes.Dig)
 	{
 		const LandHulk::Yard* Wrecks = &S.OldWrecks;
@@ -8612,12 +8616,71 @@ void ALandBattle::ShowOldWrecks(const FVector& EyeWorld)
 	{
 		return;
 	}
-	const std::vector<LandHulk::Hulk>& All = State->OldWrecks.Hulks();
+	FLandBattleState& S = *State;
+	const std::vector<LandHulk::Hulk>& All = S.OldWrecks.Hulks();
+	// A live battle's guard (GuardOldWrecks marks them as its pieces come): each marked wreck, and each one a moving man
+	// or machine is heading for, cleared away the moment the eye cannot see her go (out of its picture, too small in it,
+	// or on a cut), or, the eye on a marked one all along, LandHulk::ClearLead before a live man or machine comes near
+	// her (LandHulk::Yard::Clear): her near and far levels and her patch hidden, the grass laid again where she lay.
+	if (S.Rec.bLive)
+	{
+		LandHulk::Sight Seeing;
+		Seeing.EyeX = S.Pose.Eye.X;
+		Seeing.EyeY = S.Pose.Eye.Y;
+		Seeing.EyeZ = S.Pose.Eye.Z;
+		Seeing.LookX = S.Pose.Look.X;
+		Seeing.LookY = S.Pose.Look.Y;
+		Seeing.LookZ = S.Pose.Look.Z;
+		Seeing.Fov = S.Pose.Fov;
+		Seeing.bCut = S.Pose.bCut;
+		if (GEngine && GEngine->GameViewport)
+		{
+			FVector2D Size;
+			GEngine->GameViewport->GetViewportSize(Size);
+			if (Size.X > 0.0 && Size.Y > 0.0)
+			{
+				Seeing.Aspect = Size.X / Size.Y;
+				Seeing.Lines = Size.Y;
+			}
+		}
+		std::vector<int> How;
+		const std::vector<size_t> Gone = S.OldWrecks.Clear(S.Battle, Seeing, &How);
+		for (size_t N = 0; N < Gone.size(); ++N)
+		{
+			const size_t K = Gone[N];
+			const int32 I = static_cast<int32>(K);
+			const auto Hide = [I](const TArray<TObjectPtr<UStaticMeshComponent>>& Of)
+			{
+				if (UStaticMeshComponent* Mesh = Of.IsValidIndex(I) ? Of[I].Get() : nullptr)
+				{
+					Mesh->SetVisibility(false);
+				}
+			};
+			Hide(OldWreckNear);
+			Hide(OldWreckFar);
+			Hide(OldWreckPatch);
+			const LandHulk::Hulk& H = All[K];
+			if (Carpet.IsValid())
+			{
+				for (const LandHulk::Ring& R : H.Rings)
+				{
+					Carpet->Mark(R.X, R.Y, R.R + 0.5);
+				}
+				Carpet->Mark(H.X, H.Y, 1.12 * FMath::Max(H.PatchLong, H.PatchWide) + 0.5);
+			}
+			const int32 Why = N < How.size() ? FMath::Clamp(How[N], 0, 2) : 0;
+			const FString Said = Why == 0 ? FString(TEXT("out of the eye's sight")) : Why == 1 ? FString(TEXT("on a cut")) : FString(TEXT("in the eye's sight, her time come"));
+			const double Due = S.OldWrecks.DueOf(K);
+			const FString Coming = Due < 1e17 ? FString::Printf(TEXT("a live man or machine comes near her at %.1f s"), Due) : FString(TEXT("a man or machine heading for her"));
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): old wreck %d (the %s %s) cleared away at %.1f s, %s: %s"), I + 1, *LandParts::Wide(H.Nation),
+				*LandParts::Wide(H.Model), S.Battle, *Said, *Coming);
+		}
+	}
 	const double Ex = EyeWorld.Y / UnitsPerMetre, Ey = EyeWorld.X / UnitsPerMetre, Ez = EyeWorld.Z / UnitsPerMetre;
 	for (int32 K = 0; K < OldWreckShownNear.Num() && K < static_cast<int32>(All.size()); ++K)
 	{
-		// (one a live battle's guard cleared away stays hidden: GuardOldWrecks)
-		if (State->OldWrecks.Cleared(static_cast<size_t>(K)))
+		// (one a live battle's guard cleared away stays hidden)
+		if (S.OldWrecks.Cleared(static_cast<size_t>(K)))
 		{
 			continue;
 		}
@@ -8643,10 +8706,11 @@ void ALandBattle::GuardOldWrecks(bool bReset)
 {
 	// Old wrecks in a live battle (release 2): the rules' drill has no way round a still machine (it drives this battle's
 	// own wrecks through), so a live man or machine may be sent across one all the same. Each piece is read here as it
-	// comes, before it is drawn (the screen keeps LiveMargin behind the rules), and a wreck any of its ways comes near
+	// comes, before it is drawn (the screen keeps LiveMargin behind the rules): a wreck any of its ways comes near
 	// (LandHulk::Yard::Reached: her outline within 8.5 m of a vehicle's middle, 1.9 m of a man's, the clearances a
-	// recorded battle's wrecks are laid at) is cleared away before he gets there, her patch with her, and the grass laid
-	// again where she lay. Nothing where none was laid.
+	// recorded battle's wrecks are laid at; where crews bail out, -TheaterLandBailOut, within LandHulk::BailReach of a
+	// knocked-out tank's pin) is marked with the battle time he comes near her, and ShowOldWrecks clears her away before
+	// then, the first moment the eye cannot see her go. Nothing where none was laid.
 	if (!State.IsValid() || State->OldWrecks.Hulks().empty())
 	{
 		return;
@@ -8656,31 +8720,12 @@ void ALandBattle::GuardOldWrecks(bool bReset)
 	{
 		S.OldWreckSeen.clear();
 	}
-	const std::vector<size_t> Cleared = S.OldWrecks.Reached(S.Rec, S.OldWreckSeen);
-	for (const size_t K : Cleared)
+	const std::vector<size_t> Marked = S.OldWrecks.Reached(S.Rec, S.OldWreckSeen, S.Bails.bOn ? LandHulk::BailReach : 0.0);
+	for (const size_t K : Marked)
 	{
-		const int32 I = static_cast<int32>(K);
-		const auto Hide = [I](const TArray<TObjectPtr<UStaticMeshComponent>>& Of)
-		{
-			if (UStaticMeshComponent* Mesh = Of.IsValidIndex(I) ? Of[I].Get() : nullptr)
-			{
-				Mesh->SetVisibility(false);
-			}
-		};
-		Hide(OldWreckNear);
-		Hide(OldWreckFar);
-		Hide(OldWreckPatch);
 		const LandHulk::Hulk& H = S.OldWrecks.Hulks()[K];
-		if (Carpet.IsValid())
-		{
-			for (const LandHulk::Ring& R : H.Rings)
-			{
-				Carpet->Mark(R.X, R.Y, R.R + 0.5);
-			}
-			Carpet->Mark(H.X, H.Y, 1.12 * FMath::Max(H.PatchLong, H.PatchWide) + 0.5);
-		}
-		UE_LOG(LogTheater, Display, TEXT("Land battle (live): old wreck %d (the %s %s) cleared away at %.1f s: a live man or machine is to come near her"), I + 1,
-			*LandParts::Wide(H.Nation), *LandParts::Wide(H.Model), S.Rec.Fought);
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): old wreck %d (the %s %s) to be cleared away: a live man or machine comes near her at %.1f s (the rules at %.1f s, the screen at %.1f s)"),
+			static_cast<int32>(K) + 1, *LandParts::Wide(H.Nation), *LandParts::Wide(H.Model), S.OldWrecks.DueOf(K), S.Rec.Fought, S.Battle);
 	}
 }
 

@@ -17,8 +17,9 @@
  * Old wrecks (release 2; Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next
  * battle there): the armour burnt out in the land battles fought over a region before, laid on its field as the battle
  * opens, rusting where they fell. LOOKS ONLY, as the scars and the old ruts: nothing the rules fight reads them, no
- * round strikes one, no man takes cover behind one, and they are kept off every way the recording's men and machines
- * go, so nothing it shows is changed by them.
+ * man takes cover behind one, and they are kept off every way the recording's men and machines go and every place its
+ * rounds land, so no round strikes one and nothing it shows is changed by them. A live battle's rounds land where its
+ * rules send them, on a wreck too (the burst is drawn there; no hole is dug under her: Yard::Over).
  *
  * The campaign sends the recording's root "oldWrecks": {"count": n, "months": m, "nats": {"GER": n1, ...}}: the
  * armoured vehicles burnt out in battles fought there before (60 at most), the months since the last of them, and
@@ -33,10 +34,12 @@
  *   engineers cleared those), never in a hedge, a house, a yard, a wood, water, marsh or standing corn, never on an old
  *   shell hole, a trench, an old rut or a cattle's path, clear of every recorded vehicle's way by 8 m and every man's by
  *   1.5 m, and clear of the others. A live battle opens with no ways yet: FieldOf reads its header instead (Field::Likely:
- *   its start areas, its fronts and the ground between them, its joiners' edges), and they are laid off that ground,
- *   along the old lines outside it and out on its flanks, still facing the other side's; Yard::Reached then reads each
- *   live piece as it comes, and a wreck a live man or machine is to come near all the same is cleared away before he
- *   is drawn there (Yard::Cleared), as the scene's GuardOldWrecks does.
+ *   where the rules draw its blocks up and the player's setup room, the ground between its fronts, its joiners' edges;
+ *   and round that, the rest of its start areas and the ground its blocks fall back over), and they are laid off it,
+ *   but for the groups along the old lines and at the junctions and the village's edge, which may lie on the outer
+ *   part; Yard::Reached then reads each live piece as it comes and marks a wreck a live man or machine is to come near
+ *   (or is heading for), and Yard::Clear clears her away the moment the eye cannot see her go, or half a second before
+ *   he comes near her where it is on her all along (Yard::Cleared), as the scene's GuardOldWrecks and ShowOldWrecks do.
  * - How each looks (Yard::Dress, Yard::Patch): the game's own model of her (the miniature the battle draws, posed by
  *   LandKit), knocked out and burnt through: her turret turned, or blown off and lying near, upturned or on its side;
  *   her gun drooped to its stop; her hatches open; a track run off beside her, snaking a little and folded back on
@@ -82,16 +85,23 @@ namespace LandHulk
 	/**
 	 * A live battle (release 2: every battle the campaign plays, fought by the rules as it is shown) opens with nothing
 	 * fought, so there are no ways to keep the wrecks off: they are laid instead off the ground its men and machines are
-	 * likely to cross (Field::Likely, filled by FieldOf from the header): each side's start area (its zone, and the setup
-	 * step's room) grown by StartClear; the advance between them (the ground between the two sides' fronts as they draw
-	 * up, each as wide as its blocks side by side, AdvanceMargin round it); the lanes LiveLaneClear from a lane's middle
-	 * (the columns drive them); with a corps coming up from next door, JoinClear in from every edge of the field (it
-	 * walks on by one, any but the enemy's back edge); and EdgeClear in from the field's own edges. The rules' drill has no way round a still machine (it drives
-	 * this battle's own wrecks through), so nothing there keeps a live man or machine off one: the scene's guard (Yard::
-	 * Reached) clears a wreck away before a vehicle's middle comes within VehicleReach of her outline or a man within
-	 * ManReach, the clearances a recorded battle's wrecks are laid at (Lay's, with its half metre and 40 cm over her
-	 * rings), so every wreck left standing is as clear of the live battle's ways as a recorded battle's are of its own
-	 * (the live pieces come at least a second of battle ahead of what is drawn).
+	 * likely to cross (Field::Likely, filled by FieldOf from the header), in two parts. Its core (FromCore): each block
+	 * where the rules draw it up (units.ts deploy and drawUp: rows, GAP between blocks, the tanks on the wings, a
+	 * defence's reserve, the guns at the back; a field with a river or a city's streets, whose deploy goes otherwise:
+	 * each whole zone) and the setup step's room, grown by StartClear (the room by its widest block's half more); the
+	 * advance between them (the ground between the two sides' fronts as drawn up, their wings and all, AdvanceMargin
+	 * round it); with a corps coming up from next door, JoinClear in from every edge of the field (it walks on by one,
+	 * any but the enemy's back edge); and EdgeClear in from the field's own edges. And round the core (FromLikely): the
+	 * rest of each side's zone and the ground behind its blocks and its advance to its own back edge (a block falls back,
+	 * and runs, straight back: sim.ts withdraw and rout), each grown by StartClear. Every wreck stays off both but the
+	 * groups along the old lines and at the junctions and the village's edge, which stay off the core only, so the
+	 * earlier battle's lines and village still read; the lanes LiveLaneClear from a lane's middle (the columns drive
+	 * them). The rules' drill has no way round a still machine (it drives this battle's own wrecks through), so nothing
+	 * keeps a live man or machine off one: the scene's guard (Yard::Reached) marks a wreck before a vehicle's middle
+	 * comes within VehicleReach of her outline or a man within ManReach, the clearances a recorded battle's wrecks are
+	 * laid at (Lay's, with its half metre and 40 cm over her rings), and Yard::Clear clears her away before he gets
+	 * there (the live pieces come at least a second of battle ahead of what is drawn), so every wreck left standing is
+	 * as clear of the live battle's ways as a recorded battle's are of its own.
 	 */
 	constexpr double StartClear = 60.0, AdvanceMargin = 100.0, LiveLaneClear = 15.0, JoinClear = 300.0, EdgeClear = 60.0;
 	constexpr double VehicleReach = VehicleClear + 0.5, ManReach = ManClear + 0.4;
@@ -99,6 +109,24 @@ namespace LandHulk
 	 * groups crowded a strip's inner edge, Prokhorovka's twenty in a patch 100 by 260 m; a recorded battle's lie some 140
 	 * to 190 m apart on the average). */
 	constexpr double LiveGroupApart = 100.0;
+	/**
+	 * When a marked wreck goes (Yard::Clear). The moment the eye cannot see her go: out of its picture, too small in it
+	 * (her reach under SightPx of its lines), or on a cut (the picture starts afresh). Where it is on her all along, at
+	 * the latest ClearLead before the live man or machine comes near her (his middle at her reach: a tank's gun reaches
+	 * some 5.5 m of the 8.5 from his middle, a man's body 0.3 m of the 1.9, so she is gone before any of him reaches her).
+	 * And a wreck a moving man or machine is heading for (his last way straight on, SoonAhead of battle or SoonFar at
+	 * the most, his reach and SoonWiden more round it) goes the moment the eye cannot see her go, before he is near
+	 * enough to mark her (none goes in sight for that alone), so she seldom goes in the picture.
+	 */
+	constexpr double ClearLead = 0.5, SightPx = 2.0, SoonAhead = 8.0, SoonFar = 120.0, SoonWiden = 2.0;
+	/**
+	 * What else the scene draws that walks: a knocked-out tank's crew bailing out (-TheaterLandBailOut, LandBail: off her
+	 * deck, 8 to 12 m back in her lee, then 18 to 38 m to her rear, cover or a crater, her rear 4 m back from her middle),
+	 * read as reaching BailReach from her pin from her kill on, where the scene asks it (Reached's Crews); a man who
+	 * leaves the field with his block, drawn on at his last speed and facing for the second he fades (LandMen), read as
+	 * walking LeaveDrift on.
+	 */
+	constexpr double BailReach = 60.0, LeaveDrift = 7.0;
 
 	/**
 	 * The share of a field's burnt-out armour still lying there Months after the battle (the recovery companies took
@@ -221,23 +249,32 @@ namespace LandHulk
 		std::string AttNat, DefNat;
 		/**
 		 * A live battle's (bOn: FieldOf of a live header; off for a recording read whole, which lays as before): the
-		 * ground its men and machines are likely to cross, kept clear of each wreck's outline (FromLikely). Fought is
-		 * then the ground between the two start areas off it, Vehicles and Men empty, and the axis the line between the
-		 * zones' middles.
+		 * ground its men and machines are likely to cross, kept clear of each wreck's outline (FromLikely; the groups
+		 * along the old lines and at the junctions and the village's edge, of its core only: FromCore). Fought is then
+		 * the ground between the two zones' back edges off the core, Vehicles and Men empty, and the axis the line
+		 * between the zones' middles.
 		 */
 		struct Likely
 		{
 			bool bOn = false;
-			/** Each side's start area grown by StartClear, the setup step's room grown the same, and the edges' strips
-			 * where a corps from next door walks on: [x0, y0, x1, y1] each. */
+			/** The core's boxes, [x0, y0, x1, y1] each: each block where the rules draw it up grown StartClear (each whole
+			 * zone where its deploy is not modelled: !bDrawnUp), the setup step's room grown the same and its widest
+			 * block's half more, and the edges' strips where a corps from next door walks on. */
+			std::vector<std::vector<double>> Core;
+			/** Round the core: each side's zone and the ground behind its blocks and its advance to its own back edge, grown
+			 * StartClear: [x0, y0, x1, y1] each. */
 			std::vector<std::vector<double>> Areas;
-			/** The advance: the four corners of the ground between the two fronts (the attacker's across its start area's
-			 * middle, the defender's across its town where it has one, as the rules draw them up), AdvanceMargin round it. */
+			/** Each block where the rules draw it up (its box as drawUp stands it, ungrown: [x0, y0, x1, y1, side]), and
+			 * whether each side's are modelled (false: a river or a city's streets, its whole zone in the core). */
+			std::vector<std::vector<double>> Stands;
+			bool bDrawnUp[2] = { false, false };
+			/** The advance: the four corners of the ground between the two fronts as the rules draw them up (each side's
+			 * front line's depth, as wide as its blocks reach, wings and all), AdvanceMargin round it. */
 			std::vector<std::pair<double, double>> Advance;
 			/** The field less EdgeClear: [x0, y0, x1, y1]. */
 			double Inside[4] = { 0.0, 0.0, 0.0, 0.0 };
-			/** Each side's front as drawn up (its blocks' widths side by side, the header's; a corps from next door left
-			 * out), and whether one comes up from next door. */
+			/** Each side's front as drawn up (from its blocks' westmost to their eastmost, wings and all; a corps from next
+			 * door left out), and whether one comes up from next door. */
 			double FrontAtt = 0.0, FrontDef = 0.0;
 			bool bJoins = false;
 		};
@@ -271,11 +308,26 @@ namespace LandHulk
 		const std::vector<std::vector<std::pair<double, double>>>& OldRuts);
 
 	/**
-	 * How far a place lies from the ground a live battle's men and machines are likely to cross (F.Live: its start areas,
-	 * its advance and AdvanceMargin round it, the edges a corps from next door walks on by, the field's edges; the
-	 * lanes are kept by their own squares): under 0 inside it, 1e9 for a recording read whole (F.Live off).
+	 * How far a place lies from the ground a live battle's men and machines are likely to cross (F.Live: its core, and
+	 * round it the rest of its start areas and the ground behind its blocks; the lanes are kept by their own squares):
+	 * under 0 inside it, 1e9 for a recording read whole (F.Live off).
 	 */
 	double FromLikely(const Field& F, double X, double Y);
+	/** The same from its core alone (where its blocks are drawn up and the setup room, the advance and AdvanceMargin
+	 * round it, the edges a corps from next door walks on by, the field's edges). */
+	double FromCore(const Field& F, double X, double Y);
+
+	/** The eye as the scene draws this frame (LandEye::Pose's, field metres), for the guard to choose when a wreck goes
+	 * (Yard::Clear): out of its picture, too small in it to see, or on a cut. */
+	struct Sight
+	{
+		double EyeX = 0.0, EyeY = 0.0, EyeZ = 0.0, LookX = 0.0, LookY = 1.0, LookZ = 0.0;
+		/** Its lens (degrees from the picture's top to its bottom), the picture's width over its height, and its height
+		 * in pixels. */
+		double Fov = 55.0, Aspect = 16.0 / 9.0, Lines = 1080.0;
+		/** A cut this frame: the picture starts afresh, so nothing is seen to go. */
+		bool bCut = false;
+	};
 
 	/**
 	 * What a point of a dressed wreck shows (the coat on its side of each band's middle where her coats blend): soot,
@@ -365,22 +417,41 @@ namespace LandHulk
 		/** The ground under and round hulk K: burnt black and ragged while fresh (ash at her engine's end, a brown rim of
 		 * burnt grass, her fuel's stain), browning, then greener than the field. Note as Dress's. */
 		void Patch(size_t K, LandField::Mesh& Out, Dressing* Note = nullptr) const;
-		/** Whether the grass and corn round the eye stand at a place (false under a wreck, her hull's corners and all, or a
-		 * thrown turret, on a run-off track, and on the scorched patch while it is fresh; a wreck cleared away, Reached,
-		 * none). */
+		/** Whether a wreck covers a place, so the grass and corn round the eye do not stand there (under a wreck, her
+		 * hull's corners and all, or a thrown turret, on a run-off track, and on the scorched patch while it is fresh; a
+		 * wreck cleared away, Clear, none). */
 		bool Covers(double X, double Y) const;
 
 		/**
-		 * A live battle's guard (release 2): the wrecks a live vehicle's middle comes within VehicleReach of, or a man
-		 * within ManReach of (her outline: her rings), along the recording's tracks from Seen on (each track's kept points
-		 * from Seen[T], the straight line between them as they are drawn, and a knocked-out machine's pin), each wreck
-		 * once: cleared from then on (the scene hides her and her patch). Seen is grown to the tracks and moved on (a
-		 * track's provisional last point, Track::bTail, read again with the next piece); the caller empties it when the men
-		 * are placed again (LandFeed::Grown::bReset). Nothing for a yard with none laid.
+		 * A live battle's guard (release 2), each piece: marks the wrecks a live vehicle's middle comes within
+		 * VehicleReach of, or a man within ManReach of (her outline: her rings), along the recording's tracks from Seen on
+		 * (each track's kept points from Seen[T], the straight line between them as they are drawn; a knocked-out
+		 * machine's pin from her fall, and her crew's way out to Crews from it where the scene's crews bail out, 0: they
+		 * do not; a man who left with his block LeaveDrift on), each wreck once, with the battle time he first comes near
+		 * her (Due); returns those newly marked. And afresh each piece, the wrecks a moving man or machine is heading for
+		 * (Heading: his last way straight on SoonAhead, SoonFar at most, his reach and SoonWiden round it). Seen is grown
+		 * to the tracks and moved on (a track's provisional last point, Track::bTail, read again with the next piece); the
+		 * caller empties it when the men are placed again (LandFeed::Grown::bReset). Nothing for a yard with none laid.
 		 */
-		std::vector<size_t> Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen);
-		/** Wreck K cleared away by the guard. */
+		std::vector<size_t> Reached(const LandFeed::Recording& Rec, std::vector<size_t>& Seen, double Crews = 0.0);
+		/**
+		 * Each frame: the marked wrecks cleared away now, at battle time Now (the screen's) with the eye as it is: a
+		 * marked one or one a man or machine is heading for the moment Eye cannot see her go (out of its picture, too
+		 * small in it, or on a cut: InSight), a marked one Eye is on at the latest ClearLead before her Due. How (where
+		 * given): for each, 0 out of the eye's sight, 1 on a cut, 2 in sight at her time.
+		 */
+		std::vector<size_t> Clear(double Now, const Sight& Eye, std::vector<int>* How = nullptr);
+		/** Whether wreck K (her reach: her rings and her patch) is in the eye's picture and big enough in it to be seen
+		 * go (her reach SightPx of its lines or more); hills and houses in the way not read. */
+		bool InSight(size_t K, const Sight& Eye) const;
+		/** Wreck K cleared away (Clear). */
 		bool Cleared(size_t K) const { return K < Swept.size() && Swept[K] != 0; }
+		/** Wreck K marked (Reached) and the battle time a live man or machine comes near her (1e18: not marked). */
+		bool Marked(size_t K) const { return DueOf(K) < 1e17; }
+		double DueOf(size_t K) const { return K < DueAt.size() ? DueAt[K] : 1e18; }
+		/** A moving man or machine heading for wreck K as the last piece left them (Reached), and when he would come near. */
+		bool Heading(size_t K) const { return SoonOf(K) < 1e17; }
+		double SoonOf(size_t K) const { return K < SoonAt.size() ? SoonAt[K] : 1e18; }
 		/** Whether a place lies under a wreck not cleared away, within Margin of her outline, her footprint or her scorched
 		 * patch at its ragged edge's widest (a live battle's shell hole is not dug there: it would open under her). */
 		bool Over(double X, double Y, double Margin) const;
@@ -393,13 +464,17 @@ namespace LandHulk
 		/** Models read for the wrecks (none where the battle had them already), and one line for each drawn as another. */
 		int Read = 0;
 		std::vector<std::string> StandIns;
-		/** Laid for a live battle (Field::Likely on), for Said. */
+		/** Laid for a live battle (Field::Likely on), for Said; and how many of its groups lie on the likely ground round
+		 * its core (along the old lines, at a junction or the village's edge: FromLikely under their reach). */
 		bool bLive = false;
+		int OnLikely = 0;
 
 	private:
 		std::vector<Hulk> List;
-		/** Each wreck cleared away by the guard (Reached). */
+		/** Each wreck cleared away (Clear); when a live man or machine comes near her (Reached; 1e18 none), and when one
+		 * heading for her would (afresh each piece). */
 		std::vector<uint8_t> Swept;
+		std::vector<double> DueAt, SoonAt;
 		std::map<std::string, std::shared_ptr<LandKit::Model>> Loaded;
 		std::map<std::string, const LandKit::Model*> Models;
 		std::vector<std::string> KeyOf;
