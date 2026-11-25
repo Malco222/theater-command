@@ -5432,6 +5432,15 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		BuildingsMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		BuildingsMesh->SetMaterial(0, SceneryMaterial);
 	}
+	if (OverSeam())
+	{
+		// (The far side, seam-2, where it meets the flak ring.) The keeper of the twins over the chart's seam knows a
+		// model by its counts and a few of its points. A gun pit that makes way for a public building moves a few
+		// degrees and keeps every count (so does an airfield that shrinks when nobody flies from it): the keeper would
+		// not see it, and the twin would show the pit still standing on the new market. So this model's twin is laid
+		// again with the model, as RecolourRivers lays the rivers'.
+		LayOverSeam(BuildingsMesh);
+	}
 	UE_LOG(LogTheater, Log, TEXT("Works on the table: %d, in %d points"), Count, Model.Vertices.Num());
 	if (bFlakRing)
 	{
@@ -16590,6 +16599,13 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double FlashOut = FMath::Max(0.2 * GunUnit, 0.0015 * CameraDistance);
 				const FLinearColor MuzzleBody(FColor(214, 128, 52)), MuzzleHeart(FColor(238, 176, 96)), GunSmoke(0.46f, 0.46f, 0.47f);
 				const FVector DownTheWind = Wind.GetSafeNormal();
+				// (The far side, seam-2, where it meets the flak ring.) A raid over the chart's seam is flown to its
+				// target's place a world on (UpdateSorties: the turn nearest its airfield), where the buildings' twin
+				// stands the town's pits. The guns' fire is drawn there with the raid, in the turn of the world nearest
+				// the flight, and not a world away under an empty sky. With the far side off, or tc.Far.OverSeam off,
+				// the span is nothing and the fire is drawn at the pits as it always was.
+				const double SeamSpan = OverSeam() ? Data.WorldWidth * UnitScale : 0.0;
+				const FVector ToRaid(0.0, SeamSpan > 0.0 ? FMath::RoundToDouble((Flight.At.Y - (*TownGuns)[0].Muzzle.Y) / SeamSpan) * SeamSpan : 0.0, 0.0);
 				// (The mend of 25 November 2026. Each gun had a reload of its own, 1.7 to 2.4 seconds: guns on different
 				// clocks drift through one another, and every so often several fired within a frame or two, as one. A
 				// town's guns now load to ONE time, the town's own, and each fires at its turn round the ring and a
@@ -16610,21 +16626,22 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				for (int32 GunNo = 0; GunNo < TownGuns->Num(); ++GunNo)
 				{
 					const FFlakGun& Barrel = (*TownGuns)[GunNo];
+					const FVector Mouth = Barrel.Muzzle + ToRaid; // (the barrel's mouth, in the raid's turn of the world)
 					FRandomStream Own(Flight.Sortie.Region * 613 + GunNo * 97 + 11);
 					// (a round every two seconds or so: its turn in the ring, and a little late of it)
 					const double SinceShot = FMath::Fmod(Now + Reload * ((GunNo + Own.FRandRange(0.0f, 0.4f)) / TownGuns->Num()), Reload);
 					if (SinceShot < (bMuzzleHeld ? 0.6 : 0.09))
 					{
 						bDrawingLight = true;
-						DrawSmear(Barrel.Muzzle + Barrel.Bore * (0.9 * FlashOut), Barrel.Bore, 1.5 * FlashOut, 0.7 * FlashOut, MuzzleBody, 0.9f * NightDim, 0.6);
-						Draw(Barrel.Muzzle + Barrel.Bore * (0.3 * FlashOut), 0.55 * FlashOut, MuzzleHeart, 0.95f * NightDim);
+						DrawSmear(Mouth + Barrel.Bore * (0.9 * FlashOut), Barrel.Bore, 1.5 * FlashOut, 0.7 * FlashOut, MuzzleBody, 0.9f * NightDim, 0.6);
+						Draw(Mouth + Barrel.Bore * (0.3 * FlashOut), 0.55 * FlashOut, MuzzleHeart, 0.95f * NightDim);
 						bDrawingLight = false;
 					}
 					if (!bFromTop && SinceShot > 0.04 && SinceShot < 1.3)
 					{
 						// (its smoke: thrown up the barrel's line and slowing, then taken by the wind; thin within a second)
 						const double SmokeAged = SinceShot / 1.3;
-						const FVector SmokeAt = Barrel.Muzzle + Barrel.Bore * ((0.25 + 0.7 * FMath::Sqrt(SmokeAged)) * GunUnit) + DownTheWind * (0.3 * SmokeAged * GunUnit);
+						const FVector SmokeAt = Mouth + Barrel.Bore * ((0.25 + 0.7 * FMath::Sqrt(SmokeAged)) * GunUnit) + DownTheWind * (0.3 * SmokeAged * GunUnit);
 						Draw(SmokeAt, FMath::Max((0.16 + 0.34 * SmokeAged) * GunUnit, 0.6 * FlashOut), GunSmoke, InWindow * static_cast<float>(0.55 * (1.0 - SmokeAged) * FMath::SmoothStep(0.04, 0.12, SinceShot)));
 					}
 				}
