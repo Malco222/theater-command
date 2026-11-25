@@ -15,6 +15,7 @@ import { headline, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
 import { MANPOWER, returnMen } from './manpower';
 import { cadreTerms } from './economy';
+import { riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -111,6 +112,7 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   const mine = keep.str * keep.divs, fill = v.str * keep.divs, from = Math.max(0, fill - mine);
   if (keep.mor !== undefined && gone.mor !== undefined && fill > 0) keep.mor = (keep.mor * mine + gone.mor * from) / fill;
   keep.xp = v.xp; keep.org = v.org; keep.str = v.str; keep.ap = v.ap;
+  riflesFold(g, keep);
   if (gone.fought) keep.fought = true;
   if (gone.pressed) keep.pressed = true;
   if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;

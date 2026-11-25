@@ -19,6 +19,8 @@
 //                it was found cut, kept while a cut road comes back dry, so that "runs again" is told only when
 //                its rifles can come; and half a month further from 0 once its seller's fall was told, while the
 //                seller stays fallen (roadNews)
+//   rfa:<id>     a corps' armed level, a share of its divisions, for a nation that binds; only below the corps' full
+//   rfo:<nat>    1 once the nation's corps were armed at their strength (its opening, or an older save's next month)
 // and the shelves' own flags (arms.ts: sa:<nat>, sam:<nat>). A corps on order that drew rifles carries what it drew in
 // its Build's 'rifles' (divisions' worth), so the save keeps it and a cancel can give it back.
 
@@ -29,7 +31,7 @@ import { SHELVES, armsMonth, armsView, draw, gainOf, giveBack, has, put, stockOf
 import { atWar, headline, industryHeld, theName } from './game';
 import { majorsOf } from './diplomacy';
 import { corpsList } from './economy';
-import type { Build, Game } from './types';
+import type { Build, Corps, Game } from './types';
 
 /** A nation's rifles row: rifles to its division's worth, the share a draft draws, and whether an empty store refuses anything (the next stage reads the last two). */
 export interface RiflesRow { perDiv: number; refit?: number; binds?: boolean }
@@ -91,11 +93,78 @@ export function unarmOrder(g: Game, nat: string, b: Build): void {
   if (b.rifles && b.rifles > 0) giveBack(g, nat, 'rifles', b.rifles);
 }
 
-const kLevel = keys('rfa');
+const kLevel = keys('rfa'), kOpen = keys('rfo');
 
 /** A cadre ordered raised again comes back with new men at its full level: its old armed level is struck. */
 export function riflesRaised(g: Game, id: number): void {
   const k = kLevel(String(id));
+  if (k in g.flags) delete g.flags[k];
+}
+
+// ---- The armed level (stage B2) ---------------------------------------------------------------------------------------
+// The design director's 05:37Z (clause 3.5; the form's sections 12 and 13; 15D): each corps of a nation whose row binds
+// is armed to a level, a share of its divisions, which its drafts refill to and no further. Battle never lowers it; a
+// broken corps loses all; on the first day it is the corps' strength; a new corps comes at full; men moved from one
+// corps to another bring their rifles. Kept as rfa:<corps id> only where it stands below the corps' full; absent, it
+// is the corps' full (c.full, which a row's 'est' sets, else 1). Read only for a nation that binds: for every other
+// nation the callers keep today's figures. (A dated row without 'est': the director's answer 5, no hook until such a
+// row is laid.)
+
+/** The corps' armed level, a share of its divisions: its flag where it stands, else its full. */
+export function levelOf(g: Game, c: Corps): number {
+  const x = g.flags[kLevel(String(c.id))];
+  return x !== undefined ? x : c.full ?? 1;
+}
+
+/** Sets a corps' armed level: a flag where it stands below the corps' full, none at or above it. */
+function setLevel(g: Game, c: Corps, lvl: number): void {
+  const k = kLevel(String(c.id));
+  if (lvl < (c.full ?? 1)) g.flags[k] = lvl;
+  else if (k in g.flags) delete g.flags[k];
+}
+
+/** Each living corps of a binding nation below its full is armed to its strength that day, and the opening is noted. */
+function stampLevels(g: Game, nat: string): void {
+  for (const c of g.corps) if (c.nat === nat && !c.dead && c.str < (c.full ?? 1)) g.flags[kLevel(String(c.id))] = c.str;
+  g.flags[kOpen(nat)] = 1;
+}
+
+/**
+ * The first day (staff.ts startOpen, after the garrisons are set and before anyone's battles): each corps of a nation
+ * that binds is armed at its strength. An older whole-world save that was opened without it is stamped the same way at
+ * the nation's next month (riflesMonth).
+ */
+export function openRifles(g: Game): void {
+  for (const nat of Object.keys(g.nations)) if (binds(g, nat)) stampLevels(g, nat);
+}
+
+/** A fold (fold.ts): the kept corps' level rises to its new strength where that is higher; the men moved came armed. */
+export function riflesFold(g: Game, keep: Corps): void {
+  if (binds(g, keep.nat) && keep.str > levelOf(g, keep)) setLevel(g, keep, keep.str);
+}
+
+/** The liberation army (liberation.ts) comes armed at the strength it forms at. */
+export function riflesFormed(g: Game, c: Corps): void {
+  if (binds(g, c.nat)) setLevel(g, c, c.str);
+}
+
+/** A corps broken up (breakup.ts): the part carries the whole corps' level; each division keeps its share. */
+export function riflesSplit(g: Game, c: Corps, p: Corps): void {
+  const k = kLevel(String(c.id));
+  if (binds(g, c.nat) && k in g.flags) g.flags[kLevel(String(p.id))] = g.flags[k];
+}
+
+/**
+ * A part rejoining (breakup.ts, before the divisions are counted together): the corps' level is the two levels
+ * weighted by divisions, never below the strength the rejoin gives; the part's own flag is struck.
+ */
+export function riflesJoin(g: Game, part: Corps, into: Corps): void {
+  if (!binds(g, into.nat)) return;
+  const a = into.divs, b = part.divs, all = a + b;
+  if (all <= 0) return;
+  const weighed = (levelOf(g, into) * a + levelOf(g, part) * b) / all, str = Math.max(0, Math.min(1, (into.str * a + part.str * b) / all));
+  setLevel(g, into, Math.max(weighed, str));
+  const k = kLevel(String(part.id));
   if (k in g.flags) delete g.flags[k];
 }
 
@@ -253,6 +322,8 @@ export function riflesMonth(g: Game, nat: string): void {
   if (!shelf && !roads.length) return;
   if (!g.nations[nat]?.alive || g.flags[kMonth(nat)] === g.turn) return;
   g.flags[kMonth(nat)] = g.turn;
+  // (An older whole-world save, opened before the armed level was kept: each corps is armed at its strength now, once.)
+  if (binds(g, nat) && g.flags[kOpen(nat)] === undefined) stampLevels(g, nat);
   if (shelf) armsMonth(g, nat, industryHeld(g, nat));
   const per = riflesRow(g, nat)?.perDiv ?? 0;
   for (const road of roads) {

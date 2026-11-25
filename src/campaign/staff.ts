@@ -42,7 +42,7 @@ import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
 import { drawMen, menLeft, menRules, openManpower } from './manpower';
-import { armOrder, canArm } from './rifles';
+import { armOrder, canArm, openRifles } from './rifles';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
@@ -260,6 +260,8 @@ export function startOpen(g: Game, wide = true): Game {
   // Volunteer legions (release 2): only where stage.json switches them on. (After the reserves of men are opened: the
   // record's legions in the line on the first day are raised from them.)
   openLegions(g);
+  // China's rifles (stage B2): each corps of a nation whose rifles row binds is armed at its strength on the first day.
+  openRifles(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
   if (wide) computeSupply(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
