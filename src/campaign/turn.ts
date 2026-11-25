@@ -84,6 +84,8 @@ import { staffRuns, type DeskId } from './depth';
 import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
 import { aiShadows, orderShadow, shadowOn, shadowTargets, shadowsFollow, stopShadow, whyNotShadow } from './shadow';
 import { logVoyages } from './voyage';
+import { ATOM, PACES, aiAtom, armStrike, atomFly, atomOn, atomView, beginPlants, chooseSite, disarmStrike, pausePlants, setAtom, setMaking, setPace, whyNotPlants, whyNotStrike, type AtomView } from './atom';
+import type { AtomPace } from './types';
 import { aiMines, mineSeas, minesMonth, minesStrike, orderMines, seaMinesOn, whyNotMines } from './mines';
 import { galeNews } from './heavyseas';
 import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
@@ -163,6 +165,8 @@ export function stepAI(g: Game): string {
   // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
   yieldMonth(g, nat);
   if (g.nations[nat].alive) {
+    // Its atomic project, before its other orders, so that a bomb in hand gets the bomber group it needs (release 2, atom.ts).
+    aiAtom(g, nat);
     runAI(g, nat);
     // The computer's admirals set their shadows, after their other orders (release 2, shadow.ts).
     aiShadows(g, nat);
@@ -2229,6 +2233,55 @@ export function townBuildings(g: Game, region: number): TownBuildings | null {
 export function orderBuilding(g: Game, region: number, line: string): Build | null {
   return humanUp(g) ? orderCivic(g, g.human!, region, line) : null;
 }
+
+// ---- The atomic project (release 2; Brian 25 November 2026; atom.ts) ------------------------------------------------
+
+// A staff's armed strike flies at once as an ordinary bombing raid: the staff's proposal of bombers and escort, or else
+// the group it picked (airwar.ts launchRaid, through air.ts fly and the air rules' own losses).
+atomFly.raid = (g, nat, region, groups) => {
+  const plan = planRaid(g, 'bomb', region, undefined, nat);
+  const ids = !plan.why && plan.picked.some((id) => groups.includes(id) || (g.airFleets.find((f) => f.id === id)?.bmr ?? 0) > 0) ? plan.picked : groups;
+  return !!launchRaid(g, 'bomb', region, ids, nat);
+};
+
+/** True in a grand campaign with the atomic project switched on. */
+export const atomBombOn = (g: Game): boolean => atomOn(g);
+
+/** Switches the atomic project on or off for this grand campaign, in any month (OPTIONS). */
+export const setAtomBomb = (g: Game, on: boolean): boolean => setAtom(g, on);
+
+/** The player's atomic project as his page shows it, or null outside the rules. */
+export const atomPage = (g: Game): AtomView | null => (g.human ? atomView(g, g.human) : null);
+
+/** The paces the plants can draw at, with the share of the earnings each takes. */
+export const atomPaces = (): { pace: AtomPace; share: number }[] => PACES.map((pace) => ({ pace, share: ATOM.plants.pace[pace] }));
+
+/** Why the player cannot begin the atomic plants now (at `site`, or his chosen or the staff's), or null. */
+export const whyNotAtomPlants = (g: Game, site?: number): string | null => (g.human ? whyNotPlants(g, g.human, site) : 'There is no player.');
+
+/** Begins the player's atomic plants, at a site and a pace (his chosen, or the staff's, where none is given). */
+export const orderAtomPlants = (g: Game, site?: number, pace?: AtomPace): boolean => g.human !== null && humanUp(g) && beginPlants(g, g.human, site, pace);
+
+/** Chooses the province the player's plants will stand in, before they are begun. */
+export const orderAtomSite = (g: Game, region: number): boolean => g.human !== null && humanUp(g) && chooseSite(g, g.human, region);
+
+/** Sets the pace the player's plants draw at. */
+export const orderAtomPace = (g: Game, pace: AtomPace): boolean => g.human !== null && humanUp(g) && setPace(g, g.human, pace);
+
+/** Stops the player's plants drawing, or lets them draw again. */
+export const orderAtomPause = (g: Game, paused: boolean): boolean => g.human !== null && humanUp(g) && pausePlants(g, g.human, paused);
+
+/** Stops the player's finished plants making more bombs, or lets them. */
+export const orderAtomMaking = (g: Game, on: boolean): boolean => g.human !== null && humanUp(g) && setMaking(g, g.human, on);
+
+/** Why the player cannot arm a strike on this city now, or null. */
+export const whyNotAtomStrike = (g: Game, region: number): string | null => (g.human ? whyNotStrike(g, g.human, region) : 'There is no player.');
+
+/** Arms a strike: the player's next bombing raid on that city this month carries the bomb. */
+export const orderAtomStrike = (g: Game, region: number): boolean => g.human !== null && humanUp(g) && armStrike(g, g.human, region);
+
+/** Takes the player's armed strike back before the raid flies. */
+export const cancelAtomStrike = (g: Game): boolean => g.human !== null && humanUp(g) && disarmStrike(g, g.human);
 
 // ---- Damaged cities (the grand campaign with its switch: citydamage.ts, repairs.ts) ----------------------
 

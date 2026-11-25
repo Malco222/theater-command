@@ -21,6 +21,7 @@ import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
 import { UNITS, unitsDecide } from './units';
 import causeData from '../../data/campaign/convoycause.json';
+import { ATOM, atomOn, atomWanted } from './atom';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -44,6 +45,8 @@ export interface Tech {
   slots?: number;
   /** Ends the eastern winter's penalty for the nation's troops. */
   winterKit?: boolean;
+  /** One of the three rows of the atomic project (atom.ts), 1 to 3: out of the tree while it is switched off. */
+  atom?: number;
   /** One of the infantry's support weapons (rulings 146 and 152): what it does is worked out in support.ts. */
   weapons?: boolean;
   /** Oil made each month by every working factory at home, out of any raider's reach. */
@@ -122,10 +125,10 @@ export const shipRule = (g: Game, k: ShipRule): boolean => SHIP_RESEARCH()?.[k]?
 export const shelved = (t: Tech | undefined): boolean => !!t?.ships && SHIP_RESEARCH()?.[t.ships]?.on !== true;
 
 /**
- * True for a row this campaign's tree does not have: one shelved by its switch, or a row of Units decide in a campaign
- * opened without it. Like `shelved`, nobody picks it, orders it or is given it, and no card or list shows it.
+ * True for a row this campaign's tree does not have: one shelved by its switch, a row of Units decide in a campaign
+ * opened without it, or a row of the atomic project while that is switched off (atom.ts). Like `shelved`, nobody picks it, orders it or is given it, and no card or list shows it.
  */
-export const outOfTree = (g: Game, t: Tech | undefined): boolean => shelved(t) || (!!t?.units && !unitsDecide(g));
+export const outOfTree = (g: Game, t: Tech | undefined): boolean => shelved(t) || (!!t?.units && !unitsDecide(g)) || (!!t?.atom && !atomOn(g));
 
 /** What a navy's ships are fitted with: the stage of their anti-aircraft guns (null where that rule is off), proximity shells, damage control. */
 export interface ShipKit { stage: GunStage | null; vt: boolean; dc: boolean }
@@ -392,6 +395,10 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     // (Rider b542: the spy team works the Intelligence branch alone, in its order; the other teams never do, and
     // nobody's staff begins what only a great power's plans can give it.)
     if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
+    // (The atomic project, release 2: a staff takes up its rows only when it wants the project, atom.ts atomWanted, and
+    // then first. Never in a later start's catch-up months: those are the record's months, before the war it judges.)
+    const atom = t.atom ? (turn === g.turn && atomWanted(g, nat) ? ATOM.ai.first : null) : 0;
+    if (atom === null) continue;
     const place = order.indexOf(t.branch);
     // A staff watching its oil run down puts the fuel chemists first.
     const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
@@ -401,7 +408,7 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
     // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
     const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns - atom;
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
@@ -413,6 +420,8 @@ function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolea
   kinTechs(g, n);
   // (Ruling 240: nothing more is done on a row whose switch is off, and nothing is announced.)
   s.work = workOf(s);
+  // (The atomic project switched off in mid-war, atom.ts: its rows leave the tree, and the teams on them are free.)
+  if (!atomOn(g) && s.work.some((w) => BY_ID[w.id]?.atom)) s.work = s.work.filter((w) => !BY_ID[w.id]?.atom);
   const due: string[] = [];
   // Schools and institutes at home quicken every team.
   const pace = researchSpeed(g, n.id) * govMul(g, n.id, 'research');
@@ -606,6 +615,13 @@ function causeWords(id: string): string | null {
   return null;
 }
 
+/** What the three rows of the atomic project do (atom.ts), in words. */
+const ATOM_RULE: Record<number, string> = {
+  1: 'The first step of the atomic project. It does nothing at the front.',
+  2: 'The atomic plants can be begun: they take a share of the earnings every month for years toward one great bill. A large industry finishes them in about two years; a small one never does.',
+  3: 'Once the plants are finished, the atomic bomb is ready, and after it one more every few months. A bomb is carried by a bombing raid on an enemy city that is not a capital.',
+};
+
 export function techRule(t: Tech, g?: Game, nat?: string): string {
   const out: string[] = [];
   for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
@@ -630,6 +646,8 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   if (land) out.push(land);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
+  const atom = t.atom ? ATOM_RULE[t.atom] : undefined;
+  if (atom) out.push(atom);
   // (The design director, 22 November 20:46Z, in the UI director's words of 20:48Z: the air campaigns' oil raids cut a
   // bombed plant's yield (ruling 236.2), so this oil is safe from submarines, not from bombers.)
   if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);

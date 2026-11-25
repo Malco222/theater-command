@@ -49,6 +49,7 @@ import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fiel
 import { sightOf } from './intel';
 import { RESEARCH } from './research';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
+import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
@@ -2208,6 +2209,15 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     fh = damageField(g, target, 'raid', fieldBlow(g, a, nat, target, through, strafe));
     if (fh) { ground = fh.ground; value += fh.worth; bookGround(fh); notable = fh.closed || fh.levels > 0; result = fh.words; }
     else result = through > 0 ? 'The bombs found no airfield in use.' : 'No bombers got through.';
+  } else if ((m === 'bomb' || night) && armedAt(g, nat) === target) {
+    // The atomic project (release 2, atom.ts; the design director, 25 November): this raid carries the bomb. The air
+    // rules above decided how many bombers reached the release; the bomb is with one of them or lost. Nothing else is
+    // done to the city: no ordinary bombing, no raid on its output, no air campaign's count (priced once).
+    const hit = strikeFlown(g, nat, target, a.B, bombed);
+    result = hit.text;
+    notable = true;
+    city = hit.city;
+    if (city) value += city.worth;
   } else if (m === 'bomb' || night) {
     const N = AIR.damage.industry;
     const r = g.regions[target];
@@ -3172,6 +3182,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     if (a.aa) cut *= 1 - a.aa * WORKS.aa.cut;
     nation = total > 0 ? cut * (r.fac / total) : 0;
     value = outputWorth(g, r, cut);
+    // (The atomic project, release 2: an enemy's unfinished atomic plants there, where the raiders' side has seen them, atom.ts.)
+    value += atomRaidWorth(g, nat, r, cut);
     // The grand campaign: the chance of cutting the province's railway, and of wrecking a factory outright.
     if (groundRules(g)) {
       rail = railBombChance(g, target, through, a.aa ? a.aa * WORKS.aa.cut : 0);

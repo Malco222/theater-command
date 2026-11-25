@@ -15,6 +15,7 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import { armedAt, strikeWords } from './atom';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate, type TicketLine } from '../core/ticket';
@@ -773,6 +774,11 @@ const cityLine = (g: Game, target: number, pts: number): string =>
 function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): string[] {
   const out: string[] = [];
   const place = placeOf(g, kind, target);
+  // The atomic project (release 2, atom.ts): a raid on the armed city carries the bomb, and does nothing else there.
+  if ((kind === 'bomb' || kind === 'night') && armedAt(g, nat) === target) {
+    out.push(strikeWords(g, nat, target));
+    return out;
+  }
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
     out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);

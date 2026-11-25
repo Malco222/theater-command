@@ -17,6 +17,7 @@ import { TECH } from './tech';
 import { oilAtHome } from './world';
 import { footWorn } from './footing';
 import { bombWorn, oilHeld } from './aircampaigns';
+import { atomWorn } from './atom';
 
 export type Good = 'oil' | 'sup';
 
@@ -527,7 +528,8 @@ export function resourcesTick(g: Game, nat: string): void {
 export function willLost(g: Game, nat: string): number {
   // (All-out war wears it too, with the nation's footing switched on: a count of its own above what shortage takes, ruling 172.)
   // (And the bombing of its cities, with the air campaigns on: a small count of its own, ruling 236.2, b549.)
-  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat);
+  // (And atomic strikes on its cities, with the atomic project on: atom.ts, the design director's ruling of 25 November.)
+  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat) + atomWorn(g, nat);
 }
 
 /** What privation alone has taken from a nation's will to fight: what shortage takes, up to its own ceiling. */

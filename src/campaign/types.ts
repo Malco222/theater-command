@@ -105,6 +105,45 @@ export interface Nation {
   gov?: GovState;
   /** The nation's footing (ruling 172, the grand campaign with the lever switched on): see footing.ts. */
   foot?: Footing;
+  /** The atomic project (Brian, 25 November 2026, release 2): its plants, its bombs, and the strikes it has taken. See atom.ts. */
+  atom?: AtomState;
+}
+
+/** The pace the atomic plants draw at: a share of the nation's earnings every month (data/campaign/atom.json). */
+export type AtomPace = 'steady' | 'full' | 'crash';
+
+/** A nation's atomic project (atom.ts), and the strikes it has taken. Absent for a country that has never touched it. */
+export interface AtomState {
+  /** The province the plants stand in, or will stand in once begun. */
+  site?: number;
+  /** The work done on the plants, toward the bill; absent until they are begun. */
+  plants?: number;
+  /** The pace they draw at; 'full' when absent. */
+  pace?: AtomPace;
+  /** Stopped by order: the plants draw nothing and their work stands. */
+  paused?: 1;
+  /** What the project drew from the earnings in that month: [month, amount] (economy.ts upkeep). */
+  paid?: [number, number];
+  /** The month the plants were finished. */
+  done?: number;
+  /** The month the first bomb was ready. */
+  ready?: number;
+  /** Bombs in hand. */
+  bombs?: number;
+  /** The making of the next bomb, in months of work. */
+  next?: number;
+  /** Ordered to make no more bombs. */
+  stopMaking?: 1;
+  /** A strike armed: [month, city]: the next bombing raid on that city in that month carries the bomb. */
+  armed?: [number, number];
+  /** Bombs that reached their city. */
+  used?: number;
+  /** The month of the last strike flown. */
+  struck?: number;
+  /** The strikes this country has taken: [month, by whom, city]. */
+  hits?: [number, string, number][];
+  /** Countries whose project papers this one took with their plants' ground. */
+  papers?: string[];
 }
 
 /**

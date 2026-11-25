@@ -114,6 +114,8 @@ import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwh
 import { REARGUARD, isRearguard, rearBridgesOn, rearguardOn, setRearBridges, setRearguard } from '../../../src/campaign/rearguard';
 import { setShadow, setShadowRelay, shadowLine, shadowOn, shadowRelayOn } from '../../../src/campaign/shadow';
 import { mineLine, minesSeen, seaMinesOn, setSeaMines } from '../../../src/campaign/mines';
+import { ATOM as ATOM_DATA, PACES as ATOM_PACES, atomOn, atomView, setAtom, type AtomView } from '../../../src/campaign/atom';
+import type { AtomPace } from '../../../src/campaign/types';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
@@ -123,6 +125,7 @@ import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarc
 import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrders, type CardFigure as RuleFigure, type CardTone, type MonthCard as RuleCard, type MonthMark } from '../../../src/campaign/monthcard';
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
+import { cancelAtomStrike, orderAtomMaking, orderAtomPace, orderAtomPause, orderAtomPlants, orderAtomSite, orderAtomStrike, whyNotAtomPlants, whyNotAtomStrike } from '../../../src/campaign/turn';
 import { gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
 import { fieldRepairView } from '../../../src/campaign/fieldstate';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
@@ -979,6 +982,8 @@ function drawView() {
     // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
     seaMines: seaMinesOn(s),
     mines: minesSeen(s),
+    // (Release 2, atom.ts) Whether the atomic project is in this campaign.
+    atomBomb: atomOn(s),
     // (Release 2, heavyseas.ts) Whether gales blow at sea, and the seas in a gale this month.
     heavySeas: heavySeasOn(s),
     gales: [...galeSeas(s)],
@@ -4568,6 +4573,8 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (damagedOfMine(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
   // (Release 2, columns.ts and logistics.ts) The supply columns, where they run.
   if (columnsAreOn(s) && s.nations[s.human]?.alive) out.push({ id: 'lorries', label: 'SUPPLY COLUMNS' });
+  // (Release 2, atom.ts) The atomic project, where it is in this campaign.
+  if (atomOn(s) && s.nations[s.human]?.alive) out.push({ id: 'atom', label: 'THE ATOMIC PROJECT' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
   return out;
@@ -4688,6 +4695,11 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
       });
     }
   } catch { /* rules without the secret war */ }
+  // (Release 2, atom.ts) A bomb in hand and no strike armed.
+  const atom = atomOn(s) ? me.atom : undefined;
+  if (atom?.bombs && !(atom.armed && atom.armed[0] === s.turn) && atom.struck !== s.turn) {
+    out.push({ k: 'page:atom', t: atom.bombs === 1 ? 'AN ATOMIC BOMB IS READY' : `${atom.bombs} ATOMIC BOMBS ARE READY`, tip: 'A bomb is carried by an ordinary bombing raid on an enemy city that is not a capital. Open THE ATOMIC PROJECT to choose the city, or keep it in hand.' });
+  }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
   if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
     out.push({
@@ -5610,6 +5622,105 @@ function repairsPage(s: Game): Page | null {
   };
 }
 
+const PACE_WORD: Record<AtomPace, string> = { steady: 'STEADY', full: 'FULL', crash: 'CRASH' };
+
+/**
+ * (Release 2, atom.ts; Brian 25 November 2026) The atomic project: the three rows of research, the plants (where they
+ * stand, the pace they draw at, how far they have come), the bombs in hand, a strike to arm, and what the player knows
+ * of other countries' projects. Plain words, no count, no spectacle (ruling 230, 4e).
+ */
+function atomPage(s: Game): Page | null {
+  const nat = s.human;
+  const me = nat ? s.nations[nat] : null;
+  if (!nat || !me?.alive) return null;
+  const v: AtomView | null = atomView(s, nat);
+  if (!v) return null;
+  const up = humanUp(s) && !onEve(s);
+  const notUp = 'It is not your month.';
+  const where = (r: number | null): string => (r === null ? 'nowhere yet' : townName(s.regions[r]));
+  const pct = (x: number): string => `${Math.round(x * 100)}%`;
+  const sections: Page['sections'] = [];
+  const top: PageButton[] = [];
+  // The research.
+  const rowWord = (r: AtomView['rows'][number]): string => (r.done ? 'done' : r.work ? 'a team is at work on it' : 'not begun');
+  const NAMES = ['Atomic physics', 'Chain reaction', 'Atomic weapon design'];
+  sections.push({
+    heading: 'THE RESEARCH',
+    text: 'Three steps of the Industry branch, ordered from RESEARCH like any other. Chain reaction lets the plants be begun; the weapon design is needed before the first bomb.',
+    rows: v.rows.map((r, i) => ({ nat: '', title: NAMES[i].toUpperCase(), lines: [`${NAMES[i]}: ${rowWord(r)}.`], buttons: [], meter: r.done ? 1 : 0 })),
+  });
+  // The plants.
+  const paceButtons = (): PageButton[] => ATOM_PACES.map((p) => ({
+    label: `${PACE_WORD[p]} · ${pct(ATOM_DATA.plants.pace[p])}`, act: `atom:pace:${p}`, ok: up && p !== v.pace,
+    tip: !up ? notUp : p === v.pace ? 'The plants draw at this pace already.' : `The plants take ${pct(ATOM_DATA.plants.pace[p])} of your earnings every month.`,
+  }));
+  if (v.plants === null) {
+    const rows: PageRow[] = v.sites.map((x) => ({
+      nat, title: `${townName(s.regions[x.region]).toUpperCase()}${x.region === v.site ? '  ·  CHOSEN' : ''}`,
+      lines: [`${s.regions[x.region].fac} factor${s.regions[x.region].fac === 1 ? 'y' : 'ies'}.  ·  ${x.hops >= 99 ? 'No enemy ground anywhere near.' : `${x.hops} province${x.hops === 1 ? '' : 's'} from the nearest enemy ground.`}`],
+      buttons: [{ label: x.region === v.site ? 'CHOSEN' : 'BUILD THEM HERE', act: `atom:site:${x.region}`, ok: up && x.region !== v.site, tip: !up ? notUp : 'The plants will stand here. Bombing and sabotage here set them back, and if the province is lost, so are they.' }],
+    }));
+    sections.push({
+      heading: 'THE ATOMIC PLANTS: WHERE THEY WILL STAND',
+      text: `The plants are not research: they take a share of your earnings every month, for years, toward one great bill. A large industry finishes them in about two years; a small one never does. ${v.months === null ? "At today's earnings yours would never be finished." : `At ${PACE_WORD[v.pace].toLowerCase()} pace and today's earnings, about ${v.months} months.`}`,
+      rows,
+    });
+    top.push({ label: 'BEGIN THE ATOMIC PLANTS', act: 'atom:begin', ok: up && v.canPlants === null, tip: !up ? notUp : v.canPlants ?? `They are begun ${where(v.site) === 'nowhere yet' ? '' : `at ${where(v.site)} `}at ${PACE_WORD[v.pace].toLowerCase()} pace.` });
+    top.push(...paceButtons());
+  } else if (!v.done) {
+    sections.push({
+      heading: 'THE ATOMIC PLANTS',
+      text: `${v.paused ? 'Stopped by your order: they draw nothing, and their work stands.' : `This month they take ${moneyWords(v.draw)} of your earnings.`} ${v.months === null ? "At today's earnings they would never be finished." : `At this pace and today's earnings, about ${v.months} month${v.months === 1 ? '' : 's'} more.`} Bombing the town and sabotage there set them back; if the province is lost, so are they.`,
+      rows: [{ nat, title: `AT ${where(v.site).toUpperCase()}  ·  ${pct(v.plants / v.bill)} DONE`, lines: [`Pace: ${PACE_WORD[v.pace].toLowerCase()}.`], buttons: [], meter: Math.min(1, v.plants / v.bill) }],
+    });
+    top.push(...paceButtons());
+    top.push({ label: v.paused ? 'LET THEM DRAW AGAIN' : 'STOP THE PLANTS', act: v.paused ? 'atom:resume' : 'atom:pause', ok: up, tip: !up ? notUp : v.paused ? 'They draw their share again from this month.' : 'They draw nothing until you let them, and keep the work done.' });
+  } else {
+    sections.push({
+      heading: 'THE BOMBS',
+      text: v.bombs ? `${v.bombs === 1 ? 'One atomic bomb is' : `${v.bombs} atomic bombs are`} in hand.` : 'No bomb is in hand.',
+      rows: [{ nat, title: v.making ? 'THE PLANTS MAKE MORE' : 'THE PLANTS MAKE NO MORE', lines: [v.making ? `Another bomb every ${ATOM_DATA.plants.every} months of making, never more than ${ATOM_DATA.plants.most} in hand, for a tenth of your earnings while they make one.` : 'They draw nothing.'], buttons: [{ label: v.making ? 'MAKE NO MORE' : 'MAKE MORE', act: `atom:making:${v.making ? 'off' : 'on'}`, ok: up, tip: !up ? notUp : v.making ? 'The plants stop making bombs.' : 'The plants make more bombs again.' }], meter: v.making ? Math.min(1, v.next / ATOM_DATA.plants.every) : 0 }],
+    });
+  }
+  // A strike.
+  if (v.bombs > 0) {
+    const rows: PageRow[] = v.targets.map((t) => ({
+      nat: s.regions[t.region].ctrl, title: `${townName(s.regions[t.region]).toUpperCase()}${v.armed === t.region ? '  ·  ARMED' : ''}`,
+      lines: t.why ? [t.why] : ['A bomber group of yours can reach it this month.'],
+      buttons: v.armed === t.region
+        ? [{ label: 'PLAN THE RAID', act: `atom:arm:${t.region}`, ok: up, tip: 'Opens the raid card for this city.' }, { label: 'CANCEL', act: 'atom:disarm', ok: up, tip: 'The bomb stays in hand.' }]
+        : [{ label: 'CARRY THE BOMB HERE', act: `atom:arm:${t.region}`, ok: up && t.why === null, tip: !up ? notUp : t.why ?? 'Your next bombing raid on this city this month carries the bomb. The raid card opens.' }],
+    }));
+    sections.push({
+      heading: 'A STRIKE',
+      text: 'A bomb is carried by an ordinary bombing raid on an enemy city, flown like any raid: if the bomber that carries it is shot down, the bomb is lost with it. One strike a month. Never a capital: a government must be left to give in.',
+      rows,
+    });
+  }
+  // What strikes have cost the player, and what he knows of others.
+  if (v.worn > 0) sections.push({ heading: 'YOUR OWN CITIES', text: `Atomic strikes on your cities have taken ${pct(v.worn)} of your people's will to fight. It does not come back.`, rows: [] });
+  sections.push({
+    heading: 'OTHER COUNTRIES\' PROJECTS',
+    text: v.known.length ? 'What your agents, your allies and the news have told you.' : 'You know of no other country\'s atomic project. Your agents may find one: in the province its plants stand in, or reading the books in its capital.',
+    rows: v.known.map((k) => ({
+      nat: k.nat, title: (s.nations[k.nat]?.name ?? k.nat).toUpperCase(),
+      lines: [k.done ? `Its plants are finished.${k.used ? ` It has used ${k.used === 1 ? 'an atomic bomb' : `${k.used} atomic bombs`}.` : ''}` : k.plants === null ? 'Its plants are lost.' : `Its plants are about ${pct(k.plants / v.bill)} done.`],
+      buttons: [], ...(k.plants !== null && !k.done ? { meter: Math.min(1, k.plants / v.bill) } : {}),
+    })),
+  });
+  const headline = v.armed !== null ? `A bomb is armed for ${where(v.armed)}`
+    : v.bombs ? (v.bombs === 1 ? 'An atomic bomb is ready' : `${v.bombs} atomic bombs are ready`)
+    : v.done ? 'The plants are finished'
+    : v.plants !== null ? `The plants are ${pct(v.plants / v.bill)} done`
+    : v.rows[1].done ? 'The plants can be begun'
+    : 'The research comes first';
+  return {
+    id: 'atom', title: 'THE ATOMIC PROJECT', headline,
+    note: 'A moonshot: years of research and a great slice of your industry, competing with tanks and aircraft, for a weapon that can break a beaten enemy\'s will to fight. Every country plays by the same rules.',
+    top, sections,
+  };
+}
+
 /**
  * (Release 2, columns.ts and logistics.ts) The supply columns: what last month's columns brought the corps beyond the
  * railhead and what caught them, the front the lorries go to first, and the forward dumps.
@@ -6152,7 +6263,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'atom' ? atomPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'fleetattack' ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
@@ -6644,6 +6755,33 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       ? `${label} can be switched only in the campaign's first month.`
       : `${label} ${logisticsSet(s, which) ? `${which === 'dumps' ? 'are' : which === 'wagons' ? 'are' : 'is'} on${columnsAreOn(s) ? '' : ' (they work only with the supply columns on)'}.` : `${which === 'lorryShift' ? 'is' : 'are'} off.`}`;
     return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'atomrule') {
+    // (Release 2, atom.ts) The atomic project, switched in any month.
+    ok = setAtom(s, part[1] === 'on');
+    note = !ok ? 'The atomic project is part of the grand campaign only.' : atomOn(s) ? 'The atomic project is on: three steps of the Industry branch, then atomic plants that take a share of your earnings for years. Open THE ATOMIC PROJECT.' : 'The atomic project is off: its research leaves the tree, and no plants draw.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'atom') {
+    // (Release 2, atom.ts) The player's orders for his atomic project.
+    const nat = s.human;
+    const r = Number(part[2]);
+    if (!nat || !humanUp(s) || onEve(s)) { ok = false; note = 'It is not your month.'; }
+    else if (part[1] === 'begin') { const why = whyNotAtomPlants(s); ok = !why && orderAtomPlants(s); note = ok ? '' : why ?? 'The plants cannot be begun now.'; }
+    else if (part[1] === 'site') { ok = orderAtomSite(s, r); note = ok ? `The plants will stand at ${townName(s.regions[r])}.` : 'The plants cannot stand there.'; }
+    else if (part[1] === 'pace') { ok = orderAtomPace(s, part[2] as AtomPace); note = ok ? `The plants draw at ${part[2]} pace: ${Math.round((ATOM_DATA.plants.pace[part[2] as AtomPace] ?? 0) * 100)}% of your earnings every month.` : ''; }
+    else if (part[1] === 'pause' || part[1] === 'resume') { ok = orderAtomPause(s, part[1] === 'pause'); note = ok ? (part[1] === 'pause' ? 'The plants are stopped: they draw nothing, and their work stands.' : 'The plants draw their share again.') : ''; }
+    else if (part[1] === 'making') { ok = orderAtomMaking(s, part[2] === 'on'); note = ok ? (part[2] === 'on' ? 'The plants make more bombs.' : 'The plants make no more bombs.') : ''; }
+    else if (part[1] === 'arm') {
+      const already = s.nations[nat].atom?.armed?.[0] === s.turn && s.nations[nat].atom?.armed?.[1] === r;
+      const why = already ? null : whyNotAtomStrike(s, r);
+      ok = already || (!why && orderAtomStrike(s, r));
+      note = ok ? `Your next bombing raid on ${townName(s.regions[r])} this month carries the atomic bomb.` : why ?? 'The bomb cannot be carried there now.';
+      // (The raid card for that city, with the staff's pick of groups, as a raid on the line is opened.)
+      if (ok) open = `plan:bomb:${r}:${(() => { try { return weighRaid(s, 'bomb', r).picked.join('.'); } catch { return ''; } })()}`;
+    }
+    else if (part[1] === 'disarm') { ok = cancelAtomStrike(s); note = ok ? 'The bomb stays in hand.' : ''; }
+    return { ok, note, fly, flies, open: open || (ok ? 'atom' : ''), view: view() };
   }
   if (part[0] === 'lorries') {
     // (Release 2, logistics.ts) The front the player's lorries go to first, or none.
@@ -7720,6 +7858,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 // (Release 2: mines.ts, heavyseas.ts, shadow.ts) TC.seaMines(on), TC.heavySeas(on), TC.shadowRelay(on) at any time; the
 // options page uses act('seaminesrule:on' / 'heavyseasrule:on' / 'shadowrelayrule:on', or ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
+// (Release 2, atom.ts) The atomic project: TC.atomBomb(on) at any time; the options page uses act('atomrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).atomBomb = (on: boolean) => { const s = game(); setAtom(s, !!on); return { on: atomOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heavySeas = (on: boolean) => { const s = game(); setHeavySeas(s, !!on); return { on: heavySeasOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
