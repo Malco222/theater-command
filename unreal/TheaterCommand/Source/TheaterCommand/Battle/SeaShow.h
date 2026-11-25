@@ -137,6 +137,14 @@ namespace SeaShow
 		 * below 0 not said: as her state has it), her periscope up. A merchant ("mv"): her column in the convoy (-1 none). */
 		std::string Dive;
 		double Keel = -1.0;
+		/** A boat's keel as the battle tells it changing, view by view (the convoy field's own rise, 2 m/s blown, and her
+		 * going down): metres a second to the next view, plus down, set by the show between two views that both tell a keel
+		 * and lie no faster than a boat goes (Show::Interpolate); 0 for a steady depth, or a jump (the stand-ins' told step
+		 * from deep to the surface), which she makes at her own rates. Never read from a view. */
+		double KeelRate = 0.0;
+		/** With a KeelRate, the next view's keel (metres): where the change told so far may end, the show holding one view in
+		 * hand and no more (below 0 none). She keeps where she can stop there (Show::Trim). Never read from a view. */
+		double KeelNext = -1.0;
 		bool bScope = false;
 		int ConvoyColumn = -1;
 		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
@@ -238,8 +246,10 @@ namespace SeaShow
 		Vec At;              // her waterline amidships (Z 0 afloat)
 		/** Degrees: heading clockwise from north; heel (plus: starboard side down), pitch (plus: bow up). */
 		double Heading = 0.0, Heel = 0.0, Pitch = 0.0;
+		/** Degrees, plus bow up: a boat's angle diving or surfacing, her pitch less the sea's (0 for a ship). */
+		double DiveAngle = 0.0;
 		double Heave = 0.0;  // metres: how far the swell lifts her (plus) or lets her fall from her waterline
-		double Speed = 0.0;  // metres a second through the water
+		double Speed = 0.0;  // metres a second through the water (below 0 going astern: a boat deep the battle turns round)
 		double Wake = 0.0;   // 0 to 1: her bow wave and wake, by her speed against her flank speed
 		double Funnel = 0.0; // 0 to 1: how hard her funnels smoke (black at flank, thin at rest)
 		double Long = 180.0, Beam = 20.0;
@@ -662,6 +672,9 @@ namespace SeaShow
 		// whose men the battle counted, the real number the show took from it against the battle's own (men and dead), and
 		// men drawn taken aboard a rescuer beyond the share of the battle's count of those picked up (none allowed).
 		int MenEvents = 0, MenMatched = 0, OilEvents = 0, OilMatched = 0, AbandonEvents = 0, Abandons = 0;
+		// Ships the battle's own count took out of their line with no word of how (a view's ships fallen below those in her
+		// line, no sea:sunk, burning, abandon or surrender told for her by then): given up as one abandoned (Show::Untold)
+		int LeftUntold = 0;
 		int MenCounted = 0, MenCountOff = 0, PickedOver = 0;
 		// A boat that strikes (sea:surrender): the events read; the boats struck (her piece's boat found) and not; her men
 		// come out on her casing; of her men in the water, those who went over from it and all of hers; men drawn aboard a
@@ -792,6 +805,7 @@ namespace SeaShow
 			Vec P;
 			double Hdg = 0.0, Spd = 0.0, Rate = 0.0; // radians, m/s, radians a second
 			double Heel = 0.0, Pitch = 0.0, Heave = 0.0;
+			double DiveAngle = 0.0; // a boat's angle diving or surfacing (degrees, plus bow up), in her Pitch
 			double Back = 0.0;      // a follower: metres of track behind her leader, as she has closed up so far
 			double SOn = 0.0;       // a follower: where she is along his track (how far he had steamed when he passed there)
 			double Roll0 = 0.0, RollT = 10.0, PitchT = 7.0; // her own phase on the swell, and her roll and pitch periods
@@ -818,6 +832,7 @@ namespace SeaShow
 			double ScreenUntil = -1.0;
 			bool bScreen = false;
 			std::string LastBlow;  // the weapon of the last hit drawn on her (for the way she goes down)
+			double BlowAt = -1.0;  // when it was drawn (battle time; below 0, never): the ship of her piece a blow struck last
 			Vec LastP;
 			bool bHasLast = false;
 			double LastRate = 0.0;
@@ -835,11 +850,28 @@ namespace SeaShow
 			// her periscope.
 			std::string Dive;
 			double Keel = -1.0, KeelTo = 0.0, KeelRate = 0.0;
+			// (following a depth the battle tells as it changes, Trim: on it, and until she has eased to a stop at its end, or at
+			// the depth she was given when she left her line in the middle of one; never stopped dead from her rate)
+			bool bOnRamp = false;
+			// (a boat deep at a crawl whom the battle turns round where an escort has her: she goes astern on her motors, her
+			// stern on the battle's course, rather than come round in her circle, Show::SteamColumn; her Spd then below 0.
+			// HeldAt: when an escort's echo was last on her piece, battle time. bRounding: a boat deep coming round for her
+			// station where the battle has turned her round, until it is off her bow. bCatching: going astern no longer, the
+			// battle's course swung across her beam, steering straight for her station until she is near it on its course)
+			bool bAstern = false;
+			double HeldAt = -1.0;
+			bool bRounding = false;
+			bool bCatching = false;
 			bool bScope = false;
 			// Struck (sea:surrender): her flag up and her crew coming out on her casing once she is up (UpAt); how the battle
 			// says she ends ("scuttled", "captured"), the piece she struck to, when her flag came down; the battle's order to
 			// abandon her told (once); a prize, taken: held afloat as she was (her SinkAt carried on, so her Down stands)
 			bool bStruck = false, bAbandonTold = false, bPrize = false;
+			// (a boat abandoned, sea:abandon, while still coming up: her men, her raft and her boats wait for her casing)
+			bool bLeftUnder = false;
+			// (given up by the battle's own count with no word of how, Untold: numbered among her piece's lost as the next, and
+			// not yet by the battle's own number, which a sea:abandon told after gives her)
+			bool bGivenUp = false;
 			double StruckAt = -1.0, UpAt = -1.0, FlagDownAt = -1.0;
 			// (struck and sent down after, sea:sunk: when the stage was told her end, StageSink's clock for her crew still on her)
 			double SentDownAt = -1.0;
@@ -893,6 +925,9 @@ namespace SeaShow
 			// and the ship it was laid on; Play draws the hit through it as it is told. Below 0, none: a round like any other)
 			double ToldAt = -1.0;
 			int OnKey = -1;
+			// (laid on a ship of that piece wherever she lies afloat, in her line or out of it, as a boat's or a merchant's gun
+			// is, or a warship's gun told on her piece: where it falls, NearestAfloatOf, not her line's nearest)
+			bool bLaidAfloat = false;
 		};
 
 		struct Torp
@@ -1089,6 +1124,7 @@ namespace SeaShow
 			bool bSwept = false;  // pushed aside by a ship's bow, once or more
 			double Until = 0.0;   // climbing: when he is aboard; going under: when he is gone
 			int To = -1;          // climbing: the rescuer (her key)
+			double ToSince = 0.0; // swimming for a rescuer's side: battle time he set off for it (her net goes down as he comes)
 			int Near = -1;        // the float he keeps by, treading water in its group with no place on it (its key), -1 none
 			Vec NearOff;          // his place by it (its own frame)
 		};
@@ -1143,8 +1179,14 @@ namespace SeaShow
 		std::vector<SlickOut> Oil;
 		int NextFloat = 1, NextMan = 1;
 		bool bWrecksMoved = false; // a step has moved them since Output last laid them out
-		/** The ships' clock (stepped by Fixed) and the moment drawn, a little after it. */
+		/** The ships' clock (stepped by Fixed) and the moment drawn, a little after it. The steps are summed from the first
+		 * view's moment (ClockFrom; Elapsed the sum), not onto it: a convoy night's window opens hours into the battle's own
+		 * clock, where a sum of twentieths onto that falls off the views' moments by more than the 1e-9 s they are matched
+		 * to within a few minutes (1.5e-8 s by 1000 s from 11340 s), and a view's events and its counts came a step from
+		 * their moment; summed from the window's start it stays as close as a battle's from 0 (3.6e-10 s by 1000 s), and a
+		 * battle from 0 is stepped as it always was. */
 		double ShownT = 0.0, DrawT = 0.0, ContactT = -1.0;
+		double ClockFrom = 0.0, Elapsed = 0.0;
 		static constexpr double Fixed = 0.05;
 		/** An abandoned ship (sea:abandon): her going down drawn over this long until the battle says she goes (she settles
 		 * a sixtieth of the way a minute while her men leave her), and the way she loses a second, her engines stopped. */
@@ -1152,6 +1194,30 @@ namespace SeaShow
 		/** The share of the wind's speed an abandoned ship drifts at, empty and stopped: far more than her men in the water (a
 		 * sixtieth) or her rafts (a thirtieth), so that she drifts away from them (the art director, 22 November 18:54Z). */
 		static constexpr double AbandonedLeeway = 0.05;
+		/** The most a pattern's charge lies off its place in the pattern (metres: a few as they fell, about 3 either way). */
+		static constexpr double ChargeScatterMost = 7.0;
+		/** A man come to a rescuer's side: the least time from his setting off for it to his going up it (seconds), for a net
+		 * to be down there before he is on it (Tools/convoy_looks: ConvoyLook's NetDrop, two seconds, from when he is first
+		 * seen swimming for her, and a frame's grace). One brought near her on a float waits at its foot for the rest. */
+		static constexpr double NetDownFor = 2.5;
+		/** A boat's keel told as it changes (Piece::KeelRate): the fastest change between two views read as a ramp to follow
+		 * (metres a second: just over the convoy field's own, 2 m/s up and 1 m/s down; a faster one is a told jump), and how
+		 * fast she takes up such a ramp's rate (metres a second, each second) and gains on it where she is behind it (each
+		 * metre behind, a second, at most KeelGainMost m/s past its rate, and in all at most KeelRampOver times it). She
+		 * brakes at KeelBrake of KeelTakeUp, so that her rate can always follow her braking, and stops KeelShort (metres)
+		 * of where she could, her own easing taking her the rest of the way. */
+		static constexpr double KeelRampMost = 2.5, KeelTakeUp = 0.5, KeelGain = 0.5, KeelGainMost = 1.0, KeelRampOver = 1.5, KeelBrake = 0.9;
+		static constexpr double KeelShort = 0.04;
+		/** A boat blown up for the surface (Show::Trim): the sea stops her as her casing breaks it, KeelTopBrake m/s each
+		 * second, while her angle is at its most (12 degrees: stopped, above a third of a metre a second up), until she
+		 * rises at KeelTopEase times the rise that gives it; from there her own braking, KeelBrake of KeelTakeUp, so that her
+		 * angle comes off smoothly. */
+		static constexpr double KeelTopBrake = 2.0, KeelTopEase = 1.25;
+		/** A boat deep catching up her station once she goes astern no longer (Hull::bCatching): near it again within CatchNear
+		 * metres, the battle's course within 60 degrees of her heading, she keeps it as before; till then she steers for where
+		 * it will be when she has closed it at her way (CatchLead seconds on at the most), her way the battle's and CatchGain
+		 * m/s more a metre it lies ahead of her (less where it lies abaft her beam, to six tenths of the battle's). */
+		static constexpr double CatchNear = 8.0, CatchGain = 0.2, CatchLead = 30.0;
 		bool bStarted = false;
 		bool bBigBlast = false;
 		int NextKey = 1;
@@ -1182,6 +1248,16 @@ namespace SeaShow
 		/** Her crew ordered off her (sea:abandon): out of her line, losing way and settling, her men and boats going over
 		 * the side, until the battle says she goes (sea:sunk). */
 		void AbandonShip(Hull& H, const std::string& Words);
+		/** A boat whose crew leave her (sea:abandon, or given up untold): they leave her only on the surface, so she comes the
+		 * rest of the way up as one that struck does (her tanks blown), and her men, her raft and her boats wait for her
+		 * casing to clear (StepHands lets them go). */
+		void LeaveUp(Hull& H);
+		/** The battle's own count (a view's ships for each piece) against her line, once each step's events are played: a ship
+		 * it took out of the fight with no word of how (none of sea:sunk, burning, abandon or surrender told for her by
+		 * then; a merchant gone at her torpedo's hit, her sinking told minutes later or after the night's last view) is
+		 * given up as one abandoned, stopped and settling, her men over the side, until the battle sends her down. The ship
+		 * of her piece a blow struck last, else the last of her line. Upto: the moment the picture has reached. */
+		void Untold(double Upto);
 		/** A lost ship's own number in her piece ({piece, n}), counted as each goes (n, where the battle gives it, else the
 		 * next); and her wreck by the battle's {piece, ship} (nullptr where none). */
 		void NoteLost(const Hull& H, int N);
@@ -1230,6 +1306,9 @@ namespace SeaShow
 		Hunted* Quarry(const Hull& Boat);
 		/** A boat under (her casing below the sea, and not on her way up): out of a lookout's sight. */
 		bool BoatUnder(const Hull& Boat) const;
+		/** A boat the battle has below periscope depth, and under as drawn: she keeps no water at the surface (KeepClear), and
+		 * holds the battle's place itself, where its hunters drop on her (SteamColumn's helm). */
+		bool HeldDeep(const Hull& Boat) const;
 		/** She is in sight until at least For seconds from now. */
 		void Sight(const Hull& Boat, double For = FoundFor);
 		/** A blow on her: up, in sight until she is under again; and FoundFor from now either way. */

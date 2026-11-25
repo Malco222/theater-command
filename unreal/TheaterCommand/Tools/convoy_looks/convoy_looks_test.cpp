@@ -8,13 +8,17 @@
 // rescue against the sea scene's wreck model in its.
 
 #include "Battle/ConvoyLooksCore.h"
+#include "Battle/DeckCrewCore.h"
 #include "Battle/Fates.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -1836,16 +1840,57 @@ namespace
 			Check(bSame, "the same crew for the same frame (the look's own hash, no dice of the battle's)");
 		}
 
-		// The scene: the crew drawn from GunCrewOf on the deck the stage gives, standing or crouched by the sailor files'
-		// idle and cower; a boat's hits' looks put out while she is told down or under (as the sea show's check has it); a
-		// merchant's hits by the table's "ap" family.
+		// The scene: the crew drawn from each ship's watch (Battle/DeckCrewCore, stepped every frame from what the show says
+		// of her) on the deck the stage gives, at their gun clips, crouched by the files' cower, going to it and from it by
+		// climb_net, run and idle; none on a boat the show hides; a boat's hits' looks put out while she is told down or
+		// under (as the sea show's check has it); a merchant's hits by the table's "ap" family. These pins were the scene's
+		// "ConvoyLook::GunCrewOf(Gun, Told)", "Stage->GunDeck(Ship.Key, GunPart, Gunner.Fore, Gunner.Right, Gun.Deck, Feet,
+		// Her)", the idle or cower act and the key "-(Ship.Key * ConvoyLook::CrewMost + K + 1)" until 24 November (Brian: the
+		// files' own gun clips): changed on purpose. The crew's own checks are TestCrew's.
 		const std::string Scene = TextOf(Root + "/Battle/SeaBattle.cpp"), Sailors = TextOf(Root + "/Battle/SeaSailors.cpp");
-		Check(Scene.find("const std::vector<ConvoyLook::CrewMan> Gunners = ConvoyLook::GunCrewOf(Gun, Told);") != std::string::npos &&
-		          Scene.find("Stage->GunDeck(Ship.Key, GunPart, Gunner.Fore, Gunner.Right, Gun.Deck, Feet, Her)") != std::string::npos &&
-		          Scene.find("const SeaSailors::Act What = Gunner.bDuck ? SeaSailors::Act::Duck : SeaSailors::Act::Stand;") != std::string::npos &&
-		          Scene.find("const int32 Mine = -(Ship.Key * ConvoyLook::CrewMost + K + 1);") != std::string::npos &&
+		Check(Scene.find("DeckCrew::Step(Crewed, Said, Mounted.Shape, Mounted.Mount, Kit->second, Now, &GunCues);") != std::string::npos &&
+		          Scene.find("if (!DeckCrew::Drawn(Is, Ship))") != std::string::npos &&
+		          Scene.find("Stage->GunDeck(Ship.Key, Mounted.Part, Is.At.Root.Fore, Is.At.Root.Right, Is.At.Root.Up, FeetAt, HerTurn)") != std::string::npos &&
+		          Scene.find("Gunner.Turn = HerTurn * FQuat(FVector::UpVector, FMath::DegreesToRadians(Is.At.Facing));") != std::string::npos &&
+		          Scene.find("Gunner.Mine = -(Ship.Key * DeckCrew::Roles + Who + 1);") != std::string::npos &&
+		          Scene.find("Nearest.Add(TPair<double, int32>(Gunner.Pixels, Gunner.Mine));") != std::string::npos &&
+		          Scene.find("const int32 BankPose = S.Crew.PoseOf(CrewFile, Is.What, Is.Time);") != std::string::npos &&
+		          Scene.find("ConvoyLook::GunCrewOf") == std::string::npos &&
 		          Sailors.find("case Act::Stand: return \"idle\";") != std::string::npos && Sailors.find("case Act::Duck: return \"cower\";") != std::string::npos,
-		      "the scene mans each gun from GunCrewOf on its deck, standing or crouched (idle, cower), keyed apart from the men in the water");
+		      "the scene mans each gun from its watch on its deck (DeckCrew), drawn only where the show draws her, keyed apart from the men in the water");
+		// (what they work with drawn where their clips have it, their cues heard at their hands, through the scene's own sound
+		// path in the mix's "body" family: silent where the sound is not brought in)
+		const std::string Mix = TextOf(Content + "Data/Sound/mix.json");
+		Check(Scene.find("DrawGunWheel(NearMesh, ManAt, UnitsPerMetre, Handwheel, Turned, Fitted.ShaftAhead, Fitted.ShaftIn, bLayer);") != std::string::npos &&
+		          Scene.find("DeckCrew::LoaderRound(GunKit, ShownTime, Fitted.bBoat, MouthAt, BoreAt, InHands)") != std::string::npos &&
+		          Scene.find("SeaSailors::RoundAlong(GunKit.Passing, GunKit.Long[PasserRole], ShownTime, Handed)") != std::string::npos &&
+		          Scene.find("Sound(FName(UTF8_TO_TCHAR(Heard.Name.c_str())), CueAt[Whose], TEXT(\"body\"), 1.0f, false);") != std::string::npos &&
+		          Scene.find("UE_LOG(LogTheater, Display, TEXT(\"Sea battle: the sound %s is not in /Game/Campaign/Sounds/Real") != std::string::npos &&
+		          Mix.find("\"body\": {") != std::string::npos,
+		      "the scene draws the wheels, the sights and the rounds where the clips have them, and plays the crew's cues at their hands (the mix's body family)");
+		// (the one hatch drawn, her own, where her crew come up and the passer stands; no opening that moves with him (the
+		// review of 24 November); the loader's rounds from a rack where no passer hands them up)
+		Check(Scene.find("bScuttleOpen") == std::string::npos && Scene.find("const DeckCrew::Spot HatchSpot = DeckCrew::HatchOf(Fitted, Mounted.Mount);") != std::string::npos &&
+		          Scene.find("Manned.bRack = !Crewed.bHanding;") != std::string::npos && Scene.find("DrawGunRack(NearMesh, ManAt, UnitsPerMetre, GunKit);") != std::string::npos &&
+		          Scene.find("if (!Manned.bRack || !DeckCrew::RackRound(GunKit, ShownTime, Racked))") != std::string::npos,
+		      "the scene opens her own hatch only (none moving with the passer), and draws the loader's next round on a rack where no passer hands it up");
+		// (a merchant has no hatch by her gun: none open while her gun's crew are at it, nor one drawn where its place was
+		// never set, at the board's middle; the review of 25 November: a stray hatch on every frame a merchant's gun was
+		// manned)
+		Check(Scene.find("Manned.bHatchOpen = true;") == std::string::npos && Scene.find("Manned.bHatchOpen = Mounted.Shape.bBoat;") != std::string::npos &&
+		          Scene.find("if (Fitted.bBoat && Manned.bHatchOpen)") != std::string::npos &&
+		          Scene.find("if (Manned.bHatchOpen && Manned.Mounted != nullptr && Manned.Mounted->Shape.bBoat)\n\t\t\t{\n\t\t\t\tDrawGunHatch(NearMesh, Manned.Hatch, UnitsPerMetre, Manned.HatchAway);") != std::string::npos,
+		      "the scene opens a hatch for a boat's gun's crew only: none drawn for a merchant's (none at the board's middle)");
+		// (hands up: a struck boat's man giving up by the files' hands_up where his file has it, else standing, as before)
+		Check(Sailors.find("case Act::HandsUp: return \"hands_up\";") != std::string::npos &&
+		          Sailors.find("const Act Up = Has(K, Act::HandsUp) ? Act::HandsUp : Act::Stand;") != std::string::npos,
+		      "a struck boat's crew put their hands up by the files' hands_up, standing (idle) where a file lacks it");
+		// (the stage's ship models, as TestCrew's guns and the show's checks take them: a boat's by her navy, a merchant's by
+		// her key's roll)
+		const std::string Staged = TextOf(Root + "/Battle/AirStage.cpp");
+		Check(Staged.find("Kind = Roll < 13u ? TEXT(\"Freighter\") : Roll < 18u ? TEXT(\"Tanker\") : TEXT(\"Troopship\");") != std::string::npos &&
+		          Staged.find("const uint32 Roll = (static_cast<uint32>(Given.Id) * 2654435761u >> 16) % 20u;") != std::string::npos,
+		      "a merchant's model by her key's roll (Freighter, Tanker, Troopship), as the show's crew checks take it");
 		for (const char* Navy : { "GER", "ITA", "JAP", "SOV", "UK", "USA" })
 		{
 			const std::string Men = TextOf(Content + "Models/Soldiers/soldier_" + Navy + "_sailor.json");
@@ -1955,6 +2000,1263 @@ namespace
 			                                                     std::to_string(Torpedoed) + " of 60)");
 		}
 	}
+
+	/** The sailor files the scene reads, by navy (as SeaBattle's BeginPlay reads Content/Models/Soldiers), into one crew. */
+	bool ReadSailors(const std::string& Content, SeaSailors::Crew& Out, std::string& OutWhy)
+	{
+		for (const char* Navy : { "GER", "ITA", "JAP", "SOV", "UK", "USA" })
+		{
+			std::string Why;
+			if (!Out.AddFile(std::string(Navy) == "UK" ? "GBR" : Navy, TextOf(Content + "Models/Soldiers/soldier_" + Navy + "_sailor.json"), Why))
+			{
+				OutWhy += std::string(" ") + Navy + ": " + Why;
+			}
+		}
+		return Out.Files() == 6;
+	}
+
+	/** A model file's near mesh about one gun (Content/Models/Ships): its gun's mount and barrel by bands (their reach
+	 * across and up, a band at a time: along the bore for the barrel, up for its mount), in the gun's own frame as built
+	 * (u along its bore lying stowed, v to its right, z over her waterline, from its mount's pivot), and the flats facing up
+	 * within 4 m of the mount that are not of the gun: her deck there. */
+	struct GunModel
+	{
+		bool bRead = false;
+		double PivotX = 0.0, PivotY = 0.0, Rest = 0.0;
+		double BarrelU = 0.0, BarrelZ = 0.0; // the barrel's pivot
+		struct Band
+		{
+			double Lo = 1e9, Hi = -1e9, ZLo = 1e9, ZHi = -1e9; // its reach across (v) and, for the barrel's, up
+			double ULo = 1e9, UHi = -1e9;                      // the mount's along (u)
+		};
+		std::map<int, Band> Mount, Barrel; // by z band (the mount's: 5 cm), by u band (the barrel's: 10 cm)
+		struct Tri
+		{
+			double X[3], Y[3], Z[3];
+		};
+		std::vector<Tri> Decks;
+		double MountBackU = 0.0, MountHalf = 0.0;
+	};
+
+	GunModel ReadGun(const std::string& Content, const GunMount& M)
+	{
+		GunModel G;
+		const std::string Model = TextOf(Content + "Models/Ships/" + M.File + ".json");
+		int MountIndex = -1, BarrelIndex = -1;
+		const size_t MountAt = PartAt(Model, M.Part, MountIndex), BarrelAt = PartAt(Model, M.Part + ".gun.1", BarrelIndex);
+		if (MountIndex < 0 || BarrelIndex < 0)
+		{
+			return G;
+		}
+		const std::vector<double> Pivot = NumbersOf(Model, "pivot", MountAt), Breech = NumbersOf(Model, "pivot", BarrelAt);
+		const size_t Near = Model.find("\"near\":{");
+		const std::vector<double> Points = NumbersOf(Model, "points", Near), Facings = NumbersOf(Model, "facings", Near);
+		const std::vector<double> Corners = NumbersOf(Model, "triangles", Near), Parts = NumbersOf(Model, "part", Near);
+		if (Pivot.size() != 3 || Breech.size() != 3 || Points.size() != Parts.size() * 3 || Facings.size() != Points.size() || Corners.empty())
+		{
+			return G;
+		}
+		G.bRead = true;
+		G.PivotX = Pivot[0];
+		G.PivotY = Pivot[1];
+		G.Rest = M.Rest;
+		const double Way = std::cos(M.Rest * Pi / 180.0) >= 0.0 ? 1.0 : -1.0;
+		G.BarrelU = (Breech[0] - Pivot[0]) * Way;
+		G.BarrelZ = Breech[2];
+		G.MountBackU = 1e9;
+		for (size_t K = 0; K < Parts.size(); ++K)
+		{
+			const int Part = static_cast<int>(Parts[K]);
+			const double U = (Points[K * 3] - Pivot[0]) * Way, V = (Points[K * 3 + 1] - Pivot[1]) * Way, Z = Points[K * 3 + 2];
+			if (Part == MountIndex)
+			{
+				GunModel::Band& B = G.Mount[static_cast<int>(std::floor(Z / 0.05))];
+				B.Lo = std::min(B.Lo, V);
+				B.Hi = std::max(B.Hi, V);
+				B.ULo = std::min(B.ULo, U);
+				B.UHi = std::max(B.UHi, U);
+				G.MountBackU = std::min(G.MountBackU, U);
+				G.MountHalf = std::max(G.MountHalf, std::fabs(V));
+			}
+			else if (Part == BarrelIndex)
+			{
+				GunModel::Band& B = G.Barrel[static_cast<int>(std::floor((U - G.BarrelU) / 0.1))];
+				B.Lo = std::min(B.Lo, V);
+				B.Hi = std::max(B.Hi, V);
+				B.ZLo = std::min(B.ZLo, Z);
+				B.ZHi = std::max(B.ZHi, Z);
+			}
+		}
+		for (size_t T = 0; T + 2 < Corners.size(); T += 3)
+		{
+			const size_t A = static_cast<size_t>(Corners[T]), B = static_cast<size_t>(Corners[T + 1]), C = static_cast<size_t>(Corners[T + 2]);
+			if (A >= Parts.size() || B >= Parts.size() || C >= Parts.size())
+			{
+				continue;
+			}
+			const int PA = static_cast<int>(Parts[A]), PB = static_cast<int>(Parts[B]), PC = static_cast<int>(Parts[C]);
+			if (PA == MountIndex || PA == BarrelIndex || PB == MountIndex || PB == BarrelIndex || PC == MountIndex || PC == BarrelIndex)
+			{
+				continue;
+			}
+			if (Facings[A * 3 + 2] + Facings[B * 3 + 2] + Facings[C * 3 + 2] < 2.7)
+			{
+				continue;
+			}
+			GunModel::Tri Flat;
+			for (int K = 0; K < 3; ++K)
+			{
+				const size_t P = K == 0 ? A : K == 1 ? B : C;
+				Flat.X[K] = Points[P * 3];
+				Flat.Y[K] = Points[P * 3 + 1];
+				Flat.Z[K] = Points[P * 3 + 2];
+			}
+			if (std::hypot((Flat.X[0] + Flat.X[1] + Flat.X[2]) / 3.0 - Pivot[0], (Flat.Y[0] + Flat.Y[1] + Flat.Y[2]) / 3.0 - Pivot[1]) <= 6.0)
+			{
+				G.Decks.push_back(Flat);
+			}
+		}
+		return G;
+	}
+
+	/** The model's deck under a place by its gun (Fore, Right from the mount's middle), nearest Want within Band; -1e9
+	 * where none. */
+	double ModelDeck(const GunModel& G, double Fore, double Right, double Want, double Band)
+	{
+		const double X = G.PivotX + Fore, Y = G.PivotY + Right;
+		double Best = -1e9;
+		for (const GunModel::Tri& T : G.Decks)
+		{
+			const double D = (T.Y[1] - T.Y[2]) * (T.X[0] - T.X[2]) + (T.X[2] - T.X[1]) * (T.Y[0] - T.Y[2]);
+			if (std::fabs(D) < 1e-12) continue;
+			const double L0 = ((T.Y[1] - T.Y[2]) * (X - T.X[2]) + (T.X[2] - T.X[1]) * (Y - T.Y[2])) / D;
+			const double L1 = ((T.Y[2] - T.Y[0]) * (X - T.X[2]) + (T.X[0] - T.X[2]) * (Y - T.Y[2])) / D;
+			const double L2 = 1.0 - L0 - L1;
+			if (L0 < -1e-9 || L1 < -1e-9 || L2 < -1e-9) continue;
+			const double Z = L0 * T.Z[0] + L1 * T.Z[1] + L2 * T.Z[2];
+			if (std::fabs(Z - Want) <= Band && std::fabs(Z - Want) < std::fabs(Best - Want)) Best = Z;
+		}
+		return Best;
+	}
+
+	/** How deep a place by the gun (her frame from the mount's middle, the gun trained to Bears and lifted to Lie degrees
+	 * over its built lie, run back Back metres) is inside its mount or barrel, a band at a time less Margin; 0 outside. */
+	double InGun(const GunModel& G, double Bears, double Lift, double Back, double Fore, double Right, double Up, double Margin)
+	{
+		const double D = (Bears - G.Rest) * Pi / 180.0, Way = std::cos(G.Rest * Pi / 180.0) >= 0.0 ? 1.0 : -1.0;
+		// (un-turned to where it lies stowed, then into the gun's own frame: u along its bore, v to its right)
+		const double A = Fore * std::cos(D) + Right * std::sin(D), B = -Fore * std::sin(D) + Right * std::cos(D);
+		const double U = A * Way, V = B * Way;
+		double Deepest = 0.0;
+		auto Inside = [&](const GunModel::Band& Bd, double At, double Lo, double Hi)
+		{
+			const double Depth = std::min({ V - Bd.Lo, Bd.Hi - V, At - Lo, Hi - At }) - Margin;
+			if (Depth > Deepest) Deepest = Depth;
+		};
+		if (const auto It = G.Mount.find(static_cast<int>(std::floor(Up / 0.05))); It != G.Mount.end())
+		{
+			Inside(It->second, U, It->second.ULo, It->second.UHi);
+		}
+		// (the barrel lifted about its pivot, and run back along its bore)
+		const double L = Lift * Pi / 180.0, Du = U - G.BarrelU, Dz = Up - G.BarrelZ;
+		const double Bu = Du * std::cos(L) + Dz * std::sin(L) + Back, Bz = G.BarrelZ - Du * std::sin(L) + Dz * std::cos(L);
+		if (const auto It = G.Barrel.find(static_cast<int>(std::floor(Bu / 0.1))); It != G.Barrel.end())
+		{
+			Inside(It->second, Bz, It->second.ZLo, It->second.ZHi);
+		}
+		return std::max(0.0, Deepest);
+	}
+
+	/**
+	 * How far two men at their posts go into each other through their clips, as capsules about their bones (metres; below
+	 * 0 the gap between them): his trunk 0.14 m about from his pelvis to his chest, 0.12 to his neck and 0.10 to his
+	 * head, his shoulders 0.07, his arms 0.055 to his elbows, 0.045 to his wrists and 0.04 to his fingers' tips, his legs
+	 * 0.075 to his knees and 0.055 to his ankles; each man's clip every Every seconds, every time of one against every
+	 * time of the other (they keep no step together).
+	 */
+	double BodiesInto(const SeaSailors::Crew& Sailors, int K, SeaSailors::Act ActA, float LongA, const DeckCrew::Post& PostA, SeaSailors::Act ActB,
+	                  float LongB, const DeckCrew::Post& PostB, float Every)
+	{
+		struct Limb
+		{
+			const char* From;
+			const char* To;
+			double About;
+		};
+		static const Limb Limbs[] = {
+			{ "pelvis", "chest", 0.14 },         { "chest", "neck", 0.12 },           { "neck", "head", 0.10 },
+			{ "chest", "upperarm_l", 0.07 },     { "chest", "upperarm_r", 0.07 },     { "upperarm_l", "lowerarm_l", 0.055 },
+			{ "lowerarm_l", "hand_l", 0.045 },   { "hand_l", "fingers_l", 0.04 },     { "upperarm_r", "lowerarm_r", 0.055 },
+			{ "lowerarm_r", "hand_r", 0.045 },   { "hand_r", "fingers_r", 0.04 },     { "thigh_l", "calf_l", 0.075 },
+			{ "calf_l", "foot_l", 0.055 },       { "thigh_r", "calf_r", 0.075 },      { "calf_r", "foot_r", 0.055 },
+		};
+		constexpr size_t Count = sizeof(Limbs) / sizeof(Limbs[0]);
+		using Ends = std::vector<std::array<DeckCrew::Spot, 2>>;
+		auto Pose = [&](SeaSailors::Act A, float T, const DeckCrew::Post& At)
+		{
+			Ends Out(Count);
+			for (size_t I = 0; I < Count; ++I)
+			{
+				const LandMen::Vec3 From = Sailors.BoneAt(K, A, T, Limbs[I].From), To = Sailors.BoneAt(K, A, T, Limbs[I].To);
+				Out[I][0] = DeckCrew::ToHer(At, From.X, From.Y, From.Z);
+				Out[I][1] = DeckCrew::ToHer(At, To.X, To.Y, To.Z);
+			}
+			return Out;
+		};
+		// (the nearest two segments come, Ericson's closest points of two segments)
+		auto Apart = [](const DeckCrew::Spot& P1, const DeckCrew::Spot& Q1, const DeckCrew::Spot& P2, const DeckCrew::Spot& Q2)
+		{
+			const double D1[3] = { Q1.Fore - P1.Fore, Q1.Right - P1.Right, Q1.Up - P1.Up }, D2[3] = { Q2.Fore - P2.Fore, Q2.Right - P2.Right, Q2.Up - P2.Up };
+			const double Rv[3] = { P1.Fore - P2.Fore, P1.Right - P2.Right, P1.Up - P2.Up };
+			auto Dot = [](const double* U, const double* W) { return U[0] * W[0] + U[1] * W[1] + U[2] * W[2]; };
+			const double A = Dot(D1, D1), E = Dot(D2, D2), Fv = Dot(D2, Rv);
+			double Sv = 0.0, Tv = 0.0;
+			if (A > 1e-12 && E > 1e-12)
+			{
+				const double C = Dot(D1, Rv), Bv = Dot(D1, D2), Under = A * E - Bv * Bv;
+				Sv = Under > 1e-12 ? std::clamp((Bv * Fv - C * E) / Under, 0.0, 1.0) : 0.0;
+				Tv = (Bv * Sv + Fv) / E;
+				if (Tv < 0.0)
+				{
+					Tv = 0.0;
+					Sv = std::clamp(-C / A, 0.0, 1.0);
+				}
+				else if (Tv > 1.0)
+				{
+					Tv = 1.0;
+					Sv = std::clamp((Bv - C) / A, 0.0, 1.0);
+				}
+			}
+			else if (A > 1e-12)
+			{
+				Sv = std::clamp(-Dot(D1, Rv) / A, 0.0, 1.0);
+			}
+			else if (E > 1e-12)
+			{
+				Tv = std::clamp(Fv / E, 0.0, 1.0);
+			}
+			const double Gap[3] = { Rv[0] + D1[0] * Sv - D2[0] * Tv, Rv[1] + D1[1] * Sv - D2[1] * Tv, Rv[2] + D1[2] * Sv - D2[2] * Tv };
+			return std::sqrt(Dot(Gap, Gap));
+		};
+		std::vector<Ends> Others;
+		for (float T = 0.f; T < LongB; T += Every)
+		{
+			Others.push_back(Pose(ActB, T, PostB));
+		}
+		double Most = -1e9;
+		for (float T = 0.f; T < LongA; T += Every)
+		{
+			const Ends Mine = Pose(ActA, T, PostA);
+			for (const Ends& Theirs : Others)
+			{
+				for (size_t I = 0; I < Count; ++I)
+				{
+					for (size_t J = 0; J < Count; ++J)
+					{
+						Most = std::max(Most, Limbs[I].About + Limbs[J].About - Apart(Mine[I][0], Mine[I][1], Theirs[J][0], Theirs[J][1]));
+					}
+				}
+			}
+		}
+		return Most;
+	}
+
+	/** How far a man's boots go past the model's deck at a post (metres: from each corner of his boots off it, stepped in
+	 * toward his root a centimetre at a time until on it; 0 all on it): his heels 0.2 m behind his root, his toes 0.33
+	 * ahead, 0.21 either side. OutOff counts the corners off it. */
+	double BootsOff(const GunModel& G, const DeckCrew::Post& P, int* OutOff = nullptr)
+	{
+		double Most = 0.0;
+		for (const double X : { -0.2, 0.33 })
+		{
+			for (const double Y : { -0.21, 0.21 })
+			{
+				const DeckCrew::Spot C = DeckCrew::ToHer(P, X, Y, 0.0);
+				if (ModelDeck(G, C.Fore, C.Right, P.Root.Up, 0.3) > -1e8)
+				{
+					continue;
+				}
+				if (OutOff) ++*OutOff;
+				double In = 0.0;
+				for (; In < 1.0; In += 0.01)
+				{
+					const DeckCrew::Spot Back = DeckCrew::ToHer(P, X * (1.0 - In / std::hypot(X, Y)), Y * (1.0 - In / std::hypot(X, Y)), 0.0);
+					if (ModelDeck(G, Back.Fore, Back.Right, P.Root.Up, 0.3) > -1e8) break;
+				}
+				Most = std::max(Most, In);
+			}
+		}
+		return Most;
+	}
+
+	/** Her deck's height over the sea at a place by her gun (metres), as SeaShow::HandAt sets the show's own men on her
+	 * casing: the deck there (her waterline's frame), less how far she is down, with her pitch (bow up) along her from
+	 * amidships, her heave, and her heel (starboard down) across her. */
+	double FreeboardOf(const GunMount& M, double DeckUp, double Fore, double Right, double Dived, double Pitch, double Heave, double Heel)
+	{
+		return DeckUp - Dived + (M.Along + Fore) * std::sin(Pitch * Pi / 180.0) + Heave - Right * std::sin(Heel * Pi / 180.0);
+	}
+
+	/** The round in the passer's hands as the loader takes it and in the loader's as he has it first (the pair's moment),
+	 * each in her frame from their posts: how far apart (metres). */
+	double HandOffGap(const DeckCrew::Blocks& B, const DeckCrew::Post& Passing, const DeckCrew::Post& Loading)
+	{
+		float First = -1.f;
+		for (size_t I = 0; I + 7 < B.Loading.Track.size() && First < 0.f; I += 8)
+		{
+			if (B.Loading.Track[I] >= B.Taken - 1e-4f && B.Loading.Track[I + 1] > 0.5f) First = B.Loading.Track[I];
+		}
+		SeaSailors::RoundAt Taken, Handed;
+		SeaSailors::RoundAlong(B.Loading, B.Long[static_cast<int>(DeckCrew::Role::Loader)], First, Taken);
+		SeaSailors::RoundAlong(B.Passing, B.Long[static_cast<int>(DeckCrew::Role::Passer)], B.Taken - 0.01f, Handed);
+		const DeckCrew::Spot A = DeckCrew::ToHer(Passing, Handed.Base.X, Handed.Base.Y, Handed.Base.Z);
+		const DeckCrew::Spot C = DeckCrew::ToHer(Loading, Taken.Base.X, Taken.Base.Y, Taken.Base.Z);
+		return std::sqrt((A.Fore - C.Fore) * (A.Fore - C.Fore) + (A.Right - C.Right) * (A.Right - C.Right) + (A.Up - C.Up) * (A.Up - C.Up));
+	}
+
+	/** What a crew's frames showed: their boots against the model's deck (on their way and at the gun), the hatch (two
+	 * men in it, their feet apart; a man waiting short of it, from its middle), and how they came and went. */
+	struct CrewSeen
+	{
+		double BootsMost = 0.0, BootsAt = -1.0, FeetApart = 99.0, WaitFrom = 99.0;
+		int BootsWho = -1, InHatchTwo = 0, Waited = 0;
+		void See(const GunModel& Model, const DeckCrew::GunShape& S, const GunMount& M, const DeckCrew::Watch& W, double T)
+		{
+			const DeckCrew::Spot Hatch = DeckCrew::HatchOf(S, M);
+			std::vector<double> Climbing;
+			for (int R = 0; R < DeckCrew::Roles; ++R)
+			{
+				const DeckCrew::Shown& Is = W.Men[R];
+				if (!Is.bShown) continue;
+				if (Is.What == SeaSailors::Act::Climb)
+				{
+					Climbing.push_back(Is.At.Root.Up);
+					continue;
+				}
+				if (R == static_cast<int>(DeckCrew::Role::Passer)) continue;
+				const double Off = BootsOff(Model, Is.At);
+				if (Off > BootsMost)
+				{
+					BootsMost = Off;
+					BootsAt = T;
+					BootsWho = R;
+				}
+				if (W.Hands[R].Now == DeckCrew::Phase::Wait)
+				{
+					++Waited;
+					WaitFrom = std::min(WaitFrom, std::hypot(Is.At.Root.Fore - Hatch.Fore, Is.At.Root.Right - Hatch.Right));
+				}
+			}
+			for (size_t I = 0; I < Climbing.size(); ++I)
+			{
+				for (size_t J = I + 1; J < Climbing.size(); ++J)
+				{
+					++InHatchTwo;
+					FeetApart = std::min(FeetApart, std::fabs(Climbing[I] - Climbing[J]));
+				}
+			}
+		}
+	};
+
+	/**
+	 * A German boat's gun swung, her crew at it, from abaft her port beam round her bow to abaft her starboard beam and
+	 * back at TrainRate degrees a second (15, and the show's own 8 across her beam), then the diving alarm: the loader's
+	 * post moves on with it, his root no quicker than the gun's train swings it and he steps round the breech (TurnRate,
+	 * SlideRate), so never a jump from one way round the breech to the other; turned both ways in turn; every frame each
+	 * man's boots on the model's deck, going to the gun, at it as he steps round the breech, and going back to the hatch
+	 * and waiting by it (a corner over a deck flat's edge OverhangMost at the most); at his work, the loader moved in from
+	 * his clip's post 0.30 m at the most; standing clear as he steps round behind the breech (his hands would be in its
+	 * ring), none of him in the gun; one man in the hatch at a time.
+	 */
+	void TestCrewSweep(const std::string& Content, const SeaSailors::Crew& Sailors)
+	{
+		const double OverhangMost = 0.15;
+		const GunMount M = MountOf("Submarine_GER", false);
+		const DeckCrew::GunShape S = DeckCrew::ShapeOf(M);
+		const GunModel Model = ReadGun(Content, M);
+		const DeckCrew::Blocks B = DeckCrew::BlocksOf(Sailors, Sailors.FileFor("GER"));
+		const int Loader = static_cast<int>(DeckCrew::Role::Loader), File = Sailors.FileFor("GER");
+		for (const double TrainRate : { 15.0, 8.0 })
+		{
+			const double Swing = 135.0, Hold = 10.0, After = 8.0;
+			const double Across = 2.0 * Swing / TrainRate;
+			// (his root at most 2 m from the mount's middle, his clip's reach from the breech)
+			const double Fastest = (TrainRate * Pi / 180.0 * 2.0 + DeckCrew::TurnRate * Pi / 180.0 * B.Loading.Breech[0] + DeckCrew::SlideRate) * Frame * 1.05;
+			DeckCrew::Watch W;
+			DeckCrew::Told In;
+			In.bBoat = true;
+			In.bInLine = true;
+			In.bLaid = true;
+			In.Dive = "surfaced";
+			In.Elevation = 10.0;
+			In.Key = 77;
+			CrewSeen Seen;
+			double Jump = 0.0, JumpAt = -1.0, LastFore = 0.0, LastRight = 0.0, ShiftMost = 0.0, ClearShift = 0.0, ClearDeep = 0.0;
+			int Clear = 0, ClearIn = 0;
+			std::vector<float> SkinAt, SkinFacing;
+			bool bWas = false;
+			int Frames = 0, TurnedPort = 0, TurnedStarboard = 0, Sides = 0, LastSide = 0, ShownAfter = 0;
+			const double Alarm = Hold + 2.0 * Across;
+			for (int Tick = 0; Tick <= static_cast<int>((Alarm + After) * 30.0); ++Tick)
+			{
+				const double T = Tick / 30.0, Into = std::clamp(T - Hold, 0.0, 2.0 * Across);
+				In.Train = M.Rest - Swing + TrainRate * (Into <= Across ? Into : 2.0 * Across - Into);
+				In.Dive = T >= Alarm ? "periscope" : "surfaced";
+				DeckCrew::Step(W, In, S, M, B, T, nullptr);
+				Seen.See(Model, S, M, W, T);
+				const DeckCrew::Shown& Is = W.Men[Loader];
+				const bool bAt = Is.bShown && W.Hands[Loader].Now == DeckCrew::Phase::AtGun;
+				if (bAt && bWas)
+				{
+					const double Moved = std::hypot(Is.At.Root.Fore - LastFore, Is.At.Root.Right - LastRight);
+					if (Moved > Jump)
+					{
+						Jump = Moved;
+						JumpAt = T;
+					}
+				}
+				if (bAt)
+				{
+					++Frames;
+					TurnedPort += Is.At.Turned < -1.0 ? 1 : 0;
+					TurnedStarboard += Is.At.Turned > 1.0 ? 1 : 0;
+					const int Side = Is.At.Turned > 1.0 ? 1 : Is.At.Turned < -1.0 ? -1 : 0;
+					Sides += LastSide != 0 && Side != 0 && Side != LastSide ? 1 : 0;
+					LastSide = Side != 0 ? Side : LastSide;
+					LastFore = Is.At.Root.Fore;
+					LastRight = Is.At.Root.Right;
+					if (Is.bAtWork)
+					{
+						ShiftMost = std::max(ShiftMost, Is.At.Shift);
+					}
+					else
+					{
+						// (standing clear as he steps round behind the breech: none of him in the gun as it stands)
+						++Clear;
+						ClearShift = std::max(ClearShift, Is.At.Shift);
+						const int Count = Sailors.Skin(File, Is.What, Is.Time, LandMen::Mid, SkinAt, SkinFacing);
+						for (int I = 0; I < Count; ++I)
+						{
+							const DeckCrew::Spot Her = DeckCrew::ToHer(Is.At, SkinAt[static_cast<size_t>(I) * 3], SkinAt[static_cast<size_t>(I) * 3 + 1], SkinAt[static_cast<size_t>(I) * 3 + 2]);
+							const double Depth = InGun(Model, DeckCrew::MountTrain(M, In.Train), std::clamp(In.Elevation, S.LiftLeast, S.LiftMost), 0.0, Her.Fore, Her.Right, Her.Up, 0.01);
+							ClearIn += Depth > 0.0 ? 1 : 0;
+							ClearDeep = std::max(ClearDeep, Depth);
+						}
+					}
+				}
+				bWas = bAt;
+				for (const DeckCrew::Shown& Man : W.Men) ShownAfter += T > Alarm + 4.5 && Man.bShown ? 1 : 0;
+			}
+			const std::string N = std::string("[a German boat's gun swung beam to beam and back at ") + (TrainRate > 10.0 ? "15" : "8") + " degrees a second] ";
+			Check(Frames > static_cast<int>(2.0 * Across * 30.0) && Jump <= Fastest && TurnedPort > 0 && TurnedStarboard > 0 && Sides >= 2,
+			      N + F("the loader's post moves on with it: %.3f m a frame at the most (at %.1f s; %.3f)", Jump, JumpAt, Fastest) +
+			          F(", turned to port %.0f frames, to starboard %.0f", TurnedPort, TurnedStarboard) + F(", his way round the breech changed %.0f times", Sides));
+			Check(Model.bRead && Seen.BootsMost <= OverhangMost && ShiftMost <= 0.30 && ClearIn == 0,
+			      N + F("every frame each man's boots on the model's deck, to the gun, at it and back to the hatch: over its edge by %.3f m at the most (%.2f", Seen.BootsMost, OverhangMost) +
+			          F("; man %.0f at %.1f s); the loader at his work moved in from his clip's post %.3f m at the most (0.30)", Seen.BootsWho, Seen.BootsAt, ShiftMost) +
+			          F("; standing clear stepping round behind the breech %.0f frames (moved in %.3f m at the most), none of him in the gun (%.0f points in", Clear, ClearShift, ClearIn) +
+			          F(", %.3f m deep)", ClearDeep));
+			Check(Seen.FeetApart >= DeckCrew::HatchApart - 1e-6 && Seen.Waited > 0 && Seen.WaitFrom >= 0.5 && ShownAfter == 0,
+			      N + F("one at a time down her hatch at the alarm: two men in it %.0f frames, their feet %.2f m apart at the least", Seen.InHatchTwo, Seen.FeetApart) +
+			          F(" (1.8); %.0f frames waiting, %.2f m from its middle at the least (0.5)", Seen.Waited, Seen.WaitFrom) + F(", none up 4.5 s after (%.0f)", ShownAfter));
+		}
+	}
+
+	/** Whether a gun's loader is shown at his post with no round in his hands short of the breech shut (waiting with his
+	 * hands out, reaching for the next, past breech_close, or standing clear of the breech): as the scene draws him. */
+	bool ShutAtPost(const DeckCrew::Watch& W, const DeckCrew::Blocks& K)
+	{
+		const int Loader = static_cast<int>(DeckCrew::Role::Loader);
+		const DeckCrew::Shown& Is = W.Men[Loader];
+		return W.Hands[Loader].Now == DeckCrew::Phase::AtGun && W.SentAt < 0.0 && Is.bShown &&
+		       (Is.What != SeaSailors::Act::Loader || Is.Time < K.Taken || Is.Time >= K.Shut);
+	}
+
+	/** Whether a gun's layer, trainer and loader are shown at their posts (none sent below). */
+	bool AtPosts(const DeckCrew::Watch& W)
+	{
+		bool bAll = W.SentAt < 0.0;
+		for (int R = 0; R < DeckCrew::Roles; ++R)
+		{
+			bAll = bAll && (R == static_cast<int>(DeckCrew::Role::Passer) || (W.Hands[R].Now == DeckCrew::Phase::AtGun && W.Men[R].bShown));
+		}
+		return bAll;
+	}
+
+	/**
+	 * A gun's crew through a night as the show tells it (DeckCrew::Step, at 30 frames a second): a boat surfaced, her gun
+	 * told at 10 s, its rounds fired at the show's least cadence and slower once her crew are up (on some, rounds before
+	 * that: a hit the battle tells fired as her gun is told and another 2 s on, the loader's round in his hands; one as
+	 * her crew are still coming up her hatch; one as the loader rams, short of the breech shut), the diving alarm at 60 s,
+	 * she going down as the show takes her (ShowBoat: her keel eased down, bow down by her rate of going down over her
+	 * speed, her pitch and heave on the swell); the same boat striking instead; the German and the other navies' boats,
+	 * their guns forward, slow and at speed; a skip while manned; a merchant at her gun until she leaves her line, and at
+	 * her other gun; a boat whose hatch is where the loader can take the rounds from the passer. Her crew up her hatch one
+	 * at a time after her gun is told (until a round is fired, then each at his post at once), every round fired with her
+	 * layer, trainer and loader at their posts and the breech shut (the review of 25 November), the loader's ram before
+	 * each round he could have loaded in his own time, all below within DownWithin of the alarm and none on her deck where
+	 * it is within FreeboardLeast of the sea, none from the moment she strikes, the cues heard (from the rack: no
+	 * handoff), none on a boat the show hides.
+	 */
+	void TestCrewTimes(const std::string& Content, const SeaSailors::Crew& Sailors)
+	{
+		const double DownWithin = 4.5, FreeboardLeast = 0.1;
+		const int Loader = static_cast<int>(DeckCrew::Role::Loader), Passer = static_cast<int>(DeckCrew::Role::Passer);
+		const double Later[] = { 20.0, 24.5, 29.0, 33.25, 38.0, 42.3, 50.0, 55.0 };
+		const struct
+		{
+			const char* File;
+			const char* Navy;
+			bool bStrikes;
+			double Speed, Off; // her speed through the water (metres a second), the gun's train off where it stows
+			double Early[2];   // rounds before her crew are all up and the loader has rammed one (-1 none)
+		} Cases[] = {
+			{ "Submarine_USA", "USA", false, 1.5, 20.0, { -1.0, -1.0 } }, { "Submarine_USA", "USA", true, 1.5, 20.0, { 10.0, 12.0 } },
+			{ "Submarine_GER", "GER", false, 1.5, 20.0, { -1.0, -1.0 } }, { "Submarine_GER", "GER", false, 1.5, 90.0, { 12.0, -1.0 } },
+			{ "Submarine_GER", "GER", false, 6.0, 60.0, { -1.0, -1.0 } }, { "Submarine", "JAP", false, 1.5, -40.0, { -1.0, -1.0 } },
+			{ "Submarine", "JAP", false, 1.5, 20.0, { 13.0, 15.5 } },     { "Submarine_GER", "GER", false, 1.5, 20.0, { 10.0, 12.0 } },
+		};
+		for (const auto& Case : Cases)
+		{
+			// (the show's rounds: those before her crew are up, then its least cadence and slower)
+			std::vector<double> Fires;
+			for (const double At : Case.Early)
+			{
+				if (At >= 0.0) Fires.push_back(At);
+			}
+			Fires.insert(Fires.end(), std::begin(Later), std::end(Later));
+			const double FirstEarly = Fires.front() < Later[0] ? Fires.front() : -1.0;
+			const GunMount M = MountOf(Case.File, false);
+			const DeckCrew::GunShape S = DeckCrew::ShapeOf(M);
+			const GunModel Model = ReadGun(Content, M);
+			const DeckCrew::Blocks B = DeckCrew::BlocksOf(Sailors, Sailors.FileFor(Case.Navy));
+			const std::string N = std::string("[") + Case.File + ", " + Case.Navy + " crew, " + (Case.bStrikes ? "striking at 60 s" : "the diving alarm at 60 s") +
+			                      F(", %.1f m/s, the gun %.0f degrees off", Case.Speed, Case.Off) + (FirstEarly < 0.0 ? std::string() : F(", a round at %.2f s and %.2f", Case.Early[0], Case.Early[1])) + "] ";
+			ShowBoat Boat;
+			Boat.Up = M.File == "Submarine_USA" ? 95.0 * 0.07 : M.File == "Submarine" ? 80.0 * 0.07 : 67.0 * 0.07;
+			DeckCrew::Watch W;
+			DeckCrew::Told In;
+			In.bBoat = true;
+			In.bInLine = true;
+			In.Train = M.Rest + Case.Off;
+			In.Elevation = 5.0;
+			In.Key = 4242;
+			CrewSeen Seen;
+			std::map<std::string, int> Heard;
+			double FirstUp[DeckCrew::Roles] = { -1.0, -1.0, -1.0, -1.0 }, AllAt = -1.0, Gone = -1.0, LastRam = -1.0, LastFire = -1.0, AtSince = -1.0;
+			double DeckLeast = 99.0, DeckLeastAt = -1.0;
+			int ShownBeforeTold = 0, ShownStruck = 0, Rounds = 0, Eligible = 0, RammedFirst = 0, ShownHidden = 0, Awash = 0, Shut = 0, Snapped = 0;
+			double OpenAt = -1.0;
+			size_t Next = 0;
+			for (int Tick = 0; Tick <= 75 * 30; ++Tick)
+			{
+				const double T = Tick / 30.0;
+				In.bLaid = T >= 10.0 && T < 60.0;
+				In.Dive = !Case.bStrikes && T >= 60.0 ? "periscope" : "surfaced";
+				Boat.Step(T, In.Dive);
+				In.Dived = Boat.Dived();
+				In.bStruck = Case.bStrikes && T >= 60.0;
+				const double Pitch = Boat.Pitch(T, Case.Speed), Heave = 0.3 * std::sin(T * 0.6) * Boat.Calm(), Heel = 3.0 * std::sin(T * 0.37) * Boat.Calm();
+				bool bFires = false;
+				while (Next < Fires.size() && Fires[Next] <= T + 1e-9)
+				{
+					In.FiredAt = Fires[Next++];
+					bFires = true;
+				}
+				// (whether the loader could have loaded this round: at the gun all the time since the last, the show's
+				// rounds no quicker than his clip at its pace)
+				if (bFires)
+				{
+					++Rounds;
+					const bool bCould = LastFire >= 0.0 && AtSince >= 0.0 && AtSince <= LastFire && In.FiredAt - LastFire >= DeckCrew::FastestReload(B, true);
+					if (bCould)
+					{
+						++Eligible;
+						RammedFirst += LastRam > LastFire && LastRam <= In.FiredAt + 1e-9 ? 1 : 0;
+					}
+					LastFire = In.FiredAt;
+				}
+				std::vector<DeckCrew::Cue> Cues;
+				// (as drawn the frame before the round: her crew at their posts, the breech shut)
+				const bool bShutBefore = ShutAtPost(W, B), bUpBefore = AtPosts(W);
+				DeckCrew::Step(W, In, S, M, B, T, &Cues);
+				Seen.See(Model, S, M, W, T);
+				for (const DeckCrew::Cue& Each : Cues)
+				{
+					++Heard[Each.Name];
+					LastRam = Each.Name == B.RamCue ? T : LastRam;
+				}
+				if (bFires)
+				{
+					const bool bShut = AtPosts(W) && (bShutBefore || ShutAtPost(W, B));
+					Shut += bShut ? 1 : 0;
+					Snapped += bShut && !(bUpBefore && bShutBefore) ? 1 : 0;
+					OpenAt = !bShut && OpenAt < 0.0 ? In.FiredAt : OpenAt;
+				}
+				const bool bLoaderAt = W.Hands[Loader].Now == DeckCrew::Phase::AtGun;
+				AtSince = bLoaderAt ? (AtSince < 0.0 ? T : AtSince) : -1.0;
+				bool bAny = false, bAll = true;
+				SeaShow::ShipOut Hidden;
+				Hidden.bShown = false;
+				for (int R = 0; R < DeckCrew::Roles; ++R)
+				{
+					const DeckCrew::Shown& Is = W.Men[R];
+					bAny = bAny || Is.bShown;
+					bAll = bAll && (R == Passer || (Is.bShown && Is.bAtWork));
+					if (Is.bShown && FirstUp[R] < 0.0) FirstUp[R] = T;
+					ShownHidden += DeckCrew::Drawn(Is, Hidden) ? 1 : 0;
+					if (!Is.bShown) continue;
+					// (her deck over the sea where he is, the hatch's where he climbs in it)
+					const double Deck = FreeboardOf(M, DeckCrew::DeckUnder(S, M, Is.At.Root.Fore, Is.At.Root.Right), Is.At.Root.Fore, Is.At.Root.Right, In.Dived, Pitch, Heave, Heel);
+					if (Deck < DeckLeast)
+					{
+						DeckLeast = Deck;
+						DeckLeastAt = T;
+					}
+					Awash += Deck <= FreeboardLeast ? 1 : 0;
+				}
+				AllAt = bAll && AllAt < 0.0 ? T : AllAt;
+				ShownBeforeTold += bAny && T < 10.0 ? 1 : 0;
+				ShownStruck += bAny && In.bStruck ? 1 : 0;
+				Gone = T >= 60.0 && !bAny && Gone < 0.0 ? T : Gone;
+			}
+			if (FirstEarly < 0.0)
+			{
+				Check(ShownBeforeTold == 0 && FirstUp[0] >= 10.0 && FirstUp[0] < 10.1 && FirstUp[1] > FirstUp[0] + DeckCrew::Depth / DeckCrew::ClimbUpRate &&
+				          FirstUp[2] > FirstUp[1] + DeckCrew::Depth / DeckCrew::ClimbUpRate && FirstUp[Passer] < 0.0 && AllAt > 10.0 && AllAt < 20.0,
+				      N + F("her crew up her hatch one at a time once her gun is told (10 s): the layer at %.2f s, the trainer at %.2f, the loader at %.2f", FirstUp[0], FirstUp[1], FirstUp[2]) +
+				          F("; at their work by %.2f; no passer (none can hand the loader his rounds from her hatch: %.0f)", AllAt, FirstUp[Passer]));
+			}
+			else
+			{
+				// (a round before they are all up: up her hatch one at a time until it, then each at his post as it fires)
+				Check(ShownBeforeTold == 0 && FirstUp[0] >= 10.0 && FirstUp[0] < 10.1 && AllAt >= FirstEarly && AllAt < FirstEarly + 0.5 * Frame && FirstUp[2] <= FirstEarly + 1e-9 &&
+				          (FirstUp[1] >= FirstEarly - 1e-9 || FirstUp[1] > FirstUp[0] + DeckCrew::Depth / DeckCrew::ClimbUpRate) && FirstUp[Passer] < 0.0,
+				      N + F("her crew up her hatch one at a time until the round at %.2f s, then each at his post as it fires: the layer up at %.2f s, the trainer at %.2f", FirstEarly, FirstUp[0], FirstUp[1]) +
+				          F(", the loader at %.2f; all at their work at %.2f", FirstUp[2], AllAt));
+			}
+			Check(Shut == Rounds && (FirstEarly < 0.0 || Snapped >= 1),
+			      N + F("every round fired with her layer, trainer and loader at their posts and the breech shut: %.0f of %.0f (%.0f as they were coming up or the loader's round short of the breech", Shut, Rounds, Snapped) +
+			          F(", put at their posts at once; the first not at %.2f s)", OpenAt));
+			Check(Eligible >= 5 && RammedFirst == Eligible,
+			      N + F("the loader's ram before each round he could have loaded in his own time: %.0f of %.0f (of the show's %.0f rounds)", RammedFirst, Eligible, Rounds));
+			if (Case.bStrikes)
+			{
+				Check(ShownStruck == 0 && Gone >= 60.0 && Gone < 60.0 + Frame,
+				      N + F("none of her gun's crew from the moment she strikes (her men on her casing are the show's): %.0f frames shown after, gone at %.2f s", ShownStruck, Gone));
+			}
+			else
+			{
+				Check(Gone >= 60.0 && Gone <= 60.0 + DownWithin && Awash == 0,
+				      N + F("all below %.2f s after it (%.1f at the most), none on her deck within 0.1 m of the sea: %.0f man-frames", Gone - 60.0, DownWithin, Awash) +
+				          F(" (her deck under a man %.2f m over it at the least, at %.2f s)", DeckLeast, DeckLeastAt));
+			}
+			Check(Heard[B.TakenCue] == 0 && Heard[B.RamCue] > 0 && Heard[B.ShutCue] > 0 && Heard[B.LiftCue] == 0 && ShownHidden == 0,
+			      N + F("the cues heard: shell_ram %.0f, breech_close %.0f; from the rack, no round_handoff (%.0f)", Heard[B.RamCue], Heard[B.ShutCue], Heard[B.TakenCue]) +
+			          F(" nor round_lift (%.0f); none drawn on a boat the show hides (%.0f)", Heard[B.LiftCue], ShownHidden));
+			Check(Model.bRead && Seen.BootsMost <= 0.15 && Seen.FeetApart >= DeckCrew::HatchApart - 1e-6 && (Case.bStrikes || Seen.WaitFrom >= 0.5),
+			      N + F("each man's boots on the model's deck to the gun, at it and back (%.3f m over its edge at the most, 0.15); one at a time in her hatch (two in it %.0f frames", Seen.BootsMost, Seen.InHatchTwo) +
+			          F(", feet %.2f m apart at the least, 1.8); waiting off its middle (%.2f m from it at the least)", Seen.FeetApart, Seen.WaitFrom));
+		}
+		// A skip while manned (the scene's SkipTo, a whole window in a tick): no cue across it, and after it no more than one
+		// of each a round (the review of 24 November: every cue again on each of eleven frames).
+		for (const bool bBoat : { false, true })
+		{
+			const GunMount Gun = bBoat ? MountOf("Submarine_GER", false) : MountOf("Freighter", true);
+			const DeckCrew::GunShape Her = DeckCrew::ShapeOf(Gun);
+			const DeckCrew::Blocks Kit = DeckCrew::BlocksOf(Sailors, Sailors.FileFor(bBoat ? "GER" : "UK"));
+			DeckCrew::Watch W;
+			DeckCrew::Told In;
+			In.bBoat = bBoat;
+			In.bInLine = true;
+			In.bLaid = true;
+			In.bAft = !bBoat;
+			In.Dive = bBoat ? "surfaced" : "";
+			In.Train = Gun.Rest;
+			In.Elevation = 5.0;
+			double Now = 100.0;
+			std::vector<DeckCrew::Cue> Cues;
+			for (int I = 0; I < 30 * 12; ++I)
+			{
+				Now += Frame;
+				if (I == 30 * 8) In.FiredAt = Now;
+				Cues.clear();
+				DeckCrew::Step(W, In, Her, Gun, Kit, Now, &Cues);
+			}
+			Now += 60.0;
+			Cues.clear();
+			DeckCrew::Step(W, In, Her, Gun, Kit, Now, &Cues);
+			const size_t AcrossSkip = Cues.size();
+			std::map<std::string, int> Heard;
+			int Most = 0;
+			const double Fired[] = { Now + 0.5, Now + 0.5 + DeckCrew::FastestReload(Kit, bBoat) + 0.5 };
+			for (int I = 0; I < 30 * 12; ++I)
+			{
+				Now += Frame;
+				for (const double At : Fired) In.FiredAt = At <= Now ? std::max(In.FiredAt, At) : In.FiredAt;
+				Cues.clear();
+				DeckCrew::Step(W, In, Her, Gun, Kit, Now, &Cues);
+				for (const DeckCrew::Cue& Each : Cues) Most = std::max(Most, ++Heard[Each.Name]);
+			}
+			Check(AcrossSkip == 0 && Most <= 2 && Heard[Kit.RamCue] == 2 && W.bManned,
+			      std::string(bBoat ? "[a German boat's gun" : "[a merchant's stern gun") + F(", a 60 s skip while manned] no cue across it (%.0f), then each cue once a round: %.0f at the most of any for 2 rounds", static_cast<double>(AcrossSkip), Most) +
+			          F(" (shell_ram %.0f)", Heard[Kit.RamCue]));
+		}
+		// A merchant's crew: at her gun as it is first told, none once she leaves her line; at her stern gun as she changes
+		// to it, each gun its own crew (the old one's stand down, the new one's close up at once: none between). Her guns
+		// kept loaded: her first round 2 s after her gun is told (the review of 25 November: a troopship's loader 2 s into
+		// his clip, before any ram, as it fired) from the loader waiting with it rammed, one fired as her stern gun is first
+		// told (a hit the battle tells is fired at once), every round at a manned gun with the breech shut, the loader's ram
+		// heard before each he could load in his own time.
+		{
+			const GunMount Gun = MountOf("Freighter", false);
+			const DeckCrew::GunShape Her = DeckCrew::ShapeOf(Gun);
+			const GunMount Aft = MountOf("Freighter", true);
+			const DeckCrew::GunShape HerAft = DeckCrew::ShapeOf(Aft);
+			const DeckCrew::Blocks Kit = DeckCrew::BlocksOf(Sailors, Sailors.FileFor("UK"));
+			DeckCrew::Watch W;
+			DeckCrew::Told In;
+			In.bInLine = true;
+			In.Train = 30.0;
+			In.Key = 77;
+			int AtOnce = 0, After = 0, Passers = 0, Changed = 0, Between = 0, Rounds = 0, Shut = 0, Waited = 0, Eligible = 0, Rammed = 0;
+			const double Fires[] = { 12.0, 18.0, 20.0, 27.0 };
+			double LastRam = -1.0, LastFire = -1.0, OpenAt = -1.0;
+			size_t Next = 0;
+			for (int Tick = 0; Tick <= 40 * 30; ++Tick)
+			{
+				const double T = Tick / 30.0;
+				In.bLaid = T >= 10.0;
+				In.bInLine = T < 30.0;
+				In.bAft = T >= 20.0;
+				In.Train = In.bAft ? 160.0 : 30.0;
+				bool bFires = false;
+				while (Next < std::size(Fires) && Fires[Next] <= T + 1e-9)
+				{
+					In.FiredAt = Fires[Next++];
+					bFires = true;
+				}
+				if (bFires && LastFire >= 0.0 && In.FiredAt - LastFire >= DeckCrew::FastestReload(Kit, false) && W.bAft == In.bAft)
+				{
+					++Eligible;
+					Rammed += LastRam > LastFire && LastRam <= In.FiredAt + 1e-9 ? 1 : 0;
+				}
+				LastFire = bFires ? In.FiredAt : LastFire;
+				const bool bWasAft = W.bAft && W.bManned;
+				const bool bShutBefore = ShutAtPost(W, Kit) && W.bAft == In.bAft, bUpBefore = AtPosts(W) && W.bAft == In.bAft;
+				std::vector<DeckCrew::Cue> Cues;
+				DeckCrew::Step(W, In, In.bAft ? HerAft : Her, In.bAft ? Aft : Gun, Kit, T, &Cues);
+				for (const DeckCrew::Cue& Each : Cues) LastRam = Each.Name == Kit.RamCue ? T : LastRam;
+				if (bFires)
+				{
+					++Rounds;
+					const bool bShut = AtPosts(W) && W.bAft == In.bAft && (bShutBefore || ShutAtPost(W, Kit));
+					Shut += bShut ? 1 : 0;
+					Waited += bShut && bUpBefore && bShutBefore ? 1 : 0;
+					OpenAt = !bShut && OpenAt < 0.0 ? In.FiredAt : OpenAt;
+				}
+				Changed += W.bManned && W.bAft && !bWasAft && T >= 20.0 && T < 20.0 + Frame ? 1 : 0;
+				int Up = 0;
+				for (int R = 0; R < DeckCrew::Roles; ++R)
+				{
+					AtOnce += T >= 10.0 && T < 10.05 && W.Men[R].bShown && W.Men[R].bAtWork ? 1 : 0;
+					After += T >= 30.0 && W.Men[R].bShown ? 1 : 0;
+					Passers += R == Passer && W.Men[R].bShown ? 1 : 0;
+					Up += W.Men[R].bShown ? 1 : 0;
+				}
+				Between += T >= 10.1 && T < 30.0 && Up != 3 ? 1 : 0;
+			}
+			Check(AtOnce == 3 * 2 && After == 0 && Passers == 0 && Changed == 1 && Between == 0,
+			      F("a merchant's gun told: its layer, trainer and loader at it at once (%.0f of 6 frame-men), none once she leaves her line (%.0f), no passer (no hatch: %.0f)", AtOnce, After, Passers) +
+			          F("; at her stern gun the frame she changes to it (%.0f), never without her gun's crew between (%.0f frames)", Changed, Between));
+			Check(Rounds == 4 && Shut == Rounds && Waited == 3 && Eligible == 2 && Rammed == Eligible,
+			      F("a merchant's guns kept loaded: every round at a manned gun with the breech shut, %.0f of %.0f (the first not at %.2f s)", Shut, Rounds, OpenAt) +
+			          F("; %.0f of 3 from the loader at his post waiting with it rammed (her first among them, 2 s after her gun is told)", Waited) +
+			          F(", the loader's ram heard before each he could load in his own time (%.0f of %.0f)", Rammed, Eligible));
+		}
+		// A boat whose hatch is where the loader can take the rounds from the passer (the American boat's, moved along her to
+		// where the round in the passer's hands meets the loader's at a bearing): the passer up it last, standing in it, his
+		// round meeting the loader's hands whenever he hands up, the cues of the handing heard, down it first at the alarm.
+		{
+			const GunMount M = MountOf("Submarine_USA", false);
+			DeckCrew::GunShape S = DeckCrew::ShapeOf(M);
+			const DeckCrew::Blocks B = DeckCrew::BlocksOf(Sailors, Sailors.FileFor("USA"));
+			SeaSailors::RoundAt Handed, Taken;
+			float First = -1.f;
+			for (size_t I = 0; I + 7 < B.Loading.Track.size() && First < 0.f; I += 8)
+			{
+				if (B.Loading.Track[I] >= B.Taken - 1e-4f && B.Loading.Track[I + 1] > 0.5f) First = B.Loading.Track[I];
+			}
+			SeaSailors::RoundAlong(B.Loading, B.Long[Loader], First, Taken);
+			SeaSailors::RoundAlong(B.Passing, B.Long[Passer], B.Taken - 0.01f, Handed);
+			const double Reach = std::hypot(Handed.Base.X, Handed.Base.Y);
+			// (the bearing whose handing place is nearest her middle line, and the hatch put there)
+			double Best = 1e9, Train = M.Rest;
+			for (double Turn = -60.0; Turn <= 60.0; Turn += 2.5)
+			{
+				const DeckCrew::Post L = DeckCrew::PostOf(S, B, M, DeckCrew::Role::Loader, M.Rest + Turn, 5.0);
+				const DeckCrew::Spot X = DeckCrew::ToHer(L, Taken.Base.X, Taken.Base.Y, Taken.Base.Z);
+				if (std::fabs(X.Right) < Best)
+				{
+					Best = std::fabs(X.Right);
+					Train = M.Rest + Turn;
+				}
+			}
+			const DeckCrew::Post L = DeckCrew::PostOf(S, B, M, DeckCrew::Role::Loader, Train, 5.0);
+			const DeckCrew::Spot X = DeckCrew::ToHer(L, Taken.Base.X, Taken.Base.Y, Taken.Base.Z);
+			S.HatchAlong = M.Along + X.Fore + std::sqrt(std::max(0.0, Reach * Reach - X.Right * X.Right));
+			S.bScuttle = true;
+			DeckCrew::Watch W;
+			DeckCrew::Told In;
+			In.bBoat = true;
+			In.bInLine = true;
+			In.Train = Train;
+			In.Elevation = 5.0;
+			In.Key = 99;
+			const GunModel Model = ReadGun(Content, M);
+			CrewSeen Seen;
+			std::map<std::string, int> Heard;
+			int Handing = 0, Rooted = 0, Met = 0;
+			double RootMost = 0.0, GapMost = 0.0, PasserFirst = -1.0, LoaderFirst = -1.0, Gone = -1.0;
+			for (int Tick = 0; Tick <= 50 * 30; ++Tick)
+			{
+				const double T = Tick / 30.0;
+				In.bLaid = T >= 1.0 && T < 40.0;
+				In.Dive = T >= 40.0 ? "periscope" : "surfaced";
+				if (T >= 15.0 && std::fmod(T - 15.0, 6.0) < Frame * 0.5) In.FiredAt = T;
+				std::vector<DeckCrew::Cue> Cues;
+				DeckCrew::Step(W, In, S, M, B, T, &Cues);
+				Seen.See(Model, S, M, W, T);
+				for (const DeckCrew::Cue& Each : Cues) ++Heard[Each.Name];
+				const DeckCrew::Shown& Is = W.Men[Passer];
+				PasserFirst = Is.bShown && PasserFirst < 0.0 ? T : PasserFirst;
+				LoaderFirst = W.Men[Loader].bShown && LoaderFirst < 0.0 ? T : LoaderFirst;
+				if (Is.bShown)
+				{
+					const DeckCrew::Spot Hatch = DeckCrew::HatchOf(S, M);
+					RootMost = std::max(RootMost, std::hypot(Is.At.Root.Fore - Hatch.Fore, Is.At.Root.Right - Hatch.Right));
+					++Rooted;
+				}
+				if (Is.bShown && Is.bAtWork)
+				{
+					++Handing;
+					const double Gap = HandOffGap(B, Is.At, W.Men[Loader].At);
+					GapMost = std::max(GapMost, Gap);
+					Met += Gap <= DeckCrew::HandOffNear + 1e-9 ? 1 : 0;
+				}
+				bool bAny = false;
+				for (const DeckCrew::Shown& Man : W.Men) bAny = bAny || Man.bShown;
+				Gone = T >= 40.0 && !bAny && Gone < 0.0 ? T : Gone;
+			}
+			Check(DeckCrew::PasserEver(S, B, M) && Handing > 300 && Met == Handing && Rooted > 0 && RootMost <= 0.1 && PasserFirst > LoaderFirst,
+			      F("[a boat whose hatch is where the passer can hand up] the passer up it after the loader (%.2f s, %.2f), standing in its middle (%.3f m from it at the most, 0.1)", PasserFirst, LoaderFirst, RootMost) +
+			          F(", handing up %.0f frames, his round meeting the loader's hands on each (%.3f m apart at the most, 0.04)", Handing, GapMost));
+			Check(Heard[B.TakenCue] > 0 && Heard[B.LiftCue] > 0 && Seen.FeetApart >= DeckCrew::HatchApart - 1e-6 && Gone > 40.0 && Gone <= 40.0 + DownWithin,
+			      F("[a boat whose hatch is where the passer can hand up] round_handoff heard %.0f times, round_lift %.0f; one at a time in the hatch (feet %.2f m apart at the least)", Heard[B.TakenCue], Heard[B.LiftCue], Seen.FeetApart) +
+			          F(", all below %.2f s after the alarm", Gone - 40.0));
+		}
+	}
+
+	/**
+	 * A deck gun's crew (Battle/DeckCrewCore; Brian, 24 November 2026: the sailor files' gun_layer, gun_trainer, gun_loader
+	 * and ammo_passer, and hands_up): every navy's file has its 27 clips (at the least the 14 the men in the water need),
+	 * the gun clips' blocks and the loader's and the passer's events; the bank's key holds every act and pose; each gun's
+	 * shape against the battle modeller's file; the layer's and the trainer's hands on their wheels' rims through their
+	 * clips, the loader's fist on the round's base as he rams it and the round from the passer's hands to his; at every
+	 * bearing the gun turns to and lift, each man's feet on the deck there, none of him in its mount or barrel (nor the
+	 * loader in its barrel run back as it fires), the round laid home along the model's own bore; a boat's crew up the
+	 * hatch when she is up and her gun told, the loader's ram before each round the show fires, all below before her
+	 * casing is awash, none on a boat the show hides; a merchant's at hers until she leaves her line; the files' hands up
+	 * for a struck boat's crew, idle without it; the scene's gather and draw pinned in its source.
+	 */
+	void TestCrew(const std::string& Root)
+	{
+		if (Root.empty())
+		{
+			return;
+		}
+		using SeaSailors::Act;
+		const std::string Content = Root + "/../../Content/";
+		SeaSailors::Crew Sailors;
+		std::string Why;
+		Check(ReadSailors(Content, Sailors, Why), "the six navies' sailor files read with the gun crew's clips:" + Why);
+		for (int K = 0; K < Sailors.Files(); ++K)
+		{
+			const std::string N = "[" + Sailors.Army(K) + " sailors] ";
+			int Has = 0;
+			for (int A = 0; A < SeaSailors::Acts; ++A) Has += Sailors.Has(K, static_cast<Act>(A)) ? 1 : 0;
+			Check(Sailors.File(K).Clips.size() >= 14 && Has == SeaSailors::Acts,
+			      N + F("%.0f clips (14 at the least), %.0f of the scene's %.0f acts", static_cast<double>(Sailors.File(K).Clips.size()), Has, SeaSailors::Acts));
+			const DeckCrew::Blocks B = DeckCrew::BlocksOf(Sailors, K);
+			Check(B.bGun && B.TakenCue == "round_handoff" && B.RamCue == "shell_ram" && B.ShutCue == "breech_close" && B.LiftCue == "round_lift" && B.Wheels[0].Radius > 0.f &&
+			          B.Wheels[1].Radius > 0.f && !B.Wheels[0].Turn.empty() && !B.Wheels[1].Turn.empty() && B.Loading.bBreech && !B.Passing.Track.empty() &&
+			          B.Pair.X > 0.f && B.ClimbLong > 0.f && B.RunLong > 0.f && B.StandLong > 0.f && B.DuckLong > 0.f,
+			      N + F("the gun clips' blocks: the wheels, the rounds, the pair; the loader's round taken at %.2f s, rammed at %.2f, the breech shut at %.2f", B.Taken, B.Ram, B.Shut) +
+			          F(", the passer's lifted at %.2f (round_handoff, shell_ram, breech_close, round_lift)", B.Lift));
+			// (the layer's and the trainer's hands on their wheels' rims all through their clips: the fingers about it, the
+			// wrists by it)
+			for (int R = 0; R < 2; ++R)
+			{
+				const Act A = R == 0 ? Act::Layer : Act::Trainer;
+				const SeaSailors::Wheel& W = B.Wheels[R];
+				double Fingers = 0.0, Wrists = 0.0;
+				for (float T = 0.f; T < B.Long[R]; T += 1.f / 30.f)
+				{
+					for (const char* Bone : { "hand_l", "hand_r", "fingers_l", "fingers_r" })
+					{
+						const LandMen::Vec3 P = Sailors.BoneAt(K, A, T, Bone);
+						const double Off = std::hypot(P.X - W.Hub[0], std::hypot(P.Y - W.Hub[1], P.Z - W.Hub[2]) - W.Radius);
+						(Bone[0] == 'f' ? Fingers : Wrists) = std::max(Bone[0] == 'f' ? Fingers : Wrists, Off);
+					}
+				}
+				Check(Fingers <= 0.03 && Wrists <= 0.08, N + (R == 0 ? "the layer's" : "the trainer's") +
+				                                             F(" hands on his wheel's rim all through his clip: his fingers within %.3f m of it (0.03), his wrists %.3f (0.08)", Fingers, Wrists));
+			}
+			// (the loader's fist on the round's base as he rams it; the round from the passer's hands to his as he takes it)
+			SeaSailors::RoundAt Rammed, Taken, Handed;
+			const bool bRammed = SeaSailors::RoundAlong(B.Loading, B.Long[2], B.Ram, Rammed) && Rammed.bShown;
+			const LandMen::Vec3 Fist = Sailors.BoneAt(K, Act::Loader, B.Ram, "fingers_r");
+			const double FistOff = std::sqrt((Fist.X - Rammed.Base.X) * (Fist.X - Rammed.Base.X) + (Fist.Y - Rammed.Base.Y) * (Fist.Y - Rammed.Base.Y) + (Fist.Z - Rammed.Base.Z) * (Fist.Z - Rammed.Base.Z));
+			Check(bRammed && FistOff <= 0.05, N + F("the loader's fist on the round's base as he rams it (%.2f s): %.3f m off (0.05)", B.Ram, FistOff));
+			float First = -1.f;
+			for (size_t I = 0; I + 7 < B.Loading.Track.size() && First < 0.f; I += 8)
+			{
+				if (B.Loading.Track[I] >= B.Taken - 1e-4f && B.Loading.Track[I + 1] > 0.5f) First = B.Loading.Track[I];
+			}
+			SeaSailors::RoundAlong(B.Loading, B.Long[2], First, Taken);
+			SeaSailors::RoundAlong(B.Passing, B.Long[3], B.Taken - 0.01f, Handed);
+			const double HandOff = std::sqrt(std::pow(Handed.Base.X - B.Pair.X - Taken.Base.X, 2.0) + std::pow(Handed.Base.Y - B.Pair.Y - Taken.Base.Y, 2.0) +
+			                                 std::pow(Handed.Base.Z - B.Pair.Z - Taken.Base.Z, 2.0));
+			Check(Handed.bShown && Taken.bShown && First >= B.Taken && First <= B.Taken + 0.1f && HandOff <= 0.02,
+			      N + F("the round from the passer's hands to the loader's as he takes it (%.2f s, first his at %.2f): %.3f m apart (0.02)", B.Taken, First, HandOff));
+			// (hands up: a struck boat's man standing at his place, his hands up, by the file's own clip)
+			SeaShow::ManOut Giving;
+			Giving.Doing = SeaShow::Swim::HandsUp;
+			Giving.Nation = Sailors.Army(K);
+			Check(Sailors.Place(K, Giving, SeaSailors::Aboard(), 100.0, -1.0).What == Act::HandsUp, N + "a struck boat's man giving up: hands_up");
+		}
+		// (the art director's British sea jersey, oatmeal (6bab72b3, 22 November): made in Content only, and lost once to a
+		// byte copy of the soldiers thread's file; kept over every import since)
+		{
+			const std::string Uk = TextOf(Content + "Models/Soldiers/soldier_UK_sailor.json");
+			const int K = Sailors.FileFor("UK");
+			SeaSailors::Dress Jersey;
+			if (K >= 0) Sailors.DressOf(K, 1, false, Jersey);
+			bool bOatmeal = false, bCream = false;
+			for (int I = 0; I < 64; ++I)
+			{
+				bOatmeal = bOatmeal || (Jersey.bSet[I] && Jersey.Paint[I] == 0xAEA285u);
+				bCream = bCream || (Jersey.bSet[I] && Jersey.Paint[I] == 0xD3CAB2u);
+			}
+			Check(Uk.find("\"sweater\":{\"shirt_own\":\"AEA285\",\"about\":\"the oatmeal (undyed wool) roll-neck sea jersey") != std::string::npos &&
+			          Uk.find("D3CAB2") == std::string::npos && bOatmeal && !bCream,
+			      "the British sailors' sea jersey oatmeal (AEA285, the art director's of 22 November), not the cream: the one in seven outside warm water wears it");
+		}
+		// (a file without the gun crew's clips or hands up reads still: its men stand for hands up, its guns unmanned)
+		{
+			std::string Old = TextOf(Content + "Models/Soldiers/soldier_GER_sailor.json");
+			for (const char* Clip : { "\"hands_up\":{", "\"gun_layer\":{", "\"gun_trainer\":{", "\"gun_loader\":{", "\"ammo_passer\":{" })
+			{
+				const size_t At = Old.find(Clip);
+				if (At != std::string::npos) Old.replace(At + 1, 1, "x");
+			}
+			SeaSailors::Crew Before;
+			std::string BeforeWhy;
+			const bool bRead = Before.AddFile("GER", Old, BeforeWhy);
+			SeaShow::ManOut Giving;
+			Giving.Doing = SeaShow::Swim::HandsUp;
+			Check(bRead && !Before.Has(0, Act::HandsUp) && !Before.Has(0, Act::Loader) && !DeckCrew::BlocksOf(Before, 0).bGun &&
+			          Before.Place(0, Giving, SeaSailors::Aboard(), 100.0, -1.0).What == Act::Stand,
+			      "a file of before 24 November (no gun crew's clips, no hands_up) reads: its struck men stand (idle), its guns unmanned" + BeforeWhy);
+		}
+		// The bank's key: every act and every act's poses packed apart (six bits each), as the scene's SailorKey packs them.
+		{
+			int Most = 0;
+			for (int A = 0; A < SeaSailors::Acts; ++A) Most = std::max(Most, SeaSailors::PosesOf(static_cast<Act>(A)));
+			const std::string Scene = TextOf(Root + "/Battle/SeaBattle.cpp");
+			// (the gun crew's poses banked as few as the layer's and the trainer's: a far man is small, and each pose a copy,
+			// its draw; a copy whose men are all put away hidden)
+			int GunPoses = 0;
+			for (const Act A : { Act::HandsUp, Act::Layer, Act::Trainer, Act::Loader, Act::Passer }) GunPoses = std::max(GunPoses, SeaSailors::PosesOf(A));
+			Check(GunPoses <= 12 && Scene.find("const bool bAnyIn = SailorFree[Copy].Num() < SailorCopies[Copy]->GetInstanceCount();") != std::string::npos &&
+			          Scene.find("SailorCopies[Copy]->SetVisibility(bAnyIn);") != std::string::npos,
+			      F("the gun crew's acts banked at %.0f poses at the most (12) and a copy hidden while all its men are put away", GunPoses));
+			Check(SeaSailors::Acts <= 64 && Most <= 64 && Scene.find("static_assert(SeaSailors::Acts <= 64, \"SailorKey packs an act in six bits\");") != std::string::npos &&
+			          Scene.find("return ((((((static_cast<int64>(File) * 64 + Dress) * 64 + What) * 64 + Pose) * 4 + Lod) * 2 + (bMirror ? 1 : 0)) * 2 + (bOiled ? 1 : 0));") != std::string::npos,
+			      F("the pose bank's key holds %.0f acts and up to %.0f poses of each (64 of each at the most)", SeaSailors::Acts, Most));
+		}
+		if (Sailors.Files() == 0)
+		{
+			return;
+		}
+
+		// Each gun's shape against its file, and its crew at it at every bearing it turns to.
+		const struct
+		{
+			const char* File;
+			bool bStern;
+			const char* Navy; // the navy whose men man it here
+		} Guns[] = {
+			{ "Submarine_GER", false, "GER" }, { "Submarine_USA", false, "USA" }, { "Submarine", false, "JAP" }, { "Submarine", false, "UK" },
+			{ "Freighter", false, "UK" }, { "Freighter", true, "USA" }, { "Tanker", false, "UK" }, { "Tanker", true, "SOV" }, { "Troopship", false, "UK" }, { "Troopship", true, "ITA" },
+		};
+		for (const auto& Asked : Guns)
+		{
+			const GunMount M = MountOf(Asked.File, Asked.bStern);
+			const DeckCrew::GunShape S = DeckCrew::ShapeOf(M);
+			const GunModel G = ReadGun(Content, M);
+			const int K = Sailors.FileFor(Asked.Navy);
+			const DeckCrew::Blocks B = DeckCrew::BlocksOf(Sailors, K);
+			const std::string N = std::string("[") + Asked.File + (Asked.bStern ? " stern gun, " : " gun, ") + Asked.Navy + " crew] ";
+			Check(!S.File.empty() && G.bRead && B.bGun, N + "its shape, its model and its crew's blocks");
+			if (S.File.empty() || !G.bRead || !B.bGun)
+			{
+				continue;
+			}
+			const auto MountLow = G.Mount.empty() ? 0.0 : G.Mount.begin()->first * 0.05;
+			const double BarrelBack = G.Barrel.empty() ? 0.0 : -G.Barrel.begin()->first * 0.1;
+			if (S.bBoat)
+			{
+				Check(std::fabs(S.PivotUp - G.BarrelZ) < 0.01 && std::fabs(S.PivotAhead - G.BarrelU) < 0.01 && std::fabs(S.Foot - MountLow) < 0.05 &&
+				          std::fabs(S.BreechBack - BarrelBack) < 0.1 && S.LiftMost == 35.0 && S.Built == 2.0,
+				      N + F("its barrel's pivot %.3f m up (the file's %.3f), its foot %.3f", S.PivotUp, G.BarrelZ, S.Foot) + F(" (the mount's lowest %.2f), its breech %.3f behind", MountLow, S.BreechBack));
+				// (her deck flats' edge each quarter metre along her by the gun, DeckEdges: the narrowest the flats run unbroken
+				// out from her middle line on both sides within that quarter, a centimetre's give; the breech's ring, the
+				// barrel's hindmost band, from RingBack behind the chamber's mouth and RingHalf about its bore)
+				double EdgesOver = 0.0, EdgesUnder = 0.0;
+				for (int Slice = 0; Slice < DeckCrew::DeckEdgeCount; ++Slice)
+				{
+					const double Mid = DeckCrew::DeckEdgeFrom + DeckCrew::DeckEdgeStep * Slice;
+					double Least = 1e9;
+					for (double Fore = Mid - 0.5 * DeckCrew::DeckEdgeStep; Fore <= Mid + 0.5 * DeckCrew::DeckEdgeStep + 1e-9; Fore += 0.0125)
+					{
+						const double Floor = DeckCrew::DeckUnder(S, M, Fore, 1.0);
+						double R = 0.3;
+						while (R <= 3.0 && ModelDeck(G, Fore, R, Floor, 0.3) > -1e8 && ModelDeck(G, Fore, -R, Floor, 0.3) > -1e8) R += 0.005;
+						Least = std::min(Least, R - 0.005);
+					}
+					EdgesOver = std::max(EdgesOver, S.DeckEdges[static_cast<size_t>(Slice)] - Least);
+					EdgesUnder = std::max(EdgesUnder, Least - S.DeckEdges[static_cast<size_t>(Slice)]);
+				}
+				const auto Ring = G.Barrel.find(static_cast<int>(std::floor(-S.BreechBack * std::cos(S.Built * Pi / 180.0) / 0.1)));
+				const double RingAxis = G.BarrelZ - S.BreechBack * std::sin(S.Built * Pi / 180.0);
+				Check(S.bDeckEdges && EdgesOver <= 1e-9 && EdgesUnder <= 0.01 && Ring != G.Barrel.end() &&
+				          std::fabs(Ring->first * 0.1 + S.BreechBack + S.RingBack) < 0.005 && std::fabs(std::max(-Ring->second.Lo, Ring->second.Hi) - S.RingHalf) < 0.005 &&
+				          std::fabs(std::max(RingAxis - Ring->second.ZLo, Ring->second.ZHi - RingAxis) - S.RingHalf) < 0.01,
+				      N + F("her deck flats' edge each quarter metre by the gun as the model's (%.3f m wider at the most, %.3f narrower)", EdgesOver, EdgesUnder) +
+				          F("; the breech's ring %.3f m behind its chamber's mouth and %.3f about its bore", S.RingBack, S.RingHalf));
+				Check(S.HatchAlong == (std::fabs(S.Boat.ForeHatch - M.Along) <= std::fabs(S.Boat.AftHatch - M.Along) ? S.Boat.ForeHatch : S.Boat.AftHatch) &&
+				          S.bScuttle == (std::string(Asked.File) == "Submarine_USA"),
+				      N + F("her crew's hatch %.1f m along her, the gun %.1f: a man handing the rounds up there ", S.HatchAlong, M.Along) + (S.bScuttle ? "(near enough)" : "(none: too far)"));
+			}
+			else
+			{
+				Check(std::fabs(S.PivotUp - G.BarrelZ) < 0.01 && std::fabs(S.PivotAhead - G.BarrelU) < 0.01 && std::fabs(S.Back + G.MountBackU) < 0.01 && S.Foot == M.Deck,
+				      N + F("its barrel's pivot %.3f m up and %.2f ahead (the file's), its gunhouse's open back %.2f m behind its middle", S.PivotUp, S.PivotAhead, S.Back));
+			}
+			// At every bearing it turns to, lying level and laid up: each man's feet on her deck, none of him in the gun (each 2.5
+			// degrees, her beams among them, the review of 24 November: 15 degrees missed the German loader over her side
+			// abeam; how near the men come to each other and to the gun, and the round home, each 15 and as laid up most).
+			int Posts = 0, RootsOff = 0, FeetOff = 0, InIt = 0, InRun = 0, OffBore = 0, Corners = 0;
+			double Overhang = 0.0, Deepest = 0.0, RunDeepest = 0.0, BoreWorst = 0.0, MouthWorst = 0.0, RootWorst = 0.0;
+			// (the passer in her hatch, at the trains he hands up at, his round meeting the loader's hands; the loader's hands
+			// over the gun's own chamber's mouth, laid up to the show's usual 10 degrees; how far he is moved in)
+			int PasserTrains = 0, PasserMet = 0;
+			double PasserFrom = 0.0, PasserGap = 0.0, HighLeast = 1e9, HighMost = -1e9, ShiftMost = 0.0, EasedMost = 0.0;
+			// (where the worst of each was: the man, the bearing off where it stows and the lift)
+			double RootAt[3] = { -1.0, 0.0, 0.0 }, OverAt[3] = { -1.0, 0.0, 0.0 }, DeepAt[3] = { -1.0, 0.0, 0.0 }, BoreAt3[3] = { -1.0, 0.0, 0.0 };
+			// (the loader into the layer or the trainer, and where; his turns about the breech)
+			double CrewInto = -1e9, CrewAt[3] = { -1.0, 0.0, 0.0 }, TurnedMost = 0.0;
+			int TurnedPosts = 0, TurnedSlid = 0;
+			auto Mark = [](double* Where, double Who, double Bearing, double Laid)
+			{
+				Where[0] = Who;
+				Where[1] = Bearing;
+				Where[2] = Laid;
+			};
+			const double Lifts[] = { 0.0, 5.0, 10.0, 15.0, S.bBoat ? 30.0 : 45.0 };
+			std::vector<double> Turns;
+			for (double Turn = -M.Arc; Turn <= M.Arc + 1e-9; Turn += 2.5) Turns.push_back(Turn);
+			for (const double Beam : { -90.0, 90.0 })
+			{
+				if (std::fabs(Beam) <= M.Arc && std::find_if(Turns.begin(), Turns.end(), [Beam](double Each) { return std::fabs(Each - Beam) < 1e-9; }) == Turns.end()) Turns.push_back(Beam);
+			}
+			for (const double Turn : Turns)
+			{
+				const bool bCoarse = std::fabs(std::remainder(Turn, 15.0)) < 1e-9;
+				for (const double Lift : Lifts)
+				{
+					const bool bDeep = bCoarse && (Lift == 0.0 || Lift == 15.0 || Lift >= 30.0);
+					const double Train = M.Rest + Turn, Bears = DeckCrew::MountTrain(M, Train);
+					for (int R = 0; R < DeckCrew::Roles; ++R)
+					{
+						const DeckCrew::Post P = DeckCrew::PostOf(S, B, M, static_cast<DeckCrew::Role>(R), Train, Lift);
+						if (R == static_cast<int>(DeckCrew::Role::Passer))
+						{
+							// (in her hatch's middle; handing up only where his round meets the loader's hands)
+							if (!S.bBoat) continue;
+							const DeckCrew::Post Loading = DeckCrew::PostOf(S, B, M, DeckCrew::Role::Loader, Train, Lift);
+							PasserFrom = std::max(PasserFrom, std::hypot(P.Root.Fore - (S.HatchAlong - M.Along), P.Root.Right));
+							if (DeckCrew::PasserHolds(S, B, M, Loading))
+							{
+								++PasserTrains;
+								const double Gap = HandOffGap(B, P, Loading);
+								PasserGap = std::max(PasserGap, Gap);
+								PasserMet += Gap <= DeckCrew::HandOffNear + 1e-9 ? 1 : 0;
+							}
+							continue;
+						}
+						++Posts;
+						if (R == static_cast<int>(DeckCrew::Role::Loader))
+						{
+							ShiftMost = std::max(ShiftMost, P.Shift);
+							if (S.bBoat && Lift <= 10.0)
+							{
+								const double High = DeckCrew::BreechHigh(S, B, M, P, Train, Lift);
+								HighLeast = std::min(HighLeast, High);
+								HighMost = std::max(HighMost, High);
+							}
+						}
+						if (R == static_cast<int>(DeckCrew::Role::Loader) && bDeep)
+						{
+							TurnedPosts += P.Turned != 0.0 ? 1 : 0;
+							TurnedSlid += P.Slid > DeckCrew::SlideMost * std::clamp((DeckCrew::SlideTo - std::fabs(P.Turned)) / (DeckCrew::SlideTo - DeckCrew::TurnNear), 0.0, 1.0) + 1e-9 ? 1 : 0;
+							TurnedMost = std::max(TurnedMost, std::fabs(P.Turned));
+							for (const DeckCrew::Role Wheel : { DeckCrew::Role::Layer, DeckCrew::Role::Trainer })
+							{
+								const DeckCrew::Post Beside = DeckCrew::PostOf(S, B, M, Wheel, Train, Lift);
+								const double Into = BodiesInto(Sailors, K, Act::Loader, B.Long[R], P, DeckCrew::ActOf(Wheel), B.Long[static_cast<int>(Wheel)], Beside, 0.25f);
+								if (Into > CrewInto) Mark(CrewAt, static_cast<double>(Wheel), Turn, Lift);
+								CrewInto = std::max(CrewInto, Into);
+							}
+						}
+						const double Floor = P.Root.Up;
+						const double Under = ModelDeck(G, P.Root.Fore, P.Root.Right, Floor, 0.3);
+						if (std::fabs(Under - Floor) > RootWorst) Mark(RootAt, R, Turn, Lift);
+						RootWorst = std::max(RootWorst, std::fabs(Under - Floor));
+						if (std::fabs(Under - Floor) > 0.08) ++RootsOff;
+						{
+							// (his feet: heels 0.2 m behind his root, toes 0.33 ahead, 0.21 either side)
+							Corners += 4;
+							const double In = BootsOff(G, P, &FeetOff);
+							if (In > Overhang) Mark(OverAt, R, Turn, Lift);
+							Overhang = std::max(Overhang, In);
+						}
+						// (none of him in the gun as it stands, through his clip; the loader nor in the barrel run back, as it
+						// fires while he waits for the next round)
+						if (!S.bBoat || !bDeep)
+						{
+							continue;
+						}
+						const Act A = DeckCrew::ActOf(static_cast<DeckCrew::Role>(R));
+						std::vector<float> At, Facing;
+						for (float T = 0.f; T < B.Long[R]; T += 0.1f)
+						{
+							const int Count = Sailors.Skin(K, A, T, LandMen::Mid, At, Facing);
+							const bool bHold = R == static_cast<int>(DeckCrew::Role::Loader) && T <= DeckCrew::HoldTo + 1e-4f;
+							for (int I = 0; I < Count; ++I)
+							{
+								const DeckCrew::Spot Her = DeckCrew::ToHer(P, At[static_cast<size_t>(I) * 3], At[static_cast<size_t>(I) * 3 + 1], At[static_cast<size_t>(I) * 3 + 2]);
+								const double Depth = InGun(G, Bears, std::clamp(Lift, S.LiftLeast, S.LiftMost), 0.0, Her.Fore, Her.Right, Her.Up, 0.01);
+								if (Depth > 0.0) ++InIt;
+								if (Depth > Deepest) Mark(DeepAt, R, Turn, Lift);
+								Deepest = std::max(Deepest, Depth);
+								if (bHold)
+								{
+									const double Run = InGun(G, Bears, std::clamp(Lift, S.LiftLeast, S.LiftMost), 0.45, Her.Fore, Her.Right, Her.Up, 0.01);
+									if (Run > 0.0) ++InRun;
+									RunDeepest = std::max(RunDeepest, Run);
+								}
+							}
+						}
+						if (R == static_cast<int>(DeckCrew::Role::Loader))
+						{
+							// (the round laid home along the model's own bore, at the chamber's mouth or behind it)
+							double Way[3];
+							const DeckCrew::Spot Mouth = DeckCrew::BreechOf(S, B, M, Train, Lift, Way);
+							const DeckCrew::Spot MouthHis = DeckCrew::ToHim(P, Mouth);
+							DeckCrew::Post Turned = P;
+							Turned.Root = DeckCrew::Spot();
+							const DeckCrew::Spot BoreHis = DeckCrew::ToHim(Turned, DeckCrew::Spot{ Way[0], Way[1], Way[2] });
+							SeaSailors::RoundAt Home;
+							const LandMen::Vec3 MouthAt = { static_cast<float>(MouthHis.Fore), static_cast<float>(MouthHis.Right), static_cast<float>(MouthHis.Up) };
+							const LandMen::Vec3 BoreAt = { static_cast<float>(BoreHis.Fore), static_cast<float>(BoreHis.Right), static_cast<float>(BoreHis.Up) };
+							if (!DeckCrew::LoaderRound(B, DeckCrew::LastShown(B), true, MouthAt, BoreAt, Home))
+							{
+								++OffBore;
+								continue;
+							}
+							const double Along = (Home.Base.X - MouthAt.X) * BoreAt.X + (Home.Base.Y - MouthAt.Y) * BoreAt.Y + (Home.Base.Z - MouthAt.Z) * BoreAt.Z;
+							const double Ox = Home.Base.X - MouthAt.X - BoreAt.X * Along, Oy = Home.Base.Y - MouthAt.Y - BoreAt.Y * Along, Oz = Home.Base.Z - MouthAt.Z - BoreAt.Z * Along;
+							const double Off = std::sqrt(Ox * Ox + Oy * Oy + Oz * Oz);
+							const double Lies = Home.Way.X * BoreAt.X + Home.Way.Y * BoreAt.Y + Home.Way.Z * BoreAt.Z;
+							BoreWorst = std::max(BoreWorst, Off);
+							MouthWorst = std::max(MouthWorst, -Along);
+							if (Off > 0.01 || Along > 1e-3 || Along < -0.06 || Lies < 0.999)
+							{
+								++OffBore;
+								Mark(BoreAt3, Along, Turn, Lift);
+							}
+							// (eased onto the gun's bore from his hands, never dropping out of them as he holds it until he
+							// rams it: its base off where his clip has it in his hands, a frame apart at a boat's pace, no
+							// more than DropMost more up or down; rammed, it runs on up the gun's bore from his fist)
+							double OffWas = 0.0;
+							bool bWas = false;
+							for (float T = 0.f; T <= B.Ram; T += static_cast<float>(Frame * DeckCrew::BoatRate))
+							{
+								SeaSailors::RoundAt Now, InHands;
+								const bool bNow = DeckCrew::LoaderRound(B, T, true, MouthAt, BoreAt, Now) && Now.bShown &&
+								                  SeaSailors::RoundAlong(B.Loading, B.Long[R], T, InHands) && InHands.bShown;
+								const double OffNow = bNow ? static_cast<double>(Now.Base.Z - InHands.Base.Z) : 0.0;
+								if (bNow && bWas) EasedMost = std::max(EasedMost, std::fabs(OffNow - OffWas));
+								OffWas = OffNow;
+								bWas = bNow;
+							}
+						}
+					}
+				}
+			}
+			Check(Posts > 0 && RootsOff == 0, N + F("%.0f posts at every bearing and lift: each man's root on her deck there (the worst %.3f m off it, %.0f more than 0.08", Posts, RootWorst, RootsOff) +
+			                                      F("; man %.0f at %.0f degrees, laid %.0f)", RootAt[0], RootAt[1], RootAt[2]));
+			// (a boat's casing narrows abeam her gun: the loader stood as near the breech as the barrel's run back lets him,
+			// and turned about it as far as the layer and the trainer leave him room, a German's heels over its edge at the
+			// most OverhangMost there)
+			const double OverhangMost = 0.15;
+			Check(Overhang <= OverhangMost, N + F("each man's feet on her deck: %.0f of %.0f corners of his boots over its edge, by %.3f m at the most", FeetOff, Corners, Overhang) +
+			                                     F(" (%.2f: a boat's loader abeam, on her narrow casing; man %.0f at %.0f degrees", OverhangMost, OverAt[0], OverAt[1]) + F(", laid %.0f)", OverAt[2]));
+			// (turned only where her casing is too narrow behind the breech, and the further turned the less nearer it; clear
+			// of the men at the wheels, a merchant's gunhouse's crew close about its breech by its clips)
+			const double CrewIntoMost = 0.02;
+			Check(TurnedSlid == 0 && TurnedMost <= DeckCrew::TurnMost + 1e-9 && (TurnedPosts == 0 || (S.bBoat && S.DeckHalf < 2.0)),
+			      N + F("the loader turned about the breech at %.0f posts, %.0f degrees at the most (%.0f nearer it than SlideMost, less beyond TurnNear and none by SlideTo), only on a boat's narrow casing", TurnedPosts, TurnedMost, TurnedSlid));
+			Check(CrewInto <= CrewIntoMost, N + F("the loader clear of the layer and the trainer through their clips: into them by %.3f m at the most (%.2f; below 0 the gap", CrewInto, CrewIntoMost) +
+			                                    F(": man %.0f at %.0f degrees, laid %.0f)", CrewAt[0], CrewAt[1], CrewAt[2]));
+			if (S.bBoat)
+			{
+				Check(InIt == 0 && InRun == 0, N + F("none of the crew in the gun's mount or barrel through their clips (%.0f points in, %.3f m deep", InIt, Deepest) +
+				                                   F(": man %.0f at %.0f degrees, laid %.0f)", DeepAt[0], DeepAt[1], DeepAt[2]) +
+				                                   F(", nor the waiting loader in its barrel run back as it fires (%.0f, %.3f)", InRun, RunDeepest));
+				Check(OffBore == 0, N + F("the round eased home along the model's own bore at every bearing and lift: %.0f off, %.3f m from its line at the most, %.3f behind the chamber's mouth (0.06", OffBore, BoreWorst, MouthWorst) +
+				                        F("; %.3f along it at %.0f degrees, laid %.0f)", BoreAt3[0], BoreAt3[1], BoreAt3[2]));
+				// (his hands as his clip has them over the gun's own chamber's mouth, as measured: the files' gun_loader puts the
+				// breech 1.12 m over his feet, these guns' mouths lie lower over her casing, and lower the more the gun is laid
+				// up; no place on her deck lowers his hands, so the round is eased down across the gap from when he lays it in
+				// the tray (Laid) until it is home, off his hands a frame at a time no more than DropMost, until the soldiers
+				// thread's gun_loader has the boats' breech height: BreechGapMost bounds the gap as it is, not a claim it is
+				// closed)
+				const double BreechGapMost = 0.30, DropMost = 0.04;
+				Check(HighMost <= BreechGapMost && HighLeast >= -0.05 && EasedMost <= DropMost,
+				      N + F("the loader's hands over the gun's own chamber's mouth, laid 0 to 10 degrees: %.3f to %.3f m (known, %.2f at the most", HighLeast, HighMost, BreechGapMost) +
+				          F("; the round eased across it off his hands, %.3f m a frame up or down at the most, %.2f)", EasedMost, DropMost));
+				Check(PasserFrom <= 0.1 && PasserMet == PasserTrains && PasserTrains == 0 && !DeckCrew::PasserEver(S, B, M) && ShiftMost <= 0.30,
+				      N + F("the passer's root in her hatch's middle at every train (%.3f m from it at the most, 0.1); handing up at %.0f posts", PasserFrom, PasserTrains) +
+				          F(" (his round meeting the loader's hands at %.0f, %.3f m apart at the most): none, her hatch too far from the loader's hands for their pair", PasserMet, PasserGap) +
+				          F(", the loader's rounds from a rack; the loader moved in from his clip's post %.3f m at the most (0.30)", ShiftMost));
+			}
+		}
+		TestCrewTimes(Content, Sailors);
+		TestCrewSweep(Content, Sailors);
+	}
 }
 
 int main(int ArgC, char** ArgV)
@@ -1970,6 +3272,7 @@ int main(int ArgC, char** ArgV)
 	TestRescue(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestMeshShape();
 	TestGuns(ArgC > 1 ? std::string(ArgV[1]) : std::string());
+	TestCrew(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestCasing(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestStageSinking(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestFlagAndVents();

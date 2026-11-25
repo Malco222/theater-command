@@ -14,6 +14,7 @@
 
 #include "Battle/AirFeed.h"
 #include "Battle/ConvoyLooksCore.h"
+#include "Battle/DeckCrewCore.h"
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaShow.h"
 
@@ -21,6 +22,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -123,6 +125,7 @@ namespace
 		Drawn Size;
 		StageBoat Stage{ std::string(), 95.0, 8.3 };
 		bool bSeen = false;
+		int Piece = -1;
 		double LastHeave = 0.0, WorstPop = 0.0, WorstOff = 0.0, PopAt = 0.0, OffAt = 0.0;
 		// (what of the stage's model shows, against her state: frames at periscope depth with the show's periscope up and
 		// settled, how many show its head out, the least it shows, the most of her shorter periscope and her bridge; with it
@@ -233,6 +236,46 @@ namespace
 
 		const SeaShow::Field& Board = Night.Board();
 		const double Sky = SkyLit(Board.bLight, Board.SunUp, Board.MoonUp, Board.MoonLit);
+		// What the battle tells of the night, read from the recording, not the show (the checks below of what a night holds ask
+		// for each where it is told: a stand-in was made with all of it, a real night has what its rules and its kit gave it):
+		// the rescues it tells (sea:rescue: the naval rules send one only on the player's order, so a night fought by the
+		// computer on both sides has none); the seconds each boat is told at periscope depth with her periscope up (her dive
+		// "periscope", her scope up, her keel within half a metre of it or not told; the convoy field's crash dive passes
+		// through it in a view); a pattern dropped, an ahead-thrown salvo with a hit booked from the same escort within 60 s
+		// (the show bursts that salvo's bombs only on such a hit), and a starshell.
+		int RescuesTold = 0;
+		bool bPatternTold = false, bAheadHitTold = false, bStarTold = false;
+		std::map<int, double> ToldAtScope;
+		{
+			std::map<int, std::string> DiveWas;
+			std::map<int, double> AheadAt;
+			for (size_t I = 0; I < Rec.Views.size(); ++I)
+			{
+				const SeaFeed::Frame& V = Rec.Views[I];
+				const double For = I + 1 < Rec.Views.size() ? Rec.Views[I + 1].Head.T - V.Head.T : 0.0;
+				for (const SeaShow::Piece& P : V.Pieces)
+				{
+					if (P.Class != "ss") continue;
+					if (!P.Dive.empty()) DiveWas[P.Id] = P.Dive;
+					if (DiveWas[P.Id] == "periscope" && P.bScope && (P.Keel < 0.0 || std::fabs(P.Keel - Board.ScopeKeel) <= 0.5)) ToldAtScope[P.Id] += For;
+				}
+				for (const SeaShow::Event& E : V.Events)
+				{
+					RescuesTold += E.What == "sea:rescue" ? 1 : 0;
+					bStarTold = bStarTold || E.What == "sea:starshell";
+					if (E.What == "sea:depthCharge")
+					{
+						if (E.Kind == "ahead") AheadAt[E.Unit] = E.T;
+						else bPatternTold = true;
+					}
+					if (E.What == "sea:depthChargeHit")
+					{
+						const auto Thrown = AheadAt.find(E.From);
+						bAheadHitTold = bAheadHitTold || (Thrown != AheadAt.end() && E.T - Thrown->second <= 60.0);
+					}
+				}
+			}
+		}
 		std::map<int, BoatSeen> Boats;
 		std::map<int, RescueSeen> Rescues;
 		std::map<int, bool> Jumped, Climbed;
@@ -247,7 +290,36 @@ namespace
 		// (sent down, every man off her within SeaShow's HurryFor of it; her scuttling charges no sooner than ChargesFrom after
 		// it, and after the last of them)
 		const double HandsGoneIn = 5.0, ChargesFrom = 6.5;
-		double WorstMiss = 0.0, LeastLead = 1e9, AheadOff = -1e9;
+		double WorstMiss = 0.0, LeastLead = 1e9, AheadOff = -1e9, AheadBeyond = -1e9;
+		// (where the battle has a boat at a moment, between its views before and after: the boat piece nearest a point)
+		auto BattleBoatNear = [&Rec](double At, double X, double Y, double& PX, double& PY)
+		{
+			size_t B = 0;
+			while (B + 1 < Rec.Views.size() && Rec.Views[B].Head.T < At) ++B;
+			const size_t A = B > 0 ? B - 1 : 0;
+			const double TA = Rec.Views[A].Head.T, TB = Rec.Views[B].Head.T;
+			const double Fr = TB > TA ? std::clamp((At - TA) / (TB - TA), 0.0, 1.0) : 0.0;
+			double Best = 1e18;
+			for (const SeaShow::Piece& Was : Rec.Views[A].Pieces)
+			{
+				if (Was.Class != "ss") continue;
+				double X1 = Was.X, Y1 = Was.Y;
+				for (const SeaShow::Piece& Then : Rec.Views[B].Pieces)
+					if (Then.Id == Was.Id)
+					{
+						X1 = Was.X + (Then.X - Was.X) * Fr;
+						Y1 = Was.Y + (Then.Y - Was.Y) * Fr;
+					}
+				const double D = std::hypot(X1 - X, Y1 - Y);
+				if (D < Best)
+				{
+					Best = D;
+					PX = X1;
+					PY = Y1;
+				}
+			}
+			return Best < 1e17;
+		};
 		const double Step = 1.0 / 30.0;
 		double T = Rec.Views.front().Head.T;
 		const double EndT = Rec.Views.back().Head.T;
@@ -259,6 +331,7 @@ namespace
 			{
 				if (Ship.Class != "ss" || Ship.Dive.empty()) continue;
 				BoatSeen& B = Boats[Ship.Key];
+				B.Piece = Ship.Piece;
 				if (!B.bSeen)
 				{
 					// (the stage draws the battle modeller's boat for her navy, as made: AirStage's ShipFileOf)
@@ -621,9 +694,19 @@ namespace
 					if (bAhead)
 					{
 						// (the ahead thrower's bombs burst only on a hit, the show placing them at the boat where she is then, wherever the
-						// salvo was aimed: the ring is drawn where the show aimed it, so how far off it is the show's, told, not checked)
+						// salvo was aimed: the ring is drawn where the show aimed it. The battle's own boat has moved on from its drop
+						// as the bombs sank, so the burst lies off the ring as far as she does, and no more than the 30 m the show may
+						// draw her from her place where she is attacked (sea_show_test): on the real nights it lay 124 m off, the boat
+						// drawn far from her place. The review of 24 November, the second)
 						++AheadBursts;
-						AheadOff = std::max(AheadOff, std::hypot(E.At.X - Near->Middle.X, E.At.Y - Near->Middle.Y) - Near->Ring);
+						const double FromMiddle = std::hypot(E.At.X - Near->Middle.X, E.At.Y - Near->Middle.Y);
+						AheadOff = std::max(AheadOff, FromMiddle - Near->Ring);
+						double BX = 0.0, BY = 0.0;
+						const bool bHers = BattleBoatNear(T, E.At.X, E.At.Y, BX, BY);
+						const double Hers = bHers ? std::hypot(BX - Near->Middle.X, BY - Near->Middle.Y) : 0.0;
+						AheadBeyond = std::max(AheadBeyond, FromMiddle - Hers);
+						ShowCheck(bHers && FromMiddle - Hers <= 30.0,
+						          Said("an ahead bomb's burst at %.1f s lies off the ring's middle no more than the battle's boat does, and 30 m (%.1f m, hers %.1f m)", T, FromMiddle, Hers));
 						ShowCheck(T > Near->Lands, Said("an ahead bomb's burst at %.1f s comes after its ring is in (%.1f s after)", T, T - Near->Lands));
 					}
 					else if (E.Size < 0.5)
@@ -665,8 +748,14 @@ namespace
 		{
 			ShowCheck(B.WorstPop < 0.25, Said("boat %.0f never pops where she can be seen (worst %.3f m in a frame, at %.1f s)", Key, B.WorstPop, B.PopAt));
 			ShowCheck(B.WorstOff < 0.3, Said("boat %.0f surfaced rides where the show has her, her casing awash, or high once blown (worst %.2f m off, at %.1f s)", Key, B.WorstOff, B.OffAt));
-			ShowCheck(B.UpFrames > 0 && B.UpShown == B.UpFrames && B.UpLeast > 0.5,
-			          Said("boat %.0f at periscope depth with the show's periscope up: the stage's model shows its taller periscope's head in every frame (%.0f), at least %.2f m", Key, B.UpFrames, B.UpLeast));
+			// (some such frames where the battle holds her there long enough to settle: 30 s told, the scene's 20 s or so from the
+			// surface to periscope depth and its 5 s settling; every stand-in boat is told there 56 s and more. Every such frame,
+			// on any night, shows the head)
+			const auto AtScope = ToldAtScope.find(B.Piece);
+			const double ToldUp = AtScope != ToldAtScope.end() ? AtScope->second : 0.0;
+			ShowCheck((B.UpFrames > 0 || ToldUp < 30.0) && B.UpShown == B.UpFrames && (B.UpFrames == 0 || B.UpLeast > 0.5),
+			          Said("boat %.0f at periscope depth with the show's periscope up: the stage's model shows its taller periscope's head in every frame (%.0f), at least %.2f m", Key, B.UpFrames, B.UpLeast) +
+			              Said(" (told there %.0f s)", ToldUp));
 			ShowCheck(B.UpFrames == 0 || (B.UpLowMost < 0.0 && B.UpBridgeMost < -1.0),
 			          Said("boat %.0f, the periscope up: her shorter periscope (at most %.2f m) and her bridge (at most %.2f m) under", Key, B.UpLowMost, B.UpBridgeMost));
 			ShowCheck(B.DownFrames == 0 || B.DownMost < -0.3, Said("boat %.0f at periscope depth with the show's periscope down: nothing of the stage's model out (its highest point at most %.2f m)", Key, B.DownMost));
@@ -676,12 +765,18 @@ namespace
 			ShowCheck(B.FeatherBridgeMost < 0.0, Said("boat %.0f: feathers (%.0f) only while all of the stage's model's bridge is under (at most %.2f m)", Key, B.Feathers, B.FeatherBridgeMost));
 		}
 		ShowCheck(Jumpers > 0 && JumpWorst < 0.35, Said("a boat's men (%.0f) go over her side from her deck as the looks ride her (at most %.2f m off; %.2f m as they leave it)", Jumpers, JumpWorst, JumpRawWorst));
-		ShowCheck(ClimbFrames > 0 && ClimbOn == ClimbFrames, Said("every man the scene has climbing a rescuer's side is on a net that is down (%.0f of %.0f man-frames)", ClimbOn, ClimbFrames));
-		ShowCheck(Climbers > 0 && ClimbersOn == Climbers, Said("and his net was down before he reached it (%.0f of %.0f men)", ClimbersOn, Climbers));
+		// (climbers where the battle tells a rescue, every one on a net down; where it tells none, none: every stand-in tells one)
+		ShowCheck((RescuesTold == 0 && ClimbFrames == 0) || (ClimbFrames > 0 && ClimbOn == ClimbFrames),
+		          Said("every man the scene has climbing a rescuer's side is on a net that is down (%.0f of %.0f man-frames; %.0f rescues told)", ClimbOn, ClimbFrames, RescuesTold));
+		ShowCheck((RescuesTold == 0 && Climbers == 0) || (Climbers > 0 && ClimbersOn == Climbers), Said("and his net was down before he reached it (%.0f of %.0f men)", ClimbersOn, Climbers));
 		ShowCheck(ClimbOver == 0, Said("no man climbs over the net's top (her deck's height): %.0f man-frames", ClimbOver));
 		ShowCheck(ClimbUnnamed == 0, Said("no man climbs a ship no rescue named (%.0f man-frames)", ClimbUnnamed));
 		ShowCheck(NetsAway == 0, Said("no net down while she is under way or her rescue over and no one is on it (%.0f net-frames)", NetsAway));
-		ShowCheck(PatternBursts > 0 && AheadBursts > 0 && Stars > 0, Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars));
+		// (each where the battle tells it, and the night tells one of them at the least: the stand-ins tell all three; a real night
+		// what its kit and its contacts gave it, a pattern and a starshell in 1940, ahead-thrown salvos and no pattern in 1943)
+		ShowCheck((bPatternTold || bAheadHitTold || bStarTold) && (!bPatternTold || PatternBursts > 0) && (!bAheadHitTold || AheadBursts > 0) && (!bStarTold || Stars > 0),
+		          Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars) +
+		              Said(" where told (%.0f, %.0f, %.0f)", bPatternTold ? 1.0 : 0.0, bAheadHitTold ? 1.0 : 0.0, bStarTold ? 1.0 : 0.0));
 		// A boat that struck (sea:surrender): her flag, her men on her casing, her vents. Where the night has none, nothing asked.
 		int StruckBoats = 0;
 		for (const auto& [Key, B] : Boats)
@@ -715,8 +810,9 @@ namespace
 			              Said(" (boat %.0f)", HandsWorstKey));
 			ShowCheck(HandsLate == 0, Said("sent down, no man on her or in her hatches more than %.0f s after (%.0f man-frames, at most %.1f s)", HandsGoneIn, HandsLate, HandsLateMost));
 		}
-		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed), %d starshells\n",
-		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, Stars);
+		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed, "
+		            "%.1f m farther from its middle than the battle's boat), %d starshells\n",
+		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, AheadBeyond, Stars);
 		std::printf("  the scene's men: %d went over a boat's side, at most %.2f m off her deck as the looks ride her; %d climbed a rescuer's side, %d man-frames, every one on a net down (most nets on one "
 		            "ship %d); she stood by %.0f s; her heave while men climbed %.2f to %.2f m (the net rides it, the scene's climbers do not); the climbers %.2f to %.2f m out "
 		            "from her side as the stage draws her\n",
@@ -757,7 +853,7 @@ namespace
 		BoatState Hid, Open;
 		BoatModel Model;
 		bool bSeen = false, bWasShown = true;
-		int HiddenFrames = 0, Reveals = 0;
+		int HiddenFrames = 0, HiddenShallow = 0, Reveals = 0;
 		int Thrown = 0, TwinThrown = 0, Laid = 0, ShownOff = 0;
 		double MostApart = 0.0;
 		/** Her first swirl after each time she is found, and her twin's after the same moment (-1: none yet; RevealAt -1
@@ -852,6 +948,8 @@ namespace
 				if (!Ship.bShown)
 				{
 					++B.HiddenFrames;
+					// (near enough the surface that her twin might throw something: the line the deep frames are judged from)
+					if (Ship.Keel <= Board.ScopeKeel + 6.0) ++B.HiddenShallow;
 					B.Thrown += static_cast<int>(Out.Splashes.size());
 					B.TwinThrown += static_cast<int>(Twin.Splashes.size());
 					// (a swirl laid this frame while she is hidden: none)
@@ -868,10 +966,11 @@ namespace
 			T = std::min(EndT, T + Step);
 			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
 		}
-		int Hidden = 0, Found = 0, TwinThrown = 0, SwirledAfter = 0;
+		int Hidden = 0, HiddenShallow = 0, Found = 0, TwinThrown = 0, SwirledAfter = 0;
 		for (const auto& [Key, B] : Boats)
 		{
 			Hidden += B.HiddenFrames;
+			HiddenShallow += B.HiddenShallow;
 			Found += B.Reveals;
 			TwinThrown += B.TwinThrown;
 			SwirledAfter += B.SwirlsAfter;
@@ -881,10 +980,264 @@ namespace
 			ShowCheck(B.SwirlsOff == 0, Said("boat %.0f found lays her first swirl when her twin in sight does (%.0f times found with a swirl after, %.0f otherwise)", Key, B.SwirlsAfter,
 			                                 B.SwirlsOff));
 		}
-		ShowCheck(Boats.empty() || (Hidden > 0 && Found > 0 && TwinThrown > 0),
-		          Said("the night's enemy boats out of the player's sight a while (%.0f boat-frames), then found (%.0f times); their twins in sight threw %.0f splashes then", Hidden, Found, TwinThrown));
+		// (their twins threw something, so that throwing nothing hidden means something: where any was hidden near the surface,
+		// where a twin throws; one hidden only deep throws nothing in sight or out of it. Every stand-in hides one near it)
+		ShowCheck(Boats.empty() || (Hidden > 0 && Found > 0 && (HiddenShallow == 0 || TwinThrown > 0)),
+		          Said("the night's enemy boats out of the player's sight a while (%.0f boat-frames), then found (%.0f times); their twins in sight threw %.0f splashes then", Hidden, Found, TwinThrown) +
+		              Said(" (%.0f boat-frames hidden near the surface)", HiddenShallow));
 		std::printf("%s as the player's side sees it: %zu enemy boats, %d boat-frames out of sight, found %d times (%d with a swirl after, laid when her twin's)\n", Rec.Key.c_str(),
 		            Boats.size(), Hidden, Found, SwirledAfter);
+		return 0;
+	}
+
+	/** The gun crews' sailor files the scene reads (Content/Models/Soldiers, CONVOY_LOOKS_CONTENT), every navy's. */
+	bool ReadCrews(SeaSailors::Crew& Out)
+	{
+		const char* Content = std::getenv("CONVOY_LOOKS_CONTENT");
+		if (Content == nullptr) return false;
+		for (const char* Navy : { "GER", "ITA", "JAP", "SOV", "UK", "USA" })
+		{
+			std::ifstream File(std::string(Content) + "/Models/Soldiers/soldier_" + Navy + "_sailor.json");
+			std::stringstream Text;
+			Text << File.rdbuf();
+			std::string Why;
+			if (!File || !Out.AddFile(std::string(Navy) == "UK" ? "GBR" : Navy, Text.str(), Why)) return false;
+		}
+		return true;
+	}
+
+	/** The model the stage draws a ship of (AirStage's ShipFileOf, its rows this checks against TestCrew's pins): a boat's
+	 * by her navy (Submarine_GER, Submarine_USA, else Submarine), a merchant's by her key's roll. */
+	std::string StagedFileOf(const SeaShow::ShipOut& Ship)
+	{
+		if (Ship.Class == "ss")
+		{
+			return Ship.Nation == "GER" ? "Submarine_GER" : Ship.Nation == "USA" ? "Submarine_USA" : "Submarine";
+		}
+		const uint32_t Roll = (static_cast<uint32_t>(Ship.Key) * 2654435761u >> 16) % 20u;
+		return Roll < 13u ? "Freighter" : Roll < 18u ? "Tanker" : "Troopship";
+	}
+
+	/** The nights' totals of the gun crews' checks (each night may have no gun told). */
+	int CrewNights = 0, CrewManned = 0, CrewRounds = 0, CrewEligible = 0, CrewRams = 0, CrewHiddenFrames = 0, CrewShut = 0;
+
+	/** Whether a gun's loader is shown at his post with no round in his hands short of the breech shut (waiting with his
+	 * hands out, reaching for the next, past breech_close, or standing clear of the breech): as the scene draws him. */
+	bool ShutAtPost(const DeckCrew::Watch& W, const DeckCrew::Blocks& K)
+	{
+		const int Loader = static_cast<int>(DeckCrew::Role::Loader);
+		const DeckCrew::Shown& Is = W.Men[Loader];
+		return W.Hands[Loader].Now == DeckCrew::Phase::AtGun && W.SentAt < 0.0 && Is.bShown &&
+		       (Is.What != SeaSailors::Act::Loader || Is.Time < K.Taken || Is.Time >= K.Shut);
+	}
+
+	/** Whether a gun's layer, trainer and loader are shown at their posts (none sent below). */
+	bool AtPosts(const DeckCrew::Watch& W)
+	{
+		bool bAll = W.SentAt < 0.0;
+		for (int R = 0; R < DeckCrew::Roles; ++R)
+		{
+			bAll = bAll && (R == static_cast<int>(DeckCrew::Role::Passer) || (W.Hands[R].Now == DeckCrew::Phase::AtGun && W.Men[R].bShown));
+		}
+		return bAll;
+	}
+
+	/**
+	 * The night again as the scene steps its deck guns' crews (DeckCrew::Step, from TellOf each frame at 30 a second,
+	 * SetMine as the scene's; one watch a ship, as the scene keeps them, each gun's mount and shape its own), every boat's
+	 * and merchant's whose model has a gun the files' crew can man: none shown before her gun is first laid; none on a
+	 * boat's deck where it is within FreeboardLeast of the sea (her deck under each man as SeaShow::HandAt sets the show's
+	 * own men on her casing: less how far she is down, with her pitch, heave and heel), nor longer than DownWithin after she
+	 * is told down; none from the moment she strikes, nor with any of the show's own men out on her casing (her gun's crew
+	 * are of her crew, never more men than the show's); none drawn on a ship the show hides; a merchant changing guns, her
+	 * crew at the new one at once (the old one's gone the same frame: counted, the scene's rule); every round the show
+	 * fires from a gun the files' crew can man, the first of a gun's and those fired as her crew are still coming up her
+	 * hatch among them, fired with its layer, its trainer and its loader shown at their posts and no round in the loader's
+	 * hands short of the breech shut (the review of 25 November: a quarter of a night's rounds fired with her crew below or
+	 * the loader mid-load); and for each round the loader could have loaded in his own time (at the gun all the time since
+	 * the round before, the show's rounds no quicker than his clip at its pace) his ram heard before it goes.
+	 */
+	int PlayGunCrews(const std::string& Path, const SeaSailors::Crew& Sailors)
+	{
+		const double DownWithin = 4.5, FreeboardLeast = 0.1;
+		std::ifstream File(Path);
+		if (!File) return 2;
+		std::stringstream Text;
+		Text << File.rdbuf();
+		SeaFeed::Recording Rec;
+		std::string Error;
+		if (!SeaFeed::ReadRecording(Text.str(), Rec, Error) || Rec.Views.empty()) return 2;
+		SeaShow::Show Night(Rec.Seed ? Rec.Seed : 239);
+		Night.SetField(Rec.Board);
+		Night.SetMine(SeaFeed::SideOf(Rec.Views.front().Head.Me));
+		size_t Taken = 0;
+		auto TakeNext = [&]()
+		{
+			const SeaFeed::Frame& V = Rec.Views[Taken++];
+			Night.Take(V.Head.T, V.Pieces, V.Events, V.bZones ? &V.Zones : nullptr, V.Head.Contact);
+		};
+		TakeNext();
+		if (Taken < Rec.Views.size()) TakeNext();
+		struct Mounted
+		{
+			ConvoyLook::GunMount Mount;
+			DeckCrew::GunShape Shape;
+			int File = -1;
+		};
+		struct Crewed
+		{
+			DeckCrew::Watch W;
+			int MountKey = -1;
+			double FirstLaid = -1.0, LastFire = -1.0, LastRam = -1.0, AtSince = -1.0;
+		};
+		std::map<int, Mounted> Mounts; // each gun's, by the scene's MountKey (her key twice, and 1 for a merchant's stern gun)
+		std::map<int, Crewed> Guns;    // each ship's watch, by her key (the scene's GunWatches)
+		std::map<int, DeckCrew::Blocks> Kits;
+		int ShownEarly = 0, ShownAwash = 0, ShownLate = 0, ShownStruck = 0, ShownWithHands = 0, DrawnHidden = 0, Rounds = 0, Eligible = 0, Rammed = 0, Manned = 0, HiddenFrames = 0;
+		int Shut = 0, Snapped = 0;
+		std::string Open;
+		int GunChanges = 0, ChangedAway = 0;
+		double LateMost = 0.0, DeckLeast = 99.0;
+		const double Every = 1.0 / 30.0;
+		double T = Rec.Views.front().Head.T;
+		const double EndT = Rec.Views.back().Head.T;
+		while (true)
+		{
+			Night.Advance(T);
+			for (const SeaShow::ShipOut& Ship : Night.Ships())
+			{
+				if (Ship.Class != "ss" && Ship.Class != "mv") continue;
+				const bool bAftMount = Ship.Class == "mv" && Ship.bAftGun;
+				const int MountKey = Ship.Key * 2 + (bAftMount ? 1 : 0);
+				auto Known = Mounts.find(MountKey);
+				if (Known == Mounts.end())
+				{
+					Mounted Fresh;
+					Fresh.Mount = MountOf(StagedFileOf(Ship), bAftMount);
+					Fresh.Shape = DeckCrew::ShapeOf(Fresh.Mount);
+					Fresh.File = Fresh.Shape.File.empty() ? -1 : Sailors.FileFor(Ship.Nation);
+					Known = Mounts.emplace(MountKey, Fresh).first;
+				}
+				const Mounted& Gun = Known->second;
+				if (Gun.File < 0) continue;
+				auto Kit = Kits.find(Gun.File);
+				if (Kit == Kits.end()) Kit = Kits.emplace(Gun.File, DeckCrew::BlocksOf(Sailors, Gun.File)).first;
+				if (!Kit->second.bGun) continue;
+				Crewed& G = Guns[Ship.Key];
+				// (a merchant changing guns while hers is manned: the scene's one watch stands the old crew down and calls
+				// the new one's at once)
+				const bool bChanged = G.MountKey >= 0 && G.MountKey != MountKey && G.W.bManned;
+				G.MountKey = MountKey;
+				// (as the scene: each frame from what the show says, the cues to the sound path)
+				const DeckCrew::Told Said = DeckCrew::TellOf(Ship);
+				std::vector<DeckCrew::Cue> Cues;
+				const bool bFires = G.W.LastT >= 0.0 && Ship.FiredAt > G.W.SeenFired + 1e-9;
+				const int Loader = static_cast<int>(DeckCrew::Role::Loader);
+				// (the loader as drawn the frame before: at his post with the breech shut, or not)
+				const bool bShutBefore = ShutAtPost(G.W, Kit->second);
+				const bool bUpBefore = AtPosts(G.W);
+				if (bFires)
+				{
+					++Rounds;
+					const bool bCould = G.LastFire >= 0.0 && G.AtSince >= 0.0 && G.AtSince <= G.LastFire &&
+					                    Ship.FiredAt - G.LastFire >= DeckCrew::FastestReload(Kit->second, Gun.Shape.bBoat) && G.W.SentAt < 0.0;
+					if (bCould)
+					{
+						++Eligible;
+						Rammed += G.LastRam > G.LastFire && G.LastRam <= Ship.FiredAt + 1e-9 ? 1 : 0;
+					}
+					G.LastFire = Ship.FiredAt;
+				}
+				DeckCrew::Step(G.W, Said, Gun.Shape, Gun.Mount, Kit->second, T, &Cues);
+				for (const DeckCrew::Cue& Each : Cues)
+				{
+					if (Each.Name == Kit->second.RamCue) G.LastRam = T;
+				}
+				if (bFires)
+				{
+					// (every round: its crew at their posts as it goes, the breech shut on it; the drawn frame before it, or
+					// this one where they were not)
+					const bool bShut = AtPosts(G.W) && (bShutBefore || ShutAtPost(G.W, Kit->second));
+					Shut += bShut ? 1 : 0;
+					Snapped += bShut && !(bUpBefore && bShutBefore) ? 1 : 0;
+					if (!bShut && Open.size() < 400)
+					{
+						char Line[160];
+						std::snprintf(Line, sizeof(Line), " %s %d at %.2f (phases %d,%d,%d; clip %.2f%s)", Ship.Class.c_str(), Ship.Key, Ship.FiredAt, static_cast<int>(G.W.Hands[0].Now),
+						              static_cast<int>(G.W.Hands[1].Now), static_cast<int>(G.W.Hands[Loader].Now), G.W.Clip, G.W.bWaiting ? ", waiting" : "");
+						Open += Line;
+					}
+				}
+				const bool bLoaderAt = G.W.Hands[Loader].Now == DeckCrew::Phase::AtGun && G.W.SentAt < 0.0;
+				G.AtSince = bLoaderAt ? (G.AtSince < 0.0 ? T : G.AtSince) : -1.0;
+				if (G.FirstLaid < 0.0 && Ship.bGunLaid) G.FirstLaid = T;
+				bool bAny = false, bAwash = false;
+				for (int R = 0; R < DeckCrew::Roles; ++R)
+				{
+					const DeckCrew::Shown& Is = G.W.Men[R];
+					bAny = bAny || Is.bShown;
+					DrawnHidden += !Ship.bShown && DeckCrew::Drawn(Is, Ship) ? 1 : 0;
+					if (!Is.bShown || !Gun.Shape.bBoat) continue;
+					// (her deck under him over the sea, as SeaShow::HandAt sets her men on her casing)
+					const double Along = Gun.Mount.Along + Is.At.Root.Fore;
+					const double Deck = DeckCrew::DeckUnder(Gun.Shape, Gun.Mount, Is.At.Root.Fore, Is.At.Root.Right) - Ship.Dived + Along * std::sin(Ship.Pitch * 3.14159265358979323846 / 180.0) + Ship.Heave -
+					                    Is.At.Root.Right * std::sin(Ship.Heel * 3.14159265358979323846 / 180.0);
+					DeckLeast = std::min(DeckLeast, Deck);
+					bAwash = bAwash || Deck <= FreeboardLeast;
+				}
+				int HandsOut = 0;
+				if (bAny)
+				{
+					for (const SeaShow::ManOut& Hand : Night.Hands()) HandsOut += Hand.Ship == Ship.Key ? 1 : 0;
+				}
+				Manned += bAny ? 1 : 0;
+				HiddenFrames += bAny && !Ship.bShown ? 1 : 0;
+				ShownEarly += bAny && G.FirstLaid < 0.0 ? 1 : 0;
+				ShownAwash += bAwash ? 1 : 0;
+				ShownStruck += bAny && Ship.Struck >= 0.0 ? 1 : 0;
+				ShownWithHands += bAny && HandsOut > 0 ? 1 : 0;
+				if (bChanged)
+				{
+					++GunChanges;
+					// (the old gun's crew gone, the new one's at it this same frame where it is laid)
+					bool bAtNew = G.W.bAft == bAftMount;
+					for (int R = 0; R < DeckCrew::Roles; ++R)
+					{
+						bAtNew = bAtNew && (R == static_cast<int>(DeckCrew::Role::Passer) || (G.W.Men[R].bShown && G.W.Hands[R].Now == DeckCrew::Phase::AtGun));
+					}
+					ChangedAway += Said.bLaid && !bAtNew ? 1 : 0;
+				}
+				if (bAny && G.W.SentAt >= 0.0 && T > G.W.SentAt + DownWithin)
+				{
+					++ShownLate;
+					LateMost = std::max(LateMost, T - G.W.SentAt);
+				}
+			}
+			Night.Effects.clear();
+			if (T >= EndT - 1e-9) break;
+			T = std::min(EndT, T + Every);
+			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
+		}
+		const std::string N = "[" + Rec.Key + "'s gun crews] ";
+		ShowCheck(ShownEarly == 0, N + Said("none shown before her gun is first laid (%.0f gun-frames)", ShownEarly));
+		ShowCheck(ShownAwash == 0 && ShownLate == 0, N + Said("none on a boat's deck within %.1f m of the sea (%.0f gun-frames; her deck under a man %.2f m over it at the least)", FreeboardLeast, ShownAwash, DeckLeast < 98.0 ? DeckLeast : 0.0) +
+		                                                 Said(", nor %.1f s after she is told down (%.0f gun-frames, %.2f s at the most)", DownWithin, ShownLate, LateMost));
+		ShowCheck(ShownStruck == 0 && ShownWithHands == 0, N + Said("none of her gun's crew from the moment she strikes (%.0f gun-frames), nor with any of the show's own men out on her casing (%.0f): ", ShownStruck, ShownWithHands) +
+		                                                       "her gun's crew are of her crew, never more men than the show's");
+		ShowCheck(ChangedAway == 0, N + Said("a merchant changing guns while manned (%.0f times): the old one's crew gone the same frame, the new one's at it at once where it is laid (%.0f not)", GunChanges, ChangedAway));
+		ShowCheck(DrawnHidden == 0, N + Said("none drawn on a ship the show hides (%.0f men-frames; %.0f gun-frames manned while she is hidden)", DrawnHidden, HiddenFrames));
+		ShowCheck(Shut == Rounds, N + Said("every round fired with its layer, trainer and loader at their posts and the breech shut: %.0f of %.0f", Shut, Rounds) +
+		                              Said(" (%.0f of them as her crew were still coming up, or the loader's round short of the breech: at their posts at once)", Snapped) + Open);
+		ShowCheck(Rammed == Eligible, N + Said("the loader's ram heard before each round he could have loaded in his own time: %.0f of %.0f (%.0f rounds)", Rammed, Eligible, Rounds));
+		++CrewNights;
+		CrewManned += Manned;
+		CrewRounds += Rounds;
+		CrewEligible += Eligible;
+		CrewRams += Rammed;
+		CrewHiddenFrames += HiddenFrames;
+		CrewShut += Shut;
+		std::printf("%s's gun crews: %zu guns of %zu ships, %d gun-frames manned (%d while hidden), %d rounds (%d at a manned gun with the breech shut, %d of them with her crew put at their posts as it fired), %d the loader could load, %d rammed before; %d gun changes; least deck under a man %.2f m\n",
+		            Rec.Key.c_str(), Mounts.size(), Guns.size(), Manned, HiddenFrames, Rounds, Shut, Snapped, Eligible, Rammed, GunChanges, DeckLeast);
 		return 0;
 	}
 }
@@ -893,11 +1246,18 @@ int main(int ArgC, char** ArgV)
 {
 	int Status = 0;
 	CheckDeckRows();
+	SeaSailors::Crew Sailors;
+	const bool bCrews = ReadCrews(Sailors);
+	ShowCheck(bCrews, "the gun crews' sailor files, every navy's (CONVOY_LOOKS_CONTENT: the game's Content)");
 	for (int I = 1; I < ArgC; ++I)
 	{
 		Status = std::max(Status, PlayNight(ArgV[I]));
 		Status = std::max(Status, PlayUnseen(ArgV[I]));
+		if (bCrews) Status = std::max(Status, PlayGunCrews(ArgV[I], Sailors));
 	}
+	ShowCheck(!bCrews || CrewNights == 0 || (CrewManned > 0 && CrewEligible > 0 && CrewRams > 0 && CrewShut == CrewRounds),
+	          Said("the nights' gun crews at their guns (%.0f gun-frames), the loader's ram heard (%.0f times) before %.0f rounds he could load", CrewManned, CrewRams, CrewEligible) +
+	              Said("; %.0f of the %.0f rounds fired at a manned gun with the breech shut", CrewShut, CrewRounds));
 	std::printf("convoy looks against the show: %d checks, %d failed\n", ShowChecks, ShowFailures);
 	return ShowFailures > 0 ? 1 : Status;
 }

@@ -26,6 +26,23 @@ namespace SeaUnder
 			if (R < 0.0) R += Size;
 			return C - Size * 0.5 + R;
 		}
+		/** A point in the eye's picture: inside the frame its lens gives (its width across, 16:10), the eye level (no roll), as
+		 * the camera has it (Tools/sea_show/sea_under_test.cpp's InPicture, the same). */
+		bool InFrame(const EyePose& E, const P3& P)
+		{
+			const P3 F = E.Look - E.Eye, V = P - E.Eye;
+			const double LF = Length(F);
+			if (LF < 1e-6) return false;
+			const P3 Fwd = F * (1.0 / LF);
+			P3 Side(Fwd.Y, -Fwd.X, 0.0); // (level, to the right of the way it looks)
+			const double LS = std::hypot(Side.X, Side.Y);
+			Side = LS < 1e-6 ? P3(1.0, 0.0, 0.0) : Side * (1.0 / LS);
+			const P3 Upward(Side.Y * Fwd.Z - Side.Z * Fwd.Y, Side.Z * Fwd.X - Side.X * Fwd.Z, Side.X * Fwd.Y - Side.Y * Fwd.X);
+			const double Z = Dot(V, Fwd);
+			if (Z <= 0.0) return false;
+			const double Across = std::tan(E.Lens * 0.5 * Pi / 180.0);
+			return std::fabs(Dot(V, Side)) / Z <= Across && std::fabs(Dot(V, Upward)) / Z <= Across * 10.0 / 16.0;
+		}
 		/** How a candidate's kind ranks when two are too close: known as it opens, never what follows. */
 		int RankOf(Kind K) { return K == Kind::Pattern ? 0 : K == Kind::Ahead ? 1 : K == Kind::Rise ? 2 : 3; }
 		/** The ripples on the face, as shares of RippleWave: three crossing, none shorter than it. */
@@ -372,6 +389,85 @@ namespace SeaUnder
 		return -1.0;
 	}
 
+	P3 Director::SeenMostWay(const Window& W, double Latest) const
+	{
+		// (its charges: those its escort laid due in the window, each in from the surface at the show's sinking rate as late
+		// as it can be, never before its drop and 0.6 s (SeaUnder's Water::Seen, as the look puts them in), down to burst at
+		// its depth where it was laid)
+		struct Charge { P3 Laid; double In = 0.0, Due = 0.0, Out = 0.0, Depth = 0.0; };
+		std::vector<Charge> Mine;
+		const double Sink = std::max(0.5, Board.ChargeSink);
+		for (const Burst& B : Bursts)
+		{
+			if (B.Escort != W.Escort || !B.bPattern || B.Due < 0.0 || B.Due < W.Drop - 0.5 || B.Due > Latest) continue;
+			Charge C;
+			C.Laid = B.Laid;
+			C.Depth = std::max(1.0, B.Depth);
+			C.Due = B.Due;
+			C.Out = std::min(B.T, B.Due);
+			C.In = std::max(W.Drop + 0.6, B.Due - C.Depth / Sink);
+			Mine.push_back(C);
+		}
+		if (Mine.empty()) return P3();
+		// (the eye posed as EyeOf poses it, her place each half second as the trial had her, her depth, heading and size as
+		// the window opened; before the first bursts and 3 s more is what a staged beat cut short at them keeps)
+		const double Early = (W.FirstBurst > W.From ? W.FirstBurst : W.From + 20.0) + 3.0;
+		const std::vector<Hull> NoOthers;
+		P3 Best;
+		int BestEarly = 0, BestAll = 0;
+		double BestLight = 0.0;
+		std::vector<double> Light(Mine.size()), LightEarly(Mine.size());
+		for (int K = 0; K < 36; ++K)
+		{
+			const double Angle = K * 10.0 * Pi / 180.0;
+			Window Try = W;
+			Try.Near = P3(std::sin(Angle), std::cos(Angle), 0.0);
+			std::fill(Light.begin(), Light.end(), 0.0);
+			std::fill(LightEarly.begin(), LightEarly.end(), 0.0);
+			for (double T = W.From; T <= W.Until + 1e-9; T += 0.5)
+			{
+				P3 Off;
+				if (FromHer(W.Boat, T, 0.0, 0.0, &Off) < 0.0) continue;
+				BoatPose Her;
+				Her.Key = W.Boat;
+				Her.bThere = true;
+				Her.Heading = W.Heading;
+				Her.Long = W.Long;
+				Her.Beam = W.Beam;
+				Her.Keel = W.Keel;
+				Her.At = P3(-Off.X, -Off.Y, -MiddleOf(W.Keel));
+				EyePose Eye;
+				if (!EyeOf(Try, Her, NoOthers, T, Eye)) continue;
+				for (size_t I = 0; I < Mine.size(); ++I)
+				{
+					const Charge& C = Mine[I];
+					if (T < C.In || T > C.Out) continue;
+					const P3 At(C.Laid.X, C.Laid.Y, -std::max(0.0, C.Depth - (C.Due - T) * Sink));
+					if (!InFrame(Eye, At)) continue;
+					const double Left = LightLeft(Length(At - Eye.Eye), SeeDay);
+					Light[I] = std::max(Light[I], Left);
+					if (T <= Early) LightEarly[I] = std::max(LightEarly[I], Left);
+				}
+			}
+			int SeenEarly = 0, SeenAll = 0;
+			double Lit = 0.0;
+			for (size_t I = 0; I < Mine.size(); ++I)
+			{
+				SeenEarly += LightEarly[I] >= SeenLight ? 1 : 0;
+				SeenAll += Light[I] >= SeenLight ? 1 : 0;
+				Lit += Light[I];
+			}
+			if (SeenEarly > BestEarly || (SeenEarly == BestEarly && (SeenAll > BestAll || (SeenAll == BestAll && Lit > BestLight + 1e-9))))
+			{
+				Best = Try.Near;
+				BestEarly = SeenEarly;
+				BestAll = SeenAll;
+				BestLight = Lit;
+			}
+		}
+		return BestAll > 0 ? Best : P3();
+	}
+
 	// -------------------------------------------------------------------------------------------------------------
 	// What may be near her, and the player's own dive
 
@@ -468,28 +564,19 @@ namespace SeaUnder
 				// battle's blow is neither counted nor left out and a hit is judged as a miss: the show bursts the charge it books
 				// where it is, or moves it that charge's lethal reach toward her keel, or only where none of hers lies so near puts
 				// it by her, SeaShow.cpp's sea:depthChargeHit. A charge no pattern laid (Due below 0: a blow told with none of the
-				// escort's to take) and an ahead salvo's bombs are none of it.) Those laid near her are the ones the eye under her
-				// looks toward (EyeOf).
+				// escort's to take) and an ahead salvo's bombs are none of it.) The eye under her looks the way it sees the most of
+				// them come down, SeenMostWay (a pattern laid on her, the battle's own place for a boat deep, SeaShow's KeepClear,
+				// straddles her all round).
 				if (W.What == Kind::Pattern)
 				{
 					double Nearest = 1e18;
-					P3 NearSum;
-					int NearCount = 0;
 					for (const Burst& B : Bursts)
 					{
 						if (B.Escort != W.Escort || !B.bPattern || B.Due < 0.0 || B.Due < W.Drop - 0.5 || B.Due > Latest) continue;
-						P3 FromHerAt;
-						const double Far = FromHer(W.Boat, B.Due, B.Laid.X, B.Laid.Y, &FromHerAt);
-						if (Far < 0.0) continue;
-						Nearest = std::min(Nearest, Far);
-						if (Far <= PatternSeen)
-						{
-							NearSum = NearSum + FromHerAt;
-							++NearCount;
-						}
+						const double Far = FromHer(W.Boat, B.Due, B.Laid.X, B.Laid.Y);
+						if (Far >= 0.0) Nearest = std::min(Nearest, Far);
 					}
 					if (Nearest > PatternSeen) continue;
-					W.Near = NearSum * (1.0 / NearCount);
 				}
 				W.FirstBurst = Count ? First : -1.0;
 				W.LastBurst = Count ? Last : -1.0;
@@ -498,6 +585,7 @@ namespace SeaUnder
 				{
 					W.From = W.Drop + 0.2;
 					W.Until = W.LastBurst + 5.0;
+					W.Near = SeenMostWay(W, Latest);
 				}
 				else
 				{
@@ -598,13 +686,15 @@ namespace SeaUnder
 		case Kind::Pattern:
 		{
 			// The war film's shot: under her, looking up past her belly, dark against the light, at the charges coming down
-			// round her where they will burst near her (Near: those of the pattern the eye beside her can see, on both sides
-			// of her where they straddle her; the way to them held for the window, as they fall where they were thrown); in
+			// round her where they will burst near her (Near: the way it sees the most of them come down from, on one side of
+			// her or all round her, Director::SeenMostWay; held for the window, as they fall where they were thrown); in
 			// the last 8 s before the first burst the eye eases out to her side, on the far side from them, and the look comes
-			// down to her depth, where they burst. (Where they burst all round her, toward the pattern's middle, from her Hand side.)
+			// down to her depth, where they burst. (None seen from any way, Near 0: toward the pattern's middle, from her Hand
+			// side. Near is 0 or a way of length 1 as sin and cos round it, a last bit either side of 1 by the maths library,
+			// so it is told from 0 at half a unit, never at 1, or a way the trial tried would be posed as the fallback.)
 			const double FirstAt = W.FirstBurst > W.From ? W.FirstBurst : W.From + 20.0;
 			const double Settle = ConvoyLook::Smooth(FirstAt - 8.0, FirstAt, T);
-			const P3 Way = Length(W.Near) >= 1.0 ? W.Near : P3(W.Aim.X - Middle.X, W.Aim.Y - Middle.Y, 0.0) + Right * (-W.Hand * 15.0);
+			const P3 Way = Length(W.Near) > 0.5 ? W.Near : P3(W.Aim.X - Middle.X, W.Aim.Y - Middle.Y, 0.0) + Right * (-W.Hand * 15.0);
 			const P3 Toward = Way * (1.0 / std::max(1e-6, Length(Way)));
 			Out.Eye = Lerp(Middle - Toward * 4.0 + Up(-12.0), Middle - Toward * Off + Up(-4.0), Settle);
 			const double Pitch = Lerp(66.0, 12.0, Settle) * Pi / 180.0;
