@@ -1347,3 +1347,12 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the eye a flat sign-painter's picture on the port side of the nose under the windscreen, lettering reading left to
    right, upright, not floating off her skin nor flickering into it, none on the Mustangs or Fw 190s, a few bare noses;
    the frame rate as before.
+54. **Each aircraft type's own figures** (release 2; Brian, 24 November 2026: "i want the flying to be smooth and very
+   realistic" and "i want the planes flying with realistic capabilities and tactics"). The historian's table,
+   `Content/Data/Air/performance.json`, holds each type's real figures (size, weight, power, speeds and heights, climb,
+   turn, roll, g, dive, load and range), every figure with its source and a mark (measured, manufacturer, derived or
+   uncertain). `Battle/AirPerf` reads it, finds a type by the names the scene and the rules give it, and works out the
+   limits the flight core uses, each formula stated in `AirPerf.h`. Plain C++, no engine; the cloud test
+   (`Tools/air_show/air_perf_test`, run by `run.sh`) checks every figure's source and mark, that every model named is
+   found, and each type's limits inside their bounds. Not yet wired into the flight core (`AirShow`): until it is, every
+   battle flies as before (wave 1's join, 25 November; numbered 54 by the wave-2 plan).

@@ -1,0 +1,10194 @@
+{
+ "what": "How each aircraft type the game can draw or the rules can name really flew: size, weight, power, speeds and heights, climb, turn, roll, g, dive, load and range, each figure with its source and how sure it is; and how each air force fought, by nation and year. Read by Battle/AirPerf (no engine), which gives the 3D flight core its limits in its own units.",
+ "asked": "Brian, 24 Nov 2026: \"i want the flying to be smooth and very realistic\" and \"i want the planes flying with realistic capabilities and tactics\".",
+ "sure": "Every figure is [value, source, mark] or [value, source, mark, low, high]. Marks: measured (a flight trial's figure), manufacturer (the maker's or the service's published figure), derived (computed here, or a stand-in's mean), uncertain (a range; the value is the middle the historian would bet on). Set from knowledge by the historian on 25 Nov 2026: only the pages named 'read' in the sources were read that day, and a figure marked measured or manufacturer is the figure as commonly reproduced, not checked against the document.",
+ "units": {
+  "span_m": "metres",
+  "wing_m2": "square metres",
+  "mass_kg": "the weight it fought at (normal loaded)",
+  "power_hp": "all engines' horsepower at power_m metres (its rated height; a two-stage engine's high gear)",
+  "thrust_kn": "a jet's static thrust at sea level, all engines",
+  "top_kmh": "top level speed at top_m metres, true",
+  "cruise_kmh": "the speed it cruised at on operations, true",
+  "stall_kmh": "stalling speed, clean, power off, indicated",
+  "climb_ms": "initial climb, metres a second",
+  "to_height_min": "minutes to to_height_m metres",
+  "ceiling_m": "service ceiling",
+  "turn_m": "a documented sustained turn's radius at turn_at_m",
+  "turn_s": "a documented time for a full sustained turn at turn_at_m",
+  "roll_dps": "peak rate of roll, degrees a second, at roll_kmh indicated",
+  "roll_fast_dps": "the rate of roll at roll_fast_kmh indicated",
+  "g_limit": "the airframe's limit load factor",
+  "dive_kmh": "the placard diving limit, indicated",
+  "bomb_kg": "a usual bomb or torpedo load",
+  "range_km": "range with that load",
+  "power_low_hp": "a two-speed supercharger's low gear: all engines' horsepower at power_low_m metres (where given)",
+  "clmax": "the lift coefficient usable in a hard turn, where given (else a plain wing's 1.35)"
+ },
+ "fighting_height_m": 3000,
+ "sources": {
+  "std": "The standard published figures for the type: the maker's and the service's figures as reproduced in the standard references (Jane's Fighting Aircraft of World War II; Green and Swanborough's fact files). Set from knowledge on 25 Nov 2026, not checked against a page.",
+  "rules": "The rules' own data/aircraft.json (release 2's documented figures for six types), read on 25 Nov 2026; kept where this table agrees with it.",
+  "francillon": "Francillon, Japanese Aircraft of the Pacific War (Putnam, 1970 and 1979): the Japanese makers' and services' figures. From knowledge, not read on the page.",
+  "gordon": "Gordon and Khazanov, Soviet Combat Aircraft of the Second World War (Midland, 1998-99), giving NII VVS state-trial figures. From knowledge, not read on the page.",
+  "aaee": "A&AEE (Martlesham Heath, later Boscombe Down) performance trials of the type, as commonly reproduced. From knowledge, not read on the page.",
+  "rae109": "RAE Farnborough flight trials of the captured Bf 109E (Morgan and Morris, 1940): heavy ailerons at speed, and turning circles calculated from the trials (Bf 109E 885 ft radius at 12,000 ft against the Spitfire I's 696 ft). As commonly quoted; not read on the page.",
+  "afdu190": "AFDU Duxford, tactical trials of the captured Fw 190A-3 against the Spitfire VB, report of August 1942: the Fw 190 faster by 25 to 35 mph at all heights, markedly better in climb, dive and rate of roll, better in acceleration; the Spitfire turns tighter. Findings read on 25 Nov 2026 in a summary (History Hit, 'The Spitfire V or the Fw190').",
+  "akutan": "US Navy flight tests of the captured Akutan Zero (Sanders, 20 Sep to 15 Oct 1942), published in Informational Intelligence Summary 59 and 85: ailerons 'froze up' above 200 knots, it rolled left more easily than right, the engine cut under negative g; advice to dive, push over, and roll hard right at about 200 knots. Read on 25 Nov 2026 in Wikipedia 'Akutan Zero', citing Rearden, Koga's Zero, p. 73.",
+  "taic": "TAIC (Technical Air Intelligence Center) comparative trials of a captured A6M5 against US fighters, 1944; the report's number not checked. From knowledge.",
+  "naca868": "Toll, NACA Report 868, Summary of lateral-control research (1947). Its text, read on 25 Nov 2026 (ntrs.nasa.gov 19930090943), names only the P-47C-1-RE (wing twist costs 31 per cent of its aileron effectiveness at 400 mph IAS), the Spitfire (about 65 per cent at 400 mph IAS) and the XP-51 (pb/2V about doubled under 300 mph by its new ailerons). The many-fighter roll chart often credited to it was not found in its text.",
+  "rollchart": "The wartime comparison of fighters' rates of roll at 10,000 ft with a 50 lb stick force (NACA flight measurements, compiled in Dean, America's Hundred Thousand, 1997, graph 81, as a forum post read on 25 Nov 2026 cites it). Values recalled from the chart, not read: marked uncertain with a range.",
+  "ackroyd": "Ackroyd and Lamont, A comparison of the turning radii of four Battle of Britain fighter aircraft, The Aeronautical Journal 104 (1032), February 2000, pp. 53-58: an analysis from published flight data of the Spitfire, Hurricane, Bf 109E and Bf 110. Abstract read on 25 Nov 2026; its figures were not.",
+  "notes": "The type's own pilot's notes or pilot's flight operating instructions (its placard limits). From knowledge, not read on the page.",
+  "lundstrom": "Lundstrom, The First Team (1984) and The First Team and the Guadalcanal Campaign (1994): the US Navy's fighters, tactics and losses against the Zero. From knowledge.",
+  "mcfarland": "McFarland and Newton, To Command the Sky: the Battle for Air Superiority over Germany, 1942-1944 (1991). From knowledge.",
+  "hardesty": "Hardesty, Red Phoenix: the Rise of Soviet Air Power 1941-1945 (1982; with Grinberg as Red Phoenix Rising, 2012). From knowledge.",
+  "galland": "Galland, The First and the Last (1954): the Luftwaffe's fighter arm, the Rotte and Schwarm, the free hunt and the close-escort orders of 1940. From knowledge.",
+  "murray": "Murray, Strategy for Defeat: the Luftwaffe 1933-1945 (1983), read in part by the historian on 24 Nov 2026 (historian/air-reads-1124.md).",
+  "historian": "The historian's readings of 24 Nov 2026 in this project (historian/air-reads-1124.md and air-reads-2-1124.md).",
+  "doctrine": "The rules' src/battle/air/doctrine.ts (the design's table 1.2 and its claim ids D, B and E, checked by the historian's review), read on 25 Nov 2026.",
+  "estimate": "An estimate made in this pass (25 Nov 2026) where no published figure was found or read, always marked uncertain, with a range. The turning lift of a slatted or flapped wing is reasoned in its row's notes. The rates of roll not on the wartime chart (rollchart) nor in a trial are judged from size, weight and the reputation of the ailerons, against the charted fighters: the bombers', dive bombers', torpedo bombers' and the Fulmar's; the Soviet, Italian, French and smaller air forces' fighters', the Ki-43's and the Me 262's; and every fighter's rate at high speed where the chart's fall was not recalled.",
+  "derived": "Derived here: computed from the row's other figures by the formulas in Battle/AirPerf.h, or, for a stand-in, the rounded mean of the types it stands for."
+ },
+ "rows": [
+  {
+   "key": "Spitfire I",
+   "names": [
+    "Spitfire",
+    "Spitfire I",
+    "Spitfire Mk I",
+    "Spitfire IA"
+   ],
+   "nation": "UK",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin III",
+   "span_m": [
+    11.23,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    22.48,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2700,
+    "rules",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1030,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4950,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    582,
+    "aaee",
+    "measured",
+    570,
+    582
+   ],
+   "top_m": [
+    5640,
+    "aaee",
+    "measured"
+   ],
+   "cruise_kmh": [
+    440,
+    "std",
+    "uncertain",
+    400,
+    480
+   ],
+   "stall_kmh": [
+    121,
+    "notes",
+    "manufacturer",
+    117,
+    126
+   ],
+   "climb_ms": [
+    14.7,
+    "rules",
+    "manufacturer",
+    12.9,
+    15.0
+   ],
+   "to_height_min": [
+    9.4,
+    "aaee",
+    "uncertain",
+    7.0,
+    11.4
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    10400,
+    "rules",
+    "manufacturer"
+   ],
+   "turn_m": [
+    212,
+    "rae109",
+    "derived",
+    200,
+    230
+   ],
+   "turn_at_m": 3660,
+   "roll_dps": [
+    90,
+    "rollchart",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    20,
+    "naca868",
+    "uncertain",
+    12,
+    30
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "dive_kmh": [
+    724,
+    "notes",
+    "manufacturer"
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    637,
+    "std",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "Out-turned the Bf 109E (RAE's calculation; Ackroyd and Lamont) and could dive with it; RAF pilots turned with the 109 and took the escorts while the Hurricanes took the bombers.",
+   "notes": "The 3D model is a Mk I; the marks by date follow guns.ts (the VB from 1941, the IX from 1942).",
+   "marks": [
+    {
+     "row": "Spitfire I",
+     "from": 0
+    },
+    {
+     "row": "Spitfire V",
+     "from": 1941
+    },
+    {
+     "row": "Spitfire IX",
+     "from": 1942
+    }
+   ]
+  },
+  {
+   "key": "Spitfire V",
+   "names": [
+    "Spitfire V",
+    "Spitfire VB",
+    "Spitfire Mk V",
+    "Spitfire VC"
+   ],
+   "nation": "UK",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin 45",
+   "span_m": [
+    11.23,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    22.48,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3000,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1470,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2800,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    597,
+    "std",
+    "manufacturer",
+    590,
+    605
+   ],
+   "top_m": [
+    6100,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    460,
+    "std",
+    "uncertain",
+    420,
+    500
+   ],
+   "stall_kmh": [
+    129,
+    "std",
+    "uncertain",
+    120,
+    135
+   ],
+   "climb_ms": [
+    16.5,
+    "std",
+    "uncertain",
+    13.5,
+    20.0
+   ],
+   "to_height_min": [
+    7.5,
+    "std",
+    "uncertain",
+    6.4,
+    8.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    11300,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    105,
+    "rollchart",
+    "uncertain",
+    90,
+    115
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    45,
+    "rollchart",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "dive_kmh": [
+    756,
+    "notes",
+    "uncertain",
+    724,
+    756
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    760,
+    "std",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "Metal ailerons rolled better than the Mk I's fabric; out-turned the Bf 109F and the Fw 190A but was out-climbed, out-dived and out-rolled by the Fw 190 (AFDU, August 1942)."
+  },
+  {
+   "key": "Spitfire IX",
+   "names": [
+    "Spitfire IX",
+    "Spitfire F.IX",
+    "Spitfire LF.IX",
+    "Spitfire Mk IX"
+   ],
+   "nation": "UK",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin 61/63 (two-stage)",
+   "span_m": [
+    11.23,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    22.48,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3400,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1390,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    7160,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    657,
+    "aaee",
+    "manufacturer",
+    640,
+    660
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    520,
+    "std",
+    "uncertain",
+    480,
+    560
+   ],
+   "stall_kmh": [
+    137,
+    "std",
+    "uncertain",
+    130,
+    145
+   ],
+   "climb_ms": [
+    20.0,
+    "std",
+    "uncertain",
+    17.0,
+    23.0
+   ],
+   "to_height_min": [
+    6.7,
+    "std",
+    "uncertain",
+    5.7,
+    7.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    13100,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    105,
+    "rollchart",
+    "uncertain",
+    90,
+    115
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    50,
+    "rollchart",
+    "uncertain",
+    40,
+    60
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "dive_kmh": [
+    756,
+    "notes",
+    "uncertain",
+    724,
+    756
+   ],
+   "bomb_kg": [
+    454,
+    "std",
+    "manufacturer",
+    227,
+    454
+   ],
+   "range_km": [
+    700,
+    "std",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "Matched the Fw 190A in speed and climb at most heights and out-turned it; flown both ways from late 1942."
+  },
+  {
+   "key": "Seafire III",
+   "names": [
+    "Seafire",
+    "Seafire III",
+    "Seafire L.III",
+    "Seafire LIII"
+   ],
+   "nation": "UK",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin 55M (low-altitude)",
+   "span_m": [
+    11.23,
+    "std",
+    "manufacturer",
+    9.8,
+    11.23
+   ],
+   "wing_m2": [
+    22.48,
+    "std",
+    "manufacturer",
+    21.4,
+    22.48
+   ],
+   "mass_kg": [
+    3270,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1585,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    840,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    578,
+    "std",
+    "manufacturer",
+    570,
+    578
+   ],
+   "top_m": [
+    1830,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    440,
+    "std",
+    "uncertain",
+    400,
+    480
+   ],
+   "stall_kmh": [
+    130,
+    "std",
+    "uncertain",
+    125,
+    140
+   ],
+   "climb_ms": [
+    20.0,
+    "std",
+    "uncertain",
+    17.0,
+    23.0
+   ],
+   "ceiling_m": [
+    10000,
+    "std",
+    "uncertain",
+    9750,
+    10300
+   ],
+   "roll_dps": [
+    115,
+    "rollchart",
+    "uncertain",
+    100,
+    140
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    55,
+    "estimate",
+    "uncertain",
+    40,
+    70
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "dive_kmh": [
+    724,
+    "notes",
+    "uncertain",
+    700,
+    756
+   ],
+   "bomb_kg": [
+    227,
+    "std",
+    "uncertain",
+    0,
+    227
+   ],
+   "range_km": [
+    750,
+    "std",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "A Spitfire for the deck, flown as the Spitfire was; clipped wings for the low-level fight over the fleet."
+  },
+  {
+   "key": "Hurricane I",
+   "names": [
+    "Hurricane",
+    "Hurricane I",
+    "Hurricane Mk I",
+    "Hurricane IA"
+   ],
+   "nation": "UK",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin III",
+   "span_m": [
+    12.19,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    23.92,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2990,
+    "rules",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1030,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4950,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    521,
+    "rules",
+    "manufacturer",
+    510,
+    528
+   ],
+   "top_m": [
+    5300,
+    "rules",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    400,
+    "std",
+    "uncertain",
+    340,
+    430
+   ],
+   "stall_kmh": [
+    120,
+    "notes",
+    "uncertain",
+    110,
+    130
+   ],
+   "climb_ms": [
+    12.9,
+    "rules",
+    "manufacturer",
+    11.7,
+    14.2
+   ],
+   "to_height_min": [
+    8.2,
+    "std",
+    "uncertain",
+    8.0,
+    11.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    10200,
+    "rules",
+    "manufacturer"
+   ],
+   "turn_m": [
+    245,
+    "ackroyd",
+    "uncertain",
+    220,
+    260
+   ],
+   "turn_at_m": 3660,
+   "roll_dps": [
+    80,
+    "rollchart",
+    "uncertain",
+    70,
+    95
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 600,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "dive_kmh": [
+    628,
+    "notes",
+    "manufacturer",
+    620,
+    628
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    740,
+    "std",
+    "uncertain",
+    700,
+    965
+   ],
+   "style": "turn",
+   "style_why": "A steady gun platform with a thick wing that turned tightly; slower than the Bf 109E, it was set on the bombers while the Spitfires fought the escort (Fighter Command, 1940)."
+  },
+  {
+   "key": "Fulmar",
+   "names": [
+    "Fulmar",
+    "Fulmar I",
+    "Fulmar II"
+   ],
+   "nation": "UK",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin VIII",
+   "span_m": [
+    14.14,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    31.8,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4450,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1080,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2210,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    398,
+    "std",
+    "manufacturer",
+    398,
+    438
+   ],
+   "top_m": [
+    2740,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    280,
+    "std",
+    "uncertain",
+    250,
+    300
+   ],
+   "stall_kmh": [
+    120,
+    "std",
+    "uncertain",
+    110,
+    130
+   ],
+   "climb_ms": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    7.5
+   ],
+   "ceiling_m": [
+    6555,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    60,
+    "estimate",
+    "uncertain",
+    45,
+    75
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    6.0,
+    "std",
+    "uncertain",
+    5.0,
+    7.0
+   ],
+   "dive_kmh": [
+    560,
+    "std",
+    "uncertain",
+    500,
+    600
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1255,
+    "std",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "A slow two-seat deck fighter with eight guns and long range: good against shadowers and bombers, never a match for single-seat fighters."
+  },
+  {
+   "key": "Blenheim IV",
+   "names": [
+    "Blenheim",
+    "Blenheim IV"
+   ],
+   "nation": "UK",
+   "role": "light bomber",
+   "engines": 2,
+   "engine": "2 x Bristol Mercury XV",
+   "span_m": [
+    17.17,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    43.6,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6530,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1840,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2800,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    428,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    3600,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    319,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    7.6,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "ceiling_m": [
+    6700,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    4.0,
+    "std",
+    "uncertain",
+    3.5,
+    5.0
+   ],
+   "dive_kmh": [
+    560,
+    "std",
+    "uncertain",
+    500,
+    600
+   ],
+   "bomb_kg": [
+    454,
+    "std",
+    "manufacturer",
+    454,
+    600
+   ],
+   "range_km": [
+    2350,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "A light day bomber in vics of three; lost heavily by day to fighters and flak (1940-41)."
+  },
+  {
+   "key": "Wellington IC",
+   "names": [
+    "Wellington",
+    "Wellington IC",
+    "Wellington Mk IC"
+   ],
+   "nation": "UK",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Bristol Pegasus XVIII",
+   "span_m": [
+    26.26,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    78.0,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    12000,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    2100,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    1400,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    378,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    4720,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    290,
+    "std",
+    "uncertain",
+    270,
+    315
+   ],
+   "stall_kmh": [
+    120,
+    "std",
+    "uncertain",
+    110,
+    135
+   ],
+   "climb_ms": [
+    5.3,
+    "std",
+    "uncertain",
+    4.5,
+    6.0
+   ],
+   "ceiling_m": [
+    5490,
+    "std",
+    "manufacturer",
+    5490,
+    6700
+   ],
+   "roll_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    25,
+    40
+   ],
+   "roll_kmh": 250,
+   "roll_fast_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    28
+   ],
+   "roll_fast_kmh": 380,
+   "g_limit": [
+    3.5,
+    "std",
+    "uncertain",
+    3.0,
+    4.0
+   ],
+   "dive_kmh": [
+    480,
+    "std",
+    "uncertain",
+    430,
+    500
+   ],
+   "bomb_kg": [
+    2041,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    2550,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Geodetic, tough and slow; flown by day in vics until the Heligoland Bight (18 December 1939) sent Bomber Command to night bombing."
+  },
+  {
+   "key": "Lancaster I",
+   "names": [
+    "Lancaster",
+    "Lancaster I",
+    "Lancaster B.I",
+    "Lancaster III"
+   ],
+   "nation": "UK",
+   "role": "heavy bomber",
+   "engines": 4,
+   "engine": "4 x Rolls-Royce Merlin XX/22",
+   "span_m": [
+    31.09,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    120.5,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    26000,
+    "std",
+    "uncertain",
+    24000,
+    29500
+   ],
+   "power_hp": [
+    5120,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    462,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    3500,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    322,
+    "std",
+    "manufacturer",
+    300,
+    340
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    150,
+    175
+   ],
+   "climb_ms": [
+    4.1,
+    "std",
+    "uncertain",
+    3.5,
+    5.0
+   ],
+   "ceiling_m": [
+    6500,
+    "std",
+    "manufacturer",
+    6500,
+    7470
+   ],
+   "roll_dps": [
+    25,
+    "estimate",
+    "uncertain",
+    20,
+    35
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    18,
+    "estimate",
+    "uncertain",
+    12,
+    25
+   ],
+   "roll_fast_kmh": 450,
+   "g_limit": [
+    3.0,
+    "std",
+    "uncertain",
+    2.5,
+    3.5
+   ],
+   "dive_kmh": [
+    580,
+    "std",
+    "uncertain",
+    520,
+    580
+   ],
+   "bomb_kg": [
+    6350,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    2700,
+    "std",
+    "manufacturer",
+    2670,
+    4070
+   ],
+   "style": "none",
+   "style_why": "Night bomber in the bomber stream; when a night fighter was seen, the corkscrew: a diving turn, a climbing turn the other way, over and over."
+  },
+  {
+   "key": "Bf 109E",
+   "names": [
+    "Bf109",
+    "Bf 109",
+    "Bf 109E",
+    "Bf 109E-3",
+    "Bf 109E-4",
+    "Me 109",
+    "Me109",
+    "Emil"
+   ],
+   "nation": "GER",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Daimler-Benz DB 601A",
+   "span_m": [
+    9.87,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.17,
+    "rules",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2570,
+    "rules",
+    "manufacturer",
+    2510,
+    2610
+   ],
+   "power_hp": [
+    1020,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    560,
+    "rules",
+    "manufacturer",
+    555,
+    570
+   ],
+   "top_m": [
+    4500,
+    "rules",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    460,
+    "std",
+    "uncertain",
+    420,
+    500
+   ],
+   "stall_kmh": [
+    145,
+    "std",
+    "uncertain",
+    135,
+    155
+   ],
+   "climb_ms": [
+    15.5,
+    "rules",
+    "manufacturer",
+    15.0,
+    17.0
+   ],
+   "to_height_min": [
+    7.7,
+    "std",
+    "manufacturer",
+    7.0,
+    7.8
+   ],
+   "to_height_m": 6000,
+   "ceiling_m": [
+    10500,
+    "rules",
+    "manufacturer"
+   ],
+   "turn_m": [
+    270,
+    "rae109",
+    "derived",
+    250,
+    290
+   ],
+   "turn_at_m": 3660,
+   "roll_dps": [
+    100,
+    "rollchart",
+    "uncertain",
+    80,
+    110
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    15,
+    "rae109",
+    "uncertain",
+    10,
+    25
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.2,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    750,
+    "notes",
+    "manufacturer",
+    700,
+    750
+   ],
+   "bomb_kg": [
+    250,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    660,
+    "std",
+    "manufacturer"
+   ],
+   "clmax": [
+    1.45,
+    "estimate",
+    "uncertain",
+    1.35,
+    1.6
+   ],
+   "style": "dive",
+   "style_why": "Pairs and fours diving from height, one pass and zoom away (M\u00f6lders' Rotte and Schwarm, Spain 1937-38); out-climbed the Hurricane and dived well, but its pilots were taught never to turn with Spitfires or Hurricanes: heavy ailerons at speed, a wider turn (RAE).",
+   "notes": "The 3D model is a Bf 109E; the marks by date follow guns.ts (the F-4 from 1941 on). guns.ts has no G: the Bf 109G row is for a later change. The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read.",
+   "marks": [
+    {
+     "row": "Bf 109E",
+     "from": 0
+    },
+    {
+     "row": "Bf 109F",
+     "from": 1941
+    }
+   ]
+  },
+  {
+   "key": "Bf 109F",
+   "names": [
+    "Bf 109F",
+    "Bf 109F-4",
+    "Me 109F",
+    "Friedrich"
+   ],
+   "nation": "GER",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Daimler-Benz DB 601E",
+   "span_m": [
+    9.92,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.05,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2890,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1300,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    635,
+    "std",
+    "manufacturer",
+    615,
+    659
+   ],
+   "top_m": [
+    6200,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    500,
+    "std",
+    "uncertain",
+    470,
+    520
+   ],
+   "stall_kmh": [
+    150,
+    "std",
+    "uncertain",
+    140,
+    160
+   ],
+   "climb_ms": [
+    19.5,
+    "std",
+    "uncertain",
+    17.0,
+    21.0
+   ],
+   "to_height_min": [
+    5.2,
+    "std",
+    "uncertain",
+    5.0,
+    6.0
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    11600,
+    "std",
+    "manufacturer"
+   ],
+   "turn_s": [
+    20,
+    "gordon",
+    "uncertain",
+    19,
+    21.5
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    100,
+    "rollchart",
+    "uncertain",
+    85,
+    110
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.2,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    750,
+    "notes",
+    "manufacturer",
+    700,
+    750
+   ],
+   "bomb_kg": [
+    250,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    710,
+    "std",
+    "manufacturer"
+   ],
+   "clmax": [
+    1.45,
+    "estimate",
+    "uncertain",
+    1.35,
+    1.6
+   ],
+   "style": "dive",
+   "style_why": "The cleanest 109: fast, a fine climber, flown in the climb and dive by the Schwarm; still not a turning fighter against the Spitfire V.",
+   "notes": "The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read."
+  },
+  {
+   "key": "Bf 109G",
+   "names": [
+    "Bf 109G",
+    "Bf 109G-6",
+    "Me 109G",
+    "Gustav"
+   ],
+   "nation": "GER",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Daimler-Benz DB 605A",
+   "span_m": [
+    9.92,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.05,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3150,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1355,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    630,
+    "std",
+    "manufacturer",
+    620,
+    640
+   ],
+   "top_m": [
+    6600,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    500,
+    "std",
+    "uncertain",
+    470,
+    530
+   ],
+   "stall_kmh": [
+    155,
+    "std",
+    "uncertain",
+    145,
+    165
+   ],
+   "climb_ms": [
+    17.0,
+    "std",
+    "uncertain",
+    16.0,
+    20.0
+   ],
+   "to_height_min": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    6.5
+   ],
+   "to_height_m": 5700,
+   "ceiling_m": [
+    11550,
+    "std",
+    "manufacturer"
+   ],
+   "turn_s": [
+    20.5,
+    "gordon",
+    "uncertain",
+    19.5,
+    22.0
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    95,
+    "rollchart",
+    "uncertain",
+    80,
+    110
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.2,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    750,
+    "notes",
+    "manufacturer",
+    700,
+    750
+   ],
+   "bomb_kg": [
+    250,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    650,
+    "std",
+    "uncertain",
+    550,
+    850
+   ],
+   "clmax": [
+    1.45,
+    "estimate",
+    "uncertain",
+    1.35,
+    1.6
+   ],
+   "style": "dive",
+   "style_why": "Heavier than the F, faster at height, worse in the turn; the Schwarm's climb and dive, and from 1943 the top cover over the Sturmgruppen.",
+   "notes": "The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read."
+  },
+  {
+   "key": "Bf 110C",
+   "names": [
+    "Bf110",
+    "Bf 110",
+    "Bf 110C",
+    "Bf 110C-4",
+    "Me 110",
+    "Me110",
+    "Zerstorer"
+   ],
+   "nation": "GER",
+   "role": "heavy fighter",
+   "engines": 2,
+   "engine": "2 x Daimler-Benz DB 601A",
+   "span_m": [
+    16.25,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    38.4,
+    "rules",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6700,
+    "rules",
+    "manufacturer",
+    6600,
+    6900
+   ],
+   "power_hp": [
+    2040,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    540,
+    "rules",
+    "manufacturer",
+    540,
+    560
+   ],
+   "top_m": [
+    6000,
+    "rules",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    450,
+    "std",
+    "uncertain",
+    400,
+    480
+   ],
+   "stall_kmh": [
+    150,
+    "std",
+    "uncertain",
+    140,
+    160
+   ],
+   "climb_ms": [
+    11.0,
+    "rules",
+    "manufacturer",
+    10.0,
+    12.5
+   ],
+   "ceiling_m": [
+    10000,
+    "rules",
+    "manufacturer"
+   ],
+   "turn_m": [
+    320,
+    "ackroyd",
+    "uncertain",
+    290,
+    360
+   ],
+   "turn_at_m": 3660,
+   "roll_dps": [
+    50,
+    "rules",
+    "uncertain",
+    40,
+    65
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    5.5,
+    "std",
+    "uncertain",
+    5.0,
+    6.5
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    1000,
+    "std",
+    "manufacturer",
+    500,
+    1000
+   ],
+   "range_km": [
+    850,
+    "std",
+    "uncertain",
+    775,
+    1095
+   ],
+   "style": "dive",
+   "style_why": "Too heavy to turn with single-seat fighters: a long-range escort and bomber destroyer, falling back on the defensive circle when bounced (1940); with rockets against the American boxes in 1943."
+  },
+  {
+   "key": "Fw 190A-4",
+   "names": [
+    "Fw190",
+    "Fw 190",
+    "FW190",
+    "Fw 190A",
+    "Fw 190A-3",
+    "Fw 190A-4",
+    "Wurger"
+   ],
+   "nation": "GER",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "BMW 801D-2",
+   "span_m": [
+    10.51,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    18.3,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3850,
+    "std",
+    "manufacturer",
+    3850,
+    3980
+   ],
+   "power_hp": [
+    1440,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5700,
+    "std",
+    "manufacturer"
+   ],
+   "power_low_hp": [
+    1560,
+    "std",
+    "uncertain",
+    1500,
+    1640
+   ],
+   "power_low_m": [
+    1700,
+    "std",
+    "uncertain",
+    700,
+    2000
+   ],
+   "top_kmh": [
+    650,
+    "afdu190",
+    "manufacturer",
+    625,
+    670
+   ],
+   "top_m": [
+    6000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    500,
+    "std",
+    "uncertain",
+    460,
+    540
+   ],
+   "stall_kmh": [
+    170,
+    "std",
+    "uncertain",
+    160,
+    180
+   ],
+   "climb_ms": [
+    17.0,
+    "afdu190",
+    "uncertain",
+    15.0,
+    19.0
+   ],
+   "to_height_min": [
+    6.4,
+    "std",
+    "uncertain",
+    6.0,
+    7.0
+   ],
+   "to_height_m": 6000,
+   "ceiling_m": [
+    10600,
+    "std",
+    "manufacturer",
+    10300,
+    11400
+   ],
+   "turn_s": [
+    22,
+    "gordon",
+    "uncertain",
+    21,
+    24
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    160,
+    "rollchart",
+    "uncertain",
+    140,
+    165
+   ],
+   "roll_kmh": 410,
+   "roll_fast_dps": [
+    110,
+    "rollchart",
+    "uncertain",
+    85,
+    120
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    850,
+    "notes",
+    "uncertain",
+    750,
+    850
+   ],
+   "bomb_kg": [
+    500,
+    "std",
+    "manufacturer",
+    250,
+    500
+   ],
+   "range_km": [
+    800,
+    "std",
+    "manufacturer"
+   ],
+   "style": "dive",
+   "style_why": "Faster, better in the climb and dive and far better in the roll than the Spitfire V; flicked into a reversal or a dive the Spitfire could not follow; the Spitfire turned tighter (AFDU, August 1942).",
+   "notes": "The 3D model is an Fw 190A; the A-8 from 1944, as guns.ts. Its BMW 801D-2 gave more power low in its first supercharger gear (about 1,580 PS, 1,560 hp, near 1,700 m) than its rated 1,440 PS at 5,700 m; power_low is that, recalled, not read.",
+   "marks": [
+    {
+     "row": "Fw 190A-4",
+     "from": 0
+    },
+    {
+     "row": "Fw 190A-8",
+     "from": 1944
+    }
+   ]
+  },
+  {
+   "key": "Fw 190A-8",
+   "names": [
+    "Fw 190A-8",
+    "Fw 190A-8/R2",
+    "Fw 190F",
+    "Fw 190F-8"
+   ],
+   "nation": "GER",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "BMW 801D-2 (with water-methanol or C3 boost)",
+   "span_m": [
+    10.51,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    18.3,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4400,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1440,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5700,
+    "std",
+    "manufacturer"
+   ],
+   "power_low_hp": [
+    1560,
+    "std",
+    "uncertain",
+    1500,
+    1640
+   ],
+   "power_low_m": [
+    1700,
+    "std",
+    "uncertain",
+    700,
+    2000
+   ],
+   "top_kmh": [
+    650,
+    "std",
+    "manufacturer",
+    640,
+    660
+   ],
+   "top_m": [
+    5500,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    500,
+    "std",
+    "uncertain",
+    460,
+    540
+   ],
+   "stall_kmh": [
+    175,
+    "std",
+    "uncertain",
+    165,
+    185
+   ],
+   "climb_ms": [
+    13.0,
+    "std",
+    "uncertain",
+    11.5,
+    15.0
+   ],
+   "ceiling_m": [
+    10300,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    155,
+    "rollchart",
+    "uncertain",
+    140,
+    160
+   ],
+   "roll_kmh": 410,
+   "roll_fast_dps": [
+    105,
+    "rollchart",
+    "uncertain",
+    85,
+    120
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    850,
+    "notes",
+    "uncertain",
+    750,
+    850
+   ],
+   "bomb_kg": [
+    500,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    800,
+    "std",
+    "manufacturer",
+    800,
+    1000
+   ],
+   "style": "dive",
+   "style_why": "Armoured and heavy: the Sturmgruppen's bomber killer closing to 100 m astern in line abreast, and from 1944 the fighter-bomber that took the Stuka's place."
+  },
+  {
+   "key": "Me 262A",
+   "names": [
+    "Me262",
+    "Me 262",
+    "Me 262A",
+    "Me 262A-1a",
+    "Schwalbe"
+   ],
+   "nation": "GER",
+   "role": "jet fighter",
+   "engines": 2,
+   "engine": "2 x Junkers Jumo 004B (8.8 kN each)",
+   "span_m": [
+    12.65,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    21.7,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6400,
+    "std",
+    "manufacturer",
+    6000,
+    6775
+   ],
+   "thrust_kn": [
+    17.6,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    870,
+    "std",
+    "manufacturer",
+    855,
+    870
+   ],
+   "top_m": [
+    7000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    750,
+    "std",
+    "uncertain",
+    700,
+    780
+   ],
+   "stall_kmh": [
+    190,
+    "std",
+    "uncertain",
+    180,
+    200
+   ],
+   "climb_ms": [
+    18.0,
+    "std",
+    "uncertain",
+    15.0,
+    20.0
+   ],
+   "to_height_min": [
+    6.8,
+    "std",
+    "uncertain",
+    6.5,
+    7.0
+   ],
+   "to_height_m": 6000,
+   "ceiling_m": [
+    11450,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    70,
+    "estimate",
+    "uncertain",
+    50,
+    90
+   ],
+   "roll_kmh": 600,
+   "roll_fast_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    40,
+    70
+   ],
+   "roll_fast_kmh": 800,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "dive_kmh": [
+    950,
+    "notes",
+    "uncertain",
+    900,
+    1000
+   ],
+   "bomb_kg": [
+    500,
+    "std",
+    "manufacturer",
+    500,
+    1000
+   ],
+   "range_km": [
+    1050,
+    "std",
+    "manufacturer"
+   ],
+   "clmax": [
+    1.45,
+    "estimate",
+    "uncertain",
+    1.35,
+    1.6
+   ],
+   "style": "dive",
+   "style_why": "Fastest in the sky but slow to accelerate and wide in the turn: struck bombers from astern at speed in threes and climbed away; never turned with piston fighters.",
+   "notes": "The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read. Its sustained turn at 3,000 m works out at about 450 to 500 m: the widest of the fighters, as its pilots found."
+  },
+  {
+   "key": "He 111H",
+   "names": [
+    "He111",
+    "He 111",
+    "He 111H",
+    "He 111H-6",
+    "Heinkel"
+   ],
+   "nation": "GER",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Junkers Jumo 211",
+   "span_m": [
+    22.6,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    87.6,
+    "rules",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    12600,
+    "rules",
+    "manufacturer",
+    11000,
+    14000
+   ],
+   "power_hp": [
+    2172,
+    "rules",
+    "manufacturer"
+   ],
+   "power_m": [
+    5000,
+    "rules",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    407,
+    "rules",
+    "manufacturer",
+    407,
+    435
+   ],
+   "top_m": [
+    5000,
+    "rules",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    300,
+    "rules",
+    "manufacturer",
+    300,
+    370
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    4.2,
+    "rules",
+    "manufacturer",
+    4.0,
+    5.0
+   ],
+   "ceiling_m": [
+    7800,
+    "rules",
+    "manufacturer",
+    6500,
+    8500
+   ],
+   "roll_dps": [
+    24,
+    "rules",
+    "uncertain",
+    20,
+    35
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    18,
+    "estimate",
+    "uncertain",
+    12,
+    25
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    2.6,
+    "rules",
+    "uncertain",
+    2.5,
+    3.5
+   ],
+   "dive_kmh": [
+    540,
+    "rules",
+    "manufacturer"
+   ],
+   "bomb_kg": [
+    2000,
+    "rules",
+    "manufacturer",
+    2000,
+    2500
+   ],
+   "range_km": [
+    2300,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The Luftwaffe's main level bomber: Ketten of three, Staffeln of three Ketten in a wedge, the escort close above from late August 1940."
+  },
+  {
+   "key": "Ju 88A",
+   "names": [
+    "Ju88",
+    "Ju 88",
+    "Ju 88A",
+    "Ju 88A-4"
+   ],
+   "nation": "GER",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Junkers Jumo 211J",
+   "span_m": [
+    20.08,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    54.7,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    11500,
+    "std",
+    "manufacturer",
+    10500,
+    12100
+   ],
+   "power_hp": [
+    2780,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5300,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    470,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    5300,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    370,
+    "std",
+    "uncertain",
+    340,
+    400
+   ],
+   "stall_kmh": [
+    175,
+    "std",
+    "uncertain",
+    165,
+    190
+   ],
+   "climb_ms": [
+    5.5,
+    "std",
+    "uncertain",
+    4.5,
+    7.0
+   ],
+   "ceiling_m": [
+    8200,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    28,
+    "estimate",
+    "uncertain",
+    20,
+    35
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    5.0,
+    "std",
+    "uncertain",
+    4.0,
+    6.0
+   ],
+   "dive_kmh": [
+    650,
+    "std",
+    "uncertain",
+    600,
+    700
+   ],
+   "bomb_kg": [
+    2000,
+    "std",
+    "uncertain",
+    1400,
+    3600
+   ],
+   "range_km": [
+    2430,
+    "std",
+    "uncertain",
+    1790,
+    2730
+   ],
+   "style": "none",
+   "style_why": "Fast bomber that could dive at 60 degrees with brakes; the Luftwaffe's best twin, also a night fighter."
+  },
+  {
+   "key": "Do 17Z",
+   "names": [
+    "Do17",
+    "Do 17",
+    "Do 17Z",
+    "Do 17Z-2",
+    "Dornier"
+   ],
+   "nation": "GER",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Bramo 323P",
+   "span_m": [
+    18.0,
+    "rules",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    55.0,
+    "rules",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    8590,
+    "rules",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1850,
+    "rules",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "rules",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    410,
+    "rules",
+    "manufacturer"
+   ],
+   "top_m": [
+    4000,
+    "rules",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    302,
+    "rules",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    5.5,
+    "rules",
+    "manufacturer"
+   ],
+   "ceiling_m": [
+    8200,
+    "rules",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    28,
+    "rules",
+    "uncertain",
+    22,
+    40
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    28
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    2.8,
+    "rules",
+    "uncertain",
+    2.5,
+    3.5
+   ],
+   "dive_kmh": [
+    558,
+    "rules",
+    "manufacturer"
+   ],
+   "bomb_kg": [
+    1000,
+    "rules",
+    "manufacturer"
+   ],
+   "range_km": [
+    1150,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The 'flying pencil': flown low and level, and at low level against airfields in August 1940."
+  },
+  {
+   "key": "Ju 87B",
+   "names": [
+    "Stuka",
+    "Ju87",
+    "Ju 87",
+    "Ju 87B",
+    "Ju 87B-2",
+    "Ju 87D"
+   ],
+   "nation": "GER",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "Junkers Jumo 211Da",
+   "span_m": [
+    13.8,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    31.9,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4250,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1100,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    1500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    390,
+    "std",
+    "manufacturer",
+    383,
+    390
+   ],
+   "top_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    290,
+    "std",
+    "uncertain",
+    260,
+    310
+   ],
+   "stall_kmh": [
+    120,
+    "std",
+    "uncertain",
+    110,
+    130
+   ],
+   "climb_ms": [
+    6.0,
+    "std",
+    "uncertain",
+    5.0,
+    7.0
+   ],
+   "to_height_min": [
+    12.0,
+    "std",
+    "uncertain",
+    11.0,
+    14.0
+   ],
+   "to_height_m": 4000,
+   "ceiling_m": [
+    8100,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    40,
+    60
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_fast_kmh": 450,
+   "g_limit": [
+    6.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.5
+   ],
+   "dive_kmh": [
+    600,
+    "std",
+    "manufacturer",
+    540,
+    650
+   ],
+   "bomb_kg": [
+    500,
+    "std",
+    "manufacturer",
+    500,
+    1000
+   ],
+   "range_km": [
+    600,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Dive bomber: from about 4,000 m it rolled into a 60 to 90 degree dive with its brakes out, let go at 450 to 700 m and pulled out at about 6 g, often by its automatic pull-out; deadly where the enemy's fighters were absent."
+  },
+  {
+   "key": "P-40E",
+   "names": [
+    "Warhawk",
+    "P-40",
+    "P40",
+    "P-40E",
+    "P-40F",
+    "Kittyhawk",
+    "Tomahawk"
+   ],
+   "nation": "USA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Allison V-1710-39",
+   "span_m": [
+    11.38,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    21.92,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3700,
+    "std",
+    "manufacturer",
+    3630,
+    3760
+   ],
+   "power_hp": [
+    1150,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3570,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    575,
+    "std",
+    "manufacturer",
+    555,
+    583
+   ],
+   "top_m": [
+    4570,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    435,
+    "std",
+    "uncertain",
+    390,
+    480
+   ],
+   "stall_kmh": [
+    145,
+    "std",
+    "uncertain",
+    135,
+    155
+   ],
+   "climb_ms": [
+    11.5,
+    "std",
+    "uncertain",
+    10.5,
+    13.0
+   ],
+   "to_height_min": [
+    7.6,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "to_height_m": 4570,
+   "ceiling_m": [
+    8840,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    115,
+    "rollchart",
+    "uncertain",
+    100,
+    135
+   ],
+   "roll_kmh": 400,
+   "roll_fast_dps": [
+    80,
+    "rollchart",
+    "uncertain",
+    65,
+    95
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    8.0,
+    "std",
+    "uncertain",
+    7.33,
+    8.0
+   ],
+   "dive_kmh": [
+    770,
+    "notes",
+    "uncertain",
+    740,
+    805
+   ],
+   "bomb_kg": [
+    227,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1100,
+    "std",
+    "uncertain",
+    850,
+    1150
+   ],
+   "style": "dive",
+   "style_why": "Out-dived and out-rolled the Zero and the Oscar and was tough; the AVG's rule (Chennault): hit, dive away, never turn with them."
+  },
+  {
+   "key": "P-47D",
+   "names": [
+    "P-47",
+    "P47",
+    "P-47D",
+    "P-47D-25",
+    "Thunderbolt"
+   ],
+   "nation": "USA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Pratt & Whitney R-2800-59 (turbocharged)",
+   "span_m": [
+    12.43,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    27.87,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6200,
+    "std",
+    "manufacturer",
+    5900,
+    6600
+   ],
+   "power_hp": [
+    2300,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    8200,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    690,
+    "std",
+    "manufacturer",
+    680,
+    697
+   ],
+   "top_m": [
+    9140,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    560,
+    "std",
+    "uncertain",
+    480,
+    600
+   ],
+   "stall_kmh": [
+    170,
+    "std",
+    "uncertain",
+    160,
+    180
+   ],
+   "climb_ms": [
+    14.0,
+    "std",
+    "uncertain",
+    11.0,
+    16.0
+   ],
+   "to_height_min": [
+    9.0,
+    "std",
+    "uncertain",
+    8.5,
+    11.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    12800,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    100,
+    "rollchart",
+    "uncertain",
+    85,
+    130
+   ],
+   "roll_kmh": 400,
+   "roll_fast_dps": [
+    85,
+    "naca868",
+    "uncertain",
+    65,
+    100
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    7.33,
+    "std",
+    "uncertain",
+    7.0,
+    8.0
+   ],
+   "dive_kmh": [
+    805,
+    "notes",
+    "uncertain",
+    780,
+    830
+   ],
+   "bomb_kg": [
+    1134,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1290,
+    "std",
+    "uncertain",
+    1030,
+    1600
+   ],
+   "style": "dive",
+   "style_why": "Heavy and very fast in a dive: bounced from height and dived away, out-diving every German fighter; would not turn or climb with them low down; a fighter-bomber over France in 1944."
+  },
+  {
+   "key": "P-51B",
+   "names": [
+    "P-51B",
+    "P-51C",
+    "Mustang III"
+   ],
+   "nation": "USA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Packard V-1650-3 (two-stage Merlin)",
+   "span_m": [
+    11.28,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    21.65,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4170,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1300,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    8500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    703,
+    "std",
+    "manufacturer",
+    690,
+    708
+   ],
+   "top_m": [
+    9000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    580,
+    "std",
+    "uncertain",
+    520,
+    600
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    150,
+    170
+   ],
+   "climb_ms": [
+    18.0,
+    "std",
+    "uncertain",
+    15.0,
+    19.0
+   ],
+   "to_height_min": [
+    6.9,
+    "std",
+    "uncertain",
+    6.5,
+    7.5
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    12700,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    95,
+    "rollchart",
+    "uncertain",
+    85,
+    100
+   ],
+   "roll_kmh": 480,
+   "roll_fast_dps": [
+    85,
+    "rollchart",
+    "uncertain",
+    70,
+    95
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    8.0,
+    "std",
+    "uncertain",
+    7.0,
+    8.0
+   ],
+   "dive_kmh": [
+    813,
+    "notes",
+    "manufacturer"
+   ],
+   "bomb_kg": [
+    454,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1350,
+    "std",
+    "uncertain",
+    1100,
+    1600
+   ],
+   "style": "dive",
+   "style_why": "The long-range escort of early 1944: fast at height and in the dive; pairs and fours, boom and zoom; freed to hunt ahead of the bombers from January 1944."
+  },
+  {
+   "key": "P-51D",
+   "names": [
+    "Mustang",
+    "P-51",
+    "P51",
+    "P-51D",
+    "P-51K",
+    "Mustang IV"
+   ],
+   "nation": "USA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Packard V-1650-7 (two-stage Merlin)",
+   "span_m": [
+    11.28,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    21.83,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4450,
+    "std",
+    "manufacturer",
+    4400,
+    4580
+   ],
+   "power_hp": [
+    1500,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5900,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    703,
+    "std",
+    "manufacturer",
+    690,
+    710
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    580,
+    "std",
+    "uncertain",
+    520,
+    600
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    150,
+    175
+   ],
+   "climb_ms": [
+    16.3,
+    "std",
+    "manufacturer",
+    15.0,
+    17.5
+   ],
+   "to_height_min": [
+    7.3,
+    "std",
+    "manufacturer",
+    7.0,
+    7.5
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    12770,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    95,
+    "rollchart",
+    "uncertain",
+    85,
+    100
+   ],
+   "roll_kmh": 480,
+   "roll_fast_dps": [
+    85,
+    "rollchart",
+    "uncertain",
+    70,
+    95
+   ],
+   "roll_fast_kmh": 640,
+   "g_limit": [
+    8.0,
+    "std",
+    "uncertain",
+    7.0,
+    8.0
+   ],
+   "dive_kmh": [
+    813,
+    "notes",
+    "manufacturer"
+   ],
+   "bomb_kg": [
+    907,
+    "std",
+    "manufacturer",
+    454,
+    907
+   ],
+   "range_km": [
+    1650,
+    "std",
+    "uncertain",
+    1500,
+    1800
+   ],
+   "style": "dive",
+   "style_why": "As the P-51B, with the bubble canopy and six guns; the escort that hunted the Luftwaffe's fighters in 1944-45.",
+   "notes": "The 3D model is a P-51D; the P-51B before June 1944, as guns.ts.",
+   "marks": [
+    {
+     "row": "P-51B",
+     "from": 0
+    },
+    {
+     "row": "P-51D",
+     "from": 1944.4166666666667
+    }
+   ]
+  },
+  {
+   "key": "P-38J",
+   "names": [
+    "P-38",
+    "P38",
+    "P-38J",
+    "P-38L",
+    "Lightning"
+   ],
+   "nation": "USA",
+   "role": "fighter",
+   "engines": 2,
+   "engine": "2 x Allison V-1710-89/91 (turbocharged)",
+   "span_m": [
+    15.85,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    30.43,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    7500,
+    "std",
+    "uncertain",
+    7000,
+    7940
+   ],
+   "power_hp": [
+    2850,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    7900,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    666,
+    "std",
+    "manufacturer",
+    650,
+    666
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    530,
+    "std",
+    "uncertain",
+    480,
+    580
+   ],
+   "stall_kmh": [
+    170,
+    "std",
+    "uncertain",
+    160,
+    180
+   ],
+   "climb_ms": [
+    20.0,
+    "std",
+    "uncertain",
+    17.0,
+    22.0
+   ],
+   "ceiling_m": [
+    13400,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    65,
+    "rollchart",
+    "uncertain",
+    50,
+    100
+   ],
+   "roll_kmh": 400,
+   "roll_fast_dps": [
+    50,
+    "rollchart",
+    "uncertain",
+    40,
+    90
+   ],
+   "roll_fast_kmh": 600,
+   "g_limit": [
+    7.33,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    680,
+    "notes",
+    "uncertain",
+    640,
+    720
+   ],
+   "bomb_kg": [
+    1450,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1770,
+    "std",
+    "uncertain",
+    1500,
+    2100
+   ],
+   "style": "dive",
+   "style_why": "Fast and a fine climber, but slow to roll without boosted ailerons and caught by compressibility in a steep dive: in the Pacific it climbed and dived and never turned with the Zero."
+  },
+  {
+   "key": "F4F-4",
+   "names": [
+    "Wildcat",
+    "F4F",
+    "F4F-4",
+    "F4F-3",
+    "FM-2",
+    "Martlet"
+   ],
+   "nation": "USA",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Pratt & Whitney R-1830-86 (two-stage)",
+   "span_m": [
+    11.58,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    24.15,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3610,
+    "std",
+    "manufacturer",
+    3360,
+    3610
+   ],
+   "power_hp": [
+    1100,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5800,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    512,
+    "std",
+    "manufacturer",
+    500,
+    512
+   ],
+   "top_m": [
+    5910,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    250,
+    "std",
+    "manufacturer",
+    250,
+    400
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    9.9,
+    "std",
+    "manufacturer",
+    9.5,
+    11.0
+   ],
+   "to_height_min": [
+    12.4,
+    "std",
+    "uncertain",
+    12.0,
+    13.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    10370,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    80,
+    "rollchart",
+    "uncertain",
+    70,
+    95
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    55,
+    "estimate",
+    "uncertain",
+    45,
+    70
+   ],
+   "roll_fast_kmh": 560,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.0
+   ],
+   "dive_kmh": [
+    740,
+    "std",
+    "uncertain",
+    700,
+    800
+   ],
+   "bomb_kg": [
+    91,
+    "std",
+    "manufacturer",
+    0,
+    91
+   ],
+   "range_km": [
+    1240,
+    "std",
+    "manufacturer"
+   ],
+   "style": "dive",
+   "style_why": "Out-turned and out-climbed by the Zero: never dogfight it. Pairs and the Thach weave, a high-side pass and dive away; tough enough to live through the Zero's guns (Lundstrom)."
+  },
+  {
+   "key": "F6F-3",
+   "names": [
+    "Hellcat",
+    "F6F",
+    "F6F-3",
+    "F6F-5"
+   ],
+   "nation": "USA",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Pratt & Whitney R-2800-10W (two-stage)",
+   "span_m": [
+    13.06,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    31.03,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    5530,
+    "std",
+    "manufacturer",
+    5530,
+    5700
+   ],
+   "power_hp": [
+    1800,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    5300,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    605,
+    "std",
+    "manufacturer",
+    600,
+    610
+   ],
+   "top_m": [
+    5270,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    270,
+    "std",
+    "manufacturer",
+    270,
+    450
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    17.8,
+    "std",
+    "uncertain",
+    15.0,
+    18.0
+   ],
+   "ceiling_m": [
+    11370,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    85,
+    "rollchart",
+    "uncertain",
+    75,
+    95
+   ],
+   "roll_kmh": 400,
+   "roll_fast_dps": [
+    65,
+    "rollchart",
+    "uncertain",
+    55,
+    75
+   ],
+   "roll_fast_kmh": 600,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.0
+   ],
+   "dive_kmh": [
+    770,
+    "std",
+    "uncertain",
+    740,
+    800
+   ],
+   "bomb_kg": [
+    454,
+    "std",
+    "manufacturer",
+    454,
+    907
+   ],
+   "range_km": [
+    1750,
+    "std",
+    "manufacturer"
+   ],
+   "style": "dive",
+   "style_why": "Out-climbed and out-dived the Zero and could stay with it in a fast turn, where the Zero's ailerons stiffened; fought in pairs with the weave (TAIC's Zeke 52 trials)."
+  },
+  {
+   "key": "F4U-1",
+   "names": [
+    "Corsair",
+    "F4U",
+    "F4U-1",
+    "F4U-1D"
+   ],
+   "nation": "USA",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Pratt & Whitney R-2800-8 (two-stage)",
+   "span_m": [
+    12.49,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    29.17,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    5460,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1650,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    6700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    671,
+    "std",
+    "manufacturer",
+    650,
+    671
+   ],
+   "top_m": [
+    6070,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    300,
+    "std",
+    "manufacturer",
+    300,
+    480
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    15.0,
+    "std",
+    "uncertain",
+    14.0,
+    16.0
+   ],
+   "ceiling_m": [
+    11250,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    90,
+    "rollchart",
+    "uncertain",
+    80,
+    100
+   ],
+   "roll_kmh": 400,
+   "roll_fast_dps": [
+    70,
+    "rollchart",
+    "uncertain",
+    60,
+    80
+   ],
+   "roll_fast_kmh": 600,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.0
+   ],
+   "dive_kmh": [
+    790,
+    "std",
+    "uncertain",
+    760,
+    820
+   ],
+   "bomb_kg": [
+    454,
+    "std",
+    "manufacturer",
+    454,
+    907
+   ],
+   "range_km": [
+    1630,
+    "std",
+    "manufacturer"
+   ],
+   "style": "dive",
+   "style_why": "Fast and a fine diver: the Marines' hit-and-run fighter over the Solomons from February 1943."
+  },
+  {
+   "key": "B-17G",
+   "names": [
+    "B17",
+    "B-17",
+    "B-17G",
+    "B-17F",
+    "B-17E",
+    "Flying Fortress",
+    "Fortress"
+   ],
+   "nation": "USA",
+   "role": "heavy bomber",
+   "engines": 4,
+   "engine": "4 x Wright R-1820-97 (turbocharged)",
+   "span_m": [
+    31.62,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    131.92,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    25000,
+    "std",
+    "uncertain",
+    22000,
+    29700
+   ],
+   "power_hp": [
+    4800,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    462,
+    "std",
+    "manufacturer",
+    462,
+    480
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    330,
+    "std",
+    "uncertain",
+    290,
+    385
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    145,
+    175
+   ],
+   "climb_ms": [
+    4.6,
+    "std",
+    "uncertain",
+    4.0,
+    5.5
+   ],
+   "to_height_min": [
+    37.0,
+    "std",
+    "uncertain",
+    30.0,
+    40.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    10850,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    30
+   ],
+   "roll_kmh": 260,
+   "roll_fast_dps": [
+    15,
+    "estimate",
+    "uncertain",
+    12,
+    22
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    3.0,
+    "std",
+    "uncertain",
+    2.5,
+    3.5
+   ],
+   "dive_kmh": [
+    435,
+    "notes",
+    "uncertain",
+    435,
+    490
+   ],
+   "bomb_kg": [
+    2700,
+    "std",
+    "manufacturer",
+    1800,
+    4800
+   ],
+   "range_km": [
+    3200,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Day bomber in the combat box of 1943 (18 to 21 aircraft stepped up and down for mutual fire); bombed on the lead's drop.",
+   "notes": "One row for the B-17E, F and G (the 3D model is a G); the guns by date are guns.ts's."
+  },
+  {
+   "key": "B-24J",
+   "names": [
+    "B24",
+    "B-24",
+    "B-24J",
+    "B-24D",
+    "Liberator"
+   ],
+   "nation": "USA",
+   "role": "heavy bomber",
+   "engines": 4,
+   "engine": "4 x Pratt & Whitney R-1830-65 (turbocharged)",
+   "span_m": [
+    33.53,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    97.4,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    25000,
+    "std",
+    "uncertain",
+    23000,
+    29000
+   ],
+   "power_hp": [
+    4800,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    467,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    346,
+    "std",
+    "manufacturer",
+    320,
+    370
+   ],
+   "stall_kmh": [
+    175,
+    "std",
+    "uncertain",
+    160,
+    190
+   ],
+   "climb_ms": [
+    5.1,
+    "std",
+    "uncertain",
+    4.5,
+    5.5
+   ],
+   "ceiling_m": [
+    8530,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    25
+   ],
+   "roll_kmh": 260,
+   "roll_fast_dps": [
+    15,
+    "estimate",
+    "uncertain",
+    12,
+    20
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    3.0,
+    "std",
+    "uncertain",
+    2.5,
+    3.5
+   ],
+   "dive_kmh": [
+    443,
+    "notes",
+    "uncertain",
+    430,
+    480
+   ],
+   "bomb_kg": [
+    2300,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    3400,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Faster and longer-ranged than the B-17 but higher wing loading: worse at height and harder to hold in a tight box."
+  },
+  {
+   "key": "B-29",
+   "names": [
+    "B29",
+    "B-29",
+    "Superfortress"
+   ],
+   "nation": "USA",
+   "role": "heavy bomber",
+   "engines": 4,
+   "engine": "4 x Wright R-3350-23 (turbocharged)",
+   "span_m": [
+    43.05,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    161.3,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    50000,
+    "std",
+    "uncertain",
+    47000,
+    60560
+   ],
+   "power_hp": [
+    8800,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    574,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    350,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    170,
+    "std",
+    "uncertain",
+    160,
+    185
+   ],
+   "climb_ms": [
+    4.6,
+    "std",
+    "uncertain",
+    4.0,
+    5.0
+   ],
+   "ceiling_m": [
+    9710,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    15,
+    "estimate",
+    "uncertain",
+    12,
+    22
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    12,
+    "estimate",
+    "uncertain",
+    10,
+    18
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    2.67,
+    "std",
+    "uncertain",
+    2.5,
+    3.0
+   ],
+   "dive_kmh": [
+    480,
+    "std",
+    "uncertain",
+    450,
+    520
+   ],
+   "bomb_kg": [
+    9000,
+    "std",
+    "manufacturer",
+    5400,
+    9000
+   ],
+   "range_km": [
+    5230,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Pressurised and fast for its size: bombed Japan from 9,000 m in 1944, then low at night with fire from March 1945."
+  },
+  {
+   "key": "SBD-3",
+   "names": [
+    "SBD",
+    "SBD-3",
+    "SBD-5",
+    "Dauntless"
+   ],
+   "nation": "USA",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "Wright R-1820-52",
+   "span_m": [
+    12.66,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    30.2,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4700,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    800,
+    "std",
+    "uncertain",
+    800,
+    1000
+   ],
+   "power_m": [
+    4880,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    402,
+    "std",
+    "manufacturer",
+    395,
+    410
+   ],
+   "top_m": [
+    4880,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    245,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    126,
+    "std",
+    "uncertain",
+    115,
+    135
+   ],
+   "climb_ms": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    8.5
+   ],
+   "ceiling_m": [
+    8260,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    60,
+    "estimate",
+    "uncertain",
+    50,
+    70
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 450,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    9.0
+   ],
+   "dive_kmh": [
+    520,
+    "std",
+    "uncertain",
+    450,
+    620
+   ],
+   "bomb_kg": [
+    544,
+    "std",
+    "manufacturer",
+    454,
+    726
+   ],
+   "range_km": [
+    1345,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Dive bomber: from 4,000 to 6,000 m in a 70 degree dive with its split flaps open, letting go at 450 to 600 m; it sank four carriers at Midway."
+  },
+  {
+   "key": "SB2C-1C",
+   "names": [
+    "SB2C",
+    "SB2C-1C",
+    "Helldiver"
+   ],
+   "nation": "USA",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "Wright R-2600-8",
+   "span_m": [
+    15.15,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    39.2,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6600,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1700,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3780,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    452,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    3780,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    260,
+    "std",
+    "uncertain",
+    240,
+    300
+   ],
+   "stall_kmh": [
+    130,
+    "std",
+    "uncertain",
+    120,
+    140
+   ],
+   "climb_ms": [
+    7.4,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "ceiling_m": [
+    7370,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    40,
+    60
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_fast_kmh": 450,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    520,
+    "std",
+    "uncertain",
+    450,
+    600
+   ],
+   "bomb_kg": [
+    907,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1790,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Heavier and faster than the Dauntless, with an internal bay; the fleet's dive bomber from November 1943."
+  },
+  {
+   "key": "TBD-1",
+   "names": [
+    "TBD",
+    "TBD-1",
+    "Devastator"
+   ],
+   "nation": "USA",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "Pratt & Whitney R-1830-64",
+   "span_m": [
+    15.24,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    39.2,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4600,
+    "std",
+    "manufacturer",
+    4210,
+    4620
+   ],
+   "power_hp": [
+    850,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2440,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    332,
+    "std",
+    "manufacturer",
+    322,
+    332
+   ],
+   "top_m": [
+    2440,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    206,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    110,
+    "std",
+    "uncertain",
+    100,
+    120
+   ],
+   "climb_ms": [
+    3.7,
+    "std",
+    "uncertain",
+    3.5,
+    4.5
+   ],
+   "ceiling_m": [
+    5945,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_kmh": 240,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 350,
+   "g_limit": [
+    5.0,
+    "std",
+    "uncertain",
+    4.0,
+    6.0
+   ],
+   "dive_kmh": [
+    480,
+    "std",
+    "uncertain",
+    420,
+    500
+   ],
+   "bomb_kg": [
+    1000,
+    "std",
+    "manufacturer",
+    454,
+    1005
+   ],
+   "range_km": [
+    700,
+    "std",
+    "manufacturer",
+    700,
+    1150
+   ],
+   "style": "none",
+   "style_why": "Slow torpedo bomber that had to fly low and slow to drop its Mk 13; unescorted at Midway, nearly all were lost."
+  },
+  {
+   "key": "TBF-1",
+   "names": [
+    "TBF",
+    "TBF-1",
+    "TBF-1C",
+    "TBM",
+    "Avenger"
+   ],
+   "nation": "USA",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "Wright R-2600-8",
+   "span_m": [
+    16.51,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    45.5,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    7200,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1450,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3660,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    436,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    3660,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    233,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    125,
+    "std",
+    "uncertain",
+    115,
+    135
+   ],
+   "climb_ms": [
+    7.3,
+    "std",
+    "uncertain",
+    6.5,
+    7.6
+   ],
+   "ceiling_m": [
+    6525,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    22,
+    40
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    5.0,
+    "std",
+    "uncertain",
+    4.0,
+    6.0
+   ],
+   "dive_kmh": [
+    510,
+    "std",
+    "uncertain",
+    460,
+    560
+   ],
+   "bomb_kg": [
+    907,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1610,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The big, tough successor to the Devastator: torpedoes low and abreast, or bombs from a glide."
+  },
+  {
+   "key": "PBY-5",
+   "names": [
+    "Patrol",
+    "PBY",
+    "PBY-5",
+    "Catalina"
+   ],
+   "nation": "USA",
+   "role": "patrol",
+   "engines": 2,
+   "engine": "2 x Pratt & Whitney R-1830-82",
+   "span_m": [
+    31.7,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    130.0,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    12500,
+    "std",
+    "uncertain",
+    12000,
+    15000
+   ],
+   "power_hp": [
+    2400,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2140,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    314,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    2140,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    201,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    110,
+    "std",
+    "uncertain",
+    100,
+    120
+   ],
+   "climb_ms": [
+    5.2,
+    "std",
+    "uncertain",
+    3.5,
+    5.5
+   ],
+   "ceiling_m": [
+    4800,
+    "std",
+    "uncertain",
+    4000,
+    4800
+   ],
+   "roll_dps": [
+    15,
+    "estimate",
+    "uncertain",
+    12,
+    22
+   ],
+   "roll_kmh": 220,
+   "roll_fast_dps": [
+    12,
+    "estimate",
+    "uncertain",
+    10,
+    18
+   ],
+   "roll_fast_kmh": 300,
+   "g_limit": [
+    2.5,
+    "std",
+    "uncertain",
+    2.0,
+    3.0
+   ],
+   "dive_kmh": [
+    400,
+    "std",
+    "uncertain",
+    350,
+    420
+   ],
+   "bomb_kg": [
+    1814,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    4030,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The plain patrol flying boat the sea scene draws for every navy: slow, long-ranged, a shadower and a bomber of submarines."
+  },
+  {
+   "key": "A6M2",
+   "names": [
+    "Zero",
+    "A6M",
+    "A6M2",
+    "Zeke",
+    "Reisen",
+    "A6M2 model 21"
+   ],
+   "nation": "JAP",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Nakajima Sakae 12",
+   "span_m": [
+    12.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    22.44,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2410,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    940,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4200,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    533,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4550,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    333,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    113,
+    "std",
+    "uncertain",
+    105,
+    120
+   ],
+   "climb_ms": [
+    15.7,
+    "francillon",
+    "uncertain",
+    15.0,
+    16.0
+   ],
+   "to_height_min": [
+    7.45,
+    "francillon",
+    "manufacturer"
+   ],
+   "to_height_m": 6000,
+   "ceiling_m": [
+    10000,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    80,
+    "rollchart",
+    "uncertain",
+    70,
+    90
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    25,
+    "akutan",
+    "uncertain",
+    15,
+    35
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    7.5
+   ],
+   "dive_kmh": [
+    629,
+    "francillon",
+    "manufacturer",
+    600,
+    630
+   ],
+   "bomb_kg": [
+    120,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    2000,
+    "francillon",
+    "manufacturer",
+    1870,
+    3105
+   ],
+   "style": "turn",
+   "style_why": "The best-turning fighter of 1941-42 at low and medium speed, flown by navy pilots of 500 hours and more: it drew its enemies into a slow turning fight. Above about 200 knots its ailerons stiffened and it rolled badly, its engine cut under negative g, and it could not follow a dive (Akutan Zero tests).",
+   "notes": "The 3D model is an A6M2; the marks by date follow guns.ts.",
+   "marks": [
+    {
+     "row": "A6M2",
+     "from": 0
+    },
+    {
+     "row": "A6M3",
+     "from": 1942.5
+    },
+    {
+     "row": "A6M5",
+     "from": 1944
+    }
+   ]
+  },
+  {
+   "key": "A6M3",
+   "names": [
+    "A6M3",
+    "A6M3 model 22",
+    "A6M3 model 32",
+    "Hamp"
+   ],
+   "nation": "JAP",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Nakajima Sakae 21",
+   "span_m": [
+    12.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    22.44,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2680,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1100,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2850,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    541,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    6000,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    333,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    118,
+    "std",
+    "uncertain",
+    110,
+    125
+   ],
+   "climb_ms": [
+    15.2,
+    "francillon",
+    "uncertain",
+    14.0,
+    16.0
+   ],
+   "ceiling_m": [
+    10700,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    85,
+    "rollchart",
+    "uncertain",
+    75,
+    95
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    30,
+    "akutan",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    7.5
+   ],
+   "dive_kmh": [
+    670,
+    "std",
+    "uncertain",
+    630,
+    700
+   ],
+   "bomb_kg": [
+    120,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    2400,
+    "francillon",
+    "manufacturer",
+    1800,
+    3000
+   ],
+   "style": "turn",
+   "style_why": "As the A6M2 with more power; flown over Guadalcanal and New Guinea at the end of its range."
+  },
+  {
+   "key": "A6M5",
+   "names": [
+    "A6M5",
+    "A6M5 model 52",
+    "Zeke 52"
+   ],
+   "nation": "JAP",
+   "role": "carrier fighter",
+   "engines": 1,
+   "engine": "Nakajima Sakae 21",
+   "span_m": [
+    11.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    21.3,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2733,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    980,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    6000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    565,
+    "francillon",
+    "manufacturer",
+    540,
+    565
+   ],
+   "top_m": [
+    6000,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    370,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    125,
+    "std",
+    "uncertain",
+    118,
+    132
+   ],
+   "climb_ms": [
+    15.7,
+    "francillon",
+    "uncertain",
+    14.0,
+    17.0
+   ],
+   "to_height_min": [
+    7.0,
+    "francillon",
+    "manufacturer"
+   ],
+   "to_height_m": 6000,
+   "ceiling_m": [
+    11740,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    90,
+    "rollchart",
+    "uncertain",
+    80,
+    100
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    40,
+    "taic",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    7.5
+   ],
+   "dive_kmh": [
+    740,
+    "francillon",
+    "manufacturer",
+    660,
+    740
+   ],
+   "bomb_kg": [
+    250,
+    "francillon",
+    "manufacturer",
+    120,
+    250
+   ],
+   "range_km": [
+    1920,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "Shorter wings and a stronger skin for a faster dive, still out-turning the Hellcat at low speed but out-classed in speed, climb and dive by 1944 (TAIC's trials)."
+  },
+  {
+   "key": "Ki-43-II",
+   "names": [
+    "Ki-43",
+    "Ki43",
+    "Ki-43-II",
+    "Oscar",
+    "Hayabusa"
+   ],
+   "nation": "JAP",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Nakajima Ha-115",
+   "span_m": [
+    10.84,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    21.4,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2590,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1105,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2800,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    530,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4000,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    440,
+    "francillon",
+    "uncertain",
+    350,
+    440
+   ],
+   "stall_kmh": [
+    110,
+    "std",
+    "uncertain",
+    100,
+    120
+   ],
+   "climb_ms": [
+    16.0,
+    "francillon",
+    "uncertain",
+    14.5,
+    17.0
+   ],
+   "to_height_min": [
+    5.8,
+    "francillon",
+    "manufacturer"
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    11200,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    85,
+    "estimate",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    7.0
+   ],
+   "dive_kmh": [
+    600,
+    "std",
+    "uncertain",
+    550,
+    650
+   ],
+   "bomb_kg": [
+    500,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    1760,
+    "francillon",
+    "manufacturer"
+   ],
+   "clmax": [
+    1.45,
+    "estimate",
+    "uncertain",
+    1.35,
+    1.6
+   ],
+   "style": "turn",
+   "style_why": "The army's agile turner, with combat flaps: it drew Allied fighters into slow turns, but was fragile and lightly armed.",
+   "notes": "The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its butterfly combat flaps, lowered in a turning fight; no measured figure was read."
+  },
+  {
+   "key": "G3M2",
+   "names": [
+    "Nell",
+    "G3M",
+    "G3M2",
+    "G3M2 model 22"
+   ],
+   "nation": "JAP",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Mitsubishi Kinsei 45",
+   "span_m": [
+    25.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    75.0,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    8000,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    2150,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    373,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4180,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    280,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    115,
+    "std",
+    "uncertain",
+    105,
+    125
+   ],
+   "climb_ms": [
+    6.5,
+    "francillon",
+    "uncertain",
+    5.5,
+    7.0
+   ],
+   "to_height_min": [
+    8.3,
+    "francillon",
+    "manufacturer"
+   ],
+   "to_height_m": 3000,
+   "ceiling_m": [
+    9130,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    25,
+    40
+   ],
+   "roll_kmh": 250,
+   "roll_fast_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    28
+   ],
+   "roll_fast_kmh": 380,
+   "g_limit": [
+    3.5,
+    "std",
+    "uncertain",
+    3.0,
+    4.0
+   ],
+   "dive_kmh": [
+    480,
+    "std",
+    "uncertain",
+    430,
+    520
+   ],
+   "bomb_kg": [
+    800,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    4400,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The navy's long-range land bomber: chutai of nine in vics, bombing on the leader's drop from high, or torpedoes low (Prince of Wales and Repulse, 10 December 1941)."
+  },
+  {
+   "key": "G4M1",
+   "names": [
+    "Betty",
+    "G4M",
+    "G4M1",
+    "G4M1 model 11"
+   ],
+   "nation": "JAP",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Mitsubishi Kasei 11",
+   "span_m": [
+    25.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    78.125,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    9500,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    2820,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    428,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4200,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    315,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    130,
+    "std",
+    "uncertain",
+    120,
+    140
+   ],
+   "climb_ms": [
+    8.0,
+    "francillon",
+    "uncertain",
+    6.5,
+    9.5
+   ],
+   "to_height_min": [
+    18.0,
+    "francillon",
+    "uncertain",
+    17.5,
+    18.5
+   ],
+   "to_height_m": 7000,
+   "ceiling_m": [
+    8500,
+    "francillon",
+    "manufacturer",
+    8500,
+    9000
+   ],
+   "roll_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    22,
+    "estimate",
+    "uncertain",
+    16,
+    30
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    3.5,
+    "std",
+    "uncertain",
+    3.0,
+    4.0
+   ],
+   "dive_kmh": [
+    500,
+    "std",
+    "uncertain",
+    450,
+    540
+   ],
+   "bomb_kg": [
+    800,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    5040,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Fast and very long-ranged by giving up armour and self-sealing tanks: it burned easily. Big vees of 9 to 27 in tight formation; torpedoes low and abreast.",
+   "notes": "The marks by date follow guns.ts (the G4M2 from September 1943).",
+   "marks": [
+    {
+     "row": "G4M1",
+     "from": 0
+    },
+    {
+     "row": "G4M2",
+     "from": 1943.6666666666667
+    }
+   ]
+  },
+  {
+   "key": "G4M2",
+   "names": [
+    "G4M2",
+    "G4M2 model 22"
+   ],
+   "nation": "JAP",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Mitsubishi Kasei 21",
+   "span_m": [
+    25.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    78.125,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    12500,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    3600,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    438,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4600,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    315,
+    "francillon",
+    "uncertain",
+    300,
+    330
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    9.0,
+    "francillon",
+    "uncertain",
+    7.5,
+    10.0
+   ],
+   "ceiling_m": [
+    8950,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    25,
+    40
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    28
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    3.5,
+    "std",
+    "uncertain",
+    3.0,
+    4.0
+   ],
+   "dive_kmh": [
+    500,
+    "std",
+    "uncertain",
+    450,
+    540
+   ],
+   "bomb_kg": [
+    800,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    6000,
+    "francillon",
+    "manufacturer",
+    4300,
+    6000
+   ],
+   "style": "none",
+   "style_why": "As the G4M1 with more power and a gun turret above; still unarmoured."
+  },
+  {
+   "key": "B5N2",
+   "names": [
+    "B5N",
+    "B5N2",
+    "Kate"
+   ],
+   "nation": "JAP",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "Nakajima Sakae 11",
+   "span_m": [
+    15.52,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    37.7,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3800,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    970,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    378,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    3600,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    260,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    110,
+    "std",
+    "uncertain",
+    100,
+    120
+   ],
+   "climb_ms": [
+    7.0,
+    "francillon",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "to_height_min": [
+    7.7,
+    "francillon",
+    "manufacturer"
+   ],
+   "to_height_m": 3000,
+   "ceiling_m": [
+    8260,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    40,
+    65
+   ],
+   "roll_kmh": 260,
+   "roll_fast_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_fast_kmh": 380,
+   "g_limit": [
+    5.5,
+    "std",
+    "uncertain",
+    5.0,
+    6.0
+   ],
+   "dive_kmh": [
+    470,
+    "std",
+    "uncertain",
+    420,
+    500
+   ],
+   "bomb_kg": [
+    800,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    1990,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Torpedo bomber that struck low from both bows at once (the anvil), or bombed level from about 3,000 m in vics (Pearl Harbor)."
+  },
+  {
+   "key": "B6N2",
+   "names": [
+    "B6N",
+    "B6N2",
+    "Jill"
+   ],
+   "nation": "JAP",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "Mitsubishi Kasei 25",
+   "span_m": [
+    14.89,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    37.2,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    5200,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1850,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    481,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4900,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    333,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    130,
+    "std",
+    "uncertain",
+    120,
+    140
+   ],
+   "climb_ms": [
+    9.0,
+    "francillon",
+    "uncertain",
+    8.0,
+    10.0
+   ],
+   "ceiling_m": [
+    9040,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    55,
+    "estimate",
+    "uncertain",
+    45,
+    65
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    38,
+    "estimate",
+    "uncertain",
+    28,
+    48
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    5.5,
+    "std",
+    "uncertain",
+    5.0,
+    6.0
+   ],
+   "dive_kmh": [
+    520,
+    "std",
+    "uncertain",
+    480,
+    560
+   ],
+   "bomb_kg": [
+    800,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    3045,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The Kate's faster successor from 1944, flown by crews of far less training."
+  },
+  {
+   "key": "D3A1",
+   "names": [
+    "D3A",
+    "D3A1",
+    "D3A2",
+    "Val"
+   ],
+   "nation": "JAP",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "Mitsubishi Kinsei 43",
+   "span_m": [
+    14.36,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    34.9,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3650,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1070,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    389,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    3000,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    296,
+    "francillon",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    115,
+    "std",
+    "uncertain",
+    105,
+    125
+   ],
+   "climb_ms": [
+    8.5,
+    "francillon",
+    "uncertain",
+    7.5,
+    9.5
+   ],
+   "to_height_min": [
+    6.45,
+    "francillon",
+    "manufacturer"
+   ],
+   "to_height_m": 3000,
+   "ceiling_m": [
+    9300,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    60,
+    "estimate",
+    "uncertain",
+    50,
+    70
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    7.0
+   ],
+   "dive_kmh": [
+    520,
+    "std",
+    "uncertain",
+    450,
+    560
+   ],
+   "bomb_kg": [
+    370,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    1470,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Dive bomber: from 3,000 to 4,000 m in a 55 to 60 degree dive, letting go at about 450 m; the most accurate of 1941-42."
+  },
+  {
+   "key": "D4Y2",
+   "names": [
+    "D4Y",
+    "D4Y2",
+    "Judy",
+    "Suisei"
+   ],
+   "nation": "JAP",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "Aichi Atsuta 32",
+   "span_m": [
+    11.5,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    23.6,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    4350,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1400,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    1700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    580,
+    "francillon",
+    "manufacturer"
+   ],
+   "top_m": [
+    5250,
+    "francillon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    426,
+    "francillon",
+    "uncertain",
+    400,
+    430
+   ],
+   "stall_kmh": [
+    145,
+    "std",
+    "uncertain",
+    135,
+    155
+   ],
+   "climb_ms": [
+    11.0,
+    "francillon",
+    "uncertain",
+    9.5,
+    12.0
+   ],
+   "ceiling_m": [
+    10700,
+    "francillon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    65,
+    "estimate",
+    "uncertain",
+    55,
+    70
+   ],
+   "roll_kmh": 360,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 500,
+   "g_limit": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    7.0
+   ],
+   "dive_kmh": [
+    650,
+    "std",
+    "uncertain",
+    600,
+    700
+   ],
+   "bomb_kg": [
+    500,
+    "francillon",
+    "manufacturer"
+   ],
+   "range_km": [
+    1465,
+    "francillon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "A fast dive bomber from 1944, as quick as many fighters."
+  },
+  {
+   "key": "Yak-1",
+   "names": [
+    "Yak-1"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Klimov M-105PA",
+   "span_m": [
+    10.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    17.15,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2850,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1050,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    569,
+    "gordon",
+    "manufacturer",
+    560,
+    592
+   ],
+   "top_m": [
+    4800,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    450,
+    "std",
+    "uncertain",
+    400,
+    480
+   ],
+   "stall_kmh": [
+    150,
+    "std",
+    "uncertain",
+    140,
+    160
+   ],
+   "climb_ms": [
+    15.5,
+    "gordon",
+    "uncertain",
+    14.0,
+    17.0
+   ],
+   "to_height_min": [
+    5.4,
+    "gordon",
+    "uncertain",
+    5.2,
+    6.0
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    10000,
+    "gordon",
+    "manufacturer"
+   ],
+   "turn_s": [
+    20,
+    "gordon",
+    "uncertain",
+    19,
+    21
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    90,
+    "estimate",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    35,
+    60
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.5
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    700,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "Soviet fighters fought low, where the Yak's engine gave its best: tight threes, turning, under 4,000 m."
+  },
+  {
+   "key": "Yak-1B",
+   "names": [
+    "Yak",
+    "Yak-1B",
+    "Yak 1B"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Klimov M-105PF",
+   "span_m": [
+    10.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    17.15,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2880,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1180,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    592,
+    "gordon",
+    "manufacturer",
+    585,
+    592
+   ],
+   "top_m": [
+    3750,
+    "gordon",
+    "uncertain",
+    3500,
+    4000
+   ],
+   "cruise_kmh": [
+    460,
+    "std",
+    "uncertain",
+    420,
+    500
+   ],
+   "stall_kmh": [
+    150,
+    "std",
+    "uncertain",
+    140,
+    160
+   ],
+   "climb_ms": [
+    18.0,
+    "gordon",
+    "uncertain",
+    16.0,
+    19.0
+   ],
+   "ceiling_m": [
+    10050,
+    "gordon",
+    "manufacturer"
+   ],
+   "turn_s": [
+    19,
+    "gordon",
+    "uncertain",
+    18,
+    20
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    90,
+    "estimate",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    35,
+    60
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.5
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    700,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "The Yak-1 with a clear canopy and more power low down; pairs and fours from late 1942 (doctrine.ts), Pokryshkin's 'height, speed, manoeuvre, fire'.",
+   "notes": "The 3D model is a Yak-1B; the marks by date follow guns.ts (Yak-1 to September 1942, the 1B to the end of 1942, the Yak-9 to mid-1944, the Yak-3 after).",
+   "marks": [
+    {
+     "row": "Yak-1",
+     "from": 0
+    },
+    {
+     "row": "Yak-1B",
+     "from": 1942.75
+    },
+    {
+     "row": "Yak-9",
+     "from": 1943
+    },
+    {
+     "row": "Yak-3",
+     "from": 1944.5
+    }
+   ]
+  },
+  {
+   "key": "Yak-9",
+   "names": [
+    "Yak-9",
+    "Yak-9D",
+    "Yak-9T"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Klimov M-105PF",
+   "span_m": [
+    9.74,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    17.15,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3050,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1180,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    599,
+    "gordon",
+    "manufacturer",
+    591,
+    602
+   ],
+   "top_m": [
+    4300,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    470,
+    "std",
+    "uncertain",
+    430,
+    500
+   ],
+   "stall_kmh": [
+    155,
+    "std",
+    "uncertain",
+    145,
+    165
+   ],
+   "climb_ms": [
+    16.7,
+    "gordon",
+    "uncertain",
+    15.0,
+    18.0
+   ],
+   "ceiling_m": [
+    10500,
+    "gordon",
+    "manufacturer"
+   ],
+   "turn_s": [
+    18.5,
+    "gordon",
+    "uncertain",
+    17,
+    20
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    90,
+    "estimate",
+    "uncertain",
+    75,
+    105
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    35,
+    60
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.5
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    870,
+    "gordon",
+    "manufacturer",
+    870,
+    1400
+   ],
+   "style": "both",
+   "style_why": "The commonest Soviet fighter of 1943-44: a match for the Bf 109G below 4,000 m, in the turn and the vertical."
+  },
+  {
+   "key": "Yak-3",
+   "names": [
+    "Yak-3"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Klimov M-105PF-2",
+   "span_m": [
+    9.2,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    14.85,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2690,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1240,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2700,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    646,
+    "gordon",
+    "manufacturer",
+    646,
+    655
+   ],
+   "top_m": [
+    4100,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    500,
+    "std",
+    "uncertain",
+    460,
+    540
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    150,
+    170
+   ],
+   "climb_ms": [
+    21.0,
+    "gordon",
+    "uncertain",
+    18.0,
+    22.0
+   ],
+   "to_height_min": [
+    4.1,
+    "gordon",
+    "uncertain",
+    3.8,
+    4.5
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    10700,
+    "gordon",
+    "manufacturer"
+   ],
+   "turn_s": [
+    18,
+    "gordon",
+    "uncertain",
+    17,
+    19
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    110,
+    "estimate",
+    "uncertain",
+    90,
+    120
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    60,
+    "estimate",
+    "uncertain",
+    45,
+    75
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    650,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "Light and quick low down: out-turned and out-climbed the Bf 109G and Fw 190A under 4,000 m; the Normandie-Niemen's mount."
+  },
+  {
+   "key": "La-5FN",
+   "names": [
+    "La-5",
+    "La5",
+    "La-5FN",
+    "La-7"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Shvetsov ASh-82FN",
+   "span_m": [
+    9.8,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    17.5,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3290,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1460,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4600,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    634,
+    "gordon",
+    "manufacturer",
+    620,
+    648
+   ],
+   "top_m": [
+    6250,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    480,
+    "std",
+    "uncertain",
+    440,
+    520
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    150,
+    170
+   ],
+   "climb_ms": [
+    18.0,
+    "gordon",
+    "uncertain",
+    16.0,
+    20.0
+   ],
+   "to_height_min": [
+    4.7,
+    "gordon",
+    "uncertain",
+    4.5,
+    5.0
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    9500,
+    "gordon",
+    "manufacturer",
+    9500,
+    10000
+   ],
+   "turn_s": [
+    19,
+    "gordon",
+    "uncertain",
+    18,
+    20
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    100,
+    "estimate",
+    "uncertain",
+    80,
+    130
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    60,
+    "estimate",
+    "uncertain",
+    45,
+    75
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.5
+   ],
+   "dive_kmh": [
+    720,
+    "std",
+    "uncertain",
+    680,
+    750
+   ],
+   "bomb_kg": [
+    200,
+    "gordon",
+    "manufacturer",
+    0,
+    200
+   ],
+   "range_km": [
+    765,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "Fast and strong low down: Kozhedub's mount, fighting in the vertical and the turn under 5,000 m."
+  },
+  {
+   "key": "MiG-3",
+   "names": [
+    "MiG-3",
+    "MiG3",
+    "Mig-3"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Mikulin AM-35A",
+   "span_m": [
+    10.2,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    17.44,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3355,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1200,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    6000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    640,
+    "gordon",
+    "manufacturer"
+   ],
+   "top_m": [
+    7800,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    500,
+    "std",
+    "uncertain",
+    450,
+    540
+   ],
+   "stall_kmh": [
+    165,
+    "std",
+    "uncertain",
+    155,
+    175
+   ],
+   "climb_ms": [
+    13.0,
+    "gordon",
+    "uncertain",
+    12.0,
+    15.0
+   ],
+   "to_height_min": [
+    5.7,
+    "gordon",
+    "uncertain",
+    5.3,
+    6.0
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    12000,
+    "gordon",
+    "manufacturer"
+   ],
+   "turn_s": [
+    22,
+    "gordon",
+    "uncertain",
+    21,
+    23
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    85,
+    "estimate",
+    "uncertain",
+    70,
+    120
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    60
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    820,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "dive",
+   "style_why": "A high-altitude interceptor in a war fought low: fast above 5,000 m, heavy and slow to climb below it."
+  },
+  {
+   "key": "I-16 type 24",
+   "names": [
+    "I-16",
+    "I16",
+    "I-16 type 24",
+    "Ishak",
+    "Rata"
+   ],
+   "nation": "SOV",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Shvetsov M-62",
+   "span_m": [
+    9.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    14.54,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    1882,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    840,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4200,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    470,
+    "gordon",
+    "uncertain",
+    440,
+    489
+   ],
+   "top_m": [
+    4800,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    380,
+    "std",
+    "uncertain",
+    350,
+    400
+   ],
+   "stall_kmh": [
+    125,
+    "std",
+    "uncertain",
+    115,
+    135
+   ],
+   "climb_ms": [
+    14.7,
+    "gordon",
+    "uncertain",
+    13.5,
+    16.0
+   ],
+   "to_height_min": [
+    5.8,
+    "gordon",
+    "uncertain",
+    5.5,
+    6.5
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    9700,
+    "gordon",
+    "manufacturer"
+   ],
+   "turn_s": [
+    17,
+    "gordon",
+    "uncertain",
+    16,
+    18
+   ],
+   "turn_at_m": 1000,
+   "roll_dps": [
+    110,
+    "estimate",
+    "uncertain",
+    90,
+    140
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    60,
+    "estimate",
+    "uncertain",
+    40,
+    80
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    8.0,
+    "std",
+    "uncertain",
+    7.0,
+    9.0
+   ],
+   "dive_kmh": [
+    600,
+    "std",
+    "uncertain",
+    550,
+    650
+   ],
+   "bomb_kg": [
+    200,
+    "gordon",
+    "manufacturer"
+   ],
+   "range_km": [
+    440,
+    "gordon",
+    "manufacturer",
+    440,
+    690
+   ],
+   "style": "turn",
+   "style_why": "Short, stubby and unstable: quick to turn and roll, in tight threes low down; it could neither catch nor out-dive the Bf 109."
+  },
+  {
+   "key": "Il-2",
+   "names": [
+    "Sturmovik",
+    "Il-2",
+    "Il2",
+    "Il-2M",
+    "Il-2M3"
+   ],
+   "nation": "SOV",
+   "role": "attack",
+   "engines": 1,
+   "engine": "Mikulin AM-38F",
+   "span_m": [
+    14.6,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    38.5,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6160,
+    "std",
+    "manufacturer",
+    6060,
+    6360
+   ],
+   "power_hp": [
+    1500,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    750,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    405,
+    "gordon",
+    "manufacturer",
+    390,
+    414
+   ],
+   "top_m": [
+    1500,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    310,
+    "std",
+    "uncertain",
+    280,
+    330
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    145,
+    170
+   ],
+   "climb_ms": [
+    6.5,
+    "gordon",
+    "uncertain",
+    5.5,
+    8.0
+   ],
+   "ceiling_m": [
+    5500,
+    "gordon",
+    "manufacturer",
+    5500,
+    6000
+   ],
+   "roll_dps": [
+    55,
+    "estimate",
+    "uncertain",
+    40,
+    60
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    5.0,
+    "std",
+    "uncertain",
+    4.5,
+    6.5
+   ],
+   "dive_kmh": [
+    600,
+    "std",
+    "uncertain",
+    550,
+    650
+   ],
+   "bomb_kg": [
+    600,
+    "gordon",
+    "manufacturer",
+    400,
+    600
+   ],
+   "range_km": [
+    720,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The armoured attack aircraft: small groups low over the front, and over the target the circle (the krug), each diving in turn at 25 to 30 degrees while the circle guarded his tail."
+  },
+  {
+   "key": "Pe-2",
+   "names": [
+    "Pe2",
+    "Pe-2",
+    "Peshka"
+   ],
+   "nation": "SOV",
+   "role": "light bomber",
+   "engines": 2,
+   "engine": "2 x Klimov M-105R",
+   "span_m": [
+    17.16,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    40.5,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    7540,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    2100,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    540,
+    "gordon",
+    "manufacturer",
+    530,
+    540
+   ],
+   "top_m": [
+    5000,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    428,
+    "gordon",
+    "uncertain",
+    400,
+    440
+   ],
+   "stall_kmh": [
+    175,
+    "std",
+    "uncertain",
+    160,
+    190
+   ],
+   "climb_ms": [
+    7.5,
+    "gordon",
+    "uncertain",
+    6.0,
+    10.0
+   ],
+   "to_height_min": [
+    7.0,
+    "gordon",
+    "uncertain",
+    7.0,
+    9.0
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    8800,
+    "gordon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    22,
+    40
+   ],
+   "roll_fast_kmh": 480,
+   "g_limit": [
+    5.0,
+    "std",
+    "uncertain",
+    4.0,
+    6.0
+   ],
+   "dive_kmh": [
+    720,
+    "std",
+    "uncertain",
+    600,
+    720
+   ],
+   "bomb_kg": [
+    600,
+    "gordon",
+    "manufacturer",
+    600,
+    1000
+   ],
+   "range_km": [
+    1160,
+    "gordon",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Fast twin that dived at 60 to 70 degrees with brakes; from 1943 Polbin's 'wheel' (the vertushka), each diving in turn."
+  },
+  {
+   "key": "SB-2",
+   "names": [
+    "SB",
+    "SB-2",
+    "SB-2M-103",
+    "Tupolev SB"
+   ],
+   "nation": "SOV",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Klimov M-103",
+   "span_m": [
+    20.33,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    56.7,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6380,
+    "gordon",
+    "uncertain",
+    6300,
+    7880
+   ],
+   "power_hp": [
+    1920,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    450,
+    "gordon",
+    "manufacturer"
+   ],
+   "top_m": [
+    4100,
+    "gordon",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    300,
+    "std",
+    "uncertain",
+    280,
+    350
+   ],
+   "stall_kmh": [
+    130,
+    "std",
+    "uncertain",
+    120,
+    140
+   ],
+   "climb_ms": [
+    8.0,
+    "std",
+    "uncertain",
+    6.5,
+    9.0
+   ],
+   "ceiling_m": [
+    9300,
+    "gordon",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    28,
+    "estimate",
+    "uncertain",
+    20,
+    35
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    4.0,
+    "std",
+    "uncertain",
+    3.5,
+    5.0
+   ],
+   "dive_kmh": [
+    540,
+    "std",
+    "uncertain",
+    500,
+    580
+   ],
+   "bomb_kg": [
+    600,
+    "gordon",
+    "manufacturer",
+    500,
+    1600
+   ],
+   "range_km": [
+    1200,
+    "gordon",
+    "manufacturer",
+    1200,
+    1450
+   ],
+   "style": "none",
+   "style_why": "Fast in 1936, outclassed by 1941: flown in tight vics, often unescorted, and lost in great numbers in June and July 1941."
+  },
+  {
+   "key": "C.200",
+   "names": [
+    "C.200",
+    "C200",
+    "MC.200",
+    "MC200",
+    "Saetta"
+   ],
+   "nation": "ITA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Fiat A.74 RC38",
+   "span_m": [
+    10.58,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.82,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2200,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    840,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3800,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    503,
+    "std",
+    "manufacturer",
+    500,
+    512
+   ],
+   "top_m": [
+    4500,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    400,
+    "std",
+    "uncertain",
+    380,
+    430
+   ],
+   "stall_kmh": [
+    130,
+    "std",
+    "uncertain",
+    120,
+    140
+   ],
+   "climb_ms": [
+    15.0,
+    "std",
+    "uncertain",
+    14.0,
+    16.0
+   ],
+   "to_height_min": [
+    5.85,
+    "std",
+    "uncertain",
+    5.5,
+    6.0
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    8900,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    90,
+    "estimate",
+    "uncertain",
+    75,
+    105
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    750,
+    "std",
+    "uncertain",
+    700,
+    800
+   ],
+   "bomb_kg": [
+    320,
+    "std",
+    "uncertain",
+    0,
+    320
+   ],
+   "range_km": [
+    870,
+    "std",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "Italian pilots, trained on the CR.42 biplane, liked the turning fight and fine flying; the C.200 was sturdy and well-mannered but slow and lightly armed."
+  },
+  {
+   "key": "C.202",
+   "names": [
+    "C202",
+    "C.202",
+    "MC.202",
+    "MC202",
+    "Folgore"
+   ],
+   "nation": "ITA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Alfa Romeo RA.1000 RC41 (DB 601A licence)",
+   "span_m": [
+    10.58,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.82,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2930,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1040,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4100,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    600,
+    "std",
+    "manufacturer",
+    600,
+    612
+   ],
+   "top_m": [
+    5600,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    480,
+    "std",
+    "uncertain",
+    440,
+    500
+   ],
+   "stall_kmh": [
+    145,
+    "std",
+    "uncertain",
+    135,
+    155
+   ],
+   "climb_ms": [
+    18.0,
+    "std",
+    "uncertain",
+    16.0,
+    19.0
+   ],
+   "to_height_min": [
+    5.9,
+    "std",
+    "uncertain",
+    5.5,
+    6.0
+   ],
+   "to_height_m": 6000,
+   "ceiling_m": [
+    11500,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    95,
+    "estimate",
+    "uncertain",
+    80,
+    110
+   ],
+   "roll_kmh": 350,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 600,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    750,
+    "std",
+    "uncertain",
+    700,
+    800
+   ],
+   "bomb_kg": [
+    320,
+    "std",
+    "uncertain",
+    0,
+    320
+   ],
+   "range_km": [
+    765,
+    "std",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "A match for the Spitfire V and the P-40 over Malta and North Africa: turning but with height, in pairs and fours from 1942 (doctrine.ts)."
+  },
+  {
+   "key": "SM.79",
+   "names": [
+    "SM79",
+    "SM.79",
+    "SM.79-I",
+    "SM.79-II",
+    "Sparviero"
+   ],
+   "nation": "ITA",
+   "role": "medium bomber",
+   "engines": 3,
+   "engine": "3 x Alfa Romeo 126 RC34",
+   "span_m": [
+    21.2,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    61.7,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    10500,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    2340,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3400,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    430,
+    "std",
+    "manufacturer",
+    420,
+    460
+   ],
+   "top_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    373,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    125,
+    150
+   ],
+   "climb_ms": [
+    6.0,
+    "std",
+    "uncertain",
+    5.0,
+    7.5
+   ],
+   "ceiling_m": [
+    6500,
+    "std",
+    "manufacturer",
+    6500,
+    7000
+   ],
+   "roll_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    24,
+    "estimate",
+    "uncertain",
+    18,
+    32
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    3.5,
+    "std",
+    "uncertain",
+    3.0,
+    4.0
+   ],
+   "dive_kmh": [
+    520,
+    "std",
+    "uncertain",
+    480,
+    560
+   ],
+   "bomb_kg": [
+    1250,
+    "std",
+    "manufacturer",
+    1000,
+    1250
+   ],
+   "range_km": [
+    1900,
+    "std",
+    "manufacturer",
+    1900,
+    2000
+   ],
+   "style": "none",
+   "style_why": "Three-engined bomber in vics at 4,000 to 6,000 m over Malta; the Mediterranean's best torpedo bomber, attacking low in pairs."
+  },
+  {
+   "key": "D.520",
+   "names": [
+    "D520",
+    "D.520",
+    "Dewoitine",
+    "Dewoitine D.520"
+   ],
+   "nation": "FRA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Hispano-Suiza 12Y-45",
+   "span_m": [
+    10.2,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    15.97,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2780,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    935,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    535,
+    "std",
+    "manufacturer",
+    529,
+    535
+   ],
+   "top_m": [
+    6000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    400,
+    "std",
+    "uncertain",
+    370,
+    430
+   ],
+   "stall_kmh": [
+    145,
+    "std",
+    "uncertain",
+    135,
+    155
+   ],
+   "climb_ms": [
+    13.0,
+    "std",
+    "uncertain",
+    12.0,
+    14.5
+   ],
+   "to_height_min": [
+    5.8,
+    "std",
+    "uncertain",
+    5.5,
+    6.5
+   ],
+   "to_height_m": 4000,
+   "ceiling_m": [
+    11000,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    90,
+    "estimate",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    750,
+    "std",
+    "uncertain",
+    700,
+    825
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1000,
+    "std",
+    "manufacturer",
+    900,
+    1000
+   ],
+   "style": "turn",
+   "style_why": "France's best fighter of 1940: it could turn with and inside the Bf 109E; French patrols of three fought turning."
+  },
+  {
+   "key": "MS.406",
+   "names": [
+    "MS.406",
+    "MS406",
+    "Morane",
+    "Morane-Saulnier MS.406"
+   ],
+   "nation": "FRA",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Hispano-Suiza 12Y-31",
+   "span_m": [
+    10.62,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.0,
+    "std",
+    "uncertain",
+    16.0,
+    17.1
+   ],
+   "mass_kg": [
+    2470,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    860,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    3200,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    486,
+    "std",
+    "manufacturer",
+    460,
+    490
+   ],
+   "top_m": [
+    5000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    400,
+    "std",
+    "uncertain",
+    360,
+    420
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    11.5,
+    "std",
+    "uncertain",
+    10.5,
+    13.0
+   ],
+   "ceiling_m": [
+    9400,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    80,
+    "estimate",
+    "uncertain",
+    65,
+    95
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 500,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    730
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    800,
+    "std",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "Slow and lightly armed but sturdy and agile: flown in tight patrols of three, turning, in 1939-40."
+  },
+  {
+   "key": "LeO 451",
+   "names": [
+    "LeO451",
+    "LeO 451",
+    "LeO-451"
+   ],
+   "nation": "FRA",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Gnome-Rhone 14N 48/49",
+   "span_m": [
+    22.52,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    66.0,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    11400,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    2280,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4800,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    495,
+    "std",
+    "manufacturer",
+    480,
+    495
+   ],
+   "top_m": [
+    4800,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    380,
+    "std",
+    "uncertain",
+    360,
+    400
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    150,
+    175
+   ],
+   "climb_ms": [
+    7.0,
+    "std",
+    "uncertain",
+    6.0,
+    8.0
+   ],
+   "ceiling_m": [
+    9000,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    28,
+    "estimate",
+    "uncertain",
+    20,
+    35
+   ],
+   "roll_fast_kmh": 450,
+   "g_limit": [
+    4.0,
+    "std",
+    "uncertain",
+    3.5,
+    4.5
+   ],
+   "dive_kmh": [
+    580,
+    "std",
+    "uncertain",
+    540,
+    620
+   ],
+   "bomb_kg": [
+    1400,
+    "std",
+    "manufacturer",
+    1200,
+    2000
+   ],
+   "range_km": [
+    2300,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "A fast, modern level bomber, thrown at the German columns at low level in May and June 1940, and lost heavily to flak."
+  },
+  {
+   "key": "MB.210",
+   "names": [
+    "MB.210",
+    "MB210",
+    "Bloch MB.210",
+    "Amiot 143"
+   ],
+   "nation": "FRA",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x Gnome-Rhone 14N",
+   "span_m": [
+    22.8,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    63.0,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    10200,
+    "std",
+    "uncertain",
+    9500,
+    10500
+   ],
+   "power_hp": [
+    1820,
+    "std",
+    "uncertain",
+    1600,
+    1900
+   ],
+   "power_m": [
+    3500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    322,
+    "std",
+    "uncertain",
+    310,
+    330
+   ],
+   "top_m": [
+    3500,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    270,
+    "std",
+    "uncertain",
+    240,
+    280
+   ],
+   "stall_kmh": [
+    125,
+    "std",
+    "uncertain",
+    115,
+    135
+   ],
+   "climb_ms": [
+    5.0,
+    "std",
+    "uncertain",
+    4.0,
+    6.0
+   ],
+   "ceiling_m": [
+    7000,
+    "std",
+    "uncertain",
+    7000,
+    9900
+   ],
+   "roll_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    22,
+    38
+   ],
+   "roll_kmh": 240,
+   "roll_fast_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    28
+   ],
+   "roll_fast_kmh": 350,
+   "g_limit": [
+    3.5,
+    "std",
+    "uncertain",
+    3.0,
+    4.0
+   ],
+   "dive_kmh": [
+    450,
+    "std",
+    "uncertain",
+    420,
+    480
+   ],
+   "bomb_kg": [
+    1600,
+    "std",
+    "uncertain",
+    1200,
+    1600
+   ],
+   "range_km": [
+    1700,
+    "std",
+    "uncertain",
+    1300,
+    1700
+   ],
+   "style": "none",
+   "style_why": "The plain French bomber of 1939 (the Bloch MB.210 and the Amiot 143 alike): slow, flown at night or lost by day."
+  },
+  {
+   "key": "P.11c",
+   "names": [
+    "P.11",
+    "P.11c",
+    "P11",
+    "PZL P.11",
+    "PZL P.11c"
+   ],
+   "nation": "POL",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "PZL Mercury VI.S2",
+   "span_m": [
+    10.72,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    17.9,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    1590,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    645,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    375,
+    "std",
+    "manufacturer",
+    365,
+    390
+   ],
+   "top_m": [
+    5500,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    300,
+    "std",
+    "uncertain",
+    280,
+    320
+   ],
+   "stall_kmh": [
+    105,
+    "std",
+    "uncertain",
+    95,
+    115
+   ],
+   "climb_ms": [
+    13.0,
+    "std",
+    "uncertain",
+    11.0,
+    14.0
+   ],
+   "to_height_min": [
+    6.0,
+    "std",
+    "uncertain",
+    5.8,
+    6.5
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    8000,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    80,
+    "estimate",
+    "uncertain",
+    60,
+    100
+   ],
+   "roll_kmh": 250,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    30,
+    60
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    8.0,
+    "std",
+    "uncertain",
+    7.0,
+    9.0
+   ],
+   "dive_kmh": [
+    600,
+    "std",
+    "uncertain",
+    550,
+    650
+   ],
+   "bomb_kg": [
+    50,
+    "std",
+    "uncertain",
+    0,
+    50
+   ],
+   "range_km": [
+    700,
+    "std",
+    "manufacturer"
+   ],
+   "style": "turn",
+   "style_why": "A gull-winged design of 1934, outpaced by the Bf 109 and even by the bombers: Polish pilots relied on the turn and on getting in close (the historian's read: about even against the Luftwaffe in September 1939, uncertain)."
+  },
+  {
+   "key": "D.XXI",
+   "names": [
+    "D.XXI",
+    "DXXI",
+    "D21",
+    "Fokker D.XXI"
+   ],
+   "nation": "NED",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Bristol Mercury VIII",
+   "span_m": [
+    11.0,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    16.2,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    1970,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    830,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4500,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    460,
+    "std",
+    "manufacturer",
+    440,
+    460
+   ],
+   "top_m": [
+    5150,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    380,
+    "std",
+    "uncertain",
+    350,
+    400
+   ],
+   "stall_kmh": [
+    125,
+    "std",
+    "uncertain",
+    115,
+    135
+   ],
+   "climb_ms": [
+    13.0,
+    "std",
+    "uncertain",
+    11.0,
+    14.0
+   ],
+   "ceiling_m": [
+    11350,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    70,
+    "estimate",
+    "uncertain",
+    60,
+    90
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_fast_kmh": 450,
+   "g_limit": [
+    7.5,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    650,
+    "std",
+    "uncertain",
+    600,
+    700
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    930,
+    "std",
+    "manufacturer"
+   ],
+   "style": "both",
+   "style_why": "Fixed undercarriage, sturdy and agile: the Dutch fought turning in May 1940; the Finns in the Winter War flew pairs and fours and struck the bombers from height and below."
+  },
+  {
+   "key": "B-239",
+   "names": [
+    "B-239",
+    "B239",
+    "Buffalo",
+    "F2A",
+    "Brewster"
+   ],
+   "nation": "FIN",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "Wright R-1820-G5",
+   "span_m": [
+    10.67,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    19.4,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2640,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    950,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4750,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    478,
+    "std",
+    "manufacturer",
+    478,
+    485
+   ],
+   "top_m": [
+    4750,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    400,
+    "std",
+    "uncertain",
+    370,
+    420
+   ],
+   "stall_kmh": [
+    125,
+    "std",
+    "uncertain",
+    115,
+    135
+   ],
+   "climb_ms": [
+    14.0,
+    "std",
+    "uncertain",
+    12.5,
+    15.6
+   ],
+   "ceiling_m": [
+    10100,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    85,
+    "estimate",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 500,
+   "g_limit": [
+    8.0,
+    "std",
+    "uncertain",
+    7.0,
+    8.5
+   ],
+   "dive_kmh": [
+    680,
+    "std",
+    "uncertain",
+    640,
+    720
+   ],
+   "bomb_kg": [
+    0,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1400,
+    "std",
+    "uncertain",
+    965,
+    1600
+   ],
+   "style": "both",
+   "style_why": "Light in Finnish hands: pairs and fours from height and out of the sun, with good sight and a good turn; Finnish records show 19 lost in combat in 1941-44 (the historian's read, likely)."
+  },
+  {
+   "key": "IAR 80",
+   "names": [
+    "IAR 80",
+    "IAR80",
+    "IAR 80A",
+    "IAR-80"
+   ],
+   "nation": "ROM",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "IAR K14-1000A",
+   "span_m": [
+    10.5,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    15.97,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    2800,
+    "std",
+    "uncertain",
+    2550,
+    2980
+   ],
+   "power_hp": [
+    1025,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    510,
+    "std",
+    "manufacturer",
+    500,
+    510
+   ],
+   "top_m": [
+    4000,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    420,
+    "std",
+    "uncertain",
+    380,
+    440
+   ],
+   "stall_kmh": [
+    140,
+    "std",
+    "uncertain",
+    130,
+    150
+   ],
+   "climb_ms": [
+    13.9,
+    "std",
+    "uncertain",
+    12.0,
+    15.0
+   ],
+   "to_height_min": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    6.5
+   ],
+   "to_height_m": 5000,
+   "ceiling_m": [
+    10500,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    90,
+    "estimate",
+    "uncertain",
+    70,
+    100
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    45,
+    "estimate",
+    "uncertain",
+    35,
+    55
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "std",
+    "uncertain",
+    6.5,
+    8.0
+   ],
+   "dive_kmh": [
+    700,
+    "std",
+    "uncertain",
+    650,
+    750
+   ],
+   "bomb_kg": [
+    200,
+    "std",
+    "uncertain",
+    0,
+    200
+   ],
+   "range_km": [
+    730,
+    "std",
+    "uncertain",
+    730,
+    940
+   ],
+   "style": "both",
+   "style_why": "Romania's own fighter from 1941: a fair match for the I-16 and the Hurricane, flown in German-style pairs and fours."
+  },
+  {
+   "key": "Fighter",
+   "names": [
+    "Fighter",
+    "Fighter 1939",
+    "CarrierFighter",
+    "Carrier fighter"
+   ],
+   "nation": "",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "a radial of about 850 hp",
+   "span_m": [
+    10.6,
+    "derived",
+    "derived"
+   ],
+   "wing_m2": [
+    16.5,
+    "derived",
+    "derived"
+   ],
+   "mass_kg": [
+    2100,
+    "derived",
+    "derived"
+   ],
+   "power_hp": [
+    850,
+    "derived",
+    "derived"
+   ],
+   "power_m": [
+    4500,
+    "derived",
+    "derived"
+   ],
+   "top_kmh": [
+    460,
+    "derived",
+    "derived"
+   ],
+   "top_m": [
+    4500,
+    "derived",
+    "derived"
+   ],
+   "cruise_kmh": [
+    380,
+    "derived",
+    "derived"
+   ],
+   "stall_kmh": [
+    130,
+    "derived",
+    "derived"
+   ],
+   "climb_ms": [
+    13.0,
+    "derived",
+    "derived"
+   ],
+   "ceiling_m": [
+    9500,
+    "derived",
+    "derived"
+   ],
+   "roll_dps": [
+    85,
+    "derived",
+    "derived"
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    45,
+    "derived",
+    "derived"
+   ],
+   "roll_fast_kmh": 500,
+   "g_limit": [
+    7.5,
+    "derived",
+    "derived"
+   ],
+   "dive_kmh": [
+    650,
+    "derived",
+    "derived"
+   ],
+   "bomb_kg": [
+    0,
+    "derived",
+    "derived"
+   ],
+   "range_km": [
+    800,
+    "derived",
+    "derived"
+   ],
+   "style": "turn",
+   "style_why": "The plain fighter of 1939-41 (the P.11, D.XXI, MS.406, I-16 and C.200 it stands for): light, slow beside the Bf 109, turning.",
+   "notes": "The rounded mean of the P.11c, D.XXI, MS.406, I-16 type 24 and C.200 rows; the 3D model's span. CarrierFighter is the kit's plain carrier fighter, named by no rule today."
+  },
+  {
+   "key": "Fighter 1942",
+   "names": [
+    "Fighter 1942"
+   ],
+   "nation": "",
+   "role": "fighter",
+   "engines": 1,
+   "engine": "an engine of about 1,100 hp",
+   "span_m": [
+    10.6,
+    "derived",
+    "derived"
+   ],
+   "wing_m2": [
+    17.0,
+    "derived",
+    "derived"
+   ],
+   "mass_kg": [
+    2800,
+    "derived",
+    "derived"
+   ],
+   "power_hp": [
+    1100,
+    "derived",
+    "derived"
+   ],
+   "power_m": [
+    4000,
+    "derived",
+    "derived"
+   ],
+   "top_kmh": [
+    560,
+    "derived",
+    "derived"
+   ],
+   "top_m": [
+    5000,
+    "derived",
+    "derived"
+   ],
+   "cruise_kmh": [
+    440,
+    "derived",
+    "derived"
+   ],
+   "stall_kmh": [
+    145,
+    "derived",
+    "derived"
+   ],
+   "climb_ms": [
+    15.5,
+    "derived",
+    "derived"
+   ],
+   "ceiling_m": [
+    10500,
+    "derived",
+    "derived"
+   ],
+   "roll_dps": [
+    90,
+    "derived",
+    "derived"
+   ],
+   "roll_kmh": 320,
+   "roll_fast_dps": [
+    45,
+    "derived",
+    "derived"
+   ],
+   "roll_fast_kmh": 550,
+   "g_limit": [
+    7.0,
+    "derived",
+    "derived"
+   ],
+   "dive_kmh": [
+    720,
+    "derived",
+    "derived"
+   ],
+   "bomb_kg": [
+    0,
+    "derived",
+    "derived"
+   ],
+   "range_km": [
+    800,
+    "derived",
+    "derived"
+   ],
+   "style": "both",
+   "style_why": "The plain fighter from 1942 (as the IAR 80, C.202 and Yak-1): faster, and flown in pairs and fours.",
+   "notes": "The rounded mean of the IAR 80, C.202 and Yak-1 rows; the 3D model's span."
+  },
+  {
+   "key": "Bomber",
+   "names": [
+    "Bomber",
+    "Twin-engined bomber"
+   ],
+   "nation": "",
+   "role": "medium bomber",
+   "engines": 2,
+   "engine": "2 x radials of about 950 hp",
+   "span_m": [
+    19.8,
+    "derived",
+    "derived"
+   ],
+   "wing_m2": [
+    60.0,
+    "derived",
+    "derived"
+   ],
+   "mass_kg": [
+    9000,
+    "derived",
+    "derived"
+   ],
+   "power_hp": [
+    1950,
+    "derived",
+    "derived"
+   ],
+   "power_m": [
+    4000,
+    "derived",
+    "derived"
+   ],
+   "top_kmh": [
+    400,
+    "derived",
+    "derived"
+   ],
+   "top_m": [
+    4000,
+    "derived",
+    "derived"
+   ],
+   "cruise_kmh": [
+    300,
+    "derived",
+    "derived"
+   ],
+   "stall_kmh": [
+    135,
+    "derived",
+    "derived"
+   ],
+   "climb_ms": [
+    6.0,
+    "derived",
+    "derived"
+   ],
+   "ceiling_m": [
+    7500,
+    "derived",
+    "derived"
+   ],
+   "roll_dps": [
+    35,
+    "derived",
+    "derived"
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    24,
+    "derived",
+    "derived"
+   ],
+   "roll_fast_kmh": 420,
+   "g_limit": [
+    3.5,
+    "derived",
+    "derived"
+   ],
+   "dive_kmh": [
+    500,
+    "derived",
+    "derived"
+   ],
+   "bomb_kg": [
+    1100,
+    "derived",
+    "derived"
+   ],
+   "range_km": [
+    1800,
+    "derived",
+    "derived"
+   ],
+   "style": "none",
+   "style_why": "The plain twin of 1939-41 (as the SB-2, Blenheim, MB.210 and He 111 it stands for).",
+   "notes": "The rounded mean of the SB-2, Blenheim IV, MB.210 and He 111H rows; the 3D model's span."
+  },
+  {
+   "key": "Torpedo",
+   "names": [
+    "Torpedo",
+    "Torpedo bomber"
+   ],
+   "nation": "",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "a radial of about 900 hp",
+   "span_m": [
+    15.0,
+    "derived",
+    "derived"
+   ],
+   "wing_m2": [
+    44.0,
+    "derived",
+    "derived"
+   ],
+   "mass_kg": [
+    3900,
+    "derived",
+    "derived"
+   ],
+   "power_hp": [
+    850,
+    "derived",
+    "derived"
+   ],
+   "power_m": [
+    3000,
+    "derived",
+    "derived"
+   ],
+   "top_kmh": [
+    310,
+    "derived",
+    "derived"
+   ],
+   "top_m": [
+    2500,
+    "derived",
+    "derived"
+   ],
+   "cruise_kmh": [
+    210,
+    "derived",
+    "derived"
+   ],
+   "stall_kmh": [
+    103,
+    "derived",
+    "derived"
+   ],
+   "climb_ms": [
+    5.0,
+    "derived",
+    "derived"
+   ],
+   "ceiling_m": [
+    5800,
+    "derived",
+    "derived"
+   ],
+   "roll_dps": [
+    45,
+    "derived",
+    "derived"
+   ],
+   "roll_kmh": 240,
+   "roll_fast_dps": [
+    32,
+    "derived",
+    "derived"
+   ],
+   "roll_fast_kmh": 350,
+   "g_limit": [
+    5.0,
+    "derived",
+    "derived"
+   ],
+   "dive_kmh": [
+    440,
+    "derived",
+    "derived"
+   ],
+   "bomb_kg": [
+    850,
+    "derived",
+    "derived"
+   ],
+   "range_km": [
+    1180,
+    "derived",
+    "derived"
+   ],
+   "style": "none",
+   "style_why": "A navy's plain carrier torpedo bomber (as the B5N, TBD and Swordfish it stands for).",
+   "notes": "The rounded mean of the B5N2, TBD-1 and Swordfish I rows; the shape's span."
+  },
+  {
+   "key": "Dive",
+   "names": [
+    "Dive",
+    "Dive bomber"
+   ],
+   "nation": "",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "a radial of about 950 hp",
+   "span_m": [
+    13.0,
+    "derived",
+    "derived"
+   ],
+   "wing_m2": [
+    31.0,
+    "derived",
+    "derived"
+   ],
+   "mass_kg": [
+    4000,
+    "derived",
+    "derived"
+   ],
+   "power_hp": [
+    920,
+    "derived",
+    "derived"
+   ],
+   "power_m": [
+    3300,
+    "derived",
+    "derived"
+   ],
+   "top_kmh": [
+    385,
+    "derived",
+    "derived"
+   ],
+   "top_m": [
+    3300,
+    "derived",
+    "derived"
+   ],
+   "cruise_kmh": [
+    257,
+    "derived",
+    "derived"
+   ],
+   "stall_kmh": [
+    118,
+    "derived",
+    "derived"
+   ],
+   "climb_ms": [
+    7.3,
+    "derived",
+    "derived"
+   ],
+   "ceiling_m": [
+    7900,
+    "derived",
+    "derived"
+   ],
+   "roll_dps": [
+    57,
+    "derived",
+    "derived"
+   ],
+   "roll_kmh": 300,
+   "roll_fast_dps": [
+    40,
+    "derived",
+    "derived"
+   ],
+   "roll_fast_kmh": 430,
+   "g_limit": [
+    6.3,
+    "derived",
+    "derived"
+   ],
+   "dive_kmh": [
+    510,
+    "derived",
+    "derived"
+   ],
+   "bomb_kg": [
+    380,
+    "derived",
+    "derived"
+   ],
+   "range_km": [
+    1340,
+    "derived",
+    "derived"
+   ],
+   "style": "none",
+   "style_why": "A navy's plain carrier dive bomber (as the SBD, D3A and Skua it stands for).",
+   "notes": "The rounded mean of the SBD-3, D3A1 and Skua II rows; the shape's span."
+  },
+  {
+   "key": "Swordfish I",
+   "names": [
+    "Swordfish",
+    "Swordfish I",
+    "Stringbag"
+   ],
+   "nation": "UK",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "Bristol Pegasus IIIM3",
+   "span_m": [
+    13.87,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    56.4,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3400,
+    "std",
+    "manufacturer",
+    3400,
+    3500
+   ],
+   "power_hp": [
+    750,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    1450,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    222,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    1450,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    167,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    89,
+    "std",
+    "manufacturer",
+    85,
+    95
+   ],
+   "climb_ms": [
+    4.5,
+    "std",
+    "uncertain",
+    4.0,
+    6.2
+   ],
+   "ceiling_m": [
+    3260,
+    "std",
+    "manufacturer",
+    3260,
+    5030
+   ],
+   "roll_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_kmh": 180,
+   "roll_fast_dps": [
+    30,
+    "estimate",
+    "uncertain",
+    20,
+    40
+   ],
+   "roll_fast_kmh": 280,
+   "g_limit": [
+    5.0,
+    "std",
+    "uncertain",
+    4.5,
+    6.0
+   ],
+   "dive_kmh": [
+    360,
+    "std",
+    "uncertain",
+    320,
+    400
+   ],
+   "bomb_kg": [
+    730,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    840,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "A biplane torpedo bomber, slow enough that fighters overshot it: Taranto (11 November 1940) by night, the Bismarck's rudder (26 May 1941)."
+  },
+  {
+   "key": "Barracuda II",
+   "names": [
+    "Barracuda",
+    "Barracuda II"
+   ],
+   "nation": "UK",
+   "role": "torpedo bomber",
+   "engines": 1,
+   "engine": "Rolls-Royce Merlin 32",
+   "span_m": [
+    14.99,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    37.6,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    6400,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    1640,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    530,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    367,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    530,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    314,
+    "std",
+    "uncertain",
+    280,
+    330
+   ],
+   "stall_kmh": [
+    120,
+    "std",
+    "uncertain",
+    110,
+    130
+   ],
+   "climb_ms": [
+    4.8,
+    "std",
+    "uncertain",
+    4.3,
+    6.0
+   ],
+   "ceiling_m": [
+    5060,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    40,
+    "estimate",
+    "uncertain",
+    30,
+    50
+   ],
+   "roll_kmh": 260,
+   "roll_fast_dps": [
+    28,
+    "estimate",
+    "uncertain",
+    20,
+    35
+   ],
+   "roll_fast_kmh": 380,
+   "g_limit": [
+    5.5,
+    "std",
+    "uncertain",
+    5.0,
+    6.5
+   ],
+   "dive_kmh": [
+    560,
+    "std",
+    "uncertain",
+    500,
+    600
+   ],
+   "bomb_kg": [
+    730,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1100,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The Swordfish's successor: dive bomber against the Tirpitz (3 April 1944) as well as torpedo bomber."
+  },
+  {
+   "key": "Skua II",
+   "names": [
+    "Skua",
+    "Skua II"
+   ],
+   "nation": "UK",
+   "role": "dive bomber",
+   "engines": 1,
+   "engine": "Bristol Perseus XII",
+   "span_m": [
+    14.07,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    29.0,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    3730,
+    "std",
+    "manufacturer"
+   ],
+   "power_hp": [
+    890,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    2040,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    362,
+    "std",
+    "manufacturer"
+   ],
+   "top_m": [
+    2040,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    230,
+    "std",
+    "manufacturer"
+   ],
+   "stall_kmh": [
+    115,
+    "std",
+    "uncertain",
+    105,
+    125
+   ],
+   "climb_ms": [
+    7.5,
+    "std",
+    "uncertain",
+    6.5,
+    8.1
+   ],
+   "ceiling_m": [
+    6160,
+    "std",
+    "manufacturer"
+   ],
+   "roll_dps": [
+    50,
+    "estimate",
+    "uncertain",
+    40,
+    60
+   ],
+   "roll_kmh": 280,
+   "roll_fast_dps": [
+    35,
+    "estimate",
+    "uncertain",
+    25,
+    45
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    6.0,
+    "std",
+    "uncertain",
+    5.5,
+    7.0
+   ],
+   "dive_kmh": [
+    500,
+    "std",
+    "uncertain",
+    450,
+    560
+   ],
+   "bomb_kg": [
+    227,
+    "std",
+    "manufacturer"
+   ],
+   "range_km": [
+    1220,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "The Fleet Air Arm's dive bomber and fighter of 1939-40: it sank the cruiser Konigsberg at Bergen (10 April 1940)."
+  }
+ ],
+ "stand_ins": {
+  "Fighter": [
+   {
+    "nation": "SOV",
+    "row": "I-16 type 24"
+   },
+   {
+    "nation": "CHN",
+    "row": "I-16 type 24"
+   },
+   {
+    "nation": "ITA",
+    "until": 1941.8333333333333,
+    "row": "C.200"
+   },
+   {
+    "nation": "ITA",
+    "row": "C.202"
+   },
+   {
+    "nation": "FRA",
+    "until": 1940.4166666666667,
+    "row": "MS.406"
+   },
+   {
+    "nation": "FRA",
+    "row": "D.520"
+   },
+   {
+    "nation": "POL",
+    "row": "P.11c"
+   },
+   {
+    "nation": "NED",
+    "row": "D.XXI"
+   },
+   {
+    "nation": "FIN",
+    "until": 1941.5,
+    "row": "D.XXI"
+   },
+   {
+    "nation": "FIN",
+    "row": "B-239"
+   },
+   {
+    "nation": "ROM",
+    "until": 1941,
+    "row": "Fighter"
+   },
+   {
+    "nation": "ROM",
+    "row": "IAR 80"
+   },
+   {
+    "until": 1942,
+    "row": "Fighter"
+   },
+   {
+    "row": "Fighter 1942"
+   }
+  ],
+  "Bomber": [
+   {
+    "nation": "SOV",
+    "row": "SB-2"
+   },
+   {
+    "nation": "FRA",
+    "row": "MB.210"
+   },
+   {
+    "nation": "UK",
+    "row": "Blenheim IV"
+   },
+   {
+    "nation": "CAN",
+    "row": "Blenheim IV"
+   },
+   {
+    "nation": "AUS",
+    "row": "Blenheim IV"
+   },
+   {
+    "nation": "NZL",
+    "row": "Blenheim IV"
+   },
+   {
+    "nation": "SAF",
+    "row": "Blenheim IV"
+   },
+   {
+    "nation": "IND",
+    "row": "Blenheim IV"
+   },
+   {
+    "row": "Bomber"
+   }
+  ],
+  "Torpedo": [
+   {
+    "row": "Torpedo"
+   }
+  ],
+  "Dive": [
+   {
+    "nation": "GER",
+    "row": "Ju 87B"
+   },
+   {
+    "nation": "ITA",
+    "row": "Ju 87B"
+   },
+   {
+    "row": "Dive"
+   }
+  ],
+  "Patrol": [
+   {
+    "row": "PBY-5"
+   }
+  ]
+ },
+ "tactics": [
+  {
+   "topic": "formation",
+   "who": "GER",
+   "when": "1939-45",
+   "what": "Fighters fly in the Rotte (a leader and his wingman, about 200 m apart) and the Schwarm (two Rotten, the 'finger four'), worked out in Spain in 1937-38; a Staffel is three Schwarme stepped up. The leader shoots; the wingman guards his tail.",
+   "kind": "fact",
+   "by": [
+    "galland",
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "UK",
+   "when": "1939 to autumn 1940",
+   "what": "Tight vics of three, sections in line astern, the Fighter Area Attacks by the book; one 'weaver' guarding the rear. Easy prey for a Schwarm diving from above.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "std"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "UK",
+   "when": "autumn 1940 to spring 1941",
+   "what": "Fours in line astern, then the 'fluid six'; finger fours (the German four) from about March 1941.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "historian"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "USA (Army)",
+   "when": "1942-45",
+   "what": "Two-ship elements, four-ship flights in finger four, 16-ship squadrons; boom and zoom from height.",
+   "kind": "fact",
+   "by": [
+    "mcfarland",
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "USA (Navy)",
+   "when": "1942-45",
+   "what": "Two-plane sections and four-plane divisions; the Thach weave: two sections turning toward each other whenever one is attacked, so the other's guns meet the attacker head-on.",
+   "kind": "fact",
+   "by": [
+    "lundstrom"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "JAP (Navy)",
+   "when": "1937 to 1943",
+   "what": "The shotai of three (a leader and two wingmen in a loose vic), three shotai to a chutai; fours from 1943-44.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "lundstrom"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "JAP (Army)",
+   "when": "1941 to 1943",
+   "what": "Ki-43 sentai flew threes like the navy, changing to fours in 1943.",
+   "kind": "reading",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "SOV",
+   "when": "1941 to late 1942",
+   "what": "The zveno of three in a tight vic, low and turning; from late 1942 pairs and fours; in 1943 Pokryshkin's 'height, speed, manoeuvre, fire' and fours stacked in height (the 'Kuban stairs').",
+   "kind": "fact",
+   "by": [
+    "hardesty",
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "ITA",
+   "when": "1940-43",
+   "what": "Patrols of three in vics, turning; German pairs and fours with the C.202 from 1942.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "FRA",
+   "when": "1939-40",
+   "what": "Tight patrols of three, turning; the patrol attacked in turn from astern and the quarter.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "formation",
+   "who": "FIN",
+   "when": "1939-44",
+   "what": "Pairs and fours from the Winter War on, attacking from height, from the sun and from below.",
+   "kind": "reading",
+   "by": [
+    "historian"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "GER",
+   "when": "to 18 August 1940",
+   "what": "The free hunt: Bf 109s swept ahead of the bombers, choosing their fight.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "galland"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "GER",
+   "when": "from late August 1940",
+   "what": "Goring's orders of 18 and 19 August tied the Bf 109s to the bombers: close escort weaving beside them, with top cover above; it cost the 109s their height and speed.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "galland"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "UK",
+   "when": "1941-42",
+   "what": "The Circus: a few bombers as bait under a close escort wing, an escort cover wing, high cover, and sweeps (Rodeos) and target-support wings around them.",
+   "kind": "fact",
+   "by": [
+    "historian",
+    "std"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "USA (Army)",
+   "when": "1943",
+   "what": "Escorts tied to the bombers: close escort and top cover to the edge of their range (the P-47 to the German border), then the bombers went on alone.",
+   "kind": "fact",
+   "by": [
+    "mcfarland",
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "USA (Army)",
+   "when": "from January 1944",
+   "what": "Doolittle's order: destroy the German fighters. Groups swept ahead of the bombers and were freed to chase and to strafe airfields on the way home; relays of escorts along the route.",
+   "kind": "fact",
+   "by": [
+    "mcfarland",
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "SOV",
+   "when": "1942-45",
+   "what": "Close escort over the Il-2s, holding station (order 0685 of 9 September 1942): a fighter that left its Sturmoviks to chase was punished.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "hardesty"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "JAP",
+   "when": "1941-44",
+   "what": "Top cover weaving above the bombers and, on big raids, a sweep ahead; not below the bombers.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "escort",
+   "who": "ITA",
+   "when": "1940-42",
+   "what": "Fighters crowded close round the SM.79s (over Malta).",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "GER v B-17",
+   "when": "to 23 November 1942",
+   "what": "From astern and the rear quarter, into the tail guns' and the box's crossfire.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "GER v B-17",
+   "when": "from 23 November 1942",
+   "what": "Head-on from 12 o'clock level or a little high (Egon Mayer, JG 2, over St Nazaire): closing at 800 to 900 km/h, a burst of a second or two, then down and away under the box; the B-17's nose had few guns until the B-17G's chin turret.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "GER",
+   "when": "1943",
+   "what": "Twin-engined destroyers (Bf 110G, Me 410) firing 21 cm rockets from about 1,000 m astern to break up a box, then picking off its stragglers; air-to-air bombs dropped on boxes from above.",
+   "kind": "reading",
+   "by": [
+    "std",
+    "murray"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "GER",
+   "when": "1944",
+   "what": "The Sturmgruppen: armoured Fw 190A-8s in line abreast closing to about 100 m astern of a box, with Bf 109Gs above to hold off the escort.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "std"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "GER",
+   "when": "1943-45, night",
+   "what": "Night fighters under ground control (Himmelbett), later free in the bomber stream (Zahme Sau, Wilde Sau); upward-firing guns (Schrage Musik) from below a Lancaster, which had no gun there.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "UK",
+   "when": "1940",
+   "what": "Fighter Command's order: Hurricanes on the bombers, head-on where they could (few managed it), Spitfires on the escort.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "JAP v four-engined",
+   "when": "from mid-1942",
+   "what": "Mostly head-on against the B-17 and B-24; against twins from astern and the quarter.",
+   "kind": "fact",
+   "by": [
+    "doctrine"
+   ]
+  },
+  {
+   "topic": "attack",
+   "who": "SOV",
+   "when": "1941-45",
+   "what": "From the quarter astern and from below, under the dorsal gunner's arc; in 1941, sometimes by ramming (the taran).",
+   "kind": "reading",
+   "by": [
+    "doctrine",
+    "hardesty"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "Wildcat, P-40, P-38, P-39 v Zero and Oscar",
+   "when": "1941-44",
+   "what": "Never dogfight a Zero or an Oscar below 300 knots: make one pass from height and dive away; roll right and dive at about 200 knots when one is on your tail (the Akutan tests).",
+   "kind": "fact",
+   "by": [
+    "akutan",
+    "lundstrom"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "Bf 109E v Spitfire and Hurricane",
+   "when": "1940",
+   "what": "The 109 climbs and dives; it does not turn with either at low speed.",
+   "kind": "fact",
+   "by": [
+    "doctrine",
+    "rae109"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "Spitfire V v Fw 190A",
+   "when": "1941-42",
+   "what": "The Spitfire must not try to dive or climb away from the Fw 190: it turns, and keeps its speed up.",
+   "kind": "fact",
+   "by": [
+    "afdu190"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "Bf 109G and Fw 190A v Yak-3 and La-5FN",
+   "when": "1943-45",
+   "what": "The German fighters fought from height and avoided turning with the Soviet fighters under 4,000 m; the Soviet fighters kept the fight low.",
+   "kind": "reading",
+   "by": [
+    "hardesty",
+    "gordon"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "P-47 v Bf 109 and Fw 190",
+   "when": "1943-44",
+   "what": "From height, dive, fire and zoom back up; never a slow turning or climbing fight low down.",
+   "kind": "reading",
+   "by": [
+    "mcfarland"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "Me 262 v piston fighters",
+   "when": "1944-45",
+   "what": "Never turn: dive through at speed and climb away; most were lost taking off and landing, when they were slow.",
+   "kind": "reading",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "matchup",
+   "who": "Zero v Hellcat and Corsair",
+   "when": "1943-45",
+   "what": "The Zero must not follow them into a dive or fight them fast; its chance was the slow turn.",
+   "kind": "reading",
+   "by": [
+    "akutan",
+    "taic"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "USA (Army)",
+   "when": "1943",
+   "what": "The combat box: 18 to 21 B-17s in three squadrons (lead, high and low) stepped up and down for mutual fire; three boxes to a combat wing of 54; bombing on the lead bombardier's drop.",
+   "kind": "fact",
+   "by": [
+    "mcfarland",
+    "std"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "UK",
+   "when": "1939-40, by day",
+   "what": "Vics of three in sections; after the Heligoland Bight (18 December 1939) heavy bombers went to night bombing.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "UK",
+   "when": "1942-45, by night",
+   "what": "The bomber stream: no formation, each crew on its own route and time through a stream many miles long, over the target in a few minutes; the Lancaster's corkscrew when a night fighter was seen.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "GER",
+   "when": "1939-41",
+   "what": "The Kette of three in a vic, Staffeln of three Ketten, the Gruppe in a wedge; in 1940 the escort close above and beside.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "SOV",
+   "when": "1941-45",
+   "what": "SBs in tight vics, often unescorted in 1941; Pe-2s in close vics that dived in turn; Il-2s in small groups low over the front.",
+   "kind": "reading",
+   "by": [
+    "hardesty"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "JAP (Navy)",
+   "when": "1941-43",
+   "what": "Land bombers in big vees of 9 to 27 in tight formation, bombing together on the leader's drop from 6,000 to 8,000 m (Clark Field, Darwin); torpedo attacks low and abreast.",
+   "kind": "fact",
+   "by": [
+    "francillon",
+    "std"
+   ]
+  },
+  {
+   "topic": "bombers",
+   "who": "ITA",
+   "when": "1940-43",
+   "what": "SM.79s in vics of three at 4,000 to 6,000 m; torpedo attacks low in pairs.",
+   "kind": "reading",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "GER",
+   "when": "1939-43",
+   "what": "The Stuka: from about 4,000 m in echelon, each rolling in turn into a 60 to 90 degree dive with its brakes out, bombing at 450 to 700 m and pulling out at about 6 g.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "SOV",
+   "when": "1942-45",
+   "what": "The Il-2's circle (krug): the group circles over the target at 400 to 1,000 m, each diving in turn at 25 to 30 degrees with cannon, rockets and from July 1943 anti-tank bomblets, the circle guarding each one's tail.",
+   "kind": "fact",
+   "by": [
+    "hardesty"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "USA, UK",
+   "when": "1943-45",
+   "what": "Fighter-bombers in 30 to 45 degree dives, bombing at 300 to 900 m; Typhoons and P-47s in a 'cab rank' over Normandy, called down by controllers with the troops.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "GER",
+   "when": "1943-45",
+   "what": "Fw 190F fighter-bombers in shallow dives and low passes took the Stuka's place.",
+   "kind": "fact",
+   "by": [
+    "std"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "USA (Navy)",
+   "when": "1942-45",
+   "what": "Dive bombers from 4,000 to 6,000 m in a 70 degree dive with split flaps open, letting go at 450 to 600 m.",
+   "kind": "fact",
+   "by": [
+    "lundstrom",
+    "std"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "JAP (Navy)",
+   "when": "1941-43",
+   "what": "The Val from 3,000 to 4,000 m in a 55 to 60 degree dive, letting go at about 450 m.",
+   "kind": "fact",
+   "by": [
+    "francillon",
+    "std"
+   ]
+  },
+  {
+   "topic": "ground",
+   "who": "all navies",
+   "when": "1940-45",
+   "what": "Torpedo bombers drop low (under 30 m) and slow (about 200 km/h for the American Mk 13); the Japanese anvil: two groups at once from both bows, so a turn away from one meets the other.",
+   "kind": "fact",
+   "by": [
+    "std",
+    "lundstrom"
+   ]
+  }
+ ]
+}
