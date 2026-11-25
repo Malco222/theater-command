@@ -48,8 +48,10 @@ describe('the list', () => {
   it('keeps every note to 30 words, the raid to 36, in each game\'s own words', () => {
     for (const game of ['shared', 'browser', 'unreal']) {
       for (const l of LESSONS) {
-        const n = wordCount(namedWords(l.text, game, game === 'browser' ? ' under STAFF' : ''));
-        expect(n, `${l.id} in ${game}`).toBeLessThanOrEqual(l.id === 'raid' ? WORDS_MOST_RAID : WORDS_MOST);
+        for (const text of [l.text, ...(l.there ? [l.there] : [])]) {
+          const n = wordCount(namedWords(text, game, game === 'browser' ? ' under STAFF' : ''));
+          expect(n, `${l.id} in ${game}`).toBeLessThanOrEqual(l.id === 'raid' ? WORDS_MOST_RAID : WORDS_MOST);
+        }
       }
       expect(wordCount(namedWords(CLOSING.text, game))).toBeLessThanOrEqual(WORDS_MOST);
     }
@@ -240,6 +242,20 @@ describe('FIRST COMMAND, played', () => {
     expect(closingOwed(g, b)).toBe(true);
     b.done.push(CLOSING.id);
     expect(closingOwed(g, b)).toBe(false);
+  });
+
+  it('moves lesson 10 on once the ARSENAL is open: the note asks for the artillery corps, not for the page (build 1640)', () => {
+    const g = firstHour();
+    const build = LESSONS.find((l) => l.id === 'build')!;
+    for (const game of ['shared', 'browser', 'unreal']) {
+      const there = lessonWords(g, build, game, '', true);
+      expect(lessonWords(g, build, game).text).not.toBe(there.text);
+      expect(there.text).toMatch(/^Order an artillery corps\./);
+      expect(there.text).not.toMatch(/\bopen\b/i);
+      expect(there.deed).toBe(lessonWords(g, build, game).deed);
+    }
+    // (A lesson with no words for its page reads the same either way.)
+    expect(lessonWords(g, LESSONS[2], 'browser', '', true)).toEqual(lessonWords(g, LESSONS[2], 'browser'));
   });
 
   it('fills the city lesson\'s place names, and reads the design director\'s words where no siege stands', () => {

@@ -10,7 +10,9 @@ import {
   GOOD_NAME, RES, fieldYield, fuelAir, fuelFleet, fuelMet, fuelSlows, keepsStores, lanesTo, needOf, oilMonths, openStores, resRules, resourcesTick, seaLanes,
   shortAttack, shortDefence, shortOfOil, standing, stores, storesOf, supDrafts, supIncome, suppliesMet, willLost,
 } from '../src/campaign/resources';
+import { FAR_SETUP } from '../src/campaign/far-rows';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { FAR_STAGE } from '../src/campaign/stage';
 import { startOpen } from '../src/campaign/staff';
 import { TECH, staffPick, techOf, techRule } from '../src/campaign/tech';
 import { depots, runTurnAI, shippingLanes } from '../src/campaign/turn';
@@ -41,7 +43,8 @@ describe('the data', () => {
   it('names powers, seas, oilfields and sellers that exist', () => {
     const g = grand();
     for (const nat of POWERS) expect(g.nations[nat], nat).toBeTruthy();
-    for (const name of Object.keys(RES.oil.fields)) if (name !== '_default') expect(g.byName[name]?.oil, name).toBe(true);
+    // (With the whole world on the chart the Caspian's oil stands at Baku, and Kirovabad's mark is off: ruling 231.)
+    for (const name of Object.keys(RES.oil.fields)) if (name !== '_default') expect(g.byName[name]?.oil, name).toBe(!FAR_SETUP.unmark.includes(name));
     for (const r of g.regions) if (r.oil) expect(RES.oil.fields[r.name], `${r.name} has a yield of its own`).toBeGreaterThan(0);
     const ids = new Set<string>();
     for (const l of RES.lanes) {
@@ -195,15 +198,19 @@ describe('the depots', () => {
 describe('oilfields', () => {
   it('give their owner the most, a conqueror less, and whoever holds them the oil', () => {
     const g = grand('GER');
-    const baku = g.byName['Kirovabad'];
-    expect(fieldYield(g, baku)).toBe(RES.oil.fields.Kirovabad);
-    expect(fieldYield(g, baku, 'GER')).toBeCloseTo(RES.oil.fields.Kirovabad * RES.oil.occupied, 9);
+    // The Caspian's oil: at Kirovabad on the old chart, at Baku once the whole world is on it (ruling 231), where the
+    // Soviet Union has four fields more (Guryev, Krasnovodsk, Sterlitamak, North Sakhalin).
+    const baku = g.byName[FAR_STAGE ? 'Baku' : 'Kirovabad'];
+    const yields = RES.oil.fields[baku.name];
+    expect(yields).toBe(46);
+    expect(fieldYield(g, baku)).toBe(yields);
+    expect(fieldYield(g, baku, 'GER')).toBeCloseTo(yields * RES.oil.occupied, 9);
     expect(fieldYield(g, g.byName['Berlin'])).toBe(0);
     const before = stores(g, 'SOV')!.oil.made, ger = stores(g, 'GER')!.oil.made;
-    expect(line(g, 'SOV', 'oil', 'fields')!.count).toBe(3);
+    expect(line(g, 'SOV', 'oil', 'fields')!.count).toBe(FAR_STAGE ? 7 : 3);
     baku.ctrl = 'GER';
-    expect(stores(g, 'SOV')!.oil.made).toBeCloseTo(before - RES.oil.fields.Kirovabad, 6);
-    expect(stores(g, 'GER')!.oil.made).toBeCloseTo(ger + RES.oil.fields.Kirovabad * RES.oil.occupied, 6);
+    expect(stores(g, 'SOV')!.oil.made).toBeCloseTo(before - yields, 6);
+    expect(stores(g, 'GER')!.oil.made).toBeCloseTo(ger + yields * RES.oil.occupied, 6);
     expect(line(g, 'GER', 'oil', 'taken')!.count).toBe(1);
   });
 });

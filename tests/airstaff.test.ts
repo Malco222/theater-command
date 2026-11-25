@@ -16,8 +16,8 @@ import type { AirFleet, AirReport, Game } from '../src/campaign/types';
 
 const grand = (human: string | null = 'FRA', level = 'colonel', seed = 3): Game => { const g = startOpen(createGame(seed, human)); setLevel(g, level); return g; };
 const R = AIRWAR.ai.raids;
-/** The bombers that flew a raid on land or on shipping: strikes on a fleet or a harbour are the sea staff's, with rules of their own (carriers.test.ts). */
-const bombers = (r: AirReport): number => (r.mission === 'fleet' || r.mission === 'harbour' ? 0 : r.att.reduce((s, x) => s + x.bmr, 0));
+/** The bombers that flew a raid on land: strikes on a fleet, a harbour or shipping at sea are the sea staff's, with rules of their own (carriers.test.ts, air-staff-52.test.ts). */
+const bombers = (r: AirReport): number => (r.mission === 'fleet' || r.mission === 'harbour' || r.mission === 'strike' ? 0 : r.att.reduce((s, x) => s + x.bmr, 0));
 /** Plays so many months with the player giving no orders, and returns the raids flown in them. */
 function months(g: Game, n: number): AirReport[] {
   const from = g.airReports.length;
@@ -176,13 +176,14 @@ describe('the computer\'s air staff', () => {
           const f = g.airFleets.find((y) => y.id === x.id)!;
           expect(f.flew).toBe(g.turn);
           expect(f.mission).toBe(r.mission);
-          expect(f.target).toBe(r.region);
+          // (A strike at sea is aimed at a sea, ruling 52: its target is the sea's own number.)
+          expect(f.target).toBe(r.region >= 0 ? r.region : r.zone);
         }
       }
       // No group flies twice, and the staff does not hit one place twice in a month.
       const flew = raids.flatMap((r) => r.att.map((x) => x.id));
       expect(new Set(flew).size).toBe(flew.length);
-      expect(new Set(raids.map((r) => r.region)).size).toBe(raids.length);
+      expect(new Set(raids.map((r) => `${r.region}:${r.zone}`)).size).toBe(raids.length);
       // The rest stay on patrol, and a second call in the month sends nobody else out on a second raid.
       expect(airFleetsOf(g, 'GER').filter((f) => f.flew !== g.turn).every((f) => f.mission === 'support')).toBe(true);
       const n = raids.length;

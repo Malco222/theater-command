@@ -1,0 +1,870 @@
+{
+  "what": "How a blow looks: the ways a ship or a ground unit takes a hit, picked for the situation and never the same twice running (Battle/Fates.h). Looks only: the battle's numbers decide every loss, and nothing here changes one.",
+  "version": 1,
+  "_about": {
+    "asked": "Brian, 20 November 2026 14:26Z, for the sea and land battles: 'i want this same thing for naval and ground battles', after his ask for the air battles that every hit should not look the same (many ways down, not every hit a kill, a fire put out, a straggler that rejoins; 'variables and different situations' so it never gets boring).",
+    "memory": "recent: the weight a look keeps when it was the last shown in its group, the second last, the third, the fourth (the last is never shown next unless it is the only one allowed). same_dial: the weight a dial's value keeps when it is the one that way drew last time.",
+    "families": "What a blow can strike, by domain. Sea: bb battleship (the stage's 'ag', old Utah, counts as one), ca cruiser, cv carrier, dd destroyer, ss submarine, ap transport or merchant. Land: tanks by weight of armour (tank_light: 7TP, LightTank, Type97, M13, Matilda's light peers; tank_medium: Panzer IV, T-34, Sherman, Char B1, Panther as built with a medium's crew; tank_heavy: Tiger, KV-1, Matilda by its armour), spgun (assault guns, tank destroyers, self-propelled guns), armoured_car, halftrack, truck, gun (towed), infantry.",
+    "aspects": "Where a blow on land struck from, when the scene cannot tell: drawn by these odds (most hits on tanks were on the front, as tanks fought facing the enemy).",
+    "sizes": "The effects kit's size row for each weapon (battle-fx.json sizes): the dial $size.",
+    "glances": "The kit's Glance size for a shot that glances off armour: the dial $glance.",
+    "ways": "Each way: key; group (the memory's: ship, tank, soft, gun, man, men); words (plain, for logs and the sheets); domain; families it can show on; on: the numbers' results it can show (worn, lost, out, waver, rout, rally); how: where the numbers named the end in words, only blows with that how; weight; final (the model is lost); once (never twice on one model); by: a weight for each value of weapon, family, aspect, ground, fuel or stowage ('*' any other; a value not listed and no '*' rules the way out); if / unless: a weight when the flag harbour, moving, cover or night is set / not set; lean: the weight at nerve (or hurt) 0 and at 1, straight between; min_hurt, max_hurt, min_nerve, max_nerve, from_year, to_year: hard limits; dials; beats. A tank's lost ways name their end in how: blow (her ammunition goes up), burn or still (knocked out, no fire); the ground scene draws it from the vehicle's fire_when_pierced by the face struck and explodes_of_fires (Content/Data/Battle/performance-land.json, Brian 22 November: a rear hit on a Tiger or Panther blows her up more often).",
+    "dials": "Drawn once for the look, in the order written; a step names one with '$name' ('$-side' is its negative). A number; [low, high] drawn evenly; a list, one drawn; { range, lean: nerve- | nerve+ | hurt- | hurt+ } half luck, half the crew's nerve or the hull's hurt (nerve- puts a steadier crew toward the low end: a shorter fire); { pick, w } drawn by weights; { from: dial, map: { value: spec } } drawn by the spec the earlier dial's value names; sticky: true keeps the unit's first value (a ship floods on the side she was struck). Built in: $aspect, $weapon, $family, $size, $glance. A range shies a fifth of its width from last time's value; a list or pick from last time's value.",
+    "beats": "Each step: t (seconds after the blow), do, at (a place), kind, a, b, c, n; p (it happens only that often); times and gap (again and again, each the gap after the last). Any of them a number, a [low, high] range, a list (one drawn) or a dial.",
+    "do_sea": "blast: a burst at 'at' (kind: size; a 1 = on armour or a steel deck, bright and no crater). column: a column of water beside her at 'at' (b: the side, -1 port, 1 starboard). fire: flames at 'at', a = across as a share of her beam, b = seconds, c = 1 if her crew beat it out (the kit's BurnOut) else it dies on its own; kind side: in her side under the deck's edge, on her hit side (a carrier's hangar openings). smoke: kind black, grey or white, a = across (share of beam), b = seconds. steam: a = the vent's width in metres, b = seconds, kind up or side. cookoff: a = across (m), n = pops, b = over seconds, c = the jet's seconds (0: none). glance: kind = the kit's glance size. spark: sparks of a hit on steel. silence: the guns at 'at' fall silent (a scene that has turrets stops their fire). list: a = degrees to the side b over c seconds. right: counter-flooding, she keeps a share a of her list over c seconds. trim: a = degrees, plus down by the bow, over c seconds. settle: a = metres down, over c seconds.",
+    "do_land": "blast, fire (a = across in metres), smoke, steam, cookoff, glance, spark as at sea. clip: plays the model's own clip (kind: hit, knocked_out, burn, brew_up, open_up). rock: rocks on its springs, a = degrees. slew: a moving vehicle swung round a degrees toward side b over c seconds. stop: rolls to a halt over c seconds. track_off: at = left or right, the track runs off. turret_off: the turret thrown up at a m/s, turning b degrees a second, landing c metres off. hatch: at = which hatch opens. crew_out: n men get out and go (kind run, crawl, crouch, carry: two carry a third) to 'at' (rear, cover, crater, beside), c seconds between men. crew_in: n men climb back in. crew_up: n men get out, do what the step says (beat a fire) for b seconds, and get back in. hold_fire: the model holds its fire for a seconds. gun_droop: the gun sinks a degrees. flip: rolled over a degrees toward side b over c seconds. overturn: a gun knocked over a degrees. man_fall: a man goes down (kind forward, back, side, knees, spin, thrown). drag: a comrade drags him back. crawl_back: he crawls back a few metres. carry: n men carry him back. lie: he lies still where he fell. go_down: men within a metres drop flat and get up after b seconds. duck: heads go down for a seconds, the firing goes on. prone: a share a of the block goes to ground for b seconds (0: until it rallies). creep_back: n men crawl back. run_back: a share a of the block runs back b metres. turn_fire: n men stop, turn and fire as they go. drop_arms: n men drop their rifles. help: n men help a wounded man along. officer_wave: an officer or sergeant stands and waves the men on. gather: the men gather round him within a metres. kneel: the men kneel and face the enemy. swap: a crewman takes a fallen man's place. abandon: the crew leave (n).",
+    "lasting": "A ship's list, trim and settle stay with her (Fates::Hull) until her end, which the numbers give. A wreck stays where the numbers lay it; how it lies (burning, cold, turretless, on its side) is the look's."
+  },
+  "memory": { "recent": [0.0, 0.35, 0.6, 0.85], "same_dial": 0.3 },
+  "families": {
+    "sea": ["bb", "ca", "cv", "dd", "ss", "ap"],
+    "land": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car", "halftrack", "truck", "gun", "infantry"]
+  },
+  "aspects": { "land": { "front": 0.55, "side": 0.3, "rear": 0.1, "top": 0.05 } },
+  "sizes": {
+    "sea": { "torpedo": "bomb500", "bomb": "bomb250", "bomb_heavy": "bomb500", "shell_heavy": "bomb500", "shell_medium": "how150", "shell_light": "how105" },
+    "land": { "light": "light", "mortar": "mortar", "field": "gun75", "howitzer": "how105", "heavy": "how150", "bomb": "bomb250", "smallarms": "grenade" }
+  },
+  "glances": {
+    "sea": { "shell_medium": "gun203", "shell_light": "gun127" },
+    "land": { "light": "gun50", "field": "gun75", "howitzer": "gun75", "heavy": "gun88" }
+  },
+  "ways": [
+    {
+      "key": "ship.near_miss", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "A near miss: a tall column of water alongside, spray over her decks, and splinters through her side.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.6,
+      "by": { "weapon": { "bomb": 1, "bomb_heavy": 1, "shell_heavy": 1, "shell_medium": 1, "shell_light": 0.8 } },
+      "lean": { "hurt": [1.2, 0.6] },
+      "dials": { "where": ["fore", "mid", "aft"], "side": { "pick": [-1, 1] } },
+      "beats": [
+        { "t": 0, "do": "column", "at": "$where", "kind": "$size", "b": "$side" },
+        { "p": 0.5, "t": [0.5, 2], "do": "list", "a": [0.5, 1.5], "b": "$side", "c": [20, 40] },
+        { "p": 0.3, "t": [1, 3], "do": "fire", "at": "$where", "a": [0.15, 0.2], "b": [20, 45], "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.armour_holds", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "The armour holds: the bomb or shell bursts on her armoured deck or belt in a flash and a puff of smoke, and she steams on.",
+      "families": ["bb", "ca"], "weight": 1,
+      "by": { "family": { "bb": 1.4, "ca": 0.5 }, "weapon": { "bomb": 1.3, "shell_medium": 1.2, "shell_light": 1.5, "shell_heavy": 0.4, "bomb_heavy": 0.4 } },
+      "dials": { "where": ["fore", "mid", "aft", "turret_fore", "turret_aft"] },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "$where", "kind": "$size", "a": 1 },
+        { "t": [0.5, 1.5], "do": "smoke", "at": "$where", "kind": "grey", "a": 0.15, "b": [20, 50] },
+        { "p": 0.35, "t": 0, "do": "glance", "at": "$where", "kind": "$glance" }
+      ]
+    },
+    {
+      "key": "ship.torpedo_bulge", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "Her torpedo bulge takes it: a huge column of water, a shudder, a slight list her crew soon correct.",
+      "families": ["bb", "ca", "cv"], "weight": 0.7,
+      "by": { "family": { "bb": 1.3, "cv": 0.8, "ca": 0.5 }, "weapon": { "torpedo": 1 } },
+      "lean": { "nerve": [0.7, 1.3], "hurt": [1.3, 0.6] },
+      "dials": { "where": ["fore", "mid", "aft"], "side": { "pick": [-1, 1], "sticky": true } },
+      "beats": [
+        { "t": 0, "do": "column", "at": "$where", "kind": "$size", "b": "$side" },
+        { "t": [1, 3], "do": "list", "a": [1.5, 3], "b": "$side", "c": [15, 30] },
+        { "t": [50, 120], "do": "right", "a": [0.1, 0.3], "c": [40, 90] }
+      ]
+    },
+    {
+      "key": "ship.torpedo_flooding", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "A torpedo floods her: she lists toward the hit and settles, low by the bow or the stern; later her crew counter-flood and bring her back nearly upright.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 1,
+      "by": { "weapon": { "torpedo": 3, "shell_heavy": 0.3, "bomb_heavy": 0.15 } },
+      "lean": { "hurt": [1, 1.4] },
+      "dials": {
+        "side": { "pick": [-1, 1], "sticky": true },
+        "end": ["fore", "aft", "mid"],
+        "list": { "range": [4, 12], "lean": "hurt+" },
+        "trim": { "from": "end", "map": { "fore": [1, 3], "aft": [-3, -1], "mid": [-0.5, 0.5] } }
+      },
+      "beats": [
+        { "t": 0, "do": "column", "at": "$end", "kind": "$size", "b": "$side" },
+        { "t": [1, 3], "do": "list", "a": "$list", "b": "$side", "c": [25, 60] },
+        { "t": [2, 5], "do": "trim", "a": "$trim", "c": [40, 90] },
+        { "t": [2, 5], "do": "settle", "a": [0.4, 1.5], "c": [40, 90] },
+        { "p": 0.65, "t": [50, 150], "do": "right", "a": [0.25, 0.5], "c": [60, 150] },
+        { "p": 0.15, "t": [1, 4], "do": "fire", "at": "$end", "a": [0.2, 0.3], "b": [40, 120], "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.fire_fought", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "A fire on deck: black smoke pours from it while her crew fight it, and in a minute or two it is out, leaving grey smoke and a scorched deck.",
+      "families": ["bb", "ca", "cv", "dd", "ss", "ap"], "weight": 1.1,
+      "by": { "family": { "ss": 0.3, "*": 1 }, "weapon": { "bomb": 1.3, "bomb_heavy": 1, "shell_heavy": 0.8, "shell_medium": 1.1, "shell_light": 1.1, "torpedo": 0.2 } },
+      "lean": { "nerve": [0.4, 1.4], "hurt": [1.2, 0.6] },
+      "dials": { "where": ["fore", "mid", "aft", "bridge", "deck"], "secs": { "range": [35, 140], "lean": "nerve-" }, "across": [0.25, 0.4] },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "$where", "kind": "$size", "a": 1 },
+        { "t": [0.3, 1.5], "do": "fire", "at": "$where", "a": "$across", "b": "$secs", "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.fire_spreads", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "The fire takes hold and spreads along her: one fire becomes two or three, burning for minutes under a tall black column.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.8,
+      "by": { "family": { "cv": 1.6, "ap": 1.4, "bb": 0.8, "*": 1 }, "weapon": { "bomb": 1.4, "bomb_heavy": 1.2, "shell_heavy": 0.9, "shell_medium": 0.9, "shell_light": 0.7, "torpedo": 0.3 } },
+      "lean": { "nerve": [1.6, 0.4], "hurt": [0.7, 1.6] },
+      "dials": { "where": ["fore", "mid", "aft"], "secs": [180, 420], "side": { "pick": [-1, 1], "sticky": true } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "$where", "kind": "$size", "a": 1 },
+        { "t": [0.3, 1.5], "do": "fire", "at": "$where", "a": [0.3, 0.4], "b": "$secs" },
+        { "t": [15, 40], "times": [1, 2], "gap": [20, 60], "do": "fire", "at": ["fore", "mid", "aft", "deck"], "a": [0.25, 0.45], "b": [180, 420] },
+        { "p": 0.3, "t": [20, 60], "do": "list", "a": [1, 3], "b": "$side", "c": [60, 120] }
+      ]
+    },
+    {
+      "key": "ship.engine_hit", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "Her engine or boiler rooms are hit: steam roars from her funnel and her side, and her smoke turns thick and black, then thin.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.7,
+      "by": { "weapon": { "torpedo": 1, "bomb": 0.9, "bomb_heavy": 1.2, "shell_heavy": 1.2, "shell_medium": 0.9, "shell_light": 0.6 } },
+      "dials": { "vent": { "from": "family", "map": { "bb": [2.5, 3], "cv": [2.5, 3], "ca": 2, "dd": 1.5, "ap": 2 } }, "side": { "pick": [-1, 1] } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "mid", "kind": "$size", "a": 1 },
+        { "t": [0.5, 2], "do": "steam", "at": "funnel", "a": "$vent", "b": [12, 40], "kind": "up" },
+        { "p": 0.5, "t": [1, 3], "do": "steam", "at": "mid", "a": "$vent", "b": [8, 25], "kind": "side" },
+        { "t": [3, 8], "do": "smoke", "at": "funnel", "kind": "black", "a": 0.3, "b": [60, 180] }
+      ]
+    },
+    {
+      "key": "ship.turret_hit", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "A turret is hit: a flash at the gun house, a short fierce fire inside it, smoke curling out, and its guns fall silent.",
+      "families": ["bb", "ca", "dd"], "weight": 0.7,
+      "by": { "weapon": { "shell_heavy": 1.4, "shell_medium": 1.2, "shell_light": 0.8, "bomb": 0.9, "bomb_heavy": 1 } },
+      "dials": { "turret": ["turret_fore", "turret_aft"], "secs": { "range": [15, 60], "lean": "nerve-" } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "$turret", "kind": "$size", "a": 1 },
+        { "t": [0.3, 1], "do": "fire", "at": "$turret", "a": 0.2, "b": "$secs", "c": 1 },
+        { "t": [0.3, 1], "do": "silence", "at": "$turret" },
+        { "t": [5, 15], "do": "smoke", "at": "$turret", "kind": "grey", "a": 0.15, "b": [40, 120] }
+      ]
+    },
+    {
+      "key": "ship.bridge_hit", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "Her bridge is hit: a flash high in her upperworks, smoke, and a small fire her crew put out.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.5,
+      "by": { "weapon": { "shell_heavy": 1, "shell_medium": 1, "shell_light": 1, "bomb": 0.7, "bomb_heavy": 0.6 } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "bridge", "kind": "$size", "a": 1 },
+        { "t": [0.5, 2], "do": "fire", "at": "bridge", "a": 0.15, "b": [20, 70], "c": 1 },
+        { "t": [3, 8], "do": "smoke", "at": "bridge", "kind": "grey", "a": 0.12, "b": [30, 90] }
+      ]
+    },
+    {
+      "key": "ship.deck_park", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "Bombs among the aircraft on her flight deck: fuelled planes catch and blow up one after another until her crew push the wrecks over the side and beat the flames.",
+      "families": ["cv"], "weight": 1,
+      "by": { "weapon": { "bomb": 1.5, "bomb_heavy": 1.2, "shell_heavy": 0.6, "shell_medium": 0.6, "shell_light": 0.5, "torpedo": 0.1 } },
+      "lean": { "nerve": [0.5, 1.3] },
+      "dials": { "where": ["fore", "aft", "deck"], "secs": { "range": [90, 240], "lean": "nerve-" } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "$where", "kind": "$size", "a": 1 },
+        { "t": [1, 4], "do": "cookoff", "at": "$where", "a": [5, 8], "n": [2, 6], "b": [20, 90], "c": 0 },
+        { "t": [0.5, 2], "do": "fire", "at": "$where", "a": 0.4, "b": "$secs", "c": 1 },
+        { "p": 0.5, "t": [20, 50], "do": "fire", "at": "deck", "a": 0.3, "b": [60, 150], "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.hangar_fire", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "The bomb goes through her flight deck into the hangar: blasts below, flames out of her sides, and smoke from end to end; she burns a long time.",
+      "families": ["cv"], "weight": 0.8,
+      "by": { "weapon": { "bomb": 1.3, "bomb_heavy": 1.3, "shell_heavy": 0.5, "shell_medium": 0.4 } },
+      "lean": { "nerve": [1.6, 0.5], "hurt": [0.8, 1.5] },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "deck", "kind": "$size", "a": 1 },
+        { "t": [5, 15], "times": [2, 4], "gap": [8, 30], "do": "blast", "at": ["fore", "mid", "aft"], "kind": "bomb250", "a": 1 },
+        { "t": [1, 4], "times": [1, 2], "gap": [10, 40], "do": "fire", "at": ["fore", "mid", "aft"], "a": [0.35, 0.45], "b": [300, 900] },
+        { "t": [3, 10], "times": [2, 3], "gap": [6, 25], "do": "fire", "at": ["fore", "mid", "aft"], "kind": "side", "a": [0.2, 0.3], "b": [240, 720] },
+        { "p": 0.3, "t": [30, 90], "do": "list", "a": [1, 4], "b": "$side", "c": [60, 150] }
+      ]
+    },
+    {
+      "key": "ship.splinters", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "Light shells and splinters rake her: sparks along her upperworks, and small fires quickly put out.",
+      "families": ["bb", "ca", "cv", "dd", "ss", "ap"], "weight": 0.7,
+      "by": { "weapon": { "shell_light": 1.6, "shell_medium": 0.8, "bomb": 0.3 } },
+      "beats": [
+        { "t": 0, "times": [2, 5], "gap": [0.2, 0.8], "do": "spark", "at": ["fore", "mid", "aft", "bridge"] },
+        { "p": 0.5, "t": [1, 3], "do": "fire", "at": ["fore", "mid", "aft"], "a": 0.15, "b": [15, 40], "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.bow_stove_in", "group": "ship", "domain": "sea", "on": ["worn"],
+      "words": "A hit forward opens her bow: the sea floods in and she settles down by the head, her bow wave climbing.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.5,
+      "by": { "weapon": { "shell_heavy": 1, "shell_medium": 0.8, "bomb_heavy": 0.7, "torpedo": 0.8, "bomb": 0.3 } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "bow", "kind": "$size" },
+        { "t": [1, 3], "do": "trim", "a": [1.5, 4], "c": [40, 100] },
+        { "t": [1, 3], "do": "settle", "a": [0.3, 1], "c": [40, 100] }
+      ]
+    },
+
+    {
+      "key": "ship.settle_upright", "group": "ship", "domain": "sea", "on": ["lost"], "how": "settle", "final": true,
+      "words": "She settles on the bottom where she lies, nearly upright, her decks awash and burning.",
+      "families": ["bb", "ca", "cv", "dd", "ss", "ap"], "weight": 1, "if": { "harbour": 1 }, "unless": { "harbour": 0 },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "pace": [0.8, 1.3], "roll": [2, 6] },
+      "beats": [
+        { "p": 0.6, "t": [2, 8], "do": "fire", "at": ["fore", "mid", "aft"], "a": [0.3, 0.4], "b": [300, 900] },
+        { "p": 0.3, "t": [10, 25], "do": "steam", "at": "funnel", "a": 2.5, "b": [10, 25], "kind": "up" }
+      ]
+    },
+    {
+      "key": "ship.settle_listing", "group": "ship", "domain": "sea", "on": ["lost"], "how": "settle", "final": true,
+      "words": "She settles on the bottom listing heavily, her far side out of the water.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.8, "if": { "harbour": 1 }, "unless": { "harbour": 0 },
+      "by": { "weapon": { "torpedo": 1.6, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "pace": [0.8, 1.4], "roll": [10, 22] },
+      "beats": [
+        { "p": 0.4, "t": [5, 20], "do": "fire", "at": ["fore", "mid", "aft"], "a": 0.3, "b": [200, 600] }
+      ]
+    },
+    {
+      "key": "ship.sink_by_bow", "group": "ship", "domain": "sea", "on": ["lost"], "how": "sink", "final": true,
+      "words": "She goes down by the bow, her stern lifting, slowly, then quickly.",
+      "families": ["bb", "ca", "cv", "dd", "ss", "ap"], "weight": 1,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "end": "bow", "pace": [0.75, 1.3], "roll": [2, 8] },
+      "beats": [
+        { "p": 0.5, "t": [15, 35], "do": "steam", "at": "funnel", "a": 2.5, "b": [8, 20], "kind": "up" },
+        { "p": 0.3, "t": [20, 40], "do": "blast", "at": "mid", "kind": "bomb250" }
+      ]
+    },
+    {
+      "key": "ship.sink_by_stern", "group": "ship", "domain": "sea", "on": ["lost"], "how": "sink", "final": true,
+      "words": "She goes down by the stern, her bow rising out of the sea before she slides under.",
+      "families": ["bb", "ca", "cv", "dd", "ss", "ap"], "weight": 1,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "end": "stern", "pace": [0.75, 1.3], "roll": [2, 8] },
+      "beats": [
+        { "p": 0.5, "t": [15, 35], "do": "steam", "at": "funnel", "a": 2.5, "b": [8, 20], "kind": "up" }
+      ]
+    },
+    {
+      "key": "ship.sink_even", "group": "ship", "domain": "sea", "on": ["lost"], "how": "sink", "final": true,
+      "words": "She goes down on an even keel, lower and lower, steam and smoke rising as the sea reaches her boilers.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.6,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "end": "even", "pace": [0.9, 1.5], "roll": [1, 4] },
+      "beats": [
+        { "t": [20, 40], "do": "steam", "at": "funnel", "a": 2.5, "b": [10, 25], "kind": "up" },
+        { "p": 0.4, "t": [25, 45], "do": "blast", "at": "mid", "kind": "bomb250" }
+      ]
+    },
+    {
+      "key": "ship.capsize_fast", "group": "ship", "domain": "sea", "on": ["lost"], "how": "capsize", "final": true,
+      "words": "She rolls over quickly toward the side she was hit, her keel and screws showing.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 1,
+      "by": { "weapon": { "torpedo": 1.5, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "pace": [0.65, 0.9] },
+      "beats": [
+        { "p": 0.4, "t": [8, 18], "do": "steam", "at": "funnel", "a": 2.5, "b": [6, 15], "kind": "side" }
+      ]
+    },
+    {
+      "key": "ship.capsize_slow", "group": "ship", "domain": "sea", "on": ["lost"], "how": "capsize", "final": true,
+      "words": "She lists further and further, hangs there, then turns over slowly.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 1,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "pace": [1.2, 1.7] },
+      "beats": [
+        { "p": 0.4, "t": [5, 15], "do": "fire", "at": ["mid", "aft"], "a": 0.3, "b": [60, 200] }
+      ]
+    },
+    {
+      "key": "ship.explode_forward", "group": "ship", "domain": "sea", "on": ["lost"], "how": "explode", "final": true,
+      "words": "Her forward magazine goes up: blast on blast, a pillar of smoke, and she goes down by the bow.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 1,
+      "by": { "weapon": { "shell_heavy": 1.4, "bomb_heavy": 1.2, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "end": "fore", "pace": [0.8, 1.2] },
+      "beats": [
+        { "p": 0.4, "t": [6, 20], "do": "blast", "at": "mid", "kind": "bomb500" }
+      ]
+    },
+    {
+      "key": "ship.explode_aft", "group": "ship", "domain": "sea", "on": ["lost"], "how": "explode", "final": true,
+      "words": "Her after magazine goes up: the stern is torn open in a towering blast and she goes down by the stern.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.7,
+      "by": { "weapon": { "shell_heavy": 1.4, "bomb_heavy": 1.2, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "end": "aft", "pace": [0.8, 1.2] },
+      "beats": [
+        { "p": 0.3, "t": [6, 20], "do": "blast", "at": "mid", "kind": "bomb250" }
+      ]
+    },
+    {
+      "key": "ship.burn_out", "group": "ship", "domain": "sea", "on": ["lost"], "how": "burn", "final": true,
+      "words": "Ablaze from end to end: blasts now and then as fuel and ammunition go, until she is a burnt-out hull.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 1,
+      "by": { "family": { "cv": 1.6, "ap": 1.3, "*": 1 }, "weapon": { "bomb": 1.5, "bomb_heavy": 1.3, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "pace": [0.8, 1.3] },
+      "beats": [
+        { "t": [15, 40], "times": [2, 5], "gap": [20, 80], "do": "blast", "at": ["fore", "mid", "aft"], "kind": "bomb250", "a": 1 }
+      ]
+    },
+    {
+      "key": "ship.burn_scuttled", "group": "ship", "domain": "sea", "on": ["lost"], "how": "burn", "final": true,
+      "words": "Burning beyond saving, she is abandoned; a last heavy blast, and she settles lower in the water.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.6,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "pace": [0.9, 1.4] },
+      "beats": [
+        { "t": [10, 30], "do": "blast", "at": ["fore", "aft"], "kind": "bomb250", "a": 1 },
+        { "t": [120, 240], "do": "blast", "at": "mid", "kind": "bomb500" },
+        { "t": [125, 250], "do": "settle", "a": [1.5, 3], "c": [60, 120] }
+      ]
+    },
+    {
+      "key": "ship.break_amidships", "group": "ship", "domain": "sea", "on": ["lost"], "how": "break", "final": true,
+      "words": "Broken in two amidships: bow and stern rise into a V and go down apart.",
+      "families": ["ca", "dd", "ap", "cv", "bb"], "weight": 1,
+      "by": { "family": { "dd": 1.5, "ap": 1.2, "bb": 0.4, "*": 0.8 }, "weapon": { "torpedo": 1.5, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "cut": [-0.08, 0.08], "pace": [0.8, 1.3] },
+      "beats": [
+        { "p": 0.5, "t": [3, 10], "do": "steam", "at": "mid", "a": 2, "b": [8, 20], "kind": "up" }
+      ]
+    },
+    {
+      "key": "ship.break_forward", "group": "ship", "domain": "sea", "on": ["lost"], "how": "break", "final": true,
+      "words": "Her bow is torn away forward of the bridge; the bow sinks at once and the rest follows.",
+      "families": ["ca", "dd", "ap", "cv", "bb"], "weight": 0.6,
+      "by": { "family": { "dd": 1.3, "bb": 0.4, "*": 0.8 }, "weapon": { "torpedo": 1.3, "shell_heavy": 1.2, "*": 1 } },
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "cut": [-0.3, -0.18], "pace": [0.9, 1.4] },
+      "beats": []
+    },
+
+    {
+      "key": "ship.limp_burning", "group": "ship", "domain": "sea", "on": ["out"],
+      "words": "Out of the fight and burning: she turns away listing, her crew fighting the flames as she goes, the fires dwindling to smoke.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 1,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "where": ["fore", "mid", "aft"] },
+      "beats": [
+        { "t": 0, "do": "fire", "at": "$where", "a": [0.3, 0.4], "b": [120, 300], "c": 1 },
+        { "t": [0, 2], "do": "list", "a": [3, 8], "b": "$side", "c": [30, 60] },
+        { "p": 0.5, "t": [10, 30], "do": "fire", "at": "deck", "a": 0.25, "b": [60, 180], "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.limp_bow", "group": "ship", "domain": "sea", "on": ["out"],
+      "words": "Out of the fight with her bow stove in: she crawls away down by the head, her forecastle almost awash.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.8,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true } },
+      "beats": [
+        { "t": 0, "do": "trim", "a": [3, 5.5], "c": [40, 80] },
+        { "t": 0, "do": "settle", "a": [1, 2.5], "c": [40, 80] },
+        { "p": 0.5, "t": [0, 3], "do": "fire", "at": "fore", "a": 0.25, "b": [60, 200], "c": 1 }
+      ]
+    },
+    {
+      "key": "ship.limp_steam", "group": "ship", "domain": "sea", "on": ["out"],
+      "words": "Out of the fight with her engines hit: wreathed in steam, she drops back slowly, smoke pouring from her funnel.",
+      "families": ["bb", "ca", "cv", "dd", "ap"], "weight": 0.8,
+      "dials": { "side": { "pick": [-1, 1], "sticky": true }, "vent": { "from": "family", "map": { "bb": 2.8, "cv": 2.8, "ca": 2, "dd": 1.5, "ap": 2 } } },
+      "beats": [
+        { "t": 0, "do": "steam", "at": "funnel", "a": "$vent", "b": [20, 45], "kind": "up" },
+        { "t": [2, 6], "do": "smoke", "at": "funnel", "kind": "black", "a": 0.3, "b": [120, 300] },
+        { "t": 0, "do": "list", "a": [1, 4], "b": "$side", "c": [30, 60] }
+      ]
+    },
+
+    {
+      "key": "tank.brew_up", "group": "tank", "domain": "land", "on": ["lost"], "how": "burn", "final": true,
+      "words": "Brewed up: the shot goes in, smoke curls from the hatches, then flame; one or two of the crew get out before the ammunition goes, popping and roaring from the hatches, and she burns for the rest of the battle.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1,
+      "by": {
+        "aspect": { "front": 0.7, "side": 1.4, "rear": 1.3, "top": 1 },
+        "weapon": { "light": 1, "field": 1.2, "howitzer": 0.8, "heavy": 0.9, "bomb": 1, "mortar": 0.2 },
+        "fuel": { "petrol": 1.2, "diesel": 0.8, "*": 1 },
+        "stowage": { "wet": 0.4, "*": 1 },
+        "family": { "tank_light": 1.2, "tank_heavy": 0.8, "armoured_car": 1.1, "*": 1 }
+      },
+      "dials": { "out": { "pick": [0, 1, 2], "w": [0.3, 0.45, 0.25] } },
+      "beats": [
+        { "t": 0, "do": "spark", "at": "hull" },
+        { "t": 0, "do": "clip", "kind": "hit" },
+        { "t": [1, 4], "do": "smoke", "at": "hatch", "kind": "grey", "a": 0.6, "b": [4, 8] },
+        { "p": 0.8, "t": [1, 3], "do": "hatch", "at": "commander" },
+        { "t": [2, 5], "do": "crew_out", "n": "$out", "kind": ["run", "crawl"], "at": "rear", "c": [0.5, 1.2] },
+        { "t": [5, 10], "do": "clip", "kind": "brew_up" },
+        { "t": [5, 10], "do": "cookoff", "at": "hatch", "a": [0.5, 0.7], "n": [4, 10], "b": [5, 20], "c": [0, 8] },
+        { "t": [6, 12], "do": "fire", "at": "hull", "a": [1.5, 3], "b": [900, 1800] }
+      ]
+    },
+    {
+      "key": "tank.knocked_out_bail", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
+      "words": "Knocked out, no fire: the shot goes in, hatches fly open and most of the crew bail out and run or crawl back; the tank stands silent with a wisp of smoke.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1.2,
+      "by": {
+        "aspect": { "front": 1.2, "side": 1, "rear": 0.8, "top": 0.8 },
+        "weapon": { "light": 1.3, "field": 1, "howitzer": 0.6, "heavy": 0.6, "bomb": 0.4, "mortar": 0.2 },
+        "fuel": { "diesel": 1.2, "*": 1 }
+      },
+      "dials": { "out": { "pick": [2, 3, 4, 5], "w": [0.2, 0.35, 0.3, 0.15] }, "go": ["run", "crawl", "crouch"], "to": ["rear", "crater", "cover"] },
+      "beats": [
+        { "t": 0, "do": "spark", "at": "hull" },
+        { "t": 0, "do": "clip", "kind": "knocked_out" },
+        { "t": [0.5, 2], "do": "hatch", "at": ["commander", "driver", "loader"] },
+        { "t": [1, 3], "do": "crew_out", "n": "$out", "kind": "$go", "at": "$to", "c": [0.6, 1.5] },
+        { "p": 0.25, "t": [3, 6], "do": "crew_out", "n": 3, "kind": "carry", "at": "rear" },
+        { "t": [2, 5], "do": "smoke", "at": "hatch", "kind": "grey", "a": 0.5, "b": [60, 200] }
+      ]
+    },
+    {
+      "key": "tank.knocked_out_later_burns", "group": "tank", "domain": "land", "on": ["lost"], "how": "burn", "final": true,
+      "words": "Knocked out, and the crew get clear; a minute later the smoke thickens and she catches fire, then burns on.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.7,
+      "by": {
+        "aspect": { "front": 0.8, "side": 1.2, "rear": 1.2, "top": 1 },
+        "weapon": { "light": 1, "field": 1, "howitzer": 0.8, "heavy": 0.8, "bomb": 0.8, "mortar": 0.1 },
+        "fuel": { "petrol": 1.2, "diesel": 0.8, "*": 1 },
+        "stowage": { "wet": 0.6, "*": 1 }
+      },
+      "dials": { "out": { "pick": [2, 3, 4, 5], "w": [0.2, 0.35, 0.3, 0.15] }, "catches": [30, 120] },
+      "beats": [
+        { "t": 0, "do": "spark", "at": "hull" },
+        { "t": 0, "do": "clip", "kind": "knocked_out" },
+        { "t": [0.5, 2], "do": "hatch", "at": ["commander", "driver"] },
+        { "t": [1, 3], "do": "crew_out", "n": "$out", "kind": ["run", "crawl"], "at": "rear", "c": [0.6, 1.5] },
+        { "t": [2, 5], "do": "smoke", "at": "engine", "kind": "grey", "a": 0.8, "b": "$catches" },
+        { "t": "$catches", "do": "fire", "at": "hull", "a": [1.5, 2.5], "b": [600, 1500] },
+        { "t": "$catches", "do": "clip", "kind": "burn" },
+        { "p": 0.4, "t": [140, 260], "do": "cookoff", "at": "hatch", "a": 0.6, "n": [3, 7], "b": [5, 15], "c": 0 }
+      ]
+    },
+    {
+      "key": "tank.turret_off", "group": "tank", "domain": "land", "on": ["lost"], "how": "blow", "final": true,
+      "words": "The ammunition goes up all at once: a huge blast throws the turret into the air, it lands upside down beside the hull, and the hull burns.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "armoured_car"], "weight": 0.25,
+      "by": {
+        "weapon": { "light": 0.6, "field": 1, "howitzer": 1.2, "heavy": 1.8, "bomb": 2.5 },
+        "family": { "tank_light": 1.4, "tank_heavy": 0.7, "*": 1 },
+        "aspect": { "front": 0.7, "side": 1.3, "rear": 1.2, "top": 1.5 },
+        "stowage": { "wet": 0.5, "*": 1 }
+      },
+      "dials": { "up": [6, 14], "spin": [90, 400], "lands": [4, 18] },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "hull", "kind": "how105", "a": 1 },
+        { "t": 0.05, "do": "turret_off", "a": "$up", "b": "$spin", "c": "$lands" },
+        { "t": [0.5, 2], "do": "fire", "at": "hull", "a": [2, 3], "b": [900, 1800] },
+        { "t": [1, 3], "do": "smoke", "at": "hull", "kind": "black", "a": 2, "b": [120, 300] }
+      ]
+    },
+    {
+      "key": "tank.immobilised_abandoned", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
+      "words": "Hit in the tracks: she lurches, slews round and stops with a track run off; the crew stay a moment, then bail out and leave her.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.8,
+      "by": {
+        "weapon": { "howitzer": 1.6, "heavy": 1.6, "field": 1, "light": 0.8, "mortar": 0.3, "bomb": 1 },
+        "aspect": { "front": 1, "side": 1.2, "rear": 0.8, "top": 0.3 }
+      },
+      "if": { "moving": 1.6 }, "unless": { "moving": 0.6 },
+      "dials": { "track": ["left", "right"], "side": { "pick": [-1, 1] }, "stay": [5, 25], "out": [3, 5] },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "track", "kind": "$size", "a": 1 },
+        { "t": 0, "do": "slew", "a": [10, 40], "b": "$side", "c": [1, 2] },
+        { "t": 0.2, "do": "track_off", "at": "$track" },
+        { "t": 0.5, "do": "stop", "c": [1, 2] },
+        { "t": "$stay", "do": "hatch", "at": "commander" },
+        { "t": "$stay", "do": "crew_out", "n": "$out", "kind": ["run", "crawl", "crouch"], "at": "rear", "c": [0.6, 1.5] }
+      ]
+    },
+    {
+      "key": "tank.crew_killed", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
+      "words": "The shot goes in and the crew are killed or wounded: she rolls to a stop, her gun drooping, and no one gets out.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.35,
+      "by": {
+        "aspect": { "front": 1.3, "side": 1, "rear": 0.7, "top": 1 },
+        "weapon": { "light": 0.8, "field": 1.2, "howitzer": 0.4, "heavy": 0.6, "bomb": 0.3 }
+      },
+      "beats": [
+        { "t": 0, "do": "spark", "at": "turret" },
+        { "t": 0, "do": "stop", "c": [2, 5] },
+        { "t": [1, 3], "do": "gun_droop", "a": [3, 8] },
+        { "p": 0.4, "t": [3, 8], "do": "smoke", "at": "hatch", "kind": "grey", "a": 0.4, "b": [60, 180] }
+      ]
+    },
+    {
+      "key": "tank.engine_fire", "group": "tank", "domain": "land", "on": ["lost"], "how": "burn", "final": true,
+      "words": "Hit in the engine: fire on the engine deck, the crew bail out, and the fire slowly takes the whole tank.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.8,
+      "by": {
+        "aspect": { "rear": 2.5, "side": 1, "front": 0.2, "top": 1.5 },
+        "fuel": { "petrol": 1.3, "diesel": 0.7, "*": 1 },
+        "weapon": { "bomb": 1.4, "field": 1, "light": 0.9, "howitzer": 1, "heavy": 1, "mortar": 0.5 }
+      },
+      "dials": { "out": [3, 5], "spreads": [40, 120] },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "engine", "kind": "$size", "a": 1 },
+        { "t": [0.5, 2], "do": "fire", "at": "engine", "a": [1, 1.5], "b": [100, 200] },
+        { "t": [2, 6], "do": "crew_out", "n": "$out", "kind": ["run", "crawl"], "at": "rear", "c": [0.5, 1.2] },
+        { "t": "$spreads", "do": "fire", "at": "hull", "a": [2, 3], "b": [600, 1500] },
+        { "t": "$spreads", "do": "clip", "kind": "burn" },
+        { "p": 0.3, "t": [150, 300], "do": "cookoff", "at": "hatch", "a": 0.6, "n": [3, 6], "b": [5, 12], "c": 0 }
+      ]
+    },
+    {
+      "key": "tank.overturned", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
+      "words": "A bomb or a heavy shell bursts beside her and throws her onto her side.",
+      "families": ["tank_light", "armoured_car", "tank_medium", "spgun"], "weight": 0.12,
+      "by": { "family": { "tank_light": 2, "armoured_car": 2, "tank_medium": 0.5, "spgun": 0.7 }, "weapon": { "bomb": 3, "heavy": 1.5, "howitzer": 0.3 } },
+      "dials": { "side": { "pick": [-1, 1] } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "beside", "kind": "$size" },
+        { "t": 0.05, "do": "flip", "a": [80, 180], "b": "$side", "c": [1.2, 2] },
+        { "p": 0.5, "t": [3, 10], "do": "fire", "at": "hull", "a": 1.5, "b": [300, 900] },
+        { "p": 0.6, "t": [4, 10], "do": "crew_out", "n": [1, 2], "kind": "crawl", "at": "cover", "c": [1, 3] }
+      ]
+    },
+
+    {
+      "key": "tank.glance", "group": "tank", "domain": "land", "on": ["worn"],
+      "words": "The shot glances off her armour in a shower of sparks and whines away; she fights on.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1,
+      "by": {
+        "aspect": { "front": 1.6, "side": 0.8, "rear": 0.4, "top": 0.5 },
+        "family": { "tank_heavy": 1.6, "tank_medium": 1, "spgun": 1, "tank_light": 0.3, "armoured_car": 0.25 },
+        "weapon": { "light": 1.6, "field": 1, "howitzer": 0.3, "heavy": 0.2 }
+      },
+      "dials": { "where": ["turret", "front", "hull"] },
+      "beats": [
+        { "t": 0, "do": "glance", "at": "$where", "kind": "$glance" },
+        { "t": 0, "do": "rock", "a": [1, 2.5] }
+      ]
+    },
+    {
+      "key": "tank.shaken", "group": "tank", "domain": "land", "on": ["worn"],
+      "words": "A shell bursts on or beside her: she rocks on her springs, earth rains down on her, and after a pause she fights on.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1,
+      "by": { "weapon": { "howitzer": 1.5, "heavy": 1.5, "field": 1, "mortar": 1.3, "bomb": 1.2, "light": 0.4 } },
+      "dials": { "where": ["beside", "hull", "turret"] },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "$where", "kind": "$size" },
+        { "t": 0, "do": "rock", "a": [2, 5] },
+        { "t": 0, "do": "hold_fire", "a": [3, 10] }
+      ]
+    },
+    {
+      "key": "tank.small_fire_out", "group": "tank", "domain": "land", "on": ["worn"], "once": true,
+      "words": "A small fire on her engine deck: a crewman climbs out, beats it out, and climbs back in; she fights on.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun"], "weight": 0.4,
+      "by": { "fuel": { "petrol": 1.3, "diesel": 0.7, "*": 1 }, "aspect": { "rear": 2, "top": 1.5, "side": 1.2, "front": 0.4 }, "weapon": { "field": 1, "light": 0.8, "howitzer": 1, "heavy": 1, "mortar": 0.8, "bomb": 1 } },
+      "lean": { "nerve": [0.3, 1.3] },
+      "dials": { "secs": { "range": [8, 20], "lean": "nerve-" } },
+      "beats": [
+        { "t": 0, "do": "spark", "at": "engine" },
+        { "t": [0.5, 1.5], "do": "fire", "at": "engine", "a": 0.6, "b": "$secs", "c": 1 },
+        { "t": [2, 4], "do": "crew_up", "n": 1, "at": "engine", "b": "$secs" },
+        { "t": "$secs", "do": "smoke", "at": "engine", "kind": "grey", "a": 0.5, "b": [20, 40] }
+      ]
+    },
+    {
+      "key": "tank.bail_and_back", "group": "tank", "domain": "land", "on": ["worn"], "once": true,
+      "words": "Hit and shaken, the crew bail out and shelter behind her; nothing burns, so after a minute they climb back in and she fights on.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.5,
+      "by": { "weapon": { "light": 1, "field": 1, "howitzer": 1, "heavy": 1, "bomb": 1, "mortar": 0.3 } },
+      "lean": { "nerve": [1.6, 0.2] },
+      "if": { "moving": 0.1 },
+      "dials": { "away": { "range": [30, 90], "lean": "nerve-" }, "out": [3, 5] },
+      "beats": [
+        { "t": 0, "do": "spark", "at": "hull" },
+        { "t": [0.5, 2], "do": "hatch", "at": "commander" },
+        { "t": [1, 3], "do": "crew_out", "n": "$out", "kind": "crouch", "at": "beside", "c": [0.4, 1] },
+        { "t": 0, "do": "hold_fire", "a": "$away" },
+        { "t": "$away", "do": "crew_in", "n": "$out" },
+        { "p": 0.3, "t": [1, 3], "do": "smoke", "at": "hull", "kind": "grey", "a": 0.4, "b": [15, 40] }
+      ]
+    },
+    {
+      "key": "tank.track_lurch", "group": "tank", "domain": "land", "on": ["worn"],
+      "words": "Hit in the running gear on the move: she lurches and slews, then pulls straight and drives on.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.6,
+      "by": { "weapon": { "howitzer": 1.3, "field": 1, "light": 0.8, "heavy": 1.3, "mortar": 0.6, "bomb": 0.8 } },
+      "if": { "moving": 1 }, "unless": { "moving": 0 },
+      "dials": { "side": { "pick": [-1, 1] } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "track", "kind": "$size", "a": 1 },
+        { "t": 0, "do": "slew", "a": [5, 20], "b": "$side", "c": [0.8, 1.6] },
+        { "t": 0, "do": "rock", "a": [1.5, 3] }
+      ]
+    },
+    {
+      "key": "tank.rattle", "group": "tank", "domain": "land", "on": ["worn"],
+      "words": "Bullets and mortar splinters rattle off her: sparks, and nothing more.",
+      "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1,
+      "by": { "weapon": { "smallarms": 2, "mortar": 1.5, "light": 0.2 } },
+      "beats": [
+        { "t": 0, "times": [3, 8], "gap": [0.1, 0.4], "do": "spark", "at": ["turret", "hull", "front"] }
+      ]
+    },
+
+    {
+      "key": "soft.burns", "group": "soft", "domain": "land", "on": ["lost"], "final": true,
+      "words": "Hit and set on fire: the driver and the men aboard jump clear and it burns.",
+      "families": ["truck", "halftrack"], "weight": 1,
+      "by": { "weapon": { "light": 1, "field": 1.2, "howitzer": 1.2, "heavy": 1.2, "bomb": 1.4, "mortar": 1, "smallarms": 0.5 } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "body", "kind": "$size" },
+        { "t": [0.5, 2], "do": "crew_out", "n": [1, 3], "kind": ["run", "crawl"], "at": "cover", "c": [0.3, 0.8] },
+        { "t": [1, 3], "do": "fire", "at": "body", "a": [2, 3], "b": [600, 1200] },
+        { "p": 0.5, "t": [5, 15], "do": "blast", "at": "engine", "kind": "light" }
+      ]
+    },
+    {
+      "key": "soft.flipped", "group": "soft", "domain": "land", "on": ["lost"], "final": true,
+      "words": "A shell bursts beside it and throws it over.",
+      "families": ["truck", "halftrack"], "weight": 0.5,
+      "by": { "weapon": { "howitzer": 1.5, "heavy": 2, "bomb": 3, "field": 0.6, "mortar": 0.3 } },
+      "dials": { "side": { "pick": [-1, 1] } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "beside", "kind": "$size" },
+        { "t": 0.05, "do": "flip", "a": [90, 180], "b": "$side", "c": [0.8, 1.5] },
+        { "p": 0.4, "t": [2, 8], "do": "fire", "at": "body", "a": 1.5, "b": [300, 900] }
+      ]
+    },
+    {
+      "key": "soft.riddled", "group": "soft", "domain": "land", "on": ["lost"], "final": true,
+      "words": "Riddled: it rolls to a stop with the driver slumped over the wheel, steam hissing from the radiator.",
+      "families": ["truck", "halftrack"], "weight": 0.8,
+      "by": { "weapon": { "smallarms": 2, "light": 1, "field": 0.6, "mortar": 0.6 } },
+      "beats": [
+        { "t": 0, "times": [3, 6], "gap": [0.1, 0.3], "do": "spark", "at": ["body", "engine"] },
+        { "t": 0, "do": "stop", "c": [2, 5] },
+        { "t": [1, 3], "do": "steam", "at": "engine", "a": 0.4, "b": [8, 20], "kind": "up" },
+        { "p": 0.5, "t": [2, 5], "do": "crew_out", "n": [1, 2], "kind": "crawl", "at": "cover", "c": [1, 2] }
+      ]
+    },
+    {
+      "key": "soft.abandoned", "group": "soft", "domain": "land", "on": ["lost"], "final": true,
+      "words": "Hit and stopped: the crew bail out and run, leaving it smoking.",
+      "families": ["truck", "halftrack"], "weight": 0.7,
+      "beats": [
+        { "t": 0, "do": "blast", "at": "body", "kind": "$size" },
+        { "t": 0, "do": "stop", "c": [1, 3] },
+        { "t": [1, 3], "do": "crew_out", "n": [2, 4], "kind": "run", "at": "rear", "c": [0.3, 0.8] },
+        { "t": [2, 5], "do": "smoke", "at": "engine", "kind": "grey", "a": 0.8, "b": [120, 400] }
+      ]
+    },
+    {
+      "key": "soft.holed", "group": "soft", "domain": "land", "on": ["worn"],
+      "words": "Holed: sparks and a puff of steam, and it drives on.",
+      "families": ["truck", "halftrack"], "weight": 1,
+      "beats": [
+        { "t": 0, "times": [1, 3], "gap": [0.1, 0.3], "do": "spark", "at": ["body", "engine"] },
+        { "p": 0.4, "t": 0.5, "do": "steam", "at": "engine", "a": 0.3, "b": [3, 6], "kind": "up" }
+      ]
+    },
+    {
+      "key": "soft.stalls", "group": "soft", "domain": "land", "on": ["worn"],
+      "words": "Shaken by a near miss, it stalls; the driver gets it going again.",
+      "families": ["truck", "halftrack"], "weight": 0.6, "if": { "moving": 1 }, "unless": { "moving": 0 },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "beside", "kind": "$size" },
+        { "t": 0, "do": "stop", "c": [0.8, 1.5] },
+        { "t": [3, 8], "do": "hold_fire", "a": [3, 8] }
+      ]
+    },
+
+    {
+      "key": "gun.knocked_over", "group": "gun", "domain": "land", "on": ["lost"], "final": true,
+      "words": "A shell lands in the gun pit: the gun is thrown on its side and the crew flattened; one or two get up and crawl away.",
+      "families": ["gun"], "weight": 1,
+      "by": { "weapon": { "howitzer": 1.5, "heavy": 1.8, "field": 1, "mortar": 1.2, "bomb": 2, "light": 0.4 } },
+      "dials": { "side": { "pick": [-1, 1] } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "gun", "kind": "$size" },
+        { "t": 0.05, "do": "overturn", "a": [40, 90], "b": "$side", "c": [0.6, 1.2] },
+        { "t": 0.1, "do": "man_fall", "times": [2, 4], "gap": [0, 0.3], "kind": ["thrown", "back", "side"] },
+        { "p": 0.7, "t": [3, 8], "do": "crew_out", "n": [1, 2], "kind": "crawl", "at": "rear", "c": [1, 3] }
+      ]
+    },
+    {
+      "key": "gun.crew_cut_down", "group": "gun", "domain": "land", "on": ["lost"], "final": true,
+      "words": "The crew go down one after another, and the gun falls silent where it stands.",
+      "families": ["gun"], "weight": 0.8,
+      "by": { "weapon": { "smallarms": 2, "light": 1, "mortar": 1.5, "field": 0.8, "howitzer": 0.6 } },
+      "beats": [
+        { "t": 0, "times": [3, 5], "gap": [0.5, 3], "do": "man_fall", "kind": ["forward", "back", "side", "knees"] },
+        { "t": [1, 3], "do": "gun_droop", "a": [2, 6] }
+      ]
+    },
+    {
+      "key": "gun.ammo_hit", "group": "gun", "domain": "land", "on": ["lost"], "final": true,
+      "words": "A hit among the ready rounds: a blast, then rounds popping and burning round the gun.",
+      "families": ["gun"], "weight": 0.5,
+      "by": { "weapon": { "howitzer": 1.2, "heavy": 1.2, "field": 1, "mortar": 1, "bomb": 1.2, "light": 0.6 } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "ammo", "kind": "$size" },
+        { "t": 0.1, "do": "man_fall", "times": [1, 3], "gap": [0, 0.4], "kind": ["thrown", "back"] },
+        { "t": [1, 3], "do": "cookoff", "at": "ammo", "a": 1.5, "n": [3, 8], "b": [8, 25], "c": 0 },
+        { "t": [1, 3], "do": "fire", "at": "ammo", "a": 1.2, "b": [120, 400] },
+        { "p": 0.6, "t": [2, 6], "do": "crew_out", "n": [1, 2], "kind": "run", "at": "cover", "c": [0.5, 1.5] }
+      ]
+    },
+    {
+      "key": "gun.abandoned", "group": "gun", "domain": "land", "on": ["lost"], "final": true,
+      "words": "The crew leave the gun and run back, one dragging a wounded man.",
+      "families": ["gun"], "weight": 0.5,
+      "lean": { "nerve": [1.6, 0.3] },
+      "beats": [
+        { "t": 0, "do": "man_fall", "kind": ["forward", "knees", "side"] },
+        { "t": [1, 3], "do": "crew_out", "n": [2, 4], "kind": "run", "at": "rear", "c": [0.3, 1] },
+        { "t": [1.5, 3.5], "do": "drag", "n": 1 }
+      ]
+    },
+    {
+      "key": "gun.crew_replaced", "group": "gun", "domain": "land", "on": ["worn"],
+      "words": "A gunner goes down; another man takes his place and the gun fires on.",
+      "families": ["gun"], "weight": 1,
+      "by": { "weapon": { "smallarms": 1.5, "mortar": 1.3, "light": 1, "field": 1, "howitzer": 0.8, "heavy": 0.8, "bomb": 0.5 } },
+      "beats": [
+        { "t": 0, "do": "man_fall", "kind": ["forward", "back", "side", "knees"] },
+        { "t": [2, 5], "do": "swap" },
+        { "t": 0, "do": "hold_fire", "a": [3, 8] }
+      ]
+    },
+    {
+      "key": "gun.near_miss", "group": "gun", "domain": "land", "on": ["worn"],
+      "words": "A near miss: the crew throw themselves flat, then are back at the gun.",
+      "families": ["gun"], "weight": 1,
+      "by": { "weapon": { "mortar": 1.4, "field": 1, "howitzer": 1.2, "heavy": 1.2, "bomb": 1, "light": 0.6 } },
+      "beats": [
+        { "t": 0, "do": "blast", "at": "beside", "kind": "$size" },
+        { "t": 0.05, "do": "go_down", "a": 8, "b": [2, 6] },
+        { "t": 0, "do": "hold_fire", "a": [3, 8] }
+      ]
+    },
+
+    {
+      "key": "man.falls_forward", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "He is hit and pitches forward onto his face.",
+      "families": ["infantry"], "weight": 1,
+      "by": { "weapon": { "smallarms": 1.4, "mortar": 0.6, "*": 0.5 } },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": "forward" }, { "t": 1.5, "do": "lie" } ]
+    },
+    {
+      "key": "man.falls_back", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "He is hit and goes over backwards.",
+      "families": ["infantry"], "weight": 0.8,
+      "by": { "weapon": { "smallarms": 1.3, "*": 0.6 } },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": "back" }, { "t": 1.5, "do": "lie" } ]
+    },
+    {
+      "key": "man.crumples", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "He sinks to his knees, then slumps over.",
+      "families": ["infantry"], "weight": 0.8,
+      "beats": [ { "t": 0, "do": "man_fall", "kind": "knees" }, { "t": 2, "do": "lie" } ]
+    },
+    {
+      "key": "man.spun_round", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "The bullet spins him half round and he drops.",
+      "families": ["infantry"], "weight": 0.6,
+      "by": { "weapon": { "smallarms": 1.5, "*": 0.2 } },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": "spin" }, { "t": 1.5, "do": "lie" } ]
+    },
+    {
+      "key": "man.thrown", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "The blast throws him off his feet.",
+      "families": ["infantry"], "weight": 1,
+      "by": { "weapon": { "mortar": 1.5, "field": 1.5, "howitzer": 2, "heavy": 2, "bomb": 2, "light": 0.8, "smallarms": 0 } },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": "thrown" }, { "t": 2, "do": "lie" } ]
+    },
+    {
+      "key": "man.wounded_dragged", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "Hit and down; a comrade crawls out to him and drags him back to cover.",
+      "families": ["infantry"], "weight": 0.6,
+      "lean": { "nerve": [0.5, 1.4] },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": ["knees", "side", "forward"] }, { "t": [2, 5], "do": "drag", "n": 1 } ]
+    },
+    {
+      "key": "man.wounded_crawls", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "Hit, he goes down, then crawls back toward cover on his own.",
+      "families": ["infantry"], "weight": 0.6,
+      "beats": [ { "t": 0, "do": "man_fall", "kind": ["side", "knees"] }, { "t": [1.5, 4], "do": "crawl_back" } ]
+    },
+    {
+      "key": "man.carried", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "Hit; two men lift him between them and carry him back.",
+      "families": ["infantry"], "weight": 0.3,
+      "lean": { "nerve": [0.3, 1.3] },
+      "unless": { "moving": 1 },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": ["knees", "forward"] }, { "t": [2, 5], "do": "carry", "n": 2 } ]
+    },
+    {
+      "key": "man.slumps_in_cover", "group": "man", "domain": "land", "on": ["lost"], "final": true,
+      "words": "He slumps down behind his cover and does not get up.",
+      "families": ["infantry"], "weight": 0.8, "if": { "cover": 1.5 }, "unless": { "cover": 0.2 },
+      "beats": [ { "t": 0, "do": "man_fall", "kind": "knees" }, { "t": 1, "do": "lie" } ]
+    },
+
+    {
+      "key": "men.hit_the_dirt", "group": "men", "domain": "land", "on": ["worn"],
+      "words": "A shell lands close: the men round it drop flat, and get up again a few seconds later.",
+      "families": ["infantry"], "weight": 1,
+      "by": { "weapon": { "mortar": 1.4, "field": 1, "howitzer": 1.2, "heavy": 1.2, "bomb": 1.2, "light": 0.8 } },
+      "beats": [ { "t": 0, "do": "go_down", "a": [6, 15], "b": [2, 6] } ]
+    },
+    {
+      "key": "men.duck", "group": "men", "domain": "land", "on": ["worn"],
+      "words": "Bullets crack overhead: heads go down, and the firing goes on.",
+      "families": ["infantry"], "weight": 1,
+      "by": { "weapon": { "smallarms": 2, "*": 0.2 } },
+      "beats": [ { "t": 0, "do": "duck", "a": [1, 3] } ]
+    },
+    {
+      "key": "men.go_to_ground", "group": "men", "domain": "land", "on": ["waver"],
+      "words": "Wavering: the men go to ground and fire less; a few crawl back.",
+      "families": ["infantry"], "weight": 1,
+      "beats": [ { "t": 0, "do": "prone", "a": [0.6, 0.9], "b": 0 }, { "t": [2, 6], "do": "creep_back", "n": [1, 3] } ]
+    },
+    {
+      "key": "men.hug_cover", "group": "men", "domain": "land", "on": ["waver"],
+      "words": "Wavering: the men pull back into the nearest cover and fire from there.",
+      "families": ["infantry"], "weight": 1, "if": { "cover": 1.5 }, "unless": { "cover": 0.3 },
+      "beats": [ { "t": 0, "do": "duck", "a": [4, 10] }, { "t": [1, 3], "do": "creep_back", "n": [2, 5] } ]
+    },
+    {
+      "key": "men.stragglers", "group": "men", "domain": "land", "on": ["waver"],
+      "words": "Wavering: a few men drift to the rear, and a sergeant shouts them back.",
+      "families": ["infantry"], "weight": 0.8,
+      "beats": [ { "t": 0, "do": "run_back", "a": [0.1, 0.25], "b": [15, 40] }, { "t": [3, 6], "do": "officer_wave" } ]
+    },
+    {
+      "key": "men.run", "group": "men", "domain": "land", "on": ["rout"],
+      "words": "Routing: the men get up and run back, some dropping their rifles; a few stop, turn and fire.",
+      "families": ["infantry"], "weight": 1,
+      "beats": [
+        { "t": 0, "do": "run_back", "a": [0.7, 1], "b": [150, 400] },
+        { "t": [1, 4], "do": "drop_arms", "n": [1, 3] },
+        { "t": [3, 8], "do": "turn_fire", "n": [1, 3] }
+      ]
+    },
+    {
+      "key": "men.fall_back_carrying", "group": "men", "domain": "land", "on": ["rout"],
+      "words": "Routing: they fall back in a rush, helping their wounded along.",
+      "families": ["infantry"], "weight": 0.8,
+      "beats": [ { "t": 0, "do": "run_back", "a": [0.8, 1], "b": [150, 400] }, { "t": [0.5, 2], "do": "help", "n": [1, 3] } ]
+    },
+    {
+      "key": "men.melt_away", "group": "men", "domain": "land", "on": ["rout"],
+      "words": "Routing: men slip away in twos and threes from the back, then the rest all at once.",
+      "families": ["infantry"], "weight": 0.7,
+      "beats": [ { "t": 0, "do": "run_back", "a": [0.2, 0.35], "b": [100, 250] }, { "t": [4, 10], "do": "run_back", "a": 1, "b": [150, 400] } ]
+    },
+    {
+      "key": "men.rally_officer", "group": "men", "domain": "land", "on": ["rally"],
+      "words": "Rallying: an officer stands up and waves them on; the men gather round him, turn, and kneel to fire.",
+      "families": ["infantry"], "weight": 1,
+      "beats": [ { "t": 0, "do": "officer_wave" }, { "t": [1, 3], "do": "gather", "a": [10, 20] }, { "t": [4, 8], "do": "kneel" } ]
+    },
+    {
+      "key": "men.rally_nco", "group": "men", "domain": "land", "on": ["rally"],
+      "words": "Rallying: a sergeant pulls the men back into line one by one.",
+      "families": ["infantry"], "weight": 1,
+      "beats": [ { "t": 0, "do": "officer_wave" }, { "t": [2, 6], "times": [3, 6], "gap": [0.5, 1.5], "do": "gather", "a": 5 } ]
+    },
+    {
+      "key": "men.rally_in_cover", "group": "men", "domain": "land", "on": ["rally"],
+      "words": "Rallying: the men stop in the next cover and turn to face the enemy again.",
+      "families": ["infantry"], "weight": 0.8, "if": { "cover": 1.5 },
+      "beats": [ { "t": 0, "do": "kneel" }, { "t": [1, 3], "do": "turn_fire", "n": [2, 5] } ]
+    }
+  ]
+}

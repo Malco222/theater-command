@@ -110,11 +110,19 @@ describe('the air forces raised against Germany form on history\'s schedule', ()
     // Not twice.
     airUpkeep(g, 'USA');
     expect(at(g, 'Georgia').length).toBe(2);
-    // By the summer of 1944 every command has formed: about 1,000 fighters and 1,400 bombers are kept for the war overseas.
+    // By the summer of 1944 every command has formed and grown (ruling 228, item 4: the Eighth's bombers to 1,600, its
+    // fighters to 600, the Fifteenth to 300 and 800): about 1,500 fighters and 3,050 bombers are kept for the war overseas.
     for (let t = 35; t <= 58; t++) { g.turn = t; airUpkeep(g, 'USA'); }
     const abroad = land(g).filter((f) => !homeCommand(f));
-    expect(abroad.reduce((s, f) => s + f.est.ftr, 0)).toBe(1000);
-    expect(abroad.reduce((s, f) => s + f.est.bmr, 0)).toBe(1400);
+    // (Each group is kept at a whole number of aircraft: half an aircraft either way a group.)
+    expect(Math.abs(abroad.reduce((s, f) => s + f.est.ftr, 0) - 1500)).toBeLessThanOrEqual(abroad.length / 2);
+    expect(Math.abs(abroad.reduce((s, f) => s + f.est.bmr, 0) - 3050)).toBeLessThanOrEqual(abroad.length / 2);
+    // A command that grows past what its groups hold forms new groups as it grows: VIII Bomber Command's 1,600 bombers
+    // fly as seven groups, none kept at more than the data allows.
+    const viii = abroad.filter((f) => f.parent === 'VIII Bomber Command');
+    expect(viii.length).toBe(7);
+    expect(viii.every((f) => f.kind === 'bmr' && f.est.bmr <= AIRWAR.groups.most)).toBe(true);
+    expect(g.headlines.some((h) => /, a new group of VIII Bomber Command\.$/.test(h.text))).toBe(true);
     expect(abroad.every((f) => f.est.ftr + f.est.bmr <= AIRWAR.groups.most)).toBe(true);
   });
 });
