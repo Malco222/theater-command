@@ -704,8 +704,6 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   if (g.flags[key] === undefined) return;
   const lasted = g.turn - g.flags[key];
   const was = Object.keys(g.nations)[g.flags[`sgby:${r.id}`] ?? -1];
-  // (Read before this lift marks the town relieved: what lay outside thrown for already this month.)
-  const again = changedThisMonth(g, r) || g.flags[`relieved:${r.id}`] === g.turn;
   delete g.flags[key];
   delete g.flags[`sgby:${r.id}`];
   delete g.flags[`sgm:${r.id}`];
@@ -715,7 +713,9 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   tallySiege(g, 'raised');
   tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl, ...(was && g.nations[was] ? { lost: was } : {}) });
   // Driven off by a relieving army, the besiegers burn what they held outside the walls, if that is their order.
-  if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside', again);
+  // (Always the month's first throw for what lies outside: a siege that has lasted a month was begun before this
+  // month, and nothing else throws for the field while it stands; a siege begun again this month has not lasted.)
+  if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside');
 }
 
 /** How a town fell: stormed, opened to a summons, starved, empty, or with its guard in the battle for the province (ruling 232). */
@@ -726,9 +726,10 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   const since = g.flags[`siege:${r.id}`];
   const lasted = since === undefined ? 0 : g.turn - since;
   const old = r.ctrl;
-  // (Read before this fall's capture: the town lost already this month throws its own dice. What lay outside was
-  // thrown for too where the town was relieved this month and the place is lost whole.)
-  const again = changedThisMonth(g, r) || (since === undefined && g.flags[`relieved:${r.id}`] === g.turn);
+  // (Read before this fall's capture: the town lost already this month throws its own dice. Where the town was relieved
+  // this month and the place is lost whole, what lay outside was thrown for by the besiegers driven off: those kinds
+  // only take the side, and what lies inside keeps its key.)
+  const again = changedThisMonth(g, r) || (since === undefined && g.flags[`relieved:${r.id}`] === g.turn ? 'outside' : false);
   tallySiege(g, how);
   if (how !== 'empty') tallySiege(g, 'months', lasted);
   tallySiege(g, 'taken', garrisonOf(r).length);

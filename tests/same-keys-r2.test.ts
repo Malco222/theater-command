@@ -14,12 +14,13 @@ vi.mock('../src/core/rng', async (orig) => {
 
 import { Rng, hashString } from '../src/core/rng';
 import { LandBattle, sampleTicket } from '../src/battle/land';
-import { capture, createGame } from '../src/campaign/game';
+import { capture, createGame, setWar } from '../src/campaign/game';
 import { PRIZE_KINDS, hasPrize, prizeInside, prizeOut, setScorchPolicy } from '../src/campaign/prizes';
 import { onNet, railCut } from '../src/campaign/rails';
 import { blowChance, bridgeDown, crossingsAt, farBank } from '../src/campaign/rivers';
 import { fall, invest, lift } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
+import { runTurnAI } from '../src/campaign/turn';
 import type { Game, Region } from '../src/campaign/types';
 
 const roll = (key: string): number => new Rng(hashString(key)).next();
@@ -58,6 +59,10 @@ describe('the land field\'s own stream takes the attempt (row 3)', () => {
       // Its stream is the attempt's own, from the ticket's seed and attempt and nothing else.
       const t = at(s, 1), mine = new LandBattle(t) as unknown as { rng: Rng }, want = new Rng(hashString(`field-run:${t.seed}:1`));
       for (let i = 0; i < 3; i++) expect(mine.rng.next()).toBe(want.next());
+      // The ticket the player fights by hand (humanAtt) draws that same stream: the play mode is no salt.
+      const th = at(s, 1, true), hand = new LandBattle(th) as unknown as { rng: Rng }, same = new Rng(hashString(`field-run:${th.seed}:1`));
+      expect(th.seed).toBe(t.seed);
+      for (let i = 0; i < 3; i++) expect(hand.rng.next()).toBe(same.next());
       expect(handedAtOnce(at(s, 1))).toBe(handedAtOnce(at(s, 1)));
       const fought = (fog: boolean): number => {
         const b = new LandBattle(at(s, 1, true));
@@ -89,7 +94,8 @@ describe('the four low keys take the missing side on a second change of hands in
       expect(first).toEqual([old]);
       if (railCut(g, r.id)) continue;
       const second = keysOf(`rail:${g.seed}:`, () => capture(g, r, 'POL'));
-      expect(second.length).toBe(1);
+      // (The side driven out: Germany.)
+      expect(second).toEqual([`${old}:GER`]);
       expect(roll(second[0])).not.toBe(roll(first[0]));
       met++;
     }
@@ -114,7 +120,8 @@ describe('the four low keys take the missing side on a second change of hands in
       expect(keysOf(old, () => capture(g, r, 'GER'))).toEqual([old]);
       capture(g, r, 'POL');
       const again = keysOf(old, () => capture(g, r, 'GER'));
-      expect(again.length).toBe(1);
+      // (The captor: Germany.)
+      expect(again).toEqual([`${old}:GER`]);
       expect(roll(again[0])).not.toBe(roll(old));
     }
     {
@@ -123,7 +130,7 @@ describe('the four low keys take the missing side on a second change of hands in
       expect(keysOf(old, () => capture(g, b, 'GER'))).toEqual([old]);
       capture(g, b, 'POL');
       const then = keysOf(old, () => capture(g, r, 'GER'));
-      expect(then.length).toBe(1);
+      expect(then).toEqual([`${old}:GER`]);
       expect(roll(then[0])).not.toBe(roll(old));
     }
   });
@@ -150,8 +157,9 @@ describe('the four low keys take the missing side on a second change of hands in
       if (!left.length) continue;
       const second = keysOf(pre, () => fall(g, r, 'POL', 'empty'));
       for (const k of left) {
-        const again = second.find((x) => x.startsWith(`${pre}${k}`));
-        expect(again).toBeDefined();
+        // (The side driven off the second time: Germany.)
+        const again = second.find((x) => x.startsWith(`${pre}${k}:`) || x === `${pre}${k}`);
+        expect(again).toBe(`${pre}${k}:GER`);
         expect(roll(again!)).not.toBe(roll(`${pre}${k}`));
       }
       met++;
@@ -177,8 +185,9 @@ describe('the four low keys take the missing side on a second change of hands in
       if (!left.length) continue;
       const second = keysOf(pre, () => invest(g, r, 'GER'));
       for (const k of left) {
-        const again = second.find((x) => x.startsWith(`${pre}${k}`));
-        expect(again).toBeDefined();
+        // (The side driven off the field: its holder, Poland.)
+        const again = second.find((x) => x.startsWith(`${pre}${k}:`) || x === `${pre}${k}`);
+        expect(again).toBe(`${pre}${k}:POL`);
         expect(roll(again!)).not.toBe(roll(`${pre}${k}`));
       }
       met++;
@@ -197,9 +206,80 @@ describe('the four low keys take the missing side on a second change of hands in
       if (railCut(g, r.id) || !first.length) continue;
       expect(first).toEqual([old]);
       const second = keysOf(old, () => capture(g, r, 'POL'));
-      expect(second.length).toBe(1);
+      expect(second).toEqual([`${old}:GER`]);
       expect(roll(second[0])).not.toBe(roll(old));
       met++;
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  it('a later start (row 4): ground laid or handed over as the campaign opens is no change of hands: its first capture keeps today\'s key', () => {
+    const g = createGame(1, null);
+    while (g.turn < 10) runTurnAI(g);
+    startOpen(g);
+    expect(g.flags.openFrom).toBe(g.turn);
+    // (In a month-10 start the Baltic states and Bessarabia carry this month, with no capture behind them.)
+    const laid = g.regions.filter((r) => r.since === g.turn && g.flags[`fellP:${r.id}`] === undefined && r.ctrl === 'SOV' && onNet(r.id) && !railCut(g, r.id));
+    expect(laid.length).toBeGreaterThan(0);
+    setWar(g, 'GER', 'SOV');
+    let met = 0;
+    for (const r of laid) {
+      const old = `rail:${g.seed}:${g.turn}:${r.id}`;
+      expect(keysOf(`rail:${g.seed}:`, () => capture(g, r, 'GER'))).toEqual([old]);
+      if (railCut(g, r.id)) continue;
+      expect(keysOf(`rail:${g.seed}:`, () => capture(g, r, 'SOV'))).toEqual([`${old}:GER`]);
+      met++;
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  it('taken whole, then besieged by a third side in the month (row 6a): what lies outside burns on the new holder\'s own dice', () => {
+    const g = scorching(1);
+    setWar(g, 'FRA', 'GER');
+    let met = 0;
+    for (const r of g.regions) {
+      if (met >= 2) break;
+      if (r.ctrl !== 'POL' || !standing(g, r, true).length || g.flags[`siege:${r.id}`] !== undefined) continue;
+      const pre = `prize:${g.seed}:${g.turn}:${r.id}:`;
+      const first = keysOf(pre, () => fall(g, r, 'GER', 'empty'));
+      for (const k of first) expect(k.split(':').length).toBe(5);
+      const left = standing(g, r, true).filter((k) => first.includes(`${pre}${k}`));
+      if (!left.length) continue;
+      const second = keysOf(pre, () => invest(g, r, 'FRA'));
+      for (const k of left) expect(second).toContain(`${pre}${k}:GER`);
+      for (const k of second) expect(k.split(':').length).toBe(6);
+      met++;
+    }
+    expect(met).toBeGreaterThan(0);
+  });
+
+  it('relieved, then lost whole in the month (row 6a): only what lay outside takes the side; what lies inside keeps its key', () => {
+    let met = 0;
+    // (A town with prizes both outside and inside its walls, whose field the besiegers driven off did not burn: Bordeaux
+    // or Marseille, in the first seeds that leave one standing.)
+    for (let seed = 1; seed <= 12 && met < 2; seed++) {
+      const g = scorching(seed);
+      setWar(g, 'FRA', 'GER');
+      setScorchPolicy(g, 'FRA', 'everywhere');
+      const ger = Object.keys(g.nations).indexOf('GER');
+      for (const r of g.regions) {
+        if (met >= 2) break;
+        if ((r.ctrl !== 'POL' && r.ctrl !== 'FRA') || !standing(g, r, true).length || !standing(g, r, false).length || g.flags[`siege:${r.id}`] !== undefined) continue;
+        const pre = `prize:${g.seed}:${g.turn}:${r.id}:`, holder = r.ctrl;
+        // Besieged by Germany since last month, relieved by its holder now: the besiegers throw for the field.
+        g.flags[`siege:${r.id}`] = g.turn - 1;
+        g.flags[`sgby:${r.id}`] = ger;
+        const first = keysOf(pre, () => lift(g, r, holder));
+        for (const k of first) expect(k.split(':').length).toBe(5);
+        const out = standing(g, r, true).filter((k) => first.includes(`${pre}${k}`)), inside = standing(g, r, false);
+        if (!out.length) continue;
+        // Then lost whole, no siege standing: the holder throws for everything, the field a second time.
+        const second = keysOf(pre, () => fall(g, r, 'GER', 'field'));
+        for (const k of out) expect(second).toContain(`${pre}${k}:${holder}`);
+        for (const k of inside) expect(second).toContain(`${pre}${k}`);
+        for (const k of inside) expect(second).not.toContain(`${pre}${k}:${holder}`);
+        met++;
+      }
     }
     expect(met).toBeGreaterThan(0);
   });
