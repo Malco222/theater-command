@@ -353,6 +353,13 @@ export interface LiveOpts {
    * Off unless true.
    */
   teams?: boolean;
+  /**
+   * Units face the fire that hurts most (release 2, the Battle rules card's "facing"; the design director's ruling of
+   * 25 November 21:54Z; the rules' sim.faceRule): a block is held to its facing only by the enemy whose blows cost it
+   * most after its cover, and turns to meet another that costs it more. NOT looks only: it changes every fight. Support
+   * teams in battle works only with it on (the same ruling). Off unless true.
+   */
+  facing?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
@@ -521,7 +528,9 @@ export class LiveBattle {
     if (opts.bocage) sim.bocage = true;
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
-    if (opts.teams === true) sim.teamsRule = true;
+    if (opts.facing === true) sim.faceRule = true;
+    // (Support teams in battle works only with "facing" on: the design director, 25 November 21:54Z.)
+    if (opts.teams === true && opts.facing === true) sim.teamsRule = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;

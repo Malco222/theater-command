@@ -126,7 +126,16 @@ namespace
 		// Since the design director's ruling of 17:52Z the same switch turns on the rules' sim.teamsRule in every
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
-		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. It works only with Units face the fire that hurts most on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		// (Units face the fire that hurts most, release 2: the design director's ruling of 25 November 21:54Z on the
+		// fairness gate's trace. Off, any blow on a block's front holds it to its facing, at any range, however light
+		// and whatever its cover: ruled a fault. On, a block is held only by the enemy whose blows cost it most after
+		// its cover, and turns to meet another that costs it more (the rules' sim.faceRule). It is NOT looks only: it
+		// moves every battle, guns hold too, so it has this row of its own and its own fairness gate, and stays off
+		// until that gate and the design director pass it; -TheaterLandRuleFacing turns it on for a run. "Support
+		// teams in battle" above does nothing without it (the same ruling: the bridge and live.ts read both). Its key,
+		// name and line are the UI director's of 25 November 22:14Z.)
+		{ TEXT("facing"), TEXT("Units face the fire that hurts most"), TEXT("A unit faces the enemy that hurts it most, once its cover is counted, and turns to meet another only when that one hurts it more. Fire that truly hurts still holds a unit to its facing; a far-off gun that does it little harm no longer keeps it facing the wrong way while infantry comes in at its side. Off: any enemy striking a unit's front, however lightly and from however far, keeps it from turning to meet another at its side, as before. This changes how battles turn out."), TEXT("TheaterLandNoFacing"), false, TEXT("TheaterLandRuleFacing") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
