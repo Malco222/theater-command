@@ -1,10 +1,12 @@
 #include "Campaign/ArmyPiece.h"
 
+#include "Campaign/ArmyCarry.h"
 #include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "Campaign/ShipRide.h"
+#include "Campaign/ShipSmoke.h"
 #include "Campaign/ShipWay.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
@@ -43,6 +45,66 @@ namespace
 	{
 		static const bool bShipRideAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipRide"));
 		return bShipRideAsked || CVarShipRide.GetValueOnGameThread() != 0;
+	}
+
+	// (Release 2, armies with weight; Brian, 25 November 2026: "I want this to visually wow people on how smooth and
+	// realistic and detailed grand it looks".) An army piece is carried as a heavy thing is: along a road with its
+	// corners rounded, taken up before it goes and let down the last of the way, its foot hanging back from the hand
+	// and swinging on, and it rocks once as it lands (Campaign/ArmyCarry.h). Off as it comes, until Brian has seen the
+	// Mac's film of it; "-TheaterArmyWeight" turns it on for that film, switch or no switch. The rest are its measures.
+	TAutoConsoleVariable<int32> CVarArmyWeight(
+		TEXT("tc.Map.ArmyWeight"), 0,
+		TEXT("1: an army piece on the campaign map is carried with weight: a rounded road, a lift and a drop, a lean as the hand carries it, a rock and sized dust as it lands. 0: carried as before. Read when a piece is next moved."));
+	TAutoConsoleVariable<float> CVarArmyLean(
+		TEXT("tc.Map.ArmyLean"), 1.0f,
+		TEXT("With tc.Map.ArmyWeight: how far a piece leans as it is carried and rocks as it lands, as a multiple of its own (8 degrees at the most). 0 to 2."));
+	TAutoConsoleVariable<float> CVarArmyRound(
+		TEXT("tc.Map.ArmyRound"), 1.0f,
+		TEXT("With tc.Map.ArmyWeight: how much of each corner of its road is rounded, as a multiple of the usual (four fifths of half the shorter leg, and no further back than nine units). 0 to 3; 0 is the road corner to corner; over 1 the curve may also reach further back, a wider sweep."));
+	TAutoConsoleVariable<float> CVarArmyTime(
+		TEXT("tc.Map.ArmyTime"), 1.0f,
+		TEXT("With tc.Map.ArmyWeight: how long a march takes, as a multiple of what it takes without. 0.7 to 1.6."));
+
+	/** A piece's hang as Campaign/ArmyCarry.h keeps it, from the eight numbers the piece keeps, and back again. */
+	TheaterArmyCarry::FHang HangOf(const double* Kept)
+	{
+		TheaterArmyCarry::FHang Hang;
+		Hang.X = Kept[0];
+		Hang.Y = Kept[1];
+		Hang.RateX = Kept[2];
+		Hang.RateY = Kept[3];
+		Hang.HandRateX = Kept[4];
+		Hang.HandRateY = Kept[5];
+		Hang.PushX = Kept[6];
+		Hang.PushY = Kept[7];
+		return Hang;
+	}
+
+	void KeepHang(double* Kept, const TheaterArmyCarry::FHang& Hang)
+	{
+		Kept[0] = Hang.X;
+		Kept[1] = Hang.Y;
+		Kept[2] = Hang.RateX;
+		Kept[3] = Hang.RateY;
+		Kept[4] = Hang.HandRateX;
+		Kept[5] = Hang.HandRateY;
+		Kept[6] = Hang.PushX;
+		Kept[7] = Hang.PushY;
+	}
+
+	/**
+	 * The turn that stands a piece leaning as its hang has it, facing a yaw on the table. OutRise: how far its middle
+	 * rises when it turns about the low edge of a base of this radius (nothing in the air: a radius of nought).
+	 */
+	FQuat LeaningTurn(const double* Kept, double Reach, double BaseAcross, float Faces, double& OutRise)
+	{
+		const double LeanBy = FMath::Clamp(static_cast<double>(CVarArmyLean.GetValueOnGameThread()), 0.0, 2.0);
+		TheaterArmyCarry::FLean Leans = TheaterArmyCarry::Lean(HangOf(Kept), Reach, TheaterArmyCarry::MostLean);
+		Leans.X *= LeanBy;
+		Leans.Y *= LeanBy;
+		const TheaterArmyCarry::FSet Stands = TheaterArmyCarry::Set(Leans, BaseAcross);
+		OutRise = Stands.Rise;
+		return FQuat::FindBetweenNormals(FVector::UpVector, FVector(Stands.UpX, Stands.UpY, Stands.UpZ)) * FRotator(0.0f, Faces, 0.0f).Quaternion();
 	}
 }
 
@@ -455,6 +517,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	// that a fleet remade in the middle of her turn does not snap upright.
 	const TArray<FHullRide> HullsWere = MoveTemp(HullRides);
 	HullRides.Reset();
+	Funnels.Reset(); // (release 2, funnel smoke: they are her model's, and go with it)
 	for (UProceduralMeshComponent* HullMesh : Hulls)
 	{
 		if (HullMesh)
@@ -561,6 +624,23 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		else
 		{
 			Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag, Fleet.Stance != TEXT("port"));
+			// (Release 2, funnel smoke: where each of her ships' funnels ends, for the smoke the map draws from it.)
+			for (int32 SmokerIndex = 0; SmokerIndex < Model.Ships.Num(); ++SmokerIndex)
+			{
+				const FMiniatureMesh::FShip& Smoker = Model.Ships[SmokerIndex];
+				for (int32 FunnelIndex = 0; FunnelIndex < Smoker.FunnelCount; ++FunnelIndex)
+				{
+					if (Model.FunnelTops.IsValidIndex(Smoker.FirstFunnel + FunnelIndex))
+					{
+						FFunnel Funnel;
+						Funnel.Top = Model.FunnelTops[Smoker.FirstFunnel + FunnelIndex];
+						Funnel.Ship = SmokerIndex;
+						Funnel.Class = Smoker.Class;
+						Funnel.Long = Smoker.Long;
+						Funnels.Add(Funnel);
+					}
+				}
+			}
 		}
 		Size = Fleet.bReport ? 0.9 : FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
 		// Its plate says how many ships, and what they are about when it is not a plain patrol.
@@ -1447,11 +1527,29 @@ bool AArmyPiece::ColoursHitByRay(const FVector& Origin, const FVector& Direction
 void AArmyPiece::Carry(const FVector& GroundPoint)
 {
 	bMarching = false;
-	SetActorTickEnabled(false);
+	// (Release 2, armies with weight.) In the hand it sways as the hand moves it, so it is ticked there: Sway. Never a fleet.
+	const bool bSwaysInHand = What != 1 && CarriedWithWeight();
+	SetActorTickEnabled(bSwaysInHand);
 	if (!bInHand)
 	{
 		bInHand = true;
 		LevelHulls(); // (a fleet in the hand is off the water: her ships lie level)
+		HandWas = GroundPoint; // (taken up: the hand begins here)
+	}
+	HandNow = GroundPoint;
+	if (bSwaysInHand)
+	{
+		if (FVector::DistSquared2D(HandWas, HandNow) > FMath::Square(12.0 * LiftHeight))
+		{
+			HandWas = HandNow; // (the table came round under the hand, or the hand jumped: not a throw)
+		}
+		bHangs = true;
+		StandLeaning(GroundPoint + FVector(0.0, 0.0, LiftHeight), false);
+		return;
+	}
+	if (bHangs)
+	{
+		StandStraight(); // (the switch was turned off while it leaned)
 	}
 	SetActorLocation(GroundPoint + FVector(0.0, 0.0, LiftHeight));
 }
@@ -1494,6 +1592,33 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		}
 	}
 	bSailing = false; // (SailAlong sets it again after)
+	// (Release 2, armies with weight.) Never a fleet: she has a ship's way of her own (SailCourse), and her ships their ride.
+	bWeighty = What != 1 && CarriedWithWeight();
+	if (!bWeighty && bHangs)
+	{
+		StandStraight(); // (the switch was turned off while it leaned)
+	}
+	if (bWeighty && bLifted && Route.Num() >= 3)
+	{
+		// The hand does not carry it to the middle of each province and turn there: it cuts each corner on a curve.
+		std::vector<TheaterArmyCarry::FSpot> Road, Rounded;
+		Road.reserve(static_cast<size_t>(Route.Num()));
+		for (const FVector& Corner : Route)
+		{
+			Road.push_back(TheaterArmyCarry::FSpot{ Corner.X, Corner.Y, Corner.Z });
+		}
+		// (Over 1 the measure also lets the curve reach further back along each leg: a wider sweep, for the Mac's film to try.)
+		const double RoundBy = FMath::Clamp(static_cast<double>(CVarArmyRound.GetValueOnGameThread()), 0.0, 3.0);
+		TheaterArmyCarry::Round(Road, 0.8 * RoundBy, 9.0 * FMath::Max(RoundBy, 1.0) * LiftHeight / 3.2, Rounded);
+		if (Rounded.size() >= 2)
+		{
+			Route.Reset(static_cast<int32>(Rounded.size()));
+			for (const TheaterArmyCarry::FSpot& Spot : Rounded)
+			{
+				Route.Add(FVector(Spot.X, Spot.Y, Spot.Z));
+			}
+		}
+	}
 	RouteMarks.Reset(Route.Num());
 	double Length = 0.0;
 	RouteMarks.Add(0.0);
@@ -1505,6 +1630,13 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 	// A short hop takes most of a second; a long march not much more than two. Setting down from the hand is quick.
 	bLiftOnMarch = bLifted;
 	MarchTime = bLifted ? FMath::Clamp(0.55 + Length / 5200.0, 0.75, 2.4) : FMath::Clamp(0.22 + Length / 9000.0, 0.28, 0.7);
+	if (bWeighty)
+	{
+		MarchTime *= FMath::Clamp(static_cast<double>(CVarArmyTime.GetValueOnGameThread()), 0.7, 1.6);
+		bHangs = true;
+		const FVector Whole = Route.Last() - Route[0];
+		CameAlong = FVector2D(Whole.X, Whole.Y).GetSafeNormal();
+	}
 	MarchClock = 0.0;
 	bMarching = true;
 	bRemoveOnArrival = bInRemoveOnArrival;
@@ -1599,9 +1731,11 @@ void AArmyPiece::SetEye(double EyeDistance, bool bByFocus)
 		return;
 	}
 	bRideNear = bByFocus && !IsHidden() && EyeDistance < FMath::Max(static_cast<double>(CVarShipRideReach.GetValueOnGameThread()), 0.0);
-	if (bRideNear && !bInHand && !IsActorTickEnabled())
+	if (bRideNear && !bInHand && !bSelected && !IsActorTickEnabled())
 	{
-		SetActorTickEnabled(true); // (lying still, she is ticked while there is a swell to see: Tick turns it off again)
+		// (lying still, she is ticked while there is a swell to see: Tick turns it off again. Not one in the hand or held
+		// off the table, who would have her tick turned on here and off there at every look: the 3D pre-check's note.)
+		SetActorTickEnabled(true);
 	}
 }
 
@@ -1673,6 +1807,75 @@ void AArmyPiece::LevelHulls()
 	}
 }
 
+bool AArmyPiece::FunnelsNow(TArray<FFunnelNow>& OutFunnels, double& OutPace, double& OutGather) const
+{
+	OutFunnels.Reset();
+	OutPace = 0.0;
+	OutGather = 0.0;
+	// Only a fleet whose ships are shown, on the water: not one in the hand or carried over the table, and not one at
+	// anchor by her port, whose fires are banked.
+	if (What != 1 || Funnels.Num() == 0 || bGlimpsed || bInHand || bAtAnchor || IsHidden() || (bMarching && !bSailing && bLiftOnMarch))
+	{
+		return false;
+	}
+	const FVector Middle = GetActorLocation();
+	const FQuat Turned = GetActorQuat();
+	const double Scale = GetActorScale3D().X;
+	for (const FFunnel& Funnel : Funnels)
+	{
+		FFunnelNow Stands;
+		Stands.Top = Middle + Turned.RotateVector(Funnel.Top * Scale);
+		Stands.Ship = Funnel.Ship;
+		Stands.Class = Funnel.Class;
+		Stands.Long = Funnel.Long * Scale;
+		OutFunnels.Add(Stands);
+	}
+	SteamedAt(0.0, OutPace, OutGather);
+	return true;
+}
+
+double AArmyPiece::SteamedAt(double Ago, double& OutPace, double& OutGather) const
+{
+	OutPace = 0.0;
+	OutGather = 0.0;
+	if (!bMarching || !bSailing)
+	{
+		return 0.0;
+	}
+	const double Then = MarchClock - FMath::Max(Ago, 0.0);
+	if (SailAt.Num() >= 2)
+	{
+		TheaterShipSmoke::Steams(SailAt.GetData(), SailAt.Num(), SailEach, SailFull, Then, OutPace, OutGather);
+	}
+	else if (Then >= 0.0)
+	{
+		// (the old sail, corner to corner on one ease)
+		TheaterShipSmoke::SteamsEased(Then / FMath::Max(MarchTime, 1.0e-3), MarchTime, OutPace, OutGather);
+	}
+	return TheaterShipSmoke::Keeps(MarchTime - MarchClock);
+}
+
+FVector AArmyPiece::AsternBy(const FVector& Point, double Back) const
+{
+	if (Back <= 0.0)
+	{
+		return FVector::ZeroVector;
+	}
+	if (bMarching && bSailing && SailAt.Num() >= 2 && SailHead.Num() == SailAt.Num() && SailRan.Num() == SailAt.Num())
+	{
+		// On a course of her own: how far she has run by the clock (as Tick reckons it), and the water that far back.
+		const double Beat = FMath::Clamp(MarchClock / SailEach, 0.0, static_cast<double>(SailAt.Num() - 1));
+		const int32 Before = FMath::Min(FMath::FloorToInt32(Beat), SailAt.Num() - 2);
+		const double Run = FMath::Lerp(SailRan[Before], SailRan[Before + 1], Beat - Before);
+		const FVector Off = Point - GetActorLocation();
+		const TheaterShipWay::FSpot Gone = TheaterShipSmoke::Was(SailAt.GetData(), SailHead.GetData(), SailRan.GetData(), SailAt.Num(), Run, Back, TheaterShipWay::FSpot{ Off.X, Off.Y });
+		return FVector(Gone.X, Gone.Y, 0.0);
+	}
+	const FVector Bows = GetActorQuat().RotateVector(FVector(0.0, 1.0, 0.0));
+	const TheaterShipWay::FSpot Gone = TheaterShipSmoke::WasStraight(TheaterShipWay::FSpot{ Bows.X, Bows.Y }, Back);
+	return FVector(Gone.X, Gone.Y, 0.0);
+}
+
 void AArmyPiece::FaceTable(float Yaw)
 {
 	SailEndYaw = Yaw;
@@ -1688,8 +1891,11 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	if (!bMarching)
 	{
 		// (Release 2, a fleet under way, second part.) A fleet lying still is ticked only for as long as her ships have
-		// something to show: the last of a heel, or the swell while the eye is near.
-		if (!RideHulls(DeltaSeconds, 0.0, 0.0))
+		// something to show: the last of a heel, or the swell while the eye is near. (Armies with weight.) And a piece
+		// only while it sways in the hand or rocks after a set-down.
+		const bool bRides = RideHulls(DeltaSeconds, 0.0, 0.0);
+		const bool bSways = Sway(DeltaSeconds);
+		if (!bRides && !bSways)
 		{
 			SetActorTickEnabled(false);
 		}
@@ -1710,6 +1916,7 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// her full speed: what her ships heel by. Nothing under the old sail, corner to corner: there they only ride.
 	double CourseTurn = 0.0, CoursePace = 0.0;
 	int32 Segment = 1;
+	TheaterArmyCarry::FHeld Held;
 	if (bCourse)
 	{
 		const double Beat = FMath::Clamp(MarchClock / SailEach, 0.0, static_cast<double>(SailAt.Num() - 1));
@@ -1728,7 +1935,12 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	}
 	else
 	{
-		const double Target = Eased * RouteMarks.Last();
+		// (Armies with weight: where the hand has it, by the carry and not by one ease from end to end.)
+		if (bWeighty)
+		{
+			Held = bLiftOnMarch ? TheaterArmyCarry::Lifted(Progress, MarchTime) : TheaterArmyCarry::FromHand(Progress);
+		}
+		const double Target = (bWeighty ? Held.Along : Eased) * RouteMarks.Last();
 		while (Segment < RouteMarks.Num() - 1 && RouteMarks[Segment] < Target)
 		{
 			++Segment;
@@ -1739,7 +1951,11 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// Picked up, carried, set down.
 	if (bLiftOnMarch)
 	{
-		Position.Z += LiftHeight * FMath::Pow(FMath::Sin(Progress * UE_DOUBLE_PI), 0.55);
+		Position.Z += LiftHeight * (bWeighty ? Held.High : FMath::Pow(FMath::Sin(Progress * UE_DOUBLE_PI), 0.55));
+	}
+	else if (bWeighty && !bCourse && Route.Num() == 2)
+	{
+		Position.Z = Route[1].Z + (Route[0].Z - Route[1].Z) * Held.High; // (set down from the hand: over its place first, then let down)
 	}
 	// A piece that is still in the hand when it arrives comes to rest a little off the table.
 	Position += (HomeLocation() - RestLocation) * Eased;
@@ -1752,7 +1968,45 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	}
 	// (Seam-2: or shown in the turn nearest the eye, where the map has said so. Then it does not leave the table at the
 	// seam at all: it sails on across it, and the eye comes round with it.)
-	SetActorLocation(Shown(Position));
+	if (bWeighty && !bCourse)
+	{
+		// (Armies with weight.) Its hang over this frame, with the hand where the road and the carry have it: the foot
+		// hangs back as the hand gathers speed, swings on as it slows, and swings wide round a bend.
+		auto HandAt = [this](double Time)
+		{
+			const double Share = FMath::Clamp(Time / MarchTime, 0.0, 1.0);
+			const double Gone = (bLiftOnMarch ? TheaterArmyCarry::Lifted(Share, MarchTime).Along : TheaterArmyCarry::FromHand(Share).Along) * RouteMarks.Last();
+			int32 Leg = 1;
+			while (Leg < RouteMarks.Num() - 1 && RouteMarks[Leg] < Gone)
+			{
+				++Leg;
+			}
+			const double LegLong = FMath::Max(RouteMarks[Leg] - RouteMarks[Leg - 1], 1.0e-3);
+			const FVector Hand = FMath::Lerp(Route[Leg - 1], Route[Leg], (Gone - RouteMarks[Leg - 1]) / LegLong);
+			return TheaterArmyCarry::FSpot{ Hand.X, Hand.Y, 0.0 };
+		};
+		TheaterArmyCarry::FHang Hang = HangOf(HangKept);
+		const double Reach = TheaterArmyCarry::HangsOn * LiftHeight / 3.2;
+		const double Until = FMath::Min(MarchClock, MarchTime), Since = FMath::Max(Until - static_cast<double>(DeltaSeconds), 0.0);
+		if (bLiftOnMarch)
+		{
+			TheaterArmyCarry::Carried(Hang, HandAt, Since, Until, MarchTime, Reach);
+		}
+		else
+		{
+			TheaterArmyCarry::Swing(Hang, HandAt, Since, Until, TheaterArmyCarry::ComingDown, Reach);
+		}
+		KeepHang(HangKept, Hang);
+		if (FMath::Square(Hang.HandRateX) + FMath::Square(Hang.HandRateY) > 1.0)
+		{
+			CameAlong = FVector2D(Hang.HandRateX, Hang.HandRateY).GetSafeNormal();
+		}
+		StandLeaning(Shown(Position), false);
+	}
+	else
+	{
+		SetActorLocation(Shown(Position));
+	}
 	if (bCourse)
 	{
 		// Her bows as her course has them (a fleet's model has its bows toward its own +Y). The table may have been
@@ -1789,7 +2043,9 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	if (Progress >= 1.0)
 	{
 		bMarching = false;
-		SetActorTickEnabled(Hulls.Num() > 0 && !bRemoveOnArrival); // (her ships may have a heel still to lose, or the swell to ride: the next tick says)
+		// (her ships may have a heel still to lose, or the swell to ride: the next tick says. And a piece set down with
+		// weight has its rock to make.)
+		SetActorTickEnabled((Hulls.Num() > 0 || bWeighty) && !bRemoveOnArrival);
 		if (bSailing)
 		{
 			bSailing = false;
@@ -1805,11 +2061,138 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		{
 			Destroy();
 		}
+		else if (bWeighty)
+		{
+			// (Armies with weight.) It lands: its top is thrown on the way it came, and it rocks once (Sway). A piece
+			// still in the hand as it arrives stays a little off the table, and nothing knocks it.
+			if (!bSelected)
+			{
+				TheaterArmyCarry::FHang Hang = HangOf(HangKept);
+				TheaterArmyCarry::Kick(Hang, CameAlong.X, CameAlong.Y, TheaterArmyCarry::Landing, TheaterArmyCarry::HangsOn * LiftHeight / 3.2);
+				KeepHang(HangKept, Hang);
+			}
+			bHangs = true;
+			StandLeaning(Shown(HomeLocation()), !bSelected);
+		}
 		else
 		{
 			SetActorLocation(Shown(HomeLocation()));
 		}
 	}
+}
+
+bool AArmyPiece::CarriedWithWeight()
+{
+	static const bool bArmyWeightAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterArmyWeight"));
+	return bArmyWeightAsked || CVarArmyWeight.GetValueOnGameThread() != 0;
+}
+
+float AArmyPiece::FacingNow()
+{
+	// The map turns every piece to face the eye by setting it upright at a new yaw. So a piece that stands upright
+	// faces as the map last said; one that leans faces as it did when it began to.
+	const FRotator Turned = GetActorRotation();
+	if (!bStoodKnown || (FMath::Abs(Turned.Pitch) < 0.01 && FMath::Abs(Turned.Roll) < 0.01))
+	{
+		StoodYaw = static_cast<float>(Turned.Yaw);
+		bStoodKnown = true;
+	}
+	return StoodYaw;
+}
+
+void AArmyPiece::StandLeaning(const FVector& Place, bool bOnTable)
+{
+	const float Faces = FacingNow();
+	// (on the table it turns about the low edge of its base, which stays where it is: so its middle rises a little)
+	double Risen = 0.0;
+	const FQuat Leaning = LeaningTurn(HangKept, TheaterArmyCarry::HangsOn * LiftHeight / 3.2, bOnTable ? BaseRadius * GetActorScale3D().X : 0.0, Faces, Risen);
+	SetActorLocationAndRotation(Place + FVector(0.0, 0.0, Risen), Leaning);
+}
+
+void AArmyPiece::FaceEye(float Yaw)
+{
+	StoodYaw = Yaw;
+	bStoodKnown = true;
+	if (!bHangs)
+	{
+		SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+		return;
+	}
+	// (it leans: the same lean, facing the new way. Its place is not touched: the rise does not change with the facing.)
+	double Risen = 0.0;
+	SetActorRotation(LeaningTurn(HangKept, TheaterArmyCarry::HangsOn * LiftHeight / 3.2, 0.0, Yaw, Risen));
+}
+
+void AArmyPiece::StandStraight()
+{
+	const float Faces = FacingNow();
+	for (double& Kept : HangKept)
+	{
+		Kept = 0.0;
+	}
+	bHangs = false;
+	SetActorRotation(FRotator(0.0f, Faces, 0.0f));
+}
+
+bool AArmyPiece::Sway(double Seconds)
+{
+	if (!bHangs)
+	{
+		return false;
+	}
+	if (What == 1 || !CarriedWithWeight())
+	{
+		StandStraight(); // (the switch was turned off while it leaned)
+		if (!bInHand)
+		{
+			SetActorLocation(Shown(HomeLocation())); // (it may have been standing on the edge of its base)
+		}
+		return false;
+	}
+	TheaterArmyCarry::FHang Hang = HangOf(HangKept);
+	const double Reach = TheaterArmyCarry::HangsOn * LiftHeight / 3.2;
+	const double Span = FMath::Clamp(Seconds, 0.0, 0.25);
+	if (bInHand)
+	{
+		// In the hand: its foot swings under the hand as the hand moves it about. (While it is held it is ticked: one piece.)
+		const FVector From = HandWas, To = HandNow;
+		auto HandAt = [From, To, Span](double Time)
+		{
+			const FVector Hand = FMath::Lerp(From, To, Span > 1.0e-6 ? FMath::Clamp(Time / Span, 0.0, 1.0) : 1.0);
+			return TheaterArmyCarry::FSpot{ Hand.X, Hand.Y, 0.0 };
+		};
+		TheaterArmyCarry::Swing(Hang, HandAt, 0.0, Span, TheaterArmyCarry::InTheAir, Reach);
+		KeepHang(HangKept, Hang);
+		HandWas = HandNow;
+		StandLeaning(HandNow + FVector(0.0, 0.0, LiftHeight), false);
+		return true;
+	}
+	// On the table (or held just off it, selected): it rocks, quick and soon over, and is still.
+	auto Stays = [](double) { return TheaterArmyCarry::FSpot{}; };
+	TheaterArmyCarry::Swing(Hang, Stays, 0.0, Span, TheaterArmyCarry::OnTheTable, Reach);
+	const FVector Home = Shown(HomeLocation());
+	if (TheaterArmyCarry::Still(Hang, Reach))
+	{
+		StandStraight();
+		SetActorLocation(Home);
+		return false;
+	}
+	KeepHang(HangKept, Hang);
+	StandLeaning(Home, !bSelected);
+	return true;
+}
+
+void AArmyPiece::TakeWeight(const FVector& Along)
+{
+	if (What == 1 || bMarching || bInHand || bSelected || bGlimpsed || !CarriedWithWeight())
+	{
+		return;
+	}
+	TheaterArmyCarry::FHang Hang = HangOf(HangKept);
+	TheaterArmyCarry::Kick(Hang, Along.X, Along.Y, 0.7 * TheaterArmyCarry::Landing, TheaterArmyCarry::HangsOn * LiftHeight / 3.2);
+	KeepHang(HangKept, Hang);
+	bHangs = true;
+	SetActorTickEnabled(true);
 }
 
 void AArmyPiece::SetShadows(bool bCast)

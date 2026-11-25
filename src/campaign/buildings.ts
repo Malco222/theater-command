@@ -175,8 +175,18 @@ function doesOf(g: Game, l: CivicLine, r: Region, lv: number, keeps: boolean): s
   return `${s[0].toUpperCase()}${s.slice(1)}.`;
 }
 
-/** Why this nation cannot build the next level of this line here, apart from money; null when it can. */
-export function whyNotCivic(g: Game, nat: string, r: Region | undefined, line: string): string | null {
+/**
+ * (Release 2, a queue for a town: townqueue.ts) What is spoken for in a town beyond what stands there: the level each
+ * line will have reached once what is going up and what is queued are built, and the plots they will take.
+ */
+export interface CivicAhead { level: Record<string, number>; plots: number }
+
+/**
+ * Why this nation cannot build the next level of this line here, apart from money; null when it can. Asked with what is
+ * spoken for (`ahead`), it answers for a queue: the builders at work there are no reason, and the level and the plots
+ * are counted as they will stand once everything ahead of it is built.
+ */
+export function whyNotCivic(g: Game, nat: string, r: Region | undefined, line: string, ahead?: CivicAhead): string | null {
   const n = g.nations[nat], l = lineOf(line);
   if (!civicRules(g)) return 'Towns are built up in the grand campaign.';
   if (!n?.alive || !r || !l) return 'Nothing can be built there.';
@@ -187,16 +197,23 @@ export function whyNotCivic(g: Game, nat: string, r: Region | undefined, line: s
     if (left <= 0) return 'Only administration and medicine can be set up on conquered ground.';
     return `${townName(r)} is still settling after it was taken: every kind of building can go up there in ${left} ${left === 1 ? 'month' : 'months'}. Administration and medicine can be set up now.`;
   }
-  const lv = civicLevel(g, line, r.id);
+  const lv = ahead ? Math.max(civicLevel(g, line, r.id), ahead.level[line] ?? 0) : civicLevel(g, line, r.id);
   if (lv >= TOP) return `The ${l.levels[TOP - 1].toLowerCase()} is as far as this goes.`;
   const size = townSize(g, r);
   if (l.size && SIZES.indexOf(size) < SIZES.indexOf(l.size)) return `Needs a ${l.size}: ${townName(r)} is a ${size}.`;
   if (l.ground && !l.ground.includes(r.terrain)) return 'The ground here will not carry it.';
+  if (ahead) return lv === 0 && ahead.plots >= plotsOf(g, r) ? `Every building plot at ${townName(r)} is taken or spoken for. A bigger place has more.` : null;
   const busy = building(g, nat, r.id);
   if (busy.length) return `The builders at ${townName(r)} are busy with the ${busy[0].name.split(' at ')[0].toLowerCase()}.`;
   if (lv === 0 && civicAt(g, r.id).length >= plotsOf(g, r)) return `Every building plot at ${townName(r)} is taken. A bigger place has more.`;
   return null;
 }
+
+/** (Release 2, townqueue.ts) The building going up in a province for this nation, or null when the builders there are free. */
+export const civicGoing = (g: Game, nat: string, region: number): Build | null => building(g, nat, region)[0] ?? null;
+
+/** (Release 2, townqueue.ts) A line of building by its id ('market'), or undefined. */
+export const civicLine = (id: string): CivicLine | undefined => lineOf(id);
 
 export interface CivicOffer {
   /** The line ('market'), its name ('Commerce') and the level this order would raise ('Merchant quarter', 2). */
@@ -464,12 +481,15 @@ export function civicAI(g: Game, nat: string, earned: number, keeps = false, wai
   const built: Record<string, number> = {};
   for (const r of home) for (const { line, level } of civicAt(g, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
   for (const b of n.queue) if (b.what === 'civic' && b.item) built[b.item] = (built[b.item] ?? 0) + 1;
+  // (Release 2, townqueue.ts) A town the player has queued buildings for is his: the staff builds only where nothing is queued.
+  const spoken = g.townQueue?.[nat];
+  const open = spoken?.length ? home.filter((r) => !spoken.some((q) => q.region === r.id)) : home;
   for (let k = n.queue.filter((b) => b.what === 'civic').length; k < gangs; k++) {
     const have = g.flags[purse];
     const lines = Object.keys(A.mix).sort((x, y) => (built[x] ?? 0) / A.mix[x] - (built[y] ?? 0) / A.mix[y] || A.mix[y] - A.mix[x]);
     let pick: { r: Region; o: CivicOffer } | null = null;
     for (const line of lines) {
-      for (const r of home.slice(0, 30)) {
+      for (const r of open.slice(0, 30)) {
         const o = civicOffers(g, nat, r.id, keeps).find((x) => x.line === line);
         if (o && (o.why === null || o.poor)) { pick = { r, o }; break; }
       }

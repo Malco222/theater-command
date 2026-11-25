@@ -487,6 +487,8 @@ struct FTownBar
 	FText Title, Sub;
 	TArray<FTownPlot> Plots;
 	TArray<FTownOffer> Offers;
+	FString Best; // (release 2, build from the map) the line the staff would put up here next, or empty
+	FString Queued; // (release 2, a queue for a town) what is queued here, in a line, or empty
 	int32 Picked = INDEX_NONE; // the plot whose choices are laid out above the bar
 	int32 Revision = 0;
 };
@@ -1130,6 +1132,8 @@ public:
 	void ToggleHelp();
 	void PickTownPlot(int32 Index);
 	void OrderTownBuilding(const FString& Line);
+	/** (Release 2, a queue for a town) Gives one of the town's own acts for the town in view ("queue:<region>:<line>"), and says what came of it. */
+	void ActOnTown(const FString& Act);
 	/** The small map in the corner: its picture, the marks on it, and a jump to a place on it. */
 	UTexture2D* GetMinimapTexture() const;
 	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */

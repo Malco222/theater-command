@@ -882,6 +882,31 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Add(TEXT("60f-marked-army"), TEXT("@marked"), 0.3f).bKeep = true;
 		}
 	}
+	// ---- (release 2, seamless campaign play: the UI director, 25 November 2026) "-TheaterR2Seamless", with
+	// "-TheaterHomeFront" and "-TheaterTownCard", takes THE HOME FRONT, a town's queue on it (the shot's own presses turn
+	// building queues on, build at the capital and queue two more there), the province panel's pick under the way into
+	// the town card, and the board's staff strip with towns and trade handed over alone. "-TheaterOnly=61" takes only these.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Seamless")))
+	{
+		{
+			FShot& Shot = Add(TEXT("61a-home-front"), TEXT("@capital"), 0.45f);
+			Shot.Room = TEXT("home");
+		}
+		{
+			FShot& Shot = Add(TEXT("61b-home-front-queue"), TEXT("@capital"), 0.45f);
+			Shot.Room = TEXT("home");
+			Shot.RoomAct = TEXT("townqueuerule:on|civic:0:camp|queue:0:market|queue:0:school");
+		}
+		{
+			FShot& Shot = Add(TEXT("61c-town-row-pick"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+		}
+		{
+			FShot& Shot = Add(TEXT("61d-staff-strip-split"), TEXT("@capital"), 0.45f);
+			Shot.Room = TEXT("home");
+			Shot.RoomAct = TEXT("desk:towns:staff");
+		}
+	}
 	// ---- (end release 2)
 
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.

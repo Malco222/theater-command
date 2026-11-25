@@ -1925,6 +1925,13 @@ export interface Game {
    * many tank blocks they make, and the month; kept six months, the three latest.
    */
   captured?: Record<string, { from: string; n: number; turn: number }[]>;
+  /**
+   * A queue for a town (release 2, townqueue.ts; the design director's ruling seamless-r2-1125.md part B): by nation,
+   * the buildings the player has queued, oldest first, each the line of building, the province and the level it is to
+   * be raised to. Each is a press of BUILD made for him at the opening of his month. Kept only under the switch
+   * 'townQueue', and only while something is queued.
+   */
+  townQueue?: Record<string, { region: number; line: string; level: number }[]>;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;
