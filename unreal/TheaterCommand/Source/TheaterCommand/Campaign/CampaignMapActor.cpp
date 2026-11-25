@@ -15744,13 +15744,17 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (FFrontFire& Fire : FrontFires) { Brought(Fire.At); }
 		for (FBattleSmoke& Battle : Battles) { Brought(Battle.Where); }
 		for (FBombSmoke& Smoke : BombSmokes) { Brought(Smoke.Root); }
-		// (NOT the flak bursts. A raid is not drawn in the turn nearest the EYE: UpdateSorties counts its airfield
-		// beside the eye and then its target beside that airfield, so a raid over the far ocean can fly a whole world
-		// from the eye, and the guns' fire (Muzzle + ToRaid), the searchlight beams and the pencilled course all
-		// follow the flight, not the eye. Every burst, heavy or light, is born at Flight.At, so it is already in its
-		// raid's turn; bringing it to the eye's instead would hang the smoke a world from the bombers that drew it
-		// and from the pits that fired, and a burst already in the air would jump a world as the eye crossed the
-		// seam, leaving its own raid behind. City glance, 25 November 2026, found by a second read of seam-4.)
+		// (The flak bursts too, by the art director's ruling of 25 November 2026 05:10Z, after a second read asked
+		// whether they should stay where they were born. A burst is born at Flight.At, and a raid is drawn in the turn
+		// nearest its AIRFIELD, which is itself counted beside the eye, so while a raid is on screen its turn IS the
+		// eye's and the bursts lie with the fire that made them. The pass rounds each burst from where it lies, every
+		// frame, so one moved while its raid was far is back with its raid by the frame the raid comes within half a
+		// world. What it buys: when the eye wraps at the chart's edge (the controller's SetWrap) or the photographer
+		// jumps, every raid comes round a whole world in one frame, and the bursts in the air come with it instead of
+		// being left behind out of sight for the rest of their life. What it costs: a far raid's bursts may lie a world
+		// from it while BOTH are off screen, which no eye can see: a burst is drawn only within about 1,700 units, and
+		// a raid that far off needs over 7,500.)
+		for (FFlakBurst& Burst : FlakBursts) { Brought(Burst.At); }
 		for (TPair<FVector, double>& Down : SetDowns) { Brought(Down.Key); }
 		for (FVector4& Fire : ColumnFires)
 		{
