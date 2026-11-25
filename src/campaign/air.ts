@@ -715,7 +715,8 @@ export function flakGuns(level: number): { light: number; heavy: number; all: nu
 export const standingGuns = (): number => AIRWAR.count.guns.base;
 
 // (The UI director, 25 Nov 2026 20:08Z: on the gun forms the months are words to ten, "seen two months ago", "seen 11
-// months ago"; a month and this month as the fog's lines say them, airfog.ts agoWords.)
+// months ago"; a month and this month as the fog's lines said them. 21:22Z, case b: every month the fog prints is this
+// helper's, the knowledge lines (airfog.ts knownLines) and the raid row's fighters (airfog.ts fogBits) too.)
 const TEN = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 /** "seen two months ago", "seen 11 months ago", "seen a month ago", "seen this month": the guns' sighting, in words. */
 export const seenAgo = (n: number): string => (n <= 0 ? 'seen this month' : n === 1 ? 'seen a month ago' : `seen ${TEN[n] ?? n.toLocaleString('en-US')} months ago`);
