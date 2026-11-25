@@ -15,7 +15,7 @@ import { headline, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
 import { MANPOWER, returnMen } from './manpower';
 import { cadreTerms } from './economy';
-import { riflesFold } from './rifles';
+import { riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -117,6 +117,7 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   if (gone.pressed) keep.pressed = true;
   if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;
   returnMen(g, keep.nat, gone.str * gone.divs - from);
+  riflesBack(g, keep.nat, gone.str * gone.divs - from);
   // The works the emptied corps stood in are the kept corps' own, where they are the better.
   if (v.works !== undefined) { keep.dug = true; keep.dugFor = gone.dugFor; if (keep.ap < keep.apMax) keep.relief = true; }
   // The better of the two generals commands; the other goes to the list of generals waiting for a corps.

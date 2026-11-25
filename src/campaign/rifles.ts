@@ -143,6 +143,16 @@ export function riflesFold(g: Game, keep: Corps): void {
   if (binds(g, keep.nat) && keep.str > levelOf(g, keep)) setLevel(g, keep, keep.str);
 }
 
+/**
+ * A fold's leftover men, sent back to the reserve, bring their rifles back to the store (the design director's answer 4
+ * of 19:08Z, 25 November 2026: "Men and rifles travel together; only a broken corps loses them"), in the nation's
+ * divisions' worth (so whole rifles are that times its perDiv). Wherever the nation's orders and drafts draw, a row
+ * that only counts included (the lead's reading: it follows the draw).
+ */
+export function riflesBack(g: Game, nat: string, divs: number): void {
+  if (carries(g, nat) && divs > 0) giveBack(g, nat, 'rifles', divs);
+}
+
 /** The liberation army (liberation.ts) comes armed at the strength it forms at. */
 export function riflesFormed(g: Game, c: Corps): void {
   if (binds(g, c.nat)) setLevel(g, c, c.str);
