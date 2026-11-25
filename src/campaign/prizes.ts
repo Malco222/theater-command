@@ -282,7 +282,7 @@ export function burnChance(g: Game, r: Region, by: string, from: string): number
  * off has ordered scorched earth there, it burns what it can as it goes. The dice are the province's own for the
  * month, so nothing else in the war shifts.
  */
-export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which: 'outside' | 'inside' | 'all'): PrizeKind[] {
+export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which: 'outside' | 'inside' | 'all', again: boolean | 'outside' = false): PrizeKind[] {
   const burnt: PrizeKind[] = [];
   if (!prizeRules(g) || !g.nations[from] || !atWar(g, by, from) || !willBurn(g, from, r)) return burnt;
   const p = burnChance(g, r, by, from);
@@ -292,7 +292,10 @@ export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which
     if ((which === 'outside' && inside) || (which === 'inside' && !inside)) continue;
     // The railway keeps the rule it always had: torn up, or not, as the province falls (rails.ts), or by order.
     if (kind === 'junction') continue;
-    const roll = new Rng(hashString(`prize:${g.seed}:${g.turn}:${r.id}:${kind}`)).next();
+    // (`again`: this ground has already been lost once this month (siege.ts says how it knows): the side driven off's own
+    // dice. 'outside': only what lies outside the walls was thrown for already, so only those kinds take the side.)
+    const salt = again === true || (again === 'outside' && !inside);
+    const roll = new Rng(hashString(salt ? `prize:${g.seed}:${g.turn}:${r.id}:${kind}:${from}` : `prize:${g.seed}:${g.turn}:${r.id}:${kind}`)).next();
     if (roll < p && wreckPrize(g, r, kind, PRIZES.burn.months[kind], undefined, 'burn')) burnt.push(kind);
   }
   if (burnt.length) noteBurnt(g, r, from, by, burnt);
@@ -304,9 +307,10 @@ export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which
  * up the track in haste, if the railway's own rule (rails.ts) has not cut it already. The new holder's railwaymen
  * make such a cut good after a month or two, and engineers sooner. The dice are the province's own for the month.
  */
-export function railOnScorch(g: Game, r: Region, by: string, from: string): boolean {
+export function railOnScorch(g: Game, r: Region, by: string, from: string, again = false): boolean {
   if (!prizeRules(g) || !g.nations[from] || !atWar(g, by, from) || !onNet(r.id) || railCut(g, r.id) || !willBurn(g, from, r)) return false;
-  const roll = new Rng(hashString(`prize:${g.seed}:${g.turn}:${r.id}:rail`)).next();
+  // (`again`, from capture(): the province has already changed hands this month.)
+  const roll = new Rng(hashString(again ? `prize:${g.seed}:${g.turn}:${r.id}:rail:${from}` : `prize:${g.seed}:${g.turn}:${r.id}:rail`)).next();
   if (roll >= burnChance(g, r, by, from) || !cutRailHasty(g, r.id, PRIZES.burn.months.rail, from)) return false;
   noteBurnt(g, r, from, by, ['rail']);
   return true;
