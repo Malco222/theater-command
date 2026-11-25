@@ -2111,7 +2111,7 @@ bool ALandBattle::Open()
 		Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
 		// (the recording's grade where it gives one, over the look's own where its ground is not the bocage's: LandScape)
-		const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying());
+		const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying(), Rec.Weather.Lat, Rec.Weather.Lon, LandParts::MonthOf(Rec.Date), LandParts::TrialWords());
 		LandParts::Grade(Lens->PostProcessSettings, &Rec.Weather, &LookAir);
 		// The grain of the film stock, a little (the art director's to tune: "-TheaterLandGrain=0.3").
 		float Grain = 0.25f;
@@ -5746,7 +5746,7 @@ void ALandBattle::HideTheTable()
 	LandScape::Air LookAir;
 	if (State.IsValid() && State->Field)
 	{
-		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying());
+		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying(), State->Rec.Weather.Lat, State->Rec.Weather.Lon, LandParts::MonthOf(State->Rec.Date), LandParts::TrialWords());
 	}
 	double HazeStart = 0.0, HazeDensity = LookAir.bSet ? LookAir.HazeDensity : 0.0069, HazeFalloff = 0.1, HazeMost = 0.98;
 	LandLook::Asked(TEXT("TheaterLandHaze="), { &HazeStart, &HazeDensity, &HazeFalloff, &HazeMost });
