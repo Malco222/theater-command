@@ -125,6 +125,11 @@ describe('the strike, in the month war is declared', () => {
     month(g);
     expect(g.headlines.some((x) => /raid Pearl Harbor without warning/.test(x.text))).toBe(true);
     expect(atPearl(g)).toBeLessThan(before);
+    // The strike is booked on the fleets struck at anchor, for their staff's weighing of staying against moving (the
+    // design director's ruling of 04:33Z, 25 November 2026, 2): from the decks it was flown from.
+    const hit = g.fleets.filter((f) => f.nat === 'USA' && f.anchor?.some((e) => e.at === pearl.id && e.t === g.turn - 1));
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit.every((f) => f.anchor!.every((e) => e.from.length > 0 && e.from.every((o) => o.sea >= 0 && o.km > 0)))).toBe(true);
     // The month card names the place once (the playtest's #49): "Pearl Harbor", never "Pearl Harbor harbour".
     const card = JSON.stringify(monthCard(g, mark));
     expect(card).toMatch(/Pearl Harbor/);

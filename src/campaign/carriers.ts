@@ -884,7 +884,8 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   };
   // The carriers.
   for (const c of what === 'land' ? [] : fleetsOf(g, nat)) {
-    if (c.ships.cv <= 0) continue;
+    // (A carrier in passage to a new base flies nothing on its way: release 2, the far chart; air.ts whyNotMission.)
+    if (c.ships.cv <= 0 || c.stance === 'passage') continue;
     const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
     if (!fit(lead) || lead.bmr < 6) continue;
     const escorts = fit(cap) && cap.ftr > 0 ? [cap] : [];

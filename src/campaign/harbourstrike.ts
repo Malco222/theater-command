@@ -22,7 +22,7 @@
 import { carrierRules, harbourInReach, setMission, whyNotMission } from './air';
 import { fleetKnown, wingsOf } from './carriers';
 import { allied, atWar, theName } from './game';
-import { CLASSES, atSea, baseTargets, fleetName, fleetReach, sail, shipCount, shipList, surfaceShips } from './navy';
+import { CLASSES, atSea, baseTargets, fleetName, fleetReach, passageWhy, sail, shipCount, shipList, surfaceShips } from './navy';
 import type { AirFleet, Fleet, Game, Region, Ships } from './types';
 
 export const carrierStrikeOn = (g: Game): boolean => g.flags.open === 1 && g.flags.carrierStrike === 1;
@@ -149,6 +149,8 @@ export function whyNotCarrierStrike(g: Game, id: number, region: number): string
   const c = ownFleet(g, id);
   if (!c) return 'Only your own fleet can be given the order, in your own month.';
   if (c.ships.cv <= 0) return `${cap(fleetName(c))} has no carriers.`;
+  // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
+  if (c.stance === 'passage') return passageWhy(g, c);
   const lead = leadOf(g, c);
   if (!lead) return `${cap(fleetName(c))} has no strike aircraft aboard.`;
   if (lead.flew === g.turn) return 'Its strike aircraft have flown this month.';

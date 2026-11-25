@@ -8,7 +8,7 @@
 
 import { byHand } from './depth';
 import { tenthPct } from '../core/math';
-import type { TicketLine } from '../core/ticket';
+import { turnToDate, type TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
 import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
@@ -16,7 +16,7 @@ import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
   CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, fuelLine, torpedoWords, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, harbourPatrol, huntShareOf, huntShareSunk, huntersIn, keptAfloat, keptByHand, laneLoss, openFleetRows, quality, screenGap, seaRng,
-  sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
+  passageWhy, sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
@@ -24,7 +24,7 @@ import { dcOf } from './tech';
 import { townName } from './towns';
 import { cityHit, type CityHit } from './repairs';
 import { joinStars, splitStars, starRow, type StarRow } from './stars';
-import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
+import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance, FleetStance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 import { seaWhat, seaWhere } from './sea-words';
 import { FAR_SEAS_FIRST } from './world';
@@ -59,8 +59,8 @@ export interface FleetCard {
   base: number;
   zone: number;
   sea: string;
-  stance: Stance;
-  /** The order it is under, as the interfaces name it: Patrol, Raid shipping, Escort a lane, Hunt submarines, In harbour. */
+  stance: FleetStance;
+  /** The order it is under, as the interfaces name it: Patrol, Raid shipping, Escort a lane, Hunt submarines, In harbour (and In passage, on the far chart). */
   order: string;
   /** The lane it escorts, if it escorts one. */
   lane: string | null;
@@ -111,6 +111,8 @@ export function fleetDoing(g: Game, f: Fleet): string {
   const sea = g.seas[f.zone]?.name;
   const where = sea ? seaWhere(sea) : 'at sea', what = sea ? seaWhat(sea) : 'the sea';
   if (!atSea(f)) return `In harbour at ${f.port}`;
+  // (Release 2, the far chart: on its way to a new base.)
+  if (f.stance === 'passage') return `In passage to ${f.port} ${where}${f.passage ? `, in by ${turnToDate(f.passage.due).label}` : ''}`;
   if (f.stance === 'raid') return `Raiding shipping ${where}`;
   if (f.stance === 'hunt') return `Hunting submarines ${where}`;
   if (f.stance === 'escort') return `Escorting ${seaRoutes(g).find((r) => r.id === f.lane)?.name ?? 'a shipping lane'}`;
@@ -316,6 +318,8 @@ const foesAt = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) 
 export function whyNotBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, viewer: string | null = null): string | null {
   if (!seaWar(g)) return 'Fleets shell a coast only in the grand campaign.';
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
+  // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
+  if (f.stance === 'passage') return passageWhy(g, f);
   if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
   if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
   if (!atWar(g, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
@@ -507,6 +511,7 @@ const taken = (take: Partial<Ships>): Ships => {
 /** Why these ships cannot be split off from a fleet as a squadron of their own, or null if they can. */
 export function whyNotDetach(g: Game, f: Fleet, take: Partial<Ships>): string | null {
   if (!seaWar(g)) return 'Fleets are split only in the grand campaign.';
+  if (f.stance === 'passage') return `${passageWhy(g, f)} It is split once it is in.`;
   const s = taken(take);
   if (!shipCount(s)) return 'Choose the ships that are to go.';
   for (const c of CLASSES) if (s[c] > f.ships[c]) return `The ${f.name} has only ${f.ships[c]} ${f.ships[c] === 1 ? NAVY.classes[c].one : NAVY.classes[c].many}.`;
@@ -533,6 +538,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.attacked !== undefined) sq.attacked = f.attacked;
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
+  // (Release 2, the far chart: its strikes at anchor go with it, for its staff's weighing of a move: navy.ts anchorLoss.)
+  if (f.anchor) sq.anchor = f.anchor.map((e) => ({ ...e, from: e.from.map((o) => ({ ...o })) }));
   if (stars) sq.stars = stars;
   g.fleets.push(sq);
   // Carriers that go take their aircraft with them.
@@ -546,6 +553,8 @@ export function whyNotMerge(g: Game, a: Fleet, b: Fleet): string | null {
   if (!seaWar(g)) return 'Fleets are joined only in the grand campaign.';
   if (a.id === b.id || a.nat !== b.nat) return 'Only two fleets of the same navy can be joined.';
   if (!shipCount(a.ships)) return `The ${a.name} has no ships.`;
+  // (Release 2, the far chart: a fleet in passage joins none, nor is joined, on its way.)
+  if (a.stance === 'passage' || b.stance === 'passage') return `${passageWhy(g, a.stance === 'passage' ? a : b)} Fleets are joined once it is in.`;
   const together = atSea(a) && atSea(b) ? a.zone === b.zone : !atSea(a) && !atSea(b) && a.base === b.base && a.home === b.home;
   if (!together) return `The ${a.name} and the ${b.name} are not in the same place: bring them into the same harbour, or the same sea.`;
   return null;

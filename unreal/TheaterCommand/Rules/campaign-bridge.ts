@@ -98,7 +98,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, bookBaseOf, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -761,11 +761,12 @@ function drawView() {
       wingFtr: Math.round(wings.filter((w) => w.kind === 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       wingStrike: Math.round(wings.filter((w) => w.kind !== 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
-      reach: f.nat === s.human && up ? fleetReach(s, f) : [],
+      // (Release 2, the far chart: none for a fleet in passage to a new base, which keeps on its way or is turned back.)
+      reach: f.nat === s.human && up && f.stance !== 'passage' ? fleetReach(s, f) : [],
       // (Ruling 86.) And the seas it would reach but for a gate shut to it, each with that gate: sea, gate, sea, gate.
-      barred: f.nat === s.human && up ? barredSeas(s, f) : [],
+      barred: f.nat === s.human && up && f.stance !== 'passage' ? barredSeas(s, f) : [],
       // And the friendly ports it could make its new home.
-      bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : [],
+      bases: f.nat === s.human && up && f.stance !== 'passage' ? baseTargets(s, f).map((r) => r.id) : [],
       };
     }),
     // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
@@ -4367,7 +4368,11 @@ function force(kind: string, id: number) {
     const sea = s.seas[f.zone]?.name ?? 'the sea';
     const doing = `${fleetView(s, f.id)?.doing ?? (f.stance === 'port' ? `In harbour at ${f.port}` : f.stance === 'raid' ? `Raiding shipping in the ${sea}` : `On patrol in the ${sea}`)}.`;
     const mine = f.nat === s.human;
-    if (mine) {
+    // (Release 2, the far chart: a fleet in passage to a new base offers no sea, and its order to harbour turns it back.)
+    const passage = f.stance === 'passage' && f.passage ? { from: f.passage.fromPort } : null;
+    if (mine && passage) {
+      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Turn back to ${passage.from}`, detail: 'Back to the harbour it left, steamed from where it is: within its reach it is in this month, beyond it in passage again.', ok: up, why: notNow });
+    } else if (mine) {
       const reach = fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
       for (const z of reach) {
         const here = f.zone === z && f.stance === 'patrol';
@@ -4378,6 +4383,8 @@ function force(kind: string, id: number) {
         options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: 'Goes for merchant ships and avoids a fight with the enemy fleet.', ok: up && !here, why: here ? 'It is doing so now.' : notNow });
       }
       options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${f.port}`, detail: 'Safe from the enemy fleet, and takes no part at sea.', ok: up && f.stance !== 'port', why: f.stance === 'port' ? 'It is in harbour now.' : notNow });
+    }
+    if (mine) {
       if (staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: 'Hand it back to your admirals', detail: HAND_BACK_TIP, ok: up, why: notNow });
       // (Release 2, taskforce.ts) Its job made a standing order, or the standing order taken down.
       if (taskForceOn(s)) {
@@ -4393,7 +4400,7 @@ function force(kind: string, id: number) {
     // (Release 2, mines.ts and heavyseas.ts) Enemy mines where it sails, and a gale over its sea.
     const mined = mine ? mineLine(s, f) : '';
     const gale = mine ? galeLine(s, f) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(shadow ? [shadow] : []), ...(mined ? [mined] : []), ...(gale ? [gale] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(mine && passage ? [passageWhy(s, f)] : []), ...(mine && struckLine(s, f) ? [struckLine(s, f)] : []), ...(shadow ? [shadow] : []), ...(mined ? [mined] : []), ...(gale ? [gale] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -5356,9 +5363,13 @@ function fleetPage(s: Game, id: number): Page | null {
   const voyage = fl ? voyageLines(s, fl) : [];
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
+    // (Release 2, the far chart: struck at anchor this month or last, the card says so first, and where is out of reach.)
+    note: `${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ''}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
     top: [
-      { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
+      // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
+      fl?.stance === 'passage' && fl.passage
+        ? { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` }
+        : { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
       ...(taskForceOn(s) && fl ? [fl.task
         ? { label: 'RELEASE TASK FORCE', act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP }
