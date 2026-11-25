@@ -6,13 +6,18 @@
 // (tests/price-once-r2.test.ts, 'a row that falls back to forming at home takes nobody') runs with the far side off;
 // this file reads the same rule with the WHOLE WORLD ON, for a computer's Germany (where `home` alone keeps the
 // divisions in place: a player's claims always stay) in the Balkans in March 1941, on real data with no row added.
+//
+// (Since the design director's ruling of 18:47Z, 25 November 2026, a corps in contact keeps its divisions too: "a date
+// never lifts a corps out of a fight", drawn.ts `corpsInContact`. On this hand-set board the month is March 1941 but
+// Poland still stands beside Moravia and Neumark, where the two corps begin; so they are stood on quiet ground first,
+// Bavaria and Magdeburg, and what keeps their divisions in the first two tests is `home` and nothing else.)
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { divisionsOf } from '../src/campaign/armies';
-import { drawnWatch } from '../src/campaign/drawn';
-import { createGame, declareWar, startPhase } from '../src/campaign/game';
+import { corpsInContact, drawnWatch } from '../src/campaign/drawn';
+import { createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { farOn } from '../src/campaign/world';
 import type { Corps, Game } from '../src/campaign/types';
@@ -31,6 +36,9 @@ function balkans(allies: boolean): { g: Game; told: Told[] } {
   declareWar(g, 'ITA', 'GRE');
   declareWar(g, 'GER', 'GRE');
   for (const n of ['BUL', 'HUN', 'ROM']) { g.nations[n].align = 'axis'; if (allies) declareWar(g, n, 'GRE'); }
+  // Out of contact: no enemy at war on their ground or beside it, so the contact rule keeps nobody here.
+  relocate(g, corps(g, 'XXII Corps')!, g.byName.Bavaria);
+  relocate(g, corps(g, 'III Corps')!, g.byName.Magdeburg);
   const told: Told[] = [];
   drawnWatch.tell = (e) => told.push(e);
   return { g, told };
@@ -69,6 +77,7 @@ describe('a computer\'s row that falls back to forming at home takes nobody, wit
   it('its host at peace: it forms at the capital, and every division it names stays with its corps', () => {
     const { g, told } = balkans(false);
     expect(farOn(g)).toBe(true);
+    expect([corps(g, 'XXII Corps')!, corps(g, 'III Corps')!].map((c) => corpsInContact(g, 'GER', c))).toEqual([false, false]);
     read(g, told, true);
   });
 
