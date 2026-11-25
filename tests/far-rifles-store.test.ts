@@ -395,10 +395,26 @@ describe('the lanes are untouched', () => {
     const g = startOpen(createGame(17, null));
     expect(await dump(g)).toBe(BASE_T1);
     for (let t = 0; t < 12; t++) runTurnAI(g);
-    expect(await dump(g)).toBe(BASE_T13);
+    expect(await dump(g)).toBe(LAID_T13);
+  }, 600_000);
+
+  it('with China\'s rifles row taken out, the lanes after twelve months nobody plays read as on the base tree', async () => {
+    const row = RIFLES.nations.CHN;
+    delete RIFLES.nations.CHN;
+    try {
+      const g = startOpen(createGame(17, null));
+      expect(await dump(g)).toBe(BASE_T1);
+      for (let t = 0; t < 12; t++) runTurnAI(g);
+      expect(await dump(g)).toBe(BASE_T13);
+    } finally { RIFLES.nations.CHN = row; }
   }, 600_000);
 });
 
 // The dump's hashes on the base tree (a99350fb, /home/user/wt/rifles-base), seed 17, far on: first day and month 13.
 const BASE_T1 = '1508241fcb58';
 const BASE_T13 = 'b8cf99b5df82';
+// As laid, month 13 moves with stage B2's drafts (China's drafts refill its corps only to their armed level, their
+// strength on the first day, and its foot drafts cost no points): China's war is changed on purpose, and through it
+// Japan's. The first lane to differ is Japan's 'america-japan' oil, in the month-12 dump (13.350421 against 13.343221 a
+// month); every lane is equal before it, and equal at month 13 with China's row taken out (the test above).
+const LAID_T13 = 'c7ce1166cde1';
