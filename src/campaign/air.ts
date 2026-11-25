@@ -2955,7 +2955,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // fleet's side saw them, for its staff's weighing of staying against moving its base: navy.ts anchorLoss.)
       if (m === 'harbour' && farOn(g)) {
         const sunk = shipCount(struck![i].sunk) - struck![i].sunk.ss, had = shipCount(struck![i].ships) - struck![i].ships.ss;
-        const from = a.att.map((y) => {
+        // (Only the groups that carried bombs struck it: an escort's fighters reach no further than the bombers they guard.)
+        const from = a.att.filter((y) => y.bmr > 0).map((y) => {
           const c = carrierOf(g, y.f), R = reach(y.f, g, raidJob(m));
           return c && atSea(c) ? { sea: c.zone, field: -1, km: R.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R.bmrRange };
         });
