@@ -85,12 +85,11 @@ describe('25: a fleet only reported stays unnamed', () => {
       expect(refused).toBeGreaterThan(0);
       if (world) {
         // The Canadian ships at Halifax, out of the German fleets' reach: in harbour, and no more.
-        const canada = reported.find((t) => t.nat === 'CAN');
-        if (canada) {
-          const p = TC.page(`fleetattack:${mine.find((f) => f.name === 'Swinemunde Fleet')!.id}:${canada.id}`) as Page;
-          expect(p.headline).toBe('Those Canadian ships are in harbour, out of reach of the Swinemunde Fleet from Swinemunde.');
-          expect(p.note).toMatch(/against Canadian ships reported, in harbour\. /);
-        }
+        const canada = reported.find((t) => t.nat === 'CAN')!;
+        expect(canada).toBeDefined();
+        const p = TC.page(`fleetattack:${mine.find((f) => f.name === 'Swinemunde Fleet')!.id}:${canada.id}`) as Page;
+        expect(p.headline).toBe('Those Canadian ships are in harbour, out of reach of the Swinemunde Fleet from Swinemunde.');
+        expect(p.note).toMatch(/against Canadian ships reported, in harbour\. /);
       }
     });
   }
