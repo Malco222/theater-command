@@ -713,6 +713,14 @@ export function flakGuns(level: number): { light: number; heavy: number; all: nu
  */
 export const standingGuns = (): number => AIRWAR.count.guns.base;
 
+// (The UI director, 25 Nov 2026 20:08Z: on the gun forms the months are words to ten, "seen two months ago", "seen 11
+// months ago"; a month and this month as the fog's lines say them, airfog.ts agoWords.)
+const TEN = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** "seen two months ago", "seen 11 months ago", "seen a month ago", "seen this month": the guns' sighting, in words. */
+export const seenAgo = (n: number): string => (n <= 0 ? 'seen this month' : n === 1 ? 'seen a month ago' : `seen ${TEN[n] ?? n.toLocaleString('en-US')} months ago`);
+/** Her item 2 and item 8: a place last seen with no guns built, "No guns built when seen two months ago: only the 60 light guns every target has." */
+export const noneSeen = (ago: number): string => `No guns built when ${seenAgo(ago)}: only the ${standingGuns().toLocaleString('en-US')} light guns every target has.`;
+
 /** How many fighters make a squadron in a nation's air force in a year: some went to larger squadrons late in the war. */
 export function squadronSize(nat: string, year: number): number {
   const later = AIRWAR.count.later[nat];
@@ -2305,6 +2313,12 @@ export interface KnownDefence {
   extraNat: string;
   /** The level of the guns round the target as this side counts them. */
   aa: number;
+  /**
+   * For the card's words only (the UI director's 20:08Z marks): the level of guns this side last saw built there (-1
+   * where it never saw the place), and how many months ago (airfog.ts SkyKnown). Nothing in the rules reads them.
+   */
+  seen?: number;
+  ago?: number;
   /** The share of the town in ruins as this side last saw it (0 to 1). */
   ruined: number;
 }
@@ -2798,11 +2812,22 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     // (The UI director, 25 Nov 2026 19:10Z, section B: the built guns first, the standing light guns named apart.)
     const n = (x: number): string => x.toLocaleString('en-US'), S = n(out.standing);
     const split = `${n(out.guns.light)} light and ${n(out.guns.heavy)} heavy, and the ${S} light guns every target has.`;
+    // (Her 20:08Z marks, items 1, 2 and 13: under fog the built guns never scouted are reckoned at the worst, and a none
+    // is said as seen or as reckoned; on troops the built guns do not count, and the card says why where it knows of some.)
+    const only = `only the ${S} light guns every target has.`, Only = `Only the ${S} light guns every target has.`;
+    const seen = known ? known.seen ?? -1 : -1;
+    const counts = m === 'bomb' || night || m === 'harbour' || m === 'town';
+    const flakWords = (): string => {
+      if (!counts) return m === 'ground' && (known ? seen > 0 : gunsAt(g, target) > 0) ? `Only the ${S} light guns every target has: the guns built here guard the town, not troops in the field.` : Only;
+      if (!out.guns.all) return !known ? Only : seen === 0 ? noneSeen(known.ago ?? 0) : `None reckoned built: ${only}`;
+      if (known && seen < 0) return `Not scouted, so reckoned at the worst: about ${n(out.guns.all)} guns built round ${place}, ${split}`;
+      return known ? `About ${n(out.guns.all)} guns may stand round ${place}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`;
+    };
     out.lines.push({
       label: 'Flak',
       // (Fog on raids: weighed on one side's knowledge, the built guns are its reckoning, not a sight of them; the
       // standing light guns every target has are never hidden.)
-      value: !out.guns.all ? `Only the ${S} light guns every target has.` : known ? `About ${n(out.guns.all)} guns may stand round ${place}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`,
+      value: flakWords(),
       effect: `They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
     });
   }

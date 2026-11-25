@@ -143,7 +143,7 @@ export function knownDefence(g: Game, nat: string, t: number, end: 'low' | 'high
   const known = fightersInReach(g, t, nat).filter(sure).reduce((s, f) => s + f.ftr, 0);
   const extra = end === 'high' && k.near > 0 ? Math.max(0, k.near - known) : 0;
   const aa = k.guns >= 0 ? k.guns : end === 'high' ? F().gunsUnknown : 0;
-  return { sure, extra, extraNat: g.regions[t].ctrl, aa, ruined: Math.max(0, k.ruin) };
+  return { sure, extra, extraNat: g.regions[t].ctrl, aa, ruined: Math.max(0, k.ruin), seen: k.guns, ago: k.ago };
 }
 
 /** A mission weighed on one side's knowledge: the forecast at both ends of the band (one and the same in sight). */
