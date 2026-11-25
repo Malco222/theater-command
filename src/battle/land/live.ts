@@ -286,6 +286,19 @@ export interface LiveOpts {
   /** Each rifle figure drawn as its whole platoon (Brian: "a lot of troops"); off: sections, as the first recordings. */
   platoons?: boolean;
   /**
+   * The drill book (tactics.ts; Brian, 22 November 00:23Z: "move like a platoon with covering fire and historical
+   * tactics"): each army's sections fight by their school, in turns, under suppression. Looks only. Left out, it is on
+   * only with platoons, as it was; true, on with sections too (Brian, 25 November 13:40Z: smarter soldiers).
+   */
+  book?: boolean;
+  /**
+   * Squad life (release 2, looks only; Brian, 25 November 13:40Z: "i dont want all the soldiers of a squad doing the exact
+   * same thing at the same time ... individuals apart of a squad"; Drill.life): buddy teams rushing in turn, each man
+   * taking up an order in his own time, mixed stances, each watching his own arc. The drill book comes on with it. Off
+   * unless true.
+   */
+  life?: boolean;
+  /**
    * Direct command (Brian, 03:09Z "do 1 2 and 3"; the rules' switches, sim.ts perUnit and radio). staff: a block he
    * orders is his, and his staff fights the rest of his side. radio: his orders land a few seconds later, longer where
    * the block is hit. Both on for the player unless turned off.
@@ -487,7 +500,7 @@ export class LiveBattle {
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
     if (opts.light === true && !piece) sim.light = true;
-    this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
+    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}) });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
