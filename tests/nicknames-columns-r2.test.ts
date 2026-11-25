@@ -104,7 +104,10 @@ describe('earned nicknames in a war', () => {
     expect(g.corps.some((c) => (c.rec?.hard ?? 0) > 0)).toBe(false);
   });
   it('on: corps of more than one nation win names by their hard fights, under the cap, logged in their diaries', () => {
-    const g = war({ nicks: true });
+    // (Seed 4: by its thirty-sixth month German and Soviet corps both have names in their diaries, before and after
+    // the stood war rows' draw rule. Seed 1's war changed with that rule: Italy's Albanian rows wait for a Greek war,
+    // the Soviet front goes another way, and no corps it could still name reaches the hard fights by then.)
+    const g = war({ nicks: true }, 4);
     months(g, 36);
     const hard = g.corps.filter((c) => (c.rec?.hard ?? 0) > 0);
     expect(hard.length).toBeGreaterThan(5);
