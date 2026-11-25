@@ -164,22 +164,33 @@ export function riflesFormed(g: Game, c: Corps): void {
   if (binds(g, c.nat)) setLevel(g, c, c.str);
 }
 
-/** A corps broken up (breakup.ts): the part carries the whole corps' level; each division keeps its share. */
+/**
+ * A corps broken up (breakup.ts, after the men are shared out): rifles go with the men, as in a fold. The corps' rifles
+ * (its level x its divisions before the split) are shared by the men each part takes, each part to its full at most and
+ * the rest to the other. So no part stands above its level, and no part is left below it for its drafts to fill.
+ */
 export function riflesSplit(g: Game, c: Corps, p: Corps): void {
-  const k = kLevel(String(c.id));
-  if (binds(g, c.nat) && k in g.flags) g.flags[kLevel(String(p.id))] = g.flags[k];
+  if (!binds(g, c.nat)) return;
+  const lvl = levelOf(g, c), men = c.str * c.divs + p.str * p.divs, held = lvl * (c.divs + p.divs);
+  if (!(men > 0) || !(c.divs > 0) || !(p.divs > 0)) { setLevel(g, p, lvl); return; }
+  const fc = c.full ?? 1, fp = p.full ?? 1;
+  let lp = Math.min(fp, (held * p.str) / men);
+  const lc = Math.min(fc, (held - lp * p.divs) / c.divs);
+  lp = Math.min(fp, (held - lc * c.divs) / p.divs);
+  setLevel(g, p, lp > fp - 1e-12 ? fp : lp);
+  setLevel(g, c, lc > fc - 1e-12 ? fc : lc);
 }
 
 /**
  * A part rejoining (breakup.ts, before the divisions are counted together): the corps' level is the two levels
- * weighted by divisions, never below the strength the rejoin gives; the part's own flag is struck.
+ * weighted by divisions, so the rifles of both are kept and none are added (the director's answer 1: arming a thin
+ * corps up is a later order); the part's own flag is struck.
  */
 export function riflesJoin(g: Game, part: Corps, into: Corps): void {
   if (!binds(g, into.nat)) return;
   const a = into.divs, b = part.divs, all = a + b;
   if (all <= 0) return;
-  const weighed = (levelOf(g, into) * a + levelOf(g, part) * b) / all, str = Math.max(0, Math.min(1, (into.str * a + part.str * b) / all));
-  setLevel(g, into, Math.max(weighed, str));
+  setLevel(g, into, (levelOf(g, into) * a + levelOf(g, part) * b) / all);
   const k = kLevel(String(part.id));
   if (k in g.flags) delete g.flags[k];
 }

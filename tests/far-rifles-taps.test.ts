@@ -25,6 +25,7 @@ import { foldCorps } from '../src/campaign/fold';
 import { addCorps, capitulate, capture, corpsBase, createGame, declareWar, lineStrength, removeCorps, startPhase } from '../src/campaign/game';
 import { RIFLES, armDrafts, armShares, armWants, binds, canArm, carries, carve, carved, levelOf, noRifles, ownNeed, riflesMonth, riflesView, riflesWatch, roadsNow, type RiflesRow } from '../src/campaign/rifles';
 import { breakUp, rejoin, setBreakUp } from '../src/campaign/breakup';
+import { divisionsOf } from '../src/campaign/armies';
 import { liberate } from '../src/campaign/liberation';
 import { readiness } from '../src/campaign/readiness';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -864,23 +865,55 @@ describe('the men', () => {
     const c = corpsOf(g).find((x) => x.divs >= 3 && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school && `rfa:${x.id}` in g.flags)!;
     g.flags[`rfa:${c.id}`] = 0.5;
     c.str = 0.4;
+    const d0 = c.divs, held = 0.5 * d0, men0 = c.str * d0;
     const p = breakUp(g, c, [0])!;
     expect(p).not.toBeNull();
-    // The part carries the whole corps' level.
-    expect([g.flags[`rfa:${p.id}`], g.flags[`rfa:${c.id}`]]).toEqual([0.5, 0.5]);
-    // Rejoined: the two levels weighted by divisions, never below the strength the rejoin gives; the part's flag struck.
+    // The corps' rifles are shared by the men each part takes: none lost, none added, and no part above its level.
+    expect(levelOf(g, p) * p.divs + levelOf(g, c) * c.divs).toBeCloseTo(held, 12);
+    expect(levelOf(g, p) * p.divs).toBeCloseTo((held * p.str * p.divs) / men0, 12);
+    expect(levelOf(g, p)).toBeGreaterThanOrEqual(p.str - 1e-12);
+    expect(levelOf(g, c)).toBeGreaterThanOrEqual(c.str - 1e-12);
+    // Rejoined: the two levels weighted by divisions; the part's flag struck.
     g.flags[`rfa:${p.id}`] = 0.3;
-    const a = c.divs, b = p.divs;
+    const a = c.divs, b = p.divs, lc = levelOf(g, c);
     expect(rejoin(g, p, c)).toBe(true);
-    expect(g.flags[`rfa:${c.id}`]).toBeCloseTo((0.5 * a + 0.3 * b) / (a + b), 12);
+    expect(g.flags[`rfa:${c.id}`]).toBeCloseTo((lc * a + 0.3 * b) / (a + b), 12);
     expect(`rfa:${p.id}` in g.flags).toBe(false);
-    // A part stronger than the level it carries: the corps' level is never under its new strength.
+    // A part stronger than the level it carries: the rejoin adds no rifles (the director's answer 1: arming a thin
+    // corps up is a later order).
     const q = breakUp(g, c, [0])!;
     q.str = 0.9;
     g.flags[`rfa:${q.id}`] = 0.2;
-    const s = (c.str * c.divs + q.str * q.divs) / (c.divs + q.divs);
+    const w = (levelOf(g, c) * c.divs + 0.2 * q.divs) / (c.divs + q.divs);
     expect(rejoin(g, q, c)).toBe(true);
-    expect(g.flags[`rfa:${c.id}`]).toBeCloseTo(s, 12);
+    expect(g.flags[`rfa:${c.id}`]).toBeCloseTo(w, 12);
+  });
+
+  it('23. (the ledger) breaking a corps up, a month of drafts and the rejoin arm it no higher', () => {
+    const g = grand('CHN');
+    g.phase = g.order.indexOf('CHN');
+    setBreakUp(g, true);
+    men(g);
+    store(g, 5);
+    const c = corpsOf(g).find((x) => x.divs >= 3 && x.kind === 'inf' && x.town === undefined && x.joint === undefined && x.leave === undefined && !x.school && `rfa:${x.id}` in g.flags)!;
+    c.str = 0.6;
+    g.flags[`rfa:${c.id}`] = 0.6;
+    for (let cycle = 0; cycle < 2; cycle++) {
+      // The strongest division leaves: its men stand above the corps' strength.
+      const cards = divisionsOf(g, c), best = cards.reduce((x, y) => (y.str > x.str ? y : x), cards[0]);
+      const p = breakUp(g, c, [best.slot])!;
+      expect(p).not.toBeNull();
+      expect(p.str).toBeGreaterThan(0.6);
+      const stay = c.str;
+      g.turn++;
+      startPhase(g, 'CHN');
+      // The part that stays is at its level: no drafts arm it up at the refit price.
+      expect(c.str).toBeCloseTo(stay, 12);
+      g.phase = g.order.indexOf('CHN');
+      expect(rejoin(g, p, c)).toBe(true);
+      expect(levelOf(g, c)).toBeCloseTo(0.6, 12);
+      expect(c.str).toBeLessThanOrEqual(levelOf(g, c) + 1e-12);
+    }
   });
 
   it("24. China's month-17 row is at its est", () => {
