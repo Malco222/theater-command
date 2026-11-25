@@ -55,6 +55,7 @@ import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, G
 import { mapDist } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
+import { flagName } from './flagnames';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -405,14 +406,14 @@ export function crowding(g: Game, f: AirFleet): number {
  * The class of the airfield a region began the grand campaign with: 0 none, 1 a landing ground, 2 an airfield, 3 an air
  * base. With the air campaigns on, the record's fields the chart does not seed count too (b574).
  */
-export const fieldClass = (g: Game, region: number): number => Math.max(g.flags[`af:${region}`] ?? 0, recordField(g, region), baseField(g, region));
+export const fieldClass = (g: Game, region: number): number => Math.max(g.flags[flagName('af:', region)] ?? 0, recordField(g, region), baseField(g, region));
 
 /**
  * How many aircraft the airfields of a region can serve. In a historical scenario every region has airfields.
  * In the grand campaign's air war an airfield is a place: where there is none, and none has been built, the answer is 0.
  */
 export function airfieldsHold(g: Game, region: number): number {
-  const built = (g.flags[`wk:field:${region}`] ?? 0) * WORKS.field.holds;
+  const built = (g.flags[flagName('wk:field:', region)] ?? 0) * WORKS.field.holds;
   if (!airWar(g)) return AIR.airfields.holds + built;
   const holds = (AIRWAR.fields.sizes[fieldClass(g, region)] ?? 0) + built;
   // Airfields as targets (fieldstate.ts): each burned level serves 500 aircraft fewer until it is rebuilt.

@@ -11,6 +11,7 @@ import budgetData from '../../data/campaign/budget.json';
 import { townName, townSize, type TownSize } from './towns';
 import type { Build, Corps, Game, Region, Terrain } from './types';
 import { keepOf } from './citydamage';
+import { flagName } from './flagnames';
 
 export interface CivicLine {
   id: string;
@@ -48,7 +49,8 @@ const OCCUPIED = (budgetData as unknown as { occupied: number }).occupied;
 const SIZES: TownSize[] = ['village', 'town', 'city', 'capital'];
 const TOP = 3;
 const lineOf = (id: string): CivicLine | undefined => CIVIC.lines.find((l) => l.id === id);
-const key = (line: string, region: number): string => `cv:${line}:${region}`;
+// (Speed, the far map: the same names, made once and kept; civicSum reads every line of every province: flagnames.ts.)
+const key = (line: string, region: number): string => flagName(`cv:${line}:`, region);
 
 /** True when towns can be built up: the grand campaign. */
 export const civicRules = (g: Game): boolean => g.flags.open === 1;

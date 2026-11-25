@@ -437,6 +437,21 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
   return e.total >= NAVY.closed.ratio * seaSide(g, z, nat, false).total;
 }
 
+/** A sea as SeaPicture.state gives it. */
+export interface SeaState { fleets: { nat: string; power: number }[]; coasts: { ctrl: string; air: number; sky: string | null; skyAir: number }[]; wx: number }
+
+/** True when two states of a sea (SeaPicture.state) are alike in everything closed() reads. */
+export function sameSeaState(a: SeaState | null, b: SeaState | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.wx !== b.wx || a.fleets.length !== b.fleets.length || a.coasts.length !== b.coasts.length) return false;
+  for (let i = 0; i < a.fleets.length; i++) if (a.fleets[i].nat !== b.fleets[i].nat || a.fleets[i].power !== b.fleets[i].power) return false;
+  for (let i = 0; i < a.coasts.length; i++) {
+    const x = a.coasts[i], y = b.coasts[i];
+    if (x.ctrl !== y.ctrl || x.air !== y.air || x.sky !== y.sky || x.skyAir !== y.skyAir) return false;
+  }
+  return true;
+}
+
 /**
  * The seas as they stand at one moment, for asking of nation after nation whether each sea is closed to it (the supply
  * picture asks it of every nation with ships, every phase). What a sea holds does not depend on who asks: the fleets
@@ -449,11 +464,34 @@ export class SeaPicture {
   private coasts: ({ ctrl: string; air: number; sky: string | null; skyAir: number }[] | undefined)[] = [];
   private most: Float64Array | null = null;
   private harbours: Region[] | null = null;
+  private byHolder: Map<string, Region[]> | null = null;
   constructor(private readonly g: Game) {}
 
   /** Every province with a port, in order. */
   ports(): Region[] {
     return (this.harbours ??= this.g.regions.filter((r) => r.port));
+  }
+
+  /** The provinces with a port that this nation holds, in order: ports() with the others left out. */
+  held(nat: string): Region[] {
+    if (!this.byHolder) {
+      const by = new Map<string, Region[]>();
+      for (const r of this.ports()) { const l = by.get(r.ctrl); if (l) l.push(r); else by.set(r.ctrl, [r]); }
+      this.byHolder = by;
+    }
+    return this.byHolder.get(nat) ?? [];
+  }
+
+  /**
+   * What closed() reads of a sea besides who is at war with whom and who is whose friend, for keeping its answers from
+   * one picture to the next (the supply picture's kept lanes, game.ts): null where all there is in the sea could not
+   * close it to anybody, or else its fleets at sea with their weight, the coasts that put aircraft over it, and its sky.
+   * Where two pictures' states of a sea are alike (sameSeaState), closed() answers alike there for a nation whose
+   * friends and enemies are the same.
+   */
+  state(z: number): SeaState | null {
+    if (this.mostIn(z) < NAVY.closed.min) return null;
+    return { fleets: this.afloat(z), coasts: this.coastsOf(z), wx: this.g.seas[z].coast.length ? seaSkyMul(this.g, z) : 1 };
   }
 
   /** closedTo, from the picture. */
@@ -604,32 +642,59 @@ export function gatesTick(g: Game): void {
   }
 }
 
-/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed. */
-export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
+/**
+ * The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed.
+ * (For the supply picture's kept lanes, game.ts: `asked`, if given, is filled in with every answer the walk took, -1
+ * where it asked nothing, and `starts` are seaStarts' seas when the caller has them already. Neither changes the answer.)
+ */
+export function openSeas(g: Game, nat: string, seas?: SeaPicture, asked?: Int8Array, starts?: number[]): Uint8Array {
   const open = new Uint8Array(g.seas.length);
   // Whether a sea is closed to the nation is asked only of the seas its ships could reach, once each (-1: not asked yet).
-  const shutAt = new Int8Array(g.seas.length).fill(-1);
+  const shutAt = asked ?? new Int8Array(g.seas.length).fill(-1);
   const shut = (z: number): boolean => { if (shutAt[z] < 0) shutAt[z] = (seas ? seas.closed(z, nat) : closedTo(g, z, nat)) ? 1 : 0; return shutAt[z] === 1; };
   const q: number[] = [];
-  const start = (z: number): void => { if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); } };
-  const coastal = seas ? seas.ports() : g.regions;
-  for (const r of coastal) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
-  for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
+  for (const z of starts ?? seaStarts(g, nat, seas)) if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut(j) && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
+  return open;
+}
+
+/**
+ * The seas a nation's ships set out from (openSeas'), in the order it takes them, each as often as it comes up: the
+ * seas off its own ports, its fleets' home seas off the map, the seas off the harbours it has taken that its roads
+ * reach, and the sea a country off the map sends its convoys in by. `linkedOf`, if given, answers which provinces the
+ * nation's roads join to its capital exactly as roadsHome walks them (game.ts keeps the walk from call to call).
+ */
+export function seaStarts(g: Game, nat: string, seas?: SeaPicture, linkedOf?: (nat: string) => Uint8Array): number[] {
+  const out: number[] = [];
+  // Only a province the nation holds can be either kind of port below: with a picture of the seas, those alone are looked at.
+  const coastal = seas ? seas.held(nat) : g.regions;
+  for (const r of coastal) if (r.port && r.owner === nat && r.ctrl === nat) out.push(...r.seas);
+  for (const f of g.fleets) if (f.nat === nat && f.base < 0) out.push(f.home); // a base off the map is a home port too
   // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
   // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
   // from a conquered coast is fed from that coast, and not round by the harbours of the homeland.
-  if (seaWar(g) && (g.nations[nat]?.capital ?? -1) >= 0 && g.regions[g.nations[nat].capital].ctrl === nat) {
-    const linked = new Uint8Array(g.regions.length);
-    const road = [g.nations[nat].capital];
-    linked[road[0]] = 1;
-    for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
-    for (const r of coastal) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
+  // (The roads are walked only when there is such a harbour to reach: the walk answers nothing else.)
+  if (seaWar(g) && (g.nations[nat]?.capital ?? -1) >= 0 && g.regions[g.nations[nat].capital].ctrl === nat && coastal.some((r) => r.port && r.ctrl === nat && r.owner !== nat)) {
+    const linked = linkedOf ? linkedOf(nat) : roadsHome(g, nat);
+    for (const r of coastal) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) out.push(...r.seas);
   }
   // So is the sea a country off the map sends its convoys in by.
   const off = g.nations[nat]?.offmap;
-  if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) start(zoneOf(g, off.sea));
-  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut(j) && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
-  return open;
+  if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) out.push(zoneOf(g, off.sea));
+  return out;
+}
+
+/**
+ * The provinces a nation's roads join to its capital: the capital, and every province held by it or a friend that a
+ * road from there reaches through such provinces. `friend`, if given, answers for each province whether its holder is
+ * the nation's friend (allied), as it would be asked here.
+ */
+export function roadsHome(g: Game, nat: string, friend?: Uint8Array): Uint8Array {
+  const linked = new Uint8Array(g.regions.length);
+  const road = [g.nations[nat].capital];
+  linked[road[0]] = 1;
+  for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && (friend ? friend[j] === 1 : allied(g, nat, g.regions[j].ctrl))) { linked[j] = 1; road.push(j); }
+  return linked;
 }
 
 /** True when ships can still reach this coast: an evacuation or a supply run needs at least one sea that is not closed. */
@@ -654,10 +719,30 @@ export function crossingRisk(g: Game, nat: string, path: number[]): number {
 /** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
 export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
   if (!from.seas.length || !to.seas.length) return null;
+  return seaPathTo(seaSearch(g, nat, from, o), to);
+}
+
+/** A search by sea from one coast (seaSearch): what seaPath finds from it, worked out once for every coast it may be asked for. */
+export interface SeaSearch { cost: Float64Array; prev: Int16Array }
+
+/**
+ * (Speed, the far map.) seaPath's search from a coast, which reads nothing of where it is going: every sea's cost
+ * from there, and the way back. Each sea's closing and risk are asked once a search (they were asked again for
+ * every way into it; closedTo and seaRisk only read the war, and nothing changes during a search).
+ */
+export function seaSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean } = {}): SeaSearch {
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
-  const shut = (z: number): boolean => !o.surprise && closedTo(g, z, nat);
-  const weight = (z: number): number => 1 + (o.surprise ? 0 : 20 * seaRisk(g, z, nat));
+  const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
+  const shut = (z: number): boolean => {
+    if (o.surprise) return false;
+    if (shutAt[z] < 0) shutAt[z] = closedTo(g, z, nat) ? 1 : 0;
+    return shutAt[z] === 1;
+  };
+  const weight = (z: number): number => {
+    if (weightAt[z] === 0) weightAt[z] = 1 + (o.surprise ? 0 : 20 * seaRisk(g, z, nat)); // (never 0: at least 1)
+    return weightAt[z];
+  };
   for (const z of from.seas) if (!shut(z)) { cost[z] = weight(z); len[z] = 1; }
   for (;;) {
     let a = -1;
@@ -671,6 +756,12 @@ export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max
       if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; }
     }
   }
+  return { cost, prev };
+}
+
+/** The way a search (seaSearch) found to a coast, as the seas crossed in order, or null if there is none. */
+export function seaPathTo(s: SeaSearch, to: Region): number[] | null {
+  const { cost, prev } = s;
   let end = -1;
   for (const z of to.seas) if (cost[z] < 1e9 && (end < 0 || cost[z] < cost[end])) end = z;
   if (end < 0) return null;
@@ -1399,8 +1490,10 @@ export function coastReport(g: Game, att: string): void {
     let seen: { quay: Region; coast: Region; corps: number } | null = null;
     for (const q of quays) {
       let near: Region | null = null, len = Infinity;
+      // (one search from the quay for all the coasts: seaPath's, which reads nothing of where it goes)
+      const from = seaSearch(g, att, q, { max: NAVY.landing.range });
       for (const c of coasts) {
-        const path = seaPath(g, att, q, c, { max: NAVY.landing.range });
+        const path = seaPathTo(from, c);
         if (path && (path.length < len || (path.length === len && near !== null && 2 * c.vp + c.fac + (c.cap ? 8 : 0) > 2 * near.vp + near.fac + (near.cap ? 8 : 0)))) { near = c; len = path.length; }
       }
       if (near) { seen = { quay: q, coast: near, corps: Math.min(idle(q), n.sealift) }; break; }

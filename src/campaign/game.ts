@@ -10,6 +10,7 @@ import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
+import { flagName } from './flagnames';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
@@ -33,7 +34,7 @@ import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, canPass, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, roadsHome, sameSeaState, seaOpenAt, seaSide, seaStarts, setupNavy, shipCorps, type SeaState } from './navy';
 import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -51,7 +52,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -326,6 +327,8 @@ export function bloc(n: Nation): Bloc | null {
   return null;
 }
 
+/** (Supply keeps its friend tables, and its lanes' answers, while friendsKeyOf is the same: anything new read here must be
+ * named there too.) */
 export function allied(g: Game, a: string, b: string): boolean {
   return sameSide(g, a, b) || tiedPair(g, a, b);
 }
@@ -343,6 +346,7 @@ export function sameSide(g: Game, a: string, b: string): boolean {
   return ba !== null && ba === bloc(B);
 }
 
+/** (Supply keeps its lanes' answers while friendsKeyOf is the same: anything new read here must be named there too.) */
 export function atWar(g: Game, a: string, b: string): boolean {
   return g.nations[a].atWar.includes(b);
 }
@@ -845,19 +849,78 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
  * - The roads between provinces are not keyed: they change only when the wider world is attached (attachWorld), which
  *   also adds provinces, and a new number of provinces starts the book afresh.
  * - A kept picture is handed out again as the same arrays: nothing may write into g.supply or g.reach in place.
+ *
+ * Which provinces a country's roads may pass is a province's holder and whether that holder is the country's friend
+ * (the far chart's profile, 24 Nov 2026: with 65 countries and 2,067 provinces, the provinces were laid out and compared
+ * afresh for every country at every call). So the holders are numbered once for the whole campaign, every call writes
+ * down each province's holder by number, and the book logs the provinces whose holder changed since the call before. A
+ * kept picture remembers the friends it was last found good with and how far the log had got; it still holds when the
+ * friends are the same and every province logged since passes as it did. Both are read afresh at every call: a capture,
+ * a surrender, a hand-over or a change of alliance anywhere is in them at the next call. When the friends differ the
+ * provinces are laid out and compared in full, as before. (Nothing here reads the towns' hand:<id> stamps.)
+ *
+ * The seas each country's ships can use (openSeas) are kept too: with the seas they set out from (seaStarts, worked out
+ * at every call), whether each strait would let them through (canPass, asked at every call), and the answer to every
+ * "is this sea closed to them" the walk asked. While those are all the same, the walk would ask the same and find the
+ * same. A sea a kept answer was had in is looked at whenever that answer is (SeaPicture.state: its fleets at sea and
+ * their weight, the coasts that put aircraft over it, its sky) and stamped with the call that found it changed; a kept
+ * answer is asked again when its sea has changed since it was last found good, or when anything allied() or atWar()
+ * reads has changed since (friendsKeyOf, which names every country's alliance, life and wars). A country that loses its
+ * last port, or the shipyard ground it sails from, sets out from other seas or none, and so walks again.
+ * TC_SUPPLY_CHECK=1 walks the seas afresh as well and stops on any difference.
  */
 /** The eastern railways as they stand this call: what each Soviet-owned step of the line costs, and whose home it is. */
 interface RailNow { step: Float64Array; home: Uint8Array }
-interface SupplyDrawn { pass: Uint8Array; from: string; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
-interface SupplyBook { size: number; wide: boolean; long: string; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn> }
+/**
+ * What a country's roads may pass (mask: 1 where the holder is its friend), with the friends it was last found good
+ * with (by the holders' numbers) and the book's log as far as it had got then.
+ */
+interface RoadsSeen { mask: Uint8Array; friend: Uint8Array; at: number }
+interface SupplyDrawn extends RoadsSeen { seeds: number[]; heads: number[]; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
+/**
+ * A country's sea lanes, with what its walk set out from, every answer it had on the way, and the call at which those
+ * answers were last found good, with every country's friends and wars then (fkey, friendsKeyOf).
+ */
+interface LanesKept { starts: number[]; gates: Uint8Array; asked: Int16Array; shut: Uint8Array; open: Uint8Array; at: number; fkey: string }
+/** The provinces a country's roads join to its capital (roadsHome), by holders (mask: 1 where a friend holds it). */
+interface HomeKept extends RoadsSeen { cap: number; linked: Uint8Array }
+interface SupplyBook {
+  size: number; wide: boolean; long: string; seas: Game['seas']; gates: Game['gates']; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn>;
+  /** Each province's holder at the last call: on the field (road, as the pictures go) and in the books (own, ctrl). */
+  road: Int16Array; own: Int16Array;
+  /** The provinces whose holder changed from one call to the next, in turn; log[0] is entry number logBase. */
+  log: number[]; logBase: number;
+  lanes: Map<string, LanesKept>; home: Map<string, HomeKept>;
+  /** The calls made on this book, counted; each sea's state when last looked at, and the call that found it changed. */
+  calls: number; seaSeen: (SeaState | null | undefined)[]; seaStamp: Int32Array;
+  /** Each country's friends among every holder numbered (friendsFor of them), good while friendsKey (friendsKeyOf) is the same. */
+  friends: Map<string, Uint8Array>; friendsKey: string; friendsFor: number;
+}
 const supplyBooks = new WeakMap<Game, SupplyBook>();
+/** Every holder a campaign's supply has seen, numbered in the order seen: the numbers never change. */
+const supplyHolders = new WeakMap<Game, { no: Map<string, number>; list: string[] }>();
 const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
 const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
+/**
+ * Everything allied() and atWar() read of the war, for every country: its alliance (bloc), whether it is alive and whom
+ * it is at war with (far.ts tiedPair's tie, and atWar itself), and whether the far side is on. While this is the same,
+ * so is every answer the two give (a change to either must be followed here; tests/friends-key-r2 records their reads,
+ * and TC_SUPPLY_CHECK asks every kept answer afresh).
+ */
+export const friendsKeyOf = (g: Game): string => {
+  let key = farOn(g) ? 'far' : 'near';
+  for (const id in g.nations) { const n = g.nations[id]; key += `|${id}:${bloc(n)}:${n.alive ? 1 : 0}:${n.atWar.join(',')}`; }
+  return key;
+};
 const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
 };
+/** The flags' names a call asks after for every province, made once (the same names, without building them again). */
+const depotKeys: string[] = [], storesKeys: string[] = [];
+const depotKey = (id: number): string => (depotKeys[id] ??= 'depot:' + id);
+const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
 function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
@@ -892,13 +955,6 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
 
 export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
-  // The seas each nation's supply ships can still use, worked out once: an ally's overseas ports feed its friends too.
-  const lanes = new Map<string, Uint8Array | null>();
-  const seasNow = new SeaPicture(g);
-  const lanesOf = (id: string): Uint8Array | null => {
-    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id, seasNow) : null); }
-    return lanes.get(id)!;
-  };
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
   const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
   const wide = groundRules(g);
@@ -909,21 +965,33 @@ export function computeSupply(g: Game): void {
   // "is he my friend" is asked once a holder and not once a province), and where the long lines of the east and of
   // the desert can run at all. With fifty countries on the chart the picture is drawn fifty times over.
   const size = g.regions.length;
-  const holders: string[] = [], holderNo = new Map<string, number>();
-  const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
-  const long = lineOwners(g);
-  // The provinces that can be anybody's source of supply at all, in order: a port, or a capital, a big industrial
-  // province or a depot standing on its owner's own ground. Every other province only carries the line.
-  const sources: number[] = [];
-  for (const r of g.regions) {
-    const who = field ? field[r.id] : r.ctrl;
+  let named = supplyHolders.get(g);
+  if (!named) supplyHolders.set(g, (named = { no: new Map(), list: [] }));
+  const holderNo = named.no, holders = named.list;
+  // (here: which holders hold anything this call; only theirs is asked after below)
+  const here: number[] = [];
+  let lastWho = '', lastNo = -1;
+  const numberOf = (who: string): number => {
+    if (who === lastWho) return lastNo;
     let k = holderNo.get(who);
     if (k === undefined) { k = holders.length; holderNo.set(who, k); holders.push(who); }
+    if (here[k] !== 1) here[k] = 1;
+    lastWho = who; lastNo = k;
+    return k;
+  };
+  const road = new Int16Array(size), own = field ? new Int16Array(size) : road, deep = new Uint8Array(size), sand = new Uint8Array(size);
+  const long = lineOwners(g);
+  // The provinces that can be anybody's source of supply at all, in order, and whose roads each is on: a port, or a
+  // capital, a big industrial province or a depot standing on its owner's own ground. Every other province only carries the line.
+  const sources: number[] = [], sourceRoad: number[] = [], sourcesBy: number[][] = [];
+  for (const r of g.regions) {
+    const k = numberOf(field ? field[r.id] : r.ctrl);
     road[r.id] = k;
+    if (field) own[r.id] = numberOf(r.ctrl);
     if (long.includes(r.owner)) deep[r.id] = 1;
     // Desert ground (2) costs a step of the line; the coast overseas (1) only carries it. Either is the desert's table.
     sand[r.id] = (r.overseas ? 1 : 0) | (sandRules(r) ? 2 : 0);
-    if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]))) sources.push(r.id);
+    if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags[depotKey(r.id)]))) { sources.push(r.id); sourceRoad.push(k); (sourcesBy[k] ??= []).push(r.id); }
   }
   // What each step of the long line costs this month, on Soviet-owned ground: a region held long enough has had its
   // track relaid (in the grand campaign, unless the line there is torn up), and mud and winter lengthen every step.
@@ -939,17 +1007,135 @@ export function computeSupply(g: Game): void {
   // same; those reaching into the east hold only while every eastern step costs what it did when they were drawn.
   let book = supplyBooks.get(g);
   const longKey = `${long.join('|')}/${DESERT.step}`;
-  if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
-    book = { size, wide, long: longKey, deep, sand, rail: { step, home }, drawn: new Map() };
+  if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || book.seas !== g.seas || book.gates !== g.gates || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
+    book = { size, wide, long: longKey, seas: g.seas, gates: g.gates, deep, sand, rail: { step, home }, drawn: new Map(), road, own, log: [], logBase: 0, lanes: new Map(), home: new Map(), calls: 0, seaSeen: [], seaStamp: new Int32Array(g.seas.length), friends: new Map(), friendsKey: '', friendsFor: -1 };
     supplyBooks.set(g, book);
+  } else {
+    // The provinces whose holder has changed since the last call, on the field or in the books.
+    const was = book.road, wasOwn = book.own;
+    for (let j = 0; j < size; j++) if (was[j] !== road[j] || wasOwn[j] !== own[j]) book.log.push(j);
+    book.road = road; book.own = own;
+    // A long log is let go: what was kept from before it is then compared in full, once.
+    if (book.log.length > 4 * size) { book.logBase += book.log.length; book.log = []; }
   }
+  const kept0 = book;
+  const logEnd = book.logBase + book.log.length;
+  const callNo = ++book.calls;
   // The railways now: the same object as the last call's while nothing on them has changed, so most checks are one look.
   let rail = book.rail;
   if (!sameBytes(rail.step, step) || !sameBytes(rail.home, home)) book.rail = rail = { step, home };
   const railHolds = (then: RailNow | null): boolean => !then || then === rail || (sameBytes(then.step, rail.step) && sameBytes(then.home, rail.home));
+  // Each country's friends among every holder numbered, asked once a country while what allied() reads of the war is
+  // the same as when they were asked (friendsKeyOf: an alliance, a surrender, a war or the far side's ties change it,
+  // and the tables are asked afresh) and no new holder has been numbered. (Only this call's holders are looked at by
+  // number below; the others' entries are never read.)
+  const friendsKey = friendsKeyOf(g);
+  if (book.friendsKey !== friendsKey || book.friendsFor !== holders.length) { book.friends = new Map(); book.friendsKey = friendsKey; book.friendsFor = holders.length; }
+  const friends = book.friends;
+  const friendOf = (id: string): Uint8Array => {
+    let friend = friends.get(id);
+    if (!friend) {
+      friend = new Uint8Array(holders.length);
+      for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
+      friends.set(id, friend);
+    } else if (supplyCheck) {
+      for (let k = 0; k < holders.length; k++) if (friend[k] !== (allied(g, id, holders[k]) ? 1 : 0)) throw new Error(`friends kept for ${id} in month ${g.turn} differ from fresh ones (${holders[k]})`);
+    }
+    return friend;
+  };
+  const maskOf = (friend: Uint8Array, by: Int16Array): Uint8Array => {
+    const mask = new Uint8Array(size);
+    for (let j = 0; j < size; j++) mask[j] = friend[by[j]];
+    return mask;
+  };
+  // True while what a country's roads may pass is what it was: the same friends among this call's holders, and every
+  // province logged since passing as it did (any other province has the same holder as then, so one of this call's);
+  // or, the friends being changed, every province compared. Kept now as good for this call.
+  const roadsHold = (seen: RoadsSeen, friend: Uint8Array, by: Int16Array): boolean => {
+    let same = seen.at >= kept0.logBase && seen.friend.length <= friend.length;
+    for (let k = 0; same && k < seen.friend.length; k++) if (here[k] === 1 && seen.friend[k] !== friend[k]) same = false;
+    if (same) {
+      const log = kept0.log;
+      for (let i = seen.at - kept0.logBase; i < log.length; i++) { const j = log[i]; if (friend[by[j]] !== seen.mask[j]) return false; }
+    } else {
+      for (let j = 0; j < size; j++) if (friend[by[j]] !== seen.mask[j]) return false;
+    }
+    seen.friend = friend; seen.at = logEnd;
+    return true;
+  };
+  // The provinces a country's roads join to its capital, for the harbours it has taken (seaStarts): walked again only
+  // when its capital moves or a province changes from friend's to not or back.
+  const homeOf = (nat: string): Uint8Array => {
+    const cap = g.nations[nat].capital, friend = friendOf(nat);
+    const kept = kept0.home.get(nat);
+    if (kept && kept.cap === cap && roadsHold(kept, friend, own)) return kept.linked;
+    const mask = maskOf(friend, own);
+    const linked = roadsHome(g, nat, mask);
+    kept0.home.set(nat, { cap, mask, friend, at: logEnd, linked });
+    return linked;
+  };
+  // The seas each nation's supply ships can still use, worked out once a call: an ally's overseas ports feed its friends too.
+  const lanes = new Map<string, Uint8Array | null>();
+  const seasNow = new SeaPicture(g);
+  // Each sea as it stands this call, looked at once and set beside its state when last looked at: the call that found it
+  // changed is the sea's stamp. A kept answer about a sea not changed since it was last found good, while every
+  // country's friends and enemies are the same, is the answer closed() would give now (SeaPicture.state). A sea is
+  // looked at in every call that takes a kept answer about it, or makes one, so its stamp is later than an answer's
+  // call whenever the sea has been seen to change since.
+  const looked = new Uint8Array(g.seas.length);
+  const look = (z: number): void => {
+    if (looked[z]) return;
+    looked[z] = 1;
+    const now = seasNow.state(z), was = kept0.seaSeen[z];
+    if (was === undefined || !sameSeaState(was, now)) { kept0.seaSeen[z] = now; kept0.seaStamp[z] = callNo; }
+  };
+  const lanesKept = (id: string): Uint8Array => {
+    const starts = seaStarts(g, id, seasNow, homeOf);
+    const gates = new Uint8Array(g.gates.length);
+    for (let i = 0; i < gates.length; i++) if (canPass(g, g.gates[i].a, g.gates[i].b, id)) gates[i] = 1;
+    const kept = kept0.lanes.get(id);
+    let open: Uint8Array | null = null;
+    if (kept && sameBytes(kept.starts, starts) && sameBytes(kept.gates, gates)) {
+      // (closed() asks atWar() and allied() of the nations in a sea: both read only what friendsKeyOf names.)
+      const rels = kept.fkey === friendsKey;
+      open = kept.open;
+      for (let i = 0; i < kept.asked.length; i++) {
+        const z = kept.asked[i];
+        look(z);
+        if ((!rels || kept0.seaStamp[z] > kept.at) && seasNow.closed(z, id) !== (kept.shut[i] === 1)) { open = null; break; }
+      }
+      if (open) { kept.at = callNo; kept.fkey = friendsKey; }
+    }
+    if (!open) {
+      const asked = new Int8Array(g.seas.length).fill(-1);
+      open = openSeas(g, id, seasNow, asked, starts);
+      const at: number[] = [];
+      for (let z = 0; z < asked.length; z++) if (asked[z] >= 0) { at.push(z); look(z); }
+      kept0.lanes.set(id, { starts, gates, asked: Int16Array.from(at), shut: Uint8Array.from(at, (z) => asked[z]), open, at: callNo, fkey: friendsKey });
+    }
+    if (supplyCheck && !sameBytes(openSeas(g, id, seasNow), open)) throw new Error(`sea lanes kept for ${id} in month ${g.turn} differ from fresh ones`);
+    return open;
+  };
+  const lanesOf = (id: string): Uint8Array | null => {
+    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? lanesKept(id) : null); }
+    return lanes.get(id)!;
+  };
+  // The sources on a country's friends' roads, in order: one friend's own list when only one has any.
+  const sourcesFor = (friend: Uint8Array): number[] => {
+    let one: number[] | null = null;
+    for (let k = 0; k < sourcesBy.length; k++) {
+      if (!sourcesBy[k] || !friend[k]) continue;
+      if (one) {
+        const out: number[] = [];
+        for (let i = 0; i < sources.length; i++) if (friend[sourceRoad[i]]) out.push(sources[i]);
+        return out;
+      }
+      one = sourcesBy[k];
+    }
+    return one ?? [];
+  };
   for (const id of active) {
-    const friend = new Uint8Array(holders.length);
-    for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
+    const friend = friendOf(id);
     // Where the supply comes from, and in the desert how much of a head start each base gives: [province, start].
     const seeds: number[] = [];
     const heads: number[] = [];
@@ -957,15 +1143,14 @@ export function computeSupply(g: Game): void {
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
     const open = lanesOf(id);
     let mates: string[] | null = null;
-    for (const at of sources) {
-      if (!friend[road[at]]) continue;
+    for (const at of sourcesFor(friend)) {
       const r = g.regions[at];
       // An army round a town it has not taken holds the beaches beside the harbour and no more: ships can still
       // land its stores there, but the place is no depot of anybody's while the siege lasts.
       const shut = !!field && field[r.id] !== r.ctrl;
       // An army is fed from its own country: its capital, its big industrial regions, its depots.
       const home = !shut && r.ctrl === id && r.owner === id;
-      const depot = home && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]);
+      const depot = home && (r.cap || r.fac >= 3 || !!g.flags[depotKey(r.id)]);
       let quay = !!open && r.port && r.seas.some((z) => open[z]);
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
       if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
@@ -974,8 +1159,8 @@ export function computeSupply(g: Game): void {
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && r.fort) {
-        if (quay) g.flags[`stores:${r.id}`] = g.turn;
-        else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= portKeep(g, r)) quay = true;
+        if (quay) g.flags[storesKey(r.id)] = g.turn;
+        else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
       }
       if (!depot && !quay) continue;
       // A pocket that has eaten its stores feeds nobody (the grand campaign): its depot is a name, and no ship comes in.
@@ -983,13 +1168,13 @@ export function computeSupply(g: Game): void {
       seeds.push(r.id);
       heads.push(r.id, depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk);
     }
-    // The provinces this country's roads may pass, and its picture: the one kept, if nothing it was drawn from moved.
-    const pass = new Uint8Array(size);
-    for (let j = 0; j < size; j++) pass[j] = friend[road[j]];
-    const from = `${seeds.join(',')}/${heads.join(',')}`;
+    // Its picture: the one kept, if nothing it was drawn from moved (the provinces its roads may pass are laid out only
+    // to draw it again, or when its friends have changed).
     const kept = book.drawn.get(id);
-    if (kept && kept.from === from && railHolds(kept.rail) && sameBytes(kept.pass, pass)) {
+    if (kept && sameBytes(kept.seeds, seeds) && sameBytes(kept.heads, heads) && railHolds(kept.rail) && roadsHold(kept, friend, road)) {
       if (supplyCheck) {
+        const pass = maskOf(friend, road);
+        if (!sameBytes(pass, kept.mask)) throw new Error(`roads kept for ${id} in month ${g.turn} differ from fresh ones`);
         const fresh = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
         if (!sameBytes(fresh.ok, kept.ok) || !sameBytes(fresh.reach, kept.reach)) throw new Error(`supply picture kept for ${id} in month ${g.turn} differs from a fresh one`);
       }
@@ -997,10 +1182,11 @@ export function computeSupply(g: Game): void {
       g.reach[id] = kept.reach;
       continue;
     }
+    const pass = maskOf(friend, road);
     const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
     g.supply[id] = drawn.ok;
     g.reach[id] = drawn.reach;
-    book.drawn.set(id, { pass, from, ...drawn, rail: drawn.east ? rail : null });
+    book.drawn.set(id, { mask: pass, friend, at: logEnd, seeds, heads, ...drawn, rail: drawn.east ? rail : null });
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
@@ -2095,9 +2281,10 @@ function fadeWorks(g: Game, nat: string): void {
   if (g.flags.open !== 1) return;
   const idx = Object.keys(g.nations).indexOf(nat), fade = DEFENCE.handover?.fade ?? 1;
   for (const r of g.regions) {
-    const m = g.flags[`fw:${r.id}`];
-    if (m === undefined || g.flags[`fwn:${r.id}`] !== idx) continue;
-    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[`fw:${r.id}`] = Math.round((m - fade) * 100) / 100;
+    const key = flagName('fw:', r.id);
+    const m = g.flags[key];
+    if (m === undefined || g.flags[flagName('fwn:', r.id)] !== idx) continue;
+    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[key] = Math.round((m - fade) * 100) / 100;
   }
 }
 
