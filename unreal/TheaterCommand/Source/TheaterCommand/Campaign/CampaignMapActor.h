@@ -11,6 +11,7 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/PortLife.h"
+#include "Campaign/StreetLife.h"
 #include "Effects/BattleEffects.h"
 #include "CampaignMapActor.generated.h"
 
@@ -1151,6 +1152,28 @@ private:
 	/** Takes a port's ships off the water (every port's, for INDEX_NONE). */
 	void ParkPortCraft(int32 Roads);
 	void UpdatePortLife(const FVector& CameraFocus, float CameraDistance);
+	/**
+	 * (Release 2, the campaign map's upgrade 4, second half: street cars. Campaign/StreetLife.h has the reckoning and
+	 * Campaign/CampaignStreetLife.cpp the rest; tc.Map.StreetLife, off as it comes.) A street car works each arm of a
+	 * city's or a capital's two avenues near the eye: from her stop by the square out to the arm's end and back.
+	 * Decoration only: no rule reads it and nothing of it is saved.
+	 */
+	struct FStreetLine
+	{
+		int32 Region = INDEX_NONE; // the city's province
+		bool bManned = false; // its car is on the street now
+		float Shown = 0.0f; // how much of her is there, 0 to 1: she grows onto it and off it
+		TheaterStreetLife::FLine Laid; // the line, and its times
+		TObjectPtr<UProceduralMeshComponent> Car;
+	};
+	TArray<FStreetLine> StreetLines;
+	TMap<int32, TArray<FVector2D>> TownAvenues; // for each city, two points of the map for each avenue arm a car may work, as its town was last built
+	TMap<int32, TArray<FVector2D>> StreetAvenuesLaid; // the arms the lines were laid from: while the towns' arms are these, the lines and their cars stand
+	bool bStreetLinesStale = true; // (the towns were built again)
+	int32 StreetCarsOut = 0; // how many cars are on the streets now
+	/** Takes every street car off the streets. */
+	void ParkStreetCars();
+	void UpdateStreetLife(const FVector& CameraFocus, float CameraDistance);
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed

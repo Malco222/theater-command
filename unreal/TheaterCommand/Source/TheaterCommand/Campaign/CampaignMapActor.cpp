@@ -9279,6 +9279,8 @@ void ACampaignMapActor::BuildTowns()
 	TownLandmarks.Reset();
 	TownQuays.Reset();
 	bPortRoadsStale = true; // (release 2, busy ports: the quays are found again, and so are the fairways off them)
+	TownAvenues.Reset();
+	bStreetLinesStale = true; // (release 2, street cars: the avenues are laid again, and so are the cars' lines on them)
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -9327,7 +9329,12 @@ void ACampaignMapActor::BuildTowns()
 		}
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
-		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
+		TArray<FVector2D> Avenues; // (release 2, street cars: where a car may run on each arm of a city's avenues)
+		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop, &Avenues);
+		if (Avenues.Num() >= 2)
+		{
+			TownAvenues.Add(Region.Id, MoveTemp(Avenues));
+		}
 		TownChimneyRegion.SetNumZeroed(TownChimneys.Num()); // (the new ones are this town's)
 		for (int32 Stack = TownChimneyRegion.Num() - 1; Stack >= 0 && TownChimneyRegion[Stack] == 0; --Stack)
 		{
@@ -18108,6 +18115,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateColumns(CameraFocus, CameraDistance); // (release 2: supply columns' convoys on the roads, CampaignColumns.cpp)
 	UpdatePortLife(CameraFocus, CameraDistance); // (release 2: the little ships at the ports, CampaignPortLife.cpp; tc.Map.PortLife)
+	UpdateStreetLife(CameraFocus, CameraDistance); // (release 2: the street cars on the cities' avenues, CampaignStreetLife.cpp; tc.Map.StreetLife)
 	UpdateClouds();
 	UpdateFlashes();
 	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)
