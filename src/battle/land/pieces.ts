@@ -7,7 +7,7 @@
 // steppe. The only change is withTeams, written out here (from sample.ts) so that this file needs nothing of the
 // campaign's: the 3D game's land rules bundle carries src/battle/land alone. Not a campaign battle: nothing is booked.
 
-import type { FieldTicket, ForceTicket, SideTicket } from '../core/types';
+import type { FieldTicket, ForceKit, ForceTicket, SideTicket } from '../core/types';
 import { GROUNDS, type LandField, type LandPlace } from './field';
 import { LAND } from './rules';
 
@@ -25,6 +25,12 @@ export interface Army {
   gun: string;
   general: string;
   style: 'bold' | 'methodical' | 'mass';
+  /**
+   * What this side's foot corps carry that can pierce armour (LAND.pierce; the design director's pierce ruling, 25 Nov,
+   * P3): written by hand here, as the historian reads the force, never worked out from the piece's date or the army's
+   * name. Left out, the plain kit. Read by the field only with LandBattle.pierce on.
+   */
+  kit?: ForceKit;
 }
 
 export interface SetPiece {
@@ -77,8 +83,10 @@ export const NORMANDY: SetPiece = {
   date: 'July 1944',
   turn: 59,
   place: { region: -1, name: 'Normandy', terrain: 'plains', river: null, bridgeDown: false, town: 'Le Mesnil', townSize: 'village', fort: 0, mines: 0 },
-  att: { nat: 'USA', adj: 'American', color: '#6b7a4a', army: 'USA', standIn: 'POL', tanks: ['Sherman'], gun: 'Howitzer105', general: 'General Hale', style: 'methodical' },
-  def: { nat: 'GER', adj: 'German', color: '#5f6a6e', army: 'GER', tanks: ['Tiger', 'PanzerIV'], gun: 'leFH18', general: 'General Vane', style: 'bold' },
+  // (kit, by hand: both infantries with their own anti-tank guns, tank destroyers behind them, and launchers in the
+  // sections: the bazooka; the Panzerschreck and Panzerfaust. The historian's to correct as data.)
+  att: { nat: 'USA', adj: 'American', color: '#6b7a4a', army: 'USA', standIn: 'POL', tanks: ['Sherman'], gun: 'Howitzer105', general: 'General Hale', style: 'methodical', kit: { atGuns: true, atTd: true, atHand: true } },
+  def: { nat: 'GER', adj: 'German', color: '#5f6a6e', army: 'GER', tanks: ['Tiger', 'PanzerIV'], gun: 'leFH18', general: 'General Vane', style: 'bold', kit: { atGuns: true, atTd: true, atHand: true } },
   attForces: [
     ['VII Corps', 'inf', 3, 0.5, 4],
     ['3rd Armored Group', 'arm', 2, 0.32, 3],
@@ -115,8 +123,11 @@ export const PROKHOROVKA: SetPiece = {
   date: 'July 1943',
   turn: 47,
   place: { region: -1, name: 'Kursk salient', terrain: 'plains', river: null, bridgeDown: false, town: 'Oktyabrsky', townSize: 'village', fort: 0, mines: 0 },
-  att: { nat: 'SOV', adj: 'Soviet', color: '#7b7748', army: 'SOV', tanks: ['T34', 'T34', 'LightTank', 'T34', 'T34', 'LightTank'], gun: 'ZiS3', general: 'General Orlov', style: 'mass' },
-  def: { nat: 'GER', adj: 'German', color: '#5f6a6e', army: 'GER', tanks: ['PanzerIV', 'Tiger', 'StuG3', 'PanzerIV'], gun: 'leFH18', general: 'General Vane', style: 'methodical' },
+  // (kit, by hand: the rifle divisions with their own anti-tank guns, their anti-tank rifles counted inside the guns,
+  // no launcher; the panzergrenadiers with anti-tank guns and assault guns and tank destroyers beside them, no launcher
+  // yet. The historian's to correct as data.)
+  att: { nat: 'SOV', adj: 'Soviet', color: '#7b7748', army: 'SOV', tanks: ['T34', 'T34', 'LightTank', 'T34', 'T34', 'LightTank'], gun: 'ZiS3', general: 'General Orlov', style: 'mass', kit: { atGuns: true } },
+  def: { nat: 'GER', adj: 'German', color: '#5f6a6e', army: 'GER', tanks: ['PanzerIV', 'Tiger', 'StuG3', 'PanzerIV'], gun: 'leFH18', general: 'General Vane', style: 'methodical', kit: { atGuns: true, atTd: true } },
   attForces: [
     ['Guards Tank Army', 'arm', 6, 0.5, 18],
     ['Guards Rifle Corps', 'inf', 4, 0.36, 9],
@@ -161,6 +172,8 @@ export function ticketOf(p: SetPiece, seed: number, human: 'att' | 'def' | null 
     nat: a.nat, adj: a.adj, color: a.color, human, general: { name: a.general, level: 2 }, style: a.style,
     forces: forces.map(([name, kind, divs, share, first, dug], i): ForceTicket => ({
       corps: base + i, name, nat: a.nat, kind, divs, men: divs * 15000 * str, str, org: 0.85, xp, mor: 0.7, share, dug: !!dug, first, battles: 4,
+      // What its foot carries that can pierce armour, from the piece's own data (LAND.pierce).
+      ...(a.kit && (LAND.pierce.foot as readonly string[]).includes(kind) ? { kit: { ...a.kit } } : {}),
     })),
   });
   const A = 100;

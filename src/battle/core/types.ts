@@ -82,6 +82,18 @@ export interface ForceKit {
   jeeps?: number;
   /** Its motorcycles to each of its blocks (1 in so many below one; looks only: Drill.lightOf). */
   bikes?: number;
+  /**
+   * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P3): what a corps on
+   * foot carries that can pierce armour, each from its nation's own research and each absent where it has none (the
+   * plain kit: early guns and anti-tank rifles, no launcher, close assault). Read only with LandBattle.pierce on, and
+   * never 'at' above, which stays the overrun's own.
+   * atGuns: Anti-tank guns researched, its own anti-tank guns at their full worth.
+   */
+  atGuns?: boolean;
+  /** Tank destroyers researched: added to its own guns' worth. */
+  atTd?: boolean;
+  /** Hand-held anti-tank weapons researched: launchers at short range. */
+  atHand?: boolean;
 }
 
 export interface ForceTicket {
