@@ -4,7 +4,8 @@
 // one, so a strafer who never arrives isn't a broken promise". Her words of 15:04Z, to the letter, no colour on any:
 //   the card: LIKELY TO GO DOWN AND STRAFE; under it, once, muted, "The fighter groups most likely to go down and strafe
 //   if the sky is won. Which of them do is settled over the target."; the groups a row each; with none, "No fighter
-//   group is likely to go down and strafe.";
+//   group is likely to go down and strafe, though one still may." (her line for none as softened at 16:04Z; muted, the
+//   muted line left out above it);
 //   the report: "{No. 11 Group} went down and strafed." / "No fighter group went down to strafe."
 // The card's list is the ids strafersExpected gives the card's own forecast (the same call); the report's names are the
 // groups that really went down, the settled raid's (fly()) or the fought raid's (the battle's). With the switch off
@@ -40,7 +41,7 @@ afterEach(() => { flyKinds([]); strafeWatch.tell = undefined; heard = []; AIR.co
 
 const HEADING = 'LIKELY TO GO DOWN AND STRAFE';
 const NOTE = 'The fighter groups most likely to go down and strafe if the sky is won. Which of them do is settled over the target.';
-const NONE = 'No fighter group is likely to go down and strafe.';
+const NONE = 'No fighter group is likely to go down and strafe, though one still may.';
 const NOBODY = 'No fighter group went down to strafe.';
 const GC1 = 9, GC3 = 10, GC2 = 36, BOMBERS = 38;
 const NAME: Record<number, string> = { [GC1]: 'Groupement de Chasse 1', [GC2]: 'Groupement de Chasse 2', [GC3]: 'Groupement de Chasse 3' };
