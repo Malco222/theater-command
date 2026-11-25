@@ -2586,7 +2586,9 @@ export class Drill {
     for (const m of order) {
       if (VEHICLE.has(m.role) || CARRIED.has(m.pose) || sq.boarding !== undefined) continue;
       const going = MOVING.has(m.pose) && m.v > 0, at: [number, number] = going ? m.spot : [m.x, m.y];
-      const p = this.leash(sq, this.clear(room, sq, m, at), -4);
+      // (support teams at work: a gunner by his gun set up stays by it; the rest keep clear of him)
+      const tw = this.teamwork && !going && CREWED.has(m.role) ? sq.tw?.guns.get(m) : undefined, planted = !!tw?.at && tw.set <= t;
+      const p = planted ? at : this.leash(sq, this.clear(room, sq, m, at), -4);
       if (Math.hypot(p[0] - at[0], p[1] - at[1]) > 0.05) {
         m.spot = p;
         if (!going) {
@@ -4461,8 +4463,8 @@ export class Drill {
         g.rapid = undefined;
         return;
       }
-      // Taking it down (a moment; none in a rout), then carried.
-      if (setUp && close && !flee) {
+      // Taking it down (a moment, each in its own, even with its block already going on; none in a rout), then carried.
+      if (setUp && !flee) {
         w.pick ??= t + C.pick[0] + (C.pick[1] - C.pick[0]) * roll(this.seed, u.id, g.n, Math.floor(tw.go!), 256);
         if (t < w.pick) { g.pose = 'wait'; g.aim = undefined; g.rapid = undefined; return; }
       }
