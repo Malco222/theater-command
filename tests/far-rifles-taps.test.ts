@@ -678,7 +678,7 @@ describe('the armed level', () => {
     };
     const full = run(50);
     expect(full).toBeGreaterThan(0.5);
-    // (Twice: the store is asked for by every foot corps' drafts, volunteer corps too, which the measure leaves out.)
+    // (Twice, a margin: the store's limit is the whole foot ask, volunteer corps included, which the measure leaves out.)
     expect(run(2 * 0.05 * full)).toBeCloseTo(full, 9);
   });
 
