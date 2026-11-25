@@ -345,6 +345,14 @@ export interface LiveOpts {
   mud?: boolean;
   /** Scarred ground (release 2, looks only): the campaign's earlier battles here, as old craters; off, none are sent. */
   scars?: boolean;
+  /**
+   * Support teams in battle (release 2, the Battle rules card's "teams"; the design director's ruling of 25 November
+   * 17:52Z; the rules' sim.teamsRule): a team's fire shakes by its own harm, and a defence's line is never drawn out
+   * of its places by a team firing behind it. NOT looks only: it changes the fight wherever team blocks are, a set
+   * piece's battalions too. (A campaign battle's own teams are put on its ticket before it comes here: own-teams.ts.)
+   * Off unless true.
+   */
+  teams?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
@@ -513,6 +521,7 @@ export class LiveBattle {
     if (opts.bocage) sim.bocage = true;
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
+    if (opts.teams === true) sim.teamsRule = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;

@@ -4,7 +4,13 @@
 // of infantry, mountain troops or lorried infantry gives a small share of itself to a machine-gun and a mortar
 // battalion of its own. Nothing is added to a side: its shares and its men add up to what they did. Their ids are
 // their own, so the campaign's bill passes over them. Off, the ticket is the campaign's own, untouched.
-import { describe, expect, it } from 'vitest';
+//
+// And the rule that rides on the same switch (sim.teamsRule; the design director's ruling of 25 November 17:52Z on
+// the ground thread's own-teams-causes-1125.md): a team's nerve multiplier weighs its own harm only, where before
+// every striker's was added and the sum weighed all the harm on the block that tick. A battle with no team block is
+// the same on or off; off, every battle is as it was. (The staff's half of the ruling, ai.ts defend, is the tank and
+// soldier AI thread's line and test.)
+import { describe, expect, it, vi } from 'vitest';
 import { liveTicket } from '../src/battle/land/live';
 import { OWN_TEAM_ID, OWN_TEAM_SHARE, isOwnTeam, ownTeams, ownTeamsLook } from '../src/battle/land/own-teams';
 import { PIECES, ticketOf } from '../src/battle/land/pieces';
@@ -132,5 +138,79 @@ describe('every infantry force with its own machine gun and mortar teams', () =>
     for (const f of [...t.att.forces, ...t.def.forces]) expect(named.has(f.corps)).toBe(true);
     for (const id of ids) expect(named.has(id)).toBe(true);
     for (const s of ['att', 'def'] as const) { expect(over.lost[s]).toBeGreaterThanOrEqual(0); expect(over.lost[s]).toBeLessThanOrEqual(1); }
+  }, 120_000);
+});
+
+describe("support teams in battle: a team's fire shakes by its own harm (sim.teamsRule)", () => {
+  type Blow = { dmg: number; nerve: number };
+  type U = { id: number; team?: string };
+  const fought = (t: Ticket, rule: boolean): { R: number; t: number; lost: Record<'att' | 'def', number>; winner: string } => {
+    const sim = new LandBattle(t);
+    sim.teamsRule = rule;
+    let guard = 0;
+    while (!sim.over && guard++ < 2_000_000) sim.step();
+    return { R: sim.over!.R, t: sim.t, lost: sim.over!.lost, winner: sim.over!.winner };
+  };
+
+  it('is off unless the bridge turns it on, for a set piece and a campaign battle alike', () => {
+    const t = campaign('normandy-1944');
+    expect(new LandBattle(t).teamsRule).toBe(false);
+    expect(liveTicket(t, { me: null }).sim.teamsRule).toBe(false);
+    expect(liveTicket(t, { me: null, teams: true }).sim.teamsRule).toBe(true);
+    expect(liveTicket(ticketOf(PIECES[0], 11, null), { me: null, teams: true }, PIECES[0].key).sim.teamsRule).toBe(true);
+  });
+
+  it('changes nothing in a battle with no team block on the field', () => {
+    const t = campaign('prokhorovka-1943', 7);
+    expect([...t.att.forces, ...t.def.forces].some((f) => f.kind === 'mg' || f.kind === 'mor')).toBe(false);
+    expect(fought(t, true)).toEqual(fought(t, false));
+  }, 120_000);
+
+  it("weighs each team's multiplier by its own harm, the line's and the guns' added as they were", () => {
+    for (const rule of [false, true]) {
+      // (both are private: reached through the prototype, as the fight calls them)
+      const proto = LandBattle.prototype as unknown as { blow: (u: U, t: U) => Blow; suffer: (t: U, dmg: number, mul: number, from?: [U, number][], blind?: boolean, bare?: boolean) => void };
+      const blow = vi.spyOn(proto, 'blow'), suffer = vi.spyOn(proto, 'suffer');
+      try {
+        const sim = new LandBattle(ownTeams(campaign('normandy-1944', 3)).ticket);
+        sim.teamsRule = rule;
+        let withTeam = 0, mixed = 0, guard = 0;
+        while (!sim.over && mixed < 300 && guard++ < 400_000) {
+          const b0 = blow.mock.calls.length, s0 = suffer.mock.calls.length;
+          sim.step();
+          // this tick's blows, by who struck whom: the nerve multiplier each carried
+          const nerve = new Map<string, number>();
+          for (let i = b0; i < blow.mock.calls.length; i++) {
+            const [u, t] = blow.mock.calls[i];
+            nerve.set(`${u.id}>${t.id}`, (blow.mock.results[i].value as Blow).nerve);
+          }
+          for (let i = s0; i < suffer.mock.calls.length; i++) {
+            const [t, dmg, mul, from, , bare] = suffer.mock.calls[i];
+            // (the tick's blows only: an air strike's harm and kept harm landing name no strikers, or are 'bare')
+            if (!from?.length || bare || !from.every(([u]) => nerve.has(`${u.id}>${t.id}`))) continue;
+            const of = (u: U): number => nerve.get(`${u.id}>${t.id}`)!;
+            const all = from.reduce((a, [u]) => a + of(u), 0);
+            const teams = from.filter(([u]) => u.team), others = from.filter(([u]) => !u.team);
+            if (!teams.length) { expect(mul).toBeCloseTo(all, 9); continue; }
+            withTeam++;
+            if (others.length) mixed++;
+            const teamD = teams.reduce((a, [, d]) => a + d, 0), teamDN = teams.reduce((a, [u, d]) => a + d * of(u), 0);
+            const othersSum = others.reduce((a, [u]) => a + of(u), 0);
+            const want = rule && dmg > 0 ? ((dmg - teamD) * othersSum + teamDN) / dmg : all;
+            expect(mul).toBeCloseTo(want, 9);
+            // on, a team never makes the others' harm cost more nerve than the others' own sum would
+            if (rule && dmg > 0 && others.length) expect(mul).toBeLessThan(all);
+          }
+        }
+        // (the battle did put teams and the line on the same block in the same tick, or this proves nothing)
+        expect(withTeam).toBeGreaterThanOrEqual(mixed);
+        expect(mixed).toBeGreaterThanOrEqual(300);
+      } finally { blow.mockRestore(); suffer.mockRestore(); }
+    }
+  }, 120_000);
+
+  it('is read: with teams on the field, on and off are different battles', () => {
+    const o = ownTeams(campaign('normandy-1944', 3)).ticket;
+    expect(fought(o, true)).not.toEqual(fought(o, false));
   }, 120_000);
 });

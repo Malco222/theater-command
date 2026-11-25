@@ -149,6 +149,12 @@ interface Leg { flight: Flight; owed: Map<number, number>; nerve: Map<number, nu
 
 /** River ground: a block may wade it, never stand in it (b464(5)). */
 const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
+/**
+ * What a block takes in one tick, as step gathers it: the harm, the strikers' nerve multipliers added, who struck it and
+ * how hard, whether every blow was fire on cover. team, teamNerve (support teams in battle, sim.teamsRule): the harm its
+ * teams did it and that harm times each team's own multiplier, kept out of 'nerve' (LandBattle.tally).
+ */
+interface Hurt { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; team: number; teamNerve: number }
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
 /** A block's weight as its army's bar and break count it: the card's part for a corps come up from next door, else its power0. */
@@ -315,6 +321,19 @@ export class LandBattle implements BattleSim<LandUnit> {
    * page's ?relief, the bridge's { relief: true }); off, nothing below is read.
    */
   relief = false;
+  /**
+   * Support teams in battle (release 2, the Battle rules card's "teams"; the design director's ruling of 25 November
+   * 2026, 17:52Z, on the ground thread's own-teams-causes-1125.md). On, wherever team blocks are on the field (a
+   * campaign battle's own or built teams, a set piece's battalions):
+   *   - a team's nerve multiplier (LAND.teams' nerve, by its blow's aspect) weighs its own harm only (step). Off, as
+   *     it was: every striker's multiplier is added and the sum weighs all the harm on the block that tick, so a team
+   *     with 2% of its side's power doubled what everything landing with it cost in nerve; blocks ran early with
+   *     strength left, stopped being worn, and battles ran to the clock. The line's and the guns' are added as fitted,
+   *     and LAND.teams is untouched.
+   *   - the defence's staff never counts a team block firing from far back as a neighbour in a fight (ai.ts defend).
+   * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
+   */
+  teamsRule = false;
   /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
   readonly flanking = new Map<number, { target: number; at: [number, number]; since: number }>();
   /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
@@ -2502,7 +2521,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean }>();
+    const hurt = new Map<number, Hurt>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
@@ -2544,8 +2563,8 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.airLedger[u.side].withheld += raw;
         kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
       }
-      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
-      h.dmg += blow.dmg; h.nerve += blow.nerve;
+      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
+      this.tally(h, u, blow);
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
       h.from.push([u, blow.dmg]);
@@ -2556,6 +2575,9 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
     }
+    // Support teams in battle (teamsRule): what the tick's harm costs in nerve is the others' harm at the others' sum
+    // and each team's at its own, as one multiplier on the whole (suffer takes one). No team struck it: the sum as it was.
+    if (this.teamsRule) for (const h of hurt.values()) if (h.team > 0 && h.dmg > 0) h.nerve = ((h.dmg - h.team) * h.nerve + h.teamNerve) / h.dmg;
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
     if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
     for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind);
@@ -2900,6 +2922,17 @@ export class LandBattle implements BattleSim<LandUnit> {
     return take;
   }
 
+
+  /**
+   * One blow's harm and nerve added to what its target takes this tick (step's hurt; anything else that lands part of
+   * a blow on a block that tick must come through here too). The strikers' nerve multipliers are added, as fitted.
+   * Support teams in battle (teamsRule): a team's is not added to the others'; it is kept with its own harm (team,
+   * teamNerve), and step makes the one multiplier of them once every blow is in.
+   */
+  private tally(h: Hurt, u: LandUnit, blow: { dmg: number; nerve: number }): void {
+    h.dmg += blow.dmg;
+    if (this.teamsRule && u.team) { h.team += blow.dmg; h.teamNerve += blow.dmg * blow.nerve; } else h.nerve += blow.nerve;
+  }
   /**
    * One block's blow on another this tick: its weight (dmg), its nerve's multiplier, whether it lands on the front and
    * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across

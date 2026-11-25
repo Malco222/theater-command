@@ -78,7 +78,7 @@ function need(): LiveBattle {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
       hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
       cutters: opts?.cutters !== false, smoke: opts?.smoke !== false, bocage: !!opts?.bocage,
-      phones: opts?.phones !== false, bearers: opts?.bearers !== false, patrol: opts?.patrol !== false, captured: opts?.captured !== false, worn: opts?.worn !== false, mud: opts?.mud !== false, scars: opts?.scars !== false, blast: opts?.blast === true, escort: opts?.escort === true, mech: opts?.mech === true, spg: opts?.spg === true, td: opts?.td === true, cars: opts?.cars === true, aa: opts?.aa === true, light: opts?.light === true, japan: opts?.japan === true,
+      phones: opts?.phones !== false, bearers: opts?.bearers !== false, teams: (opts as { teams?: boolean } | null | undefined)?.teams === true, patrol: opts?.patrol !== false, captured: opts?.captured !== false, worn: opts?.worn !== false, mud: opts?.mud !== false, scars: opts?.scars !== false, blast: opts?.blast === true, escort: opts?.escort === true, mech: opts?.mech === true, spg: opts?.spg === true, td: opts?.td === true, cars: opts?.cars === true, aa: opts?.aa === true, light: opts?.light === true, japan: opts?.japan === true,
     });
     return live.header();
   },
@@ -93,7 +93,9 @@ function need(): LiveBattle {
     opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; blast?: boolean; escort?: boolean; mech?: boolean; spg?: boolean; td?: boolean; cars?: boolean; aa?: boolean; light?: boolean; japan?: boolean; island?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
   ) {
     // (release 2, the Battle rules card's "teams", off unless true: every infantry force of a campaign battle with its
-    // own machine-gun and mortar battalions, cut from its own share and its own men: src/battle/land/own-teams.ts)
+    // own machine-gun and mortar battalions, cut from its own share and its own men: src/battle/land/own-teams.ts.
+    // The same switch turns on the rules' sim.teamsRule, here and in landStart: a team's fire shakes by its own harm,
+    // and a defence's line stays in its places while its teams fire; the design director, 25 November 17:52Z)
     if ((opts as { teams?: boolean } | null | undefined)?.teams === true) ticketOrLook = ownTeamsLook(ticketOrLook);
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
@@ -103,7 +105,7 @@ function need(): LiveBattle {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
       cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
-      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, blast: o.blast === true, escort: o.escort === true, mech: o.mech === true, spg: o.spg === true, td: o.td === true, cars: o.cars === true, aa: o.aa === true, light: o.light === true, japan: o.japan === true, island: o.island === true,
+      phones: o.phones !== false, bearers: o.bearers !== false, teams: (o as { teams?: boolean }).teams === true, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, blast: o.blast === true, escort: o.escort === true, mech: o.mech === true, spg: o.spg === true, td: o.td === true, cars: o.cars === true, aa: o.aa === true, light: o.light === true, japan: o.japan === true, island: o.island === true,
       fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
     });
     return live.header();
