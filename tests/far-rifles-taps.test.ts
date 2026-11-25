@@ -243,9 +243,18 @@ describe('the draw at the orders', () => {
     for (const place of ['Chungking', 'Changteh', 'Kweiyang']) g.byName[place].ctrl = 'JAP';
     expect(riflesView(g, 'CHN')!.inflow.total).toBe(0);
     expect(offer('corps:inf').why).toBe('Not rifles enough: this corps takes 64,000 and 21,000 are in store.');
+    // A cadre waiting (2 divisions): its offer says the same, for its own divisions, and carries its rifles whole.
+    const capName = g.regions[n.capital].name;
+    const ka = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), kc = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
+    ka.str = kc.str = 0.2;
+    expect(foldCorps(g, ka, kc)).toBe(true);
+    expect(offer(`cadre:${kc.id}`).rifles).toBe(2 * PER);
+    expect(offer(`cadre:${kc.id}`).why).toBe(noRifles(g, 'CHN', 2));
+    expect(offer(`cadre:${kc.id}`).why).toBe('Not rifles enough: this corps takes 43,000 and 21,000 are in store.');
     // A store that holds the corps: no refusal.
     store(g, 3);
     expect(offer('corps:inf').why).toBeNull();
+    expect(offer(`cadre:${kc.id}`).why).toBeNull();
     void n;
     // Japan's offers carry no rifles, and none of its reasons is the store's.
     for (const o of offers(g, 'JAP', g.nations.JAP.capital)) {
@@ -343,6 +352,16 @@ describe('the carve', () => {
     expect(offers(g, 'UK', g.nations.UK.capital).find((o) => o.key === 'elite')!.cost).toBe(elite);
     techOf(g, 'JAP')!.done.push('airborne');
     expect(offers(g, 'JAP', g.nations.JAP.capital).find((o) => o.key === 'para')!.cost).toBe(para);
+    expect(offers(g, 'JAP', g.nations.JAP.capital).find((o) => o.key === 'para')!.rifles).toBe(p.divs * 15000);
+    expect(offers(g, 'UK', g.nations.UK.capital).find((o) => o.key === 'elite')!.rifles).toBe(u.divs * 15000);
+    // Short of the elite's rifles, its offer says so in the store's words.
+    store(g, u.divs - 0.01, 'UK');
+    expect(offers(g, 'UK', g.nations.UK.capital).find((o) => o.key === 'elite')!.why).toBe(noRifles(g, 'UK', u.divs));
+    expect(noRifles(g, 'UK', u.divs)).toMatch(/^Not rifles enough/);
+    store(g, 10, 'UK');
+    // The order's money test reads the carved price: a treasury of exactly it is enough.
+    expect(elite).toBeLessThan(u.cost);
+    g.nations.UK.pp = elite;
     const ppU = g.nations.UK.pp, ppJ = g.nations.JAP.pp;
     const be = orderElite(g, 'UK', g.nations.UK.capital)!, bp = orderPara(g, 'JAP', g.nations.JAP.capital)!;
     expect([be.cost, be.rifles, r1(ppU - g.nations.UK.pp)]).toEqual([elite, u.divs, elite]);
@@ -357,6 +376,24 @@ describe('the carve', () => {
     // And with no row the same orders keep their list prices.
     delete RIFLES.nations.JAP;
     expect(cadreTerms(g, 'JAP', cp).cost).toBe(r1(paraList * MANPOWER.fold.price));
+  });
+  it("8. (laid rows, the staff's bank) a binding nation's staff orders its elite with the carved price and the reserve in hand", () => {
+    lay('UK', { perDiv: 15000, refit: 0.05, binds: true });
+    const g = grand();
+    men(g, 'UK');
+    store(g, 100, 'UK');
+    // (Britain's staff waits on history's programmes in its first months: the test stands later, as test 7's does.)
+    g.turn = 40;
+    const u = eliteOf('UK')!, elite = carved(g, 'UK', u.cost, u.divs);
+    expect(elite + PRODUCTION.aiReserve).toBeLessThan(Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]));
+    g.nations.UK.pp = elite + PRODUCTION.aiReserve - 0.01;
+    aiProduction(g, 'UK');
+    expect(corpsOn(g, 'UK').some((b) => b.elite)).toBe(false);
+    // (The free infantry it ordered instead holds the staff's places: they are cleared.)
+    g.nations.UK.queue.length = 0;
+    g.nations.UK.pp = elite + PRODUCTION.aiReserve;
+    aiProduction(g, 'UK');
+    expect(corpsOn(g, 'UK').some((b) => b.elite)).toBe(true);
   });
 });
 
