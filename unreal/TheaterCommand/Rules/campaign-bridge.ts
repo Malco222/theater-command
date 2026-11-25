@@ -1213,17 +1213,16 @@ const guardLeft = (s: Game, id: number): number => 1 - Math.max(0, Math.min(100,
 // (Release 2, the art director's read of run 2, 22 November: a town held by its own guard alone says nothing new, and
 // 70 such plates buried the ones that matter. It wears its "guard" plate only inside the enemy's reach this month,
 // where it is news; elsewhere the plate is quiet, and "guard" stays in the hover card and the panel. The enemy's
-// reach is the release 1 reach of the armies the player can see; asked once while nothing that moves it has changed.)
-let guardReachKey = '';
-let guardReachWas = new Set<number>();
+// reach is the release 1 reach of the armies the player can see.)
+// (The rules builder, 25 November 2026: the answer is kept only inside one picture. It was kept between pictures while
+// the enemy's corps and the provinces' holders were the same, but the reach also turns on the player's own corps, the
+// friends, supply, bridges, mines and the enemy's full moves, so a plate could stay quiet beside an enemy who had just
+// come up. A picture is drawn from one state of the war, so inside one the answer cannot go stale; outside a picture it
+// is worked out afresh. It is asked once a picture today, by the town plates.)
 function guardReach(s: Game, me: string): Set<number> {
-  const key = `${s.turn}:${me}:${s.corps.filter((c) => !c.dead && c.nat !== me).map((c) => `${c.id}.${c.reg}.${c.ap}`).join(',')}:${s.regions.map((r) => r.ctrl).join(',')}`;
-  if (key === guardReachKey) return guardReachWas;
-  let danger = new Set<number>();
-  try { danger = enemyReach(s, (id) => s.regions[id]?.ctrl === me); } catch { danger = new Set<number>(); }
-  guardReachKey = key;
-  guardReachWas = danger;
-  return danger;
+  return inPicture(s, `guard:${me}`, () => {
+    try { return enemyReach(s, (id) => s.regions[id]?.ctrl === me); } catch { return new Set<number>(); }
+  });
 }
 
 /** Every town the player may know something of, with its plate's marks and a line of words for each mark. */
