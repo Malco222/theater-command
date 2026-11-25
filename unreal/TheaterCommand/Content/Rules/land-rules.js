@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cf3d7718 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 13faf36a 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12513,6 +12513,10 @@
           ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {},
           ...u.joined !== void 0 ? { joins: true } : {},
           ...took ? { captured: took.from } : {},
+          // (release 2, the "japan" row: a Japanese block's vehicles in her own coat where the model is one she shares with
+          // other armies and its file has no Japanese paint, the field gun, the lorry, the light tank; the 3D game keeps
+          // the coat by this name. Looks only, a campaign battle's only: a set piece is as the historian drew it.)
+          ...!piece && opts.japan === true && u.nat === "JAP" ? { coat: "japan" } : {},
           // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
           // read before the battle opens)
           ...((mls) => mls.length ? { mls } : {})(this.drill.modelsFor(u))

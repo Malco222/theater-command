@@ -365,7 +365,9 @@ export interface LiveOpts {
    * Japan's own tank and field gun (release 2, looks only; the Japan/Pacific thread's finding, 25 November: Japan
    * fought in a borrowed light tank and a German howitzer). On, a Japanese armoured block is drawn as the Type 97 and
    * a Japanese battery as the 75 mm field gun, the models the fight's own table already names for her
-   * (shells.ts). A campaign battle's only; off unless true (the art director's stills and a Mac reading first).
+   * (shells.ts), and every Japanese block is marked for her own coat (blocks[].coat "japan"), which the 3D game puts
+   * on the models she shares with other armies: the gun, the lorry, the light tank. A campaign battle's only; off
+   * unless true (the art director's stills and a Mac reading first).
    */
   japan?: boolean;
   /**
@@ -530,6 +532,10 @@ export class LiveBattle {
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
         ...(u.joined !== undefined ? { joins: true } : {}), ...(took ? { captured: took.from } : {}),
+        // (release 2, the "japan" row: a Japanese block's vehicles in her own coat where the model is one she shares with
+        // other armies and its file has no Japanese paint, the field gun, the lorry, the light tank; the 3D game keeps
+        // the coat by this name. Looks only, a campaign battle's only: a set piece is as the historian drew it.)
+        ...(!piece && opts.japan === true && u.nat === 'JAP' ? { coat: 'japan' } : {}),
         // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
         // read before the battle opens)
         ...((mls) => (mls.length ? { mls } : {}))(this.drill.modelsFor(u)),

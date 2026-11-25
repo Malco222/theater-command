@@ -236,6 +236,8 @@ namespace
 		// period marking for the month (the British flash, then star); bClose looks at the mark that faces the camera most,
 		// close enough that it fills nearly half the picture's height.
 		bool bMarks = false, bClose = false;
+		// A coat the rules picked for her army (LandKit's Dress::Coat, release 2: "japan"); empty: as her owner has her.
+		std::string Coat;
 		int CloseAmong = 99; // (the close look picks among her first this many marks: the Tiger's hull crosses, not her turret's)
 		int Year = 1944, Month = 7;
 		// A farmhouse's panel instead (release 2, LandHouse, LAND_KIT_HOUSE=1): its damage (0 whole to 3 a shell), its
@@ -676,7 +678,7 @@ int main(int argc, char** argv)
 		// (the month belongs in the key whatever the panel shows, not only for a marks panel: a model whose file gives
 		// its army's face by month (the Type 97's khaki, then two camouflages) is a different model in each, and two
 		// panels a year apart were being painted from whichever was loaded first)
-		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "");
+		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat);
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -691,6 +693,7 @@ int main(int argc, char** argv)
 			D.bMarks = For.bMarks;
 			D.Year = For.Year;
 			D.Month = For.Month;
+			D.Coat = For.Coat;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -1182,17 +1185,25 @@ int main(int argc, char** argv)
 		int Year, Month;
 		double Turret, Gun, Hatches, FireAge, DeathAge, Bearing, Up, Soot;
 		bool bBrewUp;
+		const char* Coat;
 		const char* Caption;
 	};
+	// (the gun, the light tank and the lorry are shared with other armies and have no Japanese coat in their files: the
+	// rules send one for her whole army with the row on, blocks[].coat "japan", and the game keeps it with its other
+	// owners' coats)
 	const JapanLook JapanLooks[] = {
-		{ "jap_type97_a", "Type97", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "Type 97 Chi-Ha, May 1942: turret 40\xC2\xB0 off, hatches open" },
-		{ "jap_type97_b", "Type97", "JAP", 1943, 8, 0.0, 6.0, 0.0, 0.08, -1.0, 72.0, 15.0, 0.0, false, "Type 97, August 1943: her later coat, just after a shot" },
-		{ "jap_type97_c", "Type97", "JAP", 1942, 5, -14.0, -6.0, 0.0, -1.0, 3.5, 36.0, 18.0, 0.35, false, "Type 97: knocked out, hatches thrown, gun drooped" },
-		{ "jap_type97_d", "Type97", "JAP", 1944, 3, 0.0, 0.0, 0.0, -1.0, 4.5, -48.0, 20.0, 1.0, true, "Type 97: brewed up and burnt out" },
-		{ "jap_light_was", "LightTank", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "until now: the generic light tank in Japanese paint" },
-		{ "jap_gun75", "Gun75", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "75 mm field gun, Japanese: deployed, laid at 35\xC2\xB0" },
-		{ "jap_gun75_fire", "Gun75", "JAP", 1942, 5, 0.0, 18.0, 0.0, 0.06, -1.0, 48.0, 12.0, 0.0, false, "the 75 mm gun just after a shot, the barrel back" },
-		{ "jap_lefh_was", "leFH18", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "until now: the German 10.5 cm leFH 18 in Japanese paint" },
+		{ "jap_type97_a", "Type97", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "", "Type 97 Chi-Ha, May 1942: turret 40\xC2\xB0 off, hatches open" },
+		{ "jap_type97_b", "Type97", "JAP", 1943, 8, 0.0, 6.0, 0.0, 0.08, -1.0, 72.0, 15.0, 0.0, false, "", "Type 97, August 1943: her later coat, just after a shot" },
+		{ "jap_type97_c", "Type97", "JAP", 1942, 5, -14.0, -6.0, 0.0, -1.0, 3.5, 36.0, 18.0, 0.35, false, "", "Type 97: knocked out, hatches thrown, gun drooped" },
+		{ "jap_type97_d", "Type97", "JAP", 1944, 3, 0.0, 0.0, 0.0, -1.0, 4.5, -48.0, 20.0, 1.0, true, "", "Type 97: brewed up and burnt out" },
+		{ "jap_gun75", "Gun75", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "japan", "75 mm field gun in Japan's coat: deployed, laid at 35\xC2\xB0" },
+		{ "jap_gun75_fire", "Gun75", "JAP", 1942, 5, 0.0, 18.0, 0.0, 0.06, -1.0, 48.0, 12.0, 0.0, false, "japan", "the 75 mm gun just after a shot, the barrel back" },
+		{ "jap_light", "LightTank", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "japan", "the light tank that still plays her light blocks, in Japan's coat" },
+		{ "jap_lorry", "Truck", "JAP", 1942, 5, 0.0, 0.0, 0.0, -1.0, -1.0, 52.0, 16.0, 0.0, false, "japan", "the lorry her infantry ride, in Japan's coat" },
+		{ "jap_type97_side", "Type97", "JAP", 1942, 5, 0.0, 2.0, 0.0, -1.0, -1.0, 90.0, 5.0, 0.0, false, "", "Type 97 from the side, May 1942: her road wheels' rubber tyres" },
+		{ "jap_type97_side43", "Type97", "JAP", 1943, 8, 0.0, 2.0, 0.0, -1.0, -1.0, -90.0, 7.0, 0.0, false, "", "her other side, August 1943: green, earth and light brown" },
+		{ "jap_gun75_was", "Gun75", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "", "round 1: the same gun in her maker's olive" },
+		{ "jap_light_was", "LightTank", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "", "round 1: the light tank as it was" },
 	};
 	for (const JapanLook& K : JapanLooks)
 	{
@@ -1215,6 +1226,7 @@ int main(int argc, char** argv)
 		P.CameraBearing = K.Bearing;
 		P.CameraUp = K.Up;
 		P.SootShare = K.Soot;
+		P.Coat = K.Coat;
 		P.Caption = K.Caption;
 		Panels.push_back(P);
 	}

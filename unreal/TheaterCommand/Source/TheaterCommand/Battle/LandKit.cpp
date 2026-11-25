@@ -979,6 +979,18 @@ namespace LandKit
 		/** The nation's coat for a model that has none of its own (the lorry stands in for every army's). */
 		bool NationCoat(const Dress& D, std::string& OutName, std::string& OutUpper, std::string& OutUpper2, std::string& OutShade)
 		{
+			if (D.Coat == "japan")
+			{
+				// A coat the rules picked (release 2, on its switch): Japan's khaki broken with earth brown, the family
+				// her own Type 97 wears, a step darker (the art director, 25 November: the gun and the stand-ins beside
+				// her read as a second army, a pea green by a straw khaki). The second colour goes where the file's
+				// own blotches are, so the coat is broken and not one flat tone.
+				OutName = "japan";
+				OutUpper = "796C47";
+				OutUpper2 = "615236";
+				OutShade = "463E28";
+				return true;
+			}
 			if (D.Terrain == "desert")
 			{
 				// On a desert field the lorry wears her owner's desert coat, as the tanks' files pick theirs there
@@ -2284,17 +2296,6 @@ namespace LandKit
 			if (Choice.empty())
 			{
 				Choice = ChoiceIn(Row, "paint");
-			}
-			// Then the army she serves (swaps.paint.by_nation), for a model several armies share: Japan's khaki and
-			// earth on the field gun that otherwise stands in for everyone in its maker's olive. A nation the table
-			// does not name, or a coat the file does not have, falls through to the default as before.
-			if (Choice.empty() && PaintSwap["by_nation"].IsObject())
-			{
-				Choice = PaintSwap["by_nation"][Nation].Str("");
-				if (!Choice.empty() && !PaintSwap["choices"][Choice].IsObject())
-				{
-					Choice.clear();
-				}
 			}
 			if (Choice.empty() && Nation == "GER" && PaintSwap["choices"]["yellow"].IsObject())
 			{
@@ -6229,6 +6230,7 @@ namespace LandKit
 			B.Model = V["model"].Str("");
 			B.Cal = V["cal"].Str("");
 			B.Captured = V["captured"].Str("");
+			B.Coat = V["coat"].Str("");
 			const Json::Value Mls = V["mls"];
 			for (size_t J = 0; Mls.IsArray() && J < Mls.Count(); ++J)
 			{
@@ -6316,7 +6318,7 @@ namespace LandKit
 		}
 		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
 		const std::string Captured = Role != "lorry" && Carrier.empty() && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
-		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
+		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured) + (B.Coat.empty() ? "" : "|coat " + B.Coat);
 		for (const auto& Sw : Choose)
 		{
 			OutKey += "|" + Sw.first + "=" + Sw.second; // (her swaps the rules picked: a look of her own)
@@ -6370,6 +6372,7 @@ namespace LandKit
 		D.Month = Month;
 		D.Terrain = Terrain;
 		D.Captured = Captured;
+		D.Coat = B.Coat;
 		D.Choose = Choose;
 		D.bMarks = bMarks;
 		std::string Why;

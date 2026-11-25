@@ -16,7 +16,7 @@ function ticket(key: string, side: 'att' | 'def', nat: string, date?: string): F
   return { ...t, [side]: army, ...(date ? { date } : {}) } as unknown as FieldTicket<never>;
 }
 
-interface Block { nat: string; kind: string; team?: string; model?: string | null }
+interface Block { nat: string; kind: string; team?: string; model?: string | null; coat?: string }
 
 function models(t: FieldTicket<never>, japan: boolean): Block[] {
   const L = liveTicket(t as never, { me: 'att', japan });
@@ -58,6 +58,21 @@ describe("Japan's own tank and field gun (looks only)", () => {
     expect(theirs(on)).toEqual(theirs(off));
   });
 
+  it("marks every Japanese block for her own coat, and no one else's, only when it is on", () => {
+    // (the gun, the lorry and the light tank are models she shares with other armies; the 3D game keeps a coat named
+    // "japan" for them, and puts it on where a block says so)
+    const t = ticket('normandy-1944', 'def', 'JAP');
+    const off = models(t, false), on = models(t, true);
+    expect(off.some((b) => b.coat !== undefined)).toBe(false);
+    const hers = on.filter((b) => b.nat === 'JAP');
+    expect(hers.length).toBeGreaterThan(0);
+    expect(new Set(hers.map((b) => b.coat))).toEqual(new Set(['japan']));
+    expect(on.filter((b) => b.nat !== 'JAP').some((b) => b.coat !== undefined)).toBe(false);
+    // and nothing else about any block moves but its model and that word
+    const rest = (b: Block[]): string => JSON.stringify(b.map((x) => ({ ...x, model: undefined, coat: undefined })));
+    expect(rest(on)).toBe(rest(off));
+  });
+
   it('is looks only: the battle fought is the same', () => {
     const t = ticket('normandy-1944', 'def', 'JAP');
     const fight = (japan: boolean): string => {
@@ -76,5 +91,6 @@ describe("Japan's own tank and field gun (looks only)", () => {
     const L = liveTicket(t as never, { me: 'att', japan: true }, 'normandy-1944');
     const blocks = (L.header() as unknown as { blocks: Block[] }).blocks;
     expect(blocks.some((b) => b.model === 'Type97' || b.model === 'Gun75')).toBe(false);
+    expect(blocks.some((b) => b.coat !== undefined)).toBe(false);
   });
 });

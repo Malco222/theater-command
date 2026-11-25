@@ -295,6 +295,12 @@ namespace LandKit
 		 * so (blocks[].captured) and the look is on; she wears her captor's (Nation's) coat over her maker's, the old
 		 * showing at the chipped edges and where the brush missed. Empty: her own. */
 		std::string Captured;
+		/** A coat the rules pick for her whole army (release 2, behind its switch; the recording's blocks[].coat): the
+		 * name of one the game keeps for a model several armies share (NationCoat), put on in place of what her owner
+		 * would otherwise get there. "japan": Japan's khaki broken with earth brown, on the field gun, the lorry and
+		 * the light tank that stand in for her, so they are one army with her own Type 97. A model with coats of its
+		 * own in its file is let be. Empty, or a name the game does not keep: as before. */
+		std::string Coat;
 		/** Swaps the rules pick for her (release 2, the track's "sw": a motorcycle's sidecar, a staff jeep's gun put
 		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
 		 * that choice; any other is let be. */
@@ -665,6 +671,7 @@ namespace LandKit
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
 		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
+		std::string Coat;       // a coat the rules picked for her army (the recording's "coat", release 2: "japan"); empty: as before
 		std::vector<std::string> Extra; // models her vehicles are drawn with besides her own (the header's "mls", release 2): read before her men come; "Jeep|mg=off": with those swaps
 	};
 
