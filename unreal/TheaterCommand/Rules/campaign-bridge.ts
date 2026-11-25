@@ -1577,13 +1577,15 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
     const o = see.own ? arsenalOffers(s, id).find((x) => x.key === 'work:aa' && x.at === id) : undefined;
     const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : '';
     // (The UI director, 25 Nov 2026 19:10Z, section B: the built guns first, the light guns every town has named apart.
-    // heavy and light are the built guns, 0 where none are built; base the standing light guns; words her sentence.)
+    // words is her sentence and base the standing light guns: the 3D shelf is to draw words. Until its C++ reads words
+    // it prints light as a number ("N light guns, no heavy ones"), so light stays what it was, the larger of the built
+    // light guns and the standing ones: a bare town says its 60, never 0. heavy is the built heavy guns, as it was.)
     const base = standingGuns(), n = (x: number): string => x.toLocaleString('en-US');
     const words = guns.all
       ? `About ${n(guns.all)} guns built round ${townName(r)}, ${n(guns.heavy)} of them heavy, and the ${n(base)} light guns every town has.`
       : `Only the ${n(base)} light guns every town has.`;
     return {
-      level, heavy: guns.heavy, light: guns.light, base, words, stop: Math.round(gunsStop(level) * 100), going,
+      level, heavy: guns.heavy, light: Math.max(base, guns.light), base, words, stop: Math.round(gunsStop(level) * 100), going,
       fighters, watch: ours, foe: foe ? s.nations[foe]?.adj ?? foe : '',
       sky: !sky ? '' : sky === me || allied(s, sky, me) ? 'ours' : 'theirs', skyBy: sky ? s.nations[sky]?.adj ?? sky : '',
       add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
