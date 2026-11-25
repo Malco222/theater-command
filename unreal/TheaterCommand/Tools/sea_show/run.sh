@@ -18,7 +18,8 @@ $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 # Italian flying boat on a British boat, June 1942, so the aircraft-on-a-boat check is run every time, not only when asked;
 # and the real nights: the naval rules' wolf pack against a convoy (D2), fought by the computer on both sides and recorded
 # in the scene's own names (naval-battles/wolfpack-r2/recordings: September 1940, March 1943, January 1944; each a 720 s
-# window of its night on the night's own clock), so every change is played against the battle's own convoy nights)
+# window of its night on the night's own clock), so every change is played against the battle's own convoy nights; and the
+# torpedo words' stand-in, two-lines with the "Friendly torpedoes" fields written in, stand-ins/torpedo_words.py)
 # (a checkout without the recordings plays the rest: a glob that matches nothing drops out, never a path that is not there)
 shopt -s nullglob
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/SeaBattles/*.json "$HERE"/stand-ins/*.json "$HERE"/recordings/*.json; fi
@@ -38,5 +39,13 @@ $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
   "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/sea_under_test"
 "$OUT/sea_under_test" "$SRC" "$@" || STATUS=1
+# The torpedo words (Battle/SeaWordsCore; the naval rules behind their "Friendly torpedoes" switch): every word string for
+# string, then the same recordings through the show, the tags held to the fields the views set (none on any but the
+# stand-in two-lines-torpedoes, stand-ins/torpedo_words.py, until the naval re-recordings) (Tools/sea_show/sea_words_test.cpp).
+$CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/sea_words_test.cpp" "$SRC/Battle/SeaWordsCore.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" \
+  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/sea_words_test"
+"$OUT/sea_words_test" "$@" || STATUS=1
 echo "tracks in $OUT"
 exit $STATUS

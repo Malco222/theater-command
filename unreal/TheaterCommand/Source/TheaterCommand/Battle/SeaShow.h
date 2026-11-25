@@ -147,6 +147,15 @@ namespace SeaShow
 		double KeelNext = -1.0;
 		bool bScope = false;
 		int ConvoyColumn = -1;
+		/** The torpedo words' fields (the naval rules behind their "Friendly torpedoes" switch, 25 November; Battle/SeaWordsCore
+		 * words them): the own piece in its line of fire it holds its salvo for (heldFor, -1 none) and that piece as the log
+		 * names it; the own piece whose running salvo it turns clear of (clearFrom, -1 none), the battle second that salvo
+		 * lands and the launcher as the log names it; under an order of the player's own (ordered). As each view says (none
+		 * without the switch); the show itself never reads them. */
+		int HeldFor = -1, ClearFrom = -1;
+		std::string HeldForName, ClearFromName;
+		double ClearUntil = -1.0;
+		bool bOrdered = false;
 		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
 		 * running in on her now (heard, their pieces; bHeard once a view has said it, and then it stands as last told), and
 		 * the enemy piece her deck gun is on while she is up (gun, -1 none: as each view says). An escort: the piece its echo
@@ -766,6 +775,13 @@ namespace SeaShow
 		double WindFrom() const { return WindFromR; }
 		/** A piece's column as shown now: its middle and its leader's heading; false where there is none afloat. */
 		bool PieceMiddle(int PieceId, Vec& OutAt, double& OutFace) const;
+		/** A piece's leading ship as shown now (the head of its column, where the torpedo words' tag stands): her key, -1 where
+		 * it has none in its line. */
+		int LeaderOf(int PieceId) const
+		{
+			const auto It = Lines.find(PieceId);
+			return It == Lines.end() || It->second.Line.empty() ? -1 : It->second.Line.front();
+		}
 		/** A ship as shown now, by her key. */
 		const ShipOut* Ship(int Key) const;
 		/** The pieces as the battle has them now (interpolated), for labels and the camera. */

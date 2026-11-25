@@ -6,6 +6,7 @@
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaSailors.h"
 #include "Battle/SeaShow.h"
+#include "Battle/SeaWordsCore.h"
 #include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -5996,9 +5997,12 @@ void ASeaBattle::AimEye()
 	const double WantCut = Shots.IsValidIndex(Want) ? Shots[Want].At - SeaParts::CutBefore : S.EndT + 1e9;
 	const int32 Standing = Under ? Under->StandsIn(S.BattleT, WantCut, !ShotFolder.IsEmpty()) : INDEX_NONE;
 	bool bUnderEye = Standing != INDEX_NONE && Under->EyeFor(Standing, S.Show, S.BattleT, From, To, Lens);
+	// (the torpedo words: the ship the eye is on, its shot's subject while that shot's own eye is used)
+	EyeSubject = !bUnderEye && Shots.IsValidIndex(Want) ? Shots[Want].Subject : -1;
 	if (!bUnderEye && (!Shots.IsValidIndex(Want) || !ShotEye(Shots[Want], From, To, Lens)))
 	{
 		ShotEye(Whole, From, To, Lens);
+		EyeSubject = -1;
 	}
 	// (the under shots of a picture run go through ShotEye: its eye is under the water too)
 	bUnderEye = bUnderEye || (Shots.IsValidIndex(Want) && Shots[Want].Kind == ESeaShot::Under && From.Z < 0.0);
@@ -6464,6 +6468,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	RunTrails();
 	DrawMarks();
 	AimEye();
+	PlaceTorpedoWords(); // (the torpedo words over the eye just aimed: Battle/SeaWordsCore)
 	// U1 hook (under water): the water round the eye once it is under the sea's face (its murk and light, the silt, the
 	// charges sinking, the sounds) and the U key; through the face, the lamps said again this same frame.
 	if (Under)
@@ -6734,6 +6739,85 @@ bool ASeaBattle::GetBar(double& OutKnot, UTexture2D*& OutMine, UTexture2D*& OutT
 	OutMine = MyFlag.Get();
 	OutTheirs = TheirFlag.Get();
 	return true;
+}
+
+bool ASeaBattle::GetTorpedoWords(TArray<FTorpedoTag>& OutTags, FString& OutLine) const
+{
+	if (!bBegun || !State.IsValid())
+	{
+		return false;
+	}
+	OutTags = TorpedoTags;
+	OutLine = TorpedoLine;
+	return OutTags.Num() > 0 || !OutLine.IsEmpty();
+}
+
+void ASeaBattle::PlaceTorpedoWords()
+{
+	TorpedoTags.Reset();
+	TorpedoLine.Reset();
+	// (none under the sea's face, U1: the words are the ships' on the surface)
+	if (!State.IsValid() || !Eye || EyeAt.Z < 0.0 || State->Rec.Views.empty())
+	{
+		return;
+	}
+	const FSeaBattleState& S = *State;
+	// The words for the moment shown (Battle/SeaWordsCore): the player's side as the scene takes it (the first view's "me",
+	// whatever -TheaterSeaShowAll draws), the camera's subject by her piece, the line that piece's own or none.
+	const SeaShow::ShipOut* Subject = EyeSubject >= 0 ? S.Show.Ship(EyeSubject) : nullptr;
+	const int32 SubjectPiece = Subject ? Subject->Piece : EyeSubject >= 0 ? EyeSubject / 64 : -1;
+	const int32 Mine = SeaFeed::SideOf(S.Rec.Views.front().Head.Me);
+	const SeaWords::Words Said = SeaWords::Write(S.Show.Pieces(), Mine, SubjectPiece, S.Show.Shown());
+	TorpedoLine = SeaParts::Wide(Said.Line);
+	if (Said.Tags.empty())
+	{
+		return;
+	}
+	// Each tag over the top of its piece's leading ship, put on the screen through the eye AimEye has just set (this frame's
+	// eye, not the camera manager's last), its lens across the screen's width (the eye keeps no aspect of its own:
+	// bConstrainAspectRatio off); none behind the eye or off the screen.
+	int32 ViewW = 0, ViewH = 0;
+	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+	{
+		Controller->GetViewportSize(ViewW, ViewH);
+	}
+	if (ViewW <= 0 || ViewH <= 0)
+	{
+		return;
+	}
+	const FQuat Facing = EyeFacing.Quaternion();
+	const FVector Ahead = Facing.GetForwardVector(), Right = Facing.GetRightVector(), Up = Facing.GetUpVector();
+	const double HalfWide = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(EyeLens, 1.0, 170.0) * 0.5));
+	const double Aspect = static_cast<double>(ViewW) / static_cast<double>(ViewH);
+	for (const SeaWords::Tag& One : Said.Tags)
+	{
+		const int32 LeadKey = S.Show.LeaderOf(One.Piece);
+		const SeaShow::ShipOut* Lead = LeadKey >= 0 ? S.Show.Ship(LeadKey) : nullptr;
+		if (!Lead || !Lead->bShown)
+		{
+			continue;
+		}
+		// (about her masthead: a destroyer's some 19 m, a battleship's some 36; a boat under, over the sea where she lies)
+		const double Top = FMath::Max(Lead->At.Z, 0.0) + Lead->Heave + 6.0 + 0.12 * Lead->Long;
+		const FVector Off = World(Lead->At.X, Lead->At.Y, Top) - EyeAt;
+		const double Deep = FVector::DotProduct(Off, Ahead);
+		if (Deep < UnitsPerMetre)
+		{
+			continue;
+		}
+		const double Across = 0.5 + 0.5 * FVector::DotProduct(Off, Right) / (Deep * HalfWide);
+		const double Down = 0.5 - 0.5 * Aspect * FVector::DotProduct(Off, Up) / (Deep * HalfWide);
+		if (Across < 0.0 || Across > 1.0 || Down < 0.0 || Down > 1.0)
+		{
+			continue;
+		}
+		FTorpedoTag& Placed = TorpedoTags.AddDefaulted_GetRef();
+		Placed.At = FVector2D(Across, Down);
+		Placed.Text = SeaParts::Wide(One.Text);
+		Placed.Deep = Deep;
+		Placed.Piece = One.Piece;
+		Placed.bSubject = SubjectPiece >= 0 && One.Piece == SubjectPiece;
+	}
 }
 
 void ASeaBattle::MoveKnot(double RealDt, bool bAtOnce)
