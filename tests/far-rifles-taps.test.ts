@@ -190,6 +190,14 @@ describe('the draw at the orders', () => {
     expect(stock(g, 'JAP')).toBeCloseTo(0, 12);
     // (Its level is its 'worth' through c.full, which the armed level reads when the drafts come: no flag of its own.)
     expect(`rfa:${c.id}` in g.flags).toBe(false);
+    expect(levelOf(g, c)).toBe(0.1);
+    // Knocked down, its drafts refill it to its worth, never past.
+    men(g, 'JAP');
+    g.nations.JAP.pp = 1000;
+    store(g, 10, 'JAP');
+    c.str = 0.05;
+    for (let t = 0; t < 3; t++) { g.turn++; startPhase(g, 'JAP'); expect(c.str).toBeLessThanOrEqual(0.1 + 1e-12); }
+    expect(c.str).toBeCloseTo(0.1, 9);
   });
 
   it('5. an order taken back in its month returns its rifles and its men', () => {
