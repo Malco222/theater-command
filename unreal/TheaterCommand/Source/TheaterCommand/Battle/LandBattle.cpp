@@ -5930,6 +5930,8 @@ void ALandBattle::HideTheTable()
 	{
 		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying());
 	}
+	// (Release 2, the whole picture: the far shade is lighter under a closed canopy, the jungle; Look/WholeLook.h)
+	WholeLook::FieldLaid(State.IsValid() && State->Field && LandScape::LookOf(State->Field->LookWord()) == LandScape::Look::Jungle);
 	double HazeStart = 0.0, HazeDensity = LookAir.bSet ? LookAir.HazeDensity : 0.0069, HazeFalloff = 0.1, HazeMost = 0.98;
 	LandLook::Asked(TEXT("TheaterLandHaze="), { &HazeStart, &HazeDensity, &HazeFalloff, &HazeMost });
 	HazeFalloff = FMath::Max(0.0, HazeFalloff);
@@ -6129,20 +6131,23 @@ void ALandBattle::HideTheTable()
 			LandLook::Asked(TEXT("TheaterLandSnowBelow="), { &SnowBelow });
 			FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
 			// (Release 2, the whole picture's bounce, tc.Look.Bounce (Look/WholeLook.h; agreed with the ground and environments
-			// threads, 25 Nov 04:26Z): every ground gives back its own colour as snow does, the field's paint read once here
-			// on a grid and laid as a solid colour under the sky light, so the desert's sand lifts a hull's shaded side warm
-			// and the grass gives a little green. Off, the block below is as it was. Snow's own path is unchanged; the
-			// environments thread may give a look its own bounce colour in LandScape's Air in place of the field's mean.)
-			const bool bBounceAll = WholeLook::BounceOn() && State.IsValid() && State->Field;
+			// threads, 25 Nov 04:26Z; the art director's first read 04:46Z): every ground gives back its own colour as snow
+			// does, the field's paint read once here on a grid and laid as a solid colour under the sky light, so the desert's
+			// sand lifts a hull's shaded side warm and the grass gives a little green. Its hue is pulled inside the art
+			// director's box, it follows the sun, and it is halved under a closed canopy (WholeLook::BounceLight). Off, and on
+			// a snowy field (snow's own, as shipped), the block below is as it was. The environments thread may give a look
+			// its own bounce colour in LandScape's Air in place of the field's mean; the same box binds it.)
+			const bool bBounceAll = WholeLook::BounceOn() && State.IsValid() && State->Field && Snowed < 0.25 && Below > 0.0 && Skies.Num() > 0;
 			if (bBounceAll)
 			{
 				const LandFeed::Field& Plan = State->Rec.Ground;
 				const auto* Painted = State->Field.get();
-				Bare = WholeLook::GroundMean([Painted](double X, double Y)
+				const FLinearColor Mean = WholeLook::GroundMean([Painted](double X, double Y)
 				{
 					const auto C = Painted->ColourAt(X, Y);
 					return FColor(C.R, C.G, C.B, 255);
-				}, Plan.W > 0.0 ? Plan.W : Plan.Cols * Plan.Cell, Plan.H > 0.0 ? Plan.H : Plan.Rows * Plan.Cell) * WholeLook::BounceStrength();
+				}, Plan.Cols * Plan.Cell, Plan.Rows * Plan.Cell); // (the painted field's own size, as the cloud block reads it)
+				Bare = WholeLook::BounceLight(Mean, LandScape::LookOf(Painted->LookWord()) == LandScape::Look::Jungle, TowardSun.Z);
 			}
 			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 4.0));
 			const FLinearColor Field = FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
@@ -6740,6 +6745,7 @@ void ALandBattle::ShowTheTable()
 		return;
 	}
 	bTableHidden = false;
+	WholeLook::FieldGone();
 	if (SkyDay.IsValid())
 	{
 		if (APostProcessVolume* Over = SkyDay->Grade.Get())
