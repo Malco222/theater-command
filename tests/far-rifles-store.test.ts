@@ -21,6 +21,7 @@ import { addCorps, capitulate, createGame, industryHeld, setWar } from '../src/c
 import { demand } from '../src/campaign/pacific';
 import { RES, laneKey, lanesTo, seaLanes } from '../src/campaign/resources';
 import { RIFLES, needsFrom, rifleRoads, riflesMonth, riflesRow, riflesSeen, riflesView, roadsNow, spareOf } from '../src/campaign/rifles';
+import { MANPOWER } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -398,15 +399,19 @@ describe('the lanes are untouched', () => {
     expect(await dump(g)).toBe(LAID_T13);
   }, 600_000);
 
-  it('with China\'s rifles row taken out, the lanes after twelve months nobody plays read as on the base tree', async () => {
-    const row = RIFLES.nations.CHN;
+  it('with China\'s rifles row taken out and 216(b)\'s men put back, the lanes after twelve months nobody plays read as on the base tree', async () => {
+    const row = RIFLES.nations.CHN, pool = MANPOWER.pool.CHN, cls = MANPOWER.class.CHN;
     delete RIFLES.nations.CHN;
+    // (Stage B2 S3 lays China's men by the record, 7.4 and 2.5, in far-arms.json, apart from the rifles row: the base's
+    // are ruling 216(b)'s, which far-world.json still carries under it.)
+    MANPOWER.pool.CHN = 1.5;
+    MANPOWER.class.CHN = 0.025;
     try {
       const g = startOpen(createGame(17, null));
       expect(await dump(g)).toBe(BASE_T1);
       for (let t = 0; t < 12; t++) runTurnAI(g);
       expect(await dump(g)).toBe(BASE_T13);
-    } finally { RIFLES.nations.CHN = row; }
+    } finally { RIFLES.nations.CHN = row; MANPOWER.pool.CHN = pool; MANPOWER.class.CHN = cls; }
   }, 600_000);
 });
 
