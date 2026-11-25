@@ -449,8 +449,9 @@ describe('the card\'s cut on the troops is the expectation of the settled raid\'
     }
   });
 
-  it('the clip binding on part of the luck: the card against the settled mean over 200 lucks (escort and strafers, and bombers alone)', () => {
-    for (const [ids, mult] of [[REVIEW_IDS, 1], [REVIEW_IDS, 30], [[BOMBERS], 1]] as const) {
+  // One raid a test (the three in one test ran past the limit on a loaded box): the same raids, lucks and assertions.
+  for (const [what, ids, mult] of [['escort and strafers', REVIEW_IDS, 1], ['escort and strafers, the fighters weighing thirty times', REVIEW_IDS, 30], ['bombers alone', [BOMBERS], 1]] as const) {
+    it(`the clip binding on part of the luck: the card against the settled mean over 200 lucks (${what})`, () => {
       // The clip set at the cut the card expects with no clip: it binds on about half the raid's luck.
       const free = cuts([...ids], 1, 0, mult).card / cover();
       const r = cuts([...ids], free, 200, mult);
@@ -463,8 +464,8 @@ describe('the card\'s cut on the troops is the expectation of the settled raid\'
       near(r.mean, r.card, 0.01);
       // And nearer the settled mean than the cut at the expected weight is.
       expect(Math.abs(r.card - r.mean)).toBeLessThan(Math.abs(free * cover() - r.mean));
-    }
-  });
+    });
+  }
 });
 
 // The sky gate (the design director, 16:04Z): "A group goes down only when it is free of the air fight. Settled: its side
