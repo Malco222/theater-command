@@ -127,6 +127,14 @@ function fight(job: Job, arm: string): Record<string, unknown> {
 
 const [set, arm, file] = process.argv.slice(2);
 if (!set || !arm || !file) throw new Error('usage: gate.mjs <set> <arm> <out.jsonl>');
+// (SNP_TWEAK='pin.most=20;snipers.bite=0.3': a mend tried before it is made, set on LAND by path)
+for (const kv of (process.env.SNP_TWEAK ?? '').split(';').filter(Boolean)) {
+  const [path, v] = kv.split('='), keys = path.split('.');
+  let o = LAND as unknown as Record<string, unknown>;
+  for (const k of keys.slice(0, -1)) o = o[k] as Record<string, unknown>;
+  if (!(keys[keys.length - 1] in o)) throw new Error(`no such knob ${path}`);
+  o[keys[keys.length - 1]] = Number(v);
+}
 if (arm === 'on20') (LAND.pin as { most: number }).most = 20;
 if (arm === 'on80') (LAND.pin as { most: number }).most = 80;
 const done = new Set(existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => (JSON.parse(l) as { key: string }).key) : []);
