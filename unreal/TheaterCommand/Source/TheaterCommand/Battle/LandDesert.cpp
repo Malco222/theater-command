@@ -580,7 +580,7 @@ namespace LandScape
 				default: return nullptr;
 				}
 			}
-			// (the trial "houses": the town's flat-roofed houses at the vehicles' detail, LandHouse's Kind 10: limewashed, its
+			// (the trial "deserthouses": the town's flat-roofed houses at the vehicles' detail, LandHouse's Kind 10: limewashed, its
 			// bare mud for the mud brick ones, or its main room of two storeys)
 			bool KitHouse(int K, LandHouse::Spec& Out) const override
 			{

@@ -10233,7 +10233,7 @@ namespace LandHouse
 		// ====================================================================== the desert's flat-roofed house (Kind 10)
 
 		/**
-		 * The flat-roofed house of a North African village (Kind 10; release 2, the trial "houses": the desert's kit houses at
+		 * The flat-roofed house of a North African village (Kind 10; release 2, the trial "deserthouses": the desert's kit houses at
 		 * the vehicles' detail), on the kit's footprint, some 11 m square: the main room across the back of a walled yard, a
 		 * lower wing beside it, the yard's gate in the front (+y). Mud brick under a plaster laid by hand: the walls lean in as
 		 * they rise, their faces a little wavy, their corners and their parapets' tops rounded, the parapet stood up into a
@@ -10290,6 +10290,7 @@ namespace LandHouse
 				double Hx = 5.4, Hy = 5.4;                         // the footprint's half sizes
 				double Side = 1.0;                                 // -1: the whole mirrored end for end
 				bool bMud = false, bTwo = false, bBand = false, bRug = false, bShade = false, bNiche = false;
+				bool bAlone = false;                               // (the tomb's: its room stands clear inside its court's wall)
 				double Bt = 0.022;                                 // the walls' batter: in for each metre up
 				Block Main, Wing, Yard;
 				Col Wash, Mud, Brick, Roof, Paint, Wood, Dust, Earth;
@@ -10728,6 +10729,7 @@ namespace LandHouse
 			/** Whether a place is under the house's own roofs (the yard's wall is left out there: the rooms' walls stand). */
 			bool Indoors(const Plan& P, V3 Q)
 			{
+				if (P.bAlone) return false;
 				return (Q.X < P.Main.X1() - 0.15 && Q.Y < P.Main.Y1() - 0.15) || (Q.X > P.Wing.X0() && Q.Y < P.Wing.Y1() - 0.15);
 			}
 
@@ -11144,9 +11146,9 @@ namespace LandHouse
 			}
 
 			/** A door's leaf in its opening: ledged planks in a rough frame, a nail's head through each plank at each ledge, a
-			 * bolt; its paint chalked, worn to the wood toward its foot (bBare: never painted). A timber over its head, a stone at
-			 * its foot. */
-			void Door(Pen& B, const Plan& P, const Block& Bk, const Gap& G, uint64_t Seed, bool bBare)
+			 * bolt; its paint chalked, worn to the wood toward its foot (bBare: never painted). A timber over its head (but under
+			 * an arch: not bLintel), a stone at its foot. */
+			void Door(Pen& B, const Plan& P, const Block& Bk, const Gap& G, uint64_t Seed, bool bBare, bool bLintel = true)
 			{
 				const Frame Fc = FaceOf(Bk, G.Face);
 				const double U0 = G.U - 0.5 * G.W, U1 = G.U + 0.5 * G.W, Fw = 0.06;
@@ -11184,7 +11186,7 @@ namespace LandHouse
 				// (the stone at its foot; the timber over its head)
 				const Col Stone = Mixed(P.Dust, Rgb(168, 160, 148), 0.5), StoneTop = Scaled(Stone, 1.06);
 				B.Box(Pt(G.U, G.Z0 - 0.12, -0.03), Fc.T * (0.5 * G.W + 0.07), Fc.N * 0.24, Up * 0.12, Stone, 4 | 16, &StoneTop);
-				Lintel(B, P, Bk, G, 0.17, 0.065, Seed);
+				if (bLintel) Lintel(B, P, Bk, G, 0.17, 0.065, Seed);
 			}
 
 			/** A window: a board over its head; a plank shutter shut in it, or iron bars through a flat cross bar and the room

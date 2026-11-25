@@ -1204,11 +1204,11 @@ int main(int Argc, char** Argv)
 		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 15000 && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
 		      "the trial \"houses\": the east's izbas and khatas at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
-	// The desert's kit houses built to the vehicles' detail (the same trial): the town's flat-roofed houses round their
+	// The desert's kit houses built to the vehicles' detail (a trial of their own, "deserthouses"): the town's flat-roofed houses round their
 	// walled yards (LandHouse's Kind 10), limewashed, of bare mud or of two storeys, four looks of each, each a kit slot
 	// drawn as a building with its three levels, within its footprint (its spouts and its beams' ends some 0.7 m out past
 	// its walls) and its triangle budgets.
-	if (F.Tried("houses") && LookLaid == "desert")
+	if (F.Tried("deserthouses") && LookLaid == "desert")
 	{
 		size_t Standing = 0, NearFew = static_cast<size_t>(-1), NearMost = 0, MidMost = 0, FarMost = 0, Near = 0;
 		int Kinds = 0;
@@ -1245,7 +1245,7 @@ int main(int Argc, char** Argv)
 		}
 		std::printf("  the desert's houses at the vehicles' detail: %zu standing in %d looks; near %zu to %zu triangles (%zu in all), middle at most %zu, far at most %zu\n", Standing, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, Near, MidMost, FarMost);
 		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 15000 && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
-		      "the trial \"houses\": the desert's flat-roofed houses at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+		      "the trial \"deserthouses\": the desert's flat-roofed houses at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
 	// The east's burnt-out houses (the same trial): the kit's chimney a burnt-out izba or khata at the vehicles' detail
 	// (LandHouse's Kind 9) on its house's footprint, its ash bed's skirt run down into the ground; four looks of each; in
