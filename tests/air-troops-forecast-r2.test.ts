@@ -114,11 +114,14 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, f.nat).ticket!) as AirSim;
       fight(sim);
       const o = sim.outcome();
-      // Only the group with the reach went down on the troops; the one without escorted and went home.
+      // Only the group with the reach could go down on the troops; the one without escorted and went home. (Changed on the
+      // design director's ruling 4, 17:10Z and 17:23Z: a group strafes with the fight it still carries after its air
+      // fight, and over the Saar Groupement de Chasse 3 fights itself out against the German group, so it goes home too.)
       const down = new Set(sim.history().filter((e) => e.what === 'air:strafe').map((e) => sim.units.find((u) => u.id === e.unit)!.corps));
-      expect([...down].sort((x, y) => x - y)).toEqual(rule);
-      expect(sorted(o.strafers)).toEqual(rule);
-      expect(o.strafeFire!).toBeGreaterThan(0);
+      const fieldDown: number[] = [];
+      expect([...down].sort((x, y) => x - y)).toEqual(fieldDown);
+      expect(sorted(o.strafers)).toEqual(fieldDown);
+      expect(o.strafeFire!).toBe(0);
       // Each fighter that went down paid the campaign's own share, as the card charged each it expected: on the passes
       // it completed (strafed) and on any it was partway down when the battle ended or it was jumped (at most one pass).
       const onePass = sim.units.filter((u) => down.has(u.corps) && u.air === 'ftr').reduce((t, u) => t + u.n0 / TROOPS.strafe.passes, 0);
@@ -128,7 +131,7 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       launchRaid(f.g, 'ground', f.target, f.ids, f.nat, foughtAir(o));
       const fought = heard.filter((x) => x.route === 'fought');
       expect(fought.length).toBe(1);
-      expect(sorted(fought[0].strafers)).toEqual(rule);
+      expect(sorted(fought[0].strafers)).toEqual(fieldDown);
       expect(fought[0].weight).toBe(o.strafed);
     }
   });

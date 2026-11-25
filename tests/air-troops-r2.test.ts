@@ -214,11 +214,16 @@ describe('the army under the raid (place.marks; CONTRACT.md section 2)', () => {
 describe('fought out by the computer on both sides', () => {
   it('the events keep to the contract, the men shown never pass the men booked, and the outcome carries the strafing and the cut', () => {
     let strafes = 0, flak = 0, hits = 0;
-    for (const k of [0, 1, 2]) {
+    // (Changed on the design director's ruling 4, 17:10Z and 17:23Z: a group strafes with the fight it still carries,
+    // and the French escort fights itself out against the German group over the Saar, so on the computer's own raids
+    // (k 0 to 2) nobody goes down. Setup only: on k 3 the player sends the escort down on the troops at once, with all
+    // its fight, so the strafing passes and their ground fire are still read against the contract.)
+    for (const k of [0, 1, 2, 3]) {
       const { g, target, ids, nat } = saar(k);
       const t = ticketOf(g, target, ids, nat), M = t.place.marks!;
       const ids0 = new Set(M.pieces.map((p) => p.id));
       const s = new AirSim(t, { show: true });
+      if (k === 3) expect(s.command({ do: 'air:strafe', units: s.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att')).toBe(true);
       fight(s, (sim) => {
         const v = sim.view();
         expect(v.marks).toBeTruthy();
@@ -264,6 +269,10 @@ describe('fought out by the computer on both sides', () => {
     for (const k of [0, 1, 2, 3]) {
       const a = saar(k), b = saar(k);
       const sa = airBattle(ticketOf(a.g, a.target, a.ids, a.nat)) as AirSim;
+      // (Changed on ruling 4, 17:10Z and 17:23Z: left to the computer, the escort fights itself out over the Saar and
+      // goes home without strafing, so it earns no more than one held up. Setup only: the free escort is sent down at
+      // once, with all its fight.)
+      expect(sa.command({ do: 'air:strafe', units: sa.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att')).toBe(true);
       fight(sa);
       const sb = airBattle(ticketOf(b.g, b.target, b.ids, b.nat)) as AirSim;
       const ftr = sb.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id);
@@ -277,11 +286,56 @@ describe('fought out by the computer on both sides', () => {
   });
 });
 
+describe('the strafers\' rule in the field (the design director\'s ruling 4, 17:10Z, and 17:23Z)', () => {
+  // "A half-spent group strafes with the fight it still carries: its weight is in proportion to that fight, with no
+  // threshold and no new figure. A group with none goes home." The fight a group carries is the field's own measure,
+  // (vig - SKY.spent) / (1 - SKY.spent), read once as it goes down. Setup only: a group's fight is set by hand.
+  const spend = (u: AirSim['units'][number], left: number): void => {
+    u.kit = { ftr: u.kit0 * (SKY.spent + (1 - SKY.spent) * left), bmr: 0 };
+    u.vig = (u.kit.ftr + u.kit.bmr) / u.kit0;
+  };
+  it('a group with half its fight left strafes at half weight, and pays the ground fire at half; one fought out goes home', () => {
+    for (const left of [0.5, 0]) {
+      const { g, target, ids, nat } = saar(0);
+      const t = ticketOf(g, target, ids, nat);
+      const s = airBattle(t) as AirSim;
+      const u = s.units.find((x) => x.side === 'att' && x.air === 'ftr')!;
+      expect(u.kit0).toBeGreaterThan(0);
+      spend(u, left);
+      expect(s.command({ do: 'air:strafe', units: [u.id] }, 'att')).toBe(true);
+      const rec = (s as unknown as { strafing: Map<number, { k: number }> }).strafing.get(u.id);
+      if (left === 0) {
+        expect(u.job.do).toBe('home');
+        expect(rec).toBeUndefined();
+      } else {
+        expect(u.job.do).toBe('strafe');
+        expect(rec!.k).toBeCloseTo(left, 12);
+      }
+      fight(s);
+      const o = s.outcome();
+      const whole = u.n0 * Math.min(1, u.fuel0 / SKY.fuel.full);
+      if (left === 0) {
+        expect(s.history().some((e) => e.what === 'air:strafe')).toBe(false);
+        expect(o.strafed).toBe(0);
+        expect(o.strafeFire).toBe(0);
+      } else {
+        // Its passes weigh on the troops at half its fighters, and the ground fire it paid is owed on that half.
+        expect(o.strafed!).toBeGreaterThan(0);
+        expect(o.strafed!).toBeLessThanOrEqual(whole * left + 1e-9);
+        expect(o.strafeFire!).toBeLessThanOrEqual((o.strafed! + (whole * left) / TROOPS.strafe.passes) * t.place.marks!.law.fire + 1e-9);
+      }
+    }
+  });
+});
+
 describe('the commands', () => {
   it('a strafer called up goes back to the sky, sent down again it strafes; no other raid takes the order', () => {
     const { g, target, ids, nat } = saar(1);
     const s = airBattle(ticketOf(g, target, ids, nat)) as AirSim;
     s.ai.att = true; s.ai.def = true;
+    // (Changed on ruling 4, 17:10Z and 17:23Z: left to the computer the escort fights itself out over the Saar and never
+    // goes down. Setup only: the player sends it down at once, with all its fight.)
+    expect(s.command({ do: 'air:strafe', units: s.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att')).toBe(true);
     let guard = 0;
     while (!s.over && !s.units.some((u) => u.job.do === 'strafe') && guard++ < 20_000) s.step();
     const u = s.units.find((x) => x.job.do === 'strafe')!;
