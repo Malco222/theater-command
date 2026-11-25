@@ -22,6 +22,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
 #include "Campaign/ShipWay.h" // (release 2, a fleet under way)
+#include "Campaign/ArmyCarry.h" // (release 2, armies with weight)
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -11488,11 +11489,20 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 					Travellers.Add(*Unit);
 				}
 			}
-			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->GetActorRotation()))
+			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->Upright()))
 			{
 				RoundPiece(Courier);
 				Courier->SetArmy(this, *Nation, Piece->GetRegionId(), Travellers);
 				Courier->MarchAlong(Road, true, CarriedFrom == nullptr);
+				if (AArmyPiece::CarriedWithWeight())
+				{
+					// (Release 2, armies with weight: the army it joins takes its weight as it lands. UpdateSmoke watches for it.)
+					FJoining Join;
+					Join.Sent = Courier;
+					Join.Joined = Piece;
+					Join.From = Road[0];
+					Joining.Add(Join);
+				}
 			}
 		}
 	}
@@ -15853,6 +15863,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			}
 		}
 		for (TPair<FVector, double>& Down : SetDowns) { Brought(Down.Key); }
+		for (FThud& Thud : Thuds) { Brought(Thud.Where); }
 		for (FVector4& Fire : ColumnFires)
 		{
 			Fire.Y += FMath::RoundToDouble((SeamBeside - Fire.Y) / SeamWorld) * SeamWorld;
@@ -16427,6 +16438,36 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			}
 		}
 	}
+	// (Release 2, armies with weight.) What a piece set down with weight raises: how much of an army it is, and what it
+	// lands on. Snow as the piece itself was told this month; sand where its province is desert.
+	const bool bWithWeight = AArmyPiece::CarriedWithWeight();
+	auto ThudOf = [this, Now](const AArmyPiece* Landed, double HowMuch)
+	{
+		FThud Thud;
+		Thud.Where = Landed->GetActorLocation();
+		Thud.Began = Now;
+		Thud.Much = static_cast<float>(TheaterArmyCarry::Heft(Landed->GetCorps().Num()) * HowMuch);
+		Thud.Ground = Landed->IsOnSnow() ? 1 : (Data.Regions.IsValidIndex(Landed->GetRegionId()) && Data.Regions[Landed->GetRegionId()].Terrain == TEXT("desert") ? 2 : 0);
+		return Thud;
+	};
+	// A piece sent to join an army already standing is taken off as it lands. It is not among the pieces below and
+	// raised no dust before: with weight, the army it joins rocks under it, and the dust is raised there.
+	for (int32 JoinIndex = Joining.Num() - 1; JoinIndex >= 0; --JoinIndex)
+	{
+		if (Joining[JoinIndex].Sent.IsValid())
+		{
+			continue;
+		}
+		if (AArmyPiece* Joined = Joining[JoinIndex].Joined.Get())
+		{
+			if (bWithWeight && !Joined->IsMarching())
+			{
+				Thuds.Add(ThudOf(Joined, 0.85));
+				Joined->TakeWeight(Joined->GetActorLocation() - Joining[JoinIndex].From);
+			}
+		}
+		Joining.RemoveAtSwap(JoinIndex);
+	}
 	// The fires of armies in camp: a thin thread of smoke from each.
 	// And a puff of dust as a piece that has been moved is set down on the table again.
 	for (AArmyPiece* Piece : Pieces)
@@ -16447,7 +16488,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		else if (OnTheMarch.Contains(Key))
 		{
 			OnTheMarch.Remove(Key);
-			SetDowns.Emplace(Piece->GetActorLocation(), Now);
+			if (bWithWeight)
+			{
+				Thuds.Add(ThudOf(Piece, 1.0));
+			}
+			else
+			{
+				SetDowns.Emplace(Piece->GetActorLocation(), Now);
+			}
 		}
 	}
 	SetDowns.RemoveAll([Now](const TPair<FVector, double>& Down) { return Now - Down.Value > 1.6; });
@@ -16460,6 +16508,44 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const double Angle = K * 0.698 + 0.3;
 			const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
 			Draw(Down.Key + Out * (2.6 + 3.4 * Age) * Unit + FVector(0.0, 0.0, (0.3 + 1.1 * Age) * Unit), (0.7 + 1.5 * Age) * Unit, Dusty, 0.5f * static_cast<float>(FMath::Pow(1.0 - Age, 1.4)));
+		}
+	}
+	// (Release 2, armies with weight.) And with weight: a low ring that runs out along the table from under the base as
+	// it lands, quick and soon gone, and a cloud that rises behind it and drifts off down the wind. More of both for a
+	// bigger army; white and soon fallen on snow, pale and long in the air on sand (Campaign/ArmyCarry.h).
+	Thuds.RemoveAll([Now](const FThud& Thud) { return Now - Thud.Began > 2.3; });
+	for (const FThud& Thud : Thuds)
+	{
+		if (FVector::DistSquared2D(Thud.Where, CameraFocus) > Reach * Reach)
+		{
+			continue;
+		}
+		const double Since = Now - Thud.Began;
+		// (the snow's own white is kept under the brightness at which a puff counts as a light by night: see DrawPuff)
+		const FLinearColor Raised = Thud.Ground == 1 ? FLinearColor(0.72f, 0.74f, 0.79f) : Thud.Ground == 2 ? FLinearColor(0.80f, 0.71f, 0.54f) : FLinearColor(0.62f, 0.56f, 0.45f);
+		const double Turned = FMath::Frac(Thud.Where.X * 0.0137 + Thud.Where.Y * 0.0071) * 0.7; // (no two rings set alike)
+		const TheaterArmyCarry::FDust Low = TheaterArmyCarry::Skirt(Since, Thud.Much);
+		if (Low.Thick > 0.0)
+		{
+			for (int32 Puffed = 0; Puffed < 8; ++Puffed)
+			{
+				const double Angle = Puffed * 0.7854 + 0.2 + Turned;
+				const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
+				Draw(Thud.Where + Out * (Low.Out * Unit) + FVector(0.0, 0.0, Low.High * Unit), Low.Size * Unit, Raised, static_cast<float>(Low.Thick));
+			}
+		}
+		const TheaterArmyCarry::FDust Cloud = TheaterArmyCarry::Billow(Since, Thud.Much, Thud.Ground);
+		if (Cloud.Thick > 0.0)
+		{
+			const double Aged = Since / TheaterArmyCarry::BillowLasts(Thud.Ground);
+			const FVector Drift = Wind * ((Thud.Ground == 2 ? 1.8 : 1.2) * Unit * Aged * Aged);
+			for (int32 Puffed = 0; Puffed < 9; ++Puffed)
+			{
+				const double Angle = Puffed * 0.698 + 0.3 + Turned;
+				const double Uneven = 0.85 + 0.3 * FMath::Frac(Puffed * 0.618 + Turned * 3.0);
+				const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
+				Draw(Thud.Where + Out * (Cloud.Out * Uneven * Unit) + FVector(0.0, 0.0, Cloud.High * Unit) + Drift, Cloud.Size * Unit, Raised, static_cast<float>(Cloud.Thick));
+			}
 		}
 	}
 	for (int32 K = 0; K < TownChimneys.Num(); ++K)
@@ -18380,7 +18466,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			if (Piece)
 			{
-				Piece->SetActorRotation(FRotator(0.0f, CameraYaw, 0.0f));
+				Piece->FaceEye(CameraYaw); // (armies with weight: one that leans keeps its lean; one that stands is turned as before)
 			}
 		}
 		for (const auto& Pair : FleetPieces)
