@@ -4109,7 +4109,7 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack);
 	Object->TryGetStringField(TEXT("held"), Out.Held);
 	Object->TryGetStringField(TEXT("cut"), Out.Cut);
-	Object->TryGetStringField(TEXT("haven"), Out.Haven);
+	Object->TryGetStringField(TEXT("homeTip"), Out.HomeTip);
 	const TArray<TSharedPtr<FJsonValue>>* Attack = nullptr;
 	if (Object->TryGetArrayField(TEXT("attack"), Attack))
 	{

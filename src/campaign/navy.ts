@@ -1475,6 +1475,17 @@ export function cutOffLine(g: Game, f: Fleet): string {
   return `Cut off${gate ? `: ${gateIs(gate)} shut to it` : ''}. ${r ? `Nearest friendly harbour on its side: ${r.name}.` : 'No friendly harbour on its side can take it.'}`;
 }
 
+/**
+ * (1.5.2, the release review) What RETURN TO HARBOUR does for a cut-off fleet, as its tip: it makes for the harbour on
+ * its side, which becomes its base, or comes in to its own where that stands on both sides of the strait. Empty where it
+ * is not cut off or has no harbour on its side.
+ */
+export function cutOffHomeTip(g: Game, f: Fleet): string {
+  const r = cutOff(g, f) ? harbourFor(g, f) : null;
+  return !r ? '' : r.id === f.base ? `Cut off beyond a shut strait: it comes in to ${r.name} on its own side, and keeps its base there.`
+    : `Cut off beyond a shut strait: it makes for ${r.name}, which becomes its base.`;
+}
+
 /** The month's word to a player whose fleet is cut off, once while it is (a fleet he keeps by hand, or with the navy his own: no admiral moves it). */
 export function cutOffNews(g: Game, nat: string): void {
   if (nat !== g.human) return;
@@ -1484,7 +1495,10 @@ export function cutOffNews(g: Game, nat: string): void {
     if (g.flags[key] !== undefined || !(keptByHand(g, f) || byHand(g, nat, 'navy'))) continue;
     g.flags[key] = g.turn;
     const r = harbourFor(g, f), gate = shutBetween(g, f);
-    headline(g, 'info', `${cap(fleetName(f))} is cut off in the ${g.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ''}, so it cannot sail home to ${f.port}. ${r ? `Send it to harbour and it makes for ${r.name}, the nearest friendly harbour it can reach, or move its base on its page.` : 'No friendly harbour on its side of the strait can take it: it stays at sea.'}`, nat);
+    // (its own harbour on both sides of the strait: it can come in there, on this side)
+    headline(g, 'info', r && r.id === f.base
+      ? `${cap(fleetName(f))} is cut off in the ${g.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ''}. Send it to harbour and it comes in to ${r.name} on this side of the strait, and keeps its base there.`
+      : `${cap(fleetName(f))} is cut off in the ${g.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ''}, so it cannot sail home to ${f.port}. ${r ? `Send it to harbour and it makes for ${r.name}, the nearest friendly harbour it can reach, or move its base on its page.` : 'No friendly harbour on its side of the strait can take it: it stays at sea.'}`, nat);
   }
 }
 

@@ -6,7 +6,7 @@
 // and its owner is told once.
 import { describe, expect, it } from 'vitest';
 import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
-import { baseSeas, canSailTo, cutOff, fleetReach, harbourFor, navalAI, navalUpkeep, rebase, sail, zoneOf } from '../src/campaign/navy';
+import { baseSeas, canSailTo, cutOff, cutOffHomeTip, fleetReach, harbourFor, navalAI, navalUpkeep, rebase, sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { saveGame } from '../src/campaign/save';
 import { beginHuman, humanUp, orderFleet, stepAI } from '../src/campaign/turn';
@@ -149,6 +149,12 @@ describe('a harbour on both sides of a shut strait', () => {
     expect(cutOff(g, f)).toBe(true);
     for (let r = harbourFor(g, f); r && r.id !== sm.id; r = harbourFor(g, f)) r.ctrl = 'UK';
     expect(harbourFor(g, f)?.id).toBe(sm.id);
+    // Its words say it comes in to its own harbour, not that it cannot reach it, nor that its base changes.
+    expect(cutOffHomeTip(g, f)).toBe('Cut off beyond a shut strait: it comes in to Spanish Morocco on its own side, and keeps its base there.');
+    f.ordered = true;
+    const news = g.headlines.length;
+    navalUpkeep(g, 'ITA');
+    expect(g.headlines.slice(news).map((h) => h.text)).toContain('The 2nd Fleet is cut off in the Iberian Coast: the Strait of Gibraltar is shut to it. Send it to harbour and it comes in to Spanish Morocco on this side of the strait, and keeps its base there.');
     expect(orderFleet(g, f.id, f.home, 'port')).toBe(true);
     expect(f.base).toBe(sm.id);
     expect(f.home).toBe(atl);
@@ -203,9 +209,12 @@ describe('the cut-off fleet on its page, its panel and the map', () => {
     expect(TC().forceOrder(`fleet:${f.id}:${tyrr}:patrol`)).toMatchObject({ ok: false, note: line });
     expect(TC().act(`fleet:${f.id}:${tyrr}:raid`)).toMatchObject({ ok: false, note: line });
     // The 3D tray reads the line and the harbour from the fleet in hand, to dim what it cannot do and name where it goes.
-    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: line, haven: haven.name, held: '' });
+    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: line, homeTip: `Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.`, held: '' });
+    // Its page's seas say why there are none, not that the country is at peace.
+    expect((TC().page(`fleet:${f.id}`) as PageOut & { sections: { heading: string; text: string }[] }).sections.find((x) => x.heading === 'SEAS IN ITS REACH')?.text)
+      .toBe('Every sea in its reach lies beyond the shut strait. RETURN TO HARBOUR takes it to a harbour on its side.');
     expect((TC().forceOrder(home.key) as { ok: boolean }).ok).toBe(true);
-    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: '', haven: '' });
+    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: '', homeTip: '' });
     const after = TC().force('fleet', f.id) as Panel;
     expect(after.options.some((o) => /:patrol$/.test(o.key))).toBe(true);
     expect(after.lines.some((l) => /^Cut off/.test(l))).toBe(false);
@@ -222,6 +231,8 @@ describe('the cut-off fleet on its page, its panel and the map', () => {
     expect(home.why).toBe('It is cut off beyond a shut strait, and no friendly harbour on its side can take it.');
     expect((TC().force('fleet', f.id) as Panel).lines).toContain('Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.');
     expect(TC().forceOrder(home.key)).toMatchObject({ ok: false, note: 'Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.' });
-    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: 'Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.', haven: '' });
+    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: 'Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.', homeTip: '' });
+    expect((TC().page(`fleet:${f.id}`) as PageOut & { sections: { heading: string; text: string }[] }).sections.find((x) => x.heading === 'SEAS IN ITS REACH')?.text)
+      .toBe('Every sea in its reach lies beyond the shut strait. No friendly harbour on its side can take it, so it stays at sea.');
   });
 });

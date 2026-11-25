@@ -6185,7 +6185,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			else if (Held && PointedRegion != INDEX_NONE)
 			{
 				const bool bShell = FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(PointedRegion);
-				Pointer = bShell ? EMouseCursor::Crosshairs : (PointedRegion == Held->Base || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
+				// (1.5.2) its own harbour is refused while it is held, or cut off with no harbour on its side
+				const bool bHomeShut = !FleetHand.Held.IsEmpty() || (!FleetHand.Cut.IsEmpty() && FleetHand.HomeTip.IsEmpty());
+				Pointer = bShell ? EMouseCursor::Crosshairs : ((PointedRegion == Held->Base && !bHomeShut) || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
 			}
 		}
 	}
@@ -6595,7 +6597,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				const FViewFleet* Held = View.Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
 				if (Held && Held->Base == TipRegion)
 				{
-					Line += FString::Printf(TEXT("\nRight-click: %s returns to harbour here."), *Held->Name);
+					// (1.5.2, the release review) Held where this month's battle left it, or cut off beyond a shut strait, its own
+					// harbour says what a right-click there does (or why it does nothing), as the tray's RETURN TO HARBOUR does.
+					Line += !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("\n%s"), *FleetHand.Held)
+						: !FleetHand.HomeTip.IsEmpty() ? FString::Printf(TEXT("\nRight-click: %s sails for harbour. %s"), *Held->Name, *FleetHand.HomeTip)
+						: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("\n%s"), *FleetHand.Cut)
+						: FString::Printf(TEXT("\nRight-click: %s returns to harbour here."), *Held->Name);
 				}
 				else if (Held && FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(TipRegion))
 				{
@@ -7114,16 +7121,15 @@ void ACampaignPlayerController::LayOutFleet()
 	// (1.5.2) Held where this month's battle left it, all four of its orders are refused with that reason. Cut off beyond
 	// a shut strait, its three at sea are refused with its card's line, and its way home only with no harbour on its side.
 	Tray.FleetSeaWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Cut;
-	Tray.FleetHomeWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Haven.IsEmpty() ? FleetHand.Cut : FString();
-	Tray.FleetHomeTip = !FleetHand.Cut.IsEmpty() && !FleetHand.Haven.IsEmpty()
-		? FString::Printf(TEXT("Cut off beyond a shut strait: it makes for %s, which becomes its base."), *FleetHand.Haven) : FString();
+	Tray.FleetHomeWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.HomeTip.IsEmpty() ? FleetHand.Cut : FString();
+	Tray.FleetHomeTip = FleetHand.HomeTip;
 	Tray.PendingButton = FText::GetEmpty();
 	// (1.5.2) A fleet held or cut off is told so, and not told to right-click seas it cannot go to. Its guns can still
 	// shell a coast in red, if one is in reach.
 	const TCHAR* StillShells = FleetHand.Coasts.Num() > 0 ? TEXT(" A coast in red can still be shelled.") : TEXT("");
 	Tray.Hint = FText::FromString(!View.bHumanUp ? TEXT("It is not your month.")
 		: !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s Esc lets it go."), *FleetHand.Held, StillShells)
-		: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s%s%s Esc lets it go."), *FleetHand.Cut, FleetHand.Haven.IsEmpty() ? TEXT("") : TEXT(" RETURN TO HARBOUR takes it there."), StillShells)
+		: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s%s%s Esc lets it go."), *FleetHand.Cut, FleetHand.HomeTip.IsEmpty() ? TEXT("") : TEXT(" RETURN TO HARBOUR takes it to a harbour on its side."), StillShells)
 		: Tray.bFleetGrand && FleetHand.Coasts.Num() > 0
 		? TEXT("Right-click a ringed sea to send it there, a coast in red to shell it, a port in blue to make it the fleet's home, or its own harbour to bring it in. ORDERS has the rest. Esc lets it go.")
 		: TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go."));
