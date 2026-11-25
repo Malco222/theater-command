@@ -3746,7 +3746,18 @@ function closeStaff(g: Game, mine: AirFleet[], battles: number[], back = false):
       if (left <= 0) break;
       if (f.ftr > left || f.close || f.mission !== 'support' || f.flew === g.turn || f.moved === g.turn || f.ready < CLOSE.least || can.some((x) => x.f === f)) continue;
       let to: Region | null = null, bv = 0;
-      for (const r of airBases(g, f)) { if (overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue; const v = over(f, r.id).length; if (v > bv) { bv = v; to = r; } }
+      // (The first field, in the chart's order, of those it could go to (airBases, less those across an ocean and the
+      // full ones) that covers the most battles. Asked in the cheapest order for the same field: a field beyond a
+      // month's flight is none of them (whyNotBase's last word, and one across an ocean is passed by anyway), and a
+      // field is asked whether the group could go there only when it would cover more battles than the best so far.)
+      const R = ftrR(f);
+      for (const r of g.regions) {
+        if (f.base >= 0 && km(g, f.base, r.id) > AIR.ferry) continue;
+        let v = 0;
+        for (const b of battles) if (cover(km(g, r.id, b), R) > 0) v++;
+        if (v <= bv || overOcean(g, f, r) || whyNotBase(g, f, r) !== null || !fieldRoom(g, r.id, f)) continue;
+        bv = v; to = r;
+      }
       if (to) far.push({ f, to, d: near(f) });
     }
     far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
