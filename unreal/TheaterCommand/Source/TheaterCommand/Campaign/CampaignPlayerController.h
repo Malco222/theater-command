@@ -1331,6 +1331,9 @@ private:
 	TSet<int32> RailBeyond; // (rulings 110, 112, 118) and the provinces beyond its march that a train would take it to this month
 	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
 	bool bHandSpent = false;
+	// (The 1.5.3 patch.) The corps of the hand inside a town that an order would bring out with a move to make, as the
+	// rules' reach names them: all of the garrison in hand or none, and never one that went in this month.
+	TArray<int32> HandComesOut;
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
 	// (One voice after a press; the UI director's brief, 17 November.) An order has been given to the army in hand since
 	// it was picked up: the slip stays put away, and the tray's foot no longer speaks of next month.
@@ -1357,6 +1360,18 @@ private:
 	bool ComesOutTo(int32 RegionId) const;
 	/** True where the garrison in hand may come out of its town and could go somewhere this month once out. */
 	bool ComesOut() const;
+	/**
+	 * (The 1.5.3 patch; the playtest's find 14.) A hand of corps in the field and corps of the town's garrison: the
+	 * sentence that names those of the garrison that come out of the town as the order goes, as the rules' reach names
+	 * them (HandComesOut). Empty for a hand with nobody in the field, by sea or by rail, or where none of it comes out.
+	 */
+	FString ComesOutAlong() const;
+	/**
+	 * (The 1.5.3 patch; the playtest's find 18.) True where every corps in hand is inside its town and may take the
+	 * field, but would have no move once out: it went in this month. TAKE THE FIELD is no way to march then, and the
+	 * rules' sentence (GarrisonSays) says when it can.
+	 */
+	bool GarrisonWaits() const;
 	/**
 	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have

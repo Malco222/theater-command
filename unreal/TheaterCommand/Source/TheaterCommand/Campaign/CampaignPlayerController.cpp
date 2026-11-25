@@ -6428,6 +6428,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				{
 					Line += TEXT("\nThey are inside the town, and come out of it as the order goes.");
 				}
+				else if (FindReach(TipRegion) != nullptr)
+				{
+					// (The 1.5.3 patch, the playtest's find 14.) Corps of the town's garrison in hand beside the army in the field:
+					// they come out of the town as the order goes, and the rest march as they would.
+					const FString ComingOut = ComesOutAlong();
+					if (!ComingOut.IsEmpty())
+					{
+						Line += TEXT("\n") + ComingOut;
+					}
+				}
 				// (Rules 84.2.5; ruling 211(a); the code checker, 17 November.) Guns and engineers sent forward alone: the
 				// refusal is asked as OrderTo asks it, after the question of war and before anything else is promised.
 				const FString Alone = (!bByRail && !bBySea) ? Session->WhyNotLead(PickedCorps, TipRegion) : FString();
@@ -7773,12 +7783,19 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		if (!Garrison.IsEmpty())
 		{
 			// (The UI director, 18 November 2026: the card's line above already says whose garrison they are. Where the
-			// card carries TAKE THE FIELD, the foot says only what to do.)
+			// card carries TAKE THE FIELD, the foot says only what to do. The 1.5.3 patch, the playtest's find 18: where
+			// taking the field would leave them no move, as for a garrison that went in this month, the rules' sentence
+			// says when they can march.)
 			Tray.Hint = FText::FromString(ComesOut()
 				? FString(TEXT("Right-click where they should go, or drag the flag there: they come out of the town on the way. Esc puts them down."))
-				: !Tray.FieldButton.IsEmpty()
+				: !Tray.FieldButton.IsEmpty() && !GarrisonWaits()
 				? FString(TEXT("To march, TAKE THE FIELD first. Right-click the town for its orders. Esc puts them down."))
 				: Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
+		}
+		else if (const FString ComingOut = ComesOutAlong(); !ComingOut.IsEmpty() && Tray.StormButton.IsEmpty())
+		{
+			// (The 1.5.3 patch, the playtest's find 14.) Corps of the town's garrison in hand beside the army in the field.
+			Tray.Hint = FText::FromString(TEXT("Right-click where they should go, or drag the flag there. ") + ComingOut + TEXT(" Esc puts them down."));
 		}
 	}
 	if (FCampaignSession* Rules = GetSession())
@@ -7805,7 +7822,7 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 			// card carries TAKE THE FIELD, the foot says only what to do.)
 			Tray.Hint = FText::FromString(ComesOut()
 				? FString(TEXT("Right-click where they should go, or drag the flag there: they come out of the town on the way. Esc puts them down."))
-				: !Tray.FieldButton.IsEmpty()
+				: !Tray.FieldButton.IsEmpty() && !GarrisonWaits()
 				? FString(TEXT("To march, TAKE THE FIELD first. Right-click the town for its orders. Esc puts them down."))
 				: Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
 		}
@@ -7934,7 +7951,8 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	}
 	// (The code checker, 17 November.) The army picked up is the army in the field. The town's garrison stays in its
 	// town: it was being handed marches it cannot make, and the order vanished without a word. Where nobody stands in
-	// the field the garrison is what is in hand, so that its cards and its orders can still be read.
+	// the field the garrison is what is in hand, so that its cards and its orders can still be read. (The 1.5.3 patch:
+	// a corps of the garrison that would come out with a move is clicked in among the field army by its card.)
 	if (Orderable.Num() == 0)
 	{
 		Orderable = MoveTemp(Within);
@@ -8141,7 +8159,8 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 			return;
 		}
 	}
-	if (PickedCorps.Contains(CorpsId))
+	const bool bJoins = !PickedCorps.Contains(CorpsId);
+	if (!bJoins)
 	{
 		PickedCorps.Remove(CorpsId);
 	}
@@ -8150,6 +8169,16 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 		PickedCorps.Add(CorpsId);
 	}
 	RefreshOrders();
+	if (bJoins && HandComesOut.Contains(CorpsId))
+	{
+		// (The 1.5.3 patch, the playtest's find 14.) A corps of the garrison clicked in among the army in the field says
+		// once, as it joins, that it comes out of the town as the order goes.
+		const FString ComingOut = ComesOutAlong();
+		if (!ComingOut.IsEmpty())
+		{
+			Notify(ComingOut, 6.0);
+		}
+	}
 }
 
 const FReachRegion* ACampaignPlayerController::FindReach(int32 RegionId) const
@@ -8274,7 +8303,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Carry = Unit.Carry; // (Version 84)
 		Card.bDigging = Unit.bDigging;
 		Card.Experience = Unit.Experience;
-		Card.Moves = Unit.Moves;
+		// (The 1.5.3 patch, the playtest's find 15.) A corps of his inside a town has no moves of its own (the rules keep it
+		// at none), but an order brings it out with all but one of its month: its card says the moves it will march with.
+		Card.Moves = Unit.bInTown && Unit.MovesOut >= 0 ? Unit.MovesOut : Unit.Moves;
 		Card.MovesMax = Unit.MovesMax;
 		if (Unit.MarchTo != INDEX_NONE && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Unit.MarchTo))
 		{
@@ -8317,9 +8348,12 @@ void ACampaignPlayerController::RefreshOrders()
 		Map->SetReach(Reach);
 		return;
 	}
-	// (The code checker, 17 November.) With the army in the field in hand, the town's garrison cannot be clicked in among
-	// them: it marches nowhere until it takes the field, and would be left behind without a word. Its card says why, in
-	// the rules' refusal of 84.2.4 that names the town (the UI director, 17 November: no sentence of the 3D game's own).
+	// (The 1.5.3 patch, the playtest's find 14.) With the army in the field in hand, a corps of the town's garrison is
+	// clicked in among them like any corps: the rules bring it out of the town as the order goes (since 1.5.1), and the
+	// corps in the field march as they would. Only one that would have no move once out (it went in this month, it is
+	// shut in, or the field outside is full) is kept apart, as any order would leave it behind: its card says why, in
+	// the rules' sentence that names the town (the UI director, 17 November: no sentence of the 3D game's own). Rules
+	// that do not say its moves once out keep every garrison apart, as the code checker's guard of 17 November did.
 	if (Tray.Cards.ContainsByPredicate([](const FTrayCard& C) { return C.bPicked && !C.bInTown; }))
 	{
 		for (FTrayCard& Card : Tray.Cards)
@@ -8327,7 +8361,10 @@ void ACampaignPlayerController::RefreshOrders()
 			if (Card.bInTown && !Card.bPicked && Card.bCanOrder)
 			{
 				const FViewCorps* Inside = View.Corps.FindByPredicate([&Card](const FViewCorps& Each) { return Each.Id == Card.CorpsId; });
-				Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
+				if (!Inside || Inside->MovesOut <= 0)
+				{
+					Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
+				}
 			}
 		}
 	}
@@ -8473,6 +8510,7 @@ void ACampaignPlayerController::RefreshOrders()
 	TArray<int32> Danger, Road;
 	TMap<int32, int32> Far;
 	bHandSpent = false;
+	HandComesOut.Reset();
 	bHandStands = ArmyRegion != INDEX_NONE && Session && Session->Stands(ArmyRegion) == TEXT("all");
 	KeptPlanRegion = -2; // (whatever was planned was planned for another hand)
 	if (bBySea)
@@ -8507,7 +8545,7 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	else
 	{
-		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent);
+		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent, &HandComesOut);
 	}
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
@@ -8866,6 +8904,66 @@ bool ACampaignPlayerController::ComesOut() const
 bool ACampaignPlayerController::ComesOutTo(int32 RegionId) const
 {
 	return RegionId != INDEX_NONE && RegionId != ArmyRegion && FindReach(RegionId) != nullptr && ComesOut();
+}
+
+FString ACampaignPlayerController::ComesOutAlong() const
+{
+	// (The 1.5.3 patch, the playtest's find 14. The rules bring a garrison in hand out of its town inside the order's own
+	// call, beside a field army too: comeOut in campaign-bridge.ts. Their reach names those that come out with a move.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || bBySea || bByRail || HandComesOut.Num() == 0)
+	{
+		return FString();
+	}
+	const FCampaignView& View = Session->GetView();
+	bool bInField = false;
+	TArray<FString> Names;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit)
+		{
+			continue;
+		}
+		if (!Unit->bInTown)
+		{
+			bInField = true;
+		}
+		else if (HandComesOut.Contains(Id))
+		{
+			Names.Add(Unit->Name);
+		}
+	}
+	if (!bInField || Names.Num() == 0)
+	{
+		return FString(); // (a hand that is all garrison has its own sentence: GarrisonSays and ComesOut)
+	}
+	const bool bOne = Names.Num() == 1;
+	FString Who = Names.Pop();
+	if (!bOne)
+	{
+		Who = FString::Join(Names, TEXT(", ")) + TEXT(" and ") + Who;
+	}
+	return FString::Printf(TEXT("%s %s inside the town, and %s out of it as the order goes."), *Who, bOne ? TEXT("is") : TEXT("are"), bOne ? TEXT("comes") : TEXT("come"));
+}
+
+bool ACampaignPlayerController::GarrisonWaits() const
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0 || Tray.FieldActions.Num() < PickedCorps.Num())
+	{
+		return false;
+	}
+	const FCampaignView& View = Session->GetView();
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit || !Unit->bInTown || Unit->MovesOut != 0)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 FString ACampaignPlayerController::GarrisonWhere() const
