@@ -136,6 +136,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarNationsAside(
 		TEXT("tc.Speed.NationsAside"), 1,
 		TEXT("1 works the opening screen's list of countries out on the rules' own thread while the screen says so (a later year is history played up to it: 0.7 to 1 s for 1941 in a cloud run); 0 works it out in the press's frame, as before. The same list either way."));
+	TAutoConsoleVariable<int32> CVarMonthAside(
+		TEXT("tc.Speed.MonthAside"), 0,
+		TEXT("1 plays the other nations' months and reads their answer on the rules' own thread when he ends his, so the table's frames go on meanwhile (1.0 to 1.7 s on the whole-world map in a cloud run, 0.35 to 0.8 s on Europe and the Americas), and the watch or the month's card follows once they are in; 0 plays them in the press's frame, as before. A run that takes pictures plays them at once. The same month either way."));
 	TAutoConsoleVariable<int32> CVarPicturesAside(
 		TEXT("tc.Speed.PicturesAside"), 1,
 		TEXT("1 stands a card at once and takes its unit pictures not yet taken one a frame after it, each laid in its place (the arsenal or a province's raise list opened for the first time took them all in the press's frame); 0 takes them all in the press's frame, as before. A run that takes pictures takes them at once. The same pictures either way, a few frames later."));
@@ -538,6 +541,11 @@ namespace TheaterSpeed
 	bool NationsAside()
 	{
 		return CVarNationsAside.GetValueOnGameThread() != 0;
+	}
+
+	bool MonthAside()
+	{
+		return CVarMonthAside.GetValueOnGameThread() != 0;
 	}
 
 	bool PicturesAside()

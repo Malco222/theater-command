@@ -54,7 +54,8 @@ import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/dan
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { deskRuns } from '../../../src/campaign/desks';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
-import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
+import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, majorsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
+import { startGunsOnLoad } from '../../../src/campaign/airversion';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
@@ -2039,6 +2040,7 @@ function load(text: string) {
   if (!loaded) return null;
   g = loaded;
   airCampaignsOnLoad(g);
+  startGunsLoaded(g);
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
@@ -2130,6 +2132,13 @@ const fieldCalls = {
 };
 function openFieldTargets(g: Game): void {
   try { if (fieldCalls.shipped?.()) fieldCalls.on?.(g, true); } catch { /* rules without airfields as targets */ }
+}
+/**
+ * A grand campaign saved before the start guns were on lays them as it is loaded (1.5.1; Brian, 24 November 22:31Z: "Yes,
+ * when I load a saved war"): once, for every great power, with one line in the news. airversion.ts startGunsOnLoad.
+ */
+function startGunsLoaded(g: Game): void {
+  if (startGunsOnLoad(g, majorsOf(g))) headline(g, 'info', "Anti-aircraft guns now stand round each great power's capital and its two chief factory towns.", g.human ?? undefined);
 }
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };

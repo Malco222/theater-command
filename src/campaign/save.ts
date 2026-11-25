@@ -281,8 +281,10 @@ export function loadGame(text: string): Game | null {
       g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
     }
   if (d.wrecks && typeof d.wrecks === 'object') g.wrecks = d.wrecks;
-  if (Array.isArray(d.mines)) g.mines = d.mines;
   else for (const r of g.reports ?? []) wreckBump(g, r);
+  // (Sea mines, release 2.) On a line of their own: set between the wrecks' if and its else, they took the else, and a
+  // save with wrecks and no mines counted every kept report's wrecks again on top of the saved ones at each load.
+  if (Array.isArray(d.mines)) g.mines = d.mines;
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

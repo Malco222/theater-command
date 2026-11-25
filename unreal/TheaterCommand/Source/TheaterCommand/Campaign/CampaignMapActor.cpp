@@ -2067,6 +2067,23 @@ int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 			return Id;
 		}
 	}
+	// (Release 2, the whole world.) So is the mound the world's own sheet raises for one of the Pacific's islets, which
+	// is all he sees of it from the high view: a click anywhere on the speck is a click on the island. Where a fine
+	// sheet stands the island is drawn at its own size, and only its own ground is the island.
+	if (Data.bWorld && WorldTerrain.NX > 0)
+	{
+		const double X = WrapX(P.X);
+		if ((X < 0.0 || P.Y < 0.0 || X > Data.Width || P.Y > Data.Height) && !FineSheetAt(X, P.Y) && WorldTerrain.CoverageAt(X, P.Y) >= 0.5f)
+		{
+			const int32 I = FMath::Clamp(FMath::RoundToInt32((X - WorldTerrain.OriginX) / WorldTerrain.Cell), 0, WorldTerrain.NX - 1);
+			const int32 J = FMath::Clamp(FMath::RoundToInt32((P.Y - WorldTerrain.OriginY) / WorldTerrain.Cell), 0, WorldTerrain.NY - 1);
+			const int16 Id = WorldTerrain.Region[WorldTerrain.Index(I, J)];
+			if (Id >= 0 && Data.Regions.IsValidIndex(Id) && Data.Regions[Id].bIslet)
+			{
+				return Id;
+			}
+		}
+	}
 	return INDEX_NONE;
 }
 
@@ -7618,7 +7635,13 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		if (Field.Groups > 0)
 		{
-			Signature += FString::Printf(TEXT("%d:%s:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups);
+			// (where the player shares the field, the row's share is drawn from the two counts of aircraft: both are in the
+			// signature, so that his share does not go stale as the groups grow and shrink. They were in it by
+			// twenty-fives, and the row is cut by a rounded share: 26 or 49 of a hundred were one signature and two rows.
+			// The 3D pre-check's read, 24 November 2026. Few fields are shared, so the signs are seldom laid again for it.)
+			Signature += Field.YourGroups > 0
+				? FString::Printf(TEXT("%d:%s:%d:%d:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups, FMath::Max(Field.Aircraft, 0), FMath::Max(Field.YourAircraft, 0))
+				: FString::Printf(TEXT("%d:%s:%d;"), Field.Region, *Field.Nation, Field.Groups);
 		}
 	}
 	if (!Data.IsLoaded() || Signature == ShownAirSigns)
@@ -7635,6 +7658,18 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		AirSignMesh->SetCastShadow(false);
 	}
 	AirSignMesh->ClearAllMeshSections();
+	if (!AirPennantMesh)
+	{
+		// (The pennants stand in a mesh of their own: ShowParkedPlanes sinks and hides the box aircraft close to, and a
+		// pennant that went with them would be gone just where the player comes to look for his aircraft.)
+		AirPennantMesh = UTheaterStillMesh::Make(this, TEXT("AirPennants"));
+		AirPennantMesh->SetupAttachment(Root);
+		AirPennantMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		AirPennantMesh->RegisterComponent();
+		AirPennantMesh->SetCastShadow(false);
+	}
+	AirPennantMesh->ClearAllMeshSections();
+	FMiniatureMesh Pennants;
 	for (UProceduralMeshComponent* Old : ParkedMeshes)
 	{
 		if (Old)
@@ -7688,9 +7723,10 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		if (Mine)
 		{
 			const FLinearColor His(Mine->Color);
+			// (the mast is rooted below the grass, as the field's own slab is, where a full row puts it past the slab's end)
 			const FVector Mast = At + Ahead(Turn, (-1.0 - (Parked - 1) * 0.5) * 0.62 * Field, -(Wide * 0.5 - 0.42) * Field);
-			Model.Pillar(Mast, 0.025 * Field, 0.018 * Field, 0.95 * Field, Dural * 0.7f, 6);
-			Model.Box(Mast + Ahead(Turn, 0.2 * Field, 0.0) + FVector(0.0, 0.0, 0.8 * Field), FVector(0.4, 0.025, 0.26) * Field, His, Turn);
+			Pennants.Pillar(Mast - FVector(0.0, 0.0, 0.08 * Field), 0.025 * Field, 0.018 * Field, 1.03 * Field, Dural * 0.7f, 6);
+			Pennants.Box(Mast + Ahead(Turn, 0.2 * Field, 0.0) + FVector(0.0, 0.0, 0.8 * Field), FVector(0.4, 0.025, 0.26) * Field, His, Turn);
 		}
 		for (int32 K = 0; K < Parked; ++K)
 		{
@@ -7712,6 +7748,11 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		AirSignMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		AirSignMesh->SetMaterial(0, SceneryMaterial);
+	}
+	if (Pennants.Vertices.Num() > 0)
+	{
+		AirPennantMesh->CreateMeshSection(0, Pennants.Vertices, Pennants.Triangles, Pennants.Normals, TArray<FVector2D>(), Pennants.Colors, TArray<FProcMeshTangent>(), false);
+		AirPennantMesh->SetMaterial(0, SceneryMaterial);
 	}
 }
 

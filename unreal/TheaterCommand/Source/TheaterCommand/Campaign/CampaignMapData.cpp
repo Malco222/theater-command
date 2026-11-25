@@ -237,6 +237,7 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 			Region.bOre = (*Flags)->HasField(TEXT("ore"));
 			Region.bDepot = (*Flags)->HasField(TEXT("depot"));
 			Region.bColony = (*Flags)->HasField(TEXT("col"));
+			Region.bIslet = (*Flags)->HasField(TEXT("islet"));
 			const TArray<TSharedPtr<FJsonValue>>* Fort = nullptr;
 			if ((*Flags)->TryGetArrayField(TEXT("fort"), Fort) && Fort->Num() > 0)
 			{

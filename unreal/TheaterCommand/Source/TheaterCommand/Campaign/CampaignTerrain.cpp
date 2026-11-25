@@ -413,30 +413,52 @@ void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, doub
 
 	// 3. Islands and enclaves too small for the grid to see (Malta, Gibraltar)
 	// get a small mound of their own so they are on the table and can be clicked.
+	// (Release 2, the whole world.) So do the Pacific's islets (Midway, Wake, Truk: the chart's "islet", about ten units
+	// across) on a sheet too coarse to see them. On the world's own sheet, six units a cell, an islet covers two grid
+	// points and the smoothing of the shore in step 4 puts it under the sea: from the high view there was no Midway.
+	// There its mound is two cells and a fifth in radius, the least that the smoothing leaves standing as land wherever
+	// the island falls between the grid's points. A fine sheet sees an islet at its own size and raises nothing for it.
+	// And a sheet may lie in any turn of the world, as the lands filled in step 1 do: the mound is raised where the
+	// island falls on this sheet.
 	for (const FCampaignRegion& R : Data.Regions)
 	{
-		if (R.Area <= 0.0 || R.Area > 40.0)
+		if (R.Area <= 0.0)
 		{
 			continue;
 		}
-		const double Radius = FMath::Max(2.6, FMath::Sqrt(R.Area / UE_DOUBLE_PI) + 1.4);
-		const int32 I0 = FMath::Max(FMath::FloorToInt32((R.Centroid.X - OriginX - Radius) / Cell), 0);
-		const int32 I1 = FMath::Min(FMath::CeilToInt32((R.Centroid.X - OriginX + Radius) / Cell), NX - 1);
-		const int32 J0 = FMath::Max(FMath::FloorToInt32((R.Centroid.Y - OriginY - Radius) / Cell), 0);
-		const int32 J1 = FMath::Min(FMath::CeilToInt32((R.Centroid.Y - OriginY + Radius) / Cell), NY - 1);
-		for (int32 J = J0; J <= J1; ++J)
+		const double Round = FMath::Sqrt(R.Area / UE_DOUBLE_PI);
+		const bool bLostIslet = R.bIslet && Round < 2.2 * Cell;
+		if (R.Area > 40.0 && !bLostIslet)
 		{
-			for (int32 I = I0; I <= I1; ++I)
+			continue;
+		}
+		const double Radius = FMath::Max(bLostIslet ? 2.2 * Cell : 2.6, Round + 1.4);
+		const bool bRound = Data.bWorld && Data.WorldWidth > 0.0;
+		for (int32 Turn = bRound ? -1 : 0; Turn <= (bRound ? 1 : 0); ++Turn)
+		{
+			const FVector2D Middle(R.Centroid.X + Turn * Data.WorldWidth, R.Centroid.Y);
+			if (Middle.X + Radius < OriginX || Middle.X - Radius > OriginX + ExtentX || Middle.Y + Radius < OriginY || Middle.Y - Radius > OriginY + ExtentY)
 			{
-				const double D = FVector2D::Distance(PointAt(I, J), R.Centroid);
-				const float Mound = 1.0f - FMath::SmoothStep(static_cast<float>(Radius * 0.55), static_cast<float>(Radius), static_cast<float>(D));
-				const int32 Idx = Index(I, J);
-				if (Mound > Coverage[Idx])
+				continue;
+			}
+			const int32 I0 = FMath::Max(FMath::FloorToInt32((Middle.X - OriginX - Radius) / Cell), 0);
+			const int32 I1 = FMath::Min(FMath::CeilToInt32((Middle.X - OriginX + Radius) / Cell), NX - 1);
+			const int32 J0 = FMath::Max(FMath::FloorToInt32((Middle.Y - OriginY - Radius) / Cell), 0);
+			const int32 J1 = FMath::Min(FMath::CeilToInt32((Middle.Y - OriginY + Radius) / Cell), NY - 1);
+			for (int32 J = J0; J <= J1; ++J)
+			{
+				for (int32 I = I0; I <= I1; ++I)
 				{
-					Coverage[Idx] = Mound;
-					if (Region[Idx] < 0 && Mound > 0.3f)
+					const double D = FVector2D::Distance(PointAt(I, J), Middle);
+					const float Mound = 1.0f - FMath::SmoothStep(static_cast<float>(Radius * 0.55), static_cast<float>(Radius), static_cast<float>(D));
+					const int32 Idx = Index(I, J);
+					if (Mound > Coverage[Idx])
 					{
-						Region[Idx] = static_cast<int16>(R.Id);
+						Coverage[Idx] = Mound;
+						if (Region[Idx] < 0 && Mound > 0.3f)
+						{
+							Region[Idx] = static_cast<int16>(R.Id);
+						}
 					}
 				}
 			}
