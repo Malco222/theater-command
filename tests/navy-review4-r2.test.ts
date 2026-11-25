@@ -13,8 +13,8 @@ import { setDesk } from '../src/campaign/depth';
 import { signPeace } from '../src/campaign/diplomacy';
 import { fleetDoing } from '../src/campaign/fleets';
 import { fleetWhy, setFleetWhy } from '../src/campaign/fleetwhy';
-import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
-import { adrift, anchorLoss, inPassage, navalAI, navalUpkeep, rebase, safeHarbour, setGate, strikeThreat, struckLine } from '../src/campaign/navy';
+import { addCorps, allied, atWar, createGame, declareWar } from '../src/campaign/game';
+import { adrift, anchorLoss, inPassage, navalAI, navalUpkeep, planCrossing, rebase, safeHarbour, setGate, strikeThreat, struckLine } from '../src/campaign/navy';
 import { gatherMonth } from '../src/campaign/readiness';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -80,6 +80,18 @@ describe('1. strikes by a nation since at peace with the fleet\'s no longer coun
   });
 });
 
+/** A crossing Japan's player names as his plan, from a home port of his to a shore of a country he is at war with, and a corps of his on its quay. */
+function nameCrossing(g: Game): void {
+  for (const from of g.regions.filter((r) => r.port && r.ctrl === 'JAP' && r.owner === 'JAP')) {
+    for (const to of g.regions.filter((r) => r.seas.length > 0 && atWar(g, 'JAP', r.ctrl))) {
+      if (!planCrossing(g, 'JAP', from, to)) continue;
+      addCorps(g, 'JAP', 'Quay Corps', 'inf', 1, from.id, {});
+      return;
+    }
+  }
+  throw new Error('no crossing to name');
+}
+
 describe('2. the stand-down brings home a striking fleet still on its gather voyage', () => {
   it('gathered from far off, in passage still when the window has passed, it is ordered home from where it is', () => {
     const g = startOpen(createGame(17, 'JAP'));
@@ -90,6 +102,9 @@ describe('2. the stand-down brings home a striking fleet still on its gather voy
     sing.ctrl = 'JAP';
     expect(rebase(g, force, sing, true)).toBe(true);
     g.turn = 25;
+    // (At the free stop his admirals gather for the crossing he has named, once his corps stand on its quay: the design
+    // director's ruling of 17:09Z on Units decide audit item 44.)
+    nameCrossing(g);
     gatherMonth(g, 'JAP');
     expect(g.regions[force.base].name).toBe('Etorofu');
     expect(inPassage(force)).toBe(true);

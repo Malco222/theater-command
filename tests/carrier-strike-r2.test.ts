@@ -36,7 +36,19 @@ function japan(on = true, staff = false): Game {
   setCarrierStrike(g, on);
   beginHuman(g);
   while (g.turn < 27) month(g);
+  berthAtPearl(g);
   return g;
+}
+/**
+ * America's Pacific fleets at anchor at Pearl Harbor. (The book's dated base moves run at stops 1 and 2 only, Units
+ * decide audit item 42: at the free stop America's staff keeps them at San Diego in peace, so the test berths them.)
+ */
+function berthAtPearl(g: Game): void {
+  const sea = g.seas.findIndex((z) => z.key === 'hawaii');
+  for (const f of g.fleets.filter((x) => x.nat === 'USA' && (x.name === 'Pacific Fleet' || x.name === 'Pacific Carrier Fleet'))) {
+    f.base = g.byName['Pearl Harbor'].id; f.port = 'Pearl Harbor'; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+    delete f.passage;
+  }
 }
 const fleet = (g: Game, nat: string, name: string): Fleet => g.fleets.find((f) => f.nat === nat && f.name === name)!;
 const atPearl = (g: Game): number => g.fleets.filter((f) => f.base === g.byName['Pearl Harbor'].id && !atSea(f)).reduce((n, f) => n + shipCount(f.ships) - f.ships.ss, 0);
