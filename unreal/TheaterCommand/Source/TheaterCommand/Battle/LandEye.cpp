@@ -145,6 +145,23 @@ namespace LandEye
 		return std::abs(To.Dot(Right)) / Depth <= TanH && std::abs(To.Dot(Up)) / Depth <= TanV;
 	}
 
+	double AerialShown(const Vec& Eye, const Vec& Foot, double Long, bool bRidden)
+	{
+		if (bRidden) return 0.0;
+		// (the rod's nearest point to the eye: upright from its foot)
+		const double Up = std::clamp(Eye.Z - Foot.Z, 0.0, std::max(0.0, Long));
+		const double Far = (Eye - Vec(Foot.X, Foot.Y, Foot.Z + Up)).Length();
+		if (Far <= AerialAway) return 0.0;
+		if (Far >= AerialWhole) return 1.0;
+		const double U = (Far - AerialAway) / (AerialWhole - AerialAway);
+		return U * U * (3.0 - 2.0 * U);
+	}
+
+	int RiddenBy(const Pose& P)
+	{
+		return P.Shot == Kind::Tank ? P.Subject : -1;
+	}
+
 	double Director::Roll()
 	{
 		Dice += 0x9E3779B97F4A7C15ull;
@@ -370,7 +387,7 @@ namespace LandEye
 		SinceSquad = 0;
 		UsedSpots.clear();
 		DarkSpots.clear();
-		DarkSince = -1.0;
+		DarkSince = LightSince = -1.0;
 		DarkLeft = DarkRunNow = 0;
 		bAskedUnfit = false;
 		bAsked = bAskedBuilding = bShotAsked = false;
@@ -2953,7 +2970,7 @@ namespace LandEye
 		BadSince = -1.0;
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
-		DarkSince = -1.0;
+		DarkSince = LightSince = -1.0;
 		ShotLength = Set.ShotMin + Roll() * (Set.ShotMax - Set.ShotMin);
 		if (Shot == Kind::Wide) ShotLength *= 0.7;
 		// (under shelling the holds are short and nervous: heavy rounds landing round its man in its time)
@@ -4015,12 +4032,21 @@ namespace LandEye
 		}
 		// The picture drawn too dark (the art director's rule, cut 4 fix 6): over DarkLeave under L 25 for DarkHold seconds
 		// past its first quarter second, the shot is left, and the next stands clear of where it stood (a hedge's shaded
-		// face, a crown's shade). After DarkRunMost such cuts running, the light is to blame, not the place: it rests.
+		// face, a crown's shade). After DarkRunMost such cuts running, the light is to blame, not the place: it rests,
+		// until a picture has read no darker than DarkLight for as long, which shows that the light is not.
 		if (!bChoosing && Here.DarkNow && Shot != Kind::Open && Shot != Kind::Wide)
 		{
 			const double Dark = Here.DarkNow();
 			if (Dark <= Set.DarkLeave || Held < 0.25) DarkSince = -1.0;
 			else if (DarkSince < 0.0) DarkSince = Real;
+			// (light as plainly as dark is dark: a reading there is, no darker than DarkLight, for DarkHold seconds on end
+			// past the shot's first quarter second. One light reading is not enough. The scene's reading is of a frame
+			// asked for up to a quarter of a second ago and come back later still, so the first a shot is given may be
+			// the last shot's picture, an opening's or a wide's among them, which this rule never judges; and one frame
+			// may be a shell's flash. A reading that stands half a second is this shot's own, and no flash.)
+			if (Dark < 0.0 || Dark > Set.DarkLight || Held < 0.25) LightSince = -1.0;
+			else if (LightSince < 0.0) LightSince = Real;
+			if (LightSince >= 0.0 && Real - LightSince >= Set.DarkHold) DarkRunNow = 0;
 			if (!bCut && !bHeld && DarkSince >= 0.0 && Real - DarkSince >= Set.DarkHold && DarkRunNow < Set.DarkRunMost)
 			{
 				bCut = true;
@@ -4079,8 +4105,6 @@ namespace LandEye
 					BailLog.back().Left = Real;
 					BailLog.back().LeftWhy = Reason;
 				}
-				// (a shot left for anything but a dark picture held its light: the dark rule's run starts again)
-				if (Reason != Why::Dark) DarkRunNow = 0;
 				BeginChoice(Battle, Real);
 			}
 			// (the film opening on the whistle: at once, so the opening aerial is never seen for a frame or two first)

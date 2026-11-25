@@ -79,24 +79,59 @@ namespace LandSight
 	int MonthOf(const std::string& Date);
 
 	/**
-	 * The spotter's mark (release 2; Brian, 24 November 20:38Z): how near one of his blocks must come to find an enemy
+	 * The spotter's mark (release 2; Brian, 24 November 20:38Z): how near one of his blocks comes to see an enemy
 	 * hidden in woods or on a hedge line, as the rules have it (src/battle/land/rules.ts, LAND.hide.sight and heard;
-	 * sim.ts, spotHidden and gap). A hidden block is found once a fighting enemy block's edge is within the hidden one's
-	 * own sight distance, by how it moves: men lying still under the trees are seen last, guns before them, lorries and
-	 * tanks first; and a tank or lorry on the move in cover is heard farther off still. The metres between two blocks'
-	 * edges are those between their middles less a quarter of each one's longer side. So about one of his blocks lies a
-	 * ring for each kind of enemy: a hidden one of that kind inside it is found. The enemy's own size only widens it (a
-	 * point is taken, the least). The rules know no rise or hedge here: the ring is round.
+	 * sim.ts, spotHidden and gap). A hidden block is seen once a fighting enemy block's edge is within the hidden one's
+	 * own sight distance, by how it moves: men on foot lying still under the trees are seen last; guns before them,
+	 * and the machine gun and mortar teams, which the rules count with the guns; motorised blocks and tanks first; and
+	 * a tank on the move in cover is heard farther off still (a lorried block is not: the rules hear tracks alone).
+	 * The metres between two blocks' edges are those
+	 * between their middles less a quarter of each one's longer side. So about one of his blocks lies a ring for each
+	 * kind of enemy: a hidden one of that kind inside it is seen. The enemy's own size only widens it (a point is
+	 * taken, the least). The rules know no rise or hedge here: the ring is round. A smoke screen standing between
+	 * them does hide it (where the smoke rule is on), and the scene is not told of the screens: the mark says so in
+	 * words.
+	 *
+	 * Being seen is seldom how hidden men are found, and the mark must not say it is. A hidden block neither sent to
+	 * attack nor told to fire on one block holds its fire only until an enemy is within its ambush distance (LAND.hide.ambush: men on foot and
+	 * motorised 150 m, a machine gun team 200 m, and in true forest no further than LAND.hide.forest, 100 m; guns,
+	 * mortar teams and tanks do not hold their fire at all, in forest or out of it: a mortar team is a gun block to
+	 * the rules, and only the machine gun team is given a hold of its own, so a hidden mortar team fires at its full
+	 * reach, far the longest of the teams'), and its first shot gives it away: men on foot in
+	 * hiding open fire from well outside the 60 m at which they would be seen (a motorised block's 150 m is where it
+	 * is seen too, and in forest a machine gun team's 100 m). A hidden block that is sent to attack does not hold its
+	 * fire: it fires at its weapons' full reach. Nor does one told to fire on one block (the rules' aim): it strikes
+	 * that block at full reach while the block is in plain sight, and still holds for every other. None fires on a
+	 * block that is itself hidden. The mark's words say each of these. (A hold is where a block opens fire only if
+	 * its own weapons reach that far. As the rules stand cavalry and engineers reach 140 m, ten metres short of
+	 * their 150, so hidden they open at 140; every other kind that holds reaches its hold and more. The mark's line
+	 * gives the hold, and the run lets no kind fall more than those ten metres short of it.) The ring's other use is the rules' too: a
+	 * block found by its own fire is not yet located (the fire back at it strikes softer for a while,
+	 * LAND.hide.locate) until that while is up or an enemy comes within the same sight distance, inside the ring.
+	 *
+	 * (Who is told to fire on one block, as the rules stood on 25 November: the player's own fire order, which takes
+	 * gun blocks and teams only, and, in the computer's planned attack, every gun block and team of it, aimed at the
+	 * main effort's block. So of the kinds that hold at all only the machine gun team was ever so told. The run does
+	 * NOT hold this: the mark's line says ANY given a target, which stays true whoever may be given one.)
 	 *
 	 * The numbers are the rules' own, kept here because the scene has no word from the rules for them;
-	 * Tools/land_play/run.sh fails where they differ from rules.ts.
+	 * Tools/land_play/run.sh fails where they, or the rules' lines the mark's words stand on, differ from rules.ts,
+	 * sim.ts and units.ts (which lines: the list at the head of its guard; those on who holds his fire are held
+	 * whole: ambushAt and targetOf line for line, gap() which they measure with, inWoods()'s one line (in forest is
+	 * the field's word 'woods' where the block's middle stands), and each holding kind's reach against its hold. A
+	 * hold written into whatever calls targetOf, or into live() or onHedge(), which those lines call, would not be
+	 * seen there; nor would more ground called woods by field.ts coverAt(), which the run does not read).
 	 */
 	struct Finds
 	{
-		/** Hidden men on foot, hidden guns, hidden lorries and tanks: found within this of his block's edge, metres. */
+		/** Hidden men on foot, hidden guns and teams, hidden motorised blocks and tanks: seen within this of his block's
+		 * edge, metres. */
 		double Foot = 60.0, Guns = 100.0, Vehicles = 150.0;
 		/** A hidden tank on the move is heard within this, metres. */
 		double Heard = 350.0;
+		/** Men in hiding hold their fire until an enemy is this near, metres: on foot or motorised, a machine gun team,
+		 * and the most either holds to in true forest. */
+		double Ambush = 150.0, AmbushMg = 200.0, AmbushForest = 100.0;
 	};
 	/** A ring's reach from the middle of a block W wide and D deep: the rules' sight and a quarter of its longer side. */
 	inline double FindsWithin(double Sight, double W, double D) { return Sight + 0.25 * (W > D ? W : D); }

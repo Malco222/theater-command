@@ -119,6 +119,15 @@ namespace LandGeneralEye
 		return Auto + Over;
 	}
 
+	bool Eye::TiltStands(double Zoom, double Own) const
+	{
+		return TiltOwn(Zoom, Own) - TiltAt(Zoom) > 0.25 * Rad;
+	}
+
+	bool Eye::TiltShows(double Zoom, double Own) const
+	{
+		return TiltStands(Zoom, std::min(Own, TiltMostAt(Zoom)));
+	}
 	double Eye::TiltMostAt(double Zoom) const
 	{
 		// (toward a man's shoulder his tilt is handed back to the automatic one, as the eased tilt can follow: zoomed
@@ -161,15 +170,97 @@ namespace LandGeneralEye
 	{
 		if (Number < 0 || Number >= ViewCount) return;
 		View& V = Views[Number];
+		// (the view is kept where his own hand's last move is bringing it to rest: the view he is getting, a top view
+		// just pressed above all, not one half way to it. Its turn, zoom and tilt are his own hand's unless a flight
+		// to a kept view or a wait at a hedge has them; its place is his own hand's only where no flight, glide to a
+		// point or followed unit carries it. What is not his own hand's is kept as it stands.)
+		const bool bOwnRest = FlyTo < 0 && !bBrake;
+		const bool bOwnPlace = bOwnRest && Follow < 0 && !bGliding;
+		// (his own tilt, the top view's too. On its way back to the automatic tilt by his own hand it is not his own.
+		// Where a flight he keeps in the middle of has the turning of it, to its view's tilt or back to the automatic
+		// one, it is his own as it stands if it shows on the picture, and else the automatic one: the view kept is
+		// the picture he has, never a tilt he cannot see)
+		const bool bFlightTilt = FlyTo >= 0 && bOwnTilt && (bCallToAuto || !bToAuto);
+		const bool bShows = bFlightTilt && TiltShows(S, Tl);
 		V.bKept = true;
-		V.X = Tx;
-		V.Y = Ty;
-		V.H = H;
-		V.S = S;
-		// (his own tilt as it stands, the top view's too; on its way back to the automatic tilt it is not his own)
-		V.bOwn = bOwnTilt && !bToAuto;
-		V.Tl = V.bOwn ? Tl : 0.0;
+		V.X = bOwnPlace ? WantX : Tx;
+		V.Y = bOwnPlace ? WantY : Ty;
+		V.H = bOwnRest ? WantH : H;
+		V.S = bOwnRest ? WantS : S;
+		V.bOwn = bFlightTilt ? bShows : bOwnTilt && !bToAuto;
+		V.Tl = V.bOwn ? (bOwnRest ? WantTl : Tl) : 0.0;
 		AtView = Number;
+		// (kept anew in the middle of a flight: the flight ends at the view just kept, where it stood at the press,
+		// his own tilt with it where it shows, and else handed back to the automatic one; a view kept with no flight
+		// on begins none)
+		if (FlyTo >= 0)
+		{
+			FlyTo = Number;
+			if (bFlightTilt) bToAuto = !bShows;
+			bCallToAuto = false;
+		}
+	}
+
+	bool Eye::ViewIs(int Number, Vec& OutLook, double& OutHeading, double& OutZoom, double& OutTilt) const
+	{
+		if (!ViewKept(Number)) return false;
+		const View& V = Views[Number];
+		OutLook = Vec(V.X, V.Y, 0.0);
+		OutHeading = V.H;
+		OutZoom = V.S;
+		OutTilt = (V.bOwn ? TiltOwn(V.S, std::min(V.Tl, TiltMostAt(V.S))) : TiltAt(V.S)) / Rad;
+		return true;
+	}
+
+	void Eye::FlightLetGo(bool bPanned, bool bPlace, double ZoomIn, double ZoomLeast)
+	{
+		if (bPlace)
+		{
+			// (a critically damped spring wanted at X + swing / rate dies away to it with no overshoot)
+			const double Rate = bPanned || !bGliding ? Set.Ease : Set.Glide;
+			WantX = Tx + SwingX / Rate;
+			WantY = Ty + SwingY / Rate;
+		}
+		// (the turn, the zoom and his tilt are held to a hardest push while flying: each stops in swing squared over
+		// twice that push)
+		WantH = H + SwingH * std::abs(SwingH) / (2.0 * Set.TurnPush * Rad);
+		WantS = S + SwingS * std::abs(SwingS) / (2.0 * Set.ZoomPush * Set.FlySlower);
+		// (his own tilt, where the call and not his own hand had the turning of it, to the view's tilt or back to the
+		// automatic one. Rule 21, the picture is the truth: it stays his own only if the picture HAS it as his hand
+		// takes the flight, and WILL have it where the taking frame leaves him; else it goes on back to the
+		// automatic one and is handed back, never left his own, unseen, under it. Turned back by his own hand
+		// before the call, it goes on back as he asked.
+		// Has it: TiltStands of the view as it stands this frame, S and Tl, and of nothing the zoom or the tilt
+		// have yet to do. The call sets his tilt off just under the automatic one's soft floor as the view stands,
+		// and whatever then lowers that floor bares it though nobody has turned it: a notch IN on the taking frame,
+		// or a zoom still coasting in from his own wheel or from a flight's way down. Asked of the zoom's rest
+		// instead (as it was until the sixth check), a call made while the zoom coasted in and taken a frame later
+		// left him eleven degrees of a tilt that neither he nor the flight had turned, and a tilt plainly on the
+		// picture was handed back where the zoom coasted out and a notch in took the flight. So too a tilt of his
+		// own that the picture did not have as he took the flight (swallowed farther out, or hidden by a man's
+		// shoulder, at the call or on the flight's way) is handed back whatever the taking notch would have bared:
+		// from the call the flight has the turning of it, and it is his again only once the picture has shown it.
+		// (Whether, not how much: what he then keeps is its rest, below, and a tilt still swinging up comes to rest
+		// past what the picture showed by its stopping way, several degrees at a flight's speed.)
+		// Will have it: TiltShows of the tilt's own rest from the swing it has, at the zoom's own rest (WantS
+		// above) less ZoomIn, the notch he took the flight with, which this same frame still has to take off the
+		// zoom's wish, and no nearer than ZoomLeast (a unit's card pressed follows the unit, never nearer than
+		// FollowNearest, and that too is laid on the wish later in this frame). Farther out the automatic tilt is
+		// steeper and swallows his; right in by a man's shoulder his is handed toward it (TiltMostAt); so none is
+		// left on that he cannot see where he is going.
+		// What he keeps is the tilt as it comes to rest, Rest. Toward a man's shoulder the eased tilt is already
+		// being pressed down (TlGoal), so a take on the last of the way down to a view kept there keeps what the
+		// shoulder has left of his tilt as the take finds it, not the tilt the view was kept with: less than a
+		// flight left to end would give him back on a later notch out, and nothing once the picture has lost it.)
+		if (bOwnTilt && (bCallToAuto || !bToAuto))
+		{
+			const double Rest = Tl + SwingTl * std::abs(SwingTl) / (2.0 * Set.TiltPush * Rad * Set.FlySlower);
+			const double ZoomRest = std::clamp(std::max(WantS - ZoomIn, ZoomLeast), 0.0, 1.0);
+			bToAuto = !(TiltStands(S, Tl) && TiltShows(ZoomRest, Rest));
+			WantTl = bToAuto ? TiltAt(ZoomRest) - (Set.TiltSoft + 1.0) * Rad : Rest;
+		}
+		bCallToAuto = false;
+		FlyTo = -1;
 	}
 
 	void Eye::CallView(int Number)
@@ -195,10 +286,17 @@ namespace LandGeneralEye
 		{
 			OwnTiltBegin();
 			bToAuto = false;
+			bCallToAuto = false;
 			WantTl = V.Tl;
 		}
-		else if (bOwnTilt) bToAuto = true;
-		AtView = Number;
+		else if (bOwnTilt)
+		{
+			// (turned back by this call, or by a call before it that this one follows: not by his own hand)
+			bCallToAuto = bCallToAuto || !bToAuto;
+			bToAuto = true;
+		}
+		else bCallToAuto = false;
+		AtView = FlyTo = Number;
 	}
 
 	void Eye::TiltWish(const Input& In)
@@ -334,10 +432,15 @@ namespace LandGeneralEye
 		bGliding = false;
 		Follow = -1;
 		Tl = WantTl = SwingTl = TlGoal = 0.0;
-		bOwnTilt = bToAuto = bTop = bTopWasOwn = false;
+		bOwnTilt = bToAuto = bCallToAuto = bTop = bTopWasOwn = false;
 		for (View& V : Views) V = View();
-		AtView = -1;
+		AtView = FlyTo = -1;
 		bFlying = false;
+		for (int K = 0; K < HandKinds; ++K)
+		{
+			Quiet[K] = 1.0;
+			bLeft[K] = false;
+		}
 		bFirst = true;
 		Now = LandEye::Pose();
 		return true;
@@ -784,7 +887,7 @@ namespace LandGeneralEye
 		return Hurried;
 	}
 
-	LandEye::Pose Eye::Update(const Input& In, double RealDt, double Battle)
+	LandEye::Pose Eye::Update(const Input& Given, double RealDt, double Battle)
 	{
 		if (!Rec) return Now;
 		Index();
@@ -799,8 +902,51 @@ namespace LandGeneralEye
 		const double Across = Arm * std::cos(TiltAt(S));
 
 		// What the player asked.
+		Input In = Given;
+		{
+			const bool Moved[HandKinds] = { In.PanRight != 0.0 || In.PanAhead != 0.0, In.SlideRight != 0.0 || In.SlideAhead != 0.0, In.Zoom != 0.0, In.Turn != 0.0,
+				In.Tilt != 0.0 };
+			for (int K = 0; K < HandKinds; ++K) Quiet[K] = Moved[K] ? 0.0 : Quiet[K] + Dt;
+		}
 		if (In.KeepView >= 0) KeepView(In.KeepView);
-		if (In.CallView >= 0) CallView(In.CallView);
+		if (In.CallView >= 0)
+		{
+			const bool bFlies = ViewKept(In.CallView);
+			CallView(In.CallView);
+			// (what was moving the view as he called is left out until it stops: a key still held, and a trackpad's
+			// slide that runs on after the fingers lift, would else take the view from the call at once)
+			for (int K = 0; bFlies && K < HandKinds; ++K) bLeft[K] = bLeft[K] || Quiet[K] < Set.LeftStill;
+		}
+		for (int K = 0; K < HandKinds; ++K)
+		{
+			if (Quiet[K] >= Set.LeftStill) bLeft[K] = false;
+		}
+		if (bLeft[0]) In.PanRight = In.PanAhead = 0.0;
+		if (bLeft[1]) In.SlideRight = In.SlideAhead = 0.0;
+		if (bLeft[2]) In.Zoom = 0.0;
+		if (bLeft[3]) In.Turn = 0.0;
+		if (bLeft[4]) In.Tilt = 0.0;
+		// (the pointer at the screen's edge pans as ever, but not through a flight to a kept view: it may well rest
+		// there as he presses the key)
+		const bool bEdge = !In.bLockEdgePan && FlyTo < 0;
+		const double Px = std::clamp(In.PanRight + (bEdge ? In.EdgeRight : 0.0), -1.0, 1.0);
+		const double Py = std::clamp(In.PanAhead + (bEdge ? In.EdgeAhead : 0.0), -1.0, 1.0);
+		const bool bSlide = In.SlideRight != 0.0 || In.SlideAhead != 0.0;
+		const bool bPanned = Px != 0.0 || Py != 0.0 || bSlide;
+		// (moved by his own hand, he no longer stands at a kept view, and a flight to one is over: its chip goes out)
+		if (bPanned || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.bGoTo || In.GoBlock >= 0)
+		{
+			if (FlyTo >= 0)
+			{
+				// (a unit's card pressed, with the unit still on the field and no pan of his in the same frame to end
+				// the follow: the view will follow it, and the zoom's wish is held no nearer than FollowNearest
+				// further down this frame)
+				double CardX = 0.0, CardY = 0.0;
+				const bool bToUnit = In.GoBlock >= 0 && !bPanned && BlockAt(In.GoBlock, Battle, CardX, CardY);
+				FlightLetGo(bPanned, !In.bGoTo && In.GoBlock < 0, In.Zoom * Set.ZoomStep, bToUnit ? Set.FollowNearest : 0.0);
+			}
+			AtView = FlyTo = -1;
+		}
 		if (In.bGoTo)
 		{
 			WantX = In.GoTo.X;
@@ -813,21 +959,24 @@ namespace LandGeneralEye
 			Follow = In.GoBlock;
 			bGliding = true;
 		}
-		const double Px = std::clamp(In.PanRight + (In.bLockEdgePan ? 0.0 : In.EdgeRight), -1.0, 1.0);
-		const double Py = std::clamp(In.PanAhead + (In.bLockEdgePan ? 0.0 : In.EdgeAhead), -1.0, 1.0);
-		const bool bSlide = In.SlideRight != 0.0 || In.SlideAhead != 0.0;
-		if (Px != 0.0 || Py != 0.0 || bSlide)
+		if (bPanned)
 		{
+			// (a glide his pan takes, the coast of a flight let go among them, is let go where the pan's own quicker
+			// spring brings it to rest: left wanted far ahead at the glide's rate, that spring would rush the look-at
+			// on toward it. Not a glide asked for in this same frame.)
+			if (bGliding && !In.bGoTo && In.GoBlock < 0)
+			{
+				WantX = Tx + SwingX / Set.Ease;
+				WantY = Ty + SwingY / Set.Ease;
+			}
 			Follow = -1;
 			bGliding = false;
 		}
-		// (moved by his own hand, he no longer stands at a kept view: its chip goes out)
-		if (Px != 0.0 || Py != 0.0 || bSlide || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.bGoTo || In.GoBlock >= 0) AtView = -1;
-		// (flying to a kept view he has not since moved from: its place, turn, zoom and tilt are wanted afresh each
-		// frame, so a wait at a hedge on the way, which lets a wish go, does not lose them)
-		if (bFlying && AtView >= 0)
+		// (flying to a kept view: its place, turn, zoom and tilt are wanted afresh each frame, so a wait at a hedge on
+		// the way, which lets a wish go, does not lose them)
+		if (bFlying && FlyTo >= 0)
 		{
-			const View& V = Views[AtView];
+			const View& V = Views[FlyTo];
 			const double Far = std::hypot(V.X - Tx, V.Y - Ty), Round = std::abs(WrapNear(V.H, H) - H);
 			if (Far < 2.0 && Round < 2.0 * Rad)
 			{
@@ -848,10 +997,11 @@ namespace LandGeneralEye
 			}
 			else
 			{
-				// (low down: up first, where it stands and as it faces)
-				WantX = Tx;
-				WantY = Ty;
-				WantH = H;
+				// (low down: up first, where it stands and as it faces; a glide or a turn it was in the middle of dies
+				// away where its own spring comes to rest, not at a stop)
+				WantX = Tx + SwingX / Set.Ease;
+				WantY = Ty + SwingY / Set.Ease;
+				WantH = H + SwingH * std::abs(SwingH) / (2.0 * Set.TurnPush * Rad);
 				WantS = std::max(V.S, FlyS);
 				bGliding = false;
 			}
@@ -1043,16 +1193,36 @@ namespace LandGeneralEye
 		// (and the zoom come to rest, so its own easing goes back to the automatic one's without a step)
 		if (bOwnTilt && bToAuto && !bTop && Tl <= TiltAt(S) - Set.TiltSoft * Rad && std::abs(WantS - S) < 0.005 && std::abs(SwingS) < 0.05)
 		{
-			bOwnTilt = bToAuto = false;
+			bOwnTilt = bToAuto = bCallToAuto = false;
 			Tl = WantTl = SwingTl = TlGoal = 0.0;
 		}
-		// (come to rest at the kept view, or wherever his own hand has since taken it: the turn and the zoom go back to
-		// their own easing, at rest, without a step)
-		if (bFlying && !bGliding && !bBrake && std::abs(WantS - S) < 0.005 && std::abs(SwingS) < 0.05 && std::abs(WrapNear(WantH, H) - H) < 0.5 * Rad
+		// (come to rest at the kept view, or wherever his own hand has since taken it, or drawn back from too near a
+		// followed unit: the turn and the zoom go back to their own easing, at rest, without a step. Whether the look-at
+		// is still gliding is nothing to it: after a unit on the move it glides for as long as the unit does. A flight
+		// to a kept view is not over before the tilt is there too: his own at the view's, or, for a view kept without
+		// his own tilt, handed back to the automatic one just above)
+		if (bFlying && !bBrake && std::abs(WantS - S) < 0.005 && std::abs(SwingS) < 0.05 && std::abs(WrapNear(WantH, H) - H) < 0.5 * Rad
 			&& std::abs(SwingH) < 2.0 * Rad
-			&& (AtView < 0 || (std::hypot(Views[AtView].X - Tx, Views[AtView].Y - Ty) < 1.5 && std::abs(Views[AtView].S - S) < 0.005)))
+			&& (FlyTo < 0 || (std::hypot(Views[FlyTo].X - Tx, Views[FlyTo].Y - Ty) < 1.5 && std::abs(Views[FlyTo].S - S) < 0.005
+				&& (Views[FlyTo].bOwn ? !bOwnTilt || std::abs(std::min(Views[FlyTo].Tl, TiltMostAt(S)) - Tl) < 1.0 * Rad : !bOwnTilt))))
 		{
 			bFlying = false;
+			FlyTo = -1;
+			bCallToAuto = false;
+		}
+		// (carried off the kept view by a unit it follows, by a glide begun before it was kept, or stopped short of it
+		// at a hedge: where the view is going is no longer that view, and its chip goes out)
+		if (AtView >= 0 && FlyTo < 0)
+		{
+			const View& V = Views[AtView];
+			// (and tilted away from it: his own tilt where it was kept without one, none where it was kept with one,
+			// or his own wanted elsewhere than it was kept)
+			const bool bOwnNow = bOwnTilt && !bToAuto;
+			if (std::hypot(V.X - WantX, V.Y - WantY) > 3.0 || std::abs(V.S - WantS) > 0.02 || std::abs(WrapNear(V.H, WantH) - WantH) > 2.0 * Rad || V.bOwn != bOwnNow
+				|| (V.bOwn && std::abs(std::min(V.Tl, TiltMostAt(V.S)) - std::min(WantTl, TiltMostAt(WantS))) > 2.0 * Rad))
+			{
+				AtView = -1;
+			}
 		}
 
 		Now.Eye = EyeAt;

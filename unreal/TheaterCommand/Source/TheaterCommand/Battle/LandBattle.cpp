@@ -4158,6 +4158,12 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	// picture's lines and at most 2.5 times their size, so a section reads as a dark dash and a platoon as a row of them;
 	// the art director, 22 November 18:29Z: "the men are not on screen at all" at his height, culled under two lines)
 	const bool bHigh = S.General.bOn && !S.General.bFilm;
+	// (the film in a corner, while its lens is up: a second picture of the same men. A man in its picture is posed and
+	// placed as one in his own, or he would stand frozen in the window as he last stood in his; and one within
+	// CornerTrueWithin of its lens is not grown, or he would stand a giant before it. His own picture's count is his
+	// own picture's still.)
+	const bool bFilmLens = bHigh && bCornerLens;
+	const LandPlay::Vec FilmEye = S.FilmPose.Eye;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
@@ -4167,7 +4173,11 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Crowd.PlaceAsPosed(Man, X, Y, Z, Facing); // (his height as last posed: no ground asked a man a frame)
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
-		bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		const bool bOwnLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		const double FilmFar = bFilmLens ? (At - FilmEye).Length() : 0.0;
+		const bool bInFilm = bFilmLens && (FilmFar < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, At, 1.15));
+		bool bLooked = bOwnLooked || bInFilm;
+		bool bMovedOn = false;
 		// (release 2, on trial "leave") A man leaving with his block, out of the picture: hidden for good, so he walks
 		// out of frame and is never seen to go. And a man out of the picture whose body was last drawn where the
 		// picture now looks (the camera turned or cut back to ground he has left since): drawn again, where he is
@@ -4180,15 +4190,21 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		if (bLeaveWalk && bShown && !bLooked && D.bDrawnAt)
 		{
 			const LandPlay::Vec Old(D.DrawnAt[0], D.DrawnAt[1], D.DrawnAt[2]);
-			if ((Old - At).Length() > 0.5 && ((Old - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, Old, 1.15)))
+			if ((Old - At).Length() > 0.5 && ((Old - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, Old, 1.15)
+				|| (bFilmLens && ((Old - FilmEye).Length() < 6.0 || LandParts::InPicture(S.FilmPose, 16.0 / 9.0, Old, 1.15)))))
 			{
 				bLooked = true;
+				bMovedOn = true;
 				++MenMovedOn;
 			}
 		}
 		if (bShown && bLooked)
 		{
-			++MenInPicture;
+			// (the men in his own picture, or drawn again there by "leave"; not those in the film's corner alone)
+			if (bOwnLooked || bMovedOn)
+			{
+				++MenInPicture;
+			}
 			D.bDrawnAt = true;
 			D.DrawnAt[0] = At.X;
 			D.DrawnAt[1] = At.Y;
@@ -4225,7 +4241,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			{
 				Grow = FMath::Max(1.0, MassMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines));
 			}
-			else if (bHigh && Level == static_cast<int32>(LandMen::Far) && GeneralMinPx > 0.0)
+			else if (bHigh && Level == static_cast<int32>(LandMen::Far) && GeneralMinPx > 0.0 && !(bInFilm && FilmFar < CornerTrueWithin))
 			{
 				Grow = FMath::Clamp(GeneralMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines), 1.0, 2.5);
 			}
@@ -5749,6 +5765,15 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			// (a German roof gun, the MG 34 in its cradle on the cupola's rail, is drawn only while her commander mans
 			// it: the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post)
 			D.bWhileManned = LandKit::ShownWhileManned(Model, Body);
+			// (a wireless aerial's length from its mounting, its points being kept from there: DrawArmour puts it away
+			// near the lens)
+			if (Body.Name == "aerial")
+			{
+				for (size_t K = 2; K < Body.Near.Points.size(); K += 3)
+				{
+					D.AerialLong = FMath::Max(D.AerialLong, static_cast<double>(Body.Near.Points[K]));
+				}
+			}
 			D.bFarSection = bFarSection; // TK1
 			D.LinksRun = Body.Side < 0 ? Vehicle.RunLeft : Vehicle.RunRight; // TK3: links as made, posed once she runs
 		}
@@ -5777,6 +5802,17 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		FarCrowd->SetHigh(S.General.bOn && !S.General.bFilm, S.MenLines / 1.8);
 		FarCrowd->Draw(All, S.Pose, EyeAt, [this](int32 K) { return HiddenVehicle(K); }); // TK1
 	}
+	// A wireless aerial near the lens is put away (Brian's picture of 25 November 16:35Z: the film riding behind a
+	// Sherman's turret, her own aerial 2 to 4 m before the lens, a thin dark line through the whole picture): none of
+	// it drawn within 3 m of the picture's eye, all of it from 6 m, between them that share of its length from its
+	// mounting; and none of hers while the film rides her and the film is the picture. LandEye::AerialShown, played
+	// in the cloud test. By the picture's own eye alone: with his own view the picture, the film in its corner
+	// window is drawn from the field laid for his eye (LandBattle.h, CornerLens), and a tank it rides keeps her
+	// aerial before its lens. "-TheaterLandAerialsNear": drawn whole at any distance, as before, for the Mac's with
+	// and without.
+	static const bool bAerialsNear = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandAerialsNear"));
+	const bool bOwnPicture = S.bGeneralEye && !S.General.bFilm;
+	const int RiddenTrack = bOwnPicture ? -1 : LandEye::RiddenBy(S.FilmPose);
 	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
 	int32 SootRoom = 40000; // TK1 (soot)
 	for (FBodyDrawn& D : BodiesDrawn)
@@ -5790,7 +5826,16 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		const LandKit::Model& Model = V.Look();
 		const LandKit::Body& Body = Model.Bodies[static_cast<size_t>(D.Body)];
 		const bool bManned = !D.bWhileManned || static_cast<size_t>(D.Vehicle) >= S.RoofManned.size() || S.RoofManned[static_cast<size_t>(D.Vehicle)] != 0;
-		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned;
+		// (her aerial: how much of it is drawn this frame, 1 all of it)
+		double Aerial = 1.0;
+		if (D.AerialLong > 0.0 && !bAerialsNear && static_cast<size_t>(D.Body) < V.Bodies().size())
+		{
+			const LandKit::Place& Mounting = V.Bodies()[static_cast<size_t>(D.Body)];
+			const LandPlay::Vec AerialFoot(Mounting.At.X, Mounting.At.Y, Mounting.At.Z);
+			const bool bRidden = RiddenTrack >= 0 && static_cast<size_t>(D.Vehicle) < S.TrackOfVehicle.size() && S.TrackOfVehicle[static_cast<size_t>(D.Vehicle)] == RiddenTrack;
+			Aerial = LandEye::AerialShown(EyeAt, AerialFoot, D.AerialLong, bRidden);
+		}
+		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned && Aerial > 0.0;
 		Mesh->SetVisibility(bShown);
 		if (!bShown)
 		{
@@ -5820,10 +5865,11 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		// (in the general's view a far vehicle her own meshes draw is grown as her pieces would grow her, about the ground
 		// under her middle: a gun laid high, a manned roof gun's cradle)
 		const double Grow = FarCrowd.IsValid() ? FarCrowd->GrowOf(D.Vehicle) : 1.0;
-		if (Grow != 1.0 || !Mesh->GetRelativeScale3D().Equals(FVector::OneVector))
+		// (an aerial drawn in part: that share of its length, along its own upright, from its mounting)
+		if (Grow != 1.0 || Aerial != 1.0 || !Mesh->GetRelativeScale3D().Equals(FVector::OneVector))
 		{
 			const FVector Foot = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
-			Mesh->SetWorldTransform(FTransform(FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W), Foot + (World(Place.At.X, Place.At.Y, Place.At.Z) - Foot) * Grow, FVector(Grow)));
+			Mesh->SetWorldTransform(FTransform(FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W), Foot + (World(Place.At.X, Place.At.Y, Place.At.Z) - Foot) * Grow, FVector(Grow, Grow, Grow * Aerial)));
 		}
 		else
 		{
@@ -7663,7 +7709,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The picture: the camera, the ground round it, the men and the tanks.
 	LandFell::Phase("tick: the lens aimed");
 	AimEye(static_cast<float>(Real));
-	LandFell::Phase("tick: the film in a corner");
+	LandFell::Phase("tick: the film in a corner's lens");
 	FilmCorner();
 	if (Live.IsValid())
 	{
@@ -7774,6 +7820,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 			PuffsMostAsked = Effects->PuffsAsked();
 		}
 	}
+	// (the film in a corner's picture, once everything this frame draws stands where it has it)
+	LandFell::Phase("tick: the film in a corner's picture");
+	FilmCornerTake();
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the sound");
 	PlaySound(Real);
@@ -7805,6 +7854,44 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	LandFell::Phase("tick: the pictures taken");
 	TakeShots();
+	// (the film's log, 25 November: at every cut of the film while the film is the picture, on every frame a still is
+	// waiting to be taken, and with "-TheaterLandPoseLog" four times a real second: the shot, why the last was left,
+	// where the lens stands, what it looks at through how high a lens (the pose's lens is the vertical one: AimEye
+	// makes Unreal's horizontal one of it by the window's shape), how dark the picture last read (-1: no reading), and
+	// how far ahead of the picture the rules have fought (-999: not a live battle; under nought where the picture
+	// has run on past what is fought, as in the seconds after a battle's end; a place the camera asks for past what
+	// is fought is the last one known, so its tests ahead tell nothing there). The pose is the film's own: a
+	// drag's look aside, told beside it in degrees right and up, and a shell's jolt, which the scene adds as it
+	// aims, are not in it. A still is told once for each asking, not every frame it waits. The art director's black
+	// still of the Mac's first pass could not be laid against the field again, because nothing told where the lens had
+	// stood; the log's own clock and frame count (the last three figures of it) head each line. Here, after the
+	// tick's own stills are asked for, so that a still asked for anywhere in this tick or before it in the frame is
+	// seen; one asked for after it, by another actor, is taken with this frame's picture too, and the switch's lines
+	// either side of it tell that one.)
+	{
+		static const bool bPoseLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPoseLog"));
+		// (a still is told once for each asking, known by its file's name: one that waits frame after frame is told
+		// once, and one asked for on the tick after another, the first taken as that frame was drawn, is told too)
+		static bool bStillWas = false;
+		static FString StillWas;
+		const bool bStillNow = FScreenshotRequest::IsScreenshotRequested();
+		const FString StillNow = bStillNow ? FScreenshotRequest::GetFilename() : FString();
+		const bool bStillAsked = bStillNow && (!bStillWas || StillNow != StillWas);
+		bStillWas = bStillNow;
+		StillWas = StillNow;
+		// (his own view is the picture drawn once his eye has begun, unless the film has been given the camera)
+		const bool bOwnView = S.bGeneralEye && !S.General.bFilm;
+		const bool bFilmCut = S.FilmPose.bCut && !bOwnView;
+		if (bFilmCut || bStillAsked || (bPoseLog && FMath::Abs(RealT - PoseLogAt) >= 0.25))
+		{
+			PoseLogAt = RealT;
+			UE_LOG(LogTheater, Display, TEXT("Land battle: %s %s at %.2f s of battle: a %s shot of %d, the film's last left for %s; the lens at %.2f %.2f %.2f looks at %.2f %.2f %.2f through %.1f degrees high, looked aside %.1f %.1f; the picture last read %.2f dark; the rules %.1f s ahead"),
+				bOwnView ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
+				S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject, ANSI_TO_TCHAR(LandEye::NameOf(S.Eye.LastWhy())),
+				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, LookAside.X, LookAside.Y, DarkShare,
+				Live.IsValid() ? Live->Fought() - S.Battle : -999.0);
+		}
+	}
 	LandFell::Phase("tick: the 10 s log");
 
 	// The log, every 10 s: the frames, the slowest, and what each part cost.
@@ -8073,6 +8160,8 @@ void ALandBattle::StartDarkRead()
 	StopDarkRead();
 	DarkShare = -1.0;
 	DarkReads = 0;
+	DarkAsks = 0;
+	DarkBacks = 0;
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))
 	{
 		return;
@@ -8086,6 +8175,7 @@ void ALandBattle::StartDarkRead()
 	}
 	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
 	DarkGrab->StartCapturingFrames();
+	DarkClock = 0.0;
 	DarkAskAt = 0.0;
 	DarkGotAt = 0.0;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
@@ -8098,26 +8188,49 @@ void ALandBattle::ReadDark(double Real)
 	{
 		return;
 	}
+	// (the reading's own clock, from this frame's length. Until 25 November the asks and the staleness below were
+	// measured against the frame's length itself, at most a tenth of a second: one frame was asked for as the battle
+	// began, the next ask's time was never reached, and the camera's dark rule saw nothing all battle.)
+	DarkClock += Real;
+	const double Now = DarkClock;
 	// Ask for a copy of the frame now and then; take what has come back (a frame or two later), the newest.
-	if (Real >= DarkAskAt && DarkGrab->IsCapturingFrames())
+	if (Now >= DarkAskAt && DarkGrab->IsCapturingFrames())
 	{
-		DarkAskAt = Real + 0.25;
+		DarkAskAt = Now + 0.25;
 		DarkGrab->CaptureThisFrame(FFramePayloadPtr());
+		++DarkAsks;
+	}
+	// (no frame read for six tenths of a second: the last reading is stale, so the rule is told there is none;
+	// pre-check's note. Before the frames are taken, so that it holds on every way out below: a frame come back empty
+	// too. And under the rule's own quarter second and half second together (LandEye: a shot's reading counts from
+	// its first quarter second and must hold DarkHold), so that a reading of the last shot, read as the shot was cut
+	// and the frames then stopped, cannot by itself have the next one left or the run of dark cuts started again.
+	// The age is counted from when the frame was read, not from when it was drawn: one read a frame or two into the
+	// next shot stands that much longer, past the rule's three quarters of a second only where those frames and one
+	// more come to over 0.15 s (under some twenty frames a second), and then for one cut. It was a second, 25 November.)
+	if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
+	{
+		DarkShare = -1.0;
 	}
 	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
 	if (Frames.Num() == 0)
 	{
-		// (no frame back for a second: the last reading is stale, so the rule is told there is none; pre-check's note)
-		if (DarkShare >= 0.0 && Real - DarkGotAt > 1.0)
-		{
-			DarkShare = -1.0;
-		}
 		return;
 	}
-	DarkGotAt = Real;
+	DarkBacks += Frames.Num();
 	// (a result card up: the whole picture dimmed under it, so no reading till it goes; nor while the night's light is
-	// on the picture, the night before the attack and its dawn)
-	if (State.IsValid() && (State->bCard || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
+	// on the picture, the night before the attack and its dawn; nor while the general's own view is the picture drawn
+	// (his eye begun and the film not given the camera): the film goes on being directed behind it, for its corner
+	// and for his return to it, and a dark reading of HIS view, a wood from above, would have the film leave shots
+	// that are not dark at all; nor while a drag has the lens looking aside from the shot (AimEye; more than a degree
+	// either way): what he turns the lens to, a hedge, a crown, an open field, is not the shot's picture, and the
+	// film would leave the shot he is looking about in and bar its place, or take the field for the light come back.
+	// Until the reading had a clock of its own, 25 November, nothing was read and none of this could show.
+	// These are asked as the frame comes back, a frame or two after it was drawn: one frame already on its way at
+	// a change is read as the new picture's. One reading cannot act alone: the rule wants half a second of dark to
+	// leave a shot and half a second of light to start its run again.)
+	if (FMath::Abs(LookAside.X) > 1.0 || FMath::Abs(LookAside.Y) > 1.0
+		|| (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0)))
 	{
 		DarkShare = -1.0;
 		return;
@@ -8145,6 +8258,8 @@ void ALandBattle::ReadDark(double Real)
 		}
 	}
 	DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);
+	// (only a frame that was read keeps the reading fresh: one that comes back empty leaves the last to go stale)
+	DarkGotAt = Now;
 	++DarkReads;
 }
 
@@ -11578,9 +11693,13 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (State.IsValid())
 	{
 		const FLandBattleState& S = *State;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture, from %d dark readings)"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture; the picture read %d times, %d frames back of %d asked)"),
 			S.Battle, S.Play.RoundsPlayed(), S.Play.BlastsPaired(), S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsOutOfHearing, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped,
-			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReads);
+			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReads, DarkBacks, DarkAsks);
+		if (DarkAsks >= 8 && DarkBacks * 2 < DarkAsks)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: the dark reading was all but blind: %d frames back of %d asked, so the camera's dark rule had little or nothing to go on"), DarkBacks, DarkAsks);
+		}
 		LogSound();
 	}
 	if (Limiter)

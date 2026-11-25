@@ -59,10 +59,26 @@ namespace LandGeneralEye
 		 * (or from as high as it already was); a second press swings it back to the tilt and the zoom it had. */
 		bool bTopView = false;
 		/** A view of his own kept under a number, 0 to 3 (Shift with F1 to F4, or Option and Shift with 1 to 4): where he
-		 * looks, his heading, his zoom and his tilt as they stand this frame; -1 none. */
+		 * looks, his heading, his zoom and his tilt. It is kept where his own hand's last move is bringing it to rest
+		 * (a top view just pressed is kept as the top view, not half way up to it, following a unit or not). What is
+		 * not his own hand's is kept as it stands this frame: all of it while flying to a kept view (the flight then
+		 * ends there) or waiting at a hedge, and where it looks while gliding to a point or following a unit; -1
+		 * none. A tilt the flight has the turning of is kept as his own only where it shows on the picture at the
+		 * press, and else as the automatic one (the view kept is the picture he has to a quarter of a degree, never
+		 * a tilt he cannot see); and under the zoom where his tilt is handed back toward a man's shoulder
+		 * (Settings::TiltOwnFrom) a tilt kept in a flight comes to rest at what that zoom lets it be. */
 		int KeepView = -1;
 		/** A kept view called back (F1 to F4, Option with 1 to 4, or its chip): the view flies there. One never kept is
-		 * kept now instead, as the view stands, so the first press of a number is never wasted; -1 none. */
+		 * kept now instead, so the first press of a number is never wasted and never moves the view; -1 none. A key's
+		 * pan, a slide, a zoom, a turn or a tilt still moving the view as it is called (a key still held, a trackpad's
+		 * slide still running on) is left out until it has stopped, and the pointer at the screen's edge for the whole
+		 * flight: none of them takes the view from the call. Any move begun after it does: the flight is let go and
+		 * the view comes to rest where it is, under his hand. Its tilt, where the call had the turning of it, stays
+		 * his own if the picture has it as his hand takes the flight and still will where it comes to rest; and else
+		 * it goes on back to the automatic one, so no tilt of his own is left on unseen and none comes on where the
+		 * picture had none as he took it. (What he keeps is where the tilt's own swing brings it to rest, which may
+		 * be more than the picture yet showed. A tilt his own hand was already turning back goes on back.)
+		 * The flight lasts until the tilt is there too, so a move in the last of the tilt's swing takes it as well. */
 		int CallView = -1;
 		/** Glide to a field point (a double click on the map). */
 		bool bGoTo = false;
@@ -158,6 +174,9 @@ namespace LandGeneralEye
 		 * eye is this high over what it looks at (over everything the scene draws, Tallest), then across and round, then
 		 * down. Turning or crossing among the trees would have it stop dead at one. Metres. */
 		double FlyUp = 45.0;
+		/** What was moving the view as a kept view was called is left out until it has been still this long, seconds
+		 * (a trackpad's slide runs on for a second or so after the fingers lift, a frame or two apart at its end). */
+		double LeftStill = 0.15;
 	};
 
 	/** How many views of his own the general may keep. */
@@ -195,11 +214,21 @@ namespace LandGeneralEye
 		bool OwnTilt() const { return bOwnTilt; }
 		bool TopView() const { return bTop; }
 		double TiltDegrees() const;
-		/** Whether a view is kept under a number (0 to 3); the kept view he stands at or is flying to (its chip lit), -1
-		 * once he has moved the view himself; and whether the view is flying to one now. */
+		/** Whether a view is kept under a number (0 to 3); the kept view he stands at, is coming to rest at or is flying
+		 * to (its chip lit), -1 once his own hand, a glide or a followed unit has taken the view from it, in where it
+		 * looks, its turn, its zoom or its tilt; the kept view
+		 * a call is flying to now, -1 none (the flight is over once the view is there in where it looks, its turn, its
+		 * zoom and its tilt: his own tilt at the view's, or handed back to the automatic one for a view kept without
+		 * his own); and whether the turn and the zoom are held to their fastest and hardest, as
+		 * they are through a flight and through a draw-back from too near a followed unit, until both have come to
+		 * rest. */
 		bool ViewKept(int Number) const { return Number >= 0 && Number < ViewCount && Views[Number].bKept; }
 		int ViewAt() const { return AtView; }
+		int FlyingTo() const { return FlyTo; }
 		bool Flying() const { return bFlying; }
+		/** A kept view as a call will reach it (for the cloud test): where it looks, its heading (radians), its zoom and
+		 * its tilt down (degrees); false where none is kept under the number. */
+		bool ViewIs(int Number, Vec& OutLook, double& OutHeading, double& OutZoom, double& OutTilt) const;
 		/** The eye's height over the look-at at a zoom (0..1), at the automatic tilt. */
 		double UpAt(double Zoom) const;
 		/** Where a block's men or vehicles stand on average at a battle time (those not fallen or gone); false if none. */
@@ -236,10 +265,12 @@ namespace LandGeneralEye
 		/** How long the lift has been shut in under a thing, seconds. */
 		double StuckFor = 0.0;
 		/** His own tilt, radians: now, wanted and its swing (the tilt the view takes from it is TiltFor's); whether it
-		 * is set, whether it is on its way back to the automatic tilt (switched off once there), and the top view with
-		 * the zoom and the tilt a second press goes back to. */
+		 * is set, whether it is on its way back to the automatic tilt (switched off once there), whether a flight to a
+		 * view kept without his own tilt, not his own hand, is what turned it back (so a hand that takes the flight
+		 * keeps his tilt his own while the picture still has it), and the top view with the zoom and the tilt a second press
+		 * goes back to. */
 		double Tl = 0.0, WantTl = 0.0, SwingTl = 0.0, TlGoal = 0.0;
-		bool bOwnTilt = false, bToAuto = false, bTop = false, bTopWasOwn = false;
+		bool bOwnTilt = false, bToAuto = false, bCallToAuto = false, bTop = false, bTopWasOwn = false;
 		double TopWasTl = 0.0, TopWasS = 1.0;
 		/** His kept views: the look-at, the heading, the zoom, and his own tilt where he had one set. */
 		struct View
@@ -248,11 +279,17 @@ namespace LandGeneralEye
 			double X = 0.0, Y = 0.0, H = 0.0, S = 1.0, Tl = 0.0;
 		};
 		View Views[ViewCount];
-		/** The kept view he stands at (-1 none), and whether the view is flying to one: until it has come to rest there
-		 * its turn and its zoom are held to their fastest and hardest, as a call may ask half a turn or the whole zoom
-		 * at once. */
-		int AtView = -1;
+		/** The kept view he stands at or is coming to rest at (-1 none); the kept view a call is flying to (-1 none: a
+		 * view only kept is no flight, and a flight his hand has taken is over); and whether the turn and the zoom are
+		 * held to their fastest and hardest, as a call may ask half a turn or the whole zoom at once: through a flight
+		 * and through a draw-back from too near a followed unit, until both have come to rest. */
+		int AtView = -1, FlyTo = -1;
 		bool bFlying = false;
+		/** His keys' pan, his slide, his zoom, his turn and his tilt: how long since each last moved the view, seconds,
+		 * and which were still moving it as a kept view was called (left out until they have stopped). */
+		static constexpr int HandKinds = 5;
+		double Quiet[HandKinds] = { 1.0, 1.0, 1.0, 1.0, 1.0 };
+		bool bLeft[HandKinds] = { false, false, false, false, false };
 		/** The zoom whose eye stands FlyUp over the look-at at the automatic tilt (his own is never shallower). */
 		double FlyS = 1.0;
 		/** Each block's tracks (the live feed adds tracks: rebuilt when the count changes). */
@@ -303,6 +340,12 @@ namespace LandGeneralEye
 		 * the zoom whose eye stands TopUp over the look-at at the top view's tilt. */
 		double TiltOwn(double Zoom, double Own) const;
 		double TiltMostAt(double Zoom) const;
+		/** Whether his own tilt Own stands clear of the automatic tilt at a zoom: more than a quarter of a degree
+		 * over it, the soft meeting counted, whatever a man's shoulder then lets the picture show of it. */
+		bool TiltStands(double Zoom, double Own) const;
+		/** Whether his own tilt Own shows on the picture at a zoom: as far as that zoom lets it stand (TiltMostAt),
+		 * more than a quarter of a degree over the automatic tilt there. */
+		bool TiltShows(double Zoom, double Own) const;
 		double TiltFor(double Zoom, double Own) const { return bOwnTilt ? TiltOwn(Zoom, Own) : TiltAt(Zoom); }
 		double UpOwn(double Zoom, double Own) const;
 		double TopZoom() const;
@@ -311,8 +354,23 @@ namespace LandGeneralEye
 		/** His own tilt begun where the automatic one is, just under its soft floor: the view does not move as it is
 		 * set. Nothing where it is set already. */
 		void OwnTiltBegin();
-		/** A view kept as the view stands, and a kept view called back (one never kept: kept now instead). */
+		/** A view kept, and a kept view called back (one never kept: kept now instead). */
 		void KeepView(int Number);
 		void CallView(int Number);
+		/** A flight to a kept view taken by his own hand: each wish let go at the point its own spring comes to rest
+		 * from the swing it has, so nothing rushes on to the kept view and nothing stops dead (bPanned: by a pan or
+		 * a slide, which eases the look-at at his hand's rate; bPlace: the look-at too, not where he has asked for a
+		 * glide of its own). His own tilt, where the flight had the turning of it, stays his own only if the picture
+		 * has it as the move takes the flight (TiltStands of the view as it stands, zoom and tilt), and will have
+		 * it where it comes to rest (TiltShows of the tilt's own rest at the zoom the taking move leaves him at);
+		 * else it goes on back to the automatic one. ZoomIn is the zoom notch of the frame that takes the flight
+		 * (In.Zoom * ZoomStep), which the frame has yet to take off the zoom's wish, and ZoomLeast the nearest
+		 * zoom the frame will then hold the wish to (FollowNearest where a unit's card takes the flight and the
+		 * unit is followed, else 0): both count towards where the zoom rests. So a notch out or a card's follow
+		 * cannot leave him a tilt he cannot see, and nothing that lowers the automatic tilt after the call (a
+		 * notch in, a zoom still coasting in) can make his own a tilt the picture never had. Toward a man's
+		 * shoulder the tilt kept is what the shoulder has left of it as the take finds it. A pan begun while the
+		 * look-at still coasts lets it go again at the pan's own rate (Update). */
+		void FlightLetGo(bool bPanned, bool bPlace, double ZoomIn = 0.0, double ZoomLeast = 0.0);
 	};
 }

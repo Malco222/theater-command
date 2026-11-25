@@ -301,14 +301,16 @@ void ALandBattle::ShowGeneral()
 		}
 	};
 	// The spotter's mark (release 2, -TheaterLandSpotter): looking down on the field, a ring round each of his fighting
-	// blocks, inside which a hidden enemy is found (the rules' distances, LandSight::Finds). Every block's ring for
-	// hidden men; a block in hand's for guns and vehicles too, dashed, each with its word.
+	// blocks, inside which a hidden enemy is seen (the rules' distances, LandSight::Finds). Every block's ring for
+	// hidden men on foot; a block in hand's for guns and teams and for tanks and motorised blocks too, dashed, each
+	// with its word. Not while he sets his army out: nothing is found before the clock starts, and the setup's own
+	// words stand where the mark's would.
 	if (SpotterOn < 0)
 	{
 		SpotterOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSpotter")) && FLandLive::RuleNow(TEXT("hide")) ? 1 : 0;
 		UE_LOG(LogTheater, Display, TEXT("Land battle (spotter's mark): %s"), SpotterOn == 1 ? TEXT("on: rings in the top view") : TEXT("off (no -TheaterLandSpotter, or Forest ambushes off)"));
 	}
-	if (SpotterOn == 1 && S.bGeneralEye && (S.GeneralEye.TopView() || (S.GeneralEye.OwnTilt() && S.GeneralEye.TiltDegrees() >= 60.0)))
+	if (SpotterOn == 1 && S.bGeneralEye && !G.Clipboard.Deploying() && (S.GeneralEye.TopView() || (S.GeneralEye.OwnTilt() && S.GeneralEye.TiltDegrees() >= 60.0)))
 	{
 		G.bSights = true;
 		const LandSight::Finds Finds;
@@ -333,7 +335,7 @@ void ALandBattle::ShowGeneral()
 				FVector2D Was(0.0, 0.0), WordAt(-1.0e9, 0.0);
 				auto Flush = [&]()
 				{
-					// (a run with none of it on the screen is not drawn)
+					// (a run with no stretch of it on or across the screen is not drawn)
 					if (Stroke.Points.size() >= 2 && bSeen)
 					{
 						G.Sights.push_back(Stroke);
@@ -353,10 +355,11 @@ void ALandBattle::ShowGeneral()
 						if (Stroke.Points.empty())
 						{
 							Stroke.Points.push_back({ Was.X, Was.Y });
-							bSeen = OnView(Was, 0.0);
 						}
 						Stroke.Points.push_back({ P.X, P.Y });
-						bSeen = bSeen || OnView(P, 0.0);
+						// (judged by the stretch, not by its ends: zoomed in, a ring crosses the screen with both ends of
+						// a stretch off it, and either end is then within the stretch's own length of the screen)
+						bSeen = bSeen || OnView(P, FVector2D::Distance(Was, P));
 					}
 					else
 					{
@@ -1149,6 +1152,9 @@ void ALandBattle::GeneralView(double Real)
 		}
 	}
 	LandGeneralEye::Input& In = S.GeneralIn;
+	// (each check's line is written below, once his eye has taken the step: before it, S.Pose is the film's this frame
+	// and the kept views are as they were before the step)
+	int32 TopLogged = -1, ViewsLogged = -1;
 	// (the Mac's check of his top view, -TheaterLandTopViewAt=<battle seconds>: pressed there, a still 4 s on (into the
 	// -TheaterLandScript folder, if one is given), pressed again 4 s later and a still of the view back as it was 4 s
 	// after that; each step's tilt and height in the log)
@@ -1167,10 +1173,7 @@ void ALandBattle::GeneralView(double Real)
 		{
 			ScriptStill(TopCheckStep == 1 ? TEXT("top-view") : TEXT("top-view-back"));
 		}
-		UE_LOG(LogTheater, Display, TEXT("Land battle (top view check): step %d at %.1f s of battle: tilt %.1f degrees, top view %s, own tilt %s, the eye %.0f m over what it looks at"),
-			TopCheckStep, S.Battle, S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), S.GeneralEye.OwnTilt() ? TEXT("on") : TEXT("off"),
-			S.Pose.Eye.Z - S.Pose.Look.Z);
-		++TopCheckStep;
+		TopLogged = TopCheckStep++;
 	}
 	// (the Mac's check of his kept views, the spotter's mark and the film in a corner, release 2,
 	// -TheaterLandViewsAt=<battle seconds>: a unit taken in hand there and the view glided to it; 4 s on that view kept
@@ -1203,12 +1206,7 @@ void ALandBattle::GeneralView(double Real)
 		case 6: GeneralDo(TEXT("view:1")); break;
 		default: ScriptStill(TEXT("views-back-2")); break;
 		}
-		UE_LOG(LogTheater, Display, TEXT("Land battle (views check): step %d at %.1f s of battle: at view %d, %s, kept %d%d%d%d, tilt %.1f degrees, top view %s, looking at %.0f, %.0f from %.0f m over it; rings %d, the film's window %s"),
-			ViewsCheckStep, S.Battle, S.GeneralEye.ViewAt() + 1, S.GeneralEye.Flying() ? TEXT("flying") : TEXT("settled"),
-			S.GeneralEye.ViewKept(0) ? 1 : 0, S.GeneralEye.ViewKept(1) ? 1 : 0, S.GeneralEye.ViewKept(2) ? 1 : 0, S.GeneralEye.ViewKept(3) ? 1 : 0,
-			S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Eye.Z - S.Pose.Look.Z,
-			static_cast<int32>(G.Sights.size()), bCornerShown ? TEXT("shown") : TEXT("not shown"));
-		++ViewsCheckStep;
+		ViewsLogged = ViewsCheckStep++;
 	}
 	In.Turn += S.GeneralTurnHeld * 75.0 * Real;
 	// (Shift with W or S held: his own tilt, 50 degrees a second)
@@ -1221,6 +1219,33 @@ void ALandBattle::GeneralView(double Real)
 	{
 		LandFell::Phase("general: his eye moved", In.bGoTo ? 1 : 0);
 		S.Pose = S.GeneralEye.Update(In, Real, S.Battle);
+	}
+	if (TopLogged >= 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (top view check): step %d done at %.1f s of battle: tilt %.1f degrees, top view %s, own tilt %s, the eye %.0f m over what it looks at"),
+			TopLogged, S.Battle, S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), S.GeneralEye.OwnTilt() ? TEXT("on") : TEXT("off"),
+			S.GeneralEye.Current().Eye.Z - S.GeneralEye.Current().Look.Z);
+	}
+	if (ViewsLogged >= 0)
+	{
+		// (his own view, whoever has the screen: the general's eye's pose, not S.Pose; the rings are last frame's, laid
+		// after this; the window is this frame's only once its picture is taken, later in the tick)
+		const LandEye::Pose& Own = S.GeneralEye.Current();
+		// (rings, not their strokes: a ring is laid as one stroke or as many, by its dashes and by the screen's edge;
+		// a ring's strokes follow one another)
+		int32 RingsLaid = 0;
+		for (size_t Stroke = 0; Stroke < G.Sights.size(); ++Stroke)
+		{
+			if (Stroke == 0 || G.Sights[Stroke].Block != G.Sights[Stroke - 1].Block || G.Sights[Stroke].Kind != G.Sights[Stroke - 1].Kind)
+			{
+				++RingsLaid;
+			}
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle (views check): step %d done at %.1f s of battle: at view %d, flying to %d, turn and zoom %s, kept %d%d%d%d, tilt %.1f degrees, top view %s, looking at %.0f, %.0f from %.0f m over it; rings last frame %d, the film's window last frame %s"),
+			ViewsLogged, S.Battle, S.GeneralEye.ViewAt() + 1, S.GeneralEye.FlyingTo() + 1, S.GeneralEye.Flying() ? TEXT("held") : TEXT("free"),
+			S.GeneralEye.ViewKept(0) ? 1 : 0, S.GeneralEye.ViewKept(1) ? 1 : 0, S.GeneralEye.ViewKept(2) ? 1 : 0, S.GeneralEye.ViewKept(3) ? 1 : 0,
+			S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), Own.Look.X, Own.Look.Y, Own.Eye.Z - Own.Look.Z,
+			RingsLaid, bCornerShown ? TEXT("shown") : TEXT("not shown"));
 	}
 	if (S.bEyeSwitched)
 	{
@@ -1241,21 +1266,28 @@ void ALandBattle::FilmCorner()
 {
 	// Brian, 24 November 20:38Z: while he commands from his own view, the film director's shot in a small window. The
 	// film's eye runs every frame whoever has the camera, so its pose is there to take: a second picture of the field
-	// is drawn small through it every few frames, and the general's screen shows it at its top left.
+	// is drawn small through it every few frames, and the general's screen shows it under the news at its left.
+	// Here, once the lens is aimed, the window's own lens is set up and aimed for this frame; its picture is taken
+	// by FilmCornerTake once the men and the vehicles are drawn where this frame has them.
 	if (CornerOn < 0)
 	{
 		CornerOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCorner")) ? 1 : 0;
 		int32 Wide = 480, Every = 2;
+		float TrueWithin = 40.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCornerWide="), Wide);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCornerEvery="), Every);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCornerTrueWithin="), TrueWithin);
 		CornerWide = FMath::Clamp(Wide, 160, 1280);
 		CornerEvery = FMath::Clamp(Every, 1, 8);
+		CornerTrueWithin = FMath::Clamp(static_cast<double>(TrueWithin), 0.0, 5000.0);
 		if (CornerOn == 1)
 		{
-			UE_LOG(LogTheater, Display, TEXT("Land battle (film in a corner): on, %d by %d, a picture every %d frames%s"), CornerWide, CornerWide * 9 / 16, CornerEvery,
-				FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCornerNoShadows")) ? TEXT(", without shadows") : TEXT(""));
+			UE_LOG(LogTheater, Display, TEXT("Land battle (film in a corner): on, %d by %d, a picture every %d frames%s; men in its picture within %.0f m of its lens drawn their own size"), CornerWide, CornerWide * 9 / 16, CornerEvery,
+				FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCornerNoShadows")) ? TEXT(", asked without shadows") : TEXT(""), CornerTrueWithin);
 		}
 	}
+	const bool bLensWas = bCornerLens;
+	bCornerLens = false;
 	bCornerShown = false;
 	if (CornerOn != 1 || !State.IsValid() || !Eye)
 	{
@@ -1292,16 +1324,37 @@ void ALandBattle::FilmCorner()
 		// (kept from one picture to the next, or every picture is taken at one fixed exposure whatever it is told)
 		CornerLens->bAlwaysPersistRenderingState = true;
 		// (nothing that needs several frames to settle: the film cuts, and the window is drawn only every few frames)
+		// (all of it sharp: the grade below is the main lens's, whose focus is set for his own view, not this one)
+		// (given as settings, not set on ShowFlags: registering reads ShowFlags afresh from the class's own and these;
+		// the pre-check's mend, 24 November)
+		TArray<FEngineShowFlagsSetting> CornerOff;
+		for (const TCHAR* Flag : { TEXT("TemporalAA"), TEXT("MotionBlur"), TEXT("DepthOfField") })
+		{
+			FEngineShowFlagsSetting& One = CornerOff.AddDefaulted_GetRef();
+			One.ShowFlagName = Flag;
+			One.Enabled = false;
+		}
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCornerNoShadows")))
+		{
+			FEngineShowFlagsSetting& One = CornerOff.AddDefaulted_GetRef();
+			One.ShowFlagName = TEXT("DynamicShadows");
+			One.Enabled = false;
+		}
+		CornerLens->SetShowFlagSettings(CornerOff);
+		CornerLens->TextureTarget = CornerFilm;
+		CornerLens->RegisterComponent();
+		// (and set on the registered lens itself as well: should the settings above not be taken, these stand until it
+		// is next registered, which it is not)
 		CornerLens->ShowFlags.SetTemporalAA(false);
 		CornerLens->ShowFlags.SetMotionBlur(false);
-		// (all of it sharp: the grade below is the main lens's, whose focus is set for his own view, not this one)
 		CornerLens->ShowFlags.SetDepthOfField(false);
 		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCornerNoShadows")))
 		{
 			CornerLens->ShowFlags.SetDynamicShadows(false);
 		}
-		CornerLens->TextureTarget = CornerFilm;
-		CornerLens->RegisterComponent();
+		// (what the lens really has, said once: a trial with and without shadows must know which it ran)
+		UE_LOG(LogTheater, Display, TEXT("Land battle (film in a corner): its lens draws shadows %d, depth of field %d, motion blur %d, temporal AA %d"),
+			CornerLens->ShowFlags.DynamicShadows ? 1 : 0, CornerLens->ShowFlags.DepthOfField ? 1 : 0, CornerLens->ShowFlags.MotionBlur ? 1 : 0, CornerLens->ShowFlags.TemporalAA ? 1 : 0);
 	}
 	FRotator Facing = (To - From).Rotation();
 	Facing.Roll = P.Roll;
@@ -1313,17 +1366,45 @@ void ALandBattle::FilmCorner()
 	const UCameraComponent* Lens = Eye->GetCameraComponent();
 	CornerLens->PostProcessSettings = Lens->PostProcessSettings;
 	CornerLens->PostProcessBlendWeight = Lens->PostProcessBlendWeight;
+	// (back after the film had the screen, a card or the night: the picture it holds is from before, so a new one is
+	// taken this frame, wherever the count of frames stood)
+	if (!bLensWas)
+	{
+		CornerFrame = 0;
+	}
+	bCornerLens = true;
+}
+
+void ALandBattle::FilmCornerTake()
+{
+	// (the window's picture, every few frames while its lens is up: taken once this frame's men and vehicles stand
+	// where it has them, those in the film's picture among them (DrawMen), so the film's first frame after a cut is
+	// not of men posed for the shot before)
+	if (!bCornerLens || !CornerLens)
+	{
+		return;
+	}
 	if (CornerFrame++ % CornerEvery == 0)
 	{
+		// (a picture asked for first sends the frame's own end-of-frame updates, every man, vehicle and effect just
+		// set: sent here and timed apart, so the window's figure is the window's alone. The frame pays that sending
+		// with or without the window; what is set after this is sent at the frame's end as ever.)
+		const double Sent = FPlatformTime::Seconds();
+		if (UWorld* const Around = GetWorld())
+		{
+			Around->SendAllEndOfFrameUpdates();
+		}
 		const double Mark = FPlatformTime::Seconds();
 		CornerLens->CaptureScene();
 		CornerMs += (FPlatformTime::Seconds() - Mark) * 1000.0;
+		CornerSendMs += (Mark - Sent) * 1000.0;
 		++CornerTaken;
 		// (its cost on the game's side every few hundred pictures, for the Mac's reading; the card's side shows in fps)
 		if (CornerTaken % 300 == 0)
 		{
-			UE_LOG(LogTheater, Display, TEXT("Land battle (film in a corner): %d pictures, %.2f ms each to ask for (the game's side)"), CornerTaken, CornerMs / 300.0);
+			UE_LOG(LogTheater, Display, TEXT("Land battle (film in a corner): %d pictures, %.2f ms each to ask for (the game's side), after %.2f ms each of the frame's own end-of-frame sending, which the frame pays with or without the window"), CornerTaken, CornerMs / 300.0, CornerSendMs / 300.0);
 			CornerMs = 0.0;
+			CornerSendMs = 0.0;
 		}
 	}
 	bCornerShown = CornerTaken > 0;
@@ -1372,7 +1453,8 @@ void ALandBattle::GeneralDo(const FString& Word)
 	else if (Word.StartsWith(TEXT("view:")) || Word.StartsWith(TEXT("keepview:")))
 	{
 		// (his kept views, release 2: F1 to F4, Option with 1 to 4, or a chip. A kept one is flown to; one never kept,
-		// or any with Shift, is kept as the view stands)
+		// or any with Shift, is kept: where his own hand's last move brings the view to rest, and as it stands for
+		// what is not his own hand's, LandGeneralEye's KeepView)
 		const bool bKeep = Word.StartsWith(TEXT("keepview:"));
 		const int32 Number = FCString::Atoi(*Word.Mid(bKeep ? 9 : 5));
 		if (Number >= 0 && Number < LandGeneralEye::ViewCount && S.bGeneralEye && !G.bFilm)
