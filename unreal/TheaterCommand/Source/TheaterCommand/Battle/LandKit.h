@@ -761,8 +761,12 @@ namespace LandKit
 	 * (the rules' place for him): the nearest carrier whose bed he is on (within 1.6 m of her middle line, 5 m aft to 3 m
 	 * forward of her root), and his bench by where the drill seats him (a row each 0.6 m aft from 1.4 m forward of her
 	 * root, his side his bench's). False where he is on none.
+	 * bFarAft (release 2, the scene's trial word `leave`): by his place he is taken to 8 m aft of her root (an overfull
+	 * lorry's last men stand that far back in the rules and had no seat), and the men past her benches kneel down the
+	 * bed's middle in the order they stand, fitted between her first bench and her last (not 0.55 m further aft a row,
+	 * which is behind her tail from about the third).
 	 */
-	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out);
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out, bool bFarAft = false);
 
 	class Battle
 	{
