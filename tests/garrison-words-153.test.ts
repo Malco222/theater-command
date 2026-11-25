@@ -14,10 +14,10 @@
 // the same; and the reach says why a corps of the garrison beside the field army stays inside (`stays`), so that the
 // 3D game takes it out of the hand and says so, never leaving it behind without a word.
 import { describe, expect, it } from 'vitest';
-import { createGame, hostileUnits, relocate } from '../src/campaign/game';
+import { allied, createGame, hostileUnits, relocate, whyNoTrain } from '../src/campaign/game';
 import { whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { besieged, garrison } from '../src/campaign/siege';
+import { besieged, garrison, takeField } from '../src/campaign/siege';
 import { garrisonLine, whyNotOrder, whyNotOrderGarrison } from '../src/campaign/armies';
 import { startOpen } from '../src/campaign/staff';
 import { townName } from '../src/campaign/towns';
@@ -78,6 +78,9 @@ const seen = (id: number): Seen => TC.view().corps.find((x) => x.id === id)!;
 /** The rules' line for a garrison of one, in the first month and in later ones (garrisonLine, armies.ts). */
 const told = (c: Corps, r: Region): string => `${c.name} is the garrison of ${townName(r)}. Order it to take the field first.`;
 const fresh = (c: Corps, r: Region): string => `${c.name} is the garrison of ${townName(r)}. It went in this month, and can march out next month.`;
+/** What a garrison is told of a ship and of a train where taking the field would not put it aboard this month (the third review). */
+const NO_SHIP = 'A garrison does not take ship. Out of the town, it can embark next month.';
+const NO_TRAIN = 'A garrison does not take the train. Out of the town, it can go by rail next month.';
 
 describe('find 17: a garrison asked to take ship is told it is a garrison, not that it has moved', () => {
   it('to a port of its own side and to an enemy coast; shut in, no ship leaves the siege; a corps that has marched is told so as before', () => {
@@ -85,7 +88,7 @@ describe('find 17: a garrison asked to take ship is told it is a garrison, not t
     const hamburg = g.byName['Hamburg'], bremen = g.byName['Bremen'];
     const c = inside(g, hamburg, EARLIER);
     expect(c.ap).toBe(0);
-    const take = 'A garrison does not take ship: TAKE THE FIELD first.';
+    const take = NO_SHIP;
     expect(whyNotShip(g, c, bremen)).toBe(take);
     const coast = g.regions.find((r) => r.ctrl === 'POL' && r.seas.length > 0)!;
     expect(whyNotLand(g, [c], coast)).toBe(take);
@@ -103,6 +106,45 @@ describe('find 17: a garrison asked to take ship is told it is a garrison, not t
     relocate(g, poles.units.find((u) => u.nat === 'POL' && u.kind === 'inf')!, hamburg);
     expect(besieged(g, hamburg)).toBe(true);
     expect(whyNotShip(g, c, bremen)).toBe(`${c.name} is shut in the town at Hamburg. No ship leaves a siege.`);
+  });
+
+  it('(the third review) the advice gets it aboard: TAKE THE FIELD only where that does this month, else next month out of the town; no port, no ship', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'], bremen = g.byName['Bremen'], saar = g.byName['Saar'];
+    const c = inside(g, hamburg, EARLIER);
+    const d = inside(g, hamburg, EARLIER);
+    const s = inside(g, saar, EARLIER);
+    expect(c.apMax).toBe(4);
+    expect(whyNotShip(g, c, bremen)).toBe(NO_SHIP);
+    expect(whyNoTrain(g, c)!.line).toBe(NO_TRAIN);
+    // Taken out of the town it has spent a move, and a ship and a train take a whole month: neither takes it this month.
+    expect(takeField(g, c)).toBe(true);
+    expect(c.ap).toBe(c.apMax - 1);
+    expect(whyNotShip(g, c, bremen)).toBe('Only a corps that has not moved this month can embark.');
+    expect(whyNoTrain(g, c)!.code).toBe('spent');
+    // As the next month opens a corps in the field has its whole month: it embarks, and it rides.
+    c.ap = c.apMax;
+    const port = g.regions.find((r) => r.port && r.id !== hamburg.id && whyNotShip(g, c, r) === null)!;
+    expect(port).toBeDefined();
+    expect(whyNoTrain(g, c)).toBeNull();
+    // A corps with a month longer than a train's still has a whole one once out: it is told to take the field, and
+    // that gets it aboard this month.
+    d.apMax = 5;
+    expect(whyNotShip(g, d, port)).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    expect(whyNoTrain(g, d)!.line).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(takeField(g, d)).toBe(true);
+    expect(whyNotShip(g, d, port)).toBeNull();
+    expect(whyNoTrain(g, d)).toBeNull();
+    // One that went in this month has no move once out, however long its month.
+    const g2 = playing();
+    const e = inside(g2, g2.byName['Hamburg'], g2.turn);
+    e.apMax = 5;
+    expect(whyNotShip(g2, e, g2.regions[port.id])).toBe(NO_SHIP);
+    expect(whyNoTrain(g2, e)!.line).toBe(NO_TRAIN);
+    // A garrison in a town with no port is told so, as a landing force is.
+    expect(whyNotShip(g, s, bremen)).toBe('The Saar has no port: troops are shipped from one port to another.');
+    TC.load(saveGame(g));
+    expect(TC.bySeaWhy([s.id], saar.id).why).toBe('The Saar has no port: troops are shipped from one port to another.');
   });
 });
 
@@ -162,7 +204,7 @@ describe('find 16: a garrison in hand marches up and attacks as its field brothe
     expect(saved()).toBe(t0);
     // A train: the railway's own reason, which the pointer gives (railTip).
     const ruhr = g.byName['Ruhr'].id;
-    expect(TC.rail([c.id], ruhr).said).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(TC.rail([c.id], ruhr).said).toBe(NO_TRAIN);
     expect(TC.rail([c.id], ruhr).said).toBe(TC.railTip([c.id], ruhr).no);
     expect(saved()).toBe(t0);
     // The same orders to a corps in the field are answered as they always were: a march that does nothing says nothing.
@@ -365,7 +407,7 @@ describe('the review: a garrison beside the field army sent by rail or by sea st
     expect(went.moved.map((m) => m.id)).toEqual([f.id]);
     expect(went.said).toMatch(/ by rail: there this month, the whole month spent\. /);
     expect(went.said).not.toMatch(/has no room for more/);
-    expect(went.said.endsWith(`${c.name} stays in the town. A garrison does not take the train: TAKE THE FIELD first.`)).toBe(true);
+    expect(went.said.endsWith(`${c.name} stays in the town. ${NO_TRAIN}`)).toBe(true);
     expect(corpsIn(saved(), c.id).town).toBe(EARLIER);
   });
 
@@ -376,7 +418,7 @@ describe('the review: a garrison beside the field army sent by rail or by sea st
     const f = bring(g, hamburg);
     f.ap = f.apMax;
     TC.load(saveGame(g));
-    expect(TC.bySeaWhy([c.id], hamburg.id).why).toBe('A garrison does not take ship: TAKE THE FIELD first.');
+    expect(TC.bySeaWhy([c.id], hamburg.id).why).toBe(NO_SHIP);
     const port = TC.seaReach([f.id, c.id]).ports[0];
     expect(port).toBeDefined();
     expect(TC.ship([f.id, c.id], port).moved.map((m) => m.id)).toEqual([f.id]);

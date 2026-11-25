@@ -9015,8 +9015,8 @@ FApproachPlan ACampaignPlayerController::GarrisonApproach(int32 RegionId) const
 FString ACampaignPlayerController::GarrisonAboard() const
 {
 	// (The 1.5.3 review; the playtest's find 17. The rules answer a garrison before they ask about the place it is sent
-	// to, so its own province is asked: "A garrison does not take ship: TAKE THE FIELD first.", or that no ship leaves a
-	// siege, or that there is no shipping.)
+	// to, so its own province is asked: "A garrison does not take ship. Out of the town, it can embark next month.", or
+	// that its province has no port, that no ship leaves a siege, or that there is no shipping.)
 	FCampaignSession* Session = GetSession();
 	if (!Session || ArmyRegion == INDEX_NONE)
 	{

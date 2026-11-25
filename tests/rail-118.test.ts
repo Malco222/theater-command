@@ -109,7 +109,7 @@ describe('a break he can act on is marked, and an aside is not (the art director
     expect(no.strong).toBeUndefined();
   });
 
-  it('a garrison: shut in where the town is besieged, and told to take the field first where it is not (the 3D builder, 18 November)', () => {
+  it('a garrison: shut in where the town is besieged, and told how it comes out where it is not (the 3D builder, 18 November)', () => {
     const g = grand();
     setWar(g, 'GER', 'POL');
     const town = g.byName['Lodz'];
@@ -117,7 +117,12 @@ describe('a break he can act on is marked, and an aside is not (the art director
     const c = corps(g, 'POL', 'inf', town);
     expect(garrison(g, c)).toBe(true);
     expect(besieged(g, town)).toBe(false);
-    expect(whyNoTrain(g, c)).toEqual({ code: 'town', line: 'A garrison does not take the train: TAKE THE FIELD first.', at: town.id });
+    // (The 1.5.3 review.) Coming out costs a move and a train takes four: a corps with a month of four rides from the
+    // country outside next month, and only one with a longer month is sent to TAKE THE FIELD for a train this month.
+    expect(whyNoTrain(g, c)).toEqual({ code: 'town', line: 'A garrison does not take the train. Out of the town, it can go by rail next month.', at: town.id });
+    c.town = -1; // (in since a month before this one)
+    c.apMax = 5;
+    expect(whyNoTrain(g, c)!.line).toBe('A garrison does not take the train: TAKE THE FIELD first.');
     relocate(g, corps(g, 'GER', 'inf', g.byName['Upper Silesia']), town);
     expect(besieged(g, town)).toBe(true);
     expect(whyNoTrain(g, c)!.line).toBe(`${c.name} is shut in the town at Lodz. No train leaves a siege.`);

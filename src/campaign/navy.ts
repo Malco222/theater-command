@@ -30,7 +30,7 @@ import { lineShut } from './line';
 import { stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
+import { SIEGE, apOutOfTown, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules, whyNotTakeField } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
@@ -632,19 +632,24 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
 
 /**
  * Why a corps inside its town takes no ship (1.5.3; the playtest's find 17), in the railway's own form (whyNoTrain): a
- * garrison has not moved, and is never told it has. Shut in, it is told so; otherwise it takes the field first.
+ * garrison has not moved, and is never told it has. Shut in, it is told so. (The 1.5.3 review.) Otherwise it is sent
+ * to TAKE THE FIELD only where that would get it aboard this month: coming out costs a move (apOutOfTown), and a ship
+ * takes a corps with its whole month. (On the eve of war a corps brought out has its whole month when the war opens.)
+ * Any other is told that out of the town it can embark next month.
  */
 function garrisonAboard(g: Game, c: Corps): string {
   const from = g.regions[c.reg];
-  return besieged(g, from) ? `${c.name} is shut in the town at ${from.name}. No ship leaves a siege.` : 'A garrison does not take ship: TAKE THE FIELD first.';
+  if (besieged(g, from)) return `${c.name} is shut in the town at ${from.name}. No ship leaves a siege.`;
+  return (g.flags.eve === 1 || apOutOfTown(g, c) >= Math.min(4, c.apMax)) && whyNotTakeField(g, c) === null ? 'A garrison does not take ship: TAKE THE FIELD first.' : 'A garrison does not take ship. Out of the town, it can embark next month.';
 }
 
 /** Why a corps cannot be shipped to a friendly port, or null if it can. */
 export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
-  // (1.5.3; the playtest's find 17.) A garrison has not moved: it is told what it is and how it comes out, as the railway tells it.
-  if (c.town !== undefined) return garrisonAboard(g, c);
+  // (1.5.3; the playtest's find 17.) A garrison has not moved: it is told what it is and how it comes out, as the railway
+  // tells it. (The 1.5.3 review.) One in a town with no port is told that first, as a landing force is (whyNotLand).
+  if (c.town !== undefined) return from.port ? garrisonAboard(g, c) : `${placeName(from.name, true)} has no port: troops are shipped from one port to another.`;
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
   if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
