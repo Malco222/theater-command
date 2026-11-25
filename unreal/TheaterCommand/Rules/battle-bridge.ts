@@ -970,7 +970,9 @@ export function battleCalls(h: BattleHooks) {
       // The raid card only asks whether there is a battle in the air for the pick, each time the pick changes, so the
       // ground's outlines (about 154 KB of the 160 KB ticket) stay out of its answer: the battle's own board (airStart)
       // carries them (the playtester's finding 3, 23 Nov: about 52 ms a pick change against the 33 ms order).
-      const { ground: _ground, ...place } = t.ticket.place as typeof t.ticket.place & { ground?: unknown };
+      // (Release 2 assembly) The same for release 2's bombers by name and crew (bombers.ts seatsOf, about 48 KB of a
+      // 1942 raid's look): the card asks only whether there is a ticket, and airStart's board carries them.
+      const { ground: _ground, bombers: _bombers, ...place } = t.ticket.place as typeof t.ticket.place & { ground?: unknown; bombers?: unknown };
       return { ticket: { ...t.ticket, place } };
     },
     airStart(kind: string, target: number, ids: number[]) {

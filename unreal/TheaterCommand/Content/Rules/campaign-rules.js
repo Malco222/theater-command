@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8eefe390 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 51b1954e 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -88759,7 +88759,7 @@
       airLook(kind, target, ids2) {
         const t = airTicket(h.game(), kind, target, ids2);
         if (!t.ticket) return { ticket: null, why: t.why };
-        const { ground: _ground, ...place2 } = t.ticket.place;
+        const { ground: _ground, bombers: _bombers, ...place2 } = t.ticket.place;
         return { ticket: { ...t.ticket, place: place2 } };
       },
       airStart(kind, target, ids2) {
