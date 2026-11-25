@@ -15286,7 +15286,7 @@ namespace
 			return SNew(STextBlock).Text(FText::FromString(Words)).Font(Serif(TEXT("Italic"), 10.5f)).ColorAndOpacity(Ink).AutoWrapText(true);
 		}
 
-		/** (Release 2, THE HOME FRONT) A name on the board, its sign before it and its figures after it: "Market hall  900 · 3 months". */
+		/** (Release 2, THE HOME FRONT) A name on the board, its sign before it and its figures after it: "Market hall  900, a dot, 3 months". */
 		TSharedRef<SWidget> HomeName(const FString& Sign, const FString& Name, const FString& Figures, const FLinearColor& Ink, bool bBold = false)
 		{
 			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
