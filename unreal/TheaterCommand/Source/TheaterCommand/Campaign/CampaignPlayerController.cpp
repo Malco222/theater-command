@@ -482,6 +482,13 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			if (Session->Act(Session->GetView().bFleetAttack ? TEXT("fleetattackrule:off") : TEXT("fleetattackrule:on"), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+				// (1.5.1, Brian's hand-check list: a fleet still in hand when the row is flipped is laid out afresh, so that its
+				// pointer, its "Drop ..." line and its first drop follow the new setting; its copy was refreshed only when it
+				// was picked up, and switched back on, its first drop sailed it to the sea instead of opening the ATTACK card)
+				if (FleetInHand != INDEX_NONE)
+				{
+					RefreshOrders();
+				}
 			}
 			if (!Note.IsEmpty())
 			{
