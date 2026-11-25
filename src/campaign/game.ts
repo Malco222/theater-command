@@ -646,19 +646,33 @@ export function portKeep(g: Game, r: Region): number {
   return (fortRows(g) ? portStores(g, r) : null) ?? DESERT.stores;
 }
 /**
- * The latest month a province may have changed hands, from what the game holds without a new flag: Region.since (a
- * capture, a treaty's line), the settled towns' record of ground handed over (`hand:<id>`, kept only with that switch
- * on), the month its holder came back to the war (liberation.ts handBack), and the month of a fall that can have
- * handed it on without a battle: its owner's (a fallen owner's ground passes to whoever holds it or to the victor), one
- * whose ground went to its holder (a domination, Vichy's ground to France), or France's for Vichy's own ground (the
- * armistice). Such a fall counts even where it moved nothing here (a holder another country fell to), since nothing
- * tells the two apart: the conservative reading, which charges a holder nothing for stores he may not have filled.
+ * The latest month a province may have changed hands, from what the game holds without a new flag. Always: Region.since
+ * (a capture, a treaty's line, a partition, a keeper's taking), the settled towns' record of ground handed over
+ * (`hand:<id>`, kept only with that switch on), and the month its holder came back to the war (liberation.ts handBack
+ * on a liberation). Where the holder is not the owner, also the falls that hand ground on without a battle: the owner's
+ * (a fallen owner's ground passes to whoever holds it, to a keeper or to the victor), any whose ground went to the
+ * holder (a capitulation's victor, a domination's winner), and the opening of the last act (domination.ts, a nation
+ * that leaves hands its ground on with no fall recorded). On Vichy's ground held by France or by Vichy, France's fall
+ * and Vichy's fall both count, whichever of the two holds it, since it passes between them without a battle (the
+ * armistice, and Vichy's end in finish.ts). Where the port's last capture took it from its present holder
+ * (Region.prev), it came back to him later without a battle, as foreign ground a fallen country held goes back to its
+ * owner (game.ts capitulate) or a leaving nation's ground to its heir: every fall, and the last act's opening, counts
+ * there. A port its owner holds, that is not Vichy's ground and never came back to him that way, is touched by no other
+ * nation's fall: a country that falls to Britain changes nothing in Britain's own Malta. Two hand-overs to an owner are
+ * not seen here: a port taken in battle from a nation that had taken it from its owner, given back to the owner at the
+ * taker's fall (Region.prev then names the first taker), and France's own ground off Vichy's held by an ally of hers
+ * and handed back to a freed France at Vichy's fall (liberation.ts afterFall, finish.ts endVichy). A port a peace gave
+ * back to its owner (diplomacy.ts signPeace leaves Region.prev as it was) reads as one that came back without a
+ * battle: the conservative reading, which charges nothing.
  */
 function handsChanged(g: Game, r: Region): number {
   let at = Math.max(r.since, g.flags[`hand:${r.id}`] ?? -1, g.nations[r.ctrl]?.freedOn?.turn ?? -1);
+  const held = r.ctrl !== r.owner, back = r.prev === r.ctrl;
+  const vichy = r.vichy && (r.ctrl === 'FRA' || r.ctrl === 'VIC');
+  if ((held || back) && g.flags.dom !== undefined) at = Math.max(at, g.flags.dom);
   for (const n of Object.values(g.nations)) {
     if (!n.fellOn) continue;
-    if (n.id === r.owner || n.fellOn.to === r.ctrl || (r.vichy && r.ctrl === 'VIC' && n.id === 'FRA')) at = Math.max(at, n.fellOn.turn);
+    if (back || (held && (n.id === r.owner || n.fellOn.to === r.ctrl)) || (vichy && (n.id === 'FRA' || n.id === 'VIC'))) at = Math.max(at, n.fellOn.turn);
   }
   return at;
 }

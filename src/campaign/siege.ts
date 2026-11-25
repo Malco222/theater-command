@@ -769,8 +769,8 @@ export function invest(g: Game, r: Region, by: string, monthOpen = false): void 
   // months eaten too (the design director's ruling of 19:01Z, 25 November 2026): one larder, so the larger of the two
   // clocks, never their sum, as both count the same eating, and never more than the town holds.
   // (A siege raised and closed again in one nation's month, with no draw of the supply picture between, reads the
-  // stores' month as the siege left it: the picture is drawn between any two nations' months, so the wars do not
-  // reach that order.)
+  // stores' month as the siege left it. The picture is drawn between any two nations' months, and that order was not
+  // seen in the recorded wars.)
   if (trueReach(g)) eaten = Math.min(storesOf(g, r), Math.max(eaten, keptAtOpening(g, r, monthOpen)));
   if (eaten > 0) g.flags[`sgm:${r.id}`] = eaten;
   g.supplyDirty = true;
