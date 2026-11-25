@@ -497,4 +497,51 @@ describe('the fight a group carries after its air fight (18:14Z): read afresh at
     expect(passes.length).toBe(TROOPS.strafe.passes);
     for (const p of passes.slice(1)) { expect(p.k).toBeCloseTo(after, 12); expect(p.add).toBeCloseTo((p.n * reachOf(unit) * after) / TROOPS.strafe.passes, 9); }
   });
+
+  // The design director, 25 November 2026 19:09Z, item 2: "'A group with none goes home' is decided at the go-down: a
+  // group that reads 0 there turns for home and is gone for the raid, and no later share brings it back ... Add a test:
+  // a group sent home at 0 never strafes later in that raid." Round five's edge raid (309 German fighters): Groupement de
+  // Chasse 3 alone is outweighed by 2. Jagddivision (it reads 0), and the raid's groups together are not (each reads
+  // about 0.35 once all have met it).
+  it('a group sent home at 0 at its go-down never strafes later in that raid: not when its share rises, not on the staff\'s later ticks, not on the player\'s later order (19:09Z, item 2)', () => {
+    const { s, S, unit, passes } = raid(309);
+    const foe = s.units.find((u) => u.side === 'def' && u.air === 'ftr')!;
+    const others = s.units.filter((u) => u.side === 'att' && u.air === 'ftr' && u.id !== unit.id);
+    s.ai.att = true; s.ai.def = true;
+    // Groupement de Chasse 3 is sent ahead to hunt (the player's order), and meets the German group alone, before the
+    // raid's other groups: outweighed, it reads 0.
+    expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+    let guard = 0;
+    while (!s.over && !S.met.get(unit.id)?.size && guard++ < 40_000) s.step();
+    expect([...S.met.get(unit.id)]).toEqual([foe.id]);
+    for (const u of others) expect(S.met.get(u.id)).toBeUndefined();
+    expect(S.carries(unit)).toBe(0);
+    // Its go-down, by the player's order: it reads 0 there, turns for home and is gone for the raid.
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('home');
+    expect(S.strafing.get(unit.id)).toBeUndefined();
+    // (Setup: its kill ledger spent, as a group's that has fought itself out, so that every other thing the staff asks
+    // before it sends a group down, strafeDue, can hold for it on the ticks below.)
+    unit.vig = SKY.spent / 2;
+    // Its share rises: the computer flies the raid on, the raid's other groups meet the same German group, and its
+    // weight is shared among them.
+    while (!s.over && !others.some((u) => S.met.get(u.id)?.has(foe.id)) && guard++ < 40_000) { s.step(); expect(unit.job.do).not.toBe('strafe'); }
+    const risen = S.carries(unit);
+    expect(risen).toBeGreaterThan(0);
+    // The player's later order, its share above 0: another order first, then down to strafe. It turns for home again.
+    expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+    expect(unit.job.do).toBe('hunt');
+    s.command({ do: 'air:strafe', units: [unit.id] }, 'att');
+    expect(unit.job.do).toBe('home');
+    // The staff's later ticks, to the end of the raid: never sent down again.
+    let most = risen;
+    while (!s.over && guard++ < 40_000) { s.step(); most = Math.max(most, S.carries(unit)); expect(unit.job.do).not.toBe('strafe'); }
+    expect(s.over).toBeTruthy();
+    expect(most).toBeGreaterThan(0.3);
+    // Never a pass, never charged the ground fire, never among the field's strafers; the raid's other groups strafe.
+    expect(passes).toEqual([]);
+    expect(S.strafing.get(unit.id)).toBeUndefined();
+    expect(s.outcome().strafers).not.toContain(GC3);
+    expect(s.outcome().strafers!.length).toBeGreaterThan(0);
+  });
 });
