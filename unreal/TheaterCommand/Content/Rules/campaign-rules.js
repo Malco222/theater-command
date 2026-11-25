@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b1bd81fa 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ef0a9bc6 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -97444,4 +97444,73 @@ ${standing5}`,
     const set = setLogistics(s, which, !!on);
     return { set, on: logisticsSet(s, which) };
   };
+  var R2_SHIP = {
+    nicknames: (s) => {
+      setNicknames(s, true);
+      return nicknamesOn(s);
+    },
+    marked: (s) => {
+      setMarked(s, true);
+      return markedOn(s);
+    },
+    taskforcerule: (s) => {
+      setTaskForce(s, true);
+      return taskForceOn(s);
+    },
+    rearguardrule: (s) => {
+      setRearguard(s, true);
+      return rearguardOn(s);
+    },
+    rearbridgesrule: (s) => {
+      setRearBridges(s, true);
+      return rearBridgesOn(s);
+    },
+    shadowrule: (s) => {
+      setShadow(s, true);
+      return shadowOn(s);
+    },
+    voyagelogrule: (s) => {
+      setVoyageLog(s, true);
+      return voyageOn(s);
+    },
+    seaminesrule: (s) => {
+      setSeaMines(s, true);
+      return seaMinesOn(s);
+    },
+    heavyseasrule: (s) => {
+      setHeavySeas(s, true);
+      return heavySeasOn(s);
+    },
+    shadowrelayrule: (s) => {
+      setShadowRelay(s, true);
+      return shadowRelayOn(s);
+    },
+    fleetwhyrule: (s) => {
+      setFleetWhy(s, true);
+      return fleetWhyOn(s);
+    },
+    settledtownsrule: (s) => {
+      setSettledTowns(s, true);
+      return settledTownsOn(s);
+    },
+    columns: (s) => setColumns(s, true),
+    "logistics:lorryShift": (s) => setLogistics(s, "lorryShift", true),
+    "logistics:wagons": (s) => setLogistics(s, "wagons", true),
+    "logistics:dumps": (s) => setLogistics(s, "dumps", true)
+  };
+  function r2Ship(ids2) {
+    const s = game();
+    if (s.flags.open !== 1 || s.flags.r2Ship === 1) return null;
+    let took = 0;
+    for (const id of Array.isArray(ids2) ? ids2 : []) {
+      const turnOn = R2_SHIP[id];
+      try {
+        if (turnOn && turnOn(s)) took++;
+      } catch {
+      }
+    }
+    s.flags.r2Ship = 1;
+    return took > 0 ? view2() : null;
+  }
+  globalThis.TC.r2Ship = r2Ship;
 })();
