@@ -116,7 +116,7 @@ describe('B8, the end of a loan: a regiment its division awaits leaves only if t
     expect([row(c, T1), row(c, T6)]).toEqual([undefined, undefined]);
     expect(told(c, was, LEFT)).toEqual([`Japanese formations lent to the campaign leave for other fronts: ${T1}; ${T6}.`]);
     expect(rowOffers(c)).toEqual([]);
-    expect(Object.keys(c.flags).filter((k) => /^(leave|kept|offer):/.test(k))).toEqual([]);
+    expect(Object.keys(c.flags).filter((k) => /^(leave|kept|asked):/.test(k))).toEqual([]);
   });
 
   it('let go with its division on the map, it goes home into it one for one, as the rule always had it go', () => {
