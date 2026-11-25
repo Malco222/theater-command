@@ -14,7 +14,8 @@ import { farOn } from './world';
 /** An island's row: its room in corps, the floor a cut-off garrison withers to, and whether it is an islet. */
 export interface Island { room: number; floor: number; islet: boolean }
 
-type Row = [number, 'quarter' | 'half', 0 | 1];
+// (the 4th element is the look of the island's field in the 3D ground battle, read by islandLook below and by no rule)
+type Row = [number, 'quarter' | 'half', 0 | 1, 'island' | 'jungle' | ''];
 const ROWS: Record<string, Row> | null = FAR_STAGE ? (data as unknown as { islands: Record<string, Row> }).islands : null;
 
 /** The island a province is, by the table. Null with the far side off, and for ground that is no island of the table. */
@@ -109,3 +110,17 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
 
 /** Every island of the table, by its province's name (for the lists an interface or a test draws). */
 export const islandNames = (): string[] => (ROWS ? Object.keys(ROWS) : []);
+
+/**
+ * The look an island's field is dressed in when its battle is fought in the 3D game (the design director, 25 November
+ * 2026, 12:39Z, B(3), narrowed at 13:01Z, D(2)): "jungle" where the table's jungle column says 1 (a big island's fight
+ * was inland), "island" (beach, reef and palms) where it is an islet, as the table's own columns give it
+ * (tools/make-far-islands.mjs, lookOf). No word ('') for every other island, which the 3D game dresses by its own
+ * climate from the place's latitude and longitude; for Attu, Kiska, Singapore and Iwo Jima until the art director has
+ * scored stills of them; for ground that is no island of the table; and with the far side off. Looks only: the battle's
+ * ticket carries it for the 3D game (battle-bridge.ts, battleLook), and no rule of the campaign or of the fight reads it.
+ */
+export function islandLook(g: Game, r: Region | undefined | null): 'island' | 'jungle' | '' {
+  if (!ROWS || !r || !farOn(g)) return '';
+  return ROWS[r.name]?.[3] ?? '';
+}
