@@ -13,10 +13,12 @@ import { townName, townSize } from '../../campaign/towns';
 import { SIEGE, guardForce, guardMen, guardOf, guardPower } from '../../campaign/siege';
 import { stopOf } from '../../campaign/history';
 import { techRules } from '../../campaign/tech';
+import { isFoot } from '../../campaign/ground';
+import { SUPPORT } from '../../campaign/support';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { corpsKnown, oddsBand } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
-import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
+import type { AirOnCall, FieldResult, FieldTicket, ForceKit, ForceTicket, SideTicket } from '../core/types';
 import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
 import { bearingOf, streamFor } from './stream';
@@ -29,6 +31,22 @@ export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
 
 /** The research a computer general's style grows by (data/battle/land-styles.json grow.tech). */
 const DOCTRINES = ['combined', 'deep'];
+
+/**
+ * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P3): what a corps on
+ * foot (isFoot: not tanks, guns or teams) carries that can pierce armour, from its own nation's research: Anti-tank
+ * guns, Tank destroyers and the hand-held weapons (support.json tech). Read straight off the nation's record, as the
+ * doctrine line below is, and only with the research rules on: never through techOf or hasTech, which open research on
+ * a first look. Nothing where it holds none of the three, or without research rules: the plain kit, both sides alike.
+ * Never the nation's name, never the date. Read by the field only with LandBattle.pierce on.
+ */
+function pierceKit(g: Game, c: Corps): { kit: ForceKit } | Record<string, never> {
+  if (!techRules(g) || !isFoot(c)) return {};
+  const done = g.nations[c.nat]?.tech?.done, T = SUPPORT.tech;
+  if (!done) return {};
+  const kit: ForceKit = { ...(done.includes(T.antiTank) ? { atGuns: true } : {}), ...(done.includes(T.tankDestroyers) ? { atTd: true } : {}), ...(done.includes(T.handHeld) ? { atHand: true } : {}) };
+  return Object.keys(kit).length ? { kit } : {};
+}
 
 function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, crosses?: (c: Corps) => boolean): SideTicket {
   const N = g.nations[nat];
@@ -45,6 +63,7 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
     // How worn its uniforms and kit look (release 2, looks only): absent while it is fresh.
     ...(c.wear !== undefined ? { wear: c.wear } : {}),
     ...(c.fresh ? { fresh: c.fresh } : {}),
+    ...pierceKit(g, c),
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;

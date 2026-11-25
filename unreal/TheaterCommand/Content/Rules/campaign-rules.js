@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 65ff0c3c8 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 805cbabe9 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -87140,6 +87140,95 @@
       commonwealth: ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"]
     },
     /**
+     * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
+     * tanks? cannon fire or bazookas should be the only think taking them out", and 16:03Z, "ok add all of those": guns,
+     * launchers and close assault; the design director's pierce ruling, 25 Nov, P1 to P9; LandBattle.pierce): off unless
+     * the battle is opened with it. With it on, a blow that falls on a tank block is weighed by the striker's pierce
+     * share (LandBattle.pierceShare), what it carries that can pierce armour, and by nothing else it has:
+     *   tanks and field guns: 1 (their punch and the measured armour already apply; field guns from far back are a later
+     *     form's question, Q5).
+     *   a block on foot ('foot'): the least of 'most' and G + H + C, where
+     *     guns (G), its own anti-tank guns, anywhere inside its reach: 'with' where its kit says Anti-tank guns
+     *       (ForceKit.atGuns), else 'without' (the early small guns and the anti-tank rifles together, which get no knob
+     *       of their own); plus 'destroyers' where its kit says Tank destroyers (atTd); never above guns.most.
+     *     hand (H), hand-held launchers: only where its kit says so (atHand), and only within hand.at metres between
+     *       the blocks' edges.
+     *     close (C), close assault with grenades, charges and bottles: every foot block, only within close.at;
+     *       engineers 'eng' in its place.
+     *     'close' or 'open' by the ground: close where the tank stands on 'ground' (woods, rough, buildings, industry,
+     *       suburb) or the striker stands on 'works' (its fieldworks or a bunker). The plain kit (no field) is guns at the
+     *       without level, no launcher, and close assault.
+     *   a machine-gun team teams.mg and a mortar team teams.mor, in place of LAND.teams' armour (off keeps 0.15 and 0.5);
+     *     a support team this table does not list takes nothing, as a machine-gun team (a test holds 'teams' to
+     *     LAND.teams' own keys, so a new team must be given its share here by a ruling).
+     *   a fort: 'fort', at its full reach (its guns are in its works; no kit read).
+     * LAND.alone (tanks alone) still multiplies what the tank takes, on top, unchanged.
+     * Split fire (fixed: the b418 shape, Q2): what a foot block or a support team cannot put into the tank, 1 less its
+     * share, lands as a blow on the nearest enemy block in its reach that is not a tank (by targetOf's own score; never a
+     * hidden block), with its own aspect, ground, height and take, at the same luck and with no draw of the dice; where
+     * there is none it is lost. So kit moves where a block's fire lands and from what distance, never how much it deals:
+     * the card has priced the research already, and the field must not price it a second time. No share is above 1,
+     * today's weight. Only the blow's weight is multiplied (P1): at any share, even none, it is still a blow on her, with
+     * its nerve and its pin as ever, so a machine-gun team's fire takes none of her strength and is owed none of her
+     * losses (P4), and shakes her crews only as far as others' blows take strength off her that tick, as it does today.
+     * One draw of the dice per blow, as ever, whatever the share.
+     * The overrun (P5): with pierce on, foot threatens a hull by its kit alone, at its reach where it has anti-tank guns,
+     * else at hand.at where it has launchers, else not at all; with pierce off the overrun's own test is untouched.
+     * The foot a tank does drive through strikes her by the gap and the ground as the two stand (P1: "their gap"; the
+     * drawing's P9 reads the same gap): its guns and, among its men, its close assault. Weighed from where she began
+     * her drive, as the rest of that blow is (b418), such a block put nothing at all into her in a fifth to a half of
+     * its blows and its close assault almost never counted (the fairness checker, 25 Nov).
+     * Kit comes only from the ticket (P3): the nation's own research on a campaign ticket (ticket.ts), a sample ticket's
+     * SAMPLE_KIT (sample.ts), a set piece's own data (pieces.ts). Nothing here reads a nation's name, the date, the
+     * card's anti-tank strength, the calendar's guns of the day or LAND.overrun.at.
+     * The numbers (P2), each with the range the builder may tune within, fitted by the paired measure
+     * (tools/land-gate/paired.ts: off, on and a dice placebo on the same battles, both mirrors, the marks M1 to M6 of
+     * P7); 'most', teams.mg, the close ground, split fire and the threat rule are fixed.
+     *   guns.with 0.5 [0.4 to 0.6]; guns.without 0.35 [0.15 to 0.35; the ruling's first value 0.25]; guns.destroyers 0
+     *   [0 to 0.15; first 0.1]; guns.most 0.65 [0.55 to 0.65]; hand.open 0.2 [0.15 to 0.25]; hand.close 0.35
+     *   [0.3 to 0.4]; hand.at 100 [80 to 120]; close.open 0.15 [0.1 to 0.2]; close.close 0.25 [0.2 to 0.3]; close.at 30
+     *   [25 to 40]; eng.open 0.3 [0.25 to 0.35]; eng.close 0.5 [0.4 to 0.6]; teams.mor 0.05 [0 to 0.1]; fort 0.6
+     *   [0.5 to 0.8].
+     * Two were tuned from the first values, for the kit lean with the tanks defending (M5: the field must not price
+     * research the card has priced, b418): at the first values the attack's foot won 7.5 points more of its 120 battles
+     * with the full kit than with the plain kit (bar 5) and 16.7 more on urban ground (bar 12); with the early guns at
+     * 0.35 and Tank destroyers adding nothing, 4.2 and 10.0. So Tank destroyers moves nothing on the field for now (its
+     * kit field is read all the same). Every other number stands at its first value.
+     * Measured 25 November 2026 over 5,185 battles, 51 marks, 47 passed and 4 failed: it FAILS the pass rule, so the
+     * switch stays off (P8, step 5). All four are in the shipping set with the tanks defending, and the worst is the lean
+     * (M2): the attack won 59.6% of 240 with it off and 48.8% with it on, 10.8 points toward the side with the tanks
+     * (bar 8; the dice placebo moved 0.4), 6 results flipped to the attack and 32 to the defence (net 10.8%, bar 8%),
+     * hills at odds 1.2 by 16.7 (bar 15), and endings on the clock from 44 to 57 (5.4% of the battles, bar 5%). No
+     * number inside the ranges mends it (guns.with at 0.6: 9.6 points; with close assault and the mortar at their tops
+     * too: 10.4), and the ruling's one rule mend changes nothing there, every foot block of that set having anti-tank
+     * guns. The standing gate with it on, the same set with the tanks attacking (+2.5), the bare set (+2.4 and -3.6),
+     * the kit lean, the set pieces and the purpose marks all passed.
+     * Measured again the same day after the checkers' two mends (the share of foot a tank drives through, and a team the
+     * table does not list): 5,185 battles, every figure of every set the same, 47 of 51 marks passed, the same 4 failed.
+     * With the ruled order's numbers all at their tops the failing set reads 10.4 points, flips 3 and 28, the clock 56.
+     * Left to the design director, each with its reading (no bar; neither changes the code):
+     *   a split blow counts its whole nerve on the tank and again on the men, and a machine-gun team's fire still
+     *     shakes a tank's crews though it takes none of her strength (P1's letter; P4 has it "do nothing"). On the
+     *     failing set, with the nerve shared out as the weight is: 10.0 points, flips 5 and 29, the clock 46 (off 44);
+     *     with a share of none adding no nerve on her: 11.3 points, the clock 56. Neither mends the lean.
+     *   an army all on foot (the pass rule's sets all give the side without tanks a corps of field guns): attacking a
+     *     defence with tanks at odds 1.2 it won 69 of 210 off and 42 on with the plain kit (12.9 points; plains 23.3),
+     *     49 with the sample kit (9.5); defending against tanks, the attack won 74 off and 83 on (plain), 79 (sample).
+     *     tools/land-gate/paired.ts --set SF, a reading with no bar.
+     */
+    pierce: {
+      guns: { with: 0.5, without: 0.35, destroyers: 0, most: 0.65 },
+      hand: { open: 0.2, close: 0.35, at: 100 },
+      close: { open: 0.15, close: 0.25, at: 30 },
+      eng: { open: 0.3, close: 0.5 },
+      most: 1,
+      teams: { mg: 0, mor: 0.05, snp: 0 },
+      fort: 0.6,
+      foot: ["inf", "mtn", "cav", "eng", "mot"],
+      ground: ["woods", "rough", "buildings", "industry", "suburb"],
+      works: ["works", "bunker"]
+    },
+    /**
      * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
      * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
      * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
@@ -89121,6 +89210,13 @@
     return jointForce(g2, limitAttackers(g2, jointForce(g2, corps, target), target), target);
   }
   var DOCTRINES = ["combined", "deep"];
+  function pierceKit(g2, c) {
+    if (!techRules(g2) || !isFoot(c)) return {};
+    const done = g2.nations[c.nat]?.tech?.done, T = SUPPORT.tech;
+    if (!done) return {};
+    const kit = { ...done.includes(T.antiTank) ? { atGuns: true } : {}, ...done.includes(T.tankDestroyers) ? { atTd: true } : {}, ...done.includes(T.handHeld) ? { atHand: true } : {} };
+    return Object.keys(kit).length ? { kit } : {};
+  }
   function sideOf6(g2, nat, cs, weigh3, crosses2) {
     const N = g2.nations[nat];
     const w = cs.map(weigh3), tot = w.reduce((a, b) => a + b, 0) || 1;
@@ -89145,7 +89241,8 @@
       ...crosses2 && !crosses2(c) ? { cross: false } : {},
       // How worn its uniforms and kit look (release 2, looks only): absent while it is fresh.
       ...c.wear !== void 0 ? { wear: c.wear } : {},
-      ...c.fresh ? { fresh: c.fresh } : {}
+      ...c.fresh ? { fresh: c.fresh } : {},
+      ...pierceKit(g2, c)
     }));
     const lead2 = cs.map((c) => generalOf(g2, c)).filter((x) => !!x).sort((a, b) => b.level - a.level)[0] ?? null;
     const doctrine = techRules(g2) ? DOCTRINES.filter((id) => !!N?.tech?.done.includes(id)) : [];
@@ -100366,6 +100463,7 @@
       }
       const hurt2 = /* @__PURE__ */ new Map();
       const kept3 = this.airOn.att || this.airOn.def ? /* @__PURE__ */ new Map() : null;
+      const unseen = this.pierce ? new Set(this.units.filter((e) => e.hid).map((e) => e.id)) : null;
       for (const u of this.units) {
         if (!fighting2(u)) continue;
         const t = this.targetOf(u);
@@ -100388,9 +100486,9 @@
         }
         if (!u.met) {
           u.met = true;
-          const unseen = u.team === "snp" && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
+          const unseen2 = u.team === "snp" && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
           if (u.side === "att" || !t.met) {
-            if (unseen) this.say({ what: "contact", side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
+            if (unseen2) this.say({ what: "contact", side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
             else this.say({ what: "contact", unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
           }
         }
@@ -100413,20 +100511,10 @@
           kept3.set(t.id, (kept3.get(t.id) ?? 0) + raw2);
         }
         const h = hurt2.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
-        if (this.led && blow3.parts) {
-          h.dmg += blow3.dmg;
-          const sp = nerveSplit(blow3.parts, this.led.on), pt = blow3.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
-          h.nerve += sp.block;
-          h.dm = (h.dm ?? 0) + blow3.dmg * sp.army;
-          h.built = (h.built ?? 0) + blow3.nerve;
-          h.dn = (h.dn ?? 0) + blow3.dmg * blow3.nerve;
-          w.flank += blow3.dmg * (pt.aspect === "flank" ? pt.nm : 1);
-          w.rear += blow3.dmg * (pt.aspect === "rear" ? pt.nm : 1);
-          w.fire += blow3.dmg * pt.fire;
-          w.ambush += blow3.dmg * pt.ambush;
-        } else this.tally(h, u, blow3);
+        this.landBlow(h, u, blow3);
         if (!blind) h.blind = false;
         h.from.push([u, blow3.dmg]);
+        if (blow3.rest && blow3.rest.part >= 1) h.from.pop();
         hurt2.set(t.id, h);
         if (blow3.front) t.pinned = true;
         if (u.team === "snp" && !blind) this.sniped(u, t);
@@ -100434,6 +100522,7 @@
           t.flankedAt = this.t;
           if (t.side === "att" ? this.ticket.att.human : this.ticket.def.human) this.say({ what: "flanked", unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow3.aspect === "rear" ? "rear" : "flank"}.`, x: t.x, y: t.y });
         }
+        if (blow3.rest) this.splitFire(u, blow3.rest, hurt2, kept3, unseen);
       }
       if (this.teamsRule) {
         for (const h of hurt2.values()) if (h.team > 0 && h.dmg > 0) h.nerve = ((h.dmg - h.team) * h.nerve + h.teamNerve) / h.dmg;
@@ -100665,8 +100754,78 @@
       if (e.team) return null;
       if (e.kind === "arm" || e.kind === "fort") return reachOf(e);
       if (e.kind === "art") return gunsOf(e).closeAt;
+      if (this.pierce) return this.kitReach(e);
       if (LAND3.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
       return null;
+    }
+    /**
+     * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P5): how far a foot
+     * block's own weapons that can stop a tank reach, by its kit alone: with its own anti-tank guns (ForceKit.atGuns) its
+     * reach; else with launchers (atHand) LAND.pierce.hand.at; else none (close assault and the early guns do not stop
+     * tanks driving through). Never its army's name or the month: the overrun's old table is not read.
+     */
+    kitReach(e) {
+      if (!LAND3.pierce.foot.includes(e.kind)) return null;
+      return e.kit?.atGuns ? reachOf(e) : e.kit?.atHand ? LAND3.pierce.hand.at : null;
+    }
+    /**
+     * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P1 and P2): the share
+     * of a block's blow that can fall on a tank block, from what it carries that can pierce armour. Tanks and field guns
+     * 1; a machine-gun or mortar team its own figure; a fort its own, in its reach; a block on foot its own anti-tank
+     * guns anywhere in its reach (by its kit, the plain kit the early guns), its launchers within hand.at where its kit
+     * has them, and close assault within close.at, each by the ground: close where the tank stands on close ground or
+     * the striker in its works. Pure: the two blocks' kinds, the striker's team and kit, the gap between their edges and
+     * the ground where each stands (blow() asks it as the two stand now, an overrun's pair too); no dice, no army's
+     * name, no date, nothing of the card, nothing written during the tick.
+     */
+    pierceShare(u, t, gap = this.gap(u, t), uAt = [u.x, u.y], tAt = [t.x, t.y]) {
+      const P = LAND3.pierce;
+      if (t.kind !== "arm") return 1;
+      if (u.team) return P.teams[u.team] ?? 0;
+      if (u.kind === "fort") return gap <= reachOf(u) ? P.fort : 0;
+      if (!P.foot.includes(u.kind)) return 1;
+      const where = P.ground.includes(coverAt(this.field, tAt[0], tAt[1])) || P.works.includes(groundAt(this.field, uAt[0], uAt[1])) ? "close" : "open";
+      let s = gap <= reachOf(u) ? Math.min(P.guns.most, (u.kit?.atGuns ? P.guns.with : P.guns.without) + (u.kit?.atTd ? P.guns.destroyers : 0)) : 0;
+      if (u.kit?.atHand && gap <= P.hand.at) s += P.hand[where];
+      if (gap <= P.close.at) s += (u.kind === "eng" ? P.eng : P.close)[where];
+      return Math.min(P.most, s);
+    }
+    /**
+     * Split fire (LAND.pierce; the pierce ruling, 25 Nov, P1 and Q2: the b418 shape): the rest of a blow that could not
+     * pierce a tank lands as a blow on the nearest enemy block in the striker's reach that is not a tank, by targetOf's
+     * own score (the gap times the turn to it, a routing block's doubled), never a block hidden now or as the tick's
+     * blows began ('unseen'); where there is none it is lost. Weighed by blow() itself on that block (its own aspect,
+     * ground, height and take) at the first blow's luck, so no draw of the dice. The air's share is held back from it,
+     * and its hurt, its nerve and whose losses it is owed are kept, as for any blow on that block (step). The striker
+     * stays engaged with the tank it faces.
+     */
+    splitFire(u, rest, hurt2, kept3, unseen) {
+      const reach3 = reachOf(u);
+      let e = null, score = Infinity;
+      for (const x of this.units) {
+        if (x.side === u.side || !live4(x) || x.hid || unseen.has(x.id) || x.kind === "arm") continue;
+        const d = this.gap(u, x);
+        if (d > reach3) continue;
+        const s = d * (1 + Math.abs(turn(u.face, bearing(u.x, u.y, x.x, x.y)))) * (x.state === "routing" ? 2 : 1);
+        if (s < score) {
+          score = s;
+          e = x;
+        }
+      }
+      if (!e) return;
+      const blow3 = this.blow(u, e, rest);
+      if (this.airLeft[u.side] > 0) {
+        const full = blow3.dmg / blow3.screen, held3 = full * this.airOn[u.side].share, raw2 = held3 / blow3.ground;
+        blow3.dmg = (full - held3) * blow3.screen;
+        this.airBank[u.side].set(e.id, (this.airBank[u.side].get(e.id) ?? 0) + raw2);
+        this.airLedger[u.side].withheld += raw2;
+        kept3.set(e.id, (kept3.get(e.id) ?? 0) + raw2);
+      }
+      const h = hurt2.get(e.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
+      this.landBlow(h, u, blow3);
+      h.blind = false;
+      h.from.push([u, blow3.dmg]);
+      hurt2.set(e.id, h);
     }
     /**
      * Whether an enemy weapon that can pierce a hull reaches a block now (tankReach: a tank's, a gun's over open sights, a
@@ -100693,7 +100852,7 @@
         if (u.order && u.order.kind !== "attack") continue;
         const f = this.unit(u.engaged);
         if (!f || f.side === u.side || !foot(f) || f.hid || this.overrun.has(f.id) || this.gap(u, f) > reachOf(u)) continue;
-        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND3.dug.keep || this.ownAntiTank(f)) continue;
+        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND3.dug.keep || (this.pierce ? this.kitReach(f) !== null : this.ownAntiTank(f))) continue;
         if (!this.units.some((g2) => g2.side === u.side && foot(g2) && this.gap(u, g2) <= LAND3.alone.near)) continue;
         const dx = f.x - u.x, dy = f.y - u.y, len = Math.hypot(dx, dy) || 1;
         const to = [clamp6(f.x + dx / len * (f.d / 2), 5, this.field.w - 5), clamp6(f.y + dy / len * (f.d / 2), 5, this.field.h - 5)];
@@ -100787,6 +100946,27 @@
      * Support teams in battle (teamsRule): a team's is not added to the others'; it is kept with its own harm (team,
      * teamNerve), and step makes the one multiplier of them once every blow is in.
      */
+    /**
+     * A blow landed on its target's hurt this tick (step, and splitFire for the rest of a split blow). Under the field
+     * spread's army ledger its own split, as before; else tally, which keeps support teams' harm apart under teamsRule.
+     * The two are never on together in the game: the ledger is bench-only. Under the ledger the teams' nerve split is off,
+     * so a bench run with both on is not a reading of `teams`. Under the ledger (step 1b, choice 13) each part of m is
+     * read at the army or at the block, never both.
+     */
+    landBlow(h, u, blow3) {
+      if (this.led && blow3.parts) {
+        h.dmg += blow3.dmg;
+        const sp = nerveSplit(blow3.parts, this.led.on), pt = blow3.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
+        h.nerve += sp.block;
+        h.dm = (h.dm ?? 0) + blow3.dmg * sp.army;
+        h.built = (h.built ?? 0) + blow3.nerve;
+        h.dn = (h.dn ?? 0) + blow3.dmg * blow3.nerve;
+        w.flank += blow3.dmg * (pt.aspect === "flank" ? pt.nm : 1);
+        w.rear += blow3.dmg * (pt.aspect === "rear" ? pt.nm : 1);
+        w.fire += blow3.dmg * pt.fire;
+        w.ambush += blow3.dmg * pt.ambush;
+      } else this.tally(h, u, blow3);
+    }
     tally(h, u, blow3) {
       h.dmg += blow3.dmg;
       if (this.teamsRule && ownArm2(u)) {
@@ -100799,7 +100979,7 @@
      * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
      * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
      */
-    blow(u, t) {
+    blow(u, t, spill) {
       const pair2 = this.inOverrun(u, t);
       const uAt = pair2 && u.ovr ? u.ovr.back : [u.x, u.y], tAt = pair2 && t.ovr ? t.ovr.back : [t.x, t.y];
       const gu = coverAt(this.field, uAt[0], uAt[1]);
@@ -100825,7 +101005,7 @@
         const G5 = gunsOf(u), close3 = this.gap(u, t) < G5.closeAt;
         p *= close3 ? G5.close : G5.punch;
         if (!close3) nerveMul *= fireN = G5.nerve;
-        if (u.team && t.kind === "arm") p *= LAND3.teams[u.team].armour;
+        if (u.team && t.kind === "arm" && !this.pierce) p *= LAND3.teams[u.team].armour;
       }
       if (u.kind === "arm" && LAND3.tanksClose.ground.includes(gu)) p *= LAND3.tanksClose.punch;
       if (u.kind === "arm" && motionOf(t) === "foot" && this.closed(u)) p *= LAND3.closed.foot;
@@ -100845,10 +101025,17 @@
         take3 *= LAND3.snipers.take.fragile;
         if (u.team === "mor" || u.kind === "art" && !u.team || u.kind === "arm") take3 *= LAND3.snipers.take.blast;
       }
-      const luck = 1 + LAND3.jitter * ((u.team === "snp" ? this.snpRoll(u, 342) : this.rng.next()) * 2 - 1);
+      const roll4 = spill ? spill.roll : u.team === "snp" ? this.snpRoll(u, 342) : this.rng.next();
+      const luck = 1 + LAND3.jitter * (roll4 * 2 - 1);
       const f = this.lean === void 0 ? this.fortune : this.fortune * this.lean;
       const dmg = p * am * amx * take3 * luck * (u.side === "att" ? f : 1 / f) * DT;
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {} };
+      const parts2 = this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {};
+      if (this.pierce && (spill || t.kind === "arm")) {
+        const part = spill ? spill.part : this.pierceShare(u, t);
+        const rest = !spill && part < 1 && (u.team || LAND3.pierce.foot.includes(u.kind)) ? { roll: roll4, part: 1 - part } : void 0;
+        return { dmg: dmg * part, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...parts2, ...rest ? { rest } : {} };
+      }
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...parts2 };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
