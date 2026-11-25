@@ -4,17 +4,23 @@
 // and built here against the engine's stand-ins (paint_shim.h), so what is tested is the game's own code.
 //   (a) off: on every ship file in Content/Models/Ships (26: the battleships, carriers, cruisers, destroyers, the three
 //       merchants and the three U-boats), near and far, every point's colour is bit for bit the reference's: the linear
-//       floats ToFColor is handed, and the bytes and the finish it gives;
+//       floats ToFColor is handed, and the bytes and the finish it gives; each mesh twice, as the file is and with a
+//       made-up shade (today's files carry none, and the reference never reads one), so a shade that leaks with the
+//       switches off fails here on every mesh;
 //   (b) the map's and the air stage's callers never pass the options: who sets them, and where, read from the source;
+//       the month's sea scene never takes the ship switches; the reader marks a wooden deck by its paint's name;
 //   (c) on: the shade only darkens; the rust ramp keeps to the art director's numbers step by step, never lighter than
 //       the paint, never red over 135 nor 80 over blue, the same every time; on Submarine_GER no two neighbouring weeps
-//       alike and none one flat colour; edge wear darker, never whiter; the salt as ruled;
-//   (d) a flipped default is caught: the identity check run with an option on fails.
+//       alike and none one flat colour; edge wear darker, never whiter; the salt as ruled; a wooden deck under her
+//       150,135,110 as drawn; and the sea's steel ink, worked through M_MapSurface's own sums as Tools/build_content.py
+//       makes them: the top light never above today's (none) unless the light switch asks with the skin on, no chips;
+//   (d) a flipped default is caught: the identity check run with an option on fails, both legs of it.
 // Usage: ship_paint_test <Source/TheaterCommand> <Content/Models/Ships>   (built by Tools/ship_detail/run.sh)
 
 #include "paint_shim.h"
 
 #include "Battle/LandJson.h"
+#include "Battle/SeaLookSwitches.h"
 #include "Battle/ShipPaintCore.h"
 
 #include <algorithm>
@@ -170,6 +176,7 @@ namespace
 			{
 				Raw.ShipMetal.Add(Metal.count(Paint) == 1);
 				Raw.ShipPainted.Add(Coat.count(Paint) == 1);
+				Raw.ShipPlanks.Add(Paint == "planks");
 			}
 		}
 		return true;
@@ -190,6 +197,7 @@ namespace
 		At.X = Raw.Points[K].X;
 		At.Y = Raw.Points[K].Y;
 		At.Z = Raw.Points[K].Z;
+		At.bDeckWood = Raw.ShipPlanks.IsValidIndex(Kind) && Raw.ShipPlanks[Kind];
 		return At;
 	}
 
@@ -382,8 +390,17 @@ int main(int Argc, char** Argv)
 				const FRawShip& Raw = Ship.Mesh[Far];
 				const Painted Old = PaintOld(Raw), New = PaintNew(Raw, ShipPaintCore::Options());
 				const size_t Bad = Differ(Old, New);
-				Check(Bad == 0 && Old.Colours.size() == static_cast<size_t>(Raw.Points.Num()), Ship.Name + (Far ? " far" : " near") + ": every point's floats, bytes and finish as the reference's",
-					std::to_string(Old.Colours.size() - std::min(Old.Colours.size(), Bad)) + " of " + std::to_string(Raw.Points.Num()) + " alike");
+				// (and again with a made-up shade on every point: today's files carry none, so only this leg can see a shade
+				// painted with every switch off, a flipped default or the switch's gate lost)
+				FRawShip Shaded = Raw;
+				GiveShade(Shaded);
+				const Painted OldShaded = PaintOld(Shaded), NewShaded = PaintNew(Shaded, ShipPaintCore::Options());
+				const size_t BadShaded = Differ(OldShaded, NewShaded);
+				const size_t Total = static_cast<size_t>(Raw.Points.Num());
+				Check(Bad == 0 && BadShaded == 0 && Old.Colours.size() == Total && OldShaded.Colours.size() == Total,
+					Ship.Name + (Far ? " far" : " near") + ": every point's floats, bytes and finish as the reference's, as the file is and with a made-up shade",
+					std::to_string(Old.Colours.size() - std::min(Old.Colours.size(), Bad)) + " of " + std::to_string(Total) + " alike, " +
+						std::to_string(OldShaded.Colours.size() - std::min(OldShaded.Colours.size(), BadShaded)) + " shaded");
 				Points += Raw.Points.size();
 				for (int32 K = 0; K < Raw.Points.Num(); ++K)
 				{
@@ -449,10 +466,45 @@ int main(int Argc, char** Argv)
 			"HullModel paints today's unless handed the stage's own options: LayShip's near and far, and the break's halves", std::to_string(Count(Stage, ", ShipPaint)")) + " calls");
 		Check(Count(Stage, "\tShipPaint = ") == 1 && Has(Stage, "void AAirStage::SetShipPaint(const ShipPaintCore::Options& Given, float FirstLookWear)\n{\n\tShipPaint = Given;"),
 			"the stage's own options set only by SetShipPaint", "AirStage.cpp");
-		Check(Callers == "Battle/SeaBattle.cpp x1", "SetShipPaint called by the sea battle only: never by the air scene, Pearl Harbor, Midway, the month's sea or the map", Callers);
 		const size_t Call = Scene.find("Stage->SetShipPaint(");
+		const size_t Open = Scene.find("\nbool ASeaBattle::OpenOn("), OpenEnd = Open == std::string::npos ? Open : Scene.find("\n}\n", Open);
+		Check(Callers == "Battle/SeaBattle.cpp x1" && Call != std::string::npos && Open != std::string::npos && Call > Open && Call < OpenEnd,
+			"SetShipPaint called only from the sea battle's own opening (ASeaBattle::OpenOn): never by the air scene, Pearl Harbor, Midway or the map (the month's sea scene opens the same way, and the next checks keep the switches from it)",
+			Callers);
 		const size_t Gate = Scene.rfind("if (bShipLight || bShipSkin)", Call);
 		Check(Call != std::string::npos && Gate != std::string::npos && Call - Gate < 600, "and only behind its switches (-TheaterSeaShipLight=1 or -TheaterSeaShipSkin=1)", "SeaBattle.cpp");
+		// (the three ship switches are for review pictures only, as the reel's two: the month's sea scene inside a campaign
+		// opens the same way, with bMonthScene set first, and never takes them)
+		const size_t Month = Scene.find("\nbool ASeaBattle::BeginMonthScene(");
+		const size_t MonthSet = Scene.find("bMonthScene = true;", Month), MonthOpen = Scene.find("OpenOn(", Month);
+		bool bGated = MonthSet != std::string::npos && MonthOpen != std::string::npos && MonthSet < MonthOpen && !Has(Scene, "TakeOnOff(SeaLook, \"TheaterSeaShip");
+		for (const char* Line : { "const bool bShipLight = SeaLookSwitches::TakeReview(SeaLook, \"TheaterSeaShipLight=\", !bMonthScene);",
+				 "const bool bShipSkin = SeaLookSwitches::TakeReview(SeaLook, \"TheaterSeaShipSkin=\", !bMonthScene);",
+				 "bShipShade = SeaLookSwitches::TakeReview(SeaLook, \"TheaterSeaShipShade=\", !bMonthScene);" })
+		{
+			const size_t At = Scene.find(Line);
+			bGated = bGated && At != std::string::npos && At > Open && At < OpenEnd;
+		}
+		Check(bGated, "the month's sea scene never takes the three ship switches (bMonthScene set before OpenOn, each switch read with !bMonthScene)", "SeaBattle.cpp");
+		{
+			int SkinAt = -1;
+			for (int K = 0; K < SeaLookSwitches::Count; ++K)
+			{
+				SkinAt = std::string(SeaLookSwitches::All[K].Name) == "TheaterSeaShipSkin=" ? K : SkinAt;
+			}
+			SeaLookSwitches::Look AskedSkin;
+			AskedSkin.Given.push_back({ SkinAt, "1" });
+			SeaLookSwitches::Look InMonth = AskedSkin, InBattle = AskedSkin, None;
+			const bool bMonth = SeaLookSwitches::TakeReview(InMonth, "TheaterSeaShipSkin=", false);
+			const bool bBattle = SeaLookSwitches::TakeReview(InBattle, "TheaterSeaShipSkin=", true);
+			const bool bNone = SeaLookSwitches::TakeReview(None, "TheaterSeaShipSkin=", true);
+			const std::string MonthLine = SeaLookSwitches::LineOf(SeaLookSwitches::All, SeaLookSwitches::Count, 0, InMonth.Given);
+			Check(SkinAt >= 0 && !bMonth && InMonth.Given[0].Value == "0" && bBattle && InBattle.Given[0].Value == "1" && !bNone &&
+					  Has(MonthLine, "-TheaterSeaShipSkin=0 (asked)"),
+				"a review switch asked for in the month's scene is off and said as 0 on the \"Sea look:\" line; in a battle, as asked", std::string("in the month's scene ") + InMonth.Given[0].Value + ", in a battle " + InBattle.Given[0].Value);
+		}
+		Check(Has(Minis, "Raw->ShipPlanks.Add(Paint == TEXT(\"planks\"));") && Has(Minis, "At.bDeckWood = Raw->ShipPlanks.IsValidIndex(Kind) && Raw->ShipPlanks[Kind];"),
+			"the reader marks a wooden deck by the file's paint name, planks, as this test reads it", "CampaignMiniatures.cpp");
 		// (in the miniatures: the options read only by the ship branch and the ship's own cache key)
 		size_t Reads = 0;
 		for (size_t At = Minis.find("ShipPaint"); At != std::string::npos; At = Minis.find("ShipPaint", At + 1))
@@ -719,6 +771,153 @@ int main(int Argc, char** Argv)
 				Check(Middle <= 0.5 && Palest <= 0.8, "dark, not salmon: the middle run's source under half her paint's brightness, none paler than 0.8 of it", Said);
 			}
 		}
+
+		// A wooden deck under the skin (the art director: "the scene holds a wooden deck under 150,135,110"). The skin's
+		// first look lays M_MapSurface's blot mottle over what is not metal by up to WoodMottleMost (below, from the graph's
+		// own sum), so each plank is held under her cap with room for it: as drawn, never over it, whether the material
+		// reads the bytes back by the standard's curve or by its own power of 2.2.
+		{
+			const ShipPaintCore::Linear Most = ShipPaintCore::DeckWoodMost();
+			const float Cap[3] = { ShipPaintCore::DeckR, ShipPaintCore::DeckG, ShipPaintCore::DeckB };
+			size_t Planks = 0, Over = 0, OverPower = 0, NotHeld = 0, OthersMoved = 0, PlanksMoved = 0, Mismatched = 0, TodayOver = 0;
+			std::map<std::string, size_t> PlanksOf;
+			int MostLevel[3] = { 0, 0, 0 };
+			for (const ShipFile& Ship : Files)
+			{
+				for (int Far = 0; Far < 2; ++Far)
+				{
+					const FRawShip& Raw = Ship.Mesh[Far];
+					FRawShip Unheld = Raw;
+					std::fill(Unheld.ShipPlanks.begin(), Unheld.ShipPlanks.end(), false);
+					const Painted Held = PaintNew(Raw, Skin), Free = PaintNew(Unheld, Skin), Today = PaintOld(Raw);
+					for (int32 K = 0; K < Raw.Points.Num(); ++K)
+					{
+						const ShipPaintCore::Point P = PointOf(Raw, K);
+						const bool bMoved = std::memcmp(&Held.Linear[4 * K], &Free.Linear[4 * K], 4 * sizeof(float)) != 0;
+						if (!P.bDeckWood)
+						{
+							OthersMoved += bMoved ? 1 : 0;
+							continue;
+						}
+						++Planks;
+						PlanksOf[Ship.Name + (Far ? " far" : " near")] += 1;
+						PlanksMoved += bMoved ? 1 : 0;
+						const bool bWasOver = Free.Linear[4 * K] > Most.R || Free.Linear[4 * K + 1] > Most.G || Free.Linear[4 * K + 2] > Most.B;
+						Mismatched += bMoved != bWasOver ? 1 : 0;
+						const FColor& Byte = Held.Colours[K];
+						const uint8 Level[3] = { Byte.R, Byte.G, Byte.B };
+						const float Lin[3] = { Most.R, Most.G, Most.B };
+						const FColor& Was = Today.Colours[K];
+						TodayOver += Was.R > Cap[0] || Was.G > Cap[1] || Was.B > Cap[2] ? 1 : 0;
+						for (int C = 0; C < 3; ++C)
+						{
+							MostLevel[C] = std::max<int>(MostLevel[C], Level[C]);
+							NotHeld += Held.Linear[4 * K + C] > Lin[C] ? 1 : 0;
+							Over += PaintShim::SrgbToLinear(Level[C]) * ShipPaintCore::WoodMottleMost > ShipPaintCore::ToLinear(Cap[C] / 255.0f) ? 1 : 0;
+							OverPower += std::pow(Level[C] / 255.0, 2.2) * ShipPaintCore::WoodMottleMost > std::pow(Cap[C] / 255.0, 2.2) ? 1 : 0;
+						}
+					}
+				}
+			}
+			const std::string Counted = std::to_string(Planks) + " planks (Battleship_USA " + std::to_string(PlanksOf["Battleship_USA near"]) + ", Carrier_USA " +
+										std::to_string(PlanksOf["Carrier_USA near"]) + ", Carrier_JAP " + std::to_string(PlanksOf["Carrier_JAP near"]) + " near), " +
+										std::to_string(TodayOver) + " over the cap today";
+			Check(Planks > 5000 && PlanksOf["Battleship_USA near"] == 686 && PlanksOf["Carrier_USA near"] == 67 && PlanksOf["Carrier_JAP near"] == 67 && TodayOver * 10 >= Planks * 9,
+				"the wooden decks found in the files, nearly every plank over the art director's cap today", Counted);
+			Check(NotHeld == 0 && Over == 0 && OverPower == 0,
+				"under the skin a plank times the mottle's most stays under 150,135,110, read back either way", "the brightest plank " + std::to_string(MostLevel[0]) + "," +
+					std::to_string(MostLevel[1]) + "," + std::to_string(MostLevel[2]) + " (times " + Num(ShipPaintCore::WoodMottleMost, 2) + "), " + std::to_string(Over + OverPower + NotHeld) + " over");
+			Check(OthersMoved == 0 && Mismatched == 0 && PlanksMoved > 0, "the hold moves the planks over the cap and nothing else",
+				std::to_string(PlanksMoved) + " planks moved, " + std::to_string(Planks - PlanksMoved) + " already under it, " + std::to_string(OthersMoved) + " others");
+		}
+
+		// The sea's steel ink, worked through M_MapSurface's own sums (Tools/build_content.py, build_map_surface, read here so
+		// the sums below are the graph's): the lift on what faces the sky, 1 + up x TopLight x (metal x Wear); the blot
+		// mottle, the colour times lerp(1, 0.8 + 0.42 blot, Wear x (metal/2 + 1/2)); a chip where (speck x (blot + 0.5) +
+		// ChipAt + gather x ChipGather) x ChipSharp passes 0, times metal and Wear, drawn as metal (0.85) in ChipColour.
+		{
+			const std::string Build = ReadAll(Src + "/../../Tools/build_content.py");
+			const size_t From = Build.find("def build_map_surface("), To = Build.find("\ndef build_solid(");
+			const std::string Graph = From != std::string::npos && To != std::string::npos && To > From ? Build.substr(From, To - From) : std::string();
+			bool bSums = !Graph.empty();
+			for (const char* Piece : { "wear = scalar(m, \"Wear\", 0.0, ", "scalar(m, \"TopLight\", 0.26, ",
+					 "lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, ", "times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)",
+					 "lerp(m, 1.0, plus(m, times(m, (blot, \"R\"), 0.42, -350, -1500), 0.8, -200, -1500),",
+					 "times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)",
+					 "gather = one_in(m, unreal.MaterialExpressionSaturate, ", "times(m, (speck, \"R\"), plus(m, (blot, \"G\"), 0.5, -350, -1650), -200, -1700), scalar(m, \"ChipAt\", -0.78, ",
+					 "times(m, gather, scalar(m, \"ChipGather\", 0.3, ", "scalar(m, \"ChipSharp\", 9.0, ", "metal, 450, -1750), wear, 600, -1750)",
+					 "to_property(times(m, chipped, 0.85, 750, -700), \"\", unreal.MaterialProperty.MP_METALLIC)", "scalar(m, \"BlotTiling\", 0.009, " })
+			{
+				bSums = bSums && Has(Graph, Piece);
+			}
+			Check(bSums && ShipPaintCore::MapTopLight == 0.26f && ShipPaintCore::MottleMost == 0.8f + 0.42f,
+				"M_MapSurface's lift, mottle and chip as this test works them (Tools/build_content.py, its defaults: TopLight 0.26, Wear 0, ChipAt -0.78)", "build_map_surface");
+			const auto Lift = [](float Up, float Metal, float TopLight, float Wear) { return 1.0f + std::min(1.0f, std::max(0.0f, Up)) * TopLight * (Metal * Wear); };
+			const auto Mottle = [](float Metal, float Wear, float Blot)
+			{
+				const float Share = Wear * (Metal * 0.5f + 0.5f);
+				return 1.0f + (0.8f + 0.42f * Blot - 1.0f) * Share;
+			};
+			const auto Chip = [](float Speck, float Blot, float Gather, float ChipAt, float Metal, float Wear)
+			{
+				return std::min(1.0f, std::max(0.0f, (Speck * (Blot + 0.5f) + ChipAt + Gather * 0.3f) * 9.0f)) * Metal * Wear;
+			};
+			// (each switch as the scene sets it: SeaBattle's options and wear, through the stage's SetShipPaint, which sets
+			// what SteelOf gives and nothing else; with neither switch, nothing is set and the ink is as made)
+			const std::string Stage = ReadAll(Src + "/Battle/AirStage.cpp"), Scene = ReadAll(Src + "/Battle/SeaBattle.cpp");
+			const size_t SetAt = Stage.find("void AAirStage::SetShipPaint(");
+			const std::string SetBody = SetAt == std::string::npos ? std::string() : Stage.substr(SetAt, Stage.find("\n}\n", SetAt) - SetAt);
+			size_t Params = 0;
+			for (size_t At = SetBody.find("SetScalarParameterValue"); At != std::string::npos; At = SetBody.find("SetScalarParameterValue", At + 1))
+			{
+				++Params;
+			}
+			Check(Has(Scene, "Paint.TopLight = bShipLight ? ShipPaintCore::SeaTopLight : -1.0f;") && Has(Scene, "Stage->SetShipPaint(Paint, bShipSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);") &&
+					  Has(SetBody, "const ShipPaintCore::Steel SteelSet = ShipPaintCore::SteelOf(Given, FirstLookWear);") &&
+					  Has(SetBody, "SteelInk->SetScalarParameterValue(TEXT(\"TopLight\"), SteelSet.TopLight);") && Has(SetBody, "SteelInk->SetScalarParameterValue(TEXT(\"Wear\"), SteelSet.Wear);") &&
+					  Has(SetBody, "SteelInk->SetScalarParameterValue(TEXT(\"ChipAt\"), ShipPaintCore::SeaChipAt);") && Params == 4 && !Has(SetBody, "SetVectorParameterValue"),
+				"the scene's switches reach the steel ink only through SteelOf: TopLight, Wear, BlotTiling and ChipAt, nothing else", std::to_string(Params) + " set");
+			std::string Lifts;
+			bool bLift = true, bNoChips = true;
+			float SkinMottle = 0.0f;
+			for (const int Case : { 0, 1, 2, 3 })
+			{
+				const bool bLight = (Case & 1) != 0, bSkin = (Case & 2) != 0;
+				float TopLight = ShipPaintCore::MapTopLight, Wear = 0.0f, ChipAt = -0.78f;
+				if (bLight || bSkin)
+				{
+					ShipPaintCore::Options O;
+					O.bShade = bLight;
+					O.TopLight = bLight ? ShipPaintCore::SeaTopLight : -1.0f;
+					O.bRustRamp = bSkin;
+					const ShipPaintCore::Steel Set = ShipPaintCore::SteelOf(O, bSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);
+					TopLight = Set.TopLight >= 0.0f ? Set.TopLight : TopLight;
+					Wear = Set.Wear > 0.0f ? Set.Wear : Wear;
+					ChipAt = Set.bChipsOff ? ShipPaintCore::SeaChipAt : ChipAt;
+				}
+				// (a steel deck facing the sky, metal as the reader marks painted steel: its alpha 128 less half its wear)
+				const float Lifted = Lift(1.0f, 1.0f, TopLight, Wear);
+				Lifts += std::string(Lifts.empty() ? "" : ", ") + (Case == 0 ? "off " : Case == 1 ? "light alone " : Case == 2 ? "skin alone " : "both ") + Num(Lifted, 2);
+				bLift = bLift && std::abs(Lifted - (Case == 3 ? 1.0f + ShipPaintCore::SeaTopLight : 1.0f)) < 1e-6f;
+				for (const float Speck : { 0.0f, 1.0f })
+				{
+					for (const float Blot : { 0.0f, 1.0f })
+					{
+						for (const float Gather : { 0.0f, 1.0f })
+						{
+							bNoChips = bNoChips && Chip(Speck, Blot, Gather, ChipAt, 1.0f, Wear) == 0.0f;
+						}
+					}
+				}
+				SkinMottle = bSkin ? std::max(SkinMottle, Mottle(0.0f, Wear, 1.0f)) : SkinMottle;
+			}
+			Check(bLift, "a steel deck facing the sky is lifted no more than today (none) unless the light switch asks with the skin on, and then by the art director's 0.10",
+				Lifts);
+			Check(bNoChips && Chip(1.0f, 1.0f, 1.0f, -0.78f, 1.0f, 1.0f) > 0.0f, "no chip anywhere at sea under any switch (the material's own chips, as made, would show)",
+				"ChipAt " + Num(ShipPaintCore::SeaChipAt, 1));
+			Check(std::abs(SkinMottle - ShipPaintCore::WoodMottleMost) < 1e-6f && std::abs(ShipPaintCore::WoodMottleMost - 1.11f) < 1e-6f,
+				"the mottle's most on what is not metal under the skin, which the deck's hold leaves room for", Num(SkinMottle, 3));
+		}
 	}
 
 	std::printf("(d) A flipped default is caught\n");
@@ -740,7 +939,8 @@ int main(int Argc, char** Argv)
 			}
 		}
 		Check(Caught == Meshes, "the rust ramp on by default would fail the identity check on every mesh", std::to_string(Caught) + " of " + std::to_string(Meshes));
-		Check(ShadeCaught == Meshes, "the shade on by default would fail it on every mesh that carries a shade", std::to_string(ShadeCaught) + " of " + std::to_string(Meshes));
+		Check(ShadeCaught == Meshes, "the shade painted with the switches off (on by default, or its gate lost) would fail the identity check's shaded leg on every mesh",
+			std::to_string(ShadeCaught) + " of " + std::to_string(Meshes));
 	}
 
 	std::printf("%d checks, %d failed\n%s\n", Checks, Failures, Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");

@@ -1582,13 +1582,15 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	Weather.Reset();
 	const bool bSeaIce = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaIce=");
 	// (the ship detail plan, round 1: the ships at sea, each off by default and each for review pictures until the art
-	// director's Mac check. -TheaterSeaShipLight=1: the file's shade on each point and the ships' top light, 0.10;
-	// -TheaterSeaShipSkin=1: the rust ramp, the ruled salt and M_MapSurface's own wear on the sea's steel ink; both set on
-	// the stage once the sea is raised, below, before a ship is laid. -TheaterSeaShipShade=1: occlusion, contact shadows of
-	// 0.3 m and shadow quality 3, taken with the room and given back as the scene ends.)
-	const bool bShipLight = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShipLight=");
-	const bool bShipSkin = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShipSkin=");
-	bShipShade = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShipShade=");
+	// director's Mac check, so, as the reel's two, never taken in the month's scene inside a campaign. -TheaterSeaShipLight=1:
+	// the file's shade on each point and the ships' top light, 0.10, which shows only with the skin's wear;
+	// -TheaterSeaShipSkin=1: the rust ramp, the ruled salt, the wooden deck held, and M_MapSurface's own wear on the sea's
+	// steel ink, its blot mottle with no chips; both set on the stage once the sea is raised, below, before a ship is laid.
+	// -TheaterSeaShipShade=1: occlusion, contact shadows of 0.3 m and shadow quality 3, taken with the room and given back
+	// as the scene ends.)
+	const bool bShipLight = SeaLookSwitches::TakeReview(SeaLook, "TheaterSeaShipLight=", !bMonthScene);
+	const bool bShipSkin = SeaLookSwitches::TakeReview(SeaLook, "TheaterSeaShipSkin=", !bMonthScene);
+	bShipShade = SeaLookSwitches::TakeReview(SeaLook, "TheaterSeaShipShade=", !bMonthScene);
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -1714,7 +1716,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// as LayShip lays her (Battle/ShipIce; -TheaterSeaIce=1 only, so by default the hulls are laid as made).
 	if (bSeaIce) { FHeavyWeather::Ice(Stage, S.Rec.Board, S.Show.WindSpeed(), S.Show.WindFrom(), S.BeginT); } // S6 hook (ship ice)
 	// (the ship detail plan, round 1: the ships' paint at sea, set on the stage before it lays a ship. The map, Pearl Harbor
-	// and Midway never set it, so they lay today's paint; so does this scene with both switches off.)
+	// and Midway never set it, so they lay today's paint; so does this scene with both switches off, and the month's scene,
+	// which never takes them. The top light shows only where the skin's wear is on: the light switch alone changes no
+	// colour until the ship files carry their shade, and the skin alone draws no top light, as the sea never has.)
 	if (bShipLight || bShipSkin)
 	{
 		ShipPaintCore::Options Paint;
@@ -1722,9 +1726,11 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		Paint.TopLight = bShipLight ? ShipPaintCore::SeaTopLight : -1.0f;
 		Paint.bRustRamp = bShipSkin;
 		Stage->SetShipPaint(Paint, bShipSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);
+		const FString TopLightSaid = !bShipLight ? FString(TEXT("none, as the sea has always drawn"))
+			: FString::Printf(TEXT("%.2f"), ShipPaintCore::SeaTopLight) + (bShipSkin ? TEXT("") : TEXT(", which lifts nothing without -TheaterSeaShipSkin=1 (the material lifts only where its wear is on)"));
 		UE_LOG(LogTheater, Display, TEXT("Sea battle: the ships' paint at sea: the file's shade %s, the top light %s, the rust ramp %s."),
-			bShipLight ? TEXT("on") : TEXT("off"), bShipLight ? *FString::Printf(TEXT("%.2f"), ShipPaintCore::SeaTopLight) : TEXT("the material's own"),
-			bShipSkin ? *FString::Printf(TEXT("on, with the steel ink's own wear at %.1f"), ShipPaintCore::SeaFirstLookWear) : TEXT("off"));
+			bShipLight ? TEXT("on") : TEXT("off"), *TopLightSaid,
+			bShipSkin ? *FString::Printf(TEXT("on, with the wooden decks held and the steel ink's own wear at %.1f (its blot mottle, no chips)"), ShipPaintCore::SeaFirstLookWear) : TEXT("off"));
 	}
 
 	// The paint: the wakes and tracks see-through and unlit (M_Highlight, by each point's alpha), the aircraft as the

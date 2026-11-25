@@ -137,6 +137,21 @@ namespace SeaLookSwitches
 		return false;
 	}
 
+	/** A review switch of 0 or 1 (the ship detail plan's ships at sea, "review": review pictures only): taken as TakeOnOff
+	 * takes it where review pictures are made (bReview), and never anywhere else, which is the month's sea scene inside a
+	 * campaign: there it is off and, if it was asked for, said as 0 on the "Sea look:" line. */
+	inline bool TakeReview(Look& InForce, const char* Name, bool bReview)
+	{
+		for (Asked& One : InForce.Given)
+		{
+			if (!bReview && One.Index >= 0 && One.Index < Count && std::string(All[One.Index].Name) == Name)
+			{
+				One.Value = "0";
+			}
+		}
+		return TakeOnOff(InForce, Name);
+	}
+
 	/** The release 2 sea's switches asked for (ReadOf of All); the tier 0 until step 15 builds it. */
 	template <typename AskFn>
 	Look Read(AskFn&& AskedFor)

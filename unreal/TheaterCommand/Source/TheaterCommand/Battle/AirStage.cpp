@@ -1753,21 +1753,23 @@ void AAirStage::SetShipPaint(const ShipPaintCore::Options& Given, float FirstLoo
 	{
 		return;
 	}
-	if (Given.TopLight >= 0.0f)
+	// (Battle/ShipPaintCore's SteelOf: the top light where asked, and none where the first look's Wear would otherwise bring
+	// in the material's own 0.26, which the sea has never drawn; the Wear, for the material's blot mottle, its blots seven
+	// metres across on the ship's own metres where the map's pieces take theirs in the table's measure; and the chips held
+	// off, since this material's chip is bare metal, dark and glossy, never the matt dark of rust)
+	const ShipPaintCore::Steel SteelSet = ShipPaintCore::SteelOf(Given, FirstLookWear);
+	if (SteelSet.TopLight >= 0.0f)
 	{
-		SteelInk->SetScalarParameterValue(TEXT("TopLight"), Given.TopLight);
+		SteelInk->SetScalarParameterValue(TEXT("TopLight"), SteelSet.TopLight);
 	}
-	if (FirstLookWear > 0.0f)
+	if (SteelSet.Wear > 0.0f)
 	{
-		// (the material's chips a metre and a half apart and its blots seven, on the ship's own metres, where the map's
-		// pieces take theirs in the table's measure; the chips the dark of a rust source, so worn paint never goes whiter)
-		const float Metre = static_cast<float>(UnitsPerMetre);
-		const ShipPaintCore::Linear Chip = { ShipPaintCore::ToLinear(ShipPaintCore::Source.R / 255.0f), ShipPaintCore::ToLinear(ShipPaintCore::Source.G / 255.0f),
-			ShipPaintCore::ToLinear(ShipPaintCore::Source.B / 255.0f), 1.0f };
-		SteelInk->SetScalarParameterValue(TEXT("Wear"), FirstLookWear);
-		SteelInk->SetScalarParameterValue(TEXT("ChipTiling"), 1.0f / (1.6f * Metre));
-		SteelInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (7.0f * Metre));
-		SteelInk->SetVectorParameterValue(TEXT("ChipColour"), FLinearColor(Chip.R, Chip.G, Chip.B, 1.0f));
+		SteelInk->SetScalarParameterValue(TEXT("Wear"), SteelSet.Wear);
+		SteelInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (7.0f * static_cast<float>(UnitsPerMetre)));
+	}
+	if (SteelSet.bChipsOff)
+	{
+		SteelInk->SetScalarParameterValue(TEXT("ChipAt"), ShipPaintCore::SeaChipAt);
 	}
 }
 

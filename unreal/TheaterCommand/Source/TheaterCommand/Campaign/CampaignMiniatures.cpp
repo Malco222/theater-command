@@ -689,6 +689,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		bool bShip = false;
 		TArray<int32> Salt;
 		TArray<bool> ShipMetal, ShipPainted; // (by the file's paint_names: which paints are steel, and which painted steel that rusts and salts)
+		TArray<bool> ShipPlanks; // (and which is a wooden deck's planks, for Battle/ShipPaintCore's deck under the sea battle's skin)
 		FLinearColor Rust = FLinearColor(FColor::FromHex(TEXT("8A4E28")));
 		// (A piece of the table that is nobody's vehicle and nobody's soldier, such as the agent: the file gives the
 		// colour of each of its paints, and it takes no dust of the road, no markings and no wear.)
@@ -977,6 +978,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 							const FString Paint = Value->AsString();
 							Raw->ShipMetal.Add(Metal.Contains(Paint));
 							Raw->ShipPainted.Add(Coat.Contains(Paint));
+							Raw->ShipPlanks.Add(Paint == TEXT("planks"));
 						}
 					}
 				}
@@ -1271,6 +1273,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				At.X = Raw->Points[K].X;
 				At.Y = Raw->Points[K].Y;
 				At.Z = Raw->Points[K].Z;
+				At.bDeckWood = Raw->ShipPlanks.IsValidIndex(Kind) && Raw->ShipPlanks[Kind];
 				const ShipPaintCore::Linear Coat = ShipPaintCore::Paint(At, ShipColours, ShipPaint);
 				Fresh.Add(Raw->Points[K], Raw->Facings[K], FLinearColor(Coat.R, Coat.G, Coat.B, Coat.A).ToFColor(true));
 				continue;

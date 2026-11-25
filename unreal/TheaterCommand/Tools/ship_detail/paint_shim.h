@@ -108,6 +108,7 @@ struct FRawShip
 	bool bShip = true;
 	TArray<int32> Salt, Wear, Soot;
 	TArray<bool> ShipMetal, ShipPainted;
+	TArray<bool> ShipPlanks;
 	FLinearColor Rust = FLinearColor(FColor::FromHex("8A4E28"));
 	TArray<FLinearColor> PaintColours;
 };

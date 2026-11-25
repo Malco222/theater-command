@@ -45,7 +45,14 @@ namespace ShipPaintCore
 		{
 			Linear Source, SourceDark, SourceLight, Body, Foot, Salt;
 			float RedMost = 0.0f; // (135 of 255, linear)
+			Linear DeckWood; // (a wooden deck's most: DeckWoodMost)
 		};
+
+		/** The art director's cap on one channel of a wooden deck, less the mottle's most, down to a whole sRGB level. */
+		float DeckLevel(float Cap)
+		{
+			return ToLinear(std::floor(ToSrgb(ToLinear(Cap / 255.0f) / WoodMottleMost) * 255.0f) / 255.0f);
+		}
 
 		const Steps& TheSteps()
 		{
@@ -59,6 +66,9 @@ namespace ShipPaintCore
 				S.Foot = FromSrgb(ShipPaintCore::Foot.R, ShipPaintCore::Foot.G, ShipPaintCore::Foot.B);
 				S.Salt = FromSrgb(SaltR, SaltG, SaltB);
 				S.RedMost = ToLinear(135.0f / 255.0f);
+				S.DeckWood.R = DeckLevel(DeckR);
+				S.DeckWood.G = DeckLevel(DeckG);
+				S.DeckWood.B = DeckLevel(DeckB);
 				return S;
 			}();
 			return Made;
@@ -262,6 +272,16 @@ namespace ShipPaintCore
 		{
 			Coat = Lerp(Coat, Pal.Soot, 0.6f * std::min(P.Soot, 100) / 100.0f);
 		}
+		if (O.bRustRamp && P.bDeckWood)
+		{
+			// (the art director's wooden deck under the skin: each channel held under her 150,135,110 with room for the blot
+			// mottle the skin's wear lays over what is not metal, so the planks as drawn never pass it; a darker plank keeps
+			// its own)
+			const Linear& Most = TheSteps().DeckWood;
+			Coat.R = std::min(Coat.R, Most.R);
+			Coat.G = std::min(Coat.G, Most.G);
+			Coat.B = std::min(Coat.B, Most.B);
+		}
 		if (O.bShade && P.Shade >= 0.0f && P.Shade < 1.0f)
 		{
 			// (as a figure's worn cloth: the colour times the point's shade, its alpha kept)
@@ -270,5 +290,21 @@ namespace ShipPaintCore
 			Coat.B = Coat.B * P.Shade;
 		}
 		return Coat;
+	}
+
+	Steel SteelOf(const Options& O, float FirstLookWear)
+	{
+		Steel Out;
+		Out.Wear = std::max(0.0f, FirstLookWear);
+		Out.bChipsOff = Out.Wear > 0.0f;
+		// (the material lifts what faces the sky only where its Wear is on: once the first look turns it on, the lift is the
+		// light switch's if asked and otherwise none, as the sea has always drawn; never the map's 0.26)
+		Out.TopLight = O.TopLight >= 0.0f ? O.TopLight : Out.Wear > 0.0f ? SeaTopLightToday : -1.0f;
+		return Out;
+	}
+
+	Linear DeckWoodMost()
+	{
+		return TheSteps().DeckWood;
 	}
 }
