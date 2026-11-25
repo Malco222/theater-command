@@ -599,6 +599,12 @@ struct FRaidCard
 	// (Release 2.) The fighters at the raid's height, which side's aircraft are stronger, the pilots' training (under Units
 	// decide), and the words for the pointer; each empty where the rules give none.
 	FString Types, TypesEdge, Pilots, TypesTip;
+	// (Release 2, a raid on troops with the strafers' rule on; the UI director's words.) The fighter groups likely to go
+	// down and strafe: the heading, the muted line once and a name a row, or the line for none in place of both (the
+	// note then empty). bStrafe is false where the rules send none (the switch off, any other raid).
+	bool bStrafe = false;
+	FString StrafeHeading, StrafeNote, StrafeNone;
+	TArray<FString> StrafeNames;
 };
 
 /** A figure on the month's card: "3,000" over "lost". */
