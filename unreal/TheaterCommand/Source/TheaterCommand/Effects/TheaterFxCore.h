@@ -732,8 +732,16 @@ namespace TheaterFx
 		 *   their strength-weighted middle, coloured as their strength-weighted mix, its strength their sum held to
 		 *   MergeMost times its strongest flash's, its reach grown to cover each flash's own reach from there. Strongest
 		 *   first; a flash joins a lamp only when it lies within MergeM of every flash already in it, so one lamp is
-		 *   never wider than MergeM and never chains from ship to ship. MergeM 0: none merged.
+		 *   never wider than MergeM and never chains from ship to ship. MergeM 0: none merged. The groups are made afresh
+		 *   each frame from the strongest flash alive, so in a ripple salvo (turrets 0.05 to 0.1 s apart) the lamp steps
+		 *   along her hull toward each turret as it fires, 25 to 85 m a turret, and the earlier ones fade: it reads as
+		 *   the ripple. A salvo fired in one frame (the sea scene's) is one still lamp.
 		 * - Yield: see bByEye (only with it).
+		 *
+		 * With bByEye a lamp whose sphere (its place and its reach) lies wholly outside the last Draw's view
+		 * (View::Forward, HalfAcross and HalfUp; not known while HalfAcross is 0) ranks nothing, as it can light nothing on
+		 * the screen. Ties are broken by the lamps themselves (strength, birth, place, reach, colour), never by the order
+		 * the calls came in: the same flashes give the same lamps to the bit, however their Muzzle calls were ordered.
 		 *
 		 * The sea battle's night (the sea scene, once at open, before Begin or after it):
 		 *     Effects->SetLampRule(TheaterFx::Battle::LampRule::Sea());
@@ -754,6 +762,8 @@ namespace TheaterFx
 				R.MergeS = 0.3;
 				return R;
 			}
+			/** Whether it asks anything of the kit at all (one that does not is the default: the lamps as ever). */
+			bool Asks() const { return Most > 0 || bByEye || MergeM > 0.0; }
 		};
 		/** Held: Most 0..MostLamps, MergeM 0..2,000 m, MergeS 0..2 s, MergeMost 1..16, Yield 1..10^6; a knob that is not a
 		 *  number takes its default. Survives Clear; Setup puts it back to the default. */
@@ -1455,9 +1465,17 @@ namespace TheaterFx
 		/** A flash's lamp share at Now: 1 on its first frame drawn, half the next (nothing for a one-frame flash), then
 		 *  out; a naval gun's (LampS) down from its first frame to nothing by LampS. Under 0: not lit. */
 		double FlashShare(const Flash& F, double Now) const;
-		/** The lamp rule's rank of a lamp of Strength at At: over the square of its distance from the last eye, 5 m at
-		 *  the least (bByEye); else its strength. */
-		double EyeRank(const Vec& At, double Strength) const;
+		/** The lamp rule's rank of a lamp of Strength at At reaching Reach: over the square of its distance from the last
+		 *  eye, 5 m at the least, and nothing when its sphere is wholly out of the last view (bByEye); else its strength. */
+		double EyeRank(const Vec& At, double Strength, double Reach) const;
+		/** Whether a sphere at At of radius Reach can light anything in the last Draw's view (true while the view's width
+		 *  is not known): within the view's half diagonal angle of its forward, widened by the sphere's own angle. */
+		bool LampInSight(const Vec& At, double Reach) const;
+		/** The lamp rule's order: Rank first, then the lamp itself (strength, birth, place, reach, colour, seed), so a tie
+		 *  never falls to the order the flashes were laid in. */
+		static bool LampFirst(const LampLit& A, const LampLit& B);
+		Vec SightAhead; // (the last Draw's forward, and its half diagonal angle in radians: 0 while not known)
+		double SightHalf = 0.0;
 		/** The lamp rule's merge of flashes into one lamp a salvo (LampRule's MergeM, MergeS and MergeMost). */
 		void MergeLamps(std::vector<LampLit>& Lits) const;
 		/** A naval gun's fireball and smoke ring (muzzle.<row>.fireball_m, ring_m): its own dice. */

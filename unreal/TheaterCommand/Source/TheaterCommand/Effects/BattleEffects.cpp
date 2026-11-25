@@ -337,6 +337,10 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 		LampLights[Index] = MakeLamp(Owner, Parent);
 	}
 	Core.SetLampRule(AskedRule); // (Setup put the kit's back to the default; the scene's, given before Begin, again)
+	if (AskedRule.Asks())
+	{
+		LampsByRule();
+	}
 	const UWorld* World = Parent->GetWorld();
 	Clock = World ? World->GetTimeSeconds() : 0.0; // (until the first Tick)
 	UE_LOG(LogTheater, Log, TEXT("Battle effects ready: %.2f world units a metre, room for %d puffs, %d lamps; colours %s"), UnitsPerMetre, Core.Room(), LampsInUse,
@@ -364,6 +368,24 @@ UPointLightComponent* FBattleEffects::MakeLamp(AActor* Owner, USceneComponent* P
 	Lamp->RegisterComponent();
 	Lamp->SetVisibility(false);
 	return Lamp;
+}
+
+void FBattleEffects::LampsByRule()
+{
+	// (the look review of 25 November: under a scene's rule (the sea's) a lamp is a gun flash of 6,600 to 58,000 cd
+	// reaching 115 to 360 m and lit for 6 to 12 frames. Lumen's surface cache is lit over several frames and cannot
+	// follow it: it would cost GPU time and leave an after-glow on hulls and water. So such lamps light directly
+	// only, and put nothing into the volumetric fog. Lamps made without a rule (ground, air) are never touched: the
+	// engine's defaults, 1 and 1, as ever; a rule taken back to the default puts them back)
+	const float Indirect = AskedRule.Asks() ? 0.0f : 1.0f;
+	for (int32 Index = 0; Index < LampsInUse; ++Index)
+	{
+		if (LampLights[Index].IsValid())
+		{
+			LampLights[Index]->SetIndirectLightingIntensity(Indirect);
+			LampLights[Index]->SetVolumetricScatteringIntensity(Indirect);
+		}
+	}
 }
 
 int32 FBattleEffects::LampsAsked() const
@@ -403,6 +425,7 @@ void FBattleEffects::SetLampRule(const TheaterFx::Battle::LampRule& Rule)
 			}
 		}
 		LampsInUse = Want;
+		LampsByRule();
 		UE_LOG(LogTheater, Log, TEXT("Battle effects: lamp rule %d lamps, by the eye %s, a salvo within %.0f m and %.2f s one lamp at most %.1f times its strongest"), LampsInUse, AskedRule.bByEye ? TEXT("on") : TEXT("off"), AskedRule.MergeM, AskedRule.MergeS, AskedRule.MergeMost);
 	}
 	const TheaterFx::Battle::LampRule Given = AskedRule;

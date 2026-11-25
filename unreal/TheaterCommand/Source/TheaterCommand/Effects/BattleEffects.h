@@ -332,9 +332,11 @@ public:
 	/** How the flashes' lamps are handed out, for a scene that wants its own (the sea's night fight, 25 November: look
 	 * bible S7, "gun flashes light the hulls"). Call once at open, before Begin or after it, on this thread. Without it
 	 * (ground, air) nothing changes: game.max_lamps lamps, the strongest flashes first, and no point light more is made.
-	 * Rule.Most lamps are made (0: game.max_lamps; never over MostLamps, 4), shadowless as ever, and the kit ranks them by
-	 * the light each sends the eye (bByEye: the eye Tick is given), lights a salvo's flashes as one lamp (MergeM, MergeS,
-	 * MergeMost) and lets a steady fire's own lamp go to a flash left unlit that outshines it Yield times: see
+	 * Rule.Most lamps are made (0: game.max_lamps; never over MostLamps, 4), shadowless as ever and, under a rule, with
+	 * no Lumen bounce and no volumetric fog (a flash lit for a tenth of a second is more than Lumen's surface cache can
+	 * follow); the kit ranks them by the light each sends the eye (bByEye: the eye and view Tick is given; a lamp that
+	 * can light nothing on the screen ranks nothing), lights a salvo's flashes as one lamp (MergeM, MergeS, MergeMost)
+	 * and lets a steady fire's own lamp go to a flash left unlit that outshines it Yield times: see
 	 * TheaterFx::Battle::LampRule. Kept until End.
 	 *
 	 * The sea battle's calls (the sea scene's lane wires them; nothing here knows the sea):
@@ -342,9 +344,10 @@ public:
 	 *         Effects->SetLampRule(TheaterFx::Battle::LampRule::Sea()); // 3 lamps, by the eye, a salvo within 200 m and 0.3 s one lamp
 	 *   - each turret (or mount) that fires, its row by calibre, as any gun:
 	 *         Effects->Muzzle(MuzzleAt, Facing, CalibreMm >= 280.0 ? TEXT("naval_heavy") : CalibreMm >= 150.0 ? TEXT("naval_medium") : TEXT("naval_light"), TEXT("water"));
+	 *     (a light cruiser whose main guns are 127 to 149 mm, hull 139 to 163 m, may take naval_medium for its reach)
 	 *   - every frame, as today, Effects->Tick(Now, Eye, Facing, Fov, ViewW, HourLight, ViewH): with FLinearColor::White
-	 *     (today) it is full day to the kit, so naval_heavy and naval_medium light at game.day_lamp_share (a quarter) and
-	 *     naval_light not at all; with the hour's own light (step 11) at night every row lights at full.
+	 *     (today) it is full day to the kit, so every naval row lights at game.day_lamp_share (a quarter: about 0.4 lux
+	 *     on her side); with the hour's own light (step 11) at night every row lights at full (about 1.6 lux by the gun).
 	 * Rows and numbers: Content/Effects/battle-fx.json muzzle._naval, and the sea's effects-lamps-for-sea.md. */
 	void SetLampRule(const TheaterFx::Battle::LampRule& Rule);
 	/** Everything gone: a new battle. */
@@ -406,6 +409,7 @@ private:
 	TheaterFx::Battle::LampRule AskedRule; // (SetLampRule's, kept for Begin; the default until a scene asks)
 	UPointLightComponent* MakeLamp(AActor* Owner, USceneComponent* Parent);
 	int32 LampsAsked() const; // (the rule's Most, else game.max_lamps; never over MostLamps)
+	void LampsByRule(); // (under a scene's rule, its lamps light directly only: no Lumen bounce, no fog)
 	double LampCandela = 400.0; // at full, already scaled for the world's units
 	int32 LampsLitBefore = 0; // (-TheaterFxLampLog: how many were lit the frame before, so the first frame with none is logged)
 	TFunction<FVector(const FVector&)> GroundUnder;

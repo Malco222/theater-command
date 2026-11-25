@@ -2081,27 +2081,35 @@ The sea's night fight, 25 November (look bible S7: "gun flashes light the hulls"
 because the lamps went to the strongest flashes alone.
 
 - Rows: `muzzle.naval_heavy` (280 mm and up), `naval_medium` (150 to 279 mm) and `naval_light` (under 150 mm). Each
-  has a short flame, a fireball ahead of the muzzle (the secondary flash, `fireball_m`, `_wide`, `_s`, `_lobes` and
-  three colours), a smoke ring on the big guns (`ring_m`, `ring_ahead_m`, `ring_s`), its own brown-grey cloud
-  (`cloud_m`, `smoke_colour`; no billows, no dust ring), and a lamp of `lamp_cd` candelas at night reaching
-  `lamp_reach_m`, about the band's hull (240, 190 and 115 m), held while the fireball burns (`lamp_s`). By day the
-  heavy and medium rows light at `game.day_lamp_share` and the light row does not. Sources and estimates are in
-  `muzzle._naval`. Every key is read with a default, and no other row has any of them.
+  has a short flame, a fireball ahead of the muzzle (the secondary flash, `fireball_m`, `_wide`, `_s`, `_lobes`, three
+  colours, and `fireball_hold_s`, how long the lobes by the muzzle stay near-white), a smoke ring on the big guns
+  (`ring_m`, `ring_ahead_m`, `ring_s`, `ring_puffs`, `ring_grow`), its own brown-grey cloud (`cloud_m`,
+  `smoke_colour`; no billows, no dust ring), and a lamp of `lamp_cd` candelas at night reaching `lamp_reach_m`, about
+  the band's hull (240, 190 and 115 m), held while the fireball burns (`lamp_s`).
+  - The lamp hangs `lamp_out_m` out along the bore's level way and `lamp_up_m` up from the fireball's middle, about a
+    third of her length out and two fifths up. Hung by the fireball (as first built) it burnt 40 to 110 lux on the
+    plating by the gun and left her ends 6 to 8 stops darker; hung out and up, a broadside lights her side about
+    1.6 lux by the gun and 0.6 at her ends, and the water under it about 4 lux.
+  - By day every naval row lights at `game.day_lamp_share` (about 0.4 lux on her side).
+  - Sources and estimates are in `muzzle._naval`. Every key is read with a default, and no other row has any of them.
 - Rule: `Battle::SetLampRule(LampRule)`, which `FBattleEffects::SetLampRule` passes on, once at open.
-  - `Most` lamps, up to 4. The wrapper makes the extra point lights only then, shadowless.
+  - `Most` lamps, up to 4. The wrapper makes the extra point lights only then, shadowless, and under a rule with no
+    Lumen bounce and no volumetric fog.
   - `bByEye` ranks each lamp by its strength over its distance squared from the eye (5 m at the least), the scale
-    fire.lamp's steady lights already use. The steady lights keep their share, and give it up only to a flash that
-    sends the eye `Yield` (100) times their light.
+    fire.lamp's steady lights already use; a lamp whose sphere lies wholly out of the view ranks nothing. The steady
+    lights keep their share, and give it up only to a flash that sends the eye `Yield` (100) times their light.
   - A salvo's flashes within `MergeM` metres and `MergeS` seconds of every other flash in it light one lamp, at their
     strength-weighted middle. Its strength is their sum, held to `MergeMost` times the strongest, and its reach covers
     them all.
+  - Ties go by the lamps themselves, never by the order of the calls: the same flashes give the same lamps to the bit.
   - `LampRule::Sea()` is 3 lamps, by the eye, 200 m and 0.3 s.
   - With no call, or a rule of all defaults, every lamp is handed out as before, to the byte.
 - Test: `unreal/TheaterCommand/Tools/fx_lamps/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`).
-  - 30 checks.
-  - The rows' table, night, dusk and day.
-  - The cost with 40 ships firing.
-  - A top-down night picture.
+  - 58 checks, each new rule part with a control that shows the check can fail.
+  - The rows' table, night, dusk and day, and the light along each band's side plating.
+  - The cost with 40 ships firing, the fastest of 9 calls a frame, on time lines kept out of the compilers' comparison.
+  - A night picture: from above, the battle line close, and each firing battleship's side, for today's lamps, the
+    rule as first built and the rule now.
   - Every default lamp of a scripted land and sea fight, held to the kit before the rule byte for byte.
 - Preview: `FX_GUN=naval_heavy` on the sea shot.
 - Notes for the sea scene: `/mnt/project-files/sea-storm-night/effects-lamps-for-sea.md`.
