@@ -727,15 +727,19 @@ namespace TheaterFx
 		 *   SteadyLamps) keep their own share, game.steady_lamps of the lamps, and their ramp and keep; with bByEye the
 		 *   rest go to flash or steady light by rank alike, and a steady light's own lamp goes, for the frames it is
 		 *   outshone, to a flash left unlit that sends the eye Yield times its light (it comes back up over ramp_s).
-		 * - MergeM, MergeS: flashes born within MergeS seconds of each other and lying within MergeM metres of each
+		 * - MergeM, MergeS: flashes born within MergeS seconds of each other whose guns lie within MergeM metres of each
 		 *   other light one lamp (a broadside: turrets fire within a fraction of a second, a hull's length apart), at
-		 *   their strength-weighted middle, coloured as their strength-weighted mix, its strength their sum held to
-		 *   MergeMost times its strongest flash's, its reach grown to cover each flash's own reach from there. Strongest
-		 *   first; a flash joins a lamp only when it lies within MergeM of every flash already in it, so one lamp is
-		 *   never wider than MergeM and never chains from ship to ship. MergeM 0: none merged. The groups are made afresh
-		 *   each frame from the strongest flash alive, so in a ripple salvo (turrets 0.05 to 0.1 s apart) the lamp steps
-		 *   along her hull toward each turret as it fires, 25 to 85 m a turret, and the earlier ones fade: it reads as
-		 *   the ripple. A salvo fired in one frame (the sea scene's) is one still lamp.
+		 *   their lamps' strength-weighted middle, coloured as their strength-weighted mix, its strength their sum held
+		 *   to MergeMost times its strongest flash's, its reach grown to cover each flash's own reach from there.
+		 *   Strongest first; a flash joins a lamp only when its gun lies within MergeM of every gun already in it, so no
+		 *   two guns of one lamp are more than MergeM apart and a lamp never chains from ship to ship. The distance is
+		 *   the guns' (the muzzles the scene passed), never the lamps': a naval lamp hangs some 60 to 135 m out along its
+		 *   bore (lamp_out_m), so two ships firing toward each other would bring their lamps together while their guns
+		 *   stay as far apart as ever. A flash with no gun (any other row's) is measured from its lamp. MergeM 0: none
+		 *   merged. The groups are made afresh each frame from the strongest flash alive, so in a ripple salvo (turrets
+		 *   0.05 to 0.1 s apart) the lamp steps along her hull toward each turret as it fires, 25 to 85 m a turret, and
+		 *   the earlier ones fade: it reads as the ripple. A salvo fired in one frame (the sea scene's) is one still
+		 *   lamp.
 		 * - Yield: see bByEye (only with it).
 		 *
 		 * With bByEye a lamp whose sphere (its place and its reach) lies wholly outside the last Draw's view
@@ -1062,6 +1066,10 @@ namespace TheaterFx
 			bool bOneFrame = false; // (Effects (R2): lit on the flash's own frame alone, not half the next)
 			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
 			double LampS = 0.0; // (a naval gun's, muzzle.<row>.lamp_s: full on its first frame, then down to nothing by this many seconds after its birth, never under half on the next frame. 0: as above)
+			// (a naval gun's: its muzzle, where the lamp rule's merge measures from, the lamp itself hung far out from it
+			// (lamp_out_m). bGun false: the merge measures from the lamp, At)
+			Vec Gun;
+			bool bGun = false;
 		};
 		struct Knock
 		{
@@ -1451,13 +1459,15 @@ namespace TheaterFx
 		mutable std::vector<LampKept> LampsKept;
 		mutable double LampsAt = -1.0e18;
 		// (a lamp on its way to the scene, SteadyLamps' and the lamp rule's: its source's seed (0 for a flash), its rank,
-		// when it was fired (a flash's birth) and whether it is a steady light's)
+		// when it was fired (a flash's birth), whether it is a steady light's, and where the merge measures a flash from:
+		// its gun's muzzle (Flash::Gun), or the lamp's own place for a flash without one)
 		struct LampLit
 		{
 			Lamp L;
 			uint64_t Seed = 0;
 			double Rank = 0.0, Born = 0.0;
 			bool bSteady = false;
+			Vec Gun;
 		};
 		// (SetLampRule: the scene's rule, and whether it differs from the default at all)
 		LampRule Rules;

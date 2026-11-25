@@ -5,11 +5,12 @@
 #
 #     Tools/fx_lamps/run.sh [out folder]          (default ${TMPDIR:-/tmp}/fx_lamps)
 #
-#   1. fx_lamps_test: the rule's checks (a broadside 2 km off over a slick burning 6 km off, a salvo one lamp, ships
-#      500 m apart never one, 3 lamps asked and never over 4, every lamp a number, the rows' strength night and day
-#      and their reach), the rows' table, the cost a frame with forty ships firing, and the night fight from above
-#      (fx-lamps-night.ppm, and .png with its labels where python3 has Pillow). Both compilers must print the same
-#      (the time lines aside) and draw the same picture to the byte.
+#   1. fx_lamps_test: the rule's checks (a broadside 2 km off over a slick burning 6 km off, by the eye and what the
+#      view can see, a salvo one lamp, ships 500 m apart never one, also firing toward each other, 3 lamps asked and
+#      never over 4, every lamp a number, the rows' strength night and day and their reach, the light on her side by
+#      its shape and, at the shipped lamp_cd, its level), the rows' table, the cost a frame with forty ships firing,
+#      and the night fight from above (fx-lamps-night.ppm, and .png with its labels where python3 has Pillow). Both
+#      compilers must print the same (the time lines aside) and draw the same picture to the byte.
 #   2. fx_lamps_dump: every lamp of a scripted fight on land and at sea with no scene opting in, printed exactly, held
 #      to golden-default-lamps.sha256 (the kit before the lamp rule printed it): not one lamp moves unless a scene asks.
 #      FX_LAMPS_BEFORE=<an older Source/TheaterCommand> builds the dump against that kit too and diffs the two whole.

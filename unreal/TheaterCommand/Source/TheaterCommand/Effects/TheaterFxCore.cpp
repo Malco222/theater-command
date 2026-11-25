@@ -3991,10 +3991,12 @@ namespace TheaterFx
 			// hull's length, so the flash lights its own ship and the water by her, not a 30 m patch by the turret), hung
 			// lamp_out_m out along the bore's level way and lamp_up_m up from the middle of its fireball (its flame's,
 			// without one) and going down over lamp_s; by day only a row with day_lamp lights anything, at
-			// game.day_lamp_share, as every gun's. Out and up: the look review of 25 November. A lamp by the fireball, a
+			// game.day_lamp_share, as every gun's. Out and up: the look reviews of 25 November. A lamp by the fireball, a
 			// few metres off her side, burnt a white spot on the plating by the gun and left her ends 7 stops darker
-			// (inverse square, and the side plating taking it edge on); hung about a third of her length out and up it
-			// lights her whole side within about 2 stops, and the same candelas no longer overlight the gun's side)
+			// (inverse square, and the side plating taking it edge on); hung out and up it lights her whole side within
+			// about 1.5 stops. Hung high (two fifths of her length up) it lit her from overhead, as a star shell does, her
+			// decks and roofs as bright as her side; hung about half her length out and a quarter of it up, the light
+			// comes to her side some 30 degrees up, over the water, and her deck takes under half what her side does)
 			const double CdAtFull = SafeNum(Num("game.lamp_candela_at_full", 2000.0), 1.0, 1.0e9, 2000.0); // (the wrapper's own default)
 			const double BallLong = std::max(SafeNum(Num(M + "fireball_m", 0.0), 0.0, 150.0, 0.0), Len);
 			Flash F;
@@ -4004,6 +4006,10 @@ namespace TheaterFx
 			{
 				F.At = F.At + Vec(Fw.X, Fw.Y, 0.0).Unit(Vec()) * OutBy; // (a bore straight up: no level way, hung over it)
 			}
+			// (the lamp rule's merge measures from the muzzle, not from the lamp hung out along the bore: two ships 500 m
+			// apart firing toward each other hang their lamps toward each other, never their guns. The review of 25 Nov)
+			F.Gun = At;
+			F.bGun = true;
 			F.Col = Picture(M + "lamp_colour", Picture("burst.flash.light.colour", Rgb::FromPicture(255, 196, 140)));
 			F.Born = Now;
 			F.Life = 0.03;
@@ -17515,17 +17521,20 @@ namespace TheaterFx
 
 	void Battle::MergeLamps(std::vector<LampLit>& Lits) const
 	{
-		// (a lamp that is not a number lights nothing: dropped, so no lamp the rule hands out is ever one)
-		Lits.erase(std::remove_if(Lits.begin(), Lits.end(), [](const LampLit& Is) { return !RealLamp(Is.L) || !std::isfinite(Is.Born); }), Lits.end());
+		// (a lamp that is not a number lights nothing, nor one whose gun is not a number: dropped, so no lamp the rule
+		// hands out is ever one, and no distance between guns is)
+		Lits.erase(std::remove_if(Lits.begin(), Lits.end(), [](const LampLit& Is) { return !RealLamp(Is.L) || !std::isfinite(Is.Born) || !std::isfinite(Is.Gun.X) || !std::isfinite(Is.Gun.Y) || !std::isfinite(Is.Gun.Z); }), Lits.end());
 		if (!(Rules.MergeM > 0.0) || Lits.size() < 2)
 		{
 			return;
 		}
-		// (strongest first, each the seed of a lamp; a flash joins it when it was born within MergeS and lies within MergeM
-		// of every flash already in it, so a lamp is never wider than MergeM nor longer than MergeS and never chains from
-		// ship to ship. Its strength is their sum held to MergeMost times its seed's (the strongest), at their
-		// strength-weighted middle, coloured as their strength-weighted mix, reaching as far as the farthest of their own
-		// reaches from there)
+		// (strongest first, each the seed of a lamp; a flash joins it when it was born within MergeS and its gun lies
+		// within MergeM of every gun already in it, so no lamp's guns are more than MergeM apart nor MergeS apart in time,
+		// and a lamp never chains from ship to ship. The guns', never the lamps': a naval lamp hangs far out along its bore
+		// (lamp_out_m), so two ships 500 m apart firing toward each other bring their lamps within MergeM while their guns
+		// stay 300 m apart and more (Flash::Gun; a flash without a gun is measured from its lamp). Its strength is their
+		// sum held to MergeMost times its seed's (the strongest), at their lamps' strength-weighted middle, coloured as
+		// their strength-weighted mix, reaching as far as the farthest of their own reaches from there)
 		const size_t N = Lits.size();
 		std::vector<size_t> Seeds_(N);
 		for (size_t I = 0; I < N; ++I)
@@ -17563,7 +17572,7 @@ namespace TheaterFx
 				bool bJoins = true;
 				for (const size_t K : In)
 				{
-					const Vec D = Lits[B].L.At - Lits[K].L.At;
+					const Vec D = Lits[B].Gun - Lits[K].Gun;
 					if (D.Dot(D) > Near2 || std::fabs(Lits[B].Born - Lits[K].Born) > Rules.MergeS)
 					{
 						bJoins = false;
@@ -17646,6 +17655,7 @@ namespace TheaterFx
 				LampLit Is;
 				Is.L = L;
 				Is.Born = F.Born;
+				Is.Gun = F.bGun ? F.Gun : F.At;
 				Fired.push_back(Is);
 				continue;
 			}
@@ -17808,6 +17818,7 @@ namespace TheaterFx
 			Is.L.Radius = F.Radius;
 			Is.Rank = Strength;
 			Is.Born = F.Born;
+			Is.Gun = F.bGun ? F.Gun : F.At;
 			Flashed.push_back(Is);
 		}
 		if (bLampRuled)

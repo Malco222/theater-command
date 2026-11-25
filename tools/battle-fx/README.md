@@ -2086,10 +2086,13 @@ because the lamps went to the strongest flashes alone.
   (`ring_m`, `ring_ahead_m`, `ring_s`, `ring_puffs`, `ring_grow`), its own brown-grey cloud (`cloud_m`,
   `smoke_colour`; no billows, no dust ring), and a lamp of `lamp_cd` candelas at night reaching `lamp_reach_m`, about
   the band's hull (240, 190 and 115 m), held while the fireball burns (`lamp_s`).
-  - The lamp hangs `lamp_out_m` out along the bore's level way and `lamp_up_m` up from the fireball's middle, about a
-    third of her length out and two fifths up. Hung by the fireball (as first built) it burnt 40 to 110 lux on the
-    plating by the gun and left her ends 6 to 8 stops darker; hung out and up, a broadside lights her side about
-    1.6 lux by the gun and 0.6 at her ends, and the water under it about 4 lux.
+  - The lamp hangs `lamp_out_m` out along the bore's level way and `lamp_up_m` up from the fireball's middle, about
+    half her length out and a quarter of it up (110/64, 88/52 and 55/31 m). Hung by the fireball (as first built) it
+    burnt 40 to 110 lux on the plating by the gun and left her ends 6 to 8 stops darker. Hung two fifths of her length
+    up (the first review round) it lit her from overhead, 48 to 54 degrees up, her deck as bright as her side, as a
+    star shell does. Now a broadside lights her side about 1.9 to 2.3 lux by the gun and 0.8 at her ends, the light
+    coming 29 to 32 degrees up over the water, her deck under half her side, and the water under the lamp about
+    9.3 lux (the sea paint's overlit is 9.9).
   - By day every naval row lights at `game.day_lamp_share` (about 0.4 lux on her side).
   - Sources and estimates are in `muzzle._naval`. Every key is read with a default, and no other row has any of them.
 - Rule: `Battle::SetLampRule(LampRule)`, which `FBattleEffects::SetLampRule` passes on, once at open.
@@ -2098,15 +2101,19 @@ because the lamps went to the strongest flashes alone.
   - `bByEye` ranks each lamp by its strength over its distance squared from the eye (5 m at the least), the scale
     fire.lamp's steady lights already use; a lamp whose sphere lies wholly out of the view ranks nothing. The steady
     lights keep their share, and give it up only to a flash that sends the eye `Yield` (100) times their light.
-  - A salvo's flashes within `MergeM` metres and `MergeS` seconds of every other flash in it light one lamp, at their
-    strength-weighted middle. Its strength is their sum, held to `MergeMost` times the strongest, and its reach covers
-    them all.
+  - A salvo's flashes whose guns lie within `MergeM` metres and `MergeS` seconds of every other gun in it light one
+    lamp, at their lamps' strength-weighted middle. Its strength is their sum, held to `MergeMost` times the
+    strongest, and its reach covers them all. The distance is the guns' (the muzzles passed to `Muzzle`), not the
+    hung lamps': two ships 500 m apart firing toward each other hang their lamps within 200 m of each other, while
+    their guns stay 310 m apart and more.
   - Ties go by the lamps themselves, never by the order of the calls: the same flashes give the same lamps to the bit.
   - `LampRule::Sea()` is 3 lamps, by the eye, 200 m and 0.3 s.
   - With no call, or a rule of all defaults, every lamp is handed out as before, to the byte.
 - Test: `unreal/TheaterCommand/Tools/fx_lamps/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`).
-  - 58 checks, each new rule part with a control that shows the check can fail.
-  - The rows' table, night, dusk and day, and the light along each band's side plating.
+  - 75 checks, each new rule part with a control that shows the check can fail.
+  - The rows' table, night, dusk and day, and the light along each band's side plating: its shape whatever the level
+    (end to end, from over the water), and its levels at the shipped `lamp_cd`, so scaling the three `lamp_cd` on the
+    Mac never fails them.
   - The cost with 40 ships firing, the fastest of 9 calls a frame, on time lines kept out of the compilers' comparison.
   - A night picture: from above, the battle line close, and each firing battleship's side, for today's lamps, the
     rule as first built and the rule now.
