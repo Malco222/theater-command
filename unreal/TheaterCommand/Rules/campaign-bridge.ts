@@ -5402,7 +5402,7 @@ function reportsPage(s: Game): Page | null {
     }
   } catch { staffed = []; }
   // (Release 2, the whole world: the month card's row for the formations offered, so they can be found after the
-  // card is put away: the UI director's marks, section 1. Its button's words are not marked: UI director to mark.)
+  // card is put away: the UI director's marks, section 1, and SEE THE OFFERS by his second marks of 15:23Z.)
   let offered: PageRow[] = [];
   try {
     const card = cardRowOf(s, formationOffers(s));
@@ -5472,9 +5472,9 @@ function offersPage(s: Game): Page | null {
     id: 'offers', title: 'FORMATIONS OFFERED', headline: headOf(forms, loans), note, top,
     sections: [
       { heading: '', text: '', rows },
-      // (The two lines the design director asked for, muted, that the marks do not word: UI director to mark, with their headings.)
-      { heading: 'LENT TO YOU, AND LEAVING BY THEMSELVES', text: aside.loans.join('\n'), rows: [] },
-      { heading: 'WAITING FOR THEIR WAR', text: aside.waiting.join('\n'), rows: [] },
+      // (The two lines the design director asked for, muted; their headings and words are the UI director's second marks of 15:23Z, section 6.)
+      { heading: 'LENT TO YOU', text: aside.loans.join('\n'), rows: [] },
+      { heading: 'WAITING FOR A WAR', text: aside.waiting.join('\n'), rows: [] },
     ].filter((x) => x.rows.length || x.text),
   };
 }

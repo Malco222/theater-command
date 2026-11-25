@@ -345,7 +345,7 @@ describe('the 3D game\'s calls: one list on the month card, take all or pick', (
     expect(TC().load(text)).not.toBeNull();
     expect((TC().offers() as { count: number }).count).toBe(1);
     const no = TC().offerDecline([index(FIFTH)]) as { ok: boolean; declined: number[]; said: string; offers: { count: number } };
-    expect(no).toMatchObject({ ok: true, declined: [index(FIFTH)], said: `${FIFTH} is not formed: your corps stay as they are.` });
+    expect(no).toMatchObject({ ok: true, declined: [index(FIFTH)], said: `${FIFTH} is declined: your corps stay as they are.` });
     expect(no.offers.count).toBe(0);
     expect(TC().offerDecline('all')).toMatchObject({ ok: false, declined: [] });
   }, 900000);

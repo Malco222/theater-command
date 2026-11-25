@@ -489,6 +489,6 @@ describe("the 3D game's calls: a loan's end in the one list", () => {
     const s = singapore();
     month(s, 28);
     s.phase = s.order.indexOf('GER');
-    expect(offerCalls(() => s, () => null).offerTake([index(T1)])).toMatchObject({ ok: false, said: `${T1} stays. It is not your month.` });
+    expect(offerCalls(() => s, () => null).offerTake([index(T1)])).toMatchObject({ ok: false, said: `${T1} is not sent home. It is not your month.` });
   });
 });

@@ -5280,26 +5280,29 @@ export function loansEnding(g: Game): { id: number; name: string; until: number 
  * the player's dated rows that have come due and wait for their war to begin, by ruling B7. A row that names its war
  * (`war`) and finds it not yet begun, or one posted on ground a country his is at peace with holds (`postedFor`).
  * `with` is who he must be at war with: the posting's holder, or the other of the two its war names ('*' for any war);
- * `pair` is set where its war is between two others (an ally's war it was raised to join). Read with nothing changed;
- * none with the far side off.
+ * `pair` is set where its war is between two others (an ally's war it was raised to join). `offer` says the row would
+ * take corps of his now on the board, so it comes as an offer when its war begins. Read with nothing changed; none
+ * with the far side off.
  */
-export function rowsAwaitingWar(g: Game): { id: number; name: string; with: string; pair: [string, string] | null; place: string }[] {
+export function rowsAwaitingWar(g: Game): { id: number; name: string; with: string; pair: [string, string] | null; place: string; offer: boolean }[] {
   const nat = g.human;
   if (nat === null || !offersOn(g) || g.flags.open !== 1 || !g.nations[nat]?.alive || shipsItsOwn(g, nat)) return [];
-  const out: { id: number; name: string; with: string; pair: [string, string] | null; place: string }[] = [];
+  const out: { id: number; name: string; with: string; pair: [string, string] | null; place: string; offer: boolean }[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     const o = row[6] ?? {};
     if (row[1] !== nat || g.flags[`sent:${i}`] || offerOpen(g, nat, i) || leaveOpen(g, nat, i)) return;
+    // (As the board stands, the row would take corps of his: when its war begins it is an offer, not a formation.)
+    const offer = rowTakes(g, nat, o).length > 0;
     if ((o.stops && !(o.stops as number[]).includes(stopOf(g))) || (g.turn < row[0] && !(o.war && o.after !== undefined))) return;
     if (o.war) {
       const w = o.war as string[];
       if (warOn(g, w) || warOver(g, i, w)) return;
       const mine = w.includes(nat);
-      out.push({ id: i, name: row[2], with: mine ? (w[0] === nat ? w[1] : w[0]) : w[1], pair: mine ? null : [w[0], w[1]], place: row[5] });
+      out.push({ id: i, name: row[2], with: mine ? (w[0] === nat ? w[1] : w[0]) : w[1], pair: mine ? null : [w[0], w[1]], place: row[5], offer });
       return;
     }
     const posting = g.byName[row[5]];
-    if (posting && rowPlace(g, nat, row, o, posting).waits) out.push({ id: i, name: row[2], with: posting.ctrl, pair: null, place: row[5] });
+    if (posting && rowPlace(g, nat, row, o, posting).waits) out.push({ id: i, name: row[2], with: posting.ctrl, pair: null, place: row[5], offer });
   });
   return out;
 }

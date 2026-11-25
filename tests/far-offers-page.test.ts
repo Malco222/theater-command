@@ -53,7 +53,8 @@ const MANY_NOTE = 'Each would be formed out of corps you have, as history formed
 const HEAD_BUTTONS = [{ label: 'ACCEPT ALL', act: 'offers:ask:take', ok: true, tip: '' }, { label: 'DECLINE ALL', act: 'offers:ask:decline', ok: true, tip: '' }];
 const UK_WAITS = [
   '2nd Tank Regiment waits for its war: it forms once you are at war with the United Kingdom.',
-  '15th Army (33rd and 55th Divisions) waits for its war: it forms once you are at war with the United Kingdom.',
+  // (This one would take his 11th Army (33rd Division): when its war begins it comes as an offer, and says so. The second marks, section 6.)
+  '15th Army (33rd and 55th Divisions) is offered once you are at war with the United Kingdom.',
   '2nd Raiding Regiment (paratroops of the 1st Raiding Group) waits for its war: it forms once you are at war with the United Kingdom.',
   '16th Army troops (landing with the 2nd Division) waits for its war: it forms once you are at war with the United Kingdom.',
 ];
@@ -77,8 +78,8 @@ describe('the offers page', () => {
           tones: ['', '', '', 'muted'],
           buttons: [{ label: 'FORM IT', act: `offers:take:${index(FIFTH)}`, ok: true, tip: '' }, { label: 'DECLINE', act: `offers:decline:${index(FIFTH)}`, ok: true, tip: '' }],
         }] },
-        // (The design director's point 7, a row waiting for its war: muted, unworded by the marks. UI director to mark.)
-        { heading: 'WAITING FOR THEIR WAR', text: UK_WAITS.join('\n'), rows: [] },
+        // (The design director's point 7, a row waiting for its war: muted, in the words of the UI director's second marks of 15:23Z, section 6.)
+        { heading: 'WAITING FOR A WAR', text: UK_WAITS.join('\n'), rows: [] },
       ],
     });
   }, 600000);
@@ -88,7 +89,7 @@ describe('the offers page', () => {
     months(g, 1, 30);
     const p = open(g);
     expect([p.headline, p.note, p.top]).toEqual(['6 formations offered', MANY_NOTE, HEAD_BUTTONS]);
-    expect(p.sections.map((x: any) => x.heading)).toEqual(['', 'LENT TO YOU, AND LEAVING BY THEMSELVES', 'WAITING FOR THEIR WAR']);
+    expect(p.sections.map((x: any) => x.heading)).toEqual(['', 'LENT TO YOU', 'WAITING FOR A WAR']);
     const on = (name: string): string => `offers:take:${index(name)}`, off = (name: string): string => `offers:decline:${index(name)}`;
     const lit = (name: string): string[] => [`FORM IT lit -> ${on(name)}`, `DECLINE lit -> ${off(name)}`];
     expect(p.sections[0].rows.map(words)).toEqual([
@@ -106,12 +107,13 @@ describe('the offers page', () => {
       [GARRISON, ['plain: Infantry, 10,000 men, to form at Hsuchow.', 'plain: Takes your Tientsin-Pukow railway garrison (21st Division) at Hsuchow, 15,000 men.', 'plain: The other 5,000 are lost with the old corps.',
         'plain: Declining it also gives up 21st Division detachment (for Bataan), which would later be formed out of it.', 'muted: Offered in February 1942, open until August 1942.'], lit(GARRISON)],
     ]);
-    // (The design director's point 2: the loans not offered leave as today, and the page says so. UI director to mark.)
+    // (The design director's point 2: the loans not offered leave as today, and the page says so. Its lines stand by the second marks, section 6.)
     expect(p.sections[1].text).toBe([
       '23rd Army artillery (1st Artillery Group) leaves your command by itself once Hong Kong is yours, when its loan ends.',
       '14th Army artillery (1st and 8th Field Heavy Artillery) leaves your command by itself once Bataan is yours, when its loan ends.',
     ].join('\n'));
-    expect(p.sections[2].text.split('\n')).toEqual(expect.arrayContaining([...UK_WAITS, '14th Army (65th Brigade) waits for its war: it forms once you are at war with the United States.']));
+    expect(p.sections[2].text.split('\n')).toEqual(expect.arrayContaining([...UK_WAITS, '14th Army (65th Brigade) waits for its war: it forms once you are at war with the United States.',
+      '25th Army (Imperial Guards Division) is offered once you are at war with France.']));
     // The month card's row, and the page's place in the list of rooms.
     expect(cardRowOf(g, rowOffers(g))).toEqual({ text: '6 formations offered: they wait for your answer.', amber: false, act: 'open:offers' });
   }, 600000);
@@ -147,7 +149,8 @@ describe('the offers page', () => {
     const p = open(g);
     expect([p.headline, p.note]).toEqual(['5 formations offered, 2 loans ending', `${MANY_NOTE} A loan's end: send the regiment home into its division, or keep it for good.`]);
     const loan = (name: string, division: string): unknown[] => [name, [
-      `plain: ${name}: lent to take Singapore until December 1941.`,
+      // (The row's title is the regiment's name, so the line does not say it again: the second marks, section 3.)
+      'plain: Lent to take Singapore until December 1941.',
       `plain: Sent home, it goes back into the ${division}. Kept, it stays yours for good.`,
       'muted: Offered in December 1941.',
     ], [`SEND IT HOME lit -> offers:take:${index(name)}`, `KEEP IT lit -> offers:decline:${index(name)}`]];
@@ -169,12 +172,12 @@ describe('the offers page', () => {
     expect([p.note, p.top]).toEqual([MANY_NOTE, HEAD_BUTTONS]);
     TC().act('offers:ask:decline');
     p = TC().page('offers');
-    expect(p.note).toBe('Decline all 6? None of them will be offered again, and you keep the corps they would take.');
+    expect(p.note).toBe('Decline all 6? None of them will be offered again. You keep the corps they would take.');
     expect(p.top).toEqual([{ label: 'GO BACK', act: 'offers:back', ok: true, tip: '', safe: true }, { label: 'DECLINE ALL', act: 'offers:all:decline', ok: true, tip: '', danger: true }]);
     // With loans, the question names the regiments too.
     open(singapore());
     TC().act('offers:ask:decline');
-    expect(TC().page('offers').note).toBe('Decline all 7? None of them will be offered again, and you keep the corps they would take, and the regiments lent to you.');
+    expect(TC().page('offers').note).toBe('Decline all 7? None of them will be offered again. You keep the corps they would take, and the regiments lent to you.');
   }, 600000);
 
   it("answered through the page's own acts: form one, decline one, then accept all with one that cannot form, which stays open", () => {
@@ -183,7 +186,7 @@ describe('the offers page', () => {
     fillOkinawa(g);
     open(g);
     expect(TC().act(`offers:take:${index(NOV41[0])}`)).toMatchObject({ ok: true, note: `${NOV41[0]} is formed.`, open: '' });
-    expect(TC().act(`offers:decline:${index(NOV41[1])}`)).toMatchObject({ ok: true, note: `${NOV41[1]} is not formed: your corps stay as they are.`, open: '' });
+    expect(TC().act(`offers:decline:${index(NOV41[1])}`)).toMatchObject({ ok: true, note: `${NOV41[1]} is declined: your corps stay as they are.`, open: '' });
     expect(TC().page('offers').sections[0].rows.map((r: any) => r.title)).toEqual([NOV41[2], NOV41[3], NOV41[4], GARRISON]);
     TC().act('offers:ask:take');
     expect(TC().page('offers').note).toBe('Form all 3? 3 of your corps leave the map, 34,000 men, and 3 formations form. It cannot be undone. 1 cannot be formed this month and stays open.');
@@ -193,7 +196,7 @@ describe('the offers page', () => {
     const p = TC().page('offers');
     expect([p.headline, p.sections[0].rows.map((r: any) => r.title), p.top]).toEqual(['1 formation offered', [NOV41[2]], [{ ...HEAD_BUTTONS[0], ok: false }, HEAD_BUTTONS[1]]]);
     // Declining the last one closes the page.
-    expect(TC().act('offers:all:decline')).toMatchObject({ ok: true, note: `${NOV41[2]} is not formed: your corps stay as they are.`, open: 'close' });
+    expect(TC().act('offers:all:decline')).toMatchObject({ ok: true, note: `${NOV41[2]} is declined: your corps stay as they are.`, open: 'close' });
     expect(TC().page('offers')).toEqual({ ok: false });
   }, 600000);
 
