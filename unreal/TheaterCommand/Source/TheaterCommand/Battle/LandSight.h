@@ -102,7 +102,10 @@ namespace LandSight
 	 * is seen too, and in forest a machine gun team's 100 m). A hidden block that is sent to attack does not hold its
 	 * fire: it fires at its weapons' full reach. Nor does one told to fire on one block (the rules' aim): it strikes
 	 * that block at full reach while the block is in plain sight, and still holds for every other. None fires on a
-	 * block that is itself hidden. The mark's words say each of these. The ring's other use is the rules' too: a
+	 * block that is itself hidden. The mark's words say each of these. (A hold is where a block opens fire only if
+	 * its own weapons reach that far. As the rules stand cavalry and engineers reach 140 m, ten metres short of
+	 * their 150, so hidden they open at 140; every other kind that holds reaches its hold and more. The mark's line
+	 * gives the hold, and the run lets no kind fall more than those ten metres short of it.) The ring's other use is the rules' too: a
 	 * block found by its own fire is not yet located (the fire back at it strikes softer for a while,
 	 * LAND.hide.locate) until that while is up or an enemy comes within the same sight distance, inside the ring.
 	 *
@@ -114,7 +117,8 @@ namespace LandSight
 	 * The numbers are the rules' own, kept here because the scene has no word from the rules for them;
 	 * Tools/land_play/run.sh fails where they, or the rules' lines the mark's words stand on, differ from rules.ts,
 	 * sim.ts and units.ts (which lines: the list at the head of its guard; those on who holds his fire are held
-	 * whole, inside their own function and in their order).
+	 * whole: ambushAt and targetOf line for line, and each holding kind's reach against its hold. A hold written
+	 * into whatever calls targetOf would not be seen there).
 	 */
 	struct Finds
 	{

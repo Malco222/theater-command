@@ -226,25 +226,35 @@ namespace LandGeneralEye
 		WantH = H + SwingH * std::abs(SwingH) / (2.0 * Set.TurnPush * Rad);
 		WantS = S + SwingS * std::abs(SwingS) / (2.0 * Set.ZoomPush * Set.FlySlower);
 		// (his own tilt, where the call and not his own hand had the turning of it, to the view's tilt or back to the
-		// automatic one: it stays his own where it comes to rest if it shows on the picture there; and else it goes
-		// on back to the automatic one and is handed back, never left his own, unseen, under it. Turned back by his
-		// own hand before the call, it goes on back as he asked. Two things are asked of it. That it SHOWS at the
-		// zoom the taking frame leaves him at: ZoomIn is the notch he took the flight with, which this same frame
-		// still has to take off the zoom's wish, and ZoomLeast the nearest the zoom may then stand (a unit's card
-		// pressed follows the unit, never nearer than FollowNearest, and that too is laid on the wish later in this
-		// frame). Farther out the automatic tilt is steeper and swallows his; right in by a man's shoulder his is
-		// handed toward it (TiltMostAt); so none is left on that he cannot see where he is going. And that it STANDS
-		// clear of the automatic tilt at the zoom's own rest as the taking move finds it, WantS above. The call sets
-		// his tilt off just under the automatic one's soft floor as the view stands, and a notch IN lowers that
-		// floor: judged a notch nearer alone, a flight taken in its first frames by a notch in was left with a tilt
-		// of his own that neither he nor the flight had turned. (Stands, not shows: a tilt of his own that only the
-		// shoulder hides as the take finds it is his still, and a notch out brings it back as it would with no
-		// flight on.)
+		// automatic one. Rule 21, the picture is the truth: it stays his own only if the picture HAS it as his hand
+		// takes the flight, and WILL have it where the taking frame leaves him; else it goes on back to the
+		// automatic one and is handed back, never left his own, unseen, under it. Turned back by his own hand
+		// before the call, it goes on back as he asked.
+		// Has it: TiltStands of the view as it stands this frame, S and Tl, and of nothing the zoom or the tilt
+		// have yet to do. The call sets his tilt off just under the automatic one's soft floor as the view stands,
+		// and whatever then lowers that floor bares it though nobody has turned it: a notch IN on the taking frame,
+		// or a zoom still coasting in from his own wheel or from a flight's way down. Asked of the zoom's rest
+		// instead (as it was until the sixth check), a call made while the zoom coasted in and taken a frame later
+		// left him eleven degrees of a tilt that neither he nor the flight had turned, and a tilt plainly on the
+		// picture was handed back where the zoom coasted out and a notch in took the flight. So too a tilt of his
+		// own that the picture did not have as he took the flight (swallowed farther out, or hidden by a man's
+		// shoulder, at the call or on the flight's way) is handed back whatever the taking notch would have bared:
+		// from the call the flight has it in hand, and he keeps of it what he has seen.
+		// Will have it: TiltShows of the tilt's own rest from the swing it has, at the zoom's own rest (WantS
+		// above) less ZoomIn, the notch he took the flight with, which this same frame still has to take off the
+		// zoom's wish, and no nearer than ZoomLeast (a unit's card pressed follows the unit, never nearer than
+		// FollowNearest, and that too is laid on the wish later in this frame). Farther out the automatic tilt is
+		// steeper and swallows his; right in by a man's shoulder his is handed toward it (TiltMostAt); so none is
+		// left on that he cannot see where he is going.
+		// What he keeps is the tilt as it comes to rest, Rest. Toward a man's shoulder the eased tilt is already
+		// being pressed down (TlGoal), so a take on the last of the way down to a view kept there keeps what the
+		// shoulder has left of his tilt as the take finds it, not the tilt the view was kept with: less than a
+		// flight left to end would give him back on a later notch out, and nothing once the picture has lost it.)
 		if (bOwnTilt && (bCallToAuto || !bToAuto))
 		{
 			const double Rest = Tl + SwingTl * std::abs(SwingTl) / (2.0 * Set.TiltPush * Rad * Set.FlySlower);
 			const double ZoomRest = std::clamp(std::max(WantS - ZoomIn, ZoomLeast), 0.0, 1.0);
-			bToAuto = !(TiltStands(WantS, Rest) && TiltShows(ZoomRest, Rest));
+			bToAuto = !(TiltStands(S, Tl) && TiltShows(ZoomRest, Rest));
 			WantTl = bToAuto ? TiltAt(ZoomRest) - (Set.TiltSoft + 1.0) * Rad : Rest;
 		}
 		bCallToAuto = false;

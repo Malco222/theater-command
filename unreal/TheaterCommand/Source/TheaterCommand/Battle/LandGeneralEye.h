@@ -74,8 +74,9 @@ namespace LandGeneralEye
 		 * slide still running on) is left out until it has stopped, and the pointer at the screen's edge for the whole
 		 * flight: none of them takes the view from the call. Any move begun after it does: the flight is let go and
 		 * the view comes to rest where it is, under his hand. Its tilt, where the call had the turning of it, stays
-		 * his own where it comes to rest if it shows on the picture there; and else it goes on back to the automatic
-		 * one, so no tilt of his own is left on unseen. (A tilt his own hand was already turning back goes on back.)
+		 * his own if the picture has it as his hand takes the flight and still will where it comes to rest; and else
+		 * it goes on back to the automatic one, so no tilt of his own is left on unseen and none comes on that the
+		 * picture did not have as he took it. (A tilt his own hand was already turning back goes on back.)
 		 * The flight lasts until the tilt is there too, so a move in the last of the tilt's swing takes it as well. */
 		int CallView = -1;
 		/** Glide to a field point (a double click on the map). */
@@ -265,7 +266,7 @@ namespace LandGeneralEye
 		/** His own tilt, radians: now, wanted and its swing (the tilt the view takes from it is TiltFor's); whether it
 		 * is set, whether it is on its way back to the automatic tilt (switched off once there), whether a flight to a
 		 * view kept without his own tilt, not his own hand, is what turned it back (so a hand that takes the flight
-		 * keeps his tilt his own while it still shows), and the top view with the zoom and the tilt a second press
+		 * keeps his tilt his own while the picture still has it), and the top view with the zoom and the tilt a second press
 		 * goes back to. */
 		double Tl = 0.0, WantTl = 0.0, SwingTl = 0.0, TlGoal = 0.0;
 		bool bOwnTilt = false, bToAuto = false, bCallToAuto = false, bTop = false, bTopWasOwn = false;
@@ -358,14 +359,16 @@ namespace LandGeneralEye
 		/** A flight to a kept view taken by his own hand: each wish let go at the point its own spring comes to rest
 		 * from the swing it has, so nothing rushes on to the kept view and nothing stops dead (bPanned: by a pan or
 		 * a slide, which eases the look-at at his hand's rate; bPlace: the look-at too, not where he has asked for a
-		 * glide of its own). His own tilt, where the flight had the turning of it, stays his own where it comes to
-		 * rest only if it shows on the picture (TiltShows) at the zoom the taking move leaves him at, and stood
-		 * clear of the automatic tilt (TiltStands) at the zoom's rest as that move found it; else it goes on back
-		 * to the automatic one. ZoomIn is the zoom notch of the frame that takes the flight (In.Zoom * ZoomStep),
-		 * which the frame has yet to take off the zoom's wish, and ZoomLeast the nearest zoom the frame will then
-		 * hold the wish to (FollowNearest where a unit's card takes the flight and the unit is followed, else 0):
-		 * both count towards where the zoom rests. So a notch out or a card's follow cannot leave him a tilt he
-		 * cannot see, and a notch in cannot make his own a tilt that was no tilt before it. A pan begun while the
+		 * glide of its own). His own tilt, where the flight had the turning of it, stays his own only if the picture
+		 * has it as the move takes the flight (TiltStands of the view as it stands, zoom and tilt), and will have
+		 * it where it comes to rest (TiltShows of the tilt's own rest at the zoom the taking move leaves him at);
+		 * else it goes on back to the automatic one. ZoomIn is the zoom notch of the frame that takes the flight
+		 * (In.Zoom * ZoomStep), which the frame has yet to take off the zoom's wish, and ZoomLeast the nearest
+		 * zoom the frame will then hold the wish to (FollowNearest where a unit's card takes the flight and the
+		 * unit is followed, else 0): both count towards where the zoom rests. So a notch out or a card's follow
+		 * cannot leave him a tilt he cannot see, and nothing that lowers the automatic tilt after the call (a
+		 * notch in, a zoom still coasting in) can make his own a tilt the picture never had. Toward a man's
+		 * shoulder the tilt kept is what the shoulder has left of it as the take finds it. A pan begun while the
 		 * look-at still coasts lets it go again at the pan's own rate (Update). */
 		void FlightLetGo(bool bPanned, bool bPlace, double ZoomIn = 0.0, double ZoomLeast = 0.0);
 	};

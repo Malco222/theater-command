@@ -23,7 +23,8 @@ STATUS=0
 # measured; which kinds go on foot, on wheels, on tracks and as guns, and that a team is a gun block; whose kind sets the
 # distance at which a hidden block is seen, and by whom; that tracks alone are heard; who holds his fire in hiding, and
 # that guns, mortar teams, tanks and blocks sent to attack or told to fire on a target do not, the last at their whole
-# reach; that none fires on a block itself hidden; that a block which has
+# reach; that none fires on a block itself hidden; that each kind which holds reaches as far as its hold (cavalry and
+# engineers ten metres short, as LandSight.h says); that a block which has
 # fired is struck softer until located, and located once an enemy is within its sight; that smoke hides): the scene has
 # no word from the rules for any of them, so they are checked here and the run fails where they differ, or where the
 # rules are not there to check against. The ring's own reach (LandSight.h, FindsWithin) is held to the same quarter.
@@ -66,7 +67,8 @@ else
   # (The lines of sim.ts that say who holds his fire in hiding are held WHOLE, inside their own function and in their
   # order: a search for the words alone would pass a hold added on the same line, the old line left behind as a
   # comment, or the same words in another function. A function's own lines, as the rules have them: CRs, indents,
-  # blank lines and // comment lines dropped.)
+  # trailing blanks, blank lines and // comment lines dropped; the function itself is found by its head and its
+  # closing brace at the class's own two spaces, so a re-indent of the file reads here as a changed rule.)
   body_of() { sed -n "/^  $1/,/^  }/p" "$SIM" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -vE '^(//.*)?$' || true; }
   # (ambushAt, all of it: by how the block moves, the machine gun team alone of the teams with a hold of its own, no
   # hold at all where the table gives none (guns, mortar teams, tanks: Infinity), and in true forest the least)
@@ -75,28 +77,57 @@ const H = LAND.hide, a = u.team === 'mg' ? H.ambush.mg : H.ambush[MOTION[u.kind]
 if (a <= 0) return Infinity;
 return !this.onHedge(u.x, u.y) && this.inWoods(u) ? Math.min(a, H.forest) : a;
 }"
-  [ "$(body_of 'private ambushAt(u: LandUnit): number {')" = "$AMBUSH_WANT" ] || { echo "FAULT: sim.ts ambushAt() is no longer, line for line, the hold the spotter's mark gives (by how the block moves, machine gun teams apart, none for guns, mortar teams and tanks, forest the least). If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
-  # (targetOf's head: the block's whole reach; straight after it a given target tested against that reach; and only
-  # then a hidden block's hold, unless it is sent to attack. Nothing above them may speak of hiding, the aim or the
-  # reach; the reach is set nowhere else in targetOf, and nothing else in it asks whether the block itself is hidden.
-  # So a hidden block sent to attack or given a target fires at its whole reach, and no other hold can stand
-  # beside the one the mark's words give.)
-  TARGET_BODY="$(body_of 'targetOf(u: LandUnit): LandUnit | null {')"
-  REACH_LINE="let reach = reachOf(u);"
-  AIM_LINE="if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }"
-  HOLD_LINE="if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));"
-  REACH_AT="$(printf '%s\n' "$TARGET_BODY" | grep -nxF "$REACH_LINE" | head -n 1 | cut -d: -f1 || true)"
-  TARGET_OK=0
-  if [ -n "$REACH_AT" ]; then
-    ABOVE="$(printf '%s\n' "$TARGET_BODY" | sed -n "1,$((REACH_AT - 1))p" | grep -cE '\.hid|\.aim|reachOf|ambushAt' || true)"
-    SETS="$(printf '%s\n' "$TARGET_BODY" | grep -cE '(^|[^.[:alnum:]_])reach[[:space:]]*[-+*/]?=([^=]|$)' || true)"
-    HIDES="$(printf '%s\n' "$TARGET_BODY" | grep -cF 'u.hid' || true)"
-    if [ "$(printf '%s\n' "$TARGET_BODY" | sed -n "$((REACH_AT + 1))p")" = "$AIM_LINE" ] && [ "$(printf '%s\n' "$TARGET_BODY" | sed -n "$((REACH_AT + 2))p")" = "$HOLD_LINE" ] \
-      && [ "$ABOVE" = "0" ] && [ "$SETS" = "2" ] && [ "$HIDES" = "1" ]; then TARGET_OK=1; fi
+  [ "$(body_of 'private ambushAt(u: LandUnit): number {')" = "$AMBUSH_WANT" ] || { echo "FAULT: sim.ts ambushAt() is no longer, line for line, the hold the spotter's mark gives (by how the block moves, machine gun teams apart, none for guns, mortar teams and tanks, forest the least), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
+  # (targetOf, all of it, line for line as ambushAt is held: the block's whole reach; straight after it a given target
+  # tested against that reach; only then a hidden block's hold, unless it is sent to attack; none struck that is
+  # itself hidden; and the two lines that put the held reach to use, in the search for a target and in firing on
+  # cover. So a hidden block sent to attack or given a target fires at its whole reach, and no other hold can stand
+  # in targetOf beside the one the mark's words give. What is held is this function and no more: a hold written
+  # into whatever calls it would not be seen here.)
+  TARGET_WANT="targetOf(u: LandUnit): LandUnit | null {
+const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
+if (u.kind === 'art' && marching) return null;
+if (u.order?.kind === 'withdraw') return null;
+let reach = reachOf(u);
+if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
+if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));
+let best: LandUnit | null = null, score = Infinity;
+for (const e of this.units) {
+if (e.side === u.side || !live(e) || e.hid) continue;
+const d = this.gap(u, e);
+if (d > reach) continue;
+if (u.order?.kind === 'attack' && u.order.target === e.id) return e;
+const off = Math.abs(turn(u.face, bearing(u.x, u.y, e.x, e.y)));
+const s = d * (1 + off) * (e.state === 'routing' ? 2 : 1);
+if (s < score) { score = s; best = e; }
+}
+if (!best && u.search && this.hide) {
+const [sx, sy] = u.search, R = u.searchR ?? LAND.hide.search.reach;
+for (const e of this.units) {
+if (e.side === u.side || !live(e) || !e.hid || dist(e.x, e.y, sx, sy) > R + Math.max(e.w, e.d) / 2) continue;
+const d = this.gap(u, e);
+if (d <= reach && d < score) { score = d; best = e; }
+}
+}
+return best;
+}"
+  [ "$(body_of 'targetOf(u: LandUnit): LandUnit | null {')" = "$TARGET_WANT" ] || { echo "FAULT: sim.ts targetOf() is no longer, line for line, the rule the spotter's mark's words stand on (the block's whole reach; its given target tested against that reach; only then a hidden block's hold unless it is sent to attack; none struck that is itself hidden; the held reach put to use in the search and in firing on cover: MEN LYING IN WAIT, TROOPS IN PLAIN SIGHT, FULL RANGE), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
+  REACH_WANT="export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);"
+  [ "$(tr -d '\r' < "$RULES" | sed -e 's/[[:space:]]*$//' | grep -cxF "$REACH_WANT" || true)" = "1" ] || { echo "FAULT: rules.ts reachOf() is no longer a block's whole reach by its kind and team alone (the spotter's mark's FULL RANGE)"; STATUS=1; }
+  # (a hold is only the distance the mark's words give where the block's own reach is no less: men on foot and
+  # motorised, and the machine gun team, against their holds. Cavalry and engineers reach ten metres short of
+  # theirs as the rules stand, 140 m against 150, so hidden they open fire at 140: LandSight.h says so, and no
+  # more than those ten metres is let by here.)
+  REACH_ROW="$(tr -d '\r' < "$RULES" | sed -n 's/^ *reach: { inf: \([0-9]*\), mtn: \([0-9]*\), cav: \([0-9]*\), eng: \([0-9]*\), mot: \([0-9]*\), arm: [0-9]*, art: [0-9]*, fort: [0-9]* }.*/\1 \2 \3 \4 \5/p' | head -n 1)"
+  REACH_MG="$(tr -d '\r' < "$RULES" | sed -n 's/^ *mg: { reach: \([0-9]*\),.*/\1/p' | head -n 1)"
+  REACH_OK=0
+  if [ -n "$REACH_ROW" ] && [ -n "$REACH_MG" ] && [ -n "$RULE_AMBUSH" ]; then
+    read -r R_INF R_MTN R_CAV R_ENG R_MOT <<<"$REACH_ROW"
+    read -r A_FOOT A_WHEELS A_MG <<<"$RULE_AMBUSH"
+    if [ "$R_INF" -ge "$A_FOOT" ] && [ "$R_MTN" -ge "$A_FOOT" ] && [ "$R_MOT" -ge "$A_WHEELS" ] && [ "$REACH_MG" -ge "$A_MG" ] \
+      && [ "$R_CAV" -ge "$((A_FOOT - 10))" ] && [ "$R_ENG" -ge "$((A_FOOT - 10))" ]; then REACH_OK=1; fi
   fi
-  [ "$TARGET_OK" = "1" ] || { echo "FAULT: sim.ts targetOf() no longer reads, as whole lines one straight after the other, the block's whole reach (let reach = reachOf(u);), its given target tested against that reach, and only then a hidden block's hold unless it is sent to attack; or something above them speaks of hiding, the aim or the reach; or the reach is set, or u.hid asked, somewhere else in it (the spotter's mark's lines on men lying in wait, and on any sent to attack or given a target: FULL RANGE). If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
-  grep -qxF "export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);" <(tr -d '\r' < "$RULES") || { echo "FAULT: rules.ts reachOf() is no longer a block's whole reach by its kind and team alone (the spotter's mark's FULL RANGE)"; STATUS=1; }
-  printf '%s\n' "$TARGET_BODY" | grep -qxF "if (e.side === u.side || !live(e) || e.hid) continue;" || { echo "FAULT: sim.ts targetOf() no longer spares a block that is itself hidden (the spotter's mark: troops in plain sight)"; STATUS=1; }
+  [ "$REACH_OK" = "1" ] || { echo "FAULT: a kind that holds its fire in hiding now reaches less far than its hold (rules.ts LAND.reach foot and motorised kinds '$REACH_ROW', the machine gun team '$REACH_MG', against LAND.hide.ambush '$RULE_AMBUSH'; cavalry and engineers are let ten metres short), so the spotter's mark's distances are no longer where it opens fire: the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   [ "$(sed -n '/^export function makeBlocks(/,/^}/p' "$UNITS" | grep -cF "const k = (team ? 'art' :" || true)" -ge 1 ] || { echo "FAULT: units.ts makeBlocks(), which makes each side's blocks, no longer makes a machine gun or mortar team a gun block (the spotter's ring GUNS AND TEAMS)"; STATUS=1; }
   grep -qF "return Sight + 0.25 * (W > D ? W : D);" "$SRC/Battle/LandSight.h" || { echo "FAULT: LandSight.h FindsWithin no longer adds a quarter of the block's longer side, as sim.ts gap() takes it (the rings' reach)"; STATUS=1; }
 fi
