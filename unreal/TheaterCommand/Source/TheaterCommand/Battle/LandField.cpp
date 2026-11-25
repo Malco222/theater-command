@@ -488,6 +488,8 @@ namespace LandField
 			bool bKit = false;   // the steppe's cottage: the east kit's Khata stands here (planted, not built)
 			Base KitB = Base::Khata; // (a region's kit house: its slot, Kit0..Kit19)
 			bool bWhite = false; // the steppe's farm buildings: whitewashed, their roofs plank or straw
+			bool bBoards = false; // (the trial "sheds": the steppe farm's sheds boarded, doored and worn at the foot)
+			float Lie[4][18] = {}; // (and the ground along each of its four walls, 18 places a wall: its plinth follows it)
 			int Model = -1;      // (the trial "houses": the kit slot of the farmhouse built to the vehicles' detail standing here)
 		};
 
@@ -2615,6 +2617,7 @@ namespace LandField
 		// The farm's long sheds (cattle, the tractors) and its granary at the village's edge, set to the fields' grain.
 		int Sheds = 0;
 		const double Grain = Sp ? Sp->Lay.Turn : 0.0;
+		const bool bShedTrial = !Fd.Trial.empty() && Fd.Tried("sheds");
 		for (int Ring = 0; Ring < 8 && Sheds < 4; ++Ring)
 			for (int K = 0; K < 24 && Sheds < 4; ++K)
 			{
@@ -2622,6 +2625,7 @@ namespace LandField
 				House H;
 				H.Type = Sheds == 1 ? HtBarn : HtByre;
 				H.bWhite = true;
+				H.bBoards = bShedTrial;
 				H.Long = H.Type == HtBarn ? R.Range(22.0, 28.0) : R.Range(36.0, 50.0);
 				H.Deep = H.Type == HtBarn ? R.Range(10.0, 12.0) : R.Range(9.0, 11.0);
 				H.C = V2{ Fd.TownX + D * std::cos(A), Fd.TownY + D * std::sin(A) };
@@ -2635,6 +2639,20 @@ namespace LandField
 				H.Hurt = U < 0.15 ? DmShell : U < 0.35 ? DmGable : U < 0.6 ? DmRoofHole : DmNone;
 				if (!Fits(H, 3.0)) continue;
 				FloorOf(H);
+				if (bShedTrial)
+				{
+					// (the ground along each wall, in BuildHouse's order of faces and their ways)
+					const double C = std::cos(H.Yaw), S = std::sin(H.Yaw);
+					for (int F = 0; F < 4; ++F)
+						for (int J = 0; J < 18; ++J)
+						{
+							const double T = J / 17.0;
+							const double Uu = F == 0 ? H.Long * (0.5 - T) : F == 1 ? H.Long * (T - 0.5) : F == 2 ? 0.5 * H.Long : -0.5 * H.Long;
+							const double Vv = F == 0 ? 0.5 * H.Deep : F == 1 ? -0.5 * H.Deep : F == 2 ? H.Deep * (T - 0.5) : H.Deep * (0.5 - T);
+							const double X = H.C.X + Uu * C - Vv * S, Y = H.C.Y + Uu * S + Vv * C;
+							H.Lie[F][J] = static_cast<float>(Carve(X, Y, Terrain(X, Y), nullptr));
+						}
+				}
 				Stamp(H, 2.0);
 				Houses.push_back(H);
 				++Sheds;
@@ -5227,6 +5245,34 @@ namespace LandField
 					L.Door = Rgb(88, 74, 58);
 				}
 			}
+			// The steppe farm's sheds on trial ("sheds", the art director's blank barn, 25 Nov): the barn of weathered boards
+			// stood upright on a plinth of fieldstone or old brick, each board its own grey or brown, lapped on its neighbour;
+			// the long byres whitewashed clay, the wash flaked to the clay and damp at the foot (one in three boarded as the
+			// barn is); their gables boarded to the rake; plank doors on strap hinges, hatches, small windows.
+			struct ShedLook
+			{
+				bool bPlank = false;
+				double Lap = 0.0; // how far its boards stand out of the wall's line
+				Col Board, BoardB, Wash, Clay, Plinth, Timber, Leaf, Iron, Fallen;
+			} Sd;
+			if (H.bBoards)
+			{
+				const uint64_t SK = Hash(H.Key, 0x5ED5ull);
+				Sd.bPlank = H.Type == HtBarn || Unit(SK) < 0.34;
+				Sd.Lap = Sd.bPlank ? 0.04 : 0.0;
+				const double T = 0.92 + 0.14 * Unit(Mix(SK ^ 1));
+				Sd.Board = Scaled(Rgb(132, 128, 120), T);
+				Sd.BoardB = Scaled(Rgb(116, 102, 86), T);
+				Sd.Wash = L.Stone;
+				Sd.Clay = Rgb(150, 124, 92);
+				Sd.Plinth = Unit(Mix(SK ^ 2)) < 0.5 ? Rgb(112, 104, 94) : Rgb(98, 78, 68); // (fieldstone, or old brick gone dull)
+				Sd.Timber = Scaled(Rgb(98, 86, 72), T);
+				const double UL = Unit(Mix(SK ^ 3));
+				// (its doors bare, or an old paint gone chalky: blue-green, ochre red, green)
+				Sd.Leaf = UL < 0.5 ? Rgb(110, 100, 86) : Mixed(UL < 0.75 ? Rgb(92, 110, 112) : UL < 0.9 ? Rgb(126, 80, 62) : Rgb(96, 108, 86), Rgb(122, 118, 110), 0.35);
+				Sd.Iron = Rgb(48, 44, 42);
+				Sd.Fallen = Rgb(72, 62, 52); // (what lies where a boarded wall came down: its boards, broken and burnt)
+			}
 			const V2 U{ std::cos(H.Yaw), std::sin(H.Yaw) }, V = Perp(U);
 			auto W = [&](double Uu, double Vv, double Z) { return V3{ H.C.X + U.X * Uu + V.X * Vv, H.C.Y + U.Y * Uu + V.Y * Vv, Z }; };
 			const double Long = H.Long, Deep = H.Deep, Floor = H.Floor, Thick = 0.5;
@@ -5294,6 +5340,13 @@ namespace LandField
 					if (Broken != Fc.End && !bShell) return Eaves;
 					return std::min(Eaves, TopAtU(UOf(A)) - 0.9 * (0.5 + 0.5 * Noise(A / 0.9, 11.0 + Fc.End, H.Key)));
 				};
+				// (a shed on trial: the ground along this wall, and a door's sill on it)
+				auto Gd = [&](double A) {
+					const double T = std::clamp(A / Fc.Len, 0.0, 1.0) * 17.0;
+					const int K = std::min(16, static_cast<int>(T));
+					return Lerp(H.Lie[F][K], H.Lie[F][K + 1], T - K);
+				};
+				auto Sill = [&](double A0, double A1) { return std::max(Gd(A0), Gd(A1)) + 0.05; };
 				// Its openings.
 				std::vector<Opening> Ops;
 				if (bTower)
@@ -5319,6 +5372,69 @@ namespace LandField
 						if (H.Part == 0 && F == 1) Ops.push_back({ Fc.Len * 0.33 - 0.6, Fc.Len * 0.33 + 0.6, Floor, Floor + 2.4, 1 });
 					}
 					else if (H.Part == 1 && Fc.End == 1) Ops.push_back({ 0.5 * Fc.Len - 0.65, 0.5 * Fc.Len + 0.65, Floor + 2.3, Floor + 5.4, 0 });
+				}
+				else if (H.bBoards && H.Type == HtBarn)
+				{
+					// (the trial "sheds") The barn: its cart doors in the front; a door near one end of the back; hatches
+					// under the eaves for its air, every five metres or so; in each gable the loft's pitching door, and in
+					// one a pair of doors under it. Its doors' sills on the ground where they stand.
+					if (!Fc.bGable)
+					{
+						if (bFront)
+						{
+							const double Z = Sill(0.5 * Fc.Len - 1.7, 0.5 * Fc.Len + 1.7);
+							Ops.push_back({ 0.5 * Fc.Len - 1.7, 0.5 * Fc.Len + 1.7, Z, Z + 3.7, 4 });
+						}
+						else
+						{
+							const double A = Fc.Len * (Unit(Hash(H.Key, 0x0BE5ull)) < 0.5 ? 0.22 : 0.78), Z = Sill(A - 0.55, A + 0.55);
+							Ops.push_back({ A - 0.55, A + 0.55, Z, Z + 2.1, 1 });
+						}
+						const int N = std::max(2, static_cast<int>(Fc.Len / 5.0));
+						for (int K = 0; K < N; ++K)
+						{
+							const double A = Fc.Len * (K + 0.5) / N;
+							if (bFront && std::fabs(A - 0.5 * Fc.Len) < 2.6) continue;
+							Ops.push_back({ A - 0.35, A + 0.35, Eaves - 1.7, Eaves - 1.1, 2 });
+						}
+					}
+					else
+					{
+						if (Fc.End == (Unit(Hash(H.Key, 0x0BE6ull)) < 0.5 ? -1 : 1))
+						{
+							const double Z = Sill(0.5 * Fc.Len - 1.3, 0.5 * Fc.Len + 1.3);
+							Ops.push_back({ 0.5 * Fc.Len - 1.3, 0.5 * Fc.Len + 1.3, Z, Z + 2.9, 4 });
+						}
+						Ops.push_back({ 0.5 * Fc.Len - 0.5, 0.5 * Fc.Len + 0.5, Eaves - 1.5, Eaves - 0.5, 2 });
+					}
+				}
+				else if (H.bBoards && H.Type == HtByre)
+				{
+					// The byre: its two doors in the front, small windows under the eaves along both sides, a pair of
+					// doors in each end.
+					if (!Fc.bGable)
+					{
+						double Doors[2] = { -1e9, -1e9 };
+						if (bFront)
+							for (int K = 0; K < 2; ++K)
+							{
+								Doors[K] = Fc.Len * (K == 0 ? 0.3 : 0.72);
+								const double Z = Sill(Doors[K] - 0.6, Doors[K] + 0.6);
+								Ops.push_back({ Doors[K] - 0.6, Doors[K] + 0.6, Z, Z + 2.05, 1 });
+							}
+						const int N = std::max(3, static_cast<int>(Fc.Len / 3.8));
+						for (int K = 0; K < N; ++K)
+						{
+							const double A = Fc.Len * (K + 0.5) / N;
+							if (std::fabs(A - Doors[0]) < 1.3 || std::fabs(A - Doors[1]) < 1.3) continue;
+							Ops.push_back({ A - 0.32, A + 0.32, Eaves - 1.75, Eaves - 1.2, 0 });
+						}
+					}
+					else
+					{
+						const double Z = Sill(0.5 * Fc.Len - 1.1, 0.5 * Fc.Len + 1.1);
+						Ops.push_back({ 0.5 * Fc.Len - 1.1, 0.5 * Fc.Len + 1.1, Z, Z + 2.4, 4 });
+					}
 				}
 				else if (H.Type == HtBarn)
 				{
@@ -5356,6 +5472,331 @@ namespace LandField
 				// An opening the broken wall's top runs through is gone with it.
 				Ops.erase(std::remove_if(Ops.begin(), Ops.end(), [&](const Opening& O) { return std::min(Top(O.A0), Top(O.A1)) < O.Z1 + 0.25; }), Ops.end());
 				const V3 Out3{ Fc.Out.X, Fc.Out.Y, 0.0 };
+				if (H.bBoards)
+				{
+					// (the trial "sheds") A shed's face, its own way: the plinth, its top following the ground along the
+					// wall; over it the boards, each a strip from the plinth to the wall's top (dark down the edge its
+					// neighbour laps, damp and green-black at the foot, ragged board by board, browner under the eaves), or
+					// the washed clay in cells; round its openings; its sill beam and corner boards; its doors of planks on
+					// their ledges, brace and strap hinges; the gable boarded upright to the rake over a weather board.
+					const double Lap = Sd.Lap;
+					const uint64_t FK = Hash(H.Key, 0x5ED6ull, static_cast<uint64_t>(F));
+					const V3 Along3{ U.X * Fc.DU + V.X * Fc.DV, U.Y * Fc.DU + V.Y * Fc.DV, 0.0 };
+					const Col Scorch = Rgb(52, 46, 42);
+					// (a piece of wall whose top comes down to its foot at one end is a triangle, at both nothing: no flat sliver
+					// of a triangle is laid)
+					auto Shut = [&](V3 P0, V3 P1, V3 P2, V3 P3, const Col& C0, const Col& C1, const Col& C2, const Col& C3, V3 Toward) {
+						const bool b0 = P3.Z - P0.Z < 1e-3, b1 = P2.Z - P1.Z < 1e-3;
+						if (b0 && b1) return;
+						if (!b0 && !b1)
+						{
+							B.Quad(P0, P1, P2, P3, C0, C1, C2, C3, Toward);
+							return;
+						}
+						const V3 PT = b0 ? P2 : P3;
+						V3 N = Cross(P1 - P0, PT - P0);
+						if (Dot3(N, N) < 1e-14) return;
+						N = Unit3(N);
+						const bool bTurn = Dot3(N, Toward) < 0.0;
+						if (bTurn) N = N * -1.0;
+						const uint32_t I0 = B.Vert(P0, N, C0), I1 = B.Vert(P1, N, C1), I2 = B.Vert(PT, N, b0 ? C2 : C3);
+						if (bTurn) B.Tri(I0, I2, I1);
+						else B.Tri(I0, I1, I2);
+					};
+					// (sooted under the roof where it was hit, as the other houses; charred down from a top that is broken or burnt
+					// away, Tz the wall's top over the point)
+					auto Burnt = [&](const Col& C, V3 P, double Tz) {
+						const Col Out = bInside ? Mixed(C, Scorch, 0.5 * Smooth(Eaves - 2.5, Eaves + 0.5, P.Z + 1.2 * Noise(P.X + P.Y, 1.0, H.Key)) * (bShell ? 1.0 : 0.6)) : C;
+						return Tz < Eaves - 0.05 ? Mixed(Out, Rgb(34, 30, 28), 0.85 * Smooth(1.5, 0.1, Tz - P.Z)) : Out;
+					};
+					// (each paint by the point and the ground under it, Gz)
+					auto PlinthAt = [&](V3 P, double Gz, double Tz) {
+						const double Mot = Noise((P.X + P.Y) / 0.45, P.Z / 0.3, H.Key ^ 0x71);
+						return Burnt(Mixed(Varied(Sd.Plinth, 1.0 + 0.14 * Mot, 0.03 * Mot), Rgb(44, 44, 34), Smooth(Gz + 0.3, Gz - 0.4, P.Z)), P, Tz);
+					};
+					// (how high over the ground a board is rotted black at its foot, 15 to 50 cm up from the plinth, each its own,
+					// so the line is ragged; and how high the damp fades out over that)
+					auto RotOf = [&](uint64_t BK) { return 0.55 + 0.35 * Unit(Mix(BK ^ 0x9B)); };
+					auto DampOf = [&](uint64_t BK) { return RotOf(BK) + 0.3 + 0.6 * Unit(Mix(BK ^ 0x99)) * Unit(Mix(BK ^ 0x9A)); };
+					auto BoardAt = [&](uint64_t BK, int Side, V3 P, double Gz, double Tz) {
+						const double U1 = Unit(BK), U2 = Unit(Mix(BK ^ 0x55));
+						Col C = Mixed(Sd.Board, Sd.BoardB, U1);
+						if (U2 < 0.07) C = Mixed(C, Rgb(168, 148, 110), 0.6); // (a new board among the old)
+						else if (U2 > 0.92) C = Scaled(C, 0.74);
+						C = Scaled(C, (0.92 + 0.16 * Unit(Mix(BK ^ 0x77))) * (Side == 0 ? 0.74 : 1.0));
+						const double Hg = P.Z - Gz, Rot = RotOf(BK), Damp = DampOf(BK);
+						C = Mixed(C, Rgb(46, 46, 36), Hg < Rot + 0.001 ? Lerp(0.9, 0.72, Clamp01((Hg - 0.4) / (Rot - 0.4))) : 0.72 * Clamp01((Damp - Hg) / (Damp - Rot)));
+						C = Mixed(C, Rgb(92, 78, 62), 0.3 * Smooth(Eaves - 1.0, Eaves, P.Z));
+						return Burnt(C, P, Tz);
+					};
+					auto WashAt = [&](double A, V3 P, double Gz, double Tz) {
+						const double Z = P.Z - Gz, AA = A + 37.0 * F;
+						const double Mot = Noise(AA / 0.9, P.Z / 0.55, H.Key ^ 0x51);
+						Col C = Varied(Sd.Wash, 1.0 + 0.05 * Mot, 0.015 * Mot);
+						// (the rain's grey streaks under the eaves; the wash come away to the clay in patches, most where the
+						// damp lifts it low down; damp and splash at the foot)
+						C = Mixed(C, Rgb(146, 144, 134), 0.35 * Smooth(0.1, 0.7, Noise(AA / 0.55, P.Z / 7.0, H.Key ^ 0x52)) * Smooth(Eaves - 2.4, Eaves - 0.2, P.Z));
+						const double Fl = Noise(AA / 1.2, P.Z / 0.8, H.Key ^ 0x53) + 0.85 * Smooth(1.6, 0.45, Z);
+						C = Mixed(C, Sd.Clay, 0.85 * Smooth(0.42, 0.8, Fl));
+						C = Mixed(C, Rgb(88, 84, 66), 0.6 * Smooth(1.0, 0.4, Z));
+						return Burnt(C, P, Tz);
+					};
+					// A strip proud of the wall (a beam, a board, a door's post): its foot and its top at each end, its lips
+					// back to the wall where asked.
+					auto Rail = [&](double A0, double A1, double Z00, double Z01, double Z10, double Z11, double Proud, const Col& C, bool bLips) {
+						const V3 P0 = At(A0, Z00, -Proud), P1 = At(A1, Z01, -Proud), P2 = At(A1, Z11, -Proud), P3 = At(A0, Z10, -Proud);
+						B.Quad1(P0, P1, P2, P3, C, Out3);
+						if (!bLips) return;
+						B.Quad1(P3, P2, At(A1, Z11, 0.0), At(A0, Z10, 0.0), Scaled(C, 1.1), { 0, 0, 1 });
+						B.Quad1(P0, P1, At(A1, Z01, 0.0), At(A0, Z00, 0.0), Scaled(C, 0.7), { 0, 0, -1 });
+						B.Quad1(P0, P3, At(A0, Z10, 0.0), At(A0, Z00, 0.0), Scaled(C, 0.85), Along3 * -1.0);
+						B.Quad1(P1, P2, At(A1, Z11, 0.0), At(A1, Z01, 0.0), Scaled(C, 0.85), Along3);
+					};
+					auto Level = [&](double A0, double A1, double Z0, double Z1, double Proud, const Col& C, bool bLips) { Rail(A0, A1, Z0, Z0, Z1, Z1, Proud, C, bLips); };
+					// Its columns: boards of 18 to 30 cm, or the clay in cells of 75 cm; the openings' edges among them.
+					std::vector<double> Cuts{ 0.0, Fc.Len };
+					if (Sd.bPlank)
+					{
+						uint64_t N = 0;
+						for (double A = 0.18 + 0.12 * Unit(Hash(FK, N)); A < Fc.Len - 0.1; A += 0.18 + 0.12 * Unit(Hash(FK, ++N))) Cuts.push_back(A);
+					}
+					else
+						for (double A = 0.75; A < Fc.Len - 0.3; A += 0.75) Cuts.push_back(A);
+					// (a board's or a cell's edge within 2 cm of an opening's gives way to it, never the opening's to the board's:
+					// a column begun before its opening's edge would count as opening, and leave the wall open beside the jamb)
+					for (const Opening& O : Ops)
+						Cuts.erase(std::remove_if(Cuts.begin() + 2, Cuts.end(), [&O](double X) { return std::fabs(X - O.A0) < 0.02 || std::fabs(X - O.A1) < 0.02; }), Cuts.end());
+					for (const Opening& O : Ops)
+					{
+						Cuts.push_back(O.A0);
+						Cuts.push_back(O.A1);
+					}
+					std::sort(Cuts.begin(), Cuts.end());
+					Cuts.erase(std::unique(Cuts.begin(), Cuts.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.02; }), Cuts.end());
+					// (where the wall's paint is told again going up it, over the ground: the foot's wear ends at the first)
+					const double Rows[5] = { 1.0, 1.7, 2.6, 3.6, 4.6 };
+					for (size_t I = 0; I + 1 < Cuts.size(); ++I)
+					{
+						const double A0 = Cuts[I], A1 = Cuts[I + 1], AM = 0.5 * (A0 + A1), G0 = Gd(A0), G1 = Gd(A1);
+						const double T0 = std::min(Eaves, Top(A0)), T1 = std::min(Eaves, Top(A1));
+						const uint64_t BK = Hash(FK, 0xB0A2ull, static_cast<uint64_t>(I));
+						double DoorSill = 1e9;
+						std::vector<std::pair<double, double>> Gaps;
+						for (const Opening& O : Ops)
+							if (AM > O.A0 && AM < O.A1)
+							{
+								Gaps.push_back({ O.Z0, O.Z1 });
+								if (O.What == 1 || O.What == 4) DoorSill = O.Z0;
+							}
+						std::sort(Gaps.begin(), Gaps.end());
+						const bool bDoor = DoorSill < 1e8;
+						// The plinth (a clay shed's stands out of its wall, its top weathered; under a door, up to its sill).
+						{
+							const double Q0 = std::min(bDoor ? DoorSill : G0 + 0.4, T0), Q1 = std::min(bDoor ? DoorSill : G1 + 0.4, T1), In = Sd.bPlank ? 0.0 : -0.06;
+							const double E0 = !Sd.bPlank && I == 0 ? -0.06 : A0, E1 = !Sd.bPlank && I + 2 == Cuts.size() ? Fc.Len + 0.06 : A1;
+							// (its foot half a metre under the ground along the wall, no deeper: its damp shows in what stands out)
+							const double U0 = std::max(H.Foot, G0 - 0.5), U1 = std::max(H.Foot, G1 - 0.5);
+							if (Q0 > U0 + 0.01 || Q1 > U1 + 0.01)
+							{
+								const V3 P0 = At(E0, U0, In), P1 = At(E1, U1, In), P2 = At(E1, std::max(U1, Q1), In), P3 = At(E0, std::max(U0, Q0), In);
+								Shut(P0, P1, P2, P3, PlinthAt(P0, G0, T0), PlinthAt(P1, G1, T1), PlinthAt(P2, G1, T1), PlinthAt(P3, G0, T0), Out3);
+								// (its weathered top up to the wall's foot: level under a door, and where the wall is broken down into it)
+								const double W0 = bDoor || Q0 < G0 + 0.399 ? 0.0 : 0.05, W1 = bDoor || Q1 < G1 + 0.399 ? 0.0 : 0.05;
+								if (!Sd.bPlank) B.Quad1(P3, P2, At(E1, P2.Z + W1, 0.0), At(E0, P3.Z + W0, 0.0), Scaled(Sd.Plinth, 1.1), { 0, 0, 1 });
+							}
+						}
+						// The wall over it, between its openings: a piece's foot and top at each side.
+						auto Piece = [&](double Z00, double Z01, double Z10, double Z11) {
+							if (Z10 <= Z00 + 0.01 && Z11 <= Z01 + 0.01) return;
+							const V3 P0 = At(A0, Z00, -Lap), P1 = At(A1, Z01, -Lap), P2 = At(A1, std::max(Z01, Z11), -Lap), P3 = At(A0, std::max(Z00, Z10), -Lap);
+							if (Sd.bPlank) Shut(P0, P1, P2, P3, BoardAt(BK, 0, P0, G0, T0), BoardAt(BK, 1, P1, G1, T1), BoardAt(BK, 1, P2, G1, T1), BoardAt(BK, 0, P3, G0, T0), Out3);
+							else Shut(P0, P1, P2, P3, WashAt(A0, P0, G0, T0), WashAt(A1, P1, G1, T1), WashAt(A1, P2, G1, T1), WashAt(A0, P3, G0, T0), Out3);
+						};
+						auto Span = [&](double Za0, double Za1, double Zb0, double Zb1) {
+							double L0 = Za0, L1 = Za1;
+							for (int K = 0; K < (Sd.bPlank ? 2 : 5); ++K)
+							{
+								const double Off = !Sd.bPlank ? Rows[K] : K == 0 ? RotOf(BK) : DampOf(BK), S0 = G0 + Off, S1 = G1 + Off;
+								if (S0 < L0 + 0.05 || S1 < L1 + 0.05 || S0 > Zb0 - 0.05 || S1 > Zb1 - 0.05) continue;
+								Piece(L0, L1, S0, S1);
+								L0 = S0;
+								L1 = S1;
+							}
+							Piece(L0, L1, Zb0, Zb1);
+						};
+						// (its foot on the plinth's top, down with it where the wall is broken lower; its top under the roof: a long
+						// wall's boards stand out of the wall's line, where the roof's slope is that much lower)
+						double F0 = std::min(G0 + 0.4, T0), F1 = std::min(G1 + 0.4, T1);
+						const double Cap = !Fc.bGable && bRoof ? Eaves - (Lap + 0.01) * Tan : Eaves, TB0 = std::min(T0, Cap), TB1 = std::min(T1, Cap);
+						for (const std::pair<double, double>& G : Gaps)
+						{
+							if (G.first > std::max(F0, F1) + 0.01) Span(F0, F1, std::min(G.first, TB0), std::min(G.first, TB1));
+							F0 = std::max(F0, G.second);
+							F1 = std::max(F1, G.second);
+						}
+						Span(F0, F1, TB0, TB1);
+						if (bInside)
+						{
+							// (from the wall's foot, as the other houses: a wall broken below the floor has its inside and its charred top there)
+							const V3 Q2 = At(A1, std::max(H.Foot, T1), Thick), Q3 = At(A0, std::max(H.Foot, T0), Thick);
+							Shut(At(A0, H.Foot, Thick), At(A1, H.Foot, Thick), Q2, Q3, L.Inside, L.Inside, L.Inside, L.Inside, Out3 * -1.0);
+							if (T0 < Eaves - 0.01 || T1 < Eaves - 0.01) B.Quad1(At(A0, std::max(H.Foot, TB0), -Lap), At(A1, std::max(H.Foot, TB1), -Lap), Q2, Q3, Mixed(Sd.bPlank ? Sd.BoardB : Sd.Clay, Rgb(34, 30, 28), Sd.bPlank ? 0.85 : 0.4), { 0, 0, 1 });
+						}
+					}
+					// A boarded shed's sill beam on its plinth (broken at its doors, gone where the wall is down to it) and
+					// its corner boards.
+					if (Sd.bPlank)
+					{
+						for (double A = -0.07; A < Fc.Len + 0.07; A += 1.5)
+						{
+							double A0 = A, A1 = std::min(Fc.Len + 0.07, A + 1.5);
+							bool bClear = std::min(Eaves, Top(std::clamp(0.5 * (A0 + A1), 0.0, Fc.Len))) > Gd(0.5 * (A0 + A1)) + 0.7;
+							for (const Opening& O : Ops)
+								if (O.What == 1 || O.What == 4)
+								{
+									// (a door: the beam stops at its post, either side)
+									if (A0 > O.A0 - 0.15 && A1 < O.A1 + 0.15) bClear = false;
+									else if (A0 < O.A0 - 0.15 && A1 > O.A0 - 0.15 && A1 < O.A1 + 0.15) A1 = O.A0 - 0.15;
+									else if (A1 > O.A1 + 0.15 && A0 < O.A1 + 0.15 && A0 > O.A0 - 0.15) A0 = O.A1 + 0.15;
+									else if (A0 <= O.A0 - 0.15 && A1 >= O.A1 + 0.15)
+									{
+										// (a piece over the whole door: its near part here, its far part goes on)
+										const double AD = O.A0 - 0.15;
+										if (bClear && AD > A0 + 0.02) Rail(A0, AD, Gd(A0) + 0.38, Gd(AD) + 0.38, Gd(A0) + 0.5, Gd(AD) + 0.5, 0.075, Mixed(Sd.Timber, Rgb(46, 46, 36), 0.35), true);
+										A0 = O.A1 + 0.15;
+									}
+								}
+							if (bClear && A1 > A0 + 0.02) Rail(A0, A1, Gd(A0) + 0.38, Gd(A1) + 0.38, Gd(A0) + 0.5, Gd(A1) + 0.5, 0.075, Mixed(Sd.Timber, Rgb(46, 46, 36), 0.35), true);
+						}
+						for (int E = 0; E < 2; ++E)
+						{
+							// (7 cm proud of the wall, its top that much lower down the roof's slope, or it stands up through the roof)
+							const double AE = E == 0 ? 0.0 : Fc.Len, TopE = std::min(bRoof ? Eaves - 0.08 * Tan : Eaves, Top(AE));
+							if (TopE > Gd(AE) + 0.9) Level(E == 0 ? -0.07 : Fc.Len - 0.15, E == 0 ? 0.15 : Fc.Len + 0.07, Gd(AE) + 0.5, TopE, 0.07, Scaled(Sd.Timber, 1.12), true);
+						}
+					}
+					// Its openings: the reveal and the frame round it; a window's glass and bars; a door's or a hatch's leaves.
+					for (const Opening& O : Ops)
+					{
+						const bool bLeaf = O.What != 0, bDoor = O.What == 1 || O.What == 4;
+						const double D = bLeaf ? 0.07 : 0.16;
+						const V3 A0 = At(O.A0, O.Z0, -Lap), A1 = At(O.A1, O.Z0, -Lap), A2 = At(O.A1, O.Z1, -Lap), A3 = At(O.A0, O.Z1, -Lap);
+						// (the reveal runs back to the dark behind the leaves, 2 cm past them: no crack round a door to see through)
+						const double DB = bLeaf ? D + 0.02 : D;
+						const V3 B0 = At(O.A0, O.Z0, DB), B1 = At(O.A1, O.Z0, DB), B2 = At(O.A1, O.Z1, DB), B3 = At(O.A0, O.Z1, DB);
+						B.Quad1(A0, B0, B3, A3, Sd.Timber, Along3);
+						B.Quad1(A1, B1, B2, A2, Sd.Timber, Along3 * -1.0);
+						B.Quad1(A3, A2, B2, B3, Scaled(Sd.Timber, 0.75), { 0, 0, -1 });
+						B.Quad1(A0, A1, B1, B0, Scaled(Sd.Timber, 1.1), { 0, 0, 1 });
+						const double TW = bLeaf ? 0.11 : 0.07, TP = Lap + (bLeaf ? 0.035 : 0.02);
+						const Col Trim = bLeaf ? Sd.Timber : Mixed(Sd.Timber, L.Frame, 0.45);
+						Level(O.A0 - TW, O.A0, O.Z0, O.Z1, TP, Trim, false);
+						Level(O.A1, O.A1 + TW, O.Z0, O.Z1, TP, Trim, false);
+						Level(O.A0 - TW - 0.04, O.A1 + TW + 0.04, O.Z1, O.Z1 + (bLeaf ? 0.15 : 0.07), TP + 0.015, Scaled(Trim, 0.94), bLeaf);
+						if (!bDoor) Level(O.A0 - TW - 0.03, O.A1 + TW + 0.03, O.Z0 - 0.06, O.Z0, TP + 0.03, Scaled(Trim, 1.06), true);
+						// (a clay shed's plinth stands out of its wall: its ends closed at a door's jambs)
+						if (bDoor && !Sd.bPlank)
+							for (int E = 0; E < 2; ++E)
+							{
+								const double AJ = E == 0 ? O.A0 : O.A1, ZJ = Gd(AJ) + 0.4;
+								if (ZJ > O.Z0 + 0.01) B.Quad1(At(AJ, O.Z0, -0.06), At(AJ, ZJ, -0.06), At(AJ, ZJ + 0.05, 0.0), At(AJ, O.Z0, 0.0), Scaled(Sd.Plinth, 0.85), Along3 * (E == 0 ? 1.0 : -1.0));
+							}
+						if (bShell)
+						{
+							B.Quad1(B0, B1, B2, B3, Rgb(30, 28, 26), Out3);
+							continue;
+						}
+						if (!bLeaf)
+						{
+							B.Quad1(B0, B1, B2, B3, L.Glass, Out3);
+							const double AM = 0.5 * (O.A0 + O.A1), ZM = 0.5 * (O.Z0 + O.Z1), Pr = D - 0.02;
+							B.Quad1(At(AM - 0.025, O.Z0, Pr), At(AM + 0.025, O.Z0, Pr), At(AM + 0.025, O.Z1, Pr), At(AM - 0.025, O.Z1, Pr), Trim, Out3);
+							B.Quad1(At(O.A0, ZM - 0.025, Pr), At(O.A1, ZM - 0.025, Pr), At(O.A1, ZM + 0.025, Pr), At(O.A0, ZM + 0.025, Pr), Trim, Out3);
+							continue;
+						}
+						// (the dark behind the leaves, seen between them)
+						B.Quad1(B0, B1, B2, B3, Rgb(34, 30, 28), Out3);
+						const int Leaves = O.What == 4 ? 2 : 1;
+						const uint64_t OKey = Hash(FK, 0xD002ull, static_cast<uint64_t>(std::llround(O.A0 * 16.0) + 4096 * std::llround((O.Z1 - Floor) * 16.0)));
+						for (int Lf = 0; Lf < Leaves; ++Lf)
+						{
+							const double LA0 = Lerp(O.A0, O.A1, static_cast<double>(Lf) / Leaves) + 0.015, LA1 = Lerp(O.A0, O.A1, static_cast<double>(Lf + 1) / Leaves) - 0.015;
+							const double LZ0 = O.Z0 + (bDoor ? 0.04 : 0.015), LZ1 = O.Z1 - 0.015;
+							const bool bHingeLow = Leaves == 2 ? Lf == 0 : Unit(OKey) < 0.5; // (its hinges on the side of the lesser A)
+							const int NP = std::max(2, static_cast<int>(std::lround((LA1 - LA0) / 0.19)));
+							for (int Pk = 0; Pk < NP; ++Pk)
+							{
+								const double PA0 = Lerp(LA0, LA1, static_cast<double>(Pk) / NP), PA1 = Lerp(LA0, LA1, static_cast<double>(Pk + 1) / NP);
+								const uint64_t PK = Hash(OKey, static_cast<uint64_t>(Lf * 64 + Pk));
+								const Col C = Scaled(Mixed(Sd.Leaf, Sd.Board, 0.35 * Unit(PK)), 0.88 + 0.22 * Unit(Mix(PK)));
+								const Col Low = Mixed(C, Rgb(66, 62, 50), bDoor ? 0.45 : 0.12);
+								B.Quad(At(PA0, LZ0, D), At(PA1, LZ0, D), At(PA1, LZ1, D), At(PA0, LZ1, D), Scaled(Low, 0.8), Low, C, Scaled(C, 0.8), Out3);
+							}
+							// Its ledges, a strap hinge on the top and bottom ones, and the brace between each pair.
+							const double Pr = D - 0.025;
+							const Col Ledge = Scaled(Sd.Leaf, 0.8);
+							const int NL = LZ1 - LZ0 > 1.5 ? 3 : 2;
+							double ZL[3] = { 0.0, 0.0, 0.0 };
+							for (int K = 0; K < NL; ++K)
+							{
+								ZL[K] = Lerp(LZ0, LZ1, NL == 3 ? (K == 0 ? 0.12 : K == 1 ? 0.5 : 0.88) : (K == 0 ? 0.2 : 0.8));
+								B.Quad1(At(LA0, ZL[K] - 0.055, Pr), At(LA1, ZL[K] - 0.055, Pr), At(LA1, ZL[K] + 0.055, Pr), At(LA0, ZL[K] + 0.055, Pr), Ledge, Out3);
+								if (NL == 3 && K == 1) continue;
+								const double HA0 = bHingeLow ? LA0 : LA1 - 0.45 * (LA1 - LA0), HA1 = bHingeLow ? LA0 + 0.45 * (LA1 - LA0) : LA1;
+								B.Quad1(At(HA0, ZL[K] - 0.022, Pr - 0.012), At(HA1, ZL[K] - 0.022, Pr - 0.012), At(HA1, ZL[K] + 0.022, Pr - 0.012), At(HA0, ZL[K] + 0.022, Pr - 0.012), Sd.Iron, Out3);
+							}
+							for (int K = 0; K + 1 < NL; ++K)
+							{
+								const double S = bHingeLow ? 1.0 : -1.0, BA0 = bHingeLow ? LA0 + 0.03 : LA1 - 0.03, BA1 = bHingeLow ? LA1 - 0.03 : LA0 + 0.03;
+								B.Quad1(At(BA0, ZL[K] + 0.055, Pr), At(BA0 + S * 0.12, ZL[K] + 0.055, Pr), At(BA1, ZL[K + 1] - 0.055, Pr), At(BA1 - S * 0.12, ZL[K + 1] - 0.055, Pr), Ledge, Out3);
+							}
+						}
+						// The beaten earth run up to a door's sill.
+						if (bDoor)
+						{
+							const double Run = O.What == 4 ? 2.4 : 1.5, Wd = 0.35, Low = std::min(Gd(O.A0), Gd(O.A1)) - 0.35;
+							const V3 R0 = At(O.A0 - 0.15, O.Z0 + 0.01, -Lap), R1 = At(O.A1 + 0.15, O.Z0 + 0.01, -Lap), R2 = At(O.A1 + 0.15 + Wd, Low, -Lap - Run), R3 = At(O.A0 - 0.15 - Wd, Low, -Lap - Run);
+							const Col E0 = Rgb(122, 108, 84), E1 = Rgb(104, 94, 72);
+							B.Quad(R0, R1, R2, R3, E0, E0, E1, E1, { 0, 0, 1 });
+							B.Tri1(R0, R3, At(O.A0 - 0.15 - Wd, Low, -Lap), E1, Along3 * -1.0);
+							B.Tri1(R1, R2, At(O.A1 + 0.15 + Wd, Low, -Lap), E1, Along3);
+						}
+					}
+					// The gable boarded upright to the rake, where the roof still stands over it.
+					if (Fc.bGable && bRoof && Broken != Fc.End)
+					{
+						auto Rake = [&](double A) { return Eaves + (Ridge - Eaves) * (1.0 - std::fabs(2.0 * A / Fc.Len - 1.0)); };
+						const uint64_t GK = Hash(FK, 0x6AB1ull);
+						std::vector<double> GB{ 0.0, 0.5 * Fc.Len, Fc.Len };
+						uint64_t N = 0;
+						// (a board's edge within 5 cm of the ridge's line gives way to it: the boarding runs up to the ridge)
+						for (double A = 0.2 + 0.1 * Unit(Hash(GK, N)); A < Fc.Len - 0.1; A += 0.2 + 0.1 * Unit(Hash(GK, ++N)))
+							if (std::fabs(A - 0.5 * Fc.Len) >= 0.05) GB.push_back(A);
+						std::sort(GB.begin(), GB.end());
+						GB.erase(std::unique(GB.begin(), GB.end(), [](double X, double Y) { return std::fabs(X - Y) < 0.05; }), GB.end());
+						auto Three = [&](V3 Pa, V3 Pb, V3 Pc, const Col& Ca, const Col& Cb, const Col& Cc) {
+							const uint32_t Ia = B.Vert(Pa, Out3, Ca), Ib = B.Vert(Pb, Out3, Cb), Ic = B.Vert(Pc, Out3, Cc);
+							if (Dot3(Cross(Pb - Pa, Pc - Pa), Out3) > 0.0) B.Tri(Ia, Ib, Ic);
+							else B.Tri(Ia, Ic, Ib);
+						};
+						for (size_t I = 0; I + 1 < GB.size(); ++I)
+						{
+							const double A0 = GB[I], A1 = GB[I + 1], Gz = Eaves - 9.0, Tz = 1e9; // (no foot's damp up here, and its top whole)
+							const uint64_t BK = Hash(GK, 0xB0A3ull, static_cast<uint64_t>(I));
+							const V3 P0 = At(A0, Eaves, -0.04), P1 = At(A1, Eaves, -0.04), P2 = At(A1, Rake(A1), -0.04), P3 = At(A0, Rake(A0), -0.04);
+							if (P3.Z < Eaves + 0.005) Three(P0, P1, P2, BoardAt(BK, 0, P0, Gz, Tz), BoardAt(BK, 1, P1, Gz, Tz), BoardAt(BK, 1, P2, Gz, Tz));
+							else if (P2.Z < Eaves + 0.005) Three(P0, P1, P3, BoardAt(BK, 0, P0, Gz, Tz), BoardAt(BK, 1, P1, Gz, Tz), BoardAt(BK, 0, P3, Gz, Tz));
+							else B.Quad(P0, P1, P2, P3, BoardAt(BK, 0, P0, Gz, Tz), BoardAt(BK, 1, P1, Gz, Tz), BoardAt(BK, 1, P2, Gz, Tz), BoardAt(BK, 0, P3, Gz, Tz), Out3);
+						}
+						// (the weather board from corner to corner, its ends cut to the rake: nothing of it stands up through the roof)
+						const double AW = std::min(0.45 * Fc.Len, 0.05 * Fc.Len / (Ridge - Eaves));
+						Rail(0.0, AW, Eaves - 0.07, Eaves - 0.07, Eaves - 0.01, Eaves + 0.09, 0.075, Sd.Timber, true);
+						Level(AW, Fc.Len - AW, Eaves - 0.07, Eaves + 0.09, 0.075, Sd.Timber, true);
+						Rail(Fc.Len - AW, Fc.Len, Eaves - 0.07, Eaves - 0.07, Eaves + 0.09, Eaves - 0.01, 0.075, Sd.Timber, true);
+						if (bInside) B.Tri1(At(0.0, Eaves, Thick), At(Fc.Len, Eaves, Thick), At(0.5 * Fc.Len, Ridge, Thick), L.Inside, Out3 * -1.0);
+					}
+					continue;
+				}
 				// The face, cut round its openings into cells, each cell's corners its own stone.
 				std::vector<double> AB{ 0.0, Fc.Len }, ZB{ H.Foot, Floor + 0.4, Eaves };
 				for (double A = 1.5; A < Fc.Len - 0.3; A += 1.5) AB.push_back(A);
@@ -5442,9 +5883,9 @@ namespace LandField
 			{
 				const double IU = 0.5 * Long - Thick, IV = 0.5 * Deep - Thick;
 				B.Quad(W(-IU, -IV, Floor + 0.02), W(IU, -IV, Floor + 0.02), W(IU, IV, Floor + 0.02), W(-IU, IV, Floor + 0.02), Rgb(66, 58, 50), Rgb(80, 72, 62), Rgb(62, 56, 48), Rgb(74, 66, 56), { 0, 0, 1 });
-				Mound(B, W(R.Range(-0.2, 0.2) * Long, 0.0, Floor - 0.1), 0.3 * Long, 0.3 * Deep, bShell ? 1.1 : 0.6, H.Yaw, L.Stone, H.Key ^ 0x60);
+				Mound(B, W(R.Range(-0.2, 0.2) * Long, 0.0, Floor - 0.1), 0.3 * Long, 0.3 * Deep, bShell ? 1.1 : 0.6, H.Yaw, Sd.bPlank ? Sd.Fallen : L.Stone, H.Key ^ 0x60);
 			}
-			if (Broken) Mound(B, W(Broken * (0.5 * Long + 1.0), R.Range(-0.8, 0.8), Floor - 0.25), 2.4, 0.45 * Deep + 0.8, 1.0, H.Yaw, L.Stone, H.Key ^ 0x61);
+			if (Broken) Mound(B, W(Broken * (0.5 * Long + 1.0), R.Range(-0.8, 0.8), Floor - 0.25), 2.4, 0.45 * Deep + 0.8, 1.0, H.Yaw, Sd.bPlank ? Sd.Fallen : L.Stone, H.Key ^ 0x61);
 			// The roof: two slopes of panels with their thickness, overhanging the walls; a hole or a broken end where hit.
 			if (bRoof)
 			{
