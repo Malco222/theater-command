@@ -134,7 +134,8 @@ void FSeaNightDome::Lay(double FovDeg, const FVector& Eye)
 	// The board's frame (east, north, up) to the world's (north, east, up), as ASeaBattle::World turns it; each face
 	// wound toward the eye by the kit's rule (the paint is two-sided, so this only keeps the rule).
 	const int32 Points = static_cast<int32>(M.V.size() / 3);
-	const int32 StarPoints = M.StarQuads * 4, StarIndices = M.StarQuads * 6;
+	// (the stars and the Milky Way's specks share the first section: the same paint and the same strength)
+	const int32 StarPoints = (M.StarQuads + M.GlowQuads) * 4, StarIndices = (M.StarQuads + M.GlowQuads) * 6;
 	TArray<FVector> Places[2], Normals[2];
 	TArray<FColor> Colours[2];
 	TArray<int32> Triangles[2];
@@ -186,9 +187,9 @@ void FSeaNightDome::Lay(double FovDeg, const FVector& Eye)
 	{
 		bSaid = true;
 		UE_LOG(LogTheater, Display,
-			TEXT("Sea battle: the night sky over %.1f%s %.1f%s, %d-%02d-%02d at %.1f h local (the sun %.0f deg down): %d stars to magnitude %.1f (%d under the haze, %d under cloud, %d behind the moon); the moon %s; laid in %.2f ms for a lens %.0f deg across %.0f pixels."),
+			TEXT("Sea battle: the night sky over %.1f%s %.1f%s, %d-%02d-%02d at %.1f h local (the sun %.0f deg down): %d stars to magnitude %.1f (%d under the haze, %d under cloud, %d behind the moon), the Milky Way at %.0f%% in %d specks; the moon %s; laid in %.2f ms for a lens %.0f deg across %.0f pixels."),
 			FMath::Abs(When.Lat), When.Lat >= 0.0 ? TEXT("N") : TEXT("S"), FMath::Abs(When.Lon), When.Lon >= 0.0 ? TEXT("E") : TEXT("W"),
-			When.Year, When.Month, When.Day, Sky.SolarHour, -When.SunUp, StarsLaid(), Sky.LimitMag, Sky.BelowHaze, Sky.HiddenByCloud, Sky.HiddenByMoon,
+			When.Year, When.Month, When.Day, Sky.SolarHour, -When.SunUp, StarsLaid(), Sky.LimitMag, Sky.BelowHaze, Sky.HiddenByCloud, Sky.HiddenByMoon, 100.0 * Sky.MilkyShare, GlowLaid(),
 			Sky.bMoonUp ? *FString::Printf(TEXT("%.0f deg up from %.0f, %.0f%% lit"), When.MoonUp, When.MoonFrom, 100.0 * When.MoonLit) : TEXT("down"),
 			LayMs, FovDeg, L.ViewPx);
 	}

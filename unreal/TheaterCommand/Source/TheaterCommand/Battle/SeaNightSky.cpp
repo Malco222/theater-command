@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace SeaNightSky
 {
@@ -89,6 +90,52 @@ namespace SeaNightSky
 		};
 		/** [EST] How much darker her seas are than her highlands, as the eye sees her (albedo about 0.07 against 0.12). */
 		constexpr double MareDark = 0.38;
+
+		/** The galaxy's north pole and the galactic longitude of the celestial pole (IAU 1958 in J2000). */
+		constexpr double PoleRaDeg = 192.85948, PoleDecDeg = 27.12825, PoleL = 122.93192;
+		/** [EST] The Milky Way's light where it is brightest (the Sagittarius star cloud), against a first-magnitude
+		 * star's: it is a glow, never a point, so each speck of it carries a thousandth or so of one. */
+		constexpr double MilkyLight = 0.0016;
+		/** [EST] How many specks the band is drawn with over the whole sphere: enough that the eye reads a band and not
+		 * dots (about a third of them stand above the horizon on any night), few enough to cost nothing (each is one
+		 * square, as a star is, and they are laid once at a cut). */
+		constexpr int MilkyMost = 5200;
+		/** [EST] A speck is this many times a star's least width: a little wider, so they melt together into a glow. */
+		constexpr double MilkyWide = 2.2;
+
+		/** One bright cloud of the band: where it lies (galactic longitude and latitude), how far it reaches (degrees
+		 * along the band and across it) and how much it lifts the band's light there. */
+		struct Cloud
+		{
+			double L, B, Along, Across, Lift;
+		};
+		const Cloud Clouds[] = {
+			{ 4.0, -2.0, 14.0, 7.0, 1.25 },    // the great Sagittarius cloud, toward the galaxy's centre
+			{ 27.0, -1.0, 10.0, 5.0, 0.95 },   // the Scutum cloud
+			{ 50.0, 0.0, 9.0, 4.0, 0.45 },     // Aquila and Vulpecula
+			{ 78.0, 2.5, 12.0, 6.0, 0.85 },    // the Cygnus cloud, overhead on a northern summer night
+			{ 287.0, -1.0, 13.0, 6.0, 0.90 },  // Carina, the southern sky's brightest reach
+			{ 310.0, 0.0, 10.0, 5.0, 0.55 },   // Crux and Centaurus
+			{ 333.0, -1.5, 10.0, 5.0, 0.60 },  // Norma
+			{ 206.0, -2.0, 14.0, 5.0, 0.10 },  // the anticentre, faintest of all
+		};
+		/** The Great Rift's dark lane, where the dust in front of the band splits it: from Cygnus down through Aquila
+		 * and Ophiuchus to Sagittarius. Where it lies along the band, how wide across, and how much it takes away. */
+		struct Lane
+		{
+			double FromL, ToL, B, Across, Takes;
+		};
+		const Lane Lanes[] = {
+			{ 10.0, 80.0, 0.5, 2.4, 0.62 },     // the Great Rift
+			{ 280.0, 320.0, -0.5, 2.0, 0.45 },  // the Coalsack and the southern dust, by Crux
+		};
+
+		/** Where two galactic longitudes stand apart, in degrees (the short way round). */
+		double ApartL(double A, double B)
+		{
+			const double D = std::abs(Wrap360(A) - Wrap360(B));
+			return D > 180.0 ? 360.0 - D : D;
+		}
 	}
 
 	int StarCount()
@@ -202,6 +249,108 @@ namespace SeaNightSky
 		const double C = std::sin(Theta) * std::cos(Dec0) * std::cos(Ra0 + Zeta) + std::cos(Theta) * std::sin(Dec0);
 		OutRaHours = Wrap360((std::atan2(A, B) + Z) / Rad) / 15.0;
 		OutDecDeg = std::asin(Clamp(C, -1.0, 1.0)) / Rad;
+	}
+
+	void ToGalactic(double RaHours, double DecDeg, double& OutL, double& OutB)
+	{
+		const double Ra = RaHours * 15.0 * Rad, Dec = DecDeg * Rad;
+		const double Pr = PoleRaDeg * Rad, Pd = PoleDecDeg * Rad;
+		const double SinB = std::sin(Dec) * std::sin(Pd) + std::cos(Dec) * std::cos(Pd) * std::cos(Ra - Pr);
+		OutB = std::asin(Clamp(SinB, -1.0, 1.0)) / Rad;
+		const double Y = std::cos(Dec) * std::sin(Ra - Pr);
+		const double X = std::sin(Dec) * std::cos(Pd) - std::cos(Dec) * std::sin(Pd) * std::cos(Ra - Pr);
+		OutL = Wrap360(PoleL - std::atan2(Y, X) / Rad);
+	}
+
+	void FromGalactic(double L, double B, double& OutRaHours, double& OutDecDeg)
+	{
+		const double Lr = L * Rad, Br = B * Rad;
+		const double Pd = PoleDecDeg * Rad, Pl = PoleL * Rad;
+		const double SinDec = std::sin(Br) * std::sin(Pd) + std::cos(Br) * std::cos(Pd) * std::cos(Pl - Lr);
+		OutDecDeg = std::asin(Clamp(SinDec, -1.0, 1.0)) / Rad;
+		const double Y = std::cos(Br) * std::sin(Pl - Lr);
+		const double X = std::sin(Br) * std::cos(Pd) - std::cos(Br) * std::sin(Pd) * std::cos(Pl - Lr);
+		OutRaHours = Wrap360(PoleRaDeg + std::atan2(Y, X) / Rad) / 15.0;
+	}
+
+	double MilkyAt(double L, double B)
+	{
+		// (a painter's map of the band, from the photographs' broad shape: a band thickest and brightest toward the
+		// galaxy's centre in Sagittarius, thinning to almost nothing at the anticentre; its star clouds; its dark
+		// lanes in front. Nothing is copied: these are figures for the shape, not a survey's data.)
+		const double Middle = ApartL(L, 0.0);                       // 0 at the centre, 180 at the anticentre
+		const double Toward = 1.0 - Middle / 180.0;                  // 1 at the centre, 0 at the anticentre
+		const double Thick = 3.2 + 4.3 * Toward * Toward;            // degrees: the band's half width across
+		double Light = 0.0;
+		if (std::abs(B) < 4.0 * Thick)
+		{
+			Light = std::exp(-0.5 * (B / Thick) * (B / Thick)) * (0.14 + 0.52 * Toward * Toward * Toward);
+		}
+		for (const Cloud& C : Clouds)
+		{
+			// (far from this cloud along the band or across it: nothing of it here, and no call made)
+			if (ApartL(L, C.L) > 3.0 * C.Along || std::abs(B - C.B) > 3.0 * C.Across)
+			{
+				continue;
+			}
+			const double Dl = ApartL(L, C.L) / C.Along, Db = (B - C.B) / C.Across;
+			Light += C.Lift * std::exp(-0.5 * (Dl * Dl + Db * Db));
+		}
+		if (Light <= 0.0)
+		{
+			return 0.0;
+		}
+		for (const Lane& Ln : Lanes)
+		{
+			const double Mid = Wrap360(0.5 * (Ln.FromL + Ln.ToL)), Half = 0.5 * std::abs(Ln.ToL - Ln.FromL);
+			if (ApartL(L, Mid) > Half + 12.0 || std::abs(B - Ln.B) > 3.0 * Ln.Across)
+			{
+				continue;
+			}
+			const double Reach = 1.0 - Smooth(Half, Half + 12.0, ApartL(L, Mid));
+			const double Deep = (B - Ln.B) / Ln.Across;
+			Light *= 1.0 - Ln.Takes * Reach * std::exp(-0.5 * Deep * Deep);
+		}
+		return Clamp(Light, 0.0, 1.0);
+	}
+
+	namespace
+	{
+		/** One speck of the band, drawn once in the galaxy's frame and kept: where it stands at J2000, how bright the
+		 * band is there, and its own number (for the cloud's cover). */
+		struct Speck
+		{
+			double RaHours, DecDeg, Bright;
+			uint64_t Own;
+		};
+		/** The band's specks, laid out once by a golden-ratio walk along it and a hash across it, kept for every sky
+		 * after: the same band every time, and nothing to work out again at a cut. */
+		const std::vector<Speck>& BandSpecks()
+		{
+			static const std::vector<Speck> Band = []
+			{
+				std::vector<Speck> Out;
+				Out.reserve(MilkyMost);
+				const double Golden = 0.6180339887498949;
+				for (int K = 0; K < MilkyMost * 3 && static_cast<int>(Out.size()) < MilkyMost; ++K)
+				{
+					const double L = 360.0 * std::fmod(K * Golden, 1.0);
+					// (across the band: more toward its middle, out to 25 degrees either side)
+					const double U = 2.0 * HashOf(static_cast<uint64_t>(K) * 6364136223846793005ull + 11ull) - 1.0;
+					const double B = 25.0 * U * std::abs(U);
+					const double Bright = MilkyAt(L, B);
+					if (Bright <= 0.02 || HashOf(static_cast<uint64_t>(K) * 2862933555777941757ull + 29ull) > Bright)
+					{
+						continue;
+					}
+					Speck One{ 0.0, 0.0, Bright, static_cast<uint64_t>(K) };
+					FromGalactic(L, B, One.RaHours, One.DecDeg);
+					Out.push_back(One);
+				}
+				return Out;
+			}();
+			return Band;
+		}
 	}
 
 	Dir AltAz(double UpDeg, double FromDeg)
@@ -361,6 +510,45 @@ namespace SeaNightSky
 			One.B = static_cast<float>(B * Light);
 			Out.Stars.push_back(One);
 		}
+
+		// The Milky Way, on a dark night only: the unresolved stars of the galaxy's own plane. Each speck is a square
+		// like a star's, a little wider, so together they read as a glow and not as dots. The specks are drawn once,
+		// in the galaxy's own frame (Specks), and only turned to the sky here, so the band never crawls between cuts
+		// and costs nothing to work out again.
+		Out.MilkyShare = Smooth(4.4, 5.4, Out.LimitMag);
+		if (Out.MilkyShare > 0.0)
+		{
+			for (const Speck& Sp : BandSpecks())
+			{
+				const double Bright = Sp.Bright;
+				double Up = 0.0, From = 0.0, Carried = 0.0, CarriedDec = 0.0;
+				Precess(Sp.RaHours, Sp.DecDeg, W.Year + (W.Month - 0.5) / 12.0, Carried, CarriedDec);
+				ToAltAz(Carried, CarriedDec, W.Lat, Out.SiderealDeg, Up, From);
+				if (Up < HazeDeg)
+				{
+					continue;
+				}
+				if (Cover > 0.0 && HashOf(Sp.Own * 2654435761ull + 131ull) < Cover)
+				{
+					continue;
+				}
+				const Dir Way = AltAz(Up, From);
+				if (Out.bMoonUp && DotOf(Way, Out.MoonWay) > MoonGuard)
+				{
+					continue;
+				}
+				const double Through = std::pow(10.0, -0.4 * Extinction * (AirMass(Up) - 1.0));
+				const double Light = See.Strength * MilkyLight * Bright * Out.MilkyShare * Through;
+				Laid One;
+				One.Way = Way;
+				One.HalfRad = LeastHalf * MilkyWide;
+				// (its light a touch warm, as the band's own unresolved stars are)
+				One.R = static_cast<float>(Light * 1.00);
+				One.G = static_cast<float>(Light * 0.98);
+				One.B = static_cast<float>(Light * 0.92);
+				Out.Glow.push_back(One);
+			}
+		}
 		return Out;
 	}
 
@@ -447,10 +635,11 @@ namespace SeaNightSky
 	Mesh BuildMesh(const Sky& S, double Radius, int MoonSegments, int MoonRings, double MoonDarkCut)
 	{
 		Mesh Out;
-		Out.V.reserve((S.Stars.size() * 4 + 600) * 3);
-		Out.C.reserve((S.Stars.size() * 4 + 600) * 4);
-		Out.Triangles.reserve(S.Stars.size() * 6 + 3000);
-		for (const Laid& One : S.Stars)
+		const size_t Squares = S.Stars.size() + S.Glow.size();
+		Out.V.reserve((Squares * 4 + 600) * 3);
+		Out.C.reserve((Squares * 4 + 600) * 4);
+		Out.Triangles.reserve(Squares * 6 + 3000);
+		auto Square = [&Out, Radius](const Laid& One)
 		{
 			// (a square facing the eye: two directions across the line to it)
 			Dir U = CrossOf(Dir{ 0.0, 0.0, 1.0 }, One.Way);
@@ -471,7 +660,16 @@ namespace SeaNightSky
 				Out.C.insert(Out.C.end(), { One.R, One.G, One.B, 1.0f });
 			}
 			Out.Triangles.insert(Out.Triangles.end(), { Base, Base + 1, Base + 2, Base, Base + 2, Base + 3 });
+		};
+		for (const Laid& One : S.Stars)
+		{
+			Square(One);
 			++Out.StarQuads;
+		}
+		for (const Laid& One : S.Glow)
+		{
+			Square(One);
+			++Out.GlowQuads;
 		}
 		if (S.bMoonUp)
 		{

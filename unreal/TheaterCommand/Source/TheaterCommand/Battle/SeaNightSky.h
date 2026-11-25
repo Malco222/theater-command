@@ -21,6 +21,8 @@
  *    least 1.5 of the screen's pixels across (the plan's floor, so the anti-aliasing never loses it), its light by its
  *    magnitude, dimmed through the air low down (Kasten and Young's air mass, 0.35 magnitudes an air mass at sea), its
  *    colour by its temperature, with fewer as the moon or the twilight brightens the sky;
+ *  - on a dark night the Milky Way, as the faint specks of its unresolved stars along the galaxy's plane (brightest
+ *    toward Sagittarius, the Great Rift dark through Cygnus and Aquila), gone under a bright moon or in twilight;
  *  - the moon as an opaque disc of her true half-degree, lit by her phase on the side toward the sun, her seas (maria)
  *    darker where they really lie on her face, her dark side by earthshine alone (so it still hides the stars behind
  *    it), reddening as she sinks into the haze.
@@ -90,6 +92,10 @@ namespace SeaNightSky
 		double MoonLit = 0.0;
 		std::vector<Laid> Stars;       // brightest first
 		int HiddenByMoon = 0, HiddenByCloud = 0, BelowHaze = 0, TooFaint = 0;
+		/** The Milky Way: how much of it shows tonight (0 to 1: only a dark sky shows it; a moon or the twilight washes
+		 * it out), and its unresolved stars as specks, each a star's square of its own, after the stars. */
+		double MilkyShare = 0.0;
+		std::vector<Laid> Glow;
 	};
 
 	/** Local mean solar hour -> the sidereal time at the place (degrees, 0 to 360), and the Julian date of that moment. */
@@ -109,6 +115,16 @@ namespace SeaNightSky
 	void Precess(double RaHours, double DecDeg, double Year, double& OutRaHours, double& OutDecDeg);
 	Dir AltAz(double UpDeg, double FromDeg);
 	void ToAltAz(double RaHours, double DecDeg, double LatDeg, double SiderealDeg, double& OutUp, double& OutFrom);
+
+	/** The Milky Way's frame: J2000 right ascension (hours) and declination (degrees) to galactic longitude and
+	 * latitude (degrees; l 0 toward the galaxy's centre in Sagittarius, b 90 its north pole), and back (IAU 1958, as
+	 * Hipparcos fixed it in J2000). */
+	void ToGalactic(double RaHours, double DecDeg, double& OutL, double& OutB);
+	void FromGalactic(double L, double B, double& OutRaHours, double& OutDecDeg);
+	/** The Milky Way's light at a galactic place, 0 to 1 of its brightest: a band a few degrees either side of the plane,
+	 * thicker and brightest toward the centre, with the star clouds of Scutum, Cygnus and Carina, and the Great Rift's
+	 * dark lane from Cygnus to Sagittarius. A painter's map from the photographs' broad shape, not a survey. */
+	double MilkyAt(double L, double B);
 
 	/** The air between: Kasten and Young's air mass at a height in degrees (1 overhead, about 38 at the horizon). */
 	double AirMass(double UpDeg);
@@ -139,7 +155,7 @@ namespace SeaNightSky
 	double MoonLightAt(const Sky& S, const Dir& Right, const Dir& Up, double X, double Y);
 
 	/** The dome's mesh, in units round the eye (the engine adds the eye): each star a square facing the eye at Radius,
-	 * then the moon's face, vertex colours linear (masked: alpha marks what is drawn). Every star's alpha is 1; the moon's
+	 * then each speck of the Milky Way, then the moon's face, vertex colours linear (masked: alpha marks what is drawn). Every star's alpha is 1; the moon's
 	 * is 1 where her light (of her full face's, before the air's tint) is MoonDarkCut or more, else 0: 0 lays her whole
 	 * disc, her dark side by earthshine (a dark night); above it her dark side is left out, so a twilight sky shows
 	 * through it as it does through the real moon's. The stars behind her are left out either way. */
@@ -148,7 +164,7 @@ namespace SeaNightSky
 		std::vector<double> V;       // x, y, z each, in the board's frame (east, north, up), units
 		std::vector<float> C;        // r, g, b, a each
 		std::vector<int> Triangles;
-		int StarQuads = 0, MoonTriangles = 0;
+		int StarQuads = 0, GlowQuads = 0, MoonTriangles = 0; // (the stars' squares, then the Milky Way's, then the moon)
 	};
 	Mesh BuildMesh(const Sky& S, double Radius, int MoonSegments = 64, int MoonRings = 8, double MoonDarkCut = 0.0);
 }

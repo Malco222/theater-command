@@ -65,6 +65,7 @@ public:
 
 	bool IsOn() const { return bOn; }
 	int32 StarsLaid() const { return static_cast<int32>(Sky.Stars.size()); }
+	int32 GlowLaid() const { return static_cast<int32>(Sky.Glow.size()); }
 	double LastLayMs() const { return LayMs; }
 
 	/** The view's width in the pixels it is drawn at, before any upscaling (the screen's width x r.ScreenPercentage). */

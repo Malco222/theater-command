@@ -300,6 +300,78 @@ int main()
 		Check(bSame, "the same inputs lay the same sky");
 	}
 
+	// ---- The Milky Way
+	{
+		// (the galaxy's centre, Sagittarius A*: 17h 45m 40s, -29 00' 28"; and Polaris)
+		double L = 0.0, B = 0.0;
+		ToGalactic(17.0 + 45.0 / 60.0 + 40.0 / 3600.0, -(29.0 + 28.0 / 3600.0), L, B);
+		Check(std::abs(L) < 0.2 || std::abs(L - 360.0) < 0.2, "the galaxy's centre stands at galactic longitude 0 (" + F(L, 3) + ")");
+		Check(std::abs(B) < 0.2, "and at latitude 0 (" + F(B, 3) + ")");
+		ToGalactic(2.530, 89.264, L, B);
+		Check(std::abs(L - 123.28) < 0.5 && std::abs(B - 26.46) < 0.5, "Polaris stands at l 123.3, b 26.5 (" + F(L, 2) + ", " + F(B, 2) + ")");
+		// (there and back again)
+		bool bBack = true;
+		for (double Ll = 5.0; Ll < 360.0; Ll += 37.0)
+		{
+			for (double Bb = -70.0; Bb <= 70.0; Bb += 35.0)
+			{
+				double Ra = 0.0, Dec = 0.0, L2 = 0.0, B2 = 0.0;
+				FromGalactic(Ll, Bb, Ra, Dec);
+				ToGalactic(Ra, Dec, L2, B2);
+				bBack = bBack && std::abs(B2 - Bb) < 1.0e-6 && std::abs(std::fmod(L2 - Ll + 540.0, 360.0) - 180.0) < 1.0e-6;
+			}
+		}
+		Check(bBack, "every place goes to the galaxy's frame and back");
+		Check(MilkyAt(0.0, 0.0) > MilkyAt(180.0, 0.0) * 3.0, "the band is far brighter toward the centre than toward the anticentre");
+		Check(MilkyAt(5.0, 0.0) > 0.5 && MilkyAt(0.0, 45.0) < 0.01, "bright in Sagittarius, nothing at the galaxy's pole");
+		Check(MilkyAt(40.0, 0.5) < 0.75 * MilkyAt(40.0, 5.0) && MilkyAt(40.0, 0.5) < 0.75 * MilkyAt(40.0, -4.0),
+			"the Great Rift is a dark lane splitting the band in Aquila (" + F(MilkyAt(40.0, 0.5), 3) + " against " + F(MilkyAt(40.0, 5.0), 3) + ")");
+
+		const Sky Dark2 = Lay(Night(-24.0, false, -90.0, 0.0), Lens{}, Seeing{});
+		const Sky Moon2 = Lay(Night(-24.0, true, 50.0, 1.0), Lens{}, Seeing{});
+		const Sky Twi2 = Lay(Night(-8.0, false, -90.0, 0.0), Lens{}, Seeing{});
+		std::printf("the Milky Way: dark night %d specks at %.0f%%, full moon %d, nautical twilight %d\n",
+			static_cast<int>(Dark2.Glow.size()), 100.0 * Dark2.MilkyShare, static_cast<int>(Moon2.Glow.size()), static_cast<int>(Twi2.Glow.size()));
+		Check(Dark2.Glow.size() > 600 && Dark2.MilkyShare > 0.9, "a dark night shows the band (" + std::to_string(Dark2.Glow.size()) + " specks)");
+		Check(Moon2.Glow.empty() && Twi2.Glow.empty(), "a full moon or twilight washes it away");
+		bool bBand = true, bFaint = true, bHigh = true;
+		double MostB = 0.0;
+		for (const SeaNightSky::Laid& G : Dark2.Glow)
+		{
+			bFaint = bFaint && G.R > 0.0f && G.R < 0.01f;
+			bHigh = bHigh && std::asin(G.Way.Z) * 180.0 / 3.14159265358979 >= 3.0 - 1.0e-9;
+		}
+		// (every speck within 30 degrees of the galaxy's plane: it is a band, not a scatter)
+		for (const SeaNightSky::Laid& G : Dark2.Glow)
+		{
+			double Up = std::asin(G.Way.Z) * 180.0 / 3.14159265358979;
+			double From = std::fmod(std::atan2(G.Way.X, G.Way.Y) * 180.0 / 3.14159265358979 + 360.0, 360.0);
+			double Ra = 0.0, Dec = 0.0, Gl = 0.0, Gb = 0.0;
+			// (back from the sky to the frame: the hour angle at the place and sidereal time)
+			const double Lat = 50.0 * 3.14159265358979 / 180.0, U = Up * 3.14159265358979 / 180.0, A = From * 3.14159265358979 / 180.0;
+			const double SinDec = std::sin(U) * std::sin(Lat) + std::cos(U) * std::cos(Lat) * std::cos(A);
+			Dec = std::asin(SinDec) * 180.0 / 3.14159265358979;
+			const double HourAngle = std::atan2(-std::cos(U) * std::sin(A), std::sin(U) * std::cos(Lat) - std::cos(U) * std::sin(Lat) * std::cos(A)) * 180.0 / 3.14159265358979;
+			Ra = std::fmod(Dark2.SiderealDeg - HourAngle + 720.0, 360.0) / 15.0;
+			ToGalactic(Ra, Dec, Gl, Gb);
+			MostB = std::max(MostB, std::abs(Gb));
+			bBand = bBand && std::abs(Gb) < 31.0;
+		}
+		Check(bBand, "every speck lies along the galaxy's plane, within 30 degrees (most " + F(MostB, 1) + ")");
+		Check(bFaint, "every speck is far fainter than a star");
+		Check(bHigh, "none in the sea's haze");
+		const Sky Again2 = Lay(Night(-24.0, false, -90.0, 0.0), Lens{}, Seeing{});
+		bool bSame2 = Again2.Glow.size() == Dark2.Glow.size();
+		for (size_t I = 0; bSame2 && I < Dark2.Glow.size(); ++I)
+		{
+			bSame2 = Dark2.Glow[I].Way.X == Again2.Glow[I].Way.X && Dark2.Glow[I].R == Again2.Glow[I].R;
+		}
+		Check(bSame2, "the band stands still: the same specks every time");
+		const Mesh Band = BuildMesh(Dark2, 4.0e7);
+		Check(Band.GlowQuads == static_cast<int>(Dark2.Glow.size()) && Band.StarQuads == static_cast<int>(Dark2.Stars.size()),
+			"the mesh carries a square for every star and every speck");
+	}
+
 	// ---- The moon's face
 	{
 		for (double Lit : { 0.08, 0.25, 0.5, 0.75, 0.95 })
@@ -387,7 +459,7 @@ int main()
 		std::printf("the convoy night (57 N, January, moon 0.34 lit at 25 deg): %d stars, hour %.2f, limit %.2f; %d triangles; lay and mesh %.3f ms (median of 15)\n",
 			static_cast<int>(S.Stars.size()), S.SolarHour, S.LimitMag, static_cast<int>(M.Triangles.size() / 3), Times[Times.size() / 2]);
 		Check(Times[Times.size() / 2] < 4.0, "the sky is laid and meshed in under 4 ms, once a cut");
-		Check(M.Triangles.size() / 3 < 4000, "under 4,000 triangles on the dome");
+		Check(M.Triangles.size() / 3 < 8000, "under 8,000 triangles on the dome (the stars, the Milky Way's specks and the moon)");
 		// (in a twilight sky her dark side is left out, so the sky shows through it; on a dark night her whole disc is
 		// laid, earthshine on her dark side; the stars always all drawn)
 		const Mesh Twilight = BuildMesh(S, Radius, 64, 8, 0.08);
