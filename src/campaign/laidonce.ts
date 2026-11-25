@@ -13,6 +13,7 @@
 //
 // History's campaigns keep the order of battle they were measured with: nothing here runs outside the grand campaign.
 import data from '../../data/campaign/laidonce.json';
+import setup from '../../data/campaign/setup-1939.json';
 import { divisionsOf, growCorps, keepNumbers, numbersOf } from './armies';
 import { atWar, removeCorps } from './game';
 import { stopDef } from './history';
@@ -25,7 +26,7 @@ import type { Corps, Game, Region, Voyage } from './types';
  */
 type Holder = [string, number, number[], string?];
 const ROWS = new Map<string, Holder[]>(Object.entries((data as unknown as { rows: Record<string, Holder[]> }).rows));
-const WORDS = data as unknown as { from: string; fromMany: string; ashore: string; afloat: string };
+const WORDS = data as unknown as { from: string; fromMany: string; held: string; heldMany: string; ashore: string; afloat: string };
 
 /** A watch on the rule, for the patch's gate (null in play): each read row as it comes, what it drew and what stayed. Changes nothing. */
 export const laidWatch: { tell: ((e: { turn: number; nat: string; row: string; drew: number; stayed: number; n: number }) => void) | null } = { tell: null };
@@ -75,6 +76,18 @@ function keeps(g: Game, nat: string, row: any[], place: Region, c: Corps, afloat
     || (c.town !== undefined && g.regions[c.reg].units.some((u) => !u.dead && atWar(g, nat, u.nat)));
 }
 
+/** The arm each holder's divisions are numbered in, as the war's opening order of battle has it: read for a holder now gone. */
+const ARM = new Map<string, string>(((setup as any).corps as any[]).map((r) => [`${r[0]}:${r[1]}`, r[2] as string] as [string, string]).reverse());
+
+/** What a holder gives: the numbers the record names, where it carries them; where the record names none, its last divisions. */
+function gives(h: Corps, want: number, record: number[]): number[] {
+  const list = numbersOf(h).slice(0, h.divs);
+  const known = record.length > 0 && (h.nos !== undefined || h.dn !== undefined);
+  const give: number[] = known ? record.filter((x) => list.includes(x)) : [];
+  if (!known) for (let j = list.length - 1; give.length < want && j >= 0; j--) give.push(list[j]);
+  return give;
+}
+
 /** The words' blanks filled. */
 const fill = (line: string, as: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (all, key: string) => as[key] ?? all);
 
@@ -83,10 +96,14 @@ const fill = (line: string, as: Record<string, string>): string => line.replace(
  * a passage, where it is bound), and that none is raised twice.
  */
 function told(g: Game, row: any[], place: Region, x: Corps, nos: number[], v: Voyage | undefined): string {
-  const cards = divisionsOf(g, x).filter((d) => nos.includes(d.no)).map((d) => `the ${d.name}`);
+  const all = divisionsOf(g, x);
+  const cards = all.filter((d) => nos.includes(d.no)).map((d) => `the ${d.name}`);
   const at = v ? fill(WORDS.afloat, { to: g.regions[v.to].name }) : fill(WORDS.ashore, { where: g.regions[x.reg].name });
   const as = { names: cards.join(' and '), place: place.name, army: x.name, at, count: String(nos.length), formation: row[2] };
-  const line = fill(nos.length === 1 ? WORDS.from : WORDS.fromMany, as);
+  // (A corps named after a division it carries, as a part he broke off is: the line says he holds it, not that it comes
+  // from itself. Release 2's words for a division he holds, the UI director's.)
+  const self = all.some((d) => d.name === x.name);
+  const line = fill(self ? (nos.length === 1 ? WORDS.held : WORDS.heldMany) : nos.length === 1 ? WORDS.from : WORDS.fromMany, as);
   return line.charAt(0).toUpperCase() + line.slice(1);
 }
 
@@ -99,9 +116,10 @@ function told(g: Game, row: any[], place: Region, x: Corps, nos: number[], v: Vo
  *
  * A holder is a living corps of the country by the record's name, on the map or at sea. Where the record knows the
  * numbers its divisions carry, it gives only those it still carries: a corps raised again under the name, carrying
- * none of them, holds none of the row's divisions and gives nothing. The player's own divisions never move, and a
- * part he broke off a holder carries the rest of its numbers: they stay with it just the same. A row never takes in
- * more divisions than it is to form.
+ * none of them, holds none of the row's divisions and gives nothing. The player's own divisions never move: any corps
+ * of his of the holder's arm that carries the record's numbers keeps them (a part he broke off a holder, the part he
+ * put it back into, one that outlived it), and the row comes without them. A row never takes in more divisions than it
+ * is to form.
  */
 export function drawHeld(g: Game, nat: string, row: any[], place: Region, n: number): { n: number; drawn: Drawn[]; line: string | null } {
   const holders = g.flags.open === 1 ? ROWS.get(`${nat}:${row[2]}`) : undefined;
@@ -116,21 +134,23 @@ export function drawHeld(g: Game, nat: string, row: any[], place: Region, n: num
     if (alt !== undefined && read.has(alt)) continue;
     const h = g.corps.find((x) => x.nat === nat && !x.dead && x.name === name && x.kind !== 'fort')
       ?? [...sea.keys()].find((x) => x.name === name && x.kind !== 'fort');
-    if (!h || n - took <= 0) continue;
-    const list = numbersOf(h).slice(0, h.divs);
-    // The numbers the record names, where the holder carries them; where the record names none, its last divisions.
-    const known = record.length > 0 && (h.nos !== undefined || h.dn !== undefined);
-    const give: number[] = known ? record.filter((x) => list.includes(x)) : [];
-    if (!known) for (let j = list.length - 1; give.length < want && j >= 0; j--) give.push(list[j]);
     if (nat === g.human) {
-      // His own stay where they are, the holder's and those of the parts he broke off it, and the row comes without them.
-      const parts = known ? [...g.corps, ...sea.keys()].filter((x) => x.nat === nat && !x.dead && x.part === h.id && x.kind === h.kind) : [];
+      // His own stay where they are, and the row comes without them: the holder's, and those of the record's numbers
+      // any other corps of his of the holder's arm carries (a part he broke off it, the part he put it back into, or a
+      // part that outlived it). His divisions never move.
+      if (n <= 0) continue;
+      const arm = h?.kind ?? ARM.get(`${nat}:${name}`);
+      const others = record.length > 0 && arm !== undefined
+        ? [...g.corps, ...sea.keys()].filter((x) => x !== h && x.nat === nat && !x.dead && x.kind === arm && (x.nos !== undefined || x.dn !== undefined))
+        : [];
       let left = Math.min(want, n);
       let kept = 0;
-      for (const x of [h, ...parts]) {
-        const xs = numbersOf(x).slice(0, x.divs);
-        const mine = (x === h ? give : record.filter((r) => xs.includes(r))).slice(0, Math.min(left, x.divs));
+      const said = new Set<number>();
+      for (const x of [...(h ? [h] : []), ...others]) {
+        if (left <= 0) break;
+        const mine = (x === h ? gives(h, want, record) : record.filter((r) => numbersOf(x).slice(0, x.divs).includes(r) && !said.has(r))).slice(0, Math.min(left, x.divs));
         if (!mine.length) continue;
+        for (const r of mine) said.add(r);
         left -= mine.length;
         kept += mine.length;
         n -= mine.length;
@@ -140,6 +160,9 @@ export function drawHeld(g: Game, nat: string, row: any[], place: Region, n: num
       if (alt !== undefined && kept > 0) read.add(alt);
       continue;
     }
+    if (!h || n - took <= 0) continue;
+    const list = numbersOf(h).slice(0, h.divs);
+    const give = gives(h, want, record);
     const k = Math.min(want, h.divs, n - took, give.length);
     if (k <= 0) continue;
     give.length = k;

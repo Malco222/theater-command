@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { divisionsOf, keepNumbers, numbersOf } from '../src/campaign/armies';
 import { addCorps, createGame, declareWar, putToSea, relocate, removeCorps, startPhase } from '../src/campaign/game';
-import { breakUp } from '../src/campaign/breakup';
+import { breakUp, rejoin } from '../src/campaign/breakup';
 import { setStop } from '../src/campaign/history';
 import { drawHeld, layDrawn, loanOver } from '../src/campaign/laidonce';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -331,8 +331,41 @@ describe('what a second review found (25 November 2026, evening)', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('The 9th Panzer Division was due');
     expect(lines[0]).toContain('your XXII Corps');
-    expect(lines[0]).toContain('The 2nd Panzer Division was due');
-    expect(lines[0]).toContain(`your ${part.name}`);
+    // (His part is named after the division it carries: the line says he holds it, in release 2's words.)
+    expect(lines[0]).toContain(`The 2nd Panzer Division is due in Sofia this month, but you hold it already, in ${g.regions[part.reg].name}. No division is raised twice: it goes to Sofia only if you send it.`);
+  });
+
+  it('put back into the part he broke off it, the holder is gone, and the part keeps both divisions: the row comes without them', () => {
+    const g = balkans('GER');
+    only(g, 'GER', PANZERS);
+    g.phase = g.order.indexOf('GER');
+    const xxii = corps(g, 'GER', 'XXII Corps')!;
+    const part = breakUp(g, xxii, [0])!;
+    expect(rejoin(g, xxii, part)).toBe(true);
+    expect(xxii.dead).toBe(true);
+    expect(numbersOf(part).slice(0, part.divs)).toEqual([2, 9]);
+    month(g, 'GER', 19);
+    expect(corps(g, 'GER', PANZERS)).toBeUndefined();
+    expect(holders(g, 'GER', '2nd Panzer Division')).toEqual([part]);
+    expect(holders(g, 'GER', '9th Panzer Division')).toEqual([part]);
+    const lines = said(g);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('The 2nd Panzer Division and the 9th Panzer Division are due in Sofia this month, but you hold them already');
+  });
+
+  it('a part that outlived the holder keeps its division: the row raises only the one nobody holds', () => {
+    const g = balkans('GER');
+    only(g, 'GER', PANZERS);
+    g.phase = g.order.indexOf('GER');
+    const xxii = corps(g, 'GER', 'XXII Corps')!;
+    const part = breakUp(g, xxii, [0])!;
+    removeCorps(g, xxii);
+    month(g, 'GER', 19);
+    const row = corps(g, 'GER', PANZERS)!;
+    expect(row.divs).toBe(1);
+    expect(names(g, row)).not.toContain('2nd Panzer Division');
+    expect(holders(g, 'GER', '2nd Panzer Division')).toEqual([part]);
+    expect(said(g)).toHaveLength(1);
   });
 
   it('a row never takes in more divisions than it is to form', () => {
