@@ -41,6 +41,7 @@ fi
 
 # Remove builds that are no longer the current one.
 for m in "${MODULES[@]}"; do
+  [ -n "$(current "$m")" ] || continue # (no record of this module: nothing is known to be a leftover)
   libs "$m" | while read -r f; do
     [ "$(basename "$f")" = "$(current "$m")" ] || rm -f "$f"
   done
