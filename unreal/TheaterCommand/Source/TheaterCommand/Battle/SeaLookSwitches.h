@@ -9,6 +9,7 @@
 // name collides with another (or with one the game already reads), and that a switch is marked built exactly when the
 // game reads it. Engine-free: Tools/sea_waves/measure_test.cpp builds it in the cloud.
 
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -68,8 +69,9 @@ namespace SeaLookSwitches
 		{ "TheaterSeaTurrets=", "0", "own", "16", false },
 		{ "TheaterSeaStepDown=", "0", "1", "15", false },
 		// (the ship detail plan, round 1: the ships at sea, each for review pictures until the art director's Mac check; the
-		// light, the file's shade on each point and the top light; the skin, the rust ramp and the material's own wear; the
-		// shade, occlusion, contact shadows and shadow quality; and the reel's two, R1.1's measured shots)
+		// light, the file's shade on each point and the top light, which takes a value (off or 0, none; 1 or on, 0.10; or a
+		// top light from 0.0 to 0.30: TakeReviewNumber); the skin, the rust ramp and the material's own wear; the shade,
+		// occlusion, contact shadows and shadow quality; and the reel's two, R1.1's measured shots)
 		{ "TheaterSeaShipLight=", "0", "review", "R1.3", true },
 		{ "TheaterSeaShipSkin=", "0", "review", "R1.4", true },
 		{ "TheaterSeaShipShade=", "0", "review", "R1.3", true },
@@ -150,6 +152,116 @@ namespace SeaLookSwitches
 			}
 		}
 		return TakeOnOff(InForce, Name);
+	}
+
+	/** Plain digits with at most one point, as 0.08, 0.10, .1 or 0 (no sign, no exponent, no space, at most 12 digits), read
+	 * as a float, the same on every machine (no locale); false for anything else. */
+	inline bool PlainNumber(const std::string& Text, float& Out)
+	{
+		double Whole = 0.0, Part = 0.0, Scale = 1.0;
+		int Digits = 0, Points = 0;
+		for (const char C : Text)
+		{
+			if (C == '.')
+			{
+				++Points;
+				continue;
+			}
+			if (C < '0' || C > '9' || Digits >= 12)
+			{
+				return false;
+			}
+			++Digits;
+			if (Points == 0)
+			{
+				Whole = Whole * 10.0 + (C - '0');
+			}
+			else
+			{
+				Part = Part * 10.0 + (C - '0');
+				Scale *= 10.0;
+			}
+		}
+		if (Digits == 0 || Points > 1)
+		{
+			return false;
+		}
+		Out = static_cast<float>(Whole + Part / Scale);
+		return true;
+	}
+
+	/** A number as the "Sea look:" line says it: 0 for none, else with two places at least (0.10) and as many more as it
+	 * needs to be read back as the same number (0.125). */
+	inline std::string NumberSaid(float Value)
+	{
+		if (Value == 0.0f)
+		{
+			return "0";
+		}
+		char Text[48] = {};
+		for (int Places = 2; Places <= 9; ++Places)
+		{
+			std::snprintf(Text, sizeof(Text), "%.*f", Places, static_cast<double>(Value));
+			float Back = 0.0f;
+			if (PlainNumber(Text, Back) && Back == Value)
+			{
+				break;
+			}
+		}
+		return Text;
+	}
+
+	/** A review switch that takes a number, as TakeReviewNumber took it (the ship detail plan's -TheaterSeaShipLight=, the
+	 * ships' top light): Value, the number in force, 0 for none; bRefused, asked for with a value it does not take (Typed),
+	 * and so taken as off. */
+	struct Number
+	{
+		float Value = 0.0f;
+		bool bRefused = false;
+		std::string Typed;
+	};
+
+	/** A review switch that takes a number: off or 0, none (0); 1 or on, OnValue; a number in plain digits from 0 to Most,
+	 * that number; anything else refused and taken as off. As TakeReview, it is taken only where review pictures are made
+	 * (bReview): in the month's sea scene inside a campaign it is off, whatever was asked. Its value in force is written
+	 * back into the look (NumberSaid: 0, or the number as 0.10), so the "Sea look:" line says what was applied. */
+	inline Number TakeReviewNumber(Look& InForce, const char* Name, bool bReview, float OnValue, float Most)
+	{
+		Number Out;
+		for (Asked& One : InForce.Given)
+		{
+			if (One.Index < 0 || One.Index >= Count || std::string(All[One.Index].Name) != Name)
+			{
+				continue;
+			}
+			Out.Typed = One.Value;
+			std::string Word;
+			for (const char C : One.Value)
+			{
+				Word += (C >= 'A' && C <= 'Z') ? static_cast<char>(C - 'A' + 'a') : C;
+			}
+			float Got = 0.0f;
+			if (Word == "off")
+			{
+				Out.Value = 0.0f;
+			}
+			else if (Word == "1" || Word == "on")
+			{
+				Out.Value = OnValue;
+			}
+			else if (PlainNumber(Word, Got) && Got <= Most)
+			{
+				Out.Value = Got;
+			}
+			else
+			{
+				Out.Value = 0.0f;
+				Out.bRefused = bReview;
+			}
+			Out.Value = bReview ? Out.Value : 0.0f;
+			One.Value = NumberSaid(Out.Value);
+		}
+		return Out;
 	}
 
 	/** The release 2 sea's switches asked for (ReadOf of All); the tier 0 until step 15 builds it. */

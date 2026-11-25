@@ -90,10 +90,11 @@ public:
 	/** The ship detail plan's round 1 (the sea battle's, after RaiseSea and before its ships are laid, under its own
 	 * switches): how the battle modeller's ships are painted point by point as LayShip lays them, and her halves if she
 	 * breaks (Battle/ShipPaintCore: the files' shade, the rust ramp, the wooden deck held); on this stage's own steel ink,
-	 * as ShipPaintCore::SteelOf gives it, the ships' top light (Given.TopLight where set, and none with the first look
-	 * alone) and M_MapSurface's own Wear (FirstLookWear above 0: its two-size blot mottle, laid out in metres, with its
-	 * chips held off: R1.4's first look). Never called by the air scene, Pearl Harbor or Midway: their ships are painted,
-	 * and their steel inked, as made. */
+	 * as ShipPaintCore::SteelOf gives it and nothing more, the ships' top light (Given.TopLight above 0, with or without the
+	 * first look; none with the first look alone) and M_MapSurface's own Wear (FirstLookWear above 0: its two-size blot
+	 * mottle, laid out in metres, R1.4's first look; with the light alone, a Wear too small to show a mottle, so the top
+	 * light can show), with its chips held off. Never called by the air scene, Pearl Harbor or Midway: their ships are
+	 * painted, and their steel inked, as made. */
 	void SetShipPaint(const ShipPaintCore::Options& Given, float FirstLookWear);
 	/**
 	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians

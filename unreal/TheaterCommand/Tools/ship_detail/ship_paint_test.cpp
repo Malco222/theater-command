@@ -13,7 +13,9 @@
 //       the paint, never red over 135 nor 80 over blue, the same every time; on Submarine_GER no two neighbouring weeps
 //       alike and none one flat colour; edge wear darker, never whiter; the salt as ruled; a wooden deck under her
 //       150,135,110 as drawn; and the sea's steel ink, worked through M_MapSurface's own sums as Tools/build_content.py
-//       makes them: the top light never above today's (none) unless the light switch asks with the skin on, no chips;
+//       makes them: a steel deck facing the sky lifted by the light asked (0.08, 0.10, 0.12, 0.26), with the skin or
+//       without it, and by nothing with the light off; with the light alone no mottle to see; no chips anywhere, the
+//       metal and the roughness as made; with both switches off, nothing set on the ink;
 //   (d) a flipped default is caught: the identity check run with an option on fails, both legs of it.
 // Usage: ship_paint_test <Source/TheaterCommand> <Content/Models/Ships>   (built by Tools/ship_detail/run.sh)
 
@@ -472,13 +474,15 @@ int main(int Argc, char** Argv)
 			"SetShipPaint called only from the sea battle's own opening (ASeaBattle::OpenOn): never by the air scene, Pearl Harbor, Midway or the map (the month's sea scene opens the same way, and the next checks keep the switches from it)",
 			Callers);
 		const size_t Gate = Scene.rfind("if (bShipLight || bShipSkin)", Call);
-		Check(Call != std::string::npos && Gate != std::string::npos && Call - Gate < 600, "and only behind its switches (-TheaterSeaShipLight=1 or -TheaterSeaShipSkin=1)", "SeaBattle.cpp");
+		Check(Call != std::string::npos && Gate != std::string::npos && Call - Gate < 600, "and only behind its switches (-TheaterSeaShipLight= on, or -TheaterSeaShipSkin=1)", "SeaBattle.cpp");
 		// (the three ship switches are for review pictures only, as the reel's two: the month's sea scene inside a campaign
 		// opens the same way, with bMonthScene set first, and never takes them)
 		const size_t Month = Scene.find("\nbool ASeaBattle::BeginMonthScene(");
 		const size_t MonthSet = Scene.find("bMonthScene = true;", Month), MonthOpen = Scene.find("OpenOn(", Month);
-		bool bGated = MonthSet != std::string::npos && MonthOpen != std::string::npos && MonthSet < MonthOpen && !Has(Scene, "TakeOnOff(SeaLook, \"TheaterSeaShip");
-		for (const char* Line : { "const bool bShipLight = SeaLookSwitches::TakeReview(SeaLook, \"TheaterSeaShipLight=\", !bMonthScene);",
+		bool bGated = MonthSet != std::string::npos && MonthOpen != std::string::npos && MonthSet < MonthOpen && !Has(Scene, "TakeOnOff(SeaLook, \"TheaterSeaShip") &&
+					  !Has(Scene, "TakeReview(SeaLook, \"TheaterSeaShipLight=");
+		for (const char* Line : { "const SeaLookSwitches::Number ShipLight = SeaLookSwitches::TakeReviewNumber(SeaLook, \"TheaterSeaShipLight=\", !bMonthScene, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);",
+				 "const bool bShipLight = ShipLight.Value > 0.0f;",
 				 "const bool bShipSkin = SeaLookSwitches::TakeReview(SeaLook, \"TheaterSeaShipSkin=\", !bMonthScene);",
 				 "bShipShade = SeaLookSwitches::TakeReview(SeaLook, \"TheaterSeaShipShade=\", !bMonthScene);" })
 		{
@@ -502,6 +506,41 @@ int main(int Argc, char** Argv)
 			Check(SkinAt >= 0 && !bMonth && InMonth.Given[0].Value == "0" && bBattle && InBattle.Given[0].Value == "1" && !bNone &&
 					  Has(MonthLine, "-TheaterSeaShipSkin=0 (asked)"),
 				"a review switch asked for in the month's scene is off and said as 0 on the \"Sea look:\" line; in a battle, as asked", std::string("in the month's scene ") + InMonth.Given[0].Value + ", in a battle " + InBattle.Given[0].Value);
+		}
+		{
+			// (the light switch takes a value: off or 0, none; 1 or on, the art director's 0.10; a top light from 0.0 to 0.30;
+			// anything else refused, said in the log and taken as off; in the month's scene, off whatever is asked)
+			int LightAt = -1;
+			for (int K = 0; K < SeaLookSwitches::Count; ++K)
+			{
+				LightAt = std::string(SeaLookSwitches::All[K].Name) == "TheaterSeaShipLight=" ? K : LightAt;
+			}
+			struct LightAsked
+			{
+				const char* Typed;
+				bool bReview;
+				float Want;
+				bool bRefused;
+			};
+			const LightAsked Asked[] = { { "1", true, ShipPaintCore::SeaTopLight, false }, { "on", true, ShipPaintCore::SeaTopLight, false }, { "0.08", true, 0.08f, false },
+				{ "0.10", true, 0.10f, false }, { "0.12", true, 0.12f, false }, { "0.26", true, ShipPaintCore::MapTopLight, false }, { "0.30", true, 0.30f, false },
+				{ "0", true, 0.0f, false }, { "off", true, 0.0f, false }, { "0.31", true, 0.0f, true }, { "1.0", true, 0.0f, true }, { "-0.1", true, 0.0f, true },
+				{ "bright", true, 0.0f, true }, { "0.10", false, 0.0f, false }, { "1", false, 0.0f, false } };
+			std::string Took;
+			bool bRight = LightAt >= 0;
+			for (const LightAsked& One : Asked)
+			{
+				SeaLookSwitches::Look Asks;
+				Asks.Given.push_back({ LightAt, One.Typed });
+				const SeaLookSwitches::Number Got = SeaLookSwitches::TakeReviewNumber(Asks, "TheaterSeaShipLight=", One.bReview, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
+				bRight = bRight && Got.Value == One.Want && Got.bRefused == One.bRefused && Asks.Given[0].Value == SeaLookSwitches::NumberSaid(One.Want);
+				Took += std::string(Took.empty() ? "" : ", ") + One.Typed + (One.bReview ? "" : " (month)") + " " + Asks.Given[0].Value + (Got.bRefused ? " refused" : "");
+			}
+			const size_t Refusal = Scene.find("if (ShipLight.bRefused)");
+			Check(bRight && Refusal != std::string::npos && Refusal > Open && Refusal < OpenEnd && Has(Scene, "Paint.TopLight = bShipLight ? ShipLight.Value : -1.0f;") &&
+					  ShipPaintCore::SeaTopLightMost == 0.30f,
+				"-TheaterSeaShipLight= takes off or 0, 1 or on (0.10), or a top light from 0.0 to 0.30 for the ink; anything else refused (said in the log) and off; the month's scene off",
+				Took);
 		}
 		Check(Has(Minis, "Raw->ShipPlanks.Add(Paint == TEXT(\"planks\"));") && Has(Minis, "At.bDeckWood = Raw->ShipPlanks.IsValidIndex(Kind) && Raw->ShipPlanks[Kind];"),
 			"the reader marks a wooden deck by the file's paint name, planks, as this test reads it", "CampaignMiniatures.cpp");
@@ -832,89 +871,198 @@ int main(int Argc, char** Argv)
 		}
 
 		// The sea's steel ink, worked through M_MapSurface's own sums (Tools/build_content.py, build_map_surface, read here so
-		// the sums below are the graph's): the lift on what faces the sky, 1 + up x TopLight x (metal x Wear); the blot
-		// mottle, the colour times lerp(1, 0.8 + 0.42 blot, Wear x (metal/2 + 1/2)); a chip where (speck x (blot + 0.5) +
-		// ChipAt + gather x ChipGather) x ChipSharp passes 0, times metal and Wear, drawn as metal (0.85) in ChipColour.
+		// the sums below are the graph's). The graph reads the Wear in three places and the TopLight in one: the lift on what
+		// faces the sky, 1 + up x TopLight x (metal x Wear); the blot mottle, the colour times lerp(1, 0.8 + 0.42 blot, Wear x
+		// (metal/2 + 1/2)); and a chip where (speck x (blot + 0.5) + ChipAt + gather x ChipGather) x ChipSharp passes 0, times
+		// metal and Wear, drawn in ChipColour, as metal (0.85 of the chip) and smoother (the roughness taken toward 0.34 by it).
+		// Metal is the point's own finish, saturate(2 x (1 - its alpha)), less where the alpha marks water (240), and the chips
+		// gather where the alpha falls below a half. The emissive (a figure's fill and rim) is the colour after these sums
+		// times FigureFill and FigureSun's alpha, both 0 as made and never set on the steel ink, and nothing on metal.
 		{
 			const std::string Build = ReadAll(Src + "/../../Tools/build_content.py");
 			const size_t From = Build.find("def build_map_surface("), To = Build.find("\ndef build_solid(");
 			const std::string Graph = From != std::string::npos && To != std::string::npos && To > From ? Build.substr(From, To - From) : std::string();
+			auto Times = [](const std::string& In, const std::string& What)
+			{
+				size_t N = 0;
+				for (size_t At = In.find(What); At != std::string::npos; At = In.find(What, At + 1))
+				{
+					++N;
+				}
+				return N;
+			};
+			auto Words = [](const std::string& In, const std::string& Word)
+			{
+				size_t N = 0;
+				for (size_t At = In.find(Word); At != std::string::npos; At = In.find(Word, At + 1))
+				{
+					const char Before = At == 0 ? ' ' : In[At - 1], After = At + Word.size() < In.size() ? In[At + Word.size()] : ' ';
+					N += std::isalnum(static_cast<unsigned char>(Before)) || Before == '_' || std::isalnum(static_cast<unsigned char>(After)) || After == '_' ? 0 : 1;
+				}
+				return N;
+			};
 			bool bSums = !Graph.empty();
 			for (const char* Piece : { "wear = scalar(m, \"Wear\", 0.0, ", "scalar(m, \"TopLight\", 0.26, ",
 					 "lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, ", "times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)",
 					 "lerp(m, 1.0, plus(m, times(m, (blot, \"R\"), 0.42, -350, -1500), 0.8, -200, -1500),",
 					 "times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)",
-					 "gather = one_in(m, unreal.MaterialExpressionSaturate, ", "times(m, (speck, \"R\"), plus(m, (blot, \"G\"), 0.5, -350, -1650), -200, -1700), scalar(m, \"ChipAt\", -0.78, ",
+					 "gather = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, (colour, \"A\"), -1.0, -900, -1950), 0.5, -750, -1950), 2.56, -600, -1950), -450, -1950)",
+					 "times(m, (speck, \"R\"), plus(m, (blot, \"G\"), 0.5, -350, -1650), -200, -1700), scalar(m, \"ChipAt\", -0.78, ",
 					 "times(m, gather, scalar(m, \"ChipGather\", 0.3, ", "scalar(m, \"ChipSharp\", 9.0, ", "metal, 450, -1750), wear, 600, -1750)",
-					 "to_property(times(m, chipped, 0.85, 750, -700), \"\", unreal.MaterialProperty.MP_METALLIC)", "scalar(m, \"BlotTiling\", 0.009, " })
+					 "metal = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, one_in(m, unreal.MaterialExpressionOneMinus, (colour, \"A\"), -900, -1500), 2.0, -750, -1500), -600, -1500),",
+					 "one_in(m, unreal.MaterialExpressionOneMinus, on_water, -600, -1420), -500, -1480)",
+					 "plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (colour, \"A\"), -0.9412, -1100, -1380), -1000, -1380), -60.0, -900, -1380), 1.0, -800, -1380)",
+					 "tinted = lerp(m, weathered, vector(m, \"ChipColour\", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)",
+					 "to_property(times(m, chipped, 0.85, 750, -700), \"\", unreal.MaterialProperty.MP_METALLIC)",
+					 "to_property(lerp(m, scalar(m, \"Roughness\", 0.9, -450, 200), 0.34, chipped, -250, 200), \"\", unreal.MaterialProperty.MP_ROUGHNESS)",
+					 "scalar(m, \"FigureFill\", 0.0, ", "figure_sun = vector(m, \"FigureSun\", (0.0, 0.0, 1.0, 0.0), ",
+					 "cloth = times(m, one_in(m, unreal.MaterialExpressionOneMinus, metal, ", "scalar(m, \"BlotTiling\", 0.009, " })
 			{
 				bSums = bSums && Has(Graph, Piece);
 			}
-			Check(bSums && ShipPaintCore::MapTopLight == 0.26f && ShipPaintCore::MottleMost == 0.8f + 0.42f,
-				"M_MapSurface's lift, mottle and chip as this test works them (Tools/build_content.py, its defaults: TopLight 0.26, Wear 0, ChipAt -0.78)", "build_map_surface");
-			const auto Lift = [](float Up, float Metal, float TopLight, float Wear) { return 1.0f + std::min(1.0f, std::max(0.0f, Up)) * TopLight * (Metal * Wear); };
+			// (and nothing else in the graph reads them: the wear made once and read three times, the TopLight and the lift once)
+			const size_t WearWords = Words(Graph, "wear"), TopLights = Times(Graph, "\"TopLight\""), LitTops = Words(Graph, "lit_top");
+			Check(bSums && WearWords == 4 && TopLights == 1 && LitTops == 2 && ShipPaintCore::MapTopLight == 0.26f && ShipPaintCore::MottleMost == 0.8f + 0.42f,
+				"M_MapSurface's lift, mottle, chip, metal and roughness as this test works them, and nothing else reading the Wear or the TopLight (Tools/build_content.py; as made TopLight 0.26, Wear 0, ChipAt -0.78)",
+				"wear read " + std::to_string(WearWords - std::min<size_t>(WearWords, 1)) + " times, TopLight " + std::to_string(TopLights));
+			const auto Saturate = [](float V) { return std::min(1.0f, std::max(0.0f, V)); };
+			// (a point's finish as the graph reads its alpha: how much metal, and how much the chips gather)
+			const auto MetalOf = [&Saturate](int Alpha)
+			{
+				const float A = static_cast<float>(Alpha) / 255.0f;
+				const float OnWater = Saturate(std::abs(A + -0.9412f) * -60.0f + 1.0f);
+				return Saturate((1.0f - A) * 2.0f) * (1.0f - OnWater);
+			};
+			const auto GatherOf = [&Saturate](int Alpha) { return Saturate((static_cast<float>(Alpha) / 255.0f * -1.0f + 0.5f) * 2.56f); };
+			const auto Lift = [&Saturate](float Up, float Metal, float TopLight, float Wear) { return 1.0f + Saturate(Up) * TopLight * (Metal * Wear); };
 			const auto Mottle = [](float Metal, float Wear, float Blot)
 			{
 				const float Share = Wear * (Metal * 0.5f + 0.5f);
 				return 1.0f + (0.8f + 0.42f * Blot - 1.0f) * Share;
 			};
-			const auto Chip = [](float Speck, float Blot, float Gather, float ChipAt, float Metal, float Wear)
+			const auto Chip = [&Saturate](float Speck, float Blot, float Gather, float ChipAt, float Metal, float Wear)
 			{
-				return std::min(1.0f, std::max(0.0f, (Speck * (Blot + 0.5f) + ChipAt + Gather * 0.3f) * 9.0f)) * Metal * Wear;
+				return Saturate((Speck * (Blot + 0.5f) + ChipAt + Gather * 0.3f) * 9.0f) * Metal * Wear;
 			};
-			// (each switch as the scene sets it: SeaBattle's options and wear, through the stage's SetShipPaint, which sets
-			// what SteelOf gives and nothing else; with neither switch, nothing is set and the ink is as made)
+			// (the scene's switches reach the ink only through SteelOf, in SetShipPaint, each parameter behind its own mark)
 			const std::string Stage = ReadAll(Src + "/Battle/AirStage.cpp"), Scene = ReadAll(Src + "/Battle/SeaBattle.cpp");
 			const size_t SetAt = Stage.find("void AAirStage::SetShipPaint(");
 			const std::string SetBody = SetAt == std::string::npos ? std::string() : Stage.substr(SetAt, Stage.find("\n}\n", SetAt) - SetAt);
-			size_t Params = 0;
-			for (size_t At = SetBody.find("SetScalarParameterValue"); At != std::string::npos; At = SetBody.find("SetScalarParameterValue", At + 1))
-			{
-				++Params;
-			}
-			Check(Has(Scene, "Paint.TopLight = bShipLight ? ShipPaintCore::SeaTopLight : -1.0f;") && Has(Scene, "Stage->SetShipPaint(Paint, bShipSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);") &&
+			Check(Has(Scene, "Paint.bShade = bShipLight;") && Has(Scene, "Paint.TopLight = bShipLight ? ShipLight.Value : -1.0f;") &&
+					  Has(Scene, "Stage->SetShipPaint(Paint, bShipSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);") &&
 					  Has(SetBody, "const ShipPaintCore::Steel SteelSet = ShipPaintCore::SteelOf(Given, FirstLookWear);") &&
-					  Has(SetBody, "SteelInk->SetScalarParameterValue(TEXT(\"TopLight\"), SteelSet.TopLight);") && Has(SetBody, "SteelInk->SetScalarParameterValue(TEXT(\"Wear\"), SteelSet.Wear);") &&
-					  Has(SetBody, "SteelInk->SetScalarParameterValue(TEXT(\"ChipAt\"), ShipPaintCore::SeaChipAt);") && Params == 4 && !Has(SetBody, "SetVectorParameterValue"),
-				"the scene's switches reach the steel ink only through SteelOf: TopLight, Wear, BlotTiling and ChipAt, nothing else", std::to_string(Params) + " set");
-			std::string Lifts;
-			bool bLift = true, bNoChips = true;
-			float SkinMottle = 0.0f;
-			for (const int Case : { 0, 1, 2, 3 })
+					  Has(SetBody, "if (SteelSet.TopLight >= 0.0f)\n\t{\n\t\tSteelInk->SetScalarParameterValue(TEXT(\"TopLight\"), SteelSet.TopLight);\n\t}") &&
+					  Has(SetBody, "if (SteelSet.Wear > 0.0f)\n\t{\n\t\tSteelInk->SetScalarParameterValue(TEXT(\"Wear\"), SteelSet.Wear);\n\t}") &&
+					  Has(SetBody, "if (SteelSet.bBlots)\n\t{\n\t\tSteelInk->SetScalarParameterValue(TEXT(\"BlotTiling\"), ") &&
+					  Has(SetBody, "if (SteelSet.bChipsOff)\n\t{\n\t\tSteelInk->SetScalarParameterValue(TEXT(\"ChipAt\"), ShipPaintCore::SeaChipAt);\n\t}") &&
+					  Times(SetBody, "SetScalarParameterValue") == 4 && !Has(SetBody, "SetVectorParameterValue") && Times(Stage, "SteelInk->Set") == Times(SetBody, "SteelInk->Set"),
+				"the scene's switches reach the steel ink only through SteelOf, each of TopLight, Wear, BlotTiling and ChipAt behind its own mark, and nothing else sets it",
+				std::to_string(Times(SetBody, "SetScalarParameterValue")) + " set, " + std::to_string(Times(Stage, "SteelInk->Set")) + " in AirStage.cpp");
+			// (the ink as SetShipPaint leaves it: what SteelOf marks to set, else as made)
+			struct Ink
 			{
-				const bool bLight = (Case & 1) != 0, bSkin = (Case & 2) != 0;
 				float TopLight = ShipPaintCore::MapTopLight, Wear = 0.0f, ChipAt = -0.78f;
-				if (bLight || bSkin)
+				bool bBlots = false;
+				int Set = 0;
+			};
+			const auto InkOf = [](const ShipPaintCore::Steel& Steel)
+			{
+				Ink Out;
+				Out.TopLight = Steel.TopLight >= 0.0f ? Steel.TopLight : Out.TopLight;
+				Out.Wear = Steel.Wear > 0.0f ? Steel.Wear : Out.Wear;
+				Out.bBlots = Steel.bBlots;
+				Out.ChipAt = Steel.bChipsOff ? ShipPaintCore::SeaChipAt : Out.ChipAt;
+				Out.Set = (Steel.TopLight >= 0.0f ? 1 : 0) + (Steel.Wear > 0.0f ? 1 : 0) + (Steel.bBlots ? 1 : 0) + (Steel.bChipsOff ? 1 : 0);
+				return Out;
+			};
+			const float Deck = MetalOf(127), Plank = MetalOf(255), Roughness = 0.55f;
+			std::string Lifts, Params;
+			bool bDeckLift = true, bPlank = true, bAlike = true, bNoChips = true, bAsMade = true, bOff = false, bSets = true;
+			float AloneMottle = 0.0f, SkinMottle = 0.0f;
+			for (const float Light : { 0.0f, 0.08f, ShipPaintCore::SeaTopLight, 0.12f, ShipPaintCore::MapTopLight })
+			{
+				float DeckLift[2] = { 0.0f, 0.0f };
+				Ink Inks[2];
+				for (const bool bSkin : { false, true })
 				{
 					ShipPaintCore::Options O;
-					O.bShade = bLight;
-					O.TopLight = bLight ? ShipPaintCore::SeaTopLight : -1.0f;
+					O.bShade = Light > 0.0f;
+					O.TopLight = Light > 0.0f ? Light : -1.0f;
 					O.bRustRamp = bSkin;
-					const ShipPaintCore::Steel Set = ShipPaintCore::SteelOf(O, bSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);
-					TopLight = Set.TopLight >= 0.0f ? Set.TopLight : TopLight;
-					Wear = Set.Wear > 0.0f ? Set.Wear : Wear;
-					ChipAt = Set.bChipsOff ? ShipPaintCore::SeaChipAt : ChipAt;
-				}
-				// (a steel deck facing the sky, metal as the reader marks painted steel: its alpha 128 less half its wear)
-				const float Lifted = Lift(1.0f, 1.0f, TopLight, Wear);
-				Lifts += std::string(Lifts.empty() ? "" : ", ") + (Case == 0 ? "off " : Case == 1 ? "light alone " : Case == 2 ? "skin alone " : "both ") + Num(Lifted, 2);
-				bLift = bLift && std::abs(Lifted - (Case == 3 ? 1.0f + ShipPaintCore::SeaTopLight : 1.0f)) < 1e-6f;
-				for (const float Speck : { 0.0f, 1.0f })
-				{
-					for (const float Blot : { 0.0f, 1.0f })
+					const ShipPaintCore::Steel Steel = ShipPaintCore::SteelOf(O, bSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);
+					const Ink Made = InkOf(Steel);
+					Inks[bSkin ? 1 : 0] = Made;
+					if (Light <= 0.0f && !bSkin)
 					{
-						for (const float Gather : { 0.0f, 1.0f })
+						// (both switches off: nothing set at all, the ink as made)
+						bOff = Made.Set == 0 && Steel.TopLight < 0.0f && Steel.Wear == 0.0f && !Steel.bChipsOff && !Steel.bBlots;
+					}
+					else if (bSkin)
+					{
+						// (the skin: its own Wear, its blots, no chips, and the top light the light asked, none if not)
+						bSets = bSets && Made.Set == 4 && Steel.Wear == ShipPaintCore::SeaFirstLookWear && Steel.TopLight == Light && Steel.bBlots && Steel.bChipsOff;
+					}
+					else
+					{
+						// (the light alone: a Wear, the TopLight over it, no chips, and nothing else)
+						bSets = bSets && Made.Set == 3 && Steel.Wear > 0.0f && Steel.TopLight == Light / Steel.Wear && !Steel.bBlots && Steel.bChipsOff;
+					}
+					// (a steel deck facing the sky, worn as the reader marks it, alpha 127: all metal; a plank, alpha 255: none)
+					DeckLift[bSkin ? 1 : 0] = Lift(1.0f, Deck, Made.TopLight, Made.Wear);
+					bDeckLift = bDeckLift && std::abs(DeckLift[bSkin ? 1 : 0] - (1.0f + Light)) < 1e-3f;
+					bPlank = bPlank && Lift(1.0f, Plank, Made.TopLight, Made.Wear) == 1.0f;
+					// (no chip anywhere, at every finish and every corner and step of the noise: the metal stays 0, the roughness as made)
+					for (int Alpha = 0; Alpha <= 255; ++Alpha)
+					{
+						const float Metal = MetalOf(Alpha), Gather = GatherOf(Alpha);
+						for (int S = 0; S <= 32; ++S)
 						{
-							bNoChips = bNoChips && Chip(Speck, Blot, Gather, ChipAt, 1.0f, Wear) == 0.0f;
+							for (int B = 0; B <= 32; ++B)
+							{
+								const float Chipped = Chip(S / 32.0f, B / 32.0f, Gather, Made.ChipAt, Metal, Made.Wear);
+								const float Metallic = Chipped * 0.85f, Rough = Roughness + Chipped * (0.34f - Roughness);
+								bNoChips = bNoChips && Chipped == 0.0f && Metallic == 0.0f && Rough == Roughness;
+							}
+						}
+						// (the mottle's most, every blot from 0 to 1: with the light alone, no more than a sliver)
+						for (int B = 0; B <= 256; ++B)
+						{
+							const float Change = std::abs(Mottle(Metal, Made.Wear, B / 256.0f) - 1.0f);
+							AloneMottle = !bSkin && Light > 0.0f ? std::max(AloneMottle, Change) : AloneMottle;
+						}
+					}
+					SkinMottle = bSkin ? std::max(SkinMottle, Mottle(0.0f, Made.Wear, 1.0f)) : SkinMottle;
+					bAsMade = bAsMade && (Light > 0.0f || bSkin || (Made.TopLight == ShipPaintCore::MapTopLight && Made.Wear == 0.0f && Made.ChipAt == -0.78f));
+				}
+				// (the light alone lifts every finish, every way a face can turn, exactly as the skin with the same light does)
+				if (Light > 0.0f)
+				{
+					for (int Alpha = 0; Alpha <= 255; ++Alpha)
+					{
+						for (const float Up : { -1.0f, -0.5f, 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+						{
+							const float Alone = Lift(Up, MetalOf(Alpha), Inks[0].TopLight, Inks[0].Wear), Skinned = Lift(Up, MetalOf(Alpha), Inks[1].TopLight, Inks[1].Wear);
+							bAlike = bAlike && std::abs(Alone - Skinned) < 1e-6f;
 						}
 					}
 				}
-				SkinMottle = bSkin ? std::max(SkinMottle, Mottle(0.0f, Wear, 1.0f)) : SkinMottle;
+				Lifts += std::string(Lifts.empty() ? "" : "; ") + "light " + (Light > 0.0f ? Num(Light, 2) : std::string("off")) + ": alone " + Num(DeckLift[0], 4) + ", with the skin " +
+						 Num(DeckLift[1], 4);
+				Params += std::string(Params.empty() ? "" : "; ") + (Light > 0.0f ? Num(Light, 2) : std::string("off")) + " alone " +
+						  (Inks[0].Set == 0 ? std::string("nothing set") : "Wear " + Num(Inks[0].Wear, 2) + " TopLight " + Num(Inks[0].TopLight, 2)) + ", skin Wear " + Num(Inks[1].Wear, 2) +
+						  " TopLight " + Num(Inks[1].TopLight, 2);
 			}
-			Check(bLift, "a steel deck facing the sky is lifted no more than today (none) unless the light switch asks with the skin on, and then by the art director's 0.10",
+			Check(bOff && bAsMade, "with both switches off nothing is set on the steel ink: as made, TopLight 0.26 with no Wear to lift by, so no lift, no mottle, no chips", "nothing set");
+			Check(bSets, "the light alone sets Wear, TopLight (the light over the Wear) and ChipAt, nothing else; the skin its own Wear 1.0, the light itself (0 if off), BlotTiling and ChipAt",
+				Params);
+			Check(bDeckLift && Deck == 1.0f, "a steel deck facing the sky is lifted by the light asked, 1 + T within 0.001 (0.08, 0.10, 0.12, 0.26), with or without the skin, and by nothing with the light off",
 				Lifts);
-			Check(bNoChips && Chip(1.0f, 1.0f, 1.0f, -0.78f, 1.0f, 1.0f) > 0.0f, "no chip anywhere at sea under any switch (the material's own chips, as made, would show)",
-				"ChipAt " + Num(ShipPaintCore::SeaChipAt, 1));
+			Check(bAlike, "the light alone lifts every finish (alpha 0 to 255), facing every way, exactly as the skin with the same light does", "within 0.000001");
+			Check(bPlank && Plank == 0.0f, "a plank (not metal, alpha 255) is never lifted, whatever the light", "metal " + Num(Plank, 1));
+			Check(AloneMottle > 0.0f && AloneMottle < 0.005f, "with the light alone the blot mottle moves a colour by under 0.5 in 100 anywhere (every finish, every blot)",
+				"at most " + Num(AloneMottle * 100.0f, 3) + " in 100");
+			Check(bNoChips && Chip(1.0f, 1.0f, 1.0f, -0.78f, 1.0f, 1.0f) > 0.0f,
+				"no chip anywhere at sea under any switch, so the metal stays 0 and the roughness as made (the material's own chips, as made, would show)", "ChipAt " + Num(ShipPaintCore::SeaChipAt, 1));
 			Check(std::abs(SkinMottle - ShipPaintCore::WoodMottleMost) < 1e-6f && std::abs(ShipPaintCore::WoodMottleMost - 1.11f) < 1e-6f,
 				"the mottle's most on what is not metal under the skin, which the deck's hold leaves room for", Num(SkinMottle, 3));
 		}

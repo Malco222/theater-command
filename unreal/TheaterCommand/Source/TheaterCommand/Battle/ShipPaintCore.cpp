@@ -295,11 +295,19 @@ namespace ShipPaintCore
 	Steel SteelOf(const Options& O, float FirstLookWear)
 	{
 		Steel Out;
-		Out.Wear = std::max(0.0f, FirstLookWear);
-		Out.bChipsOff = Out.Wear > 0.0f;
-		// (the material lifts what faces the sky only where its Wear is on: once the first look turns it on, the lift is the
-		// light switch's if asked and otherwise none, as the sea has always drawn; never the map's 0.26)
-		Out.TopLight = O.TopLight >= 0.0f ? O.TopLight : Out.Wear > 0.0f ? SeaTopLightToday : -1.0f;
+		const bool bSkin = FirstLookWear > 0.0f, bLight = O.TopLight > 0.0f;
+		if (!bSkin && !bLight)
+		{
+			return Out; // (every switch off: the ink as made, nothing set)
+		}
+		// (the material lifts what faces the sky by up x TopLight x metal x Wear: so the Wear is the skin's first look if it
+		// is on, and else the light alone's, too little to lay a mottle anyone could see; and the TopLight set is the light
+		// asked over that Wear, so the lift is the light asked either way. With the skin and no light, none, as the sea has
+		// always drawn: never the map's 0.26)
+		Out.Wear = bSkin ? FirstLookWear : SeaLightAloneWear;
+		Out.TopLight = (bLight ? O.TopLight : SeaTopLightToday) / Out.Wear;
+		Out.bChipsOff = true;
+		Out.bBlots = bSkin;
 		return Out;
 	}
 

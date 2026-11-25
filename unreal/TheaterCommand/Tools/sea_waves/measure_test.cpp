@@ -7,6 +7,7 @@
 
 #include "Battle/SeaFrames.h"
 #include "Battle/SeaLookSwitches.h"
+#include "Battle/ShipPaintCore.h" // (its named numbers only: the ships' top light the light switch takes)
 
 #include <algorithm>
 #include <cctype>
@@ -357,6 +358,58 @@ int main(int Argc, char** Argv)
 			PoolLine);
 		Lines << "look\t0||-TheaterSeaMarksPool=1 (asked)\t" << PoolLine << '\n';
 		Said.push_back(PoolLine);
+
+		// the ship detail plan's light switch, a review switch that takes a number (OpenOn, TakeReviewNumber): off or 0, none;
+		// 1 or on, the art director's 0.10; a number in plain digits from 0.0 to 0.30, that top light; anything else refused
+		// and taken as off; in the month's sea scene, off whatever was asked. The line says the value in force.
+		{
+			struct LightCase
+			{
+				const char* Typed;
+				bool bReview;
+				float Want;
+				bool bRefused;
+				const char* Said;
+			};
+			const LightCase Cases[] = {
+				{ "1", true, ShipPaintCore::SeaTopLight, false, "0.10" }, { "on", true, ShipPaintCore::SeaTopLight, false, "0.10" },
+				{ "On", true, ShipPaintCore::SeaTopLight, false, "0.10" }, { "0.10", true, 0.10f, false, "0.10" }, { ".1", true, 0.10f, false, "0.10" },
+				{ "0.08", true, 0.08f, false, "0.08" }, { "0.12", true, 0.12f, false, "0.12" }, { "0.26", true, 0.26f, false, "0.26" },
+				{ "0.3", true, 0.30f, false, "0.30" }, { "0.125", true, 0.125f, false, "0.125" }, { "0", true, 0.0f, false, "0" },
+				{ "0.0", true, 0.0f, false, "0" }, { "off", true, 0.0f, false, "0" }, { "OFF", true, 0.0f, false, "0" },
+				{ "0.31", true, 0.0f, true, "0" }, { "0.30001", true, 0.0f, true, "0" }, { "1.0", true, 0.0f, true, "0" }, { "2", true, 0.0f, true, "0" },
+				{ "-0.1", true, 0.0f, true, "0" }, { "1e-1", true, 0.0f, true, "0" }, { "0x0.1", true, 0.0f, true, "0" }, { "0.1.2", true, 0.0f, true, "0" },
+				{ "", true, 0.0f, true, "0" }, { ".", true, 0.0f, true, "0" }, { "nan", true, 0.0f, true, "0" }, { " 0.1", true, 0.0f, true, "0" },
+				{ "0.1x", true, 0.0f, true, "0" }, { "yes", true, 0.0f, true, "0" },
+				{ "1", false, 0.0f, false, "0" }, { "0.12", false, 0.0f, false, "0" }, { "junk", false, 0.0f, false, "0" },
+			};
+			int LightAt = -1;
+			for (int K = 0; K < Count; ++K)
+			{
+				LightAt = std::string(All[K].Name) == "TheaterSeaShipLight=" ? K : LightAt;
+			}
+			int Wrong = 0;
+			std::string FirstWrong;
+			for (const LightCase& Case : Cases)
+			{
+				Look Asks;
+				Asks.Given.push_back(Asked{ LightAt, Case.Typed });
+				const SeaLookSwitches::Number Took = TakeReviewNumber(Asks, "TheaterSeaShipLight=", Case.bReview, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
+				const bool bRight = Took.Value == Case.Want && Took.bRefused == Case.bRefused && Took.Typed == Case.Typed && Asks.Given[0].Value == Case.Said &&
+									Has(Line(Asks), std::string("-TheaterSeaShipLight=") + Case.Said + " (asked)");
+				Wrong += bRight ? 0 : 1;
+				FirstWrong = !bRight && FirstWrong.empty() ? std::string("\"") + Case.Typed + "\" took " + std::to_string(Took.Value) + ", said " + Asks.Given[0].Value : FirstWrong;
+			}
+			Look Twelve, Unasked;
+			Twelve.Given.push_back(Asked{ LightAt, "0.12" });
+			const SeaLookSwitches::Number Took = TakeReviewNumber(Twelve, "TheaterSeaShipLight=", true, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
+			const SeaLookSwitches::Number NotAsked = TakeReviewNumber(Unasked, "TheaterSeaShipLight=", true, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
+			const std::string LightLine = Line(Twelve);
+			Check("-TheaterSeaShipLight= takes off or 0 (none), 1 or on (0.10), or a top light from 0.0 to 0.30; anything else refused and taken as off; never in the month's scene; said as in force",
+				LightAt >= 0 && Wrong == 0 && Took.Value == 0.12f && NotAsked.Value == 0.0f && !NotAsked.bRefused && Line(Unasked) == Plain && ShipPaintCore::SeaTopLightMost == 0.30f &&
+					LightLine == "Sea look: tier 0 (release 1.5's sea, as made); 14 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0.12 (asked), -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off.",
+				std::to_string(std::size(Cases) - Wrong) + " of " + std::to_string(std::size(Cases)) + " values as ruled" + (FirstWrong.empty() ? "" : "; " + FirstWrong) + "; " + LightLine);
+		}
 
 		// a table of the test's own, some built: what a later step's line says
 		const Switch Mine[] = {

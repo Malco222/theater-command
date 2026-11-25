@@ -16,15 +16,15 @@
  * map, Pearl Harbor and Midway (the air stage) and every air battle never set an option, so what they draw is today's.
  * Only the sea battle sets them (ASeaBattle::OpenOn, through AAirStage::SetShipPaint), each behind its own switch, and
  * never in the month's sea scene inside a campaign, which does not take the switches:
- * - bShade (-TheaterSeaShipLight=1): the point's colour multiplied by the file's own "shade" (its baked shadow, 1 open,
- *   less in a crease), as a figure's is (the soldiers' maker's worn cloth). Today's ship files carry no shade: until the
- *   models re-export with it (R1.3's models half), it changes nothing.
+ * - bShade (-TheaterSeaShipLight= on, at any top light above 0): the point's colour multiplied by the file's own "shade"
+ *   (its baked shadow, 1 open, less in a crease), as a figure's is (the soldiers' maker's worn cloth). Today's ship files
+ *   carry no shade: until the models re-export with it (R1.3's models half), it changes nothing.
  * - bRustRamp (-TheaterSeaShipSkin=1): the one-colour rust replaced by a ramp, dark brown at its source, brown in its
  *   body, a thin brown-orange film at its foot, with a ragged edge; the salt as the art director ruled it; and a wooden
  *   deck's planks held under her 150,135,110 as drawn.
- * - TopLight (-TheaterSeaShipLight=1) is not a point's paint: it is the ships' material's own lift on what faces the sky,
- *   which the sea battle sets on its own steel ink (SeaTopLight, through SteelOf). It rides here so the options travel
- *   together.
+ * - TopLight (-TheaterSeaShipLight=: 1 or on for SeaTopLight, 0.10, or a top light of its own from 0.0 to 0.30) is not a
+ *   point's paint: it is the ships' material's own lift on what faces the sky, which the sea battle sets on its own steel
+ *   ink through SteelOf. It rides here so the options travel together.
  *
  * THE ART DIRECTOR'S NUMBERS (25 November 2026, 16:05Z, art-director/ship-detail/ship-weathering-numbers.md, which
  * supersede the plan's starting figures): rust is told by being dark and warm. In sRGB, laid over the coat:
@@ -53,22 +53,33 @@ namespace ShipPaintCore
 	};
 
 	/** The ships' top light at sea (the art director, 25 November 16:05Z: "one number for every ship in the sea scene"):
-	 * the lift M_MapSurface gives to what faces the sky, set on the sea battle's own steel ink under -TheaterSeaShipLight=1.
-	 * Her Mac check: if a deck no longer reads as its own plane, 0.12; if a steel deck is the brightest thing aboard, 0.08.
-	 * The material lifts only where its Wear is on (1 + up x TopLight x metal x Wear), and the sea's steel ink has never
-	 * had Wear: so the sea has drawn no top light at all, and this shows only with the skin's first look
-	 * (-TheaterSeaShipSkin=1). Her pair is none (the skin alone) against 0.10 (the skin and the light), and the material
-	 * cannot give a top light without its Wear's blot mottle too. */
+	 * the lift M_MapSurface gives to what faces the sky, set on the sea battle's own steel ink by -TheaterSeaShipLight=1 (or
+	 * =on). Her one Mac pair is 0.26 against 0.10; if a deck no longer reads as its own plane, 0.12; if a steel deck is the
+	 * brightest thing aboard, 0.08. -TheaterSeaShipLight= takes any of them as a number too (0.0 to SeaTopLightMost).
+	 * The material lifts by up x TopLight x metal x Wear, and the sea's steel ink has never had Wear, so the sea has drawn no
+	 * top light at all. SteelOf gives the ink the Wear the lift needs, with or without the skin: with the skin, the first
+	 * look's own (SeaFirstLookWear); with the light alone, so little (SeaLightAloneWear) that its blot mottle cannot be seen,
+	 * and TopLight raised to match, so the lift is the light asked either way. */
 	inline constexpr float SeaTopLight = 0.10f;
+	/** The most top light -TheaterSeaShipLight= takes as a number (anything over it is refused and taken as off). */
+	inline constexpr float SeaTopLightMost = 0.30f;
 	/** The material's own (M_MapSurface's TopLight as Tools/build_content.py makes it): the map's, whose pieces have Wear.
-	 * Never drawn at sea: the sea's ink has no Wear, and with the skin's Wear on, SteelOf sets SeaTopLightToday. */
+	 * Never drawn at sea: with every switch off the sea's ink has no Wear, and with either ship switch on SteelOf sets the
+	 * ink's TopLight itself. */
 	inline constexpr float MapTopLight = 0.26f;
 	/** What the sea has drawn until now on its ships' steel: no top light (its ink's Wear is 0). The skin's first look keeps
-	 * to it unless -TheaterSeaShipLight=1 asks for SeaTopLight, so the skin alone never brings in the map's 0.26. */
+	 * to it unless -TheaterSeaShipLight= asks for a top light, so the skin alone never brings in the map's 0.26. */
 	inline constexpr float SeaTopLightToday = 0.0f;
 	/** The first look at sea (R1.4's "free first look"): M_MapSurface's own Wear (its two-size blot mottle) on the sea
 	 * battle's steel ink, under -TheaterSeaShipSkin=1. 0 today. */
 	inline constexpr float SeaFirstLookWear = 1.0f;
+	/** The Wear the light alone sets (-TheaterSeaShipLight= without -TheaterSeaShipSkin=1), only so the top light can show.
+	 * In M_MapSurface the Wear does three things: it lets the lift through (1 + up x TopLight x metal x Wear), it lays the
+	 * blot mottle (the colour times a mix of 1 and 0.8 + 0.42 of the blot, by Wear x (metal/2 + 1/2)), and it lets the chips
+	 * through (times Wear; held off by ChipAt at SeaChipAt anyway). At 0.01, with TopLight set to the light divided by it,
+	 * the lift is the light asked, while the mottle moves a colour by at most 0.22 in 100 (0.01 x 0.22): less than one
+	 * level of 255 anywhere, so the light alone looks like the light alone, not like the skin. */
+	inline constexpr float SeaLightAloneWear = 0.01f;
 	/** The material's chips held off at sea (its "ChipAt", -0.78 as made): its chip is metal (0.85), smoother than the paint
 	 * (0.34) and coloured "ChipColour", so a rust-coloured chip draws as a near-black, glossy fleck, never as the dark of a
 	 * rust source. At -2 nothing chips whatever the noise (the most its sum reaches is 1.5 + 0.3 + ChipAt). Rust-coloured
@@ -82,7 +93,7 @@ namespace ShipPaintCore
 	inline constexpr float DeckR = 150.0f, DeckG = 135.0f, DeckB = 110.0f;
 
 	/** What the sea battle sets on its own steel ink (an instance of M_MapSurface; AAirStage::SetShipPaint) for the options
-	 * and the first look's wear. */
+	 * and the first look's wear. Whatever is not marked to be set is left as the material makes it. */
 	struct Steel
 	{
 		/** TopLight to set; below 0, left as the material makes it (0.26, which lifts nothing while Wear is 0). */
@@ -91,6 +102,8 @@ namespace ShipPaintCore
 		float Wear = 0.0f;
 		/** ChipAt set to SeaChipAt: no chips. */
 		bool bChipsOff = false;
+		/** BlotTiling set to the first look's blots, about 7 m across on the ship's own metres (the skin only). */
+		bool bBlots = false;
 	};
 
 	/** What the sea battle asks of its ships' paint. As made: today's, everything off. */
@@ -100,7 +113,8 @@ namespace ShipPaintCore
 		bool bShade = false;
 		/** The rust ramp and the ruled salt (R1.4). */
 		bool bRustRamp = false;
-		/** The ships' top light on the sea battle's steel ink; below 0, the material's own (not set). Not a point's paint. */
+		/** The ships' top light at sea, the lift on what faces the sky (-TheaterSeaShipLight=, above 0 when on); 0 or below,
+		 * none asked. The ink's own TopLight is set from it by SteelOf. Not a point's paint. */
 		float TopLight = -1.0f;
 	};
 
@@ -157,9 +171,11 @@ namespace ShipPaintCore
 	/** The point's colour (linear, as the reader turns it into the mesh's colour). */
 	Linear Paint(const Point& P, const Palette& Pal, const Options& O);
 
-	/** The sea battle's steel ink for these options and the first look's wear (FirstLookWear, 0 for none): the top light
-	 * where asked, else none (SeaTopLightToday) once the first look's Wear is on, else left; the Wear; and with it the chips
-	 * held off. With every switch off, nothing is set. */
+	/** The sea battle's steel ink for these options and the first look's wear (FirstLookWear, 0 for none). With every switch
+	 * off, nothing is set. With the skin (FirstLookWear above 0): its Wear, its blots, the chips held off, and the top light
+	 * asked (none, SeaTopLightToday, if not). With the light alone: the Wear SeaLightAloneWear, the chips held off, and
+	 * nothing else. Either way the ink's TopLight is the light asked divided by the Wear set, so a steel deck facing the sky
+	 * is lifted by the light asked, 1 + T, whether the skin is on or not. */
 	Steel SteelOf(const Options& O, float FirstLookWear);
 
 	/** A wooden deck's most under the skin (linear, each channel): the art director's 150,135,110 with room for the blot

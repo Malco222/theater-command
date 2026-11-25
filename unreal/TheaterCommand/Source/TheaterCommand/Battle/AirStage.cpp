@@ -1753,10 +1753,13 @@ void AAirStage::SetShipPaint(const ShipPaintCore::Options& Given, float FirstLoo
 	{
 		return;
 	}
-	// (Battle/ShipPaintCore's SteelOf: the top light where asked, and none where the first look's Wear would otherwise bring
-	// in the material's own 0.26, which the sea has never drawn; the Wear, for the material's blot mottle, its blots seven
-	// metres across on the ship's own metres where the map's pieces take theirs in the table's measure; and the chips held
-	// off, since this material's chip is bare metal, dark and glossy, never the matt dark of rust)
+	// (Battle/ShipPaintCore's SteelOf, and only what it gives: with every switch off, nothing. The material lifts what faces
+	// the sky only where its Wear is on, so the Wear is set whenever a top light is asked: the skin's first look, whose blot
+	// mottle lies seven metres across on the ship's own metres where the map's pieces take theirs in the table's measure; or,
+	// with the light alone, a Wear too small for its mottle to be seen. The TopLight set is the light asked over that Wear,
+	// so the lift is the light asked either way, and with the skin and no light it is none, never the material's own 0.26,
+	// which the sea has never drawn. The chips are held off, since this material's chip is bare metal, dark and glossy,
+	// never the matt dark of rust)
 	const ShipPaintCore::Steel SteelSet = ShipPaintCore::SteelOf(Given, FirstLookWear);
 	if (SteelSet.TopLight >= 0.0f)
 	{
@@ -1765,6 +1768,9 @@ void AAirStage::SetShipPaint(const ShipPaintCore::Options& Given, float FirstLoo
 	if (SteelSet.Wear > 0.0f)
 	{
 		SteelInk->SetScalarParameterValue(TEXT("Wear"), SteelSet.Wear);
+	}
+	if (SteelSet.bBlots)
+	{
 		SteelInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (7.0f * static_cast<float>(UnitsPerMetre)));
 	}
 	if (SteelSet.bChipsOff)
