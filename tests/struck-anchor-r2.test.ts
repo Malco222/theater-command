@@ -10,7 +10,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { airAI, seaKm } from '../src/campaign/air';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
-import { anchorLoss, inPassage, navalAI, voyageMonths, navalUpkeep, safeHarbour, shipCount, strikeMoves, struckLine } from '../src/campaign/navy';
+import { anchorLoss, fleetReach, inPassage, navalAI, setBeatReach, voyageMonths, navalUpkeep, safeHarbour, shipCount, strikeMoves, struckLine } from '../src/campaign/navy';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -65,6 +65,21 @@ describe('a fleet struck at anchor', () => {
     expect(g.headlines.slice(news).some((h) => h.text === `The Pacific Fleet withdraws from ${port}, struck at anchor there, to ${to.name}, out of the strikers' reach.`)).toBe(true);
     // A voyage, where the harbour lies beyond a month's steaming.
     expect(inPassage(f)).toBe(months > 0);
+  });
+
+  it("with the beat-in-reach switch on, its beat lies in reach of the harbour it withdraws to; off, it keeps the beat it had (the design director, 20:02Z, 2)", () => {
+    for (const on of [false, true]) {
+      const { g, f } = war();
+      if (on) setBeatReach(g, true);
+      const was = f.station;
+      strike(g, f, 0.25);
+      const to = safeHarbour(g, f)!;
+      navalAI(g, 'USA');
+      expect(f.base).toBe(to.id);
+      expect(fleetReach(g, f, true)).not.toContain(was);
+      if (on) { expect(f.station).toBe(f.home); expect(fleetReach(g, f, true)).toContain(f.station); }
+      else expect(f.station).toBe(was);
+    }
   });
 
   it('stays where staying costs less than the move: a light strike', () => {

@@ -2409,6 +2409,20 @@ export function beatOnMove(g: Game, f: Fleet, was: number, job: { seas: readonly
   return reach.has(was) ? was : f.home;
 }
 
+/**
+ * True where a fleet its staff moves for a withdrawal or a landing's cover takes its beat by that one rule (beatOnMove),
+ * so its beat lies within its new base's reach (the design director, 20:02Z, 2: in the 24 wars a cover move left the beat
+ * out of reach 453 times in 529, a withdrawal 94 in 138). Its own switch (stage.json 'beatReach'): off, every beat is
+ * as shipped and the whole save the same. The grand campaign, with the switch on.
+ */
+export const beatReachOn = (g: Game): boolean => g.flags.open === 1 && g.flags.beatReach === 1;
+
+/** Turns the beat-in-reach rule on or off in a campaign under way (beatReachOn). */
+export function setBeatReach(g: Game, on: boolean): void {
+  if (on) g.flags.beatReach = 1;
+  else delete g.flags.beatReach;
+}
+
 // ---- A base move is a voyage (release 2, the far chart) ----------------------------------------------------------
 // The design director's ruling of 04:33Z, 25 November 2026 (finding 39 of the 1.5.1 playtest: Japan's Mobile Fleet
 // moved its base to Konigsberg in a month). A fleet steams its reach (NAVY.range seas, the sea it starts on counted as
@@ -2660,8 +2674,10 @@ export function struckLine(g: Game, f: Fleet): string {
  */
 function withdraws(g: Game, f: Fleet): boolean {
   if (!anchorStrikes(g, f).length || g.flags[`withArmy:${f.id}`]) return false;
-  const to = safeHarbour(g, f), from = f.port;
+  const to = safeHarbour(g, f), from = f.port, was = f.station;
   if (to && strikeMoves(g, f, to) && rebase(g, f, to)) {
+    // (Its beat the one it had while that lies in reach of its new harbour, else its new home sea: beatReachOn.)
+    if (beatReachOn(g)) f.station = beatOnMove(g, f, was, null);
     headline(g, 'info', `${cap(fleetName(f))} withdraws from ${from}, struck at anchor there, to ${to.name}, out of the strikers' reach.`, f.nat, to.id);
     return true;
   }
@@ -5944,11 +5960,14 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
   // Back to the base it had (release 2, the far chart: the design director's ruling of 04:33Z, 25 November 2026, 1(a)):
   // a fleet still in passage from it to its cover base turns back from where it is; one in passage from elsewhere comes
   // in first, and is read the month after. True where it moved.
+  // (Its beat the one it had while that lies in reach of the base it goes back to, else its home sea there: beatReachOn.)
   const goBack = (f: Fleet, r: Region | undefined): boolean => {
-    if (!inPassage(f)) { forget(f); return !!r && r.id !== f.base && rebase(g, f, r); }
+    const beat = f.station;
+    const back = (ok: boolean): boolean => { if (ok && beatReachOn(g)) f.station = beatOnMove(g, f, beat, null); return ok; };
+    if (!inPassage(f)) { forget(f); return back(!!r && r.id !== f.base && rebase(g, f, r)); }
     if (f.passage?.from !== r?.id) return false;
     forget(f);
-    return turnBack(g, f);
+    return back(turnBack(g, f));
   };
   if (!coversBeaches(g, nat)) {
     for (const f of mine) if (was(f) !== undefined && !ordered(f) && goBack(f, g.regions[was(f)! - 1])) moved.add(f.id);
@@ -5974,8 +5993,11 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
     for (const f of can.filter((x) => !covers.has(x.id)).sort((a, b) => fleetPower(g, b) - fleetPower(g, a) || a.id - b.id)) {
       const r = coverBase(g, f, z);
       if (!r) continue;
-      const from = f.base;
+      const from = f.base, beat = f.station;
       if (!rebase(g, f, r)) continue;
+      // (Its beat the one it had while that lies in reach of its cover base, else the beach's sea, as a fleet moved for a
+      // quay keeps its beat: beatReachOn, the one rule of beatOnMove.)
+      if (beatReachOn(g)) f.station = beatOnMove(g, f, beat, { seas: [z], keep: true });
       if (was(f) === undefined) g.flags[`fl:cover:${f.id}`] = from + 1;
       g.flags[`fl:coverAt:${f.id}`] = r.id + 1;
       covers.add(f.id);

@@ -98,7 +98,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { adrift, baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { adrift, baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, beatReachOn, setBeatReach, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -1084,6 +1084,8 @@ function drawView(step = false) {
     shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
     // (Release 2, navy.ts) Whether a fleet seeks battle at most once a month, by order or at a month's end.
     seekOnce: seekOnceOn(s),
+    // (Release 2, navy.ts) Whether a fleet moved to withdraw or to cover a landing keeps a beat in its new base's reach.
+    beatReach: beatReachOn(s),
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
@@ -7412,6 +7414,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : (shadowRelayOn(s) ? 'The shadow relay is on: a shadow\'s fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact.' : on ? 'The shadow relay will work once shadowing is on.' : 'The shadow relay is off: shadows stay on station as long as they keep contact.');
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'beatreachrule') {
+    // (Release 2, navy.ts) A moved fleet's beat in reach, switched by the player in any month.
+    setBeatReach(s, part[1] === 'on');
+    ok = true;
+    note = beatReachOn(s)
+      ? 'A moved fleet\'s beat in reach is on: a fleet the admirals move to withdraw from a struck harbour, or to cover a landing and back, patrols a sea it can reach from its new base.'
+      : 'A moved fleet\'s beat in reach is off: a moved fleet keeps the beat it had, wherever its new base is.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'seekoncerule') {
     // (Release 2, navy.ts) One battle sought a month, switched by the player in any month.
     setSeekOnce(s, part[1] === 'on');
@@ -8810,6 +8821,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
 // (Release 2, navy.ts) One battle sought a month: TC.seekOnce(on) at any time; the options page uses act('seekoncerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seekOnce = (on: boolean) => { const s = game(); setSeekOnce(s, !!on); return { on: seekOnceOn(s) }; };
+// (Release 2, navy.ts) A moved fleet's beat in reach: TC.beatReach(on) at any time; the options page uses act('beatreachrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).beatReach = (on: boolean) => { const s = game(); setBeatReach(s, !!on); return { on: beatReachOn(s) }; };
 // (Release 2, carriers.ts) TC.wingByDate(on) at any time; the options page uses act('wingbydaterule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wingByDate = (on: boolean) => { const s = game(); setWingByDate(s, !!on); return { on: wingByDateOn(s) }; };
 // (Release 2, harbourstrike.ts) TC.carrierStrike(on) at any time; the options page uses act('carrierstrikerule:on' / ':off').
@@ -8854,6 +8867,7 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   heavyseasrule: (s) => { setHeavySeas(s, true); return heavySeasOn(s); },
   shadowrelayrule: (s) => { setShadowRelay(s, true); return shadowRelayOn(s); },
   seekoncerule: (s) => { setSeekOnce(s, true); return seekOnceOn(s); },
+  beatreachrule: (s) => { setBeatReach(s, true); return beatReachOn(s); },
   fleetwhyrule: (s) => { setFleetWhy(s, true); return fleetWhyOn(s); },
   teamsrule: (s) => { setTeams(s, true); return teamsOn(s); },
   settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },

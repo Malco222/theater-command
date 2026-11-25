@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { endStaffMonth, ferry } from '../src/campaign/ai';
 import { atWar, createGame, declareWar, relocate } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
-import { NAVY, fleetReach, navalAI, navalUpkeep, seaPath, voyageMonths } from '../src/campaign/navy';
+import { NAVY, fleetReach, navalAI, navalUpkeep, seaPath, setBeatReach, voyageMonths } from '../src/campaign/navy';
 import { PACIFIC, coversBeaches, firstOnRun, hopShores, hopsBind, laneOn, onRun, pacificFreed, pacificRuns, ringDrawn, runOf, runQuays } from '../src/campaign/pacific';
 import { oceanRuns, startOpen } from '../src/campaign/staff';
 import { acrossOcean, oceanShares, overseasOf, sailings } from '../src/campaign/world';
@@ -391,6 +391,30 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     navalAI(g, 'USA');
     expect(g.regions[pf.base].name).toBe('Pearl Harbor');
     expect(Object.keys(g.flags).filter((k) => k.startsWith('fl:cover'))).toEqual([]);
+  });
+
+  it("with the beat-in-reach switch on, a fleet moved to cover takes the beach's sea for its beat where the one it had lies out of reach; off, it keeps it (the design director, 20:02Z, 2)", () => {
+    // (Its beat the Hawaiian Waters, which Samoa reaches: kept, on or off. Its beat the California Coast, which Samoa does not.)
+    for (const far of [false, true]) for (const on of [false, true]) {
+      const { g, beach } = august();
+      if (on) setBeatReach(g, true);
+      const pf = fleet(g, 'USA', 'Pacific Fleet');
+      if (far) pf.station = g.seas.findIndex((z) => z.name === 'California Coast');
+      const was = pf.station;
+      navalAI(g, 'USA');
+      expect(g.regions[pf.base].name).toBe('Samoa');
+      expect(fleetReach(g, pf, true).includes(was)).toBe(!far);
+      expect(pf.station, `far ${far} on ${on}`).toBe(on && far ? beach : was);
+      if (!(on && far)) continue;
+      // (Its beaches done, it goes back to Pearl Harbor: the beach's sea lies beyond its reach there, so its home sea.)
+      g.turn++;
+      delete g.flags['st:hop:USA:0'];
+      delete g.flags['st:hopQ:USA:0'];
+      navalAI(g, 'USA');
+      expect(g.regions[pf.base].name).toBe('Pearl Harbor');
+      expect(fleetReach(g, pf, true)).not.toContain(beach);
+      expect(pf.station).toBe(pf.home);
+    }
   });
 
   it('moves the strongest fleet that could cover to the nearest harbour of its side within three seas of the beach; it spends the month in harbour there', () => {
