@@ -231,6 +231,201 @@ namespace
 		std::sort(L.begin(), L.end());
 		return L[std::min(L.size() - 1, static_cast<size_t>(P * static_cast<double>(L.size() - 1) + 0.5))];
 	}
+	// ---- The burnt coat (release 2, Dress::bBurntCoat, the trial word "burntcoat").
+
+	/**
+	 * Every battle model, worn by her own nation (a "_" file by the Germans), loaded with the burnt coat off and on.
+	 * Off must be as before: no point with a burnt colour of its own. On: every point of every mesh has one; her paint
+	 * is as it was (the far level whole; the near level's own points, the cut's new ones after them); the near level is
+	 * cut by no more than an eighth more triangles, none of them a sliver of no area, and the far level not at all; her
+	 * far pieces carry the colours; and the skin of whatever has three places or more the fire comes out of is soot,
+	 * rust and ash together. That is counted by area over what does not look down (her underside is all soot, and no
+	 * one sees it): soot a tenth to six tenths of it, rust a fifth or more, ash a twentieth or more. (The art
+	 * director's own line is on a picture's sunlit faces, soot no more than half and rust and ash a tenth each: the
+	 * sheet is measured for that, LAND_KIT_BURNT=1; this counts her inner faces too.) Gives the failures.
+	 */
+	int CheckBurntCoat(const std::string& Content)
+	{
+		std::printf("THE BURNT COAT (release 2, -TheaterLandTrial=burntcoat: a wreck in soot, rust and ash, each point to its own)\n");
+		std::vector<std::string> Files;
+		for (const auto& Entry : std::filesystem::directory_iterator(Content + "/Models/Battle"))
+		{
+			if (Entry.path().extension() == ".json")
+			{
+				Files.push_back(Entry.path().stem().string());
+			}
+		}
+		std::sort(Files.begin(), Files.end());
+		int Failures = 0;
+		size_t Models = 0, TanksSeen = 0;
+		double MostMore = 0.0, MostSoot = 0.0, LeastSoot = 1.0, LeastRust = 1.0, LeastAsh = 1.0, MsOff = 0.0, MsOn = 0.0;
+		std::string MostMoreOf;
+		for (const std::string& Name : Files)
+		{
+			std::string Text, Error;
+			Json Doc;
+			if (!ReadFile(Content + "/Models/Battle/" + Name + ".json", Text) || !Doc.Parse(Text, Error))
+			{
+				std::printf("  FAIL cannot read %s.json\n", Name.c_str());
+				++Failures;
+				continue;
+			}
+			std::string Own = Doc.Root()["nation"].Str();
+			if (Own == "any" || Own.empty())
+			{
+				Own = "GER";
+			}
+			Dress D;
+			D.Nation = Own;
+			Model Off, On;
+			const auto T0 = Clock::now();
+			const bool bOff = Off.Load(Text, D, Error);
+			const auto T1 = Clock::now();
+			D.bBurntCoat = true;
+			const bool bOn = bOff && On.Load(Text, D, Error);
+			const auto T2 = Clock::now();
+			if (!bOn || Off.Bodies.size() != On.Bodies.size())
+			{
+				std::printf("  FAIL %s (%s): %s\n", Name.c_str(), Own.c_str(), Error.c_str());
+				++Failures;
+				continue;
+			}
+			MsOff += std::chrono::duration<double, std::milli>(T1 - T0).count();
+			MsOn += std::chrono::duration<double, std::milli>(T2 - T1).count();
+			++Models;
+			std::string Why;
+			size_t NearWas = 0, NearNow = 0;
+			double Area[3] = { 0.0, 0.0, 0.0 }, Seen[3] = { 0.0, 0.0, 0.0 };
+			if (Off.bBurntCoat || !On.bBurntCoat)
+			{
+				Why = "the model does not say whether its coat is on";
+			}
+			for (size_t B = 0; B < On.Bodies.size() && Why.empty(); ++B)
+			{
+				for (int Level = 0; Level < 2 && Why.empty(); ++Level)
+				{
+					const Mesh& Was = Level == 0 ? Off.Bodies[B].Near : Off.Bodies[B].Far;
+					const Mesh& Now = Level == 0 ? On.Bodies[B].Near : On.Bodies[B].Far;
+					const std::string Which = On.Bodies[B].Name + (Level == 0 ? " near" : " far");
+					if (!Was.Burnt.empty())
+					{
+						Why = Which + ": a burnt colour of its own with the coat off";
+					}
+					else if (Now.Burnt.size() != Now.Count() * 3)
+					{
+						Why = Which + ": not every point has its burnt colour";
+					}
+					else if (Now.Count() < Was.Count() || (Level == 1 && (Now.Count() != Was.Count() || Now.Triangles != Was.Triangles)))
+					{
+						Why = Which + (Level == 1 ? ": the far level was cut" : ": points lost");
+					}
+					else if (!std::equal(Was.Points.begin(), Was.Points.end(), Now.Points.begin()) || !std::equal(Was.Colours.begin(), Was.Colours.end(), Now.Colours.begin())
+						|| !std::equal(Was.Normals.begin(), Was.Normals.end(), Now.Normals.begin()) || Was.LinkFirst != Now.LinkFirst || Was.LinkCount != Now.LinkCount)
+					{
+						Why = Which + ": her own points or paint changed under the coat";
+					}
+					if (!Why.empty())
+					{
+						break;
+					}
+					if (Level == 0)
+					{
+						NearWas += Was.Triangles.size() / 3;
+						NearNow += Now.Triangles.size() / 3;
+					}
+					for (size_t T = 0; T + 2 < Now.Triangles.size(); T += 3)
+					{
+						const uint32_t Ix[3] = { Now.Triangles[T], Now.Triangles[T + 1], Now.Triangles[T + 2] };
+						if (Ix[0] >= Now.Count() || Ix[1] >= Now.Count() || Ix[2] >= Now.Count())
+						{
+							Why = Which + ": a triangle past the points";
+							break;
+						}
+						if (Level != 0)
+						{
+							continue;
+						}
+						auto PointOf = [&Now](uint32_t I) { return V3(Now.Points[I * 3], Now.Points[I * 3 + 1], Now.Points[I * 3 + 2]); };
+						const double Twice = (PointOf(Ix[1]) - PointOf(Ix[0])).Cross(PointOf(Ix[2]) - PointOf(Ix[0])).Length();
+						// (a cut's own triangle, one with a new point: never of no area)
+						if (std::max({ Ix[0], Ix[1], Ix[2] }) >= Was.Count() && Twice < 1e-10)
+						{
+							Why = Which + ": the cut left a triangle of no area";
+							break;
+						}
+						double Rgb[3] = { 0.0, 0.0, 0.0 };
+						for (uint32_t I : Ix)
+						{
+							for (size_t Ch = 0; Ch < 3; ++Ch)
+							{
+								Rgb[Ch] += Now.Burnt[I * 3 + Ch] / 3.0;
+							}
+						}
+						// (soot: dark; ash: pale and grey; the rest rust)
+						const int Kind = Rgb[0] < 62.0 ? 0 : (Rgb[0] - Rgb[2] < 30.0 && Rgb[0] >= 85.0 ? 2 : 1);
+						Area[Kind] += 0.5 * Twice;
+						const double UpZ = (Now.Normals[Ix[0] * 3 + 2] + Now.Normals[Ix[1] * 3 + 2] + Now.Normals[Ix[2] * 3 + 2]) / 3.0;
+						if (UpZ > -0.15)
+						{
+							Seen[Kind] += 0.5 * Twice;
+						}
+					}
+				}
+			}
+			FarSplit Split;
+			SplitFar(On, Split);
+			for (const FarPiece& Piece : Split.Pieces)
+			{
+				if (Why.empty() && Piece.Merged.Burnt.size() != Piece.Merged.Count() * 3)
+				{
+					Why = "a far piece without its points' burnt colours";
+				}
+			}
+			const double More = NearWas > 0 ? static_cast<double>(NearNow) / static_cast<double>(NearWas) - 1.0 : 0.0;
+			if (Why.empty() && More > 0.125)
+			{
+				Why = "the cut added more than an eighth to her near triangles";
+			}
+			if (More > MostMore)
+			{
+				MostMore = More;
+				MostMoreOf = Name;
+			}
+			int FirePlaces = 0;
+			for (const Socket& S : On.Sockets)
+			{
+				FirePlaces += S.Name == "engine" || S.Name == "ring" || S.Name.compare(0, 5, "fire.") == 0;
+			}
+			const double All = Area[0] + Area[1] + Area[2], SeenAll = Seen[0] + Seen[1] + Seen[2];
+			// (only a model whose every mesh was read: a fault above leaves the count short)
+			if (FirePlaces >= 3 && SeenAll > 0.0 && Why.empty())
+			{
+				++TanksSeen;
+				const double Soot = Seen[0] / SeenAll, Rust = Seen[1] / SeenAll, Ash = Seen[2] / SeenAll;
+				MostSoot = std::max(MostSoot, Soot);
+				LeastSoot = std::min(LeastSoot, Soot);
+				LeastRust = std::min(LeastRust, Rust);
+				LeastAsh = std::min(LeastAsh, Ash);
+				if (Soot > 0.6 || Soot < 0.1 || Rust < 0.2 || Ash < 0.05)
+				{
+					Why = "her skin is not soot, rust and ash together";
+				}
+				std::printf("  %-13s soot %2.0f%%  rust %2.0f%%  ash %2.0f%% of what does not look down (soot %2.0f%% of all her skin); near triangles %zu to %zu (+%.1f%%)\n",
+					Name.c_str(), 100.0 * Soot, 100.0 * Rust, 100.0 * Ash, 100.0 * Area[0] / All, NearWas, NearNow, 100.0 * More);
+			}
+			if (!Why.empty())
+			{
+				std::printf("  FAIL %s (%s): %s\n", Name.c_str(), Own.c_str(), Why.c_str());
+				++Failures;
+			}
+		}
+		std::printf("  %zu models, %zu of them with three places or more to burn from: soot %.0f%% to %.0f%%, the least rust %.0f%%, the least ash %.0f%%; the most the cut adds %.1f%% (%s)\n",
+			Models, TanksSeen, 100.0 * LeastSoot, 100.0 * MostSoot, 100.0 * LeastRust, 100.0 * LeastAsh, 100.0 * MostMore, MostMoreOf.c_str());
+		std::printf("  loading them all: %.0f ms with the coat off, %.0f ms with it on\n", MsOff, MsOn);
+		std::printf("  off as before; on, every point its own burnt colour, her paint untouched %s\n\n", Failures == 0 ? "ok" : "FAILED");
+		return Failures;
+	}
+
 	// ---- National marks (release 2, Dress::bMarks, "-TheaterLandMarks").
 
 	/** The nearest point of triangle A, B, C to P (Ericson's). */
@@ -562,6 +757,11 @@ int main(int argc, char** argv)
 		return 2;
 	}
 	const std::string Content = argv[1];
+	// (LAND_KIT_ONLY_BURNT: the burnt coat's section alone, a short run while its paint is being mended)
+	if (std::getenv("LAND_KIT_ONLY_BURNT"))
+	{
+		return CheckBurntCoat(Content) ? 1 : 0;
+	}
 	const std::string RecordingPath = argc > 2 ? argv[2] : Content + "/Data/LandBattles/normandy-1944.json";
 	int Failures = 0;
 	auto Report = [&Failures](const char* What, const Tally& T, const char* Unit)
@@ -721,6 +921,7 @@ int main(int argc, char** argv)
 	}
 
 	Failures += CheckMarks(Content);
+	Failures += CheckBurntCoat(Content);
 	if (std::getenv("LAND_KIT_ONLY_MARKS"))
 	{
 		return Failures ? 1 : 0;

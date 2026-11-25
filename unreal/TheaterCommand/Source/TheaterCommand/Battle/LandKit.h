@@ -251,10 +251,16 @@ namespace LandKit
 		std::vector<float> Normals;     // x, y, z a point (unit)
 		std::vector<uint8_t> Colours;   // r, g, b, a a point: 8-bit sRGB (FColor wants them as B, G, R, A)
 		std::vector<float> Soot;        // 0 to 1 a point: how far toward BurntColour it goes once the wreck has burnt through
+		/** r, g, b a point (8-bit sRGB): the colour THIS point burns to, where the burnt coat is on (release 2,
+		 * Dress::bBurntCoat): soot, rust or ash by where the point is and which way it looks. Empty: every point burns to
+		 * the model's one BurntColour, as before. BurntOf reads either. */
+		std::vector<uint8_t> Burnt;
 		std::vector<uint32_t> Triangles;// three point numbers a triangle
 		/** A track body's links (Near): the run of points of each, in the order of Model::Links(Side). */
 		std::vector<uint32_t> LinkFirst, LinkCount;
 		size_t Count() const { return Soot.size(); }
+		/** The colour point K burns to: its own (Burnt) where the burnt coat is on, else the model's one (Whole). */
+		const uint8_t* BurntOf(size_t K, const uint8_t* Whole) const { return Burnt.size() >= (K + 1) * 3 ? &Burnt[K * 3] : Whole; }
 	};
 
 	struct Body
@@ -308,6 +314,12 @@ namespace LandKit
 		/** National marks (release 2, "-TheaterLandMarks"): her owner's plain period marking painted on her skin at each
 		 * of her file's mark places (Model::Marks). Off: none, as before. */
 		bool bMarks = false;
+		/** The burnt coat (release 2, on its own switch, the trial word "burntcoat"; the art director's brief of 25
+		 * November, for every army's wrecks): a burnt-out wreck goes to three colours in place of one. Soot (the model's
+		 * BurntColour) above and round what the smoke poured from and under overhangs, ash grey on faces that look up and
+		 * on a burnt tyre's rim, rust on upright plates and the running gear, in patches some 0.3 to 0.8 m across; never
+		 * ash on an edge. Each point's colour is kept in Mesh::Burnt. Off: one colour, as before. */
+		bool bBurntCoat = false;
 	};
 
 	class Model
@@ -331,6 +343,9 @@ namespace LandKit
 		/** The sooty black-brown a burnt-out wreck goes to (8-bit sRGB): lerp each point toward it by its Soot times the
 		 * vehicle's Vehicle::Soot (0 to 1 over 30 s of burning). */
 		uint8_t BurntColour[3] = { 38, 33, 29 };
+		/** The burnt coat (release 2, Dress::bBurntCoat) was on when she was loaded: every point of every mesh of hers
+		 * has a burnt colour of its own (Mesh::Burnt: soot, rust or ash), and BurntColour is her soot alone. */
+		bool bBurntCoat = false;
 
 		// The controls (controls, running): parts by number, -1 where the model has none.
 		int Turret = -1, Gun = -1, Barrel = -1, Traverse = -1, Hull = -1, Breech = -1;
@@ -809,6 +824,9 @@ namespace LandKit
 		/** National marks (release 2, Brian's 24 Nov ask for the tanks' country markings): on, every vehicle wears her
 		 * owner's plain period marking at her file's mark places (Dress::bMarks). Off unless set; set before Load. */
 		bool bMarks = false;
+		/** The burnt coat (release 2, the trial word "burntcoat"; Dress::bBurntCoat): on, every vehicle's wreck burns to
+		 * soot, rust and ash, each point to its own. Off unless set; set before Load. */
+		bool bBurntCoat = false;
 
 	private:
 		std::vector<Vehicle> All;

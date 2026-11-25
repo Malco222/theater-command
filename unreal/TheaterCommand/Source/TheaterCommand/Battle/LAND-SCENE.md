@@ -208,6 +208,30 @@ camera comes back to its shot.
   `-TheaterLandTornProcedural` keeps them all procedural; `-TheaterLandTornSettle=` (3 s) and `-TheaterLandTornBakeMs=`
   (1 ms) tune it. The effects kit's own painted crater marks stay off in this scene (the holes are the torn earth's);
   `-TheaterLandKitScars` brings them back for an A/B.
+- **The burnt coat (release 2, on trial: `-TheaterLandTrial=burntcoat`, off; `-TheaterLandNoBurntCoat` off whatever
+  the trial).** A burnt-out wreck goes to three colours in place of one sooty black (the art director's brief of 25
+  November, for every army). `LandKit` gives every point of every mesh its own burnt colour at load (`Mesh::Burnt`,
+  read with `Mesh::BurntOf`; `Model::bBurntCoat` says so): soot above and round what the smoke poured from (her
+  `engine`, `fire.*` and `ring` sockets; it climbs), under overhangs, in stains, and over what the fire left coolest,
+  where her paint charred and keeps a little of its tone; rust, from a dark scale to a red-brown with a thin soot
+  film, in streaks down upright plates, on her tracks and running gear; and pale ash in flakes on what looks up and on
+  the thin band of rubber round a tank's road wheel, never on a plate's edge. A lorry's, a half-track's or a
+  motorcycle's tyre (a wheel whose rubber is more than about a quarter of its radius) chars, with its ash lying on it
+  in flakes: a clean pale ring reads as a white-walled tyre. A vent's reach goes with her width, is halved on what is
+  no longer than a motorcycle and its sidecar, and is counted from her nearest skin where a fire's place hangs in the
+  air of an open body (a half-track's). The near mesh is cut along the ash's line (`CutAlong`, long edges only:
+  some 3 to 6% more near triangles, the far mesh untouched), so a flake ends at an edge with a soft shoulder and does
+  not fade across a 25 cm plate. Her live paint is as it was: the coat changes only what a point burns to and how far.
+  Near wrecks take it in `LandParts::FromBody`; far ones carry it in their instanced pieces' texture coordinates
+  (`LandCrowd`'s `PieceMesh`: red beside the soot weight, green and blue in a second coordinate) and `M_LandSteel`
+  reads it where its `BurntByPoint` is 1. **`M_LandSteel` must be rebuilt for the far wrecks**
+  (`TC_REBUILD=M_LandSteel`); with the old one they stay the one black until they come near. The cloud's sheet:
+  `LAND_KIT_BURNT=1` (three hulls before and after, and one burnt out among live ones from 150 m), `=more` (twelve
+  other kinds) or `=bikes` (the motorcycles) with `Tools/land_kit/land_picture.cpp`, her marks the game's own so they
+  burn with her skin; `LAND_KIT_MASK=1` writes each picture's vehicle and sunlit pixels beside it for measuring. The
+  vehicles' suite has its own section (`THE BURNT COAT`; `LAND_KIT_ONLY_BURNT=1` runs it alone): off as before, her
+  own points and paint untouched under the cut, and soot, rust and ash together on what does not look down. Not yet:
+  the half minute of burning takes her paint straight to these colours; black first and rust after would be truer.
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built

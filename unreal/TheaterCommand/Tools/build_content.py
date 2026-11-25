@@ -81,7 +81,10 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
     (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
     paint taken toward "BurntColour" by its soot weight, the mesh's first texture coordinate's U, times how far her
-    burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.)
+    burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.
+    The burnt coat, release 2: where "BurntByPoint" is 1 the colour is each point's own, soot, rust or ash, its red in the
+    first coordinate's V and its green and blue in the second coordinate (LandCrowd.cpp, PieceMesh); 0, the default, the
+    one "BurntColour" as before.)
     (SO1: with crowd, M_LandCrowd, the ground battle's mid and far men as instances in the pose bank's poses: see
     crowd_poses.)
     (With sway, M_LandBlades, the ground battle's grass, corn, shrubs and trees that the wind bends: the same surface,
@@ -101,10 +104,13 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
         connect(toned, "", to_linear, "Base")
     elif soot:
         # TK1
-        weight = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 150), -1300, 150,
-                           r=True, g=False, b=False, a=False)
+        first = node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 150)
+        weight = node_from(m, unreal.MaterialExpressionComponentMask, first, -1300, 150, r=True, g=False, b=False, a=False)
         burnt = one_in(m, unreal.MaterialExpressionSaturate, times(m, weight, node(m, unreal.MaterialExpressionPerInstanceCustomData, -1300, 250), -1150, 200), -1050, 200)
-        connect(lerp(m, colour, vector(m, "BurntColour", (38.0 / 255.0, 33.0 / 255.0, 29.0 / 255.0, 1.0), -1150, 50), burnt, -850, 100), "", to_linear, "Base")
+        own_red = node_from(m, unreal.MaterialExpressionComponentMask, first, -1300, 400, r=False, g=True, b=False, a=False)
+        own = pair(m, own_red, node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 500, coordinate_index=1), -1150, 450)
+        to = lerp(m, vector(m, "BurntColour", (38.0 / 255.0, 33.0 / 255.0, 29.0 / 255.0, 1.0), -1150, 50), own, scalar(m, "BurntByPoint", 0.0, -1150, 600), -1000, 300)
+        connect(lerp(m, colour, to, burnt, -850, 100), "", to_linear, "Base")
     else:
         connect(colour, "", to_linear, "Base")
 

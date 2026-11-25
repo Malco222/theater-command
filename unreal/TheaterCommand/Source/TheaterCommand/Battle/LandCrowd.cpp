@@ -28,12 +28,15 @@ namespace LandCrowdParts
 	 * A far piece (LandKit::FarPiece::Merged: model axes, metres from its anchor's pivot; x forward, y right, z up, as
 	 * Unreal's own) as a mesh of its own on Ink, for instancing: points and normals as LandBattle's FromBody gives the
 	 * near meshes theirs, colours as the same sRGB bytes (see LandParts::ThingMesh: handed over linear, kept as these
-	 * bytes), and each point's soot weight in the first texture coordinate's U (M_LandSteel reads it). Each triangle's
+	 * bytes), and each point's soot weight in the first texture coordinate's U (M_LandSteel reads it). With BurntWhole
+	 * given (the burnt coat, release 2: her model's one burnt colour, for a point with none of its own), the colour each
+	 * point burns to goes with it, in the same sRGB: its red in the first coordinate's V, its green and blue in a second
+	 * coordinate (M_LandSteel reads them where its "BurntByPoint" is 1). Each triangle's
 	 * last two corners swapped, as FromBody's: the model files wind their faces the other way round to the engine's
 	 * front (LandBattle.cpp, LandParts::KitFront; drawn as they stood, every far vehicle was inside out). A triangle that
 	 * repeats a corner is left out (it draws nothing). Null where there is nothing to draw.
 	 */
-	static UStaticMesh* PieceMesh(UObject* Owner, const LandKit::Mesh& M, UMaterialInterface* Ink, double U)
+	static UStaticMesh* PieceMesh(UObject* Owner, const LandKit::Mesh& M, UMaterialInterface* Ink, double U, const uint8_t* BurntWhole = nullptr)
 	{
 		const int32 Count = static_cast<int32>(M.Count());
 		if (!Owner || !Ink || Count <= 0 || M.Triangles.empty() || M.Points.size() != static_cast<size_t>(Count) * 3
@@ -50,7 +53,7 @@ namespace LandCrowdParts
 		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
 		auto Colours = Attributes.GetVertexInstanceColors();
 		auto Uvs = Attributes.GetVertexInstanceUVs();
-		Uvs.SetNumChannels(1);
+		Uvs.SetNumChannels(BurntWhole ? 2 : 1);
 		const FPolygonGroupID Group = D.CreatePolygonGroup();
 		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
 		D.ReserveNewVertices(Count);
@@ -72,7 +75,16 @@ namespace LandCrowdParts
 			Signs[Corner] = 1.0f;
 			Colours[Corner] = FVector4f(FLinearColor(FColor(M.Colours[K * 4], M.Colours[K * 4 + 1], M.Colours[K * 4 + 2], M.Colours[K * 4 + 3])));
 			const float Soot = K < M.Soot.size() ? M.Soot[K] : 0.0f;
-			Uvs.Set(Corner, 0, FVector2f(Soot, 0.0f));
+			if (BurntWhole)
+			{
+				const uint8_t* Own = M.BurntOf(K, BurntWhole);
+				Uvs.Set(Corner, 0, FVector2f(Soot, Own[0] / 255.0f));
+				Uvs.Set(Corner, 1, FVector2f(Own[1] / 255.0f, Own[2] / 255.0f));
+			}
+			else
+			{
+				Uvs.Set(Corner, 0, FVector2f(Soot, 0.0f));
+			}
 			Corners[I] = Corner;
 		}
 		int32 Made = 0;
@@ -269,6 +281,9 @@ UMaterialInterface* FLandCrowd::InkFor(const LandKit::Model& Model, FKind& Kind)
 		Ink->CopyParameterOverrides(From);
 	}
 	Ink->SetVectorParameterValue(TEXT("BurntColour"), FLinearColor(Model.BurntColour[0] / 255.0f, Model.BurntColour[1] / 255.0f, Model.BurntColour[2] / 255.0f, 1.0f));
+	// (the burnt coat, release 2: each point's own burnt colour, carried in her far meshes' texture coordinates; an
+	// M_LandSteel built before it has no such number and keeps the one colour)
+	Ink->SetScalarParameterValue(TEXT("BurntByPoint"), Model.bBurntCoat ? 1.0f : 0.0f);
 	Keep->Add(Ink);
 	// (its own settings, given back when the general's view is put away)
 	Kind.Ink = Ink;
@@ -330,7 +345,7 @@ void FLandCrowd::MakeStick(FKind& Kind, UMaterialInterface* Ink)
 	}
 	LandKit::Mesh Box;
 	LandCrowdParts::StickBox(Colour, Box);
-	UStaticMesh* Mesh = LandCrowdParts::PieceMesh(Scene, Box, Ink, U);
+	UStaticMesh* Mesh = LandCrowdParts::PieceMesh(Scene, Box, Ink, U, Model.bBurntCoat ? Model.BurntColour : nullptr);
 	if (!Mesh)
 	{
 		return;
@@ -402,7 +417,7 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 		{
 			continue;
 		}
-		UStaticMesh* Mesh = Of.Anchor >= 0 ? LandCrowdParts::PieceMesh(Scene, Of.Merged, Ink, U) : nullptr;
+		UStaticMesh* Mesh = Of.Anchor >= 0 ? LandCrowdParts::PieceMesh(Scene, Of.Merged, Ink, U, Model.bBurntCoat ? Model.BurntColour : nullptr) : nullptr;
 		if (!Mesh && Piece == LidUp)
 		{
 			// (the lid-up copy only shows the lid up: without it she shows it shut, as before)

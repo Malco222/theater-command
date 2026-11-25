@@ -1094,6 +1094,9 @@ namespace LandKit
 			std::vector<int> Blend2, DustIn, Haze;
 			std::vector<float> ShadeIn;
 			bool bDust = false;
+			// (the burnt coat, release 2, Dress::bBurntCoat: what a point's bare steel is left as once she has burnt out:
+			// over 0 the pale ash of her paint lying on it, else rust. Empty with the coat off. CutAlong ends each at a line.)
+			std::vector<float> Ash;
 			std::vector<uint32_t> Triangles;
 			size_t Count() const { return Paints.size(); }
 		};
@@ -1314,6 +1317,179 @@ namespace LandKit
 				}
 				R.Triangles.swap(Cut);
 			}
+		}
+
+		/** The least of Field at each place: points that lie together (a corner the mesh splits for its faces' own
+		 * facings, a seam between two paints) all take the least of theirs, so a line drawn by Field's sign crosses both
+		 * sides of a seam at one place (CutAlong: then no point of one triangle sits in the middle of its neighbour's
+		 * edge). */
+		void LeastTogether(const RawMesh& R, std::vector<float>& Field)
+		{
+			const size_t N = R.Count();
+			if (Field.size() != N)
+			{
+				return;
+			}
+			auto Key = [&R](size_t I)
+			{
+				const int64_t X = std::llround(R.Points[I * 3] * 2000.0), Y = std::llround(R.Points[I * 3 + 1] * 2000.0), Z = std::llround(R.Points[I * 3 + 2] * 2000.0);
+				return (static_cast<uint64_t>(X & 0x1FFFFF) << 42) | (static_cast<uint64_t>(Y & 0x1FFFFF) << 21) | static_cast<uint64_t>(Z & 0x1FFFFF);
+			};
+			std::unordered_map<uint64_t, float> Least;
+			Least.reserve(N);
+			for (size_t I = 0; I < N; ++I)
+			{
+				const auto Put = Least.emplace(Key(I), Field[I]);
+				if (!Put.second)
+				{
+					Put.first->second = std::min(Put.first->second, Field[I]);
+				}
+			}
+			for (size_t I = 0; I < N; ++I)
+			{
+				Field[I] = Least.find(Key(I))->second;
+			}
+		}
+
+		/** Cuts the mesh along the line where Field crosses 0 (the burnt coat's ash from its rust), so the two end at a
+		 * line and do not fade into each other across a whole plate (a hull side's plates are a quarter of a metre
+		 * across and more, and the colours are laid on the points: the art director's brief asks an edge under 10 cm).
+		 * Each edge longer than MinEdge whose ends lie either side of 0 is cut once, where Field crosses, for every
+		 * triangle that shares it (so no point sits in the middle of a neighbour's edge), and the crossing is two points
+		 * in one place, one for each side: each with its own side's paint and part, Field just its side of 0, and the
+		 * rest of what the file gives a point as far between the ends' as it lies. A triangle is cut in two or three by
+		 * how many of its edges were. An edge with an end marked in Whole is left whole (a wheel's points and a track
+		 * link's keep their count and their order). Field wants LeastTogether first. */
+		void CutAlong(RawMesh& R, std::vector<float>& Field, const std::vector<uint8_t>& Whole, double MinEdge)
+		{
+			const size_t First = R.Count();
+			if (Field.size() != First || Whole.size() != First)
+			{
+				return;
+			}
+			const double Min2 = MinEdge * MinEdge;
+			struct Pair
+			{
+				uint32_t Over = 0, Under = 0;
+			};
+			std::unordered_map<uint64_t, Pair> Cuts;
+			auto Over = [&Field](uint32_t P) { return Field[P] > 0.0f; };
+			// A point T of the way from From to To, on Of's side of the line (Of is one of the two).
+			auto Add = [&R, &Field](uint32_t From, uint32_t To, double T, uint32_t Of, float Value)
+			{
+				for (size_t I = 0; I < 3; ++I)
+				{
+					R.Points.push_back(static_cast<float>(Lerp(R.Points[From * 3 + I], R.Points[To * 3 + I], T)));
+				}
+				const V3 Facing = (V3(R.Facings[From * 3], R.Facings[From * 3 + 1], R.Facings[From * 3 + 2]) * (1.0 - T)
+					+ V3(R.Facings[To * 3], R.Facings[To * 3 + 1], R.Facings[To * 3 + 2]) * T).Unit();
+				R.Facings.push_back(static_cast<float>(Facing.X));
+				R.Facings.push_back(static_cast<float>(Facing.Y));
+				R.Facings.push_back(static_cast<float>(Facing.Z));
+				R.Paints.push_back(R.Paints[Of]);
+				R.Parts.push_back(R.Parts[Of]);
+				auto Between = [T](int A, int B) { return static_cast<int>(std::lround(Lerp(A, B, T))); };
+				R.Blend.push_back(Between(R.Blend[From], R.Blend[To]));
+				R.SootIn.push_back(Between(R.SootIn[From], R.SootIn[To]));
+				R.Wear.push_back(Between(R.Wear[From], R.Wear[To]));
+				R.Blend2.push_back(Between(R.Blend2[From], R.Blend2[To]));
+				R.DustIn.push_back(Between(R.DustIn[From], R.DustIn[To]));
+				R.Haze.push_back(Between(R.Haze[From], R.Haze[To]));
+				R.ShadeIn.push_back(static_cast<float>(Lerp(R.ShadeIn[From], R.ShadeIn[To], T)));
+				Field.push_back(Value);
+				return static_cast<uint32_t>(R.Count() - 1);
+			};
+			auto CutOf = [&](uint32_t A, uint32_t B, Pair& Out)
+			{
+				if (Over(A) == Over(B) || Whole[A] != 0 || Whole[B] != 0)
+				{
+					return false;
+				}
+				double Length2 = 0.0;
+				for (size_t I = 0; I < 3; ++I)
+				{
+					const double D = static_cast<double>(R.Points[A * 3 + I]) - R.Points[B * 3 + I];
+					Length2 += D * D;
+				}
+				if (Length2 <= Min2)
+				{
+					return false;
+				}
+				const uint64_t Key = (static_cast<uint64_t>(std::min(A, B)) << 32) | std::max(A, B);
+				auto It = Cuts.find(Key);
+				if (It == Cuts.end())
+				{
+					// (from the end over 0 to the other, whichever way round the triangle names them: one place for
+					// both triangles that share the edge; never nearer an end than a twentieth of the edge, no sliver)
+					const uint32_t Hi = Over(A) ? A : B, Lo = Over(A) ? B : A;
+					const double T = Clamp(static_cast<double>(Field[Hi]) / (static_cast<double>(Field[Hi]) - Field[Lo]), 0.05, 0.95);
+					Pair Made;
+					Made.Over = Add(Hi, Lo, T, Hi, 1e-4f);
+					Made.Under = Add(Hi, Lo, T, Lo, -1e-4f);
+					It = Cuts.emplace(Key, Made).first;
+				}
+				Out = It->second;
+				return true;
+			};
+			const size_t Before = R.Triangles.size() / 3;
+			std::vector<uint32_t> Cut;
+			Cut.reserve(R.Triangles.size() + R.Triangles.size() / 4);
+			auto Tri = [&Cut](uint32_t A, uint32_t B, uint32_t C)
+			{
+				Cut.push_back(A);
+				Cut.push_back(B);
+				Cut.push_back(C);
+			};
+			for (size_t T = 0; T < Before; ++T)
+			{
+				const uint32_t V[3] = { R.Triangles[T * 3], R.Triangles[T * 3 + 1], R.Triangles[T * 3 + 2] };
+				const bool S[3] = { Over(V[0]), Over(V[1]), Over(V[2]) };
+				if (S[0] == S[1] && S[1] == S[2])
+				{
+					Tri(V[0], V[1], V[2]);
+					continue;
+				}
+				// (a triangle of no area, three points in a line where a file's plates meet, is left as it is: it shows
+				// nothing, and its pieces would be of no area too)
+				const auto PointOf = [&R](uint32_t P) { return V3(R.Points[P * 3], R.Points[P * 3 + 1], R.Points[P * 3 + 2]); };
+				const V3 Corner = PointOf(V[0]);
+				if ((PointOf(V[1]) - Corner).Cross(PointOf(V[2]) - Corner).Length() < 2e-6)
+				{
+					Tri(V[0], V[1], V[2]);
+					continue;
+				}
+				// The corner alone on its side of the line, and the two after it as the triangle winds.
+				const size_t Lone = S[0] != S[1] && S[0] != S[2] ? 0 : (S[1] != S[0] && S[1] != S[2] ? 1 : 2);
+				const uint32_t L = V[Lone], N1 = V[(Lone + 1) % 3], N2 = V[(Lone + 2) % 3];
+				Pair M, N;
+				const bool bM = CutOf(L, N1, M);
+				const bool bN = CutOf(N2, L, N);
+				const bool bLoneOver = S[Lone];
+				const uint32_t MineM = bLoneOver ? M.Over : M.Under, TheirsM = bLoneOver ? M.Under : M.Over;
+				const uint32_t MineN = bLoneOver ? N.Over : N.Under, TheirsN = bLoneOver ? N.Under : N.Over;
+				if (bM && bN)
+				{
+					Tri(L, MineM, MineN);
+					Tri(TheirsM, N1, N2);
+					Tri(TheirsM, N2, TheirsN);
+				}
+				else if (bM)
+				{
+					// (the other crossing edge is short: its fade is no wider than MinEdge)
+					Tri(L, MineM, N2);
+					Tri(TheirsM, N1, N2);
+				}
+				else if (bN)
+				{
+					Tri(L, N1, MineN);
+					Tri(TheirsN, N1, N2);
+				}
+				else
+				{
+					Tri(V[0], V[1], V[2]);
+				}
+			}
+			R.Triangles.swap(Cut);
 		}
 	}
 
@@ -1864,6 +2040,26 @@ namespace LandKit
 				Out.Normals.insert(Out.Normals.end(), { static_cast<float>(Normal.X), static_cast<float>(Normal.Y), static_cast<float>(Normal.Z) });
 				Out.Colours.insert(Out.Colours.end(), { static_cast<uint8_t>(Clamp(R, 0.0, 255.0) + 0.5), static_cast<uint8_t>(Clamp(G, 0.0, 255.0) + 0.5),
 					static_cast<uint8_t>(Clamp(B, 0.0, 255.0) + 0.5), 255 });
+				if (!Out.Burnt.empty())
+				{
+					// (the burnt coat: the mark burns to what the skin under it does)
+					uint8_t To[3] = { 38, 33, 29 };
+					if (H.T)
+					{
+						const uint32_t Ix[3] = { H.T->I0, H.T->I1, H.T->I2 };
+						const double Wt[3] = { 1.0 - H.U - H.V, H.U, H.V };
+						for (size_t Ch = 0; Ch < 3; ++Ch)
+						{
+							double Sum = 0.0;
+							for (int K = 0; K < 3; ++K)
+							{
+								Sum += Out.Burnt[Ix[K] * 3 + Ch] * Wt[K];
+							}
+							To[Ch] = static_cast<uint8_t>(Clamp(Sum, 0.0, 255.0) + 0.5);
+						}
+					}
+					Out.Burnt.insert(Out.Burnt.end(), To, To + 3);
+				}
 				Out.Soot.push_back(Soot);
 				return static_cast<uint32_t>(Out.Soot.size() - 1);
 			};
@@ -2125,6 +2321,10 @@ namespace LandKit
 					std::copy_n(&Out.Normals[From * 3], 3, &Out.Normals[Next * 3]);
 					std::copy_n(&Out.Colours[From * 4], 4, &Out.Colours[Next * 4]);
 					Out.Soot[Next] = Out.Soot[From];
+					if (!Out.Burnt.empty())
+					{
+						std::copy_n(&Out.Burnt[From * 3], 3, &Out.Burnt[static_cast<size_t>(Next) * 3]);
+					}
 				}
 				++Next;
 			}
@@ -2132,6 +2332,10 @@ namespace LandKit
 			Out.Normals.resize(static_cast<size_t>(Next) * 3);
 			Out.Colours.resize(static_cast<size_t>(Next) * 4);
 			Out.Soot.resize(Next);
+			if (!Out.Burnt.empty())
+			{
+				Out.Burnt.resize(static_cast<size_t>(Next) * 3);
+			}
 			for (size_t T = FirstTriangle; T < Out.Triangles.size(); ++T)
 			{
 				Out.Triangles[T] = static_cast<uint32_t>(NewIndex[Out.Triangles[T] - FirstPoint]);
@@ -2670,6 +2874,56 @@ namespace LandKit
 			// (near only: from far off a blotch is smaller than a pixel, and the far mesh's plates blend it well enough)
 			Refine(Near, Upper, 0.25);
 		}
+		const uint64_t Seed = Mix(std::hash<std::string>()(Name) & 0xFFFFFFFFull, 0x5EED);
+		// The burnt coat (release 2, Dress::bBurntCoat; the art director's brief of 25 November): what each point's
+		// steel is left as once she has burnt out, the pale ash of her paint lying on it or rust (RawMesh::Ash, laid in
+		// patches some 0.3 to 0.8 m across), and the near mesh cut along the line between the two. Ash lies on what looks
+		// up and a little more the higher it is; an upright plate sheds it and rusts. The running gear and bare steel
+		// rust; a burnt tyre leaves its ash on the rim; never ash on a plate's edge (no pale line on an edge).
+		bBurntCoat = D.bBurntCoat;
+		// (her own near points, before the cut adds its own after them: what counts her paint's shares counts these)
+		const size_t NearOwn = Near.Count();
+		std::vector<float> NearEdgeOwn;
+		if (D.bBurntCoat)
+		{
+			for (RawMesh* Raw : { &Near, &Far })
+			{
+				const std::vector<float> Edge = Edges(*Raw);
+				if (Raw == &Near)
+				{
+					NearEdgeOwn = Edge;
+				}
+				const size_t N = Raw->Count();
+				Raw->Ash.assign(N, -0.3f);
+				for (size_t K = 0; K < N; ++K)
+				{
+					const int PaintK = std::max(0, std::min(Raw->Paints[K], static_cast<int>(Paint.size()) - 1));
+					const Part& P = Parts[static_cast<size_t>(Raw->Parts[K])];
+					if (PaintK == Rubber)
+					{
+						Raw->Ash[K] = 0.3f;
+					}
+					else if (P.Kind != PartKind::Spin && !P.bLink && PaintK != Tread && PaintK != Steel && Edge[K] <= 0.0f)
+					{
+						const V3 At(Raw->Points[K * 3], Raw->Points[K * 3 + 1], Raw->Points[K * 3 + 2]);
+						const double Broad = Noise(At * 3.2, Seed + 203);
+						const double Fine = Noise(At * 5.5, Seed + 204);
+						const double Lean = Lerp(-0.2, 0.025, Smooth(0.15, 0.7, Raw->Facings[K * 3 + 2])) + 0.04 * Smooth(0.8, 2.2, At.Z);
+						Raw->Ash[K] = static_cast<float>(0.66 * Broad + 0.34 * Fine - 0.5 + Lean);
+					}
+				}
+				LeastTogether(*Raw, Raw->Ash);
+			}
+			// (near only: from far off a patch's edge is smaller than a pixel. A wheel's points and a link's are left as
+			// they are: every wheel of a side is one mesh, and a track's links are runs of points in file order.)
+			std::vector<uint8_t> Whole(Near.Count(), 0);
+			for (size_t K = 0; K < Whole.size(); ++K)
+			{
+				const Part& P = Parts[static_cast<size_t>(Near.Parts[K])];
+				Whole[K] = P.Kind == PartKind::Spin || P.bLink ? 1 : 0;
+			}
+			CutAlong(Near, Near.Ash, Whole, 0.2);
+		}
 		std::vector<size_t> Points(Parts.size(), 0);
 		for (const RawMesh* Raw : { &Near, &Far })
 		{
@@ -2731,8 +2985,56 @@ namespace LandKit
 				Fires.push_back(S.At);
 			}
 		}
-		const uint64_t Seed = Mix(std::hash<std::string>()(Name) & 0xFFFFFFFFull, 0x5EED);
 		const Lin Dust = FromPicture(156, 141, 112), SunFaded = FromPicture(108, 101, 76);
+		// (the burnt coat's three colours: her soot, the model's one burnt colour as it was; rust from a dark red-brown
+		// to an orange, about 105, 62, 40 between them; ash grey, about 115, 110, 104)
+		const Lin SootBlack = FromPicture(BurntColour[0], BurntColour[1], BurntColour[2]);
+		const Lin RustDark = FromPicture(60, 42, 35), RustBright = FromPicture(112, 70, 46);
+		const Lin AshDark = FromPicture(101, 96, 91), AshPale = FromPicture(129, 124, 117);
+		// (how far a vent's smoke blackens her goes with her size, by her half width: a light tank is not all soot; and
+		// half as far on what is no longer than a motorcycle and its sidecar, a small fire with little to feed it)
+		double HalfWide = 0.0, HalfLong = 0.0;
+		for (size_t K = 0; K < NearOwn; ++K)
+		{
+			HalfLong = std::max(HalfLong, std::fabs(static_cast<double>(Near.Points[K * 3])));
+			HalfWide = std::max(HalfWide, std::fabs(static_cast<double>(Near.Points[K * 3 + 1])));
+		}
+		const double Small = Lerp(0.5, 1.0, Smooth(1.2, 1.6, HalfLong));
+		const double VentReach = Clamp(HalfWide / 1.5, 0.7, 1.1) * Small;
+		// (a fire's place that hangs in the air of an open body, a half-track's or a lorry's, more than a quarter of a
+		// metre from her nearest skin: its smoke's reach is counted from that much nearer, or it would blacken nothing;
+		// and which wheels wear only a thin band of rubber, a tank's road wheels: that burns away to ash, where a
+		// lorry's or a motorcycle's tyre chars)
+		std::vector<double> FireSlack(Fires.size(), 0.0);
+		std::vector<uint8_t> ThinBand(Parts.size(), 0);
+		if (D.bBurntCoat)
+		{
+			std::vector<double> Least(Fires.size(), 1e9), In(Parts.size(), 1e9), Out(Parts.size(), 0.0);
+			for (size_t K = 0; K < NearOwn; ++K)
+			{
+				const V3 At(Near.Points[K * 3], Near.Points[K * 3 + 1], Near.Points[K * 3 + 2]);
+				for (size_t F = 0; F < Fires.size(); ++F)
+				{
+					Least[F] = std::min(Least[F], (At - Fires[F]).Length());
+				}
+				const size_t PartK = static_cast<size_t>(Near.Parts[K]);
+				if (Near.Paints[K] == Rubber && Parts[PartK].Kind == PartKind::Spin)
+				{
+					const V3 Off = At - Parts[PartK].Pivot;
+					const double Round = std::sqrt(Off.X * Off.X + Off.Z * Off.Z);
+					In[PartK] = std::min(In[PartK], Round);
+					Out[PartK] = std::max(Out[PartK], Round);
+				}
+			}
+			for (size_t F = 0; F < Fires.size(); ++F)
+			{
+				FireSlack[F] = std::max(0.0, Least[F] - 0.25);
+			}
+			for (size_t I = 0; I < Parts.size(); ++I)
+			{
+				ThinBand[I] = Out[I] > 0.0 && Out[I] - In[I] < 0.28 * Out[I] ? 1 : 0;
+			}
+		}
 
 		// The German three colours: olive green and red-brown sprayed over the dark yellow, each in its own blotches
 		// (two noises), the green a quarter of the coat and the brown a sixth, about the share photographs of
@@ -2743,7 +3045,7 @@ namespace LandKit
 		const auto Threshold = [&](uint64_t Of, double Cover)
 		{
 			std::vector<double> Values;
-			for (size_t K = 0; K < Near.Count(); ++K)
+			for (size_t K = 0; K < NearOwn; ++K)
 			{
 				if (Near.Paints[K] == Upper)
 				{
@@ -2780,9 +3082,15 @@ namespace LandKit
 					break;
 				}
 			}
-			const std::vector<float> Edge = Edges(Raw);
+			std::vector<float> Edge = Edges(Raw);
+			if (Level == 0 && NearEdgeOwn.size() <= Edge.size())
+			{
+				// (the burnt coat's cut adds points: her own keep the edges they had before it)
+				std::copy(NearEdgeOwn.begin(), NearEdgeOwn.end(), Edge.begin());
+			}
 			std::vector<uint8_t> Colour(N * 4, 255);
 			std::vector<float> Burn(N, 0.0f);
+			std::vector<uint8_t> BurntTo(D.bBurntCoat ? N * 3 : 0, 0);
 			std::vector<float> Dirt(D.bMarks ? N * 6 : 0, 0.0f);
 			for (size_t K = 0; K < N; ++K)
 			{
@@ -2919,7 +3227,80 @@ namespace LandKit
 				{
 					B = 0.5;
 				}
-				Burn[K] = static_cast<float>(Clamp(B * (0.8 + 0.4 * Noise(Here * 1.7, Seed + 77)), 0.0, 1.0));
+				if (D.bBurntCoat)
+				{
+					// The burnt coat: three colours in place of one. Soot above and round what the smoke poured from
+					// (it climbs: what is over a vent is blackened further from it than what is beside or under it),
+					// under an overhang, where it gathered, in stains here and there, and over what the fire left
+					// coolest, far from every vent, where her paint charred and did not burn away; laid soft, in thick
+					// and thin. Under the soot her steel as RawMesh::Ash left it: pale ash, or rust from a dark scale to a
+					// red-brown, in streaks down an upright plate. Her running gear's rust is darkened by her tyres'
+					// smoke. Cloth and glass have no steel under them: ash, or charred black. Little of her paint is
+					// left anywhere, and her tracks and bare steel rust with the rest.
+					// (a gun or a cart, with no place the fire comes out of: burnt evenly, half way between)
+					double Vent = 0.0, Heat = Fires.empty() ? 0.5 : 0.0;
+					for (size_t F = 0; F < Fires.size(); ++F)
+					{
+						V3 Off = At - Fires[F];
+						Heat = std::max(Heat, Smooth(3.4, 1.2, Off.Length()));
+						Off.Z *= Off.Z > 0.0 ? 0.6 : 1.7;
+						Vent = std::max(Vent, Smooth(1.3 * VentReach, 0.3 * VentReach, std::max(0.0, Off.Length() - FireSlack[F])));
+					}
+					// (the soot's thick and thin and its stains are as much smaller on a motorcycle as its fire is: else one
+					// stain covers the whole of her, or none of her)
+					const double Thick = Noise(Here * (1.5 / Small), Seed + 201);
+					const double Veil = Noise(Here * (0.9 / Small), Seed + 209);
+					double Sooted = std::max({ Vent * (0.55 + 0.9 * Thick), Smooth(-0.15, -0.6, Up.Z) * (0.7 + 0.5 * Thick),
+						(1.0 - Heat) * (0.5 + 0.9 * Veil), 0.9 * Smooth(0.55, 0.8, Veil) });
+					const bool bCloth = PaintK == Canvas || PaintK == Glass;
+					const bool bRuns = bSpins || P.bLink || PaintK == Tread;
+					const double Down = std::fabs(Up.Z) < 0.5 ? 0.9 : 2.6;
+					const double Scale = Noise(V3(Here.X * 2.6, Here.Y * 2.6, Here.Z * Down), Seed + 205);
+					// (a thin film of soot over her rust, more here, less there: never one clean orange)
+					Lin To = Mix(Mix(RustDark, RustBright, Smooth(0.2, 0.8, Scale)), SootBlack, 0.3 * Noise(Here * 6.5, Seed + 210));
+					// (the ash ends at RawMesh::Ash's line, the near mesh cut there, and thins toward it from both sides:
+					// a flake's edge with a soft shoulder, not a painted patch's)
+					const double A = Raw.Ash[K];
+					// (cloth leaves less of it than paint on steel does)
+					double Ashen = (PaintK == Glass ? 0.0 : A > 0.0 ? Lerp(0.72, 1.0, Smooth(0.0, 0.03, A)) : Lerp(0.28, 0.0, Smooth(0.0, -0.03, A)))
+						* (PaintK == Canvas ? 0.55 : 1.0);
+					if (bCloth && A <= 0.0)
+					{
+						Sooted = 1.0;
+					}
+					else if (bRuns)
+					{
+						To = Mix(To, SootBlack, 0.2);
+					}
+					if (PaintK == Rubber && !ThinBand[static_cast<size_t>(PartK)])
+					{
+						// (a burnt tyre: its carcass charred, its own pale ash lying on that in flakes, thick and thin;
+						// never a clean pale ring, which reads as a white-walled tyre. The thin band of rubber round a
+						// tank's road wheel burns away to ash, as RawMesh::Ash has it.)
+						To = SootBlack * 1.2;
+						Ashen = 0.7 * Smooth(0.36, 0.64, Noise(Here * 9.0, Seed + 211));
+					}
+					To = Mix(To, Mix(AshDark, AshPale, Noise(Here * 2.7, Seed + 206)), Ashen);
+					To = To * (0.92 + 0.16 * Noise(Here * 21.0, Seed + 207));
+					To = Mix(To, SootBlack * (0.85 + 0.3 * Noise(Here * 4.0, Seed + 208)), Smooth(0.4, 0.62, Sooted));
+					BurntTo[K * 3] = ToPicture(To.R);
+					BurntTo[K * 3 + 1] = ToPicture(To.G);
+					BurntTo[K * 3 + 2] = ToPicture(To.B);
+					// (where the fire was coolest her paint charred and a little of its own tone is left under the black: a
+					// grey hull's wreck and an olive one's are not one colour)
+					B = (0.86 + 0.14 * std::max(Near2Fire, std::max(0.0, Up.Z))) * (1.0 - 0.2 * (1.0 - Heat));
+					if (PaintK == Rubber || bCloth)
+					{
+						B = 0.97;
+					}
+					else if (PaintK == Tread || PaintK == Steel)
+					{
+						B = 0.8;
+					}
+				}
+				// (the burnt coat: more even, its unevenness is in its colours)
+				const double Uneven = Noise(Here * 1.7, Seed + 77);
+				Burn[K] = static_cast<float>(Clamp(B * (D.bBurntCoat ? 0.9 + 0.2 * Uneven : 0.8 + 0.4 * Uneven), 0.0, 1.0));
 			}
 
 			// The cut: every point to its owner's body, in file order (a track's links one after another).
@@ -2965,6 +3346,7 @@ namespace LandKit
 				Out.Normals.resize(List.size() * 3);
 				Out.Colours.resize(List.size() * 4);
 				Out.Soot.resize(List.size());
+				Out.Burnt.resize(D.bBurntCoat ? List.size() * 3 : 0);
 				for (size_t J = 0; J < List.size(); ++J)
 				{
 					const size_t K = List[J];
@@ -2977,6 +3359,10 @@ namespace LandKit
 					Out.Normals[J * 3 + 2] = static_cast<float>(F.Z);
 					std::memcpy(&Out.Colours[J * 4], &Colour[K * 4], 4);
 					Out.Soot[J] = Burn[K];
+					if (D.bBurntCoat)
+					{
+						std::memcpy(&Out.Burnt[J * 3], &BurntTo[K * 3], 3);
+					}
 				}
 			}
 			std::vector<int32_t> BodyOf(N, -1), Local(N, -1);
@@ -3027,6 +3413,10 @@ namespace LandKit
 						Out.Points.insert(Out.Points.end(), { static_cast<float>(P.X), static_cast<float>(P.Y), static_cast<float>(P.Z) });
 						Out.Normals.insert(Out.Normals.end(), { static_cast<float>(Nf.X), static_cast<float>(Nf.Y), static_cast<float>(Nf.Z) });
 						Out.Colours.insert(Out.Colours.end(), { Cr, Cg, Cb, 255 });
+						if (!Out.Burnt.empty())
+						{
+							Out.Burnt.insert(Out.Burnt.end(), { BurntColour[0], BurntColour[1], BurntColour[2] });
+						}
 						Out.Soot.push_back(0.6f);
 						return static_cast<uint32_t>(Out.Soot.size() - 1);
 					};
@@ -6375,6 +6765,7 @@ namespace LandKit
 		D.Coat = B.Coat;
 		D.Choose = Choose;
 		D.bMarks = bMarks;
+		D.bBurntCoat = bBurntCoat;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -7082,6 +7473,11 @@ namespace LandKit
 					To.Colours.insert(To.Colours.end(), From.Colours.begin() + static_cast<std::ptrdiff_t>(K * 4),
 						From.Colours.begin() + static_cast<std::ptrdiff_t>(K * 4 + 4));
 					To.Soot.push_back(From.Soot[K]);
+					if (M.bBurntCoat)
+					{
+						const uint8_t* Own = From.BurntOf(K, M.BurntColour);
+						To.Burnt.insert(To.Burnt.end(), Own, Own + 3);
+					}
 				}
 				for (uint32_t I : From.Triangles)
 				{

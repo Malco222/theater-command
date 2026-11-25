@@ -769,8 +769,9 @@ namespace LandParts
 	static constexpr double StalkClear = 3.5, StalkEyeLow = 2.5, StalkEyeHigh = 3.0;
 
 	/** A body of a battle model (model axes, metres from its pivot: x forward, y right, z up, as Unreal's own) as the
-	 * engine takes it, its colours taken toward the burnt colour by Soot. Each triangle's last two corners are swapped
-	 * (KitFront). */
+	 * engine takes it, its colours taken toward the burnt colour by Soot: Burnt, the model's one, or with the burnt coat
+	 * on (release 2, the trial word "burntcoat") each point's own soot, rust or ash (LandKit::Mesh::BurntOf). Each
+	 * triangle's last two corners are swapped (KitFront). */
 	static void FromBody(const LandKit::Mesh& M, const uint8_t* Burnt, double Soot, double U, TArray<FVector>& P, TArray<FVector>& N, TArray<FColor>& C, TArray<int32>* T)
 	{
 		const int32 Count = static_cast<int32>(M.Count());
@@ -784,7 +785,8 @@ namespace LandParts
 			N[I] = FVector(M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2]);
 			const double S = Soot > 0.0 && K < M.Soot.size() ? FMath::Clamp(M.Soot[K] * Soot, 0.0, 1.0) : 0.0;
 			auto Mixed = [S](uint8_t From, uint8_t To) { return static_cast<uint8>(FMath::RoundToInt(From + (To - From) * S)); };
-			C[I] = FColor(Mixed(M.Colours[K * 4], Burnt[0]), Mixed(M.Colours[K * 4 + 1], Burnt[1]), Mixed(M.Colours[K * 4 + 2], Burnt[2]), M.Colours[K * 4 + 3]);
+			const uint8_t* Own = M.BurntOf(K, Burnt);
+			C[I] = FColor(Mixed(M.Colours[K * 4], Own[0]), Mixed(M.Colours[K * 4 + 1], Own[1]), Mixed(M.Colours[K * 4 + 2], Own[2]), M.Colours[K * 4 + 3]);
 		}
 		if (T)
 		{
@@ -4182,6 +4184,13 @@ void ALandBattle::MakeArmour()
 	// Army's red star, the British flash before July 1943. Off: none, as before.
 	Armour->bMarks = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMarks"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: national marks %s"), Armour->bMarks ? TEXT("painted on (-TheaterLandMarks, release 2)") : TEXT("off"));
+	// The burnt coat (release 2, on trial: "-TheaterLandTrial=burntcoat", off until the art director and a Mac reading
+	// pass; the art director's brief of 25 November for every army's wrecks): a burnt-out wreck goes to soot, rust and
+	// ash, each point to its own (LandKit's Dress::bBurntCoat), in place of one sooty black. "-TheaterLandNoBurntCoat"
+	// off whatever the trial. The far wrecks' own colours need M_LandSteel rebuilt (Tools/build_content.py,
+	// TC_REBUILD=M_LandSteel): with the old one they stay the one black until they come near.
+	Armour->bBurntCoat = LandParts::OnTrial("burntcoat") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoBurntCoat"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: the burnt coat %s"), Armour->bBurntCoat ? TEXT("ON (-TheaterLandTrial=burntcoat, release 2): wrecks in soot, rust and ash") : TEXT("off"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
