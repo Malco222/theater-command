@@ -39,7 +39,8 @@ namespace
 		{ TEXT("america"), EKind::TrialWord, TEXT("Battle looks: North American farmland"), TEXT("Fields in North America are laid out in its own big square farms. Off: the European pattern."), TEXT("america"), true, TEXT("AD PASS 23 Nov (some months' stills owed); Mac fps in the final pass"), false },
 		{ TEXT("runs"), EKind::TrialWord, TEXT("Battle looks: men run in their own strides"), TEXT("Men in a squad run each in his own stride instead of in step. Off: in step."), TEXT("runs"), true, TEXT("AD and Mac in the final pass"), false },
 		{ TEXT("deserthouses"), EKind::TrialWord, TEXT("Battle looks: desert towns' houses in full detail"), TEXT(""), TEXT("deserthouses"), false, TEXT("the AD's first review NOT YET (six mends, one more round); no Mac look yet"), false },
-		{ TEXT("city"), EKind::TrialWord, TEXT("Battle looks: ruined cities"), TEXT(""), TEXT("city"), false, TEXT("pass 2 (q82imy 38b6ab24): waits the AD's read of its first mend round and the Mac's 45 fps in a capital's core, with stills"), false },
+		{ TEXT("city"), EKind::TrialWord, TEXT("Battle looks: ruined cities"), TEXT(""), TEXT("city"), false, TEXT("pass 2 (q82imy 1d615923, the AD's three ride-along mends on 38b6ab24): waits the Mac's stills at the capital-east field (avenue, core street, suburb, barricade) and 45 fps in the core, then the AD"), false },
+		{ TEXT("scorch"), EKind::TrialWord, TEXT("Battle looks: scorched ground round burnt-out vehicles"), TEXT(""), TEXT("scorch"), false, TEXT("pass 2 (nu6w43 50c648ff): the crater sheet passes; waits the effects timing and a Mac A/B, then the AD"), false },
 		{ TEXT("trigh"), EKind::TrialWord, TEXT("Battle looks: desert wheel tracks"), TEXT(""), TEXT("trigh"), false, TEXT("pass 2 (nu6w43 3e5946b2 + 3b0b72bb): waits the 3D pre-check's compile and its A/B shots (the desert at 31.5N 25.0E)"), false },
 		{ TEXT("wetlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("wet"), true, TEXT("the look of the Battle rules card's Wet mud row (its switch); the AD's gate 25 Nov 14:02Z: NOT YET, small mend, stays ON (the wet row's note)"), false },
 		{ TEXT("wornlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("worn"), true, TEXT("the look of the Battle rules card's Worn uniforms row (its switch)"), false },
@@ -81,6 +82,7 @@ namespace
 		{ TEXT("bearers"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("bearers"), false, TEXT("standing rule: off (the get-up bug)"), false },
 		{ TEXT("smoke"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("smoke"), false, TEXT("standing rule: off until the tactics mend"), false },
 		{ TEXT("noseArt"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("noseArt"), false, TEXT("pass 2 (air wave 1, 0byihx 805b71bc): the paintings passed the AD; ON once the Mac's C13/C13b shows them placed on the bombers"), false },
+		{ TEXT("unitColours"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("unitColours"), false, TEXT("pass 2 (air 0byihx 30899121, earned colours): the Battle rules card's Earned colours row; waits the AD's read of the palette on the Mac"), false },
 		{ TEXT("flyTroops"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("flyTroops"), false, TEXT("off: no raid on troops has a battle in the air until the air rules thread's side joins, so on it would show nothing"), false },
 		{ TEXT("flyDefend"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("flyDefend"), false, TEXT("off: the month stop it needs is not built yet (the stand-in offer is -TheaterAirScrambleDemo)"), false },
 		// ---- The campaign map ----
