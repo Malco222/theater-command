@@ -39,7 +39,11 @@ interface Bridge {
   railReach(ids: number[]): { regions: number[] };
   seaReach(ids: number[]): { ports: number[]; beaches: number[] };
   ship(ids: number[], to: number): { moved: { id: number }[] };
-  railTip(ids: number[], to: number): { no: string };
+  railTip(ids: number[], to: number): { no: string; ride: string };
+  railShow(ids: number[], march: number[]): { can: boolean; line: string; tint: number[] };
+  landingPlan(ids: number[], to: number): { ok: boolean; why: string };
+  landOn(ids: number[], to: number): { ok: boolean; moved: { id: number }[] };
+  work(action: string): { ok: boolean; note: string };
   approach(ids: number[], to: number): { ok: boolean; none: string; rows: Row[] };
   bySeaWhy(ids: number[], to: number): { why: string };
 }
@@ -409,6 +413,55 @@ describe('the review: a garrison beside the field army sent by rail or by sea st
     expect(went.said).not.toMatch(/has no room for more/);
     expect(went.said.endsWith(`${c.name} stays in the town. ${NO_TRAIN}`)).toBe(true);
     expect(corpsIn(saved(), c.id).town).toBe(EARLIER);
+  });
+
+  it('(the third review) the railway is offered to the field army as if the garrison were not in hand, and names the garrison as it stays', () => {
+    const g = playing();
+    const eifel = g.byName['Eifel'];
+    const c = inside(g, eifel, EARLIER);
+    const f = bring(g, eifel);
+    f.ap = f.apMax;
+    TC.load(saveGame(g));
+    const t0 = saved();
+    const alone = TC.railShow([f.id], []), both = TC.railShow([f.id, c.id], []);
+    expect(alone.can).toBe(true);
+    expect(alone.tint.length).toBeGreaterThan(0);
+    // The station dots stay lit: a right-click beyond the march is the field army's train, not a long march for all.
+    expect(both).toMatchObject({ can: true, tint: alone.tint });
+    expect(both.line).toBe(`${alone.line} ${c.name} stays in the town. ${NO_TRAIN}`);
+    const to = alone.tint[0];
+    expect(TC.railTip([f.id, c.id], to).ride).toBe(`${TC.railTip([f.id], to).ride} ${c.name} stays in the town.`);
+    // A hand that is all garrison is judged whole, as before.
+    expect(TC.railShow([c.id], [])).toMatchObject({ can: false, line: NO_TRAIN });
+    expect(saved()).toBe(t0);
+    // Where the field army cannot ride either, the line is its own reason.
+    f.ap = 1;
+    TC.load(saveGame(g));
+    expect(TC.railShow([f.id, c.id], [])).toMatchObject({ can: false, line: TC.railShow([f.id], []).line });
+  });
+
+  it('(the third review) by sea the landing is the field army\'s: the coast stays offered, the garrison stays in its town', () => {
+    const g = playing();
+    const hamburg = g.byName['Hamburg'];
+    const c = inside(g, hamburg, EARLIER);
+    const f = bring(g, hamburg);
+    f.ap = f.apMax;
+    TC.load(saveGame(g));
+    const t0 = saved();
+    const alone = TC.seaReach([f.id]), both = TC.seaReach([f.id, c.id]);
+    expect(alone.beaches.length).toBeGreaterThan(0);
+    expect(both).toEqual(alone);
+    const beach = alone.beaches[0];
+    expect(TC.landingPlan([f.id, c.id], beach)).toMatchObject({ ok: true, why: '' });
+    // Asked of a coast the offer leaves out, the field army's own reason, not the garrison's.
+    const other = g.regions.find((r) => r.seas.length > 0 && !alone.beaches.includes(r.id) && r.ctrl !== 'GER' && !allied(g, 'GER', r.ctrl))!;
+    expect(TC.bySeaWhy([f.id, c.id], other.id).why).toBe(TC.bySeaWhy([f.id], other.id).why);
+    expect(saved()).toBe(t0);
+    // The landing goes, and the garrison is not in it.
+    const landed = TC.landOn([f.id, c.id], beach);
+    expect(landed.ok).toBe(true);
+    expect(landed.moved.map((m) => m.id)).not.toContain(c.id);
+    expect(corpsIn(saved(), c.id)).toMatchObject({ reg: hamburg.id, town: EARLIER });
   });
 
   it('by sea: asked of its own province, the rules give a garrison its own reason (the 3D game\'s GarrisonAboard); a ship takes the field corps alone', () => {

@@ -1063,6 +1063,22 @@ const garrisonHand = (s: Game, ids: unknown): Corps[] => {
   try { return inside.length && inside.length === corpsById(s, ids as number[]).length ? inside : []; } catch { return []; }
 };
 /**
+ * (The 1.5.3 review.) The corps of a hand that a train or a ship takes. Beside the army in the field, the corps of the
+ * town's garrison take neither (whyNoTrain, whyNotShip): the train, the voyage and the landing are the field army's,
+ * judged on it alone, and the garrison stays in its town, as rail() and ship() leave it. A hand that is all garrison,
+ * or has none, is judged whole.
+ */
+const afield = (cs: Corps[]): Corps[] => {
+  const field = cs.filter((c) => c.town === undefined);
+  return field.length && field.length < cs.length ? field : cs;
+};
+/** (The 1.5.3 review.) The corps of a hand left in their town as the rest go by train or by sea, named, with the rules' reason ('' where none is left). */
+function leftInTown(stay: Corps[], why: string): string {
+  if (!stay.length) return '';
+  const names = stay.map((c) => shortName(c.name));
+  return `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} stay` : `${names[0]} stays`} in the town.${why ? ` ${why}` : ''}`;
+}
+/**
  * Why these corps of his inside a town march nowhere this month, in the sentence the 3D game's pointer gives a
  * garrison in hand (garrisonWhy): the rules' garrisonLine, which tells one that went in this month when it can march
  * (it has no move once out) and any other the way out (TAKE THE FIELD, or a sortie where an army stands round the
@@ -3217,8 +3233,7 @@ function rail(ids: number[], to: number) {
   // stays in the town, with the rules' reason (whyNoTrain), and is not counted among those the place has no room for.
   const inside = asked.filter((c) => c.town !== undefined && !moved.some((m) => m.id === c.id));
   const place = s.regions[to]?.name ?? '', left = asked.length - inside.length - went.length;
-  const names = inside.map((c) => shortName(c.name));
-  const stay = names.length ? ` ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} stay` : `${names[0]} stays`} in the town. ${whyNoTrain(s, inside[0])?.line ?? ''}`.trimEnd() : '';
+  const stay = inside.length ? ` ${leftInTown(inside, whyNoTrain(s, inside[0])?.line ?? '')}` : '';
   const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}${stay}` : '';
   return { moved, said, view: view() };
 }
@@ -3258,7 +3273,10 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
   const none = { can: false, strong: '', line: '', tracks: [] as number[][], reach: [] as number[], dots: [] as number[], tint: [] as number[], bars: [] as number[][], ringed: [] as number[] };
   try {
     if (!humanUp(s) || onEve(s)) return none;
-    const cs = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c));
+    // (The 1.5.3 review.) Beside the army in the field, the town's garrison in hand takes no train: the field army is
+    // judged alone, as rail() sends it, and where it rides the line names the garrison as it stays in its town.
+    const all = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c));
+    const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
     if (!cs.length) return none;
     const walked = new Set<number>(march);
     const reach = [...railReachFor(s, cs)];
@@ -3290,6 +3308,7 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
         line = `${who} ${named.many ? 'are' : 'is'} ${seat.town}'s garrison${stronger ? `: inside the town ${named.many ? 'they fight' : 'it fights'} ${stronger}% stronger` : ''}. TAKE THE FIELD brings ${named.many ? 'them' : 'it'} out.`;
       }
     } catch { /* the rules' own line stands */ }
+    if (said?.can && stay.length) line = `${line} ${leftInTown(stay, whyNoTrain(s, stay[0])?.line ?? '')}`;
     return {
       can: !!said?.can, strong: said?.strong ?? '', line, tracks, reach,
       dots: beyond.filter((id) => !cuts.has(id) && !(barred && steep.has(s.regions[id].name))),
@@ -3308,11 +3327,13 @@ function railTip(ids: number[], to: number) {
   const s = game();
   const none = { ride: '', relay: '', no: '', strong: '', cutHere: false };
   try {
-    const cs = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+    // (The 1.5.3 review.) The field army is judged alone, as railShow judges it; the ride names the garrison that stays.
+    const all = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+    const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
     if (!cs.length || !s.regions[to] || !humanUp(s)) return none;
     if (railReachFor(s, cs).has(to)) {
       const said = rideLines(s, cs, to, 'Right-click');
-      return { ...none, ride: said.line, relay: said.relay };
+      return { ...none, ride: stay.length ? `${said.line} ${leftInTown(stay, '')}` : said.line, relay: said.relay };
     }
     const no = whyNoTrainFor(s, cs, to);
     return no ? { ...none, no: no.line, strong: no.strong ?? '', cutHere: no.code === 'cut' && no.at === to } : none;
@@ -3325,7 +3346,7 @@ function seaReach(ids: number[]) {
   const ports = new Set<number>();
   let beaches: number[] = [];
   if (humanUp(s) && !onEve(s)) {
-    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review: the garrison beside the field army stays in its town)
     for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
     beaches = landingTargets(s, cs).map((r) => r.id);
   }
@@ -3340,7 +3361,7 @@ function seaReach(ids: number[]) {
 function bySeaWhy(ids: number[], to: number): { why: string } {
   const s = game();
   const r = s.regions[to];
-  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review, as seaReach)
   if (!r || !cs.length) return { why: '' };
   if (allied(s, cs[0].nat, r.ctrl)) {
     for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
@@ -3360,7 +3381,7 @@ function ship(ids: number[], to: number) {
 /** What a landing on an enemy coast would meet, before the order is given. */
 function landingPlan(ids: number[], to: number) {
   const s = game();
-  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review: the force is the field army's, as seaReach offers the coast)
   const p = previewLanding(s, cs, to);
   const lines: string[] = [];
   if (!p.why) {
@@ -3425,7 +3446,7 @@ function landingPlan(ids: number[], to: number) {
 /** Lands the chosen corps on an enemy coast. */
 function landOn(ids: number[], to: number) {
   const s = game();
-  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review, as landingPlan: the garrison stays in its town)
   const before = new Map(cs.map((c) => [c.id, c.reg] as const));
   const r = orderLand(s, cs, to);
   const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => ({ id: c.id, path: [c.reg] }));

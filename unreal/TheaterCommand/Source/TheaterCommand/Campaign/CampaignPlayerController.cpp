@@ -9288,6 +9288,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	const FReachRegion* Target = FindReach(RegionId);
 	if (bBySea && Target)
 	{
+		// (The 1.5.3 review; the playtest's finds 14 and 17. Asked before the hand sails: corps of the town's garrison
+		// beside the army in the field take no ship, and are named as they stay. The voyage and the landing are the field
+		// army's alone, in the rules' reckoning: seaReach and landingPlan in campaign-bridge.ts.)
+		const FString Staying = StaysAshore();
 		if (Target->bAttack)
 		{
 			// A landing: say what it will meet, and ask.
@@ -9303,7 +9307,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Region = RegionId;
 			WarPrompt.Tag = Session->GetView().Human;
 			WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Land at %s?"), *Plan.Name));
-			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")));
+			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")) + (Staying.IsEmpty() ? FString() : TEXT("\n\n") + Staying));
 			if (!Plan.AshoreLine.IsEmpty())
 			{
 				// (set out as the card's other notes are: a heading, and its line marked)
@@ -9319,9 +9323,6 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Confirm = FText::FromString(TEXT("SEND THEM IN"));
 			return;
 		}
-		// (The 1.5.3 review; the playtest's finds 14 and 17. Asked before the hand sails: corps of the town's garrison
-		// beside the army in the field take no ship, and are named as they stay.)
-		const FString Staying = StaysAshore();
 		const TArray<FCorpsMove> Convoys = Session->Ship(PickedCorps, RegionId);
 		if (Convoys.Num() == 0)
 		{
