@@ -10,7 +10,8 @@
 // no half year against it, where the same row of a computer's not formed by the end of its half year is struck.
 // The same row, the same months, each seat. The old chart: tests/far-dated-rows-off and the identity check.
 import { vi } from 'vitest';
-vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+// (The offers rule has its own switch, off until its screen passes the Mac: stage.ts OFFERS_STAGE. On for this file.)
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, placed, removeCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';

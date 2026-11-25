@@ -48,7 +48,7 @@ import { inTheWay, pacificGround, runQuays } from './pacific';
 import { roomAt } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE } from './stage';
+import { AIRNAMES_STAGE, ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FERRY_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, OFFERS_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE } from './stage';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -175,6 +175,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (FLEETATTACK_STAGE) g.flags.fleetAttack = 1;
   // An air group sent to any friendly airfield with one order, by stages (release 2, ferry.ts).
   if (FERRY_STAGE) g.flags.ferry = 1;
+  // Formations offered (release 2, game.ts offersOn): the player's dated rows are offers, on the whole world only.
+  if (OFFERS_STAGE) g.flags.offers = 1;
   // Breaking a corps up into its divisions (release 2, breakup.ts).
   if (BREAKUP_STAGE) g.flags.breakUp = 1;
   // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.

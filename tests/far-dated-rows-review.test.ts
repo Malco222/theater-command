@@ -23,7 +23,8 @@
 //   the 3D game's reply A reason is a sentence of its own: it follows a full stop, not a colon.
 // The states are set by hand, as tests/far-dated-rows-b7.test.ts sets them.
 import { vi } from 'vitest';
-vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+// (The offers rule has its own switch, off until its screen passes the Mac: stage.ts OFFERS_STAGE. On for this file.)
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { createGame, declineOffer, men, relocate, removeCorps, rowOffers, setWar, startPhase, takeOffer } from '../src/campaign/game';

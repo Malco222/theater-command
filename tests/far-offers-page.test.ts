@@ -8,7 +8,8 @@
 // design director asked for that the marks do not word. The month card's one row, and the reports page's. A player's
 // Japan, seed 5, the months walked by hand as tests/far-dated-rows-b7.test.ts walks them.
 import { vi } from 'vitest';
-vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+// (The offers rule has its own switch, off until its screen passes the Mac: stage.ts OFFERS_STAGE. On for this file.)
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, placed, relocate, rowOffers, setWar, startPhase } from '../src/campaign/game';

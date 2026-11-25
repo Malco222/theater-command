@@ -180,3 +180,8 @@ export const FERRY_STAGE: boolean = staged('TC_FERRY', 'ferry');
 // while this is true carry the flag 'airNames' (air.ts groupName). Words only. Forced by TC_AIRNAMES.
 /** True where new grand campaigns open with the air arms' own numbers and names (stage.json 'airNames'). */
 export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');
+// Formations offered (release 2, Japan and the Pacific; the design director's ruling B8 of 25 November 2026): the grand
+// campaigns opened while this is true carry the flag 'offers' (game.ts offersOn). Read only on the whole world. Off
+// until its screen passes the Mac (his 13:39Z of that day). Forced by TC_OFFERS.
+/** True where new grand campaigns open with the player's dated rows as offers (stage.json 'offers'). */
+export const OFFERS_STAGE: boolean = staged('TC_OFFERS', 'offers');

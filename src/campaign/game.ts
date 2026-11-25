@@ -4971,9 +4971,20 @@ export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string;
 // surrender (`ends`) was never a loan. Only where a division's row awaits the regiment does the game know where its
 // men are counted, and there the choice is a real one.
 
+/**
+ * True where the player's dated rows are offers (ruling B8 and all that hangs on it: the end of a loan, Oahu's split,
+ * the half year, the offers page): the whole world, in a campaign opened with the switch 'offers' (stage.ts
+ * OFFERS_STAGE; the design director's 13:39Z of 25 November 2026, "B8 stays OFF until its screen is built and passes
+ * the Mac"). Off, no offer is made and none of its flags is written or read: the player's rows come and go as a
+ * computer's do, as they did before the ruling was built. A computer's rows never read it.
+ */
+export const offersOn = (g: Game): boolean => farOn(g) && g.flags.offers === 1;
+/** True for the player's own country where his rows are offers (`offersOn`). */
+const hisOffers = (g: Game, nat: string | null): boolean => nat !== null && nat === g.human && offersOn(g);
+
 const offerKey = (i: number): string => `offer:${i}`;
 const offerCount = (i: number): string => `offer:n:${i}`;
-const offerOpen = (g: Game, nat: string, i: number): boolean => farOn(g) && nat === g.human && g.flags[offerKey(i)] !== undefined;
+const offerOpen = (g: Game, nat: string, i: number): boolean => hisOffers(g, nat) && g.flags[offerKey(i)] !== undefined;
 const offerShut = (g: Game, i: number): void => { delete g.flags[offerKey(i)]; delete g.flags[offerCount(i)]; };
 /**
  * A row of the formations list (startPhase, `formRow`) has its number in the one list of offers after the dated
@@ -5008,7 +5019,7 @@ const makersOf = (nat: string, names: string[]): number[] => {
  * form the 25th Army's 18th Division still open. Never with the far side off, and never for a computer.
  */
 function sourceAsked(g: Game, nat: string, o: any): boolean {
-  if (!farOn(g) || nat !== g.human) return false;
+  if (!hisOffers(g, nat)) return false;
   const cut = o.cut ? (Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]) : [];
   if (cut.length && !cut.some((nm) => rowLanded(g, nm)) && makersOf(nat, cut).some((j) => offerOpen(g, nat, j))) return true;
   return Array.isArray(o.from) && !(o.adds > 0) && rowTakes(g, nat, o).length === 0 && makersOf(nat, o.from).some((j) => offerOpen(g, nat, j));
@@ -5024,7 +5035,7 @@ function sourceAsked(g: Game, nat: string, o: any): boolean {
  * for a computer.
  */
 function menKept(g: Game, nat: string, o: any, deep = 0): boolean {
-  if (!farOn(g) || nat !== g.human || !Array.isArray(o?.from) || o.adds > 0 || rowTakes(g, nat, o).length > 0) return false;
+  if (!hisOffers(g, nat) || !Array.isArray(o?.from) || o.adds > 0 || rowTakes(g, nat, o).length > 0) return false;
   const rows = (setup as any).expeditions as any[];
   return makersOf(nat, o.from).some((j) => g.flags[unmadeKey(j)] !== undefined && !rowLanded(g, rows[j][2])
     && (rowTakes(g, nat, rows[j][6]).length > 0 || (deep < 8 && menKept(g, nat, rows[j][6], deep + 1))));
@@ -5151,7 +5162,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
 
 const leaveKey = (i: number): string => `leave:${i}`;
 const keptKey = (i: number): string => `kept:${i}`;
-const leaveOpen = (g: Game, nat: string, i: number): boolean => farOn(g) && nat === g.human && g.flags[leaveKey(i)] !== undefined;
+const leaveOpen = (g: Game, nat: string, i: number): boolean => hisOffers(g, nat) && g.flags[leaveKey(i)] !== undefined;
 /** The player's corps a lent row put on the map, while it lives. */
 const lentCorps = (g: Game, nat: string, i: number): Corps | undefined => { const id = g.flags[`lent:${i}`]; return id > 0 ? g.corps.find((x) => x.id === id && x.nat === nat && !x.dead) : undefined; };
 
@@ -5168,7 +5179,7 @@ const awaitedBy = (nat: string, name: string): number => (((setup as any).expedi
  * over is the month it is made.
  */
 function loanStays(g: Game, nat: string, row: any[], o: any, i: number, taken: boolean): boolean {
-  if (!farOn(g) || nat !== g.human || awaitedBy(nat, row[2]) < 0) return false;
+  if (!hisOffers(g, nat) || awaitedBy(nat, row[2]) < 0) return false;
   if (!lentCorps(g, nat, i)) { delete g.flags[leaveKey(i)]; return false; }
   if (g.flags[keptKey(i)]) return true;
   if (taken) return false;
@@ -5217,7 +5228,7 @@ function formView(g: Game, nat: string, row: any[], id: number): RowOffer {
 /** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */
 export function rowOffers(g: Game): RowOffer[] {
   const nat = g.human;
-  if (nat === null || !farOn(g) || !g.nations[nat]?.alive) return [];
+  if (nat === null || !offersOn(g) || !g.nations[nat]?.alive) return [];
   const out: RowOffer[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     if (row[1] !== nat) return;
@@ -5238,7 +5249,7 @@ export function rowOffers(g: Game): RowOffer[] {
  */
 export function loansEnding(g: Game): { id: number; name: string; until: number | null; takes: string | null; holds: string[] | null }[] {
   const nat = g.human;
-  if (nat === null || !farOn(g) || !g.nations[nat]?.alive) return [];
+  if (nat === null || !offersOn(g) || !g.nations[nat]?.alive) return [];
   const out: { id: number; name: string; until: number | null; takes: string | null; holds: string[] | null }[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     const o = row[6] ?? {};
@@ -5260,7 +5271,7 @@ export function loansEnding(g: Game): { id: number; name: string; until: number 
  */
 export function rowsAwaitingWar(g: Game): { id: number; name: string; with: string; pair: [string, string] | null; place: string }[] {
   const nat = g.human;
-  if (nat === null || !farOn(g) || g.flags.open !== 1 || !g.nations[nat]?.alive || shipsItsOwn(g, nat)) return [];
+  if (nat === null || !offersOn(g) || g.flags.open !== 1 || !g.nations[nat]?.alive || shipsItsOwn(g, nat)) return [];
   const out: { id: number; name: string; with: string; pair: [string, string] | null; place: string }[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     const o = row[6] ?? {};
@@ -5397,7 +5408,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
         // was then struck for its half year, while the player's offer of it lapsed at once. A war not yet begun is
         // waited for as before, by both. Read on the far side's rows alone, `farRow`: nothing on the old chart.)
         if (!warOn(g, o.war)) {
-          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; if (nat === g.human && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
+          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; if (hisOffers(g, nat) && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
           return;
         }
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
@@ -5464,7 +5475,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (The far side: a row that would take corps of the player's off the board is an offer, never a silent removal:
     // ruling B8 of 25 November 2026. It is made in the month the rule would have formed the row, stands open until he
     // answers, and taken (`take`) it does what the rule always did. A computer's rows are as they were.)
-    const asks = farOn(g) && nat === g.human && take !== i && !ashore && !own && rowTakes(g, nat, o).length > 0;
+    const asks = hisOffers(g, nat) && take !== i && !ashore && !own && rowTakes(g, nat, o).length > 0;
     const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
     if (old) {
       if (asks) { offerMade(g, nat, i, o); return; }
@@ -5743,7 +5754,7 @@ function formRow(g: Game, nat: string, row: any[], id: number, take = false): bo
   const made = formMade(g, nat, row);
   const reg = formPlace(g, nat, row, made);
   if (!reg) return false;
-  if (made && id >= 0 && nat === g.human && !take) { offerMade(g, nat, id, row[6]); return false; }
+  if (made && id >= 0 && hisOffers(g, nat) && !take) { offerMade(g, nat, id, row[6]); return false; }
   const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
   if (row[6]?.str !== undefined) c.str = row[6].str;
@@ -5779,7 +5790,7 @@ export function startPhase(g: Game, nat: string): void {
   });
   // (The far side: the player's reorganisations offered and not yet answered stand or lapse as any offer does: ruling
   // B8 and the design director's ruling of 13:39Z, 25 November 2026, point 3, `formRow`. Never for a computer.)
-  if (farOn(g) && nat === g.human) ((setup as any).formations ?? []).forEach((row: any[], k: number) => { if (offerOpen(g, nat, formId(k))) offerStands(g, nat, row, formId(k)); });
+  if (hisOffers(g, nat)) ((setup as any).formations ?? []).forEach((row: any[], k: number) => { if (offerOpen(g, nat, formId(k))) offerStands(g, nat, row, formId(k)); });
   // The fortress rows of this month, and those whose orders take them out of their works (the fortress rows' switch on).
   fortsMonth(g, nat);
   expeditions(g, nat);

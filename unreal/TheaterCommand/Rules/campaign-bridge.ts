@@ -152,10 +152,10 @@ import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
-import { chanceOn, headline } from '../../../src/campaign/game';
+import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { CHART_NOW, answersOf, attachWorld, closedCountry, farOn, motherLine, patronOf } from '../../../src/campaign/world';
+import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
 import { islandOf, roomSays } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
@@ -5400,7 +5400,7 @@ function reportsPage(s: Game): Page | null {
 let offersAsked = '';
 
 function offersPage(s: Game): Page | null {
-  if (!s.human || !farOn(s)) return null;
+  if (!s.human || !offersOn(s)) return null;
   let open: RowOffer[] = [];
   try { open = formationOffers(s); } catch { open = []; }
   if (!open.length) return null;

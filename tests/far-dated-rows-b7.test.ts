@@ -14,7 +14,8 @@
 // design director's ruling of 13:39Z, 25 November 2026, point 5). The computer's rows as they were.
 // The states are set by hand, as tests/far-posted-ashore.test.ts sets them; the last block walks the 3D game's calls.
 import { vi } from 'vitest';
-vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+// (The offers rule has its own switch, off until its screen passes the Mac: stage.ts OFFERS_STAGE. On for this file.)
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { createGame, declineOffer, men, postedFor, relocate, removeCorps, rowOffers, setWar, startPhase, takeOffer } from '../src/campaign/game';
