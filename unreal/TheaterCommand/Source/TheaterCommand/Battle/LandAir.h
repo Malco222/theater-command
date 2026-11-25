@@ -202,17 +202,25 @@ namespace LandAir
 		// his harness as he lies, LineSilk over its top (from about 0.8 of its slump, as it settles, 12 mm over the
 		// highest of its silk there and wherever the line between two would dip into it), and over its edge and down to
 		// the ground beside it; never under the ground. And (MidLow) the lowest the middle of the line to each seam may
-		// lie lying, the ground there and its cord's thickness (-1e9: none)
+		// lie lying, the ground there and its cord's thickness (-1e9: none); and (HarnessLow) the lowest the straight the
+		// lines across it run taut from his harness starts (LineLies): the ground under his harness as he lies (read
+		// there, never more than 0.1 m under HeapShape's grid) and its cord's thickness (-1e9: none). The scene draws him
+		// flat at his feet's height, so that on a bank or a hummock his harness is in the ground: his lines come up out of
+		// it by him and run on over it, never up from under it
 		std::vector<int> Across;
 		std::vector<V3> Over;
 		std::vector<double> MidLow;
+		double HarnessLow = -1e9;
 		// (HeapShape's own: what it works out once for it as it lies, the same every make while his chute and where it
 		// lies are, kept for its next make: what that was worked out for, its lying shape before the ground, how much of a
-		// fold across it there is at each point, how its lines lie across it, and what each column round it shares)
+		// fold across it there is at each point, how its lines lie across it, and what each column round it shares; and,
+		// handed it by SilkStep for the one make it is moved toward from the last, that make's lines across it (Across and
+		// Over), which HeapShape keeps its own over the ground on the way from, and leaves empty)
 		struct LyingKept
 		{
 			std::vector<double> Key, Crossing, Laid, Columns;
-			std::vector<V3> Lies;
+			std::vector<V3> Lies, OverWas;
+			std::vector<int> AcrossWas;
 		};
 		LyingKept Kept;
 		void Clear();
@@ -277,8 +285,9 @@ namespace LandAir
 	 * middle let down toward the lower end's height (never under the ground: SilkMesh::MidLow) and bowed aside by 0.06
 	 * of the line's length, every other line the other way (three points). Those its silk lies across (SilkMesh::Across:
 	 * the art director's note of 24 November 17:40Z, "a few lines cross the silk rather than all running to one neat
-	 * point") go from his harness through their Over points (LinePoints): across the grass, from taut to lying, and on
-	 * over the silk and its edge as HeapShape last laid them. Returns how many points it put in Out.
+	 * point") go from his harness through their Over points (LinePoints): across the grass, from taut (the straight from
+	 * his harness, or from the ground over it where he lies sunk into it: SilkMesh::HarnessLow) to lying, and on over
+	 * the silk and its edge as HeapShape last laid them. Returns how many points it put in Out.
 	 */
 	constexpr int LineGrass = 4, LineSilk = 24, LineVia = LineGrass + LineSilk + 2, LinePoints = LineVia + 1;
 	int LineLies(const SilkMesh& Silk, size_t Seam, const V3& Harness, double Slack, V3 (&Out)[LinePoints]);
