@@ -43,7 +43,7 @@ const names = (g: Game, c: Corps): string[] => divisionsOf(g, c).map((d) => d.na
 /** Germany's living corps by name, place, divisions and strength. */
 const army = (g: Game): string[] => g.corps.filter((c) => c.nat === 'GER' && !c.dead)
   .map((c) => `${c.name} | ${g.regions[c.reg].name} | ${c.divs} | ${c.str.toFixed(6)} | ${names(g, c).join(', ')}`).sort();
-const told = (g: Game): string[] => g.headlines.filter((h) => h.nat === 'GER' && / (is|are) due at | was due to be formed at /.test(h.text)).map((h) => h.text);
+const told = (g: Game): string[] => g.headlines.filter((h) => h.nat === 'GER' && / (is|are) due (at|in) | was due to be formed (at|in) /.test(h.text)).map((h) => h.text);
 const asked = (g: Game): string[] => Object.keys(g.flags).filter((k) => k.startsWith('asked:'));
 
 /** The walk with Plovdiv full in March and emptied in April: the same moves with the offers on and off. */
@@ -73,7 +73,7 @@ describe('a row whose line tells the player he holds its divisions is not an off
     const was = names(g, corps(g, 'XXII Corps')!);
     month(g, MARCH_41);
     // (a) The map line's line, and its flag.
-    expect(told(g).find((t) => t.includes('2nd Panzer Division and the 9th Panzer Division are due at Sofia'))).toContain('you hold them already');
+    expect(told(g).find((t) => t.includes('2nd and 9th Panzer Divisions are due in Sofia'))).toContain('you hold them already');
     expect(g.flags[`offer:${rowAt(PANZERS)}`]).toBe(MARCH_41);
     expect(g.flags[`offer:${rowAt(INFANTRY)}`]).toBe(MARCH_41);
     expect(g.flags[`sent:${rowAt(PANZERS)}`]).toBe(1);
@@ -106,7 +106,7 @@ describe('a row whose line tells the player he holds its divisions is not an off
     expect(on.g.regions[corps(on.g, INFANTRY)!.reg].name).toBe('Plovdiv');
     expect(corps(on.g, MOUNTAIN)).toBeDefined();
     // Its line was told once, in March, and not again when it formed.
-    expect(told(on.g).filter((t) => t.includes('The 50th Infantry Division is due at Plovdiv'))).toHaveLength(1);
+    expect(told(on.g).filter((t) => t.includes('The 50th Infantry Division is due in Plovdiv'))).toHaveLength(1);
     expect(told(on.g)).toEqual(told(off.g));
     expect(asked(on.g)).toEqual([]);
     expect(rowOffers(on.g)).toEqual([]);
