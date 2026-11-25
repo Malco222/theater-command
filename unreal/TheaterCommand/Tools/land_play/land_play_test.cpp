@@ -2179,6 +2179,81 @@ int main(int argc, char** argv)
 		if (RoofOff > 0) Fault("a roof gun played a take off its roof row");
 		if (Mix.TankMgWhole > 0) Fault("a tank's burst played a take shorter than the burst, whole (her row holds a take too short for her bursts)");
 	}
+	{
+		// A support team's gun is heard on its own row by the gun drawn (land.teamMg, Noise.Mount the file, release 2's
+		// "teamguns"), at the burst the ground scene gives it (LandTeamGun::BurstOf): every take on its row, long enough for
+		// the burst, save the Maxim's (9 rounds at 10 a second against its take's 0.86 s); a hmg burst with no file, or a
+		// file with no row, takes its army's row as before.
+		struct TeamShot
+		{
+			const char* File;
+			const char* Army;
+			int Rounds;
+			double PerSecond;
+		};
+		const TeamShot Shots[] = { { "HmgMG42", "GER", 18, 20.0 }, { "HmgMG34", "GER", 13, 15.0 }, { "HmgM1919", "USA", 7, 8.0 },
+			{ "HmgM1917", "POL", 7, 8.0 }, { "HmgVickers", "UK", 7, 8.0 }, { "HmgMaxim", "SOV", 9, 10.0 }, { "HmgType92", "JAP", 6, 7.5 },
+			{ "HmgHotchkiss", "FRA", 6, 7.5 }, { "HmgBreda37", "ITA", 6, 7.5 }, { "", "GER", 10, 20.0 }, { "HmgNoRow", "SOV", 8, 10.0 } };
+		LandSound::Mixer Probe;
+		std::string ProbeError;
+		int OffRow = 0, Rows = 0, Fallback = 0, Heard = 0;
+		std::string Picked;
+		if (Probe.Begin(MixText, Rec.Seed, ProbeError))
+		{
+			LandSound::Listener Ear;
+			Ear.At = Vec(0.0, 0.0, 1.5);
+			Ear.CameraHeight = 1.5;
+			for (int Round = 0; Round < 4; ++Round)
+			{
+				for (size_t K = 0; K < sizeof(Shots) / sizeof(Shots[0]); ++K)
+				{
+					const TeamShot& Sh = Shots[K];
+					LandPlay::Noise N;
+					N.Kind = LandPlay::NoiseKind::Shot;
+					N.Weapon = "mg";
+					N.Role = "hmg";
+					N.Army = Sh.Army;
+					N.Mount = Sh.File;
+					N.Side = 0;
+					N.Rounds = Sh.Rounds;
+					N.PerSecond = Sh.PerSecond;
+					N.At = Vec(20.0, 3.0 * static_cast<double>(K), 0.5);
+					N.From = N.At;
+					N.To = Vec(400.0, 0.0, 0.0);
+					std::vector<LandSound::Take> Got;
+					const double Now = 500.0 + 3.0 * static_cast<double>(K + 12 * static_cast<size_t>(Round));
+					Probe.Hear(N, Now, Now, 1.0, Ear, Got);
+					std::string Name;
+					for (const LandSound::Take& T : Got)
+					{
+						if (T.Family == "mg") { Name = T.Name; break; }
+					}
+					if (Name.empty()) continue;
+					++Heard;
+					const std::string Own = std::string("teamMg.") + Sh.File;
+					if (Probe.HasList(Own))
+					{
+						++Rows;
+						if (!Probe.InList(Own, Name)) ++OffRow;
+					}
+					else
+					{
+						const std::string Army = "byNation.mg." + std::string(Sh.Army);
+						if (Probe.InList(Probe.HasList(Army) ? Army : std::string("byNation.mg.*"), Name)) ++Fallback;
+						else ++OffRow;
+					}
+					if (Round == 0) Picked += std::string(" ") + (Sh.File[0] ? Sh.File : "(none)") + " " + Name + ";";
+				}
+			}
+		}
+		std::printf("support teams' guns heard close (land.teamMg), %d of %d bursts on their own row, %d on their army's (no file or no row), %d off; whole takes %d; first round:%s\n",
+			Rows, Heard, Fallback, OffRow, Probe.TeamMgWhole, Picked.c_str());
+		if (!ProbeError.empty()) Fault(("the probe mix for land.teamMg did not load: " + ProbeError).c_str());
+		if (Heard < 40) Fault("a support team's close burst was not heard");
+		if (OffRow > 0) Fault("a support team's gun played a take off its row (land.teamMg) or, with none, off its army's");
+		// (the Maxim's 4 bursts play whole until her burst is 8 rounds; any other gun's row holds a take too short)
+		if (Probe.TeamMgWhole > 4) Fault("a support team's burst played a take shorter than the burst, whole, beyond the Maxim's");
+	}
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
 	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots kept on their own recording at a half step, %d other takes nearer than their far takes kept on theirs at a half step, %d moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",
 		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameCloseHalf, Mix.SameNearHalf, Mix.SameToFar, Mix.SameToOtherFar, Mix.SameMerged, Mix.SameCrowded);

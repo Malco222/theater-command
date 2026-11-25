@@ -342,6 +342,13 @@ namespace LandSound
 		{
 			if (Roof.Values[K].IsArray() && Roof.Keys[K][0] != '_') Lists["tankMg.roof." + Roof.Keys[K]] = Takes(Roof.Values[K]);
 		}
+		// (a support team's gun on its mount, release 2's "teamguns", by the gun drawn: land.teamMg, over its army's row, named
+		// by Noise.Mount as the ground scene gives it: an MG 34 team before mid-1942 is not an MG 42's 1,200 a minute)
+		const Json& TeamMg = Land["teamMg"];
+		for (size_t K = 0; K < TeamMg.Keys.size(); ++K)
+		{
+			if (TeamMg.Values[K].IsArray() && TeamMg.Keys[K][0] != '_') Lists["teamMg." + TeamMg.Keys[K]] = Takes(TeamMg.Values[K]);
+		}
 		const Json& Parts = Mg["parts"];
 		for (size_t K = 0; K < Parts.Keys.size(); ++K)
 		{
@@ -937,6 +944,9 @@ namespace LandSound
 					const std::string Roof = "tankMg.roof." + Army, Own = "tankMg." + Army;
 					MgList = N.Mount == "roof_mg" && Lists.count(Roof) ? Roof : Lists.count(Own) ? Own : Lists.count("tankMg.*") ? std::string("tankMg.*") : MgList;
 				}
+				// (a support team's gun, her own row by the gun drawn where the mix has one: land.teamMg)
+				const bool bTeamMg = bMg && N.Role == "hmg" && !N.Mount.empty() && Lists.count("teamMg." + N.Mount) > 0;
+				if (bTeamMg) MgList = "teamMg." + N.Mount;
 				const bool bFarMg = bMg && Far > F.FarFrom;
 				T.Name = Pick(Far > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : bMg ? MgList : Nation("rifle"));
 				const double Want = bMg && N.PerSecond > 0.0 ? N.Rounds / N.PerSecond : 0.0;
@@ -957,6 +967,12 @@ namespace LandSound
 						// (a take on a tank's row shorter than her burst plays whole: more rounds than she fired)
 						auto Part = FiringPart.find(T.Name);
 						if (Part != FiringPart.end() && Part->second.second - Part->second.first < Want) ++TankMgWhole;
+					}
+					if (bTeamMg && !bFarMg)
+					{
+						++TeamMgTakes[N.Mount + " " + T.Name];
+						auto Part = FiringPart.find(T.Name);
+						if (Part != FiringPart.end() && Part->second.second - Part->second.first < Want) ++TeamMgWhole;
 					}
 					Uncut = T;
 					CutBurst(T, N);

@@ -168,6 +168,10 @@ namespace LandSound
 		std::map<std::string, int> TankMgTakes;
 		/** Those whose take fires for less than the burst, so it played whole (its row holds a take too short). */
 		int TankMgWhole = 0;
+		/** A support team's close bursts by her gun's file and the take picked ("HmgMG34 mg42_burst_01"), for the log and the
+		 * test; and those whose take fires for less than her burst, so it played whole. */
+		std::map<std::string, int> TeamMgTakes;
+		int TeamMgWhole = 0;
 		/** Whether a take is on a list the mix names (byNation.mg.GER, tankMg.roof.USA ...), for the test. */
 		bool InList(const std::string& ListName, const std::string& Name) const;
 		bool HasList(const std::string& ListName) const { return Lists.count(ListName) > 0; }
