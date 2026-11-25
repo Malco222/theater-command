@@ -7893,6 +7893,8 @@ function r2Ship(ids: string[]) {
 // rules' own step ends (turn.ts stepAI, beginHuman, endHuman; marches.ts advanceMarches) and view() above, supply is
 // clean whenever the rules hand control back: the moment it is refreshed is fixed by the rules and the player's
 // orders alone. A call that finds it clean pays two tests of a flag.
+// KEEP THIS BLOCK LAST IN THE FILE: it wraps the calls TC holds as it runs, so a call added below it is not wrapped
+// (tests/supply-window-r2 'every call on the table is wrapped' fails if one is).
 {
   const table = (globalThis as Record<string, unknown>).TC as Record<string, unknown>;
   for (const name of Object.keys(table)) {
