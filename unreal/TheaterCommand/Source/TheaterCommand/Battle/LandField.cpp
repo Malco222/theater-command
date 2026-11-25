@@ -7439,7 +7439,7 @@ namespace LandField
 		if (!Sp) Rg = LandScape::Make(LookIs, Fd, Seed ^ 0x5CA9E5ull);
 		if (!Sp && !Rg) LookIs = LandScape::Look::Bocage;
 		SnowIs = LandScape::SnowOf(Fd, LookIs);
-		SnowLay = LandScape::MakeSnow(SnowIs, LookIs, Seed ^ 0x5D0Bull);
+		SnowLay = LandScape::MakeSnow(SnowIs, LookIs, Seed ^ 0x5D0Bull, Fd);
 		if (!SnowLay) SnowIs = 0.0;
 		ReadCells();
 		MakeLanes();

@@ -436,6 +436,8 @@ namespace LandScape
 	/** The region for a look (null for the bocage and the steppe), and the snow over it (null where none lies). */
 	std::unique_ptr<Region> Make(Look L, const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
+	/** The same, the field's trial words read ("wintergrass": the farmland's dry stalks dead and bent as its grass is). */
+	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed, const LandField::Field& F);
 
 	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
 	// LandAmerica.cpp, LandPlain.cpp, LandSnow.cpp).
@@ -447,7 +449,7 @@ namespace LandScape
 	std::unique_ptr<Region> MakeAsia(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeAmerica(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakePlain(const LandField::Field& F, uint64_t Seed);
-	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
+	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed, bool bGrassTrial = false);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */
 	struct Writer
