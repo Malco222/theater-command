@@ -26,6 +26,9 @@
  *   man's legs took the table cubemap's dark ground on every field but snow: the desert's sand gave no warm fill and
  *   the steppe's grass no green. Read once as the field is laid (the mean of its paint on a grid) and laid under the
  *   battle's sky light by LandBattle's HideTheTable. tc.Look.BounceStrength tunes it (snow keeps its own, 2).
+ *
+ * The tunings can be set from the launch line too, for the Mac's sweeps: -TheaterLookCrispSharpen=, -TheaterLookDepthStrength=,
+ * -TheaterLookDepthReach= (metres), -TheaterLookDepthQuality=, -TheaterLookBounceStrength=.
  */
 namespace WholeLook
 {
