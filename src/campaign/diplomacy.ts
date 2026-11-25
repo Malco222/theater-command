@@ -8,7 +8,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
-import { STACK } from './types';
+import { roomAt } from './islands';
 import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, warning, roomless } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
@@ -676,7 +676,7 @@ export function withdraw(g: Game, nat: string, from: Region): void {
     if (c.nat !== nat) continue;
     let best: Region | null = null, bd = 1e12;
     for (const r of g.regions) {
-      if (r.owner !== nat || r.ctrl !== nat || r.units.filter((u) => !roomless(g, u)).length >= STACK) continue;
+      if (r.owner !== nat || r.ctrl !== nat || r.units.filter((u) => !roomless(g, u)).length >= roomAt(g, r, nat)) continue;
       const d = chartDist2(g, r, from);
       if (d < bd) { bd = d; best = r; }
     }
@@ -912,7 +912,7 @@ function fire(g: Game, e0: DiploEvent): boolean {
     let at: Region | undefined;
     const seen = new Set([r.id]);
     for (let ring = [r], step = 0; ring.length && !at && step <= 3; step++) {
-      at = ring.find((x) => x.units.filter((u) => !roomless(g, u)).length < STACK);
+      at = ring.find((x) => x.units.filter((u) => !roomless(g, u)).length < roomAt(g, x, row[0]));
       const next: Region[] = [];
       for (const x of ring) for (const j of x.nb) if (!seen.has(j) && g.regions[j].ctrl === row[0]) { seen.add(j); next.push(g.regions[j]); }
       ring = next;

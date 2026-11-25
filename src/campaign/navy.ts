@@ -45,7 +45,8 @@ import { stationBars, whyStationBars } from './far';
 import { FAR_SEAS_FIRST, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, placed, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
+import { islandOf, roomAt, roomSays } from './islands';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -1219,7 +1220,8 @@ function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null
   }
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
-  if (placed(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
+  // (A harbour holds five corps of a side, and an island of the Pacific its own room, said in its own words: islands.ts.)
+  if (placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) return roomSays(g, to) ?? `${to.name} has no room for another corps.`;
   // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
   if (!rides && ownShips !== c.nat && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   return null;
@@ -1308,7 +1310,7 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
     if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
     if (g.flags[dropKey(g, nat)]) return 'The transport aircraft can carry one airborne assault a month.';
     if (skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no transport aircraft can fly under them. Win the sky there first.`;
-    return null;
+    return islandFull(g, cs, to);
   }
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
   if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
@@ -1329,8 +1331,18 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
   // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
-  return null;
+  // (The island's room is asked last, of a force that could otherwise sail: every older refusal is said as it was.)
+  return islandFull(g, cs, to);
 }
+
+/**
+ * An island of the Pacific takes no more corps ashore than it has room for, those of the force's side already on it
+ * counted and engineers apart, as a march counts them (rulings 173(b) and 179(s): "the limit of an open beach is the
+ * island's room of one corps and what the corps carries"). The island's own sentence where the force is too many
+ * ("Wake has room for one corps."), or null: always null for ground that is no island of the table, and with the far
+ * side off.
+ */
+const islandFull = (g: Game, cs: Corps[], to: Region): string | null => (islandOf(g, to) && !roomForAll(g, to, cs) ? roomSays(g, to) : null);
 
 /** What a force is worth in divisions: size times strength. */
 const worthOf = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);

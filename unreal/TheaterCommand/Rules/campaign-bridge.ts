@@ -18,7 +18,9 @@
 //   TC.load(text)                       -> view, or null if the save cannot be read
 //   TC.view()                           -> view
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
-//   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], view }
+//   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], note, view }: 'note' is the staff's word on the order ('' where the piece moving is the answer):
+//                                          a march that carries on, two corps that would change places, or an island of the Pacific that has no room
+//                                          for one more corps ("Hong Kong has room for one corps.": rulings 173(b) and 179(s))
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
 //   TC.endMonth()                       -> { steps, headlines, events, fallen, ready, view }
@@ -26,6 +28,7 @@
 //   TC.railReach([corpsId, ...])        -> { regions: [id, ...] } the picked corps could go to by rail
 //   TC.rail([corpsId, ...], regionId)   -> { moved, view }
 //   TC.province(regionId)               -> what a territory holds, and what the player can raise or build there
+//                                          ('island' on the whole-world map: { room, line } for an island of the Pacific, its room in corps and the sentence that says so; null for other ground)
 //   TC.raise(kind, regionId)            -> { ok, view }: orders a new corps
 //   TC.fortify(regionId)                -> { ok, view }: orders the next level of fortification
 //   TC.cancel(buildId)                  -> { ok, view }: takes back an order placed this month
@@ -46,7 +49,7 @@
 //   TC.offerTake(ids | 'all')           -> { ok, taken, left, said, offers, view }: he takes those offers; TC.offerDecline(ids | 'all') -> { ok, declined, said, offers, view }
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoRoom, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, airJoinsPlan, factoriesBuilt, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -151,6 +154,7 @@ import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
+import { islandOf, roomSays } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
@@ -2782,6 +2786,9 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
   const trySwap = (c: Corps): void => {
     let others: Corps[] = [];
     try { others = s.regions[c.reg]?.nb.includes(to) ? swapChoices(s, c, to) : []; } catch { others = []; }
+    // (Release 2, the Pacific's islands.) An island that has no room for one more corps says so in its own words,
+    // where nobody there can change places with the corps: "Hong Kong has room for one corps." (rulings 173(b), 179(s)).
+    if (!others.length && !moved.length && !note) { try { note = whyNoRoom(s, c, s.regions[to]) ?? ''; } catch { note = ''; } }
     if (!others.length || moved.length) return;
     const other = others[0], from = c.reg, key = `${c.id}:${to}:${s.turn}`;
     if (swapAsked === key) {
@@ -2792,7 +2799,8 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
       }
     } else {
       swapAsked = key;
-      note = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
+      // (An island of the Pacific is full at its own room, and says that: "Hong Kong has room for one corps.")
+      note = `${roomSays(s, s.regions[to]) ?? `${s.regions[to].name} is full.`} Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
     }
   };
   // (Rules 84.2.5) the fighting corps first: guns and engineers follow them onto enemy-held ground. (The code checker, 17
@@ -4120,6 +4128,8 @@ function province(id: number) {
     worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],
     harbour: r.port,
     capital: r.cap,
+    // (Release 2, the Pacific's islands: rulings 173(b) and 179(s).) An island's room in corps, and the sentence that says so.
+    island: (() => { const isle = islandOf(s, r); return isle ? { room: isle.room, line: roomSays(s, r) ?? '' } : null; })(),
     // What the province gives whoever holds it each month, as money: by its land, harbour, oil, factories and seat of government.
     yield: (() => {
       const y = provinceYield(s, r);
