@@ -1,7 +1,7 @@
 {
  "what": "How each aircraft type the game can draw or the rules can name really flew: size, weight, power, speeds and heights, climb, turn, roll, g, dive, load and range, each figure with its source and how sure it is; and how each air force fought, by nation and year. Read by Battle/AirPerf (no engine), which gives the 3D flight core its limits in its own units.",
  "asked": "Brian, 24 Nov 2026: \"i want the flying to be smooth and very realistic\" and \"i want the planes flying with realistic capabilities and tactics\".",
- "sure": "Every figure is [value, source, mark] or [value, source, mark, low, high]. Marks: measured (a flight trial's figure), manufacturer (the maker's or the service's published figure), derived (computed here, or a stand-in's mean), uncertain (a range; the value is the middle the historian would bet on). Set from knowledge by the historian on 25 Nov 2026: only the pages named 'read' in the sources were read that day, and a figure marked measured or manufacturer is the figure as commonly reproduced, not checked against the document.",
+ "sure": "Every figure is [value, source, mark] or [value, source, mark, low, high]. Marks: measured (a flight trial's figure), manufacturer (the maker's or the service's published figure), derived (computed here, or a stand-in's mean), uncertain (a range; the value is the middle the historian would bet on). Set from knowledge by the historian on 25 Nov 2026: only the pages named 'read' in the sources were read that day, and a figure marked measured or manufacturer is the figure as commonly reproduced, not checked against the document. Fixed on 25 Nov 2026 after review: no figure is credited to a source that was not read for it (Ackroyd and Lamont's, the AFDU's, Gordon's for German types), the quoted stalls checked against their lift, and a tactic is a fact only with a historical source beside doctrine.ts.",
  "units": {
   "span_m": "metres",
   "wing_m2": "square metres",
@@ -10,7 +10,7 @@
   "thrust_kn": "a jet's static thrust at sea level, all engines",
   "top_kmh": "top level speed at top_m metres, true",
   "cruise_kmh": "the speed it cruised at on operations, true",
-  "stall_kmh": "stalling speed, clean, power off, indicated",
+  "stall_kmh": "stalling speed, clean, power off, indicated, as the pilot's notes give it (the indicator reads low near the stall: a lift of 1.2 to 1.8 at the row's weight). A cross-check only: AirPerf works its stall out from its weight, its wing and the lift it turns with",
   "climb_ms": "initial climb, metres a second",
   "to_height_min": "minutes to to_height_m metres",
   "ceiling_m": "service ceiling",
@@ -22,23 +22,26 @@
   "dive_kmh": "the placard diving limit, indicated",
   "bomb_kg": "a usual bomb or torpedo load",
   "range_km": "range with that load",
-  "power_low_hp": "a two-speed supercharger's low gear: all engines' horsepower at power_low_m metres (where given)",
-  "clmax": "the lift coefficient usable in a hard turn, where given (else a plain wing's 1.35)"
+  "power_low_hp": "a two-speed or two-stage supercharger's low gear: all engines' horsepower at power_low_m metres (where given)",
+  "clmax": "the lift coefficient usable in a hard turn, where given (else a plain wing's 1.35)",
+  "stall_flaps_kmh": "a quoted stalling speed whose lift at the row's weight (over 1.8) says it is not a clean stall: most likely flaps and wheels down, often at landing weight. Kept as quoted; not used",
+  "models": "the row's plain model names (as the scene and the rules name the 3D model): only these walk the marks by date; a mark named outright flies as named",
+  "marks": "the row to fly from each year on, for a plain model name (the record's dates; where guns.ts differs, its notes say)"
  },
  "fighting_height_m": 3000,
  "sources": {
   "std": "The standard published figures for the type: the maker's and the service's figures as reproduced in the standard references (Jane's Fighting Aircraft of World War II; Green and Swanborough's fact files). Set from knowledge on 25 Nov 2026, not checked against a page.",
   "rules": "The rules' own data/aircraft.json (release 2's documented figures for six types), read on 25 Nov 2026; kept where this table agrees with it.",
   "francillon": "Francillon, Japanese Aircraft of the Pacific War (Putnam, 1970 and 1979): the Japanese makers' and services' figures. From knowledge, not read on the page.",
-  "gordon": "Gordon and Khazanov, Soviet Combat Aircraft of the Second World War (Midland, 1998-99), giving NII VVS state-trial figures. From knowledge, not read on the page.",
+  "gordon": "Gordon and Khazanov, Soviet Combat Aircraft of the Second World War (Midland, 1998-99), giving NII VVS state-trial figures of the Soviet types. From knowledge, not read on the page; used for the Soviet rows only.",
   "aaee": "A&AEE (Martlesham Heath, later Boscombe Down) performance trials of the type, as commonly reproduced. From knowledge, not read on the page.",
   "rae109": "RAE Farnborough flight trials of the captured Bf 109E (Morgan and Morris, 1940): heavy ailerons at speed, and turning circles calculated from the trials (Bf 109E 885 ft radius at 12,000 ft against the Spitfire I's 696 ft). As commonly quoted; not read on the page.",
-  "afdu190": "AFDU Duxford, tactical trials of the captured Fw 190A-3 against the Spitfire VB, report of August 1942: the Fw 190 faster by 25 to 35 mph at all heights, markedly better in climb, dive and rate of roll, better in acceleration; the Spitfire turns tighter. Findings read on 25 Nov 2026 in a summary (History Hit, 'The Spitfire V or the Fw190').",
+  "afdu190": "AFDU Duxford, tactical trials of the captured Fw 190A-3 against the Spitfire VB, report of August 1942: the Fw 190 faster by 25 to 35 mph at all heights, markedly better in climb, dive and rate of roll, better in acceleration; the Spitfire turns tighter. Findings read on 25 Nov 2026 in a summary (History Hit, 'The Spitfire V or the Fw190'). Comparisons only: no absolute figure in this table is credited to it.",
   "akutan": "US Navy flight tests of the captured Akutan Zero (Sanders, 20 Sep to 15 Oct 1942), published in Informational Intelligence Summary 59 and 85: ailerons 'froze up' above 200 knots, it rolled left more easily than right, the engine cut under negative g; advice to dive, push over, and roll hard right at about 200 knots. Read on 25 Nov 2026 in Wikipedia 'Akutan Zero', citing Rearden, Koga's Zero, p. 73.",
   "taic": "TAIC (Technical Air Intelligence Center) comparative trials of a captured A6M5 against US fighters, 1944; the report's number not checked. From knowledge.",
   "naca868": "Toll, NACA Report 868, Summary of lateral-control research (1947). Its text, read on 25 Nov 2026 (ntrs.nasa.gov 19930090943), names only the P-47C-1-RE (wing twist costs 31 per cent of its aileron effectiveness at 400 mph IAS), the Spitfire (about 65 per cent at 400 mph IAS) and the XP-51 (pb/2V about doubled under 300 mph by its new ailerons). The many-fighter roll chart often credited to it was not found in its text.",
   "rollchart": "The wartime comparison of fighters' rates of roll at 10,000 ft with a 50 lb stick force (NACA flight measurements, compiled in Dean, America's Hundred Thousand, 1997, graph 81, as a forum post read on 25 Nov 2026 cites it). Values recalled from the chart, not read: marked uncertain with a range.",
-  "ackroyd": "Ackroyd and Lamont, A comparison of the turning radii of four Battle of Britain fighter aircraft, The Aeronautical Journal 104 (1032), February 2000, pp. 53-58: an analysis from published flight data of the Spitfire, Hurricane, Bf 109E and Bf 110. Abstract read on 25 Nov 2026; its figures were not.",
+  "ackroyd": "Ackroyd and Lamont, A comparison of the turning radii of four Battle of Britain fighter aircraft, The Aeronautical Journal 104 (1032), February 2000, pp. 53-58: an analysis from published flight data of the Spitfire, Hurricane, Bf 109E and Bf 110. Abstract read on 25 Nov 2026 (twice: it gives no radii and no ranking); its figures were not read, so no figure in this table is taken from it.",
   "notes": "The type's own pilot's notes or pilot's flight operating instructions (its placard limits). From knowledge, not read on the page.",
   "lundstrom": "Lundstrom, The First Team (1984) and The First Team and the Guadalcanal Campaign (1994): the US Navy's fighters, tactics and losses against the Zero. From knowledge.",
   "mcfarland": "McFarland and Newton, To Command the Sky: the Battle for Air Superiority over Germany, 1942-1944 (1991). From knowledge.",
@@ -48,7 +51,9 @@
   "historian": "The historian's readings of 24 Nov 2026 in this project (historian/air-reads-1124.md and air-reads-2-1124.md).",
   "doctrine": "The rules' src/battle/air/doctrine.ts (the design's table 1.2 and its claim ids D, B and E, checked by the historian's review), read on 25 Nov 2026.",
   "estimate": "An estimate made in this pass (25 Nov 2026) where no published figure was found or read, always marked uncertain, with a range. The turning lift of a slatted or flapped wing is reasoned in its row's notes. The rates of roll not on the wartime chart (rollchart) nor in a trial are judged from size, weight and the reputation of the ailerons, against the charted fighters: the bombers', dive bombers', torpedo bombers' and the Fulmar's; the Soviet, Italian, French and smaller air forces' fighters', the Ki-43's and the Me 262's; and every fighter's rate at high speed where the chart's fall was not recalled.",
-  "derived": "Derived here: computed from the row's other figures by the formulas in Battle/AirPerf.h, or, for a stand-in, the rounded mean of the types it stands for."
+  "derived": "Derived here: computed from the row's other figures by the formulas in Battle/AirPerf.h, or, for a stand-in, the rounded mean of the types it stands for.",
+  "niivvs": "The NII VVS (the Soviet air force's research institute) trials of captured German fighters, 1942-43 (a Bf 109F, a Bf 109G-2, an Fw 190A-4), whose times for a full turn at 1,000 m are commonly quoted in later secondary works. Recalled, not read, and the report not identified: every figure from it is marked uncertain.",
+  "wikimerlin": "Wikipedia, 'Rolls-Royce Merlin', its list of variants, read on 25 Nov 2026: the Merlin 61 '1,565 hp at 3,000 rpm at 12,250 ft (3,730 m), 1,390 hp at 3,000 rpm at 23,500 ft (7,163 m)' (the maker's ratings as reproduced)."
  },
  "rows": [
   {
@@ -58,6 +63,9 @@
     "Spitfire I",
     "Spitfire Mk I",
     "Spitfire IA"
+   ],
+   "models": [
+    "Spitfire"
    ],
    "nation": "UK",
    "role": "fighter",
@@ -74,7 +82,7 @@
     "manufacturer"
    ],
    "mass_kg": [
-    2700,
+    2750,
     "rules",
     "manufacturer"
    ],
@@ -181,8 +189,8 @@
     "manufacturer"
    ],
    "style": "both",
-   "style_why": "Out-turned the Bf 109E (RAE's calculation; Ackroyd and Lamont) and could dive with it; RAF pilots turned with the 109 and took the escorts while the Hurricanes took the bombers.",
-   "notes": "The 3D model is a Mk I; the marks by date follow guns.ts (the VB from 1941, the IX from 1942).",
+   "style_why": "Out-turned the Bf 109E (the RAE's calculation from its trials) and could dive with it; RAF pilots turned with the 109 and took the escorts while the Hurricanes took the bombers.",
+   "notes": "The 3D model is a Mk I. A plain 'Spitfire' flies the mark of its date: the V from 1941 (guns.ts's VB), the IX from 1943. The IX's date is a reading: it reached its first squadron, No. 64, in July 1942, but the V was most of Fighter Command's Spitfires to the end of 1942. guns.ts arms a 1942 Spitfire as the 'IX (C wing)': the same guns as the VC's C wing, so the two agree.",
    "marks": [
     {
      "row": "Spitfire I",
@@ -194,7 +202,7 @@
     },
     {
      "row": "Spitfire IX",
-     "from": 1942
+     "from": 1943
     }
    ]
   },
@@ -353,12 +361,22 @@
    ],
    "power_hp": [
     1390,
-    "std",
+    "wikimerlin",
     "manufacturer"
    ],
    "power_m": [
-    7160,
-    "std",
+    7163,
+    "wikimerlin",
+    "manufacturer"
+   ],
+   "power_low_hp": [
+    1565,
+    "wikimerlin",
+    "manufacturer"
+   ],
+   "power_low_m": [
+    3730,
+    "wikimerlin",
     "manufacturer"
    ],
    "top_kmh": [
@@ -450,7 +468,8 @@
     "manufacturer"
    ],
    "style": "both",
-   "style_why": "Matched the Fw 190A in speed and climb at most heights and out-turned it; flown both ways from late 1942."
+   "style_why": "Matched the Fw 190A in speed and climb at most heights and out-turned it; flown both ways from late 1942.",
+   "notes": "Its two-stage Merlin 61's two ratings (read on 25 Nov 2026): 1,565 hp at 3,730 m in its low gear, 1,390 hp at 7,163 m in its high gear; the Merlin 63 and 66 of later IXs gave more."
   },
   {
    "key": "Seafire III",
@@ -634,7 +653,7 @@
     340,
     430
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     120,
     "notes",
     "uncertain",
@@ -663,7 +682,7 @@
    ],
    "turn_m": [
     245,
-    "ackroyd",
+    "estimate",
     "uncertain",
     220,
     260
@@ -712,7 +731,8 @@
     965
    ],
    "style": "turn",
-   "style_why": "A steady gun platform with a thick wing that turned tightly; slower than the Bf 109E, it was set on the bombers while the Spitfires fought the escort (Fighter Command, 1940)."
+   "style_why": "A steady gun platform with a thick wing that turned tightly; slower than the Bf 109E, it was set on the bombers while the Spitfires fought the escort (Fighter Command, 1940).",
+   "notes": "Its turn_m (245 m at 3,660 m) is this pass's estimate from its wing loading against the Spitfire's and the Bf 109E's RAE radii; Ackroyd and Lamont's figures were not read."
   },
   {
    "key": "Fulmar",
@@ -769,7 +789,7 @@
     250,
     300
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     120,
     "std",
     "uncertain",
@@ -998,7 +1018,7 @@
     270,
     315
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     120,
     "std",
     "uncertain",
@@ -1196,6 +1216,12 @@
     "Me109",
     "Emil"
    ],
+   "models": [
+    "Bf109",
+    "Bf 109",
+    "Me 109",
+    "Me109"
+   ],
    "nation": "GER",
    "role": "fighter",
    "engines": 1,
@@ -1330,7 +1356,7 @@
    ],
    "style": "dive",
    "style_why": "Pairs and fours diving from height, one pass and zoom away (M\u00f6lders' Rotte and Schwarm, Spain 1937-38); out-climbed the Hurricane and dived well, but its pilots were taught never to turn with Spitfires or Hurricanes: heavy ailerons at speed, a wider turn (RAE).",
-   "notes": "The 3D model is a Bf 109E; the marks by date follow guns.ts (the F-4 from 1941 on). guns.ts has no G: the Bf 109G row is for a later change. The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read.",
+   "notes": "The 3D model is a Bf 109E. A plain 'Bf109' flies the mark of its date: the F from 1941, the G from mid-1942 (a reading of the date: the G-2 replaced the F-4 in the Jagdgeschwader from about June 1942). guns.ts arms a 'Bf109' as the F-4 from 1941 to the end: the G-2's guns were the F-4's (one MG 151/20 and two MG 17), but the G-6's two MG 131 of 1943-45 are not in guns.ts (a question for the rules, not for this table). The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read.",
    "marks": [
     {
      "row": "Bf 109E",
@@ -1339,6 +1365,10 @@
     {
      "row": "Bf 109F",
      "from": 1941
+    },
+    {
+     "row": "Bf 109G",
+     "from": 1942.5
     }
    ]
   },
@@ -1427,7 +1457,7 @@
    ],
    "turn_s": [
     20,
-    "gordon",
+    "niivvs",
     "uncertain",
     19,
     21.5
@@ -1490,7 +1520,9 @@
     "Bf 109G",
     "Bf 109G-6",
     "Me 109G",
-    "Gustav"
+    "Gustav",
+    "Bf 109G-2",
+    "Bf 109G-14"
    ],
    "nation": "GER",
    "role": "fighter",
@@ -1569,7 +1601,7 @@
    ],
    "turn_s": [
     20.5,
-    "gordon",
+    "niivvs",
     "uncertain",
     19.5,
     22.0
@@ -1626,7 +1658,7 @@
    ],
    "style": "dive",
    "style_why": "Heavier than the F, faster at height, worse in the turn; the Schwarm's climb and dive, and from 1943 the top cover over the Sturmgruppen.",
-   "notes": "The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read."
+   "notes": "One row for the G-2 to the G-14, its figures the G-6's (the G-2 of 1942 was a little lighter and faster, the G-14 of 1944 a little faster with its boost). The usable lift in a hard turn (clmax 1.45, against a plain wing's 1.35) is this pass's estimate for its automatic leading-edge slats, which let it pull nearer the stall without dropping a wing; no measured figure was read."
   },
   {
    "key": "Bf 110C",
@@ -1710,7 +1742,7 @@
    ],
    "turn_m": [
     320,
-    "ackroyd",
+    "estimate",
     "uncertain",
     290,
     360
@@ -1761,7 +1793,8 @@
     1095
    ],
    "style": "dive",
-   "style_why": "Too heavy to turn with single-seat fighters: a long-range escort and bomber destroyer, falling back on the defensive circle when bounced (1940); with rockets against the American boxes in 1943."
+   "style_why": "Too heavy to turn with single-seat fighters: a long-range escort and bomber destroyer, falling back on the defensive circle when bounced (1940); with rockets against the American boxes in 1943.",
+   "notes": "Its turn_m (320 m at 3,660 m) is this pass's estimate from its wing and power loading; Ackroyd and Lamont's figures were not read."
   },
   {
    "key": "Fw 190A-4",
@@ -1773,6 +1806,12 @@
     "Fw 190A-3",
     "Fw 190A-4",
     "Wurger"
+   ],
+   "models": [
+    "Fw190",
+    "Fw 190",
+    "FW190",
+    "Fw 190A"
    ],
    "nation": "GER",
    "role": "fighter",
@@ -1821,7 +1860,7 @@
    ],
    "top_kmh": [
     650,
-    "afdu190",
+    "std",
     "manufacturer",
     625,
     670
@@ -1847,7 +1886,7 @@
    ],
    "climb_ms": [
     17.0,
-    "afdu190",
+    "std",
     "uncertain",
     15.0,
     19.0
@@ -1869,7 +1908,7 @@
    ],
    "turn_s": [
     22,
-    "gordon",
+    "niivvs",
     "uncertain",
     21,
     24
@@ -2613,7 +2652,7 @@
     260,
     310
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     120,
     "std",
     "uncertain",
@@ -2985,6 +3024,20 @@
     "std",
     "manufacturer"
    ],
+   "power_low_hp": [
+    1550,
+    "estimate",
+    "uncertain",
+    1450,
+    1620
+   ],
+   "power_low_m": [
+    3800,
+    "estimate",
+    "uncertain",
+    3400,
+    4200
+   ],
    "top_kmh": [
     703,
     "std",
@@ -3072,7 +3125,8 @@
     1600
    ],
    "style": "dive",
-   "style_why": "The long-range escort of early 1944: fast at height and in the dive; pairs and fours, boom and zoom; freed to hunt ahead of the bombers from January 1944."
+   "style_why": "The long-range escort of early 1944: fast at height and in the dive; pairs and fours, boom and zoom; freed to hunt ahead of the bombers from January 1944.",
+   "notes": "Its V-1650-3's low-gear rating (about 1,550 hp near 3,800 m) is recalled, not read: an estimate with a range. The high gear's 1,300 hp at 8,500 m is the rated power."
   },
   {
    "key": "P-51D",
@@ -3083,6 +3137,11 @@
     "P-51D",
     "P-51K",
     "Mustang IV"
+   ],
+   "models": [
+    "Mustang",
+    "P-51",
+    "P51"
    ],
    "nation": "USA",
    "role": "fighter",
@@ -3114,6 +3173,20 @@
     5900,
     "std",
     "manufacturer"
+   ],
+   "power_low_hp": [
+    1590,
+    "estimate",
+    "uncertain",
+    1490,
+    1720
+   ],
+   "power_low_m": [
+    2600,
+    "estimate",
+    "uncertain",
+    2300,
+    2900
    ],
    "top_kmh": [
     703,
@@ -3205,7 +3278,7 @@
    ],
    "style": "dive",
    "style_why": "As the P-51B, with the bubble canopy and six guns; the escort that hunted the Luftwaffe's fighters in 1944-45.",
-   "notes": "The 3D model is a P-51D; the P-51B before June 1944, as guns.ts.",
+   "notes": "The 3D model is a P-51D; a plain 'Mustang' flies the P-51B before June 1944, as guns.ts. Its V-1650-7's low-gear rating (about 1,590 hp near 2,600 m) is recalled, not read: an estimate with a range; the high gear's 1,500 hp at 5,900 m is the rated power.",
    "marks": [
     {
      "row": "P-51B",
@@ -3530,7 +3603,7 @@
     270,
     450
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     140,
     "std",
     "uncertain",
@@ -3650,7 +3723,7 @@
     300,
     480
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     140,
     "std",
     "uncertain",
@@ -3715,13 +3788,149 @@
    "style_why": "Fast and a fine diver: the Marines' hit-and-run fighter over the Solomons from February 1943."
   },
   {
+   "key": "B-17F",
+   "names": [
+    "B-17F",
+    "B-17E",
+    "B-17F-BO"
+   ],
+   "nation": "USA",
+   "role": "heavy bomber",
+   "engines": 4,
+   "engine": "4 x Wright R-1820-97 (turbocharged)",
+   "span_m": [
+    31.62,
+    "std",
+    "manufacturer"
+   ],
+   "wing_m2": [
+    131.92,
+    "std",
+    "manufacturer"
+   ],
+   "mass_kg": [
+    24000,
+    "std",
+    "uncertain",
+    21000,
+    29000
+   ],
+   "power_hp": [
+    4800,
+    "std",
+    "manufacturer"
+   ],
+   "power_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "top_kmh": [
+    500,
+    "std",
+    "uncertain",
+    480,
+    523
+   ],
+   "top_m": [
+    7620,
+    "std",
+    "manufacturer"
+   ],
+   "cruise_kmh": [
+    330,
+    "std",
+    "uncertain",
+    290,
+    385
+   ],
+   "stall_kmh": [
+    160,
+    "std",
+    "uncertain",
+    145,
+    175
+   ],
+   "climb_ms": [
+    5.0,
+    "std",
+    "uncertain",
+    4.3,
+    6.0
+   ],
+   "to_height_min": [
+    26.0,
+    "std",
+    "uncertain",
+    22.0,
+    30.0
+   ],
+   "to_height_m": 6096,
+   "ceiling_m": [
+    11200,
+    "std",
+    "uncertain",
+    10850,
+    11430
+   ],
+   "roll_dps": [
+    20,
+    "estimate",
+    "uncertain",
+    15,
+    30
+   ],
+   "roll_kmh": 260,
+   "roll_fast_dps": [
+    15,
+    "estimate",
+    "uncertain",
+    12,
+    22
+   ],
+   "roll_fast_kmh": 400,
+   "g_limit": [
+    3.0,
+    "std",
+    "uncertain",
+    2.5,
+    3.5
+   ],
+   "dive_kmh": [
+    435,
+    "notes",
+    "uncertain",
+    435,
+    490
+   ],
+   "bomb_kg": [
+    2700,
+    "std",
+    "manufacturer",
+    1800,
+    4800
+   ],
+   "range_km": [
+    3200,
+    "std",
+    "manufacturer"
+   ],
+   "style": "none",
+   "style_why": "Day bomber of the Eighth Air Force's first year: the staggered group formations of late 1942 and the combat box of 1943; its thin nose defence drew the head-on attack from November 1942.",
+   "notes": "Stands for the B-17E and F of 1942-43: no chin turret, fewer guns and less armour than the G, so lighter, a little faster and higher. Its figures are recalled, not read (the E about 510 km/h at 25,000 ft, the F 480 to 523 km/h by source): each marked uncertain with its range; the rest as the G's row."
+  },
+  {
    "key": "B-17G",
    "names": [
     "B17",
     "B-17",
     "B-17G",
-    "B-17F",
-    "B-17E",
+    "Flying Fortress",
+    "Fortress"
+   ],
+   "models": [
+    "B17",
+    "B-17",
     "Flying Fortress",
     "Fortress"
    ],
@@ -3846,7 +4055,17 @@
    ],
    "style": "none",
    "style_why": "Day bomber in the combat box of 1943 (18 to 21 aircraft stepped up and down for mutual fire); bombed on the lead's drop.",
-   "notes": "One row for the B-17E, F and G (the 3D model is a G); the guns by date are guns.ts's."
+   "notes": "The 3D model is a G. A plain 'B17' flies the B-17F (standing for the E and F) to August 1943 and the G from September 1943, as guns.ts arms them; the guns by date are guns.ts's.",
+   "marks": [
+    {
+     "row": "B-17F",
+     "from": 0
+    },
+    {
+     "row": "B-17G",
+     "from": 1943.6666666666667
+    }
+   ]
   },
   {
    "key": "B-24J",
@@ -4020,7 +4239,7 @@
     "std",
     "manufacturer"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     170,
     "std",
     "uncertain",
@@ -4140,7 +4359,7 @@
     "std",
     "manufacturer"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     126,
     "std",
     "uncertain",
@@ -4257,7 +4476,7 @@
     240,
     300
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     130,
     "std",
     "uncertain",
@@ -4374,7 +4593,7 @@
     "std",
     "manufacturer"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     110,
     "std",
     "uncertain",
@@ -4493,7 +4712,7 @@
     "std",
     "manufacturer"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     125,
     "std",
     "uncertain",
@@ -4682,6 +4901,12 @@
     "Zeke",
     "Reisen",
     "A6M2 model 21"
+   ],
+   "models": [
+    "Zero",
+    "A6M",
+    "Zeke",
+    "Reisen"
    ],
    "nation": "JAP",
    "role": "carrier fighter",
@@ -5106,7 +5331,7 @@
     350,
     440
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     110,
     "std",
     "uncertain",
@@ -5309,6 +5534,10 @@
     "G4M",
     "G4M1",
     "G4M1 model 11"
+   ],
+   "models": [
+    "Betty",
+    "G4M"
    ],
    "nation": "JAP",
    "role": "medium bomber",
@@ -5959,7 +6188,7 @@
     400,
     430
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     145,
     "std",
     "uncertain",
@@ -6158,6 +6387,9 @@
     "Yak",
     "Yak-1B",
     "Yak 1B"
+   ],
+   "models": [
+    "Yak"
    ],
    "nation": "SOV",
    "role": "fighter",
@@ -7649,7 +7881,7 @@
     "std",
     "manufacturer"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     140,
     "std",
     "uncertain",
@@ -8144,7 +8376,7 @@
     240,
     280
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     125,
     "std",
     "uncertain",
@@ -8516,7 +8748,7 @@
     370,
     420
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     125,
     "std",
     "uncertain",
@@ -8638,7 +8870,7 @@
     380,
     440
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     140,
     "std",
     "uncertain",
@@ -9167,7 +9399,7 @@
     "derived",
     "derived"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     118,
     "derived",
     "derived"
@@ -9387,7 +9619,7 @@
     280,
     330
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     120,
     "std",
     "uncertain",
@@ -9499,7 +9731,7 @@
     "std",
     "manufacturer"
    ],
-   "stall_kmh": [
+   "stall_flaps_kmh": [
     115,
     "std",
     "uncertain",
@@ -9777,7 +10009,7 @@
    "who": "ITA",
    "when": "1940-43",
    "what": "Patrols of three in vics, turning; German pairs and fours with the C.202 from 1942.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9787,7 +10019,7 @@
    "who": "FRA",
    "when": "1939-40",
    "what": "Tight patrols of three, turning; the patrol attacked in turn from astern and the quarter.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9873,7 +10105,7 @@
    "who": "JAP",
    "when": "1941-44",
    "what": "Top cover weaving above the bombers and, on big raids, a sweep ahead; not below the bombers.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9883,7 +10115,7 @@
    "who": "ITA",
    "when": "1940-42",
    "what": "Fighters crowded close round the SM.79s (over Malta).",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9893,7 +10125,7 @@
    "who": "GER v B-17",
    "when": "to 23 November 1942",
    "what": "From astern and the rear quarter, into the tail guns' and the box's crossfire.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9903,7 +10135,7 @@
    "who": "GER v B-17",
    "when": "from 23 November 1942",
    "what": "Head-on from 12 o'clock level or a little high (Egon Mayer, JG 2, over St Nazaire): closing at 800 to 900 km/h, a burst of a second or two, then down and away under the box; the B-17's nose had few guns until the B-17G's chin turret.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9945,7 +10177,7 @@
    "who": "UK",
    "when": "1940",
    "what": "Fighter Command's order: Hurricanes on the bombers, head-on where they could (few managed it), Spitfires on the escort.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]
@@ -9955,7 +10187,7 @@
    "who": "JAP v four-engined",
    "when": "from mid-1942",
    "what": "Mostly head-on against the B-17 and B-24; against twins from astern and the quarter.",
-   "kind": "fact",
+   "kind": "reading",
    "by": [
     "doctrine"
    ]

@@ -70,18 +70,38 @@ namespace AirPerf
 			return std::clamp((ThrustAt(R, R.TopM, V) - Induced) / QS, 0.012, 0.06);
 		}
 
-		/** The lift it uses in a hard turn: the historian's own figure where he gave one (a slatted or flapped wing), else
-		 * a plain wing's 1.35 (the rules' data/aircraft.json gives the Spitfire 1.36 and the Hurricane 1.35). */
-		double TurnLift(const Row& R)
-		{
-			return R.ClMax > 0.0 ? std::clamp(R.ClMax, 1.0, 1.7) : 1.35;
-		}
-
 		double GMaxOf(const Row& R)
 		{
 			const double Limit = R.GLimit > 0.0 ? R.GLimit : R.IsFighter() ? 7.0 : 3.0;
 			return std::min(Limit, PilotG);
 		}
+	}
+
+	/** The lift it uses in a hard turn: the historian's own figure where he gave one (a slatted or flapped wing), else a
+	 * plain wing's 1.35 (the rules' data/aircraft.json gives the Spitfire 1.36 and the Hurricane 1.35). */
+	double TurnLift(const Row& R)
+	{
+		return R.ClMax > 0.0 ? std::clamp(R.ClMax, 1.0, 1.7) : 1.35;
+	}
+
+	double StallSpeed(const Row& R)
+	{
+		// (from its weight, not from the quoted stall: the quoted stalls are on mixed bases, clean and flaps down, and the
+		// reviewer of 25 November found them up to a quarter low; Vs = sqrt(2 W / (rho0 S CL)), the lift it turns with)
+		if (R.Mass <= 0.0 || R.Wing <= 0.0) return 0.0;
+		return std::sqrt(2.0 * Weight(R) / (SeaRho * R.Wing * TurnLift(R)));
+	}
+
+	double RadiusWorked(const Row& R)
+	{
+		return R.TurnRadius > 0.0 && R.TurnMark == "measured" ? R.TurnRadius : TurnRadius(R, FightM);
+	}
+
+	double RollSettle(const Row& R, double SpeedMs)
+	{
+		const double K = R.Engines >= 3 || R.Span >= 28.0 ? 0.19 : R.Engines == 2 ? 0.16 : 0.13;
+		const double Loading = R.Wing > 0.0 ? R.Mass / R.Wing : 150.0;
+		return Loading * K * K / (ClpQuarter * Density(FightM) * std::max(SpeedMs, 30.0));
 	}
 
 	double Density(double HeightM)
@@ -107,7 +127,7 @@ namespace AirPerf
 		if (R.Mass <= 0.0 || R.Wing <= 0.0 || R.Span <= 0.0 || R.Top <= 0.0 || (R.Power <= 0.0 && R.Thrust <= 0.0)) return 0.0;
 		const double Rho = Density(HeightM), S = R.Wing, W = Weight(R), Cd0 = DragZero(R), Cl = TurnLift(R), Span = SpanFactor(R), GMost = GMaxOf(R);
 		// (from just over its stall, true at this height, to its top speed)
-		const double Slow = (R.Stall > 0.0 ? R.Stall / 3.6 : std::sqrt(2.0 * W / (SeaRho * S * 1.35))) * std::sqrt(SeaRho / Rho) * 1.05;
+		const double Slow = StallSpeed(R) * std::sqrt(SeaRho / Rho) * 1.05;
 		double Best = std::numeric_limits<double>::infinity(), BestTime = 0.0;
 		for (double V = Slow; V <= R.Top / 3.6; V += 0.5)
 		{
@@ -133,7 +153,8 @@ namespace AirPerf
 		Flight F;
 		const bool bFighter = R.IsFighter();
 		F.VTop = R.Top > 0.0 ? R.Top / 3.6 : bFighter ? 150.0 : 110.0;
-		F.VMin = R.Stall > 0.0 ? 1.15 * R.Stall / 3.6 : bFighter ? 45.0 : 40.0;
+		const double Stall = StallSpeed(R);
+		F.VMin = Stall > 0.0 ? 1.15 * Stall : bFighter ? 45.0 : 40.0;
 		// (a fighter cruises in formation and fights at about four-fifths of its top speed, a bomber at its cruise)
 		if (bFighter) F.VMax = std::max(R.Cruise / 3.6, 0.82 * F.VTop);
 		else F.VMax = R.Cruise > 0.0 ? R.Cruise / 3.6 : 0.75 * F.VTop;
@@ -141,15 +162,14 @@ namespace AirPerf
 		F.VDive = std::max(R.Dive / 3.6, F.VTop);
 		F.GMax = GMaxOf(R);
 		// (the turn: a measured radius where the historian laid one, else worked out; held to sane bounds, a fighter's 150
-		// to 450 m as the brief of 24 November sets them, any other's 150 to 2,500 m. Only the Me 262 is held: it works out
-		// at about 495 m and flies at 450, still the widest of the fighters.)
-		double Radius = R.TurnRadius > 0.0 && R.TurnMark == "measured" ? R.TurnRadius : TurnRadius(R, FightM);
+		// to 450 m as the brief of 24 November sets them, any other's 150 to 2,500 m. Two are held: the Me 262A works out at
+		// about 495 m and flies at 450, still the widest of the fighters; the Swordfish I, a biplane, at about 136 m and
+		// flies at 150.)
+		double Radius = RadiusWorked(R);
 		if (Radius <= 0.0) Radius = bFighter ? 300.0 : 800.0;
 		F.RMin = bFighter ? std::clamp(Radius, 150.0, 450.0) : std::clamp(Radius, 150.0, 2500.0);
 		F.RollMax = (R.Roll > 0.0 ? R.Roll : bFighter ? 90.0 : 30.0) * Deg;
-		const double K = R.Engines >= 3 || R.Span >= 28.0 ? 0.19 : R.Engines == 2 ? 0.16 : 0.13;
-		const double Loading = R.Wing > 0.0 ? R.Mass / R.Wing : 150.0;
-		F.RollTime = std::clamp(Loading * K * K / (ClpQuarter * Density(FightM) * std::max(F.VMax, 30.0)), 0.08, 1.2);
+		F.RollTime = std::clamp(RollSettle(R, F.VMax), 0.08, 1.2);
 		F.ClimbMost = R.Climb > 0.0 ? R.Climb : bFighter ? 15.0 : 5.0;
 		F.Ceiling = R.Ceiling > 0.0 ? R.Ceiling : bFighter ? 10000.0 : 7500.0;
 		return F;
@@ -159,7 +179,7 @@ namespace AirPerf
 	{
 		const double Peak = (R.Roll > 0.0 ? R.Roll : 90.0) * Deg;
 		const double PeakAt = R.RollKmh > 0.0 ? R.RollKmh / 3.6 : 85.0;
-		const double Slow = R.Stall > 0.0 ? R.Stall / 3.6 : 35.0;
+		const double Slow = StallSpeed(R) > 0.0 ? StallSpeed(R) : 35.0;
 		if (IndicatedMs <= PeakAt)
 		{
 			// (the ailerons' bite grows with speed from about half the stall up to the peak, where the stick force caps it)
@@ -197,8 +217,13 @@ namespace AirPerf
 		const auto It = ByName.find(Base);
 		if (It == ByName.end()) return nullptr;
 		const Row& Found = Rows[It->second];
-		// (a model's plain name flies the mark of the battle's date; a mark named outright flies as named)
-		if (Year <= 0.0 || Found.Marks.empty() || Base == Plain(Found.Key)) return &Found;
+		// (a model's plain name, one of the row's Models, flies the mark of the battle's date; any other of its names, its
+		// key or a mark named outright, flies as named: "Bf 109E-4" in 1943 is still an E, as the reviewer of 25 November
+		// asked)
+		if (Year <= 0.0 || Found.Marks.empty()) return &Found;
+		bool bPlainModel = false;
+		for (const std::string& M : Found.Models) bPlainModel = bPlainModel || Plain(M) == Base;
+		if (!bPlainModel) return &Found;
 		const Row* Pick = &Found;
 		for (const Row::Mark& K : Found.Marks)
 		{
@@ -210,11 +235,24 @@ namespace AirPerf
 		return Pick;
 	}
 
+	Flight Table::LimitsOf(const Row& R) const
+	{
+		if (R.Index < Rows.size() && R.Index < Flights.size() && &Rows[R.Index] == &R) return Flights[R.Index];
+		return Limits(R);
+	}
+
 	bool Read(const std::string& Text, Table& Out, std::string& OutError)
 	{
 		Out = Table();
 		AirFeed::Json J;
 		if (!AirFeed::Parse(Text, J, OutError)) return false;
+		// (the height the table's turns are laid at must be the one the turns are worked at)
+		const AirFeed::Json& Height = J["fighting_height_m"];
+		if (!Height.IsNull() && std::fabs(Height.Num(-1.0) - FightM) > 0.5)
+		{
+			OutError = "the table's fighting_height_m is not AirPerf::FightM";
+			return false;
+		}
 		const AirFeed::Json& List = J["rows"];
 		if (!List.IsArray() || List.Count() == 0)
 		{
@@ -231,6 +269,7 @@ namespace AirPerf
 			R.Style = X["style"].Str("");
 			R.Engines = X["engines"].Int(1);
 			for (size_t N = 0; N < X["names"].Count(); ++N) R.Names.push_back(X["names"].At(N).Str(""));
+			for (size_t N = 0; N < X["models"].Count(); ++N) R.Models.push_back(X["models"].At(N).Str(""));
 			R.Span = Fig(X["span_m"]);
 			R.Wing = Fig(X["wing_m2"]);
 			R.Mass = Fig(X["mass_kg"]);
@@ -271,8 +310,25 @@ namespace AirPerf
 				return false;
 			}
 			const size_t At = Out.Rows.size();
+			R.Index = At;
 			std::vector<std::string> Calls = R.Names;
 			Calls.push_back(R.Key);
+			// (its plain model names are some of its names; a row with marks has them, or its marks could never be flown)
+			for (const std::string& M : R.Models)
+			{
+				bool bNamed = false;
+				for (const std::string& Name : Calls) bNamed = bNamed || Plain(Name) == Plain(M);
+				if (!bNamed)
+				{
+					OutError = R.Key + "'s model " + M + " is not one of its names";
+					return false;
+				}
+			}
+			if (!R.Marks.empty() && R.Models.empty())
+			{
+				OutError = R.Key + " has marks but no models to fly them";
+				return false;
+			}
 			for (const std::string& Name : Calls)
 			{
 				const std::string P = Plain(Name);
@@ -316,6 +372,9 @@ namespace AirPerf
 				}
 			}
 		}
+		// (every row's limits worked out once, so that the flight core never sweeps a turn as an aircraft is made)
+		Out.Flights.reserve(Out.Rows.size());
+		for (const Row& R : Out.Rows) Out.Flights.push_back(Limits(R));
 		return true;
 	}
 }
