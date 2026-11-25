@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f417aece 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f59f5c0c 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -57634,6 +57634,7 @@
   }
   function foughtIn(g2, mine4) {
     for (const x of mine4) x.attacked = g2.turn;
+    markSought(g2, mine4);
   }
   function theirsAt(g2, f, t, at4) {
     const side5 = (x) => x.id !== t.id && (x.nat === t.nat || allied(g2, x.nat, t.nat)) && atWar(g2, x.nat, f.nat) && shipCount(x.ships) > 0;
