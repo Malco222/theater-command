@@ -1526,6 +1526,15 @@ void ACampaignPlayerController::BeginPlay()
 					// the eye stood a whole world west of the town. So the eye comes round at the chart's seam.
 					const double West = Map->MapToWorld(World.Charted.Min.X, 0.0).Y;
 					Eye->SetWrap(West, West + World.WorldWidth * Map->UnitScale);
+					// (Seam-2: and what the table shows on the eye's side of that seam, its pieces and the screen's
+					// names, comes round in the very frame the eye does.)
+					Eye->CameRound = [Table = Map, Eye]()
+					{
+						if (Table.IsValid())
+						{
+							Table->EyeCameRound(Eye->GetFocus());
+						}
+					};
 				}
 				// (and at the chart's north and south edges the table beyond it fills no more than about a fifth of the screen)
 				Eye->SetEdgeHold(0.2f, 0.2f);

@@ -425,6 +425,38 @@ bool ACampaignMapActor::OverSeam() const
 	return Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0 && CVarOverSeam.GetValueOnGameThread() != 0;
 }
 
+void ACampaignMapActor::EyeCameRound(const FVector& Focus)
+{
+	if (!Data.bFar)
+	{
+		return;
+	}
+	const bool bOverSeam = OverSeam();
+	LastAskedFocus = Focus;
+	TheaterSpeed::RoundWorld(Focus.Y, bOverSeam ? Data.WorldWidth * UnitScale : 0.0);
+	for (AArmyPiece* Piece : Pieces)
+	{
+		if (Piece)
+		{
+			Piece->LookFrom(Focus.Y, bOverSeam);
+		}
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : FleetPieces)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->LookFrom(Focus.Y, bOverSeam);
+		}
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : AirPieces)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->LookFrom(Focus.Y, bOverSeam);
+		}
+	}
+}
+
 double ACampaignMapActor::NearX(double X, double BesideX) const
 {
 	return Data.bFar && Data.WorldWidth > 0.0 ? X + FMath::RoundToDouble((BesideX - X) / Data.WorldWidth) * Data.WorldWidth : X;
@@ -435,6 +467,7 @@ void ACampaignMapActor::RoundPiece(AArmyPiece* Piece) const
 	if (Piece && Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0)
 	{
 		Piece->KeepRound(MapToWorld(Data.Charted.Min.X, 0.0).Y, Data.WorldWidth * UnitScale);
+		Piece->LookFrom(LastAskedFocus.Y, OverSeam()); // (seam-2: shown on the eye's side from its first frame; UpdateForCamera says so each frame after)
 	}
 }
 
@@ -10756,7 +10789,7 @@ void ACampaignMapActor::BuildGunLines()
 		{
 			continue; // (no guns; or nothing but guns, which keeps its gun on the base)
 		}
-		if (Piece->IsMarching() || FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) > FMath::Square(0.5 * U))
+		if (Piece->IsMarching() || FVector::DistSquared2D(Piece->GetReckonedLocation(), Piece->GetRestLocation()) > FMath::Square(0.5 * U))
 		{
 			GunsAway.Add(Piece); // (in the hand or on the road: its guns are put down with it)
 			continue;
@@ -16834,10 +16867,15 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	{
 		const double ShadowReach = CameraDistance * 1.1 + 500.0;
 		const bool bAny = CameraDistance < 7000.0f;
+		const bool bOverSeam = OverSeam(); // (the far side, seam-2: each piece is shown in the turn of the world nearest the eye)
 		auto Shade = [&](AArmyPiece* Piece)
 		{
 			if (Piece)
 			{
+				if (Data.bFar)
+				{
+					Piece->LookFrom(CameraFocus.Y, bOverSeam);
+				}
 				Piece->SetShadows(bAny && FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach);
 			}
 		};
@@ -17021,12 +17059,12 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			for (const FGunLine& Line : GunLines)
 			{
 				const AArmyPiece* Piece = Line.Piece.Get();
-				bMoved |= !Piece || Piece->IsMarching() || FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) > Slack;
+				bMoved |= !Piece || Piece->IsMarching() || FVector::DistSquared2D(Piece->GetReckonedLocation(), Piece->GetRestLocation()) > Slack;
 			}
 			for (const TWeakObjectPtr<AArmyPiece>& Waited : GunsAway)
 			{
 				const AArmyPiece* Piece = Waited.Get();
-				bMoved |= !Piece || (!Piece->IsMarching() && FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) <= Slack);
+				bMoved |= !Piece || (!Piece->IsMarching() && FVector::DistSquared2D(Piece->GetReckonedLocation(), Piece->GetRestLocation()) <= Slack);
 			}
 			if (bMoved)
 			{

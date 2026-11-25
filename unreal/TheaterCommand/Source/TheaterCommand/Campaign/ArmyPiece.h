@@ -86,6 +86,21 @@ public:
 	 */
 	void KeepRound(double West, double Span) { RoundWest = West; RoundSpan = FMath::Max(Span, 0.0); }
 	/**
+	 * (Release 2, the far side: the art director's seam-2, 25 November 2026.) Where the eye looks along the table's
+	 * east (the world's +Y). A piece kept in its own turn of the world was a whole world from an eye on the other side
+	 * of the chart's seam: the fleet at Pearl Harbor was not there from over California, and a fleet under sail was
+	 * lost to sight at the seam. Told this (by the map, each frame), the piece is SHOWN in the turn of the world
+	 * nearest the eye, wherever it stands, marches or sails, so it is in sight from both sides and crosses the seam
+	 * without leaving the table. Its own reckoning does not change: its rest, its way and what it tells the map of
+	 * them stay in the turn they were given in. Needs KeepRound's span; with bOn false it is kept as KeepRound says.
+	 */
+	void LookFrom(double EyeAlong, bool bOn);
+	/**
+	 * Where the piece is, in its own reckoning: where it is shown, brought back to the turn of the world its rest is
+	 * counted in. (For "has it left its rest?": the shown place may be a whole world from the rest. See LookFrom.)
+	 */
+	FVector GetReckonedLocation() const;
+	/**
 	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) A
 	 * fleet sails along the points given, on the water: not lifted, its bows turned the way it goes and its passage wake
 	 * thrown, and turned back to face the table (TableYaw) as it comes to rest. Longer ways take longer, from about a
@@ -270,6 +285,10 @@ private:
 	bool bLiftOnMarch = true;
 	bool bSailing = false; // (release 2) a fleet under sail: see SailAlong
 	double RoundWest = 0.0, RoundSpan = 0.0; // (release 2, the far side) the turn of the world it is kept in: see KeepRound
+	double RoundEye = 0.0; // (and where the eye looks along the world's +Y, while it is shown in the turn nearest the eye: see LookFrom)
+	bool bRoundToEye = false;
+	/** A place of the piece's own reckoning as it is shown: in the turn of the world nearest the eye, where the map has said so. */
+	FVector Shown(const FVector& Place) const;
 	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
 	bool bSelected = false;
 	bool bHovered = false;

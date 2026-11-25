@@ -328,6 +328,11 @@ public:
 	 */
 	bool OverSeam() const;
 	/**
+	 * (Seam-2.) The eye has come in again at the other end of the world and now looks at Focus: the pieces and the
+	 * screen's names are counted from there at once (the camera's CameRound), not from the frame after.
+	 */
+	void EyeCameRound(const FVector& Focus);
+	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
 	 * folded up, the piece that is shown and how many are put away behind it.
