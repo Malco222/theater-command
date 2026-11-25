@@ -4480,14 +4480,20 @@ namespace LandField
 		const double U2 = Unit(Hash(Q.Key, 0x70E2));
 		const double U3 = Unit(Hash(Q.Key, 0x70E3));
 		const bool bGrass = !(Q.Kind == RgField && Q.Crop != CpRoots);
+		const auto Luma = [](const Col& A) { return 0.2126 * A.R + 0.7152 * A.G + 0.0722 * A.B; };
+		const double Was = Luma(C);
 		Col T;
 		if (bGrass)
 		{
 			T = Varied(C, 1.0 + 0.16 * (U1 - 0.5), 0.06 * U2);
 			if (U3 < 0.25) T = Varied(T, 1.06, 0.04);                                  // fresh bitten
 			else if (U3 > 0.8) T = Varied(Mixed(T, Rgb(60, 88, 44), 0.12), 0.93, 0.0); // rank, left ungrazed
-			// (never bluer than the crop's own paint: a sward gone blue reads as a photograph's cast, not a field)
-			const double Most = C.B / std::max(1.0, C.G) + 0.005;
+			// Never bluer than the crop's own paint: a sward gone blue reads as a photograph's cast, not a field. And a
+			// darker field seen across the haze reads bluer by itself (the air's blue the same, the field's own green less),
+			// so the darker a sward is made, the less blue its paint: its blue/green down by its darkening (measured from
+			// the general's height, 170 and 400 m up; the field close by only a deeper green).
+			const double Dark = 1.0 - std::clamp(Luma(T) / std::max(1.0, Was), 0.9, 1.0);
+			const double Most = C.B / std::max(1.0, C.G) * (1.0 - 1.2 * Dark) + 0.005;
 			if (T.B > Most * T.G) T.B = Most * T.G;
 		}
 		else
@@ -4497,7 +4503,7 @@ namespace LandField
 			else if (U3 > 0.75) T = Varied(T, 1.05, 0.03);       // over-ripe, bleached
 		}
 		// (the men read against the ground: never under nine tenths of its value; the whole colour lifted, its hue kept)
-		const double Was = 0.2126 * C.R + 0.7152 * C.G + 0.0722 * C.B, Now = 0.2126 * T.R + 0.7152 * T.G + 0.0722 * T.B;
+		const double Now = Luma(T);
 		if (Now < 0.9 * Was && Now > 0.0) T = Scaled(T, 0.9 * Was / Now);
 		return Mixed(C, T, std::max(Green, Ripe));
 	}
