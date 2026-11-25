@@ -1443,6 +1443,16 @@ function makesHarbour(g: Game, f: Fleet): boolean {
   return true;
 }
 
+/**
+ * The standing line on a cut-off fleet's own card, for as long as it is cut off (DD 25 Nov 04:05Z: a player who skipped
+ * the news still sees it where he looks at the fleet). Empty when it is not cut off.
+ */
+export function cutOffLine(g: Game, f: Fleet): string {
+  if (!cutOff(g, f)) return '';
+  const r = harbourFor(g, f), gate = shutBetween(g, f);
+  return `Cut off${gate ? `: ${gateIs(gate)} shut to it` : ''}. ${r ? `Nearest friendly harbour on its side: ${r.name}.` : 'No friendly harbour on its side can take it.'}`;
+}
+
 /** The month's word to a player whose fleet is cut off, once while it is (a fleet he keeps by hand, or with the navy his own: no admiral moves it). */
 export function cutOffNews(g: Game, nat: string): void {
   if (nat !== g.human) return;

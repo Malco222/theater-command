@@ -99,8 +99,8 @@ describe('a fleet at sea when a strait shuts behind it', () => {
 // ---- Through the 3D game's doorway ------------------------------------------------------------------------------
 type Call = (...a: unknown[]) => unknown;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
-interface PageOut { top: { label: string; act: string; ok: boolean; tip: string }[] }
-interface Panel { options: { key: string; label: string; detail: string; ok: boolean; why: string }[] }
+interface PageOut { note: string; top: { label: string; act: string; ok: boolean; tip: string }[] }
+interface Panel { lines: string[]; options: { key: string; label: string; detail: string; ok: boolean; why: string }[] }
 interface View { fleets: { id: number; reach: number[]; bases: number[] }[] }
 
 describe('the cut-off fleet on its page, its panel and the map', () => {
@@ -118,12 +118,18 @@ describe('the cut-off fleet on its page, its panel and the map', () => {
     expect(home.label).toBe(`Return to harbour at ${haven.name}`);
     expect(home.ok).toBe(true);
     expect(home.detail).toMatch(/cut off beyond a shut strait/);
+    // The card says it while it lasts (the DD's standing line), on the panel and at the head of the page's note.
+    const line = `Cut off: the Strait of Gibraltar is shut to it. Nearest friendly harbour on its side: ${haven.name}.`;
+    expect(panel.lines).toContain(line);
+    expect((TC().page(`fleet:${f.id}`) as PageOut).note.startsWith(`${line} `)).toBe(true);
     const button = (TC().page(`fleet:${f.id}`) as PageOut).top.find((b) => b.label === 'RETURN TO HARBOUR')!;
     expect(button.ok).toBe(true);
     expect(button.tip).toBe(`Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.`);
     expect((TC().forceOrder(home.key) as { ok: boolean }).ok).toBe(true);
     const after = TC().force('fleet', f.id) as Panel;
     expect(after.options.some((o) => /:patrol$/.test(o.key))).toBe(true);
+    expect(after.lines.some((l) => /^Cut off/.test(l))).toBe(false);
+    expect((TC().page(`fleet:${f.id}`) as PageOut).note).not.toMatch(/Cut off/);
   });
 
   it('with no friendly harbour on its side the button is there but cannot be pressed, and says why', () => {
@@ -134,6 +140,7 @@ describe('the cut-off fleet on its page, its panel and the map', () => {
     const home = (TC().force('fleet', f.id) as Panel).options.find((o) => o.key.endsWith(':port'))!;
     expect(home.ok).toBe(false);
     expect(home.why).toBe('It is cut off beyond a shut strait, and no friendly harbour on its side can take it.');
+    expect((TC().force('fleet', f.id) as Panel).lines).toContain('Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.');
     expect((TC().forceOrder(home.key) as { ok: boolean }).ok).toBe(false);
   });
 });

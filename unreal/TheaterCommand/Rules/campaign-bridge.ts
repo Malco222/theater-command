@@ -92,7 +92,7 @@ import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, cutSays, cutsKnown } from '../../../src/campaign/intel';
-import { baseTargets, cutOff, fleetReach, harbourFor, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, cutOff, cutOffLine, fleetReach, harbourFor, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, moveTargets, overOcean, whyNotMission } from '../../../src/campaign/air';
@@ -3738,7 +3738,9 @@ function force(kind: string, id: number) {
       if (staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: 'Hand it back to your admirals', detail: HAND_BACK_TIP, ok: up, why: notNow });
     }
     const who = mine ? whoSails(s, id) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(who ? [who] : [])], options };
+    // (1.5.2) A cut-off fleet's own card says so for as long as it is (the DD, 25 Nov 04:05Z).
+    const cut = mine ? cutOffLine(s, f) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(cut ? [cut] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -4466,6 +4468,12 @@ function fleetInHand(id: number) {
 const cap1 = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
 
 /** A fleet's orders, all in one room: what it is, the seas in its reach and what it would meet, lanes to escort, coasts to shell, splitting and joining. */
+/** (1.5.2) The cut-off line at the head of the fleet page's note, with a space after it; empty when it is not cut off. */
+function cutOffNote(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id), line = f ? cutOffLine(s, f) : '';
+  return line ? `${line} ` : '';
+}
+
 function fleetPage(s: Game, id: number): Page | null {
   const card = s.flags.open === 1 ? fleetView(s, id) : null;
   if (!card || card.nat !== s.human) return null;
@@ -4540,7 +4548,7 @@ function fleetPage(s: Game, id: number): Page | null {
   const who = whoSails(s, id);
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
+    note: `${cutOffNote(s, id)}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
     top: [
       ...(() => {
         // (1.5.2) Cut off at sea beyond a shut strait, it makes for the nearest friendly harbour on its side, or has none.
