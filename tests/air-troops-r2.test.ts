@@ -81,12 +81,13 @@ describe('the switch (off by default, bit for bit as before)', () => {
       expect(JSON.stringify(rb)).toBe(JSON.stringify(ra));
       expect(saveGame(b.g)).toBe(saveGame(a.g));
     }
-    // A raid with a fighter group out of reach to strafe (Groupement de Chasse 1 moved to Belfort, 190 km off, beyond
-    // 0.6 of its 220 km): the defence, the odds and the bombers book as off; the far group loses only what the air fight
+    // A raid with a fighter group out of reach to strafe (Groupement de Chasse 1 moved to Namur, 216 km off, beyond
+    // 0.9 of its 220 km, the design director's reach of 13:35Z; it stood at Belfort, 190 km off, beyond the old 0.6,
+    // which is inside 0.9): the defence, the odds and the bombers book as off; the far group loses only what the air fight
     // took (as off would with no ground fire at all), and the weight on the troops is only the strafers'.
     const far = (k: number) => {
       const s = saar(k);
-      s.g.airFleets.find((f) => f.id === 9)!.base = s.g.regions.find((r) => r.name === 'Belfort')!.id;
+      s.g.airFleets.find((f) => f.id === 9)!.base = s.g.regions.find((r) => r.name === 'Namur')!.id;
       return { ...s, ids: [...s.ids, 9] };
     };
     for (const k of [3, 4]) {
@@ -102,7 +103,7 @@ describe('the switch (off by default, bit for bit as before)', () => {
       expect(rb.odds).toBe(ra.odds);
       expect(rb.att.map((x) => x.lostBmr)).toEqual(ra.att.map((x) => x.lostBmr));
       expect(rb.att.find((x) => x.id === 9)!.lostFtr).toBe(rc.att.find((x) => x.id === 9)!.lostFtr);
-      // With the switch off the far group pays the ground fire too: at Belfort, 150 fighters, on these two seeds.
+      // With the switch off the far group pays the ground fire too: at Namur, on these two seeds.
       expect(ra.att.find((x) => x.id === 9)!.lostFtr).toBeGreaterThanOrEqual(rc.att.find((x) => x.id === 9)!.lostFtr);
     }
   });
