@@ -101,7 +101,7 @@ import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar'
 import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
-import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
+import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, noneSeen, overOcean, seenAgo, skyOver, standingGuns, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
@@ -1584,8 +1584,16 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
     const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === 'work' && b.item === 'aa' && b.region === id).length ?? 0;
     const o = see.own ? arsenalOffers(s, id).find((x) => x.key === 'work:aa' && x.at === id) : undefined;
     const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : '';
+    // (The UI director, 25 Nov 2026 19:10Z, section B: the built guns first, the light guns every town has named apart.
+    // words is her sentence and base the standing light guns: the 3D shelf is to draw words. Until its C++ reads words
+    // it prints light as a number ("N light guns, no heavy ones"), so light stays what it was, the larger of the built
+    // light guns and the standing ones: a bare town says its 60, never 0. heavy is the built heavy guns, as it was.)
+    const base = standingGuns(), n = (x: number): string => x.toLocaleString('en-US');
+    const words = guns.all
+      ? `About ${n(guns.all)} guns built round ${townName(r)}, ${n(guns.heavy)} of them heavy, and the ${n(base)} light guns every town has.`
+      : `Only the ${n(base)} light guns every town has.`;
     return {
-      level, heavy: guns.heavy, light: guns.light, stop: Math.round(gunsStop(level) * 100), going,
+      level, heavy: guns.heavy, light: Math.max(base, guns.light), base, words, stop: Math.round(gunsStop(level) * 100), going,
       fighters, watch: ours, foe: foe ? s.nations[foe]?.adj ?? foe : '',
       sky: !sky ? '' : sky === me || allied(s, sky, me) ? 'ours' : 'theirs', skyBy: sky ? s.nations[sky]?.adj ?? sky : '',
       add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
@@ -1794,7 +1802,7 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
       // (The kind of raid is the replay's `kind`. The row read a `mission` the replay does not carry, so no flight
       // ever said night and the searchlights of ruling 107 were never lit on the map in play: mended 25 November 2026.)
       const byNight = r.kind === 'night';
-      const lightGuns = r.region >= 0 && workLevel(s, 'aa', r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, flakGuns(0).light) : 0;
+      const lightGuns = r.region >= 0 && workLevel(s, 'aa', r.region) === 0 && (byNight ? AIR.combat.night.flak : AIR.combat.flak) > 0 ? Math.max(1, standingGuns()) : 0;
       // (a carrier wing has no airfield: it takes off from where its fleet was, which the report gives as a point)
       const deck = (x: { base: number; x: number; y: number }): boolean => x.base < 0 && (x.x > 0 || x.y > 0);
       for (const a of r.attackers.filter((x) => (x.base >= 0 || deck(x)) && x.ftr + x.bmr >= 1).slice(0, 4)) {
@@ -6993,11 +7001,19 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (Fog on raids, airfog.ts with its switch on: out of sight the fighters are those known for sure, with more
         // perhaps behind them, and the guns as last seen, or not known.)
         const hid = !!dn.fog && !dn.fog.live;
+        // (The guns, her 20:08Z marks, items 7, 8, 11 and 12 as mended at 20:12Z: the tail holds about 25 characters, so
+        // the card's sentence goes in the tip, ahead of the tip as it was; a bare target says its guns as none built.)
+        const unknown = hid && dn.gunsKnown === false, when = hid && !unknown ? seenAgo(dn.fog!.ago) : '';
+        const S = standingGuns().toLocaleString('en-US'), each = 'Each level stops a share of the bombing and brings down more bombers.';
+        const gunsTip = hid && !unknown && dn.guns <= 0 ? `${noneSeen(dn.fog!.ago)} ${each}`
+          : dn.gunsCount === dn.gunsLabel ? `${dn.gunsLabel} ${each}` : `${dn.gunsCount} ${dn.gunsLabel}. ${each}`;
         return {
           label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
           foes: hid && foes <= 0 ? 'Unknown' : foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: hid ? (foes > 0 ? 'enemy fighters known in reach, more may come' : 'fighters in reach: not scouted') : foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
-          // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
-          guns: dn.guns, gunsFigure: hid && dn.gunsKnown === false ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.gunsTail ? `\u00B7 ${dn.gunsTail}` : '', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
+          // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them; the
+          // tail short, the built guns' count in the tip with the light guns every target has named apart)
+          guns: dn.guns, gunsFigure: unknown ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: unknown || dn.guns > 0 ? 'AA guns' : 'AA guns built',
+          gunsTail: unknown ? `\u00B7 ${dn.gunsTail}` : when ? `\u00B7 ${when}` : dn.guns > 0 ? `\u00B7 and ${S} light` : `\u00B7 only ${S} light`, gunsTip,
           day: one(dn.day), night: one(dn.night),
           // (new for the 3D card to draw, where it will: what the side knows, a line each, and the band)
           ...(dn.fog ? { fog: { live: dn.fog.live, fighters: dn.fog.fighters, guns: dn.fog.guns, damage: dn.fog.damage, band: dn.fog.band } } : {}),

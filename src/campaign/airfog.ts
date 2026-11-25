@@ -143,7 +143,7 @@ export function knownDefence(g: Game, nat: string, t: number, end: 'low' | 'high
   const known = fightersInReach(g, t, nat).filter(sure).reduce((s, f) => s + f.ftr, 0);
   const extra = end === 'high' && k.near > 0 ? Math.max(0, k.near - known) : 0;
   const aa = k.guns >= 0 ? k.guns : end === 'high' ? F().gunsUnknown : 0;
-  return { sure, extra, extraNat: g.regions[t].ctrl, aa, ruined: Math.max(0, k.ruin) };
+  return { sure, extra, extraNat: g.regions[t].ctrl, aa, ruined: Math.max(0, k.ruin), seen: k.guns, ago: k.ago };
 }
 
 /** A mission weighed on one side's knowledge: the forecast at both ends of the band (one and the same in sight). */
@@ -250,13 +250,13 @@ export function band(lo: number, hi: number, pctOf = true): string {
 }
 
 /**
- * The guns and the fighters as a list of targets says them where the place is out of sight: "guns not known", "level 2
- * guns when seen 3 months ago", "fighters not known", "about 120 fighters in reach when seen a month ago".
+ * The fighters as a list of targets says them where the place is out of sight: "fighters not known", "about 120
+ * fighters in reach when seen a month ago". (The guns of such a row are said in airwar.ts whatIsThere, in the UI
+ * director's words of 25 Nov 2026 20:08Z, item 6: the old guns text here had no reader left and is gone.)
  */
-export function fogBits(k: SkyKnown): { guns: string; fighters: string } {
+export function fogBits(k: SkyKnown): { fighters: string } {
   const when = agoWords(k.ago).replace(/^seen/, 'when seen');
   return {
-    guns: k.guns < 0 ? 'guns not known' : `${k.guns ? `level ${k.guns} guns` : 'no guns'} ${when}`,
     fighters: k.fighters < 0 ? 'fighters not known' : `${k.fighters > 0 ? `about ${k.fighters.toLocaleString('en-US')} fighters in reach` : 'no fighters in reach'} ${when}`,
   };
 }
