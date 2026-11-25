@@ -83,9 +83,13 @@ describe("support teams in battle: to the staff a team is its own division's, ne
 });
 
 // The rule reads only a machine-gun or a mortar team (the sim's ownArm, 1dea1eee; ai.ts's own ownArm): a team of any
-// other arm (a sniper pair, release 2) is laid, waited under and counted a neighbour in a fight as it is with the rule
-// off. Each test makes every team block of a battle the other arm and asks that on is off, at the staff's three lines
-// that read `team` (the aim and the wait in planned, the neighbour in defend).
+// other arm is laid, waited under and counted a neighbour in a fight as it is with the rule off. Each test makes every
+// team block of a battle the other arm and asks that on is off, at the staff's three lines that read `team` (the aim
+// and the wait in planned, the neighbour in defend).
+// The other arm is a made-up one that no branch has (OTHER), lent a machine gun's figures for the test: it tests ownArm
+// and nothing else. A sniper pair ('snp', release 2) is such an arm, but where its own rules are joined its aim and its
+// lane are the sniper thread's (a pair sent with other blocks takes no lane, and its target is its aim only by order),
+// so a stand-in named 'snp' tested those rules there, not this one (the assembler, 25 November 21:14Z).
 describe('support teams in battle: the staff reads only a machine-gun or a mortar team (ai.ts)', () => {
   type V = U & { state: string; str: number; x: number; y: number; engaged?: number; reserve?: string };
   /** The battle with every team block made the arm asked for, fought to a second: its blocks, and when the attack went in. */
@@ -99,19 +103,22 @@ describe('support teams in battle: the staff reads only a machine-gun or a morta
     const plan = (sim as unknown as { plan: { att?: Plan } }).plan.att;
     return { units, went: plan ? plan.went : null, state: JSON.stringify(units.map((u) => [u.id, u.state, +u.str.toFixed(6), +u.x.toFixed(3), +u.y.toFixed(3), u.aim ?? -1])) };
   };
-  /** A stand-in for the other arm's figures where the branch has none (taken away after the test). */
+  /** The made-up arm: no branch's rules name it. */
+  const OTHER = 'xx';
+  /** The made-up arm's figures for the length of a test: a machine gun's, taken away after it. */
   const lent = <R>(run: () => R): R => {
-    const teams = LAND.teams as unknown as Record<string, unknown>, lend = !('snp' in teams);
-    if (lend) teams.snp = { ...LAND.teams.mg };
-    try { return run(); } finally { if (lend) delete teams.snp; }
+    const teams = LAND.teams as unknown as Record<string, unknown>;
+    expect(OTHER in teams).toBe(false);
+    teams[OTHER] = { ...LAND.teams.mg };
+    try { return run(); } finally { delete teams[OTHER]; }
   };
 
   it("4a. the aim: teams of another arm are laid on the main effort's target with the guns, on as off", () => lent(() => {
     const o = ownTeams(campaign('normandy-1944', 1)).ticket;
-    const on = armed(o, true, 'snp', 60), off = armed(o, false, 'snp', 60);
-    const pairs = on.units.filter((u) => u.side === 'att' && u.team === 'snp');
-    expect(pairs.length).toBeGreaterThan(0);
-    expect(pairs.every((u) => u.aim !== undefined)).toBe(true);
+    const on = armed(o, true, OTHER, 60), off = armed(o, false, OTHER, 60);
+    const others = on.units.filter((u) => u.side === 'att' && u.team === OTHER);
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.every((u) => u.aim !== undefined)).toBe(true);
     expect(on.state).toBe(off.state);
     // (and a machine-gun or a mortar team is still never laid: test 2)
     expect(armed(o, true, 'mg', 60).units.filter((u) => u.side === 'att' && u.team).every((u) => u.aim === undefined)).toBe(true);
@@ -120,7 +127,7 @@ describe('support teams in battle: the staff reads only a machine-gun or a morta
   it('4b. the wait: an army whose only fire is teams of another arm waits under them, on as off', () => lent(() => {
     const t = mlawa(1), o = ownTeams(t).ticket;
     const without = fought(t, true, 200).plan.went;
-    const on = armed(o, true, 'snp', 200), off = armed(o, false, 'snp', 200);
+    const on = armed(o, true, OTHER, 200), off = armed(o, false, OTHER, 200);
     expect(on.went).not.toBeNull();
     expect(on.went).toBe(off.went);
     expect(on.went!).toBeGreaterThan(without! + 2);
@@ -155,7 +162,7 @@ describe('support teams in battle: the staff reads only a machine-gun or a morta
       return byTeamsAlone;
     };
     let on = 0, off = 0, own = 0;
-    for (let seed = 1; seed <= 12; seed++) { on += drawnOut(seed, true, 'snp'); off += drawnOut(seed, false, 'snp'); own += drawnOut(seed, true, 'mg'); }
+    for (let seed = 1; seed <= 12; seed++) { on += drawnOut(seed, true, OTHER); off += drawnOut(seed, false, OTHER); own += drawnOut(seed, true, 'mg'); }
     expect(off).toBeGreaterThan(0);
     expect(on).toBe(off);
     // (and a machine-gun or a mortar team alone still draws nobody out: mend T)
