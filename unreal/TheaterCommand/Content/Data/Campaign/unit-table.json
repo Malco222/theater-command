@@ -6631,6 +6631,120 @@
    "hull": "7C8680",
    "hull_name": "green-grey"
   },
+  "TIB": {
+   "name": "Tibet",
+   "later": true,
+   "soldier": {
+    "src": "generic",
+    "model": "fieldcap"
+   },
+   "cloth": "7A6A4E",
+   "cloth_name": "brown khaki wool",
+   "tank": {
+    "src": "generic",
+    "model": "LightTank, MediumTank once medium tanks are researched"
+   },
+   "gun": {
+    "src": "generic",
+    "model": "Gun75"
+   },
+   "carrier": {
+    "src": "generic",
+    "model": "Truck"
+   },
+   "fighter": {
+    "src": "generic",
+    "model": "Fighter",
+    "with_plans": "jets"
+   },
+   "bomber": {
+    "src": "generic",
+    "model": "Bomber",
+    "with_plans": "heavybombers"
+   },
+   "carrier_fighter": {
+    "src": "generic",
+    "model": "CarrierFighter"
+   },
+   "torpedo_bomber": {
+    "src": "generic",
+    "model": "TorpedoBomber"
+   },
+   "dive_bomber": {
+    "src": "generic",
+    "model": "DiveBomber"
+   },
+   "paint": "847A5A",
+   "paint_name": "mountain khaki",
+   "paint2": "5E5640",
+   "paint2_name": "olive",
+   "ground": "high plateau",
+   "marking": [
+    "F2C230",
+    "1D3B7A",
+    "F2EEE2"
+   ],
+   "marking_words": "gold, blue, white",
+   "insignia": [
+    {
+     "ring": [
+      0.0,
+      1.0
+     ],
+     "c": "F2C230"
+    },
+    {
+     "ring": [
+      0.0,
+      0.66
+     ],
+     "c": "1D3B7A"
+    },
+    {
+     "ring": [
+      0.0,
+      0.33
+     ],
+     "c": "F2EEE2"
+    }
+   ],
+   "insignia_checked": false,
+   "insignia_words": "plain ring of the colours of the table's own flag for Tibet: gold, blue, white; no air arm, and no mark of this kind on the record",
+   "fin": {
+    "dir": "v",
+    "bands": [
+     "1D3B7A",
+     "F2C230"
+    ],
+    "words": "blue, gold"
+   },
+   "battleship": {
+    "src": "captured",
+    "model": null,
+    "plans": "bb",
+    "words": "captured or stolen plans only: the battleship of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign and jack"
+   },
+   "cruiser": {
+    "src": "generic",
+    "model": "Cruiser"
+   },
+   "destroyer": {
+    "src": "generic",
+    "model": "Destroyer"
+   },
+   "ship_carrier": {
+    "src": "captured",
+    "model": null,
+    "plans": "cv",
+    "words": "captured or stolen plans only: the carrier of the great power whose plans it holds (captured_models), in this country's own hull grey, with its own ensign"
+   },
+   "submarine": {
+    "src": "generic",
+    "model": "Submarine"
+   },
+   "hull": "7C8680",
+   "hull_name": "green-grey"
+  },
   "SAU": {
    "name": "Saudi Arabia",
    "later": true,

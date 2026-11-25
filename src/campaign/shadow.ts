@@ -27,7 +27,7 @@ import { Rng, hashString } from '../core/rng';
 import { fleetKnown } from './carriers';
 import { atWar, headline } from './game';
 import { HEAVY, inGale } from './heavyseas';
-import { atSea, fleetName, fleetPower, fleetReach, sail, shipCount, surfaceShips } from './navy';
+import { atSea, fleetName, fleetPower, fleetReach, passageWhy, sail, shipCount, surfaceShips } from './navy';
 import { seaWhere } from './sea-words';
 import type { Fleet, Game } from './types';
 
@@ -81,6 +81,8 @@ const whereIs = (g: Game, t: Fleet): string => (atSea(t) ? seaWhere(g.seas[t.zon
 /** The order's own rule, the same for the player and the computer's admirals: why `f` cannot shadow `t` now, or null. */
 function ruleOut(g: Game, f: Fleet, t: Fleet | undefined): string | null {
   if (!shipCount(f.ships)) return 'There is no such fleet.';
+  // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
+  if (f.stance === 'passage') return passageWhy(g, f);
   if (!shadowShips(f)) return "Shadowing is cruisers' work: a fleet of cruisers, with destroyers or without, and no battleship or carrier. Split the cruisers off first.";
   if (!t || t.nat === f.nat || !shipCount(t.ships) || fleetKnown(g, t, f.nat) === 'none') return 'No such enemy fleet is known.';
   if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;
@@ -206,7 +208,7 @@ export function aiShadows(g: Game, nat: string): void {
   const mine = g.fleets.filter((f) => f.nat === nat && shipCount(f.ships) > 0);
   for (const f of mine) if (f.shadow !== undefined && f.ready < SHADOW.ai.home) { stopShadow(f); sail(g, f, f.home, 'port'); }
   if (mine.filter((f) => f.shadow !== undefined).length >= SHADOW.ai.most) return;
-  const free = mine.filter((f) => f.shadow === undefined && shadowShips(f) && f.ready >= SHADOW.ai.ready && f.stance !== 'escort' && f.duty !== 'raid');
+  const free = mine.filter((f) => f.shadow === undefined && shadowShips(f) && f.ready >= SHADOW.ai.ready && f.stance !== 'escort' && f.stance !== 'passage' && f.duty !== 'raid');
   if (!free.length) return;
   const prey = g.fleets
     .filter((t) => atSea(t) && atWar(g, nat, t.nat) && surfaceShips(t) > 0 && fleetKnown(g, t, nat) !== 'none')

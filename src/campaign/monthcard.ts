@@ -772,7 +772,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.tag = att ? (r.won ? 'HIT' : 'MISSED') : r.won ? 'HIT' : 'HELD';
       const [pic, place, hit, miss]: [CardPicture, string, string, string] =
         r.mission === 'line' ? ['rail-yard', `${town} rail yard`, `${what} cut the railway there.`, 'The bombs fell wide. The line still runs.']
-        : r.mission === 'harbour' ? ['harbour', `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
+        : r.mission === 'harbour' ? ['harbour', /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
         : r.mission === 'fleet' ? ['fleet', cap(the(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, 'The strike on the fleet was beaten off.']
         : r.mission === 'strike' ? ['fleet', cap(r.place.replace(/^the /, 'The ')), `${what} struck the shipping there.`, 'The strike on the shipping was beaten off.']
         : r.mission === 'ground' ? ['troops', r.place, `${what} struck the troops there.`, 'The raid on the troops was beaten off.']
@@ -1243,18 +1243,20 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
 
   // ---- 7. Elsewhere: a flag and one line a war, the greatest event first -------------------------------------
   const weight: Record<Headline['kind'], number> = { war: 0, fall: 1, battle: 2, event: 3, info: 9, goal: 9, honour: 9, letter: 9 };
+  // (News with a line of its own for this card stands before a battle's line for its country: sheet 25, box 5.)
+  const newsRank = (h: Headline): number => (h.card ? weight.fall + 0.5 : weight[h.kind]);
   const seenNat = new Set<string>();
   const abroad: Headline[] = [];
   // (Of the same kind of news: the war on land before the sea and the air, and a city's news before a field's.)
   const armRank = (h: Headline): number => (h.arm === 'air' ? 2 : h.arm === 'sea' ? 1 : 0);
   const cityRank = (h: Headline): number => { const r = h.region !== undefined ? g.regions[h.region] : undefined; const s = r ? townSize(g, r) : ''; return s === 'capital' ? 0 : s === 'city' ? 1 : 2; };
-  for (const h of [...hs].filter((x) => !used.has(x) && !!x.nat && !!g.nations[x.nat] && !mine(x.nat) && weight[x.kind] < 9 && !x.warn).sort((a, b) => weight[a.kind] - weight[b.kind] || armRank(a) - armRank(b) || cityRank(a) - cityRank(b) || Number(foe(b.nat) || side(b.nat)) - Number(foe(a.nat) || side(a.nat)))) {
+  for (const h of [...hs].filter((x) => !used.has(x) && !!x.nat && !!g.nations[x.nat] && !mine(x.nat) && weight[x.kind] < 9 && !x.warn).sort((a, b) => newsRank(a) - newsRank(b) || armRank(a) - armRank(b) || cityRank(a) - cityRank(b) || Number(foe(b.nat) || side(b.nat)) - Number(foe(a.nat) || side(a.nat)))) {
     if (seenNat.has(h.nat!)) continue;
     seenNat.add(h.nat!);
     abroad.push(h);
   }
   // (Each whole while the box's lines last; one that will not fit is cut, or stays in the newsreel: fitFoot.)
-  for (const f of fitFoot(abroad.map((h) => first(h.text)), opts.whole ? Infinity : FOOT_ROOM.elsewhere, slots * 2, slots)) {
+  for (const f of fitFoot(abroad.map((h) => h.card ?? first(h.text)), opts.whole ? Infinity : FOOT_ROOM.elsewhere, slots * 2, slots)) {
     const h = abroad[f.at];
     card.elsewhere.push({ nat: h.nat!, text: f.text, full: h.text, ...(h.region !== undefined ? { region: h.region } : {}) });
     used.add(h);

@@ -727,8 +727,18 @@ void CampaignTextures::MakeWeather(TArray<FColor>& OutPixels, bool bSnow)
 		return Sorted[FMath::Clamp(FMath::FloorToInt32(Share * Sorted.Num()), 0, Sorted.Num() - 1)];
 	};
 	const float CloudAt = Level(Cloud, 0.6f), MistAt = Level(Mist, 0.6f);
-	// The rain: thin streaks about fifteen points long, each leaning a third of its length, soft at both ends. The
-	// snow: small soft flakes.
+	// The rain: short soft streaks, each leaning its own way. The snow: small soft flakes.
+	// (The art director's ruling of 25 November 2026 04:54Z, art-director/reviews/map-winter-sky-ruling.md: on a 1.5
+	// still the falling weather read as RULED DASHES, 12 to 15 screen points long and all leaning the same way, because
+	// every streak was 11 to 18 points of this picture long and every one leaned a third of its length to the same
+	// side. Her targets: no straight edge longer than about twelve screen points, no two neighbours sharing a lean,
+	// and the brightness spread inside a patch no more than a quarter of its mean. The picture is tiled about three
+	// times across the screen (RainTiles), so a point of it is about two screen points: a streak is now 3 to 6 points
+	// long, leans by a sixth to a half of its length ON THE SIDE OF THE FALL, and is drawn at a lower weight (SkyRain).
+	// Flakes lose their square corners. She judges it on the next pictures. Her third target, as she amended it at
+	// 05:36Z: the FALLING layer may ride the screen, because rain hangs in the air between the eye and the table; what
+	// must be fixed to the ground is the LID'S BODY, the zone's edge and the cloud and mist shares, and that is the sky
+	// picture, laid over the map through SkyFrame in map units. So nothing here asks the material to change.)
 	FRandomStream Dice(1944);
 	TArray<float> Falling;
 	Falling.Init(0.0f, Size * Size);
@@ -747,26 +757,37 @@ void CampaignTextures::MakeWeather(TArray<FColor>& OutPixels, bool bSnow)
 	};
 	if (bSnow)
 	{
-		for (int32 Flake = 0; Flake < 900; ++Flake)
+		// (a flake is a middle with four half-lit neighbours a little way off: round at its edge, where a square of
+		// four dabs gave it corners and a flat side)
+		for (int32 Flake = 0; Flake < 1100; ++Flake)
 		{
-			const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size)), Bright = Dice.FRandRange(0.5f, 1.0f);
-			for (const FVector2f& Off : { FVector2f(0.0f, 0.0f), FVector2f(0.9f, 0.0f), FVector2f(0.0f, 0.9f), FVector2f(0.9f, 0.9f) })
+			const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size)), Bright = Dice.FRandRange(0.45f, 0.85f);
+			Dab(AtX, AtY, Bright);
+			for (const FVector2f& Off : { FVector2f(0.8f, 0.0f), FVector2f(-0.8f, 0.0f), FVector2f(0.0f, 0.8f), FVector2f(0.0f, -0.8f) })
 			{
-				Dab(AtX + Off.X, AtY + Off.Y, Bright);
+				Dab(AtX + Off.X, AtY + Off.Y, Bright * 0.5f);
 			}
 		}
 	}
 	else
 	{
-		for (int32 Streak = 0; Streak < 520; ++Streak)
+		for (int32 Streak = 0; Streak < 900; ++Streak)
 		{
 			const float AtX = Dice.FRandRange(0.0f, static_cast<float>(Size)), AtY = Dice.FRandRange(0.0f, static_cast<float>(Size));
-			const float Long = Dice.FRandRange(11.0f, 18.0f), Bright = Dice.FRandRange(0.5f, 1.0f);
+			const float Long = Dice.FRandRange(3.0f, 6.0f), Bright = Dice.FRandRange(0.4f, 0.75f);
+			// (its own lean, all on the side of the fall: from about a sixth of its length to about half of it, so that
+			// no two neighbours lean alike and every streak still leans the way its drop is falling.
+			// The art director mended her own wording at 05:36Z: "no two neighbours sharing a lean" was badly put,
+			// since a streak is the blur of a falling drop. The picture falls down the screen and a third as far
+			// across it (RainFall), so a streak that leans against its own travel reads as confetti in motion. The
+			// first build of this mend flipped half of them; her numbers, 0.15 to 0.55 and the old sign, do not.
+			// Named Slant, not Lean: this file already has a Lean() of its own above, for the hillsides' shading.)
+			const float Slant = Dice.FRandRange(0.15f, 0.55f);
 			const int32 Steps = FMath::CeilToInt32(Long * 2.0f);
 			for (int32 Step = 0; Step <= Steps; ++Step)
 			{
 				const float Along = static_cast<float>(Step) / Steps;
-				Dab(AtX + Along * Long / 3.0f, AtY + Along * Long, Bright * FMath::Sin(Along * UE_PI));
+				Dab(AtX + Along * Long * Slant, AtY + Along * Long, Bright * FMath::Sin(Along * UE_PI));
 			}
 		}
 	}

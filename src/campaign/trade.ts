@@ -14,7 +14,7 @@ import { atWar, bloc, headline } from './game';
 import { canPass, closedTo, seaRisk, zoneOf } from './navy';
 import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
-import { mapDist } from './wrap';
+import { chartDist } from './wrap';
 import { seaWhatList } from './sea-words';
 
 export const TRADE = data as unknown as {
@@ -438,7 +438,7 @@ export function tradePath(g: Game, d: TradeDeal): [number, number][] {
     for (const id of g.seas[z].coast) {
       const r = g.regions[id];
       if (!r.port || r.ctrl !== nat) continue;
-      const dist = home ? mapDist(g, r.x, r.y, home.x, home.y) : 0;
+      const dist = home ? chartDist(g, r, home) : 0;
       if (dist < far) { far = dist; best = r; }
     }
     return best;

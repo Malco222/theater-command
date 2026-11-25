@@ -34,7 +34,7 @@ import { FAR_STAGE } from './stage';
 import { FAR_FIRST, farOn } from './world';
 import { addCorps, armySize, atWar, bloc, capture, headline, relocate, removeCorps, sameSide, setWar, theName, roomless } from './game';
 import { signPeace } from './diplomacy';
-import { mapDist2 } from './wrap';
+import { chartDist2 } from './wrap';
 import { STACK, type Corps, type Game, type Region } from './types';
 
 interface ClientRow { patron: string; wars: string[] }
@@ -101,8 +101,70 @@ export function whyTieBars(g: Game, c: Corps, to: Region, from = c.reg): string 
   return `${c.name} stands on ${theName(H)}'s ground, and ${theName(H)} is at peace with ${theName(L)}. An army strikes from the ground of its client or its patron only into a war that country is in too.`;
 }
 
+// ---- Ground held by agreement (the design director's ruling of 21:08Z of 21 November 2026, form 2) ---------------
+//
+// Indochina after Japan's demand on Vichy France (pacific.ts `demand`): Japan's troops are stationed in the colony
+// and Japan is its holder, but the ground stays its owner's, and it carries the agreement's mark. As built the
+// demand made the colony Japan's own, so every enemy of Japan had a front on it: Britain and China took Hanoi and
+// Laos in 9 wars of 12, at peace with Vichy France throughout, where in the record no Allied army crossed into the
+// colony before 1945. The rule: a country at war with the holder but at peace with the owner forms no front over
+// marked ground (staff.ts `fronts`) and orders no ground attack (rivers.ts `blocked`) or landing (navy.ts
+// `whyNotLand`) into it. Its aircraft raid the holder's troops, works and ships there as anywhere. A country at war
+// with the owner as well is not bound. The mark reads while its holder holds the ground, at peace with the owner.
+
+/** The month a province was marked as held by agreement, for the holder it was marked for. */
+const stationKey = (holder: string, id: number): string => `agr:${holder}:${id}`;
+
+/** Marks ground as held by agreement with its owner: its holder's troops are stationed there. */
+export function station(g: Game, r: Region, holder: string): void {
+  g.flags[stationKey(holder, r.id)] = g.turn;
+  g.flags.agr ??= g.turn;
+}
+
+/** Ends the mark a holder had on a province, whoever holds it now. True if there was one. */
+export function unstation(g: Game, r: Region, holder: string): boolean {
+  const key = stationKey(holder, r.id);
+  if (g.flags.agr === undefined || g.flags[key] === undefined) return false;
+  delete g.flags[key];
+  return true;
+}
+
+/** True for ground its holder stands on by agreement with its owner. Never with the far side off: nothing is marked there. */
+export function stationed(g: Game, r: Region): boolean {
+  if (g.flags.agr === undefined || r.ctrl === r.owner) return false;
+  return g.flags[stationKey(r.ctrl, r.id)] !== undefined && !atWar(g, r.ctrl, r.owner);
+}
+
+/** True where the agreement bars a country's army from a province: at war with its holder, at peace with its owner. */
+export function stationBars(g: Game, nat: string, r: Region): boolean {
+  if (g.flags.agr === undefined || r.ctrl === r.owner) return false;
+  return nat !== r.owner && atWar(g, nat, r.ctrl) && !atWar(g, nat, r.owner) && stationed(g, r);
+}
+
+/**
+ * True where the agreement shuts ground to a country and no declaration of its own can open it: the owner is no more,
+ * or stands on the country's own side. Elsewhere war on the owner frees it (turn.ts `declarable` offers the owner).
+ */
+export function stationShut(g: Game, nat: string, r: Region): boolean {
+  if (!stationBars(g, nat, r)) return false;
+  const O = g.nations[r.owner];
+  return !O.alive || sameSide(g, nat, O.id);
+}
+
+/**
+ * The plain reason for it, in the UI director's words (20:58Z of 21 November 2026, and the rider of 21:27Z), or null:
+ * one line for an attack and for a landing. It names what frees the country, war on the owner, only where that war
+ * can be declared (`stationShut` otherwise).
+ */
+export function whyStationBars(g: Game, nat: string, r: Region): string | null {
+  if (!stationBars(g, nat, r)) return null;
+  const O = g.nations[r.owner], H = g.nations[r.ctrl];
+  if (stationShut(g, nat, r)) return `${r.name} belongs to ${theName(O)}, and ${theName(H)}'s troops are there by agreement: no army of yours may go in while the agreement stands. Strike them from the air.`;
+  return `${r.name} belongs to ${theName(O)}, and you are not at war with it: ${theName(H)}'s troops are there by agreement. Declare war on ${theName(O)} first, or strike them from the air.`;
+}
+
 /** A war the client's row made: the month it began. */
-const tieFlag = (client: string, e: string): string => `tie:${client}:${e}`;
+const tieFlag =(client: string, e: string): string => `tie:${client}:${e}`;
 /** A war the patron took up for its client: the month it began. */
 const dutyFlag = (client: string, e: string): string => `duty:${client}:${e}`;
 /** Set while a client's tie reads, so that the month it stops reading is known. */
@@ -210,7 +272,7 @@ function parts(g: Game, client: string, patron: string): void {
       let best: Region | null = null, bd = Infinity;
       for (const r of g.regions) {
         if (r === from || r.ctrl !== client || r.units.filter((u) => !roomless(g, u)).length >= STACK || r.units.some((u) => u.nat !== client)) continue;
-        const d = mapDist2(g, r.x, r.y, from.x, from.y);
+        const d = chartDist2(g, r, from);
         if (d < bd) { bd = d; best = r; }
       }
       if (best) relocate(g, c, best); else removeCorps(g, c);
@@ -259,6 +321,14 @@ export function farGround(g: Game): void {
   for (const name of FAR_SETUP.unmark) {
     const r = g.byName[name];
     if (r && r.id < FAR_FIRST) r.oil = false;
+  }
+  // The depots a far file lays: the map's own mark (game.ts computeSupply), put on a province of the far side by
+  // name. (The design director's 13:43Z of 22 November 2026: Italian East Africa was cut off from Italy from June
+  // 1940 and lived on its own stocks until each seat was taken; as laid, with no depot on its ground and the sea to
+  // its ports shut, its whole army starved in the fourth month of its war.)
+  for (const name of FAR_SETUP.depots) {
+    const r = g.byName[name];
+    if (r && r.id >= FAR_FIRST) g.flags['depot:' + r.id] = 1;
   }
 }
 

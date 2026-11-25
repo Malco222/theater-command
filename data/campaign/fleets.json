@@ -41,6 +41,7 @@
     "raid": { "label": "Raid shipping", "blurb": "Hunt the enemy's merchant ships and keep clear of his fleet." },
     "escort": { "label": "Escort a lane", "blurb": "Sail with the convoys on one shipping lane and guard them the whole way." },
     "hunt": { "label": "Hunt submarines", "blurb": "Destroyers and carrier aircraft comb one sea for submarines." },
-    "port": { "label": "In harbour", "blurb": "Safe, and refitting quickly." }
+    "port": { "label": "In harbour", "blurb": "Safe, and refitting quickly." },
+    "passage": { "label": "In passage", "blurb": "At sea on its way to a new base, more than a month's steaming off: it can be found and attacked on the way, and strikes, patrols and escorts nothing until it comes in. It can be turned back." }
   }
 }

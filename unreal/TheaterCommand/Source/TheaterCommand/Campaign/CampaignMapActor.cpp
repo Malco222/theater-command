@@ -84,6 +84,12 @@ struct FCampaignMeshBuffers
 		}
 		Mesh->CreateMeshSection(Section, Vertices, Triangles, Normals, UVs, Colors, Tangents, false);
 		Mesh->SetMaterial(Section, Material);
+		// (seam-2: a model of the table that has a twin over the chart's seam has been laid again, and its twin is
+		// to be; the keeper cannot always see it by looking)
+		if (ACampaignMapActor* Table = Cast<ACampaignMapActor>(Mesh->GetOwner()))
+		{
+			Table->SeamLaidAgain(Mesh);
+		}
 		return true;
 	}
 };
@@ -107,6 +113,24 @@ namespace
 		static const bool bOnTheLine = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakRing"));
 		return bOnTheLine || CVarFlakRing.GetValueOnGameThread() != 0;
 	}
+
+	// (Release 2, 25 November 2026.) Ruling 107's night look of a raid: the hour falls to night while a raid flown by
+	// night is watched, and the place raided shows its searchlights. It was built for release 1 and never seen in
+	// play, because no flight the rules sent ever said night; the air rules thread's bridge now says it. A look that
+	// comes on in play has its switch (Brian, 25 November 01:10Z: every release 2 feature keeps one in OPTIONS): off
+	// as it comes, a night raid is watched by day as in every release before, until the Mac and the art director
+	// pass it. "-TheaterNightRaid" still flies every raid by night for a picture, switch or no switch.
+	TAutoConsoleVariable<int32> CVarNightRaid(
+		TEXT("tc.Look.NightRaid"), 0,
+		TEXT("1 watches a raid flown by night in the dark, the place raided showing its searchlights (ruling 107); 0 watches it by day, as before. Release 2; off as it comes."));
+
+	// (Release 2, the far side: the art director's seam-2, 25 November 2026.) With the whole world on the table, what
+	// lies within sight of the chart's seam is shown from both sides of it: the screen's names and plates, the lines and
+	// towns laid on the table, and the pieces. On as it comes, and it does nothing without the far side. 0 is the table
+	// as the third far bundle left it, everything laid once, for the Mac to set the one against the other.
+	TAutoConsoleVariable<int32> CVarOverSeam(
+		TEXT("tc.Far.OverSeam"), 1,
+		TEXT("With the far side on, 1 shows what lies within sight of the chart's seam (141 W) from both sides of it; 0 lays everything once, as before. Release 2."));
 
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
@@ -401,6 +425,460 @@ double ACampaignMapActor::WrapX(double X) const
 int32 ACampaignMapActor::TurnFor(double X, double EyeX) const
 {
 	return Data.bWorld && Data.WorldWidth > 0.0 ? FMath::RoundToInt32((EyeX - X) / Data.WorldWidth) : 0;
+}
+
+double ACampaignMapActor::LaidX(double X) const
+{
+	if (!Data.bFar || !Data.Charted.bIsValid || Data.WorldWidth <= 0.0)
+	{
+		return X;
+	}
+	return X - FMath::FloorToDouble((X - Data.Charted.Min.X) / Data.WorldWidth) * Data.WorldWidth;
+}
+
+bool ACampaignMapActor::OverSeam() const
+{
+	return Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0 && CVarOverSeam.GetValueOnGameThread() != 0;
+}
+
+void ACampaignMapActor::EyeCameRound(const FVector& Focus)
+{
+	if (!Data.bFar)
+	{
+		return;
+	}
+	const bool bOverSeam = OverSeam();
+	LastAskedFocus = Focus;
+	TheaterSpeed::RoundWorld(Focus.Y, bOverSeam ? Data.WorldWidth * UnitScale : 0.0);
+	for (AArmyPiece* Piece : Pieces)
+	{
+		if (Piece)
+		{
+			Piece->LookFrom(Focus.Y, bOverSeam);
+		}
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : FleetPieces)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->LookFrom(Focus.Y, bOverSeam);
+		}
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : AirPieces)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->LookFrom(Focus.Y, bOverSeam);
+		}
+	}
+	SquaresRound(Focus); // (and the squares of woods and towns)
+}
+
+namespace
+{
+	/**
+	 * (Release 2, the far side: seam-2.) How far from the chart's seam the highest view sees, in the map's units: the
+	 * eye stands 3,000 units off at the top of its climb, and its picture is about that wide. What is laid nearer the
+	 * seam than this is laid again a world away (LayOverSeam).
+	 */
+	const double SeamSight = 1700.0;
+}
+
+void ACampaignMapActor::LayOverSeam(UProceduralMeshComponent* Of)
+{
+	if (!Of)
+	{
+		return;
+	}
+	int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+	if (Slot == INDEX_NONE)
+	{
+		Slot = SeamLaid.Add(Of);
+		SeamTwins.Add(nullptr);
+		SeamStamps.Add(0);
+		SeamCounts.Add(0);
+	}
+	UProceduralMeshComponent* Twin = SeamTwins[Slot].Get();
+	// (Only a model that lies on the table as it was built: one that has been turned or grown is a thing that moves,
+	// and is not laid twice.)
+	const FTransform& Stands = Of->GetComponentTransform();
+	if (!OverSeam() || !Stands.GetRotation().IsIdentity(1.0e-4) || !Stands.GetScale3D().Equals(FVector::OneVector, 1.0e-4))
+	{
+		if (Twin)
+		{
+			Twin->ClearAllMeshSections();
+		}
+		return;
+	}
+	// The seam at the chart's west end, the same seam a world on at its east end, and the sight of each: in the
+	// model's own measure along the table's east.
+	const double Span = Data.WorldWidth * UnitScale;
+	const double West = MapToWorld(Data.Charted.Min.X, 0.0).Y - Stands.GetLocation().Y;
+	const double WestSight = West + SeamSight * UnitScale, EastSight = West + Span - SeamSight * UnitScale;
+	const int32 Sections = Of->GetNumSections();
+	TArray<FVector> Points, Normals;
+	TArray<int32> Corners, WestNumber, EastNumber;
+	TArray<FVector2D> UV0, UV1, UV2, UV3;
+	TArray<FColor> Inks;
+	TArray<FProcMeshTangent> Tangents;
+	for (int32 Section = 0; Section < Sections; ++Section)
+	{
+		const FProcMeshSection* Laid = Of->GetProcMeshSection(Section);
+		Points.Reset();
+		Normals.Reset();
+		Corners.Reset();
+		UV0.Reset();
+		UV1.Reset();
+		UV2.Reset();
+		UV3.Reset();
+		Inks.Reset();
+		Tangents.Reset();
+		if (Laid && Laid->ProcIndexBuffer.Num() >= 3 && Laid->ProcVertexBuffer.Num() > 0)
+		{
+			// (each point's number in the share: laid a world east, for the west end's; a world west, for the east end's)
+			const int32 Count = Laid->ProcVertexBuffer.Num();
+			WestNumber.Init(INDEX_NONE, Count);
+			EastNumber.Init(INDEX_NONE, Count);
+			auto Take = [&](TArray<int32>& Numbers, uint32 Point, double Shift) -> int32
+			{
+				int32& Number = Numbers[Point];
+				if (Number == INDEX_NONE)
+				{
+					const FProcMeshVertex& From = Laid->ProcVertexBuffer[Point];
+					Number = Points.Add(FVector(From.Position.X, From.Position.Y + Shift, From.Position.Z));
+					Normals.Add(FVector(From.Normal));
+					UV0.Add(FVector2D(From.UV0));
+					UV1.Add(FVector2D(From.UV1));
+					UV2.Add(FVector2D(From.UV2));
+					UV3.Add(FVector2D(From.UV3));
+					Inks.Add(From.Color);
+					Tangents.Add(From.Tangent);
+				}
+				return Number;
+			};
+			for (int32 First = 0; First + 2 < Laid->ProcIndexBuffer.Num(); First += 3)
+			{
+				const uint32 A = Laid->ProcIndexBuffer[First], B = Laid->ProcIndexBuffer[First + 1], C = Laid->ProcIndexBuffer[First + 2];
+				if (A >= static_cast<uint32>(Count) || B >= static_cast<uint32>(Count) || C >= static_cast<uint32>(Count))
+				{
+					continue;
+				}
+				// (a face is laid whole, by where its first corner lies)
+				const double Along = Laid->ProcVertexBuffer[A].Position.Y;
+				if (Along < WestSight)
+				{
+					Corners.Add(Take(WestNumber, A, Span));
+					Corners.Add(Take(WestNumber, B, Span));
+					Corners.Add(Take(WestNumber, C, Span));
+				}
+				else if (Along > EastSight)
+				{
+					Corners.Add(Take(EastNumber, A, -Span));
+					Corners.Add(Take(EastNumber, B, -Span));
+					Corners.Add(Take(EastNumber, C, -Span));
+				}
+			}
+		}
+		if (Corners.Num() == 0)
+		{
+			if (Twin && Section < Twin->GetNumSections())
+			{
+				Twin->ClearMeshSection(Section);
+			}
+			continue;
+		}
+		if (!Twin)
+		{
+			// (a still model's twin is a still model, and a plain one's plain: each is drawn as its model is)
+			Twin = Of->IsA<UTheaterStillMesh>() ? static_cast<UProceduralMeshComponent*>(UTheaterStillMesh::Make(this, TEXT("OverSeam"))) : NewObject<UProceduralMeshComponent>(this);
+			Twin->SetupAttachment(Root);
+			Twin->bUseAsyncCooking = false;
+			Twin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Twin->SetCastShadow(Of->CastShadow);
+			Twin->SetTranslucentSortPriority(Of->TranslucencySortPriority);
+			Twin->SetRelativeTransform(Of->GetRelativeTransform());
+			Twin->RegisterComponent();
+			Twin->SetVisibility(Of->IsVisible());
+			SeamTwins[Slot] = Twin;
+		}
+		Twin->CreateMeshSection(Section, Points, Corners, Normals, UV0, UV1, UV2, UV3, Inks, Tangents, false);
+		Twin->SetMaterial(Section, Of->GetMaterial(Section));
+	}
+	// (sections the model no longer has)
+	for (int32 Section = Sections; Twin && Section < Twin->GetNumSections(); ++Section)
+	{
+		Twin->ClearMeshSection(Section);
+	}
+}
+
+void ACampaignMapActor::SeamLaidAgain(const UProceduralMeshComponent* Of)
+{
+	const int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+	if (SeamCounts.IsValidIndex(Slot))
+	{
+		++SeamCounts[Slot];
+	}
+}
+
+void ACampaignMapActor::KeepSeamTwins()
+{
+	// The models laid once that are not things that move: the lines and works of the table, and the washes and signs
+	// laid for the player's hand. (Not the ground, the sea or the sky, which go round by themselves. Not what changes
+	// each frame or moves, which is seen over the seam by other means (seam-4): smoke, fires, raids, searchlights,
+	// trains, parked aircraft and sinking ships are shown in the turn of the world nearest the eye, where each is
+	// drawn; the lights of the night have a whole twin, KeepLightsTwin. The woods and the towns are moved whole:
+	// SquaresRound. Still laid once: the shadows of the clouds, which lie over the home map alone.)
+	UProceduralMeshComponent* const Kept[] = {
+		BorderMesh.Get(), RailMesh.Get(), RiverMesh.Get(), WorksMesh.Get(), WorksLeftMesh.Get(), CivicMesh.Get(), PrizesMesh.Get(), ScarsMesh.Get(),
+		BuildingsMesh.Get(), TownMesh.Get(), TownFarMesh.Get(), AirSignMesh.Get(), AirPennantMesh.Get(), GunLineMesh.Get(), ColumnsMesh.Get(),
+		LanesMesh.Get(), ChartMesh.Get(), WrecksMesh.Get(), WatchMesh.Get(), FrontLineMesh.Get(), EnemyReachMesh.Get(), CutLampMesh.Get(),
+		RailLightMesh.Get(), OrdersMesh.Get(), HighlightMesh.Get(), MovesMesh.Get(), PointerMesh.Get(), WakeMesh.Get() };
+	const bool bOverSeam = OverSeam();
+	for (int32 Gone = 0; Gone < SeamLaid.Num(); ++Gone)
+	{
+		// (a model that is no more leaves no twin standing)
+		if (!SeamLaid[Gone] && SeamTwins[Gone] && SeamTwins[Gone]->GetNumSections() > 0)
+		{
+			SeamTwins[Gone]->ClearAllMeshSections();
+		}
+	}
+	for (UProceduralMeshComponent* Of : Kept)
+	{
+		if (!Of)
+		{
+			continue;
+		}
+		// What it looks like now: how many points and corners each section has, its ink, and a few of its points.
+		uint32 Stamp = bOverSeam ? 2u : 1u;
+		const int32 Sections = Of->GetNumSections();
+		for (int32 Section = 0; Section < Sections; ++Section)
+		{
+			const FProcMeshSection* Laid = Of->GetProcMeshSection(Section);
+			const int32 Count = Laid ? Laid->ProcVertexBuffer.Num() : 0;
+			Stamp = HashCombine(Stamp, GetTypeHash(Count));
+			Stamp = HashCombine(Stamp, GetTypeHash(Laid ? Laid->ProcIndexBuffer.Num() : 0));
+			Stamp = HashCombine(Stamp, PointerHash(Of->GetMaterial(Section)));
+			for (int32 Nth = 0; Nth < 8 && Count > 0; ++Nth)
+			{
+				const FProcMeshVertex& Sample = Laid->ProcVertexBuffer[static_cast<int32>(static_cast<int64>(Nth) * (Count - 1) / 7)];
+				Stamp = HashCombine(Stamp, GetTypeHash(Sample.Position));
+				Stamp = HashCombine(Stamp, GetTypeHash(Sample.Color));
+			}
+		}
+		int32 Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+		// (And how many times its builder has said it was laid again. A model may change and keep every count and
+		// every point looked at: a gun pit that made way by a few degrees, an airfield drawn smaller when nobody
+		// flies from it. A model with no twin yet counts as none, which is what its new twin starts from.)
+		Stamp = HashCombine(Stamp, SeamCounts.IsValidIndex(Slot) ? SeamCounts[Slot] : 0u);
+		if (Slot == INDEX_NONE || SeamStamps[Slot] != Stamp)
+		{
+			if (Slot == INDEX_NONE && !bOverSeam)
+			{
+				continue; // (never laid over the seam, and not asked to be)
+			}
+			LayOverSeam(Of);
+			Slot = SeamLaid.IndexOfByPredicate([Of](const TObjectPtr<UProceduralMeshComponent>& Each) { return Each.Get() == Of; });
+			if (Slot == INDEX_NONE)
+			{
+				continue;
+			}
+			SeamStamps[Slot] = Stamp;
+		}
+		// Its twin is shown, hidden and placed as it is.
+		if (UProceduralMeshComponent* Twin = SeamTwins[Slot].Get())
+		{
+			if (Twin->IsVisible() != Of->IsVisible())
+			{
+				Twin->SetVisibility(Of->IsVisible());
+			}
+			if (!Twin->GetRelativeTransform().Equals(Of->GetRelativeTransform(), 0.01))
+			{
+				Twin->SetRelativeTransform(Of->GetRelativeTransform());
+			}
+			if (!Twin->IsA<UTheaterStillMesh>())
+			{
+				// (a plain model's sections may be shown and hidden one by one; a still model's never are)
+				for (int32 Section = 0; Section < Sections && Section < Twin->GetNumSections(); ++Section)
+				{
+					const bool bShown = Of->IsMeshSectionVisible(Section);
+					if (Twin->IsMeshSectionVisible(Section) != bShown)
+					{
+						Twin->SetMeshSectionVisible(Section, bShown);
+					}
+				}
+			}
+		}
+	}
+}
+
+void ACampaignMapActor::FillLightsTwin()
+{
+	bLightsTwinStale = false;
+	if (!LightsTwin || !LightsMesh)
+	{
+		return;
+	}
+	// Each section of the lights as it is lit now: its points and their light, and (when it is laid for the first
+	// time, or has changed its size) its corners.
+	const int32 Sections = LightsMesh->GetNumSections();
+	TArray<FVector> Points;
+	TArray<FColor> Inks;
+	for (int32 Section = 0; Section < Sections; ++Section)
+	{
+		const FProcMeshSection* Lit = LightsMesh->GetProcMeshSection(Section);
+		const FProcMeshSection* Mine = Section < LightsTwin->GetNumSections() ? LightsTwin->GetProcMeshSection(Section) : nullptr;
+		const int32 Count = Lit ? Lit->ProcVertexBuffer.Num() : 0;
+		if (Count == 0 || Lit->ProcIndexBuffer.Num() < 3)
+		{
+			if (Mine && Mine->ProcVertexBuffer.Num() > 0)
+			{
+				LightsTwin->ClearMeshSection(Section);
+			}
+			continue;
+		}
+		Points.SetNumUninitialized(Count);
+		Inks.SetNumUninitialized(Count);
+		for (int32 Point = 0; Point < Count; ++Point)
+		{
+			Points[Point] = FVector(Lit->ProcVertexBuffer[Point].Position);
+			Inks[Point] = Lit->ProcVertexBuffer[Point].Color;
+		}
+		if (Mine && Mine->ProcVertexBuffer.Num() == Count && Mine->ProcIndexBuffer.Num() == Lit->ProcIndexBuffer.Num())
+		{
+			// (the same lamps at another hour: their light alone is laid again, as the model's own is)
+			LightsTwin->UpdateMeshSection(Section, Points, TArray<FVector>(), TArray<FVector2D>(), Inks, TArray<FProcMeshTangent>());
+			continue;
+		}
+		TArray<int32> Corners;
+		Corners.Reserve(Lit->ProcIndexBuffer.Num());
+		for (const uint32 Corner : Lit->ProcIndexBuffer)
+		{
+			Corners.Add(static_cast<int32>(Corner));
+		}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Count);
+		LightsTwin->CreateMeshSection(Section, Points, Corners, Normals, TArray<FVector2D>(), Inks, TArray<FProcMeshTangent>(), false);
+		LightsTwin->SetMaterial(Section, LightsMesh->GetMaterial(Section));
+	}
+	// (sections the lights no longer have)
+	for (int32 Section = Sections; Section < LightsTwin->GetNumSections(); ++Section)
+	{
+		LightsTwin->ClearMeshSection(Section);
+	}
+}
+
+void ACampaignMapActor::KeepLightsTwin(const FVector& Focus)
+{
+	// Which side the twin stands on. The eye near the chart's west end sees, over the seam, what lies at the chart's
+	// east end: a world to the west of where that was built. Near the east end it sees the west end's, a world to the
+	// east. (The eye is kept within one turn of the chart by its own camera.) By day, and away from the seam, there
+	// is nothing of the twin to see, and nothing of it is drawn or filled.
+	double Aside = 0.0;
+	if (OverSeam() && LightsMesh && LightsMesh->IsVisible() && LightsMesh->GetNumSections() > 0)
+	{
+		const double Span = Data.WorldWidth * UnitScale;
+		const double FromWest = Focus.Y - MapToWorld(Data.Charted.Min.X, 0.0).Y;
+		Aside = FromWest < SeamSight * UnitScale ? -Span : FromWest > Span - SeamSight * UnitScale ? Span : 0.0;
+	}
+	if (Aside == 0.0)
+	{
+		if (LightsTwin && LightsTwin->IsVisible())
+		{
+			LightsTwin->SetVisibility(false);
+		}
+		return;
+	}
+	if (!LightsTwin)
+	{
+		LightsTwin = NewObject<UProceduralMeshComponent>(this);
+		LightsTwin->SetupAttachment(Root);
+		LightsTwin->bUseAsyncCooking = false;
+		LightsTwin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		LightsTwin->SetCastShadow(false);
+		LightsTwin->SetTranslucentSortPriority(LightsMesh->TranslucencySortPriority);
+		LightsTwin->RegisterComponent();
+		LightsTwin->SetVisibility(false);
+		bLightsTwinStale = true;
+	}
+	if (bLightsTwinStale)
+	{
+		FillLightsTwin();
+	}
+	// It stands as the lights do, a world aside; each of its sections is shown as theirs is (the windows are put out
+	// from high up, where the towns are drawn in their far form); and it is shown.
+	const FVector Stands = LightsMesh->GetRelativeLocation() + FVector(0.0, Aside, 0.0);
+	if (!LightsTwin->GetRelativeLocation().Equals(Stands, 0.5))
+	{
+		LightsTwin->SetRelativeLocation(Stands);
+	}
+	for (int32 Section = 0; Section < LightsMesh->GetNumSections() && Section < LightsTwin->GetNumSections(); ++Section)
+	{
+		const bool bShown = LightsMesh->IsMeshSectionVisible(Section);
+		if (LightsTwin->IsMeshSectionVisible(Section) != bShown)
+		{
+			LightsTwin->SetMeshSectionVisible(Section, bShown);
+		}
+	}
+	if (!LightsTwin->IsVisible())
+	{
+		LightsTwin->SetVisibility(true);
+	}
+}
+
+void ACampaignMapActor::SquaresRound(const FVector& Focus)
+{
+	const double Span = OverSeam() ? Data.WorldWidth * UnitScale : 0.0;
+	auto Beside = [&](UProceduralMeshComponent* Square)
+	{
+		if (!Square)
+		{
+			return;
+		}
+		// (its own middle as it was built: where it is shown now, less what it has been moved by)
+		const FVector Moved = Square->GetRelativeLocation();
+		const double Middle = Square->Bounds.Origin.Y - Moved.Y;
+		const double Round = Span > 0.0 ? FMath::RoundToDouble((Focus.Y - Middle) / Span) * Span : 0.0;
+		if (FMath::Abs(Moved.Y - Round) > 0.5)
+		{
+			Square->SetRelativeLocation(FVector(Moved.X, Round, Moved.Z));
+		}
+	};
+	for (const TObjectPtr<UProceduralMeshComponent>& Square : TreeMeshes)
+	{
+		Beside(Square.Get());
+	}
+	for (const TObjectPtr<UProceduralMeshComponent>& Square : TownSquares)
+	{
+		Beside(Square.Get());
+	}
+	for (const TObjectPtr<UProceduralMeshComponent>& Square : TownFarSquares)
+	{
+		Beside(Square.Get());
+	}
+}
+
+double ACampaignMapActor::NearX(double X, double BesideX) const
+{
+	return Data.bFar && Data.WorldWidth > 0.0 ? X + FMath::RoundToDouble((BesideX - X) / Data.WorldWidth) * Data.WorldWidth : X;
+}
+
+FVector ACampaignMapActor::BesideEye(const FVector& Place) const
+{
+	if (!OverSeam())
+	{
+		return Place;
+	}
+	const double Span = Data.WorldWidth * UnitScale;
+	return FVector(Place.X, Place.Y + FMath::RoundToDouble((LastAskedFocus.Y - Place.Y) / Span) * Span, Place.Z);
+}
+
+void ACampaignMapActor::RoundPiece(AArmyPiece* Piece) const
+{
+	if (Piece && Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0)
+	{
+		Piece->KeepRound(MapToWorld(Data.Charted.Min.X, 0.0).Y, Data.WorldWidth * UnitScale);
+		Piece->LookFrom(LastAskedFocus.Y, OverSeam()); // (seam-2: shown on the eye's side from its first frame; UpdateForCamera says so each frame after)
+	}
 }
 
 float ACampaignMapActor::GroundAt(double InX, double Y) const
@@ -1280,6 +1758,18 @@ void ACampaignMapActor::UpdateSinkings()
 			SinkingShips.RemoveAt(Index);
 			continue;
 		}
+		{
+			// (seam-4: she goes down on the eye's side of the chart's seam, her white water with her, as a fleet is shown)
+			const FVector Beside = BesideEye(Ship.At);
+			if (Beside.Y != Ship.At.Y)
+			{
+				if (Ship.Water)
+				{
+					Ship.Water->AddWorldOffset(FVector(0.0, Beside.Y - Ship.At.Y, 0.0));
+				}
+				Ship.At = Beside;
+			}
+		}
 		// (she lists for the first half of it, and only then begins to go)
 		const double Heel = 56.0 * FMath::SmoothStep(0.0, 0.7, T);
 		const double Stern = 14.0 * FMath::SmoothStep(0.3, 1.0, T);
@@ -2080,9 +2570,10 @@ int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 			return Id;
 		}
 	}
-	// (Release 2, the whole world.) So is the mound the world's own sheet raises for one of the Pacific's islets, which
-	// is all he sees of it from the high view: a click anywhere on the speck is a click on the island. Where a fine
-	// sheet stands the island is drawn at its own size, and only its own ground is the island.
+	// (Release 2, the whole world.) So is the mound the world's own sheet raises for one of the Pacific's islets or any
+	// other island too small for it (Oahu, Okinawa, Samoa), which is all he sees of it from the high view: a click
+	// anywhere on the speck is a click on the island. Where a fine sheet stands the island is drawn at its own size,
+	// and only its own ground is the island.
 	if (Data.bWorld && WorldTerrain.NX > 0)
 	{
 		const double X = WrapX(P.X);
@@ -2091,7 +2582,7 @@ int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 			const int32 I = FMath::Clamp(FMath::RoundToInt32((X - WorldTerrain.OriginX) / WorldTerrain.Cell), 0, WorldTerrain.NX - 1);
 			const int32 J = FMath::Clamp(FMath::RoundToInt32((P.Y - WorldTerrain.OriginY) / WorldTerrain.Cell), 0, WorldTerrain.NY - 1);
 			const int16 Id = WorldTerrain.Region[WorldTerrain.Index(I, J)];
-			if (Id >= 0 && Data.Regions.IsValidIndex(Id) && Data.Regions[Id].bIslet)
+			if (Id >= 0 && Data.Regions.IsValidIndex(Id) && WorldTerrain.Raised.Contains(Id))
 			{
 				return Id;
 			}
@@ -4399,7 +4890,20 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	FMiniatureMesh Model;
 	const double Unit = UnitScale * 2.1; // the size the towns are built to
 	int32 Count = 0;
-	int32 RingTowns = 0, RingAsked = 0, RingSeated = 0, RingRows = 0; // (release 2, the flak brief: what the ring came to, for the log)
+	int32 RingTowns = 0, RingAsked = 0, RingSeated = 0, RingRows = 0, RingTwos = 0, RingNone = 0, RingPlots = 0; // (release 2, the flak brief: what the ring came to, for the log)
+	// (The flak ring's second mend.) Which of a town's six public plots are built on or going up, a bit a line, as
+	// ShowCivic was last given them: a pit makes way for those.
+	TMap<int32, int32> PlotsTaken;
+	if (bFlakRing)
+	{
+		for (int32 Entry = 0; Entry + 3 < ShownCivic.Num(); Entry += 4)
+		{
+			if (ShownCivic[Entry + 1] >= 0 && ShownCivic[Entry + 1] <= 5)
+			{
+				PlotsTaken.FindOrAdd(ShownCivic[Entry]) |= 1 << ShownCivic[Entry + 1];
+			}
+		}
+	}
 	for (int32 Id = 0; Id < Works.Num() && Id < Data.Regions.Num(); ++Id)
 	{
 		const FIntVector4& Built = Works[Id];
@@ -4676,8 +5180,11 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 				// at the radius today's row starts at (the roofs, plus 0.9, plus a ring). A stand is refused by today's
 				// own tests (off the province, in water, on the army's base, on the airfield) and where it would lie on
 				// a railway, on the road down to a river crossing, on a river, on another pit or on the town's other
-				// works; a refused stand slides up to twenty degrees either way and is then dropped. A town that
-				// cannot seat three (an islet, a harbour spit) keeps today's row. The pit itself is as it was.
+				// works; a refused stand slides a little either way and is then dropped. The pit itself is as it was.
+				// (The art director's rulings of 25 November 2026, 03:06Z and 03:21Z, on a town that cannot seat its
+				// ring. Brian saw no guns round his cities, and one pit by the track is the picture he did not see: so
+				// a town falls back to today's row only when it has nowhere else to stand a gun. See THE LIGHTER RING
+				// below. And a pit makes way for a public building: see THE GUNS MAKE WAY.)
 				if (bFlakRing && Feet.Num() > 0)
 				{
 					const FVector2D FirstStand = Row.Num() > 0 ? Row[0] : WorldToMap(Feet[0]);
@@ -4706,14 +5213,47 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 							KeptLines.Add(FKeptLine{ Middle, Bridge.At, Ring + 0.5 });
 						}
 					}
-					for (const FLandRiver& River : Land.Rivers)
+					if (RiverPaths.Num() > 0)
 					{
-						for (int32 Bend = 0; Bend + 1 < River.Course.Num(); ++Bend)
+						// (The mend of 25 November 2026.) The rivers AS THEY ARE DRAWN: the smooth curve the ribbon is laid
+						// along, which leaves the straight line between two points of a course by a unit or more at a bend,
+						// so that a pit kept off the straight line could still stand in the water. A pit keeps off the
+						// curve by its own ring, the ribbon's half breadth THERE as BuildWaterways laid it (a river of
+						// the wider chart wanders in breadth, flares where it joins another and widens to twice and
+						// more where it meets the sea) and the bank beside it.
+						for (int32 RiverNo = 0; RiverNo < RiverPaths.Num(); ++RiverNo)
 						{
-							// (a river is a map unit and a quarter across at its broadest, and it wanders about its course)
-							if (FMath::PointDistToSegment(FVector(Middle, 0.0), FVector(River.Course[Bend], 0.0), FVector(River.Course[Bend + 1], 0.0)) < RingOut + Ring + 1.5)
+							const TArray<FVector2D>& Drawn = RiverPaths[RiverNo];
+							const TArray<double>* DrawnHalf = RiverHalf.IsValidIndex(RiverNo) ? &RiverHalf[RiverNo] : nullptr;
+							const double Broadest = 1.4 * (RiverBroad.IsValidIndex(RiverNo) ? RiverBroad[RiverNo] : 0.425);
+							for (int32 Bend = 0; Bend + 1 < Drawn.Num(); ++Bend)
 							{
-								KeptLines.Add(FKeptLine{ River.Course[Bend], River.Course[Bend + 1], Ring + 1.5 });
+								// (a step of the curve is two units or so, and the broadest water is the Amazon's mouth, under
+								// fifteen from its middle: a step nowhere near the town is passed by cheaply)
+								if (FVector2D::DistSquared(Drawn[Bend], Middle) >= FMath::Square(RingOut + 24.0))
+								{
+									continue;
+								}
+								const double HalfHere = DrawnHalf && DrawnHalf->IsValidIndex(Bend + 1) ? FMath::Max((*DrawnHalf)[Bend], (*DrawnHalf)[Bend + 1]) : Broadest;
+								const double Banks = Ring + HalfHere + 0.3;
+								if (FMath::PointDistToSegment(FVector(Middle, 0.0), FVector(Drawn[Bend], 0.0), FVector(Drawn[Bend + 1], 0.0)) < RingOut + Banks)
+								{
+									KeptLines.Add(FKeptLine{ Drawn[Bend], Drawn[Bend + 1], Banks });
+								}
+							}
+						}
+					}
+					else
+					{
+						for (const FLandRiver& River : Land.Rivers)
+						{
+							for (int32 Bend = 0; Bend + 1 < River.Course.Num(); ++Bend)
+							{
+								// (no ribbons laid yet: a river is a map unit and a quarter across at its broadest, and it wanders about its course)
+								if (FMath::PointDistToSegment(FVector(Middle, 0.0), FVector(River.Course[Bend], 0.0), FVector(River.Course[Bend + 1], 0.0)) < RingOut + Ring + 1.5)
+								{
+									KeptLines.Add(FKeptLine{ River.Course[Bend], River.Course[Bend + 1], Ring + 1.5 });
+								}
 							}
 						}
 					}
@@ -4733,50 +5273,243 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 						{
 							KeptPlaces.Emplace(WorksAt, 3.0 + Ring);
 						}
-						if (Built.Y > 0 && PlaceOnCoast(WorksAt))
+						// (the mend: a shipyard with no coast of its own to stand on is built east of the town, and is kept off there too)
+						if (Built.Y > 0 && (PlaceOnCoast(WorksAt) || Place(FVector2D(10.0, 1.0), WorksAt)))
 						{
 							KeptPlaces.Emplace(WorksAt, 4.0 + Ring);
 						}
 					}
-					TArray<FVector2D, TInlineAllocator<9>> Seated;
-					Seated.Add(FirstStand);
-					for (int32 Next = 1; Next < Asked; ++Next)
+					// (The mend.) THE TOWN'S PUBLIC BUILDINGS: the market, the hall, the school and the rest stand on six
+					// plots of a quarter of their own (ShowCivic's, the same numbers), the nearest of them against the
+					// town's last roofs, where the ring runs. A pit keeps off each plot that is built on or going up.
+					// Not off an empty one: no town has a public building when the war of 1939 opens, and the six
+					// together close sixty to a hundred degrees of a ring. A plot's paving reaches about a size and a
+					// half from its middle at its corners, and the bank and the domed exchange of a market raised to its
+					// second and third levels stand beyond the paving, to almost two sizes: a pit keeps two sizes off,
+					// whatever the level, so that it need not move again when the building is raised.
+					TArray<TPair<FVector2D, double>, TInlineAllocator<6>> PlotPlaces;
+					const int32 PlotBits = PlotsTaken.FindRef(Id);
+					if (PlotBits != 0)
 					{
-						for (const double Slid : { 0.0, 5.0, -5.0, 10.0, -10.0, 15.0, -15.0, 20.0, -20.0 })
+						static const FVector2D QuarterPlots[] = { FVector2D(1.0, 0.0), FVector2D(16.0, 7.2), FVector2D(16.0, 0.0), FVector2D(8.5, 7.2), FVector2D(1.0, 7.2), FVector2D(8.5, 0.0) };
+						const double QuarterNear = CivicNear(Id), QuarterTurn = FMath::DegreesToRadians(CivicTurn(Id));
+						const double PlotSize = Region.bCapital ? 2.9 : (Region.Terrain == TEXT("urban") ? 2.7 : 2.4);
+						for (int32 PlotLine = 0; PlotLine < 6; ++PlotLine)
 						{
-							const double Bears = FirstBearing + 2.0 * PI * Next / Asked + FMath::DegreesToRadians(Slid);
-							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
-							bool bOpen = Data.FindRegionAt(Try.X, Try.Y) == Id && GroundAt(Try.X, Try.Y) > 0.0f;
-							for (int32 K = 0; bOpen && K < KeptPlaces.Num(); ++K)
+							if ((PlotBits & (1 << PlotLine)) != 0)
 							{
-								bOpen = FVector2D::Distance(Try, KeptPlaces[K].Key) >= KeptPlaces[K].Value;
-							}
-							for (int32 K = 0; bOpen && K < Seated.Num(); ++K)
-							{
-								bOpen = FVector2D::Distance(Try, Seated[K]) >= 2.3 * Ring; // (never touching: today's least)
-							}
-							for (int32 K = 0; bOpen && K < KeptLines.Num(); ++K)
-							{
-								bOpen = FMath::PointDistToSegment(FVector(Try, 0.0), FVector(KeptLines[K].From, 0.0), FVector(KeptLines[K].To, 0.0)) >= KeptLines[K].Off;
-							}
-							if (bOpen)
-							{
-								Seated.Add(Try);
-								break;
+								const FVector2D PlotOut(QuarterPlots[PlotLine].X, QuarterNear + QuarterPlots[PlotLine].Y);
+								PlotPlaces.Emplace(Middle + FVector2D(PlotOut.X * FMath::Cos(QuarterTurn) - PlotOut.Y * FMath::Sin(QuarterTurn), PlotOut.X * FMath::Sin(QuarterTurn) + PlotOut.Y * FMath::Cos(QuarterTurn)), 2.0 * PlotSize + Ring);
 							}
 						}
 					}
+					auto OffThePlots = [&](const FVector2D& Asking) -> bool
+					{
+						for (const TPair<FVector2D, double>& Paved : PlotPlaces)
+						{
+							if (FVector2D::Distance(Asking, Paved.Key) < Paved.Value)
+							{
+								return false;
+							}
+						}
+						return true;
+					};
+					// (whether a pit may stand at a place on the ring, by everything but the other pits and the public plots)
+					auto StandOpen = [&](const FVector2D& Asking) -> bool
+					{
+						bool bFree = Data.FindRegionAt(Asking.X, Asking.Y) == Id && GroundAt(Asking.X, Asking.Y) > 0.0f;
+						for (int32 KeptNo = 0; bFree && KeptNo < KeptPlaces.Num(); ++KeptNo)
+						{
+							bFree = FVector2D::Distance(Asking, KeptPlaces[KeptNo].Key) >= KeptPlaces[KeptNo].Value;
+						}
+						for (int32 KeptNo = 0; bFree && KeptNo < KeptLines.Num(); ++KeptNo)
+						{
+							bFree = FMath::PointDistToSegment(FVector(Asking, 0.0), FVector(KeptLines[KeptNo].From, 0.0), FVector(KeptLines[KeptNo].To, 0.0)) >= KeptLines[KeptNo].Off;
+						}
+						return bFree;
+					};
+					TArray<FVector2D, TInlineAllocator<9>> Seated;
+					// (the bearing each was seated at, from the town's middle, and the bearing its stand has before any slide)
+					TArray<double, TInlineAllocator<9>> SeatedBears, SeatedHomes;
+					Seated.Add(FirstStand);
+					SeatedBears.Add(FirstBearing);
+					SeatedHomes.Add(FirstBearing);
+					// (a slide either way of a bearing, the nearest first: 0, 5, -5, 10, -10 degrees and so on)
+					auto SlideOf = [](int32 Fifth) -> double
+					{
+						return FMath::DegreesToRadians(((Fifth + 1) / 2) * 5.0 * (Fifth % 2 == 1 ? 1.0 : -1.0));
+					};
+					// (whether a pit may stand at a bearing by the other pits: never touching, today's least, and no
+					// nearer in bearing to one, the short way round, than is asked; the pit asking is left out)
+					auto ClearOfPits = [&](double Bears, double LeastApart, int32 Asker) -> bool
+					{
+						const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+						for (int32 K = 0; K < Seated.Num(); ++K)
+						{
+							const double Between = Bears - SeatedBears[K];
+							if (K != Asker && (FVector2D::Distance(Try, Seated[K]) < 2.3 * Ring
+								|| FMath::Abs(FMath::Atan2(FMath::Sin(Between), FMath::Cos(Between))) < LeastApart - 1.0e-6))
+							{
+								return false;
+							}
+						}
+						return true;
+					};
+					// (seats a stand: at its own bearing if it may stand there, or the nearest slide from it that may)
+					auto SeatStand = [&](double Home, int32 Slides, double LeastApart) -> bool
+					{
+						for (int32 Slid = 0; Slid <= Slides; ++Slid)
+						{
+							const double Bears = Home + SlideOf(Slid);
+							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+							if (StandOpen(Try) && ClearOfPits(Bears, LeastApart, INDEX_NONE))
+							{
+								Seated.Add(Try);
+								SeatedBears.Add(Bears);
+								SeatedHomes.Add(Home);
+								return true;
+							}
+						}
+						return false;
+					};
+					// (how far a stand of this ring may slide, in steps of five degrees, and how near in bearing two of its
+					// pits may end: kept for a pit that later makes way)
+					int32 RingSlides = 8;
+					double RingApart = 0.0;
+					bool bLighter = Guns == 1;
+					if (!bLighter)
+					{
+						// (levels 2 and 3 as they were built: six or nine stands, each sliding up to twenty degrees; their
+						// pits are sixty and forty degrees apart, and a wider slide would run them into their neighbours)
+						for (int32 Next = 1; Next < Asked; ++Next)
+						{
+							SeatStand(FirstBearing + 2.0 * PI * Next / Asked, RingSlides, RingApart);
+						}
+						bLighter = Seated.Num() < 3; // (it cannot seat three: it follows level 1's rule for three)
+					}
+					if (bLighter)
+					{
+						// THE LIGHTER RING (the ruling of 03:06Z). Three stands, 120 degrees apart. A stand may slide up to
+						// forty degrees either way, the nearest bearing first, but must end at least sixty degrees of bearing
+						// from every other seated pit: three pits may sit unevenly, they may never bunch on one side as a
+						// battery.
+						// (Each stand takes its nearest open bearing as it comes, and the first to be seated can take the
+						// one place that leaves the other none. So where three are not seated the pass is made once more
+						// with the far stand seated first, before the town is cut to two.)
+						RingSlides = 16;
+						RingApart = FMath::DegreesToRadians(60.0);
+						for (int32 Pass = 0; Pass < 2 && Seated.Num() < 3; ++Pass)
+						{
+							Seated.SetNum(1);
+							SeatedBears.SetNum(1);
+							SeatedHomes.SetNum(1);
+							for (int32 Next = 1; Next < 3; ++Next)
+							{
+								SeatStand(FirstBearing + 2.0 * PI * (Pass == 0 ? Next : 3 - Next) / 3.0, RingSlides, RingApart);
+							}
+						}
+						if (Seated.Num() < 3 && Guns < 3)
+						{
+							// If one of the three cannot be seated, TWO: the first pit by the track and one more, as nearly
+							// opposite it as there is room and never under ninety degrees from it. Guns on two sides of a
+							// town still read as a defence round it. (Not at level 3, by her ruling of 03:21Z: a town
+							// never shows fewer pits than its row would, and two there would read as guns lost.)
+							Seated.SetNum(1);
+							SeatedBears.SetNum(1);
+							SeatedHomes.SetNum(1);
+							RingSlides = 36;
+							RingApart = FMath::DegreesToRadians(90.0);
+							SeatStand(FirstBearing + PI, RingSlides, RingApart);
+						}
+					}
+					// THE GUNS MAKE WAY (her ruling of 03:21Z). The ring above is seated as if the town had no public
+					// buildings, so that it is the same ring whatever has been built since. Then a pit that stands on a
+					// plot that is built on or going up makes way: it alone moves, to the nearest slide of its own stand
+					// that is off the plots and clear of the other pits, which keep their places; with nowhere to go it
+					// is taken away. The first pit by the track never moves (ruling 125): there the plot loses, as today.
+					// (Every pit in the way is lifted before any is set down again, so that a pit is tried against the
+					// others where they will stand, and never against a place another pit is about to leave.)
+					// (Whether the ground alone seated a ring, before any pit made way: the art director, 03:39Z, has a
+					// town that loses its ring to a public building counted apart from one whose ground never seated it.)
+					const bool bRingedBefore = Seated.Num() >= 3 || (Guns < 3 && Seated.Num() == 2);
+					TArray<double, TInlineAllocator<9>> Displaced; // (the home bearings of the pits lifted, the last seated first)
+					for (int32 InTheWay = Seated.Num() - 1; InTheWay >= 1; --InTheWay)
+					{
+						if (!OffThePlots(Seated[InTheWay]))
+						{
+							Displaced.Add(SeatedHomes[InTheWay]);
+							Seated.RemoveAt(InTheWay);
+							SeatedBears.RemoveAt(InTheWay);
+							SeatedHomes.RemoveAt(InTheWay);
+						}
+					}
+					for (int32 SetDown = Displaced.Num() - 1; SetDown >= 0; --SetDown)
+					{
+						// (in the order they were seated; a pit with no place left is not set down)
+						bool bMadeWay = false;
+						for (int32 Slid = 0; Slid <= RingSlides && !bMadeWay; ++Slid)
+						{
+							const double Bears = Displaced[SetDown] + SlideOf(Slid);
+							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+							if (StandOpen(Try) && OffThePlots(Try) && ClearOfPits(Bears, RingApart, INDEX_NONE))
+							{
+								Seated.Add(Try);
+								SeatedBears.Add(Bears);
+								SeatedHomes.Add(Displaced[SetDown]);
+								bMadeWay = true;
+							}
+						}
+					}
+					// (whether the pits are two on two sides of the town: the second never under ninety degrees of
+					// bearing from the first)
+					auto OnTwoSides = [&]() -> bool
+					{
+						return Seated.Num() == 2
+							&& FMath::Abs(FMath::Atan2(FMath::Sin(SeatedBears[1] - SeatedBears[0]), FMath::Cos(SeatedBears[1] - SeatedBears[0]))) >= FMath::DegreesToRadians(90.0) - 1.0e-6;
+					};
+					// TWO, BEFORE THE ROW (her ruling of 03:53Z, in place of 03:39Z's). Making way can leave a level 1
+					// or 2 town with its first pit alone, or with two under ninety degrees apart. The row would move or
+					// take away pits that were not in the way too, and show fewer guns: so the town first tries the
+					// two-pit stand, the first pit where it is and one more as nearly opposite it as is open and off
+					// the plots, sliding up to ninety degrees either way. Only if that fails does it fall back.
+					if (Guns < 3 && Displaced.Num() > 0 && Seated.Num() < 3 && !OnTwoSides())
+					{
+						Seated.SetNum(1);
+						SeatedBears.SetNum(1);
+						SeatedHomes.SetNum(1);
+						RingSlides = 36;
+						RingApart = FMath::DegreesToRadians(90.0);
+						const double Opposite = FirstBearing + PI;
+						for (int32 Slid = 0; Slid <= RingSlides && Seated.Num() < 2; ++Slid)
+						{
+							const double Bears = Opposite + SlideOf(Slid);
+							const FVector2D Try = Middle + FVector2D(FMath::Cos(Bears), FMath::Sin(Bears)) * RingOut;
+							if (StandOpen(Try) && OffThePlots(Try) && ClearOfPits(Bears, RingApart, INDEX_NONE))
+							{
+								Seated.Add(Try);
+								SeatedBears.Add(Bears);
+								SeatedHomes.Add(Opposite);
+							}
+						}
+					}
+					// (a ring of three or more; at levels 1 and 2 two pits on two sides of the town, however the town
+					// came to have two; else today's row: a town never shows fewer pits than its row would, and never
+					// two bunched on one side)
+					const bool bRinged = Seated.Num() >= 3 || (Guns < 3 && OnTwoSides());
 					++RingTowns;
 					RingAsked += Asked;
-					if (3 * Seated.Num() < 2 * Asked)
+					if (Seated.Num() < 3 || 3 * Seated.Num() < 2 * Asked)
 					{
-						// (the art director, 25 November 2026: the log names any town that seats under two thirds of its pits)
+						// (the art director, 25 November 2026: the log names any town that seats under two thirds of its pits,
+						// one that seats only two, and one that falls back, in those words, so that they can be counted)
 						UE_LOG(LogTheater, Display, TEXT("Flak ring: %s (level %d) seats %d of the %d pits it asks%s"), *Region.Name, Guns, Seated.Num(), Asked,
-							Seated.Num() >= 3 ? TEXT("") : TEXT(" and keeps today's row"));
+							!bRinged ? (bRingedBefore ? TEXT(" and falls back to the row, its pits having made way for a public building") : TEXT(" and falls back to the row"))
+								: Seated.Num() == 2 ? TEXT(", on two sides of the town") : TEXT(""));
 					}
-					if (Seated.Num() >= 3)
+					if (bRinged)
 					{
 						RingSeated += Seated.Num();
+						RingTwos += Seated.Num() == 2 ? 1 : 0;
 						Feet.Reset();
 						for (const FVector2D& Seat : Seated)
 						{
@@ -4786,7 +5519,16 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					else
 					{
 						++RingRows; // (it keeps today's row)
+						RingPlots += bRingedBefore ? 1 : 0; // (and of those, the towns whose ground did seat a ring)
 					}
+				}
+				else if (bFlakRing)
+				{
+					// (the mend: a town with guns built and no ground for today's row shows none, and the log says so)
+					++RingTowns;
+					RingAsked += 3 * Guns;
+					++RingNone;
+					UE_LOG(LogTheater, Display, TEXT("Flak ring: %s (level %d) has no ground for its row, and no gun is drawn"), *Region.Name, Guns);
 				}
 			}
 			const double Rim = Ring * UnitScale; // (the ring's radius on the table)
@@ -4889,11 +5631,23 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		BuildingsMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		BuildingsMesh->SetMaterial(0, SceneryMaterial);
 	}
+	if (OverSeam())
+	{
+		// (The far side, seam-2, where it meets the flak ring.) The keeper of the twins over the chart's seam knows a
+		// model by its counts and a few of its points. A gun pit that makes way for a public building moves a few
+		// degrees and keeps every count (so does an airfield that shrinks when nobody flies from it): the keeper would
+		// not see it, and the twin would show the pit still standing on the new market. So this model's twin is laid
+		// again with the model, as RecolourRivers lays the rivers'.
+		LayOverSeam(BuildingsMesh);
+	}
 	UE_LOG(LogTheater, Log, TEXT("Works on the table: %d, in %d points"), Count, Model.Vertices.Num());
 	if (bFlakRing)
 	{
 		// (for the reader of a picture run: how many towns have guns, how many pits their levels ask and how many found a seat)
-		UE_LOG(LogTheater, Display, TEXT("Flak ring (tc.Look.FlakRing): %d towns with guns, %d pits asked, %d seated in rings, %d towns kept the row"), RingTowns, RingAsked, RingSeated, RingRows);
+		// (the mend of 25 November 2026: and how many seat only two, fall back to the row, or have no ground for a gun at all)
+		// (her ask of 03:39Z: and, of the towns that fall back, how many do so because pits made way for a public building)
+		UE_LOG(LogTheater, Display, TEXT("Flak ring (tc.Look.FlakRing): %d towns with guns, %d pits asked, %d seated in rings, %d towns seat only two, %d towns fall back to the row (%d of them for a public building), %d towns have nowhere to stand a gun"),
+			RingTowns, RingAsked, RingSeated, RingTwos, RingRows, RingPlots, RingNone);
 	}
 }
 
@@ -5734,6 +6488,7 @@ void ACampaignMapActor::BuildWaterways()
 	RiverMesh->ClearAllMeshSections();
 	RiverPaths.Reset();
 	RiverBroad.Reset();
+	RiverHalf.Reset();
 	// A river is a ribbon of water set into the land along its course: narrow at the source, broader at the
 	// mouth (a great river about a map unit and a quarter across, the rest under one), its course rounded and
 	// given a gentle wander so that it winds, blue-green, with a dark bank on either side.
@@ -6002,6 +6757,9 @@ void ACampaignMapActor::BuildWaterways()
 		const double Broad = FCampaignMapData::RiverBroad(River.Name);
 		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
 		RiverBroad.Add(Broad);
+		// (release 2, the flak ring's second mend: and its ribbon's half breadth at each point as it is laid below, wander,
+		// flare and widening and all, for the gun pits that keep off the water; none past where the ribbon stops)
+		TArray<double>& Halves = RiverHalf.AddDefaulted_GetRef();
 		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
 		// (The art director, 18 November 2026, at Quebec on build 1668: past the town the St Lawrence's ribbon carried on
 		// across the estuary's open water, a river drawn on top of the sea. The coarse sheet of ground, which is what
@@ -6047,6 +6805,7 @@ void ACampaignMapActor::BuildWaterways()
 			// (it widens into the open water it meets: to a little over twice its breadth, over its last seven points)
 			const double Widens = MeetsWater < Path.Num() && K <= MeetsWater ? 1.0 + 1.2 * FMath::SmoothStep(static_cast<double>(MeetsWater - 7), static_cast<double>(MeetsWater), static_cast<double>(K)) : 1.0;
 			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders * Widens;
+			Halves.Add(Half);
 			// A river does not run over the sea: stop where the land does.
 			if (GroundAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
 			{
@@ -6297,6 +7056,10 @@ bool ACampaignMapActor::RecolourRivers()
 		RiverMesh->UpdateMeshSection(Section, Positions, TArray<FVector>(), TArray<FVector2D>(), Inks, TArray<FProcMeshTangent>());
 	}
 	RiversHazedFor = HazeSet;
+	if (OverSeam())
+	{
+		LayOverSeam(RiverMesh); // (seam-2: the rivers' twin over the seam takes the new inks; its keeper looks at a few points only)
+	}
 	return true;
 }
 
@@ -6325,6 +7088,13 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	const double U = UnitScale;
 	const double LinkLasts = 11.0; // seconds from one town to the next
 	const FVector2D Looking = WorldToMap(CameraFocus);
+	// (seam-4: a line a little way over the chart's seam is near the eye too. Its place is counted in the turn of the
+	// world nearest the eye, and its train is shown there, on the railway's twin. Only while both sides are drawn.)
+	const bool bBothSides = OverSeam();
+	auto SeenFrom = [this, bBothSides, &Looking](const FVector2D& OnLine)
+	{
+		return FVector2D(bBothSides ? NearX(OnLine.X, Looking.X) : OnLine.X, OnLine.Y);
+	};
 	// From far off the trains are too small to see, and are put away.
 	const bool bNear = CameraDistance < 9000.0f;
 	// (Speed: "tc.Speed.TrainShadows", for measuring only. A thing that throws a shadow and moves has the shadows round
@@ -6349,7 +7119,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 		double Share = (Now - Train.Began) / LinkLasts;
 		const bool bGone = !bNear || !Land.Rails.IsValidIndex(Train.Rail) || ShownCut.Contains(Land.Rails[Train.Rail].A) || ShownCut.Contains(Land.Rails[Train.Rail].B)
 			|| HazeSet.Contains(Land.Rails[Train.Rail].A) || HazeSet.Contains(Land.Rails[Train.Rail].B) // (nothing moves under the haze)
-			|| FVector2D::DistSquared(Land.Rails[Train.Rail].At, Looking) > 260.0 * 260.0;
+			|| FVector2D::DistSquared(SeenFrom(Land.Rails[Train.Rail].At), Looking) > 260.0 * 260.0;
 		if (!bGone && Share >= 1.0 && Data.Regions.IsValidIndex(Land.Rails[Train.Rail].A) && Data.Regions.IsValidIndex(Land.Rails[Train.Rail].B))
 		{
 			// Arrived. (Brian, 16 November 2026: "can the trains turn on the tracks? when they get to the end of the line
@@ -6451,6 +7221,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 					Stands = Train.Pivot + FRotator(0.0, Heading, 0.0).RotateVector(FVector(2.6 * U, 0.0, 0.0));
 				}
 			}
+			Stands.Y += (SeenFrom(Rail.At).X - Rail.At.X) * U; // (seam-4: a whole number of worlds east or west, or nothing)
 			Train.Mesh->SetRelativeLocationAndRotation(Stands, FRotator(0.0, Heading, 0.0));
 		}
 	}
@@ -6467,7 +7238,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	for (int32 Index = 0; Index < Land.Rails.Num(); ++Index)
 	{
 		const FLandRail& Rail = Land.Rails[Index];
-		if (Data.Regions.IsValidIndex(Rail.A) && Data.Regions.IsValidIndex(Rail.B) && FVector2D::DistSquared(Rail.At, Looking) < Reach * Reach && !ShownCut.Contains(Rail.A) && !ShownCut.Contains(Rail.B)
+		if (Data.Regions.IsValidIndex(Rail.A) && Data.Regions.IsValidIndex(Rail.B) && FVector2D::DistSquared(SeenFrom(Rail.At), Looking) < Reach * Reach && !ShownCut.Contains(Rail.A) && !ShownCut.Contains(Rail.B)
 			&& !HazeSet.Contains(Rail.A) && !HazeSet.Contains(Rail.B)
 			&& !Trains.ContainsByPredicate([Index](const FTrain& Each) { return Each.Rail == Index; }))
 		{
@@ -6826,6 +7597,7 @@ void ACampaignMapActor::BuildWorks()
 	{
 		WorksMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		WorksMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(WorksMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	UE_LOG(LogTheater, Log, TEXT("Works: %d crossings (%d bridges down), %d railways cut, %d towns' own bridges"), Land.Crossings.Num(), ShownDown.Num(), ShownCut.Num(), TownBridges);
 }
@@ -7077,6 +7849,34 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 	{
 		return;
 	}
+	// (Release 2, the flak ring's second mend; tc.Look.FlakRing.) A gun pit makes way for a plot that is built on or
+	// going up. Where a plot is newly taken, or given up, in a town with guns, the works are stood again below, so
+	// that no pit is left under a market: the pit in the way moves a few degrees, once, as the scaffold appears.
+	bool bPlotsMoved = false;
+	if (FlakRingAsked())
+	{
+		auto PlotsOf = [](const TArray<int32>& Listed)
+		{
+			TSet<int32> Stood;
+			for (int32 Entry = 0; Entry + 3 < Listed.Num(); Entry += 4)
+			{
+				if (Listed[Entry + 1] >= 0 && Listed[Entry + 1] <= 5)
+				{
+					Stood.Add(Listed[Entry] * 8 + Listed[Entry + 1]);
+				}
+			}
+			return Stood;
+		};
+		const TSet<int32> StoodBefore = PlotsOf(ShownCivic), StoodAfter = PlotsOf(Civic);
+		for (const int32 PlotPair : StoodBefore)
+		{
+			bPlotsMoved |= !StoodAfter.Contains(PlotPair) && ShownBuildings.IsValidIndex(PlotPair / 8) && ShownBuildings[PlotPair / 8].Z > 0;
+		}
+		for (const int32 PlotPair : StoodAfter)
+		{
+			bPlotsMoved |= !StoodBefore.Contains(PlotPair) && ShownBuildings.IsValidIndex(PlotPair / 8) && ShownBuildings[PlotPair / 8].Z > 0;
+		}
+	}
 	ShownCivic = Civic;
 	if (!CivicMesh)
 	{
@@ -7121,6 +7921,13 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 	{
 		CivicMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		CivicMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(CivicMesh); // (seam-2: its twin over the chart's seam is laid again)
+	}
+	if (bPlotsMoved && LastWorks.Num() > 0)
+	{
+		const TArray<FIntVector4> Again = LastWorks;
+		ShownBuildings.Reset();
+		ShowBuildings(Again);
 	}
 }
 
@@ -7321,6 +8128,7 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 	{
 		WorksLeftMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		WorksLeftMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(WorksLeftMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -7384,6 +8192,7 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 	{
 		PrizesMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		PrizesMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(PrizesMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -7893,11 +8702,13 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		AirSignMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		AirSignMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(AirSignMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	if (Pennants.Vertices.Num() > 0)
 	{
 		AirPennantMesh->CreateMeshSection(0, Pennants.Vertices, Pennants.Triangles, Pennants.Normals, TArray<FVector2D>(), Pennants.Colors, TArray<FProcMeshTangent>(), false);
 		AirPennantMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(AirPennantMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -7931,16 +8742,22 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 		AirSignMesh->SetRelativeLocation(FVector(0.0, 0.0, -Sink * FMath::SmoothStep(0.0f, 1.0f, BoxesDown)));
 	}
 	const FLinearColor Dural(FColor::FromHex(TEXT("B9BDB6"))), Tyre(FColor::FromHex(TEXT("2E2C2A")));
+	const bool bBothSides = OverSeam();
 	for (FParkedField& Each : ParkedFields)
 	{
-		const bool bShow = bClose && FVector2D::DistSquared(Eye, Each.Spot) < 240.0 * 240.0;
+		// (seam-4: a field a little way over the chart's seam is near the eye too, and its aircraft are then shown a
+		// whole world to the eye's side, where the field's twin stands. They are built where the field was built.)
+		const double SeenX = bBothSides ? NearX(Each.Spot.X, Eye.X) : Each.Spot.X;
+		const double AsideNow = (SeenX - Each.Spot.X) * UnitScale;
+		const bool bShow = bClose && FVector2D::DistSquared(Eye, FVector2D(SeenX, Each.Spot.Y)) < 240.0 * 240.0;
 		const float UpWas = Each.Up;
 		Each.Up = FMath::Clamp(Each.Up + (bShow ? Step : -Step), 0.0f, 1.0f);
-		if (bShow == Each.bShown && Each.Up == UpWas)
+		if (bShow == Each.bShown && Each.Up == UpWas && AsideNow == Each.Aside)
 		{
 			continue;
 		}
 		Each.bShown = bShow;
+		Each.Aside = AsideNow;
 		if (bShow && Each.Mesh == INDEX_NONE)
 		{
 			FMiniatureMesh Planes;
@@ -7983,7 +8800,7 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 		if (ParkedMeshes.IsValidIndex(Each.Mesh) && ParkedMeshes[Each.Mesh])
 		{
 			ParkedMeshes[Each.Mesh]->SetVisibility(Each.Up > 0.0f);
-			ParkedMeshes[Each.Mesh]->SetRelativeLocation(FVector(0.0, 0.0, -Sink * (1.0f - FMath::SmoothStep(0.0f, 1.0f, Each.Up))));
+			ParkedMeshes[Each.Mesh]->SetRelativeLocation(FVector(0.0, Each.Aside, -Sink * (1.0f - FMath::SmoothStep(0.0f, 1.0f, Each.Up))));
 		}
 	}
 }
@@ -8101,6 +8918,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 	{
 		ScarsMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		ScarsMesh->SetMaterial(0, SceneryMaterial);
+		SeamLaidAgain(ScarsMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 }
 
@@ -8494,6 +9312,12 @@ void ACampaignMapActor::BuildTowns()
 		LightsMesh->SetCastShadow(false);
 	}
 	LightsMesh->ClearAllMeshSections();
+	// (seam-4: and their twin over the seam is emptied, to be filled from the new lights when it is next wanted)
+	bLightsTwinStale = true;
+	if (LightsTwin)
+	{
+		LightsTwin->ClearAllMeshSections();
+	}
 	LightColours.Reset();
 	LightPoints.Reset();
 	ShownNight = -1.0f;
@@ -9045,6 +9869,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 	}
 	// (by day there is nothing of them to see, so nothing of them is drawn: thousands of unlit panes still cost)
 	LightsMesh->SetVisibility(Night > 0.02f);
+	bLightsTwinStale = true; // (seam-4: the lamps below are lit for a new hour; their twin over the seam follows when it is next shown)
 	// The lamps are lit one by one as the light goes: each has its own moment, and some stay dark all night. A
 	// country at war keeps the blackout: its towns and villages show almost nothing.
 	TSet<int32> Black;
@@ -10532,6 +11357,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, LastPieceYaw, 0.0f));
+			RoundPiece(Piece); // (the far side: a march over the chart's seam, Alaska to the Yukon, goes the short way)
 		}
 		if (Piece)
 		{
@@ -10638,6 +11464,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 			}
 			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->GetActorRotation()))
 			{
+				RoundPiece(Courier);
 				Courier->SetArmy(this, *Nation, Piece->GetRegionId(), Travellers);
 				Courier->MarchAlong(Road, true, CarriedFrom == nullptr);
 			}
@@ -10718,7 +11545,7 @@ void ACampaignMapActor::BuildGunLines()
 		{
 			continue; // (no guns; or nothing but guns, which keeps its gun on the base)
 		}
-		if (Piece->IsMarching() || FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) > FMath::Square(0.5 * U))
+		if (Piece->IsMarching() || FVector::DistSquared2D(Piece->GetReckonedLocation(), Piece->GetRestLocation()) > FMath::Square(0.5 * U))
 		{
 			GunsAway.Add(Piece); // (in the hand or on the road: its guns are put down with it)
 			continue;
@@ -11057,6 +11884,7 @@ void ACampaignMapActor::BuildGunLines()
 	{
 		GunLineMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		GunLineMesh->SetMaterial(0, PieceMaterial);
+		SeamLaidAgain(GunLineMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	Earth.Commit(GunLineMesh, 1, GunEarthInk ? static_cast<UMaterialInterface*>(GunEarthInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 	Replant();
@@ -11135,8 +11963,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (bInHarbour)
 		{
 			// Out from the port toward its sea until the water is reached, and a little beyond.
+			// (Release 2, the far side: toward its sea the short way round, where the sea's middle lies over the chart's seam.)
 			const FVector2D Port = Data.Regions[Fleet.Base].Center;
-			const FVector2D Out = (Sea - Port).GetSafeNormal();
+			const FVector2D Out = (FVector2D(NearX(Sea.X, Port.X), Sea.Y) - Port).GetSafeNormal();
 			At = Port;
 			for (int32 Step = 0; Step < 80 && CoverAt(At.X, At.Y) > 0.35f; ++Step)
 			{
@@ -11152,12 +11981,14 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			const double Angle = Others * 2.1 + Fleet.Zone;
 			At += FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Others > 0 ? 16.0 : 0.0);
 		}
+		At.X = LaidX(At.X); // (the far side: laid in the chart's own turn of the world, wherever the steps out ended)
 		++Others;
 		TObjectPtr<AArmyPiece>& Piece = FleetPieces.FindOrAdd(Fleet.Id);
 		const bool bWasLaid = Piece != nullptr;
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(MapToWorld(At.X, At.Y), Facing);
+			RoundPiece(Piece); // (the far side: a sail over the chart's seam, San Diego to Pearl Harbor, goes the short way)
 		}
 		// (Release 2: ships that sail.) A fleet seen where it was and where it is now, that has changed its sea or
 		// come in or gone out of harbour, sails there by water. A fleet only reported (a sighting, not a fleet seen)
@@ -11178,6 +12009,22 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			if (Wake.Num() >= 2)
 			{
 				Wakes.RemoveAll([&Fleet, &View](const FWakeTrail& Old) { return Old.Fleet == Fleet.Id && Old.Turn == View.Turn; });
+				// (Release 2, the far side.) A way over the chart's seam comes back in the turn of the world it left from,
+				// and ends a whole world from where the fleet is laid. Its wake is laid twice, once from where it left and
+				// once to where it lies: each is whole, and each lies on ground that is drawn while the eye is near it.
+				// (Seam-2: once only where the wakes have a twin over the seam, which lays the other.)
+				const double WorldRound = At.X - Wake.Last().X;
+				if (FMath::Abs(WorldRound) > 1.0 && !OverSeam())
+				{
+					FWakeTrail& Twin = Wakes.AddDefaulted_GetRef();
+					Twin.Fleet = Fleet.Id;
+					Twin.Turn = View.Turn;
+					Twin.Points = Wake;
+					for (FVector2D& Point : Twin.Points)
+					{
+						Point.X += WorldRound;
+					}
+				}
 				FWakeTrail& Trail = Wakes.AddDefaulted_GetRef();
 				Trail.Fleet = Fleet.Id;
 				Trail.Turn = View.Turn;
@@ -11264,6 +12111,7 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(SurfacePoint(At.X, At.Y, 0.0), Facing);
+			RoundPiece(Piece);
 		}
 		if (Piece)
 		{
@@ -11375,11 +12223,15 @@ void ACampaignMapActor::LayWakes(int32 Turn)
 	Foam.Commit(WakeMesh, 0, WakeTrailInk ? static_cast<UMaterialInterface*>(WakeTrailInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 }
 
-TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& To) const
+TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& Given) const
 {
 	// (Release 2: ships that sail.) A search over squares of the chart, in a box round the two points: water is
 	// what the harbour's own way out counts as water (land cover no more than 0.35); a square beside land costs a
 	// little more, which keeps a fleet off the coasts; then the corners are cut where open water lets them be.
+	// (Release 2, the far side.) The short way round the world: the far end is counted in the turn nearest the near
+	// one, and the box is searched there (the cover is read whichever turn a place is given in). So the way comes back
+	// in the turn it left from, and over the chart's seam its last point is a whole world from the place given.
+	const FVector2D To(NearX(Given.X, From.X), Given.Y);
 	const double Apart = FVector2D::Distance(From, To);
 	TArray<FVector2D> Way = { From, To };
 	if (Apart < 1.0)
@@ -13423,19 +14275,38 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 		const bool bHere = Zone == Hover;
 		// An anchorage marked on the chart: a ring of brass, doubled and brighter under the pointer.
 		const double Wide = bHere ? 15.0 : 13.0;
-		Wash(Middle, Wide, FLinearColor(1.0f, 0.82f, 0.3f, static_cast<float>(bHere ? SeaFill.Y : SeaFill.X))); // the water inside it, tinted
-		Ring(Middle, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
-		Ring(Middle, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
-		if (bHere && bHaveFleet && FVector2D::Distance(From, Middle) > 12.0)
+		auto Anchorage = [&](const FVector2D& Where)
+		{
+			Wash(Where, Wide, FLinearColor(1.0f, 0.82f, 0.3f, static_cast<float>(bHere ? SeaFill.Y : SeaFill.X))); // the water inside it, tinted
+			Ring(Where, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
+			Ring(Where, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
+		};
+		// (Release 2, the far side.) A sea over the chart's seam from the fleet is marked a second time in the fleet's
+		// own turn of the world, where the eye that picked the fleet up can see it (Hawaiian Waters from San Diego),
+		// and the course is dashed to it the short way round.
+		// (Seam-2: where the orders have a twin over the seam, such a sea is marked once only, at the place nearest
+		// the fleet, and the twin marks it at its own place on the chart: marked twice here it would be laid four
+		// times, and its wash double.)
+		const FVector2D Nearer(bHaveFleet ? NearX(Middle.X, From.X) : Middle.X, Middle.Y);
+		const bool bOverTheSeam = FMath::Abs(Nearer.X - Middle.X) > 1.0;
+		if (!bOverTheSeam || !OverSeam())
+		{
+			Anchorage(Middle);
+		}
+		if (bOverTheSeam)
+		{
+			Anchorage(Nearer);
+		}
+		if (bHere && bHaveFleet && FVector2D::Distance(From, Nearer) > 12.0)
 		{
 			// The course it would steer, dashed from the fleet to the sea.
-			const double Length = FVector2D::Distance(From, Middle);
+			const double Length = FVector2D::Distance(From, Nearer);
 			const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 6.0), 2, 200);
 			for (int32 Dash = 0; Dash < Dashes; ++Dash)
 			{
 				TArray<FVector2D> Stroke;
-				Stroke.Add(FMath::Lerp(From, Middle, (Dash + 0.15) / Dashes));
-				Stroke.Add(FMath::Lerp(From, Middle, (Dash + 0.7) / Dashes));
+				Stroke.Add(FMath::Lerp(From, Nearer, (Dash + 0.15) / Dashes));
+				Stroke.Add(FMath::Lerp(From, Nearer, (Dash + 0.7) / Dashes));
 				AppendRibbon(Buffers, Stroke, 0.5, 0.3, FLinearColor(1.0f, 0.92f, 0.6f, 0.85f).ToFColor(false), false);
 			}
 		}
@@ -13653,6 +14524,13 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 	{
 		Key += FString::Printf(TEXT("%s%d:%d;"), *Lane.State, Lane.Path.Num(), FMath::RoundToInt32(Lane.Flow * 20.0f));
 	}
+	// (seam-2: the short way over the chart's seam only while both sides of it are drawn, tc.Far.OverSeam: with the
+	// switch off a lane is ruled as it always was, since nothing would lay the part that ran past the chart's frame)
+	const bool bShortWay = OverSeam();
+	if (bShortWay)
+	{
+		Key += TEXT("~");
+	}
 	if (Key == ShownLanes)
 	{
 		return;
@@ -13675,12 +14553,21 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 			: bTrade ? FLinearColor(0.2f, 0.135f, 0.07f, 0.78f)
 			: FLinearColor(0.86f, 0.93f, 1.0f, 0.5f); // (a sea lane is ruled like a trade route, a fine dotted line in pale ink: no chalk bars on the water)
 		const FLinearColor TradeAtSea(0.9f, 0.84f, 0.66f, 0.42f);
+		// (seam-2, the art director, 25 November 2026: over the chart's seam the lane is ruled the short way. Each
+		// point is counted in the turn of the world nearest the one before it, so the lane from California to
+		// Hawaii is not ruled east across two oceans; what then runs out past the chart's frame is laid on the
+		// other side by the lanes' twin. Without the far side, or with the switch off, the points are as they were given.)
+		TArray<FVector2D> Chained = Lane.Path;
+		for (int32 Link = 1; bShortWay && Link < Chained.Num(); ++Link)
+		{
+			Chained[Link].X = NearX(Chained[Link].X, Chained[Link - 1].X);
+		}
 		// The lane as a smooth curve through its points, a step every map unit or so.
 		TArray<FVector2D> Curve;
-		const int32 Count = Lane.Path.Num();
+		const int32 Count = Chained.Num();
 		for (int32 K = 0; K + 1 < Count; ++K)
 		{
-			const FVector2D P0 = Lane.Path[FMath::Max(K - 1, 0)], P1 = Lane.Path[K], P2 = Lane.Path[K + 1], P3 = Lane.Path[FMath::Min(K + 2, Count - 1)];
+			const FVector2D P0 = Chained[FMath::Max(K - 1, 0)], P1 = Chained[K], P2 = Chained[K + 1], P3 = Chained[FMath::Min(K + 2, Count - 1)];
 			const int32 Steps = FMath::Clamp(FMath::CeilToInt32(FVector2D::Distance(P1, P2) / 2.0), 2, 400);
 			for (int32 Step = 0; Step < Steps; ++Step)
 			{
@@ -13688,7 +14575,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 				Curve.Add(0.5 * ((2.0 * P1) + (P2 - P0) * T + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * T * T + (3.0 * P1 - P0 - 3.0 * P2 + P3) * T * T * T));
 			}
 		}
-		Curve.Add(Lane.Path.Last());
+		Curve.Add(Chained.Last());
 		// Drawn as dashes, like a course pencilled on a chart; only over the water.
 		const int32 Dash = 1, Gap = 2;
 		TArray<TArray<FVector2D>> Strokes;
@@ -14200,8 +15087,12 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 	{
 		// ("-TheaterFlakLight" gives every raid on a target with no guns built its light flak, for a picture of the pale
 		// puffs: release 2, the flak brief, 2c. They are drawn only with tc.Look.FlakRing on.)
+		// (The mend of 25 November 2026: a raid is up to four flights and the rules name the guns on the first alone, so
+		// "no guns on this flight" is not "no guns built there". It is asked of the province's own works; and a strike
+		// at sea has no town under it to fire.)
 		static const bool bLightAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakLight"));
-		if (bLightAsked && Sortie.bBombers && Flight.Sortie.Flak <= 0)
+		if (bLightAsked && Sortie.bBombers && Flight.Sortie.Flak <= 0 && Data.Regions.IsValidIndex(Sortie.Region)
+			&& !(ShownBuildings.IsValidIndex(Sortie.Region) && ShownBuildings[Sortie.Region].Z > 0))
 		{
 			Flight.Sortie.bLightFlak = true;
 		}
@@ -14213,6 +15104,10 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 		{
 			Flight.Sortie.bNight = true;
 			Flight.Sortie.bEscort = false; // (no fighters go with the night bombers)
+		}
+		else if (CVarNightRaid.GetValueOnGameThread() == 0)
+		{
+			Flight.Sortie.bNight = false; // (tc.Look.NightRaid off: a raid the rules flew by night is watched by day, as before)
 		}
 	}
 	{
@@ -14322,6 +15217,7 @@ bool ACampaignMapActor::FirstFlight(FVector2D& OutSpot, float& OutHeight) const
 		return false;
 	}
 	OutSpot = WorldToMap(Flights[0].At);
+	OutSpot.X = LaidX(OutSpot.X); // (seam-4: a raid is flown on the eye's side of the seam; whoever asks is told its place on the chart)
 	OutHeight = static_cast<float>(Flights[0].At.Z); // (the eye's focus is on the table's own level: this is how far above it)
 	return true;
 }
@@ -14376,8 +15272,16 @@ void ACampaignMapActor::UpdateSorties()
 			continue;
 		}
 		// Out to the target, a turn over it, and home: the airfield is where the air groups stand, south-west of the town.
-		const FVector2D Field = SortieStart(Flight.Sortie);
-		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Flight.Sortie.To.X, Flight.Sortie.To.Y, 0.3);
+		// (seam-4: the airfield is counted in the turn of the world nearest the eye, so the whole raid, its aircraft,
+		// its pencilled course and the fighters that meet it, is flown on the eye's side of the seam, where the towns'
+		// twins stand under it. Only while both sides of the seam are drawn.)
+		const FVector2D FieldLaid = SortieStart(Flight.Sortie);
+		const FVector2D Field(OverSeam() ? NearX(FieldLaid.X, WorldToMap(LastAskedFocus).X) : FieldLaid.X, FieldLaid.Y);
+		// (seam-2: the target is counted in the turn of the world nearest the airfield, so a raid over the chart's
+		// seam, Alaska to the Yukon, is flown the short way and not across the whole table. Only while both sides of
+		// the seam are drawn, tc.Far.OverSeam: the town it flies to stands a world on only as a twin.)
+		const FVector2D Aimed(OverSeam() ? NearX(Flight.Sortie.To.X, Field.X) : Flight.Sortie.To.X, Flight.Sortie.To.Y);
+		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Aimed.X, Aimed.Y, 0.3);
 		const FVector Course = (Aim - Field0).GetSafeNormal2D();
 		const FVector Abeam(-Course.Y, Course.X, 0.0);
 		const double Leg = FVector::Dist2D(Field0, Aim);
@@ -14440,8 +15344,10 @@ void ACampaignMapActor::UpdateSorties()
 			FVector Ground = Aim + FVector(0.0, 0.0, 1.0 * U);
 			if (Data.Regions.IsValidIndex(Flight.Sortie.MeetFrom))
 			{
+				// (seam-4: their own field in the turn of the world the target is flown to, or they would climb to the
+				// raid from a whole world away)
 				const FVector2D Theirs = AirfieldSpot(Flight.Sortie.MeetFrom);
-				Ground = SurfacePoint(Theirs.X, Theirs.Y, 0.3) + FVector(0.0, 0.0, 1.0 * U);
+				Ground = SurfacePoint(OverSeam() ? NearX(Theirs.X, Aimed.X) : Theirs.X, Theirs.Y, 0.3) + FVector(0.0, 0.0, 1.0 * U);
 			}
 			const double Round = FMath::Clamp((Share - Meets) / (Parts - Meets), 0.0, 1.0) * PI * 3.0;
 			const FVector Among = Flight.At + (Course * FMath::Cos(Round) + Abeam * FMath::Sin(Round)) * (6.5 * U) + FVector(0.0, 0.0, 2.2 * U * FMath::Sin(Round * 2.0));
@@ -14473,13 +15379,13 @@ void ACampaignMapActor::UpdateSorties()
 			Flight.RivalAt = Now3;
 		}
 		// The course of the raid, pencilled on the table from the airfield to the target while it is flown.
-		const double Length = FVector2D::Distance(Field, Flight.Sortie.To);
+		const double Length = FVector2D::Distance(Field, Aimed);
 		const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 7.0), 2, 200);
 		for (int32 Dash = 0; Dash < Dashes; ++Dash)
 		{
 			TArray<FVector2D> Stroke;
-			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.15) / Dashes));
-			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.75) / Dashes));
+			Stroke.Add(FMath::Lerp(Field, Aimed, (Dash + 0.15) / Dashes));
+			Stroke.Add(FMath::Lerp(Field, Aimed, (Dash + 0.75) / Dashes));
 			// (The art director's round 37: close up the dashes were cream slabs 30 px wide through the middle of the
 			// bombers, and by night the brightest thing after the beams. Thinned below playing height, let down by night.)
 			const double Thin = FMath::Lerp(0.3, 1.0, FMath::SmoothStep(2600.0, 4600.0, static_cast<double>(SortieSeenFrom)));
@@ -14612,7 +15518,9 @@ void ACampaignMapActor::UpdateSearchlights(float CameraDistance)
 		// (on when the bombers are about four wingspans short, before the guns; they search two seconds after the
 		// bombers turn for home, and then go out one by one)
 		const double On = 0.2 * FlightLasts, Home = 0.56 * FlightLasts + 2.0;
-		const FVector2D Middle = Data.Regions[Region].Center;
+		// (seam-4: the lamps stand round the place in the turn of the world the raid is flown in, which is the eye's side
+		// of the seam: UpdateSorties. Else they would search a sky a whole world from the bombers.)
+		const FVector2D Middle(OverSeam() ? NearX(Data.Regions[Region].Center.X, WorldToMap(Flight.At).X) : Data.Regions[Region].Center.X, Data.Regions[Region].Center.Y);
 		const double Round = 4.6 * TownSpread(Region); // (open ground at the edge of the place, in the map's units)
 		const double High = FMath::Max(11.5 * U + Flight.At.Z * 0.0, 2.0 * U); // (the bombers' height over the place, as they fly over it)
 		// The bombers themselves, as they are now: the leader and the two behind it.
@@ -14811,6 +15719,66 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	if (!SmokeMesh || !World || !HighlightMaterial)
 	{
 		return;
+	}
+	// (Release 2, the far side: seam-4.) Smoke and fire are drawn afresh each frame from lists of places kept in the
+	// world's own measure, each laid where its builder stood it on the chart. A chimney, a burning depot or a bombed
+	// town a little way over the chart's seam is then a whole world from the eye, and none of its smoke was seen from
+	// this side. Every such place is brought, here, into the turn of the world nearest what the eye looks at, as a
+	// piece is (LookFrom): what smokes there has its twin on this side, or is a piece itself. With tc.Far.OverSeam
+	// off they are brought back to the chart's own turn, which is where they were built; on a table with edges
+	// nothing is done. (Nobody else reads these lists: their builders fill them and this draws them.)
+	if (Data.bFar && Data.Charted.bIsValid && Data.WorldWidth > 0.0)
+	{
+		const double SeamWorld = Data.WorldWidth * UnitScale;
+		const double SeamBeside = OverSeam() ? CameraFocus.Y : MapToWorld((Data.Charted.Min.X + Data.Charted.Max.X) * 0.5, 0.0).Y;
+		auto Brought = [SeamWorld, SeamBeside](FVector& Place)
+		{
+			Place.Y += FMath::RoundToDouble((SeamBeside - Place.Y) / SeamWorld) * SeamWorld;
+		};
+		for (FVector& Place : TownChimneys) { Brought(Place); }
+		for (FVector& Place : WorksChimneys) { Brought(Place); }
+		for (FVector& Place : Smoulders) { Brought(Place); }
+		for (FVector& Place : SiegeFires) { Brought(Place); }
+		for (FVector& Place : PrizeFires) { Brought(Place); }
+		for (FVector& Place : FrontGlow) { Brought(Place); }
+		for (FFrontFire& Fire : FrontFires) { Brought(Fire.At); }
+		for (FBattleSmoke& Battle : Battles) { Brought(Battle.Where); }
+		for (FBombSmoke& Smoke : BombSmokes) { Brought(Smoke.Root); }
+		// (THE FLAK BURSTS ARE NOT BROUGHT TO THE EYE. The art director ruled at 05:10Z that they must come round with
+		// the rest, so that when the eye wraps at the chart's edge (the controller's SetWrap) or the photographer jumps,
+		// the bursts in the air come round with their raid instead of hanging a world behind for the rest of their life.
+		// She is right about what has to happen; the eye is the wrong thing to measure it from. A raid is NOT drawn in
+		// the eye's turn: UpdateSorties counts the airfield beside the eye and then the target beside the AIRFIELD, so a
+		// raid from a near field to a far target is drawn up to a world from the eye, and the guns' own fire follows the
+		// raid there (RaidTurn and ToRaid below), as do the searchlights. A pass rounding bursts to the eye therefore
+		// moves them off their raid and onto the twin of the bombed town, which stands within sight of the seam with no
+		// bombers over it and no gun flashes under it: smoke in an empty sky, measured by a third read (eye at map x
+		// 4900, field 300, target -3000: the raid is drawn at -3000 and its bursts land at 6256, about 1,356 units from
+		// the eye and well inside the 1,700 a burst is drawn within).
+		// So each burst is brought round to the turn of ITS OWN RAID, named by the province bombed and the province
+		// flown from. That gives her what she asked for -- the eye wraps, the raid comes round a world, the bursts come
+		// with it in the same frame -- and it cannot part a burst from the fire that made it. A burst whose raid has
+		// gone home is left where it hangs and fades there, which is the only honest place for it.)
+		for (FFlakBurst& Burst : FlakBursts)
+		{
+			if (Burst.Over == INDEX_NONE)
+			{
+				continue;
+			}
+			const FFlight* Maker = Flights.FindByPredicate([&Burst](const FFlight& Flier)
+			{
+				return Flier.Sortie.Region == Burst.Over && Flier.Sortie.From == Burst.From && !Flier.At.IsZero();
+			});
+			if (Maker)
+			{
+				Burst.At.Y += FMath::RoundToDouble((Maker->At.Y - Burst.At.Y) / SeamWorld) * SeamWorld;
+			}
+		}
+		for (TPair<FVector, double>& Down : SetDowns) { Brought(Down.Key); }
+		for (FVector4& Fire : ColumnFires)
+		{
+			Fire.Y += FMath::RoundToDouble((SeamBeside - Fire.Y) / SeamWorld) * SeamWorld;
+		}
 	}
 	// (A puff is a middle point and two rings of eight: the inner ring lets a puff be thick across its heart and fade
 	// only across its rim. With one ring a puff was thick at its very middle alone, a third as thick as it was meant
@@ -15657,7 +16625,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double Breath = 1.0 + 0.08 * FMath::Sin(Now * 1.53 + Burning.Seed) + 0.045 * FMath::Sin(Now * 2.03 + Burning.Seed * 1.7);
 				const float Glowing = GlowNight * Burning.Risen * static_cast<float>(Breath) * (bHard ? 1.0f : 0.6f);
 				const double Houses = TownRadius(Lit.Key) * UnitScale;
-				const FVector TownAt = SurfacePoint(Province.Center.X, Province.Center.Y, 0.0);
+				// (seam-4: the town in the turn of the world its fire is drawn in, which is the eye's side of the seam)
+				const FVector TownLaid = SurfacePoint(Province.Center.X, Province.Center.Y, 0.0);
+				const FVector TownAt(TownLaid.X, TownLaid.Y + (Data.bFar && Data.WorldWidth > 0.0 ? FMath::RoundToDouble((Burning.FireAt.Y - TownLaid.Y) / (Data.WorldWidth * UnitScale)) * (Data.WorldWidth * UnitScale) : 0.0), TownLaid.Z);
 				// The pool reaches half a town's width beyond the houses; it stays under about a third of its
 				// province's width; and from the top it is never under about forty pixels across.
 				double PoolOut = 2.0 * Houses * (bHard ? 1.0 : 0.67) * FMath::Lerp(1.0, 1.45, GlowHigh);
@@ -15833,7 +16803,29 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	const double Table = UnitScale;
 	// (release 2, the art director's flak brief of 24 November 2026; tc.Look.FlakRing, off as it comes)
 	const bool bFlakRing = FlakRingAsked();
-	TArray<int32, TInlineAllocator<8>> TownsFiring; // (a town's guns are drawn firing once, however many raids are over it)
+	// (a town's guns are drawn firing once, however many raids are over it; with the far side's seam, once in each
+	// turn of the world that has a raid over it: the town's number, and the turn)
+	TArray<FIntPoint, TInlineAllocator<8>> TownsFiring;
+	// (The mend of 25 November 2026. A raid is up to four flights, and each was puffing for itself: three times the
+	// puffs, and pale puffs over a gunned town beside its heavy bursts, since the rules name the guns on the first
+	// flight alone. Light flak is fired by one flight a town at a time, over a province of the map, and never over
+	// a town with guns built or with a flight under its heavy guns.)
+	TArray<int32, TInlineAllocator<8>> TownsPuffing;
+	auto TownGunned = [this](int32 Town) -> bool
+	{
+		if (ShownBuildings.IsValidIndex(Town) && ShownBuildings[Town].Z > 0)
+		{
+			return true;
+		}
+		for (const FFlight& Raiding : Flights)
+		{
+			if (Raiding.Sortie.Region == Town && Raiding.Sortie.Flak > 0)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
 	for (int32 F = 0; F < Flights.Num(); ++F)
 	{
 		FFlight& Flight = Flights[F];
@@ -15880,6 +16872,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Burst.Born = Now - Ago;
 				Burst.Seed = Chance.RandRange(1, 1 << 20);
 				Burst.Wings = Wings;
+				Burst.Over = Flight.Sortie.Region; // (seam-4's mend: whose raid it is, for its turn of the world)
+				Burst.From = Flight.Sortie.From;
 				// (a burst that goes off now, within about a wingspan and a quarter of the leader, jolts the formation:
 				// up to three and a half degrees of roll and one and a half of nod, the nearer the more)
 				const double Near = 1.0 - FMath::Clamp(FVector::Distance(Burst.At, Flight.At) / (1.25 * Wings), 0.0, 1.0);
@@ -15909,9 +16903,18 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// its own time, so that the ring ripples and never fires as one. They are drawn at the barrels' known
 			// mouths: the barrels are in the merged mesh and do not turn. From the top, the flash alone.
 			const TArray<FFlakGun>* TownGuns = bFlakRing ? FlakGuns.Find(Flight.Sortie.Region) : nullptr;
-			if (TownGuns && TownGuns->Num() > 0 && !TownsFiring.Contains(Flight.Sortie.Region))
+			// (The far side, seam-2, where it meets the flak ring.) A raid over the chart's seam is flown to its
+			// target's place a world on (UpdateSorties: the turn nearest its airfield), where the buildings' twin
+			// stands the town's pits. The guns' fire is drawn there with the raid, in the turn of the world nearest
+			// the flight, and not a world away under an empty sky; and two raids on one town flown in two turns each
+			// have the guns under them. With the far side off, or tc.Far.OverSeam off, the span is nothing, the turn
+			// is 0 and the fire is drawn at the pits as it always was.
+			const double SeamSpan = (TownGuns && TownGuns->Num() > 0 && OverSeam()) ? Data.WorldWidth * UnitScale : 0.0;
+			const int32 RaidTurn = SeamSpan > 0.0 ? FMath::RoundToInt32((Flight.At.Y - (*TownGuns)[0].Muzzle.Y) / SeamSpan) : 0;
+			const FIntPoint FiringKey(Flight.Sortie.Region, RaidTurn);
+			if (TownGuns && TownGuns->Num() > 0 && !TownsFiring.Contains(FiringKey))
 			{
-				TownsFiring.Add(Flight.Sortie.Region);
+				TownsFiring.Add(FiringKey);
 				const double GunUnit = UnitScale * 2.1; // (the size the pits are built to)
 				static const bool bMuzzleHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld")); // (for a still: every flash held)
 				const bool bFromTop = CameraDistance > 9000.0f;
@@ -15920,32 +16923,52 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double FlashOut = FMath::Max(0.2 * GunUnit, 0.0015 * CameraDistance);
 				const FLinearColor MuzzleBody(FColor(214, 128, 52)), MuzzleHeart(FColor(238, 176, 96)), GunSmoke(0.46f, 0.46f, 0.47f);
 				const FVector DownTheWind = Wind.GetSafeNormal();
+				const FVector ToRaid(0.0, RaidTurn * SeamSpan, 0.0); // (whole worlds along the chart, to the raid's turn)
+				// (The mend of 25 November 2026. Each gun had a reload of its own, 1.7 to 2.4 seconds: guns on different
+				// clocks drift through one another, and every so often several fired within a frame or two, as one. A
+				// town's guns now load to ONE time, the town's own, and each fires at its turn round the ring and a
+				// little late of it, by up to four tenths of the gap to the next: so the fire runs round the ring and
+				// no two guns ever fire together.)
+				const double Reload = FRandomStream(Flight.Sortie.Region * 613 + 11).FRandRange(1.7f, 2.4f);
+				// (And the smoke at the barrels came and went at a step as the raid crossed into and out of its firing
+				// window. It comes in over the window's first tenth and goes out over its last, with the raid that is
+				// deepest in its window over this town.)
+				float InWindow = 0.0f;
+				for (const FFlight& RaidOver : Flights)
+				{
+					if (RaidOver.Sortie.Region == Flight.Sortie.Region && RaidOver.Sortie.Flak > 0 && !RaidOver.At.IsZero())
+					{
+						InWindow = FMath::Max(InWindow, static_cast<float>(FMath::SmoothStep(0.30, 0.33, RaidOver.Share) * (1.0 - FMath::SmoothStep(0.60, 0.64, RaidOver.Share))));
+					}
+				}
 				for (int32 GunNo = 0; GunNo < TownGuns->Num(); ++GunNo)
 				{
 					const FFlakGun& Barrel = (*TownGuns)[GunNo];
+					const FVector Mouth = Barrel.Muzzle + ToRaid; // (the barrel's mouth, in the raid's turn of the world)
 					FRandomStream Own(Flight.Sortie.Region * 613 + GunNo * 97 + 11);
-					// (a round every two seconds or so, each gun's time its own; its turn in the ring, and a little out of it)
-					const double Reload = Own.FRandRange(1.7f, 2.4f);
-					const double SinceShot = FMath::Fmod(Now + Reload * (static_cast<double>(GunNo) / TownGuns->Num() + Own.FRandRange(0.0f, 0.3f)), Reload);
+					// (a round every two seconds or so: its turn in the ring, and a little late of it)
+					const double SinceShot = FMath::Fmod(Now + Reload * ((GunNo + Own.FRandRange(0.0f, 0.4f)) / TownGuns->Num()), Reload);
 					if (SinceShot < (bMuzzleHeld ? 0.6 : 0.09))
 					{
 						bDrawingLight = true;
-						DrawSmear(Barrel.Muzzle + Barrel.Bore * (0.9 * FlashOut), Barrel.Bore, 1.5 * FlashOut, 0.7 * FlashOut, MuzzleBody, 0.9f * NightDim, 0.6);
-						Draw(Barrel.Muzzle + Barrel.Bore * (0.3 * FlashOut), 0.55 * FlashOut, MuzzleHeart, 0.95f * NightDim);
+						DrawSmear(Mouth + Barrel.Bore * (0.9 * FlashOut), Barrel.Bore, 1.5 * FlashOut, 0.7 * FlashOut, MuzzleBody, 0.9f * NightDim, 0.6);
+						Draw(Mouth + Barrel.Bore * (0.3 * FlashOut), 0.55 * FlashOut, MuzzleHeart, 0.95f * NightDim);
 						bDrawingLight = false;
 					}
 					if (!bFromTop && SinceShot > 0.04 && SinceShot < 1.3)
 					{
 						// (its smoke: thrown up the barrel's line and slowing, then taken by the wind; thin within a second)
 						const double SmokeAged = SinceShot / 1.3;
-						const FVector SmokeAt = Barrel.Muzzle + Barrel.Bore * ((0.25 + 0.7 * FMath::Sqrt(SmokeAged)) * GunUnit) + DownTheWind * (0.3 * SmokeAged * GunUnit);
-						Draw(SmokeAt, FMath::Max((0.16 + 0.34 * SmokeAged) * GunUnit, 0.6 * FlashOut), GunSmoke, static_cast<float>(0.55 * (1.0 - SmokeAged) * FMath::SmoothStep(0.04, 0.12, SinceShot)));
+						const FVector SmokeAt = Mouth + Barrel.Bore * ((0.25 + 0.7 * FMath::Sqrt(SmokeAged)) * GunUnit) + DownTheWind * (0.3 * SmokeAged * GunUnit);
+						Draw(SmokeAt, FMath::Max((0.16 + 0.34 * SmokeAged) * GunUnit, 0.6 * FlashOut), GunSmoke, InWindow * static_cast<float>(0.55 * (1.0 - SmokeAged) * FMath::SmoothStep(0.04, 0.12, SinceShot)));
 					}
 				}
 			}
 		}
-		else if (bFlakRing && Flight.Sortie.bLightFlak && Flight.Sortie.bBombers && Flight.Share > 0.3 && Flight.Share < 0.64)
+		else if (bFlakRing && Flight.Sortie.bLightFlak && Flight.Sortie.bBombers && Flight.Share > 0.3 && Flight.Share < 0.64
+			&& Data.Regions.IsValidIndex(Flight.Sortie.Region) && !TownsPuffing.Contains(Flight.Sortie.Region) && !TownGunned(Flight.Sortie.Region))
 		{
+			TownsPuffing.Add(Flight.Sortie.Region); // (one flight fires a town's light flak at a time: the mend above)
 			// (Release 2, the flak brief, section 2c; the air thread sends "light" on a bomber flight over a target with
 			// no built guns.) LIGHT FLAK. No guns are built here, and the rules still cost the raid bombers there. It is
 			// seen only by its fire: a pale grey puff, half the size of a heavy burst, at two thirds of the bombers'
@@ -15967,6 +16990,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Puffed.Seed = Dice.RandRange(1, 1 << 20);
 				Puffed.Wings = LightWings;
 				Puffed.bLight = true;
+				Puffed.Over = Flight.Sortie.Region; // (seam-4's mend: whose raid it is, for its turn of the world)
+				Puffed.From = Flight.Sortie.From;
 			};
 			if (Flight.NextFlak <= 0.0)
 			{
@@ -16297,6 +17322,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (Release 2, the flak brief, 2c, with the ring on: by night a burst is an orange flash for a fifth of a
 			// second and then a smoke that is barely there.)
 			const bool bNightBurst = bFlakRing && Moonlit > 0.5f;
+			// (The mend of 25 November 2026: the smoke was let down to three tenths at a step as the moonlight passed
+			// the half, and every burst in the air thinned in one frame at dusk and thickened in one at dawn. It
+			// thins between three and seven tenths of the moonlight; the flash keeps its day and night rules. The
+			// burst's shadow on the ground thins with its smoke.)
+			const float NightThin = bFlakRing ? FMath::Lerp(1.0f, 0.3f, FMath::SmoothStep(0.3f, 0.7f, Moonlit)) : 1.0f;
 			if (bTop && ++Shown > 5)
 			{
 				continue; // (from the top: three to five, the newest)
@@ -16371,7 +17401,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				for (int32 Row = 0; Row < 3; ++Row)
 				{
 					const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
-					DrawShape(OnGround, Downwind * Square, Level * (Square * 0.9), FirstShape, Row, FLinearColor(0.0f, 0.0f, 0.0f), 0.3f * Remains * AgeShare[Row], bTurned);
+					DrawShape(OnGround, Downwind * Square, Level * (Square * 0.9), FirstShape, Row, FLinearColor(0.0f, 0.0f, 0.0f), 0.3f * NightThin * Remains * AgeShare[Row], bTurned);
 				}
 			}
 			// (Ruling 107; the art director's brief.) Smoke inside a searchlight's beam is lit by it, about 1.7 times as
@@ -16400,7 +17430,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// ("-TheaterFlakFlashHeld" holds every flash for six tenths of a second, so that a still catches some: a
 			// flash of two frames is in one still in ten. Its smoke is held as thin as it is in those two frames.)
 			static const bool bFlashHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld"));
-			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f) * (bNightBurst ? 0.3f : 1.0f);
+			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f) * NightThin;
 			if (Burst.bLight)
 			{
 				// (The art director's mend of the flak brief's 2c, 25 November 2026: light flak is drawn with the soft puffs
@@ -16409,7 +17439,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				// a half seconds: one soft puff, and a smaller one a little down the wind of it. By night it takes the
 				// hour's light as all smoke does, and is barely there.)
 				const FLinearColor PaleGrey(FColor(200, 198, 190));
-				const float PaleStrong = static_cast<float>(0.6 * (1.0 - FMath::Clamp(Age / 2.5, 0.0, 1.0)) * FMath::SmoothStep(0.0, 0.06, Age)) * (bNightBurst ? 0.3f : 1.0f);
+				const float PaleStrong = static_cast<float>(0.6 * (1.0 - FMath::Clamp(Age / 2.5, 0.0, 1.0)) * FMath::SmoothStep(0.0, 0.06, Age)) * NightThin;
 				const double PaleOut = 0.55 * SmokeLong;
 				Draw(Heartland, PaleOut, PaleGrey, PaleStrong);
 				if (!bTop)
@@ -16595,6 +17625,9 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	LastAskedYaw = CameraYaw;
 	LastAskedFocus = CameraFocus;
 	bViewAsked = true;
+	// (Release 2, the far side: seam-2. What the screen draws at a place on the table is counted in the turn of the world
+	// nearest the eye; on a table with edges, as it is given.)
+	TheaterSpeed::RoundWorld(CameraFocus.Y, OverSeam() ? Data.WorldWidth * UnitScale : 0.0);
 	if (bUpdatesHeld)
 	{
 		return;
@@ -16753,15 +17786,28 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	const bool bWorldComing = UpdateLand(WorldLand, CameraDistance, CameraFocus, false);
 	bLandTilesComing = bHomeComing || bWorldComing;
 	UpdateFineSheets(CameraDistance, CameraFocus);
+	// (Release 2, the far side: seam-2. What is laid once is seen from both sides of the chart's seam: the squares of
+	// woods and towns are shown on the eye's side, and the great models have their twins.)
+	if (Data.bWorld || SeamLaid.Num() > 0)
+	{
+		SquaresRound(CameraFocus);
+		KeepSeamTwins();
+		KeepLightsTwin(CameraFocus); // (seam-4: and the lights of the night)
+	}
 
 	// Pieces cast shadows only near what the eye is looking at, and not at all from far off.
 	{
 		const double ShadowReach = CameraDistance * 1.1 + 500.0;
 		const bool bAny = CameraDistance < 7000.0f;
+		const bool bOverSeam = OverSeam(); // (the far side, seam-2: each piece is shown in the turn of the world nearest the eye)
 		auto Shade = [&](AArmyPiece* Piece)
 		{
 			if (Piece)
 			{
+				if (Data.bFar)
+				{
+					Piece->LookFrom(CameraFocus.Y, bOverSeam);
+				}
 				Piece->SetShadows(bAny && FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach);
 			}
 		};
@@ -16802,10 +17848,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	};
 	bSquaresComing = false;
 	{
+		const double TreesRound = OverSeam() ? Data.WorldWidth * UnitScale : 0.0;
 		TArray<TPair<double, int32>> Owed; // (how far from the eye's point, squared, and which square)
 		for (int32 Index = 0; Index < TreeMeshes.Num(); ++Index)
 		{
-			const double Away = FVector::DistSquared2D(TreeCentres[Index], CameraFocus);
+			// (the far side, seam-2: a square of woods is shown in the turn of the world nearest the eye, and is so far from it)
+			const double AwayEast = TreeCentres[Index].Y - CameraFocus.Y;
+			const double Away = FMath::Square(TreeCentres[Index].X - CameraFocus.X)
+				+ FMath::Square(TreesRound > 0.0 ? AwayEast - FMath::RoundToDouble(AwayEast / TreesRound) * TreesRound : AwayEast);
 			const bool bShow = bNear && Away < Reach * Reach;
 			if (bShow != TreesShown[Index])
 			{
@@ -16945,12 +17995,12 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			for (const FGunLine& Line : GunLines)
 			{
 				const AArmyPiece* Piece = Line.Piece.Get();
-				bMoved |= !Piece || Piece->IsMarching() || FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) > Slack;
+				bMoved |= !Piece || Piece->IsMarching() || FVector::DistSquared2D(Piece->GetReckonedLocation(), Piece->GetRestLocation()) > Slack;
 			}
 			for (const TWeakObjectPtr<AArmyPiece>& Waited : GunsAway)
 			{
 				const AArmyPiece* Piece = Waited.Get();
-				bMoved |= !Piece || (!Piece->IsMarching() && FVector::DistSquared2D(Piece->GetActorLocation(), Piece->GetRestLocation()) <= Slack);
+				bMoved |= !Piece || (!Piece->IsMarching() && FVector::DistSquared2D(Piece->GetReckonedLocation(), Piece->GetRestLocation()) <= Slack);
 			}
 			if (bMoved)
 			{
@@ -17781,10 +18831,19 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 		// (Tuned by measure over Germany from playing height, 17 November 2026. Closed at rest: the ground (108, 106, 79)
 		// stands at (84, 81, 67), 78 parts in 100 as bright, and the sea (59, 154, 169) at (66, 108, 126). In the sky
 		// view the sheet brings the sea to (109, 133, 146). Cloud at rest takes the ground down a twentieth all told.)
-		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.6f, 0.66f, 0.76f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
-		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.871f, 0.896f, 0.93f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
-		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.617f, 0.658f, 0.701f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
-		const FLinearColor RainInk = FMath::Lerp(FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
+		// (The art director's ruling of 25 November 2026 04:54Z, art-director/reviews/map-winter-sky-ruling.md, on a 1.5
+		// still of France in January 1940: by day the lid was a cyan DYE over the land, not a pearl wash. She measured
+		// France inside the zone at red/green 0.67 to 0.76 with blue/green 1.19 to 1.30, against Belgium a step outside
+		// at 1.14 / 0.76, and ruled that washed land must keep its own hue direction and only be pulled toward neutral:
+		// red/green 0.88 to 1.02, blue/green 1.00 to 1.08. The old sheet stood at blue/green 1.15, which over
+		// green-olive land multiplies into water. These are her starting numbers at the same brightness, hers to judge
+		// again on the next pictures. By night the lerp is untouched: a cold blue lid by moonlight is right.)
+		const FLinearColor Sheet = FMath::Lerp(FLinearColor(0.66f, 0.665f, 0.70f), FLinearColor(0.107f, 0.138f, 0.223f), Moon);
+		const FLinearColor Puff = FMath::Lerp(FLinearColor(0.902f, 0.906f, 0.916f), FLinearColor(0.202f, 0.246f, 0.352f), Moon);
+		const FLinearColor Mist = FMath::Lerp(FLinearColor(0.645f, 0.658f, 0.680f), FLinearColor(0.15f, 0.17f, 0.21f), Moon);
+		// (snow lying under the lid is to read L150 to 175 at blue/green 1.02 to 1.05; for rain her word is that the
+		// present ink is near enough, so each weather keeps its own)
+		const FLinearColor RainInk = FMath::Lerp(bSnow ? FLinearColor(0.86f, 0.865f, 0.875f) : FLinearColor(0.776f, 0.823f, 0.888f), FLinearColor(0.24f, 0.26f, 0.31f), Moon);
 		const float Dim = FMath::Lerp(0.57f, 0.71f, Moon);
 		for (UMaterialInstanceDynamic* Each : Wearing)
 		{
@@ -17801,7 +18860,11 @@ void ACampaignMapActor::UpdateSky(float CameraDistance, const FVector& CameraFoc
 			Each->SetScalarParameterValue(TEXT("SkyView"), SkyViewNow);
 			Each->SetScalarParameterValue(TEXT("SkyTravel"), Travel);
 			Each->SetScalarParameterValue(TEXT("SkyDim"), Dim);
-			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.5f : 0.32f);
+			// (Her fault 2, the same ruling: inside a 100 by 100 patch of washed land the spread of brightness is to be
+			// no more than a quarter of the patch's mean, where Touraine stood at 0.45. The falling weather is the loud
+			// part of that spread, so it is laid on at about three fifths of its old weight; its marks are softened and
+			// turned every way in MakeWeather. Hers to measure again.)
+			Each->SetScalarParameterValue(TEXT("SkyRain"), bSnow ? 0.3f : 0.2f);
 			// (the mist's bands are for where he plays: from high up they are gone before they can read as ruled lines)
 			Each->SetScalarParameterValue(TEXT("SkyMists"), 0.02f * (1.0f - FMath::SmoothStep(5000.0f, 9000.0f, CameraDistance)));
 			Each->SetVectorParameterValue(TEXT("RainFall"), RainFall);

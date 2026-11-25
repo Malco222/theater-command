@@ -724,6 +724,24 @@ namespace
 			P.Disc(White, 1.289, 0.539, 0.042);
 		});
 
+		// Tibet (release 2, the far side; it had no flag on the table and flew plain brown). A ruled exception, as Saudi
+		// Arabia's is: the snow mountain and the sun of the army's flag alone, on plain blue inside its yellow border
+		// (three sides, the fly left open). The rays, the lions and the jewels are not drawn: the table flies no rayed
+		// sun and no emblem of a faith.
+		Map.Add(TEXT("TIB"), [](FFlagPainter& P)
+		{
+			const FLinearColor Yellow = Hex(TEXT("F2C230")), Snow = Hex(TEXT("F4F4F0")), Shade = Hex(TEXT("C3CEE2"));
+			P.Field(Hex(TEXT("1D3B7A")));
+			P.Disc(Yellow, 0.78, 0.27, 0.115);
+			P.Polygon(Snow, { { 0.30, 0.94 }, { 0.56, 0.60 }, { 0.645, 0.69 }, { 0.78, 0.44 }, { 0.915, 0.67 }, { 1.00, 0.585 }, { 1.26, 0.94 } });
+			P.Polygon(Shade, { { 0.78, 0.44 }, { 0.915, 0.67 }, { 0.89, 0.94 }, { 0.80, 0.94 }, { 0.835, 0.70 } });
+			P.Polygon(Shade, { { 0.56, 0.60 }, { 0.645, 0.69 }, { 0.62, 0.94 }, { 0.575, 0.94 }, { 0.59, 0.76 } });
+			P.Polygon(Shade, { { 1.00, 0.585 }, { 1.26, 0.94 }, { 1.13, 0.94 }, { 1.045, 0.76 } });
+			P.Rect(Yellow, 0.0, 0.0, 1.5, 0.06);
+			P.Rect(Yellow, 0.0, 0.94, 1.5, 1.0);
+			P.Rect(Yellow, 0.0, 0.0, 0.06, 1.0);
+		});
+
 		// ---------------------------------------------------------------- the Americas
 		// Brazil, the flag of 1889 to 1960: twenty-one stars, one of them above the band. (Today's design has five.)
 		Map.Add(TEXT("BRA"), [](FFlagPainter& P)

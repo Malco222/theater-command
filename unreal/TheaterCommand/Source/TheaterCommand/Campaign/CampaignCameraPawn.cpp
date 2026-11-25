@@ -197,12 +197,13 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 		const double North = (bBoxed ? BoundsMax.X : HalfExtent.X) - (HoldNorth > 0.0f ? Reach(1.0 - 2.0 * HoldNorth * Less, true) : 0.0);
 		TargetFocus.X = South < North ? FMath::Clamp(TargetFocus.X, South, North) : (South + North) * 0.5;
 	}
+	bool bCameRoundNow = false;
 	if (bWraps)
 	{
 		// Past one end of the world the eye comes in again at the other, with everything it was doing.
 		const double Span = WrapEast - WrapWest;
-		while (TargetFocus.Y >= WrapEast) { TargetFocus.Y -= Span; Focus.Y -= Span; }
-		while (TargetFocus.Y < WrapWest) { TargetFocus.Y += Span; Focus.Y += Span; }
+		while (TargetFocus.Y >= WrapEast) { TargetFocus.Y -= Span; Focus.Y -= Span; bCameRoundNow = true; }
+		while (TargetFocus.Y < WrapWest) { TargetFocus.Y += Span; Focus.Y += Span; bCameRoundNow = true; }
 	}
 	else
 	{
@@ -214,6 +215,10 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 	Yaw = FMath::FInterpTo(Yaw, TargetYaw, DeltaSeconds, 9.0f);
 	Tilt = FMath::FInterpTo(Tilt, TargetTilt, DeltaSeconds, 9.0f);
 	ApplyView();
+	if (bCameRoundNow && CameRound)
+	{
+		CameRound(); // (the far side: what the table shows on the eye's side of the seam comes round with it, this frame)
+	}
 }
 
 void ACampaignCameraPawn::ApplyView()

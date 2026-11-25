@@ -1224,13 +1224,46 @@ FVector AArmyPiece::HomeLocation() const
 	return RestLocation + FVector(0.0, 0.0, bSelected ? LiftHeight * 0.3 : 0.0);
 }
 
+FVector AArmyPiece::Shown(const FVector& Place) const
+{
+	return bRoundToEye && RoundSpan > 0.0 ? FVector(Place.X, Place.Y + FMath::RoundToDouble((RoundEye - Place.Y) / RoundSpan) * RoundSpan, Place.Z) : Place;
+}
+
+FVector AArmyPiece::GetReckonedLocation() const
+{
+	const FVector At = GetActorLocation();
+	return bRoundToEye && RoundSpan > 0.0 ? FVector(At.X, At.Y + FMath::RoundToDouble((RestLocation.Y - At.Y) / RoundSpan) * RoundSpan, At.Z) : At;
+}
+
+void AArmyPiece::LookFrom(double EyeAlong, bool bOn)
+{
+	const bool bWas = bRoundToEye;
+	RoundEye = EyeAlong;
+	bRoundToEye = bOn && RoundSpan > 0.0;
+	if (bRoundToEye)
+	{
+		// (A piece now more than half a world from the eye comes round to the eye's side. It is never in sight as it
+		// does: the high view reaches about a seventh of the way round.)
+		const FVector At = GetActorLocation();
+		const double Round = FMath::RoundToDouble((RoundEye - At.Y) / RoundSpan) * RoundSpan;
+		if (Round != 0.0)
+		{
+			SetActorLocation(FVector(At.X, At.Y + Round, At.Z));
+		}
+	}
+	else if (bWas && !bMarching)
+	{
+		SetActorLocation(HomeLocation()); // (put off: back to where it is laid)
+	}
+}
+
 void AArmyPiece::SetSelected(bool bInSelected)
 {
 	bSelected = bInSelected;
 	ShowRing();
 	if (!bMarching)
 	{
-		SetActorLocation(HomeLocation());
+		SetActorLocation(Shown(HomeLocation()));
 	}
 }
 
@@ -1245,7 +1278,7 @@ void AArmyPiece::SetRestLocation(const FVector& Location)
 	RestLocation = Location;
 	if (!bMarching)
 	{
-		SetActorLocation(HomeLocation());
+		SetActorLocation(Shown(HomeLocation()));
 	}
 }
 
@@ -1291,9 +1324,11 @@ void AArmyPiece::Carry(const FVector& GroundPoint)
 
 void AArmyPiece::ReturnToRest()
 {
-	if (!bMarching && !GetActorLocation().Equals(HomeLocation(), 1.0))
+	// (the far side: from where it is in its own reckoning, which is where it is shown on any table with edges)
+	const FVector From = GetReckonedLocation();
+	if (!bMarching && !From.Equals(HomeLocation(), 1.0))
 	{
-		MarchAlong({ GetActorLocation(), RestLocation }, false, false);
+		MarchAlong({ From, RestLocation }, false, false);
 	}
 }
 
@@ -1308,6 +1343,15 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	if (RoundSpan > 0.0)
+	{
+		// (Release 2, the far side.) The short way round: each point is counted in the turn of the world nearest the
+		// one before it, so the way may run on past the seam. Tick brings the piece itself round as it crosses.
+		for (int32 i = 1; i < Route.Num(); ++i)
+		{
+			Route[i].Y += FMath::RoundToDouble((Route[i - 1].Y - Route[i].Y) / RoundSpan) * RoundSpan;
+		}
+	}
 	bSailing = false; // (SailAlong sets it again after)
 	RouteMarks.Reset(Route.Num());
 	double Length = 0.0;
@@ -1329,7 +1373,7 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		Body->SetMeshSectionVisible(1, false);
 		Body->SetMeshSectionVisible(2, true);
 	}
-	SetActorLocation(Route[0]);
+	SetActorLocation(Shown(Route[0]));
 	SetActorTickEnabled(true);
 }
 
@@ -1384,7 +1428,16 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	}
 	// A piece that is still in the hand when it arrives comes to rest a little off the table.
 	Position += (HomeLocation() - RestLocation) * Eased;
-	SetActorLocation(Position);
+	if (RoundSpan > 0.0 && !bRoundToEye && (bSailing || bLiftOnMarch))
+	{
+		// (Release 2, the far side.) Kept in its own turn of the world: over the seam, it comes round, and is seen to
+		// leave on the one side and to come in on the other. (Not a piece gliding back from the hand, which may have
+		// been carried a little over the seam: it glides straight back as it was seen to go.)
+		Position.Y -= FMath::FloorToDouble((Position.Y - RoundWest) / RoundSpan) * RoundSpan;
+	}
+	// (Seam-2: or shown in the turn nearest the eye, where the map has said so. Then it does not leave the table at the
+	// seam at all: it sails on across it, and the eye comes round with it.)
+	SetActorLocation(Shown(Position));
 	if (bSailing)
 	{
 		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
@@ -1423,7 +1476,7 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		}
 		else
 		{
-			SetActorLocation(HomeLocation());
+			SetActorLocation(Shown(HomeLocation()));
 		}
 	}
 }

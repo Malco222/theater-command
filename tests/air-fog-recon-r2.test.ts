@@ -1,0 +1,283 @@
+// Fog and reconnaissance on air raids (release 2; Brian, 24 November 2026: "you should be able to bomb a german city but
+// you dont know what your up against without doing recon. If a squadron does a recon mission it should lift the fog of
+// war for that area for 2 turns"; the design director's ruling of 22:10Z). airfog.ts, behind g.flags.rfog, off as shipped.
+import { describe, expect, it } from 'vitest';
+import { AIRWAR, airAI, assessAir, fightersInReach, forecastAir } from '../src/campaign/air';
+import { bandAt, knownDefence, rememberSkies, setRaidFog, skyKnown, staffReads, staffWeigh, wantsLook, weighKnown } from '../src/campaign/airfog';
+import { airPage } from '../src/campaign/airpages';
+import { createGame, setWar } from '../src/campaign/game';
+import { SIGHT, sightOf } from '../src/campaign/intel';
+import { loadGame, saveGame } from '../src/campaign/save';
+import { characterOf, startOpen } from '../src/campaign/staff';
+import { beginHuman, humanUp, orderRaid, orderScout, previewDayNight, previewRaid, raidTargetsFor, stepAI } from '../src/campaign/turn';
+import type { AirFleet, Game } from '../src/campaign/types';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
+
+type Call = (...a: unknown[]) => unknown;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+const F = AIRWAR.fog;
+
+/** The player's Britain at war with Germany in September 1939, at the opening of his month. */
+function britain(on: boolean): Game {
+  const g = startOpen(createGame(7, 'UK'));
+  setWar(g, 'UK', 'GER');
+  if (on) setRaidFog(g, true);
+  for (let k = 0; !humanUp(g) && k < 200; k++) stepAI(g);
+  beginHuman(g);
+  return g;
+}
+const id = (g: Game, n: string): number => g.byName[n].id;
+const grp = (g: Game, name: string): AirFleet => g.airFleets.find((f) => f.nat === 'UK' && f.name === name)!;
+const going = (g: Game, ids: number[]): AirFleet[] => g.airFleets.filter((f) => ids.includes(f.id));
+const truth = (g: Game, ids: number[], t: number) => forecastAir(g, assessAir(g, going(g, ids), 'bomb', t), 'bomb', t);
+
+describe('fog on raids: the switch off', () => {
+  it('the card, the target list and the day and night forecast are the old ones, and nothing new is written', () => {
+    const g = britain(false);
+    const ruhr = id(g, 'Ruhr');
+    const p = previewRaid(g, 'bomb', ruhr);
+    expect(p.why).toBeNull();
+    expect('fog' in p).toBe(false);
+    expect(p.bomberLoss).toBe(truth(g, p.picked, ruhr).bomberLoss);
+    const dn = previewDayNight(g, 'bomb', ruhr)!;
+    expect('fog' in dn || 'gunsKnown' in dn || 'band' in dn.day || 'band' in dn.night).toBe(false);
+    for (const t of raidTargetsFor(g, 'bomb')) expect(t.what).not.toMatch(/not known|when seen/);
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, ruhr).ok).toBe(true);
+    airAI(g, 'GER');
+    expect(g.intel.scoutBy).toBeUndefined();
+    expect(g.intel.airSeen).toBeUndefined();
+    expect(g.flags.rfog).toBeUndefined();
+    // The bridge's raid card carries none of it.
+    TC().load(saveGame(g));
+    const q = previewRaid(g, 'bomb', id(g, 'Rhineland'));
+    const card = (TC().page(`plan:bomb:${id(g, 'Rhineland')}:${q.picked.join('.')}`) as { card: Record<string, unknown> & { ways: Record<string, unknown> } }).card;
+    expect('fog' in card).toBe(false);
+    expect('fog' in card.ways).toBe(false);
+    expect(card.ways.gunsFigure).not.toBe('Unknown');
+  });
+});
+
+describe('fog on raids: the switch on', () => {
+  it('a city never seen: fighters and guns unknown, and the forecast a band from the known defence to every fighter last seen near it rising', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    expect(sightOf(g, 'UK')[t]).not.toBe(SIGHT.full);
+    const k = skyKnown(g, 'UK', t);
+    expect(k.ago).toBe(-1);
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.why).toBeNull();
+    expect(p.fog!.fighters).toBe('Fighters: unknown');
+    expect(p.fog!.guns).toBe('Guns: unknown');
+    expect(p.fog!.band).toMatch(/^Losses forecast: \d+ to \d+% \(not scouted\)$/);
+    // The low end: only the fighters known for sure (their fields in sight now), and no guns but the light flak.
+    const lo = knownDefence(g, 'UK', t, 'low');
+    expect(lo.extra).toBe(0);
+    expect(lo.aa).toBe(0);
+    const aLo = assessAir(g, going(g, p.picked), 'bomb', t, lo);
+    expect(p.fog!.loss[0]).toBe(forecastAir(g, aLo, 'bomb', t).bomberLoss);
+    // The high end: the heaviest guns, and the most fighters last seen in reach of a place near it, all rising.
+    const hi = knownDefence(g, 'UK', t, 'high');
+    expect(hi.aa).toBe(F.gunsUnknown);
+    expect(k.near).toBeGreaterThan(0);
+    const sure = fightersInReach(g, t, 'UK').filter(hi.sure).reduce((s, f) => s + f.ftr, 0);
+    expect(hi.extra + sure).toBe(Math.max(k.near, sure));
+    expect(p.fog!.loss[1]).toBe(forecastAir(g, assessAir(g, going(g, p.picked), 'bomb', t, hi), 'bomb', t).bomberLoss);
+    expect(p.fog!.loss[1]).toBeGreaterThan(p.fog!.loss[0]);
+    // The card's figures are the high end's: the defence the side must allow for.
+    expect(p.bomberLoss).toBe(p.fog!.loss[1]);
+    // The list of targets and the pages say the same.
+    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/guns not known, fighters not known/);
+    const page = JSON.stringify(airPage(g, `plan:bomb:${t}:${p.picked.join('.')}`));
+    expect(page).toContain('Fighters: unknown');
+    expect(page).toContain('(not scouted)');
+    // And the 3D card, through the bridge, in the fields it already draws.
+    TC().load(saveGame(g));
+    const card = (TC().page(`plan:bomb:${t}:${p.picked.join('.')}`) as { card: { what: string; ticket: string; fog: { fighters: string }; ways: { foes: string; gunsFigure: string; day: { lost: string } } } }).card;
+    expect(card.what).toMatch(/guns not known/);
+    expect(card.ways.foes).toBe('Unknown');
+    expect(card.ways.gunsFigure).toBe('Unknown');
+    expect(card.ways.day.lost).toMatch(/^\d+ to \d+% · about /);
+    expect(card.ticket).toContain('Losses forecast:');
+    expect(card.fog.fighters).toBe('Fighters: unknown');
+  });
+
+  it('a place seen before and out of sight now: the high end counts every fighter last seen in reach of it, all rising', () => {
+    const g = britain(true);
+    const t = id(g, 'Ruhr');
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, t).ok).toBe(true);
+    const seen = skyKnown(g, 'UK', t);
+    g.turn += 2;
+    const k = skyKnown(g, 'UK', t);
+    expect(k.live).toBe(false);
+    expect(k.fighters).toBe(seen.fighters);
+    expect(k.fighters).toBeGreaterThan(0);
+    const hi = knownDefence(g, 'UK', t, 'high');
+    const sure = fightersInReach(g, t, 'UK').filter(hi.sure).reduce((s, f) => s + f.ftr, 0);
+    expect(hi.extra).toBe(Math.max(0, k.fighters - sure));
+    expect(hi.aa).toBe(k.guns);
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.fighters).toBe(`Fighters: about ${k.fighters.toLocaleString('en-US')} in reach, seen 2 months ago`);
+    expect(p.fog!.loss[1]).toBe(forecastAir(g, assessAir(g, going(g, p.picked), 'bomb', t, hi), 'bomb', t).bomberLoss);
+    expect(p.fog!.loss[1]).toBeGreaterThan(p.fog!.loss[0]);
+  });
+
+  it('a reconnaissance gives one figure, the truth, for the month flown and the next, and a band again in the third', () => {
+    const g = britain(true);
+    const t = id(g, 'Ruhr');
+    expect(previewRaid(g, 'bomb', t).fog!.live).toBe(false);
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, t).ok).toBe(true);
+    const month = g.turn;
+    for (const turn of [month, month + 1]) {
+      g.turn = turn;
+      const S = sightOf(g, 'UK');
+      expect(S[t]).toBe(SIGHT.full);
+      // The ground beside it is seen too.
+      for (const j of g.regions[t].nb) expect(S[j]).toBe(SIGHT.full);
+      const p = previewRaid(g, 'bomb', t);
+      expect(p.fog!.live && p.fog!.scouted).toBe(true);
+      expect(p.fog!.band).toMatch(/^Losses forecast: \d+% \(scouted\)$/);
+      expect(p.fog!.fighters).toMatch(/, scouted$/);
+      expect(p.bomberLoss).toBe(truth(g, p.picked, t).bomberLoss);
+      expect(p.fog!.loss[0]).toBe(p.fog!.loss[1]);
+    }
+    g.turn = month + 2;
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.live).toBe(false);
+    expect(p.fog!.band).toMatch(/^Losses forecast: \d+ to \d+% \(not scouted\)$/);
+  });
+
+  it('the memory ages: seen so many months ago, then forgotten', () => {
+    const g = britain(true);
+    const t = id(g, 'Ruhr');
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, t).ok).toBe(true);
+    const month = g.turn;
+    g.turn = month + 3;
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.ago).toBe(3);
+    expect(p.fog!.fighters).toMatch(/seen 3 months ago$/);
+    expect(p.fog!.guns).toMatch(/^Guns: (none built|light|medium|heavy), seen 3 months ago$/);
+    // A staff counts it stale from 'stale' months.
+    expect(wantsLook(g, 'UK', t)).toBe(3 >= F.stale);
+    g.turn = month + F.forget;
+    rememberSkies(g, 'UK');
+    expect(g.intel.airSeen!.UK[t]).toBeUndefined();
+    expect(previewRaid(g, 'bomb', t).fog!.fighters).toBe('Fighters: unknown');
+  });
+
+  it('a raid can be ordered on a city never seen, and it is fought and booked on what is really there', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    expect(skyKnown(g, 'UK', t).ago).toBe(-1);
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.why).toBeNull();
+    // The same month with the switch off: the raid flown is the same raid, to the aircraft.
+    const twin = structuredClone(g);
+    setRaidFog(twin, false);
+    const a = orderRaid(g, 'bomb', t, p.picked);
+    const b = orderRaid(twin, 'bomb', t, p.picked);
+    expect(a).not.toBeNull();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(JSON.stringify(g.airFleets)).toBe(JSON.stringify(twin.airFleets));
+  });
+
+  it('on the same band a careful staff declines a raid that a bold staff flies', () => {
+    const g = britain(true);
+    const R = AIRWAR.ai.raids;
+    // The staff's own test of a raid (air.ts raidStaff): the bombers' losses within what it bears, and a fair chance.
+    const flies = (fc: ReturnType<typeof forecastAir>): boolean => fc.bomberLoss <= R.loss && fc.success >= R.success;
+    let found = 0;
+    for (const x of raidTargetsFor(g, 'bomb')) {
+      const p = previewRaid(g, 'bomb', x.id);
+      if (p.why || !p.fog || p.fog.live) continue;
+      const w = weighKnown(g, 'UK', going(g, p.picked), 'bomb', x.id);
+      if (!w.lo.fc || !w.hi.fc) continue;
+      const careful = bandAt(w.lo.fc, w.hi.fc, F.reads.cautious), bold = bandAt(w.lo.fc, w.hi.fc, F.reads.bold);
+      if (!(flies(bold) && !flies(careful))) continue;
+      found++;
+      // Each staff reads its own point of the band, by its character, and the British staff is a careful one in this war.
+      expect(characterOf(g, 'UK')).toBe('cautious');
+      expect(staffReads(g, 'UK')).toBe(F.reads.cautious);
+      expect(staffWeigh(g, 'UK', going(g, p.picked), 'bomb', x.id).fc).toEqual(careful);
+    }
+    expect(found).toBeGreaterThan(0);
+    // The careful staff reads the high end, the bold the middle (the ruling).
+    expect(F.reads.cautious).toBe(1);
+    expect(F.reads.bold).toBe(0.5);
+  });
+
+  it('a staff photographs a target it has never seen before it weighs it, on its own table, and every nation alike', () => {
+    const g = startOpen(createGame(7, 'UK'));
+    setWar(g, 'UK', 'GER');
+    setRaidFog(g, true);
+    const before = sightOf(g, 'GER');
+    airAI(g, 'GER');
+    const by = g.intel.scoutBy?.GER ?? {};
+    const scouted = Object.keys(by).map(Number);
+    expect(scouted.length).toBeGreaterThan(0);
+    expect(scouted.length).toBeLessThanOrEqual(F.scouts);
+    const after = sightOf(g, 'GER');
+    for (const t of scouted) {
+      expect(by[t]).toBe(g.turn);
+      expect(before[t]).not.toBe(SIGHT.full);
+      expect(after[t]).toBe(SIGHT.full);
+      // What it saw there is remembered.
+      expect(g.intel.airSeen!.GER[t][0]).toBe(g.turn);
+    }
+    // The player's own photographs are his: the staff's flights are not in them.
+    expect(Object.keys(g.intel.scout ?? {}).filter((t) => scouted.includes(+t))).toEqual([]);
+  });
+
+  it('out of sight the battle ticket says what is reckoned, not what is there: no guns stated as fact, no "no fighters" while unseen fighters are counted', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.guns).toBe('Guns: unknown');
+    expect(p.fog!.squadrons[1]).toBeGreaterThan(0);
+    const line = (label: string) => p.lines.find((l) => l.label === label);
+    // The guns are the high end's reckoning: the ticket may not say they ring the factories.
+    for (const l of p.lines) expect(l.value).not.toMatch(/^Level \d guns ring /);
+    expect(line('Anti-aircraft guns')!.value).toMatch(/may ring/);
+    expect(line('Flak')!.value).toMatch(/may stand/);
+    // The forecast counts the fighters last seen near it: the ticket may not say none are in range.
+    expect(line('In range to intercept')!.value).not.toBe('No enemy fighters');
+    expect(line('Forces')!.value).not.toMatch(/against no fighters$/);
+    expect(line('Forces')!.value).toMatch(/last seen near it/);
+    // With the switch off the ticket is the old one, word for word.
+    const h = britain(false);
+    const q = previewRaid(h, 'bomb', t);
+    expect(q.lines).toEqual(assessAir(h, going(h, q.picked), 'bomb', t).lines);
+    expect(q.lines.some((l) => /may ring|may stand|last seen near it|known for sure/.test(`${l.value} ${l.effect ?? ''}`))).toBe(false);
+  });
+
+  it('out of sight the plan page heads with the chance of success as a band, the same band its note gives', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.fog!.live).toBe(false);
+    const page = airPage(g, `plan:bomb:${t}:${p.picked.join('.')}`)!;
+    const lo = Math.round(p.fog!.success[0] * 100), hi = Math.round(p.fog!.success[1] * 100);
+    expect(lo).not.toBe(hi);
+    expect(page.note).toContain(`Chance of success ${lo} to ${hi}%`);
+    expect(page.headline).toContain(`${lo} to ${hi}%`);
+    // Scouted, it is one figure again, the verdict's.
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, t).ok).toBe(true);
+    const q = previewRaid(g, 'bomb', t);
+    expect(q.fog!.live).toBe(true);
+    expect(airPage(g, `plan:bomb:${t}:${q.picked.join('.')}`)!.headline).toBe(`${q.verdict}: ${Math.round(q.success * 100)}%`);
+  });
+
+  it('a saved war keeps what each side has seen and photographed, and its card reads the same', () => {
+    const g = britain(true);
+    const t = id(g, 'Ruhr');
+    expect(orderScout(g, grp(g, 'No. 1 Group').id, t).ok).toBe(true);
+    g.turn += 2;
+    const p = previewRaid(g, 'bomb', t);
+    const h = loadGame(saveGame(g))!;
+    expect(h.flags.rfog).toBe(1);
+    expect(h.intel.airSeen).toEqual(g.intel.airSeen);
+    expect(h.intel.scoutBy).toEqual(g.intel.scoutBy);
+    expect(previewRaid(h, 'bomb', t).fog).toEqual(p.fog);
+    const j = JSON.parse(JSON.stringify(g)) as Game;
+    expect(previewRaid(j, 'bomb', t).fog).toEqual(p.fog);
+  });
+});

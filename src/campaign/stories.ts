@@ -8,7 +8,7 @@
 // home ties, rivalries and postings home apply to the player's own units alone, and
 // nothing here draws on the dice of the land war. History's wars play out as they did.
 
-import { mapDist } from './wrap';
+import { chartDist } from './wrap';
 import data from '../../data/campaign/stories.json';
 import budget from '../../data/campaign/budget.json';
 import { Rng, hashString } from '../core/rng';
@@ -175,6 +175,11 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'relief': return `Back in supply at ${at} after ${n} months cut off.`;
     case 'honour': { const a = n ? awardOf(g, n) : undefined; return a ? `Honoured: ${awardTitle(g, a)}.` : 'Honoured.'; }
     case 'named': { const nick = (u as { nick?: string | null }).nick; return `Called ${nick ?? 'by a name of its own'} by its own army after ${n ?? NICKNAMES.need} hard fights, the last at ${at}.`; }
+    case 'airnamed': {
+      // (A Soviet group earns the Guards title, a new name and number, not a name its crews call it: its line says so.)
+      const nick = (u as { nick?: string | null }).nick, guards = (u as { guards?: number }).guards !== undefined;
+      return guards && !nick ? `Made a Guards unit after ${n ?? 8} missions, the last ${atIn('over')}.` : `Called ${nick ?? 'by a name of its own'} by its crews after ${n ?? 8} missions, the last ${atIn('over')}.`;
+    }
     case 'bonds': return 'Sent home on a bond tour.';
     case 'school': return 'Sent home to the training schools as instructors.';
     case 'back': return 'Back from home and ready for orders.';
@@ -897,7 +902,7 @@ function homeFor(g: Game, c: Corps): Region | null {
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
     if (!room(r) || r.fac <= 0) continue;
-    const d = mapDist(g, r.x, r.y, here.x, here.y);
+    const d = chartDist(g, r, here);
     if (d < bd) { bd = d; best = r; }
   }
   return best;

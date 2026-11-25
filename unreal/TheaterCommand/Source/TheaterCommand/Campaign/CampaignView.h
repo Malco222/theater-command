@@ -584,6 +584,10 @@ struct FRaidCard
 	float BomberShare = 0.0f;
 	FString Massed, OffPatrol, Ticket; // for the pointer: what meeting up is worth, what it costs at home, the battle ticket
 	FPageButton Fly;
+	// (Release 2, atom.ts; the UI director under ruling 134(f).) A raid that carries the atomic bomb: BACK, the safe
+	// answer, is the lit button and takes Enter and Esc; the raid takes a click only.
+	bool bBomb = false;
+	FPageButton Back;
 	// (Ruling 107(d).) A bombing raid by day and by night, side by side: empty for any other kind of raid.
 	TArray<FRaidWay> Ways;
 	FString WaysLabel, WaysFoes, WaysFoesWords;
@@ -1212,6 +1216,7 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	bool bAirNames = false; // (release 2, airnames.ts) new air groups are named with their own air force's numbers and words
 	bool bMarkedOn = false; // (release 2, marked.ts) the armies that took his towns are marked in red
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back
@@ -1221,9 +1226,14 @@ struct FCampaignView
 	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
+	bool bSailors = false; // (release 2, the sea field's sailor rules: battle/sea/ticket.ts) men go into the water when a ship goes down
 	bool bSeaMines = false; // (release 2, mines.ts) fleets can lay minefields at sea
 	bool bHeavySeas = false; // (release 2, heavyseas.ts) gales blow at sea: fleets slowed, convoys late, shadows lost
 	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)
+	bool bSeekOnce = false; // (release 2, navy.ts) a fleet seeks battle at most once a month
+	bool bAtomBomb = false; // (release 2, atom.ts) the atomic project: research rows, plants, a bomb carried by a raid
+	bool bCarrierStrike = false; // (release 2, harbourstrike.ts) a carrier fleet's page offers a strike on an enemy harbour (the switch as set)
+	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.

@@ -5,7 +5,7 @@
 import { minesAt } from './engineers';
 import type { Assessment } from './game';
 import { allied } from './game';
-import { agentAt, corpsKnown, fogOn } from './intel';
+import { agentAt, corpsKnown, fogOn, photographedBy } from './intel';
 import { aloneUnknown, faceLines, type FaceLine } from './support';
 import type { Game, Region } from './types';
 import type { TicketLine } from '../core/ticket';
@@ -26,6 +26,8 @@ export function gunsKnown(g: Game, a: Assessment, viewer: string | null = g.huma
 export function minesKnown(g: Game, r: Region, viewer: string | null = g.human): boolean {
   if (!fogOn(g, viewer) || viewer === null || allied(g, viewer, r.ctrl)) return true;
   if (agentAt(g, r.id, viewer) || (viewer === g.human && g.intel.scout?.[r.id] === g.turn)) return true;
+  // (Fog on raids, airfog.ts: a photograph shows the ground the month it is flown and the next.)
+  if (g.flags.rfog === 1 && photographedBy(g, viewer).includes(r.id)) return true;
   return r.units.some((c) => !allied(g, viewer, c.nat) && corpsKnown(g, c, viewer).level !== 'none');
 }
 

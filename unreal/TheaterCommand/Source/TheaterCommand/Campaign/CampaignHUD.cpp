@@ -15189,13 +15189,26 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(TEXT("FLY IT YOURSELF"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
 					]
 				]
+				// (Release 2, atom.ts; the UI director under ruling 134(f).) A raid that carries the atomic bomb: BACK is the lit
+				// button, the safe answer that Enter and Esc give; the raid is unlit and takes a click only.
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, Card.bBomb ? 12.0f : 0.0f, 0.0f)
+				[
+					Card.bBomb
+					? StaticCastSharedRef<SWidget>(SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(38.0f, 11.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(Card.Back.Tip))
+						.OnClicked_Lambda(Go(Card.Back.Act))
+						[
+							SNew(STextBlock).Text(FText::FromString(Card.Back.Label.IsEmpty() ? FString(TEXT("BACK")) : Card.Back.Label)).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Ink)
+						])
+					: SNullWidget::NullWidget
+				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					Aimed(TEXT("fly"), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(38.0f, 11.0f)).IsFocusable(false).IsEnabled(Card.Fly.bOk)
+					Aimed(TEXT("fly"), SNew(SButton).ButtonStyle(Card.bBomb ? &PlainButton : &BrassStyle).ContentPadding(FMargin(Card.bBomb ? 20.0f : 38.0f, Card.bBomb ? 10.0f : 11.0f)).IsFocusable(false).IsEnabled(Card.Fly.bOk)
 					.ToolTipText(FText::FromString(Card.Fly.Tip))
 					.OnClicked_Lambda(Go(Card.Fly.Act))
 					[
-						SNew(STextBlock).Text(FText::FromString(Card.Fly.Label.IsEmpty() ? FString(TEXT("FLY THE RAID")) : Card.Fly.Label)).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Card.Fly.bOk ? Ink : Faint)
+						SNew(STextBlock).Text(FText::FromString(Card.Fly.Label.IsEmpty() ? FString(TEXT("FLY THE RAID")) : Card.Fly.Label)).Font(Font(TEXT("Bold"), Card.bBomb ? 11 : 12, Card.bBomb ? 200 : 240)).ColorAndOpacity(!Card.Fly.bOk ? Faint : Card.bBomb ? Cream : Ink)
 					])
 				]
 			];

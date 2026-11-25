@@ -5,14 +5,15 @@ import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type CrewOrder, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
-import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
+import { raidFogOn, rememberSkies } from './airfog';
+import { fleetKnown, fleetsSeen, flyAboard, flyAshore, plannedStrike, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import { attackTargets, fleetAttackOn, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan, type FleetAttackResult } from './fleetattack';
 import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, inPassage, laneNear, passageWhy, turnBack, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -22,6 +23,8 @@ import {
   worksMonth,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
+import { atItsPost } from './pacific';
+import { stationBars, whyStationBars } from './far';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, smallAirMonth, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
@@ -42,8 +45,8 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
+import { RELATIONS, closeDiplomacy, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { yieldMonth } from './yield';
-import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour, whyNoSchool } from './stories';
@@ -65,7 +68,7 @@ import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTrade
 import { gateViews, type GateView } from './gates';
 import { SIEGE, apOutOfTown, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { loadGame, saveGame } from './save';
-import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
+import { RIVALS, characterOf, effortsOf, lodgment, ops, plansKnown, quietNews, rearMonth, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
@@ -84,7 +87,10 @@ import { staffRuns, type DeskId } from './depth';
 import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
 import { aiShadows, orderShadow, shadowOn, shadowTargets, shadowsFollow, stopShadow, whyNotShadow } from './shadow';
 import { logVoyages } from './voyage';
+import { ATOM, PACES, aiAtom, armStrike, atomFly, atomOn, atomView, beginPlants, chooseSite, disarmStrike, pausePlants, setAtom, setMaking, setPace, whyNotPlants, whyNotStrike, type AtomView } from './atom';
+import type { AtomPace } from './types';
 import { aiMines, mineSeas, minesMonth, minesStrike, orderMines, seaMinesOn, whyNotMines } from './mines';
+import { orderCarrierStrike, type CarrierStrikeResult } from './harbourstrike';
 import { galeNews } from './heavyseas';
 import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
@@ -92,6 +98,7 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { cancelFerry, ferryMonth, ferryOn, ferryRoutes, orderFerry, type FerryRoute } from './ferry';
 import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
 import { legionsMonth, recallLegion, sendLegion } from './legions';
 
@@ -114,6 +121,8 @@ function closePhase(g: Game, nat: string): void {
     // A fallen country whose capital its friends hold, with no enemy corps in or next to it, returns at the month's
     // end, dated the month that ends (ruling 229, part 2; the grand campaign).
     liberationMonth(g);
+    // History's events that are read as a month closes (the far side: America's entry follows Japan's blow, ruling 197).
+    closeDiplomacy(g);
     // An alliance finishes its war together (ruling 115): Vichy ends with a France that is free again, and a great
     // power's fall this month turns its conquerors on the great powers their allies still fight.
     finishMonthEnd(g);
@@ -158,11 +167,15 @@ export function stepAI(g: Game): string {
   startPhase(g, nat);
   // Its fleets at sea in an enemy's minefield may strike a mine (release 2, mines.ts; nothing with that switch off).
   minesStrike(g, nat);
+  // Its air groups on their way to another field fly the month's hops (release 2, ferry.ts; nothing with that switch off).
+  ferryMonth(g, nat);
   // Every shadow follows its quarry as a country's month opens (release 2, shadow.ts; nothing with that switch off).
   shadowsFollow(g, nat);
   // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
   yieldMonth(g, nat);
   if (g.nations[nat].alive) {
+    // Its atomic project, before its other orders, so that a bomb in hand gets the bomber group it needs (release 2, atom.ts).
+    aiAtom(g, nat);
     runAI(g, nat);
     // The computer's admirals set their shadows, after their other orders (release 2, shadow.ts).
     aiShadows(g, nat);
@@ -179,14 +192,20 @@ export function beginHuman(g: Game): void {
   startPhase(g, current(g));
   // His fleets at sea in an enemy's minefield may strike a mine (release 2, mines.ts; nothing with that switch off).
   minesStrike(g, current(g));
+  // His air groups on their way to another field fly the month's hops (release 2, ferry.ts; nothing with that switch off).
+  ferryMonth(g, current(g));
   // The month's gales over his seas, in a line of news (release 2, heavyseas.ts; nothing with that switch off).
   galeNews(g, current(g));
   // Every shadow follows its quarry, and his report where it is (release 2, shadow.ts; nothing with that switch off).
   shadowsFollow(g, current(g));
+  // (The far side: the rear garrison of a port he took last month comes to a player as to a computer's staff, staff.ts rearMonth.)
+  rearMonth(g, current(g));
   // (The yield form: the player's country is told the month the cause is met, and yields at the next opening.)
   yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
+  // Fog on raids (airfog.ts, its switch on): and what his side sees of the enemy's air defence is noted, as every staff's is.
+  if (raidFogOn(g)) rememberSkies(g, g.human);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
   noteReadings(g);
   quietNews(g);
@@ -368,6 +387,8 @@ export function runTurnAI(g: Game): void {
 export function canOrder(g: Game, c: Corps): boolean {
   // A corps sent home on a bond tour or to the schools takes no orders until it is back; nor does one at the battle schools this month.
   if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined || c.school) return false;
+  // (The far side: Vichy's corps that stayed at their posts in Indochina on the demand take no orders from Japan, pacific.ts atItsPost.)
+  if (atItsPost(c)) return false;
   // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
   return c.nat === g.human || (c.joint === g.human && allied(g, c.nat, g.human));
 }
@@ -474,11 +495,13 @@ export function previewAttack(g: Game, corps: Corps[], target: Region): Assessme
 /**
  * Why troops may not be attacked where they stand, or '' if they may (the grand campaign). Enemy troops on the
  * ground of a country the attacker is neither allied to nor at war with are out of reach: marching in there is an
- * act of war on that country, and it has to be declared first (orderDeclare).
+ * act of war on that country, and it has to be declared first (orderDeclare). So are an enemy's troops stationed by
+ * agreement on the ground of a country the attacker is at peace with (far.ts `stationBars`).
  */
 export function whyNotAttack(g: Game, target: Region, nat: string | null = g.human): string {
   if (g.flags.open !== 1 || nat === null) return '';
-  if (allied(g, nat, target.ctrl) || atWar(g, nat, target.ctrl)) return '';
+  if (allied(g, nat, target.ctrl)) return '';
+  if (atWar(g, nat, target.ctrl)) return whyStationBars(g, nat, target) ?? '';
   const host = g.nations[target.ctrl];
   return host ? `${target.name} belongs to ${theName(host)}, and you are not at war with it. Declare war on ${theName(host)} first, or leave the troops there alone.` : '';
 }
@@ -1470,7 +1493,7 @@ export function orderRail(g: Game, c: Corps, to: number): boolean {
 export function shipTargets(g: Game, c: Corps): Region[] {
   const from = g.regions[c.reg];
   if (g.nations[c.nat].sealift <= 0 || !from.port || c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return [];
-  return g.regions.filter((r) => r.port && r.id !== from.id && whyNotShip(g, c, r) === null);
+  return g.regions.filter((r) => r.port && r.id !== from.id && canShip(g, c, r));
 }
 
 /** Enemy coasts the player's chosen corps could land on from the port they stand in. */
@@ -1546,7 +1569,8 @@ const hisOrder = (f: Fleet, ok: boolean): boolean => {
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
+  // (Release 2, the far chart: a fleet in passage to a new base sent back to harbour turns back, to the one it left.)
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, f && inPassage(f) ? stance === 'port' && turnBack(g, f) : sail(g, f, zone, stance));
   // A task force given a new job keeps that one as its standing order; sent into harbour, it is released (release 2).
   if (ok) retask(g, f!);
   // A new order ends a shadow (release 2, shadow.ts).
@@ -1557,8 +1581,11 @@ export function orderFleet(g: Game, id: number, zone: number, stance: Stance): b
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
+  // (A fleet in passage is turned back, not sent on elsewhere: release 2, the far chart.)
+  const ok = !!f && !heldAfterAttack(g, f) && !inPassage(f) && hisOrder(f, rebase(g, f, g.regions[region]));
   if (ok) stopShadow(f!);
+  // (Moved where the staff's book wanted it, the move that waited for him is made: navy.ts, bookWaits.)
+  if (ok && f!.planBase?.base === g.regions[region].name) delete f!.planBase;
   return ok;
 }
 
@@ -1597,6 +1624,19 @@ export function orderMinesFleet(g: Game, id: number, zone: number): boolean {
   const ok = orderMines(g, id, zone);
   if (ok) { delete f.task; stopShadow(f); }
   return ok;
+}
+
+/**
+ * One of the player's carrier fleets sails to strike an enemy harbour from the air (release 2, harbourstrike.ts): to the
+ * nearest sea from which its aircraft reach it, its wings sent at the harbour to fly with the month's air war. A new
+ * order of his own: the fleet is his from then on, and it ends a shadow and a task force's standing job.
+ */
+export function orderCarrierStrikeFleet(g: Game, id: number, region: number): CarrierStrikeResult | null {
+  const f = myFleet(g, id);
+  if (!f || heldAfterAttack(g, f)) return null;
+  const done = orderCarrierStrike(g, id, region);
+  if (done) { hisOrder(f, true); delete f.task; stopShadow(f); }
+  return done;
 }
 
 /** Ends one of the player's fleets' shadow: it stays where it is, under his orders (release 2, shadow.ts). */
@@ -1705,19 +1745,22 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   const f = myFleet(g, id);
   if (!f) return null;
   const war = g.nations[f.nat].atWar.length > 0;
-  const held = heldAfterAttack(g, f);
+  // (Release 2, the far chart: a fleet in passage to a new base is held to its way. It can only be turned back.)
+  const held = heldAfterAttack(g, f) || inPassage(f);
   const out: FleetOptions = {
     seas: war && !held ? seaOptions(g, f, f.nat) : [],
-    lanes: war && !held ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
+    // (Release 2, the far chart: only the lanes within two months' steaming of it, and its own: laneNear.)
+    lanes: war && !held ? escortLanes(g, f.nat).filter((l) => laneNear(g, f, l)).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
     ports: held ? [] : baseTargets(g, f).map((r) => r.id),
     merge: mergeTargets(g, f).map((x) => x.id),
-    split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
+    split: g.flags.open === 1 && !inPassage(f) && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
   if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
   if (shadowOn(g)) out.shadow = war ? shadowTargets(g, f.id) : [];
   if (seaMinesOn(g)) out.mines = war && !held ? mineSeas(g, f.id) : [];
-  if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  if (inPassage(f)) out.held = `${passageWhy(g, f)} It can be turned back to ${f.passage?.fromPort ?? 'the harbour it left'}.`;
+  else if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
   return out;
 }
 
@@ -1948,8 +1991,35 @@ export function orderGate(g: Game, gate: number, shut: boolean): boolean {
 export function orderAirBase(g: Game, id: number, region: number): boolean {
   const f = myAir(g, id), r = g.regions[region];
   if (!f || !r) return false;
+  // A group on its way by stages (ferry.ts) is sent here instead: its journey is called off first, and stands if the move cannot be made.
+  const was = f.way;
+  if (was) delete f.way;
   // (Across an ocean a land group goes by sea, one a month: ruling 133(b).)
-  return f.ship !== undefined ? flyAshore(g, f, r) : overOcean(g, f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
+  const ok = f.ship !== undefined ? flyAshore(g, f, r) : overOcean(g, f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
+  if (!ok && was) f.way = was;
+  return ok;
+}
+
+/**
+ * Every airfield of his side's one of the player's land groups could be sent to by stages (release 2, ferry.ts), each
+ * with its way there in plain words: the turns, the fields on the way, and the enemy fighters his side knows of within
+ * reach of it; or crated by sea, or why not. Empty with the switch off.
+ */
+export function airFerryRoutes(g: Game, id: number): FerryRoute[] {
+  const f = g.airFleets.find((x) => x.id === id && x.nat === g.human);
+  return f && g.human && ferryOn(g) ? [...ferryRoutes(g, f, g.human).values()] : [];
+}
+
+/** Sends one of the player's land groups to a friendly airfield by stages: it sets off at once. False only where there is no way there (ferry.ts). */
+export function orderFerryTo(g: Game, id: number, region: number): FerryRoute | null {
+  const f = myAir(g, id);
+  return f && ferryOn(g) ? orderFerry(g, f, region) : null;
+}
+
+/** Calls off one of the player's groups' journey: it stays at the field it has reached. */
+export function orderFerryOff(g: Game, id: number): boolean {
+  const f = myAir(g, id);
+  return !!f && ferryOn(g) && cancelFerry(g, f);
 }
 
 /** The fleets one of the player's carrier wings ashore could go back aboard, those it can board now first: each with where it lies, the deck room standing empty, and why not now. */
@@ -2237,6 +2307,55 @@ export function orderBuilding(g: Game, region: number, line: string): Build | nu
   return humanUp(g) ? orderCivic(g, g.human!, region, line) : null;
 }
 
+// ---- The atomic project (release 2; Brian 25 November 2026; atom.ts) ------------------------------------------------
+
+// A staff's armed strike flies at once as an ordinary bombing raid: the staff's proposal of bombers and escort, or else
+// the group it picked (airwar.ts launchRaid, through air.ts fly and the air rules' own losses).
+atomFly.raid = (g, nat, region, groups) => {
+  const plan = planRaid(g, 'bomb', region, undefined, nat);
+  const ids = !plan.why && plan.picked.some((id) => groups.includes(id) || (g.airFleets.find((f) => f.id === id)?.bmr ?? 0) > 0) ? plan.picked : groups;
+  return !!launchRaid(g, 'bomb', region, ids, nat);
+};
+
+/** True in a grand campaign with the atomic project switched on. */
+export const atomBombOn = (g: Game): boolean => atomOn(g);
+
+/** Switches the atomic project on or off for this grand campaign, in any month (OPTIONS). */
+export const setAtomBomb = (g: Game, on: boolean): boolean => setAtom(g, on);
+
+/** The player's atomic project as his page shows it, or null outside the rules. */
+export const atomPage = (g: Game): AtomView | null => (g.human ? atomView(g, g.human) : null);
+
+/** The paces the plants can draw at, with the share of the earnings each takes. */
+export const atomPaces = (): { pace: AtomPace; share: number }[] => PACES.map((pace) => ({ pace, share: ATOM.plants.pace[pace] }));
+
+/** Why the player cannot begin the atomic plants now (at `site`, or his chosen or the staff's), or null. */
+export const whyNotAtomPlants = (g: Game, site?: number): string | null => (g.human ? whyNotPlants(g, g.human, site) : 'There is no player.');
+
+/** Begins the player's atomic plants, at a site and a pace (his chosen, or the staff's, where none is given). */
+export const orderAtomPlants = (g: Game, site?: number, pace?: AtomPace): boolean => g.human !== null && humanUp(g) && beginPlants(g, g.human, site, pace);
+
+/** Chooses the province the player's plants will stand in, before they are begun. */
+export const orderAtomSite = (g: Game, region: number): boolean => g.human !== null && humanUp(g) && chooseSite(g, g.human, region);
+
+/** Sets the pace the player's plants draw at. */
+export const orderAtomPace = (g: Game, pace: AtomPace): boolean => g.human !== null && humanUp(g) && setPace(g, g.human, pace);
+
+/** Stops the player's plants drawing, or lets them draw again. */
+export const orderAtomPause = (g: Game, paused: boolean): boolean => g.human !== null && humanUp(g) && pausePlants(g, g.human, paused);
+
+/** Stops the player's finished plants making more bombs, or lets them. */
+export const orderAtomMaking = (g: Game, on: boolean): boolean => g.human !== null && humanUp(g) && setMaking(g, g.human, on);
+
+/** Why the player cannot arm a strike on this city now, or null. */
+export const whyNotAtomStrike = (g: Game, region: number): string | null => (g.human ? whyNotStrike(g, g.human, region) : 'There is no player.');
+
+/** Arms a strike: the player's next bombing raid on that city this month carries the bomb. */
+export const orderAtomStrike = (g: Game, region: number): boolean => g.human !== null && humanUp(g) && armStrike(g, g.human, region);
+
+/** Takes the player's armed strike back before the raid flies. */
+export const cancelAtomStrike = (g: Game): boolean => g.human !== null && humanUp(g) && disarmStrike(g, g.human);
+
 // ---- Damaged cities (the grand campaign with its switch: citydamage.ts, repairs.ts) ----------------------
 
 /** True when towns take damage and are repaired in this war. */
@@ -2254,6 +2373,10 @@ export function setCityDamage(g: Game, on: boolean): boolean {
 }
 
 // ---- Air campaigns (aircampaigns.ts; the grand campaign's air war, ruling 236.2) ---------------------------------
+
+// Fog and reconnaissance on air raids (airfog.ts; off as shipped, airwar.json fog.on): a war has it with g.flags.rfog,
+// set by setRaidFog right after startOpen. The bridge can ask for both by name.
+export { raidFogShipped, setRaidFog } from './airfog';
 
 /** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
 export function cityDamage(g: Game, region: number): RepairView | null {
@@ -2564,7 +2687,8 @@ export function rivalStaff(g: Game, nat: string): StaffView | null {
   const offensives: StaffView['offensives'] = [];
   if (source) {
     for (const e of n.atWar) {
-      const since = Object.keys(g.flags).filter((k) => k === `st:on:${nat}:${e}` || k.startsWith(`st:on:${nat}:${e}:t`)).reduce((s, k) => Math.max(s, g.flags[k]), 0);
+      // (The far-side fronts' word is kept under a key of its own, staff.ts `farWordKey`: never written with the far side off.)
+      const since = Object.keys(g.flags).filter((k) => k === `st:on:${nat}:${e}` || k === `st:on:${nat}:${e}:far` || k.startsWith(`st:on:${nat}:${e}:t`)).reduce((s, k) => Math.max(s, g.flags[k]), 0);
       // (Only one that is being fought: opened lately, or with a battle of its own in the last three months.)
       if (since && g.nations[e]?.alive && (g.turn - since <= 3 || g.turn - (n.lastFight[e] ?? -99) <= 3)) offensives.push({ enemy: e, since });
     }
@@ -2854,9 +2978,12 @@ export function declarable(g: Game): string[] {
     const N = g.nations[o];
     if (N && N.alive && !sameSide(g, me, o) && !atWar(g, me, o)) out.add(o);
   };
+  // (And the owner of ground an enemy's troops stand on by agreement, which is shut to his army while he is at peace
+  // with that owner: far.ts `stationBars`. The refusal tells him to declare war on the owner, so he must be able to.)
+  const reached = (r: Region): void => { add(r.ctrl); if (stationBars(g, me, r)) add(r.owner); };
   for (const r of g.regions) {
     if (!allied(g, me, r.ctrl)) continue;
-    for (const j of r.nb) add(g.regions[j].ctrl);
+    for (const j of r.nb) reached(g.regions[j]);
   }
   // A nation with troopships can also reach any coast within landing range of its own ports.
   if (g.nations[me].sealift > 0) {
@@ -2864,7 +2991,7 @@ export function declarable(g: Game): string[] {
     const q: number[] = [];
     for (const r of g.regions) if (r.port && r.ctrl === me) for (const z of r.seas) if (depth[z] < 0) { depth[z] = 1; q.push(z); }
     for (let i = 0; i < q.length; i++) {
-      for (const id of g.seas[q[i]].coast) add(g.regions[id].ctrl);
+      for (const id of g.seas[q[i]].coast) reached(g.regions[id]);
       if (depth[q[i]] >= NAVY.landing.range) continue;
       for (const j of g.seas[q[i]].adj) if (depth[j] < 0 && canPass(g, q[i], j, me)) { depth[j] = depth[q[i]] + 1; q.push(j); }
     }
@@ -2943,6 +3070,11 @@ export function orderDeclare(g: Game, on: string): boolean {
   declareWar(g, g.human, on);
   // At war with an Axis power, a country across the ocean stands with the Allies (ruling 32).
   standWithAllies(g, g.human, was);
+  // The plan's strike falls in the month of the declaration (the far side, ruling 200(c)). A computer's staff flies
+  // it as its great choice is taken (ai.ts); a player's staff, where he has handed it the navy, flies it as he
+  // declares, at each harbour of the country declared on that his country's plan names. A harbour out of the
+  // fleet's reach, or with no ship of the enemy's in it, is not struck (carriers.ts, `plannedStrike`).
+  if (staffRuns(g, g.human, 'navy')) for (const op of ops(g.human)) for (const st of op.strikes ?? []) if (g.byName[st.harbour]?.ctrl === on) plannedStrike(g, g.human, st.fleet, st.harbour, st.home);
   ensureSupply(g);
   return true;
 }

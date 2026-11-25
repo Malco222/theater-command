@@ -384,6 +384,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 		{
 			Add(TEXT("nicknames"), TEXT("Earned names"), TEXT("A corps that wins three hard fights (an attack carried at poor odds, a line held against the odds, or a win bought dear) is given a name by its own army, in its country's own way, and the name is lettered over its flag. Every country's corps can earn one. A name changes nothing in the war. It can be switched in any month."),
 				Now.bNickFlags ? TEXT("ON") : TEXT("OFF"), Now.bNickFlags);
+			// (Release 2, airnames.ts; Brian 25 November 2026) Air units named the way their own air force named them.
+			Add(TEXT("airnames"), TEXT("Air units' own names"), TEXT("Each new air group is named the way its own air force numbered and named its units: the numbers it really used, in its own words, and Japan's navy groups by the airfield they form at. Where the name does not say whether a group flies fighters or bombers, its card says so beside it. A name changes nothing in the war, and the groups you have keep theirs. It can be switched in any month."),
+				Now.bAirNames ? TEXT("ON") : TEXT("OFF"), Now.bAirNames);
 			// (Release 2, fleetattack.ts; Brian 23 November 2026 22:23Z) Fleets dropped on an enemy fleet attack it at once.
 			// (Release 2, marked.ts; Brian 24 November 2026 18:01Z) The marked army.
 			Add(TEXT("marked"), TEXT("The marked army"), TEXT("An enemy army that takes one of your towns is marked: it wears a red tag on its flagpole, lettered with the town, and its card says what it took, until you beat it (throw back its attack, or drive it off the field). Beating it, or its end, takes the mark off with a line in the month's news. No more than three are marked at once. A mark changes nothing in the war. It can be switched in any month."),
@@ -411,6 +414,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, voyage.ts; Brian 24 November 2026 19:47Z) Each fleet's log of where it sailed and what it fought.
 			Add(TEXT("voyagelogrule"), TEXT("Voyage log"), TEXT("Each fleet writes one line at every month's end: where it was, what it was doing there, and the fleet actions it fought, with the ships sunk and lost. The log is on the fleet's page, newest first, three years of it. It changes nothing in the war. It can be switched in any month."),
 				Now.bVoyageLog ? TEXT("ON") : TEXT("OFF"), Now.bVoyageLog);
+			// (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Men in the water, and the call that decides who is saved.
+			Add(TEXT("sailorsrule"), TEXT("Sailors"), TEXT("When a ship goes down in a fleet action fought on the sea field, her men go into the water, and after the fight the side left holding the water picks up who it can. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
+				Now.bSailors ? TEXT("ON") : TEXT("OFF"), Now.bSailors);
 			// (Release 2, mines.ts; Brian 24 November 2026 20:38Z) Minefields laid across a narrow sea or off an enemy harbour.
 			Add(TEXT("seaminesrule"), TEXT("Mines at sea"), TEXT("A fleet with destroyers, cruisers or submarines can lay a field of mines from its page with LAY MINES, across a narrow sea or off a harbour an enemy fleet sails from. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month until their destroyers sweep it, and a field wears down over a few months. The computer's admirals lay fields too. It can be switched in any month: off, every field is gone."),
 				Now.bSeaMines ? TEXT("ON") : TEXT("OFF"), Now.bSeaMines);
@@ -422,6 +428,18 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 					? TEXT("A shadow's fuel lasts three months on station. Then it makes for harbour, and a fresh cruiser fleet of yours lying in harbour takes over the shadow without losing contact, like a relay runner handing on the baton. With none in harbour, contact is lost. The computer's admirals work the same way. It can be switched in any month.")
 					: TEXT("A shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. It works only with Shadowing on. It can be switched in any month."),
 				Now.bShadowRelay ? TEXT("ON") : TEXT("OFF"), Now.bShadowRelay);
+			// (Release 2, navy.ts; the design director's ruling of 25 November 2026) A fleet seeks battle once a month.
+			Add(TEXT("seekoncerule"), TEXT("One battle sought a month"), TEXT("A fleet that goes after the enemy, by your order or in the fighting at a month's end, seeks no other battle that month, yours and the computer's alike. Without it an allied fleet at sea could seek battle again in each of its allies' months. A fleet that was attacked can still be attacked again, and fights back. It can be switched in any month."),
+				Now.bSeekOnce ? TEXT("ON") : TEXT("OFF"), Now.bSeekOnce);
+			// (Release 2, atom.ts; Brian 25 November 2026 01:14Z) The atomic project, a moonshot any large industry can attempt.
+			Add(TEXT("atomrule"), TEXT("The atomic project"), TEXT("Three steps of the Industry branch, then atomic plants that take a share of your earnings every month for years: a large industry finishes them in about two years, a small one never. Then a bomb or two, each carried by an ordinary raid of four-engined bombers on an enemy city that is not a capital. The city is left in ruins and the country loses much of its will to fight. Spies, bombing and capture set the plants back. Every country plays by the same rules. Off, the atomic rows leave the research tree and nobody builds the bomb. It can be switched in any month."),
+				Now.bAtomBomb ? TEXT("ON") : TEXT("OFF"), Now.bAtomBomb);
+			// (Release 2, harbourstrike.ts; Brian 24 November 2026 21:45Z, the Pacific resumed) A carrier fleet strikes an enemy harbour in one order.
+			Add(TEXT("carrierstrikerule"), TEXT("Carrier strikes on harbours"), TEXT("A carrier fleet's page lists the enemy harbours where warships lie at anchor that its aircraft can reach, and STRIKE FROM THE AIR sails it to the nearest sea in range and sends its wings in with the month's air war. A harbour too far names a base of yours from which they reach it. A strike flown in the month war is declared goes in without warning. Your own order only: the computer's admirals plan their strikes as before. It can be switched in any month."),
+				Now.bCarrierStrike ? TEXT("ON") : TEXT("OFF"), Now.bCarrierStrike);
+			// (Release 2, carriers.ts; the rider to rulings 189 and 202) A navy's carriers change their mix of aircraft by date.
+			Add(TEXT("wingbydaterule"), TEXT("Carrier wings by date"), TEXT("A navy's carriers change their mix of aircraft on the dates the record gives: Britain's carry more fighters from August 1942, and more aircraft a deck in 1944 and 1945. Aircraft over the new room go to the reserve; new room fills as losses are made good, while the carriers lie in harbour. It applies to every side, the computer's too. It can be switched in any month."),
+				Now.bWingByDate ? TEXT("ON") : TEXT("OFF"), Now.bWingByDate);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
@@ -676,16 +694,16 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
-				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog
-				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Now.bColumnsOn;
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors
+				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				const bool bBreakUpRow = Id == TEXT("breakuprule");
@@ -1573,6 +1591,15 @@ void ACampaignPlayerController::BeginPlay()
 					// the eye stood a whole world west of the town. So the eye comes round at the chart's seam.
 					const double West = Map->MapToWorld(World.Charted.Min.X, 0.0).Y;
 					Eye->SetWrap(West, West + World.WorldWidth * Map->UnitScale);
+					// (Seam-2: and what the table shows on the eye's side of that seam, its pieces and the screen's
+					// names, comes round in the very frame the eye does.)
+					Eye->CameRound = [Table = Map, Eye]()
+					{
+						if (Table.IsValid())
+						{
+							Table->EyeCameRound(Eye->GetFocus());
+						}
+					};
 				}
 				// (and at the chart's north and south edges the table beyond it fills no more than about a fifth of the screen)
 				Eye->SetEdgeHold(0.2f, 0.2f);
@@ -1912,6 +1939,13 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	if (bPageOpen && Id == TEXT("atom"))
+	{
+		// (Release 2, atom.ts; the UI director's marks.) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END
+		// THE MONTH has done its work, and the view is taken again at once so that it goes now, not at the next order.
+		FString SeenNote;
+		Session->Act(TEXT("atom:seen"), SelectedRegion, SeenNote);
+	}
 	if (bPageOpen && Id == TEXT("airfield"))
 	{
 		AdviserSaw(3);
@@ -5902,7 +5936,15 @@ void ACampaignPlayerController::Escape()
 	}
 	else if (bPageOpen)
 	{
-		ClosePage();
+		if (Page.Card.bValid && Page.Card.bBomb)
+		{
+			AtomBackAt = FPlatformTime::Seconds();
+			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
+		}
+		else
+		{
+			ClosePage();
+		}
 	}
 	else if (WarPrompt.bVisible)
 	{
@@ -11091,12 +11133,22 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 			// holder for every province they know: if that is more than the table has, it is said once, as an error,
 			// so that the picture check stops on it. (Fewer is as it should be: a history scenario's rules know
 			// Europe's 375 alone, and the world beyond them is the table's backdrop.)
+			// (Release 2, the far side: the Pacific thread's audit, 25 November 2026.) The other way round is said too,
+			// when the rules know a wider world than Europe's own and the table draws a wider one still: the far side
+			// switched on for the table (stage.json "far") with a rules bundle not built for it draws 2,067 provinces
+			// while the rules play 915, and Asia stands painted with nobody in it. A rules picture of Europe's own
+			// provinces and no more is still as it should be.)
 			static int32 SaidFor = -1;
-			const int32 Known = View.RegionHolder.Num(), Drawn = Map->GetData().Regions.Num();
+			const int32 Known = View.RegionHolder.Num(), Drawn = Map->GetData().Regions.Num(), Own = Map->GetData().FirstBeyond;
 			if (Known > Drawn && SaidFor != Known)
 			{
 				SaidFor = Known;
 				UE_LOG(LogTheater, Error, TEXT("The rules know %d provinces and the table draws %d: an army in a province the table does not have cannot be seen. The map files the table reads are not the ones the rules were built from."), Known, Drawn);
+			}
+			else if (Known < Drawn && Own > 0 && Known > Own && SaidFor != Known)
+			{
+				SaidFor = Known;
+				UE_LOG(LogTheater, Error, TEXT("The rules know %d provinces and the table draws %d: the table has a wider world than the rules play, and the ground beyond theirs is painted with nobody on it. The far side is switched on for the table (stage.json far, or -TheaterFar) and the rules' bundle was not built for it."), Known, Drawn);
 			}
 		}
 		HumanLaid = View.Human;
@@ -12641,6 +12693,20 @@ void ACampaignPlayerController::EndMonth()
 	if (!bScripted && bPageOpen && Page.Month.bValid)
 	{
 		ClosePage();
+		return;
+	}
+	// (Release 2, atom.ts; the UI director under ruling 134(f).) On the raid card of a raid that carries the atomic bomb,
+	// Enter is BACK, the lit answer: the bomb is kept, and the raid takes a click. (END THE MONTH clicked goes on as ever.)
+	if (bEnterByKey && !bScripted && bPageOpen && Page.Card.bValid && Page.Card.bBomb)
+	{
+		AtomBackAt = FPlatformTime::Seconds();
+		PressPage(Page.Card.Back.Act);
+		return;
+	}
+	// (BACK opens THE ATOMIC PROJECT again: a held or doubled Enter takes no key for its first half second, so that it
+	// cannot end the month the bomb was kept in before he has seen the page.)
+	if (bEnterByKey && !bScripted && FPlatformTime::Seconds() - AtomBackAt < 0.5)
+	{
 		return;
 	}
 	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never

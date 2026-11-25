@@ -30,6 +30,7 @@ import { landingForce } from './staff';
 import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
+import { gatherMonth } from './readiness';
 import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
 import { aiRepair } from './repairs';
 import { aiFieldRepair } from './fieldstate';
@@ -466,7 +467,9 @@ function navy(g: Game, nat: string): string | null {
   for (const f of fleetsOf(g, nat)) {
     const w = was.get(f.id);
     if (!w || (w.zone === f.zone && w.stance === f.stance)) continue;
-    if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
+    // (Release 2, the far chart: one set out for a new base beyond a month's steaming.)
+    if (f.stance === 'passage') out.push(`the ${f.name} on its way to ${f.port}`);
+    else if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
     else if (w.stance !== 'port') back.push(`the ${f.name}`);
   }
   if (out.length) did.push(`sent ${some(out)}`);
@@ -516,6 +519,8 @@ function runDesk(g: Game, nat: string, desk: DeskId): void {
 export function staffMonth(g: Game): void {
   const nat = g.human;
   if (!depthRules(g) || nat === null || !g.nations[nat]?.alive) return;
+  // (The far side: where no book dates Japan's strike, his admirals gather the striking fleet by the freeze, as the computer's do. readiness.ts.)
+  gatherMonth(g, nat);
   for (const desk of ORDER) if (staffRuns(g, nat, desk) && !deskRan(g, desk)) runDesk(g, nat, desk);
   crossingReport(g, nat);
 }

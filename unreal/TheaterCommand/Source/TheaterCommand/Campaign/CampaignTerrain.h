@@ -82,6 +82,12 @@ public:
 	TArray<float> ShoreDistance; // map units to the shoreline: positive on land, negative at sea
 	TArray<float> Roughness; // how mountainous: the relief amplitude at each point, in map units
 	TArray<int16> Region; // region id at each grid point, or Sea / UnclaimedLand
+	/**
+	 * (Release 2, the whole world.) The provinces this sheet could not see at their own size and raised a wider mound
+	 * for (BuildOver, step 3): the Pacific's islets and every other small island on the world's coarse sheet. A click
+	 * anywhere on such a mound is a click on its island.
+	 */
+	TSet<int32> Raised;
 	TArray<float> BorderDistance; // grid cells to the nearest border between two nations, capped
 
 	/** Box blur with clamped edges, run Passes times. */

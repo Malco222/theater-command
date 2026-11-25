@@ -12,12 +12,14 @@
 
 import { FIGHTERS, fieldedMark, fighterTypesOn, hasFighterWorks, holdsMark, stealMark, stolenMarks, stolenWords } from './fighters';
 import data from '../../data/campaign/intel.json';
+import warData from '../../data/campaign/airwar.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, DoubleAgent, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
 import { allied, atWar, bloc, declareWar, fieldArmy, headline, placeName, theName, theWords } from './game';
 import { inOrAt } from './towns';
 import { ARSENAL, yardLevel } from './arsenal';
 import { PLANS, PLAN_PLACES, PLAN_WORDS, canNowWords, doesWith, givesPlans, grantPlans, isCapitalHull, planRules, plansFrom, whyNoTechPlans, type PlanItem } from './plans';
+import { atomSabotage, sabotageWeight } from './atom';
 import { CAUSE_WORDS, cutCause, cutOn, cutRail, cutThroughGuns, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
 import { turnToDate } from '../core/ticket';
 import { levelIndex } from './difficulty';
@@ -96,6 +98,9 @@ export function sightOf(g: Game, viewer: string | null = g.human): Uint8Array {
   for (const a of agentsOf(g, me)) if (atWork(g, a) && dist[a.reg] !== 0) { dist[a.reg] = 0; ring.push(a.reg); }
   // Ground the player's aircraft have photographed this month is seen as an agent on watch would see it.
   if (me === g.human) for (const [id, turn] of Object.entries(g.intel.scout ?? {})) if (turn === g.turn && dist[+id] !== 0) { dist[+id] = 0; ring.push(+id); }
+  // Fog on raids (airfog.ts, its switch on): ground a nation's own aircraft photographed, this month or last, is seen
+  // the same way, by the player and by every staff alike.
+  if (g.flags.rfog === 1) for (const id of photographedBy(g, me)) if (dist[id] !== 0) { dist[id] = 0; ring.push(id); }
   for (let d = 1; d <= far && ring.length; d++) {
     const next: number[] = [];
     for (const id of ring) for (const j of g.regions[id].nb) if (dist[j] < 0) { dist[j] = d; next.push(j); }
@@ -246,6 +251,17 @@ export function identify(g: Game, corps: Corps[], by: string | null, how: Source
   }
 }
 
+/**
+ * Fog on raids (airfog.ts; only with its switch on): the provinces a nation's own reconnaissance flights have
+ * photographed and that it still sees by them, the month flown and so many months in all (airwar.json fog.months).
+ */
+export function photographedBy(g: Game, nat: string | null): number[] {
+  const by = nat !== null && g.flags.rfog === 1 ? g.intel?.scoutBy?.[nat] : undefined;
+  if (!by) return [];
+  const months = (warData as unknown as { fog: { months: number } }).fog.months;
+  return Object.entries(by).filter(([, turn]) => g.turn - turn < months).map(([id]) => +id);
+}
+
 /** The provinces round a set of provinces that an agent's eyes or a camera cover: each one's own and those around it. */
 function cover(g: Game, from: number[]): Set<number> {
   const out = new Set<number>(from);
@@ -273,6 +289,8 @@ export function reconnoitre(g: Game): void {
   const me = g.human;
   if (!me || !intelRules(g) || !g.nations[me]?.alive) return;
   const photographed = Object.entries(g.intel.scout ?? {}).filter(([, turn]) => turn === g.turn).map(([id]) => +id);
+  // (Fog on raids: last month's photographs still show the ground, so the armies on it are still named.)
+  if (g.flags.rfog === 1) for (const id of photographedBy(g, me)) if (!photographed.includes(id)) photographed.push(id);
   for (const id of cover(g, photographed)) identify(g, g.regions[id].units, me, 'air');
   for (const id of cover(g, agentsOf(g, me).filter((a) => atWork(g, a)).map((a) => a.reg))) identify(g, g.regions[id].units, me, 'agent');
   const known = g.intel.known;
@@ -950,7 +968,13 @@ function attempt(g: Game, a: Agent): void {
           : `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
   }
   else if (sham && ok) text = `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.`;
-  else if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
+  else if (ok && m === 'factory' && wreckFactory(g, r)) {
+    done = true;
+    text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`;
+    // (The atomic project, release 2: the plants that stand there lose months of their work, atom.ts.)
+    const atom = atomSabotage(g, r);
+    if (atom) text += ` ${atom}`;
+  }
   else if (ok && m === 'rail' && cutRail(g, r.id, 'agent', a.nat)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
   else if (ok && m === 'airfield' && wreckField(g, r.id, (n) => atWar(g, a.nat, n))) {
     done = true;
@@ -1101,10 +1125,11 @@ function foesMonth(g: Game, nat: string): void {
     const mine = (n: string): boolean => n === nat;
     const struck = f.kind === 'rail' ? cutRail(g, r.id, 'saboteurs') : f.kind === 'airfield' ? wreckField(g, r.id, mine) : wreckFactory(g, r);
     if (!struck) continue;
+    const atom = f.kind === 'factory' ? atomSabotage(g, r) : null;
     const text = f.kind === 'rail'
       ? `Saboteurs blow the railway at ${r.name}. Your police blame ${F.adj} agents. No train runs through until engineers relay the track.`
       : f.kind === 'airfield' ? `Grounded this month: saboteurs wrecked the field at ${r.name}. Your police blame ${F.adj} agents.`
-        : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.`;
+        : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.${atom ? ` ${atom}` : ''}`;
     note(g, who, r.id, 'struck', text, false);
     headline(g, 'event', text, nat, r.id);
   }
@@ -1260,7 +1285,7 @@ function plotAim(g: Game, nat: string, foe: string): { reg: number; kind: FoeAge
   for (const r of g.regions) {
     if (r.ctrl !== nat || r.owner !== nat || r.overseas) continue;
     if (rail) { if (onNet(r.id) && !railCut(g, r.id)) pool.push(r); }
-    else if (workingFactories(g, r) > 0 && ruinedAt(g, r) < ruinMost(r)) for (let k = 0; k < workingFactories(g, r); k++) pool.push(r);
+    else if (workingFactories(g, r) > 0 && ruinedAt(g, r) < ruinMost(r)) for (let k = 0, w = workingFactories(g, r) + sabotageWeight(g, foe, r); k < w; k++) pool.push(r);
   }
   if (!pool.length) return null;
   return { reg: pool[Math.floor(draw(g, g.turn, 'where', foe) * pool.length) % pool.length].id, kind: rail ? 'rail' : 'factory' };
@@ -1443,7 +1468,7 @@ function plots(g: Game, nat: string): void {
     for (const r of g.regions) {
       if (r.ctrl !== nat || r.owner !== nat || r.overseas) continue;
       if (rail) { if (onNet(r.id) && !railCut(g, r.id)) pool.push(r); }
-      else if (workingFactories(g, r) > 0 && ruinedAt(g, r) < ruinMost(r)) for (let k = 0; k < workingFactories(g, r); k++) pool.push(r);
+      else if (workingFactories(g, r) > 0 && ruinedAt(g, r) < ruinMost(r)) for (let k = 0, w = workingFactories(g, r) + sabotageWeight(g, foe, r); k < w; k++) pool.push(r);
     }
     if (!pool.length) continue;
     const r = pool[Math.floor(draw(g, g.turn, 'where', foe) * pool.length) % pool.length];
@@ -1458,9 +1483,10 @@ function plots(g: Game, nat: string): void {
     }
     const struck = rail ? cutRail(g, r.id, 'saboteurs') : wreckFactory(g, r);
     if (!struck) continue;
+    const atom = rail ? null : atomSabotage(g, r);
     const text = rail
       ? `Saboteurs blow the railway at ${r.name}. Your police blame ${F.adj} agents. No train runs through until engineers relay the track.`
-      : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.`;
+      : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.${atom ? ` ${atom}` : ''}`;
     note(g, who, r.id, 'struck', text, false);
     headline(g, 'event', text, nat, r.id);
   }

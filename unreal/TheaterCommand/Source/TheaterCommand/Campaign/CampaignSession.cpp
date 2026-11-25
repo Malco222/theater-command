@@ -1310,6 +1310,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("airNames"), Out.bAirNames); // (release 2, airnames.ts)
 	Object->TryGetBoolField(TEXT("markedOn"), Out.bMarkedOn); // (release 2, the marked army)
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
 	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)
@@ -1319,9 +1320,14 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("rearBridges"), Out.bRearBridges); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)
+	Object->TryGetBoolField(TEXT("sailors"), Out.bSailors); // (release 2, the sea field's sailor rules: battle/sea/ticket.ts)
 	Object->TryGetBoolField(TEXT("seaMines"), Out.bSeaMines); // (release 2, mines.ts)
 	Object->TryGetBoolField(TEXT("heavySeas"), Out.bHeavySeas); // (release 2, heavyseas.ts)
 	Object->TryGetBoolField(TEXT("shadowRelay"), Out.bShadowRelay); // (release 2, shadow.ts)
+	Object->TryGetBoolField(TEXT("seekOnce"), Out.bSeekOnce); // (release 2, navy.ts)
+	Object->TryGetBoolField(TEXT("atomBomb"), Out.bAtomBomb); // (release 2, atom.ts)
+	Object->TryGetBoolField(TEXT("carrierStrike"), Out.bCarrierStrike); // (release 2, harbourstrike.ts)
+	Object->TryGetBoolField(TEXT("wingByDate"), Out.bWingByDate); // (release 2, carriers.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
@@ -4534,6 +4540,17 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 			(*FlyObject)->TryGetStringField(TEXT("tip"), Card.Fly.Tip);
 			(*FlyObject)->TryGetBoolField(TEXT("ok"), Card.Fly.bOk);
 		}
+		// (Release 2, atom.ts) A raid that carries the atomic bomb, and its BACK.
+		Told->TryGetBoolField(TEXT("bomb"), Card.bBomb);
+		const TSharedPtr<FJsonObject>* BackObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("back"), BackObject) && BackObject && BackObject->IsValid())
+		{
+			(*BackObject)->TryGetStringField(TEXT("label"), Card.Back.Label);
+			(*BackObject)->TryGetStringField(TEXT("act"), Card.Back.Act);
+			(*BackObject)->TryGetStringField(TEXT("tip"), Card.Back.Tip);
+			(*BackObject)->TryGetBoolField(TEXT("ok"), Card.Back.bOk);
+		}
+		Card.bBomb = Card.bBomb && !Card.Back.Act.IsEmpty();
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Sections = nullptr;
 	if (Object->TryGetArrayField(TEXT("sections"), Sections))

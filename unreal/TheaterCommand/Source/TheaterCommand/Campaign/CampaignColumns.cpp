@@ -271,11 +271,13 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns, const TA
 		}
 		ColumnsMesh->CreateMeshSection(0, Roads.Vertices, Roads.Triangles, Roads.Normals, TArray<FVector2D>(), Roads.Colors, TArray<FProcMeshTangent>(), false);
 		ColumnsMesh->SetMaterial(0, LanesInk ? static_cast<UMaterialInterface*>(LanesInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+		SeamLaidAgain(ColumnsMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	if (Wrecks.Triangles.Num() > 0)
 	{
 		ColumnsMesh->CreateMeshSection(1, Wrecks.Vertices, Wrecks.Triangles, Wrecks.Normals, TArray<FVector2D>(), Wrecks.Colors, TArray<FProcMeshTangent>(), false);
 		ColumnsMesh->SetMaterial(1, PieceMaterial);
+		SeamLaidAgain(ColumnsMesh); // (seam-2: its twin over the chart's seam is laid again)
 	}
 	{
 		// (for whoever checks the columns from the log)
