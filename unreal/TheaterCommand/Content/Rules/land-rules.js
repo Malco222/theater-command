@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 7f3d48fb1 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 21da273b8 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -14012,7 +14012,7 @@
       if (!k) {
         k = {
           n: this.order.length,
-          who: { b, k: m.k, ...m.j !== void 0 ? { j: m.j } : {}, r: m.r, ...fo ? { fo: 1 } : {}, ...m.ml ? { ml: m.ml } : {}, ...m.sw ? { sw: m.sw } : {} },
+          who: { b, k: m.k, ...m.j !== void 0 ? { j: m.j } : {}, r: m.r, ...fo ? { fo: 1 } : {}, ...m.ml ? { ml: m.ml } : {}, ...m.sw ? { sw: m.sw } : {}, ...m.sn ? { sn: m.sn } : {} },
           last: p,
           pend: [],
           ch,
@@ -14146,7 +14146,7 @@
         for (const d of dl.men) {
           let tr = tracks[d.n];
           if (!tr) {
-            tr = tracks[d.n] = { b: d.b, k: d.k, ...d.j !== void 0 ? { j: d.j } : {}, r: d.r, at: [], ch: [], s: [], ...d.fo ? { fo: 1 } : {}, ...d.ml ? { ml: d.ml } : {}, ...d.sw ? { sw: d.sw } : {} };
+            tr = tracks[d.n] = { b: d.b, k: d.k, ...d.j !== void 0 ? { j: d.j } : {}, r: d.r, at: [], ch: [], s: [], ...d.fo ? { fo: 1 } : {}, ...d.ml ? { ml: d.ml } : {}, ...d.sw ? { sw: d.sw } : {}, ...d.sn ? { sn: d.sn } : {} };
           }
           if (d.at) tr.at.push(...d.at);
           if (d.ch) tr.ch.push(...d.ch);

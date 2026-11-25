@@ -53,12 +53,14 @@ export interface TrackOut {
   ml?: string;
   /** Her model's swaps the rules pick (release 2, looks only): a motorcycle's sidecar, a staff jeep's gun. */
   sw?: Record<string, string>;
+  /** A sniper team's man (release 2, looks only; MenOut.sn): 1 the sniper with his scoped rifle, 2 his spotter with his glasses. */
+  sn?: 1 | 2;
 }
 
 /** What a delta says of one track: n its number in the order tracks were first seen; who it is only the first time. */
 export interface TrackDelta {
   n: number;
-  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string; sw?: Record<string, string>;
+  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string; sw?: Record<string, string>; sn?: 1 | 2;
   at?: Pt[]; ch?: Ch[]; s?: number[]; d?: number; mk?: unknown[];
   /** Battle time he left the list; -1: he is back on it. */
   out?: number;
@@ -99,7 +101,7 @@ const keyOf = (b: number, m: MenOut, fo: boolean): string => `${b}:${fo ? 'fo' :
 
 interface Kept {
   n: number;
-  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string; sw?: Record<string, string> };
+  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string; sw?: Record<string, string>; sn?: 1 | 2 };
   /** The last kept point (the line test's start), and the points seen since. */
   last: Pt;
   pend: Pt[];
@@ -130,7 +132,7 @@ export class LiveKeeper {
     let k = this.men.get(key);
     if (!k) {
       k = {
-        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}), ...(m.sw ? { sw: m.sw } : {}) },
+        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}), ...(m.sw ? { sw: m.sw } : {}), ...(m.sn ? { sn: m.sn } : {}) },
         last: p, pend: [], ch, shot: undefined, newAt: [p], newCh: [ch], newS: [], sentWho: false, sentD: false, sentMk: false, sentOut: undefined, sentTail: null,
       };
       this.men.set(key, k);
@@ -216,7 +218,7 @@ export class LiveKeeper {
       if (dl.reset) tracks.length = 0;
       for (const d of dl.men) {
         let tr = tracks[d.n];
-        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}), ...(d.sw ? { sw: d.sw } : {}) }; }
+        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}), ...(d.sw ? { sw: d.sw } : {}), ...(d.sn ? { sn: d.sn } : {}) }; }
         if (d.at) tr.at.push(...d.at);
         if (d.ch) tr.ch.push(...d.ch);
         if (d.s) tr.s.push(...d.s);
