@@ -1,0 +1,69 @@
+{
+  "_about": "China's rifles on the whole world (the design director's rulings of 05:37Z and 05:44Z of 25 November 2026, on pacific-japan/dd-form-arms-1125.md, sections 3, 4, 14 and 15, and the historian's historian/china-arms-1125.md): the far side's rows for the stock of arms (src/campaign/arms.ts) and the rifles' rule (src/campaign/rifles.ts), laid over data/campaign/arms.json and data/campaign/rifles.json while the far side's switch is on (src/campaign/far-rows.ts). Kept by hand. China's rifles shelf stands at 0 on the first day (the historian's read: no rifles in depots and in no unit on 1 September 1939, D, U; China's call-up depot row reads 0, confirmed at 05:44Z). It fills from three arsenals, each while China holds its place, at rifles a month over 21,300 rifles to China's division's worth: Chungking 3,000, Hunan 1,000, Kweichow 500 (D; the places U), the 4,500 a month that is the record's own net rise, from the first day, no date laid. And from four roads, each a chain of places on the chart from where its cargoes start to Kunming or Lanchow or Canton, every step beside the last: the Burma Road, 1,250 tons a month at 2 rifles a ton (D); the Sinkiang road, 650 tons a month at 2 a ton, sold by the Soviet Union (D); the Haiphong railway and the road from Hong Kong, 0 tons (the record: a French embargo on munitions from 1938; Hong Kong and Canton shut by Japan's hold on Canton from the first day). A road is cut by land only in this piece: the sea leg is the next slice's. With no rifles shelf of the Soviet Union's on this line, the seller's interim test stands in (G): a seller at war with a great power sends nothing. Figures marked as the form marks them: L read, D derived, M memory, U uncertain, G a guess.",
+  "arms.json": {
+    "nations": {
+      "CHN": {
+        "_marks": "start G read as 0 (D, U). works: each gain is rifles a month / 21,300 (rifles.json perDiv): Chungking 3,000 (D, the 21st Arsenal and Gongxian's remnant, two thirds), Hunan 1,000 (D; the place M, Chenxi), Kweichow 500 (D; the place U). Hunan's works stood at Chenxi (about 27.99 N, 110.20 E; the historian's M), which is no province's name on the chart: that point lies inside the chart province of Changteh (its outline in src/generated/world-whole.json, by the far chart's own projection: x = (east + 11) * 40 * cos 50, y = (71.4 - north) * 40), which is China's on the first day, so Hunan's share stands at Changteh and does not stay with Chungking. Kweichow's share stands at Kweiyang, the province's own town on the chart (U).",
+        "_from": "historian/china-arms-1125.md, section 3; the design director's 05:44Z of 25 November 2026, point B.",
+        "rifles": {
+          "start": 0,
+          "works": [
+            { "place": "Chungking", "gain": 0.14084507042253522 },
+            { "place": "Changteh", "gain": 0.046948356807511735 },
+            { "place": "Kweiyang", "gain": 0.023474178403755867 }
+          ]
+        }
+      }
+    }
+  },
+  "rifles.json": {
+    "nations": {
+      "CHN": {
+        "_marks": "perDiv D: 775,520 rifles in June 1939 (L) over 36.44, China's first day at strength (rulings 209 and 216). refit D, U: about 0.05 of a rifle lost for each man lost (the historian's read; ruled at 05:44Z, point D). binds: China is the first nation the rule binds (05:37Z).",
+        "_from": "historian/china-arms-1125.md; pacific-japan/dd-form-arms-1125.md, sections 4 and 15.",
+        "perDiv": 21300,
+        "refit": 0.05,
+        "binds": true
+      }
+    },
+    "roads": [
+      {
+        "id": "burma-road",
+        "name": "the Burma Road",
+        "to": "CHN",
+        "past": ["Rangoon", "Prome", "Yenangyaung", "Mandalay", "Lashio", "Paoshan", "Tali", "Kunming"],
+        "tons": 1250,
+        "perTon": 2,
+        "_marks": "tons D from L: 24,911 long tons of arms and ammunition, February 1939 to October 1940. perTon D (1 to 3): the Soviet aid's 50,000 to 110,000 rifles in about 40,000 tons. The sellers and the monsoon are the next slice's."
+      },
+      {
+        "id": "sinkiang-road",
+        "name": "the Sinkiang road",
+        "to": "CHN",
+        "seller": "SOV",
+        "past": ["Ayaguz", "Tihwa", "Turfan", "Hami", "Anhsi", "Yumen", "Changyeh", "Liangchow", "Lanchow"],
+        "tons": 650,
+        "perTon": 2,
+        "_marks": "tons D from L: about 40,000 tons over 1937 to 1941 (500 to 800 a month). perTon D. The chain past Tihwa (Turfan, Hami, Anhsi, Yumen, Changyeh, Liangchow) is the builder's, along the old road by the chart's own neighbours, each step beside the last."
+      },
+      {
+        "id": "haiphong-rail",
+        "name": "the Haiphong railway",
+        "to": "CHN",
+        "past": ["Haiphong", "Hanoi", "Lao Kay", "Mengtsz", "Kunming"],
+        "tons": 0,
+        "perTon": 2,
+        "_marks": "0 tons is the record (L): a French embargo on munitions from February and March 1938."
+      },
+      {
+        "id": "hongkong-canton",
+        "name": "the road from Hong Kong",
+        "to": "CHN",
+        "past": ["Hong Kong", "Tungkun", "Canton"],
+        "tons": 0,
+        "perTon": 2,
+        "_marks": "0 tons: shut by Japan's hold on Canton from the first day (L, October 1938)."
+      }
+    ]
+  }
+}
