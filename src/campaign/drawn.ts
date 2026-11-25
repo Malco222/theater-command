@@ -27,9 +27,10 @@
 //   formed     a division the record formed out of another (a row's `was`: the 14th Panzer, out of the 4th Infantry)
 //              is drawn as that other one, from the corps that holds it, or else out of the largest free infantry
 //              corps on home soil; with neither it is not formed. It is never new strength.
-//   the end    when a lent row's time is up (`until`), each division it drew goes back to the corps it came out of,
-//              where that corps lives and stands in the same side theatre (the main fronts are one); otherwise it
-//              stands on where it is, as a corps of its own under its own name, free for its staff to move. A division
+//   the end    when a lent row's time is up (`until`), or a war row's war is over, each division it drew goes back to
+//              the corps it came out of, where that corps lives and the two stand together, in one province; otherwise
+//              it stands on where it is, as a corps of its own under its own name, free for its staff to move: a return
+//              never moves a division for free (her rulings of 19:03Z and 19:17Z, 25 November 2026). A division
 //              formed out of another never goes back. The divisions the row raised new leave, as they always did.
 //              Nothing goes back to a corps that is itself leaving that month.
 // Parts are not divisions: a row or a corps whose fullest size is under a division's (`est`) neither draws nor gives.
@@ -56,7 +57,7 @@
 
 import words from '../../data/campaign/drawn.json';
 import counting from '../../data/campaign/counting.json';
-import { atWar, relocate, removeCorps } from './game';
+import { addCorps, atWar, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
 import { seat } from './commanders';
 import type { Corps, Game, Kind, Region } from './types';
@@ -262,6 +263,16 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
 export const formsAny = (claims: Claim[], n: number): boolean => n - claims.length > 0 || claims.some((q) => q.from && !q.stays);
 
 /**
+ * (The stood war rows.) What of its establishment a corps still holds as its own: a corps the record's divisions were
+ * drawn out of by share keeps all its cards, and the drafts make good only the share that is still its own, never
+ * what it gave (the design director's ruling of 19:03Z, 25 November 2026: price once, carried past the first day).
+ * 1 for any other corps.
+ */
+export function ownShare(c: Corps): number {
+  return c.out && c.outOf ? clamp(1 - c.out / c.outOf) : 1;
+}
+
+/**
  * A row has landed or settled: each card a stood war row counted as staying with its corps (the player's, or one that
  * stands where the row is for) now stands for that row, and the next row that counts on the corps takes the cards
  * before it (`Corps.kept`). Cards that come move, and need no mark. Called once a row is settled: game.ts.
@@ -351,6 +362,7 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
     const took = Math.min((recs / left) * men, mine.length);
     h.str = clamp((men - took) / h.divs);
     h.out = (h.out ?? 0) + recs;
+    if (h.outOf === undefined) h.outOf = mine[0].share!.of;
     lot.set(h, took / mine.length);
     g.supplyDirty = true;
   }
@@ -384,32 +396,42 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
 
 /**
  * A lent row's time with its campaign is up, for a corps that holds divisions the row drew (`drew`): each goes back
- * to the corps it came out of, where that corps lives and stands in the same side theatre; the divisions the row
- * raised new leave. True where the corps stands on, with what could not go back, under its own name again and free
+ * to the corps it came out of, where that corps lives and the two stand together, in one province (which is in one
+ * side theatre: the bound of 14:28Z on which parent it may rejoin, never a move). Apart from it, or with its corps
+ * gone, it stands on where it is, under its own name and free for its staff: a return never moves a division for
+ * free, at a lent row's end as at a war's (the design director's rulings of 19:03Z and 19:17Z, 25 November 2026).
+ * The divisions the row raised new leave. True where the corps stands on, with what could not go back, under its own name again and free
  * of the row's orders; false where nothing of it is left to stand, and it leaves as a lent row's corps always did.
  * `leaving` a corps that is itself on its way out this month: nothing goes back to it.
  * `war` true for a row whose war is over (the stood war rows, above): the divisions it raised new stay with it, and it
  * keeps the row's name and orders. A division drawn by share goes back as a division of its own, and the corps it
- * joins counts the record's divisions it stands for as its own again.
+ * joins counts the record's divisions it stands for as its own again. A drawn division goes back only to a corps it
+ * stands together with, in one province; one apart from it, or whose corps is no more, stands on where it is under
+ * its own name, free for its staff, which sends it home by the rules if it wants: a return never moves a division for
+ * free (the design director's ruling of 19:03Z, 25 November 2026). It leaves the row's corps as a corps of its own,
+ * or, where the row's corps holds nothing else, that corps takes its name and is free of the row's orders.
  */
 export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false, war = false): boolean {
   const keep: Part[] = [];
+  // (The war over: the drawn divisions that stand on apart from the corps they came out of.)
+  const apart: Part[] = [];
   const back = new Map<Corps, Part[]>();
   const home = new Map<Corps, number>();
   for (const p of partsOf(g, c)) {
     const rec = c.drew?.find((r) => r.name[0] === p.name[0]);
     if (!rec) { if (war) keep.push(p); continue; }
-    const parent = rec.from === c.id || rec.conv ? undefined : g.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving(x));
-    if (parent && g.regions[parent.reg].theatre === g.regions[c.reg].theatre) {
+    const own = rec.from === c.id || !!rec.conv;
+    const parent = own ? undefined : g.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving(x));
+    if (parent && parent.reg === c.reg) {
       back.set(parent, [...(back.get(parent) ?? []), p]);
       if (rec.rec) home.set(parent, (home.get(parent) ?? 0) + rec.rec);
     }
-    else keep.push(p);
+    else (war && !own ? apart : keep).push(p);
   }
   for (const [parent, ps] of back) {
     assemble(g, parent, [...partsOf(g, parent), ...ps]);
     const rec = home.get(parent);
-    if (rec) { const out = (parent.out ?? 0) - rec; if (out > 1e-9) parent.out = out; else delete parent.out; }
+    if (rec) { const out = (parent.out ?? 0) - rec; if (out > 1e-9) parent.out = out; else { delete parent.out; delete parent.outOf; } }
     // (A parent that is itself on loan holds them as its own from here: when its own row's time is up they stand on
     // with it, whichever of the two rows is read first, and do not leave as divisions that row raised new. One it had
     // itself drawn from another corps keeps that record: it goes back there when the parent's own time is up.)
@@ -418,13 +440,27 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
       parent.drew = [...had, ...ps.filter((p) => !had.some((r) => r.name[0] === p.name[0])).map((p) => ({ name: p.name, no: p.no, from: parent.id }))];
     }
   }
+  // (A corps of their own beside the row's, where the row's corps keeps divisions of its own; the row's corps itself,
+  // free of its orders, where it keeps nothing else. Its numbers are theirs: no stand-in number is spent on it.)
+  let freed = false;
+  if (apart.length && keep.length) {
+    const before = standInCount(g, c.nat, c.kind);
+    const f = addCorps(g, c.nat, formationName(apart.map((p) => p.name)) ?? c.name, c.kind, apart.length, c.reg, {});
+    setStandInCount(g, c.nat, c.kind, before);
+    f.ap = c.ap;
+    f.apMax = c.apMax;
+    f.supplied = c.supplied;
+    f.fought = c.fought;
+    if (c.mor !== undefined) f.mor = c.mor; else delete f.mor;
+    assemble(g, f, apart);
+  } else if (apart.length) { keep.push(...apart); freed = true; }
   if (!keep.length) return false;
   assemble(g, c, keep);
   if (c.rowed) {
     c.name = c.rowed.name;
     c.hold = c.rowed.hold;
     if (c.rowed.stay) c.stay = true; else delete c.stay;
-  } else if (!war) {
+  } else if (!war || freed) {
     c.name = formationName(keep.map((p) => p.name)) ?? c.name;
     c.hold = false;
     delete c.stay;

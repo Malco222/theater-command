@@ -31,7 +31,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, rowOver } from './drawn';
+import { DRAWN, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -5436,7 +5436,9 @@ export function startPhase(g: Game, nat: string): void {
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
   // (A fortress crew living on its port's stores is cut off for its drafts and its rest, 07:12Z.)
   const stored = new Set(army.filter((c) => onPortStores(g, c)));
-  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * columnShare(g, c) * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+  // (A corps the stood war rows drew the record's divisions out of by share is made good only to the share still its
+  // own: drawn.ts ownShare, the design director's ruling of 19:03Z, 25 November 2026.)
+  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) * ownShare(c) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * columnShare(g, c) * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
   // A volunteer legion's drafts come from its own home's reserve, not the patron's (legions.ts; release 2, switched off in release 1).
   const want = army.map((c) => (c.vol ? 0 : wantOf(c)));
   const volWant = army.map((c) => (c.vol ? wantOf(c) : 0));

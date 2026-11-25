@@ -588,6 +588,11 @@ export interface Corps extends Storied {
    */
   out?: number;
   /**
+   * (The stood war rows, counting.json.) How many divisions the record counts in this corps, from its first draw by
+   * share: with `out`, the share of its establishment the drafts still make good (drawn.ts ownShare).
+   */
+  outOf?: number;
+  /**
    * (The stood war rows, counting.json.) How many of this corps' cards earlier rows counted as staying with it: the
    * player's own, or a corps that stands where the row is for. A row after them counts the cards before those, so no
    * card stands for two rows, and where none is left it raises new what the corps no longer holds. None where none was counted.
