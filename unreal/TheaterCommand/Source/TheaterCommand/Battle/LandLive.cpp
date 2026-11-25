@@ -97,6 +97,18 @@ namespace
 		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
 		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
 		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Off: men and vehicles move on their own."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
+		// (Squad life, release 2: Brian, 25 November 13:40Z, "i dont want all the soldiers of a squad doing the exact same
+		// thing at the same time. I want them to work together and look real as individuals apart of a squad". The drill's,
+		// looks only: nothing in the fight reads it, and a battle ends the same with it on or off (tests/land-squad-life). It
+		// brings the drill book on with the men drawn as sections (no platoon crowds). Off until a Mac off/on line and the
+		// art director pass it; -TheaterLandRuleSquadLife turns it on for a run.)
+		{ TEXT("life"), TEXT("Squads of individuals"), TEXT("Each soldier does his own part of his squad's job in his own time: pairs rush in turn while their mates cover them, men react a moment apart, stand, kneel or lie as their cover suits, and each watches his own arc. Off: a squad moves and fires more as one."), TEXT("TheaterLandNoSquadLife"), false, TEXT("TheaterLandRuleSquadLife") },
+		// (Heads up, hatches down, release 2: Brian, 25 November 15:11Z, "do those 3 ideas": tank commanders ride with heads
+		// out for a better view, then button up when bullets fly. The drill's, looks only: each commander closes his
+		// hatch in his own time, and a battle ends the same with it on or off (tests/land-hatches). What a closed-up tank
+		// can see is not touched: that part changes results and waits for the design director's ruling under a switch of
+		// its own. Off until a Mac off/on line and the art director pass it; -TheaterLandRuleHatches turns it on for a run.)
+		{ TEXT("hatches"), TEXT("Heads up, hatches down"), TEXT("Each tank commander rides with his head out of the hatch for the view, and drops inside in his own time when rounds come at his tank or the enemy gets close: green crews early and for long, veterans late and briefly. Off: a platoon's tanks all close up together when the enemy is within 120 metres."), TEXT("TheaterLandNoHatches"), false, TEXT("TheaterLandRuleHatches") },
 		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
 		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
 		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },

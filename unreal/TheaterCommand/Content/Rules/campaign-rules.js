@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 4437b0581 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2802bf170 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -89700,6 +89700,36 @@
       flank: { rush: [14, 26], out: 45 },
       smoke: { on: true, every: 60, spread: 10, per: 15, most: 12 }
     },
+    life: {
+      _about: [
+        "Squad life (release 2; Brian, 25 November 2026, 13:40Z: 'i dont want all the soldiers of a squad doing the exact same thing at the same time. I want them to work together and look real as individuals apart of a squad'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill life: the 3D game's 'Squads of individuals' switch), and the drill book is on with it. A squad still does one thing together (it rushes in its turn, holds its line, falls back), but each man does his own part of it in his own time.",
+        "Buddy teams: a squad's men pair off (its leader and his runner, its gun with its number twos, its riflemen two by two along each arm of its wedge). rush: in fire and movement a squad's teams rise one after another over 'spread' turns of the cycle (each cycle in a fresh order), not all in the same second, so some of a squad are always down firing while its others run; a wave's teams rise within 'wave' seconds; each man's own rush lasts 'len' [least, most] of his army's; the fast (rolling) advance drops its teams to fire one at a time over 'roll' seconds, a share 'knee' of the men only to a knee. A man left more than about 'sprint' metres behind his place sprints upright till he has made it up, and at any time a share 'upright' of the men run head up where the rest go bent low, each for a spell of his own.",
+        "drift: on the move no line is dressed as on parade: each man drifts up to 'along' metres ahead of and behind his place and 'across' to either side of it, over 'every' [least, most] seconds of his own. rout: in a rout the share in headlong flight, and the share running upright with their rifles (the rest bent low), each for a spell of his own.",
+        "react: seconds [least, most] over which a squad's men take up a new order, never all in one moment. rise: a man lying or kneeling who must get up and go (his block gone on, its line swung round) gets up within this many seconds, his own moment; leash: each man's own slack, up to this many metres, before a block going on without him gets him up; calm: a change of the squad's task within this many seconds of its last is taken up by all at once (a squad creeping forward in a firefight changes from moving to firing and back each half second: no man's moment is set back by that). ground: going to ground when fire comes (raw men 'raw' times slower); up: getting up to move, the leader's team first and the rest by teams; settle: taking their firing places as the squad halts; back: falling back, the gun team last; break: a rout (a few go, then the rest); rally: gathering again.",
+        "watch: holding or waiting, the men of a squad take different stances by what shelters each (open: the share lying; cover: woods, a bank, a wreck; works: fieldworks and houses) and each keeps his for 'keep' [least, most] seconds of his own; 'sentries' of each squad kneel watching, the duty passing on every 'turn' [least, most] seconds; far from the enemy ('far' metres) a share 'easy' stand easy; its leader has his glasses up a share 'glasses' of the time.",
+        "scan: a man watching faces his own way: his own lean of up to 'own' radians off the squad's front, a fresh look every 'every' [least, most] seconds within 'arc' radians (sentries the whole of it, the rest 'rest' of it, a man lying 'lying' of it), turning his head and shoulders at 'rate' radians a second; a leader looks along his line to his men a share 'back' of his looks.",
+        "pause: a man firing from the line breaks off every 'every' [least, most] seconds for 'for' [least, most] (a fresh clip, a look for his target); a machine gun every 'gun' [least, most] seconds for 'gunFor' (a new belt or drum, a hot barrel).",
+        "ready: on the approach, not yet under fire, the distance from the enemy at which each man brings his rifle to the ready, as a share of rifle range (ranges.bound), by his own number between 'ready' [least, most]: the scouts and the wary first, the rest trotting on with rifles at the port."
+      ],
+      rush: { spread: 2, wave: 2.2, len: [0.8, 1.25], roll: 6, knee: 0.4, sprint: 5, upright: 0.45 },
+      drift: { across: 1.2, along: 3, every: [8, 15] },
+      rout: [0.55, 0.27],
+      react: { rise: 1.4, leash: 10, calm: 3, ground: [0, 1], raw: 1.5, up: [0, 2.5], settle: [0, 1.5], back: [0, 2], break: [0, 2.5], rally: [0, 2] },
+      watch: { open: 0.75, cover: 0.5, works: 0.3, keep: [25, 45], sentries: 2, turn: [40, 80], far: 600, easy: 0.3, glasses: 0.35 },
+      scan: { own: 0.22, every: [4, 9], arc: 0.6, rest: 0.4, lying: 0.3, rate: 1.6, back: 0.12 },
+      pause: { every: [8, 14], for: [2, 3.5], gun: [25, 40], gunFor: [3, 4.5] },
+      ready: [0.6, 2.4]
+    },
+    hatch: {
+      _about: "Heads up, hatches down (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill hatches: the 3D game's switch). A tank's commander rides with his head out of his hatch, for the view, until something sends him down: a round at his own tank, a shell bursting within 'burst' metres of her, or the enemy within his own nerve of it: 'near' metres by his crew's experience [raw, regular, veteran], each commander his own share 'own' [least, most] of it. He drops inside 'drop' seconds [least, most] after the first of it (times 'quick' by experience: a veteran is down at once) and comes up again once nothing has troubled him for 'quiet' seconds by experience (his own share 'own' of it): a green commander closes up early and stays down long, a veteran rides heads up until the rounds are at him and is up again soon after. A round at another tank of his block sends him down too a share 'mates' of the time, by experience. A commander struck in his hatch (book.tankMg) stays down. Off, a block's tanks close up as one with the enemy inside 120 m.",
+      near: [260, 160, 90],
+      own: [0.7, 1.3],
+      drop: [0.3, 1.6],
+      quick: [1.3, 1, 0.5],
+      quiet: [30, 16, 8],
+      burst: 30,
+      mates: [0.8, 0.4, 0.1]
+    },
     blast: {
       _about: "Shell blasts (release 2; Brian, 23 November 05:04Z: 'explosions on the ground should be able to take out multiple people if they are close to it'). Looks only, the rules' counts untouched (Drill.thin): with LandBattle.blast on, the men a block loses to a gun's or a tank's high explosive wait up to 'hold' battle seconds for one burst, or until as many are due as one shell of the class takes ('most', a realistic few: men of a section stand 5 to 10 m apart); a 'shell' event that took a key man within 'anchor' seconds is that burst. The men nearest it fall, within shells.ts REACH of it; a man lying down counts his distance over 'lying', kneeling over 'kneeling' (a burst finds him less: fragments fly up and out).",
       hold: 6,
@@ -89948,6 +89978,7 @@
   var MOVING = /* @__PURE__ */ new Set(["walk", "run", "advance", "creep", "crawl", "flee", "drive", "reverse", "towed", "stretcher_front", "stretcher_rear"]);
   var CARRIED = /* @__PURE__ */ new Set(["ride", "mounted", "horses"]);
   var LYING = /* @__PURE__ */ new Set(["fire_prone", "hide", "crawl", "observe", "cower", "lmg_burst"]);
+  var WATCHING = /* @__PURE__ */ new Set(["wait", "hide", "idle", "observe"]);
   var SMALL_ARMS = /* @__PURE__ */ new Set(["fire_stand", "fire_kneel", "fire_prone", "lmg_burst"]);
   var VEHICLE = /* @__PURE__ */ new Set(["tank", "gun", "lorry"]);
   var CREWED = /* @__PURE__ */ new Set(["hmg", "mortar"]);
@@ -90044,6 +90075,25 @@
        * for every block, as before.
        */
       __publicField(this, "scale");
+      /**
+       * Squad life (release 2; Brian, 25 November 2026, 13:40Z: "i dont want all the soldiers of a squad doing the exact same
+       * thing at the same time. I want them to work together and look real as individuals apart of a squad"): a squad's men
+       * pair off into buddy teams that rush one after another, take up a new order each in his own time, hold in different
+       * stances, each watching his own arc, and break off firing for a fresh clip. Looks only; the drill book is on with it.
+       * Off unless asked (DR.life).
+       */
+      __publicField(this, "life");
+      /**
+       * Heads up, hatches down (release 2; Brian, 25 November 2026, 15:11Z: "do those 3 ideas"): each tank's commander rides
+       * with his head out until something sends him down (a round at his own tank, a shell bursting by her, the enemy's foot
+       * within his own nerve of it), drops inside at his own moment and comes up again in his own time once it is quiet: a
+       * green crew early and for long, a veteran late and briefly. Looks only (the drill's own dice; what a closed-up tank
+       * sees is the rules' business and is not touched here). Off unless asked (DR.hatch); off, a block's tanks close up as
+       * one with the enemy inside 120 m, as before.
+       */
+      __publicField(this, "hatches");
+      /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
+      __publicField(this, "freshNow", /* @__PURE__ */ new Set());
       __publicField(this, "sup", new Suppression());
       /** Each side's tanks standing this step, and each block's most dangerous men (its guns), worked out once a step. */
       __publicField(this, "tankMemo", { t: -1, at: {} });
@@ -90052,7 +90102,9 @@
       this.seed = b.ticket.seed;
       this.sections = !!opts.sections || !!opts.platoons;
       this.platoons = !!opts.platoons;
-      this.byBook = opts.book ?? this.platoons;
+      this.life = !!opts.life;
+      this.hatches = !!opts.hatches;
+      this.byBook = opts.book ?? (this.platoons || this.life);
       this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
       for (const u of b.units) {
         this.squads.set(u.id, this.make(u));
@@ -90642,6 +90694,7 @@
           if (b.escort) this.escort(sq);
           if (sq.screenQ) this.screenRound(sq);
         }
+        if (this.hatches && u.kind === "arm" && !sq.esc) this.hatchNow(sq);
         this.walk(sq);
         this.fire(sq);
       }
@@ -90736,7 +90789,31 @@
     }
     /** Men of every block near a burst duck. */
     duck(x, y) {
-      for (const sq of this.squads.values()) if (Math.hypot(sq.u.x - x, sq.u.y - y) < Math.max(sq.u.w, sq.u.d) / 2 + 40) sq.shelledAt = this.b.t;
+      for (const sq of this.squads.values()) if (Math.hypot(sq.u.x - x, sq.u.y - y) < Math.max(sq.u.w, sq.u.d) / 2 + 40) {
+        sq.shelledAt = this.b.t;
+        if (this.hatches && sq.u.kind === "arm" && !sq.esc) {
+          for (const m of sq.men) if (m.role === "tank" && m.fell === void 0 && Math.hypot(m.x - x, m.y - y) < DR.hatch.burst) this.alarm(sq, m, this.b.t);
+        }
+      }
+    }
+    /**
+     * Hatches: something sends this tank's commander down at battle time `at` (a round at her landing then, a burst by
+     * her, the enemy's foot too near). The first of a spell, he drops inside his own moment after it ('drop', a veteran
+     * quicker by 'quick'); every one keeps him down his own quiet time longer ('quiet': a green commander long, a veteran
+     * briefly). With `mate`, it was at another tank of his block: he closes up for it only a share 'mates' of the time, by
+     * his crew's experience (green crews when any of them is fired on, veterans at their own rounds).
+     */
+    alarm(sq, m, at4, mate = false) {
+      const u = sq.u, H = DR.hatch, x = this.band(u);
+      if (mate && roll(this.seed, u.id, m.n, Math.floor(at4 / 4), 174) >= H.mates[x]) return;
+      const gone = m.shutTo === void 0 || at4 > m.shutTo;
+      if (gone) m.shutAt = at4 + (H.drop[0] + (H.drop[1] - H.drop[0]) * roll(this.seed, u.id, m.n, Math.floor(at4), 171)) * H.quick[x];
+      m.shutTo = Math.max(gone ? 0 : m.shutTo, at4 + H.quiet[x] * (H.own[0] + (H.own[1] - H.own[0]) * roll(this.seed, u.id, m.n, 172)));
+    }
+    /** Hatches: each tank closed up or not this step, by her own commander's times (alarm); one struck in his hatch stays down. */
+    hatchNow(sq) {
+      const t = this.b.t;
+      for (const m of sq.men) if (m.role === "tank" && m.fell === void 0) m.buttoned = m.cmdDown !== void 0 || m.shutAt !== void 0 && t >= m.shutAt && t < m.shutTo || void 0;
     }
     /** Where model k of block id stands now (alive, or the moment he falls): the shell that cost him lands there. */
     manAt(id, k) {
@@ -91459,6 +91536,229 @@
       for (const m of men2) if (rear.has(m.sec ?? m.k) && (m.role === "rifle" || m.role === "sapper")) out.add(m);
       return out;
     }
+    // ---- Squad life (DR.life) -------------------------------------------------------------------------------------------
+    // Brian, 25 November 2026, 13:40Z: "i dont want all the soldiers of a squad doing the exact same thing at the same
+    // time. I want them to work together and look real as individuals apart of a squad". A squad still does one thing
+    // together; each man does his own part of it in his own time. All of it the drill's own dice (looks only).
+    /**
+     * His buddy team in his group (a section, or a platoon's squad): [its number, the group's teams, his place among the
+     * group's men]. Its leader with the rifleman at his elbow; its machine gun (its number twos keep by it: pairs); the
+     * rest two by two along each arm of the wedge, neighbours together, an odd man with the pair beside him. Worked out
+     * with the block's men on their feet (memo), so a team that loses a man closes up with the next.
+     */
+    teamOf(sq, m) {
+      const M2 = this.memo(sq);
+      if (!M2.teams) {
+        M2.teams = /* @__PURE__ */ new Map();
+        const groups = /* @__PURE__ */ new Map();
+        for (const x of M2.up) {
+          if (VEHICLE.has(x.role) || CREWED.has(x.role) || x.role === "officer" || x.role === "holder") continue;
+          const g2 = grp(x);
+          let l = groups.get(g2);
+          if (!l) groups.set(g2, l = []);
+          l.push(x);
+        }
+        for (const men2 of groups.values()) {
+          const head = (x) => x.j === void 0 || x.lead ? 0 : 1;
+          men2.sort((a, c) => head(a) - head(c) || (a.j ?? 0) - (c.j ?? 0));
+          const guns2 = men2.filter((x) => x.role === "mg"), rest = men2.filter((x) => x.role !== "mg");
+          const teams2 = [];
+          if (rest.length) teams2.push(rest.slice(0, 2));
+          const arms = [[], []];
+          rest.slice(2).forEach((x, i) => arms[i % 2].push(x));
+          const pairs2 = [[], []];
+          arms.forEach((arm2, a) => {
+            for (let i = 0; i < arm2.length; i += 2) pairs2[a].push(arm2.slice(i, i + 2));
+            const last = pairs2[a][pairs2[a].length - 1];
+            if (last && last.length === 1 && pairs2[a].length > 1) {
+              pairs2[a].pop();
+              pairs2[a][pairs2[a].length - 1].push(last[0]);
+            }
+          });
+          for (const g2 of guns2) teams2.push([g2]);
+          for (let i = 0; i < Math.max(pairs2[0].length, pairs2[1].length); i++) for (const a of [0, 1]) if (pairs2[a][i]) teams2.push(pairs2[a][i]);
+          teams2.forEach((team, ti) => {
+            for (const x of team) M2.teams.set(x, [ti, teams2.length, men2.indexOf(x)]);
+          });
+        }
+      }
+      return M2.teams.get(m) ?? [0, 1, 0];
+    }
+    /**
+     * Squad life: when in his squad's turn of cycle n his own buddy team rises (seconds after the turn begins) and how
+     * long his own rush lasts. The squad's teams go one after another over DR.life.rush.spread turns, each cycle in a
+     * fresh order (where a squad moves as one body round its gun, the gun still goes first), so some of a squad are always
+     * down firing while its others run. A wave's teams rise within a second or so: it is a wave.
+     */
+    rushOf(sq, m, n, bk, bound3) {
+      const L3 = DR.life.rush, u = sq.u, [ti, nT] = this.teamOf(sq, m), wave = bound3 === "wave";
+      const lo = wave ? 0.7 : L3.len[0], hi = wave ? 1 : L3.len[1];
+      const len = bk.rush * (lo + (hi - lo) * roll(this.seed, u.id, m.n, n, 103));
+      const W2 = Math.max(0, Math.min(wave ? L3.wave : L3.spread * bk.slot, bk.cyc - bk.rush * hi - 0.35));
+      const ord = nT <= 1 || bound3 === "body" && m.role === "mg" ? 0 : (ti + Math.floor(roll(this.seed, u.id, grp(m), n, 101) * nT)) % nT;
+      return [ord / Math.max(1, nT) * W2 + 0.3 * roll(this.seed, u.id, m.n, n, 102), len];
+    }
+    /** Squad life: his team's share of the way round his group's teams (0 to 1), and a little of his own. */
+    teamShare(sq, m) {
+      const [ti, nT] = this.teamOf(sq, m);
+      return (ti + 0.5 * roll(this.seed, sq.u.id, m.n, 104)) / Math.max(1, nT);
+    }
+    /**
+     * Squad life: no squad takes up a new order in one moment. When its block's phase changes, each man is given his own
+     * moment to take it up (DR.life.react): going to ground as fire comes, each as he sees it (raw men slower); getting up
+     * to move, the leader's team first and the rest by teams; taking their firing places as it halts; falling back, the gun
+     * team last; a rout, a few first and then the rest; gathering to rally. Leaders act at once. Till his moment a man goes
+     * on with what he was at: returned, each such man and what he was at, to be put back once his block's drill has run
+     * (think). A man whose moment has just come takes the phase up as on its first think (fresh).
+     */
+    lags(sq, was) {
+      const t = this.b.t, u = sq.u, ph = sq.phase, R2 = DR.life.react, up = this.memo(sq).up;
+      this.freshNow.clear();
+      if (sq.since === t && was !== ph && (sq.lastFor === void 0 || sq.lastFor >= R2.calm)) {
+        const still = (p) => p === "hold" || p === "rest" || p === "startline" || p === "fight" || p === "pinned" || p === "rally";
+        const kind = ph === "flee" ? "break" : ph === "fallback" ? "back" : ph === "rally" ? "rally" : ph === "pinned" ? "ground" : (ph === "bound" || ph === "fight") && (was === "column" || was === "deploy") ? "ground" : (ph === "column" || ph === "deploy" || ph === "bound") && still(was) ? "up" : still(ph) ? "settle" : null;
+        for (const m of up) {
+          m.lagTo = void 0;
+          if (!kind || VEHICLE.has(m.role) || CREWED.has(m.role) || m.role === "holder" || m.role === "officer") continue;
+          const [lo, hi] = R2[kind], [ti, nT] = this.teamOf(sq, m), r = roll(this.seed, u.id, m.n, Math.round(t * 2), 105);
+          let lag = lo + (hi - lo) * r * (kind === "ground" && this.band(u) === 0 ? R2.raw : 1);
+          if (kind === "up") lag = lo + (hi - lo) * ((ti + 0.6 * r) / Math.max(1, nT));
+          else if (kind === "back") lag = m.role === "mg" ? hi : lo + (hi - lo) * 0.8 * r;
+          if (kind !== "break" && (m.lead || m.j === void 0 && m.role !== "mg")) lag = Math.min(lag, 0.2);
+          if (lag >= 0.25) m.lagTo = t + lag;
+        }
+      }
+      let held3 = null;
+      for (const m of up) {
+        if (m.lagTo === void 0) continue;
+        if (t >= m.lagTo - 1e-6) {
+          m.lagTo = void 0;
+          this.freshNow.add(m);
+          continue;
+        }
+        (held3 ?? (held3 = [])).push([m, { pose: m.pose, v: m.v, spot: m.spot, cover: m.cover, aim: m.aim, until: m.until, slotAt: m.slotAt, el: m.el, rapid: m.rapid, hidden: m.hidden, rushed: m.rushed, shot: m.shot, sentry: m.sentry }]);
+      }
+      return held3;
+    }
+    /** Whether a man takes his block's phase up this think: its first, or (squad life) his own moment for it just come. */
+    fresh(sq, m) {
+      return sq.since === this.b.t || this.freshNow.has(m);
+    }
+    /**
+     * Squad life: the stance a man holds or waits in (DR.life.watch), where the plain drill has a whole line kneeling
+     * alike. A machine gun lies at its gun. A leader kneels, his glasses up a share of the time (lying to use them). Two
+     * of each squad are its sentries, kneeling and watching, the duty passing on. The rest by what shelters each: most
+     * lie in the open, more kneel behind a bank or in a wood, most stand to at a parapet or a window; far from the enemy
+     * some stand easy. Each keeps his stance a spell of his own, so no two change together.
+     */
+    /** Squad life: the men of a group who can stand sentry (on foot, not its leader, not its gun), in their order. */
+    sentryList(sq, g2) {
+      const M2 = this.memo(sq);
+      let l = (M2.sentries ?? (M2.sentries = /* @__PURE__ */ new Map())).get(g2);
+      if (!l) {
+        l = M2.up.filter((x) => grp(x) === g2 && !VEHICLE.has(x.role) && !CREWED.has(x.role) && x.role !== "holder" && x.role !== "officer" && x.role !== "mg" && !(x.lead || x.j === void 0 && !!x.hasSec));
+        l.sort((a, c) => (a.j ?? 0) - (c.j ?? 0));
+        M2.sentries.set(g2, l);
+      }
+      return l;
+    }
+    watchPose(sq, m, near2, plain2) {
+      if (!this.life || VEHICLE.has(m.role) || CREWED.has(m.role) || m.role === "holder" || m.role === "officer") return plain2;
+      m.sentry = void 0;
+      if (m.role === "mg") return "hide";
+      const W2 = DR.life.watch, u = sq.u, t = this.b.t, g2 = grp(m);
+      if (m.lead || m.j === void 0 && !!m.hasSec) {
+        const win2 = Math.floor((t + 8 * roll(this.seed, u.id, m.n, 111)) / 8);
+        return roll(this.seed, u.id, m.n, win2, 112) < W2.glasses ? "observe" : "wait";
+      }
+      const can2 = this.sentryList(sq, g2), n = can2.length, at4 = can2.indexOf(m);
+      const turn2 = W2.turn[0] + (W2.turn[1] - W2.turn[0]) * roll(this.seed, u.id, g2, 113), rota = Math.floor((t + turn2 * roll(this.seed, u.id, g2, 114)) / turn2);
+      for (let k = 0; k < W2.sentries && n > W2.sentries && at4 >= 0; k++) if ((rota + Math.floor(k * n / W2.sentries)) % n === at4) {
+        m.sentry = true;
+        return "wait";
+      }
+      const keep2 = W2.keep[0] + (W2.keep[1] - W2.keep[0]) * roll(this.seed, u.id, m.n, 115), win = Math.floor((t + keep2 * roll(this.seed, u.id, m.n, 116)) / keep2);
+      if (near2 >= W2.far && roll(this.seed, u.id, m.n, win, 118) < W2.easy) return "idle";
+      const lying = m.cover === "works" || m.cover === "building" ? W2.works : m.cover === "woods" || m.cover === "rock" || m.cover === "wreck" || m.cover === "rough" || m.cover === "crest" ? W2.cover : W2.open;
+      return roll(this.seed, u.id, m.n, win, 117) < lying ? "hide" : "wait";
+    }
+    /**
+     * Squad life: how far off the way to the enemy a man watching looks now (radians, to his right; DR.life.scan): his own
+     * lean, and a fresh look every few seconds of his own, a sentry sweeping the whole arc, the rest a part of it, a man
+     * lying less; a leader looks round along his line to his men now and then.
+     */
+    scan(sq, m) {
+      const S3 = DR.life.scan, u = sq.u, t = this.b.t;
+      const every = S3.every[0] + (S3.every[1] - S3.every[0]) * roll(this.seed, u.id, m.n, 132), win = Math.floor((t + every * roll(this.seed, u.id, m.n, 133)) / every);
+      const low2 = m.pose === "hide" || m.pose === "observe";
+      if (!low2 && (m.lead || m.j === void 0 && !!m.hasSec) && roll(this.seed, u.id, m.n, win, 134) < S3.back) return (roll(this.seed, u.id, m.n, win, 135) < 0.5 ? -1 : 1) * (1.5 + 0.9 * roll(this.seed, u.id, m.n, win, 136));
+      const share = low2 ? S3.lying : m.sentry ? 1 : S3.rest;
+      return (roll(this.seed, u.id, m.n, 131) - 0.5) * 2 * S3.own * (low2 ? 0.5 : 1) + (roll(this.seed, u.id, m.n, win, 137) - 0.5) * 2 * S3.arc * share;
+    }
+    /**
+     * Squad life: the battle time till which a man firing from the line has broken off (DR.life.pause: a fresh clip, a look
+     * for his target; a machine gun's new belt or hot barrel), or none while he fires. Each man's spells are his own.
+     */
+    pauseOf(sq, m) {
+      if (!this.life) return void 0;
+      const P = DR.life.pause, u = sq.u, t = this.b.t, gun2 = m.role === "mg";
+      const [e0, e1] = gun2 ? P.gun : P.every, [f0, f1] = gun2 ? P.gunFor : P.for;
+      const every = e0 + (e1 - e0) * roll(this.seed, u.id, m.n, 141), at4 = t + every * roll(this.seed, u.id, m.n, 142), win = Math.floor(at4 / every);
+      const len = f0 + (f1 - f0) * roll(this.seed, u.id, m.n, win, 143), ph = at4 - win * every;
+      return ph < len ? t + (len - ph) : void 0;
+    }
+    /**
+     * Squad life: no line on the move is dressed as on parade. Each man drifts a few paces ahead of and behind his place
+     * and a little to either side of it, slowly, in his own time (DR.life.drift): [metres across, metres along] now.
+     */
+    drift(sq, m) {
+      const D2 = DR.life.drift, u = sq.u;
+      const T = D2.every[0] + (D2.every[1] - D2.every[0]) * roll(this.seed, u.id, m.n, 126), ph = (this.b.t / T + roll(this.seed, u.id, m.n, 127)) * Math.PI * 2;
+      return [D2.across * Math.sin(ph * 0.73 + 6.3 * roll(this.seed, u.id, m.n, 128)), D2.along * Math.sin(ph)];
+    }
+    /**
+     * Squad life: the gait of a man keeping up with his block under fire. Left further behind his place than his own
+     * patience (some make it up at once, some not till they are well back) he sprints upright till he has made it up;
+     * else he goes at the crouch.
+     */
+    gaitOf(sq, m, gain) {
+      const u = sq.u, t = this.b.t;
+      if (m.pose === "run" || m.pose === "advance") {
+        const T = 1.5 + 1.5 * roll(this.seed, u.id, m.n, 154), at4 = t + T * roll(this.seed, u.id, m.n, 155);
+        if (Math.floor(at4 / T) === Math.floor((at4 - 0.5) / T)) return m.pose;
+      }
+      const up = this.upright(sq, m), far = DR.life.rush.sprint * (up ? 0.4 + 0.8 * roll(this.seed, u.id, m.n, 156) : 9 + 4 * roll(this.seed, u.id, m.n, 156));
+      return (m.pose === "run" ? gain > (up ? 1.5 : far * 0.5) : gain > far) ? "run" : "advance";
+    }
+    /**
+     * Squad life: a man lying or kneeling who must now get up and go (left behind by his block, its line swung round, its
+     * pace picked up) gets up at a moment of his own (up to DR.life.react.rise seconds after he must, his leader at once):
+     * true once it has come. Never a section on its feet in one movement.
+     */
+    rises(sq, m) {
+      if (!this.life || MOVING.has(m.pose) || VEHICLE.has(m.role) || CREWED.has(m.role)) {
+        m.riseAt = void 0;
+        return true;
+      }
+      const t = this.b.t;
+      if (m.riseAt === void 0 || t > m.riseAt + 2) m.riseAt = t + (m.lead || m.j === void 0 && m.role !== "mg" ? 0 : DR.life.react.rise * roll(this.seed, sq.u.id, m.n, Math.round(t * 2), 157));
+      if (t < m.riseAt - 1e-6) return false;
+      m.riseAt = void 0;
+      return true;
+    }
+    /**
+     * Squad life: how a man runs when he must cover ground, for a spell of his own: head up and sprinting (DR.life.rush.upright
+     * of them at any time), or bent low at the crouch. No squad runs all one way.
+     */
+    upright(sq, m) {
+      const u = sq.u, T = 6 + 8 * roll(this.seed, u.id, m.n, 125), win = Math.floor(this.b.t / T + roll(this.seed, u.id, m.n, 129));
+      return roll(this.seed, u.id, m.n, win, 130) < DR.life.rush.upright;
+    }
+    /** Squad life: whether a man on the approach has his rifle at the ready yet (DR.life.ready): its scouts always, the rest each from his own distance. */
+    readyNow(sq, m, gap) {
+      const [lo, hi] = DR.life.ready;
+      return !!m.scout || gap < DR.ranges.bound * (lo + (hi - lo) * roll(this.seed, sq.u.id, m.n, 151));
+    }
     // ---- Thinking: each block twice a second --------------------------------------------------------------------------
     think(sq) {
       const u = sq.u, t = this.b.t;
@@ -91482,6 +91782,7 @@
         }
       }
       if (ph !== was || got) {
+        if (this.life) sq.lastFor = sq.since > 0 ? t - sq.since : Infinity;
         sq.phase = ph;
         sq.since = t;
       }
@@ -91510,6 +91811,7 @@
         this.mounted(sq);
         return;
       }
+      const held3 = this.life ? this.lags(sq, was) : null;
       switch (ph) {
         case "column":
           this.column(sq);
@@ -91548,6 +91850,7 @@
         default:
           break;
       }
+      if (held3) for (const [m, snap] of held3) Object.assign(m, snap);
       this.ambush(sq);
       this.officer(sq);
       for (const m of sq.men) if (m.fell === void 0 && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
@@ -91559,8 +91862,9 @@
      */
     arrive(sq, m) {
       m.v = 0;
+      const routed = m.pose === "flee" || this.life && sq.phase === "flee";
       if (m.pr) {
-        m.pose = m.pose === "flee" ? "cower" : "wait";
+        m.pose = routed ? "cower" : "wait";
         return;
       }
       switch (m.role) {
@@ -91576,11 +91880,11 @@
         // A support team's crew sets its weapon up in the line, or down a moment on the march; a routing one crouches.
         case "hmg":
         case "mortar":
-          m.pose = m.pose === "flee" ? "cower" : sq.phase === "battery" ? "deployed" : "wait";
+          m.pose = routed ? "cower" : sq.phase === "battery" ? "deployed" : "wait";
           return;
         default: {
           m.until = Math.max(m.until, this.b.t + 1.5);
-          if (m.pose === "flee") {
+          if (routed) {
             m.pose = "cower";
             return;
           }
@@ -91591,7 +91895,10 @@
           }
           if (!m.aim && m.role !== "officer" && (sq.phase === "fight" || sq.phase === "pinned")) m.aim = this.aimAt(m, this.threat(sq.u));
           if (m.aim && m.role !== "officer") m.pose = this.firePose(m);
-          else m.pose = m.role === "mg" && sq.phase !== "fight" ? "hide" : "wait";
+          else {
+            m.pose = m.role === "mg" && sq.phase !== "fight" ? "hide" : "wait";
+            if (this.life && (sq.phase === "hold" || sq.phase === "startline")) m.pose = this.watchPose(sq, m, this.nearestGap(sq.u), m.pose);
+          }
         }
       }
     }
@@ -92070,6 +92377,27 @@
           return "fire_prone";
       }
     }
+    /**
+     * Squad life: off his sights a moment where he lies (a fresh clip, a stoppage, a look for his target): ducked below the
+     * parapet or the sill, head down behind his tree or his rock; in the open still at his rifle, not firing (a machine
+     * gun silent on its bipod). The poses the 3D game already has: there is no reload clip yet (the soldier modeller's to
+     * make; once there is one, this is where it goes).
+     */
+    lowPose(m) {
+      if (m.role === "mg") return "hide";
+      switch (m.cover) {
+        case "works":
+        case "building":
+          return "wait";
+        case "woods":
+        case "rock":
+        case "wreck":
+        case "rough":
+          return "cower";
+        default:
+          return "hide";
+      }
+    }
     /** The nearest standing man of the block it fights, else a point in that block: where he fires. */
     aimAt(m, e) {
       if (!e) return void 0;
@@ -92115,19 +92443,26 @@
       const u = sq.u, t = this.b.t, N = this.nums(u), h = sq.heading, v = Math.max(0.5, sq.speed);
       const e = this.threat(u), dir = this.threatDir(sq);
       const [hx, hy] = fwd(h);
-      const close3 = e ? this.b.gap(u, e) < DR.ranges.bound : false;
+      const gapE = e ? this.b.gap(u, e) : Infinity, close3 = gapE < DR.ranges.bound;
       const book3 = this.byBook, bound3 = book3 ? this.boundFor(sq, N) : "wave", S3 = schoolNums(u.nat), bk = this.cycle(sq, N, bound3);
+      const life = this.life && book3;
       const vLeap = book3 ? CATCH_UP * 0.85 * bk.rush / bk.cyc : 4.7 * N.rush / (N.rush + N.halt);
       sq.leap = sq.leap ? v < vLeap * 1.1 : v < vLeap * 0.9;
       const dbl = u.order?.kind === "move" && !!u.order.run;
       for (const m of this.up(sq)) {
-        const [a, l] = this.slot(sq, m, "line");
+        let [a, l] = this.slot(sq, m, "line");
+        if (this.life && !VEHICLE.has(m.role) && !CREWED.has(m.role)) {
+          const [da, dl] = this.drift(sq, m);
+          a += da;
+          l += dl;
+        }
         const s = toWorld(u, u.face, a, l);
         if (!under || dbl) {
           m.aim = void 0;
           m.until = t + 1;
           m.el = void 0;
-          this.follow(sq, m, s, dbl ? "run" : close3 ? "advance" : "walk");
+          const ready = this.life && e ? this.readyNow(sq, m, gapE) : close3;
+          this.follow(sq, m, s, dbl ? "run" : ready ? "advance" : "walk");
           continue;
         }
         if (m.role === "officer" && sq.leap) {
@@ -92144,8 +92479,15 @@
             cyc = bk.cyc;
             off2 = -(this.turnFor(sq, m, bound3) * bk.slot + (first2 ? 0 : 0.3 + (BOOK2.stagger - 0.3) * roll(this.seed, u.id, grp(m), Math.floor((m.j ?? 0) / 2), 92)));
           } else off2 += m.jx * 0.08;
-          const at4 = t + off2 + 100 * cyc, n = Math.floor(at4 / cyc);
-          const rushing = at4 - n * cyc < rush;
+          let at4 = t + off2 + 100 * cyc, n = Math.floor(at4 / cyc);
+          let rushing = at4 - n * cyc < rush;
+          if (life) {
+            at4 = t - this.turnFor(sq, m, bound3) * bk.slot + 100 * cyc;
+            n = Math.floor(at4 / cyc);
+            const [d0, len] = this.rushOf(sq, m, n, bk, bound3), p0 = at4 - n * cyc;
+            rushing = p0 >= d0 && p0 < d0 + len;
+            rush = len;
+          }
           const gain = (s[0] - m.x) * hx + (s[1] - m.y) * hy, behind2 = gain > 30;
           const lead2 = v * (rush + (cyc - rush) / 2);
           if (rushing && m.rushed !== n && gain + lead2 < 3) m.rushed = n;
@@ -92159,14 +92501,16 @@
             m.pose = m.aim ? this.firePose(m) : "cower";
             continue;
           }
-          if (rushing && m.rushed !== n && m.role !== "officer" || behind2 && m.pose !== "advance") {
+          const onRush = m.pose === "advance" || life && m.pose === "run";
+          if (rushing && m.rushed !== n && m.role !== "officer" || behind2 && !onRush && (!life || this.rises(sq, m))) {
             this.go(sq, m, [s[0] + hx * lead2, s[1] + hy * lead2], "advance", 3, t + rush, dir, 6);
             m.v = clamp6(Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) / (rush * 0.85), 2, behind2 || book3 ? CATCH_UP : 5.5);
             if (book3 && m.v <= 2.8 && !behind2 && roll(this.seed, u.id, m.n, n, 93) < S3.crawl) m.pose = "creep";
+            else if (life && m.role !== "officer" && this.upright(sq, m)) m.pose = "run";
             m.rushed = n;
             m.aim = void 0;
             m.el = 2;
-          } else if (m.pose === "advance" || m.pose === "creep") {
+          } else if (onRush || m.pose === "creep") {
             if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 1.5 && t < m.until + 1) continue;
             m.v = 0;
             m.spot = [m.x, m.y];
@@ -92187,30 +92531,48 @@
             m.el = m.role === "officer" ? void 0 : 1;
           } else if (book3 && m.pose === "crawl" && t < m.until && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 0.3) continue;
           else if (t >= m.until && close3 && m.role !== "officer") {
-            m.aim = this.aimFor(sq, m, e);
-            m.pose = this.firePose(m);
-            m.until = t + 1.5;
-            m.el = 1;
+            const off3 = life ? this.pauseOf(sq, m) : void 0;
+            if (off3 !== void 0) {
+              m.aim = void 0;
+              m.pose = this.lowPose(m);
+              m.until = off3;
+              m.el = 1;
+            } else {
+              m.aim = this.aimFor(sq, m, e);
+              m.pose = this.firePose(m);
+              m.until = t + 1.5 + (life ? roll(this.seed, u.id, m.n, Math.round(t * 2), 106) : 0);
+              m.el = 1;
+            }
           }
           if (book3 && m.aim && SMALL_ARMS.has(m.pose)) m.rapid = t + 1;
         } else {
           const share = 0.3, cyc = 6;
-          const ph = book3 && bound3 !== "wave" ? (t - this.turnFor(sq, m, bound3) * 2 + 600) % 6 : (t + roll(this.seed, u.id, m.n, 11) * cyc) % cyc;
-          const behind2 = (s[0] - m.x) * hx + (s[1] - m.y) * hy > 12;
-          if ((book3 && bound3 !== "wave" ? ph < 2 : ph < cyc * share) && m.role !== "officer" && !behind2) {
+          let ph = book3 && bound3 !== "wave" ? (t - this.turnFor(sq, m, bound3) * 2 + 600) % 6 : (t + roll(this.seed, u.id, m.n, 11) * cyc) % cyc;
+          let drop = book3 && bound3 !== "wave" ? 2 : cyc * share;
+          if (life && bound3 !== "wave") {
+            ph = (ph - this.teamShare(sq, m) * DR.life.rush.roll + 600) % 6;
+            drop = 1.2 + roll(this.seed, u.id, m.n, Math.floor((t - this.turnFor(sq, m, bound3) * 2 + 600) / 6), 107);
+          }
+          const gain = (s[0] - m.x) * hx + (s[1] - m.y) * hy, behind2 = gain > 12;
+          if (ph < drop && m.role !== "officer" && !behind2) {
             if (m.pose !== "fire_prone" && m.pose !== "lmg_burst" && m.pose !== "fire_kneel") {
               m.spot = [m.x, m.y];
               m.cover = "none";
             }
+            const knee = life && roll(this.seed, u.id, m.n, 110) < DR.life.rush.knee;
             m.v = 0;
-            m.pose = close3 ? m.role === "mg" ? "lmg_burst" : "fire_prone" : "wait";
+            m.pose = close3 ? m.role === "mg" ? "lmg_burst" : knee ? "fire_kneel" : "fire_prone" : knee ? "wait" : life ? "hide" : "wait";
             m.aim = close3 ? this.aimFor(sq, m, e) : void 0;
             m.el = 1;
             if (book3 && m.aim) m.rapid = t + 1;
           } else {
+            if (life && !this.rises(sq, m)) {
+              m.until = t + 0.5;
+              continue;
+            }
             m.aim = void 0;
             m.el = m.role === "officer" ? void 0 : 2;
-            this.follow(sq, m, s, "advance", 1.1);
+            this.follow(sq, m, s, life && m.role !== "officer" ? this.gaitOf(sq, m, gain) : "advance", 1.1);
           }
           m.until = t + 0.5;
         }
@@ -92218,18 +92580,18 @@
     }
     /** Lying where they are, in the best cover near their places, in one pose (the start line: waiting for the guns to lift). */
     lie(sq, pose) {
-      const u = sq.u, t = this.b.t, dir = this.threatDir(sq);
+      const u = sq.u, t = this.b.t, dir = this.threatDir(sq), near2 = this.life ? this.nearestGap(u) : 0;
       for (const m of this.up(sq)) {
         if (m.role === "officer") continue;
         const [a, l] = this.slot(sq, m, "line");
         const s = toWorld(u, u.face, a, l);
-        if (sq.since === t || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 || t >= m.until) this.go(sq, m, s, pose, 3, t + 30, dir);
+        if (this.fresh(sq, m) || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 + (this.life ? 5 * roll(this.seed, u.id, m.n, 158) : 0) && this.rises(sq, m) || t >= m.until) this.go(sq, m, s, pose, 3, t + 30 + (this.life ? 25 * roll(this.seed, u.id, m.n, Math.round(t * 2), 108) : 0), dir);
         if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) {
-          m.pose = m.role === "mg" ? "hide" : pose;
+          m.pose = this.watchPose(sq, m, near2, m.role === "mg" ? "hide" : pose);
           m.v = 0;
         } else {
           const far = Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 15, r = roll(this.seed, u.id, m.n, 41);
-          m.pose = far ? "run" : "creep";
+          m.pose = far ? this.life && !this.upright(sq, m) ? "advance" : "run" : "creep";
           m.v = far ? 3.8 + 1.4 * r : 2.1 + 0.6 * r;
         }
       }
@@ -92296,7 +92658,7 @@
           }
           continue;
         }
-        const moved = fresh6 || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 6;
+        const moved = (this.life ? this.fresh(sq, m) : fresh6) || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 6;
         if (moved || t >= m.until + (m.role === "mg" ? 20 : 30) * (0.6 + 0.8 * roll(this.seed, u.id, m.n, Math.floor(t / 20)))) {
           this.go(sq, m, s, sq.harm > DR.pin.harm * 0.6 ? "crawl" : "creep", sq.harm > DR.pin.harm * 0.6 ? 1.2 : 2.5, t + 1, dir);
           m.aim = void 0;
@@ -92399,9 +92761,15 @@
           }
           continue;
         }
-        const moved = fresh6 || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 6;
+        const first2 = this.life ? this.fresh(sq, m) : fresh6;
+        const moved = first2 || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 6 + (this.life ? 6 * roll(this.seed, u.id, m.n, 158) : 0) && (first2 || this.rises(sq, m));
         if (moved || t >= m.until + (m.role === "mg" ? 20 : 30) * (0.6 + 0.8 * roll(this.seed, u.id, m.n, Math.floor(t / 20)))) {
           this.go(sq, m, s, down ? "crawl" : "creep", down ? 1.2 : 2.5, t + 1, dir);
+          if (this.life && !down) {
+            const far = Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) > DR.life.rush.sprint * 2;
+            m.pose = far ? this.upright(sq, m) ? "run" : "advance" : "creep";
+            m.v = (far ? 4 : 2.1) + 0.8 * roll(this.seed, u.id, m.n, 119);
+          }
           m.aim = void 0;
           m.el = 1;
           continue;
@@ -92412,7 +92780,7 @@
         if (t < m.until && m.pose !== "creep" && m.pose !== "crawl") continue;
         const r = roll(this.seed, u.id, m.n, t, 6);
         if (home && e && gap > (S3.hold ?? (m.role === "mg" ? BOOK2.hold.mg : BOOK2.hold.rifle[band2]))) {
-          m.pose = m.role === "mg" ? "hide" : "wait";
+          m.pose = this.watchPose(sq, m, gap, m.role === "mg" ? "hide" : "wait");
           m.aim = void 0;
           m.until = t + 1;
           continue;
@@ -92432,10 +92800,17 @@
           m.aim = void 0;
           m.until = t + 1.2;
         } else {
-          m.pose = aim ? this.firePose(m) : "wait";
-          m.aim = aim;
-          m.until = t + 2 + 2.5 * r;
-          if (out && aim) m.rapid = m.until;
+          const off2 = aim ? this.pauseOf(sq, m) : void 0;
+          if (off2 !== void 0) {
+            m.pose = this.lowPose(m);
+            m.aim = void 0;
+            m.until = off2;
+          } else {
+            m.pose = aim ? this.firePose(m) : "wait";
+            m.aim = aim;
+            m.until = t + 2 + 2.5 * r;
+            if (out && aim) m.rapid = m.until;
+          }
         }
         if (home && m.cover === "none" && u.dug) m.until = Math.min(m.until, t + 1);
       }
@@ -92576,20 +92951,27 @@
           }
           return;
         }
-        this.go(sq, m, p, "advance", final === "charge" ? CATCH_UP : 5.5, t + 4, dir, 4);
+        this.go(sq, m, p, this.life && this.upright(sq, m) ? "run" : "advance", final === "charge" ? CATCH_UP : 5.5, t + 4, dir, 4);
         m.aim = void 0;
         return;
       }
       const first2 = m.lead || m.j === void 0 && m.role === "rifle" || bound3 === "body" && m.role === "mg";
       const off2 = -(this.turnFor(sq, m, bound3) * bk.slot + (first2 ? 0 : 0.3 + (BOOK2.stagger - 0.3) * roll(this.seed, u.id, grp(m), Math.floor((m.j ?? 0) / 2), 92)));
-      const at4 = t + off2 + 100 * bk.cyc, n = Math.floor(at4 / bk.cyc), rushing = at4 - n * bk.cyc < bk.rush;
+      let at4 = t + off2 + 100 * bk.cyc, n = Math.floor(at4 / bk.cyc), rushing = at4 - n * bk.cyc < bk.rush, rush = bk.rush;
+      if (this.life) {
+        at4 = t - this.turnFor(sq, m, bound3) * bk.slot + 100 * bk.cyc;
+        n = Math.floor(at4 / bk.cyc);
+        const [d0, len] = this.rushOf(sq, m, n, bk, bound3), p0 = at4 - n * bk.cyc;
+        rushing = p0 >= d0 && p0 < d0 + len;
+        rush = len;
+      }
       const dl = edge4 - G5 * 0.7;
       if (rushing && m.rushed !== n && !down && dl > 2) {
         const F2 = BOOK2.flank.rush, swing = F2[0] + (F2[1] - F2[0]) * roll(this.seed, u.id, m.n, n, 3), step2 = 10 + 10 * roll(this.seed, u.id, m.n, n, 4);
         const sa = clamp6(da, -swing, swing), sl = clamp6(dl, 0, Math.max(3, step2 - Math.abs(sa) * 0.5));
         const heavy = lv > BOOK2.suppress.heavy, slow = heavy || roll(this.seed, u.id, m.n, n, 93) < crawl;
-        const d = Math.hypot(sa, sl), pace2 = heavy ? 1.2 : slow ? 2.6 : clamp6(d / (bk.rush * 0.85), 3.5, CATCH_UP);
-        this.go(sq, m, [m.x + rx * sa + fx * sl, m.y + ry * sa + fy * sl], heavy ? "crawl" : slow ? "creep" : "advance", pace2, t + (slow ? d / pace2 : bk.rush), dir, 6);
+        const d = Math.hypot(sa, sl), pace2 = heavy ? 1.2 : slow ? 2.6 : clamp6(d / (rush * 0.85), 3.5, CATCH_UP);
+        this.go(sq, m, [m.x + rx * sa + fx * sl, m.y + ry * sa + fy * sl], heavy ? "crawl" : slow ? "creep" : this.life && this.upright(sq, m) ? "run" : "advance", pace2, t + (slow ? d / pace2 : rush), dir, 6);
         m.rushed = n;
         m.aim = void 0;
         return;
@@ -92633,6 +93015,13 @@
         m.aim = aim;
         m.until = t + 1.6;
       } else {
+        const off22 = aim ? this.pauseOf(sq, m) : void 0;
+        if (off22 !== void 0) {
+          m.pose = this.lowPose(m);
+          m.aim = void 0;
+          m.until = off22;
+          return;
+        }
         m.pose = aim ? this.firePose(m) : "wait";
         m.aim = aim;
         m.until = t + 1 + 1.5 * r;
@@ -92646,7 +93035,7 @@
         if (m.role === "officer") continue;
         const [a, l] = this.slot(sq, m, "line");
         const s = toWorld(u, u.face, a, l);
-        if (sq.since === t || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 || m.v > 0 && t >= m.until) {
+        if (this.fresh(sq, m) || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 + (this.life ? 5 * roll(this.seed, u.id, m.n, 158) : 0) && this.rises(sq, m) || m.v > 0 && t >= m.until) {
           this.go(sq, m, s, "creep", 2.5, t + 1, dir);
           continue;
         }
@@ -92654,7 +93043,7 @@
         m.v = 0;
         m.aim = void 0;
         if (m.role === "at" && m.hidden) continue;
-        m.pose = m.role === "mg" ? "hide" : near2 < 600 ? "wait" : roll(this.seed, u.id, m.n, Math.floor(t / 8)) < 0.3 ? "idle" : "wait";
+        m.pose = this.watchPose(sq, m, near2, m.role === "mg" ? "hide" : near2 < 600 ? "wait" : roll(this.seed, u.id, m.n, Math.floor(t / 8)) < 0.3 ? "idle" : "wait");
       }
     }
     /** A reserve resting out of the fight: in knots, in cover, ready; the headquarters at the middle. */
@@ -92663,7 +93052,7 @@
       for (const m of this.up(sq)) {
         const [a, l] = this.slot(sq, m, "rest");
         const s = toWorld(u, u.face, a, l);
-        if (sq.since === t || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 || m.v > 0 && t >= m.until) {
+        if (this.fresh(sq, m) || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 + (this.life ? 5 * roll(this.seed, u.id, m.n, 158) : 0) && this.rises(sq, m) || m.v > 0 && t >= m.until) {
           this.go(sq, m, s, "walk", 2, t + 1, dir);
           continue;
         }
@@ -92671,6 +93060,7 @@
         m.v = 0;
         m.aim = void 0;
         m.pose = m.k % 5 === 1 ? "wait" : roll(this.seed, u.id, m.n, Math.floor(t / 10)) < 0.5 ? "idle" : "wait";
+        if (this.life) m.pose = this.watchPose(sq, m, Infinity, m.pose);
       }
     }
     /**
@@ -92729,12 +93119,13 @@
       for (const m of this.up(sq)) {
         const [a, l] = this.slot(sq, m, "line");
         const s = toWorld(u, u.face, a, l);
-        const cyc = N.rush + N.halt, ph = (t + (m.team === 2 ? cyc / 2 : 0) + m.jx * 0.08 + 100 * cyc) % cyc;
+        const cyc = N.rush + N.halt;
+        const ph = (t + (this.life ? this.teamShare(sq, m) * cyc : (m.team === 2 ? cyc / 2 : 0) + m.jx * 0.08) + 100 * cyc) % cyc;
         const cover3 = sq.leap ? ph >= N.rush : roll(this.seed, u.id, m.n, Math.floor(t / 2)) < 0.2;
         if (cover3 && m.role !== "officer" && e && this.b.gap(u, e) < 500) {
           m.v = 0;
           m.spot = [m.x, m.y];
-          m.pose = m.role === "mg" ? "lmg_burst" : "fire_kneel";
+          m.pose = m.role === "mg" ? "lmg_burst" : this.life && roll(this.seed, u.id, m.n, 109) < 0.35 ? "fire_prone" : "fire_kneel";
           m.aim = this.aimAt(m, e);
         } else {
           m.aim = void 0;
@@ -92757,7 +93148,12 @@
         m.aim = void 0;
         m.hidden = void 0;
         m.until = t + 0.5;
-        this.follow(sq, m, s, "flee", 1.1);
+        let gait = "flee";
+        if (this.life && !VEHICLE.has(m.role) && !CREWED.has(m.role)) {
+          const T = 8 + 8 * roll(this.seed, u.id, m.n, 161), r = roll(this.seed, u.id, m.n, Math.floor(t / T + roll(this.seed, u.id, m.n, 162)), 163), F2 = DR.life.rout;
+          gait = r < F2[0] ? "flee" : r < F2[0] + F2[1] ? "run" : "advance";
+        }
+        this.follow(sq, m, s, gait, 1.1);
       }
     }
     /** Rallied: the men gather on their officer, facing the enemy again. */
@@ -92769,17 +93165,22 @@
       lead2.spot = [lead2.x, lead2.y];
       lead2.pose = "idle";
       lead2.aim = void 0;
+      const back = Math.atan2(-dir[0], -dir[1]);
       men2.forEach((m, i) => {
         if (m === lead2) return;
-        const ang = i / men2.length * Math.PI * 2, r = sq.tier >= 1 ? 7 + 0.25 * men2.length : 7;
+        let ang = i / men2.length * Math.PI * 2, r = sq.tier >= 1 ? 7 + 0.25 * men2.length : 7, pace2 = 4;
+        if (this.life) {
+          ang = back + ((i + roll(this.seed, u.id, m.n, 121)) / men2.length - 0.5) * 3.6;
+          r = 3 + (r + 3) * Math.sqrt(roll(this.seed, u.id, m.n, 122));
+          pace2 = 3 + 2.2 * roll(this.seed, u.id, m.n, 123);
+        }
         const p = [lead2.x + Math.sin(ang) * r + dir[0] * 4, lead2.y + Math.cos(ang) * r + dir[1] * 4];
-        if (Math.hypot(m.spot[0] - p[0], m.spot[1] - p[1]) > 4) this.go(sq, m, p, "run", 4, t + 2, dir, 4);
+        if (Math.hypot(m.spot[0] - p[0], m.spot[1] - p[1]) > 4) this.go(sq, m, p, "run", pace2, t + 2, dir, 4);
         else if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) {
           m.v = 0;
-          m.pose = "wait";
+          m.pose = this.life && m.role !== "mg" && roll(this.seed, u.id, m.n, 124) < 0.4 ? "hide" : "wait";
         }
       });
-      void u;
     }
     /** Lorried infantry still aboard, cavalry still mounted: they ride where their block goes. */
     mounted(sq) {
@@ -93281,7 +93682,8 @@
       let behind2 = Infinity;
       if (close3 && foot.length) for (const f of foot) behind2 = Math.min(behind2, (f.x - u.x) * fx + (f.y - u.y) * fy + f.d / 2 - 15);
       tanks.forEach((m, i) => {
-        m.buttoned = lone || e !== null && b.gap(u, e) < 120 || m.cmdDown !== void 0 || void 0;
+        if (!this.hatches) m.buttoned = lone || e !== null && b.gap(u, e) < 120 || m.cmdDown !== void 0 || void 0;
+        else if (lone || e !== null && b.gap(u, e) < DR.hatch.near[this.band(u)] * (DR.hatch.own[0] + (DR.hatch.own[1] - DR.hatch.own[0]) * roll(this.seed, u.id, m.n, 173))) this.alarm(sq, m, t);
         m.coax = this.byBook && !!e && FOOT_KINDS.includes(e.kind) && u.engaged !== void 0 && b.gap(u, e) < 600 || void 0;
         const n = sq.u.figures0 - 1 - m.k;
         const [wa, wl] = wreckOffset(u.id, n, u.w, u.d);
@@ -93774,16 +94176,22 @@
           if (s >= d - 1e-9 && !via && MOVING.has(m.pose) && m.role !== "lorry" && sq.phase !== "column" && sq.phase !== "limbered" && sq.boarding === void 0) this.arrive(sq, m);
         } else {
           let want;
+          let turn2 = rate2;
           if (m.aim) want = bearing2(m.x, m.y, m.aim[0], m.aim[1]);
           else if (m.v === 0 && fighting(u)) {
             if (e === void 0) e = this.threat(u);
             if (e) want = bearing2(m.x, m.y, e.x, e.y);
+            if (this.life && want !== void 0 && WATCHING.has(m.pose) && !veh && !CREWED.has(m.role) && m.role !== "holder") {
+              want += this.scan(sq, m);
+              turn2 = Math.min(rate2, DR.life.scan.rate * DT);
+            }
           }
-          if (want !== void 0 && !(this.b.trucks && m.role === "lorry")) m.face = turnTo(m.face, want, rate2);
+          if (want !== void 0 && !(this.b.trucks && m.role === "lorry")) m.face = turnTo(m.face, want, turn2);
         }
         if (m.role === "lorry" && (sq.hop !== void 0 || sq.left !== void 0 && t < sq.left + HOP.clear && sq.phase !== "flee")) return;
         const extra = m.role === "lorry" ? 120 : 0;
-        const [lx, ly] = this.leash(sq, [m.x, m.y], extra);
+        const slack = this.life && !veh && !CREWED.has(m.role) ? DR.life.react.leash * roll(this.seed, u.id, m.n, 153) : 0;
+        const [lx, ly] = this.leash(sq, [m.x, m.y], extra + slack);
         const gd = Math.hypot(lx - m.x, ly - m.y);
         if (gd === 0) return;
         const fast = m.role === "tank" ? tankTop(sq) : veh ? 16 : m.pose === "ride" || m.pose === "mounted" ? 14 : CATCH_UP, need = Math.min(fast, Math.max(3, sq.speed * 1.25));
@@ -93800,7 +94208,7 @@
           m.hidden = void 0;
           const rev = back(m.spot);
           m.v = rev ? Math.min(need, 4) : need;
-          m.pose = rev ? "reverse" : m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : sq.phase === "flee" ? "flee" : sq.phase === "bound" || sq.phase === "fight" ? "advance" : "run";
+          m.pose = rev ? "reverse" : m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : sq.phase === "flee" ? "flee" : (sq.phase === "bound" || sq.phase === "fight") && !(this.life && m.pose === "run") ? "advance" : "run";
           m.until = t + 1;
         }
         this.ring(sq, m, extra || (u.kind === "mot" || u.kind === "cav" ? RIDERS_RING + (this.b.trucks && u.kind === "mot" && m.role !== "lorry" ? HOP.ring : 0) : 0));
@@ -94019,6 +94427,9 @@
       const range2 = Math.hypot(v.x - m.x, v.y - m.y);
       if (range2 > (w === "mg" || w === "rifle" ? 900 : 4e3)) return;
       const l = Math.round((t + range2 / R2.speed[w]) * 10) / 10, k0 = Math.round(t * 10);
+      if (this.hatches && v.role === "tank" && !tq.esc) {
+        for (const x2 of alive) if (x2.role === "tank") this.alarm(tq, x2, l, x2 !== v);
+      }
       const base = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on2.id, x: 0, y: 0, r: "miss" };
       if (m.j !== void 0) base.j = m.j;
       if (w === "mg" && m.role === "tank") base.g = this.tankGun(u, m, aim, k0);
