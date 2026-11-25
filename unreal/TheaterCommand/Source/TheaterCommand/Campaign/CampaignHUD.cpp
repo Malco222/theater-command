@@ -15351,14 +15351,14 @@ namespace
 			{
 				Kind[0] = FChar::ToUpper(Kind[0]);
 			}
-			FString Under = Town.Town == Town.Province ? Kind : Town.Province + TEXT("  ·  ") + Town.Size;
+			FString Under = Town.Town == Town.Province ? Kind : Town.Province + TEXT("  \u00B7  ") + Town.Size;
 			if (!Town.bOwn)
 			{
-				Under += TEXT("  ·  taken");
+				Under += TEXT("  \u00B7  taken");
 			}
 			if (Town.Pays > 0)
 			{
-				Under += TEXT("  ·  pays ") + Cash(Town.Pays);
+				Under += TEXT("  \u00B7  pays ") + Cash(Town.Pays);
 			}
 
 			TSharedRef<SHorizontalBox> Plots = SNew(SHorizontalBox);
@@ -15408,7 +15408,7 @@ namespace
 			else if (Town.bBest)
 			{
 				const FHomeBuild& Best = Town.Best;
-				Middle->AddSlot().AutoHeight()[HomeName(TEXT("civic-") + Best.Line, Best.Label, FString::Printf(TEXT("%s  ·  %s"), *Cash(Best.Cost), *HomeMonths(Best.Months)), Cream)];
+				Middle->AddSlot().AutoHeight()[HomeName(TEXT("civic-") + Best.Line, Best.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Best.Cost), *HomeMonths(Best.Months)), Cream)];
 				Middle->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[HomeWords(Best.bOk || Best.Why.IsEmpty() ? Best.Effect : Best.Why)];
 				Order = Build(Best, Town.Town, false);
 			}
@@ -15461,7 +15461,7 @@ namespace
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
 							SNew(SVerticalBox)
-							+ SVerticalBox::Slot().AutoHeight()[HomeName(TEXT("civic-") + Offer.Line, Offer.Label, FString::Printf(TEXT("%s  ·  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Cream)]
+							+ SVerticalBox::Slot().AutoHeight()[HomeName(TEXT("civic-") + Offer.Line, Offer.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Cream)]
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[HomeWords(Offer.bOk || Offer.Why.IsEmpty() ? Offer.Effect : Offer.Why)]
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[Build(Offer, Town.Town, true)]
@@ -15625,7 +15625,7 @@ namespace
 					.ToolTipText(FText::FromString(Tip))
 					.OnClicked_Lambda([this, Which]() { if (Controller.IsValid()) { Controller->SetHomeFilter(Which); } return FReply::Handled(); })
 					[
-						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %d"), Label, Count))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(bOn ? OnBrass : Cream)
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d"), Label, Count))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(bOn ? OnBrass : Cream)
 					];
 			};
 			TSharedRef<SVerticalBox> Towns = SNew(SVerticalBox);
@@ -15713,7 +15713,7 @@ namespace
 								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 								[
 									SNew(SVerticalBox)
-									+ SVerticalBox::Slot().AutoHeight()[HomeName(FString(), Offer.Label, FString::Printf(TEXT("%s  ·  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Offer.bOk ? Cream : Muted, true)]
+									+ SVerticalBox::Slot().AutoHeight()[HomeName(FString(), Offer.Label, FString::Printf(TEXT("%s  \u00B7  %s"), *Cash(Offer.Cost), *HomeMonths(Offer.Months)), Offer.bOk ? Cream : Muted, true)]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)[HomeWords(Offer.bOk || Offer.Why.IsEmpty() ? Offer.Note : Offer.Why)]
 								]
 								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
@@ -15737,7 +15737,7 @@ namespace
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()
 						[
-							SNew(STextBlock).Text(FText::FromString(Board.bAgain && Board.AgainCost > 0 ? FString::Printf(TEXT("ORDER AGAIN  ·  %s"), *Cash(Board.AgainCost)) : FString(TEXT("ORDER AGAIN")))).Font(SmallCaps()).ColorAndOpacity(Board.bAgain ? BrightBrass : Faint)
+							SNew(STextBlock).Text(FText::FromString(Board.bAgain && Board.AgainCost > 0 ? FString::Printf(TEXT("ORDER AGAIN  \u00B7  %s"), *Cash(Board.AgainCost)) : FString(TEXT("ORDER AGAIN")))).Font(SmallCaps()).ColorAndOpacity(Board.bAgain ? BrightBrass : Faint)
 						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 						[
@@ -15773,7 +15773,7 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight()
 						[
 							SNew(STextBlock).Font(Typed(9.5f)).ColorAndOpacity(Muted)
-							.Text(FText::FromString(Each.Where.IsEmpty() ? FString::Printf(TEXT("Due %s"), *Each.Due) : FString::Printf(TEXT("%s  ·  due %s"), *Each.Where, *Each.Due)))
+							.Text(FText::FromString(Each.Where.IsEmpty() ? FString::Printf(TEXT("Due %s"), *Each.Due) : FString::Printf(TEXT("%s  \u00B7  due %s"), *Each.Where, *Each.Due)))
 						]
 					];
 				if (Each.bCancel)
