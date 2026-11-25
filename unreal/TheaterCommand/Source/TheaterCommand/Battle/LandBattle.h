@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Effects/BattleEffects.h"
+#include "Effects/WeatherFall.h"
 #include "GameFramework/Actor.h"
 
 #include "LandBattle.generated.h"
@@ -177,6 +178,14 @@ public:
 private:
 	TSharedPtr<FLandBattleState> State;
 	TUniquePtr<FBattleEffects> Effects;
+	/** Rain and snow seen falling (release 2, the look bible's G10; Battle/LandBattleWeather.cpp), "-TheaterLandFalling":
+	 * the battle's own weather (the campaign's word and the day's sky, LandWeather) falling round the eye, the haze
+	 * thickened and the light dulled for it, the ground and the things on it wet under rain, the rain heard. None
+	 * without the switch, and the battle as before. */
+	TUniquePtr<FWeatherFall> Fall;
+	bool bFalling = false;
+	/** The drops' colour: the haze's as HideTheTable lays it for the weather, times the weather's InkOverHaze. */
+	FLinearColor FallInk = FLinearColor(0.5f, 0.52f, 0.55f, 1.0f);
 	TSharedPtr<SLandBattleScreen> Screen;
 	TSharedPtr<SWidget> ScreenFrame;
 
@@ -919,6 +928,16 @@ private:
 	 * each plane drawn where the plan has it, its guns, the ground's guns firing up at it, and the one lost going down.
 	 * EyeWorld: the eye this frame (a downed pilot's canopy glows seen against the sun: -TheaterLandChutes). */
 	void FlyOver(const FVector& EyeWorld);
+	/** G10 (Battle/LandBattleWeather.cpp): with "-TheaterLandFalling", rain's wetness on the field's open ground before it
+	 * is laid (Word: the campaign's weather word over it; Look: LandScape's word for it), 0 without the switch or the
+	 * rain. Reads the recipe (Content/Effects/land-weather.json). */
+	double RainOnField(const FString& Word, const FString& Look);
+	/** G10: the battle's weather picked once the field is laid (the snow lying known), into the state; the wet surfaces. */
+	void PickWeather();
+	/** G10: the falling drops made (after HideTheTable: the haze's colour known). */
+	void MakeFall();
+	/** G10: each frame, after the effects: the drops round the eye. */
+	void DrawFall(const FVector& EyeWorld, float RealSeconds);
 	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
 	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
 	void SeatLight(int32 FromVehicle);

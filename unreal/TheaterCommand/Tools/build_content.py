@@ -994,6 +994,152 @@ def build_cloud_turned_or_tell():
             unreal.log_error("Theater Command: and the half-built M_CloudTurned could not be removed:\n" + traceback.format_exc())
 
 
+def _fall_chip_text():
+    """G10: Effects/WeatherFallChip.inl as it stands (the drops' arithmetic, which the cloud test, Tools/land_weather,
+    also compiles as C++ and checks)."""
+    import os
+    places = []
+    try:
+        places.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Source", "TheaterCommand", "Effects", "WeatherFallChip.inl"))
+    except NameError:  # (run where the script's own path is not given)
+        pass
+    places.append(os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Source", "TheaterCommand", "Effects", "WeatherFallChip.inl"))
+    for path in places:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+    raise RuntimeError("Effects/WeatherFallChip.inl was not found at " + " or ".join(places))
+
+
+def build_land_fall():
+    """RELEASE 2, THE LOOK BIBLE'S G10: RAIN AND SNOW SEEN FALLING (Effects/WeatherFall). One mesh a layer, made once:
+    each drop four points at its home in a box about the mesh's middle (all four at the home), each point's first
+    texture coordinate its corner, its second the drop's fall in steps and its phase, its third its size and its turn
+    to show. Where the points are placed (the vertex shader) the Custom node runs Effects/WeatherFallChip.inl for the
+    eye as it is this frame: the drop fallen and carried by the clock, wrapped round the box about the eye, turned to
+    it (a streak along its way for rain, a soft flake square to the eye for snow), never thinner than a pixel and a
+    quarter (its light kept), faded near the lens and toward the box's edge; the drops past the strength's share are
+    folded to a point. The numbers a frame: "Box", "Move", "Look", "Lens" (WeatherFall::Params), "UnitsPerMetre".
+    The pixels: the streak's or the flake's soft shape (the same file's Shape), "Ink" (linear: the haze's colour as
+    the day lights it) times "Brightness" and the drop's own, see-through by "Opacity". Light of its own, seen from
+    both sides, the engine's responsive anti-aliasing on (thin moving streaks are not smeared into the frames
+    before)."""
+    m = new_material("M_LandFall")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    try:
+        m.set_editor_property("enable_responsive_aa", True)
+    except Exception:
+        unreal.log_warning("Theater Command: M_LandFall: no responsive anti-aliasing flag in this engine; left as it is")
+    maths = _fall_chip_text()
+
+    def four(name, default, x, y):
+        v = vector(m, name, default, x, y)
+        return pair(m, v, (v, "A"), x + 200, y)
+
+    chip = node(m, unreal.MaterialExpressionCustom, -2400, 900)
+    chip.set_editor_property("description", "WeatherFallChip")
+    chip.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    chip.set_editor_property("code", maths + """
+// (the glue: one point of one drop, for the eye where it is this frame; the mesh's own frame is the world's, unturned,
+// in metres here)
+FFallChip FallChip;
+FallChip.Pad = 0.0f;
+float3 FallHomeM = FallHome / FallUnits;
+float3 FallEyeM = FallEye / FallUnits;
+FFallOut FallOut = FallChip.Vertex(FallHomeM, FallCorner, float4(FallSteps.x, FallSteps.y, FallSize.x, FallSize.y), FallEyeM, FallBox, FallMove, FallLook, FallLens);
+FallSeen = FallOut.Look;
+return FallOut.At * FallUnits;
+""")
+    inputs = []
+    for name in ("FallHome", "FallCorner", "FallSteps", "FallSize", "FallEye", "FallUnits", "FallBox", "FallMove", "FallLook", "FallLens"):
+        each = unreal.CustomInput()
+        each.set_editor_property("input_name", name)
+        inputs.append(each)
+    chip.set_editor_property("inputs", inputs)
+    seen_out = unreal.CustomOutput()
+    seen_out.set_editor_property("output_name", "FallSeen")
+    seen_out.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+    chip.set_editor_property("additional_outputs", [seen_out])
+
+    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2900, 600), "", chip, "FallHome")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 700, coordinate_index=0), "", chip, "FallCorner")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 800, coordinate_index=1), "", chip, "FallSteps")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 900, coordinate_index=2), "", chip, "FallSize")
+    eye = node(m, unreal.MaterialExpressionTransformPosition, -2700, 1000,
+               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    connect(node(m, unreal.MaterialExpressionCameraPositionWS, -2950, 1000), "", eye, "")
+    connect(eye, "", chip, "FallEye")
+    connect(scalar(m, "UnitsPerMetre", 100.0, -2900, 1100), "", chip, "FallUnits")
+    # (strength 0 until the game sets it: no drop shows)
+    connect(four("Box", (8.0, 0.0, 48.0, 0.0), -3300, 1200), "", chip, "FallBox")
+    connect(four("Move", (0.0, 0.0, 1.0 / 6.0, 0.0), -3300, 1350), "", chip, "FallMove")
+    connect(four("Look", (0.003, 0.55, 0.6, 1.6), -3300, 1500), "", chip, "FallLook")
+    lens = vector(m, "Lens", (0.0008, 1.25, 0.0, 0.55), -3300, 1650)
+    connect(pair(m, lens, (lens, "A"), -3100, 1650), "", chip, "FallLens")
+
+    # The point moved from where the mesh made it to where the chip puts it, in the world.
+    away = node(m, unreal.MaterialExpressionSubtract, -2100, 900)
+    connect(chip, "", away, "A")
+    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2300, 1050), "", away, "B")
+    moved = node(m, unreal.MaterialExpressionTransform, -1900, 900,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    connect(away, "", moved, "")
+    to_property(moved, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    # The pixels: how much of the drop shows (carried from its points), its shape there, its colour.
+    seen = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "FallSeen"), -1700, 0)
+    shown = node_from(m, unreal.MaterialExpressionComponentMask, seen, -1500, 200, r=True, g=False, b=False, a=False)
+    own = node_from(m, unreal.MaterialExpressionComponentMask, seen, -1500, -200, r=False, g=True, b=False, a=False)
+    corner = node_from(m, unreal.MaterialExpressionComponentMask, seen, -1500, 400, r=False, g=False, b=True, a=True)
+    kind = node_from(m, unreal.MaterialExpressionComponentMask, lens, -1500, 550, r=False, g=False, b=True, a=False)
+    shape = node(m, unreal.MaterialExpressionCustom, -1250, 450)
+    shape.set_editor_property("description", "WeatherFallShape")
+    shape.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    shape.set_editor_property("code", maths + """
+FFallChip FallChip;
+FallChip.Pad = 0.0f;
+return FallChip.Shape(FallCorner, FallKind);
+""")
+    shape_inputs = []
+    for name in ("FallCorner", "FallKind"):
+        each = unreal.CustomInput()
+        each.set_editor_property("input_name", name)
+        shape_inputs.append(each)
+    shape.set_editor_property("inputs", shape_inputs)
+    connect(corner, "", shape, "FallCorner")
+    connect(kind, "", shape, "FallKind")
+    alpha = times(m, times(m, shown, shape, -1000, 300), scalar(m, "Opacity", 0.3, -1200, 650), -800, 350)
+    to_property(one_in(m, unreal.MaterialExpressionSaturate, alpha, -600, 350), "", unreal.MaterialProperty.MP_OPACITY)
+    lit = times(m, times(m, vector(m, "Ink", (0.5, 0.52, 0.55, 1.0), -1200, -400), scalar(m, "Brightness", 1.0, -1200, -250), -1000, -300), own, -800, -250)
+    to_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+    try:  # (what the points' and the pixels' shaders cost, for the next Mac run's notes)
+        stats = mel.get_statistics(m)
+        unreal.log(f"Theater Command: M_LandFall: {stats.get_editor_property('num_vertex_shader_instructions')} vertex shader instructions, "
+                   f"{stats.get_editor_property('num_pixel_shader_instructions')} pixel")
+    except Exception:
+        pass
+
+
+def build_land_fall_or_tell():
+    """G10: M_LandFall is the falling rain and snow only; without it nothing falls and the battle says so (the haze, the
+    light and the wet ground are laid as asked). Whatever goes wrong in it is told, and the rest is built as before."""
+    import traceback
+    try:
+        build_land_fall()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandFall was not built (no rain or snow will be seen falling):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandFall"):
+                eal.delete_asset(f"{MATERIALS}/M_LandFall")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandFall could not be removed:\n" + traceback.format_exc())
+
+
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -2981,11 +3127,13 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # M_LandCrowdWorn, the same: TC_REBUILD=M_LandManWorn,M_LandCrowdWorn after a change to M_MapSurface or crowd_poses.)
 # (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
 # Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
+# (Release 2, G10: M_LandFall, the rain and snow seen falling, the same: TC_REBUILD=M_LandFall after a change to
+# Effects/WeatherFallChip.inl, whose text its two Custom nodes hold.)
 # (The wind and the clouds' shadows, release 2, 23 November: M_LandBlades, the grass, corn and trees the wind bends, and
 # M_LandCloudShade, the clouds' shadows on the field, the same; they and M_LandSurface, M_LandLeaves and M_LandStalks read
 # Tools/land_look/T_LandCloudWind.png: TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks
 # once, and again after make_sky_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandWorn", build_land_worn_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandManWorn", lambda: build_land_men_worn_or_tell("M_LandManWorn", False)), ("M_LandCrowdWorn", lambda: build_land_men_worn_or_tell("M_LandCrowdWorn", True)), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandWorn", build_land_worn_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandManWorn", lambda: build_land_men_worn_or_tell("M_LandManWorn", False)), ("M_LandCrowdWorn", lambda: build_land_men_worn_or_tell("M_LandCrowdWorn", True)), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_LandFall", build_land_fall_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

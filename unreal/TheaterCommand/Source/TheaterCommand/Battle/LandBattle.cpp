@@ -1557,6 +1557,9 @@ bool ALandBattle::Open()
 				}
 			}
 		}
+		// (release 2, G10: rain falling over this battle wets its open ground, laid with it; none without
+		// -TheaterLandFalling: Battle/LandBattleWeather.cpp)
+		Lay.Rain = RainOnField(LandParts::Wide(Lay.Weather), LandParts::Wide(std::string(LandScape::NameOf(LandScape::Pick(Lay)))));
 		S.Field = std::make_unique<LandField::Ground>(Lay);
 		S.Sight.Lay(S.Field.get());
 	}
@@ -2151,7 +2154,9 @@ bool ALandBattle::Open()
 	LayOldWrecks();
 	const double LaySeconds = LandParts::Seconds() - Took;
 	MakeFlags();
+	PickWeather(); // (G10: the battle's weather, before the table is hidden and the day laid for it)
 	HideTheTable();
+	MakeFall(); // (G10: the drops, in the haze's colour)
 
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
@@ -5915,6 +5920,13 @@ void ALandBattle::HideTheTable()
 		Day.Base = FMath::Clamp(Day.Base, 300.0, 3000.0);
 		Day.bDeck = DeckAsked >= 0.5 || Day.Cover >= 0.8;
 	}
+	// (rain or snow falling comes from under a closed sky, as the campaign draws it; the same for -TheaterLandFall's
+	// stills on a fair day, so a forced rain is never lit by the sun: LandBattleWeather)
+	if (bFalling && State.IsValid() && State->Weather.Kind != WeatherFall::Kind::None)
+	{
+		Day.Cover = FMath::Max(Day.Cover, 0.85);
+		Day.bDeck = true;
+	}
 	// (scattered cumulus up to about half the sky is a fair day; past it the light dulls, and a deck is overcast)
 	Day.Overcast = Day.bDeck ? 1.0 : FMath::SmoothStep(0.55, 0.85, Day.Cover);
 	// The sun from the place, the month and the hour (Open turned it for the recording's hour; "-TheaterLandHour=" tries
@@ -5997,7 +6009,17 @@ void ALandBattle::HideTheTable()
 	// (a warm grey-blue on a fair day, the summer haze over the bocage, not the sea's blue; greyer under overcast)
 	const FLinearColor HazeFair = LookAir.bSet ? FLinearColor(static_cast<float>(LookAir.HazeInk[0]), static_cast<float>(LookAir.HazeInk[1]), static_cast<float>(LookAir.HazeInk[2])) : FLinearColor(0.62f, 0.66f, 0.70f);
 	const FLinearColor HazeDull = LookAir.bSet ? FLinearColor(static_cast<float>(LookAir.HazeOvercast[0]), static_cast<float>(LookAir.HazeOvercast[1]), static_cast<float>(LookAir.HazeOvercast[2])) : FLinearColor(0.50f, 0.52f, 0.54f);
-	const FLinearColor HazeInk = FMath::Lerp(HazeFair, HazeDull, static_cast<float>(Day.Overcast));
+	FLinearColor HazeInk = FMath::Lerp(HazeFair, HazeDull, static_cast<float>(Day.Overcast));
+	// (release 2, the look bible's G10: rain or snow falling over the battle, -TheaterLandFalling (LandWeather; Battle/
+	// LandBattleWeather.cpp): the haze thicker, the harder it falls the thicker, and drawn toward the rain's grey or the
+	// snow's white. The falling drops take the haze's colour, FallInk)
+	if (bFalling && State.IsValid() && State->Weather.Kind != WeatherFall::Kind::None)
+	{
+		const LandWeather::Weather& Falls = State->Weather;
+		HazeDensity *= Falls.HazeTimes;
+		HazeInk = FMath::Lerp(HazeInk, FLinearColor(static_cast<float>(Falls.HazeInk[0]), static_cast<float>(Falls.HazeInk[1]), static_cast<float>(Falls.HazeInk[2])), static_cast<float>(Falls.HazeToward));
+	}
+	FallInk = HazeInk;
 	// (old smoke pales into the air behind it, the effects kit's slow smoke: the horizon's haze as the screen shows it,
 	// its sRGB pixel; the haze's own colour stands for it, the stills' horizon reading within a few levels of it)
 	if (Effects)
@@ -6267,7 +6289,9 @@ void ALandBattle::HideTheTable()
 	// others (each against the engine's own numbers, as -TheaterAirSky's).
 	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = LookAir.bSet ? LookAir.SkyDust : 0.6, HazeOver = 1.0;
 	LandLook::Asked(TEXT("TheaterLandSky="), { &SkyBright, &SkyAir, &SkyDust, &HazeOver });
-	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast));
+	// (under rain or snow falling, the deck a darker grey lid still: the weather's SkyTimes, LandWeather)
+	const double SkyFalls = bFalling && State.IsValid() && State->Weather.Kind != WeatherFall::Kind::None ? State->Weather.SkyTimes : 1.0;
+	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast) * SkyFalls);
 	// The sky overhead lifted as the sun climbs (the art director on 849c1bc1: Baghdad's zenith 50,59,74 with the sun 61
 	// degrees up, "a night storm over Iraq", and Voronezh's 63,71,85 at 52; it should be a pale hazy blue, about
 	// 120,145,185, near white at the horizon). The field's light grows with the sun's height (Whole, in Day's lamps) while
@@ -6306,6 +6330,14 @@ void ALandBattle::HideTheTable()
 			LandParts::Grade(Over->Settings, State.IsValid() ? &State->Rec.Weather : nullptr, &LookAir);
 			Day.Grade = Over;
 		}
+	}
+	// (G10: under the rain or the snow the day's lamps a little duller, LandWeather's LightTimes)
+	if (bFalling && State.IsValid() && State->Weather.Kind != WeatherFall::Kind::None)
+	{
+		const float Dull = static_cast<float>(State->Weather.LightTimes);
+		Day.Key *= Dull;
+		Day.Fill *= Dull;
+		Day.SkyLight *= Dull;
 	}
 	LightTheBattle();
 	LaySky();
@@ -7204,6 +7236,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// in FieldMs).
 	PlayEffects();
 	FlyOver(EyeWorld); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
+	DrawFall(EyeWorld, static_cast<float>(Real)); // (G10: rain and snow round the eye, -TheaterLandFalling)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the breaches");
 	MakeBreaches();
@@ -10484,6 +10517,11 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		Effects->End();
 		Effects.Reset();
+	}
+	if (Fall)
+	{
+		Fall->Clear();
+		Fall.Reset();
 	}
 	if (Eye)
 	{

@@ -101,6 +101,12 @@ namespace LandField
 		 * empty where none. "mud" (the thaw, the autumn rains): open ground's effects word is "mud", not "earth" (the
 		 * holes' soil, the tracks' torn ruts, the rounds' thrown mud); snow lying, sand and rock keep their own. */
 		std::string Weather;
+		/** Rain falling over this battle (release 2, the look bible's G10: LandWeather::RainOnField, the battle's own
+		 * weather, behind "-TheaterLandFalling"): the open ground's wetness, 0 to 1. Above 0, open earth is the thaw's
+		 * mud for the effects (the holes' soil, the ruts, a deep hole's water) and the ground is drawn wet (Wetted:
+		 * darker, and water standing in its hollows); none where snow lies (0.3 and more: what falls there is snow).
+		 * 0: dry, as before. The cloud test's LAND_FIELD_RAIN. */
+		double Rain = 0.0;
 		uint64_t Seed = 1;
 		/** The open steppe, where the recording lays it (Steppe.bOn); else the bocage. */
 		SteppeLay Steppe;

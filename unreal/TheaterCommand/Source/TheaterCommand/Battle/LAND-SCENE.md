@@ -24,6 +24,10 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandKit.h/.cpp` | The vehicles and guns: Shermans, Tigers, Panzer IVs, the field guns and lorries from `Content/Models/Battle`, their tracks, turrets, dust, soot, and the fires and cook-offs of a kill. Plain C++. |
 | `LandHulk.h/.cpp` | Old wrecks (release 2, `-TheaterLandOldWrecks`): where the burnt-out armour of earlier battles lies on the field and how each looks, from the game's own vehicle models. Plain C++; `Tools/land_hulk/run.sh` tests it. |
 | `LandAir.h/.cpp` | The fighters on call (release 2, `-TheaterLandAirSupport`): each leg's planes down their run, the ground's guns and the lost plane's fall, from the rules' air notes. Plain C++; drawn by `LandBattleAir.cpp`. |
+| `LandWeather.h/.cpp` | Rain and snow seen falling (release 2, `-TheaterLandFalling`): what falls over a battle and how hard, from the campaign's weather word and the day's sky (no new draw), and the day's changes for it (haze, light, wet ground, sheen, rain heard). Plain C++; numbers in `Content/Effects/land-weather.json`. |
+| `LandBattleWeather.cpp` | `ALandBattle`'s side of it: reads the switches and the recording's sky, lays the wet inks and the rain bed, makes and ticks the drops. |
+| `../Effects/WeatherFall.h/.cpp`, `WeatherFallCore.h/.cpp`, `WeatherFallChip.inl` | The falling drops: one mesh per layer round the eye, made once, every drop placed on the graphics card each frame by `M_LandFall` (`Tools/build_content.py`, `build_land_fall`), whose arithmetic is `WeatherFallChip.inl`, shared word for word with the cloud test. |
+| `../../../Tools/land_weather/` | The cloud test of what falls (the pick, the recipe file, each layer's drops, wind, fades, counts in a picture), built with both compilers' strict flags; `weather_fall_picture` lays the drops over `Tools/land_field`'s pictures (`LAND_FIELD_FALL=rain,0.8`). |
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
 | `LandBattleScreen.h/.cpp` | `SLandBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
@@ -466,6 +470,96 @@ The art director's Mac shots:
 - 20 s of wind with wheat, a hedge, poplars and palms, plus 10 s at top wind and 10 s on a calm day.
 - A low-sun shaft shot, plus a midday frame.
 - The frame rate for each look alone and for all three, against the 45 fps gate.
+
+## Rain and snow seen falling (release 2, off until passed)
+
+Brian, 25 November: "better overall graphics". This is the look bible's G10. `-TheaterLandFalling` turns it on (the
+ship list's `falling` row), and `-TheaterLandFallingSnow` with it lets snow fall too (its own row, `fallingsnow`, so
+rain can ship while snow waits: the art director's round 2). Both are OFF until the Mac passes them; the art director
+passed both to the Mac on 25 November, 12:21Z (`falling-weather-r2-review.md`). There is no new weather draw: what falls is
+read from the battle's own weather, the campaign's word over the place and the day's sky as the ticket drew it
+(`Battle/LandWeather`, numbers in `Content/Effects/land-weather.json`'s `pick`).
+
+- `rain` (a deck of 0.75 to 0.95): it rains, from 0.45 under the lightest deck to a downpour at 0.95. The jungle's,
+  the islands' and rice country's rain is heavier; the desert's and the dry steppe's lighter.
+- `snow` (0.8 to 1): the snow lies; it falls only under a deck of 0.88 or more, about half the snow months' battles,
+  never harder than `pick.snow.most` (1; lower it if the Mac finds the field reads only under a lighter snow), and
+  only with `-TheaterLandFallingSnow`: without it none falls, the day as drawn.
+- `mud` (0.6 to 0.8): a drizzle under the heaviest of its decks (0.76 and more).
+- `clear` or none: nothing falls. Over snow lying (0.3 and more) what falls is snow.
+
+What the battle does for it (all looks; nothing in any fight reads it):
+
+- The drops: three layers of streaks (or flakes) in boxes of 8, 22 and 64 m about the eye, each a mesh made once,
+  moved, wrapped and turned to the eye on the graphics chip by `M_LandFall` (`Effects/WeatherFall`,
+  `Effects/WeatherFallChip.inl`). The game's thread sends a few numbers a frame. A drop stays put in the world while
+  it is near; none shows within 0.6 m of the lens or at a box's edge; none is drawn under a pixel and a quarter wide.
+  The drops hang still while the battle is held, and fall through the night's own shots.
+- The sky: rain and snow always fall from a closed sky (a forced rain on a fair day too), the deck a darker grey lid
+  under them (its brightness times 1 - 0.4 x strength in rain, 1 - 0.45 x in snow, so the grey lid sits 15 or more
+  under the snow lying). The art director's R1 and S2.
+- The haze: thicker (1 + 1.3 x strength squared for rain, so a light rain keeps the field's depth and a downpour closes
+  it; 1 + 0.6 x for snow, so the far village still reads in heavy snow over the winter's own white haze) and drawn,
+  the square root of the strength's share of the way, toward a darker rain grey (0.2, 0.21, 0.23 linear) or the snow's
+  grey lid itself (0.38, 0.40, 0.45: the haze is laid over the sky at the horizon, so it must not be lighter than the
+  lid, or the lid and the snow meet as one pane; round 2). The drops take the haze's colour, a little brighter (snow's
+  flakes three times, light discs about L225 to 240 against the lid, a wood or a hull).
+- The light: the day's lamps 0.88 to 1 of the day's (rain); snow leaves them as they were, so the snow lying stays white.
+- The wet: under rain the open earth is the thaw's mud for the effects (the holes' soil, torn ruts, thrown mud, a deep
+  hole's water), and LandField's `Field::Rain` soaks the ground's colour: deeper, never greyer (the paler and drier the
+  darker: a lane's dust to about 55% of dry, green grass hardly darker), the corn, the stubble and the hay to about three
+  quarters, their hue kept (red over green up by no more than 0.05), the far ground the same, a bright gold ground
+  darkened as little as the corn standing on it, so the general's view and the eye's agree (round 2's A: from above, wet
+  corn had turned burnt orange). Water stands in pools on bare ground only (lanes, gateways, ploughland, holes; none in
+  grass or standing corn, where soft pools read as bruises until the ground's material carries a wet mask with a firm
+  edge: round 2's B) and along the lanes' ruts, the overcast's grey it mirrors. The ground, the hedges' and the clutter's paint and the steel shine wet (Roughness and
+  Specular: grass and leaves no smoother than 0.75, steel 0.5).
+- The streaks: a light rain's shorter and fainter than a downpour's: its length times 0.3 + 0.7 x strength, its alpha
+  times the strength to the 1.5th power (strength_alpha 0, strength_alpha_curve 1.5; the layers' alphas 0.45, 0.35,
+  0.22), so a light rain's streaks lift a third less off the ground than a downpour's (round 2's C). The three layers
+  lean about 5 degrees apart in the same wind (wind_share 1.25, 1, 0.75). A snow's flakes keep their alpha as it
+  lightens, only fewer (snow_strength_alpha 0.7); near flakes 3 cm, middle 2.5 cm (the art director's S3).
+- The sound: the mix's `beds.place.rain` (`rain_loop`), over the place's air, softer the lighter it falls.
+
+Switches for the Mac's stills: `-TheaterLandFall=rain,0.8`, `=snow,0.5`, `=0.6` (snow where it lies, else rain) or
+`=none`, whatever the day (it turns the look on too, falling snow's switch or not). `-TheaterFxSet=fall.rain.far.density=0.1` sets any recipe number
+at launch. Build the material once: `TC_REBUILD=M_LandFall` (it is made by `build_content.sh` when missing). Without it
+nothing falls and the log says so; the haze, the light and the wet ground are laid anyway.
+
+The cloud test: `Tools/land_weather/run.sh` (the pick, the recipe file against the code, and the chip's own arithmetic:
+periods, boxes, world anchoring, fades, strength, width; how many drops a picture holds and the pixels they cover). The
+field painter paints it: `LAND_FIELD_FALL="rain,0.85"` (or `word` for the recording's own weather) with
+`LAND_FIELD_PICTURES`; `LAND_FIELD_FALL_HIDE=1` paints the same day without its drops (to measure what they add),
+`LAND_FIELD_FALL_SET="rain.near.alpha=0.4,..."` and `LAND_FIELD_DAY_SET="day.snow.sky_dimmer=0.5,..."` try other numbers
+as the json would.
+
+The art director's eight deciding Mac shots (round 2, `/mnt/project-files/art-director/reviews/falling-weather-r2-review.md`;
+rain's 1 to 5 decide the `falling` row, snow's 6 to 8 the `fallingsnow` row):
+
+1. Dry, `rain,0.45` and `rain,0.9` from one eye and one hour: R1's and R2's ratios to dry hold under the real sky.
+2. A tank and a section of men at 300 m and 600 m in the downpour: 25 or more against their ground, and 12 or more.
+3. The general's high view over corn, dry and in the downpour: wet corn 70% to 85% of dry, red over green up 0.05 at most.
+4. A slow pan at both strengths: no streak held still on the screen, none repeating as a tile.
+5. The frame rate in a downpour against the 45 fps gate. If it fails, the far streak layer goes first.
+6. `snow,0.8`: the sky's lower third 15 or more under the near and middle snow.
+7. A tank and a section of men at 300 m and 600 m at `snow,0.8`: 35 or more, and 18 or more.
+8. Flakes against a wood or a hull: near ones 5 to 9 px (of a 675 px picture), L225 to 240, drifting, never a dash.
+
+If rain passes and snow does not, rain ships (`falling` on) and falling snow stays off (`fallingsnow` off), or ships
+capped at the strength where 6 and 7 hold (`pick.snow.most`).
+
+Round 1's fuller list, each with and without the switch (`falling-weather-r1-review.md`):
+
+- One eye and one hour, three frames: dry, `-TheaterLandFall=rain,0.45`, `rain,0.9` (the ratios to dry).
+- Normandy's low eye in the corn, and a hedge close by in rain (the streaks against the dark leaves).
+- A tank and a section of men at 300 m and at 600 m, in the downpour and in `snow,0.8` (Readable).
+- The lane and its puddles at the general's slanting view, about 100 m.
+- Five-second clips: a slow pan in rain at both strengths, and snow drifting (no streak held still on the screen, none
+  repeating as a tile).
+- One night frame in rain beside something burning.
+- The steppe under `rain,0.7` with tanks through the mud, and a winter field under `snow,0.8`.
+- The frame rate in a downpour against the 45 fps gate, with `stat gpu`. If it fails, the far streak layer goes first
+  (`-TheaterFxSet=fall.rain.far.off=1`).
 
 ## A burning tank as a film shows it (release 2, off until passed)
 
