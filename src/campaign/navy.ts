@@ -1019,10 +1019,30 @@ export interface SeaSearch { cost: Float64Array; prev: Int16Array }
  */
 export function seaSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean } = {}): SeaSearch {
   const R = readingOf(g);
-  if (!R) return searchNow(g, nat, from, o);
+  if (!R) return o.surprise ? surpriseSearch(g, nat, from, o) : searchNow(g, nat, from, o);
   const k = `${nat}|${from.id}|${o.max ?? 0}|${o.surprise ? 1 : 0}`;
   let S = R.searches.get(k);
   if (!S) R.searches.set(k, (S = searchNow(g, nat, from, o)));
+  return S;
+}
+/**
+ * (Speed, the far map: the playtest's finding 41.) A search for a landing by surprise reads nothing of the war but the
+ * straits: every sea weighs the same and none is closed to it. So it is kept, by nation, coast and reach, and used
+ * again while every strait lets that nation's ships through, or not, as it did (canPass, strait by strait). A
+ * computer staff asks it of every harbour for every shore it wants: some twenty thousand times in a far month.
+ * (Nothing that is handed a search changes it.)
+ */
+const SURPRISE = new WeakMap<object, Map<string, SeaSearch>>();
+function surpriseSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): SeaSearch {
+  let m = SURPRISE.get(g.seas);
+  if (!m) SURPRISE.set(g.seas, (m = new Map()));
+  let k = `${nat}|${from.id}|${o.max ?? 0}|`;
+  for (const gt of g.gates) k += canPass(g, gt.a, gt.b, nat) ? '1' : '0';
+  let S = m.get(k);
+  if (!S) {
+    if (m.size >= 50000) m.clear();
+    m.set(k, (S = searchNow(g, nat, from, o)));
+  }
   return S;
 }
 function searchNow(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): SeaSearch {
