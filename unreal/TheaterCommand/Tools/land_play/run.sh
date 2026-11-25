@@ -28,6 +28,39 @@ STATUS=0
 # fired is struck softer until located, and located once an enemy is within its sight; that smoke hides): the scene has
 # no word from the rules for any of them, so they are checked here and the run fails where they differ, or where the
 # rules are not there to check against. The ring's own reach (LandSight.h, FindsWithin) is held to the same quarter.
+# (Everything below reads CODE ALONE: every file is first copied with its comments struck, a /* */ block's text and a
+# // comment's to its line's end, and only the comment: the code beside one stays where it stood, each line on its own
+# line, trailing blanks dropped. So an old line or a whole old function kept in a comment cannot stand in for the
+# rule, a comment set beside a changed rule cannot make it read as the old one, and a comment's own words can neither
+# trip a pin nor pass one. A quote's text, '...', "..." or `...`, is left as it is to the end of its line. Not
+# known: a quote that runs over lines, and a regex that holds a quote or a comment's opening. None stands in the
+# files read today; one would leave comments unstruck after it on its line or strike code as a comment.)
+code_of() {
+  tr -d '\r' < "$1" | awk '
+    BEGIN { st = 0; q = "" }
+    {
+      out = ""; n = length($0); i = 1
+      while (i <= n) {
+        c = substr($0, i, 1); d = substr($0, i, 2)
+        if (st == 1) { if (d == "*/") { st = 0; i += 2 } else i++; continue }
+        if (st == 2) {
+          out = out c
+          if (c == "\\") { out = out substr($0, i + 1, 1); i += 2; continue }
+          if (c == q) st = 0
+          i++; continue
+        }
+        if (d == "/*") { st = 1; i += 2; continue }
+        if (d == "//") break
+        if (c == "\"" || c == "\047" || c == "`") { st = 2; q = c }
+        out = out c; i++
+      }
+      if (st == 2) st = 0
+      sub(/[ \t]+$/, "", out)
+      print out
+    }'
+}
+CODE="$OUT/code_alone"
+mkdir -p "$CODE"
 RULES="$ROOT/../../src/battle/land/rules.ts"
 SIM="$ROOT/../../src/battle/land/sim.ts"
 UNITS="$ROOT/../../src/battle/land/units.ts"
@@ -40,14 +73,21 @@ if [ ! -f "$RULES" ] || [ ! -f "$SIM" ] || [ ! -f "$UNITS" ]; then
     STATUS=1
   fi
 else
+  code_of "$RULES" > "$CODE/rules.ts"
+  code_of "$SIM" > "$CODE/sim.ts"
+  code_of "$UNITS" > "$CODE/units.ts"
+  RULES="$CODE/rules.ts"
+  SIM="$CODE/sim.ts"
+  UNITS="$CODE/units.ts"
+  code_of "$SRC/Battle/LandSight.h" > "$CODE/LandSight.h"
   RULE_SIGHT="$(sed -n 's/^ *sight: { foot: \([0-9]*\), wheels: \([0-9]*\), tracks: \([0-9]*\), guns: \([0-9]*\),.*/\1 \4 \2 \3/p' "$RULES" | head -n 1)"
   RULE_HEARD="$(sed -n 's/^ *heard: {.*tracks: \([0-9]*\),.*/\1/p' "$RULES" | head -n 1)"
   RULE_AMBUSH="$(sed -n 's/^ *ambush: { foot: \([0-9]*\), wheels: \([0-9]*\), tracks: 0, guns: 0, fixed: 0, mg: \([0-9]*\) }.*/\1 \2 \3/p' "$RULES" | head -n 1)"
   RULE_FOREST="$(sed -n 's/^ *forest: \([0-9]*\),.*/\1/p' "$RULES" | head -n 1)"
-  CORE_SIGHT="$(sed -n 's/^.*double Foot = \([0-9]*\)\.0, Guns = \([0-9]*\)\.0, Vehicles = \([0-9]*\)\.0;.*/\1 \2 \3 \3/p' "$SRC/Battle/LandSight.h" | head -n 1)"
-  CORE_HEARD="$(sed -n 's/^.*double Heard = \([0-9]*\)\.0;.*/\1/p' "$SRC/Battle/LandSight.h" | head -n 1)"
-  CORE_AMBUSH="$(sed -n 's/^.*double Ambush = \([0-9]*\)\.0, AmbushMg = \([0-9]*\)\.0, AmbushForest = \([0-9]*\)\.0;.*/\1 \1 \2/p' "$SRC/Battle/LandSight.h" | head -n 1)"
-  CORE_FOREST="$(sed -n 's/^.*double Ambush = \([0-9]*\)\.0, AmbushMg = \([0-9]*\)\.0, AmbushForest = \([0-9]*\)\.0;.*/\3/p' "$SRC/Battle/LandSight.h" | head -n 1)"
+  CORE_SIGHT="$(sed -n 's/^.*double Foot = \([0-9]*\)\.0, Guns = \([0-9]*\)\.0, Vehicles = \([0-9]*\)\.0;.*/\1 \2 \3 \3/p' "$CODE/LandSight.h" | head -n 1)"
+  CORE_HEARD="$(sed -n 's/^.*double Heard = \([0-9]*\)\.0;.*/\1/p' "$CODE/LandSight.h" | head -n 1)"
+  CORE_AMBUSH="$(sed -n 's/^.*double Ambush = \([0-9]*\)\.0, AmbushMg = \([0-9]*\)\.0, AmbushForest = \([0-9]*\)\.0;.*/\1 \1 \2/p' "$CODE/LandSight.h" | head -n 1)"
+  CORE_FOREST="$(sed -n 's/^.*double Ambush = \([0-9]*\)\.0, AmbushMg = \([0-9]*\)\.0, AmbushForest = \([0-9]*\)\.0;.*/\3/p' "$CODE/LandSight.h" | head -n 1)"
   if [ -z "$RULE_SIGHT" ] || [ -z "$RULE_HEARD" ] || [ "$RULE_SIGHT" != "$CORE_SIGHT" ] || [ "$RULE_HEARD" != "$CORE_HEARD" ]; then
     echo "FAULT: the spotter's mark's distances (LandSight.h Finds: foot guns wheels tracks '$CORE_SIGHT', heard '$CORE_HEARD') are not the rules' (rules.ts LAND.hide: '$RULE_SIGHT', heard '$RULE_HEARD')"
     STATUS=1
@@ -64,15 +104,11 @@ else
   grep -qF "fighting(e) && this.gap(u, e) <= Math.max(sight, heard) && (this.gap(u, e) <= heard || !veiled(e))" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer sees a hidden block by a fighting enemy within its sight, or heard, and not through smoke (the spotter's rings, and its smoke line)"; STATUS=1; }
   grep -qE "heard: \{ foot: 0, wheels: 0, tracks: [0-9]+, guns: 0, fixed: 0 \}" "$RULES" || { echo "FAULT: rules.ts LAND.hide.heard no longer hears tracks alone (LandSight.h says a lorried block is not heard)"; STATUS=1; }
   # (The lines of sim.ts that say who holds his fire in hiding are held WHOLE, inside their own function and in their
-  # order: a search for the words alone would pass a hold added on the same line, the old line left behind as a
-  # comment, or the same words in another function. A function's own lines, as the rules have them: CRs, indents,
-  # trailing blanks, blank lines and // comment lines dropped; the function itself is found by its head and its
-  # closing brace at the class's own two spaces, so a re-indent of the file reads here as a changed rule.)
-  # (and a /* */ block's lines are no lines of the rules, wherever they are counted or held: an old line or a whole
-  # old function kept in one must not stand in for the rule. A block closed on its own line is cut out of it; one
-  # that runs on is dropped to the line that closes it.)
-  no_blocks() { tr -d '\r' < "$1" | sed -e 's|/\*.*\*/||g' -e '/\/\*/,/\*\//d'; }
-  body_of() { no_blocks "$SIM" | sed -n "/^  $1/,/^  }/p" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -vE '^(//.*)?$' || true; }
+  # order: a search for the words alone would pass a hold added on the same line or the same words in another
+  # function. A function's own lines of code, indents and blank lines dropped; the function itself is found by its
+  # head and its closing brace at the class's own two spaces, so a re-indent of the file reads here as a changed
+  # rule.)
+  body_of() { sed -n "/^  $1/,/^  }/p" "$SIM" | sed -e 's/^[[:space:]]*//' | grep -v '^$' || true; }
   # (ambushAt, all of it: by how the block moves, the machine gun team alone of the teams with a hold of its own, no
   # hold at all where the table gives none (guns, mortar teams, tanks: Infinity), and in true forest the least)
   AMBUSH_WANT="private ambushAt(u: LandUnit): number {
@@ -93,7 +129,7 @@ return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w
 }"
   [ "$(body_of 'gap(a: LandUnit, b: LandUnit): number {')" = "$GAP_WANT" ] || { echo "FAULT: sim.ts gap() is no longer, line for line, the metres between two blocks' edges less a quarter of each one's longer side (every hold, reach and ring of the spotter's mark is measured in it; LandSight.h FindsWithin), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, LandSight.h and the mark's legend must change with it"; STATUS=1; }
   WOODS_WANT="private inWoods(u: LandUnit): boolean { return coverAt(this.field, u.x, u.y) === 'woods'; }"
-  [ "$(no_blocks "$SIM" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -cxF "$WOODS_WANT" || true)" = "1" ] || { echo "FAULT: sim.ts inWoods() is no longer standing in woods and nothing else (the spotter's mark's IN FOREST, where the hold is the least). If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
+  [ "$(sed -e 's/^[[:space:]]*//' "$SIM" | grep -cxF "$WOODS_WANT" || true)" = "1" ] || { echo "FAULT: sim.ts inWoods() is no longer standing in woods and nothing else (the spotter's mark's IN FOREST, where the hold is the least). If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   # (targetOf, all of it, line for line as ambushAt is held: the block's whole reach; straight after it a given target
   # tested against that reach; only then a hidden block's hold, unless it is sent to attack; none struck that is
   # itself hidden; and the two lines that put the held reach to use, in the search for a target and in firing on
@@ -132,7 +168,7 @@ return best;
 }"
   [ "$(body_of 'targetOf(u: LandUnit): LandUnit | null {')" = "$TARGET_WANT" ] || { echo "FAULT: sim.ts targetOf() is no longer, line for line, the rule the spotter's mark's words stand on (the block's whole reach; its given target tested against that reach; only then a hidden block's hold unless it is sent to attack; none struck that is itself hidden; the held reach put to use in the search and in firing on cover: MEN LYING IN WAIT, TROOPS IN PLAIN SIGHT, FULL RANGE), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   REACH_WANT="export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);"
-  [ "$(no_blocks "$RULES" | sed -e 's/[[:space:]]*$//' | grep -cxF "$REACH_WANT" || true)" = "1" ] || { echo "FAULT: rules.ts reachOf() is no longer a block's whole reach by its kind and team alone (the spotter's mark's FULL RANGE)"; STATUS=1; }
+  [ "$(grep -cxF "$REACH_WANT" "$RULES" || true)" = "1" ] || { echo "FAULT: rules.ts reachOf() is no longer a block's whole reach by its kind and team alone (the spotter's mark's FULL RANGE)"; STATUS=1; }
   # (a hold is only the distance the mark's words give where the block's own reach is no less: men on foot and
   # motorised, and the machine gun team, against their holds. Cavalry and engineers reach ten metres short of
   # theirs as the rules stand, 140 m against 150, so hidden they open fire at 140: LandSight.h says so, and no
@@ -140,14 +176,14 @@ return best;
   # (each read from its own table and nowhere else: LAND.reach's row by its "as Record<Kind, number>" end, the
   # machine gun team's inside LAND.teams; and exactly one of each, so that no other table that reads alike is
   # measured in its place)
-  REACH_ROW="$(no_blocks "$RULES" | sed -n 's/^ *reach: { inf: \([0-9]*\), mtn: \([0-9]*\), cav: \([0-9]*\), eng: \([0-9]*\), mot: \([0-9]*\), arm: [0-9]*, art: [0-9]*, fort: [0-9]* } as Record<Kind, number>,.*/\1 \2 \3 \4 \5/p')"
-  REACH_MG="$(no_blocks "$RULES" | sed -n '/^  teams: {/,/^  }/s/^ *mg: { reach: \([0-9]*\),.*/\1/p')"
+  REACH_ROW="$(sed -n 's/^ *reach: { inf: \([0-9]*\), mtn: \([0-9]*\), cav: \([0-9]*\), eng: \([0-9]*\), mot: \([0-9]*\), arm: [0-9]*, art: [0-9]*, fort: [0-9]* } as Record<Kind, number>,.*/\1 \2 \3 \4 \5/p' "$RULES")"
+  REACH_MG="$(sed -n '/^  teams: {/,/^  }/s/^ *mg: { reach: \([0-9]*\),.*/\1/p' "$RULES")"
   REACH_ROWS="$(printf '%s\n' "$REACH_ROW" | grep -c . || true)"
   REACH_MGS="$(printf '%s\n' "$REACH_MG" | grep -c . || true)"
   REACH_FORM=1
   REACH_LEFT="whether each kind that holds its fire in hiding still reaches as far as its hold is NOT checked. Read the holds against the reaches again and bring this pin up to date"
-  [ "$REACH_ROWS" = "1" ] || { echo "FAULT: rules.ts LAND.reach's row was read $REACH_ROWS times, not once (read: '$REACH_ROW'). The form this check reads, outside any /* */ block: one line, indented with spaces, 'reach: { inf: N, mtn: N, cav: N, eng: N, mot: N, arm: N, art: N, fort: N } as Record<Kind, number>,' with one space after each colon and comma, plain digits, and that ending. It is no longer so, or another table reads alike: $REACH_LEFT"; STATUS=1; REACH_FORM=0; }
-  [ "$REACH_MGS" = "1" ] || { echo "FAULT: rules.ts LAND.teams' machine gun row was read $REACH_MGS times, not once (read: '$REACH_MG'). The form this check reads, outside any /* */ block: inside the block that opens with a line of exactly two spaces and 'teams: {', one line, indented with spaces, beginning 'mg: { reach: N,' in plain digits. It is no longer so, or there are two: $REACH_LEFT"; STATUS=1; REACH_FORM=0; }
+  [ "$REACH_ROWS" = "1" ] || { echo "FAULT: rules.ts LAND.reach's row was read $REACH_ROWS times, not once (read: '$REACH_ROW'). The form this check reads, comments apart: one line, indented with spaces, 'reach: { inf: N, mtn: N, cav: N, eng: N, mot: N, arm: N, art: N, fort: N } as Record<Kind, number>,' with one space after each colon and comma, plain digits, and that ending. It is no longer so, or another table reads alike: $REACH_LEFT"; STATUS=1; REACH_FORM=0; }
+  [ "$REACH_MGS" = "1" ] || { echo "FAULT: rules.ts LAND.teams' machine gun row was read $REACH_MGS times, not once (read: '$REACH_MG'). The form this check reads, comments apart: inside the block that opens with a line of exactly two spaces and 'teams: {', one line, indented with spaces, beginning 'mg: { reach: N,' in plain digits. It is no longer so, or there are two: $REACH_LEFT"; STATUS=1; REACH_FORM=0; }
   [ -n "$RULE_AMBUSH" ] || { echo "FAULT: rules.ts LAND.hide.ambush could not be read (its form: 'ambush: { foot: N, wheels: N, tracks: 0, guns: 0, fixed: 0, mg: N }' on one line): $REACH_LEFT"; STATUS=1; REACH_FORM=0; }
   if [ "$REACH_FORM" = "1" ]; then
     REACH_OK=0
@@ -158,16 +194,20 @@ return best;
     [ "$REACH_OK" = "1" ] || { echo "FAULT: a kind that holds its fire in hiding now reaches less far than its hold (rules.ts LAND.reach foot and motorised kinds '$REACH_ROW', the machine gun team '$REACH_MG', against LAND.hide.ambush '$RULE_AMBUSH'; cavalry and engineers are let ten metres short), so the spotter's mark's distances are no longer where it opens fire: the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   fi
   [ "$(sed -n '/^export function makeBlocks(/,/^}/p' "$UNITS" | grep -cF "const k = (team ? 'art' :" || true)" -ge 1 ] || { echo "FAULT: units.ts makeBlocks(), which makes each side's blocks, no longer makes a machine gun or mortar team a gun block (the spotter's ring GUNS AND TEAMS)"; STATUS=1; }
-  grep -qF "return Sight + 0.25 * (W > D ? W : D);" "$SRC/Battle/LandSight.h" || { echo "FAULT: LandSight.h FindsWithin no longer adds a quarter of the block's longer side, as sim.ts gap() takes it (the rings' reach)"; STATUS=1; }
+  grep -qF "return Sight + 0.25 * (W > D ? W : D);" "$CODE/LandSight.h" || { echo "FAULT: LandSight.h FindsWithin no longer adds a quarter of the block's longer side, as sim.ts gap() takes it (the rings' reach)"; STATUS=1; }
 fi
 # (The camera's dark rule reads the drawn picture through the scene, which is not built here: the lines that give the
 # reading its own clock are held, whole and in their order. Measured against a frame's length instead, as it was
 # through release 1.5.1, the reading asked for a single frame as the battle began and the rule saw nothing all battle;
-# no run here could tell. Held: every line of ReadDark() that names the frame's length, the clock, the next ask's time
-# or the last reading's time, so the ask and the staleness are measured on the clock that is advanced, once, by the
-# frame's length; and in the tick, that it hands ReadDark the frame's length and that this is the frame's length.
-# Not held: the rest of ReadDark, and the frame grabber.)
-DARK_BODY="$(sed -n '/^void ALandBattle::ReadDark(double Real)/,/^}/p' "$SRC/Battle/LandBattle.cpp" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -vE '^(//.*)?$' || true)"
+# no run here could tell. Held, in the file's code alone: every line of ReadDark() that names the frame's length, the
+# clock, the next ask's time or the last reading's time, so the ask and the staleness are measured on the clock that
+# is advanced by the frame's length; that the clock, the next ask's time and the last reading's time are written
+# nowhere else in the file but where a battle's reading begins, each set to nought there (a plain write or a step:
+# one through a pointer or a reference is not seen); that a stale reading is told as none, and that only a frame
+# that was read keeps the reading fresh; and in the tick, that it hands ReadDark the frame's length and that this is
+# the frame's length. Not held: the rest of ReadDark, and the frame grabber.)
+code_of "$SRC/Battle/LandBattle.cpp" > "$CODE/LandBattle.cpp"
+DARK_BODY="$(sed -n '/^void ALandBattle::ReadDark(double Real)/,/^}/p' "$CODE/LandBattle.cpp" | sed -e 's/^[[:space:]]*//' | grep -v '^$' || true)"
 DARK_WANT="void ALandBattle::ReadDark(double Real)
 DarkClock += Real;
 const double Now = DarkClock;
@@ -177,11 +217,23 @@ if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
 DarkGotAt = Now;"
 [ "$(printf '%s\n' "$DARK_BODY" | grep -E '(^|[^[:alnum:]_])(Real|Now|DarkClock|DarkAskAt|DarkGotAt)([^[:alnum:]_]|$)' || true)" = "$DARK_WANT" ] \
   || { echo "FAULT: LandBattle.cpp ReadDark() no longer keeps the dark reading's clock as it was held (DarkClock += Real, once; Now that clock; the next ask a quarter second on by it, and the reading stale after six tenths of a second by it, under the rule's own three quarters; the frame's length used for nothing else): measured against the frame's length, or on two clocks, the camera's dark rule is blind after its first frame. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
-DARK_TICK="$(sed -n '/^void ALandBattle::Tick(float DeltaSeconds)/,/^}/p' "$SRC/Battle/LandBattle.cpp" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)"
+DARK_WRITES_WANT="DarkClock = 0.0;
+DarkAskAt = 0.0;
+DarkGotAt = 0.0;
+DarkClock += Real;
+DarkAskAt = Now + 0.25;
+DarkGotAt = Now;"
+DARK_WRITES="$(sed -e 's/^[[:space:]]*//' "$CODE/LandBattle.cpp" | grep -E '(^|[^[:alnum:]_])(DarkClock|DarkAskAt|DarkGotAt)[[:space:]]*((<<|>>|[-+*/%&|^])?=([^=]|$)|\+\+|--)|(\+\+|--)[[:space:]]*(DarkClock|DarkAskAt|DarkGotAt)([^[:alnum:]_]|$)' || true)"
+[ "$DARK_WRITES" = "$DARK_WRITES_WANT" ] \
+  || { echo "FAULT: LandBattle.cpp writes the dark reading's clock, its next ask's time or its last reading's time somewhere else, or otherwise, than it was held (the three set to 0.0 where a battle's reading begins, then in ReadDark 'DarkClock += Real;', 'DarkAskAt = Now + 0.25;' and 'DarkGotAt = Now;', each once and in that order in the file; read: '$(printf '%s' "$DARK_WRITES" | tr '\n' ' ')'): a second step of the clock runs it fast, and a second stamp keeps a stale reading fresh. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
+[ "$(printf '%s\n' "$DARK_BODY" | grep -xF -A 2 "if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)" | tr '\n' ' ' || true)" = "if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6) { DarkShare = -1.0; " ] \
+  && [ "$(printf '%s\n' "$DARK_BODY" | grep -xF -B 1 "DarkGotAt = Now;" | head -n 1 || true)" = "DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);" ] \
+  || { echo "FAULT: LandBattle.cpp ReadDark() no longer tells the rule there is no reading once the last is stale (the line after the stale test's brace 'DarkShare = -1.0;'), or no longer stamps the reading's time straight after the reading itself is set ('DarkGotAt = Now;' under 'DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);'): a frame that was not read would keep an old reading fresh. If the lines have only been written anew bring this pin up to date"; STATUS=1; }
+DARK_TICK="$(sed -n '/^void ALandBattle::Tick(float DeltaSeconds)/,/^}/p' "$CODE/LandBattle.cpp" | sed -e 's/^[[:space:]]*//' || true)"
 [ "$(printf '%s\n' "$DARK_TICK" | grep -cxF "const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);" || true)" = "1" ] \
   && [ "$(printf '%s\n' "$DARK_TICK" | grep -cE '^const double Real([^[:alnum:]_]|$)' || true)" = "1" ] \
   && [ "$(printf '%s\n' "$DARK_TICK" | grep -cxF "ReadDark(Real);" || true)" = "1" ] \
-  && [ "$(tr -d '\r' < "$SRC/Battle/LandBattle.cpp" | grep -cE '(^|[^[:alnum:]_:])ReadDark\(' || true)" = "1" ] \
+  && [ "$(grep -cE '(^|[^[:alnum:]_:])ReadDark\(' "$CODE/LandBattle.cpp" || true)" = "1" ] \
   || { echo "FAULT: LandBattle.cpp's tick no longer hands ReadDark() the frame's length, once (in Tick: 'const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);' the only Real, and 'ReadDark(Real);' the only call in the file): handed a running clock, or not called, the camera's dark rule reads wrongly or not at all. If the tick's lines have only been written anew bring this pin up to date"; STATUS=1; }
 for F in "$@"; do
   case "$F" in *armies.json) continue ;; esac

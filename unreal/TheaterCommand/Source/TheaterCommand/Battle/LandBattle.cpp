@@ -6983,8 +6983,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// waiting to be taken, and with "-TheaterLandPoseLog" four times a real second: the shot, why the last was left,
 	// where the lens stands, what it looks at through how high a lens (the pose's lens is the vertical one: AimEye
 	// makes Unreal's horizontal one of it by the window's shape), how dark the picture last read (-1: no reading), and
-	// how far ahead of the picture the rules have fought (-1: not a live battle; a place the camera asks for past
-	// what is fought is the last one known, so its tests ahead tell nothing there). The pose is the film's own: a
+	// how far ahead of the picture the rules have fought (-999: not a live battle; under nought where the picture
+	// has run on past what is fought, as in the seconds after a battle's end; a place the camera asks for past what
+	// is fought is the last one known, so its tests ahead tell nothing there). The pose is the film's own: a
 	// drag's look aside, told beside it in degrees right and up, and a shell's jolt, which the scene adds as it
 	// aims, are not in it. A still is told once for each asking, not every frame it waits. The art director's black
 	// still of the Mac's first pass could not be laid against the field again, because nothing told where the lens had
@@ -6994,10 +6995,15 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// either side of it tell that one.)
 	{
 		static const bool bPoseLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPoseLog"));
+		// (a still is told once for each asking, known by its file's name: one that waits frame after frame is told
+		// once, and one asked for on the tick after another, the first taken as that frame was drawn, is told too)
 		static bool bStillWas = false;
+		static FString StillWas;
 		const bool bStillNow = FScreenshotRequest::IsScreenshotRequested();
-		const bool bStillAsked = bStillNow && !bStillWas;
+		const FString StillNow = bStillNow ? FScreenshotRequest::GetFilename() : FString();
+		const bool bStillAsked = bStillNow && (!bStillWas || StillNow != StillWas);
 		bStillWas = bStillNow;
+		StillWas = StillNow;
 		// (his own view is the picture drawn once his eye has begun, unless the film has been given the camera)
 		const bool bOwnView = S.bGeneralEye && !S.General.bFilm;
 		const bool bFilmCut = S.FilmPose.bCut && !bOwnView;
@@ -7008,7 +7014,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 				bOwnView ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
 				S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject, ANSI_TO_TCHAR(LandEye::NameOf(S.Eye.LastWhy())),
 				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, LookAside.X, LookAside.Y, DarkShare,
-				Live.IsValid() ? Live->Fought() - S.Battle : -1.0);
+				Live.IsValid() ? Live->Fought() - S.Battle : -999.0);
 		}
 	}
 	LandFell::Phase("tick: the 10 s log");
@@ -7203,8 +7209,11 @@ void ALandBattle::ReadDark(double Real)
 	// (no frame read for six tenths of a second: the last reading is stale, so the rule is told there is none;
 	// pre-check's note. Before the frames are taken, so that it holds on every way out below: a frame come back empty
 	// too. And under the rule's own quarter second and half second together (LandEye: a shot's reading counts from
-	// its first quarter second and must hold DarkHold), so that a reading of the last shot, the frames stopped, can
-	// never by itself have the next one left or the run of dark cuts started again. It was a second, 25 November.)
+	// its first quarter second and must hold DarkHold), so that a reading of the last shot, read as the shot was cut
+	// and the frames then stopped, cannot by itself have the next one left or the run of dark cuts started again.
+	// The age is counted from when the frame was read, not from when it was drawn: one read a frame or two into the
+	// next shot stands that much longer, past the rule's three quarters of a second only where those frames and one
+	// more come to over 0.15 s (under some twenty frames a second), and then for one cut. It was a second, 25 November.)
 	if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
 	{
 		DarkShare = -1.0;
