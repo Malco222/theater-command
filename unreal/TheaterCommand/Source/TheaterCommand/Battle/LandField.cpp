@@ -626,6 +626,20 @@ namespace LandField
 		SegGrid CGrid;
 		std::vector<Placed> CowBits;
 		std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> CowSquares;
+		/** On trial ("feet"): where a bush's body, a tree's trunk or its low boughs, a stack or a well stands in the grass
+		 * (its place, the ground it stands on and its radius over the lowest metre), sorted by the clutter's 8 m squares
+		 * it reaches into (FootSquares: a square's first and its end; one that lies across a square's edge is in each).
+		 * The clutter keeps out of them what would stand up into the body: no grass blowing through a bush; the ferns on
+		 * a bank's flank under a hedge, their tops below its shrubs' feet, stay. Empty with the word off. */
+		struct Footing
+		{
+			float X = 0.0f, Y = 0.0f, Z = 0.0f, R = 0.0f;
+		};
+		std::vector<Footing> Feet;
+		std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> FootSquares;
+		/** The footings' dial, on trial with them ("feetwide"): off, a clump may stand with half its own width inside a
+		 * footing's edge (as first built); on, its whole body and its blades' sweep in a full gust stand clear. */
+		bool bFeetWide = false;
 
 		std::vector<HedgeLine> HedgeOut;
 		std::vector<HedgeOpening> OpeningOut;
@@ -693,6 +707,7 @@ namespace LandField
 		/** A region's low kit standing taller than LowKitHigh after all, once its models are built: taken up where it lies
 		 * on a recorded men's way. */
 		void TakeUpTallLowKit();
+		void MakeFeet();
 		void MakeSites();
 		struct House ChurchYard(V2 C, double Yaw) const;
 		void LayChurch(V2 C, double Yaw, int Hurt);
@@ -1695,6 +1710,148 @@ namespace LandField
 			const size_t Was = L.size();
 			L.erase(std::remove_if(L.begin(), L.end(), [&](const Placed& P) { return High * P.ScaleZ > LowKitHigh && WayRoom({ P.X, P.Y }) < 0.8; }), L.end());
 			Count.Instances -= Was - L.size();
+		}
+	}
+
+	namespace
+	{
+		/** The most a foot's own reach is widened by for the thing that would stand at its edge (Ground::Clutter); and
+		 * with the dial on ("feetwide"), when a clump's whole width and its blades' sweep are kept clear. A blade's
+		 * sweep: a fifth of its height (the grass bends 0.14 radians from its root at a full gust and springs a quarter
+		 * past it; the corn much the same at its ears). */
+		constexpr double FootEdge = 0.45, FootWide = 0.9, BladeSweep = 0.2;
+
+		/** A place a base's body stands in the grass, in the base's own frame: its middle and its radius, metres. */
+		struct LowFoot
+		{
+			double X = 0.0, Y = 0.0, R = 0.0;
+		};
+
+		/**
+		 * Where a base stands in the grass, as built: the middle of what it has between 0.1 and 1 m up (its body, its
+		 * leaves' cards and sprigs, each triangle's edges cut to that band, so a trunk with no ring of points there is
+		 * still measured) and the radius round that middle that holds 85 in 100 of it: a hedge shrub's whole body, a
+		 * leaning apple's trunk where it stands and not round its root, a spruce's lowest boughs. Nothing where it has
+		 * nothing there. A long thin thing (its spread one way under a sixth of the other, by their variances) the grass
+		 * grows along and through, a fallen log, a length of fence: nothing; but one in leaf, a curtain of climbers at a
+		 * wood's edge, stands in the grass all along itself: a row of rounds down its length, at most twelve.
+		 */
+		std::vector<LowFoot> LowFeet(const BaseMesh& M)
+		{
+			constexpr double Lo = 0.1, Hi = 1.0;
+			std::vector<double> Xs, Ys;
+			double SX = 0.0, SY = 0.0, SXX = 0.0, SYY = 0.0, SXY = 0.0;
+			auto Take = [&](double X, double Y) {
+				Xs.push_back(X);
+				Ys.push_back(Y);
+				SX += X;
+				SY += Y;
+				SXX += X * X;
+				SYY += Y * Y;
+				SXY += X * Y;
+			};
+			for (const Mesh* Ms : { &M.Near, &M.Cards, &M.Sprigs })
+			{
+				const size_t Pts = Ms->Positions.size() / 3;
+				for (size_t T = 0; T + 2 < Ms->Triangles.size(); T += 3)
+					for (int E = 0; E < 3; ++E)
+					{
+						const size_t A = Ms->Triangles[T + static_cast<size_t>(E)], B = Ms->Triangles[T + static_cast<size_t>((E + 1) % 3)];
+						if (A >= Pts || B >= Pts) continue;
+						const float* Pa = &Ms->Positions[A * 3];
+						const float* Pb = &Ms->Positions[B * 3];
+						const double Za = Pa[2], Zb = Pb[2];
+						if (std::max(Za, Zb) < Lo || std::min(Za, Zb) > Hi) continue;
+						// (the edge's two ends, each brought along it into the band; a level edge's ends where they are)
+						for (int End = 0; End < 2; ++End)
+						{
+							const double Z = std::clamp(End == 0 ? Za : Zb, Lo, Hi);
+							const double U = std::fabs(Zb - Za) > 1e-9 ? (Z - Za) / (Zb - Za) : static_cast<double>(End);
+							Take(Pa[0] + (Pb[0] - Pa[0]) * U, Pa[1] + (Pb[1] - Pa[1]) * U);
+						}
+					}
+			}
+			std::vector<LowFoot> Out;
+			if (Xs.size() < 6) return Out;
+			const double N = static_cast<double>(Xs.size()), MX = SX / N, MY = SY / N;
+			const double CXX = SXX / N - Sq(MX), CYY = SYY / N - Sq(MY), CXY = SXY / N - MX * MY;
+			const double Half = 0.5 * (CXX + CYY), Diff = std::sqrt(Sq(0.5 * (CXX - CYY)) + CXY * CXY);
+			const size_t At = std::min(Xs.size() - 1, static_cast<size_t>(0.85 * N));
+			auto Centile = [](std::vector<double>& V, size_t K) {
+				std::nth_element(V.begin(), V.begin() + static_cast<std::ptrdiff_t>(K), V.end());
+				return V[K];
+			};
+			std::vector<double> D(Xs.size());
+			if (Half + Diff > 0.25 && Half - Diff < (Half + Diff) / 6.0)
+			{
+				if (M.Cards.Triangles.empty() && M.Sprigs.Triangles.empty()) return Out;
+				// (its length's way: the wider spread's own direction)
+				const double Turn = 0.5 * std::atan2(2.0 * CXY, CXX - CYY), AX = std::cos(Turn), AY = std::sin(Turn);
+				for (size_t K = 0; K < Xs.size(); ++K) D[K] = std::fabs(-(Xs[K] - MX) * AY + (Ys[K] - MY) * AX);
+				const double Wide = std::max(0.3, Centile(D, At));
+				for (size_t K = 0; K < Xs.size(); ++K) D[K] = (Xs[K] - MX) * AX + (Ys[K] - MY) * AY;
+				const double T0 = Centile(D, static_cast<size_t>(0.05 * N)), T1 = Centile(D, std::min(Xs.size() - 1, static_cast<size_t>(0.95 * N)));
+				const int Rounds = std::clamp(static_cast<int>(std::ceil((T1 - T0) / (1.4 * Wide))), 1, 12);
+				for (int K = 0; K < Rounds; ++K)
+				{
+					const double Tt = Lerp(T0, T1, (K + 0.5) / Rounds);
+					Out.push_back({ MX + AX * Tt, MY + AY * Tt, Wide });
+				}
+				return Out;
+			}
+			for (size_t K = 0; K < Xs.size(); ++K) D[K] = std::hypot(Xs[K] - MX, Ys[K] - MY);
+			Out.push_back({ MX, MY, Centile(D, At) });
+			return Out;
+		}
+	}
+
+	void Ground::Impl::MakeFeet()
+	{
+		if (Fd.Trial.empty() || !Fd.Tried("feet")) return;
+		bFeetWide = Fd.Tried("feetwide");
+		struct Reached
+		{
+			uint64_t Key;
+			Footing F;
+		};
+		std::vector<Reached> All;
+		size_t Stand = 0;
+		for (size_t B = 0; B <= static_cast<size_t>(Base::Haycock); ++B) Stand += Inst[B].size();
+		All.reserve(2 * Stand);
+		for (size_t B = 0; B <= static_cast<size_t>(Base::Haycock); ++B)
+		{
+			const Base Is = static_cast<Base>(B);
+			const std::vector<Placed>& L = Inst[B];
+			// (not what the grass grows through or up against: a gate, a fence, a pole; nor a house, whose floor the
+			// raster keeps clear; nor a region's low kit, a balk or a bund)
+			if (L.empty() || Is == Base::Gate || Is == Base::Wattle || Is == Base::Pole || Is == Base::Sweep || Is == Base::Khata || Is == Base::Chimney || KitLowAt(Is)) continue;
+			if (Bases[B].Class == BaseMesh::Draw::House) continue;
+			// (nor a wood's undergrowth, floor growth itself: a few stems and leaves over a wide round, the ferns among them)
+			if (Bases[B].Name == "Undergrowth") continue;
+			const std::vector<LowFoot> Low = LowFeet(Bases[B]);
+			for (const LowFoot& Lf : Low)
+				for (const Placed& P : L)
+				{
+					// (a thin trunk is a trunk still: only a twig's width is left out)
+					const double R = std::min(Lf.R * P.Scale, 3.5);
+					if (R < 0.05) continue;
+					const double Reach = R + (bFeetWide ? FootWide : FootEdge), Cs = std::cos(static_cast<double>(P.Yaw)), Sn = std::sin(static_cast<double>(P.Yaw));
+					const float FX = static_cast<float>(P.X + (Lf.X * Cs - Lf.Y * Sn) * P.Scale), FY = static_cast<float>(P.Y + (Lf.X * Sn + Lf.Y * Cs) * P.Scale);
+					const int I0 = static_cast<int>(std::floor((FX - Reach) / ClutterSquare)), I1 = static_cast<int>(std::floor((FX + Reach) / ClutterSquare));
+					const int J0 = static_cast<int>(std::floor((FY - Reach) / ClutterSquare)), J1 = static_cast<int>(std::floor((FY + Reach) / ClutterSquare));
+					for (int J = J0; J <= J1; ++J)
+						for (int I = I0; I <= I1; ++I) All.push_back({ SquareKeyIJ(I, J), Footing{ FX, FY, P.Z, static_cast<float>(R) } });
+				}
+		}
+		std::stable_sort(All.begin(), All.end(), [](const Reached& A, const Reached& B) { return A.Key < B.Key; });
+		Feet.reserve(All.size());
+		for (size_t K = 0; K < All.size();)
+		{
+			size_t E = K;
+			while (E < All.size() && All[E].Key == All[K].Key) ++E;
+			FootSquares[All[K].Key] = { static_cast<uint32_t>(K), static_cast<uint32_t>(E) };
+			for (size_t Q = K; Q < E; ++Q) Feet.push_back(All[Q].F);
+			K = E;
 		}
 	}
 }
@@ -7930,6 +8087,7 @@ namespace LandField
 		const auto T1 = Clock::now();
 		MakeBases();
 		TakeUpTallLowKit();
+		MakeFeet();
 		MakeTiles();
 		MakeRing();
 		// (snow on the roofs and the walls' tops)
@@ -8253,6 +8411,18 @@ namespace LandField
 			for (int I = I0; I <= I1; ++I)
 			{
 				const uint64_t Key = Hash(G.Seed ^ 0xC107E5ull, static_cast<uint64_t>(static_cast<int64_t>(I)), static_cast<uint64_t>(static_cast<int64_t>(J)));
+				// (on trial, "feet": the bushes' bodies, the trunks and the stacks that reach into this square)
+				const Impl::Footing* Foot0 = nullptr;
+				const Impl::Footing* Foot1 = nullptr;
+				if (!G.FootSquares.empty())
+				{
+					const auto Stood = G.FootSquares.find(SquareKeyIJ(I, J));
+					if (Stood != G.FootSquares.end())
+					{
+						Foot0 = G.Feet.data() + Stood->second.first;
+						Foot1 = G.Feet.data() + Stood->second.second;
+					}
+				}
 				for (int K = 0; K < Tries; ++K)
 				{
 					// Everything about a thing comes from its square and its number, so any box that holds it lays it the same.
@@ -8463,6 +8633,18 @@ namespace LandField
 						P.Scale = static_cast<float>(Scale);
 						P.ScaleZ = static_cast<float>(ScaleZ);
 						P.Tint = Tint8(TR * Shade, TG * Shade, TB * Shade);
+					}
+					// (on trial, "feet": nothing grows inside a bush's body, a trunk or a stack that would stand more than a
+					// hand's height over its foot, nor so near its edge that its blades would blow through the leaves; the
+					// short sward, a stone, what lies flat and what stands lower down a bank's flank stay)
+					if (Foot0)
+					{
+						const BaseMesh& Own = G.Bases[static_cast<size_t>(P.Kind)];
+						const double Tall = Own.Height * P.ScaleZ, Wide = Own.Radius * P.Scale, Tip = Z + Tall - 0.3;
+						const double Half = G.bFeetWide ? std::min(FootWide, Wide + BladeSweep * Tall) : std::min(FootEdge, 0.5 * Wide);
+						bool bIn = false;
+						for (const Impl::Footing* F = Foot0; F != Foot1 && !bIn; ++F) bIn = Tip > F->Z && Sq(X - F->X) + Sq(Y - F->Y) < Sq(F->R + Half);
+						if (bIn) continue;
 					}
 					// (under snow: buried, or its tips showing through, frosted)
 					if (G.SnowLay && !G.SnowLay->Clutter(P, Seen)) continue;
