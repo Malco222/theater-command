@@ -16,7 +16,7 @@
 // 'harbour' (target: a province) are raids like the rest.
 
 import type { AirFleet, AirReport, AirSide, Game } from './types';
-import { AIR, BROKE_OFF_SKY, SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean } from './air';
+import { AIR, SHIP_AIR_TIP, airRange, airWar, carrierRules, closeRules, groupAt, hasAirfield, km, overOcean, skyWords } from './air';
 import { offers } from './arsenal';
 import { turnToDate } from '../core/ticket';
 import { fieldCanBeLaid, isEngineer } from './engineers';
@@ -539,22 +539,10 @@ function raidReportPage(g: Game, id: number): Page | null {
     const had = shipList(x.ships), sunk = shipList(x.sunk);
     return { nat: x.nat, title: x.fleet, lines: [`${had[0].toUpperCase()}${had.slice(1)}${x.admiral ? `. ${x.admiral} commands` : ''}. ${sunk === 'no ships' ? 'No ships lost.' : `Lost ${sunk}.`}`], buttons: [] };
   });
-  // A fight for the sky: how the fighters stood at its end, against what it takes to win it. The sky is not won
-  // without fighters enough still over it at the end, however few the defence has left: a sweep flown by bombers
-  // alone, or by a handful of fighters, is told that and not a ratio (which the rules write as 99 where nothing
-  // defends).
-  const sent = r.att.reduce((n, x) => n + x.ftr, 0), left = r.att.reduce((n, x) => n + x.ftr - x.lostFtr, 0);
-  // (Ratios in the game's "to 1" form, as the height line has them. Where too few fighters were left the count is
-  // given, so the player sees how far short he was.)
-  const few = sent < 1 ? ', and none flew' : left < 1 ? ', and none were left' : left < AIR.sky.least ? `, and only ${num(left)} ${Math.round(left) === 1 ? 'was' : 'were'} left` : '';
-  const sky = r.mission !== 'superiority' ? ''
-    : r.sky ? ` The ${adj(r.attNat)} air force won the sky over ${r.place}: at the end ${r.hold >= 9 ? 'no opposition was left' : `its fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`}.`
-      : left < AIR.sky.least ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end${few}.`
-        // (Fighters enough left, and odds enough, and still no sky: they gave the fight up before it was joined, or
-        // too few of them could stay over a target at the edge of their range. Never "it takes 50" to a player who
-        // had more than 50 left.)
-        : r.hold >= AIR.sky.win ? ` The sky was not won: ${num(left)} fighters were still over it at the end, ${r.hold >= 9 ? 'with no opposition left' : `about ${r.hold.toFixed(2)} to 1`}, but they ${r.result === BROKE_OFF_SKY ? 'had to turn for home' : 'could not stay to hold it'}.`
-        : ` The sky was not won: at the end the ${adj(r.attNat)} fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up, and it takes ${AIR.sky.win} to 1.`;
+  // A fight for the sky: how the fighters stood at its end, against what it takes to win it, in the one set of words
+  // the browser's report card reads too (air.ts skyWords, the UI director's rulings of 04:55Z to 15:42Z on 25 November):
+  // the game's page and the browser's card say the same sentence of the same raid.
+  const sky = skyWords(g, r);
   const unready = r.surprise ? ' Caught unready: war was declared this month, so the harbour had no warning, its fighters and guns were not manned, and the ships lay at their moorings.' : '';
   const where: PageButton[] = r.zone >= 0 ? [{ label: `GO TO ${r.place.replace(/^the /i, 'THE ').toUpperCase()}`, act: `goto:sea:${r.zone}`, ok: true, tip: 'Looks at the place on the map.' }]
     : r.region >= 0 ? [{ label: `GO TO ${r.place.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: 'Looks at the place on the map.' }] : [];

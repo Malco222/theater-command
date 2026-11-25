@@ -2319,6 +2319,9 @@ export function skyWords(g: Game, r: AirReport): string {
   const usedUp = r.def.length > 0 && r.def.every((x) => x.lostFtr >= x.ftr);
   return r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${r.place}: at the end ${r.hold >= 9 && (!r.def.length || usedUp) ? 'no opposition was left' : stood('its')}.`
     : brokeOff(r) ? ' The sky was not won: the raid was broken off.'
+    // (No fighter of the raid's was left, or none flew: a ratio of nothing is not quoted. The raid report page's own
+    // sentence for it, as the UI director ruled that page at 03:55Z and 04:07Z on 25 November, kept to the letter.)
+    : leftOver < 1 && r.hold < AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end, and none ${sum(r.att, 'ftr') < 1 ? 'flew' : 'were left'}.`
     : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood('the attackers\'')}, and it takes ${AIR.sky.win} to 1.`
     : r.hold >= 9 && !r.def.length ? ` The sky was not won: the defenders put up no fighters, ${floor}.`
     : r.hold >= 9 && usedUp ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.`
