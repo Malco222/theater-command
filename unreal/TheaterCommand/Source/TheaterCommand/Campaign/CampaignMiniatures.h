@@ -262,6 +262,9 @@ struct FMiniatureMesh
 		bool bPacked = false; // a city or capital in a province too small for it: built tight and tall, with no parks, works or detached houses
 		TArray<double> Arms; // the bearings (degrees east of north) of the roads and railways out of it: the town runs out along them
 		bool bFar = false; // the same town as seen from high up: one piece for each block, no trees, streets or cranes (laid out exactly as the near one is)
+		// (release 2, grander great cities: Campaign/GrandCity.h) a city or a capital with a fuller heart, turrets and small
+		// domes over it, and a garden suburb at its edge: the same town, every house where it stood, and no dice thrown for it
+		bool bGrand = false;
 	};
 	/**
 	 * A town as a place with a plan. A small place: a chapel and a street. A town: a church, a main street and a

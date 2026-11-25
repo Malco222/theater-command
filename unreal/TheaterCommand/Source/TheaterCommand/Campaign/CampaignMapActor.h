@@ -812,6 +812,8 @@ private:
 	void BuildWarRoom();
 	void BuildLabels();
 	void BuildTowns();
+	/** (Release 2, grander great cities.) True while "tc.Map.GrandCities" is on, or the game was started with -TheaterGrandCities (Campaign/CampaignGrandCities.cpp). */
+	static bool GrandCitiesWanted();
 	/** What the builder of a town is told of the place: its size, its works, its kit, its quay. (The table's towns and the studio's picture of one are built from the same.) */
 	void FillTownSite(const FCampaignRegion& Region, FMiniatureMesh::FTownSite& Site);
 
@@ -1748,6 +1750,7 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProceduralMeshComponent>> TownFarSquares;
 	int32 TownsCut = -1; // 1 while the towns stand in squares, 0 in one piece, -1 not built yet
+	int32 TownsGrand = -1; // (release 2, "tc.Map.GrandCities") 1 while the great cities stand in their grander form, 0 as they were, -1 not built yet
 	int32 TownShadowsCast = -1; // ("tc.Speed.TownShadows", for measuring only) 1 while the near towns throw shadows
 	/** Shows the near towns (and their windows' panes) or the far ones, in whichever pieces they stand. */
 	void ShowTownForm(bool bFar);
