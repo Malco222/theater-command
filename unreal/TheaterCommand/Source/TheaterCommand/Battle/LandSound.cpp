@@ -216,6 +216,9 @@ namespace LandSound
 		PlaceDb = Place[PlaceOpen.c_str()]["gainDb"].Num(PlaceDb);
 		PlaceFullDb = Place[PlaceOpen.c_str()]["atFullDb"].Num(PlaceFullDb);
 		PlaceTownDb = Place[PlaceOpen.c_str()]["buildingsDb"].Num(PlaceTownDb);
+		RainTake = Place["rain"]["take"].Str(RainTake.c_str());
+		RainDb = Place["rain"]["gainDb"].Num(RainDb);
+		RainFullDb = Place["rain"]["atFullDb"].Num(RainFullDb);
 		const Json& L = M["limits"];
 		for (size_t K = 0; K < L.Keys.size(); ++K) if (L.Values[K].IsNumber()) Limits[L.Keys[K]] = L.Values[K].Int(10);
 		WorldTotal = L["worldTotal"].Int(WorldTotal);
@@ -1450,6 +1453,16 @@ namespace LandSound
 		Place.bSilent = Cover == "water";
 		Place.Db = PlaceDb + (PlaceFullDb - PlaceDb) * MeterNow + (Cover == "buildings" ? PlaceTownDb : 0.0);
 		OutBeds.push_back(Place);
+		// Rain falling (RainShare): over the place's air, sinking a little as the fight swells but heard through it, and
+		// softer the lighter it falls (a light rain a quarter of a downpour's power).
+		if (RainShare > 0.0 && !RainTake.empty())
+		{
+			Bed Rain;
+			Rain.Name = RainTake;
+			Rain.bSilent = false;
+			Rain.Db = RainDb + (RainFullDb - RainDb) * MeterNow + 10.0 * std::log10(std::clamp(RainShare, 0.05, 1.0));
+			OutBeds.push_back(Rain);
+		}
 		(void)RumbleDb;
 	}
 

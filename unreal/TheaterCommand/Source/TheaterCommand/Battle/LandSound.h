@@ -94,6 +94,10 @@ namespace LandSound
 		 * times (a sound crossing the ground, Far / 343 s) reaches the ear Far / 343 / (Speed x Life) real seconds
 		 * after its flash. 1: the battle clock is life's. */
 		double Life = 1.0;
+		/** Rain falling over the battle (release 2, the look bible's G10: LandWeather's Sound, 0 to 1): the mix's
+		 * beds.place.rain played over the place's own air, heard through the fight, softer the lighter it falls. 0:
+		 * none, as before. */
+		double RainShare = 0.0;
 
 		/** A source heard: what to start. Now is the real clock (seconds), Speed the battle clock's against it (Life says
 		 * how many life seconds a battle second is), Battle
@@ -190,6 +194,8 @@ namespace LandSound
 		std::vector<BedRow> Beds;
 		std::string PlaceOpen = "wind_loop", PlaceWoods = "woods_loop";
 		double PlaceDb = 0.0, PlaceFullDb = -10.0, PlaceTownDb = -6.0;
+		std::string RainTake = "rain_loop";
+		double RainDb = 0.0, RainFullDb = -4.0;
 		double RumbleDb = -6.0, RiflesFarBeforeDb = -14.0;
 		// Takes.
 		std::map<std::string, std::vector<std::string>> Lists;

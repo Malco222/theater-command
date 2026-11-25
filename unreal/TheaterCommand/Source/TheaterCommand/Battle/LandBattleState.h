@@ -21,6 +21,7 @@
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
 #include "Battle/LandWalkPan.h"
+#include "Battle/LandWeather.h"
 #include "Battle/Fates.h"
 
 #include <map>
@@ -67,6 +68,9 @@ struct FLandBattleState
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
+	/** Release 2, the look bible's G10: the battle's weather (LandWeather::Pick: what falls, how hard, and the day's
+	 * changes for it), picked once the field is laid; none (Kind None) without -TheaterLandFalling. */
+	LandWeather::Weather Weather;
 	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */

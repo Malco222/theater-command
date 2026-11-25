@@ -6,6 +6,9 @@
 # and the whole field from above (PNG, 1600 pixels wide; ImageMagick's convert writes them). LAND_FIELD_EYE="x y
 # angle" puts the soldier's eye at a place of one's own (metres from the field's south-west corner; the angle in degrees
 # from east, counter-clockwise: 90 looks north. The test prints it back as degrees from north).
+# LAND_FIELD_FALL="rain,0.8" (or "snow,0.5", or "word": the campaign's word and the recording's sky, as the game's
+# -TheaterLandFalling) paints rain or snow falling over the eye's pictures, the day grey and the field wet for it
+# (release 2's G10; Tools/land_weather draws the drops with the graphics chip's own arithmetic).
 # LAND_FIELD_GAPS=1 lists every run of hedgerow 8 m or longer that a man's eye sees over (what is near it, and why).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -14,8 +17,8 @@ SRC="$ROOT/Source/TheaterCommand"
 OUT="${LAND_FIELD_OUT:-${TMPDIR:-/tmp}/land_field}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
-$CXX ${LAND_FIELD_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$HERE" \
-  "$HERE/land_field_test.cpp" "$HERE/land_field_picture.cpp" "$SRC/Battle/LandField.cpp" "$SRC/Battle/LandHouse.cpp" "$SRC/Battle/LandSteppe.cpp" "$SRC/Battle/LandScape.cpp" "$SRC/Battle/LandDesert.cpp" "$SRC/Battle/LandMed.cpp" "$SRC/Battle/LandTropic.cpp" "$SRC/Battle/LandFarm.cpp" "$SRC/Battle/LandSnow.cpp" "$SRC/Battle/LandDry.cpp" "$SRC/Battle/LandAsia.cpp" "$SRC/Battle/LandAmerica.cpp" "$SRC/Battle/LandPlain.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/LandCrater.cpp" \
+$CXX ${LAND_FIELD_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$HERE" -I"$ROOT/Tools/land_weather" \
+  "$HERE/land_field_test.cpp" "$HERE/land_field_picture.cpp" "$ROOT/Tools/land_weather/weather_fall_picture.cpp" "$SRC/Battle/LandWeather.cpp" "$SRC/Effects/WeatherFallCore.cpp" "$SRC/Battle/LandField.cpp" "$SRC/Battle/LandHouse.cpp" "$SRC/Battle/LandSteppe.cpp" "$SRC/Battle/LandScape.cpp" "$SRC/Battle/LandDesert.cpp" "$SRC/Battle/LandMed.cpp" "$SRC/Battle/LandTropic.cpp" "$SRC/Battle/LandFarm.cpp" "$SRC/Battle/LandSnow.cpp" "$SRC/Battle/LandDry.cpp" "$SRC/Battle/LandAsia.cpp" "$SRC/Battle/LandAmerica.cpp" "$SRC/Battle/LandPlain.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/LandCrater.cpp" \
   -pthread -o "$OUT/land_field_test"
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/LandBattles/*.json; fi
 STATUS=0

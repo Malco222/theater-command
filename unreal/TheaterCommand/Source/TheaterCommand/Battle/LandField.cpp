@@ -605,8 +605,10 @@ namespace LandField
 		std::unique_ptr<LandScape::Snow> SnowLay;
 		double SnowIs = 0.0;
 		uint8_t PlainFx = 0;
-		/** The thaw's wet ground drawn (on trial, "wet", where Field::Weather lays the mud): Wetted. */
+		/** The thaw's wet ground drawn (on trial, "wet", where Field::Weather lays the mud), or rain's: Wetted. */
 		bool bWet = false;
+		/** Rain's wetness on the open ground (Field::Rain, none over snow), 0 to 1: 0 where the wet is the thaw's. */
+		double RainWet = 0.0;
 		struct RegionHost;
 		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
@@ -711,12 +713,26 @@ namespace LandField
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
-		/** The thaw's wet ground over a colour where bWet: a fifth darker, sodden, and mud standing in low patches. */
+		/** The thaw's wet ground over a colour where bWet: a fifth darker, sodden, and mud standing in low patches. Under
+		 * rain (RainWet): soaked darker the harder it has fallen, and water standing in pools in the hollows, more of
+		 * them the harder it falls, the grey of the sky over it; the sheen is the ground material's (LandBattle lays it
+		 * wet). */
 		Col Wetted(Col C, double X, double Y) const
 		{
 			if (!bWet) return C;
-			const double Puddle = Smooth(0.25, 0.6, Noise(X / 23.0, Y / 23.0, Seed ^ 0x3E7));
-			return Mixed(Varied(C, 0.8, 0.0), Rgb(66, 58, 44), 0.35 * Puddle);
+			if (RainWet <= 0.0)
+			{
+				const double Puddle = Smooth(0.25, 0.6, Noise(X / 23.0, Y / 23.0, Seed ^ 0x3E7));
+				return Mixed(Varied(C, 0.8, 0.0), Rgb(66, 58, 44), 0.35 * Puddle);
+			}
+			const double W = std::clamp(RainWet, 0.0, 1.0);
+			// (the hollows: the bottoms of the ground's own 24 m dips, Land's finest relief, the same noise, so the water
+			// stands where the drawn ground is low; broken into pools by a finer noise. Two noises a point, not a look round
+			// it: the colour is asked at every point of the ground and every track mark)
+			const double Dip = -Noise(X / 24.0, Y / 24.0, Seed ^ 0xA3);
+			const double Patch = Noise(X / 6.0, Y / 6.0, Seed ^ 0x5A1);
+			const double Puddle = Smooth(0.95 - 0.3 * W, 1.15 - 0.3 * W, Dip + 0.35 * Patch);
+			return Mixed(Varied(C, 1.0 - 0.28 * W, 0.0), Rgb(64, 66, 68), 0.55 * Puddle);
 		}
 		Col GroundBare(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col SteppeColour(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
@@ -1173,8 +1189,11 @@ namespace LandField
 		PlainFx = bDesert ? 5 : 0;
 		if (Rg) PlainFx = static_cast<uint8_t>(std::clamp(Rg->Fx("open", PlainFx), 0, 7));
 		if (SnowIs >= 0.5) PlainFx = 6;
-		if (Fd.Weather == "mud" && PlainFx == 0) PlainFx = 4; // (the thaw's mud over open earth: Field::Weather)
+		// (rain falling, Field::Rain: none where snow lies, as LandWeather's pick.snow_lying_from)
+		RainWet = SnowIs < 0.3 && std::isfinite(Fd.Rain) ? std::clamp(Fd.Rain, 0.0, 1.0) : 0.0;
+		if ((Fd.Weather == "mud" || RainWet > 0.0) && PlainFx == 0) PlainFx = 4; // (the thaw's mud over open earth: Field::Weather; or rain's)
 		bWet = PlainFx == 4 && Fd.Weather == "mud" && !Fd.Trial.empty() && Fd.Tried("wet"); // (its look, on trial)
+		if (RainWet > 0.0) bWet = true; // (rain's wet ground, wherever it falls: Wetted)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)

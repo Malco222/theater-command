@@ -1,0 +1,33 @@
+{
+ "what": "Rain and snow seen falling in the ground battle (release 2, the look bible's G10; behind -TheaterLandFalling). Read by Effects/WeatherFall (FWeatherFall::LoadRecipe) for the falling drops ('fall') and by Battle/LandWeather for what falls over a battle and how the day changes for it ('pick' and 'day'). Every number has its standing value in the code (WeatherFall::Recipe::Standing, LandWeather.cpp): a number left out of this file keeps it, so this file is the art director's to tune without a code change. -TheaterFxSet=fall.rain.near.density=0.8 sets one over the file's at launch, as battle-fx.json's.",
+ "pick": {
+  "_how": "What falls, from the battle's one weather draw (no new draw): the campaign's word over the place and the day's sky as drawn (the ticket's sky: rain a deck of 0.75 to 0.95, snow 0.8 to 1, mud 0.6 to 0.8). Strengths 0 to 1: light rain about 0.3, a downpour 1. Where snow lies (snow_lying_from and more), what falls is snow.",
+  "snow_lying_from": 0.3,
+  "rain": { "from_cover": 0.7, "full_cover": 0.95, "least": 0.45, "tropic_more": 0.15, "dry_times": 0.7, "_how": "always falls: least at from_cover, a downpour at full_cover; the jungle's, the islands' and rice country's heavier (tropic_more added), the desert's and the dry steppe's lighter (dry_times)" },
+  "snow": { "from_cover": 0.88, "full_cover": 1.0, "least": 0.35, "_how": "the snow months: falls only under a deck of from_cover or more (about half their battles), least there, heaviest at full_cover" },
+  "mud": { "from_cover": 0.76, "least": 0.25, "more": 0.15, "_how": "the thaw and the autumn rains: a drizzle under the heaviest of their decks (from_cover and more)" }
+ },
+ "day": {
+  "_how": "How the day changes for it. The haze: its density times 1 + haze_more x strength, its colour drawn haze_toward x strength of the way to haze_r, haze_g, haze_b (linear). The day's lamps times 1 - dimmer x strength. The open ground's wetness wet_least + (1 - wet_least) x strength; the ground's, the hedges' and things' and the steel's roughness and specular when wet (the dry ones: ground 0.95 and 0.15, things 0.9 and 0.2, steel 0.6 and 0.35). The drops' colour: the haze's times ink_over_haze.",
+  "rain": { "wet_least": 0.55, "haze_more": 1.3, "haze_toward": 0.5, "haze_r": 0.44, "haze_g": 0.46, "haze_b": 0.49, "dimmer": 0.18, "ground_rough_less": 0.32, "ground_specular_more": 0.22, "thing_rough_less": 0.22, "thing_specular_more": 0.15, "steel_rough": 0.45, "steel_specular": 0.45, "ink_over_haze": 1.15 },
+  "snow": { "haze_more": 2.0, "haze_toward": 0.6, "haze_r": 0.70, "haze_g": 0.73, "haze_b": 0.78, "dimmer": 0.1, "ink_over_haze": 1.45 }
+ },
+ "fall": {
+  "_how": "The drops, in layers about the eye, each a box (box_m a side) that goes where the eye goes, the drops in it staying put in the world while near: density a cubic metre at full strength (a strength shows that share of them), fall m/s (each drop its own, within spread of it either way), wind_share of the wind, width_m across (a flake's size), length_m long (rain's streak), alpha the most one shows, tone its colour's share of the ink; none nearer the lens than near_from_m, whole from near_full_m, fading from far_fade of half the box to its edge; flutter_m a flake's sway either way; order its place among the see-through things (near over the smoke, far under it); off 1 leaves a layer out. Every fall and wind is a whole number of rain_step (snow_step) m/s, so each layer comes round exactly. Nothing is drawn thinner than least_px pixels (its light kept). At no strength the drops show strength_alpha of their alpha. most_drops: a layer's mesh at most. Heavy rain at full strength: some 1,800 streaks in a 70 degree picture, covering about a sixth of it; heavy snow some 1,800 flakes (Tools/land_weather counts them). The far layers cost the most drops (about 52,000 each, of which about one in thirty is in the picture): fall.rain.far.density halves them, at a cost in the far grain.",
+  "rain_step": 0.16666667,
+  "snow_step": 0.06666667,
+  "least_px": 1.25,
+  "strength_alpha": 0.55,
+  "most_drops": 60000,
+  "rain": {
+   "near": { "box_m": 8, "density": 2.0, "fall": 8.5, "spread": 0.18, "wind_share": 1.0, "width_m": 0.003, "length_m": 0.55, "alpha": 0.28, "tone": 1.1, "near_from_m": 0.6, "near_full_m": 1.6, "far_fade": 0.55, "order": 2 },
+   "middle": { "box_m": 22, "density": 1.2, "fall": 8.5, "spread": 0.18, "wind_share": 1.0, "width_m": 0.006, "length_m": 0.75, "alpha": 0.22, "tone": 1.0, "near_from_m": 3.0, "near_full_m": 4.5, "far_fade": 0.55, "order": 0 },
+   "far": { "box_m": 64, "density": 0.2, "fall": 8.5, "spread": 0.18, "wind_share": 1.0, "width_m": 0.02, "length_m": 1.3, "alpha": 0.14, "tone": 0.95, "near_from_m": 8.0, "near_full_m": 12.0, "far_fade": 0.55, "order": -1 }
+  },
+  "snow": {
+   "near": { "box_m": 8, "density": 2.0, "fall": 1.0, "spread": 0.35, "wind_share": 0.6, "width_m": 0.012, "alpha": 0.9, "near_from_m": 0.4, "near_full_m": 1.0, "far_fade": 0.55, "flutter_m": 0.12, "order": 2 },
+   "middle": { "box_m": 22, "density": 1.0, "fall": 1.0, "spread": 0.35, "wind_share": 0.6, "width_m": 0.02, "alpha": 0.8, "near_from_m": 3.0, "near_full_m": 4.5, "far_fade": 0.55, "flutter_m": 0.15, "order": 0 },
+   "far": { "box_m": 64, "density": 0.2, "fall": 1.0, "spread": 0.35, "wind_share": 0.6, "width_m": 0.05, "alpha": 0.55, "near_from_m": 8.0, "near_full_m": 12.0, "far_fade": 0.55, "flutter_m": 0.2, "order": -1 }
+  }
+ }
+}

@@ -12,6 +12,8 @@
 #include "Battle/LandField.h"
 #include "Battle/LandScape.h"
 #include "land_field_picture.h"
+#include "Battle/LandWeather.h"
+#include "weather_fall_picture.h"
 
 #include <algorithm>
 #include <chrono>
@@ -807,9 +809,28 @@ int main(int Argc, char** Argv)
 	if (const char* V = std::getenv("LAND_FIELD_SNOW")) F.Snow = std::atof(V);
 	if (const char* V = std::getenv("LAND_FIELD_TRIAL")) F.Trial = V; // (the looks on trial: Field::Trial)
 	if (const char* V = std::getenv("LAND_FIELD_WEATHER")) F.Weather = V; // (the campaign's weather word: "mud")
+	if (const char* V = std::getenv("LAND_FIELD_RAIN")) F.Rain = std::atof(V); // (rain's wetness on the open ground, 0 to 1: Field::Rain)
 	if (const char* V = std::getenv("LAND_FIELD_MONTH")) F.Month = std::atoi(V);
 	if (const char* V = std::getenv("LAND_FIELD_TERRAIN")) F.Terrain = V;
 	if (std::getenv("LAND_FIELD_OLD_RIVER_BED")) F.bOldRiverBed = true; // (the game's -TheaterLandOldRiverBed: Field::bOldRiverBed)
+	// (rain or snow seen falling, release 2's G10: LAND_FIELD_FALL="rain,0.8" (or "snow,0.5", a strength alone, or "word"
+	// for the campaign's own word and the recording's sky: the game's -TheaterLandFalling) paints it over the pictures,
+	// and wets the field under rain as the game does (LandWeather::RainOnField), unless LAND_FIELD_RAIN says otherwise)
+	LandWeather::Asked FallAsked;
+	const bool bFallAsked = std::getenv("LAND_FIELD_FALL") != nullptr;
+	if (bFallAsked)
+	{
+		const std::string FallWord = std::getenv("LAND_FIELD_FALL");
+		FallAsked.Word = F.Weather;
+		if (const Json* Sky = Rec.Get("sky"))
+		{
+			FallAsked.Cover = Sky->Num("cover", 0.45);
+			FallAsked.bDeck = FallAsked.Cover >= 0.8 || (Sky->Get("kind") && Sky->Get("kind")->K == Json::String && Sky->Get("kind")->S == "deck");
+		}
+		if (FallWord != "word") LandWeather::ReadForced(FallWord, FallAsked.ForcedKind, FallAsked.ForcedStrength);
+		FallAsked.Look = LandScape::NameOf(LandScape::Pick(F));
+		if (!std::getenv("LAND_FIELD_RAIN")) F.Rain = LandWeather::RainOnField(FallAsked, LandWeather::Book());
+	}
 	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings
 	// (Content/Models/East: the recording's folder's ../../Models/East), as the game reads them.
 	if (const Json* St = Fj->Get("steppe"); St && St->K == Json::Object)
@@ -3210,8 +3231,8 @@ int main(int Argc, char** Argv)
 		else if (G.SnowLying() > 0.0) // (under snow the grass is the snow's: marks in it, or on the grass where it shows)
 			Check(R.Pieces() > 2000 && ByKind[1] + ByKind[3] > 100, "tanks driven across the field leave their marks in the snow",
 				Fmt("%.0f pieces, %.0f in the snow or on grass through it", R.Pieces(), ByKind[1] + ByKind[3]));
-		else if (F.Weather == "mud") // (the thaw: a track tears the turf to mud, so none pressed on grass, all torn earth)
-			Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] == 0 && ByKind[3] >= 1, "tanks driven across the thaw's field leave their marks in corn and torn earth, none pressed on grass",
+		else if (F.Weather == "mud" || F.Rain > 0.0) // (the thaw, or rain (Field::Rain): a track tears the turf to mud, so none pressed on grass, all torn earth)
+			Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] == 0 && ByKind[3] >= 1, F.Rain > 0.0 ? "tanks driven across the rain's wet field leave their marks in corn and torn earth, none pressed on grass" : "tanks driven across the thaw's field leave their marks in corn and torn earth, none pressed on grass",
 				Fmt("%.0f pieces, %.0f in corn, %.0f torn earth, %.0f on grass", R.Pieces(), ByKind[2], ByKind[3], ByKind[1]));
 		else
 		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
@@ -3264,6 +3285,36 @@ int main(int Argc, char** Argv)
 			if (Air.Cover >= 0.0) Sk.Cover = Air.Cover;
 		}
 		std::printf("look laid: %s, snow %.2f%s\n", G.LookWord(), G.SnowLying(), Air.bSet ? Fmt(", haze %.2f %.2f %.2f x%.2f", Air.HazeInk[0], Air.HazeInk[1], Air.HazeInk[2], Sk.HazeThick).c_str() : "");
+		if (bFallAsked)
+		{
+			// (the game's pick once the field is laid, its snow known: LandBattle's PickWeather; the day as HideTheTable lays it)
+			FallAsked.SnowLying = G.SnowLying();
+			FallAsked.Look = G.LookWord();
+			const LandWeather::Weather W = LandWeather::Pick(FallAsked, LandWeather::Book());
+			std::printf("falling: %s", W.Why.c_str());
+			if (W.Kind != WeatherFall::Kind::None) std::printf(" (%s at %.2f, the haze x%.2f, the light x%.2f, the ground %.2f wet)", WeatherFall::NameOf(W.Kind), W.Strength, W.HazeTimes, W.LightTimes, F.Rain);
+			std::printf("\n");
+			if (W.Kind != WeatherFall::Kind::None)
+			{
+				Sk.Overcast = 1.0;
+				Sk.HazeTimes = W.HazeTimes;
+				Sk.HazeToward = W.HazeToward;
+				for (int C = 0; C < 3; ++C) Sk.FallHaze[C] = W.HazeInk[C];
+				Sk.LightTimes = W.LightTimes;
+				WeatherFallPicture::Asked Drops;
+				Drops.Kind = W.Kind;
+				Drops.Strength = W.Strength;
+				Drops.InkOverHaze = W.InkOverHaze;
+				Drops.Seed = F.Seed;
+				if (const Json* Sky = Rec.Get("sky"))
+					if (const Json* Wind = Sky->Get("wind"); Wind && Wind->A.size() == 2)
+					{
+						Drops.WindX = Wind->A[0].N;
+						Drops.WindY = Wind->A[1].N;
+					}
+				Sk.Over = WeatherFallPicture::Over(WeatherFall::Recipe::Standing(), Drops);
+			}
+		}
 		if (!LandFieldPicture::Paint(G, F, Sk, Key, Argv[2])) ++Failures;
 		std::printf("pictures painted in %.1f s\n", Seconds(P0));
 	}

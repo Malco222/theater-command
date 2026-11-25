@@ -602,6 +602,8 @@ namespace LandFieldPicture
 			double Beta = 3.912 / 3500.0;
 			double Exposure = 0.85;
 			double Cover = 0.45, Base = 900.0;
+			/** A grey day's softness (Sky::Overcast): shade lifted toward light by this share, the sky a deck. */
+			double Soft = 0.0;
 			// (the clouds' shadows' picture moved so its clear disc lies over the field's middle at the start, as the
 			// game's LandBattle lays M_LandCloudShade's "Anchor": U along the field's y, V along its x, in repeats)
 			double AnchorU = 0.0, AnchorV = 0.0;
@@ -638,6 +640,31 @@ namespace LandFieldPicture
 			L.Beta *= Sk.HazeThick;
 			L.Cover = Sk.Cover;
 			L.Base = Sk.Base;
+			// (rain or snow, release 2's G10: a grey day under a deck, as the game lays it for the weather. The sun's
+			// light mostly gone into the cloud and its shadows soft; the sky's light greyer and stronger; the haze
+			// thicker and drawn toward the weather's grey; the lamps a little duller)
+			if (Sk.Overcast > 0.0)
+			{
+				const double O = std::clamp(Sk.Overcast, 0.0, 1.0);
+				const double Grey[3] = { 0.52, 0.54, 0.57 };
+				for (int C = 0; C < 3; ++C)
+				{
+					L.SunCol[C] *= 1.0 - 0.82 * O;
+					L.Sky[C] = (L.Sky[C] + (0.62 * Grey[C] - L.Sky[C]) * O) * (1.0 + 0.9 * O);
+					L.HazeSun[C] = L.HazeSun[C] + (L.HazeCol[C] - L.HazeSun[C]) * O;
+				}
+				L.Cover = 0.0;
+				L.Soft = O;
+			}
+			for (int C = 0; C < 3; ++C)
+			{
+				L.HazeCol[C] += (Sk.FallHaze[C] - L.HazeCol[C]) * std::clamp(Sk.HazeToward, 0.0, 1.0);
+				L.HazeSun[C] += (Sk.FallHaze[C] - L.HazeSun[C]) * std::clamp(Sk.HazeToward, 0.0, 1.0);
+				L.SunCol[C] *= Sk.LightTimes;
+				L.Sky[C] *= Sk.LightTimes;
+				L.Bounce[C] *= Sk.LightTimes;
+			}
+			L.Beta *= std::max(1.0, Sk.HazeTimes);
 			return L;
 		}
 
@@ -660,6 +687,18 @@ namespace LandFieldPicture
 			const double Cos = Dot(Ray, L.Sun);
 			const double Glow = 0.5 * std::pow(std::max(0.0, Cos), 40.0) + (Cos > 0.99996 ? 30.0 : 0.0);
 			for (int C = 0; C < 3; ++C) Out[C] += Glow * L.SunCol[C] / 2.1;
+			// (a grey day: the deck over everything, lighter overhead, into the haze at the horizon)
+			if (L.Soft > 0.0)
+			{
+				const double Deck[3] = { 0.60, 0.62, 0.66 };
+				const double Over = std::pow(std::clamp(Ray.Z / 0.25, 0.0, 1.0), 0.7);
+				for (int C = 0; C < 3; ++C)
+				{
+					const double Grey = Haze[C] + (Deck[C] * (0.85 + 0.25 * Up) - Haze[C]) * Over;
+					Out[C] += (Grey - Out[C]) * L.Soft;
+				}
+				return;
+			}
 			// Cumulus on a deck at the cloud base: soft, lit on top, greyer underneath, lost in the haze far off.
 			if (Ray.Z > 0.01 && L.Cover > 0.0)
 			{
@@ -735,7 +774,8 @@ namespace LandFieldPicture
 		}
 
 		/** Lights, hazes and tones the samples, then averages them down two to one into the picture's bytes. */
-		std::vector<uint8_t> Shade(const Target& T, const View& V, const Light& L, const std::vector<const Shadow*>& Shadows, bool bHaze, int Down)
+		std::vector<uint8_t> Shade(const Target& T, const View& V, const Light& L, const std::vector<const Shadow*>& Shadows, bool bHaze, int Down,
+			const std::vector<float>* OverLight = nullptr, const std::vector<float>* OverCover = nullptr)
 		{
 			const int W = T.W, H = T.H;
 			std::vector<float> Lin(static_cast<size_t>(W) * H * 3);
@@ -770,6 +810,7 @@ namespace LandFieldPicture
 									break;
 								}
 							}
+							Lit += (1.0 - Lit) * 0.8 * L.Soft; // (a grey day's shadows soft)
 							// (the game's clouds' shadows: where this point's sun ray meets the clouds' base, as M_LandCloudShade lays
 							// them: how far inside a cloud (red, metres either side of 0.5 over 400), the edge blurred over 30 m,
 							// the clouds the day's cover keeps (blue under four fifths of the cover, at most 0.4, over the 0.41 the
@@ -815,6 +856,14 @@ namespace LandFieldPicture
 								for (int C = 0; C < 3; ++C) Out[C] = Out[C] * Keep + Haze[C] / L.Exposure * 0.82 * (1.0 - Keep);
 							}
 						}
+						// (what falls over the picture: the drops in the haze's colour along the ray, over what lies behind)
+						if (OverCover && (*OverCover)[K] > 0.0f)
+						{
+							double Haze[3];
+							HazeOf(L, V.RayOf(X + 0.5, Y + 0.5), Haze);
+							const double Hide = std::clamp(static_cast<double>((*OverCover)[K]), 0.0, 1.0), Add = (*OverLight)[K];
+							for (int C = 0; C < 3; ++C) Out[C] = Out[C] * (1.0 - Hide) + Haze[C] / L.Exposure * 0.82 * Add;
+						}
 						for (int C = 0; C < 3; ++C) Lin[K * 3 + C] = static_cast<float>(Filmic(Out[C] * L.Exposure));
 					}
 			};
@@ -853,7 +902,8 @@ namespace LandFieldPicture
 		double Seconds(std::chrono::steady_clock::time_point Since) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - Since).count(); }
 
 		/** One picture: its shadows (a fine map round FineAt, a wide one round WideAt), its draws, painted and saved. */
-		bool Picture(const LandField::Ground& G, const Light& L, const View& V, const V3& FineAt, double FineSize, const V3& WideAt, double WideSize, double ClutterReach, bool bHaze, const std::string& Path)
+		bool Picture(const LandField::Ground& G, const Light& L, const View& V, const V3& FineAt, double FineSize, const V3& WideAt, double WideSize, double ClutterReach, bool bHaze, const std::string& Path,
+			const Sky* Falling = nullptr)
 		{
 			const auto T0 = std::chrono::steady_clock::now();
 			std::vector<LandField::Placed> Clutter;
@@ -882,7 +932,27 @@ namespace LandFieldPicture
 			Rasterize(T, V, Sc.Draws, true);
 			std::vector<const Shadow*> Order;
 			for (const Shadow& S : Maps) Order.push_back(&S);
-			const std::vector<uint8_t> Pic = Shade(T, V, L, Order, bHaze, 2);
+			std::vector<float> OverLight, OverCover;
+			if (Falling && Falling->Over)
+			{
+				Lens Ln;
+				const V3 Axes[4] = { V.Eye, V.Fwd, V.Right, V.Up };
+				double* Into[4] = { Ln.Eye, Ln.Fwd, Ln.Right, Ln.Up };
+				for (int A = 0; A < 4; ++A)
+				{
+					Into[A][0] = Axes[A].X;
+					Into[A][1] = Axes[A].Y;
+					Into[A][2] = Axes[A].Z;
+				}
+				Ln.Tan = V.Tan;
+				Ln.W = V.W;
+				Ln.H = V.H;
+				Ln.PixelsAcross = V.W / 2;
+				OverLight.assign(static_cast<size_t>(V.W) * V.H, 0.0f);
+				OverCover.assign(static_cast<size_t>(V.W) * V.H, 0.0f);
+				Falling->Over(Ln, T.Depth, OverLight, OverCover);
+			}
+			const std::vector<uint8_t> Pic = Shade(T, V, L, Order, bHaze, 2, OverCover.empty() ? nullptr : &OverLight, OverCover.empty() ? nullptr : &OverCover);
 			std::printf("  %zu draws, %.1f million triangles (%.1f million in the shadows), %zu clutter things, painted in %.1f s\n", Sc.Draws.size(), Sc.Tris / 1e6, ShadowTris / 1e6, Clutter.size(), Seconds(T0));
 			return Save(Path, V.W / 2, V.H / 2, Pic);
 		}
@@ -970,7 +1040,7 @@ namespace LandFieldPicture
 			std::printf("  eye at %.0f, %.0f, %.1f m up, looking %.0f degrees from north\n", Eye.X, Eye.Y, Eye.Z - G.At(Eye.X, Eye.Y).Z, std::fmod(450.0 - Yaw * 180.0 / Pi, 360.0));
 			const View V = Looking(Eye, Yaw, -2.0 * Pi / 180.0, 62.0, W, H);
 			const V3 Ahead{ std::cos(Yaw), std::sin(Yaw), 0.0 };
-			bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png");
+			bOk &= Picture(G, L, V, Eye + Ahead * 45.0, 120.0, Eye + Ahead * 520.0, 1400.0, 70.0, true, Dir + "/" + Key + "-field-eye.png", &Sk);
 		}
 		// (b) 30 m up over the bocage, south of the village, looking toward it.
 		{
@@ -979,7 +1049,7 @@ namespace LandFieldPicture
 			const double Yaw = std::atan2(TY - EY, TX - EX);
 			const View V = Looking(Eye, Yaw, -9.0 * Pi / 180.0, 60.0, W, H);
 			const V3 Ahead{ std::cos(Yaw), std::sin(Yaw), 0.0 };
-			bOk &= Picture(G, L, V, Eye + Ahead * 150.0 - V3{ 0, 0, 30.0 }, 320.0, Eye + Ahead * 800.0, 2000.0, 70.0, true, Dir + "/" + Key + "-field-oblique.png");
+			bOk &= Picture(G, L, V, Eye + Ahead * 150.0 - V3{ 0, 0, 30.0 }, 320.0, Eye + Ahead * 800.0, 2000.0, 70.0, true, Dir + "/" + Key + "-field-oblique.png", &Sk);
 		}
 		// (c) The whole field and its band from straight above, north up.
 		{
