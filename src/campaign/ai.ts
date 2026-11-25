@@ -25,6 +25,7 @@ import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, front
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
+import { heldFirst } from './far';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineKeepWatch, lineKeeps, lineLeaves, lineOf, lineShut } from './line';
@@ -717,6 +718,9 @@ export function answering(g: Game, nat: string): Corps[] {
   return seaAnswers(g, nat).map((x) => x.c);
 }
 
+/** Told, as a staff's fighting opens, of each held row that answers this month and the ground it is tied to (`on`). For tests and readings: nothing in the game listens. */
+export const answerWatch: { tell: ((e: { nat: string; rows: { corps: Corps; on: Set<number> }[] }) => void) | null } = { tell: null };
+
 /**
  * Runs a staff's fighting with its answering rows off hold and tied to their own ground (a piece of home ground an
  * enemy reached from the sea, a front's ground he came to by land, or the two together), and puts the hold back on
@@ -724,6 +728,7 @@ export function answering(g: Game, nat: string): Corps[] {
  */
 export function withAnswer<T>(g: Game, nat: string, run: () => T): T {
   const answer = answers(g, nat);
+  if (answer.length) answerWatch.tell?.({ nat, rows: answer.map((x) => ({ corps: x.c, on: x.on })) });
   for (const x of answer) { x.c.hold = false; tied.set(x.c.id, x.on); }
   try { return run(); } finally { for (const x of answer) if (!x.c.dead) x.c.hold = true; tied = new Map(); }
 }
@@ -777,18 +782,37 @@ function seaAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
  * town he stood round, the front is entered and its rows answer. Ground he took from somebody else, or held before
  * the war, is no beach: a front that faces it is a front by land from its first day.
  *
- * Its ground is the front's own provinces and the friendly ground next behind them, as the staff's sums already read
- * a garrison "on the front itself" (staff.ts `fronts`: one further back stays where it is), and with them the ground
- * on that front its side held until the enemy took it, which is the front's to win back. The held corps that stand
- * on the front's provinces or next behind them, on the far side of the chart, answer. They come off hold for the
- * month's fighting, tied to that ground as a home row is tied to its piece of home ground: they defend, they
- * counter-attack, they march and ride on it; they go nowhere in the enemy's own country and they do not sail. The
- * hold is back on each where it then stands, so a row that answered is a held row still when the enemy is gone. A row
- * further back stays held until the front comes to it. A corps on the ground of two fronts answers on both.
+ * Its rows are the held corps that stand on the front itself: on the front's own provinces or on the friendly
+ * ground next behind them, on the far side of the chart, as the staff's sums already read a garrison "on the front
+ * itself" (staff.ts `fronts`: "one further back stays where it is"). A row further back stays held until the front
+ * comes to it. A corps on the ground of two fronts answers on both. (The skeptic of 25 November 2026 asked for every
+ * member of the front by the staff's one membership instead, staff.ts `membership`, so that the reserve at Ulan-Ude
+ * answers with the armies on the line. Tried and not kept: a corps behind the lines is a member of the front nearest
+ * it however far off that is. In a war nobody played, Japan at peace with the Soviet Union, the Korea Army's two
+ * held divisions stood at Kaifeng and Pengpu in China by the third month with no enemy on Japan's ground;
+ * Kamchatka's garrison answered for Manchukuo's front with a hundred provinces to go to, and Sumatra's garrisons
+ * for Java's. The staff's own sums count a held row toward a front only on the front itself. Put to the design
+ * director as the edge left open.)
+ *
+ * Its ground is its side's own ground on that front, on the far side of the chart: of the front's own provinces and
+ * the friendly ground next behind them, what is a country of its side's (its own, a client's, an ally's) or was its
+ * side's on the first day (far.ts `heldFirst`: Japan's ground in China); and such ground on that front as the enemy
+ * has taken from its side or stands round, which is the front's to win back. What its side has taken in an enemy's
+ * country since is beyond the front: no row is sent onto it, and none goes to win it back when it is lost again. A
+ * row that already stands on such ground answers where it stands. (As first built the ground was read from who held
+ * a province now and who held it last, month by month, so where the staff's own offensive went forward the held rows
+ * followed it: in one war the Transbaikal district's army at Chita, a held row all the while, stood at Tatung in
+ * China in its fifth month. The skeptic's finding.)
+ *
+ * The rows come off hold for the month's fighting, tied to that ground as a home row is tied to its piece of home
+ * ground: they defend, they counter-attack, they march and ride on it; they go nowhere beyond it, and they are not
+ * taken off it by sea, cut off or broken as they may be (`evacuations`). The hold is back on each where it then
+ * stands, so a row that answered is a held row still when the enemy is gone.
  *
  * Never a fortress, engineers (the staff leaves them to their works), a row marked to stay or kept inside its town,
- * a row somebody still waits to send somewhere (`waitsToGo`), a corps of a side theatre's own army, or one lent to
- * the player's army. None for the player, whose corps no hold binds, nor with the far side off.
+ * a row somebody still waits to send somewhere (`waitsToGo`), a corps of a side theatre's own army (no province of
+ * the far side lies in a side theatre today, so this passes nobody over yet), or one lent to the player's army. None
+ * for the player, whose corps no hold binds, nor with the far side off.
  */
 export function frontAnswering(g: Game, nat: string): Corps[] {
   return landAnswers(g, nat).map((x) => x.c);
@@ -809,15 +833,17 @@ const waitsToGo = (g: Game, c: Corps): boolean => planWaits(c) || g.flags[`st:ho
 /**
  * True for ground of this nation's side that an enemy reached from the sea in the move that won it: a beach he took
  * as he landed, or the field of one whose town still holds, his army round it since the day he came ashore. A
- * landing leaves its month on the shore it sails for (navy.ts `landCorps`), and that month is the month the ground
- * changed hands or the siege was laid. A town that falls later falls to an army already ashore: by land. Nothing
- * marks ground taken from the air, so an airborne descent reads as an entry by land.
+ * landing that wins its shore leaves the month on it (navy.ts `landCorps`, `shoreWon`), and that month is the month
+ * the ground changed hands or the siege was laid. A town that falls later falls to an army already ashore: by land.
+ * A landing thrown back marks nothing, so the province is no beach if it falls to a march in that same month; and a
+ * later wave put ashore on ground already won leaves the first wave's month standing. Nothing marks ground taken
+ * from the air, so an airborne descent reads as an entry by land. (A war saved before the mark was kept has none:
+ * its beaches read as entered by land, and their rows answer.)
  */
 function beach(g: Game, nat: string, r: Region): boolean {
   const town = allied(g, nat, r.ctrl);
   if (!town && !(r.prev !== null && allied(g, nat, r.prev))) return false;
-  const when = town ? investedOn(g, r) : r.since;
-  return g.nations[nat].atWar.some((e) => g.flags[`landedAt:${r.id}:${e}`] === when);
+  return g.flags[`shoreWon:${r.id}`] === (town ? investedOn(g, r) : r.since);
 }
 
 /** Each corps that answers an attack by land, with its front's ground. */
@@ -829,21 +855,29 @@ function landAnswers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
     && !waitsToGo(g, c) && !standBy.has(c) && theatreOf(g, c) < 0 && !aside(g, g.regions[c.reg], nat));
   if (!rows.length) return [];
   const friendly = (r: Region): boolean => allied(g, nat, ctl(g, r)) && !aside(g, r, nat);
+  // (Its side's own ground, on the far side: a country of its side's, or ground its side held on the first day.)
+  const ours = (r: Region): boolean => shoreOf(r) === 2 && (allied(g, nat, r.owner) || allied(g, nat, heldFirst(r)));
   const grounds = new Map<Corps, Set<number>>();
   for (const f of fronts(g, nat, { skip: (r) => aside(g, r, nat) })) {
     if (!ownFront(g, f)) continue;
     const his: Region[] = [];
     for (let id = 0; id < f.depth.length; id++) if (f.depth[id] >= 1) his.push(g.regions[id]);
     if (his.every((r) => beach(g, nat, r))) continue;
-    const on = new Set<number>(f.ours);
-    for (const id of f.ours) for (const j of g.regions[id].nb) if (friendly(g.regions[j])) on.add(j);
-    const here = rows.filter((c) => on.has(c.reg));
+    // (The front itself: its own provinces and the friendly ground next behind them.)
+    const line = new Set<number>(f.ours);
+    for (const id of f.ours) for (const j of g.regions[id].nb) if (friendly(g.regions[j])) line.add(j);
+    const here = rows.filter((c) => line.has(c.reg));
     if (!here.length) continue;
-    // (What the enemy has taken of the front, or stands round: ground its side held until he came is the front's to win back.)
-    for (const r of his) if (allied(g, nat, r.ctrl) || (r.prev !== null && allied(g, nat, r.prev))) on.add(r.id);
+    // (Its ground: of the front itself, what is its side's own; and what the enemy has taken of its side's own
+    // ground there, or stands round, which is the front's to win back. Never what its side took in his country.)
+    const on = new Set<number>();
+    for (const id of line) if (ours(g.regions[id])) on.add(id);
+    for (const r of his) if (ours(r) && (allied(g, nat, r.ctrl) || (r.prev !== null && allied(g, nat, r.prev)))) on.add(r.id);
     for (const c of here) {
-      const was = grounds.get(c);
-      if (was) for (const id of on) was.add(id); else grounds.set(c, new Set(on));
+      // (Where it stands is its ground whatever that ground is: a row is never barred from its own post.)
+      let was = grounds.get(c);
+      if (!was) grounds.set(c, (was = new Set([c.reg])));
+      for (const id of on) was.add(id);
     }
   }
   return rows.filter((c) => grounds.has(c)).map((c) => ({ c, on: grounds.get(c)! }));
@@ -3805,7 +3839,13 @@ export function wantsOut(g: Game, c: Corps): boolean {
 
 function evacuations(g: Game, nat: string): void {
   ensureSupply(g);
-  const out = g.corps.filter((c) => c.nat === nat && (!scope || scope.has(c.reg)) && wantsOut(g, c));
+  // (A held row that answers on its own ground this month is not taken off it by sea, cut off or broken as it may be:
+  // it was freed for that ground's defence and no further (`withAnswer`; the design director's B11 of 25 November
+  // 2026, "not beyond it", as a home row that answers never sails). As first built the tie barred its marches and
+  // its trains and not this step: Japan's 6th Army, a held row answering in Manchukuo, was lifted off the quay at
+  // Chinchow and ended its month in Tokyo, a held row there. The skeptic's finding. This step reads no hold, so a
+  // held row that does not answer is lifted off as it always was. Nobody is tied with the far side off.)
+  const out = g.corps.filter((c) => c.nat === nat && (!scope || scope.has(c.reg)) && !tied.has(c.id) && wantsOut(g, c));
   if (!out.length) return;
   const stuck: Corps[] = [];
   for (const c of out) {

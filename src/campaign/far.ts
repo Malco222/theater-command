@@ -299,6 +299,13 @@ function parts(g: Game, client: string, patron: string): void {
 // ---- The first day ------------------------------------------------------------------------------------
 
 /**
+ * Who held a province on the first day: the country the far side's first day gives it to where that was not its
+ * owner (`farGround`: Japan's ground in China), and otherwise its owner of that day. Read from the chart and the
+ * setup, never from the war: it says the same in every month and after every load.
+ */
+export const heldFirst = (r: Region): string => FAR_SETUP.held[r.name] ?? r.first ?? r.owner;
+
+/**
  * The far side's ground as it stood on 1 September 1939, set as the chart is attached and before its countries are
  * made (world.ts): the provinces another than their owner holds, the capitals that move, and the oil marks the old
  * chart gives up to the far side.

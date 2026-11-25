@@ -11,13 +11,17 @@
 // where they then stand. A landing alone is no entry by land (home ground reached from the sea is b641 (f)'s, and
 // its tests are far-home-answer's). Never a fortress, engineers, a row marked to stay or a row somebody still waits
 // to send somewhere; never for the player, whose corps no hold binds; nothing on the old chart.
+//
+// The skeptic's findings of 25 November 2026, mended here: the tie is to its side's own ground on the front and
+// never to what its side took in the enemy's country; an answering row is not lifted off its front by sea; and a
+// shore is a beach only where the landing itself won it. (The months-long reading is far-front-answer-months'.)
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { answering, frontAnswering, homeBars, withAnswer } from '../src/campaign/ai';
+import { answering, frontAnswering, homeBars, wantsOut, withAnswer } from '../src/campaign/ai';
 import { clientMonth } from '../src/campaign/far';
-import { addCorps, atWar, capitulate, createGame, declareWar, moveCorps, relocate, setWar } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, createGame, declareWar, moveCorps, relocate, setWar, whyNotEvacuate } from '../src/campaign/game';
 import { landCorps } from '../src/campaign/navy';
 import { offensiveWatch, startOpen } from '../src/campaign/staff';
 import { beginHuman, canOrder, current, endHuman, orderAttack, orderMove, stepAI } from '../src/campaign/turn';
@@ -115,6 +119,74 @@ describe('held armies answer an attack by land (the design director\'s B11)', ()
     expect([dauria.hold, homeBars(dauria, at('Hailar'))]).toEqual([true, false]);
   });
 
+  it('a held row far behind the line is on no front: the Korea Army answers nothing for the war in China, nor Kamchatka for Manchukuo\'s front', () => {
+    // The edge left open for the design director. "Every held row on that front" is read as the staff's sums read a
+    // held row on a front: on its provinces or next behind them. Read by the staff's membership (the nearest front,
+    // however far), the Korea Army's two held divisions were in China by the third month of a war nobody played.
+    const g = wide();
+    expect([atWar(g, 'JAP', 'CHN'), atWar(g, 'JAP', 'SOV')]).toEqual([true, false]);
+    const japan = names(frontAnswering(g, 'JAP'));
+    for (const nm of ['Korea Army (19th Division)', 'Korea Army (20th Division)', 'Kwantung Army reserve', '4th Army (the Amur)']) {
+      expect([nm, called(g, nm).hold, japan.includes(nm)]).toEqual([nm, true, false]);
+    }
+    // At war with the Union, the Korea Army stands on the front that faces it and answers there; the reserve at
+    // Ulan-Ude and Kamchatka's garrison, behind the Union's own line, stay held until the front comes to them.
+    setWar(g, 'JAP', 'SOV');
+    clientMonth(g, true);
+    expect(names(frontAnswering(g, 'JAP'))).toEqual(expect.arrayContaining(['Korea Army (19th Division)', '4th Army (the Amur)']));
+    const union = names(frontAnswering(g, 'SOV'));
+    for (const nm of ['Transbaikal reserve', 'Kamchatka garrison']) expect([nm, called(g, nm).hold, union.includes(nm)]).toEqual([nm, true, false]);
+    // The front comes to the reserve: with Chita lost, Ulan-Ude is next behind the line and its row answers.
+    const chita = g.byName['Chita'], reserve = called(g, 'Transbaikal reserve');
+    const near = g.regions[reserve.reg].nb.includes(chita.id) || g.regions[reserve.reg].nb.some((j) => g.regions[j].nb.includes(chita.id) && g.regions[j].owner === 'SOV');
+    expect(near).toBe(true);
+    for (const u of [...chita.units]) relocate(g, u, g.byName['Irkutsk']);
+    chita.prev = chita.ctrl; chita.ctrl = 'JAP'; chita.since = g.turn;
+    addCorps(g, 'JAP', 'Test army at Chita', 'inf', 3, 'Chita', {});
+    expect(names(frontAnswering(g, 'SOV'))).toContain(reserve.name);
+  });
+
+  it('the tie is to its side\'s own ground: never ground its side took in the enemy\'s country, held or lost again', () => {
+    const g = wide();
+    setWar(g, 'JAP', 'SOV');
+    clientMonth(g, true);
+    const at = (nm: string): Region => g.byName[nm];
+    const amur = called(g, '2nd Red Banner Army (the Amur)');
+    const heiho = at('Heiho'), blago = at('Blagoveshchensk');
+    expect([g.regions[amur.reg].name, heiho.owner, blago.nb.includes(heiho.id)]).toEqual(['Blagoveshchensk', 'MAN', true]);
+    const bars = (c: Corps, list: string[]): boolean[] => { const on = grounds(g, 'SOV', [c]).get(c)!; return list.map((nm) => !on.has(at(nm).id)); };
+    // The first day of the war: its own bank, and nothing of Manchukuo's.
+    expect(bars(amur, ['Blagoveshchensk', 'Svobodny', 'Heiho'])).toEqual([false, false, true]);
+
+    // The Red Army's own offensive has taken Heiho over the river (the staff's release sends free corps, not these).
+    // It is a province of the front now, and it is Manchukuo's country: no held row is sent onto it.
+    for (const u of [...heiho.units]) relocate(g, u, at('Harbin'));
+    const taken = (r: Region, by: string): void => { r.prev = r.ctrl; r.ctrl = by; r.since = g.turn; };
+    taken(heiho, 'SOV');
+    expect(names(frontAnswering(g, 'SOV'))).toContain(amur.name);
+    expect(bars(amur, ['Blagoveshchensk', 'Svobodny', 'Heiho'])).toEqual([false, false, true]);
+
+    // Manchukuo takes it back. The Union held it last, and it is still no ground of the Union's side: nobody goes
+    // to win it back. (Read by who held it last, the held rows followed the staff's offensive province by province:
+    // in one war Chita's army, a held row all the while, stood at Tatung in China in its fifth month.)
+    taken(heiho, 'MAN');
+    expect([heiho.ctrl, heiho.prev]).toEqual(['MAN', 'SOV']);
+    expect(bars(amur, ['Blagoveshchensk', 'Svobodny', 'Heiho'])).toEqual([false, false, true]);
+    // The Union's own province, lost and to be won back, is its ground as before.
+    taken(at('Zavitaya'), 'JAP');
+    expect(bars(called(g, '2nd Red Banner Army (Svobodny)'), ['Svobodny', 'Zavitaya', 'Heiho'])).toEqual([false, false, true]);
+
+    // A held row that already stands on ground taken answers where it stands, and goes no deeper.
+    taken(heiho, 'SOV');
+    relocate(g, amur, heiho);
+    const beyond = heiho.nb.map((j) => g.regions[j]).filter((r) => r.owner === 'MAN');
+    expect(beyond.length).toBeGreaterThan(0);
+    for (const r of beyond) { for (const u of [...r.units]) relocate(g, u, at('Harbin')); taken(r, 'SOV'); }
+    expect(names(frontAnswering(g, 'SOV'))).toContain(amur.name);
+    const on = grounds(g, 'SOV', [amur]).get(amur)!;
+    expect([on.has(heiho.id), on.has(blago.id), beyond.map((r) => on.has(r.id))]).toEqual([true, true, beyond.map(() => false)]);
+  });
+
   it('never a fortress, engineers, a row marked to stay or one the ships have waiting; none for the player; nothing on the old chart', () => {
     const g = wide();
     setWar(g, 'JAP', 'SOV');
@@ -126,6 +198,10 @@ describe('held armies answer an attack by land (the design director\'s B11)', ()
     addCorps(g, 'SOV', 'Test engineers', 'eng', 1, 'Dauria', { hold: 1 });
     addCorps(g, 'SOV', 'Test garrison marked to stay', 'inf', 1, 'Dauria', { hold: 1, stay: 1 });
     addCorps(g, 'SOV', 'Test field division', 'inf', 1, 'Dauria', {});
+    // (A garrison the record keeps inside its town, and a corps that marches with another's army at a player's
+    // asking and takes that army's orders: the two the rule also passes over.)
+    addCorps(g, 'SOV', 'Test garrison kept inside its town', 'inf', 1, 'Dauria', { hold: 1 }).fortress = true;
+    addCorps(g, 'SOV', 'Test division lent to an ally', 'inf', 1, 'Dauria', { hold: 1 }).joint = 'MGL';
     expect(names(frontAnswering(g, 'SOV'))).toEqual([...FRONTIER, plain.name].sort());
     // One rule for every nation: Japan's own held rows on that front answer under a computer's staff, and they are
     // none of them a row marked to stay.
@@ -203,7 +279,13 @@ describe('held armies answer an attack by land (the design director\'s B11)', ()
     expect(rows.some((c) => !c.dead && (c.fought || c.reg !== posts.get(c)))).toBe(true);
   }, 600000);
 
-  it('the Dutch divisions Britain keeps on Java stand through a landing and answer once the army ashore marches into the next province', () => {
+  /**
+   * Java in Britain's keeping, Japan at war with Britain, and Britain's month about to open: the three Dutch
+   * divisions at their establishment. `first` runs with Central Java's division still at Semarang, before it is
+   * drawn east to Soerabaja so that Semarang stands open. Then two Japanese armies and a detachment land at Bandoeng
+   * from Saigon, and the detachment marches overland into Semarang.
+   */
+  const java = (first?: (g: Game, at: (nm: string) => Region) => void): { g: Game; at: (nm: string) => Region; knil: Corps[]; ashore: Corps[]; land: () => void; march: () => void } => {
     const g = wide();
     declareWar(g, 'GER', 'NED');
     capitulate(g, 'NED', 'GER');
@@ -213,23 +295,29 @@ describe('held armies answer an attack by land (the design director\'s B11)', ()
     const knil = ['KNIL 1st Division (West Java)', 'KNIL 2nd Division (Central Java)', 'KNIL 3rd Division (East Java)'].map((nm) => called(g, nm));
     // Kept at their posts, Britain's to command, on hold: Batavia, Semarang, Soerabaja.
     expect(knil.map((c) => [c.nat, c.raised, c.hold, !!c.stay, g.regions[c.reg].name])).toEqual([['UK', 'NED', true, false, 'Batavia'], ['UK', 'NED', true, false, 'Semarang'], ['UK', 'NED', true, false, 'Soerabaja']]);
-    // (The divisions at their establishment, and Central Java's drawn east to Soerabaja, so that Semarang is open.)
     for (const c of knil) { c.str = 1; c.org = 1; c.supplied = true; }
+    first?.(g, at);
     relocate(g, knil[1], at('Soerabaja'));
+    const ashore = [3, 3, 1].map((divs, i) => addCorps(g, 'JAP', i < 2 ? `Test army ${i + 1}` : 'Test detachment', 'inf', divs, 'Saigon', {}));
+    const land = (): void => { expect(landCorps(g, ashore, at('Bandoeng')).taken).toBe(true); };
+    const march = (): void => { ashore[2].ap = ashore[2].apMax; expect(moveCorps(g, ashore[2], at('Semarang'))).toBe(true); };
+    return { g, at, knil, ashore, land, march };
+  };
+
+  it('the Dutch divisions Britain keeps on Java stand through a landing and answer once the army ashore marches into the next province', () => {
+    const { g, at, knil, ashore, land, march } = java();
     expect(frontAnswering(g, 'UK').filter((c) => knil.includes(c))).toEqual([]);
 
-    // Two Japanese armies and a detachment land at Bandoeng from Saigon.
-    const ashore = [3, 3, 1].map((divs, i) => addCorps(g, 'JAP', i < 2 ? `Test army ${i + 1}` : 'Test detachment', 'inf', divs, 'Saigon', {}));
-    expect(landCorps(g, ashore, at('Bandoeng')).ok).toBe(true);
-    expect([at('Bandoeng').ctrl, at('Bandoeng').prev, g.flags[`landedAt:${at('Bandoeng').id}:JAP`]]).toEqual(['JAP', 'UK', g.turn]);
+    // Two Japanese armies and a detachment land at Bandoeng from Saigon: the shore is won from the sea, this month.
+    land();
+    expect([at('Bandoeng').ctrl, at('Bandoeng').prev, g.flags[`shoreWon:${at('Bandoeng').id}`]]).toEqual(['JAP', 'UK', g.turn]);
     // A landing alone is no entry by land: the beach beside Batavia frees nobody.
     expect(frontAnswering(g, 'UK').filter((c) => knil.includes(c))).toEqual([]);
 
     // The detachment marches overland into Semarang, the next province: the front is entered.
     const detachment = ashore[2];
-    detachment.ap = detachment.apMax;
-    expect(moveCorps(g, detachment, at('Semarang'))).toBe(true);
-    expect([at('Semarang').ctrl, g.flags[`landedAt:${at('Semarang').id}:JAP`]]).toEqual(['JAP', undefined]);
+    march();
+    expect([at('Semarang').ctrl, g.flags[`shoreWon:${at('Semarang').id}`]]).toEqual(['JAP', undefined]);
     expect(names(frontAnswering(g, 'UK').filter((c) => knil.includes(c)))).toEqual(names(knil));
     // Their ground is the front's: Java's own provinces, what was lost there, and the friendly ground next behind
     // (Bali, and Oosthaven across the strait). Not Sumatra's oil beyond it, not Malaya, not the enemy's harbour.
@@ -254,5 +342,45 @@ describe('held armies answer an attack by land (the design director\'s B11)', ()
       expect(ground.get(c)!.has(c.reg), `${c.name} at ${g.regions[c.reg].name}`).toBe(true);
     }
     expect(names(at('Semarang').units.filter((c) => c.nat === 'UK'))).toEqual(['KNIL 2nd Division (Central Java)', 'KNIL 3rd Division (East Java)']);
+  }, 600000);
+
+  it('a shore is a beach only where the landing won it: a landing thrown back at Semarang does not make the march into it a landing', () => {
+    // A weak party sails for Semarang while Central Java's division still stands there, and is thrown back into
+    // the sea. Then, in the same month, the army lands at Bandoeng and its detachment marches into Semarang, which
+    // the division has left. (Read from the mark a landing leaves as it sails, whatever becomes of it, the march
+    // into Semarang was a landing at Semarang, everything Japan held on Java was a beach, and nobody answered.)
+    const { g, at, knil, land, march } = java((g, at) => {
+      const party = addCorps(g, 'JAP', 'Test landing party', 'inf', 1, 'Saigon', {});
+      const res = landCorps(g, [party], at('Semarang'));
+      expect([res.ok, res.taken, at('Semarang').ctrl]).toEqual([true, false, 'UK']);
+      // (The coast watch's mark, left as the landing sailed: it says a landing came, not that it won.)
+      expect(g.flags[`landedAt:${at('Semarang').id}:JAP`]).toBe(g.turn);
+    });
+    land();
+    expect(frontAnswering(g, 'UK').filter((c) => knil.includes(c))).toEqual([]);
+    march();
+    expect([at('Semarang').ctrl, at('Semarang').since]).toEqual(['JAP', g.turn]);
+    expect(names(frontAnswering(g, 'UK').filter((c) => knil.includes(c)))).toEqual(names(knil));
+    // The shore the army won is marked with its month; the province it marched into is not.
+    expect([g.flags[`shoreWon:${at('Bandoeng').id}`], g.flags[`shoreWon:${at('Semarang').id}`]]).toEqual([g.turn, undefined]);
+  }, 600000);
+
+  it('an answering row is not lifted off its front by sea, broken as it may be: West Java\'s division stays at Batavia', () => {
+    const { g, at, knil, land, march } = java();
+    land();
+    march();
+    // West Java's division was broken in a fight last month, at a harbour on ground that is not Britain's own: the
+    // staff's standing rule for a corps abroad sails such a corps home (`wantsOut`, which reads no hold: a held row
+    // that does not answer is lifted off as it always was). As first built the tie barred an answering row's marches
+    // and trains and not this step, and the division ended Britain's month in London, a held row there.
+    const west = knil[0];
+    west.org = 0;
+    west.fought = true;
+    expect([g.regions[west.reg].name, at('Batavia').port, at('Batavia').owner, whyNotEvacuate(g, west)]).toEqual(['Batavia', true, 'NED', null]);
+    expect(names(frontAnswering(g, 'UK'))).toContain(west.name);
+    expect(wantsOut(g, west)).toBe(true);
+    stepAI(g);
+    // It answered where it stood and is a held row on Java still: not in London, not in Singapore.
+    expect([west.dead, west.hold, g.regions[west.reg].name]).toEqual([false, true, 'Batavia']);
   }, 600000);
 });

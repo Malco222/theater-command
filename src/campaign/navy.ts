@@ -47,7 +47,7 @@ import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, s
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, placed, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules, housed } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fieldBeside, fuelFleet, laneStopped } from './resources';
 import { bargainOutputLoss, replacedDeal } from './bargains';
@@ -1700,6 +1700,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
   const held = to.ctrl;
+  // (The far side: whose army held the field there before the landing, to tell a shore the landing wins. Below.)
+  const field = farOn(g) ? fieldCtrl(g, to) : null;
   const air = airborne(cs);
   const surprise = !air && surpriseOn(g, nat, to);
   const rode = air ? [] : riding(g, cs);
@@ -1730,6 +1732,13 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   }
   for (const c of cs) if (!c.dead) c.ap = 0;
   if (taken) for (const c of rode) if (!c.dead) c.hold = false;
+  // (The far side: a shore won from the sea is marked with its month, as the ground changes hands or the army is
+  // first laid round a town that holds. The staff's answer by land reads it to tell a beach from ground an enemy
+  // marched into: ai.ts `beach`, the design director's B11 of 25 November 2026. The mark above, `landedAt`, is
+  // written as the landing sails, whatever becomes of it: a landing thrown back in the month the province then
+  // fell to a march read as a beach by it, and a second wave put ashore round a town still holding wiped the first
+  // wave's month. The skeptic's finding. Nothing is marked from the air, nor with the far side off.)
+  if (field !== null && !air && taken && (to.ctrl !== held || fieldCtrl(g, to) !== field)) g.flags[`shoreWon:${to.id}`] = g.turn;
   const adj = g.nations[nat].adj;
   if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
   else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
