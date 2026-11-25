@@ -250,13 +250,13 @@ export function band(lo: number, hi: number, pctOf = true): string {
 }
 
 /**
- * The guns and the fighters as a list of targets says them where the place is out of sight: "guns not known", "level 2
- * guns when seen 3 months ago", "fighters not known", "about 120 fighters in reach when seen a month ago".
+ * The fighters as a list of targets says them where the place is out of sight: "fighters not known", "about 120
+ * fighters in reach when seen a month ago". (The guns of such a row are said in airwar.ts whatIsThere, in the UI
+ * director's words of 25 Nov 2026 20:08Z, item 6: the old guns text here had no reader left and is gone.)
  */
-export function fogBits(k: SkyKnown): { guns: string; fighters: string } {
+export function fogBits(k: SkyKnown): { fighters: string } {
   const when = agoWords(k.ago).replace(/^seen/, 'when seen');
   return {
-    guns: k.guns < 0 ? 'guns not known' : `${k.guns ? `level ${k.guns} guns` : 'no guns'} ${when}`,
     fighters: k.fighters < 0 ? 'fighters not known' : `${k.fighters > 0 ? `about ${k.fighters.toLocaleString('en-US')} fighters in reach` : 'no fighters in reach'} ${when}`,
   };
 }
