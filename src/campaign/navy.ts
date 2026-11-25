@@ -3912,7 +3912,8 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const foes = g.fleets.filter((f) => f.zone === z && atSea(f) && atWar(g, f.nat, nat) && shipCount(f.ships) > 0);
     if (!foes.length) continue;
     // (A shadow seeks no battle: release 2, shadow.ts. No fleet carries one with that switch off.)
-    const mine = g.fleets.filter((f) => f.zone === z && f.stance === 'patrol' && f.shadow === undefined && surfaceShips(f) > 0 && (f.nat === nat || (allied(g, f.nat, nat) && foes.some((e) => atWar(g, f.nat, e.nat)))));
+    // (Release 2, seekOnce) Nor does a fleet that has sought battle once this month: by order, or in an earlier meeting.
+    const mine = g.fleets.filter((f) => f.zone === z && f.stance === 'patrol' && f.shadow === undefined && !hasSought(g, f) && surfaceShips(f) > 0 && (f.nat === nat || (allied(g, f.nat, nat) && foes.some((e) => atWar(g, f.nat, e.nat)))));
     if (!mine.some((f) => f.nat === nat)) continue;
     const rng = seaRng(g, `battle:${z}:${nat}`);
     // A patrolling enemy stands and fights. Raiding surface ships have to be found first; submarines are the escorts' business.
@@ -3951,6 +3952,8 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   const where = at ? `at ${at.port}` : seaWhere(zone.name);
   const A = sum(mine) + airA, D = Math.max(1, (at ? sum(met) * at.anchor + at.shore : sum(met)) + airD);
   const att = mine.map(sideOf), def = met.map(sideOf);
+  // (Release 2, seekOnce) The seeking side has sought its battle for the month; the defenders are not marked.
+  markSought(g, mine);
   // (src/battle/sea) An action the player fought out on the field hands back the ratio it came to and the ships it cost.
   const played = seaField.fought?.({ turn: g.turn, zone: z, nat, mine: mine.map((f) => f.id), met: met.map((f) => f.id), A, D, airA, airD });
   const R = played ? played.R : (A / D) * rng.range(0.8, 1.2);
@@ -4107,6 +4110,27 @@ export function keepsHarbour(g: Game, nat: string): boolean {
  * leave it where he sent it (1.5.1; Brian, 24 November 2026 18:32Z). They neither move it nor take it out of harbour.
  */
 export const keptByHand = (g: Game, f: Fleet): boolean => f.ordered === true && f.nat === g.human;
+
+// ---- One battle sought a month (release 2; the design director's ruling of 25 November 2026, 02:38Z) ----------------
+// seaBattles runs at the close of every nation's month and takes onto the seeking side every allied fleet in the sea at
+// war with a foe there, so one fleet could seek battle in its allies' meetings and in its own; and a fleet sent at the
+// enemy by order could seek again at its month's end where the order missed or struck a harbour. With the switch on, a
+// fleet seeks battle once a month: every fleet on the seeking side of an action is marked (Fleet.sought), left out of
+// every later meeting that month and refused a second order. Defenders are never marked. Off: nothing is written.
+
+/** True where each fleet seeks battle at most once a month (the switch 'seekOnce'). */
+export const seekOnceOn = (g: Game): boolean => g.flags.open === 1 && g.flags.seekOnce === 1;
+/** Switches the one battle sought a month on or off in a campaign under way. */
+export function setSeekOnce(g: Game, on: boolean): void {
+  if (on) g.flags.seekOnce = 1;
+  else delete g.flags.seekOnce;
+}
+/** True where the fleet has sought battle this month and may seek no more (the switch on). */
+export const hasSought = (g: Game, f: Fleet): boolean => seekOnceOn(g) && f.sought === g.turn;
+/** Marks fleets as having sought battle this month, where the switch is on. */
+export function markSought(g: Game, fs: Fleet[]): void {
+  if (seekOnceOn(g)) for (const f of fs) f.sought = g.turn;
+}
 
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
