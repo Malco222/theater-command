@@ -1423,6 +1423,7 @@ void ACampaignPlayerController::EnterCampaign()
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
 	RoundSeen.Reset();
+	ToDoSeen.Reset();
 	// (The code checker, 17 November.) The last month's newsreel and the first night's word belong to the campaign just
 	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
 	LastReel.Reset();
@@ -1771,6 +1772,64 @@ bool ACampaignPlayerController::IsTownCardStyle()
 {
 	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterTownCard"));
 	return bAsked || CVarTownCard.GetValueOnGameThread() != 0;
+}
+
+namespace
+{
+	// (Release 2; the UI director's seamless plan for Brian's 25 November ask, fix 4: one NEXT.) Tab past the armies
+	// goes round the month's list; off until the art director has passed the Mac's stills; -TheaterNextAll for a run.
+	TAutoConsoleVariable<int32> CVarNextAll(
+		TEXT("tc.UI.NextAll"), 0,
+		TEXT("1: once every army has its orders, Tab (NEXT ARMY) goes on round the month's list under END THE MONTH, opening each row's screen once; 0 as before (as -TheaterNextAll)."));
+}
+
+bool ACampaignPlayerController::IsNextAllStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterNextAll"));
+	return bAsked || CVarNextAll.GetValueOnGameThread() != 0;
+}
+
+int32 ACampaignPlayerController::NextToDoIndex() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!IsNextAllStyle() || !Session || !Session->GetView().bHumanUp || bWatching || Opening.bVisible)
+	{
+		return INDEX_NONE;
+	}
+	const TArray<FCampaignView::FToDo>& List = Session->GetView().ToDo;
+	for (int32 Index = 0; Index < List.Num(); ++Index)
+	{
+		if (!List[Index].Screen.IsEmpty() && !ToDoSeen.Contains(List[Index].Screen))
+		{
+			return Index;
+		}
+	}
+	return INDEX_NONE;
+}
+
+bool ACampaignPlayerController::StepToDo()
+{
+	const FCampaignSession* Session = GetSession();
+	if (!IsNextAllStyle() || !Session)
+	{
+		return false;
+	}
+	const int32 Index = NextToDoIndex();
+	if (Index == INDEX_NONE)
+	{
+		if (ToDoSeen.Num() == 0)
+		{
+			return false; // (nothing on the list: Tab says what it always said)
+		}
+		// (round them all: the next Tab begins the list again)
+		ToDoSeen.Reset();
+		Notify(TEXT("Every army has its orders, and you have been round this month's list. Press Enter to end the month."), 4.0);
+		return true;
+	}
+	// (a row's screen is opened once a round: two rows that open the same screen are one stop)
+	ToDoSeen.Add(Session->GetView().ToDo[Index].Screen);
+	PressToDo(Index);
+	return true;
 }
 
 namespace
@@ -5899,6 +5958,10 @@ void ACampaignPlayerController::NextArmy()
 	// touched before the others, then the nearest; each is shown once before any is shown again.
 	if (Session->GetView().Round.All <= 0)
 	{
+		if (StepToDo())
+		{
+			return;
+		}
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
@@ -5916,6 +5979,10 @@ void ACampaignPlayerController::NextArmy()
 	const int32 Next = Session->NextArmy(RoundSeen, From);
 	if (!Map->GetData().Regions.IsValidIndex(Next))
 	{
+		if (StepToDo())
+		{
+			return;
+		}
 		Notify(TEXT("Every army has its orders. Press Enter to end the month."), 4.0);
 		return;
 	}
@@ -13084,6 +13151,7 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	const FCampaignView& View = Session->GetView();
 	RoundSeen.Reset(); // (the code checker, 17 November: a new month, and Tab's round of the armies begins again)
+	ToDoSeen.Reset(); // (release 2, tc.UI.NextAll: and its round of the month's list)
 	// (Release 2, map run 7: tc.Speed.MonthSpread. The new holders and the armies in the month's frame; the rest of the
 	// table a frame after, as an order's answer has it.)
 	ShowWar(View, TArray<FCorpsMove>(), nullptr, TheaterSpeed::MonthSpread());

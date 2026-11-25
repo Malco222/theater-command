@@ -12580,7 +12580,7 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
-					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 && (ListUnfolded() || ScreenFold.bEndLesson) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 && (ListUnfolded() || ScreenFold.bEndLesson) && !ToDoWaits() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 					[
 						SNew(SBorder).BorderImage(&QuietChipBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
 						[
@@ -12595,8 +12595,43 @@ namespace
 							]
 						]
 					]
+				]
+				// 4. (Release 2, tc.UI.NextAll: one NEXT.) Every army has its orders and the month's list has a row Tab has not
+				// opened yet: the quiet chip names it, and a press or Tab opens it. It never lights and never holds the month.
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SBox).MinDesiredWidth(252.0f).HeightOverride(25.0f)
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 && (ListUnfolded() || ScreenFold.bEndLesson) && ToDoWaits() ? EVisibility::Visible : EVisibility::Collapsed; })
+					[
+						SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("Every army has its orders. This opens the next thing on this month's list, each once, then says the month is done. None of them holds the month. (Tab)")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
+						[
+							SNew(SBorder).BorderImage(&RearChipBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(12.0f, 0.0f))
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Typed(9.0f, true)).ColorAndOpacity(RearInk)
+									.Text_Lambda([this]()
+									{
+										const int32 Row = Controller.IsValid() ? Controller->NextToDoIndex() : INDEX_NONE;
+										return FText::FromString(Row == INDEX_NONE ? FString() : FString::Printf(TEXT("NEXT  \u00B7  %s"), *Controller->GetToDoText(Row)));
+									})
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("TAB"), RearInk)]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(SLineIcon).Kind(8).Size(10.0f).Weight(1.6f).Ink(RearInk)
+								]
+							]
+						]
+					]
 				];
 		}
+
+		/** (Release 2, tc.UI.NextAll) True while the month's list has a row Tab has not opened yet this round. */
+		bool ToDoWaits() const { return Controller.IsValid() && Controller->NextToDoIndex() != INDEX_NONE; }
 
 		/** (Release 2; ruling 161.) Whether the chief's list stands whole: through the player's first month, and after it while unfolded. */
 		bool ListUnfolded() const { return !ScreenFold.bFolded || ScreenFold.bChiefOpen; }
