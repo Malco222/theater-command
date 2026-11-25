@@ -7612,7 +7612,7 @@ namespace AirShow
 			P.bShown = C.bShown;
 			P.bOnGround = C.Doing == Role::Ground;
 			P.bFalling = C.Doing == Role::Fall;
-			P.bFiring = C.bFiring || C.bLaneGuns;
+			P.bFiring = C.bFiring || (C.bLaneGuns && C.bLaneRun && C.Doing == Role::Dive);
 			P.Target = C.bFighter && C.Doing == Role::Fight ? C.Target : -1;
 			P.Task = C.bFighter ? C.Task : "";
 			P.Leader = -1;
@@ -7656,8 +7656,9 @@ namespace AirShow
 		}
 		// (a hit on a ship the battle has counted, held until the bombs or the torpedoes could have reached her)
 		for (const Held& H : Later) StrikeHits += !H.bForShot && (H.E.What == "air:ship-hit" || H.E.What == "air:ship-sunk") ? 1 : 0;
-		// (and a hit on a piece of a column, held for its bomb or its rounds)
-		for (const MarkHold& H : MarkHolds) StrikeHits += H.bDone ? 0 : 1;
+		// (and a hit on a piece of a column while its bomb falls, its rounds fly or its strafing pass goes in; not while
+		// it only waits for one: AirShowTroops.cpp)
+		if (Column.Has()) StrikeHits += MarkStrikes();
 		bStrikeOn = StrikeBombs + StrikeBays + StrikeDives + StrikeTorpedo + StrikeHits > 0;
 	}
 

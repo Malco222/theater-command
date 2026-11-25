@@ -1255,14 +1255,20 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    title and the after card ("The raid on the British I Corps near Hampshire"; a card line's "the target" becomes "the
    column"), the top bar ("their column's organisation cut by 1.2% so far", from `view.marks.cut`), the aim slip ("The
    British I Corps on the march near Hampshire", "On the column so far: 1 vehicle or gun wrecked, 2 burning, 3 damaged,
-   22 men lost", as the views count them); and with his fighter groups in hand, STRAFE THE COLUMN in the orders strip
-   sends `{ do: 'air:strafe', units: [...] }`. Drawn only: the rules decide every hit, state and loss.
+   22 men lost", as the views count them); and with his fighter groups in hand over the enemy's column (never his own,
+   where he defends it), STRAFE THE COLUMN in the orders strip sends `{ do: 'air:strafe', units: [...] }`. Nothing is
+   told before it is drawn (the reviewer, 25 November): a hit's dispatch line and its sound come in the frame its bomb or
+   rounds land, the aim slip counts a piece struck only from then (`AirDesk::Desk::Struck`, from the core's column), and
+   the top bar's cut waits until every hit told up to its view has landed (`Show::MarksCut`). A near miss leaves a piece
+   as it was until the views' words say it was damaged. Drawn only: the rules decide every hit, state and loss.
    The switch: the Battle rules card's **Fly raids on troops yourself** (FLandLive's rule `flyTroops`, OFF; never sent
    to the land rules: `FLandLive::Start` skips every rule whose key starts "fly"), read by
    `AAirBattle::CampaignLiveOn(Kind)` ("bomb" and "superiority" read `flyLive`, "ground" `flyTroops`).
-   `-TheaterAirRuleTroops` turns it on for one run, `-TheaterAirNoRuleTroops` off. With it on, FLY IT YOURSELF is offered
-   on a raid on troops only where TC.airLook gives a ticket (today's rules fight only `bomb` and `superiority`, so it is
-   not offered yet); with it off nothing changes. A raid with no marks never reaches any of this. The cloud test
+   `-TheaterAirRuleTroops` turns it on for one run, `-TheaterAirNoRuleTroops` off. With it on, the rules are told before
+   each TC.airLook and as the battle opens, `TC.airKinds(["ground"])` (the air rules thread's switch, default none; once
+   more with `[]` after the row goes off), and FLY IT YOURSELF is offered on a raid on troops only where they could be
+   told and TC.airLook gives a ticket (this base's rules have neither TC.airKinds nor `ground` in `FOUGHT_KINDS`, so it is
+   not offered yet: the log says "the rules could not be told"); with it off nothing changes and nothing is sent. A raid with no marks never reaches any of this. The cloud test
    (`Tools/air_show/air_marks_test`, run by `run.sh` on every recording) plays a marked recording and checks every hit,
    every bomb, the pass and the words; `Tools/air_show/make_marks_recording.py` made the test's own recording from the
    day raid on Hampshire (`troops-test.json.gz` in the every-kind folder's `troops/`, with its pictures).
@@ -1272,9 +1278,12 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    sunk, not floating) and driving nose first along the road (if every one faces backwards, the half turn in
    `DrawTroops` is the mend); the two boxes' sticks from 394 s mostly clear of the column, and the ten hits each where
    its bomb lands: gun 30 wrecked (burnt shape, fire), lorry 28 going up and burning, near misses smoking (lorries 18 and
-   27, flak gun 29), men blocks 15, 34 and 35 thinned and scattered; at 408 s four Bf 109s down the road, guns firing on the way down, pulling out some 70 m
-   up, lorry 25 set burning by them, men 14 scattered; the four light flak guns' short streams at the nearest raider,
-   heard; gun 30 still wrecked after the stale word at 420 s; the aim slip, the top bar and the after card as above;
+   27, flak gun 29), men blocks 15, 34 and 35 thinned and scattered; the dispatch "A gun of the column is wrecked on the
+   road." in the frame gun 30 goes up, not before, and the aim slip and the top bar's cut rising only as the hits land;
+   at 408 s four Bf 109s down the road, guns firing on the way down, pulling out some 70 m up, lorry 25 set burning by
+   them (a fuel ball half as wide again: a big hit), men 14 scattered, the clock at x1 while they go in; the four light
+   flak guns' short streams at the nearest raider, heard; gun 30 still wrecked after the stale word at 420 s; the aim
+   slip, the top bar and the after card as above;
    45 fps or better with the whole column in view and burning; the Battle rules card's new row, OFF, its tip in full;
    FLY IT YOURSELF still on a day raid with the row off.
 52. **The scramble offer: he meets an enemy raid himself** (release 2; Brian, 24 November 2026 22:21Z: "i want every air

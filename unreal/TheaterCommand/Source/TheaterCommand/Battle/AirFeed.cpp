@@ -585,8 +585,10 @@ namespace AirFeed
 			if (Colon == std::string::npos) continue;
 			Show.SetLoadout(Pair.first.substr(0, Colon), Pair.first.substr(Colon + 1) == "ftr", Pair.second);
 		}
-		// (a raid on troops: what stands on the ground; every other raid has none, and nothing of it runs)
-		if (S.Marks.Has()) Show.SetMarks(S.Marks);
+		// (a raid on troops: what stands on the ground; every other raid has none, and nothing of it runs. Only on a raid
+		// on troops, as the desk's OnTroops asks: a raid of another kind that someday carries marks is not laid by them,
+		// the reviewer, 25 November)
+		if (S.PlaceKind == "ground" && S.Marks.Has()) Show.SetMarks(S.Marks);
 	}
 
 	bool ReadView(const Json& J, const Sky& S, Frame& Out)

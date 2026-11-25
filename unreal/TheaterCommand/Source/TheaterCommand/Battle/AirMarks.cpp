@@ -1,5 +1,7 @@
 #include "Battle/AirMarks.h"
 
+#include "Battle/LandAir.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -62,6 +64,17 @@ namespace AirMarks
 				}
 				Before += std::sqrt(Leg2);
 			}
+		}
+
+		/** How far a board point is from the nearest piece but one (Skip, its place in Pieces), metres from its footprint. */
+		double Clearance(const Column& C, double X, double Y, int Skip)
+		{
+			double Least = 1e18;
+			for (size_t K = 0; K < C.Pieces.size(); ++K)
+			{
+				if (static_cast<int>(K) != Skip) Least = std::min(Least, Off(C.Pieces[K], X, Y));
+			}
+			return Least;
 		}
 	}
 
@@ -281,19 +294,43 @@ namespace AirMarks
 		const double Fx = std::sin(P.Face), Fy = std::cos(P.Face);
 		const uint32_t H = Hash(static_cast<uint32_t>(P.Id) * 7919u, Salt);
 		const double A = UnitOf(H) - 0.5, B = UnitOf(Hash(H, 1)) - 0.5;
-		// On it: within the middle of its footprint.
+		// On it: within the middle of its footprint, and clear of every other piece by more than Blast; where that spot is
+		// not, another on it that is, or failing any, the one of them farthest from the others (the reviewer, 25
+		// November: it had been the first spot whatever stood by it).
 		OutX = P.X + Fx * (A * 0.6 * P.Long) + Fy * (B * 0.6 * P.Wide);
 		OutY = P.Y + Fy * (A * 0.6 * P.Long) - Fx * (B * 0.6 * P.Wide);
-		if (How != "near" && How != "scatter") return;
+		if (How != "near" && How != "scatter")
+		{
+			if (Blast <= 0.0 || Clear(C, OutX, OutY, Blast, Index)) return;
+			double Room = Clearance(C, OutX, OutY, Index);
+			for (uint32_t Try = 0; Try < 8; ++Try)
+			{
+				const uint32_t Ht = Hash(H, 20 + Try);
+				const double At = UnitOf(Ht) - 0.5, Bt = UnitOf(Hash(Ht, 1)) - 0.5;
+				const double X = P.X + Fx * (At * 0.8 * P.Long) + Fy * (Bt * 0.8 * P.Wide), Y = P.Y + Fy * (At * 0.8 * P.Long) - Fx * (Bt * 0.8 * P.Wide);
+				const double Here = Clearance(C, X, Y, Index);
+				if (Here > Room)
+				{
+					Room = Here;
+					OutX = X;
+					OutY = Y;
+				}
+				if (Room > Blast) return;
+			}
+			return;
+		}
 		// Beside it: out from its side, a quarter to two thirds of the blast from its edge (men scattered: nearer), and
-		// clear of every other piece; the other side, or nearer, if not; on it if neither will do.
+		// clear of every other piece; the other side, or nearer, if not. Where none of the eight will do, the one of them
+		// farthest from the other pieces: still beside it, never on it, so a near miss is never drawn as a hit (the
+		// reviewer, 25 November: it had fallen back to the spot on it).
 		const double Least = How == "scatter" ? 0.2 : 0.3, Most = How == "scatter" ? 0.45 : 0.65;
 		const double Hand = UnitOf(Hash(H, 2)) < 0.5 ? 1.0 : -1.0;
+		double Room = -1.0;
 		for (int Try = 0; Try < 8; ++Try)
 		{
 			const double Side = (Try % 2 ? -Hand : Hand);
 			const double Edge = Blast * (Least + (Most - Least) * UnitOf(Hash(H, 3 + static_cast<uint32_t>(Try)))) * (Try >= 4 ? 0.5 : 1.0);
-			const double V = Side * (P.Wide * 0.5 + Edge);
+			const double V = Side * (P.Wide * 0.5 + std::max(Edge, 1.0));
 			const double U = A * 0.5 * P.Long;
 			const double X = P.X + Fx * U + Fy * V, Y = P.Y + Fy * U - Fx * V;
 			if (Clear(C, X, Y, Blast, Index))
@@ -302,15 +339,23 @@ namespace AirMarks
 				OutY = Y;
 				return;
 			}
+			const double Here = Clearance(C, X, Y, Index);
+			if (Here > Room)
+			{
+				Room = Here;
+				OutX = X;
+				OutY = Y;
+			}
 		}
 	}
 
-	State StateAfter(const std::string& How, const std::string& What, State Now)
+	State StateAfter(const std::string& How, State Now)
 	{
+		// (a near miss and men scattered leave it as the rules last said it, until a view's word says what it did: the
+		// scene does not decide that a near miss damaged a vehicle (the reviewer, 25 November))
 		State To = Now;
 		if (How == "wreck" || How == "blast") To = State::Out;
 		else if (How == "burn") To = State::Burn;
-		else if (How == "near" && What != "men") To = State::Hit;
 		return static_cast<int>(To) > static_cast<int>(Now) ? To : Now;
 	}
 
@@ -399,7 +444,22 @@ namespace AirMarks
 
 	Pass PassOf(const std::string& Model)
 	{
+		// A fighter flies its pass by LandAir's own figures for one (its Machine as it stands before MachineOf fits it to an
+		// air force: from 800 m in a 25 degree dive, guns from 900 m to 250 m, out 45 m up at 4 g), read from there, so the
+		// land battle's ground attack and this pass are one table (the reviewer, 25 November). The air battle knows the
+		// group's own aircraft, where the land battle picks an air force's machine for a year, so MachineOf itself is not
+		// asked; its Stuka and Il-2 rows are the two below, as it gives them (its .cpp is not built into the cloud's air
+		// tests, which would need the land battle's feed with it).
+		const LandAir::Machine Fighter;
 		Pass P;
+		P.High = Fighter.High;
+		P.Low = Fighter.Low;
+		P.Dive = Fighter.Dive;
+		P.Climb = Fighter.Climb;
+		P.Open = Fighter.Open;
+		P.Shut = Fighter.Shut;
+		P.PullG = Fighter.PullG;
+		P.Speed = Fighter.Speed;
 		std::string M;
 		for (char Ch : Model) if (Ch != '-' && Ch != ' ' && Ch != '.') M += static_cast<char>(std::tolower(static_cast<unsigned char>(Ch)));
 		if (M == "stuka" || M == "ju87")
