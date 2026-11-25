@@ -18,8 +18,8 @@ import { collideWords, drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
-import { fighterGuns, type GunKind } from './guns';
-import type { AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import { bomberGuns, fighterGuns, type GunKind } from './guns';
+import type { AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
@@ -148,6 +148,8 @@ export class AirSim implements BattleSim<AirUnit> {
   /** Battle seconds each group last showed a hit it survived; the heaviest gun each fighter group carries. */
   private hitAt = new Map<number, number>();
   private gunOf = new Map<number, GunKind | null>();
+  /** The one gun's name each group carries, where all its guns are of one name (the hits' 'gun'); null where they are not. */
+  private oneGunOf = new Map<number, string | null>();
   /** The pass each fighter group is flying at each bomber group it is on ('fighter:bomber'). */
   private passes = new Map<string, Pass>();
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
@@ -1203,11 +1205,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private fall(live: AirUnit[]): void {
     const P = this.place;
     const lost: Loss[] = [];
-    const hit: [AirUnit, number][] = [];
+    const hit: [AirUnit, number, Map<number | 'flak', number> | undefined][] = [];
     for (const u of live) {
       let k = u.owed;
       const owed = k;
       u.owed = 0;
+      // Who owed on it this tick, as it stood before any loss was booked: the shown hit's 'by' (R2).
+      const due = this.show && owed > 0 ? new Map(this.owedBy.get(u.id) ?? []) : undefined;
       for (; k > 0 && u.n > 0; k -= 1) {
         if (k < 1 && this.lossRng.next() >= k) break;
         // Which group brought it down, and whether it was a straggler (the box's next loss is its straggler's): never a count.
@@ -1228,10 +1232,10 @@ export class AirSim implements BattleSim<AirUnit> {
         u.figures = this.modelsAfter(u, s);
         lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures });
       }
-      if (this.show && owed > 0 && u.n > 0) hit.push([u, owed]);
+      if (this.show && owed > 0 && u.n > 0) hit.push([u, owed, due]);
     }
     if (lost.length) this.fated(lost);
-    for (const [u, owed] of hit) this.hitShown(u, owed);
+    for (const [u, owed, due] of hit) this.hitShown(u, owed, due);
   }
 
   /**
@@ -1374,15 +1378,46 @@ export class AirSim implements BattleSim<AirUnit> {
    * A hit one of its aircraft survives (Brian, 20 November: "not all planes that get hit go down"; fates.ts hitOf):
    * while a group is being hit, a chance of SKY.hit.k times what it was owed this tick, at most once each SKY.hit.gap
    * battle seconds. Shown only, and never told: holes, smoke, pieces torn off, or a bomber's engine fire put out.
+   * Whose hit it was ('by', and 'gun' where one gun's name covers all that group carries: AirHitWho) comes from what
+   * each enemy group owed on it this tick ('due'), by the same draw that decided the hit: no draw is added anywhere.
    */
-  private hitShown(u: AirUnit, owed: number): void {
+  private hitShown(u: AirUnit, owed: number, due?: Map<number | 'flak', number>): void {
     const H = SKY.hit;
     if (this.t - (this.hitAt.get(u.id) ?? -Infinity) < H.gap) return;
-    if (!this.hitRng.chance(Math.min(0.5, owed * H.k))) return;
+    // (The draw chance() makes: kept as a number, for under p it is spread evenly over the shares of who owed.)
+    const p = Math.min(0.5, owed * H.k), x = this.hitRng.next();
+    if (!(x < p)) return;
     this.hitAt.set(u.id, this.t);
     const h = hitOf(this.hitRng, u.air);
+    const by = due ? this.hitBy(due, x / p) : null;
+    const gun = typeof by === 'number' ? this.oneGun(by) : null;
+    const who: AirHitWho | null = by === null ? null : { by, ...(gun ? { gun } : {}) };
     // A fire put out leaves its propeller feathered on a bomber with more than one engine (the art director).
-    this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt });
+    this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt, ...(who ?? {}) });
+  }
+
+  /**
+   * The group whose fire a shown hit was (R2): of those that owed on the group this tick, the one in whose share of it
+   * 'f' (0 to 1) falls, the groups in the order of their ids and the guns last. Null when nobody owed (never, for a hit).
+   */
+  private hitBy(due: Map<number | 'flak', number>, f: number): number | 'flak' | null {
+    const all = [...due].filter(([, k]) => k > 0).sort(([a], [b]) => (a === 'flak' ? 1 : b === 'flak' ? -1 : a - b));
+    const sum = all.reduce((t, [, k]) => t + k, 0);
+    if (!all.length || sum <= 0) return null;
+    let x = f * sum;
+    for (const [by, k] of all) { x -= k; if (x < 0) return by; }
+    return all[all.length - 1][0];
+  }
+
+  /** The gun's name (guns.ts) where every gun a group carries that month has the one name; null where they differ. */
+  private oneGun(id: number): string | null {
+    if (!this.oneGunOf.has(id)) {
+      const v = this.unit(id);
+      const L = !v ? null : this.place.guns?.[v.nat]?.[v.air] ?? (v.air === 'ftr' ? fighterGuns(v.model, v.nat, this.when) : bomberGuns(v.model, v.nat, this.when));
+      const names = new Set((L?.guns ?? []).map((g) => g.gun));
+      this.oneGunOf.set(id, names.size === 1 ? [...names][0] : null);
+    }
+    return this.oneGunOf.get(id) ?? null;
   }
 
   /**
