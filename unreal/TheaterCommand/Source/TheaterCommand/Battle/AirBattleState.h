@@ -5,6 +5,7 @@
 #include "Battle/AirFeed.h"
 #include "Battle/AirNoseArt.h"
 #include "Battle/AirShow.h"
+#include "Battle/AirUnitColours.h"
 
 #include <map>
 #include <memory>
@@ -123,6 +124,23 @@ struct FAirBattleState
 	std::map<std::string, AirNoseArt::Panel> NoseArtPanels;
 	std::map<std::string, bool> NoseArtModels;
 	AirNoseArt::Book NoseArt;
+
+	/** The groups' earned colours (AirBattleUnitColours.cpp, release 2): its switch as read when the battle's first
+	 * aircraft was made (-1 not yet read, 0 off, 1 on); the art director's palette (Content/Data/Air/unit-colours.json),
+	 * read then; each model's file and the regions found on it, read when a group first wears colours on it (a model whose
+	 * file does not read is kept empty, and flies plain); the look being laid; and how many looks were written to the log. */
+	int UnitColoursOn = -1;
+	AirUnitColours::Palette UnitColoursPalette;
+	struct FUnitColoursModel
+	{
+		bool bRead = false;
+		AirUnitColours::Model Model;
+		AirUnitColours::Found Found;
+	};
+	std::map<std::string, FUnitColoursModel> UnitColoursModels;
+	AirUnitColours::Look UnitColoursLook;
+	std::string UnitColoursKind;
+	std::set<std::string> UnitColoursLogged;
 
 	/** His side's own groups of one kind, as shown now. */
 	std::vector<int> MineOf(bool bFighter) const

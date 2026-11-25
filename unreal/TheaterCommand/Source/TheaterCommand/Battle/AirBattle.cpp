@@ -6,6 +6,7 @@
 
 #include "Battle/AirBattleScreen.h"
 #include "Battle/AirBattleState.h"
+#include "Battle/AirBattleUnitColours.inl"
 #include "Battle/AirGround.h"
 #include "Battle/AirLight.h"
 #include "Battle/AirLand.h"
@@ -4920,6 +4921,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Made.bTwoShapes = Far != nullptr;
 	Made.Phase = static_cast<double>(GetTypeHash(Key) % 360u);
 	Made.Marks = MoveTemp(Struck);
+	Made.Shape = UnitColoursShape(Key, Mesh, Made.Shape, Shapes); // (a group's earned colours: AirBattleUnitColours.inl)
 	PlaneMade.Add(Key, Made);
 	return Mesh;
 }

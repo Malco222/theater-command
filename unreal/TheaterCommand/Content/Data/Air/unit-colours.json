@@ -1,0 +1,1326 @@
+{
+ "about": "Earned colours for air units, release 2. The art director's palette, 25 November 2026. Our own schemes: none is meant to match a real unit's. Third issue, 04:05Z: the historian's check of 03:51Z and 03:54Z and second pass of 04:01Z are applied (twelve schemes struck and replaced, and the rules that follow from them). A scheme's number never changes; a struck scheme's row is replaced in place. Copied into the game unchanged in substance from art-director/air-colours/unit-colours-palette.json (third issue, 04:05Z); read by Battle/AirUnitColours. The historian's check is owed before it ships on: the rows the brief keeps as near (its section 6) are judged in the stills of the one review round, and the Battle rules card's Earned colours stays off until the art director and the historian pass them.",
+ "tiers": {
+  "1": "spinner",
+  "2": "spinner and nose ring",
+  "3": "spinner, nose ring and tail"
+ },
+ "colours": {
+  "ink": {
+   "srgb": "#202226",
+   "word": "black"
+  },
+  "bone": {
+   "srgb": "#D8D1BA",
+   "word": "cream"
+  },
+  "wine": {
+   "srgb": "#6B2231",
+   "word": "wine red"
+  },
+  "orange": {
+   "srgb": "#BE5527",
+   "word": "orange"
+  },
+  "moss": {
+   "srgb": "#55713D",
+   "word": "moss green"
+  },
+  "bottle": {
+   "srgb": "#1E4A39",
+   "word": "bottle green"
+  },
+  "teal": {
+   "srgb": "#1D6A73",
+   "word": "teal"
+  },
+  "turquoise": {
+   "srgb": "#45A8A0",
+   "word": "turquoise"
+  },
+  "paleblue": {
+   "srgb": "#7FAED6",
+   "word": "pale blue"
+  },
+  "azure": {
+   "srgb": "#2D6CB5",
+   "word": "azure blue"
+  },
+  "deepblue": {
+   "srgb": "#20386B",
+   "word": "dark blue"
+  },
+  "slate": {
+   "srgb": "#56667B",
+   "word": "slate blue"
+  },
+  "plum": {
+   "srgb": "#5E3A72",
+   "word": "purple"
+  },
+  "grey": {
+   "srgb": "#8D908C",
+   "word": "grey"
+  }
+ },
+ "night": {
+  "multiply": 0.55,
+  "bone_becomes": "#7E7C72",
+  "note": "on a night finish every earned colour is dulled by this much and the tail pattern is kept to the top half of the fin"
+ },
+ "patterns": {
+  "tipped": "the tail in the first colour, its top fifth in the second",
+  "bands": "five level bands of equal height, first colour, second, first, second, first",
+  "checks": "level squares, five to the height of the fin, the first colour at the top front corner",
+  "stripes": "six upright stripes of equal width, parallel to the rudder hinge, first colour foremost",
+  "halved": "the tail halved on the slant from the fin's top front corner to the rudder's bottom rear corner, first colour above and behind, second below and before"
+ },
+ "nations": {
+  "GER": [
+   {
+    "scheme": 0,
+    "spinner": "orange",
+    "ring": "plum",
+    "pattern": "halved",
+    "tail": [
+     "orange",
+     "bone"
+    ],
+    "words": "Orange spinner, purple nose band, tail halved, orange over cream"
+   },
+   {
+    "scheme": 1,
+    "spinner": "slate",
+    "ring": "turquoise",
+    "pattern": "checks",
+    "tail": [
+     "slate",
+     "turquoise"
+    ],
+    "words": "Slate blue spinner, turquoise nose band, slate blue and turquoise checked tail"
+   },
+   {
+    "scheme": 2,
+    "spinner": "paleblue",
+    "ring": "slate",
+    "pattern": "bands",
+    "tail": [
+     "paleblue",
+     "slate"
+    ],
+    "words": "Pale blue spinner, slate blue nose band, tail banded in pale blue and slate blue"
+   },
+   {
+    "scheme": 3,
+    "spinner": "orange",
+    "ring": "slate",
+    "pattern": "stripes",
+    "tail": [
+     "orange",
+     "bone"
+    ],
+    "words": "Orange spinner, slate blue nose band, orange and cream striped tail"
+   },
+   {
+    "scheme": 4,
+    "spinner": "plum",
+    "ring": "turquoise",
+    "pattern": "stripes",
+    "tail": [
+     "plum",
+     "turquoise"
+    ],
+    "words": "Purple spinner, turquoise nose band, purple and turquoise striped tail"
+   },
+   {
+    "scheme": 5,
+    "spinner": "moss",
+    "ring": "orange",
+    "pattern": "tipped",
+    "tail": [
+     "moss",
+     "ink"
+    ],
+    "words": "Moss green spinner, orange nose band, moss green tail with a black tip"
+   },
+   {
+    "scheme": 6,
+    "spinner": "moss",
+    "ring": "wine",
+    "pattern": "checks",
+    "tail": [
+     "moss",
+     "bone"
+    ],
+    "words": "Moss green spinner, wine red nose band, moss green and cream checked tail"
+   },
+   {
+    "scheme": 7,
+    "spinner": "moss",
+    "ring": "paleblue",
+    "pattern": "halved",
+    "tail": [
+     "moss",
+     "bone"
+    ],
+    "words": "Moss green spinner, pale blue nose band, tail halved, moss green over cream"
+   },
+   {
+    "scheme": 8,
+    "spinner": "slate",
+    "ring": "paleblue",
+    "pattern": "tipped",
+    "tail": [
+     "slate",
+     "ink"
+    ],
+    "words": "Slate blue spinner, pale blue nose band, slate blue tail with a black tip"
+   },
+   {
+    "scheme": 9,
+    "spinner": "slate",
+    "ring": "moss",
+    "pattern": "stripes",
+    "tail": [
+     "slate",
+     "bone"
+    ],
+    "words": "Slate blue spinner, moss green nose band, slate blue and cream striped tail"
+   },
+   {
+    "scheme": 10,
+    "spinner": "plum",
+    "ring": "grey",
+    "pattern": "checks",
+    "tail": [
+     "plum",
+     "grey"
+    ],
+    "words": "Purple spinner, grey nose band, purple and grey checked tail"
+   },
+   {
+    "scheme": 11,
+    "spinner": "plum",
+    "ring": "paleblue",
+    "pattern": "halved",
+    "tail": [
+     "plum",
+     "paleblue"
+    ],
+    "words": "Purple spinner, pale blue nose band, tail halved, purple over pale blue"
+   },
+   {
+    "scheme": 12,
+    "spinner": "turquoise",
+    "ring": "moss",
+    "pattern": "tipped",
+    "tail": [
+     "turquoise",
+     "moss"
+    ],
+    "words": "Turquoise spinner, moss green nose band, turquoise tail with a moss green tip"
+   },
+   {
+    "scheme": 13,
+    "spinner": "turquoise",
+    "ring": "slate",
+    "pattern": "bands",
+    "tail": [
+     "turquoise",
+     "slate"
+    ],
+    "words": "Turquoise spinner, slate blue nose band, tail banded in turquoise and slate blue"
+   },
+   {
+    "scheme": 14,
+    "spinner": "paleblue",
+    "ring": "orange",
+    "pattern": "bands",
+    "tail": [
+     "paleblue",
+     "orange"
+    ],
+    "words": "Pale blue spinner, orange nose band, tail banded in pale blue and orange"
+   },
+   {
+    "scheme": 15,
+    "spinner": "turquoise",
+    "ring": "wine",
+    "pattern": "stripes",
+    "tail": [
+     "turquoise",
+     "wine"
+    ],
+    "words": "Turquoise spinner, wine red nose band, turquoise and wine red striped tail"
+   }
+  ],
+  "UK": [
+   {
+    "scheme": 0,
+    "spinner": "teal",
+    "ring": "wine",
+    "pattern": "tipped",
+    "tail": [
+     "teal",
+     "wine"
+    ],
+    "words": "Teal spinner, wine red nose band, teal tail with a wine red tip"
+   },
+   {
+    "scheme": 1,
+    "spinner": "bottle",
+    "ring": "paleblue",
+    "pattern": "checks",
+    "tail": [
+     "bottle",
+     "paleblue"
+    ],
+    "words": "Bottle green spinner, pale blue nose band, bottle green and pale blue checked tail"
+   },
+   {
+    "scheme": 2,
+    "spinner": "bottle",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "bottle",
+     "bone"
+    ],
+    "words": "Bottle green spinner, orange nose band, tail halved, bottle green over cream"
+   },
+   {
+    "scheme": 3,
+    "spinner": "teal",
+    "ring": "paleblue",
+    "pattern": "tipped",
+    "tail": [
+     "teal",
+     "paleblue"
+    ],
+    "words": "Teal spinner, pale blue nose band, teal tail with a pale blue tip"
+   },
+   {
+    "scheme": 4,
+    "spinner": "teal",
+    "ring": "plum",
+    "pattern": "halved",
+    "tail": [
+     "teal",
+     "bone"
+    ],
+    "words": "Teal spinner, purple nose band, tail halved, teal over cream"
+   },
+   {
+    "scheme": 5,
+    "spinner": "wine",
+    "ring": "teal",
+    "pattern": "halved",
+    "tail": [
+     "wine",
+     "teal"
+    ],
+    "words": "Wine red spinner, teal nose band, tail halved, wine red over teal"
+   },
+   {
+    "scheme": 6,
+    "spinner": "wine",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "wine",
+     "orange"
+    ],
+    "words": "Wine red spinner, orange nose band, tail halved, wine red over orange"
+   },
+   {
+    "scheme": 7,
+    "spinner": "plum",
+    "ring": "paleblue",
+    "pattern": "bands",
+    "tail": [
+     "plum",
+     "paleblue"
+    ],
+    "words": "Purple spinner, pale blue nose band, tail banded in purple and pale blue"
+   },
+   {
+    "scheme": 8,
+    "spinner": "plum",
+    "ring": "bottle",
+    "pattern": "checks",
+    "tail": [
+     "plum",
+     "bone"
+    ],
+    "words": "Purple spinner, bottle green nose band, purple and cream checked tail"
+   },
+   {
+    "scheme": 9,
+    "spinner": "orange",
+    "ring": "plum",
+    "pattern": "tipped",
+    "tail": [
+     "orange",
+     "plum"
+    ],
+    "words": "Orange spinner, purple nose band, orange tail with a purple tip"
+   },
+   {
+    "scheme": 10,
+    "spinner": "orange",
+    "ring": "bottle",
+    "pattern": "bands",
+    "tail": [
+     "orange",
+     "bottle"
+    ],
+    "words": "Orange spinner, bottle green nose band, tail banded in orange and bottle green"
+   },
+   {
+    "scheme": 11,
+    "spinner": "orange",
+    "ring": "wine",
+    "pattern": "checks",
+    "tail": [
+     "orange",
+     "bone"
+    ],
+    "words": "Orange spinner, wine red nose band, orange and cream checked tail"
+   },
+   {
+    "scheme": 12,
+    "spinner": "teal",
+    "ring": "orange",
+    "pattern": "checks",
+    "tail": [
+     "teal",
+     "ink"
+    ],
+    "words": "Teal spinner, orange nose band, teal and black checked tail"
+   },
+   {
+    "scheme": 13,
+    "spinner": "plum",
+    "ring": "orange",
+    "pattern": "bands",
+    "tail": [
+     "plum",
+     "orange"
+    ],
+    "words": "Purple spinner, orange nose band, tail banded in purple and orange"
+   },
+   {
+    "scheme": 14,
+    "spinner": "plum",
+    "ring": "teal",
+    "pattern": "halved",
+    "tail": [
+     "plum",
+     "bone"
+    ],
+    "words": "Purple spinner, teal nose band, tail halved, purple over cream"
+   },
+   {
+    "scheme": 15,
+    "spinner": "orange",
+    "ring": "paleblue",
+    "pattern": "tipped",
+    "tail": [
+     "orange",
+     "paleblue"
+    ],
+    "words": "Orange spinner, pale blue nose band, orange tail with a pale blue tip"
+   }
+  ],
+  "USA": [
+   {
+    "scheme": 0,
+    "spinner": "teal",
+    "ring": "orange",
+    "pattern": "bands",
+    "tail": [
+     "teal",
+     "ink"
+    ],
+    "words": "Teal spinner, orange nose band, tail banded in teal and black"
+   },
+   {
+    "scheme": 1,
+    "spinner": "teal",
+    "ring": "plum",
+    "pattern": "checks",
+    "tail": [
+     "teal",
+     "bone"
+    ],
+    "words": "Teal spinner, purple nose band, teal and cream checked tail"
+   },
+   {
+    "scheme": 2,
+    "spinner": "turquoise",
+    "ring": "orange",
+    "pattern": "stripes",
+    "tail": [
+     "turquoise",
+     "ink"
+    ],
+    "words": "Turquoise spinner, orange nose band, turquoise and black striped tail"
+   },
+   {
+    "scheme": 3,
+    "spinner": "bottle",
+    "ring": "slate",
+    "pattern": "checks",
+    "tail": [
+     "bottle",
+     "bone"
+    ],
+    "words": "Bottle green spinner, slate blue nose band, bottle green and cream checked tail"
+   },
+   {
+    "scheme": 4,
+    "spinner": "slate",
+    "ring": "turquoise",
+    "pattern": "tipped",
+    "tail": [
+     "slate",
+     "turquoise"
+    ],
+    "words": "Slate blue spinner, turquoise nose band, slate blue tail with a turquoise tip"
+   },
+   {
+    "scheme": 5,
+    "spinner": "slate",
+    "ring": "orange",
+    "pattern": "checks",
+    "tail": [
+     "slate",
+     "bone"
+    ],
+    "words": "Slate blue spinner, orange nose band, slate blue and cream checked tail"
+   },
+   {
+    "scheme": 6,
+    "spinner": "slate",
+    "ring": "bottle",
+    "pattern": "halved",
+    "tail": [
+     "slate",
+     "bone"
+    ],
+    "words": "Slate blue spinner, bottle green nose band, tail halved, slate blue over cream"
+   },
+   {
+    "scheme": 7,
+    "spinner": "plum",
+    "ring": "orange",
+    "pattern": "tipped",
+    "tail": [
+     "plum",
+     "orange"
+    ],
+    "words": "Purple spinner, orange nose band, purple tail with an orange tip"
+   },
+   {
+    "scheme": 8,
+    "spinner": "plum",
+    "ring": "turquoise",
+    "pattern": "bands",
+    "tail": [
+     "plum",
+     "turquoise"
+    ],
+    "words": "Purple spinner, turquoise nose band, tail banded in purple and turquoise"
+   },
+   {
+    "scheme": 9,
+    "spinner": "plum",
+    "ring": "teal",
+    "pattern": "stripes",
+    "tail": [
+     "plum",
+     "bone"
+    ],
+    "words": "Purple spinner, teal nose band, purple and cream striped tail"
+   },
+   {
+    "scheme": 10,
+    "spinner": "turquoise",
+    "ring": "plum",
+    "pattern": "tipped",
+    "tail": [
+     "turquoise",
+     "plum"
+    ],
+    "words": "Turquoise spinner, purple nose band, turquoise tail with a purple tip"
+   },
+   {
+    "scheme": 11,
+    "spinner": "turquoise",
+    "ring": "slate",
+    "pattern": "stripes",
+    "tail": [
+     "turquoise",
+     "bone"
+    ],
+    "words": "Turquoise spinner, slate blue nose band, turquoise and cream striped tail"
+   },
+   {
+    "scheme": 12,
+    "spinner": "turquoise",
+    "ring": "bottle",
+    "pattern": "halved",
+    "tail": [
+     "turquoise",
+     "bottle"
+    ],
+    "words": "Turquoise spinner, bottle green nose band, tail halved, turquoise over bottle green"
+   },
+   {
+    "scheme": 13,
+    "spinner": "bottle",
+    "ring": "turquoise",
+    "pattern": "bands",
+    "tail": [
+     "bottle",
+     "turquoise"
+    ],
+    "words": "Bottle green spinner, turquoise nose band, tail banded in bottle green and turquoise"
+   },
+   {
+    "scheme": 14,
+    "spinner": "bottle",
+    "ring": "plum",
+    "pattern": "stripes",
+    "tail": [
+     "bottle",
+     "bone"
+    ],
+    "words": "Bottle green spinner, purple nose band, bottle green and cream striped tail"
+   },
+   {
+    "scheme": 15,
+    "spinner": "bottle",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "bottle",
+     "orange"
+    ],
+    "words": "Bottle green spinner, orange nose band, tail halved, bottle green over orange"
+   }
+  ],
+  "SOV": [
+   {
+    "scheme": 0,
+    "spinner": "azure",
+    "ring": "orange",
+    "pattern": "stripes",
+    "tail": [
+     "azure",
+     "bone"
+    ],
+    "words": "Azure blue spinner, orange nose band, azure blue and cream striped tail"
+   },
+   {
+    "scheme": 1,
+    "spinner": "azure",
+    "ring": "bottle",
+    "pattern": "stripes",
+    "tail": [
+     "azure",
+     "bottle"
+    ],
+    "words": "Azure blue spinner, bottle green nose band, azure blue and bottle green striped tail"
+   },
+   {
+    "scheme": 2,
+    "spinner": "azure",
+    "ring": "turquoise",
+    "pattern": "halved",
+    "tail": [
+     "azure",
+     "ink"
+    ],
+    "words": "Azure blue spinner, turquoise nose band, tail halved, azure blue over black"
+   },
+   {
+    "scheme": 3,
+    "spinner": "paleblue",
+    "ring": "orange",
+    "pattern": "bands",
+    "tail": [
+     "paleblue",
+     "ink"
+    ],
+    "words": "Pale blue spinner, orange nose band, tail banded in pale blue and black"
+   },
+   {
+    "scheme": 4,
+    "spinner": "paleblue",
+    "ring": "bottle",
+    "pattern": "halved",
+    "tail": [
+     "paleblue",
+     "bottle"
+    ],
+    "words": "Pale blue spinner, bottle green nose band, tail halved, pale blue over bottle green"
+   },
+   {
+    "scheme": 5,
+    "spinner": "bottle",
+    "ring": "azure",
+    "pattern": "tipped",
+    "tail": [
+     "bottle",
+     "azure"
+    ],
+    "words": "Bottle green spinner, azure blue nose band, bottle green tail with an azure blue tip"
+   },
+   {
+    "scheme": 6,
+    "spinner": "bottle",
+    "ring": "turquoise",
+    "pattern": "checks",
+    "tail": [
+     "bottle",
+     "turquoise"
+    ],
+    "words": "Bottle green spinner, turquoise nose band, bottle green and turquoise checked tail"
+   },
+   {
+    "scheme": 7,
+    "spinner": "bottle",
+    "ring": "paleblue",
+    "pattern": "stripes",
+    "tail": [
+     "bottle",
+     "paleblue"
+    ],
+    "words": "Bottle green spinner, pale blue nose band, bottle green and pale blue striped tail"
+   },
+   {
+    "scheme": 8,
+    "spinner": "orange",
+    "ring": "paleblue",
+    "pattern": "checks",
+    "tail": [
+     "orange",
+     "paleblue"
+    ],
+    "words": "Orange spinner, pale blue nose band, orange and pale blue checked tail"
+   },
+   {
+    "scheme": 9,
+    "spinner": "orange",
+    "ring": "bottle",
+    "pattern": "stripes",
+    "tail": [
+     "orange",
+     "bottle"
+    ],
+    "words": "Orange spinner, bottle green nose band, orange and bottle green striped tail"
+   },
+   {
+    "scheme": 10,
+    "spinner": "orange",
+    "ring": "plum",
+    "pattern": "halved",
+    "tail": [
+     "orange",
+     "plum"
+    ],
+    "words": "Orange spinner, purple nose band, tail halved, orange over purple"
+   },
+   {
+    "scheme": 11,
+    "spinner": "plum",
+    "ring": "paleblue",
+    "pattern": "tipped",
+    "tail": [
+     "plum",
+     "paleblue"
+    ],
+    "words": "Purple spinner, pale blue nose band, purple tail with a pale blue tip"
+   },
+   {
+    "scheme": 12,
+    "spinner": "plum",
+    "ring": "turquoise",
+    "pattern": "checks",
+    "tail": [
+     "plum",
+     "bone"
+    ],
+    "words": "Purple spinner, turquoise nose band, purple and cream checked tail"
+   },
+   {
+    "scheme": 13,
+    "spinner": "turquoise",
+    "ring": "azure",
+    "pattern": "tipped",
+    "tail": [
+     "turquoise",
+     "azure"
+    ],
+    "words": "Turquoise spinner, azure blue nose band, turquoise tail with an azure blue tip"
+   },
+   {
+    "scheme": 14,
+    "spinner": "turquoise",
+    "ring": "orange",
+    "pattern": "bands",
+    "tail": [
+     "turquoise",
+     "ink"
+    ],
+    "words": "Turquoise spinner, orange nose band, tail banded in turquoise and black"
+   },
+   {
+    "scheme": 15,
+    "spinner": "turquoise",
+    "ring": "plum",
+    "pattern": "bands",
+    "tail": [
+     "turquoise",
+     "plum"
+    ],
+    "words": "Turquoise spinner, purple nose band, tail banded in turquoise and purple"
+   }
+  ],
+  "JAP": [
+   {
+    "scheme": 0,
+    "spinner": "deepblue",
+    "ring": "moss",
+    "pattern": "bands",
+    "tail": [
+     "deepblue",
+     "moss"
+    ],
+    "words": "Dark blue spinner, moss green nose band, tail banded in dark blue and moss green"
+   },
+   {
+    "scheme": 1,
+    "spinner": "deepblue",
+    "ring": "turquoise",
+    "pattern": "checks",
+    "tail": [
+     "deepblue",
+     "bone"
+    ],
+    "words": "Dark blue spinner, turquoise nose band, dark blue and cream checked tail"
+   },
+   {
+    "scheme": 2,
+    "spinner": "deepblue",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "deepblue",
+     "orange"
+    ],
+    "words": "Dark blue spinner, orange nose band, tail halved, dark blue over orange"
+   },
+   {
+    "scheme": 3,
+    "spinner": "paleblue",
+    "ring": "deepblue",
+    "pattern": "halved",
+    "tail": [
+     "paleblue",
+     "deepblue"
+    ],
+    "words": "Pale blue spinner, dark blue nose band, tail halved, pale blue over dark blue"
+   },
+   {
+    "scheme": 4,
+    "spinner": "paleblue",
+    "ring": "moss",
+    "pattern": "checks",
+    "tail": [
+     "paleblue",
+     "moss"
+    ],
+    "words": "Pale blue spinner, moss green nose band, pale blue and moss green checked tail"
+   },
+   {
+    "scheme": 5,
+    "spinner": "paleblue",
+    "ring": "plum",
+    "pattern": "halved",
+    "tail": [
+     "paleblue",
+     "plum"
+    ],
+    "words": "Pale blue spinner, purple nose band, tail halved, pale blue over purple"
+   },
+   {
+    "scheme": 6,
+    "spinner": "moss",
+    "ring": "turquoise",
+    "pattern": "bands",
+    "tail": [
+     "moss",
+     "turquoise"
+    ],
+    "words": "Moss green spinner, turquoise nose band, tail banded in moss green and turquoise"
+   },
+   {
+    "scheme": 7,
+    "spinner": "moss",
+    "ring": "paleblue",
+    "pattern": "stripes",
+    "tail": [
+     "moss",
+     "ink"
+    ],
+    "words": "Moss green spinner, pale blue nose band, moss green and black striped tail"
+   },
+   {
+    "scheme": 8,
+    "spinner": "moss",
+    "ring": "orange",
+    "pattern": "stripes",
+    "tail": [
+     "moss",
+     "bone"
+    ],
+    "words": "Moss green spinner, orange nose band, moss green and cream striped tail"
+   },
+   {
+    "scheme": 9,
+    "spinner": "orange",
+    "ring": "deepblue",
+    "pattern": "tipped",
+    "tail": [
+     "orange",
+     "deepblue"
+    ],
+    "words": "Orange spinner, dark blue nose band, orange tail with a dark blue tip"
+   },
+   {
+    "scheme": 10,
+    "spinner": "orange",
+    "ring": "plum",
+    "pattern": "stripes",
+    "tail": [
+     "orange",
+     "plum"
+    ],
+    "words": "Orange spinner, purple nose band, orange and purple striped tail"
+   },
+   {
+    "scheme": 11,
+    "spinner": "plum",
+    "ring": "paleblue",
+    "pattern": "checks",
+    "tail": [
+     "plum",
+     "paleblue"
+    ],
+    "words": "Purple spinner, pale blue nose band, purple and pale blue checked tail"
+   },
+   {
+    "scheme": 12,
+    "spinner": "plum",
+    "ring": "orange",
+    "pattern": "checks",
+    "tail": [
+     "plum",
+     "orange"
+    ],
+    "words": "Purple spinner, orange nose band, purple and orange checked tail"
+   },
+   {
+    "scheme": 13,
+    "spinner": "turquoise",
+    "ring": "moss",
+    "pattern": "tipped",
+    "tail": [
+     "turquoise",
+     "ink"
+    ],
+    "words": "Turquoise spinner, moss green nose band, turquoise tail with a black tip"
+   },
+   {
+    "scheme": 14,
+    "spinner": "turquoise",
+    "ring": "deepblue",
+    "pattern": "tipped",
+    "tail": [
+     "turquoise",
+     "deepblue"
+    ],
+    "words": "Turquoise spinner, dark blue nose band, turquoise tail with a dark blue tip"
+   },
+   {
+    "scheme": 15,
+    "spinner": "turquoise",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "turquoise",
+     "ink"
+    ],
+    "words": "Turquoise spinner, orange nose band, tail halved, turquoise over black"
+   }
+  ],
+  "ITA": [
+   {
+    "scheme": 0,
+    "spinner": "azure",
+    "ring": "moss",
+    "pattern": "tipped",
+    "tail": [
+     "azure",
+     "ink"
+    ],
+    "words": "Azure blue spinner, moss green nose band, azure blue tail with a black tip"
+   },
+   {
+    "scheme": 1,
+    "spinner": "azure",
+    "ring": "wine",
+    "pattern": "halved",
+    "tail": [
+     "azure",
+     "wine"
+    ],
+    "words": "Azure blue spinner, wine red nose band, tail halved, azure blue over wine red"
+   },
+   {
+    "scheme": 2,
+    "spinner": "wine",
+    "ring": "paleblue",
+    "pattern": "bands",
+    "tail": [
+     "wine",
+     "paleblue"
+    ],
+    "words": "Wine red spinner, pale blue nose band, tail banded in wine red and pale blue"
+   },
+   {
+    "scheme": 3,
+    "spinner": "wine",
+    "ring": "orange",
+    "pattern": "checks",
+    "tail": [
+     "wine",
+     "orange"
+    ],
+    "words": "Wine red spinner, orange nose band, wine red and orange checked tail"
+   },
+   {
+    "scheme": 4,
+    "spinner": "wine",
+    "ring": "azure",
+    "pattern": "stripes",
+    "tail": [
+     "wine",
+     "azure"
+    ],
+    "words": "Wine red spinner, azure blue nose band, wine red and azure blue striped tail"
+   },
+   {
+    "scheme": 5,
+    "spinner": "moss",
+    "ring": "slate",
+    "pattern": "bands",
+    "tail": [
+     "moss",
+     "ink"
+    ],
+    "words": "Moss green spinner, slate blue nose band, tail banded in moss green and black"
+   },
+   {
+    "scheme": 6,
+    "spinner": "moss",
+    "ring": "paleblue",
+    "pattern": "checks",
+    "tail": [
+     "moss",
+     "ink"
+    ],
+    "words": "Moss green spinner, pale blue nose band, moss green and black checked tail"
+   },
+   {
+    "scheme": 7,
+    "spinner": "orange",
+    "ring": "wine",
+    "pattern": "tipped",
+    "tail": [
+     "orange",
+     "wine"
+    ],
+    "words": "Orange spinner, wine red nose band, orange tail with a wine red tip"
+   },
+   {
+    "scheme": 8,
+    "spinner": "orange",
+    "ring": "azure",
+    "pattern": "stripes",
+    "tail": [
+     "orange",
+     "ink"
+    ],
+    "words": "Orange spinner, azure blue nose band, orange and black striped tail"
+   },
+   {
+    "scheme": 9,
+    "spinner": "orange",
+    "ring": "paleblue",
+    "pattern": "halved",
+    "tail": [
+     "orange",
+     "paleblue"
+    ],
+    "words": "Orange spinner, pale blue nose band, tail halved, orange over pale blue"
+   },
+   {
+    "scheme": 10,
+    "spinner": "slate",
+    "ring": "paleblue",
+    "pattern": "tipped",
+    "tail": [
+     "slate",
+     "paleblue"
+    ],
+    "words": "Slate blue spinner, pale blue nose band, slate blue tail with a pale blue tip"
+   },
+   {
+    "scheme": 11,
+    "spinner": "slate",
+    "ring": "wine",
+    "pattern": "stripes",
+    "tail": [
+     "slate",
+     "wine"
+    ],
+    "words": "Slate blue spinner, wine red nose band, slate blue and wine red striped tail"
+   },
+   {
+    "scheme": 12,
+    "spinner": "slate",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "slate",
+     "ink"
+    ],
+    "words": "Slate blue spinner, orange nose band, tail halved, slate blue over black"
+   },
+   {
+    "scheme": 13,
+    "spinner": "paleblue",
+    "ring": "moss",
+    "pattern": "bands",
+    "tail": [
+     "paleblue",
+     "moss"
+    ],
+    "words": "Pale blue spinner, moss green nose band, tail banded in pale blue and moss green"
+   },
+   {
+    "scheme": 14,
+    "spinner": "paleblue",
+    "ring": "orange",
+    "pattern": "checks",
+    "tail": [
+     "paleblue",
+     "ink"
+    ],
+    "words": "Pale blue spinner, orange nose band, pale blue and black checked tail"
+   },
+   {
+    "scheme": 15,
+    "spinner": "paleblue",
+    "ring": "slate",
+    "pattern": "stripes",
+    "tail": [
+     "paleblue",
+     "slate"
+    ],
+    "words": "Pale blue spinner, slate blue nose band, pale blue and slate blue striped tail"
+   }
+  ],
+  "FRA": [
+   {
+    "scheme": 0,
+    "spinner": "bottle",
+    "ring": "wine",
+    "pattern": "halved",
+    "tail": [
+     "bottle",
+     "bone"
+    ],
+    "words": "Bottle green spinner, wine red nose band, tail halved, bottle green over cream"
+   },
+   {
+    "scheme": 1,
+    "spinner": "wine",
+    "ring": "grey",
+    "pattern": "halved",
+    "tail": [
+     "wine",
+     "grey"
+    ],
+    "words": "Wine red spinner, grey nose band, tail halved, wine red over grey"
+   },
+   {
+    "scheme": 2,
+    "spinner": "wine",
+    "ring": "turquoise",
+    "pattern": "halved",
+    "tail": [
+     "wine",
+     "turquoise"
+    ],
+    "words": "Wine red spinner, turquoise nose band, tail halved, wine red over turquoise"
+   },
+   {
+    "scheme": 3,
+    "spinner": "bottle",
+    "ring": "orange",
+    "pattern": "tipped",
+    "tail": [
+     "bottle",
+     "orange"
+    ],
+    "words": "Bottle green spinner, orange nose band, bottle green tail with an orange tip"
+   },
+   {
+    "scheme": 4,
+    "spinner": "bottle",
+    "ring": "grey",
+    "pattern": "tipped",
+    "tail": [
+     "bottle",
+     "grey"
+    ],
+    "words": "Bottle green spinner, grey nose band, bottle green tail with a grey tip"
+   },
+   {
+    "scheme": 5,
+    "spinner": "bottle",
+    "ring": "turquoise",
+    "pattern": "tipped",
+    "tail": [
+     "bottle",
+     "turquoise"
+    ],
+    "words": "Bottle green spinner, turquoise nose band, bottle green tail with a turquoise tip"
+   },
+   {
+    "scheme": 6,
+    "spinner": "plum",
+    "ring": "grey",
+    "pattern": "bands",
+    "tail": [
+     "plum",
+     "grey"
+    ],
+    "words": "Purple spinner, grey nose band, tail banded in purple and grey"
+   },
+   {
+    "scheme": 7,
+    "spinner": "plum",
+    "ring": "turquoise",
+    "pattern": "checks",
+    "tail": [
+     "plum",
+     "turquoise"
+    ],
+    "words": "Purple spinner, turquoise nose band, purple and turquoise checked tail"
+   },
+   {
+    "scheme": 8,
+    "spinner": "plum",
+    "ring": "orange",
+    "pattern": "halved",
+    "tail": [
+     "plum",
+     "bone"
+    ],
+    "words": "Purple spinner, orange nose band, tail halved, purple over cream"
+   },
+   {
+    "scheme": 9,
+    "spinner": "orange",
+    "ring": "plum",
+    "pattern": "checks",
+    "tail": [
+     "orange",
+     "bone"
+    ],
+    "words": "Orange spinner, purple nose band, orange and cream checked tail"
+   },
+   {
+    "scheme": 10,
+    "spinner": "orange",
+    "ring": "bottle",
+    "pattern": "checks",
+    "tail": [
+     "orange",
+     "bottle"
+    ],
+    "words": "Orange spinner, bottle green nose band, orange and bottle green checked tail"
+   },
+   {
+    "scheme": 11,
+    "spinner": "turquoise",
+    "ring": "grey",
+    "pattern": "bands",
+    "tail": [
+     "turquoise",
+     "ink"
+    ],
+    "words": "Turquoise spinner, grey nose band, tail banded in turquoise and black"
+   },
+   {
+    "scheme": 12,
+    "spinner": "turquoise",
+    "ring": "bottle",
+    "pattern": "bands",
+    "tail": [
+     "turquoise",
+     "bottle"
+    ],
+    "words": "Turquoise spinner, bottle green nose band, tail banded in turquoise and bottle green"
+   },
+   {
+    "scheme": 13,
+    "spinner": "turquoise",
+    "ring": "orange",
+    "pattern": "checks",
+    "tail": [
+     "turquoise",
+     "ink"
+    ],
+    "words": "Turquoise spinner, orange nose band, turquoise and black checked tail"
+   },
+   {
+    "scheme": 14,
+    "spinner": "turquoise",
+    "ring": "plum",
+    "pattern": "checks",
+    "tail": [
+     "turquoise",
+     "bone"
+    ],
+    "words": "Turquoise spinner, purple nose band, turquoise and cream checked tail"
+   },
+   {
+    "scheme": 15,
+    "spinner": "turquoise",
+    "ring": "wine",
+    "pattern": "checks",
+    "tail": [
+     "turquoise",
+     "wine"
+    ],
+    "words": "Turquoise spinner, wine red nose band, turquoise and wine red checked tail"
+   }
+  ]
+ }
+}

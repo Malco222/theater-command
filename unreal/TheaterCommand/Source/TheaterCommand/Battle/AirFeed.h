@@ -2,6 +2,7 @@
 
 #include "Battle/AirShow.h"
 #include "Battle/AirSky.h"
+#include "Battle/AirUnitColours.h"
 
 #include <limits>
 #include <map>
@@ -102,6 +103,9 @@ namespace AirFeed
 			std::vector<BomberSeat> Seats;
 		};
 		std::map<int, BomberGroup> Bombers;
+		/** The groups that have earned colours (place.corpsMarks, by corps: the rules' scheme and tier; release 2, Brian
+		 * 25 November 03:27Z), for Battle/AirUnitColours. Empty where the battle does not say. */
+		std::map<int, AirUnitColours::CorpsMark> CorpsMarks;
 	};
 	bool ReadSky(const Json& J, Sky& Out);
 	/** The day's vapour-trail height, metres, by the weather zone (place.cloud.zone), the month (from 0) and the

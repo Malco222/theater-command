@@ -385,6 +385,30 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> NoseArtInk;
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UTexture2D>> NoseArtPictures;
+	/**
+	 * The groups' earned colours (release 2; Brian, 25 November 2026 03:27Z: "unique colorings or markings like the
+	 * tuskegee airmen"): a group the rules say has earned colours (the board's place.corpsMarks, by its corps: its nation's
+	 * scheme of the art director's palette, Content/Data/Air/unit-colours.json, and how far it has earned it) flies a shape
+	 * of its own, its model's shapes with the colours laid on (Battle/AirUnitColours: the spinner, then the nose band,
+	 * then the tail; the triangles a pattern's edge crosses parted along it), made once for each look on each shape and
+	 * kept as the shapes are. Called once from PlaneMesh as an aircraft's mesh is made: the shape it is to wear, Shape
+	 * itself for one that has none, and then nothing of it is touched. Off unless the Battle rules card's "Earned colours"
+	 * is on (FLandLive's rule "unitColours"): "-TheaterAirUnitColours" turns it on for a run, "-TheaterAirNoUnitColours"
+	 * off, "-TheaterRulesFlip=unitColours" clicks the card's switch. Defined in Battle/AirBattleUnitColours.inl (it handles
+	 * the scene's own shapes, AirParts::FShape, which only AirBattle.cpp knows); the rest in AirBattleUnitColours.cpp.
+	 */
+	template <typename TShapes>
+	FString UnitColoursShape(int32 Key, UProceduralMeshComponent* Mesh, const FString& Shape, TShapes& Shapes);
+	/** The switch, read at the battle's first aircraft made (true when this is that first time, so that the shapes coloured
+	 * for an earlier battle are let go), and whether it is on. */
+	bool UnitColoursSwitch(bool& bFirst);
+	/** The look the aircraft Key wears on a shape of the model Kind (its key, added to the shape's), kept for
+	 * UnitColoursLay; false where it wears none. */
+	bool UnitColoursFor(int32 Key, const FString& Kind, FString& Look);
+	/** A shape's arrays (its points brought in from its file's as the scene does: about Middle, by Fit) with the look
+	 * UnitColoursFor found laid on: its points recoloured, its parted triangles' pieces added. bFar: the far shape. False,
+	 * and nothing changed, where the shape's points are not its file's. */
+	bool UnitColoursLay(bool bFar, const FVector& Middle, double Fit, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colors);
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;

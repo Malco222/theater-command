@@ -442,6 +442,8 @@ namespace AirFeed
 			for (const Json& Seat : B["seats"].Items) Row.Seats.push_back({ std::max(0, Seat["art"].Int(0)), Seat["name"].Str("") });
 		}
 
+		AirUnitColours::ReadMarks(Place["corpsMarks"], Out.CorpsMarks); // (the groups' earned colours: Battle/AirUnitColours)
+
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
 		if (Cloud.IsObject())

@@ -136,6 +136,11 @@ namespace
 		// on for a run, -TheaterAirNoNoseArt off. The air battle reads it (AAirBattle::DrawNoseArt); it is never sent to the
 		// land rules.)
 		{ TEXT("noseArt"), TEXT("Bomber nose art"), TEXT("American bombers in the air battles wear painted nose art, each crew's own picture and name. Off: every bomber's nose is bare."), TEXT("TheaterAirNoNoseArt"), false, TEXT("TheaterAirNoseArt") },
+		// (Earned colours, Brian 25 November 03:27Z: "unique colorings or markings like the tuskegee airmen". Off until the
+		// art director has scored the stills and the historian's check is through; -TheaterAirUnitColours turns it on for a
+		// run, -TheaterAirNoUnitColours off. The air battle reads it (Battle/AirBattleUnitColours.cpp); never sent to the
+		// land rules.)
+		{ TEXT("unitColours"), TEXT("Earned colours"), TEXT("Air groups that have flown hard wear colours of their own: first the spinner, then a band round the nose, then the tail. Off: every aircraft wears its plain paint."), TEXT("TheaterAirNoUnitColours"), false, TEXT("TheaterAirUnitColours") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
@@ -245,7 +250,7 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		if (FCString::Strcmp(LandRuleTable[R].Key, TEXT("flyLive")) == 0 || FCString::Strcmp(LandRuleTable[R].Key, TEXT("noseArt")) == 0)
+		if (FCString::Strcmp(LandRuleTable[R].Key, TEXT("flyLive")) == 0 || FCString::Strcmp(LandRuleTable[R].Key, TEXT("noseArt")) == 0 || FCString::Strcmp(LandRuleTable[R].Key, TEXT("unitColours")) == 0)
 		{
 			continue; // (the air battles' own switches, on the same card: the campaign and the air battle read them, the land rules never do)
 		}
