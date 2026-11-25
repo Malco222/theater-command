@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 88342311f 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 76dba7eb2 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11,7 +11,7 @@
 
   // ../../data/campaign/arsenal.json
   var arsenal_default = {
-    _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided; and, facing 'facing' dug-in enemy corps or more, raise artillery corps until it has one to every 'per' of its other corps, 'most' at the most, and none while its field army is under 'fit' of the largest it has been (an army being worn away wants men in the line before guns).",
+    _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. 'lights' (searchlights, levels 1 to 3, built on any ground the nation holds) is offered, built and billed only with the switch 'cityDefences' (stage.json; what a level does is in citydefences.json): a quarter of the guns' price to build and about a third of their upkeep (city defences, the design director's ruling of 25 Nov 2026 02:23Z, choice 10, A). Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided; and, facing 'facing' dug-in enemy corps or more, raise artillery corps until it has one to every 'per' of its other corps, 'most' at the most, and none while its field army is under 'fit' of the largest it has been (an army being worn away wants men in the line before guns).",
     land: {
       art: { label: "Artillery corps", divs: 2, cost: 66, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as a corps of tanks." },
       eng: { label: "Engineer corps", divs: 1, cost: 18, months: 3, blurb: "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own, and it cannot take ground without infantry or tanks." }
@@ -98,7 +98,8 @@
       yard: { label: "Shipyard", cost: [0, 20, 30, 45], months: 8, blurb: "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
       aa: { label: "Anti-aircraft guns", cost: [0, 8, 12, 18], months: 2, upkeep: 0.05, cut: 0.15, flak: 0.012, blurb: "Heavy guns round the factories and the rail yards. Each level stops part of the bombing of this province, its railway included, and brings down more of the bombers." },
       field: { label: "Airfields", cost: [0, 10, 15, 22], months: 3, upkeep: 0.04, holds: 500, blurb: "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." },
-      strip: { label: "Field strip", cost: [0, 3, 4, 5], months: 1, upkeep: 0.02, holds: 500, blurb: "Grass, steel mat or coral, laid in weeks: fighters can be based here, and each level lets 500 more aircraft fly from the province. Bombers need a concrete airfield. (Offered only with airfields as targets.)" }
+      strip: { label: "Field strip", cost: [0, 3, 4, 5], months: 1, upkeep: 0.02, holds: 500, blurb: "Grass, steel mat or coral, laid in weeks: fighters can be based here, and each level lets 500 more aircraft fly from the province. Bombers need a concrete airfield. (Offered only with airfields as targets.)" },
+      lights: { label: "Searchlights", cost: [0, 2, 3, 5], months: 1, upkeep: 0.015, blurb: "Searchlights to hold the night bombers in their beams, by night and under a clear sky only. They help the night fighters a little, and where Fighter control's radar lays the guns, each level lights one level of anti-aircraft guns." }
     },
     yards: {
       Hamburg: 3,
@@ -352,7 +353,9 @@
     _ferry: "Moving an air group to any airfield of its side's or its allies' with one order (release 2; Brian 24 November 2026 22:08Z; src/campaign/ferry.ts, data/campaign/ferry.json). The group flies by a chain of friendly fields within its ferry range, a few hops a month, out of the fight on the way, and the order says how many turns it takes and whether enemy fighters are known within reach of the way; where no chain reaches across an ocean it goes crated by sea. The computer's staffs use it for their spare groups. Off, nothing of it runs and no die is drawn. A run outside the browser can be given it by TC_FERRY=1.",
     ferry: false,
     _airNames: "Better air unit names (release 2; Brian 25 November 2026: 'can we come up with better names for the airforce squadrons?'; the design director's ruling of 03:18Z, design-director/air-names-1125.md; src/campaign/air.ts groupName, data/campaign/air-names.json '_airNames'). Words only: on, a new air group is named with the numbers its arm really used, the role in the name only where the arm put it there (else shown beside the name), in its arm's own plain form where no rung is near, and Japan's island groups by their airfield. (Italy's day-one names were dropped by Brian's answer of 03:31Z; its words are its earned list, under 'nicknames'.) Off: every name as ruling 220 gives it. A group keeps the name it was given for life, whatever the switch says later, and a saved war keeps its names. The grand campaigns opened while this is true carry the flag 'airNames'; it can be switched in any month from OPTIONS (new groups only). A run outside the browser can force it: TC_AIRNAMES=1 or TC_AIRNAMES=0.",
-    airNames: false
+    airNames: false,
+    _cityDefences: "City defences (release 2; Brian 24 November 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 November 2026 02:23Z; src/campaign/citydefences.ts, data/campaign/citydefences.json, arsenal.json works.lights). Searchlights to build beside the anti-aircraft guns; by night the guns fire by what they can see (dark, laid by Fighter control's radar, or lit as well), and the lights help the night fighters a little, under a clear sky only; a garrison fortifies the town it holds, a month at a time; and the town's heavy guns fire on attacking tanks. One rule for every country. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'cityDefences' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_CITYDEFENCES=1 or TC_CITYDEFENCES=0.",
+    cityDefences: false
   };
 
   // ../../src/campaign/stage.ts
@@ -411,6 +414,7 @@
   var WINGBYDATE_STAGE = staged("TC_WINGBYDATE", "wingByDate");
   var FERRY_STAGE = staged("TC_FERRY", "ferry");
   var AIRNAMES_STAGE = staged("TC_AIRNAMES", "airNames");
+  var CITYDEFENCES_STAGE = staged("TC_CITYDEFENCES", "cityDefences");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -26250,6 +26254,7 @@
     "corps:eng": "engineer corps",
     "work:fort": "fortifications",
     "work:aa": "anti-aircraft guns",
+    "work:lights": "searchlights",
     "ship:dd": "destroyers",
     "ship:ss": "submarines",
     "ship:ca": "cruisers",
@@ -30821,6 +30826,3778 @@
     return names[id] ?? (names[id] = `${prefix}${id}`);
   }
 
+  // ../../data/campaign/citydefences.json
+  var citydefences_default = {
+    _about: "City defences (release 2; Brian 24 Nov 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 Nov 2026 02:23Z; rules-builder/release2/city-defences/form.md, section 11 over sections 3 to 9). Read only with the switch 'cityDefences' (stage.json; src/campaign/citydefences.ts). Searchlights are a work of their own, levels 1 to 3 (arsenal.json works.lights: its label, cost, months, upkeep and blurb); by night and under a clear sky a level of them lights a level of the anti-aircraft guns, which count by night by what they can see; a garrison fortifies the town it holds, a month at a time; and the town's heavy guns fire on attacking tanks. One rule for every nation: the causes are works, the radar row (Fighter control), the sky, the bombers sent, a garrison and armour. Off: nothing here is read.",
+    _night: "The share of a built gun level's day worth by night: 'dark' (no lights lit, no radar) 0.20 and 'radar' (Fighter control held) 0.45, form section 2 and ruling choice 1 (A); 'lit' (lit, no radar) ruled equal to dark, 0.20 (ruling choice 1, the changed cell: Pile 1940, F); 'both' (lit, radar) 0.75 (A).",
+    night: { dark: 0.2, radar: 0.45, lit: 0.2, both: 0.75 },
+    _saturation: "The bombers over the target one level of searchlights can hold: above it the lights' gain falls in proportion (form section 3, ruling choice 5 (A); 60 to 150 in the record, A).",
+    saturation: 100,
+    _fighters: "The night fighters' floor by searchlights level 0 to 3, a share of their day worth, under a clear sky only (form section 4, the floor; form section 2, 0.003 to 0.006 in the record; ruling choice 4 (A); mark A). A floor, never a multiplier.",
+    fighters: [0, 2e-3, 3e-3, 4e-3],
+    _works: "A garrison's town works: 'most' months of them at the most; 'worth' times the entrenching share for the months done (defence.json entrench.share) is their bonus inside the walls, the larger of it and the forts' (form section 5, +0.15 / +0.225 / +0.3; ruling choices 6 and 7 (A); mark A, a design figure matched to the fort levels, no record reading).",
+    works: { most: 3, worth: 0.3 },
+    _ground: "The town's heavy guns against tanks in a storm, where it has a garrison: 'armour' off the tanks' attack a gun level, 'most' at the most, and 'lost' gun levels lost when such a town falls by storm (form section 6 as corrected in section 11, ruling choice 8 (A)).",
+    ground: { armour: 0.07, most: 0.25, lost: 1 },
+    _ai: "How many months a night raid on one of its provinces counts for the computer's order of searchlights (form section 7, 'the last two months'; the ruling's 'Also': lights before more guns only where they count; mark A, a design window, no record reading).",
+    ai: { months: 2 },
+    _start: "Searchlights laid at a history start with the switch on (historian/start-searchlights-1125.md, section 2, read 25 Nov 02:40Z; the ruling's 'Also'): rows { region (the map's own name), turns (the start months the reading holds for), level, mark (the historian's: F firm, L likely, D derived, U uncertain), lay, why }, only where he reads a city belt at that date, never by nation; none means no row. A start month between two listed ones takes the earlier listed reading. Laid (the design director's ruling of 25 Nov 2026 02:40Z): rows marked F, L or D, and D with a U on the count only; a U alone is a change not laid, so the last laid level holds, written as a row of its own with lay true. Whoever holds the province at that date has the lights; the 'Directed' column (S or R) is not stored: the lights lift the guns only where the holder has Fighter control.",
+    start: [
+      { region: "London", turns: [1, 5], level: 2, mark: "D", lay: true, why: "the Inner Artillery Zone's 96 lights (August 1939, L) and the approaches' belt inside the region, about a level (D): L + D" },
+      { region: "London", turns: [11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "the IAZ's '240 90 cm searchlights' (5 June 1940) and '242' (30 September 1940), L, and the belt (D): L + D" },
+      { region: "London", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 11's level: the historian's later cuts (2 from January 1942 for manpower, 1 from February 1944; U, sizes not read) are not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Kent", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Hampshire", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "West Country", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "East Anglia", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Midlands", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Wales", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Lancashire", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Yorkshire", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Lincolnshire", turns: [1], level: 2, mark: "D", lay: true, why: "2,700 lights nationally in September 1939 (Pile's despatch, F), less London and the northern ports, over the belt regions: about 200-260 each (D)" },
+      { region: "Kent", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Hampshire", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "West Country", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "East Anglia", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Midlands", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Wales", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Lancashire", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Yorkshire", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Lincolnshire", turns: [5, 11, 13, 14, 17, 22], level: 3, mark: "D", lay: true, why: "3,361 lights at the end of 1939, 3,932 in July 1940, 4,532 early in 1941 (Pile, F): about 300-400 a region (D)" },
+      { region: "Kent", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Hampshire", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "West Country", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "East Anglia", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Midlands", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Wales", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Lancashire", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Yorkshire", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Lincolnshire", turns: [29, 33, 34, 39, 47, 53, 57, 58], level: 3, mark: "U", lay: true, why: "held at turn 5's level: the historian's 1941-43 killer and indicator belts (level 2) and the 1944 cut (level 1) are U and not read (the design director, 25 Nov 02:40Z)" },
+      { region: "Northumbria", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53], level: 1, mark: "D", lay: true, why: "the Tyne, Tees, Clyde, Forth and Belfast defended areas (3rd and 7th AA Divisions, L), lights round the city only, about 75 (D; the count not read, U)" },
+      { region: "Clydeside", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53], level: 1, mark: "D", lay: true, why: "the Tyne, Tees, Clyde, Forth and Belfast defended areas (3rd and 7th AA Divisions, L), lights round the city only, about 75 (D; the count not read, U)" },
+      { region: "Lothian", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53], level: 1, mark: "D", lay: true, why: "the Tyne, Tees, Clyde, Forth and Belfast defended areas (3rd and 7th AA Divisions, L), lights round the city only, about 75 (D; the count not read, U)" },
+      { region: "Ulster", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53], level: 1, mark: "D", lay: true, why: "the Tyne, Tees, Clyde, Forth and Belfast defended areas (3rd and 7th AA Divisions, L), lights round the city only, about 75 (D; the count not read, U)" },
+      { region: "Northumbria", turns: [57, 58], level: 1, mark: "U", lay: true, why: "held: nothing read after January 1944, and the last laid level holds (the design director, 25 Nov 02:40Z)" },
+      { region: "Clydeside", turns: [57, 58], level: 1, mark: "U", lay: true, why: "held: nothing read after January 1944, and the last laid level holds (the design director, 25 Nov 02:40Z)" },
+      { region: "Lothian", turns: [57, 58], level: 1, mark: "U", lay: true, why: "held: nothing read after January 1944, and the last laid level holds (the design director, 25 Nov 02:40Z)" },
+      { region: "Ulster", turns: [57, 58], level: 1, mark: "U", lay: true, why: "held: nothing read after January 1944, and the last laid level holds (the design director, 25 Nov 02:40Z)" },
+      { region: "Berlin", turns: [1, 5, 11, 13, 14], level: 1, mark: "D", lay: true, why: "lights with the city flak from the outset, by sound locator (L); count not read: by the ratio of 0.55-0.85 lights a gun on the start guns' level 1 (D)" },
+      { region: "Berlin", turns: [17, 22, 29, 33, 34, 39], level: 2, mark: "D", lay: true, why: "the same ratio on the start guns' level 2 (D)" },
+      { region: "Berlin", turns: [47], level: 2, mark: "D", lay: true, why: "'around 100 batteries ... each containing searchlight units' (1943, L); 245 lights in January 1944 (L) (D)" },
+      { region: "Berlin", turns: [53, 57, 58], level: 2, mark: "L", lay: true, why: "'440 heavy ... 400 light ... 245 searchlights' (24 January 1944, L)" },
+      { region: "Ruhr", turns: [1, 5, 11, 13, 14], level: 1, mark: "D", lay: true, why: "as Berlin: by the ratio on the start guns' level 1 (D)" },
+      { region: "Ruhr", turns: [17, 22, 29, 33, 34, 39], level: 2, mark: "D", lay: true, why: "as Berlin: by the ratio on the start guns' level 2 (D)" },
+      { region: "Ruhr", turns: [47, 53, 57, 58], level: 3, mark: "D", lay: true, why: "over 1,000 heavy guns by mid-1943 (L) at 0.55-0.85 lights a gun, 550-850 lights, capped at 3 (D)" },
+      { region: "Hamburg", turns: [1, 5, 11, 13, 14], level: 1, mark: "D", lay: true, why: "as Berlin: by the ratio on the start guns' level 1 / level 2 (the design director, 25 Nov 13:06Z)" },
+      { region: "Hamburg", turns: [17, 22, 29, 33, 34, 39], level: 2, mark: "D", lay: true, why: "as Berlin: by the ratio on the start guns' level 1 / level 2 (the design director, 25 Nov 13:06Z)" },
+      { region: "Hamburg", turns: [47, 53, 57, 58], level: 2, mark: "D", lay: true, why: "56 heavy batteries in July 1943 (L), about 220-340 guns, at 0.55-0.85 a gun: about 120-290 lights (D)" },
+      { region: "Schleswig-Holstein", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Bremen", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Friesland", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Gelderland", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Brabant", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Liege", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Namur", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Lille", turns: [14, 17, 22, 29], level: 1, mark: "D", lay: true, why: "the night-fighter belt, 'solid light ... 10 to 20 miles in depth' from the Danish border to near Maubeuge (L, a 1943 US report), October 1940 to May 1942: about 70-200 lights a region on its course (D, U)" },
+      { region: "Moscow", turns: [22], level: 3, mark: "L", lay: true, why: "'600 anti-aircraft searchlights' at the beginning of the massive raids (July 1941, L)" },
+      { region: "Moscow", turns: [29, 33, 34, 39], level: 3, mark: "L", lay: true, why: "the Moscow Air Defence Front (April 1942): '1,300 searchlights' with 1,560 guns (L)" },
+      { region: "Moscow", turns: [47, 53, 57, 58], level: 3, mark: "L", lay: true, why: "'four searchlight divisions' (May 1943, L)" },
+      { region: "Leningrad", turns: [29, 33, 34, 39, 47], level: 3, mark: "L", lay: true, why: "'350 searchlights' with 500 guns (9 November 1941, L); carried on (L, then U)" },
+      { region: "Leningrad", turns: [53, 57, 58], level: 3, mark: "U", lay: true, why: "held: carried on, nothing read after (U); the last laid level holds (the design director, 25 Nov 02:40Z)" },
+      { region: "Saxony", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53, 57, 58], level: 1, mark: "D", lay: true, why: "by the lights file's own ratio from the city's start guns (the design director, 25 Nov 04:10Z)" },
+      { region: "Frankfurt", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53, 57, 58], level: 1, mark: "D", lay: true, why: "by the lights file's own ratio from the city's start guns (the design director, 25 Nov 04:10Z)" },
+      { region: "Hanover", turns: [1, 5, 11, 13, 14, 17, 22, 29, 33, 34, 39, 47, 53, 57, 58], level: 1, mark: "D", lay: true, why: "by the lights file's own ratio from the city's start guns (the design director, 25 Nov 04:10Z)" },
+      { region: "Rhineland", turns: [17, 22, 29, 33, 34, 39, 47, 53, 57, 58], level: 1, mark: "D", lay: true, why: "by the lights file's own ratio from the city's start guns (the design director, 25 Nov 04:10Z)" }
+    ],
+    _startGuns: "Anti-aircraft guns laid at a history start with the switch on, where the record had them (the design director's ruling of 25 Nov 2026 04:10Z, 'Start guns from the record'; historian/start-guns-1125.md, section 2): rows in the shape of 'start', a reading of none included (level 0). A level is heavy guns divided by 120, to the nearest whole, none under 60, at most 3. Rows read L or D are laid, and rows marked D and U are laid as D, the mark kept as he wrote it. Where nothing is read the row is marked G, has no level and is not laid: ruling 124's level stands there as a stand-in until read. A start month between two listed ones takes the earlier listed reading (the same lookup as the lights'). Under the switch ruling 124's flat placement retires where a laid row reads the place; a power's own ground that it holds takes the row's level; nothing here reads a nation.",
+    startGuns: [
+      { region: "Berlin", turns: [1, 5, 11, 13, 14], level: 1, mark: "D, U", lay: true, why: "Air Defence Command Berlin from 1 July 1938 (L), at the outbreak elements of five flak regiments, about 80 to 240 heavy guns (D)" },
+      { region: "Berlin", turns: [17, 22, 29], level: 2, mark: "D, U", lay: true, why: "renamed the 1st Flak Division 1 September 1941 (L); grown, the count not read" },
+      { region: "Hamburg", turns: [1, 5, 11, 13, 14], level: 1, mark: "D", lay: true, why: "Air Defence Command Hamburg formed 1 July 1938 (L), one of the six before the war (L); the same standing as Berlin's" },
+      { region: "Hamburg", turns: [17, 22, 29], level: 2, mark: "D, U", lay: true, why: "as Berlin; later 54 heavy and 26 light batteries with 166 88mm guns (L, undated within 1940 to June 1943)" },
+      { region: "Ruhr", turns: [1, 5, 11, 13, 14], level: 1, mark: "D", lay: true, why: "Air Defense Command Essen from 1 July 1938, later Dusseldorf, the only one in the Ruhr at first (L)" },
+      { region: "Ruhr", turns: [17, 22, 29], level: 2, mark: "D, U", lay: true, why: "Cologne's command joined in 1940-41 (L); over 1,000 heavy guns in the Ruhr by mid-1943 (L)" },
+      { region: "Saxony", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 1, mark: "D, U", lay: true, why: "Leipzig's region: one of the six pre-war air defence commands (L); the count not read" },
+      { region: "Frankfurt", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 1, mark: "D, U", lay: true, why: "one of the six pre-war air defence commands (L); the count not read" },
+      { region: "Hanover", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 1, mark: "D, U", lay: true, why: "one of the six pre-war air defence commands (L); the count not read" },
+      { region: "Rhineland", turns: [17, 22, 29], level: 1, mark: "D, U", lay: true, why: "Cologne's region: a command throughout 1940 and 1941 (L); the month not read" },
+      { region: "Bohemia", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 0, mark: "", lay: true, why: "none: not read, and not one of the six commands" },
+      { region: "London", turns: [1, 5], level: 1, mark: "L", lay: true, why: "On mobilisation in August 1939 the 1st AA Division controlled 159 heavy guns (L)" },
+      { region: "London", turns: [11, 13], level: 1, mark: "L", lay: true, why: "92 heavy guns on 7 September 1940 (L): guns had gone to the airfields and ports that summer" },
+      { region: "London", turns: [14, 17, 22, 29], level: 2, mark: "L, then U", lay: true, why: "203 heavy guns two days later (L); London's count in 1941 not read" },
+      { region: "Midlands", turns: [1, 5], level: 0, mark: "D", lay: true, why: "none: the 4th AA Division's 92 heavy guns over six cities in August 1939 (L), about 40 for Birmingham and Coventry (D)" },
+      { region: "Midlands", turns: [11, 13, 14, 17, 22, 29], level: 1, mark: "L, then U", lay: true, why: "July 1940: Birmingham 64, Coventry 44 (L), 108 heavy guns" },
+      { region: "Lancashire", turns: [1, 5], level: 0, mark: "D", lay: true, why: "none: as the Midlands, about 35 heavy guns for Liverpool and Manchester (D)" },
+      { region: "Lancashire", turns: [11, 13, 14, 17, 22, 29], level: 1, mark: "L, then U", lay: true, why: "July 1940: Liverpool 52, Manchester 20 (L), 72 heavy guns" },
+      { region: "Moscow", turns: [1, 5, 11, 13, 14, 17], level: 3, mark: "D, U", lay: true, why: "1st Air Defence Corps since 11 January 1938 (L), 1,044 guns a month into the war (L): even half standing before is over 360 heavy (D)" },
+      { region: "Moscow", turns: [22, 29], level: 3, mark: "L", lay: true, why: "1,044 anti-aircraft guns in July 1941 (L); 1,560 in April 1942 (L)" },
+      { region: "Leningrad", turns: [29], level: 3, mark: "L", lay: true, why: "500 anti-aircraft guns on 9 November 1941 (L)" },
+      { region: "Tokyo", turns: [1, 5, 11, 13, 14, 17, 22], level: 1, mark: "D, U", lay: true, why: "around 150 anti-aircraft guns at the start of the Pacific War (L), carried back to 1939 as standing guns" },
+      { region: "Tokyo", turns: [29], level: 1, mark: "L", lay: true, why: "around 150 anti-aircraft guns, most of them obsolete, at the start of the Pacific War (L)" },
+      { region: "Rome", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 1, mark: "D, U", lay: true, why: "1,700 guns in 425 batteries (April 1940, L) over 32 first-degree places (L): about 53 a place (D); the capital likely twice that (U)" },
+      { region: "Lombardy", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 1, mark: "D, U", lay: true, why: "Milan's region: 1,700 guns over 32 first-degree places (L), about 53 a place (D); the great industrial cities likely twice that (U)" },
+      { region: "Piedmont", turns: [1, 5, 11, 13, 14, 17, 22, 29], level: 1, mark: "D, U", lay: true, why: "Turin's region: 1,700 guns over 32 first-degree places (L), about 53 a place (D); the great industrial cities likely twice that (U)" },
+      { region: "Washington", turns: [1, 5, 11, 13, 14, 17, 22], level: 0, mark: "D", lay: true, why: "none: at peace, coast-defence guns only; no city belt read before December 1941" },
+      { region: "New York", turns: [1, 5, 11, 13, 14, 17, 22], level: 0, mark: "D", lay: true, why: "read with Washington and Philadelphia (the design director, 25 Nov)" },
+      { region: "Detroit", turns: [1, 5, 11, 13, 14, 17, 22], level: 0, mark: "D", lay: true, why: "none: at peace, coast-defence guns only; no city belt read before December 1941" },
+      { region: "Philadelphia", turns: [1, 5, 11, 13, 14, 17, 22], level: 0, mark: "D", lay: true, why: "none: at peace, coast-defence guns only; no city belt read before December 1941" },
+      { region: "Paris", turns: [1, 5, 11], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Lille", turns: [1, 5, 11], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Lyon", turns: [1, 5, 11], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Gorky", turns: [1, 5, 11, 13, 14, 17, 22, 29], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Kharkov", turns: [1, 5, 11, 13, 14, 17, 22, 29], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Washington", turns: [29], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "New York", turns: [29], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Detroit", turns: [29], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" },
+      { region: "Philadelphia", turns: [29], mark: "G", lay: false, why: "not read: ruling 124's level stands there as a stand-in until read (the design director, 25 Nov 04:10Z)" }
+    ]
+  };
+
+  // ../../data/campaign/defence.json
+  var defence_default = {
+    _about: "Prepared defences (the grand campaign). An army that spends a whole month where it stands, without marching or fighting, digs in whoever commands it, the computer's armies as well as the player's. Against troops who are dug in and in supply the day's luck runs against the attacker, so that odds which would be safe in the open become a gamble, and an attack thrown back from such a line has shot its bolt for the month. Rules in src/campaign/game.ts (assess, resolveBattle, endPhase).",
+    entrench: { auto: true, months: 3, share: [0.5, 0.75, 1] },
+    handover: { fade: 1 },
+    probe: { ap: 2, wear: 1, weight: 3e4, loss: 0.04, org: 0.06 },
+    wear: { perAttack: 1, fullAt: 0.6, guns: 1, regrow: 0.5 },
+    tired: { per: 0.15, most: 3 },
+    hammer: { first: 0.5, second: 1 },
+    frontage: { sides: 3, extra: 1, guns: 2 },
+    prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, surpriseMonths: 1, openingMonths: 3, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
+    staff: { odds: 0 },
+    notes: {
+      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. A corps that leaves the ground leaves its fieldworks behind it (players read 'fieldworks', never 'trenches': Brian, 2026-11-14). With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
+      handover: "Hand over the fieldworks (Version 64). Works belong to the ground. A dug-in corps that marches off, entrains or goes forward after a battle won leaves its positions behind: a corps of its own side standing there without works takes them over at once, and otherwise they wait for the next corps of that side to march or ride in, which has them, as old as they were, from the moment it arrives and keeps them at the month's end though it marched. Standing empty they lose 'fade' months of work at the start of each of their owner's months, and they are gone the moment the enemy sets foot there. Troops driven off their ground leave nothing, and troops falling back or put down by any other means take nothing over. Remove the key to have works lost when a corps leaves, as before Version 64.",
+      probe: "Probe the line (Version 64). One fighting corps of the player's feels out the enemy army in the province beside it: every corps there is identified as a battle would identify it, and the works of each one that is dug in lose 'wear' months where the probing corps has 'weight' men or more, and in proportion where it has fewer (Version 65: a husk of a corps scratches a line, it does not open it). It costs the probing corps 'loss' of its men, 'org' of its organisation and 'ap' of its moves, and it counts as having fought, so it does no digging that month. The defenders lose no men; they count as attacked, so they dig at the pace of troops who were. Nothing changes hands, no battle is filed, no offensive is opened by it, and a line is probed once a month at most. A computer staff probes as the player does since Version 65 (rivals.json, 'soften').",
+      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the fieldworks. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
+      wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the fieldworks. Works are never worn below nothing, and troops whose works are worn under one month lose the fieldworks' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
+      tired: "Defenders who have already fought this month fight the next blow tired (Version 63). Every attack a corps stands against in the field, won or lost, counts against it until its own month begins again: 'per' off its defence for each blow at full weight, up to 'most' blows. The weight of a blow is the same measure the wear on works uses: full at wear.fullAt to 1 or better on the Battle Ticket, in proportion below that. The defenders' losses in men and in organisation go by the same weight, so that a jab by one corps at a great stack costs it almost nothing and tires nobody.",
+      hammer: "The computer's two-wave attack (Version 63). Where its whole force cannot carry a place at the odds its staff asks, it sends a first wave to wear the works and tire the defence and the main body after it in the same month: the first wave must come at 'first' to 1 or better, and the main body must then have the staff's usual odds times 'second'. A slow command plans it too, since it is one operation laid on beforehand.",
+      frontage: "Attacked from 'sides' provinces or more at once, a defence cannot cover every road: each side's roads carry 'extra' more corps. Against fortress works or dug-in troops up to 'guns' artillery corps join an attack without taking room on the roads, since they fire over the heads of the infantry.",
+      staff: "'odds': how much better odds than usual a computer staff asks before it attacks a fully prepared line. At 0 it attacks as it always did, and learns the cost in men.",
+      measured: "Over 72 computer wars to the end of 1944 (Version 57 before, Version 58 after): Berlin fallen in 38 and 25, the German army still deep in Russia in 16 and 7, neither in 10 and 40; Paris falls between 2 and 3 months later. Of 36 wars run on to January 1947 Berlin had fallen in 29 and 7 were undecided. A dug-in, supplied line now throws back an attack at 1.5 to 1 about 4 times in 10 and at 2 to 1 about 1 in 7; nothing is safe under 2.4 to 1. Version 61 (works that wear, the share of each month's digging, the opening offensive, room on the roads), over 24 computer wars to December 1944 against Version 60: Paris falls in October 1940 at the median (November) and by August in 5 (none), Berlin has fallen in 6 (5) and Moscow in 4 (2); finished, supplied lines throw back 60% of attacks at 1.2 to 1.6 to 1 and 26% at 1.6 to 2.2 to 1 (59% and 23%); 280 attacks thrown back wore works down. Over 24 wars played as Germany on history's plan at Colonel, Berlin holds to the end of 1944 in 13 (12). A Soviet player who strikes first in June 1940 takes Berlin from Germany in 6 wars of 8 (4)."
+    }
+  };
+
+  // ../../data/campaign/aircampaigns.json
+  var aircampaigns_default = {
+    _about: "Ruling 236.2 (the design director, b545, b549, b550): air campaigns, the grand campaign with the switch g.flags.ac on. A campaign is a standing order to an air force, flown every month until it is called off. 'sky': the battle for the sky over a province is held once the side fighting for it has had 'own' (airwar.json sky.own, b446's 1.5 to 1) times the defender's aircraft in reach over it for 'months' months running, or has won the fight itself each of those months where the defender has radar over its own ground (b446's guard), or at once when the defender's airfields there are knocked out (every fighter group in reach grounded, its field wrecked, or worn to readiness 'knocked', the floor, on a field this side has bombed since last month); held, it stays held while the holder keeps 'keep' times the defender's numbers and fights there at least every 'idle' + 1 months. 'stock': the damage bombs leave in a province carries over (every raid, b549) and comes back each month at the historian's rate for the target ('repair', air-campaign-236: 'perMonth', and 'dispersed' for Germany from 'dispersal.from'), at most 'most' of its output held down. 'use' says which repair row each raid reads: a raid by night is an area raid on the city's works, a raid by day a precision raid on its works ('aircraft'), an oilfield's refinery, or the fuel plants of a works province when the campaign aims at oil. 'dispersal': from March 1944 Germany's works were spread out: each raid on them does 'cut' of what it did (the feature builder's reading: the historian gives no number), and they come back at the 'dispersed' rate. 'will': each city or capital whose works are held down wears its country's will to fight by 'per' times the share held down, 'most' at most for the country (b549: small; bombing never broke a nation by itself). 'book': the historian's 54 doctrine rows, as he wrote them, read two ways (b549): at the stops that follow the book, each row's 'fly' phases open and close on their months for every country the player does not fly, on the provinces named (a province not on the map is passed over); at stops 3 to 5 the computer-opponent builder's staff reads them as doctrine. A row without 'fly' says in 'book' why the book does not open it as a campaign. 'share' is the part of the country's groups of that kind in reach of the targets that the campaign takes (1 all); 'bombers' puts its bombers in reach on a fight for the sky (raids on the airfields); 'escort' is the part of its fighters in reach that ride with a day raid; 'aim' oil or rail; 'kind' sky over the row's own kind. 'bands': the loss bands the record's commanders bore, a raid's losses over what it sent (the historian's part 4).",
+    on: true,
+    onAbout: "A new grand campaign opens with air campaigns flown (g.flags.ac), as the design director ruled on 22 November (b623, b636). Read by name at the start (airCampaignsShipped). Scenarios, history campaigns and saved games keep what they had.",
+    sky: {
+      months: 2,
+      keep: 1,
+      knocked: 0.3,
+      idle: 1
+    },
+    stock: {
+      most: 0.6,
+      least: 5e-3
+    },
+    use: {
+      night: "city",
+      day: "aircraft",
+      oilfield: "refinery",
+      oil: "synthetic"
+    },
+    dispersal: {
+      nat: "GER",
+      from: 55,
+      cut: 0.75,
+      rows: [
+        "aircraft",
+        "engines",
+        "tanks"
+      ]
+    },
+    will: {
+      per: 0.02,
+      most: 0.04
+    },
+    bands: [
+      {
+        from: 0.15,
+        words: "Heavier than any air force bore: every one stopped within one to three raids."
+      },
+      {
+        from: 0.08,
+        words: "Heavy: air forces flying at this rate stopped or changed course within a month or two."
+      },
+      {
+        from: 0.03,
+        words: "Bearable while new aircraft and crews matched the losses: about 5% a raid could be kept up, 7% for long could not."
+      },
+      {
+        from: 0,
+        words: "Light: kept up as long as there were targets."
+      }
+    ],
+    repair: {
+      airfield: {
+        target: "airfield",
+        firstRaid: "runways and grass in hours to 2 days; aircraft and buildings in weeks",
+        perMonth: 1,
+        repeat: "Had to be hit again daily or near it to keep shut; Manston was given up after August 1940's raids",
+        conf: "high"
+      },
+      track: {
+        target: "rail track",
+        firstRaid: "hours to 2 days",
+        perMonth: 1,
+        repeat: "Cut lines stayed cut only under daily attack",
+        conf: "high"
+      },
+      yard: {
+        target: "rail yard",
+        firstRaid: "through traffic in 2 to 7 days; full in 2 to 4 weeks",
+        perMonth: 0.7,
+        repeat: "Under the Transportation Plan (April to June 1944) French rail traffic fell to about a third; German car loadings fell by about half from August to December 1944, and further by March 1945",
+        conf: "medium-high"
+      },
+      bridge: {
+        target: "large bridge",
+        firstRaid: "3 to 8 weeks (ferries and pontoons in days)",
+        perMonth: 0.35,
+        repeat: "The Seine bridges below Paris were all down by D-Day",
+        conf: "medium-high"
+      },
+      port: {
+        target: "port",
+        firstRaid: "most of its capacity in 1 to 3 weeks; months if sunken ships or mines block the channel",
+        perMonth: 0.5,
+        repeat: "Liverpool lost about half its capacity for some days after May 1941; Japan's ports were shut by mines in 1945, which repair could not lift",
+        conf: "medium"
+      },
+      aircraft: {
+        target: "aircraft works",
+        firstRaid: "most output back in 4 to 8 weeks; machine tools mostly survived the buildings",
+        perMonth: 0.4,
+        dispersed: 0.6,
+        repeat: "After Big Week (February 1944) German fighter output fell for about two months and then rose to its peak in September 1944",
+        conf: "medium-high"
+      },
+      engines: {
+        target: "aero-engine works",
+        firstRaid: "2 to 3 months",
+        perMonth: 0.3,
+        dispersed: 0.45,
+        repeat: "Japan's Nakajima engine works at Musashino kept building through eight raids from November 1944",
+        conf: "medium-low"
+      },
+      bearings: {
+        target: "ball bearings",
+        firstRaid: "3 to 6 months to full at the works",
+        perMonth: 0.25,
+        repeat: "Stocks, imports from Sweden and Switzerland, redesign and dispersal meant no weapon went short (the bombing survey)",
+        conf: "medium-high"
+      },
+      tanks: {
+        target: "tank and vehicle works",
+        firstRaid: "4 to 8 weeks",
+        perMonth: 0.4,
+        dispersed: 0.6,
+        repeat: "German tank output peaked in December 1944; Gorky's motor works, bombed in June 1943, was back in about three months",
+        conf: "medium"
+      },
+      synthetic: {
+        target: "oil, synthetic plant",
+        firstRaid: "partial in 2 to 3 weeks, full in 4 to 8",
+        perMonth: 0.3,
+        repeat: "Under raids every 2 to 4 weeks from 12 May 1944 it never came back: German aviation fuel fell from about 175,000 tons in April 1944 to about 10,000 tons by September, with some recovery in November before falling again; 350,000 men were put to repairs",
+        conf: "high"
+      },
+      refinery: {
+        target: "oil, refinery",
+        firstRaid: "2 to 6 weeks",
+        perMonth: 0.5,
+        repeat: "Ploesti had spare capacity and was back above its old output within weeks of 1 Aug 1943; the 1944 campaign, raid after raid, cut it to about a fifth by August",
+        conf: "medium-high"
+      },
+      steel: {
+        target: "steel and coke",
+        firstRaid: "1 to 3 months",
+        perMonth: 0.35,
+        repeat: "The Battle of the Ruhr (1943) cost Germany some months' growth in steel, not its supply",
+        conf: "medium-low"
+      },
+      power: {
+        target: "power station",
+        firstRaid: "1 to 3 months",
+        perMonth: 0.35,
+        repeat: "Seldom attacked; the bombing survey judged the German grid a missed target",
+        conf: "medium-low"
+      },
+      city: {
+        target: "city works (area raid)",
+        firstRaid: "main works back to about 80% in 2 to 5 months",
+        perMonth: 0.25,
+        repeat: "Hamburg (July 1943) was back to about 80% in five months; Coventry's works mostly back in 6 to 8 weeks after November 1940. Japan's cities burned in 1945 did not come back, short of everything",
+        conf: "medium"
+      }
+    },
+    book: [
+      {
+        nat: "GER",
+        kind: "sky",
+        what: "Opening blow on the enemy's airfields on the first days of each main offensive",
+        targets: "airfields",
+        time: "day",
+        from: 1,
+        to: 65,
+        conf: "high",
+        note: "Poland 1, Norway 8, the West 9, the Balkans 20, the Soviet Union 22 (the largest), Blue 34, Citadel 47, and Bodenplatte on 1 Jan 1945 (65). Flown the day the offensive opens, then the sky over the main effort.",
+        book: "The staff flies it: its fight for the sky over the front where its offensive opens (raidStaff)."
+      },
+      {
+        nat: "GER",
+        kind: "support",
+        what: "Close support and interdiction behind every main offensive",
+        targets: "troops, rail, bridges",
+        time: "day",
+        from: 1,
+        to: 69,
+        conf: "high",
+        note: "The Luftwaffe's main work all war. Night ground-attack units from October 1943 (50) in the east.",
+        book: "The staff flies it: close support behind its main effort (closeStaff) and its raids on the front."
+      },
+      {
+        nat: "GER",
+        kind: "sea",
+        what: "Anti-shipping and mining off Britain and in the Atlantic",
+        targets: "shipping, ports, mines",
+        time: "both",
+        from: 3,
+        to: 50,
+        conf: "high",
+        note: "Magnetic mines from November 1939 (3); the Channel convoys in July and early August 1940 (11-12); Fw 200s over the Atlantic from August 1940 (12) to late 1943 (50).",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "GER",
+        kind: "sky",
+        what: "The battle for the sky over southern England",
+        targets: "Fighter Command's airfields, radar, aircraft works",
+        time: "day",
+        from: 12,
+        to: 13,
+        conf: "high",
+        theatre: "GER-west",
+        share: [
+          [
+            12,
+            0.85
+          ]
+        ],
+        bases: [
+          [
+            12,
+            [
+              "Calais",
+              "Somme",
+              "Rouen",
+              "Normandy",
+              "Cotentin",
+              "Paris",
+              "Orleans",
+              "Brittany",
+              "Flanders",
+              "Brussels",
+              "Holland",
+              "Sorlandet",
+              "Jutland"
+            ]
+          ]
+        ],
+        note: "Adlertag 13 Aug 1940 to 6 Sep 1940. Escorted.",
+        fly: [
+          {
+            from: 12,
+            to: 12,
+            regions: [
+              "Kent",
+              "Hampshire",
+              "London"
+            ],
+            bombers: true
+          },
+          {
+            from: 13,
+            to: 13,
+            regions: [
+              "Kent",
+              "Hampshire",
+              "London"
+            ],
+            bombers: true
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "London and the ports by day",
+        targets: "London's docks and works",
+        time: "day",
+        from: 13,
+        to: 14,
+        conf: "high",
+        theatre: "GER-west",
+        share: [
+          [
+            13,
+            0.8
+          ]
+        ],
+        bases: [
+          [
+            13,
+            [
+              "Calais",
+              "Somme",
+              "Rouen",
+              "Normandy",
+              "Cotentin",
+              "Paris",
+              "Orleans",
+              "Brittany",
+              "Flanders",
+              "Brussels",
+              "Holland",
+              "Sorlandet",
+              "Jutland"
+            ]
+          ]
+        ],
+        note: "7 Sep 1940 to the end of September; fighter-bombers only by day in October 1940 (14).",
+        fly: [
+          {
+            from: 13,
+            to: 14,
+            regions: [
+              "London"
+            ],
+            escort: 0.5
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "The night Blitz on Britain",
+        targets: "London, then the ports and the industrial towns (Coventry 14 Nov 1940, Liverpool, Bristol, Plymouth, Clydeside, Birmingham)",
+        time: "night",
+        from: 13,
+        to: 21,
+        conf: "high",
+        theatre: "GER-west",
+        share: [
+          [
+            13,
+            0.5
+          ]
+        ],
+        bases: [
+          [
+            13,
+            [
+              "Paris",
+              "Orleans",
+              "Rouen",
+              "Somme",
+              "Normandy",
+              "Brittany",
+              "Brussels",
+              "Flanders",
+              "Holland"
+            ]
+          ]
+        ],
+        note: "7 Sep 1940 to 10/11 May 1941. Ended as the bombers went east for Barbarossa.",
+        fly: [
+          {
+            from: 13,
+            to: 21,
+            regions: [
+              "London",
+              "Midlands",
+              "Lancashire",
+              "Clydeside",
+              "Hampshire",
+              "West Country",
+              "Yorkshire",
+              "Northumbria"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "sea",
+        what: "The Mediterranean: Malta and the convoys",
+        targets: "Malta's airfields and harbour, shipping",
+        time: "both",
+        from: 17,
+        to: 38,
+        conf: "high",
+        theatre: "GER-med",
+        share: [
+          [
+            17,
+            0.7
+          ],
+          [
+            28,
+            0.6
+          ]
+        ],
+        bases: [
+          [
+            17,
+            [
+              "Sicily"
+            ]
+          ],
+          [
+            22,
+            [
+              "Athens",
+              "Crete"
+            ]
+          ],
+          [
+            28,
+            [
+              "Sicily"
+            ]
+          ],
+          [
+            34,
+            [
+              "Crete",
+              "Derna",
+              "Benghazi"
+            ]
+          ],
+          [
+            38,
+            [
+              "Sicily"
+            ]
+          ]
+        ],
+        note: "X Fliegerkorps January to May 1941 (17-21); II Fliegerkorps December 1941 to May 1942 (28-33); the last blitz in October 1942 (38).",
+        fly: [
+          {
+            from: 17,
+            to: 21,
+            regions: [
+              "Malta"
+            ],
+            kind: "sky",
+            bombers: true
+          },
+          {
+            from: 28,
+            to: 33,
+            regions: [
+              "Malta"
+            ],
+            kind: "sky",
+            bombers: true
+          },
+          {
+            from: 38,
+            to: 38,
+            regions: [
+              "Malta"
+            ],
+            kind: "sky",
+            bombers: true
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "Moscow by night",
+        targets: "Moscow",
+        time: "night",
+        from: 23,
+        to: 28,
+        conf: "high",
+        theatre: "GER-east",
+        share: [
+          [
+            23,
+            0.06
+          ],
+          [
+            25,
+            0.02
+          ]
+        ],
+        bases: [
+          [
+            23,
+            [
+              "Minsk",
+              "Vitebsk",
+              "Mogilev"
+            ]
+          ],
+          [
+            26,
+            [
+              "Smolensk",
+              "Vyazma",
+              "Bryansk"
+            ]
+          ]
+        ],
+        note: "From 21/22 Jul 1941; small after the first weeks.",
+        fly: [
+          {
+            from: 23,
+            to: 28,
+            regions: [
+              "Moscow"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "sea",
+        what: "The Arctic convoys",
+        targets: "shipping",
+        time: "both",
+        from: 31,
+        to: 37,
+        conf: "high",
+        note: "March to September 1942 (PQ 17 in July, PQ 18 in September).",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "Reprisal raids on English towns (the Baedeker raids)",
+        targets: "historic towns",
+        time: "night",
+        from: 32,
+        to: 34,
+        conf: "high",
+        theatre: "GER-west",
+        share: [
+          [
+            32,
+            0.15
+          ]
+        ],
+        bases: [
+          [
+            32,
+            [
+              "Holland",
+              "Brabant",
+              "Brussels",
+              "Somme",
+              "Rouen"
+            ]
+          ]
+        ],
+        note: "April to June 1942, after Luebeck.",
+        fly: [
+          {
+            from: 32,
+            to: 34,
+            regions: [
+              "West Country",
+              "Yorkshire",
+              "Kent"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "Fighter-bomber hit-and-run raids on the south coast",
+        targets: "coastal towns, rail",
+        time: "day",
+        from: 31,
+        to: 46,
+        conf: "medium-high",
+        theatre: "GER-west",
+        share: [
+          [
+            31,
+            0.05
+          ]
+        ],
+        bases: [
+          [
+            31,
+            [
+              "Calais",
+              "Somme",
+              "Normandy",
+              "Cotentin"
+            ]
+          ]
+        ],
+        note: "March 1942 to June 1943.",
+        fly: [
+          {
+            from: 31,
+            to: 46,
+            regions: [
+              "Kent",
+              "Hampshire",
+              "West Country"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "Soviet war industry by night",
+        targets: "Gorky's motor and tank works, Yaroslavl's rubber, Saratov's refinery",
+        time: "night",
+        from: 46,
+        to: 46,
+        conf: "medium-high",
+        theatre: "GER-east",
+        share: [
+          [
+            46,
+            0.08
+          ]
+        ],
+        bases: [
+          [
+            46,
+            [
+              "Bryansk",
+              "Orel",
+              "Smolensk"
+            ]
+          ]
+        ],
+        note: "June 1943 only, then the bombers went back to the front.",
+        fly: [
+          {
+            from: 46,
+            to: 46,
+            regions: [
+              "Gorky",
+              "Yaroslavl",
+              "Saratov"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "London by night again (Operation Steinbock)",
+        targets: "London",
+        time: "night",
+        from: 53,
+        to: 57,
+        conf: "high",
+        theatre: "GER-west",
+        share: [
+          [
+            53,
+            0.15
+          ],
+          [
+            54,
+            0.125
+          ],
+          [
+            55,
+            0.1
+          ],
+          [
+            56,
+            0.075
+          ],
+          [
+            57,
+            0.05
+          ]
+        ],
+        bases: [
+          [
+            53,
+            [
+              "Somme",
+              "Champagne",
+              "Brussels",
+              "Brabant",
+              "Holland",
+              "Brittany"
+            ]
+          ]
+        ],
+        note: "21/22 Jan 1944 to May 1944.",
+        fly: [
+          {
+            from: 53,
+            to: 57,
+            regions: [
+              "London"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "GER",
+        kind: "strategic",
+        what: "Flying bombs on London and Antwerp (flown by a Luftwaffe flak regiment)",
+        targets: "London, Antwerp",
+        time: "both",
+        from: 58,
+        to: 67,
+        conf: "high",
+        note: "13 Jun 1944 to March 1945. The rockets of September 1944 on were the army's.",
+        book: "No air groups: a flak regiment flew the flying bombs, a late weapon (ruling 230)."
+      },
+      {
+        nat: "GER",
+        kind: "defence",
+        what: "Defence of the Reich",
+        targets: "night fighters, then day fighters at home",
+        time: "both",
+        from: 11,
+        to: 69,
+        conf: "high",
+        note: "Night fighters from July 1940; day fighters against the Americans from 1943; home defence first from autumn 1943 (50), fighters taken from the fronts.",
+        book: "Home defence is what fighter groups on patrol do: no campaign."
+      },
+      {
+        nat: "UK",
+        kind: "strategic",
+        what: "Day raids on the German fleet only",
+        targets: "warships at sea and in harbour",
+        time: "day",
+        from: 1,
+        to: 4,
+        conf: "high",
+        note: "Stopped after 18 Dec 1939.",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "UK",
+        kind: "strategic",
+        what: "Leaflets and reconnaissance at night",
+        targets: "none (leaflets)",
+        time: "night",
+        from: 1,
+        to: 9,
+        conf: "high",
+        note: "Bombs first fell on Germany on land on 19/20 Mar 1940 (Sylt).",
+        book: "No bombs: leaflets only."
+      },
+      {
+        nat: "UK",
+        kind: "strategic",
+        what: "Night bombing of Germany",
+        targets: "oil, rail and aircraft works (1940-41); industrial cities (area bombing from February 1942); the Ruhr (March to July 1943); Hamburg (July and August 1943); Berlin (November 1943 to March 1944); oil and transport (June 1944 to April 1945)",
+        time: "night",
+        from: 9,
+        to: 69,
+        conf: "high",
+        theatre: "UK-home",
+        share: [
+          [
+            9,
+            0.25
+          ],
+          [
+            17,
+            0.3
+          ],
+          [
+            41,
+            0.38
+          ],
+          [
+            56,
+            0.114
+          ],
+          [
+            59,
+            0.38
+          ],
+          [
+            60,
+            0.23
+          ],
+          [
+            65,
+            0.27
+          ]
+        ],
+        bases: [
+          [
+            9,
+            [
+              "Lincolnshire",
+              "Yorkshire",
+              "East Anglia"
+            ]
+          ]
+        ],
+        note: "From 15/16 May 1940. Oil first in January to March 1941. The area directive of 14 Feb 1942, Harris from 22 Feb (30). Under SHAEF's direction for the invasion April to September 1944.",
+        fly: [
+          {
+            from: 9,
+            to: 29,
+            regions: [
+              "Ruhr",
+              "Rhineland",
+              "Hamburg",
+              "Bremen",
+              "Westphalia"
+            ]
+          },
+          {
+            from: 30,
+            to: 42,
+            regions: [
+              "Ruhr",
+              "Rhineland",
+              "Hamburg",
+              "Bremen",
+              "Westphalia",
+              "Frankfurt",
+              "Hanover"
+            ]
+          },
+          {
+            from: 43,
+            to: 46,
+            regions: [
+              "Ruhr",
+              "Westphalia",
+              "Rhineland"
+            ]
+          },
+          {
+            from: 47,
+            to: 48,
+            regions: [
+              "Hamburg",
+              "Ruhr"
+            ]
+          },
+          {
+            from: 49,
+            to: 50,
+            regions: [
+              "Hanover",
+              "Frankfurt",
+              "Ruhr",
+              "Rhineland"
+            ]
+          },
+          {
+            from: 51,
+            to: 55,
+            regions: [
+              "Berlin"
+            ]
+          },
+          {
+            from: 58,
+            to: 63,
+            regions: [
+              "Ruhr",
+              "Rhineland",
+              "Westphalia"
+            ],
+            aim: "oil"
+          },
+          {
+            from: 64,
+            to: 69,
+            regions: [
+              "Ruhr",
+              "Rhineland",
+              "Saxony",
+              "Dresden",
+              "Magdeburg"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "UK",
+        kind: "sky",
+        what: "Fighter sweeps over France to draw the Luftwaffe (Circus, Rhubarb)",
+        targets: "the German fighters in France",
+        time: "day",
+        from: 17,
+        to: 46,
+        conf: "medium-high",
+        theatre: "UK-home",
+        share: [
+          [
+            17,
+            0.2
+          ],
+          [
+            29,
+            0.15
+          ],
+          [
+            41,
+            0.1
+          ]
+        ],
+        bases: [
+          [
+            17,
+            [
+              "Kent",
+              "London",
+              "Hampshire"
+            ]
+          ]
+        ],
+        note: "From January 1941; cut back on 13 Nov 1941 (27); smaller in 1942 (Dieppe, August 1942, the biggest day); merged into the invasion's air plan in 1943.",
+        fly: [
+          {
+            from: 17,
+            to: 27,
+            regions: [
+              "Calais",
+              "Somme"
+            ]
+          },
+          {
+            from: 28,
+            to: 46,
+            regions: [
+              "Calais"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "UK",
+        kind: "strategic",
+        what: "Day raids by Bomber Command, with fighter escort",
+        targets: "oil, rail, defences, cities",
+        time: "day",
+        from: 60,
+        to: 69,
+        conf: "medium-high",
+        theatre: "UK-home",
+        share: [
+          [
+            60,
+            0.15
+          ]
+        ],
+        bases: [
+          [
+            60,
+            [
+              "Lincolnshire",
+              "Yorkshire",
+              "East Anglia"
+            ]
+          ]
+        ],
+        note: "From August 1944 (Homberg, 27 Aug), when the escort and the Allied sky allowed.",
+        fly: [
+          {
+            from: 60,
+            to: 69,
+            regions: [
+              "Ruhr",
+              "Rhineland"
+            ],
+            aim: "oil",
+            escort: 0.5
+          }
+        ]
+      },
+      {
+        nat: "UK",
+        kind: "sky",
+        what: "Home defence with radar and Fighter Command",
+        targets: "the sky over Britain",
+        time: "both",
+        from: 1,
+        to: 69,
+        conf: "high",
+        note: "The Battle of Britain July to October 1940 (11-14).",
+        book: "Home defence is what fighter groups on patrol do: no campaign."
+      },
+      {
+        nat: "UK",
+        kind: "support",
+        what: "Ground support and interdiction (the tactical air forces)",
+        targets: "troops, rail, bridges, airfields",
+        time: "day",
+        from: 9,
+        to: 69,
+        conf: "high",
+        note: "France May 1940; the Western Desert from June 1940 and as a tactical air force from Crusader, November 1941 (27); Tunisia, Sicily, Italy 1943-45; 2nd Tactical Air Force from June 1943 (46) for Normandy and on; Burma 1943-45.",
+        book: "The staff flies it: support behind its main effort."
+      },
+      {
+        nat: "UK",
+        kind: "interdiction",
+        what: "Rail and bridges in France before the invasion (the Transportation Plan)",
+        targets: "rail yards, bridges",
+        time: "both",
+        from: 56,
+        to: 58,
+        conf: "high",
+        theatre: "UK-home",
+        share: [
+          [
+            56,
+            0.4
+          ]
+        ],
+        bases: [
+          [
+            56,
+            [
+              "Lincolnshire",
+              "Yorkshire",
+              "East Anglia",
+              "Champagne",
+              "Lille",
+              "Flanders",
+              "Kent",
+              "Hampshire",
+              "Normandy",
+              "Brussels",
+              "Brabant",
+              "Gelderland",
+              "Rhineland",
+              "Westphalia"
+            ]
+          ]
+        ],
+        note: "April to June 1944.",
+        fly: [
+          {
+            from: 56,
+            to: 58,
+            regions: [
+              "Rouen",
+              "Paris",
+              "Somme",
+              "Calais",
+              "Lille",
+              "Orleans"
+            ],
+            aim: "rail"
+          }
+        ]
+      },
+      {
+        nat: "UK",
+        kind: "sea",
+        what: "Coastal Command against the U-boats and shipping; the Malta strikes on the Libyan convoys",
+        targets: "U-boats, shipping",
+        time: "both",
+        from: 1,
+        to: 69,
+        conf: "high",
+        note: "Malta's strikes late 1940 to 1943; Coastal Command's strike wings from November 1942 (39).",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "USA",
+        kind: "strategic",
+        what: "Day precision bombing from England (the Eighth Air Force)",
+        targets: "U-boat bases, rail, airfields in France (August 1942 to January 1943); Germany from 27 Jan 1943; aircraft works and ball bearings (from June 1943); oil (from 12 May 1944); transport (late 1944-45)",
+        time: "day",
+        from: 36,
+        to: 69,
+        conf: "high",
+        theatre: "USA-eur",
+        share: [
+          [
+            36,
+            0.35
+          ],
+          [
+            41,
+            0.4
+          ]
+        ],
+        bases: [
+          [
+            36,
+            [
+              "East Anglia",
+              "Midlands"
+            ]
+          ]
+        ],
+        note: "First raid 17 Aug 1942 (Rouen). Deep raids beyond escort June to 14 Oct 1943 (46-50), then shallow raids under escort; deep again only with escorts from 11 Jan 1944 (53); Big Week 20-25 Feb 1944 (54); Berlin from March 1944 (55).",
+        fly: [
+          {
+            from: 36,
+            to: 40,
+            regions: [
+              "Nantes",
+              "Rouen",
+              "Lille"
+            ]
+          },
+          {
+            from: 41,
+            to: 45,
+            regions: [
+              "Bremen",
+              "Hamburg",
+              "Ruhr"
+            ]
+          },
+          {
+            from: 46,
+            to: 52,
+            regions: [
+              "Franconia",
+              "Bavaria",
+              "Hanover",
+              "Ruhr"
+            ]
+          },
+          {
+            from: 53,
+            to: 56,
+            regions: [
+              "Hanover",
+              "Saxony",
+              "Franconia",
+              "Bavaria",
+              "Berlin"
+            ],
+            escort: 0.6
+          },
+          {
+            from: 57,
+            to: 63,
+            regions: [
+              "Saxony",
+              "Magdeburg",
+              "Ruhr",
+              "Upper Silesia"
+            ],
+            aim: "oil",
+            escort: 0.6
+          },
+          {
+            from: 64,
+            to: 69,
+            regions: [
+              "Rhineland",
+              "Frankfurt",
+              "Ruhr",
+              "Saxony"
+            ],
+            aim: "rail",
+            escort: 0.6
+          }
+        ]
+      },
+      {
+        nat: "USA",
+        kind: "strategic",
+        what: "Day precision bombing from Italy (the Fifteenth Air Force)",
+        targets: "south German and Austrian aircraft works; Ploesti oil (April to August 1944); rail",
+        time: "day",
+        from: 51,
+        to: 69,
+        conf: "high",
+        theatre: "USA-eur",
+        share: [
+          [
+            51,
+            0.15
+          ],
+          [
+            53,
+            0.2
+          ]
+        ],
+        bases: [
+          [
+            48,
+            [
+              "Benghazi"
+            ]
+          ],
+          [
+            51,
+            [
+              "Tunis",
+              "Apulia"
+            ]
+          ],
+          [
+            52,
+            [
+              "Apulia"
+            ]
+          ]
+        ],
+        note: "From November 1943. The one low-level raid on Ploesti from Libya was 1 Aug 1943 (48).",
+        fly: [
+          {
+            from: 51,
+            to: 55,
+            regions: [
+              "Vienna",
+              "Upper Austria",
+              "Bavaria"
+            ]
+          },
+          {
+            from: 56,
+            to: 60,
+            regions: [
+              "Ploiesti"
+            ],
+            aim: "oil"
+          },
+          {
+            from: 61,
+            to: 69,
+            regions: [
+              "Vienna",
+              "Upper Austria",
+              "Bavaria",
+              "Moravia"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "USA",
+        kind: "support",
+        what: "Tactical air forces: ground support and interdiction",
+        targets: "troops, rail, bridges, airfields",
+        time: "day",
+        from: 39,
+        to: 69,
+        conf: "high",
+        note: "North Africa from Torch (39); Italy, Strangle March to May 1944 (55-57); the Ninth Air Force from October 1943 (50), the Seine bridges May 1944 (57), Normandy and on.",
+        book: "The staff flies it: support behind its main effort."
+      },
+      {
+        nat: "USA",
+        kind: "sky",
+        what: "The battle for the sky over New Guinea and the Solomons",
+        targets: "Japanese airfields and air groups; shipping",
+        time: "day",
+        from: 36,
+        to: 58,
+        conf: "high",
+        theatre: "USA-pac",
+        share: [
+          [
+            36,
+            0.5
+          ],
+          [
+            41,
+            0.55
+          ],
+          [
+            53,
+            0.35
+          ]
+        ],
+        bases: [
+          [
+            36,
+            [
+              "Port Moresby",
+              "Milne Bay",
+              "Guadalcanal",
+              "Espiritu Santo"
+            ]
+          ],
+          [
+            40,
+            [
+              "Buna"
+            ]
+          ],
+          [
+            46,
+            [
+              "Lae",
+              "New Georgia"
+            ]
+          ],
+          [
+            51,
+            [
+              "Bougainville"
+            ]
+          ],
+          [
+            54,
+            [
+              "Hollandia",
+              "Biak"
+            ]
+          ]
+        ],
+        note: "Guadalcanal from August 1942 (36); the Fifth Air Force from September 1942; Bismarck Sea March 1943 (43); Wewak August 1943 (48); Rabaul October and November 1943 (50-51).",
+        fly: [
+          {
+            from: 36,
+            to: 58,
+            regions: [
+              "Lae",
+              "Wewak",
+              "Rabaul"
+            ],
+            bombers: true
+          }
+        ]
+      },
+      {
+        nat: "USA",
+        kind: "sky",
+        what: "Carrier strikes on enemy airfields before each landing",
+        targets: "airfields",
+        time: "day",
+        from: 51,
+        to: 72,
+        conf: "high",
+        note: "From Tarawa, November 1943 (51); the Japanese home islands from February 1945 (66). (The Doolittle raid, 18 Apr 1942, was a single raid, not a campaign.)",
+        book: "Carrier wings: the sea staff flies them."
+      },
+      {
+        nat: "USA",
+        kind: "strategic",
+        what: "B-29s from China and India (XX Bomber Command)",
+        targets: "steel and coke (Yawata, Anshan), aircraft (Omura), Formosa; Southeast Asia's ports and rail from India",
+        time: "day",
+        from: 58,
+        to: 67,
+        conf: "high",
+        theatre: "USA-pac",
+        share: [
+          [
+            58,
+            0.06
+          ]
+        ],
+        bases: [
+          [
+            58,
+            [
+              "Kharagpur",
+              "Chengtu"
+            ]
+          ],
+          [
+            66,
+            [
+              "Kharagpur"
+            ]
+          ]
+        ],
+        note: "15 Jun 1944 to 15 Jan 1945 from Chengtu; from India only, February and March 1945.",
+        fly: [
+          {
+            from: 58,
+            to: 65,
+            regions: [
+              "Fukuoka",
+              "Anshan",
+              "Formosa"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "USA",
+        kind: "strategic",
+        what: "B-29s from the Marianas (XXI Bomber Command)",
+        targets: "aircraft engine and airframe works by day (24 Nov 1944 to February 1945); cities by night with fire (from 9/10 Mar 1945); oil refineries by night (June to August 1945); mines in Japan's waters (from 27 Mar 1945)",
+        time: "both",
+        from: 63,
+        to: 72,
+        conf: "high",
+        theatre: "USA-pac",
+        share: [
+          [
+            63,
+            0.1
+          ],
+          [
+            65,
+            0.25
+          ]
+        ],
+        bases: [
+          [
+            63,
+            [
+              "Saipan",
+              "Guam"
+            ]
+          ],
+          [
+            68,
+            [
+              "Saipan",
+              "Guam",
+              "Iwo Jima"
+            ]
+          ]
+        ],
+        note: "Day precision from high altitude to February 1945 (63-66); low-level night fire raids from March 1945 (67); day precision again under P-51s from Iwo Jima from April 1945 (68).",
+        fly: [
+          {
+            from: 63,
+            to: 66,
+            regions: [
+              "Tokyo",
+              "Nagoya",
+              "Osaka"
+            ]
+          },
+          {
+            from: 67,
+            to: 72,
+            regions: [
+              "Tokyo",
+              "Nagoya",
+              "Osaka",
+              "Fukuoka"
+            ],
+            night: true
+          }
+        ]
+      },
+      {
+        nat: "SOV",
+        kind: "strategic",
+        what: "Day bombing of Finland (the Winter War)",
+        targets: "Helsinki, towns, rail",
+        time: "day",
+        from: 3,
+        to: 7,
+        conf: "high",
+        theatre: "SOV",
+        share: [
+          [
+            3,
+            0.25
+          ]
+        ],
+        bases: [
+          [
+            3,
+            [
+              "Leningrad",
+              "Estonia"
+            ]
+          ]
+        ],
+        note: "30 Nov 1939 to 13 Mar 1940.",
+        fly: [
+          {
+            from: 3,
+            to: 7,
+            regions: [
+              "Helsinki"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "SOV",
+        kind: "support",
+        what: "Ground attack and the battle for the sky over the front",
+        targets: "troops, guns, crossings; the sky over the main effort",
+        time: "day",
+        from: 22,
+        to: 72,
+        conf: "high",
+        note: "The Soviet air war's core. Air armies from May 1942 (33). The sky over the main effort held from the Kuban and Kursk, spring and summer 1943 (44-47); full command of it in Bagration, June 1944 (58).",
+        book: "The staff flies it: support behind its main effort."
+      },
+      {
+        nat: "SOV",
+        kind: "sky",
+        what: "Strikes on enemy airfields as an operation opens",
+        targets: "airfields",
+        time: "day",
+        from: 22,
+        to: 72,
+        conf: "medium",
+        note: "Finland 25 Jun 1941; the failed dawn strike at Kursk 5 Jul 1943 (47); Bagration (58); the Vistula-Oder (65); Manchuria August 1945 (72).",
+        book: "The staff flies it: its fight for the sky over the front where its offensive opens."
+      },
+      {
+        nat: "SOV",
+        kind: "strategic",
+        what: "Long-range bombing by night",
+        targets: "rail junctions and airfields behind the front; now and then cities in reach (Berlin, Koenigsberg, Danzig, Helsinki, Budapest, Bucharest)",
+        time: "night",
+        from: 22,
+        to: 69,
+        conf: "medium-high",
+        theatre: "SOV",
+        share: [
+          [
+            22,
+            0.1
+          ],
+          [
+            65,
+            0.08
+          ]
+        ],
+        bases: [
+          [
+            22,
+            [
+              "Crimea"
+            ]
+          ],
+          [
+            24,
+            [
+              "Estonia"
+            ]
+          ],
+          [
+            26,
+            [
+              "Moscow",
+              "Ryazan",
+              "Tula",
+              "Yaroslavl"
+            ]
+          ],
+          [
+            51,
+            [
+              "Kursk",
+              "Kharkov",
+              "Smolensk"
+            ]
+          ]
+        ],
+        note: "Naval aviation on Romanian oil and Constanta June to August 1941 (22-24); Berlin from Saaremaa August and early September 1941 (24-25); long-range aviation as its own command from March 1942 (31); Koenigsberg April 1943 (44); Helsinki February 1944 (54). Day raids with long-range bombers ended in summer 1941 (see stand-downs).",
+        fly: [
+          {
+            from: 24,
+            to: 25,
+            regions: [
+              "Berlin"
+            ]
+          },
+          {
+            from: 44,
+            to: 44,
+            regions: [
+              "Konigsberg"
+            ]
+          },
+          {
+            from: 54,
+            to: 54,
+            regions: [
+              "Helsinki"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "SOV",
+        kind: "support",
+        what: "Night harassment over the front with light biplanes",
+        targets: "troops, rear areas",
+        time: "night",
+        from: 26,
+        to: 69,
+        conf: "high",
+        note: "From late 1941.",
+        book: "The staff flies it: support over the front."
+      },
+      {
+        nat: "SOV",
+        kind: "sea",
+        what: "Anti-shipping in the Baltic, Black Sea and Arctic",
+        targets: "shipping",
+        time: "day",
+        from: 22,
+        to: 69,
+        conf: "medium",
+        note: "Strongest 1944.",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "JAP",
+        kind: "strategic",
+        what: "Day bombing of Chinese cities",
+        targets: "Chongqing and the cities of the interior",
+        time: "day",
+        from: 1,
+        to: 48,
+        conf: "high",
+        theatre: "JAP",
+        share: [
+          [
+            1,
+            0.4
+          ],
+          [
+            17,
+            0.3
+          ],
+          [
+            25,
+            0.05
+          ]
+        ],
+        bases: [
+          [
+            1,
+            [
+              "Hankow"
+            ]
+          ],
+          [
+            5,
+            [
+              "Hankow",
+              "Loyang"
+            ]
+          ]
+        ],
+        note: "From February 1938 (before turn 1) to August 1943. Peaks: Operation 101, May to September 1940 (9-13), with the new long-range Zero escort from August 1940; Operation 102, July and August 1941 (23-24).",
+        fly: [
+          {
+            from: 1,
+            to: 48,
+            regions: [
+              "Chungking"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "JAP",
+        kind: "sky",
+        what: "Opening blows on enemy airfields",
+        targets: "Pearl Harbor, Clark Field, Malaya's and Java's airfields",
+        time: "day",
+        from: 28,
+        to: 30,
+        conf: "high",
+        note: "7-8 Dec 1941 (28), then airfield by airfield through the south to February 1942 (30).",
+        book: "Japan's opening blows belong to its opening (ruling 234)."
+      },
+      {
+        nat: "JAP",
+        kind: "sea",
+        what: "Anti-shipping by land-based torpedo bombers and the carriers",
+        targets: "warships and shipping; Darwin's harbour (19 Feb 1942); Colombo and Trincomalee (April 1942)",
+        time: "day",
+        from: 28,
+        to: 44,
+        conf: "high",
+        note: "Force Z sunk 10 Dec 1941.",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "JAP",
+        kind: "sky",
+        what: "The battle for the sky over New Guinea and the Solomons",
+        targets: "Port Moresby, Henderson Field, Allied air groups and shipping",
+        time: "day",
+        from: 30,
+        to: 52,
+        conf: "high",
+        theatre: "JAP",
+        share: [
+          [
+            30,
+            0.3
+          ],
+          [
+            41,
+            0.45
+          ],
+          [
+            53,
+            0.2
+          ]
+        ],
+        bases: [
+          [
+            30,
+            [
+              "Rabaul",
+              "Lae"
+            ]
+          ],
+          [
+            36,
+            [
+              "Rabaul",
+              "Bougainville"
+            ]
+          ],
+          [
+            45,
+            [
+              "Wewak",
+              "Rabaul",
+              "Bougainville"
+            ]
+          ]
+        ],
+        note: "Port Moresby from February 1942 (30); Guadalcanal August 1942 to February 1943 (36-42); I-Go, 7-16 Apr 1943 (44); RO-Go, November 1943 (51).",
+        fly: [
+          {
+            from: 30,
+            to: 52,
+            regions: [
+              "Port Moresby",
+              "Guadalcanal"
+            ],
+            bombers: true
+          }
+        ]
+      },
+      {
+        nat: "JAP",
+        kind: "strategic",
+        what: "Raids on northern Australia",
+        targets: "Darwin and its airfields",
+        time: "both",
+        from: 30,
+        to: 51,
+        conf: "high",
+        theatre: "JAP",
+        share: [
+          [
+            30,
+            0.03
+          ]
+        ],
+        bases: [
+          [
+            30,
+            [
+              "Koepang",
+              "Kendari",
+              "Ambon"
+            ]
+          ]
+        ],
+        note: "19 Feb 1942 to November 1943, 64 raids on Darwin.",
+        fly: [
+          {
+            from: 30,
+            to: 51,
+            regions: [
+              "Darwin"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "JAP",
+        kind: "strategic",
+        what: "Raids on Calcutta",
+        targets: "Calcutta's docks",
+        time: "both",
+        from: 40,
+        to: 52,
+        conf: "medium-high",
+        theatre: "JAP",
+        share: [
+          [
+            40,
+            0.03
+          ]
+        ],
+        bases: [
+          [
+            40,
+            [
+              "Rangoon",
+              "Meiktila",
+              "Yenangyaung"
+            ]
+          ]
+        ],
+        note: "At night in December 1942 (40); by day in December 1943 (52).",
+        fly: [
+          {
+            from: 40,
+            to: 40,
+            regions: [
+              "Calcutta"
+            ],
+            night: true
+          },
+          {
+            from: 52,
+            to: 52,
+            regions: [
+              "Calcutta"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "JAP",
+        kind: "support",
+        what: "Army air support in China and Burma",
+        targets: "troops, airfields",
+        time: "day",
+        from: 1,
+        to: 72,
+        conf: "medium",
+        note: "Small. Its largest was Ichi-Go, April to December 1944 (56-64).",
+        book: "The staff flies it: support behind its main effort."
+      },
+      {
+        nat: "JAP",
+        kind: "sea",
+        what: "Special attack (suicide) on ships",
+        targets: "ships",
+        time: "day",
+        from: 62,
+        to: 72,
+        conf: "high",
+        note: "From 25 Oct 1944 (Leyte); the mass Kikusui raids off Okinawa, 6 Apr to 22 Jun 1945 (68-70).",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "JAP",
+        kind: "defence",
+        what: "Home defence against the B-29s",
+        targets: "the sky over Japan",
+        time: "both",
+        from: 58,
+        to: 72,
+        conf: "medium",
+        note: "From June 1944; weak, and fighters were held back for the invasion from mid-1945.",
+        book: "Home defence is what fighter groups on patrol do: no campaign."
+      },
+      {
+        nat: "ITA",
+        kind: "strategic",
+        what: "Malta",
+        targets: "airfields, harbour, dockyard",
+        time: "both",
+        from: 10,
+        to: 38,
+        conf: "high",
+        theatre: "ITA",
+        share: [
+          [
+            10,
+            0.12
+          ],
+          [
+            17,
+            0.1
+          ],
+          [
+            29,
+            0.15
+          ]
+        ],
+        bases: [
+          [
+            10,
+            [
+              "Sicily"
+            ]
+          ]
+        ],
+        note: "From 11 Jun 1940, high-level by day; with the Germans January to May 1941 (17-21) and December 1941 to May 1942 (28-33); the last blitz October 1942 (38).",
+        fly: [
+          {
+            from: 10,
+            to: 38,
+            regions: [
+              "Malta"
+            ],
+            kind: "sky",
+            bombers: true
+          }
+        ]
+      },
+      {
+        nat: "ITA",
+        kind: "sea",
+        what: "Against the British fleet and convoys",
+        targets: "warships and shipping",
+        time: "day",
+        from: 11,
+        to: 49,
+        conf: "high",
+        note: "High-level bombing from July 1940 (Calabria); torpedo bombers from August 1940 (12) to September 1943 (49), Italy's most telling air arm.",
+        book: "At sea: the sea staff flies it."
+      },
+      {
+        nat: "ITA",
+        kind: "strategic",
+        what: "Long-range raids on British oil and bases",
+        targets: "Haifa's and Bahrain's refineries, Alexandria, Gibraltar",
+        time: "both",
+        from: 11,
+        to: 40,
+        conf: "medium-high",
+        theatre: "ITA",
+        share: [
+          [
+            11,
+            0.03
+          ]
+        ],
+        bases: [
+          [
+            11,
+            [
+              "Rhodes",
+              "Sardinia"
+            ]
+          ]
+        ],
+        note: "Haifa from July 1940; Bahrain 19 Oct 1940 (14); Gibraltar at night 1940-43. On the chart (the historian, b569): Rhodes (Maritza, Gadurra) and Sardinia (Elmas, Decimomannu, Alghero) had real air bases, but neither has an airfield on today's chart and nothing else on it reaches Haifa, Bahrain or Gibraltar; so the row flies Alexandria from Libya's fields and leaves those out.",
+        fly: [
+          {
+            from: 11,
+            to: 40,
+            regions: [
+              "Alexandria"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "ITA",
+        kind: "strategic",
+        what: "The Italian air corps over Britain",
+        targets: "Harwich, Ramsgate, east-coast ports",
+        time: "both",
+        from: 14,
+        to: 17,
+        conf: "high",
+        theatre: "ITA",
+        share: [
+          [
+            14,
+            0.08
+          ]
+        ],
+        bases: [
+          [
+            14,
+            [
+              "Brussels",
+              "Flanders"
+            ]
+          ]
+        ],
+        note: "October 1940 to January 1941.",
+        fly: [
+          {
+            from: 14,
+            to: 17,
+            regions: [
+              "Kent"
+            ]
+          }
+        ]
+      },
+      {
+        nat: "ITA",
+        kind: "support",
+        what: "Ground support",
+        targets: "troops",
+        time: "day",
+        from: 10,
+        to: 49,
+        conf: "high",
+        note: "North Africa June 1940 to May 1943 (10-45); Greece October 1940 to April 1941 (14-20); Russia August 1941 to January 1943 (24-41).",
+        book: "The staff flies it: support behind its main effort."
+      },
+      {
+        nat: "FRA",
+        kind: "sky",
+        what: "Fighter cover over the armies",
+        targets: "the sky over the front",
+        time: "day",
+        from: 1,
+        to: 10,
+        conf: "high",
+        note: "September 1939 to June 1940.",
+        book: "The staff flies it: support over the front."
+      },
+      {
+        nat: "FRA",
+        kind: "strategic",
+        what: "No bombing of Germany by choice; leaflets and reconnaissance only",
+        targets: "none",
+        time: "night",
+        from: 1,
+        to: 9,
+        conf: "high",
+        note: "For fear of reprisal on French towns. The Baku oil plan of spring 1940 was never flown.",
+        book: "No bombs, by choice: leaflets only."
+      },
+      {
+        nat: "FRA",
+        kind: "support",
+        what: "Support and interdiction in the battle of France",
+        targets: "bridges, columns",
+        time: "both",
+        from: 9,
+        to: 10,
+        conf: "high",
+        note: "May and June 1940: the Meuse bridges at Sedan (14 May), the low-level Breguet attacks, the LeO 451s by night. Small raids on Italy in June 1940.",
+        book: "The staff flies it: support behind its main effort."
+      }
+    ],
+    bookAbout: "Rider b569 (3) and (4), with the historian's shares and bases (historian/air-shares-b569.json and .md): at the stops that follow the book a row takes its 'share' (dated rows [from turn, share]) of the front-line aircraft of its nation's 'theatre', of every kind together, as the historian gives it; a bombing row fills it with bombers, a fight for the sky with each kind it flies at that share. Its escort takes 'escort' of the theatre's fighters (the feature builder's reading). A theatre is: Germany's west, east and Mediterranean by 'split' (the historian's whole-Luftwaffe split by date); the RAF at home, its groups on British home ground; America's Europe and Pacific, its groups on either side of the world; any other nation's, its whole air force. Groups are whole: a row takes one, and another only while that comes nearer its share than stopping does. Groups in reach of the row's targets go first. A group out of reach is moved on the row's month to the field its side holds nearest any of the row's 'bases' for that month, in reach of the targets, one with room first; if the side holds none, the row flies without it.",
+    split: {
+      GER: [
+        [
+          1,
+          {
+            east: 0.5,
+            west: 0.5,
+            med: 0
+          }
+        ],
+        [
+          5,
+          {
+            east: 0.05,
+            west: 0.95,
+            med: 0
+          }
+        ],
+        [
+          17,
+          {
+            east: 0,
+            west: 0.7,
+            med: 0.3
+          }
+        ],
+        [
+          22,
+          {
+            east: 0.6,
+            west: 0.25,
+            med: 0.1
+          }
+        ],
+        [
+          28,
+          {
+            east: 0.6,
+            west: 0.25,
+            med: 0.15
+          }
+        ],
+        [
+          29,
+          {
+            east: 0.55,
+            west: 0.25,
+            med: 0.2
+          }
+        ],
+        [
+          41,
+          {
+            east: 0.4,
+            west: 0.35,
+            med: 0.25
+          }
+        ],
+        [
+          53,
+          {
+            east: 0.35,
+            west: 0.55,
+            med: 0.1
+          }
+        ],
+        [
+          65,
+          {
+            east: 0.5,
+            west: 0.5,
+            med: 0
+          }
+        ]
+      ]
+    },
+    sources: [
+      "Tooze, The Wages of Destruction (2006); Wagenfuehr's armaments series in the US Strategic Bombing Survey, The Effects of Strategic Bombing on the German War Economy (1945)",
+      "Harrison (ed.), The Economics of World War II (1998); Harrison, Accounting for War (1996)",
+      "Postan, British War Production (HMSO, 1952)",
+      "War Production Board, Wartime Production Achievements and the Reconversion Outlook (1945)",
+      "US Strategic Bombing Survey, The Effects of Strategic Bombing on Japan's War Economy (1946); Cohen, Japan's Economy in War and Reconstruction (1949)",
+      "Middlebrook and Everitt, The Bomber Command War Diaries (1985); Webster and Frankland, The Strategic Air Offensive against Germany (HMSO, 1961)",
+      "Craven and Cate, The Army Air Forces in World War II; Freeman, The Mighty Eighth War Diary (1981)",
+      "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
+    ],
+    fields: {
+      _about: "Rider b574 (the design director, 22:11Z) and the historian's list (historian/med-airfields-b574.md): the record's Mediterranean air war was flown from fields today's chart does not seed. With the switch on, these provinces have an airfield of at least this class (1 a landing ground, 2 an airfield, 3 an air base; airwar.json fields.sizes) all war; every one existed all war and served whoever held the province, so whoever holds it in the game uses it, as everywhere. With the switch off they are not read. Pantelleria is not on the chart: it folds into Sicily, which has its air base. Gambut is counted with Tobruk's El Adem.",
+      rows: [
+        { region: "Tripoli", from: 1, class: 3, why: "Castel Benito (high)." },
+        { region: "Benghazi", from: 1, class: 3, why: "Benina and Berka; the 1943 Ploesti raid flew from here (high)." },
+        { region: "Derna", from: 1, class: 2, why: "Derna and Martuba (high)." },
+        { region: "Tobruk", from: 1, class: 3, why: "El Adem and Gambut (high)." },
+        { region: "Agedabia", from: 1, class: 1, why: "Landing grounds that followed the front (medium)." },
+        { region: "El Agheila", from: 1, class: 1, why: "Marble Arch (medium)." },
+        { region: "Bardia", from: 1, class: 1, why: "Landing grounds that followed the front (medium)." },
+        { region: "Mersa Matruh", from: 1, class: 2, why: "Matruh's fields (high)." },
+        { region: "El Alamein", from: 1, class: 2, why: "The Alamein fields (high)." },
+        { region: "Sidi Barrani", from: 1, class: 1, why: "Sidi Barrani's landing ground (high)." },
+        { region: "Rhodes", from: 1, class: 2, why: "Maritza, Gadurra and Calato, the Aegean command's base (high)." },
+        { region: "Sardinia", from: 1, class: 3, why: "Elmas, Decimomannu and four more, home to the torpedo and bomber groups (high)." },
+        { region: "Crete", from: 1, class: 2, why: "Maleme and Heraklion (high)." },
+        { region: "Corsica", from: 1, class: 2, why: "The Allied fields of 1943-44 (high)." },
+        { region: "Tunis", from: 1, class: 3, why: "El Aouina and Bizerte (medium-high)." },
+        { region: "Sfax", from: 1, class: 2, why: "Kairouan and Gabes (medium-high)." }
+      ]
+    },
+    radar: {
+      _about: `Ruling 236 riders b553 and b558 (Brian, 20:43Z: "if you had radar then your fighters are much better at intercepting bombing raids"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled. (c) b569(2): at stops 3 to 5 a staff whose ground was bombed by night within 'need' months takes Fighter control first in its research, once it holds Early-warning radar, every nation alike.`,
+      tech: "earlywarning",
+      control: "gci",
+      ground: 0.5,
+      need: 3,
+      record: [
+        {
+          nat: "GER",
+          from: 1,
+          name: "the Freya stations",
+          by: "the coast's warning service",
+          ground: 0.5,
+          plural: true,
+          regions: [
+            "Hamburg",
+            "Schleswig-Holstein",
+            "Bremen"
+          ],
+          where: "its North Sea coast"
+        },
+        {
+          nat: "SOV",
+          from: 23,
+          name: "the Redut stations",
+          by: "the air defence of Moscow and Leningrad",
+          ground: 0.5,
+          plural: true,
+          regions: [
+            "Moscow",
+            "Leningrad"
+          ],
+          where: "Moscow and Leningrad"
+        },
+        {
+          nat: "SOV",
+          from: 41,
+          name: "the Redut stations",
+          by: "the air armies' warning service",
+          ground: 0.5,
+          plural: true
+        },
+        {
+          nat: "USA",
+          from: 29,
+          name: "the Aircraft Warning Service",
+          by: "the Army's fighter commands",
+          ground: 0.5
+        },
+        {
+          nat: "JAP",
+          from: 41,
+          name: "the coast radars and picket boats",
+          by: "the home islands' air defence",
+          ground: 0.5,
+          plural: true
+        },
+        {
+          nat: "ITA",
+          from: 41,
+          name: "the German radar stations",
+          by: "the German air force in Italy",
+          ground: 0.5,
+          plural: true
+        }
+      ],
+      night: {
+        UK: [
+          [
+            1,
+            1e-3
+          ],
+          [
+            17,
+            3e-3
+          ],
+          [
+            19,
+            8e-3
+          ],
+          [
+            41,
+            0.015
+          ],
+          [
+            53,
+            0.023
+          ]
+        ],
+        GER: [
+          [
+            1,
+            1e-3
+          ],
+          [
+            14,
+            4e-3
+          ],
+          [
+            30,
+            0.011
+          ],
+          [
+            41,
+            0.022
+          ],
+          [
+            47,
+            0.01
+          ],
+          [
+            49,
+            0.033
+          ],
+          [
+            57,
+            0.02
+          ],
+          [
+            63,
+            8e-3
+          ]
+        ],
+        USA: [
+          [
+            1,
+            3e-3
+          ],
+          [
+            58,
+            0.012
+          ]
+        ],
+        SOV: [
+          [
+            1,
+            1e-3
+          ],
+          [
+            41,
+            2e-3
+          ],
+          [
+            53,
+            4e-3
+          ]
+        ],
+        JAP: [
+          [
+            1,
+            1e-3
+          ],
+          [
+            58,
+            3e-3
+          ]
+        ],
+        ITA: [
+          [
+            1,
+            1e-3
+          ],
+          [
+            47,
+            3e-3
+          ]
+        ],
+        _default: [
+          [
+            1,
+            1e-3
+          ]
+        ]
+      },
+      nightWhy: {
+        UK: "1 to 16: no ground control at night and no working airborne radar (the AI Mk III Blenheims). 17: the first ground-control (GCI) stations and the Beaufighter with AI Mk IV. 19: the two together, March 1941, rising to the best month of the Blitz in May 1941. 41: centimetric radar in Mosquitos (from early 1943). 53: Mosquitos with AI Mk VIII and X against Steinbock, 1944.",
+        GER: "1 to 13: searchlights and few night fighters. 14: the searchlight belt and Freya line (October 1940), then the Himmelbett boxes in 1941. 30: Lichtenstein airborne radar in service (February 1942), general by late 1942. 41: the full Himmelbett and Lichtenstein system of 1943. 47: Window blinds Wuerzburg and Lichtenstein (Hamburg, 24/25 Jul 1943) for about two months. 49: free hunting in the bomber stream (Tame Boar and Wild Boar) with SN-2 radar, the peak of the night defence. 57: France's warning lost after D-Day, fuel short, British intruders and jamming. 63: the collapse of late 1944 and 1945.",
+        USA: "No night raids on American soil. Overseas, the P-70 and early navy night fighters to 1944; the P-61 with SCR-720 radar from mid-1944 (58).",
+        SOV: "Night fighters without radar, under searchlights, most of the war; most German night losses over Soviet cities were to guns.",
+        JAP: "Night fighters with upward-firing guns and few radar sets against the B-29 fire raids from 1944.",
+        ITA: "No night-fighter arm of note; German night fighters in Italy in 1943."
+      }
+    },
+    gunners: {
+      _about: "Rulings 237 b557 and b559 (accepted), the historian's historian/gunner-kills-b557.md: the defending fighters the bombers' gunners bring down, for each bomber the fighters bring down (real losses, never the gunners' claims). With the switch on these take the place of ruling 227's day figure (airwar.json day.kill x the nation's bomber defence); with it off 227 stands as it is. The game flies one kind of bomber a nation, so the historian's kinds are read from what the game knows ('map'). 'night': any bomber by night. 'ground': a strike on troops ('ground' and 'line'), the two-seat ground-attack aircraft with a rear gunner. 'box': the nations whose day bombers fly as heavy boxes, 'alone' when no escort reached the target, 'escorted' when one did (keyed by the raid's escort, not the year, so it works at every stop). 'b29': that nation's day raids from 'from' on Japan's home islands ('regions', held by 'vs'); elsewhere its heavy-box rows stand (the historian, 21:08Z: the B-24s and B-25s flew the day raids on the Philippines, New Guinea, Borneo and Formosa). 'day': every other day raid, by nation, rows [from turn, ratio] (a row holds until the next).",
+      night: 0.05,
+      ground: 0.07,
+      box: {
+        nats: [
+          "USA"
+        ],
+        alone: 0.4,
+        escorted: 0.2
+      },
+      b29: {
+        nat: "USA",
+        vs: [
+          "JAP"
+        ],
+        from: 58,
+        ratio: 0.5,
+        regions: [
+          "Sapporo",
+          "Kushiro",
+          "Aomori",
+          "Akita",
+          "Sendai",
+          "Niigata",
+          "Tokyo",
+          "Yokohama",
+          "Nagano",
+          "Shizuoka",
+          "Nagoya",
+          "Kanazawa",
+          "Kyoto",
+          "Osaka",
+          "Okayama",
+          "Hiroshima",
+          "Shimonoseki",
+          "Shikoku",
+          "Fukuoka",
+          "Nagasaki",
+          "Kumamoto",
+          "Kagoshima"
+        ]
+      },
+      day: {
+        _default: [
+          [
+            1,
+            0.07
+          ],
+          [
+            29,
+            0.15
+          ]
+        ],
+        UK: [
+          [
+            1,
+            0.15
+          ],
+          [
+            17,
+            0.07
+          ],
+          [
+            29,
+            0.15
+          ]
+        ]
+      },
+      map: {
+        "Light and medium bombers with hand-held guns, 1939-41 (0.07)": "Every nation's day bombers from September 1939 to December 1941 (turns 1 to 28), and Britain's in 1941 (17 to 28: the Blenheims' day raids).",
+        "Bombers with power turrets by day, 1939-40 (0.15)": "Britain's day bombers from September 1939 to December 1940 (1 to 16: the Wellingtons and Hampdens).",
+        "Medium bombers in formation with more guns, 1942-45 (0.15)": "Every nation's day bombers from January 1942 (29), America's excepted.",
+        "Heavy bomber boxes (0.4 beyond escort, 0.2 escorted all the way)": "America's day bombers, every month, keyed by whether an escort reached the target. The game's one American bomber is the heavy; its B-25s and B-26s are not told apart.",
+        "B-29 by day over Japan (0.5)": "America's day raids on Japan's home islands while Japan holds them, from June 1944 (58); elsewhere the heavy-box rows.",
+        "Any bomber by night (0.05)": "Every night raid.",
+        "Ground-attack aircraft with a rear gunner (0.07)": "Every nation's strikes on troops ('ground' and 'line'), whatever the year: the game's bombers flying close support stand for the Il-2s and Ju 87s."
+      }
+    }
+  };
+
+  // ../../data/campaign/far-fields.json
+  var far_fields_default = {
+    _about: "The far side's airfields on the record (ruling 234, the design director's notes of 04:47Z and 04:58Z of 21 November 2026 on rider b645 (2), Singapore's and Palembang's sky; the historian's table, historian/far-chart-airfields.md, sections 1 to 4, with its marks H, M and L). In the form of rider b574's table for the Mediterranean (aircampaigns.json fields.rows): a province has an airfield of at least this class from this month, whoever holds it. 1 a landing ground, 2 an airfield, 3 an air base (airwar.json fields.sizes: 500, 1,000 and 1,500 aircraft). A month is counted from September 1939 (28 is December 1941); 'from 1' is a field that stood by December 1941. Read by src/campaign/aircampaigns.ts (recordField) with the far side's switch on, whatever the air campaigns' switch says; with the far switch off it is not read. Kept by hand, from the historian's table.",
+    _laid: "How the table is laid on this chart. A field is laid in the province it lies in: Samarinda II in Samarinda's and Manggar in Balikpapan's; Miri in Miri's and Labuan in Brunei's; Magwe in Yenangyaung's, Heho in Taunggyi's; Prachuap and Chumphon in the Kra's; Maguwo in Semarang's; Singosari and Maospati in Soerabaja's, an airfield until the B-17s came and an air base from month 29; Majuro in the Eastern Marshalls'; Yunnanyi in Tali's; Dinjan, Chabua and Mohanbari in Dibrugarh's; Fort Glenn in Dutch Harbor's; Horn Island and Iron Range in Cape York's; Suichuan in Kanchow's; Wau in Lae's. Clark Field lies in Lingayen's province, where the roster bases its squadrons, so Lingayen's air base stands. Where the table gives a class of 1 to 2 or 2 to 3 the lower is laid, and where it gives a span of months the last. A row only ever raises a field: the chart's own first-day field stands where it is the larger (Tarawa, Wake, Midway, Kwajalein, Espiritu Santo, Fiji, Saipan, Iwo Jima, Okinawa, Chengtu, Kunming, Townsville). NOT LAID, for the design director: the three corrections that would make a first-day field smaller (Del Monte 3 to 2; Rabaul 2 until month 40; Port Moresby 2 until month 36), because the rule that the base of an air fleet on the record is an air base gives each its 3 and a table that is read as 'at least' cannot take it away. Not on the chart as provinces of their own, and adding nothing where they lie (the historian's section 6): Tinian (Saipan's, an air base already), Efate (Espiritu Santo's, the same), Noemfoor (Biak's, the same), Amchitka (left out: Adak has its airfield). Chihkiang in Changteh's, at the mouth of the Yuan valley it lies up: the chart has no province of west Hunan beyond Paoking.",
+    rows: [
+      { region: "Singora", from: 1, class: 1, why: "Singora (Songkhla): a small Thai field (M)." },
+      { region: "Singora", from: 28, class: 2, why: "Enlarged within days of 8 Dec 1941 as the 3rd Air Group's forward base (M)." },
+      { region: "Kota Bharu", from: 1, class: 2, why: "Kota Bharu, Gong Kedah, Machang: Hudsons and Vildebeests (M)." },
+      { region: "Penang", from: 1, class: 2, why: "Alor Star, Sungei Patani, Butterworth; Bayan Lepas on the island (M)." },
+      { region: "Ipoh", from: 1, class: 1, why: "Ipoh and Taiping: fighters (M)." },
+      { region: "Kuantan", from: 1, class: 2, why: "Kuantan: Hudsons and Vildebeests (M)." },
+      { region: "Kuala Lumpur", from: 1, class: 1, why: "Sungei Besi; Port Swettenham: fighters and transports (M)." },
+      { region: "Johore", from: 1, class: 1, why: "Kluang, Kahang, Batu Pahat: fighters and light bombers (M)." },
+      { region: "Kra", from: 1, class: 1, why: "Prachuap and Chumphon: the Thai air force's Wing 5 fought the landing of 8 Dec 1941 (M)." },
+      { region: "Chiang Mai", from: 1, class: 1, why: "Chiang Mai and Lampang: Japan's fighters against Burma (M)." },
+      { region: "Mergui", from: 1, class: 1, why: "Mergui, Tavoy, Victoria Point: the ferry route's landing grounds from India to Malaya (M)." },
+      { region: "Moulmein", from: 1, class: 1, why: "Moulmein: fighters (M)." },
+      { region: "Toungoo", from: 1, class: 2, why: "Kyedaw: the AVG trained here from Aug 1941; fighters and Blenheims (M)." },
+      { region: "Yenangyaung", from: 1, class: 1, why: "Magwe: the RAF's and the AVG's base after Rangoon fell (the table's 1 to 2; the lower is laid) (M)." },
+      { region: "Meiktila", from: 1, class: 1, why: "Meiktila: fighters (M)." },
+      { region: "Taunggyi", from: 1, class: 1, why: "Heho, in the Shan States: Japan's fighter field in central Burma from 1942 (M)." },
+      { region: "Mandalay", from: 1, class: 1, why: "Mandalay and Shwebo: fighters (M)." },
+      { region: "Lashio", from: 1, class: 1, why: "Lashio: CNAC's transports at the Burma Road's railhead; fighters (M)." },
+      { region: "Myitkyina", from: 1, class: 1, why: "Myitkyina's two strips: fighters (M)." },
+      { region: "Myitkyina", from: 57, class: 2, why: "The Allied field, retaken on 17 May 1944: C-47s and the Hump's low route (H)." },
+      { region: "Akyab", from: 1, class: 2, why: "Akyab island: Blenheims and Hurricanes; a staging field on the coast route (M)." },
+      { region: "Kuching", from: 1, class: 1, why: "Kuching (the 7th Mile): fighters staging (M)." },
+      { region: "Miri", from: 28, class: 1, why: "Miri: a small strip (the table's Brunei row, whose fields are Miri and Labuan) (L)." },
+      { region: "Brunei", from: 41, class: 1, why: "Labuan, which Japan built in 1942 to 1943 (the table's Brunei row; laid from the turn of that year) (L)." },
+      { region: "Jolo", from: 1, class: 1, why: "Jolo: fighters; the navy's Zeros staged here for Tarakan and Balikpapan (M-L)." },
+      { region: "Davao", from: 1, class: 1, why: "Davao (Sasa), with the seaplane anchorage: fighters and flying boats (M)." },
+      { region: "Davao", from: 58, class: 3, why: "Several Japanese fields by 1944 (L)." },
+      { region: "Menado", from: 1, class: 1, why: "Langoan and Mapanget: fighters (M)." },
+      { region: "Tarakan", from: 1, class: 1, why: "Tarakan: fighters (M)." },
+      { region: "Balikpapan", from: 1, class: 1, why: "Manggar: fighters (the table's Balikpapan row is 2 for its two fields; the bombers' field lies in Samarinda's province on this chart) (M)." },
+      { region: "Samarinda", from: 1, class: 2, why: "Samarinda II, inland: the Dutch Glenn Martins' hidden field (the table's Balikpapan row) (M)." },
+      { region: "Makassar", from: 1, class: 2, why: "Mandai: medium bombers (M)." },
+      { region: "Ambon", from: 1, class: 2, why: "Laha: No. 13 Squadron RAAF's Hudsons, then Japan's navy bombers (M)." },
+      { region: "Koepang", from: 1, class: 1, why: "Penfui: Hudsons; the ferry stop between Darwin and Java (M)." },
+      { region: "Dili", from: 1, class: 1, why: "Dili: Japan's from 20 Feb 1942 (M)." },
+      { region: "Bali", from: 1, class: 1, why: "Den Pasar: Japan's Zeros struck Soerabaja from here (M)." },
+      { region: "Singkawang", from: 1, class: 1, why: "Singkawang II: a Dutch field (L-M)." },
+      { region: "Bandjermasin", from: 1, class: 1, why: "Ulin: a Dutch field (L-M)." },
+      { region: "Palembang", from: 1, class: 2, why: "P1 (Pangkalan Benteng) and P2 (Prabumulih): Hurricanes, Blenheims and Hudsons in Feb 1942 (M)." },
+      { region: "Medan", from: 1, class: 1, why: "Polonia: fighters; KLM's civil route (M)." },
+      { region: "Soerabaja", from: 1, class: 2, why: "Perak and Morokrembangan, with Singosari at Malang, a Dutch medium-bomber base until the B-17s came, and Maospati at Madioen: both lie in the province on this chart (M)." },
+      { region: "Soerabaja", from: 29, class: 3, why: "Singosari as the B-17s' base from about January 1942 (the historian's section 6) (M)." },
+      { region: "Semarang", from: 1, class: 2, why: "Maguwo at Jogjakarta, which lies in the province on this chart: the Allies' bombers in Jan and Feb 1942 (M)." },
+      { region: "Hanoi", from: 1, class: 2, why: "Gia Lam and Bach Mai: Japan's bombers struck Kunming and the Burma Road from them in 1940 and 1941 (M)." },
+      { region: "Cam Ranh", from: 23, class: 1, why: "Nha Trang; Cam Ranh's seaplane station: fighters and flying boats (L)." },
+      { region: "Hainan", from: 1, class: 2, why: "Sanya and Haikou: Japan's navy bombers and fighters (M)." },
+      { region: "Hong Kong", from: 41, class: 2, why: "Kai Tak, lengthened by Japan with prisoners' labour by about 1943 (M)." },
+      { region: "Legaspi", from: 1, class: 1, why: "Legaspi: fighters (M)." },
+      { region: "Aparri", from: 1, class: 1, why: "Aparri; Vigan and Laoag: fighters (M)." },
+      { region: "Truk", from: 1, class: 1, why: "Japan's navy field (L)." },
+      { region: "Truk", from: 28, class: 2, why: "Eten's field, built about 1941 (L)." },
+      { region: "Truk", from: 49, class: 3, why: "Moen's and Param's fields, built in 1943 and 1944 (L)." },
+      { region: "Palau", from: 28, class: 2, why: "Peleliu; Airai on Babelthuap: Japan's navy bombers and fighters (L)." },
+      { region: "Eastern Marshalls", from: 25, class: 1, why: "Taroa, Wotje, Mili and Jaluit: Japan's navy fields (the table's 1 to 2; the lower is laid) (M-L)." },
+      { region: "Eastern Marshalls", from: 54, class: 2, why: "Majuro, the fleet's anchorage with a Marine field from Feb 1944: laid in the nearest Marshalls province (the historian's section 6) (M)." },
+      { region: "Eniwetok", from: 54, class: 2, why: "The Allies' field from Feb 1944 (the table's 2 to 3; the lower is laid) (M)." },
+      { region: "Guam", from: 64, class: 3, why: "North and Northwest Fields, 1944 to 1945 (M)." },
+      { region: "Lae", from: 1, class: 1, why: "Lae, Salamaua and Wau: the gold-fields' airlift hub (M)." },
+      { region: "Lae", from: 49, class: 3, why: "Nadzab, built after the airborne landing of 5 Sep 1943: heavy bombers (M)." },
+      { region: "Milne Bay", from: 35, class: 1, why: "Gurney: the RAAF's Kittyhawks in the battle of Aug and Sep 1942 (the table's 1 to 2; the lower is laid) (H)." },
+      { region: "Buna", from: 35, class: 1, why: "Japan's strip at Buna from Jul 1942 (M)." },
+      { region: "Buna", from: 40, class: 2, why: "Dobodura, the Allies' from about Dec 1942 (M)." },
+      { region: "Buna", from: 46, class: 3, why: "Dobodura by mid-1943 (M)." },
+      { region: "Wewak", from: 40, class: 2, why: "But, Boram and Dagua: Japan's army air base of 1943 (the table's 2 to 3; the lower is laid) (M)." },
+      { region: "Madang", from: 40, class: 1, why: "Madang, in the table's Wewak row: fighters (M)." },
+      { region: "Guadalcanal", from: 36, class: 1, why: "Henderson Field: the first aircraft landed on 20 Aug 1942 (H)." },
+      { region: "Guadalcanal", from: 39, class: 2, why: "Henderson with Fighter One and Two (M)." },
+      { region: "Guadalcanal", from: 44, class: 3, why: "With Carney and Koli in 1943 (M)." },
+      { region: "New Georgia", from: 40, class: 1, why: "Munda, built in secret by Japan from late Nov 1942 (H)." },
+      { region: "Bougainville", from: 37, class: 1, why: "Buka, Kahili and Ballale: Japan's fields covering the Solomons (the table's 1 to 2; the lower is laid) (M)." },
+      { region: "New Caledonia", from: 34, class: 3, why: "Tontouta and Plaine des Gaiacs (M)." },
+      { region: "Hollandia", from: 56, class: 3, why: "Japan's three fields, the Allies' from the landing of 22 Apr 1944 (H for the date)." },
+      { region: "Biak", from: 58, class: 3, why: "Mokmer and Owi (M)." },
+      { region: "Morotai", from: 61, class: 3, why: "Wama and Pitu (M)." },
+      { region: "Leyte", from: 62, class: 2, why: "Tacloban, Dulag, Tanauan; Burauen: mud kept them small for weeks (M)." },
+      { region: "Mindoro", from: 64, class: 2, why: "San Jose (M)." },
+      { region: "Cape York", from: 30, class: 1, why: "Horn Island (the table's 1 to 2; the lower is laid) (M)." },
+      { region: "Cape York", from: 37, class: 2, why: "Iron Range (M)." },
+      { region: "Dibrugarh", from: 33, class: 2, why: "Dinjan, then Chabua and Mohanbari: the Hump's bases in Assam (M)." },
+      { region: "Dibrugarh", from: 46, class: 3, why: "The Hump's bases by about mid-1943 (M)." },
+      { region: "Tali", from: 33, class: 2, why: "Yunnanyi, a Hump terminal and a fighter field behind the Salween: laid in Tali's province, which holds Siangyun (the historian's section 6) (L)." },
+      { region: "Jorhat", from: 36, class: 2, why: "Jorhat: a Hump base in Assam (M)." },
+      { region: "Changteh", from: 50, class: 2, why: "Chihkiang, up the Yuan river, whose valley runs down to Changteh: laid in Changteh's province, the chart having none west of Paoking; Changteh's ground stayed China's in 1944-45 (the historian's section 7) (L)." },
+      { region: "Kweilin", from: 40, class: 2, why: "The 14th Air Force's forward base (the table's months 1 to 40 for east China's fields; laid from the last) (M)." },
+      { region: "Liuchow", from: 40, class: 2, why: "The 14th Air Force's forward base (as Kweilin) (M)." },
+      { region: "Hengyang", from: 40, class: 2, why: "The 14th Air Force's forward base (as Kweilin) (M)." },
+      { region: "Lingling", from: 40, class: 2, why: "The 14th Air Force's forward base (as Kweilin) (M)." },
+      { region: "Kanchow", from: 40, class: 2, why: "Kanchow and Suichuan: the 14th Air Force's forward bases (as Kweilin) (M)." },
+      { region: "Dutch Harbor", from: 31, class: 2, why: "Fort Glenn on Umnak (M)." },
+      { region: "Cold Bay", from: 31, class: 2, why: "Cold Bay (M)." },
+      { region: "Adak", from: 37, class: 2, why: "Adak (M)." }
+    ]
+  };
+
+  // ../../data/campaign/weather.json
+  var weather_default = {
+    _about: "Weather (ruling 127, the sky's words ruling 143; the grand campaign only). Each month each weather zone is under a clear sky, cloud, or a closed sky, dealt by the campaign's seed from the zone's odds for that month ('odds': twelve rows, January first, of [clear, cloud, closed] in tenths). Under cloud everything flies and only the odds change ('cloud'); under a closed sky nothing flies in the zone for either side: no raid, no group based there, no air support, no sea cover or strike, no air scouting. A mission needs an open sky at its base and at its target. This month's sky is known before any order; next month's is a forecast with the true odds. At stops 1 and 2 of the history dial the months in 'book' are as history had them. 'zones' are a theatre's worth of land, or a sea: 'lands' match a province by who held it on the first day ('nats'), on which map ('world': the Americas and the Atlantic beyond Europe's map), and where it lies ('x' and 'y', [least, most], null for no bound); the first clause that matches wins, and a province no clause matches has no weather. 'seas' are the sea zones under the zone's sky. 'plate' is the point where the zone's plate is drawn, 'snow' the months a closed sky snows instead of rains (a look, no rule). 'on' switches weather on for new grand campaigns (a campaign keeps the setting it began with, in g.flags.weather).",
+    on: false,
+    cloud: {
+      bombsDay: 0.6,
+      bombsNight: 0.8,
+      met: 0.7,
+      gunsDay: 0.7,
+      gunsNight: 0.5,
+      support: 0.5
+    },
+    zones: [
+      {
+        key: "nwe",
+        name: "North-west Europe",
+        the: false,
+        plate: [300, 860],
+        snow: [12, 1, 2],
+        seas: ["North Sea", "English Channel", "Irish Sea", "Skagerrak"],
+        odds: [[2, 5, 3], [2, 5, 3], [3, 5, 2], [4, 5, 1], [5, 5, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0], [5, 4, 1], [3, 5, 2], [2, 5, 3], [2, 5, 3]]
+      },
+      {
+        key: "central",
+        name: "Central Europe",
+        the: false,
+        plate: [640, 790],
+        snow: [12, 1, 2],
+        seas: ["Baltic Sea"],
+        odds: [[3, 4, 3], [3, 4, 3], [4, 4, 2], [5, 4, 1], [6, 4, 0], [6, 4, 0], [7, 3, 0], [7, 3, 0], [6, 3, 1], [4, 4, 2], [2, 5, 3], [3, 4, 3]]
+      },
+      {
+        key: "scand",
+        name: "Scandinavia",
+        the: false,
+        plate: [700, 300],
+        snow: [11, 12, 1, 2, 3],
+        seas: ["Gulf of Bothnia"],
+        odds: [[3, 3, 4], [3, 4, 3], [4, 4, 2], [4, 4, 2], [5, 4, 1], [6, 4, 0], [6, 4, 0], [5, 4, 1], [4, 4, 2], [3, 4, 3], [2, 4, 4], [2, 4, 4]]
+      },
+      {
+        key: "nrus",
+        name: "Northern Russia",
+        the: false,
+        plate: [1230, 520],
+        snow: [11, 12, 1, 2, 3],
+        seas: ["Gulf of Finland"],
+        odds: [[4, 3, 3], [4, 3, 3], [4, 4, 2], [3, 5, 2], [6, 4, 0], [7, 3, 0], [7, 3, 0], [7, 3, 0], [5, 4, 1], [3, 5, 2], [2, 5, 3], [3, 4, 3]]
+      },
+      {
+        key: "srus",
+        name: "Southern Russia",
+        the: false,
+        plate: [1250, 860],
+        snow: [12, 1, 2],
+        seas: ["Black Sea"],
+        odds: [[4, 3, 3], [4, 4, 2], [4, 4, 2], [5, 4, 1], [7, 3, 0], [8, 2, 0], [8, 2, 0], [8, 2, 0], [7, 3, 0], [5, 4, 1], [3, 4, 3], [3, 4, 3]]
+      },
+      {
+        key: "balkans",
+        name: "Danube and Balkans",
+        the: true,
+        plate: [840, 1060],
+        snow: [12, 1, 2],
+        seas: [],
+        odds: [[3, 5, 2], [3, 5, 2], [4, 5, 1], [5, 4, 1], [6, 4, 0], [7, 3, 0], [8, 2, 0], [8, 2, 0], [7, 3, 0], [5, 4, 1], [3, 5, 2], [3, 5, 2]]
+      },
+      {
+        key: "italy",
+        name: "Italy",
+        the: false,
+        plate: [600, 1110],
+        snow: [1, 2],
+        seas: [],
+        odds: [[3, 5, 2], [3, 5, 2], [4, 5, 1], [5, 4, 1], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [7, 3, 0], [5, 4, 1], [3, 5, 2], [3, 5, 2]]
+      },
+      {
+        key: "iberia",
+        name: "Iberia",
+        the: false,
+        plate: [200, 1240],
+        snow: [],
+        seas: ["Iberian Coast"],
+        odds: [[4, 5, 1], [4, 5, 1], [5, 4, 1], [6, 4, 0], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [6, 4, 0], [4, 5, 1], [4, 5, 1]]
+      },
+      {
+        key: "nafrica",
+        name: "North Africa",
+        the: false,
+        plate: [600, 1630],
+        snow: [],
+        seas: [],
+        odds: [[6, 3, 1], [6, 3, 1], [6, 3, 1], [6, 3, 1], [7, 2, 1], [9, 1, 0], [9, 1, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [7, 3, 0], [6, 3, 1]]
+      },
+      {
+        key: "mideast",
+        name: "Middle East",
+        the: true,
+        plate: [1250, 1420],
+        snow: [12, 1, 2],
+        seas: [],
+        odds: [[5, 4, 1], [5, 4, 1], [6, 3, 1], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [6, 3, 1], [5, 4, 1]]
+      },
+      {
+        key: "atlantic",
+        name: "North Atlantic",
+        the: true,
+        plate: [-300, 700],
+        snow: [],
+        seas: ["North Atlantic", "Western Approaches", "Bay of Biscay", "Iceland Gap", "Denmark Strait", "Mid-Atlantic Gap", "Labrador Sea", "Grand Banks", "Azores Waters", "Canary Basin"],
+        odds: [[1, 5, 4], [1, 5, 4], [2, 5, 3], [3, 5, 2], [4, 5, 1], [4, 5, 1], [5, 4, 1], [5, 4, 1], [4, 5, 1], [2, 5, 3], [1, 5, 4], [1, 5, 4]]
+      },
+      {
+        key: "arctic",
+        name: "Arctic",
+        the: true,
+        plate: [800, 40],
+        snow: [10, 11, 12, 1, 2, 3, 4],
+        seas: ["Norwegian Sea", "Barents Sea"],
+        odds: [[1, 4, 5], [1, 5, 4], [2, 5, 3], [3, 5, 2], [4, 5, 1], [4, 5, 1], [4, 5, 1], [3, 5, 2], [2, 5, 3], [1, 5, 4], [1, 4, 5], [1, 4, 5]]
+      },
+      {
+        key: "med",
+        name: "Mediterranean",
+        the: true,
+        plate: [700, 1440],
+        snow: [],
+        seas: ["Western Mediterranean", "Tyrrhenian Sea", "Adriatic Sea", "Ionian Sea", "Aegean Sea", "Eastern Mediterranean", "Central Mediterranean", "Libyan Sea"],
+        odds: [[4, 4, 2], [4, 4, 2], [5, 4, 1], [6, 4, 0], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [6, 3, 1], [4, 4, 2], [4, 4, 2]]
+      },
+      {
+        key: "namerica",
+        name: "North America",
+        the: false,
+        plate: [-2200, 1500],
+        snow: [12, 1, 2, 3],
+        seas: ["Hudson Bay", "Gulf of St Lawrence", "Gulf of Maine", "Eastern Seaboard", "Carolina Coast", "Scotian Shelf", "California Coast", "North-East Pacific"],
+        odds: [[3, 5, 2], [3, 5, 2], [4, 5, 1], [5, 4, 1], [6, 4, 0], [7, 3, 0], [7, 3, 0], [7, 3, 0], [7, 3, 0], [6, 4, 0], [4, 5, 1], [3, 5, 2]]
+      },
+      {
+        key: "caribbean",
+        name: "Caribbean",
+        the: true,
+        plate: [-1700, 2200],
+        snow: [],
+        seas: ["Sargasso Sea", "Straits of Florida", "Gulf of Mexico", "Caribbean Sea", "Leeward Passage", "Gulf of Tehuantepec", "Gulf of Panama", "Guiana Coast"],
+        odds: [[7, 3, 0], [7, 3, 0], [8, 2, 0], [8, 2, 0], [7, 3, 0], [6, 4, 0], [6, 3, 1], [5, 4, 1], [5, 4, 1], [6, 3, 1], [7, 3, 0], [7, 3, 0]]
+      },
+      {
+        key: "samerica",
+        name: "South America",
+        the: false,
+        plate: [-1300, 3700],
+        snow: [],
+        seas: ["Gulf of Guayaquil", "Peruvian Coast", "Atacama Coast", "Chilean Sea", "Patagonian Channels", "Eastern Pacific", "South-East Pacific", "Amazon Mouth", "Bahia Coast", "Santos Bight", "River Plate", "Argentine Sea", "Falkland Waters"],
+        odds: [[6, 4, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0], [5, 4, 1], [5, 4, 1], [5, 4, 1], [6, 4, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0]]
+      },
+      {
+        key: "satlantic",
+        name: "South Atlantic",
+        the: true,
+        plate: [-300, 3200],
+        snow: [],
+        seas: ["Tropical Atlantic", "Atlantic Narrows", "South Atlantic", "Sierra Leone Basin", "Gulf of Guinea", "Angola Basin", "Cape Basin"],
+        odds: [[5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1]]
+      }
+    ],
+    lands: [
+      { zone: "mideast", world: false, nats: ["TUR", "IRQ", "IRN"] },
+      { zone: "mideast", world: false, nats: ["FRA"], x: [1150, null] },
+      { zone: "mideast", world: false, nats: ["UK"], x: [1130, null], y: [null, 1620] },
+      { zone: "nafrica", world: false, nats: ["FRA"], y: [1380, null] },
+      { zone: "nafrica", world: false, nats: ["ITA"], y: [1540, null] },
+      { zone: "nafrica", world: false, nats: ["UK"], y: [1580, null] },
+      { zone: "nafrica", world: false, nats: ["ESP"], y: [1440, null] },
+      { zone: "balkans", world: false, nats: ["HUN", "SVK", "ROM", "YUG", "BUL", "GRE"] },
+      { zone: "balkans", world: false, nats: ["ITA"], x: [780, null] },
+      { zone: "italy", world: false, nats: ["ITA"] },
+      { zone: "italy", world: false, nats: ["FRA"], y: [1150, null] },
+      { zone: "italy", world: false, nats: ["UK"], x: [600, null] },
+      { zone: "iberia", world: false, nats: ["ESP", "POR"] },
+      { zone: "iberia", world: false, nats: ["UK"], y: [1300, null] },
+      { zone: "nwe", world: false, nats: ["UK", "IRL", "NED", "BEL", "LUX", "DEN", "FRA"] },
+      { zone: "central", world: false, nats: ["GER", "POL", "SUI", "LIT", "LAT", "EST"] },
+      { zone: "scand", world: false, nats: ["NOR", "SWE", "FIN"] },
+      { zone: "nrus", world: false, nats: ["SOV"], y: [null, 759] },
+      { zone: "srus", world: false, nats: ["SOV"] },
+      { zone: "atlantic", world: true, nats: ["DEN", "POR", "ESP"] },
+      { zone: "namerica", world: true, nats: ["USA", "CAN"] },
+      { zone: "namerica", world: true, nats: ["UK"], y: [null, 1100] },
+      { zone: "samerica", world: true, nats: ["UK"], y: [4e3, null] },
+      { zone: "samerica", world: true, nats: ["BRA", "ARG", "PER", "CHL", "BOL", "ECU", "URU", "PAR"] },
+      { zone: "caribbean", world: true, nats: ["MEX", "CUB", "GUA", "NIC", "HON", "COS", "PAN", "HAI", "DOM", "ELS", "VEN", "COL", "UK", "NED", "FRA"] }
+    ],
+    book: [
+      { turn: 64, zone: "nwe", sky: "closed", why: "December 1944: fog and low cloud over the Ardennes" },
+      { turn: 39, zone: "srus", sky: "closed", why: "November 1942: freezing fog as the Soviet pincers close at Stalingrad" },
+      { turn: 28, zone: "nrus", sky: "closed", why: "December 1941: the deep cold before Moscow" },
+      { turn: 1, zone: "central", sky: "clear", why: "September 1939: a dry, fine month over Poland" },
+      { turn: 12, zone: "nwe", sky: "clear", why: "August 1940: the long fine summer over southern England" },
+      { turn: 54, zone: "central", sky: "clear", why: "February 1944: the break in the weather for the great raids on the aircraft works" },
+      { turn: 58, zone: "nwe", sky: "cloud", why: "June 1944: the storms over the Channel" },
+      { turn: 61, zone: "nwe", sky: "cloud", why: "September 1944: low cloud over the bridges in Holland" }
+    ],
+    words: {
+      clear: "clear sky",
+      cloud: "cloud",
+      closed: "closed sky",
+      means: { clear: "everything flies", cloud: "flying is harder", closed: "nothing flies" },
+      tip: "A closed sky grounds every aircraft there, the enemy's too. THE SKY on the month card shows this month's sky and next month's chances."
+    }
+  };
+
+  // ../../src/campaign/weather.ts
+  var WEATHER = weather_default;
+  var SKIES = ["clear", "cloud", "closed"];
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var weatherOn = (g2) => g2.flags.open === 1 && g2.flags.weather === 1;
+  function openWeather(g2) {
+    if (WEATHER.on) g2.flags.weather = 1;
+  }
+  var maps = /* @__PURE__ */ new WeakMap();
+  var within = (v, b) => !b || (b[0] === null || v >= b[0]) && (b[1] === null || v <= b[1]);
+  function zoneMap(g2) {
+    let m = maps.get(g2.regions);
+    if (m && m.regions.length === g2.regions.length && m.seas.length === g2.seas.length) return m;
+    const index = new Map(WEATHER.zones.map((z, i) => [z.key, i]));
+    const regions = new Int16Array(g2.regions.length).fill(-1);
+    for (const r of g2.regions) {
+      const who = r.first ?? r.owner, world = beyondEurope(r);
+      const c = WEATHER.lands.find((l) => l.world === world && l.nats.includes(who) && within(r.x, l.x) && within(r.y, l.y));
+      if (c) regions[r.id] = index.get(c.zone) ?? -1;
+    }
+    const seas = new Int16Array(g2.seas.length).fill(-1);
+    for (const z of g2.seas) seas[z.id] = WEATHER.zones.findIndex((w) => w.seas.includes(z.name));
+    m = { regions, seas };
+    maps.set(g2.regions, m);
+    return m;
+  }
+  var zoneOfRegion = (g2, region) => region >= 0 && region < g2.regions.length ? zoneMap(g2).regions[region] : -1;
+  var zoneOfSea = (g2, sea) => sea >= 0 && sea < g2.seas.length ? zoneMap(g2).seas[sea] : -1;
+  var zoneName = (zone) => {
+    const z = WEATHER.zones[zone];
+    return z ? `${z.the ? "the " : ""}${z.name}` : "";
+  };
+  var zoneHead = (zone) => {
+    const s = zoneName(zone);
+    return s[0].toUpperCase() + s.slice(1);
+  };
+  var monthOf = (turn2) => turnToDate(turn2).month;
+  function bookSky(g2, zone, turn2) {
+    if (!stopDef(g2).book) return null;
+    const key7 = WEATHER.zones[zone].key;
+    return WEATHER.book.find((b) => b.turn === turn2 && b.zone === key7) ?? null;
+  }
+  var oddsOf = (zone, turn2) => WEATHER.zones[zone].odds[monthOf(turn2)];
+  var dealt = /* @__PURE__ */ new WeakMap();
+  function skiesOf(g2, turn2) {
+    const key7 = `${g2.seed}:${turn2}:${stopDef(g2).book ? 1 : 0}`;
+    const hold3 = turn2 === g2.turn ? dealt.get(g2) : void 0;
+    if (hold3 && hold3.key === key7) return hold3.skies;
+    const skies = WEATHER.zones.map((z, i) => {
+      const b = bookSky(g2, i, turn2);
+      if (b) return b.sky;
+      const roll3 = new Rng(hashString(`sky:${g2.seed}:${turn2}:${z.key}`)).next() * 10;
+      const [clear, cloud] = oddsOf(i, turn2);
+      return roll3 < clear ? "clear" : roll3 < clear + cloud ? "cloud" : "closed";
+    });
+    if (turn2 === g2.turn) dealt.set(g2, { key: key7, skies });
+    return skies;
+  }
+  var dealtSky = (g2, zone, turn2 = g2.turn) => zone < 0 ? "clear" : skiesOf(g2, turn2)[zone];
+  function skyOf(g2, zone, turn2 = g2.turn) {
+    if (!weatherOn(g2) || zone < 0) return "clear";
+    return skiesOf(g2, turn2)[zone];
+  }
+  var skyAt = (g2, region) => weatherOn(g2) ? skyOf(g2, zoneOfRegion(g2, region)) : "clear";
+  var skyAtSea = (g2, sea) => weatherOn(g2) ? skyOf(g2, zoneOfSea(g2, sea)) : "clear";
+  function zoneOfGroup(g2, f) {
+    if (f.ship === void 0) return zoneOfRegion(g2, f.base);
+    const c = g2.fleets.find((x) => x.id === f.ship);
+    if (!c) return -1;
+    return c.stance !== "port" ? zoneOfSea(g2, c.zone) : zoneOfRegion(g2, c.base);
+  }
+  var grounded = (g2, f) => weatherOn(g2) && skyOf(g2, zoneOfGroup(g2, f)) === "closed";
+  var cloudAim = (sky, night) => sky === "cloud" ? night ? WEATHER.cloud.bombsNight : WEATHER.cloud.bombsDay : 1;
+  var cloudMet = (sky) => sky === "cloud" ? WEATHER.cloud.met : 1;
+  var cloudGuns = (sky, night) => sky === "cloud" ? night ? WEATHER.cloud.gunsNight : WEATHER.cloud.gunsDay : 1;
+  function dayShare(lat, month3) {
+    const rad = Math.PI / 180;
+    const day = Math.round(15.5 + month3 * (365 / 12));
+    const decl = 23.44 * rad * Math.sin(2 * Math.PI * (284 + day) / 365);
+    const phi = Math.max(-89.9, Math.min(89.9, lat)) * rad;
+    const c = (Math.sin(-0.833 * rad) - Math.sin(phi) * Math.sin(decl)) / (Math.cos(phi) * Math.cos(decl));
+    return c <= -1 ? 1 : c >= 1 ? 0 : Math.acos(c) / Math.PI;
+  }
+  var skySupport = (sky) => sky === "closed" ? 0 : sky === "cloud" ? WEATHER.cloud.support : 1;
+  function whyNotSky(g2, f, targetZone) {
+    if (!weatherOn(g2)) return null;
+    const home = zoneOfGroup(g2, f);
+    if (skyOf(g2, home) === "closed") return `Grounded this month: the sky is closed over ${zoneName(home)}.`;
+    if (skyOf(g2, targetZone) === "closed") return `Closed sky this month: nothing flies over ${zoneName(targetZone)}.`;
+    return null;
+  }
+  function skyBattleLine(g2, zone, place3) {
+    const s = skyOf(g2, zone);
+    if (s === "closed") return `The sky is closed over ${place3} this month: no aircraft will fly for either side.`;
+    if (s === "cloud") return `Cloud over ${place3} this month: air support is worth half for both sides.`;
+    return null;
+  }
+  function skyRaidLine(g2, zone, place3) {
+    if (!weatherOn(g2) || zone < 0) return null;
+    const where = place3.length > 24 ? "the target" : place3;
+    const s = skyOf(g2, zone);
+    return s === "closed" ? `Closed sky over ${where}: nothing flies there this month.` : s === "cloud" ? `Cloud over ${where}: fewer bombs hit, and fewer bombers are found.` : `Clear sky over ${where}.`;
+  }
+  var TENTHS = { 1: [1, 10], 2: [1, 5], 3: [3, 10], 4: [2, 5], 5: [1, 2], 6: [3, 5], 7: [7, 10], 8: [4, 5], 9: [9, 10] };
+  var chances = (t, first2) => {
+    const [a, b] = TENTHS[t];
+    return first2 ? `${a} ${a === 1 ? "chance" : "chances"} in ${b}` : `${a} in ${b}`;
+  };
+  var word = (s) => s === "closed" ? "closed" : s;
+  function forecastLine(g2, zone, turn2 = g2.turn + 1, lead2) {
+    const month3 = lead2 ?? MONTHS[monthOf(turn2)];
+    const b = bookSky(g2, zone, turn2);
+    if (b) return `${month3}: ${b.sky === "clear" ? "a clear sky" : b.sky === "cloud" ? "cloud" : "a closed sky"}, as history had it.`;
+    const odds = oddsOf(zone, turn2);
+    const top = Math.max(...odds);
+    if (top >= 10) return `${month3}: ${SKIES[odds.indexOf(10)] === "clear" ? "a clear sky" : SKIES[odds.indexOf(10)]}, for certain.`;
+    const best = SKIES.filter((_, i) => odds[i] === top).reverse();
+    let line = best.length > 1 ? `${month3}: ${best.map(word).join(" or ")}, ${chances(top, true)} each` : `${month3}: likely ${word(best[0])}, ${chances(top, true)}`;
+    if (!best.includes("closed") && odds[2] >= 1) line += `; closed, ${chances(odds[2], false)}`;
+    return `${line}.`;
+  }
+  function zonesOf(g2, nat) {
+    const out = /* @__PURE__ */ new Set();
+    for (const f of g2.airFleets) if (f.nat === nat && f.ftr + f.bmr > 0) {
+      const z = zoneOfGroup(g2, f);
+      if (z >= 0) out.add(z);
+    }
+    const n = g2.nations[nat];
+    if (n?.atWar.length) {
+      for (const r of g2.regions) {
+        if (r.ctrl !== nat) continue;
+        if (r.nb.some((id) => n.atWar.includes(g2.regions[id].ctrl))) {
+          const z = zoneOfRegion(g2, r.id);
+          if (z >= 0) out.add(z);
+        }
+      }
+    }
+    return out;
+  }
+  function skyView(g2, nat = g2.human) {
+    if (!weatherOn(g2) || !nat || !g2.nations[nat]) return null;
+    const mine4 = [...zonesOf(g2, nat)].sort((a, b) => a - b);
+    const rows = WEATHER.zones.map((z, i) => ({ zone: i, name: zoneName(i), sky: skyOf(g2, i), text: "", forecast: forecastLine(g2, i), snow: z.snow.includes(monthOf(g2.turn) + 1) }));
+    for (const r of rows) r.text = r.sky === "closed" ? `${zoneHead(r.zone)}: closed sky. Nothing flies there this month.` : r.sky === "cloud" ? `${zoneHead(r.zone)}: cloud. Raids and air support count for less.` : `${zoneHead(r.zone)}: clear sky.`;
+    const lines2 = [];
+    const closed = mine4.filter((z) => rows[z].sky === "closed"), cloud = mine4.filter((z) => rows[z].sky === "cloud");
+    for (const z of closed) lines2.push({ sky: "closed", text: rows[z].text, forecast: [rows[z].forecast] });
+    if (cloud.length) {
+      const names = cloud.map((z, i) => i === 0 ? zoneHead(z) : zoneName(z));
+      lines2.push({ sky: "cloud", text: `${names.join(" and ")}: cloud. Raids and air support count for less.`, forecast: cloud.map((z) => cloud.length > 1 ? `${zoneHead(z)}. ${rows[z].forecast}` : rows[z].forecast) });
+    }
+    lines2.push({ sky: "clear", text: closed.length || cloud.length ? "Clear sky everywhere else you fly." : "Clear sky everywhere you fly.", forecast: [] });
+    const told2 = g2.flags["wx:tip"];
+    const tip = closed.length && nat === g2.human && (!told2 || told2 === g2.turn) ? WEATHER.words.tip : null;
+    return { lines: lines2, rows, open: closed.length > 0, report: groundedReport(g2, nat), tip };
+  }
+  function weatherMonth(g2) {
+    if (!weatherOn(g2)) return;
+    const was = g2.turn - 1;
+    for (const nat of Object.keys(g2.nations)) {
+      const n = g2.nations[nat];
+      const kept3 = n.alive && n.atWar.length ? g2.airFleets.filter((f) => f.nat === nat && f.ftr + f.bmr > 0 && skyOf(g2, zoneOfGroup(g2, f), was) === "closed").length : 0;
+      if (kept3) g2.flags[`wx:kept:${nat}`] = was * 1e3 + kept3;
+      else delete g2.flags[`wx:kept:${nat}`];
+    }
+  }
+  function groundedReport(g2, nat) {
+    const v = g2.flags[`wx:kept:${nat}`];
+    if (!v) return null;
+    const turn2 = Math.floor(v / 1e3), k = v % 1e3;
+    if (turn2 !== g2.turn - 1) return null;
+    const zones = [...new Set(g2.airFleets.filter((f) => f.nat === nat).map((f) => zoneOfGroup(g2, f)).filter((z) => z >= 0 && skyOf(g2, z, turn2) === "closed"))];
+    const where = zones.length === 1 ? ` over ${zoneName(zones[0])}` : "";
+    return `In ${MONTHS[monthOf(turn2)]} the closed sky${where} kept ${k} of your air groups on the ground.`;
+  }
+
+  // ../../data/campaign/airversion.json
+  var airversion_default = {
+    _about: "The air version's open pieces (the design director's b482, item 3; the grand campaign only). Each has its own switch: 'on' sets it for new grand campaigns, and a campaign keeps the setting it began with (g.flags 'av:night', 'av:start', 'av:field'). Untouched means unchanged: with every switch off nothing here runs. 'nightGuns' (ruling 107(b)): by night the guns round a target bring down 'share' as many bombers as by day; the bombing they stop is the same. 'startGuns' (ruling 124): every great power opens a grand campaign with anti-aircraft guns round its capital and round the 'provinces' home provinces with the most factories (its own ground, held), player and computer alike: level 'early' in a campaign begun in 'earlyTo' or before, level 'late' in a later one. A province that has guns keeps the higher level. 'field' (ruling 151(b), WRECK THE AIRFIELD): an agent abroad, at war with the host, can wreck the field of a province where an air group of the host's side is based; the numbers are the factory's (intel.json missions.airfield). Every air group based there is grounded for the month the attempt comes off. The other side's services strike at the player's fields too: a plot is aimed at a field with chance 'enemyShare', where the player has an air group based on home ground; otherwise it divides as it always did. Brian switched 'field' on for new grand campaigns in release 2 (22 November) and the start guns on (24 November, 1.5.1 and release 2; a grand campaign saved before that gets them once as it loads, startGunsOnLoad); the night guns stay off.",
+    nightGuns: { on: false, share: 0.5 },
+    startGuns: { on: true, early: 1, late: 2, earlyTo: 1940, provinces: 2 },
+    field: { on: true, enemyShare: 0.25 }
+  };
+
+  // ../../src/campaign/airversion.ts
+  var AIRV = airversion_default;
+  var KEY = { night: "av:night", start: "av:start", field: "av:field" };
+  var airPiece = (g2, p) => g2.flags.open === 1 && g2.flags[KEY[p]] === 1;
+  var nightGunShare = (g2, night) => night && airPiece(g2, "night") ? AIRV.nightGuns.share : 1;
+  function startGunSites(g2, nat) {
+    const n = g2.nations[nat];
+    if (!n?.alive) return [];
+    const out = [];
+    const cap17 = g2.regions[n.capital];
+    if (cap17 && cap17.owner === nat && cap17.ctrl === nat) out.push(cap17.id);
+    const homes = g2.regions.filter((r) => r.owner === nat && r.ctrl === nat && r.fac > 0 && r.id !== n.capital).sort((a, b) => b.fac - a.fac || a.id - b.id);
+    for (const r of homes.slice(0, AIRV.startGuns.provinces)) out.push(r.id);
+    return out;
+  }
+  var startGunLevel = (turn2) => turnToDate(turn2).year <= AIRV.startGuns.earlyTo ? AIRV.startGuns.early : AIRV.startGuns.late;
+  function openAirVersion(g2, majors) {
+    if (AIRV.nightGuns.on) g2.flags[KEY.night] = 1;
+    if (AIRV.field.on) g2.flags[KEY.field] = 1;
+    if (!AIRV.startGuns.on) return;
+    g2.flags[KEY.start] = 1;
+    layStartGuns(g2, majors);
+  }
+  function startGunsOnLoad(g2, majors) {
+    if (!AIRV.startGuns.on || g2.flags.open !== 1 || g2.flags[KEY.start] === 1) return false;
+    g2.flags[KEY.start] = 1;
+    layStartGuns(g2, majors, g2.flags.openFrom ?? 1);
+    return true;
+  }
+  function layStartGuns(g2, majors, began = g2.turn) {
+    const lv = startGunLevel(began);
+    for (const nat of majors) for (const id of startGunSites(g2, nat)) g2.flags[`wk:aa:${id}`] = Math.max(g2.flags[`wk:aa:${id}`] ?? 0, lv);
+  }
+  var fieldWrecked = (g2, region) => g2.flags.fields === 1 && fieldRules(g2) ? fieldShut(g2, region) : g2.flags[`wreck:${region}`] === g2.turn;
+  var wrecked = (g2, f) => f.ship === void 0 && (f.way !== void 0 || fieldShut(g2, f.base));
+  function whyNotField(g2, f) {
+    if (!wrecked(g2, f)) return null;
+    if (f.way !== void 0) return `On its way to ${g2.regions[f.way.to]?.name ?? "another airfield"}: out of the fight until it gets there.`;
+    return g2.flags.fields === 1 && fieldRules(g2) ? `Grounded: the runway at ${g2.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g2.regions[f.base].name}.`;
+  }
+  var groupsOnField = (g2, region, nat) => g2.airFleets.filter((f) => f.base === region && f.ship === void 0 && f.ftr + f.bmr > 0 && nat(f.nat));
+  function wreckField(g2, region, nat) {
+    if (fieldWrecked(g2, region) || !groupsOnField(g2, region, nat).length) return false;
+    if (g2.flags.fields === 1 && fieldRules(g2)) return damageField(g2, region, "agent") !== null;
+    g2.flags[`wreck:${region}`] = g2.turn;
+    return true;
+  }
+
+  // ../../src/campaign/aircampaigns.ts
+  var AC = aircampaigns_default;
+  var acOn = (g2) => g2.flags.open === 1 && g2.flags.ac === 1;
+  var FAR_FIELDS = /* @__PURE__ */ new Map();
+  if (FAR_STAGE) for (const f of far_fields_default.rows) FAR_FIELDS.set(f.region, [...FAR_FIELDS.get(f.region) ?? [], f]);
+  function recordField(g2, region) {
+    const name = g2.regions[region]?.name;
+    let out = 0;
+    for (const f of FAR_FIELDS.get(name) ?? []) if (f.from <= g2.turn) out = Math.max(out, f.class);
+    if (!acOn(g2)) return out;
+    for (const f of AC.fields.rows) if (f.region === name && f.from <= g2.turn) out = Math.max(out, f.class);
+    return out;
+  }
+  var airCampaignsShipped = () => AC.on === true;
+  function setAirCampaigns(g2, on2) {
+    if (on2) g2.flags.ac = 1;
+    else delete g2.flags.ac;
+  }
+  var mem = (g2) => g2.ac ?? (g2.ac = { campaigns: [], next: 1, sky: {}, stock: {} });
+  var open = (g2) => g2.ac ? g2.ac.campaigns.filter((c) => c.off === void 0) : [];
+  var month = (t) => turnToDate(t).label;
+  var foesOf = (g2, nat, region) => /* @__PURE__ */ new Set([g2.regions[region].ctrl]);
+  function radarGuard(g2, nat, region) {
+    const r = g2.regions[region], home = r.owner;
+    return !r.overseas && atWar(g2, nat, home) && allied(g2, home, r.ctrl) && !!g2.nations[home]?.alive && hasTech(g2, home, AIRWAR.sky.radar);
+  }
+  function knockedOut(g2, region, nat) {
+    const holder = g2.regions[region].ctrl;
+    const wx = weatherOn(g2);
+    const bombed = /* @__PURE__ */ new Set();
+    for (let i = g2.airReports.length - 1; i >= 0; i--) {
+      const r = g2.airReports[i];
+      if (r.turn < g2.turn - 1) break;
+      if (r.mission === "superiority" && r.region >= 0 && (r.attNat === nat || allied(g2, r.attNat, nat))) bombed.add(r.region);
+    }
+    let all = 0, fit3 = 0;
+    for (const f of g2.airFleets) {
+      if (f.ftr <= 0 || f.close || !atWar(g2, f.nat, nat) || !guardsLand(g2, f, region, holder)) continue;
+      const n = f.ftr * cover(kmTo(g2, f, region), airRange(f, g2).ftr) * crowding(g2, f);
+      if (n <= 0) continue;
+      all += n;
+      const down = wx && grounded(g2, f) || wrecked(g2, f) || f.ready <= AC.sky.knocked + 1e-9 && bombed.has(f.base);
+      if (!down) fit3 += n;
+    }
+    return all >= AIR.sky.least && fit3 < AIR.sky.least;
+  }
+  function numbers(g2, nat, region) {
+    return { a: airOverBattle(g2, /* @__PURE__ */ new Set([nat]), foesOf(g2, nat, region), region), d: airOverBattle(g2, foesOf(g2, nat, region), /* @__PURE__ */ new Set([nat]), region) };
+  }
+  function settled(s, turn2) {
+    const gap = turn2 - s.turn;
+    if (gap <= 1) return { state: s.state, streak: s.streak };
+    return { state: s.state === "held" && gap <= AC.sky.idle + 1 ? "held" : "contested", streak: 0 };
+  }
+  function skyFought(g2, nat, region, won) {
+    const M2 = mem(g2);
+    let s = M2.sky[region];
+    const ours = !!s && (s.by === nat || allied(g2, s.by, nat));
+    if (!s || !ours) {
+      s = M2.sky[region] = { by: nat, state: "contested", streak: 0, turn: g2.turn, since: g2.turn, best: -2, was: { state: "contested", streak: 0 } };
+    } else if (s.turn !== g2.turn) {
+      s.was = settled(s, g2.turn);
+      s.best = -2;
+      s.turn = g2.turn;
+    }
+    const { a, d } = numbers(g2, nat, region);
+    const T = AIRWAR.sky.own, least = AIR.sky.least;
+    const out = a >= least && a >= T * d && knockedOut(g2, region, nat);
+    const guard = radarGuard(g2, nat, region);
+    const res = out ? 2 : won || !guard && a >= least && a >= T * d ? 1 : d >= least && d >= T * a ? -1 : 0;
+    if (res <= s.best) return s.state;
+    s.best = res;
+    const before = s.state;
+    let { state, streak } = s.was;
+    if (res === 2) {
+      state = "held";
+      streak = Math.max(1, streak);
+    } else if (state === "held") {
+      if (res < 0 || a < AC.sky.keep * d) {
+        state = "contested";
+        streak = 0;
+      }
+    } else {
+      streak = res === 1 ? Math.max(0, streak) + 1 : res === -1 ? Math.min(0, streak) - 1 : 0;
+      state = streak >= AC.sky.months ? "held" : streak <= -AC.sky.months ? "lost" : "contested";
+    }
+    s.state = state;
+    s.streak = streak;
+    if (state === "held") {
+      if (before !== "held") s.won = g2.turn;
+      g2.sky[region] = { nat, turn: g2.turn };
+    } else delete s.won;
+    if (state !== before && state !== "contested") skyNews(g2, s, region, out);
+    return state;
+  }
+  function skyNews(g2, s, region, out) {
+    const adj = g2.nations[s.by].adj, place3 = g2.regions[region].name, foe = g2.nations[g2.regions[region].ctrl]?.adj ?? "enemy";
+    const text = s.state === "held" ? `The ${adj} air force has won the sky over ${place3}: ${out ? `the ${foe} fighters there are knocked out on their fields` : `for ${AC.sky.months} months running the ${foe} air force could not match it there`}. It holds that sky for as long as it keeps the numbers and keeps flying over it.` : `The ${adj} air force has lost the battle for the sky over ${place3}: for ${AC.sky.months} months running the ${foe} fighters there outnumbered it.`;
+    headline(g2, "battle", text, s.by, region, { arm: "air", ...s.state === "held" ? { won: s.by, lost: g2.regions[region].ctrl } : { won: g2.regions[region].ctrl, lost: s.by } });
+  }
+  function skyFight(g2, region) {
+    const s = g2.ac?.sky[region];
+    if (!s || !g2.nations[s.by]?.alive || !atWar(g2, s.by, g2.regions[region].ctrl)) return null;
+    const n = settled(s, g2.turn);
+    return { ...s, now: n.state, run: n.streak };
+  }
+  function skyMonth(g2) {
+    const M2 = g2.ac;
+    if (!M2) return;
+    for (const k of Object.keys(M2.sky)) {
+      const region = Number(k), s = M2.sky[region];
+      if (!g2.nations[s.by]?.alive || !atWar(g2, s.by, g2.regions[region].ctrl) || g2.turn - s.turn > AC.sky.idle + 3) {
+        delete M2.sky[region];
+        continue;
+      }
+      if (s.state !== "held") continue;
+      const { a, d } = numbers(g2, s.by, region);
+      if (g2.turn - s.turn > AC.sky.idle + 1 || a < AIR.sky.least || a < AC.sky.keep * d) {
+        s.state = "contested";
+        s.streak = 0;
+        delete s.won;
+        continue;
+      }
+      g2.sky[region] = { nat: s.by, turn: g2.turn };
+    }
+  }
+  var rate = (row2, dispersed) => {
+    const r = AC.repair[row2];
+    return dispersed && r.dispersed !== void 0 ? r.dispersed : r.perMonth;
+  };
+  var dispersedAt = (g2, victim, row2) => victim === AC.dispersal.nat && g2.turn >= AC.dispersal.from && AC.dispersal.rows.includes(row2);
+  var landsIn = (g2, by2, victim) => g2.order.indexOf(by2) < g2.order.indexOf(victim) ? g2.turn : g2.turn + 1;
+  function addStock(g2, r, kind, by2, cut2, rt) {
+    if (cut2 <= 0) return;
+    const M2 = mem(g2), k = `${r.id}:${kind}`, victim = r.ctrl, when = landsIn(g2, by2, victim);
+    let s = M2.stock[k];
+    if (!s || s.victim !== victim) s = M2.stock[k] = { region: r.id, kind, by: by2, victim, v: 0, rate: rt, at: when - 1, land: {}, carry: 0, mended: 0, done: 0 };
+    const have = s.v + Object.values(s.land).reduce((x, y) => x + y, 0);
+    s.rate = have + cut2 > 0 ? (have * s.rate + cut2 * rt) / (have + cut2) : rt;
+    s.land[when] = Math.min(AC.stock.most, (s.land[when] ?? 0) + cut2);
+    s.by = by2;
+    s.last = { turn: g2.turn, by: by2, cut: (s.last && s.last.turn === g2.turn && s.last.by === by2 ? s.last.cut : 0) + cut2 };
+    if (when === g2.turn) s.done += cut2;
+  }
+  function bombLands(g2, by2, r, cut2, night, aim) {
+    var _a;
+    if (night) ((_a = mem(g2)).night ?? (_a.night = {}))[r.ctrl] = g2.turn;
+    if (cut2 <= 0) return cut2;
+    const row2 = night ? AC.use.night : AC.use.day;
+    const spread = dispersedAt(g2, r.ctrl, row2);
+    const out = spread ? cut2 * AC.dispersal.cut : cut2;
+    if (r.fac > 0 && aim === "works") addStock(g2, r, "works", by2, out, rate(row2, spread));
+    if (r.oil) addStock(g2, r, "oil", by2, out, rate(AC.use.oilfield, false));
+    else if (aim === "oil" && r.fac > 0) addStock(g2, r, "oil", by2, out, rate(AC.use.oil, false));
+    return out;
+  }
+  function stockMonth(g2) {
+    const M2 = g2.ac;
+    if (!M2) return;
+    for (const k of Object.keys(M2.stock)) {
+      const s = M2.stock[k], r = g2.regions[s.region];
+      if (r.ctrl !== s.victim) {
+        delete M2.stock[k];
+        continue;
+      }
+      s.mended = 0;
+      while (s.at < g2.turn - 1) {
+        s.at++;
+        s.v = Math.min(AC.stock.most, s.v * (1 - s.rate) + (s.land[s.at] ?? 0));
+        delete s.land[s.at];
+      }
+      s.mended = s.v * s.rate;
+      s.carry = s.v * (1 - s.rate);
+      s.done = s.land[g2.turn] ?? 0;
+      if (s.carry < AC.stock.least && !Object.keys(s.land).length) delete M2.stock[k];
+    }
+  }
+  function heldDown(g2, r, kind) {
+    const s = acOn(g2) ? g2.ac?.stock[`${r.id}:${kind}`] : void 0;
+    if (!s || s.victim !== r.ctrl) return 0;
+    return Math.min(AC.stock.most, s.carry + (s.land[g2.turn] ?? 0));
+  }
+  function stockLoss(g2, nat) {
+    if (!acOn(g2) || !g2.ac) return 0;
+    let total = 0, down = 0;
+    for (const r of g2.regions) if (r.ctrl === nat) total += r.fac;
+    if (total <= 0) return 0;
+    for (const s of Object.values(g2.ac.stock)) {
+      if (s.kind !== "works" || s.victim !== nat) continue;
+      const r = g2.regions[s.region];
+      if (r.ctrl === nat) down += s.carry * r.fac;
+    }
+    return down / total;
+  }
+  var oilHeld = (g2, r) => heldDown(g2, r, "oil");
+  function bombWorn(g2, nat) {
+    if (!acOn(g2) || !g2.ac) return 0;
+    let w = 0;
+    for (const s of Object.values(g2.ac.stock)) {
+      if (s.kind !== "works" || s.victim !== nat) continue;
+      const r = g2.regions[s.region], size = townSize(g2, r);
+      if (size === "city" || size === "capital") w += AC.will.per * heldDown(g2, r, "works");
+    }
+    return Math.min(AC.will.most, w);
+  }
+  function chainAt(g2, r, record2) {
+    if (r.owner !== r.ctrl) return null;
+    const nat = r.ctrl;
+    const old = record2.find((c) => c.nat === nat && c.from <= g2.turn);
+    if (old) return old;
+    if (stopDef(g2).book) {
+      const row2 = AC.radar.record.find((c) => c.nat === nat && c.from <= g2.turn && (!c.regions || c.regions.includes(r.name)));
+      return row2 && majorsOf(g2).includes(nat) ? row2 : null;
+    }
+    if (!hasTech(g2, nat, AC.radar.tech)) return null;
+    const n = g2.nations[nat];
+    return { nat, from: g2.turn, name: `the ${n?.adj ?? nat} radar chain`, by: n?.name ?? nat, ground: AC.radar.ground };
+  }
+  function gunnerRatio(g2, nat, m, target, night, escorted2) {
+    const G5 = AC.gunners;
+    if (night) return G5.night;
+    if (m === "ground" || m === "line") return G5.ground;
+    if (G5.box.nats.includes(nat)) {
+      const r = m === "strike" || m === "fleet" ? void 0 : g2.regions[target];
+      if (r && nat === G5.b29.nat && g2.turn >= G5.b29.from && G5.b29.vs.includes(r.ctrl) && G5.b29.regions.includes(r.name)) return G5.b29.ratio;
+      return escorted2 ? G5.box.escorted : G5.box.alone;
+    }
+    return rowAt(G5.day[nat] ?? G5.day._default, g2.turn);
+  }
+  function controlFirst(g2, nat) {
+    if (!acOn(g2) || stopDef(g2).book) return null;
+    const at4 = g2.ac?.night?.[nat];
+    if (at4 === void 0 || g2.turn - at4 > AC.radar.need) return null;
+    return hasTech(g2, nat, AC.radar.tech) && !hasTech(g2, nat, AC.radar.control) ? AC.radar.control : null;
+  }
+  function radarWords(g2, nat, id) {
+    if (!acOn(g2)) return null;
+    const record2 = AIR.radar.chains, without = AIR.radar.without;
+    if (id === AC.radar.tech) {
+      if (stopDef(g2).book) {
+        const rows = [...record2.filter((c) => c.nat === nat), ...majorsOf(g2).includes(nat) ? AC.radar.record.filter((c) => c.nat === nat) : []].sort((a, b) => a.from - b.from);
+        if (!rows.length) return null;
+        return `Its warning chain follows history's, with or without this research: ${rows.map((c) => `over ${c.where ?? "all its ground"} from ${month(c.from)}`).join(", ")}.`;
+      }
+      return `A warning chain over all the ground it holds: every fighter in reach gets up in time to meet a raid, where without one only ${Math.round(without * 10)} in 10 do, and fewer of its aircraft are caught on the ground.`;
+    }
+    if (id === AC.radar.control) {
+      return stopDef(g2).book ? "Its night defence grows with the years as history's did, with or without this research." : "Its fighters are steered onto the bombers in the dark, as well as each year's sets allow. Without this, its night defence stays as it was at the start of the war.";
+    }
+    return null;
+  }
+  var rowAt = (rows, t) => {
+    let v = rows[0][1];
+    for (const [from2, x] of rows) if (from2 <= t) v = x;
+    return v;
+  };
+  function nightFighters(g2, nat) {
+    const rows = AC.radar.night[nat] ?? AC.radar.night._default;
+    return stopDef(g2).book || hasTech(g2, nat, AC.radar.control) ? rowAt(rows, g2.turn) : rows[0][1];
+  }
+  var missionOf = (c) => c.kind === "sky" ? "superiority" : c.night ? "night" : "bomb";
+  function campaignOf(g2, f) {
+    if (!acOn(g2) || f.camp === void 0 || !g2.ac) return null;
+    return g2.ac.campaigns.find((c) => c.id === f.camp && c.off === void 0 && (c.groups.includes(f.id) || c.escorts.includes(f.id))) ?? null;
+  }
+  var inCampaign = (g2, f) => campaignOf(g2, f) !== null;
+  function aimOf(g2, fleets) {
+    for (const f of fleets) {
+      const c = campaignOf(g2, f);
+      if (c) return c.aim;
+    }
+    return "works";
+  }
+  var nameFor = (g2, nat, kind, targets2, night) => {
+    const place3 = g2.regions[targets2[0]].name + (targets2.length > 1 ? ` and ${targets2.length - 1} more` : "");
+    return theWords(kind === "sky" ? `The battle for the sky over ${place3}` : kind === "support" ? `Support for the offensive at ${place3}` : `The bombing of ${place3}${night ? " by night" : ""}`);
+  };
+  function addCampaign(g2, nat, kind, targets2, groups, o, book3) {
+    const M2 = mem(g2);
+    const night = kind === "bomb" && !!o.night;
+    const c = {
+      id: M2.next++,
+      nat,
+      kind,
+      name: o.name ?? nameFor(g2, nat, kind, targets2, night),
+      targets: [...targets2],
+      next: 0,
+      groups: [...groups],
+      escorts: night ? [] : [...o.escorts ?? []],
+      night,
+      aim: o.aim ?? "works",
+      since: g2.turn,
+      log: [],
+      ...book3 !== void 0 ? { book: book3 } : {}
+    };
+    M2.campaigns.push(c);
+    for (const id of [...c.groups, ...c.escorts]) {
+      const f = g2.airFleets.find((x) => x.id === id);
+      if (f) f.camp = c.id;
+    }
+    return c;
+  }
+  function release(g2, c, f) {
+    if (f.camp !== c.id) return;
+    delete f.camp;
+    if (c.kind === "support") delete f.close;
+    if (f.escorts !== void 0 && c.escorts.includes(f.id)) delete f.escorts;
+    if (f.flew !== g2.turn) {
+      f.mission = "support";
+      f.target = -1;
+    }
+  }
+  function endCampaign(g2, c, why) {
+    closeLog(g2, c);
+    c.off = g2.turn;
+    c.why = why;
+    for (const f of g2.airFleets) if (f.camp === c.id) release(g2, c, f);
+    if (c.nat === g2.human) headline(g2, "info", `${c.name} has ended after ${monthsWord(g2.turn - c.since)}: ${why.charAt(0).toLowerCase()}${why.slice(1)}`, c.nat);
+  }
+  var monthsWord = (n) => n <= 0 ? "less than a month" : n === 1 ? "a month" : `${n} months`;
+  var live = (g2, c, ids2) => ids2.map((id) => g2.airFleets.find((f) => f.id === id)).filter((f) => !!f && f.nat === c.nat && f.ftr + f.bmr > 0 && !afloat(f));
+  function behind(g2, nat, t) {
+    const near2 = /* @__PURE__ */ new Set();
+    for (const k of g2.corps) if (k.nat === nat && !k.dead) {
+      near2.add(k.reg);
+      for (const j of g2.regions[k.reg].nb) near2.add(j);
+    }
+    return g2.regions[t].nb.filter((j) => atWar(g2, nat, g2.regions[j].ctrl) && !near2.has(j));
+  }
+  var lostOf = (fs) => fs.reduce((s, f) => s + f.lost.ftr + f.lost.bmr, 0);
+  function closeLog(g2, c) {
+    const e = c.log[c.log.length - 1];
+    if (!e || e.ids === void 0) return;
+    e.lost = Math.max(0, lostOf(e.ids.map((id) => g2.airFleets.find((f) => f.id === id)).filter((f) => !!f)) - (e.base ?? 0));
+    delete e.ids;
+    delete e.base;
+  }
+  function campaignOrders(g2, nat) {
+    if (!acOn(g2) || !g2.ac) return;
+    for (const c of open(g2)) {
+      if (c.nat !== nat) continue;
+      closeLog(g2, c);
+      const main = live(g2, c, c.groups), esc2 = live(g2, c, c.escorts);
+      c.groups = main.map((f) => f.id);
+      c.escorts = esc2.map((f) => f.id);
+      const book3 = c.book !== void 0;
+      if (!main.length) {
+        if (!book3) endCampaign(g2, c, "Its air groups are gone.");
+        continue;
+      }
+      const targets2 = c.targets.filter((t) => g2.regions[t] && atWar(g2, nat, g2.regions[t].ctrl));
+      if (!targets2.length) {
+        if (!book3) endCampaign(g2, c, c.kind === "support" ? "Its offensive is over, the ground taken." : "Its targets are no longer in enemy hands.");
+        continue;
+      }
+      const ready = main.filter((f) => f.flew !== g2.turn);
+      if (!ready.length) continue;
+      let target = -1;
+      if (c.kind === "sky") {
+        const notHeld = targets2.filter((t) => {
+          const s = skyFight(g2, t);
+          return !(s && s.now === "held" && allied(g2, s.by, nat));
+        });
+        const pool = notHeld.length ? notHeld : targets2;
+        const flyable = pool.filter((t) => ready.some((f) => whyNotMission(g2, f, "superiority", t) === null));
+        target = flyable.length ? notHeld.length ? flyable[0] : flyable[c.next++ % flyable.length] : -1;
+        for (const f of ready) if (target >= 0 && whyNotMission(g2, f, "superiority", target) === null) {
+          f.mission = "superiority";
+          f.target = target;
+          f.camp = c.id;
+        }
+      } else if (c.kind === "bomb") {
+        const m = missionOf(c);
+        for (let k = 0; k < targets2.length; k++) {
+          const t = targets2[(c.next + k) % targets2.length];
+          if (!ready.some((f) => f.bmr > 0 && whyNotMission(g2, f, m, t) === null)) continue;
+          target = t;
+          c.next = (c.next + k + 1) % targets2.length;
+          break;
+        }
+        if (target >= 0) {
+          let lead2 = null;
+          for (const f of ready) if (f.bmr > 0 && whyNotMission(g2, f, m, target) === null) {
+            f.mission = m;
+            f.target = target;
+            f.camp = c.id;
+            lead2 ?? (lead2 = f);
+          }
+          if (lead2 && !c.night) {
+            for (const f of esc2) if (f.flew !== g2.turn) {
+              f.mission = "support";
+              f.target = -1;
+              f.escorts = lead2.id;
+              f.camp = c.id;
+            }
+          }
+        }
+      } else {
+        const sky = targets2.find((t) => ready.some((f) => f.ftr > 0 && whyNotMission(g2, f, "superiority", t) === null)) ?? -1;
+        target = targets2[0];
+        for (const f of ready) {
+          f.camp = c.id;
+          if (f.bmr <= 0 || f.kind === "ftr") {
+            if (byHand(g2, nat, "air") ? closeRules(g2) : closeStaffRules(g2)) {
+              f.mission = "support";
+              f.target = -1;
+              f.close = true;
+              delete f.escorts;
+            } else if (sky >= 0 && whyNotMission(g2, f, "superiority", sky) === null) {
+              f.mission = "superiority";
+              f.target = sky;
+            }
+            continue;
+          }
+          const troops = targets2.find((t) => whyNotMission(g2, f, "ground", t) === null);
+          const rear = targets2.flatMap((t) => behind(g2, nat, t)).find((t) => whyNotMission(g2, f, "bomb", t) === null);
+          const pick4 = (g2.turn + f.id) % 2 === 0 ? troops ?? rear : rear ?? troops;
+          if (pick4 !== void 0) {
+            f.mission = troops === pick4 ? "ground" : "bomb";
+            f.target = pick4;
+          }
+        }
+      }
+      const flying3 = [...main, ...esc2].filter((f) => f.camp === c.id);
+      const e = {
+        turn: g2.turn,
+        target,
+        sent: flying3.reduce((s, f) => s + f.ftr + f.bmr, 0),
+        lost: 0,
+        downed: 0,
+        done: 0,
+        ids: flying3.map((f) => f.id),
+        base: lostOf(flying3)
+      };
+      c.log.push(e);
+    }
+  }
+  function campaignResults(g2, nat, reps) {
+    if (!acOn(g2) || !g2.ac) return;
+    for (const c of open(g2)) {
+      if (c.nat !== nat) continue;
+      const e = c.log[c.log.length - 1];
+      if (!e || e.turn !== g2.turn) continue;
+      const ids2 = /* @__PURE__ */ new Set([...c.groups, ...c.escorts]);
+      for (const r of reps) {
+        if (!r.att.some((x) => x.id !== void 0 && ids2.has(x.id))) continue;
+        e.downed += r.def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
+        if (r.mission === "superiority" && r.region >= 0) {
+          const s = skyFight(g2, r.region);
+          if (s) e.sky = s.now;
+        }
+      }
+      if (c.kind !== "sky" && e.target >= 0) {
+        for (const k of ["works", "oil"]) {
+          const s = g2.ac.stock[`${e.target}:${k}`];
+          if (s?.last && s.last.turn === g2.turn && s.last.by === nat) e.done = Math.max(e.done, s.last.cut);
+        }
+      }
+    }
+  }
+  var phaseOf = (row2, turn2) => row2.fly?.find((p) => p.from <= turn2 && turn2 <= p.to) ?? null;
+  var kindOf = (row2, p) => p.kind === "sky" || row2.kind === "sky" ? "sky" : "bomb";
+  function theatreOf2(g2, nat, th) {
+    const side5 = th?.split("-")[1];
+    const split = AC.split[nat];
+    if (split && side5) return { mine: () => true, part: rowAt(split, g2.turn)[side5] ?? 1 };
+    if (th === "UK-home") return { mine: (f) => {
+      const r = g2.regions[f.base];
+      return !!r && (r.first ?? r.owner) === "UK" && !r.overseas;
+    }, part: 1 };
+    if (th === "USA-eur") return { mine: (f) => !beyondEurope(f.base), part: 1 };
+    if (th === "USA-pac") return { mine: (f) => beyondEurope(f.base), part: 1 };
+    return { mine: () => true, part: 1 };
+  }
+  function strength(g2, nat, th, bombers) {
+    return airFleetsOf(g2, nat).reduce((s, f) => s + (!afloat(f) && th.mine(f) ? bombers ? f.kind !== "ftr" ? f.bmr : 0 : f.kind !== "bmr" ? f.ftr : 0 : 0), 0);
+  }
+  function bookGroups(g2, nat, targets2, bombers, want, taken2, th, bases) {
+    const fs = airFleetsOf(g2, nat).filter((f) => !afloat(f) && th.mine(f) && !taken2.has(f.id) && (bombers ? f.bmr > 0 && f.kind !== "ftr" : f.ftr > 0 && f.kind !== "bmr"));
+    const size = (f) => bombers ? f.bmr : f.ftr;
+    const range2 = (f) => bombers ? airRange(f, g2).bmr : airRange(f, g2).ftr;
+    const nearFrom = (at4) => Math.min(...targets2.map((t) => km(g2, at4, t)));
+    const near2 = (f) => Math.min(...targets2.map((t) => kmTo(g2, f, t)));
+    const toBase = (at4) => Math.min(...bases.map((b) => km(g2, at4, b)));
+    const out = [];
+    let got = 0;
+    const enough = (f) => want <= 0 || got > 0 && got + size(f) / 2 > want;
+    const can2 = fs.filter((f) => near2(f) <= range2(f)).sort((a, b) => near2(a) - near2(b) || a.id - b.id);
+    for (const f of can2) {
+      if (enough(f)) return out;
+      out.push(f);
+      got += size(f);
+    }
+    if (!bases.length) return out;
+    const rest = fs.filter((f) => !can2.includes(f)).sort((a, b) => toBase(a.base) - toBase(b.base) || a.id - b.id);
+    for (const f of rest) {
+      if (enough(f)) break;
+      const fields = g2.regions.filter((r) => nearFrom(r.id) <= range2(f) && whyNotBase(g2, f, r, true) === null).sort((a, b) => Number(fieldRoom(g2, b.id, f)) - Number(fieldRoom(g2, a.id, f)) || toBase(a.id) - toBase(b.id) || a.id - b.id);
+      if (!fields.length || !rebaseAir(g2, f, fields[0], true)) continue;
+      out.push(f);
+      got += size(f);
+    }
+    return out;
+  }
+  function bookMonth(g2) {
+    if (!stopDef(g2).book) return;
+    const M2 = mem(g2);
+    const taken2 = /* @__PURE__ */ new Set();
+    for (const c of M2.campaigns) if (c.off === void 0 && c.book === void 0) for (const id of [...c.groups, ...c.escorts]) taken2.add(id);
+    AC.book.forEach((row2, i) => {
+      const c = M2.campaigns.find((x) => x.book === i && x.off === void 0);
+      const p = phaseOf(row2, g2.turn);
+      const n = g2.nations[row2.nat];
+      const can2 = !!p && !!n?.alive && n.atWar.length > 0 && !byHand(g2, row2.nat, "air");
+      const targets2 = can2 ? p.regions.map((nm) => g2.byName[nm]?.id).filter((t) => t !== void 0 && atWar(g2, row2.nat, g2.regions[t].ctrl)) : [];
+      if (!can2 || !targets2.length) {
+        if (c) endCampaign(g2, c, p ? "Its targets are out of reach." : "Its months are over.");
+        return;
+      }
+      const kind = kindOf(row2, p);
+      const night = kind === "bomb" && (p.night ?? row2.time === "night");
+      for (const f of airFleetsOf(g2, row2.nat)) if (f.camp === c?.id) delete f.camp;
+      const share = row2.share ? rowAt(row2.share, g2.turn) : 1;
+      const th = theatreOf2(g2, row2.nat, row2.theatre);
+      const bases = (row2.bases ? rowAt(row2.bases, g2.turn) : []).map((nm) => g2.byName[nm]?.id).filter((b) => b !== void 0);
+      const ftr = strength(g2, row2.nat, th, false) * th.part, bmr = strength(g2, row2.nat, th, true) * th.part;
+      const main = kind === "sky" ? [...bookGroups(g2, row2.nat, targets2, false, share * ftr, taken2, th, bases), ...p.bombers ? bookGroups(g2, row2.nat, targets2, true, share * bmr, taken2, th, bases) : []] : bookGroups(g2, row2.nat, targets2, true, share * (ftr + bmr), taken2, th, bases);
+      for (const f of main) taken2.add(f.id);
+      const esc2 = kind === "bomb" && !night && p.escort ? bookGroups(g2, row2.nat, targets2, false, p.escort * ftr, taken2, th, bases) : [];
+      for (const f of esc2) taken2.add(f.id);
+      const aim = p.aim ?? "works";
+      if (!c) {
+        if (!main.length) return;
+        addCampaign(g2, row2.nat, kind, targets2, main.map((f) => f.id), { name: row2.what, night, escorts: esc2.map((f) => f.id), aim }, i);
+        return;
+      }
+      c.kind = kind;
+      c.night = night;
+      c.aim = aim;
+      if (c.targets.join() !== targets2.join()) {
+        c.targets = targets2;
+        c.next = 0;
+      }
+      c.groups = main.map((f) => f.id);
+      c.escorts = esc2.map((f) => f.id);
+      for (const f of [...main, ...esc2]) f.camp = c.id;
+    });
+  }
+  function airWarMonth(g2) {
+    if (!acOn(g2)) return;
+    stockMonth(g2);
+    skyMonth(g2);
+    bookMonth(g2);
+  }
+
+  // ../../src/campaign/citydefences.ts
+  var CITYDEF = citydefences_default;
+  var ENTRENCH = defence_default.entrench;
+  var WORKS_TOP = 3;
+  var LIGHTS_TOP = WORKS_TOP;
+  var cityDefences = (g2) => g2.flags.cityDefences === 1;
+  var cityDefencesOn = (g2) => g2.flags.open === 1 && cityDefences(g2);
+  function setCityDefences(g2, on2) {
+    if (!on2) {
+      delete g2.flags.cityDefences;
+      return;
+    }
+    g2.flags.cityDefences = 1;
+    cityStartLay(g2);
+  }
+  var lightsAt = (g2, region) => cityDefences(g2) ? g2.flags[`wk:lights:${region}`] ?? 0 : 0;
+  function startRowsAt(rows, month3) {
+    let at4 = -Infinity;
+    for (const row2 of rows) for (const t of row2.turns) if (t <= month3 && t > at4) at4 = t;
+    return at4 === -Infinity ? [] : rows.filter((row2) => row2.lay && row2.turns.includes(at4));
+  }
+  function openCityDefences(g2, rows = CITYDEF.start) {
+    if (!cityDefences(g2)) return;
+    for (const row2 of startRowsAt(rows, g2.flags.openFrom ?? 1)) {
+      const r = g2.regions.find((x) => x.name === row2.region);
+      const lv = Math.max(0, Math.min(LIGHTS_TOP, Math.floor(row2.level)));
+      if (!r || lv <= 0) continue;
+      g2.flags[`wk:lights:${r.id}`] = Math.max(g2.flags[`wk:lights:${r.id}`] ?? 0, lv);
+    }
+  }
+  var START_LAID = "cds";
+  function layStartGunsFromRecord(g2, fresh6, rows = CITYDEF.startGuns) {
+    if (!cityDefences(g2)) return;
+    for (const row2 of startRowsAt(rows, g2.flags.openFrom ?? 1)) {
+      const r = g2.regions.find((x) => x.name === row2.region);
+      if (!r || r.owner !== r.ctrl) continue;
+      const lv = Math.max(0, Math.min(WORKS_TOP, Math.floor(row2.level ?? 0)));
+      const key7 = `wk:aa:${r.id}`;
+      if (fresh6) {
+        if (lv > 0) g2.flags[key7] = lv;
+        else delete g2.flags[key7];
+      } else if (lv > (g2.flags[key7] ?? 0)) g2.flags[key7] = lv;
+    }
+  }
+  function cityStartLay(g2) {
+    if (!cityDefences(g2) || g2.flags.open !== 1 || g2.flags[START_LAID] === 1) return;
+    g2.flags[START_LAID] = 1;
+    const began = g2.flags.openFrom ?? 1;
+    openCityDefences(g2);
+    layStartGunsFromRecord(g2, g2.turn === began);
+  }
+  function markNightRaid(g2, region) {
+    if (cityDefences(g2)) g2.flags[`nr:${region}`] = g2.turn;
+  }
+  function nightRaided(g2, region) {
+    if (!cityDefences(g2)) return false;
+    const t = g2.flags[`nr:${region}`];
+    return t !== void 0 && g2.turn - t <= CITYDEF.ai.months;
+  }
+  function radarLays(g2, region) {
+    const ctrl = g2.regions[region]?.ctrl;
+    return !!ctrl && hasTech(g2, ctrl, AC.radar.control);
+  }
+  function cityNight(g2, target, bombers, sky, blind = false, at4) {
+    const N = CITYDEF.night;
+    const L2 = at4 ? at4.guns : gunsAt(g2, target), Ls = at4 ? at4.lights : lightsAt(g2, target);
+    const radar = !blind && radarLays(g2, target);
+    const clear = sky === "clear";
+    const lit = clear ? Math.min(L2, Ls) : 0;
+    const sat = Math.min(1, CITYDEF.saturation * Ls / Math.max(1, bombers));
+    const d = radar ? N.radar : N.dark, t = radar ? N.both : N.lit;
+    const share = L2 > 0 ? ((L2 - lit) * d + lit * (d + (t - d) * sat)) / L2 : d;
+    return { guns: L2, lights: Ls, radar, cloud: Ls > 0 && !clear, lit, sat, share, litShare: radar && L2 > 0 ? lit * sat / L2 : 0 };
+  }
+  var lightsFloor = (g2, target, sky) => cityDefences(g2) && sky === "clear" ? CITYDEF.fighters[lightsAt(g2, target)] ?? 0 : 0;
+  var nationIndex = (g2, nat) => Object.keys(g2.nations).indexOf(nat);
+  function townWorksAt(g2, r) {
+    if (!cityDefences(g2)) return 0;
+    const m = g2.flags[`tw:${r.id}`] ?? 0;
+    if (m <= 0 || g2.flags[`twn:${r.id}`] !== nationIndex(g2, r.ctrl)) return 0;
+    return Math.min(CITYDEF.works.most, m);
+  }
+  function townWorksWorth(g2, r) {
+    const m = townWorksAt(g2, r);
+    return m > 0 ? CITYDEF.works.worth * (ENTRENCH.share[m - 1] ?? 1) : 0;
+  }
+  function clearTownWorks(g2, r) {
+    if (!cityDefences(g2)) return;
+    delete g2.flags[`tw:${r.id}`];
+    delete g2.flags[`twn:${r.id}`];
+  }
+  function markStormed(g2, r) {
+    if (cityDefences(g2)) g2.flags[`tws:${r.id}`] = g2.turn;
+  }
+  function townWorksMonth(g2, nat) {
+    if (!cityDefences(g2)) return;
+    const idx2 = nationIndex(g2, nat);
+    for (const r of g2.regions) {
+      const key7 = `tw:${r.id}`, by2 = `twn:${r.id}`, hit = `tws:${r.id}`;
+      if (g2.flags[key7] !== void 0 && g2.flags[by2] !== nationIndex(g2, r.ctrl)) {
+        delete g2.flags[key7];
+        delete g2.flags[by2];
+      }
+      if (r.ctrl !== nat) continue;
+      const stormed = g2.flags[hit] !== void 0;
+      if (stormed) delete g2.flags[hit];
+      const m = g2.flags[key7] ?? 0;
+      if (garrisonOf(r).some((c) => !c.dead && c.nat === nat)) {
+        if (stormed || m >= CITYDEF.works.most) continue;
+        g2.flags[key7] = m + 1;
+        g2.flags[by2] = idx2;
+      } else if (m > 0) {
+        if (m <= 1) {
+          delete g2.flags[key7];
+          delete g2.flags[by2];
+        } else g2.flags[key7] = m - 1;
+      }
+    }
+  }
+  function townWorksWords(g2, r, fort) {
+    const m = townWorksAt(g2, r);
+    if (m <= 0) return "";
+    const months4 = `${m} month${m === 1 ? "" : "s"} of barricades and strongpoints`;
+    return fort > townWorksWorth(g2, r) ? `, with ${months4}, though its forts count for more` : `, behind ${months4}`;
+  }
+  function townFlak(g2, r) {
+    if (!cityDefences(g2)) return 0;
+    if (!garrisonOf(r).some((c) => !c.dead)) return 0;
+    return gunsAt(g2, r.id);
+  }
+  var flakCut = (level) => level > 0 ? Math.min(CITYDEF.ground.most, CITYDEF.ground.armour * level) : 0;
+  var townFlakCut = (g2, r) => flakCut(townFlak(g2, r));
+  var flakCutMost = () => flakCut(WORKS_TOP);
+  var flakLine = (cut2) => ({ label: "Armor", value: "Heavy anti-aircraft guns dug in with the garrison", effect: `Tank attack cut by a further ${Math.round(cut2 * 100)}%` });
+  var isFlakLine = (l) => l.label === "Armor" && /^Heavy anti-aircraft guns dug in with the garrison$/.test(l.value);
+  var flakFog = () => ({ label: "Armor", value: "The garrison may have heavy anti-aircraft guns dug in", effect: `Tank attack cut by as much as ${Math.round(flakCutMost() * 100)}% if it has` });
+  function flakLostWithTown(g2, r, level, town) {
+    if (!cityDefences(g2) || level <= 0) return null;
+    const key7 = `wk:aa:${r.id}`;
+    const left = Math.max(0, (g2.flags[key7] ?? 0) - CITYDEF.ground.lost);
+    if (left > 0) g2.flags[key7] = left;
+    else delete g2.flags[key7];
+    g2.flags[`aal:${r.id}`] = g2.turn;
+    return { label: "Anti-aircraft guns", value: `The anti-aircraft guns of ${town} fought the tanks over open sights, and one level of them was lost with the town.` };
+  }
+
   // ../../src/campaign/siege.ts
   var SIEGE = siege_default;
   var siegeRules = (g2) => g2.flags.sieges === 1;
@@ -30872,7 +34649,8 @@
     if (now > 0) g2.flags[`breach:${r.id}`] = Math.round(now * 10) / 10;
     return now / 100;
   }
-  var wallsOf = (g2, r, works2 = worksFor(g2, r, r.ctrl)) => SIEGE.bonus[townSize(g2, r)] - 1 + (r.fort && works2 ? SIEGE.fortBonus[r.fort.lv] ?? 0 : 0);
+  var fortTerm = (r, works2) => r.fort && works2 ? SIEGE.fortBonus[r.fort.lv] ?? 0 : 0;
+  var wallsOf = (g2, r, works2 = worksFor(g2, r, r.ctrl)) => SIEGE.bonus[townSize(g2, r)] - 1 + Math.max(fortTerm(r, works2), townWorksWorth(g2, r));
   var townBonus = (g2, r, eased = 0, works2 = worksFor(g2, r, r.ctrl)) => 1 + wallsOf(g2, r, works2) * (1 - breachOf(g2, r)) * (1 - clamp2(eased, 0, 1));
   function guardOf(g2, r) {
     if (g2.flags.sieges !== 1 || r.ctrl !== r.owner) return 0;
@@ -30902,7 +34680,12 @@
   var opensTo = (g2, r, force3) => guardOf(g2, r) > 0 && !SIEGE.summonsNot.includes(townSize(g2, r)) && assess(g2, wholeOf(force3), r, { town: true }).odds >= SIEGE.summons;
   var wholeOf = (force3) => force3.some((c) => c.bookPart) ? force3.map((c) => c.bookPart ? { ...c, divs: c.divs / c.bookPart[0] } : c) : force3;
   var guardWorth = (d) => d >= 0.95 && d < 1.05 ? "1 division's worth" : d >= 1.05 ? `${(Math.round(d * 10) / 10).toFixed(1)} divisions' worth` : "part of a division's worth";
-  var fieldWalls = (g2, r, eased, open3) => 1 + (SIEGE.bonus[townSize(g2, r)] - 1 + (r.fort && worksFor(g2, r, r.ctrl) ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp2(open3, 0, 1) : 0)) * (1 - breachOf(g2, r)) * (1 - clamp2(eased, 0, 1));
+  var fieldWalls = (g2, r, eased, open3) => {
+    const town = townWorksWorth(g2, r);
+    const works2 = town > 0 ? Math.max(fortTerm(r, worksFor(g2, r, r.ctrl)), town) * clamp2(open3, 0, 1) : r.fort && worksFor(g2, r, r.ctrl) ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp2(open3, 0, 1) : 0;
+    return 1 + (SIEGE.bonus[townSize(g2, r)] - 1 + works2) * (1 - breachOf(g2, r)) * (1 - clamp2(eased, 0, 1));
+  };
+  var townWorksPhrase = (g2, r) => townWorksWords(g2, r, fortTerm(r, worksFor(g2, r, r.ctrl)));
   var townHeld = (g2, r) => garrisonOf(r).length > 0 || guardOf(g2, r) > 0;
   var storesOf = (g2, r) => SIEGE.stores[townSize(g2, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
   var monthsShut = (g2, r) => g2.flags[`sgm:${r.id}`] ?? 0;
@@ -30953,11 +34736,11 @@
     const open3 = who.map((x) => by2(x, r.ctrl));
     return r.seas.filter((z) => open3.some((o) => o[z] === 1));
   }
-  var strength = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
+  var strength2 = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
   function ringClosed(g2, r) {
-    const out = strength(besiegers(g2, r));
+    const out = strength2(besiegers(g2, r));
     if (out <= 0) return false;
-    const need = SIEGE.ring * (strength(garrisonOf(r)) + guardOf(g2, r));
+    const need = SIEGE.ring * (strength2(garrisonOf(r)) + guardOf(g2, r));
     if (out >= need) return true;
     const by2 = besiegerOf(g2, r);
     let near2 = 0, road = false;
@@ -31372,6 +35155,7 @@
     const going = stormForce(g2, corps, r);
     if (!going.length || !besieged(g2, r) || g2.flags[`storm:${r.id}`] === g2.turn) return null;
     g2.flags[`storm:${r.id}`] = g2.turn;
+    markStormed(g2, r);
     return resolveBattle(g2, going, r, { town: true });
   }
   function salliers(g2, r, nat) {
@@ -31585,7 +35369,7 @@
     const crew = clock === null ? null : { left: clock, months: Math.max(...garrisonOf(r).filter((c) => !c.dead && fortRow(g2, c)).map((c) => crewStores(c) ?? 0)) };
     const lines2 = [];
     const pct14 = Math.round((bonus - 1) * 100);
-    lines2.push(`Troops inside ${townName(r)} fight ${pct14}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ""}. It has room for ${roomIn(g2, r) === 1 ? "one corps" : `${roomIn(g2, r)} corps`}.`);
+    lines2.push(`Troops inside ${townName(r)} fight ${pct14}% stronger${townWorksPhrase(g2, r)}${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ""}. It has room for ${roomIn(g2, r) === 1 ? "one corps" : `${roomIn(g2, r)} corps`}.`);
     if (guard > 0) lines2.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : "part of a division"}. ${driveOut(g2) && !inside2 && !by2 && r.units.some((u) => !u.dead && allied(g2, u.nat, r.ctrl)) ? "With no garrison inside, it fights beside the army in the field, and the town falls with the field." : "It holds the town while no army does."}`);
     if (driveOut(g2) && inside2 && !by2) lines2.push("The garrison will hold the town after the field is lost: it must then be stormed or starved out.");
     if (by2) {
@@ -40175,7 +43959,7 @@
     const [y, m] = ym.split("-").map(Number);
     return (y - 1939) * 12 + m - 8;
   };
-  var rowAt = (rows, t) => {
+  var rowAt2 = (rows, t) => {
     let k = 0;
     rows.forEach(([w], i) => {
       if (turnOfMonth(w) <= t) k = i;
@@ -40205,7 +43989,7 @@
       });
       return { key: Number(s) * 100 + k2 + 1, mix: rows[k2][1] };
     }
-    const k = rowAt(L2.history, fighterClock(g2, nat));
+    const k = rowAt2(L2.history, fighterClock(g2, nat));
     return { key: k + 1, mix: L2.history[k][1] };
   }
   var deckBred = (f) => f.ship !== void 0 || f.ashore !== void 0;
@@ -40215,7 +43999,7 @@
     const stolen = !deckBred(f) ? stolenLead(g2, f.nat, L2 ? landRow(g2, f.nat).mix : {}) : null;
     if (!L2 && !bought.length && !stolen) return null;
     let mix4 = {};
-    if (L2 && deckBred(f) && L2.deck) mix4 = L2.deck[rowAt(L2.deck, g2.turn)][1];
+    if (L2 && deckBred(f) && L2.deck) mix4 = L2.deck[rowAt2(L2.deck, g2.turn)][1];
     else if (stolen) mix4 = stolen;
     else if (L2) mix4 = landRow(g2, f.nat).mix;
     if (bought.length) {
@@ -40287,12 +44071,12 @@
       return w ? wayNow(g2, w) : void 0;
     }
     const rows = FIGHTERS.doctrine.rows[nat];
-    return rows?.length ? rows[rowAt(rows, g2.turn)][1] : void 0;
+    return rows?.length ? rows[rowAt2(rows, g2.turn)][1] : void 0;
   }
   function hoursEdge(g2, a, b, k = FIGHTERS.law.k) {
     const R2 = FIGHTERS.hours.rows;
     if (!k || !R2[a]?.length || !R2[b]?.length) return 0;
-    return k * Math.log(R2[a][rowAt(R2[a], g2.turn)][1] / R2[b][rowAt(R2[b], g2.turn)][1]);
+    return k * Math.log(R2[a][rowAt2(R2[a], g2.turn)][1] / R2[b][rowAt2(R2[b], g2.turn)][1]);
   }
   function pilotsEdge(a, d, k) {
     if (!(k > 0) || !a.h || !d.h || !a.q || !d.q) return 0;
@@ -40752,3479 +44536,6 @@
     _book: "The stops that follow the book (1 and 2): only this nation, its computer-run staff, on the record's clock, as turns (September 1939 = 1): physics Dec 1941 (the S-1 decision), chain reaction Dec 1942 (the first pile), plants from Mar 1943 (Oak Ridge and Hanford), weapon and plants done Jul 1945 (Trinity), first used Aug 1945. The plants draw their share in those months like anyone's. Nobody else's staff takes the project up at those stops.",
     book: { nat: "USA", physics: 28, chain: 40, plants: 43, ready: 71, use: 72 }
   };
-
-  // ../../data/campaign/aircampaigns.json
-  var aircampaigns_default = {
-    _about: "Ruling 236.2 (the design director, b545, b549, b550): air campaigns, the grand campaign with the switch g.flags.ac on. A campaign is a standing order to an air force, flown every month until it is called off. 'sky': the battle for the sky over a province is held once the side fighting for it has had 'own' (airwar.json sky.own, b446's 1.5 to 1) times the defender's aircraft in reach over it for 'months' months running, or has won the fight itself each of those months where the defender has radar over its own ground (b446's guard), or at once when the defender's airfields there are knocked out (every fighter group in reach grounded, its field wrecked, or worn to readiness 'knocked', the floor, on a field this side has bombed since last month); held, it stays held while the holder keeps 'keep' times the defender's numbers and fights there at least every 'idle' + 1 months. 'stock': the damage bombs leave in a province carries over (every raid, b549) and comes back each month at the historian's rate for the target ('repair', air-campaign-236: 'perMonth', and 'dispersed' for Germany from 'dispersal.from'), at most 'most' of its output held down. 'use' says which repair row each raid reads: a raid by night is an area raid on the city's works, a raid by day a precision raid on its works ('aircraft'), an oilfield's refinery, or the fuel plants of a works province when the campaign aims at oil. 'dispersal': from March 1944 Germany's works were spread out: each raid on them does 'cut' of what it did (the feature builder's reading: the historian gives no number), and they come back at the 'dispersed' rate. 'will': each city or capital whose works are held down wears its country's will to fight by 'per' times the share held down, 'most' at most for the country (b549: small; bombing never broke a nation by itself). 'book': the historian's 54 doctrine rows, as he wrote them, read two ways (b549): at the stops that follow the book, each row's 'fly' phases open and close on their months for every country the player does not fly, on the provinces named (a province not on the map is passed over); at stops 3 to 5 the computer-opponent builder's staff reads them as doctrine. A row without 'fly' says in 'book' why the book does not open it as a campaign. 'share' is the part of the country's groups of that kind in reach of the targets that the campaign takes (1 all); 'bombers' puts its bombers in reach on a fight for the sky (raids on the airfields); 'escort' is the part of its fighters in reach that ride with a day raid; 'aim' oil or rail; 'kind' sky over the row's own kind. 'bands': the loss bands the record's commanders bore, a raid's losses over what it sent (the historian's part 4).",
-    on: true,
-    onAbout: "A new grand campaign opens with air campaigns flown (g.flags.ac), as the design director ruled on 22 November (b623, b636). Read by name at the start (airCampaignsShipped). Scenarios, history campaigns and saved games keep what they had.",
-    sky: {
-      months: 2,
-      keep: 1,
-      knocked: 0.3,
-      idle: 1
-    },
-    stock: {
-      most: 0.6,
-      least: 5e-3
-    },
-    use: {
-      night: "city",
-      day: "aircraft",
-      oilfield: "refinery",
-      oil: "synthetic"
-    },
-    dispersal: {
-      nat: "GER",
-      from: 55,
-      cut: 0.75,
-      rows: [
-        "aircraft",
-        "engines",
-        "tanks"
-      ]
-    },
-    will: {
-      per: 0.02,
-      most: 0.04
-    },
-    bands: [
-      {
-        from: 0.15,
-        words: "Heavier than any air force bore: every one stopped within one to three raids."
-      },
-      {
-        from: 0.08,
-        words: "Heavy: air forces flying at this rate stopped or changed course within a month or two."
-      },
-      {
-        from: 0.03,
-        words: "Bearable while new aircraft and crews matched the losses: about 5% a raid could be kept up, 7% for long could not."
-      },
-      {
-        from: 0,
-        words: "Light: kept up as long as there were targets."
-      }
-    ],
-    repair: {
-      airfield: {
-        target: "airfield",
-        firstRaid: "runways and grass in hours to 2 days; aircraft and buildings in weeks",
-        perMonth: 1,
-        repeat: "Had to be hit again daily or near it to keep shut; Manston was given up after August 1940's raids",
-        conf: "high"
-      },
-      track: {
-        target: "rail track",
-        firstRaid: "hours to 2 days",
-        perMonth: 1,
-        repeat: "Cut lines stayed cut only under daily attack",
-        conf: "high"
-      },
-      yard: {
-        target: "rail yard",
-        firstRaid: "through traffic in 2 to 7 days; full in 2 to 4 weeks",
-        perMonth: 0.7,
-        repeat: "Under the Transportation Plan (April to June 1944) French rail traffic fell to about a third; German car loadings fell by about half from August to December 1944, and further by March 1945",
-        conf: "medium-high"
-      },
-      bridge: {
-        target: "large bridge",
-        firstRaid: "3 to 8 weeks (ferries and pontoons in days)",
-        perMonth: 0.35,
-        repeat: "The Seine bridges below Paris were all down by D-Day",
-        conf: "medium-high"
-      },
-      port: {
-        target: "port",
-        firstRaid: "most of its capacity in 1 to 3 weeks; months if sunken ships or mines block the channel",
-        perMonth: 0.5,
-        repeat: "Liverpool lost about half its capacity for some days after May 1941; Japan's ports were shut by mines in 1945, which repair could not lift",
-        conf: "medium"
-      },
-      aircraft: {
-        target: "aircraft works",
-        firstRaid: "most output back in 4 to 8 weeks; machine tools mostly survived the buildings",
-        perMonth: 0.4,
-        dispersed: 0.6,
-        repeat: "After Big Week (February 1944) German fighter output fell for about two months and then rose to its peak in September 1944",
-        conf: "medium-high"
-      },
-      engines: {
-        target: "aero-engine works",
-        firstRaid: "2 to 3 months",
-        perMonth: 0.3,
-        dispersed: 0.45,
-        repeat: "Japan's Nakajima engine works at Musashino kept building through eight raids from November 1944",
-        conf: "medium-low"
-      },
-      bearings: {
-        target: "ball bearings",
-        firstRaid: "3 to 6 months to full at the works",
-        perMonth: 0.25,
-        repeat: "Stocks, imports from Sweden and Switzerland, redesign and dispersal meant no weapon went short (the bombing survey)",
-        conf: "medium-high"
-      },
-      tanks: {
-        target: "tank and vehicle works",
-        firstRaid: "4 to 8 weeks",
-        perMonth: 0.4,
-        dispersed: 0.6,
-        repeat: "German tank output peaked in December 1944; Gorky's motor works, bombed in June 1943, was back in about three months",
-        conf: "medium"
-      },
-      synthetic: {
-        target: "oil, synthetic plant",
-        firstRaid: "partial in 2 to 3 weeks, full in 4 to 8",
-        perMonth: 0.3,
-        repeat: "Under raids every 2 to 4 weeks from 12 May 1944 it never came back: German aviation fuel fell from about 175,000 tons in April 1944 to about 10,000 tons by September, with some recovery in November before falling again; 350,000 men were put to repairs",
-        conf: "high"
-      },
-      refinery: {
-        target: "oil, refinery",
-        firstRaid: "2 to 6 weeks",
-        perMonth: 0.5,
-        repeat: "Ploesti had spare capacity and was back above its old output within weeks of 1 Aug 1943; the 1944 campaign, raid after raid, cut it to about a fifth by August",
-        conf: "medium-high"
-      },
-      steel: {
-        target: "steel and coke",
-        firstRaid: "1 to 3 months",
-        perMonth: 0.35,
-        repeat: "The Battle of the Ruhr (1943) cost Germany some months' growth in steel, not its supply",
-        conf: "medium-low"
-      },
-      power: {
-        target: "power station",
-        firstRaid: "1 to 3 months",
-        perMonth: 0.35,
-        repeat: "Seldom attacked; the bombing survey judged the German grid a missed target",
-        conf: "medium-low"
-      },
-      city: {
-        target: "city works (area raid)",
-        firstRaid: "main works back to about 80% in 2 to 5 months",
-        perMonth: 0.25,
-        repeat: "Hamburg (July 1943) was back to about 80% in five months; Coventry's works mostly back in 6 to 8 weeks after November 1940. Japan's cities burned in 1945 did not come back, short of everything",
-        conf: "medium"
-      }
-    },
-    book: [
-      {
-        nat: "GER",
-        kind: "sky",
-        what: "Opening blow on the enemy's airfields on the first days of each main offensive",
-        targets: "airfields",
-        time: "day",
-        from: 1,
-        to: 65,
-        conf: "high",
-        note: "Poland 1, Norway 8, the West 9, the Balkans 20, the Soviet Union 22 (the largest), Blue 34, Citadel 47, and Bodenplatte on 1 Jan 1945 (65). Flown the day the offensive opens, then the sky over the main effort.",
-        book: "The staff flies it: its fight for the sky over the front where its offensive opens (raidStaff)."
-      },
-      {
-        nat: "GER",
-        kind: "support",
-        what: "Close support and interdiction behind every main offensive",
-        targets: "troops, rail, bridges",
-        time: "day",
-        from: 1,
-        to: 69,
-        conf: "high",
-        note: "The Luftwaffe's main work all war. Night ground-attack units from October 1943 (50) in the east.",
-        book: "The staff flies it: close support behind its main effort (closeStaff) and its raids on the front."
-      },
-      {
-        nat: "GER",
-        kind: "sea",
-        what: "Anti-shipping and mining off Britain and in the Atlantic",
-        targets: "shipping, ports, mines",
-        time: "both",
-        from: 3,
-        to: 50,
-        conf: "high",
-        note: "Magnetic mines from November 1939 (3); the Channel convoys in July and early August 1940 (11-12); Fw 200s over the Atlantic from August 1940 (12) to late 1943 (50).",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "GER",
-        kind: "sky",
-        what: "The battle for the sky over southern England",
-        targets: "Fighter Command's airfields, radar, aircraft works",
-        time: "day",
-        from: 12,
-        to: 13,
-        conf: "high",
-        theatre: "GER-west",
-        share: [
-          [
-            12,
-            0.85
-          ]
-        ],
-        bases: [
-          [
-            12,
-            [
-              "Calais",
-              "Somme",
-              "Rouen",
-              "Normandy",
-              "Cotentin",
-              "Paris",
-              "Orleans",
-              "Brittany",
-              "Flanders",
-              "Brussels",
-              "Holland",
-              "Sorlandet",
-              "Jutland"
-            ]
-          ]
-        ],
-        note: "Adlertag 13 Aug 1940 to 6 Sep 1940. Escorted.",
-        fly: [
-          {
-            from: 12,
-            to: 12,
-            regions: [
-              "Kent",
-              "Hampshire",
-              "London"
-            ],
-            bombers: true
-          },
-          {
-            from: 13,
-            to: 13,
-            regions: [
-              "Kent",
-              "Hampshire",
-              "London"
-            ],
-            bombers: true
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "London and the ports by day",
-        targets: "London's docks and works",
-        time: "day",
-        from: 13,
-        to: 14,
-        conf: "high",
-        theatre: "GER-west",
-        share: [
-          [
-            13,
-            0.8
-          ]
-        ],
-        bases: [
-          [
-            13,
-            [
-              "Calais",
-              "Somme",
-              "Rouen",
-              "Normandy",
-              "Cotentin",
-              "Paris",
-              "Orleans",
-              "Brittany",
-              "Flanders",
-              "Brussels",
-              "Holland",
-              "Sorlandet",
-              "Jutland"
-            ]
-          ]
-        ],
-        note: "7 Sep 1940 to the end of September; fighter-bombers only by day in October 1940 (14).",
-        fly: [
-          {
-            from: 13,
-            to: 14,
-            regions: [
-              "London"
-            ],
-            escort: 0.5
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "The night Blitz on Britain",
-        targets: "London, then the ports and the industrial towns (Coventry 14 Nov 1940, Liverpool, Bristol, Plymouth, Clydeside, Birmingham)",
-        time: "night",
-        from: 13,
-        to: 21,
-        conf: "high",
-        theatre: "GER-west",
-        share: [
-          [
-            13,
-            0.5
-          ]
-        ],
-        bases: [
-          [
-            13,
-            [
-              "Paris",
-              "Orleans",
-              "Rouen",
-              "Somme",
-              "Normandy",
-              "Brittany",
-              "Brussels",
-              "Flanders",
-              "Holland"
-            ]
-          ]
-        ],
-        note: "7 Sep 1940 to 10/11 May 1941. Ended as the bombers went east for Barbarossa.",
-        fly: [
-          {
-            from: 13,
-            to: 21,
-            regions: [
-              "London",
-              "Midlands",
-              "Lancashire",
-              "Clydeside",
-              "Hampshire",
-              "West Country",
-              "Yorkshire",
-              "Northumbria"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "sea",
-        what: "The Mediterranean: Malta and the convoys",
-        targets: "Malta's airfields and harbour, shipping",
-        time: "both",
-        from: 17,
-        to: 38,
-        conf: "high",
-        theatre: "GER-med",
-        share: [
-          [
-            17,
-            0.7
-          ],
-          [
-            28,
-            0.6
-          ]
-        ],
-        bases: [
-          [
-            17,
-            [
-              "Sicily"
-            ]
-          ],
-          [
-            22,
-            [
-              "Athens",
-              "Crete"
-            ]
-          ],
-          [
-            28,
-            [
-              "Sicily"
-            ]
-          ],
-          [
-            34,
-            [
-              "Crete",
-              "Derna",
-              "Benghazi"
-            ]
-          ],
-          [
-            38,
-            [
-              "Sicily"
-            ]
-          ]
-        ],
-        note: "X Fliegerkorps January to May 1941 (17-21); II Fliegerkorps December 1941 to May 1942 (28-33); the last blitz in October 1942 (38).",
-        fly: [
-          {
-            from: 17,
-            to: 21,
-            regions: [
-              "Malta"
-            ],
-            kind: "sky",
-            bombers: true
-          },
-          {
-            from: 28,
-            to: 33,
-            regions: [
-              "Malta"
-            ],
-            kind: "sky",
-            bombers: true
-          },
-          {
-            from: 38,
-            to: 38,
-            regions: [
-              "Malta"
-            ],
-            kind: "sky",
-            bombers: true
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "Moscow by night",
-        targets: "Moscow",
-        time: "night",
-        from: 23,
-        to: 28,
-        conf: "high",
-        theatre: "GER-east",
-        share: [
-          [
-            23,
-            0.06
-          ],
-          [
-            25,
-            0.02
-          ]
-        ],
-        bases: [
-          [
-            23,
-            [
-              "Minsk",
-              "Vitebsk",
-              "Mogilev"
-            ]
-          ],
-          [
-            26,
-            [
-              "Smolensk",
-              "Vyazma",
-              "Bryansk"
-            ]
-          ]
-        ],
-        note: "From 21/22 Jul 1941; small after the first weeks.",
-        fly: [
-          {
-            from: 23,
-            to: 28,
-            regions: [
-              "Moscow"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "sea",
-        what: "The Arctic convoys",
-        targets: "shipping",
-        time: "both",
-        from: 31,
-        to: 37,
-        conf: "high",
-        note: "March to September 1942 (PQ 17 in July, PQ 18 in September).",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "Reprisal raids on English towns (the Baedeker raids)",
-        targets: "historic towns",
-        time: "night",
-        from: 32,
-        to: 34,
-        conf: "high",
-        theatre: "GER-west",
-        share: [
-          [
-            32,
-            0.15
-          ]
-        ],
-        bases: [
-          [
-            32,
-            [
-              "Holland",
-              "Brabant",
-              "Brussels",
-              "Somme",
-              "Rouen"
-            ]
-          ]
-        ],
-        note: "April to June 1942, after Luebeck.",
-        fly: [
-          {
-            from: 32,
-            to: 34,
-            regions: [
-              "West Country",
-              "Yorkshire",
-              "Kent"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "Fighter-bomber hit-and-run raids on the south coast",
-        targets: "coastal towns, rail",
-        time: "day",
-        from: 31,
-        to: 46,
-        conf: "medium-high",
-        theatre: "GER-west",
-        share: [
-          [
-            31,
-            0.05
-          ]
-        ],
-        bases: [
-          [
-            31,
-            [
-              "Calais",
-              "Somme",
-              "Normandy",
-              "Cotentin"
-            ]
-          ]
-        ],
-        note: "March 1942 to June 1943.",
-        fly: [
-          {
-            from: 31,
-            to: 46,
-            regions: [
-              "Kent",
-              "Hampshire",
-              "West Country"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "Soviet war industry by night",
-        targets: "Gorky's motor and tank works, Yaroslavl's rubber, Saratov's refinery",
-        time: "night",
-        from: 46,
-        to: 46,
-        conf: "medium-high",
-        theatre: "GER-east",
-        share: [
-          [
-            46,
-            0.08
-          ]
-        ],
-        bases: [
-          [
-            46,
-            [
-              "Bryansk",
-              "Orel",
-              "Smolensk"
-            ]
-          ]
-        ],
-        note: "June 1943 only, then the bombers went back to the front.",
-        fly: [
-          {
-            from: 46,
-            to: 46,
-            regions: [
-              "Gorky",
-              "Yaroslavl",
-              "Saratov"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "London by night again (Operation Steinbock)",
-        targets: "London",
-        time: "night",
-        from: 53,
-        to: 57,
-        conf: "high",
-        theatre: "GER-west",
-        share: [
-          [
-            53,
-            0.15
-          ],
-          [
-            54,
-            0.125
-          ],
-          [
-            55,
-            0.1
-          ],
-          [
-            56,
-            0.075
-          ],
-          [
-            57,
-            0.05
-          ]
-        ],
-        bases: [
-          [
-            53,
-            [
-              "Somme",
-              "Champagne",
-              "Brussels",
-              "Brabant",
-              "Holland",
-              "Brittany"
-            ]
-          ]
-        ],
-        note: "21/22 Jan 1944 to May 1944.",
-        fly: [
-          {
-            from: 53,
-            to: 57,
-            regions: [
-              "London"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "GER",
-        kind: "strategic",
-        what: "Flying bombs on London and Antwerp (flown by a Luftwaffe flak regiment)",
-        targets: "London, Antwerp",
-        time: "both",
-        from: 58,
-        to: 67,
-        conf: "high",
-        note: "13 Jun 1944 to March 1945. The rockets of September 1944 on were the army's.",
-        book: "No air groups: a flak regiment flew the flying bombs, a late weapon (ruling 230)."
-      },
-      {
-        nat: "GER",
-        kind: "defence",
-        what: "Defence of the Reich",
-        targets: "night fighters, then day fighters at home",
-        time: "both",
-        from: 11,
-        to: 69,
-        conf: "high",
-        note: "Night fighters from July 1940; day fighters against the Americans from 1943; home defence first from autumn 1943 (50), fighters taken from the fronts.",
-        book: "Home defence is what fighter groups on patrol do: no campaign."
-      },
-      {
-        nat: "UK",
-        kind: "strategic",
-        what: "Day raids on the German fleet only",
-        targets: "warships at sea and in harbour",
-        time: "day",
-        from: 1,
-        to: 4,
-        conf: "high",
-        note: "Stopped after 18 Dec 1939.",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "UK",
-        kind: "strategic",
-        what: "Leaflets and reconnaissance at night",
-        targets: "none (leaflets)",
-        time: "night",
-        from: 1,
-        to: 9,
-        conf: "high",
-        note: "Bombs first fell on Germany on land on 19/20 Mar 1940 (Sylt).",
-        book: "No bombs: leaflets only."
-      },
-      {
-        nat: "UK",
-        kind: "strategic",
-        what: "Night bombing of Germany",
-        targets: "oil, rail and aircraft works (1940-41); industrial cities (area bombing from February 1942); the Ruhr (March to July 1943); Hamburg (July and August 1943); Berlin (November 1943 to March 1944); oil and transport (June 1944 to April 1945)",
-        time: "night",
-        from: 9,
-        to: 69,
-        conf: "high",
-        theatre: "UK-home",
-        share: [
-          [
-            9,
-            0.25
-          ],
-          [
-            17,
-            0.3
-          ],
-          [
-            41,
-            0.38
-          ],
-          [
-            56,
-            0.114
-          ],
-          [
-            59,
-            0.38
-          ],
-          [
-            60,
-            0.23
-          ],
-          [
-            65,
-            0.27
-          ]
-        ],
-        bases: [
-          [
-            9,
-            [
-              "Lincolnshire",
-              "Yorkshire",
-              "East Anglia"
-            ]
-          ]
-        ],
-        note: "From 15/16 May 1940. Oil first in January to March 1941. The area directive of 14 Feb 1942, Harris from 22 Feb (30). Under SHAEF's direction for the invasion April to September 1944.",
-        fly: [
-          {
-            from: 9,
-            to: 29,
-            regions: [
-              "Ruhr",
-              "Rhineland",
-              "Hamburg",
-              "Bremen",
-              "Westphalia"
-            ]
-          },
-          {
-            from: 30,
-            to: 42,
-            regions: [
-              "Ruhr",
-              "Rhineland",
-              "Hamburg",
-              "Bremen",
-              "Westphalia",
-              "Frankfurt",
-              "Hanover"
-            ]
-          },
-          {
-            from: 43,
-            to: 46,
-            regions: [
-              "Ruhr",
-              "Westphalia",
-              "Rhineland"
-            ]
-          },
-          {
-            from: 47,
-            to: 48,
-            regions: [
-              "Hamburg",
-              "Ruhr"
-            ]
-          },
-          {
-            from: 49,
-            to: 50,
-            regions: [
-              "Hanover",
-              "Frankfurt",
-              "Ruhr",
-              "Rhineland"
-            ]
-          },
-          {
-            from: 51,
-            to: 55,
-            regions: [
-              "Berlin"
-            ]
-          },
-          {
-            from: 58,
-            to: 63,
-            regions: [
-              "Ruhr",
-              "Rhineland",
-              "Westphalia"
-            ],
-            aim: "oil"
-          },
-          {
-            from: 64,
-            to: 69,
-            regions: [
-              "Ruhr",
-              "Rhineland",
-              "Saxony",
-              "Dresden",
-              "Magdeburg"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "UK",
-        kind: "sky",
-        what: "Fighter sweeps over France to draw the Luftwaffe (Circus, Rhubarb)",
-        targets: "the German fighters in France",
-        time: "day",
-        from: 17,
-        to: 46,
-        conf: "medium-high",
-        theatre: "UK-home",
-        share: [
-          [
-            17,
-            0.2
-          ],
-          [
-            29,
-            0.15
-          ],
-          [
-            41,
-            0.1
-          ]
-        ],
-        bases: [
-          [
-            17,
-            [
-              "Kent",
-              "London",
-              "Hampshire"
-            ]
-          ]
-        ],
-        note: "From January 1941; cut back on 13 Nov 1941 (27); smaller in 1942 (Dieppe, August 1942, the biggest day); merged into the invasion's air plan in 1943.",
-        fly: [
-          {
-            from: 17,
-            to: 27,
-            regions: [
-              "Calais",
-              "Somme"
-            ]
-          },
-          {
-            from: 28,
-            to: 46,
-            regions: [
-              "Calais"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "UK",
-        kind: "strategic",
-        what: "Day raids by Bomber Command, with fighter escort",
-        targets: "oil, rail, defences, cities",
-        time: "day",
-        from: 60,
-        to: 69,
-        conf: "medium-high",
-        theatre: "UK-home",
-        share: [
-          [
-            60,
-            0.15
-          ]
-        ],
-        bases: [
-          [
-            60,
-            [
-              "Lincolnshire",
-              "Yorkshire",
-              "East Anglia"
-            ]
-          ]
-        ],
-        note: "From August 1944 (Homberg, 27 Aug), when the escort and the Allied sky allowed.",
-        fly: [
-          {
-            from: 60,
-            to: 69,
-            regions: [
-              "Ruhr",
-              "Rhineland"
-            ],
-            aim: "oil",
-            escort: 0.5
-          }
-        ]
-      },
-      {
-        nat: "UK",
-        kind: "sky",
-        what: "Home defence with radar and Fighter Command",
-        targets: "the sky over Britain",
-        time: "both",
-        from: 1,
-        to: 69,
-        conf: "high",
-        note: "The Battle of Britain July to October 1940 (11-14).",
-        book: "Home defence is what fighter groups on patrol do: no campaign."
-      },
-      {
-        nat: "UK",
-        kind: "support",
-        what: "Ground support and interdiction (the tactical air forces)",
-        targets: "troops, rail, bridges, airfields",
-        time: "day",
-        from: 9,
-        to: 69,
-        conf: "high",
-        note: "France May 1940; the Western Desert from June 1940 and as a tactical air force from Crusader, November 1941 (27); Tunisia, Sicily, Italy 1943-45; 2nd Tactical Air Force from June 1943 (46) for Normandy and on; Burma 1943-45.",
-        book: "The staff flies it: support behind its main effort."
-      },
-      {
-        nat: "UK",
-        kind: "interdiction",
-        what: "Rail and bridges in France before the invasion (the Transportation Plan)",
-        targets: "rail yards, bridges",
-        time: "both",
-        from: 56,
-        to: 58,
-        conf: "high",
-        theatre: "UK-home",
-        share: [
-          [
-            56,
-            0.4
-          ]
-        ],
-        bases: [
-          [
-            56,
-            [
-              "Lincolnshire",
-              "Yorkshire",
-              "East Anglia",
-              "Champagne",
-              "Lille",
-              "Flanders",
-              "Kent",
-              "Hampshire",
-              "Normandy",
-              "Brussels",
-              "Brabant",
-              "Gelderland",
-              "Rhineland",
-              "Westphalia"
-            ]
-          ]
-        ],
-        note: "April to June 1944.",
-        fly: [
-          {
-            from: 56,
-            to: 58,
-            regions: [
-              "Rouen",
-              "Paris",
-              "Somme",
-              "Calais",
-              "Lille",
-              "Orleans"
-            ],
-            aim: "rail"
-          }
-        ]
-      },
-      {
-        nat: "UK",
-        kind: "sea",
-        what: "Coastal Command against the U-boats and shipping; the Malta strikes on the Libyan convoys",
-        targets: "U-boats, shipping",
-        time: "both",
-        from: 1,
-        to: 69,
-        conf: "high",
-        note: "Malta's strikes late 1940 to 1943; Coastal Command's strike wings from November 1942 (39).",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "USA",
-        kind: "strategic",
-        what: "Day precision bombing from England (the Eighth Air Force)",
-        targets: "U-boat bases, rail, airfields in France (August 1942 to January 1943); Germany from 27 Jan 1943; aircraft works and ball bearings (from June 1943); oil (from 12 May 1944); transport (late 1944-45)",
-        time: "day",
-        from: 36,
-        to: 69,
-        conf: "high",
-        theatre: "USA-eur",
-        share: [
-          [
-            36,
-            0.35
-          ],
-          [
-            41,
-            0.4
-          ]
-        ],
-        bases: [
-          [
-            36,
-            [
-              "East Anglia",
-              "Midlands"
-            ]
-          ]
-        ],
-        note: "First raid 17 Aug 1942 (Rouen). Deep raids beyond escort June to 14 Oct 1943 (46-50), then shallow raids under escort; deep again only with escorts from 11 Jan 1944 (53); Big Week 20-25 Feb 1944 (54); Berlin from March 1944 (55).",
-        fly: [
-          {
-            from: 36,
-            to: 40,
-            regions: [
-              "Nantes",
-              "Rouen",
-              "Lille"
-            ]
-          },
-          {
-            from: 41,
-            to: 45,
-            regions: [
-              "Bremen",
-              "Hamburg",
-              "Ruhr"
-            ]
-          },
-          {
-            from: 46,
-            to: 52,
-            regions: [
-              "Franconia",
-              "Bavaria",
-              "Hanover",
-              "Ruhr"
-            ]
-          },
-          {
-            from: 53,
-            to: 56,
-            regions: [
-              "Hanover",
-              "Saxony",
-              "Franconia",
-              "Bavaria",
-              "Berlin"
-            ],
-            escort: 0.6
-          },
-          {
-            from: 57,
-            to: 63,
-            regions: [
-              "Saxony",
-              "Magdeburg",
-              "Ruhr",
-              "Upper Silesia"
-            ],
-            aim: "oil",
-            escort: 0.6
-          },
-          {
-            from: 64,
-            to: 69,
-            regions: [
-              "Rhineland",
-              "Frankfurt",
-              "Ruhr",
-              "Saxony"
-            ],
-            aim: "rail",
-            escort: 0.6
-          }
-        ]
-      },
-      {
-        nat: "USA",
-        kind: "strategic",
-        what: "Day precision bombing from Italy (the Fifteenth Air Force)",
-        targets: "south German and Austrian aircraft works; Ploesti oil (April to August 1944); rail",
-        time: "day",
-        from: 51,
-        to: 69,
-        conf: "high",
-        theatre: "USA-eur",
-        share: [
-          [
-            51,
-            0.15
-          ],
-          [
-            53,
-            0.2
-          ]
-        ],
-        bases: [
-          [
-            48,
-            [
-              "Benghazi"
-            ]
-          ],
-          [
-            51,
-            [
-              "Tunis",
-              "Apulia"
-            ]
-          ],
-          [
-            52,
-            [
-              "Apulia"
-            ]
-          ]
-        ],
-        note: "From November 1943. The one low-level raid on Ploesti from Libya was 1 Aug 1943 (48).",
-        fly: [
-          {
-            from: 51,
-            to: 55,
-            regions: [
-              "Vienna",
-              "Upper Austria",
-              "Bavaria"
-            ]
-          },
-          {
-            from: 56,
-            to: 60,
-            regions: [
-              "Ploiesti"
-            ],
-            aim: "oil"
-          },
-          {
-            from: 61,
-            to: 69,
-            regions: [
-              "Vienna",
-              "Upper Austria",
-              "Bavaria",
-              "Moravia"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "USA",
-        kind: "support",
-        what: "Tactical air forces: ground support and interdiction",
-        targets: "troops, rail, bridges, airfields",
-        time: "day",
-        from: 39,
-        to: 69,
-        conf: "high",
-        note: "North Africa from Torch (39); Italy, Strangle March to May 1944 (55-57); the Ninth Air Force from October 1943 (50), the Seine bridges May 1944 (57), Normandy and on.",
-        book: "The staff flies it: support behind its main effort."
-      },
-      {
-        nat: "USA",
-        kind: "sky",
-        what: "The battle for the sky over New Guinea and the Solomons",
-        targets: "Japanese airfields and air groups; shipping",
-        time: "day",
-        from: 36,
-        to: 58,
-        conf: "high",
-        theatre: "USA-pac",
-        share: [
-          [
-            36,
-            0.5
-          ],
-          [
-            41,
-            0.55
-          ],
-          [
-            53,
-            0.35
-          ]
-        ],
-        bases: [
-          [
-            36,
-            [
-              "Port Moresby",
-              "Milne Bay",
-              "Guadalcanal",
-              "Espiritu Santo"
-            ]
-          ],
-          [
-            40,
-            [
-              "Buna"
-            ]
-          ],
-          [
-            46,
-            [
-              "Lae",
-              "New Georgia"
-            ]
-          ],
-          [
-            51,
-            [
-              "Bougainville"
-            ]
-          ],
-          [
-            54,
-            [
-              "Hollandia",
-              "Biak"
-            ]
-          ]
-        ],
-        note: "Guadalcanal from August 1942 (36); the Fifth Air Force from September 1942; Bismarck Sea March 1943 (43); Wewak August 1943 (48); Rabaul October and November 1943 (50-51).",
-        fly: [
-          {
-            from: 36,
-            to: 58,
-            regions: [
-              "Lae",
-              "Wewak",
-              "Rabaul"
-            ],
-            bombers: true
-          }
-        ]
-      },
-      {
-        nat: "USA",
-        kind: "sky",
-        what: "Carrier strikes on enemy airfields before each landing",
-        targets: "airfields",
-        time: "day",
-        from: 51,
-        to: 72,
-        conf: "high",
-        note: "From Tarawa, November 1943 (51); the Japanese home islands from February 1945 (66). (The Doolittle raid, 18 Apr 1942, was a single raid, not a campaign.)",
-        book: "Carrier wings: the sea staff flies them."
-      },
-      {
-        nat: "USA",
-        kind: "strategic",
-        what: "B-29s from China and India (XX Bomber Command)",
-        targets: "steel and coke (Yawata, Anshan), aircraft (Omura), Formosa; Southeast Asia's ports and rail from India",
-        time: "day",
-        from: 58,
-        to: 67,
-        conf: "high",
-        theatre: "USA-pac",
-        share: [
-          [
-            58,
-            0.06
-          ]
-        ],
-        bases: [
-          [
-            58,
-            [
-              "Kharagpur",
-              "Chengtu"
-            ]
-          ],
-          [
-            66,
-            [
-              "Kharagpur"
-            ]
-          ]
-        ],
-        note: "15 Jun 1944 to 15 Jan 1945 from Chengtu; from India only, February and March 1945.",
-        fly: [
-          {
-            from: 58,
-            to: 65,
-            regions: [
-              "Fukuoka",
-              "Anshan",
-              "Formosa"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "USA",
-        kind: "strategic",
-        what: "B-29s from the Marianas (XXI Bomber Command)",
-        targets: "aircraft engine and airframe works by day (24 Nov 1944 to February 1945); cities by night with fire (from 9/10 Mar 1945); oil refineries by night (June to August 1945); mines in Japan's waters (from 27 Mar 1945)",
-        time: "both",
-        from: 63,
-        to: 72,
-        conf: "high",
-        theatre: "USA-pac",
-        share: [
-          [
-            63,
-            0.1
-          ],
-          [
-            65,
-            0.25
-          ]
-        ],
-        bases: [
-          [
-            63,
-            [
-              "Saipan",
-              "Guam"
-            ]
-          ],
-          [
-            68,
-            [
-              "Saipan",
-              "Guam",
-              "Iwo Jima"
-            ]
-          ]
-        ],
-        note: "Day precision from high altitude to February 1945 (63-66); low-level night fire raids from March 1945 (67); day precision again under P-51s from Iwo Jima from April 1945 (68).",
-        fly: [
-          {
-            from: 63,
-            to: 66,
-            regions: [
-              "Tokyo",
-              "Nagoya",
-              "Osaka"
-            ]
-          },
-          {
-            from: 67,
-            to: 72,
-            regions: [
-              "Tokyo",
-              "Nagoya",
-              "Osaka",
-              "Fukuoka"
-            ],
-            night: true
-          }
-        ]
-      },
-      {
-        nat: "SOV",
-        kind: "strategic",
-        what: "Day bombing of Finland (the Winter War)",
-        targets: "Helsinki, towns, rail",
-        time: "day",
-        from: 3,
-        to: 7,
-        conf: "high",
-        theatre: "SOV",
-        share: [
-          [
-            3,
-            0.25
-          ]
-        ],
-        bases: [
-          [
-            3,
-            [
-              "Leningrad",
-              "Estonia"
-            ]
-          ]
-        ],
-        note: "30 Nov 1939 to 13 Mar 1940.",
-        fly: [
-          {
-            from: 3,
-            to: 7,
-            regions: [
-              "Helsinki"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "SOV",
-        kind: "support",
-        what: "Ground attack and the battle for the sky over the front",
-        targets: "troops, guns, crossings; the sky over the main effort",
-        time: "day",
-        from: 22,
-        to: 72,
-        conf: "high",
-        note: "The Soviet air war's core. Air armies from May 1942 (33). The sky over the main effort held from the Kuban and Kursk, spring and summer 1943 (44-47); full command of it in Bagration, June 1944 (58).",
-        book: "The staff flies it: support behind its main effort."
-      },
-      {
-        nat: "SOV",
-        kind: "sky",
-        what: "Strikes on enemy airfields as an operation opens",
-        targets: "airfields",
-        time: "day",
-        from: 22,
-        to: 72,
-        conf: "medium",
-        note: "Finland 25 Jun 1941; the failed dawn strike at Kursk 5 Jul 1943 (47); Bagration (58); the Vistula-Oder (65); Manchuria August 1945 (72).",
-        book: "The staff flies it: its fight for the sky over the front where its offensive opens."
-      },
-      {
-        nat: "SOV",
-        kind: "strategic",
-        what: "Long-range bombing by night",
-        targets: "rail junctions and airfields behind the front; now and then cities in reach (Berlin, Koenigsberg, Danzig, Helsinki, Budapest, Bucharest)",
-        time: "night",
-        from: 22,
-        to: 69,
-        conf: "medium-high",
-        theatre: "SOV",
-        share: [
-          [
-            22,
-            0.1
-          ],
-          [
-            65,
-            0.08
-          ]
-        ],
-        bases: [
-          [
-            22,
-            [
-              "Crimea"
-            ]
-          ],
-          [
-            24,
-            [
-              "Estonia"
-            ]
-          ],
-          [
-            26,
-            [
-              "Moscow",
-              "Ryazan",
-              "Tula",
-              "Yaroslavl"
-            ]
-          ],
-          [
-            51,
-            [
-              "Kursk",
-              "Kharkov",
-              "Smolensk"
-            ]
-          ]
-        ],
-        note: "Naval aviation on Romanian oil and Constanta June to August 1941 (22-24); Berlin from Saaremaa August and early September 1941 (24-25); long-range aviation as its own command from March 1942 (31); Koenigsberg April 1943 (44); Helsinki February 1944 (54). Day raids with long-range bombers ended in summer 1941 (see stand-downs).",
-        fly: [
-          {
-            from: 24,
-            to: 25,
-            regions: [
-              "Berlin"
-            ]
-          },
-          {
-            from: 44,
-            to: 44,
-            regions: [
-              "Konigsberg"
-            ]
-          },
-          {
-            from: 54,
-            to: 54,
-            regions: [
-              "Helsinki"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "SOV",
-        kind: "support",
-        what: "Night harassment over the front with light biplanes",
-        targets: "troops, rear areas",
-        time: "night",
-        from: 26,
-        to: 69,
-        conf: "high",
-        note: "From late 1941.",
-        book: "The staff flies it: support over the front."
-      },
-      {
-        nat: "SOV",
-        kind: "sea",
-        what: "Anti-shipping in the Baltic, Black Sea and Arctic",
-        targets: "shipping",
-        time: "day",
-        from: 22,
-        to: 69,
-        conf: "medium",
-        note: "Strongest 1944.",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "JAP",
-        kind: "strategic",
-        what: "Day bombing of Chinese cities",
-        targets: "Chongqing and the cities of the interior",
-        time: "day",
-        from: 1,
-        to: 48,
-        conf: "high",
-        theatre: "JAP",
-        share: [
-          [
-            1,
-            0.4
-          ],
-          [
-            17,
-            0.3
-          ],
-          [
-            25,
-            0.05
-          ]
-        ],
-        bases: [
-          [
-            1,
-            [
-              "Hankow"
-            ]
-          ],
-          [
-            5,
-            [
-              "Hankow",
-              "Loyang"
-            ]
-          ]
-        ],
-        note: "From February 1938 (before turn 1) to August 1943. Peaks: Operation 101, May to September 1940 (9-13), with the new long-range Zero escort from August 1940; Operation 102, July and August 1941 (23-24).",
-        fly: [
-          {
-            from: 1,
-            to: 48,
-            regions: [
-              "Chungking"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "JAP",
-        kind: "sky",
-        what: "Opening blows on enemy airfields",
-        targets: "Pearl Harbor, Clark Field, Malaya's and Java's airfields",
-        time: "day",
-        from: 28,
-        to: 30,
-        conf: "high",
-        note: "7-8 Dec 1941 (28), then airfield by airfield through the south to February 1942 (30).",
-        book: "Japan's opening blows belong to its opening (ruling 234)."
-      },
-      {
-        nat: "JAP",
-        kind: "sea",
-        what: "Anti-shipping by land-based torpedo bombers and the carriers",
-        targets: "warships and shipping; Darwin's harbour (19 Feb 1942); Colombo and Trincomalee (April 1942)",
-        time: "day",
-        from: 28,
-        to: 44,
-        conf: "high",
-        note: "Force Z sunk 10 Dec 1941.",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "JAP",
-        kind: "sky",
-        what: "The battle for the sky over New Guinea and the Solomons",
-        targets: "Port Moresby, Henderson Field, Allied air groups and shipping",
-        time: "day",
-        from: 30,
-        to: 52,
-        conf: "high",
-        theatre: "JAP",
-        share: [
-          [
-            30,
-            0.3
-          ],
-          [
-            41,
-            0.45
-          ],
-          [
-            53,
-            0.2
-          ]
-        ],
-        bases: [
-          [
-            30,
-            [
-              "Rabaul",
-              "Lae"
-            ]
-          ],
-          [
-            36,
-            [
-              "Rabaul",
-              "Bougainville"
-            ]
-          ],
-          [
-            45,
-            [
-              "Wewak",
-              "Rabaul",
-              "Bougainville"
-            ]
-          ]
-        ],
-        note: "Port Moresby from February 1942 (30); Guadalcanal August 1942 to February 1943 (36-42); I-Go, 7-16 Apr 1943 (44); RO-Go, November 1943 (51).",
-        fly: [
-          {
-            from: 30,
-            to: 52,
-            regions: [
-              "Port Moresby",
-              "Guadalcanal"
-            ],
-            bombers: true
-          }
-        ]
-      },
-      {
-        nat: "JAP",
-        kind: "strategic",
-        what: "Raids on northern Australia",
-        targets: "Darwin and its airfields",
-        time: "both",
-        from: 30,
-        to: 51,
-        conf: "high",
-        theatre: "JAP",
-        share: [
-          [
-            30,
-            0.03
-          ]
-        ],
-        bases: [
-          [
-            30,
-            [
-              "Koepang",
-              "Kendari",
-              "Ambon"
-            ]
-          ]
-        ],
-        note: "19 Feb 1942 to November 1943, 64 raids on Darwin.",
-        fly: [
-          {
-            from: 30,
-            to: 51,
-            regions: [
-              "Darwin"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "JAP",
-        kind: "strategic",
-        what: "Raids on Calcutta",
-        targets: "Calcutta's docks",
-        time: "both",
-        from: 40,
-        to: 52,
-        conf: "medium-high",
-        theatre: "JAP",
-        share: [
-          [
-            40,
-            0.03
-          ]
-        ],
-        bases: [
-          [
-            40,
-            [
-              "Rangoon",
-              "Meiktila",
-              "Yenangyaung"
-            ]
-          ]
-        ],
-        note: "At night in December 1942 (40); by day in December 1943 (52).",
-        fly: [
-          {
-            from: 40,
-            to: 40,
-            regions: [
-              "Calcutta"
-            ],
-            night: true
-          },
-          {
-            from: 52,
-            to: 52,
-            regions: [
-              "Calcutta"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "JAP",
-        kind: "support",
-        what: "Army air support in China and Burma",
-        targets: "troops, airfields",
-        time: "day",
-        from: 1,
-        to: 72,
-        conf: "medium",
-        note: "Small. Its largest was Ichi-Go, April to December 1944 (56-64).",
-        book: "The staff flies it: support behind its main effort."
-      },
-      {
-        nat: "JAP",
-        kind: "sea",
-        what: "Special attack (suicide) on ships",
-        targets: "ships",
-        time: "day",
-        from: 62,
-        to: 72,
-        conf: "high",
-        note: "From 25 Oct 1944 (Leyte); the mass Kikusui raids off Okinawa, 6 Apr to 22 Jun 1945 (68-70).",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "JAP",
-        kind: "defence",
-        what: "Home defence against the B-29s",
-        targets: "the sky over Japan",
-        time: "both",
-        from: 58,
-        to: 72,
-        conf: "medium",
-        note: "From June 1944; weak, and fighters were held back for the invasion from mid-1945.",
-        book: "Home defence is what fighter groups on patrol do: no campaign."
-      },
-      {
-        nat: "ITA",
-        kind: "strategic",
-        what: "Malta",
-        targets: "airfields, harbour, dockyard",
-        time: "both",
-        from: 10,
-        to: 38,
-        conf: "high",
-        theatre: "ITA",
-        share: [
-          [
-            10,
-            0.12
-          ],
-          [
-            17,
-            0.1
-          ],
-          [
-            29,
-            0.15
-          ]
-        ],
-        bases: [
-          [
-            10,
-            [
-              "Sicily"
-            ]
-          ]
-        ],
-        note: "From 11 Jun 1940, high-level by day; with the Germans January to May 1941 (17-21) and December 1941 to May 1942 (28-33); the last blitz October 1942 (38).",
-        fly: [
-          {
-            from: 10,
-            to: 38,
-            regions: [
-              "Malta"
-            ],
-            kind: "sky",
-            bombers: true
-          }
-        ]
-      },
-      {
-        nat: "ITA",
-        kind: "sea",
-        what: "Against the British fleet and convoys",
-        targets: "warships and shipping",
-        time: "day",
-        from: 11,
-        to: 49,
-        conf: "high",
-        note: "High-level bombing from July 1940 (Calabria); torpedo bombers from August 1940 (12) to September 1943 (49), Italy's most telling air arm.",
-        book: "At sea: the sea staff flies it."
-      },
-      {
-        nat: "ITA",
-        kind: "strategic",
-        what: "Long-range raids on British oil and bases",
-        targets: "Haifa's and Bahrain's refineries, Alexandria, Gibraltar",
-        time: "both",
-        from: 11,
-        to: 40,
-        conf: "medium-high",
-        theatre: "ITA",
-        share: [
-          [
-            11,
-            0.03
-          ]
-        ],
-        bases: [
-          [
-            11,
-            [
-              "Rhodes",
-              "Sardinia"
-            ]
-          ]
-        ],
-        note: "Haifa from July 1940; Bahrain 19 Oct 1940 (14); Gibraltar at night 1940-43. On the chart (the historian, b569): Rhodes (Maritza, Gadurra) and Sardinia (Elmas, Decimomannu, Alghero) had real air bases, but neither has an airfield on today's chart and nothing else on it reaches Haifa, Bahrain or Gibraltar; so the row flies Alexandria from Libya's fields and leaves those out.",
-        fly: [
-          {
-            from: 11,
-            to: 40,
-            regions: [
-              "Alexandria"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "ITA",
-        kind: "strategic",
-        what: "The Italian air corps over Britain",
-        targets: "Harwich, Ramsgate, east-coast ports",
-        time: "both",
-        from: 14,
-        to: 17,
-        conf: "high",
-        theatre: "ITA",
-        share: [
-          [
-            14,
-            0.08
-          ]
-        ],
-        bases: [
-          [
-            14,
-            [
-              "Brussels",
-              "Flanders"
-            ]
-          ]
-        ],
-        note: "October 1940 to January 1941.",
-        fly: [
-          {
-            from: 14,
-            to: 17,
-            regions: [
-              "Kent"
-            ]
-          }
-        ]
-      },
-      {
-        nat: "ITA",
-        kind: "support",
-        what: "Ground support",
-        targets: "troops",
-        time: "day",
-        from: 10,
-        to: 49,
-        conf: "high",
-        note: "North Africa June 1940 to May 1943 (10-45); Greece October 1940 to April 1941 (14-20); Russia August 1941 to January 1943 (24-41).",
-        book: "The staff flies it: support behind its main effort."
-      },
-      {
-        nat: "FRA",
-        kind: "sky",
-        what: "Fighter cover over the armies",
-        targets: "the sky over the front",
-        time: "day",
-        from: 1,
-        to: 10,
-        conf: "high",
-        note: "September 1939 to June 1940.",
-        book: "The staff flies it: support over the front."
-      },
-      {
-        nat: "FRA",
-        kind: "strategic",
-        what: "No bombing of Germany by choice; leaflets and reconnaissance only",
-        targets: "none",
-        time: "night",
-        from: 1,
-        to: 9,
-        conf: "high",
-        note: "For fear of reprisal on French towns. The Baku oil plan of spring 1940 was never flown.",
-        book: "No bombs, by choice: leaflets only."
-      },
-      {
-        nat: "FRA",
-        kind: "support",
-        what: "Support and interdiction in the battle of France",
-        targets: "bridges, columns",
-        time: "both",
-        from: 9,
-        to: 10,
-        conf: "high",
-        note: "May and June 1940: the Meuse bridges at Sedan (14 May), the low-level Breguet attacks, the LeO 451s by night. Small raids on Italy in June 1940.",
-        book: "The staff flies it: support behind its main effort."
-      }
-    ],
-    bookAbout: "Rider b569 (3) and (4), with the historian's shares and bases (historian/air-shares-b569.json and .md): at the stops that follow the book a row takes its 'share' (dated rows [from turn, share]) of the front-line aircraft of its nation's 'theatre', of every kind together, as the historian gives it; a bombing row fills it with bombers, a fight for the sky with each kind it flies at that share. Its escort takes 'escort' of the theatre's fighters (the feature builder's reading). A theatre is: Germany's west, east and Mediterranean by 'split' (the historian's whole-Luftwaffe split by date); the RAF at home, its groups on British home ground; America's Europe and Pacific, its groups on either side of the world; any other nation's, its whole air force. Groups are whole: a row takes one, and another only while that comes nearer its share than stopping does. Groups in reach of the row's targets go first. A group out of reach is moved on the row's month to the field its side holds nearest any of the row's 'bases' for that month, in reach of the targets, one with room first; if the side holds none, the row flies without it.",
-    split: {
-      GER: [
-        [
-          1,
-          {
-            east: 0.5,
-            west: 0.5,
-            med: 0
-          }
-        ],
-        [
-          5,
-          {
-            east: 0.05,
-            west: 0.95,
-            med: 0
-          }
-        ],
-        [
-          17,
-          {
-            east: 0,
-            west: 0.7,
-            med: 0.3
-          }
-        ],
-        [
-          22,
-          {
-            east: 0.6,
-            west: 0.25,
-            med: 0.1
-          }
-        ],
-        [
-          28,
-          {
-            east: 0.6,
-            west: 0.25,
-            med: 0.15
-          }
-        ],
-        [
-          29,
-          {
-            east: 0.55,
-            west: 0.25,
-            med: 0.2
-          }
-        ],
-        [
-          41,
-          {
-            east: 0.4,
-            west: 0.35,
-            med: 0.25
-          }
-        ],
-        [
-          53,
-          {
-            east: 0.35,
-            west: 0.55,
-            med: 0.1
-          }
-        ],
-        [
-          65,
-          {
-            east: 0.5,
-            west: 0.5,
-            med: 0
-          }
-        ]
-      ]
-    },
-    sources: [
-      "Tooze, The Wages of Destruction (2006); Wagenfuehr's armaments series in the US Strategic Bombing Survey, The Effects of Strategic Bombing on the German War Economy (1945)",
-      "Harrison (ed.), The Economics of World War II (1998); Harrison, Accounting for War (1996)",
-      "Postan, British War Production (HMSO, 1952)",
-      "War Production Board, Wartime Production Achievements and the Reconversion Outlook (1945)",
-      "US Strategic Bombing Survey, The Effects of Strategic Bombing on Japan's War Economy (1946); Cohen, Japan's Economy in War and Reconstruction (1949)",
-      "Middlebrook and Everitt, The Bomber Command War Diaries (1985); Webster and Frankland, The Strategic Air Offensive against Germany (HMSO, 1961)",
-      "Craven and Cate, The Army Air Forces in World War II; Freeman, The Mighty Eighth War Diary (1981)",
-      "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
-    ],
-    fields: {
-      _about: "Rider b574 (the design director, 22:11Z) and the historian's list (historian/med-airfields-b574.md): the record's Mediterranean air war was flown from fields today's chart does not seed. With the switch on, these provinces have an airfield of at least this class (1 a landing ground, 2 an airfield, 3 an air base; airwar.json fields.sizes) all war; every one existed all war and served whoever held the province, so whoever holds it in the game uses it, as everywhere. With the switch off they are not read. Pantelleria is not on the chart: it folds into Sicily, which has its air base. Gambut is counted with Tobruk's El Adem.",
-      rows: [
-        { region: "Tripoli", from: 1, class: 3, why: "Castel Benito (high)." },
-        { region: "Benghazi", from: 1, class: 3, why: "Benina and Berka; the 1943 Ploesti raid flew from here (high)." },
-        { region: "Derna", from: 1, class: 2, why: "Derna and Martuba (high)." },
-        { region: "Tobruk", from: 1, class: 3, why: "El Adem and Gambut (high)." },
-        { region: "Agedabia", from: 1, class: 1, why: "Landing grounds that followed the front (medium)." },
-        { region: "El Agheila", from: 1, class: 1, why: "Marble Arch (medium)." },
-        { region: "Bardia", from: 1, class: 1, why: "Landing grounds that followed the front (medium)." },
-        { region: "Mersa Matruh", from: 1, class: 2, why: "Matruh's fields (high)." },
-        { region: "El Alamein", from: 1, class: 2, why: "The Alamein fields (high)." },
-        { region: "Sidi Barrani", from: 1, class: 1, why: "Sidi Barrani's landing ground (high)." },
-        { region: "Rhodes", from: 1, class: 2, why: "Maritza, Gadurra and Calato, the Aegean command's base (high)." },
-        { region: "Sardinia", from: 1, class: 3, why: "Elmas, Decimomannu and four more, home to the torpedo and bomber groups (high)." },
-        { region: "Crete", from: 1, class: 2, why: "Maleme and Heraklion (high)." },
-        { region: "Corsica", from: 1, class: 2, why: "The Allied fields of 1943-44 (high)." },
-        { region: "Tunis", from: 1, class: 3, why: "El Aouina and Bizerte (medium-high)." },
-        { region: "Sfax", from: 1, class: 2, why: "Kairouan and Gabes (medium-high)." }
-      ]
-    },
-    radar: {
-      _about: `Ruling 236 riders b553 and b558 (Brian, 20:43Z: "if you had radar then your fighters are much better at intercepting bombing raids"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled. (c) b569(2): at stops 3 to 5 a staff whose ground was bombed by night within 'need' months takes Fighter control first in its research, once it holds Early-warning radar, every nation alike.`,
-      tech: "earlywarning",
-      control: "gci",
-      ground: 0.5,
-      need: 3,
-      record: [
-        {
-          nat: "GER",
-          from: 1,
-          name: "the Freya stations",
-          by: "the coast's warning service",
-          ground: 0.5,
-          plural: true,
-          regions: [
-            "Hamburg",
-            "Schleswig-Holstein",
-            "Bremen"
-          ],
-          where: "its North Sea coast"
-        },
-        {
-          nat: "SOV",
-          from: 23,
-          name: "the Redut stations",
-          by: "the air defence of Moscow and Leningrad",
-          ground: 0.5,
-          plural: true,
-          regions: [
-            "Moscow",
-            "Leningrad"
-          ],
-          where: "Moscow and Leningrad"
-        },
-        {
-          nat: "SOV",
-          from: 41,
-          name: "the Redut stations",
-          by: "the air armies' warning service",
-          ground: 0.5,
-          plural: true
-        },
-        {
-          nat: "USA",
-          from: 29,
-          name: "the Aircraft Warning Service",
-          by: "the Army's fighter commands",
-          ground: 0.5
-        },
-        {
-          nat: "JAP",
-          from: 41,
-          name: "the coast radars and picket boats",
-          by: "the home islands' air defence",
-          ground: 0.5,
-          plural: true
-        },
-        {
-          nat: "ITA",
-          from: 41,
-          name: "the German radar stations",
-          by: "the German air force in Italy",
-          ground: 0.5,
-          plural: true
-        }
-      ],
-      night: {
-        UK: [
-          [
-            1,
-            1e-3
-          ],
-          [
-            17,
-            3e-3
-          ],
-          [
-            19,
-            8e-3
-          ],
-          [
-            41,
-            0.015
-          ],
-          [
-            53,
-            0.023
-          ]
-        ],
-        GER: [
-          [
-            1,
-            1e-3
-          ],
-          [
-            14,
-            4e-3
-          ],
-          [
-            30,
-            0.011
-          ],
-          [
-            41,
-            0.022
-          ],
-          [
-            47,
-            0.01
-          ],
-          [
-            49,
-            0.033
-          ],
-          [
-            57,
-            0.02
-          ],
-          [
-            63,
-            8e-3
-          ]
-        ],
-        USA: [
-          [
-            1,
-            3e-3
-          ],
-          [
-            58,
-            0.012
-          ]
-        ],
-        SOV: [
-          [
-            1,
-            1e-3
-          ],
-          [
-            41,
-            2e-3
-          ],
-          [
-            53,
-            4e-3
-          ]
-        ],
-        JAP: [
-          [
-            1,
-            1e-3
-          ],
-          [
-            58,
-            3e-3
-          ]
-        ],
-        ITA: [
-          [
-            1,
-            1e-3
-          ],
-          [
-            47,
-            3e-3
-          ]
-        ],
-        _default: [
-          [
-            1,
-            1e-3
-          ]
-        ]
-      },
-      nightWhy: {
-        UK: "1 to 16: no ground control at night and no working airborne radar (the AI Mk III Blenheims). 17: the first ground-control (GCI) stations and the Beaufighter with AI Mk IV. 19: the two together, March 1941, rising to the best month of the Blitz in May 1941. 41: centimetric radar in Mosquitos (from early 1943). 53: Mosquitos with AI Mk VIII and X against Steinbock, 1944.",
-        GER: "1 to 13: searchlights and few night fighters. 14: the searchlight belt and Freya line (October 1940), then the Himmelbett boxes in 1941. 30: Lichtenstein airborne radar in service (February 1942), general by late 1942. 41: the full Himmelbett and Lichtenstein system of 1943. 47: Window blinds Wuerzburg and Lichtenstein (Hamburg, 24/25 Jul 1943) for about two months. 49: free hunting in the bomber stream (Tame Boar and Wild Boar) with SN-2 radar, the peak of the night defence. 57: France's warning lost after D-Day, fuel short, British intruders and jamming. 63: the collapse of late 1944 and 1945.",
-        USA: "No night raids on American soil. Overseas, the P-70 and early navy night fighters to 1944; the P-61 with SCR-720 radar from mid-1944 (58).",
-        SOV: "Night fighters without radar, under searchlights, most of the war; most German night losses over Soviet cities were to guns.",
-        JAP: "Night fighters with upward-firing guns and few radar sets against the B-29 fire raids from 1944.",
-        ITA: "No night-fighter arm of note; German night fighters in Italy in 1943."
-      }
-    },
-    gunners: {
-      _about: "Rulings 237 b557 and b559 (accepted), the historian's historian/gunner-kills-b557.md: the defending fighters the bombers' gunners bring down, for each bomber the fighters bring down (real losses, never the gunners' claims). With the switch on these take the place of ruling 227's day figure (airwar.json day.kill x the nation's bomber defence); with it off 227 stands as it is. The game flies one kind of bomber a nation, so the historian's kinds are read from what the game knows ('map'). 'night': any bomber by night. 'ground': a strike on troops ('ground' and 'line'), the two-seat ground-attack aircraft with a rear gunner. 'box': the nations whose day bombers fly as heavy boxes, 'alone' when no escort reached the target, 'escorted' when one did (keyed by the raid's escort, not the year, so it works at every stop). 'b29': that nation's day raids from 'from' on Japan's home islands ('regions', held by 'vs'); elsewhere its heavy-box rows stand (the historian, 21:08Z: the B-24s and B-25s flew the day raids on the Philippines, New Guinea, Borneo and Formosa). 'day': every other day raid, by nation, rows [from turn, ratio] (a row holds until the next).",
-      night: 0.05,
-      ground: 0.07,
-      box: {
-        nats: [
-          "USA"
-        ],
-        alone: 0.4,
-        escorted: 0.2
-      },
-      b29: {
-        nat: "USA",
-        vs: [
-          "JAP"
-        ],
-        from: 58,
-        ratio: 0.5,
-        regions: [
-          "Sapporo",
-          "Kushiro",
-          "Aomori",
-          "Akita",
-          "Sendai",
-          "Niigata",
-          "Tokyo",
-          "Yokohama",
-          "Nagano",
-          "Shizuoka",
-          "Nagoya",
-          "Kanazawa",
-          "Kyoto",
-          "Osaka",
-          "Okayama",
-          "Hiroshima",
-          "Shimonoseki",
-          "Shikoku",
-          "Fukuoka",
-          "Nagasaki",
-          "Kumamoto",
-          "Kagoshima"
-        ]
-      },
-      day: {
-        _default: [
-          [
-            1,
-            0.07
-          ],
-          [
-            29,
-            0.15
-          ]
-        ],
-        UK: [
-          [
-            1,
-            0.15
-          ],
-          [
-            17,
-            0.07
-          ],
-          [
-            29,
-            0.15
-          ]
-        ]
-      },
-      map: {
-        "Light and medium bombers with hand-held guns, 1939-41 (0.07)": "Every nation's day bombers from September 1939 to December 1941 (turns 1 to 28), and Britain's in 1941 (17 to 28: the Blenheims' day raids).",
-        "Bombers with power turrets by day, 1939-40 (0.15)": "Britain's day bombers from September 1939 to December 1940 (1 to 16: the Wellingtons and Hampdens).",
-        "Medium bombers in formation with more guns, 1942-45 (0.15)": "Every nation's day bombers from January 1942 (29), America's excepted.",
-        "Heavy bomber boxes (0.4 beyond escort, 0.2 escorted all the way)": "America's day bombers, every month, keyed by whether an escort reached the target. The game's one American bomber is the heavy; its B-25s and B-26s are not told apart.",
-        "B-29 by day over Japan (0.5)": "America's day raids on Japan's home islands while Japan holds them, from June 1944 (58); elsewhere the heavy-box rows.",
-        "Any bomber by night (0.05)": "Every night raid.",
-        "Ground-attack aircraft with a rear gunner (0.07)": "Every nation's strikes on troops ('ground' and 'line'), whatever the year: the game's bombers flying close support stand for the Il-2s and Ju 87s."
-      }
-    }
-  };
-
-  // ../../data/campaign/far-fields.json
-  var far_fields_default = {
-    _about: "The far side's airfields on the record (ruling 234, the design director's notes of 04:47Z and 04:58Z of 21 November 2026 on rider b645 (2), Singapore's and Palembang's sky; the historian's table, historian/far-chart-airfields.md, sections 1 to 4, with its marks H, M and L). In the form of rider b574's table for the Mediterranean (aircampaigns.json fields.rows): a province has an airfield of at least this class from this month, whoever holds it. 1 a landing ground, 2 an airfield, 3 an air base (airwar.json fields.sizes: 500, 1,000 and 1,500 aircraft). A month is counted from September 1939 (28 is December 1941); 'from 1' is a field that stood by December 1941. Read by src/campaign/aircampaigns.ts (recordField) with the far side's switch on, whatever the air campaigns' switch says; with the far switch off it is not read. Kept by hand, from the historian's table.",
-    _laid: "How the table is laid on this chart. A field is laid in the province it lies in: Samarinda II in Samarinda's and Manggar in Balikpapan's; Miri in Miri's and Labuan in Brunei's; Magwe in Yenangyaung's, Heho in Taunggyi's; Prachuap and Chumphon in the Kra's; Maguwo in Semarang's; Singosari and Maospati in Soerabaja's, an airfield until the B-17s came and an air base from month 29; Majuro in the Eastern Marshalls'; Yunnanyi in Tali's; Dinjan, Chabua and Mohanbari in Dibrugarh's; Fort Glenn in Dutch Harbor's; Horn Island and Iron Range in Cape York's; Suichuan in Kanchow's; Wau in Lae's. Clark Field lies in Lingayen's province, where the roster bases its squadrons, so Lingayen's air base stands. Where the table gives a class of 1 to 2 or 2 to 3 the lower is laid, and where it gives a span of months the last. A row only ever raises a field: the chart's own first-day field stands where it is the larger (Tarawa, Wake, Midway, Kwajalein, Espiritu Santo, Fiji, Saipan, Iwo Jima, Okinawa, Chengtu, Kunming, Townsville). NOT LAID, for the design director: the three corrections that would make a first-day field smaller (Del Monte 3 to 2; Rabaul 2 until month 40; Port Moresby 2 until month 36), because the rule that the base of an air fleet on the record is an air base gives each its 3 and a table that is read as 'at least' cannot take it away. Not on the chart as provinces of their own, and adding nothing where they lie (the historian's section 6): Tinian (Saipan's, an air base already), Efate (Espiritu Santo's, the same), Noemfoor (Biak's, the same), Amchitka (left out: Adak has its airfield). Chihkiang in Changteh's, at the mouth of the Yuan valley it lies up: the chart has no province of west Hunan beyond Paoking.",
-    rows: [
-      { region: "Singora", from: 1, class: 1, why: "Singora (Songkhla): a small Thai field (M)." },
-      { region: "Singora", from: 28, class: 2, why: "Enlarged within days of 8 Dec 1941 as the 3rd Air Group's forward base (M)." },
-      { region: "Kota Bharu", from: 1, class: 2, why: "Kota Bharu, Gong Kedah, Machang: Hudsons and Vildebeests (M)." },
-      { region: "Penang", from: 1, class: 2, why: "Alor Star, Sungei Patani, Butterworth; Bayan Lepas on the island (M)." },
-      { region: "Ipoh", from: 1, class: 1, why: "Ipoh and Taiping: fighters (M)." },
-      { region: "Kuantan", from: 1, class: 2, why: "Kuantan: Hudsons and Vildebeests (M)." },
-      { region: "Kuala Lumpur", from: 1, class: 1, why: "Sungei Besi; Port Swettenham: fighters and transports (M)." },
-      { region: "Johore", from: 1, class: 1, why: "Kluang, Kahang, Batu Pahat: fighters and light bombers (M)." },
-      { region: "Kra", from: 1, class: 1, why: "Prachuap and Chumphon: the Thai air force's Wing 5 fought the landing of 8 Dec 1941 (M)." },
-      { region: "Chiang Mai", from: 1, class: 1, why: "Chiang Mai and Lampang: Japan's fighters against Burma (M)." },
-      { region: "Mergui", from: 1, class: 1, why: "Mergui, Tavoy, Victoria Point: the ferry route's landing grounds from India to Malaya (M)." },
-      { region: "Moulmein", from: 1, class: 1, why: "Moulmein: fighters (M)." },
-      { region: "Toungoo", from: 1, class: 2, why: "Kyedaw: the AVG trained here from Aug 1941; fighters and Blenheims (M)." },
-      { region: "Yenangyaung", from: 1, class: 1, why: "Magwe: the RAF's and the AVG's base after Rangoon fell (the table's 1 to 2; the lower is laid) (M)." },
-      { region: "Meiktila", from: 1, class: 1, why: "Meiktila: fighters (M)." },
-      { region: "Taunggyi", from: 1, class: 1, why: "Heho, in the Shan States: Japan's fighter field in central Burma from 1942 (M)." },
-      { region: "Mandalay", from: 1, class: 1, why: "Mandalay and Shwebo: fighters (M)." },
-      { region: "Lashio", from: 1, class: 1, why: "Lashio: CNAC's transports at the Burma Road's railhead; fighters (M)." },
-      { region: "Myitkyina", from: 1, class: 1, why: "Myitkyina's two strips: fighters (M)." },
-      { region: "Myitkyina", from: 57, class: 2, why: "The Allied field, retaken on 17 May 1944: C-47s and the Hump's low route (H)." },
-      { region: "Akyab", from: 1, class: 2, why: "Akyab island: Blenheims and Hurricanes; a staging field on the coast route (M)." },
-      { region: "Kuching", from: 1, class: 1, why: "Kuching (the 7th Mile): fighters staging (M)." },
-      { region: "Miri", from: 28, class: 1, why: "Miri: a small strip (the table's Brunei row, whose fields are Miri and Labuan) (L)." },
-      { region: "Brunei", from: 41, class: 1, why: "Labuan, which Japan built in 1942 to 1943 (the table's Brunei row; laid from the turn of that year) (L)." },
-      { region: "Jolo", from: 1, class: 1, why: "Jolo: fighters; the navy's Zeros staged here for Tarakan and Balikpapan (M-L)." },
-      { region: "Davao", from: 1, class: 1, why: "Davao (Sasa), with the seaplane anchorage: fighters and flying boats (M)." },
-      { region: "Davao", from: 58, class: 3, why: "Several Japanese fields by 1944 (L)." },
-      { region: "Menado", from: 1, class: 1, why: "Langoan and Mapanget: fighters (M)." },
-      { region: "Tarakan", from: 1, class: 1, why: "Tarakan: fighters (M)." },
-      { region: "Balikpapan", from: 1, class: 1, why: "Manggar: fighters (the table's Balikpapan row is 2 for its two fields; the bombers' field lies in Samarinda's province on this chart) (M)." },
-      { region: "Samarinda", from: 1, class: 2, why: "Samarinda II, inland: the Dutch Glenn Martins' hidden field (the table's Balikpapan row) (M)." },
-      { region: "Makassar", from: 1, class: 2, why: "Mandai: medium bombers (M)." },
-      { region: "Ambon", from: 1, class: 2, why: "Laha: No. 13 Squadron RAAF's Hudsons, then Japan's navy bombers (M)." },
-      { region: "Koepang", from: 1, class: 1, why: "Penfui: Hudsons; the ferry stop between Darwin and Java (M)." },
-      { region: "Dili", from: 1, class: 1, why: "Dili: Japan's from 20 Feb 1942 (M)." },
-      { region: "Bali", from: 1, class: 1, why: "Den Pasar: Japan's Zeros struck Soerabaja from here (M)." },
-      { region: "Singkawang", from: 1, class: 1, why: "Singkawang II: a Dutch field (L-M)." },
-      { region: "Bandjermasin", from: 1, class: 1, why: "Ulin: a Dutch field (L-M)." },
-      { region: "Palembang", from: 1, class: 2, why: "P1 (Pangkalan Benteng) and P2 (Prabumulih): Hurricanes, Blenheims and Hudsons in Feb 1942 (M)." },
-      { region: "Medan", from: 1, class: 1, why: "Polonia: fighters; KLM's civil route (M)." },
-      { region: "Soerabaja", from: 1, class: 2, why: "Perak and Morokrembangan, with Singosari at Malang, a Dutch medium-bomber base until the B-17s came, and Maospati at Madioen: both lie in the province on this chart (M)." },
-      { region: "Soerabaja", from: 29, class: 3, why: "Singosari as the B-17s' base from about January 1942 (the historian's section 6) (M)." },
-      { region: "Semarang", from: 1, class: 2, why: "Maguwo at Jogjakarta, which lies in the province on this chart: the Allies' bombers in Jan and Feb 1942 (M)." },
-      { region: "Hanoi", from: 1, class: 2, why: "Gia Lam and Bach Mai: Japan's bombers struck Kunming and the Burma Road from them in 1940 and 1941 (M)." },
-      { region: "Cam Ranh", from: 23, class: 1, why: "Nha Trang; Cam Ranh's seaplane station: fighters and flying boats (L)." },
-      { region: "Hainan", from: 1, class: 2, why: "Sanya and Haikou: Japan's navy bombers and fighters (M)." },
-      { region: "Hong Kong", from: 41, class: 2, why: "Kai Tak, lengthened by Japan with prisoners' labour by about 1943 (M)." },
-      { region: "Legaspi", from: 1, class: 1, why: "Legaspi: fighters (M)." },
-      { region: "Aparri", from: 1, class: 1, why: "Aparri; Vigan and Laoag: fighters (M)." },
-      { region: "Truk", from: 1, class: 1, why: "Japan's navy field (L)." },
-      { region: "Truk", from: 28, class: 2, why: "Eten's field, built about 1941 (L)." },
-      { region: "Truk", from: 49, class: 3, why: "Moen's and Param's fields, built in 1943 and 1944 (L)." },
-      { region: "Palau", from: 28, class: 2, why: "Peleliu; Airai on Babelthuap: Japan's navy bombers and fighters (L)." },
-      { region: "Eastern Marshalls", from: 25, class: 1, why: "Taroa, Wotje, Mili and Jaluit: Japan's navy fields (the table's 1 to 2; the lower is laid) (M-L)." },
-      { region: "Eastern Marshalls", from: 54, class: 2, why: "Majuro, the fleet's anchorage with a Marine field from Feb 1944: laid in the nearest Marshalls province (the historian's section 6) (M)." },
-      { region: "Eniwetok", from: 54, class: 2, why: "The Allies' field from Feb 1944 (the table's 2 to 3; the lower is laid) (M)." },
-      { region: "Guam", from: 64, class: 3, why: "North and Northwest Fields, 1944 to 1945 (M)." },
-      { region: "Lae", from: 1, class: 1, why: "Lae, Salamaua and Wau: the gold-fields' airlift hub (M)." },
-      { region: "Lae", from: 49, class: 3, why: "Nadzab, built after the airborne landing of 5 Sep 1943: heavy bombers (M)." },
-      { region: "Milne Bay", from: 35, class: 1, why: "Gurney: the RAAF's Kittyhawks in the battle of Aug and Sep 1942 (the table's 1 to 2; the lower is laid) (H)." },
-      { region: "Buna", from: 35, class: 1, why: "Japan's strip at Buna from Jul 1942 (M)." },
-      { region: "Buna", from: 40, class: 2, why: "Dobodura, the Allies' from about Dec 1942 (M)." },
-      { region: "Buna", from: 46, class: 3, why: "Dobodura by mid-1943 (M)." },
-      { region: "Wewak", from: 40, class: 2, why: "But, Boram and Dagua: Japan's army air base of 1943 (the table's 2 to 3; the lower is laid) (M)." },
-      { region: "Madang", from: 40, class: 1, why: "Madang, in the table's Wewak row: fighters (M)." },
-      { region: "Guadalcanal", from: 36, class: 1, why: "Henderson Field: the first aircraft landed on 20 Aug 1942 (H)." },
-      { region: "Guadalcanal", from: 39, class: 2, why: "Henderson with Fighter One and Two (M)." },
-      { region: "Guadalcanal", from: 44, class: 3, why: "With Carney and Koli in 1943 (M)." },
-      { region: "New Georgia", from: 40, class: 1, why: "Munda, built in secret by Japan from late Nov 1942 (H)." },
-      { region: "Bougainville", from: 37, class: 1, why: "Buka, Kahili and Ballale: Japan's fields covering the Solomons (the table's 1 to 2; the lower is laid) (M)." },
-      { region: "New Caledonia", from: 34, class: 3, why: "Tontouta and Plaine des Gaiacs (M)." },
-      { region: "Hollandia", from: 56, class: 3, why: "Japan's three fields, the Allies' from the landing of 22 Apr 1944 (H for the date)." },
-      { region: "Biak", from: 58, class: 3, why: "Mokmer and Owi (M)." },
-      { region: "Morotai", from: 61, class: 3, why: "Wama and Pitu (M)." },
-      { region: "Leyte", from: 62, class: 2, why: "Tacloban, Dulag, Tanauan; Burauen: mud kept them small for weeks (M)." },
-      { region: "Mindoro", from: 64, class: 2, why: "San Jose (M)." },
-      { region: "Cape York", from: 30, class: 1, why: "Horn Island (the table's 1 to 2; the lower is laid) (M)." },
-      { region: "Cape York", from: 37, class: 2, why: "Iron Range (M)." },
-      { region: "Dibrugarh", from: 33, class: 2, why: "Dinjan, then Chabua and Mohanbari: the Hump's bases in Assam (M)." },
-      { region: "Dibrugarh", from: 46, class: 3, why: "The Hump's bases by about mid-1943 (M)." },
-      { region: "Tali", from: 33, class: 2, why: "Yunnanyi, a Hump terminal and a fighter field behind the Salween: laid in Tali's province, which holds Siangyun (the historian's section 6) (L)." },
-      { region: "Jorhat", from: 36, class: 2, why: "Jorhat: a Hump base in Assam (M)." },
-      { region: "Changteh", from: 50, class: 2, why: "Chihkiang, up the Yuan river, whose valley runs down to Changteh: laid in Changteh's province, the chart having none west of Paoking; Changteh's ground stayed China's in 1944-45 (the historian's section 7) (L)." },
-      { region: "Kweilin", from: 40, class: 2, why: "The 14th Air Force's forward base (the table's months 1 to 40 for east China's fields; laid from the last) (M)." },
-      { region: "Liuchow", from: 40, class: 2, why: "The 14th Air Force's forward base (as Kweilin) (M)." },
-      { region: "Hengyang", from: 40, class: 2, why: "The 14th Air Force's forward base (as Kweilin) (M)." },
-      { region: "Lingling", from: 40, class: 2, why: "The 14th Air Force's forward base (as Kweilin) (M)." },
-      { region: "Kanchow", from: 40, class: 2, why: "Kanchow and Suichuan: the 14th Air Force's forward bases (as Kweilin) (M)." },
-      { region: "Dutch Harbor", from: 31, class: 2, why: "Fort Glenn on Umnak (M)." },
-      { region: "Cold Bay", from: 31, class: 2, why: "Cold Bay (M)." },
-      { region: "Adak", from: 37, class: 2, why: "Adak (M)." }
-    ]
-  };
-
-  // ../../data/campaign/weather.json
-  var weather_default = {
-    _about: "Weather (ruling 127, the sky's words ruling 143; the grand campaign only). Each month each weather zone is under a clear sky, cloud, or a closed sky, dealt by the campaign's seed from the zone's odds for that month ('odds': twelve rows, January first, of [clear, cloud, closed] in tenths). Under cloud everything flies and only the odds change ('cloud'); under a closed sky nothing flies in the zone for either side: no raid, no group based there, no air support, no sea cover or strike, no air scouting. A mission needs an open sky at its base and at its target. This month's sky is known before any order; next month's is a forecast with the true odds. At stops 1 and 2 of the history dial the months in 'book' are as history had them. 'zones' are a theatre's worth of land, or a sea: 'lands' match a province by who held it on the first day ('nats'), on which map ('world': the Americas and the Atlantic beyond Europe's map), and where it lies ('x' and 'y', [least, most], null for no bound); the first clause that matches wins, and a province no clause matches has no weather. 'seas' are the sea zones under the zone's sky. 'plate' is the point where the zone's plate is drawn, 'snow' the months a closed sky snows instead of rains (a look, no rule). 'on' switches weather on for new grand campaigns (a campaign keeps the setting it began with, in g.flags.weather).",
-    on: false,
-    cloud: {
-      bombsDay: 0.6,
-      bombsNight: 0.8,
-      met: 0.7,
-      gunsDay: 0.7,
-      gunsNight: 0.5,
-      support: 0.5
-    },
-    zones: [
-      {
-        key: "nwe",
-        name: "North-west Europe",
-        the: false,
-        plate: [300, 860],
-        snow: [12, 1, 2],
-        seas: ["North Sea", "English Channel", "Irish Sea", "Skagerrak"],
-        odds: [[2, 5, 3], [2, 5, 3], [3, 5, 2], [4, 5, 1], [5, 5, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0], [5, 4, 1], [3, 5, 2], [2, 5, 3], [2, 5, 3]]
-      },
-      {
-        key: "central",
-        name: "Central Europe",
-        the: false,
-        plate: [640, 790],
-        snow: [12, 1, 2],
-        seas: ["Baltic Sea"],
-        odds: [[3, 4, 3], [3, 4, 3], [4, 4, 2], [5, 4, 1], [6, 4, 0], [6, 4, 0], [7, 3, 0], [7, 3, 0], [6, 3, 1], [4, 4, 2], [2, 5, 3], [3, 4, 3]]
-      },
-      {
-        key: "scand",
-        name: "Scandinavia",
-        the: false,
-        plate: [700, 300],
-        snow: [11, 12, 1, 2, 3],
-        seas: ["Gulf of Bothnia"],
-        odds: [[3, 3, 4], [3, 4, 3], [4, 4, 2], [4, 4, 2], [5, 4, 1], [6, 4, 0], [6, 4, 0], [5, 4, 1], [4, 4, 2], [3, 4, 3], [2, 4, 4], [2, 4, 4]]
-      },
-      {
-        key: "nrus",
-        name: "Northern Russia",
-        the: false,
-        plate: [1230, 520],
-        snow: [11, 12, 1, 2, 3],
-        seas: ["Gulf of Finland"],
-        odds: [[4, 3, 3], [4, 3, 3], [4, 4, 2], [3, 5, 2], [6, 4, 0], [7, 3, 0], [7, 3, 0], [7, 3, 0], [5, 4, 1], [3, 5, 2], [2, 5, 3], [3, 4, 3]]
-      },
-      {
-        key: "srus",
-        name: "Southern Russia",
-        the: false,
-        plate: [1250, 860],
-        snow: [12, 1, 2],
-        seas: ["Black Sea"],
-        odds: [[4, 3, 3], [4, 4, 2], [4, 4, 2], [5, 4, 1], [7, 3, 0], [8, 2, 0], [8, 2, 0], [8, 2, 0], [7, 3, 0], [5, 4, 1], [3, 4, 3], [3, 4, 3]]
-      },
-      {
-        key: "balkans",
-        name: "Danube and Balkans",
-        the: true,
-        plate: [840, 1060],
-        snow: [12, 1, 2],
-        seas: [],
-        odds: [[3, 5, 2], [3, 5, 2], [4, 5, 1], [5, 4, 1], [6, 4, 0], [7, 3, 0], [8, 2, 0], [8, 2, 0], [7, 3, 0], [5, 4, 1], [3, 5, 2], [3, 5, 2]]
-      },
-      {
-        key: "italy",
-        name: "Italy",
-        the: false,
-        plate: [600, 1110],
-        snow: [1, 2],
-        seas: [],
-        odds: [[3, 5, 2], [3, 5, 2], [4, 5, 1], [5, 4, 1], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [7, 3, 0], [5, 4, 1], [3, 5, 2], [3, 5, 2]]
-      },
-      {
-        key: "iberia",
-        name: "Iberia",
-        the: false,
-        plate: [200, 1240],
-        snow: [],
-        seas: ["Iberian Coast"],
-        odds: [[4, 5, 1], [4, 5, 1], [5, 4, 1], [6, 4, 0], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [6, 4, 0], [4, 5, 1], [4, 5, 1]]
-      },
-      {
-        key: "nafrica",
-        name: "North Africa",
-        the: false,
-        plate: [600, 1630],
-        snow: [],
-        seas: [],
-        odds: [[6, 3, 1], [6, 3, 1], [6, 3, 1], [6, 3, 1], [7, 2, 1], [9, 1, 0], [9, 1, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [7, 3, 0], [6, 3, 1]]
-      },
-      {
-        key: "mideast",
-        name: "Middle East",
-        the: true,
-        plate: [1250, 1420],
-        snow: [12, 1, 2],
-        seas: [],
-        odds: [[5, 4, 1], [5, 4, 1], [6, 3, 1], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [6, 3, 1], [5, 4, 1]]
-      },
-      {
-        key: "atlantic",
-        name: "North Atlantic",
-        the: true,
-        plate: [-300, 700],
-        snow: [],
-        seas: ["North Atlantic", "Western Approaches", "Bay of Biscay", "Iceland Gap", "Denmark Strait", "Mid-Atlantic Gap", "Labrador Sea", "Grand Banks", "Azores Waters", "Canary Basin"],
-        odds: [[1, 5, 4], [1, 5, 4], [2, 5, 3], [3, 5, 2], [4, 5, 1], [4, 5, 1], [5, 4, 1], [5, 4, 1], [4, 5, 1], [2, 5, 3], [1, 5, 4], [1, 5, 4]]
-      },
-      {
-        key: "arctic",
-        name: "Arctic",
-        the: true,
-        plate: [800, 40],
-        snow: [10, 11, 12, 1, 2, 3, 4],
-        seas: ["Norwegian Sea", "Barents Sea"],
-        odds: [[1, 4, 5], [1, 5, 4], [2, 5, 3], [3, 5, 2], [4, 5, 1], [4, 5, 1], [4, 5, 1], [3, 5, 2], [2, 5, 3], [1, 5, 4], [1, 4, 5], [1, 4, 5]]
-      },
-      {
-        key: "med",
-        name: "Mediterranean",
-        the: true,
-        plate: [700, 1440],
-        snow: [],
-        seas: ["Western Mediterranean", "Tyrrhenian Sea", "Adriatic Sea", "Ionian Sea", "Aegean Sea", "Eastern Mediterranean", "Central Mediterranean", "Libyan Sea"],
-        odds: [[4, 4, 2], [4, 4, 2], [5, 4, 1], [6, 4, 0], [7, 3, 0], [8, 2, 0], [9, 1, 0], [9, 1, 0], [8, 2, 0], [6, 3, 1], [4, 4, 2], [4, 4, 2]]
-      },
-      {
-        key: "namerica",
-        name: "North America",
-        the: false,
-        plate: [-2200, 1500],
-        snow: [12, 1, 2, 3],
-        seas: ["Hudson Bay", "Gulf of St Lawrence", "Gulf of Maine", "Eastern Seaboard", "Carolina Coast", "Scotian Shelf", "California Coast", "North-East Pacific"],
-        odds: [[3, 5, 2], [3, 5, 2], [4, 5, 1], [5, 4, 1], [6, 4, 0], [7, 3, 0], [7, 3, 0], [7, 3, 0], [7, 3, 0], [6, 4, 0], [4, 5, 1], [3, 5, 2]]
-      },
-      {
-        key: "caribbean",
-        name: "Caribbean",
-        the: true,
-        plate: [-1700, 2200],
-        snow: [],
-        seas: ["Sargasso Sea", "Straits of Florida", "Gulf of Mexico", "Caribbean Sea", "Leeward Passage", "Gulf of Tehuantepec", "Gulf of Panama", "Guiana Coast"],
-        odds: [[7, 3, 0], [7, 3, 0], [8, 2, 0], [8, 2, 0], [7, 3, 0], [6, 4, 0], [6, 3, 1], [5, 4, 1], [5, 4, 1], [6, 3, 1], [7, 3, 0], [7, 3, 0]]
-      },
-      {
-        key: "samerica",
-        name: "South America",
-        the: false,
-        plate: [-1300, 3700],
-        snow: [],
-        seas: ["Gulf of Guayaquil", "Peruvian Coast", "Atacama Coast", "Chilean Sea", "Patagonian Channels", "Eastern Pacific", "South-East Pacific", "Amazon Mouth", "Bahia Coast", "Santos Bight", "River Plate", "Argentine Sea", "Falkland Waters"],
-        odds: [[6, 4, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0], [5, 4, 1], [5, 4, 1], [5, 4, 1], [6, 4, 0], [6, 4, 0], [6, 4, 0], [6, 4, 0]]
-      },
-      {
-        key: "satlantic",
-        name: "South Atlantic",
-        the: true,
-        plate: [-300, 3200],
-        snow: [],
-        seas: ["Tropical Atlantic", "Atlantic Narrows", "South Atlantic", "Sierra Leone Basin", "Gulf of Guinea", "Angola Basin", "Cape Basin"],
-        odds: [[5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1], [5, 4, 1]]
-      }
-    ],
-    lands: [
-      { zone: "mideast", world: false, nats: ["TUR", "IRQ", "IRN"] },
-      { zone: "mideast", world: false, nats: ["FRA"], x: [1150, null] },
-      { zone: "mideast", world: false, nats: ["UK"], x: [1130, null], y: [null, 1620] },
-      { zone: "nafrica", world: false, nats: ["FRA"], y: [1380, null] },
-      { zone: "nafrica", world: false, nats: ["ITA"], y: [1540, null] },
-      { zone: "nafrica", world: false, nats: ["UK"], y: [1580, null] },
-      { zone: "nafrica", world: false, nats: ["ESP"], y: [1440, null] },
-      { zone: "balkans", world: false, nats: ["HUN", "SVK", "ROM", "YUG", "BUL", "GRE"] },
-      { zone: "balkans", world: false, nats: ["ITA"], x: [780, null] },
-      { zone: "italy", world: false, nats: ["ITA"] },
-      { zone: "italy", world: false, nats: ["FRA"], y: [1150, null] },
-      { zone: "italy", world: false, nats: ["UK"], x: [600, null] },
-      { zone: "iberia", world: false, nats: ["ESP", "POR"] },
-      { zone: "iberia", world: false, nats: ["UK"], y: [1300, null] },
-      { zone: "nwe", world: false, nats: ["UK", "IRL", "NED", "BEL", "LUX", "DEN", "FRA"] },
-      { zone: "central", world: false, nats: ["GER", "POL", "SUI", "LIT", "LAT", "EST"] },
-      { zone: "scand", world: false, nats: ["NOR", "SWE", "FIN"] },
-      { zone: "nrus", world: false, nats: ["SOV"], y: [null, 759] },
-      { zone: "srus", world: false, nats: ["SOV"] },
-      { zone: "atlantic", world: true, nats: ["DEN", "POR", "ESP"] },
-      { zone: "namerica", world: true, nats: ["USA", "CAN"] },
-      { zone: "namerica", world: true, nats: ["UK"], y: [null, 1100] },
-      { zone: "samerica", world: true, nats: ["UK"], y: [4e3, null] },
-      { zone: "samerica", world: true, nats: ["BRA", "ARG", "PER", "CHL", "BOL", "ECU", "URU", "PAR"] },
-      { zone: "caribbean", world: true, nats: ["MEX", "CUB", "GUA", "NIC", "HON", "COS", "PAN", "HAI", "DOM", "ELS", "VEN", "COL", "UK", "NED", "FRA"] }
-    ],
-    book: [
-      { turn: 64, zone: "nwe", sky: "closed", why: "December 1944: fog and low cloud over the Ardennes" },
-      { turn: 39, zone: "srus", sky: "closed", why: "November 1942: freezing fog as the Soviet pincers close at Stalingrad" },
-      { turn: 28, zone: "nrus", sky: "closed", why: "December 1941: the deep cold before Moscow" },
-      { turn: 1, zone: "central", sky: "clear", why: "September 1939: a dry, fine month over Poland" },
-      { turn: 12, zone: "nwe", sky: "clear", why: "August 1940: the long fine summer over southern England" },
-      { turn: 54, zone: "central", sky: "clear", why: "February 1944: the break in the weather for the great raids on the aircraft works" },
-      { turn: 58, zone: "nwe", sky: "cloud", why: "June 1944: the storms over the Channel" },
-      { turn: 61, zone: "nwe", sky: "cloud", why: "September 1944: low cloud over the bridges in Holland" }
-    ],
-    words: {
-      clear: "clear sky",
-      cloud: "cloud",
-      closed: "closed sky",
-      means: { clear: "everything flies", cloud: "flying is harder", closed: "nothing flies" },
-      tip: "A closed sky grounds every aircraft there, the enemy's too. THE SKY on the month card shows this month's sky and next month's chances."
-    }
-  };
-
-  // ../../src/campaign/weather.ts
-  var WEATHER = weather_default;
-  var SKIES = ["clear", "cloud", "closed"];
-  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  var weatherOn = (g2) => g2.flags.open === 1 && g2.flags.weather === 1;
-  function openWeather(g2) {
-    if (WEATHER.on) g2.flags.weather = 1;
-  }
-  var maps = /* @__PURE__ */ new WeakMap();
-  var within = (v, b) => !b || (b[0] === null || v >= b[0]) && (b[1] === null || v <= b[1]);
-  function zoneMap(g2) {
-    let m = maps.get(g2.regions);
-    if (m && m.regions.length === g2.regions.length && m.seas.length === g2.seas.length) return m;
-    const index = new Map(WEATHER.zones.map((z, i) => [z.key, i]));
-    const regions = new Int16Array(g2.regions.length).fill(-1);
-    for (const r of g2.regions) {
-      const who = r.first ?? r.owner, world = beyondEurope(r);
-      const c = WEATHER.lands.find((l) => l.world === world && l.nats.includes(who) && within(r.x, l.x) && within(r.y, l.y));
-      if (c) regions[r.id] = index.get(c.zone) ?? -1;
-    }
-    const seas = new Int16Array(g2.seas.length).fill(-1);
-    for (const z of g2.seas) seas[z.id] = WEATHER.zones.findIndex((w) => w.seas.includes(z.name));
-    m = { regions, seas };
-    maps.set(g2.regions, m);
-    return m;
-  }
-  var zoneOfRegion = (g2, region) => region >= 0 && region < g2.regions.length ? zoneMap(g2).regions[region] : -1;
-  var zoneOfSea = (g2, sea) => sea >= 0 && sea < g2.seas.length ? zoneMap(g2).seas[sea] : -1;
-  var zoneName = (zone) => {
-    const z = WEATHER.zones[zone];
-    return z ? `${z.the ? "the " : ""}${z.name}` : "";
-  };
-  var zoneHead = (zone) => {
-    const s = zoneName(zone);
-    return s[0].toUpperCase() + s.slice(1);
-  };
-  var monthOf = (turn2) => turnToDate(turn2).month;
-  function bookSky(g2, zone, turn2) {
-    if (!stopDef(g2).book) return null;
-    const key7 = WEATHER.zones[zone].key;
-    return WEATHER.book.find((b) => b.turn === turn2 && b.zone === key7) ?? null;
-  }
-  var oddsOf = (zone, turn2) => WEATHER.zones[zone].odds[monthOf(turn2)];
-  var dealt = /* @__PURE__ */ new WeakMap();
-  function skiesOf(g2, turn2) {
-    const key7 = `${g2.seed}:${turn2}:${stopDef(g2).book ? 1 : 0}`;
-    const hold3 = turn2 === g2.turn ? dealt.get(g2) : void 0;
-    if (hold3 && hold3.key === key7) return hold3.skies;
-    const skies = WEATHER.zones.map((z, i) => {
-      const b = bookSky(g2, i, turn2);
-      if (b) return b.sky;
-      const roll3 = new Rng(hashString(`sky:${g2.seed}:${turn2}:${z.key}`)).next() * 10;
-      const [clear, cloud] = oddsOf(i, turn2);
-      return roll3 < clear ? "clear" : roll3 < clear + cloud ? "cloud" : "closed";
-    });
-    if (turn2 === g2.turn) dealt.set(g2, { key: key7, skies });
-    return skies;
-  }
-  var dealtSky = (g2, zone, turn2 = g2.turn) => zone < 0 ? "clear" : skiesOf(g2, turn2)[zone];
-  function skyOf(g2, zone, turn2 = g2.turn) {
-    if (!weatherOn(g2) || zone < 0) return "clear";
-    return skiesOf(g2, turn2)[zone];
-  }
-  var skyAt = (g2, region) => weatherOn(g2) ? skyOf(g2, zoneOfRegion(g2, region)) : "clear";
-  var skyAtSea = (g2, sea) => weatherOn(g2) ? skyOf(g2, zoneOfSea(g2, sea)) : "clear";
-  function zoneOfGroup(g2, f) {
-    if (f.ship === void 0) return zoneOfRegion(g2, f.base);
-    const c = g2.fleets.find((x) => x.id === f.ship);
-    if (!c) return -1;
-    return c.stance !== "port" ? zoneOfSea(g2, c.zone) : zoneOfRegion(g2, c.base);
-  }
-  var grounded = (g2, f) => weatherOn(g2) && skyOf(g2, zoneOfGroup(g2, f)) === "closed";
-  var cloudAim = (sky, night) => sky === "cloud" ? night ? WEATHER.cloud.bombsNight : WEATHER.cloud.bombsDay : 1;
-  var cloudMet = (sky) => sky === "cloud" ? WEATHER.cloud.met : 1;
-  var cloudGuns = (sky, night) => sky === "cloud" ? night ? WEATHER.cloud.gunsNight : WEATHER.cloud.gunsDay : 1;
-  function dayShare(lat, month3) {
-    const rad = Math.PI / 180;
-    const day = Math.round(15.5 + month3 * (365 / 12));
-    const decl = 23.44 * rad * Math.sin(2 * Math.PI * (284 + day) / 365);
-    const phi = Math.max(-89.9, Math.min(89.9, lat)) * rad;
-    const c = (Math.sin(-0.833 * rad) - Math.sin(phi) * Math.sin(decl)) / (Math.cos(phi) * Math.cos(decl));
-    return c <= -1 ? 1 : c >= 1 ? 0 : Math.acos(c) / Math.PI;
-  }
-  var skySupport = (sky) => sky === "closed" ? 0 : sky === "cloud" ? WEATHER.cloud.support : 1;
-  function whyNotSky(g2, f, targetZone) {
-    if (!weatherOn(g2)) return null;
-    const home = zoneOfGroup(g2, f);
-    if (skyOf(g2, home) === "closed") return `Grounded this month: the sky is closed over ${zoneName(home)}.`;
-    if (skyOf(g2, targetZone) === "closed") return `Closed sky this month: nothing flies over ${zoneName(targetZone)}.`;
-    return null;
-  }
-  function skyBattleLine(g2, zone, place3) {
-    const s = skyOf(g2, zone);
-    if (s === "closed") return `The sky is closed over ${place3} this month: no aircraft will fly for either side.`;
-    if (s === "cloud") return `Cloud over ${place3} this month: air support is worth half for both sides.`;
-    return null;
-  }
-  function skyRaidLine(g2, zone, place3) {
-    if (!weatherOn(g2) || zone < 0) return null;
-    const where = place3.length > 24 ? "the target" : place3;
-    const s = skyOf(g2, zone);
-    return s === "closed" ? `Closed sky over ${where}: nothing flies there this month.` : s === "cloud" ? `Cloud over ${where}: fewer bombs hit, and fewer bombers are found.` : `Clear sky over ${where}.`;
-  }
-  var TENTHS = { 1: [1, 10], 2: [1, 5], 3: [3, 10], 4: [2, 5], 5: [1, 2], 6: [3, 5], 7: [7, 10], 8: [4, 5], 9: [9, 10] };
-  var chances = (t, first2) => {
-    const [a, b] = TENTHS[t];
-    return first2 ? `${a} ${a === 1 ? "chance" : "chances"} in ${b}` : `${a} in ${b}`;
-  };
-  var word = (s) => s === "closed" ? "closed" : s;
-  function forecastLine(g2, zone, turn2 = g2.turn + 1, lead2) {
-    const month3 = lead2 ?? MONTHS[monthOf(turn2)];
-    const b = bookSky(g2, zone, turn2);
-    if (b) return `${month3}: ${b.sky === "clear" ? "a clear sky" : b.sky === "cloud" ? "cloud" : "a closed sky"}, as history had it.`;
-    const odds = oddsOf(zone, turn2);
-    const top = Math.max(...odds);
-    if (top >= 10) return `${month3}: ${SKIES[odds.indexOf(10)] === "clear" ? "a clear sky" : SKIES[odds.indexOf(10)]}, for certain.`;
-    const best = SKIES.filter((_, i) => odds[i] === top).reverse();
-    let line = best.length > 1 ? `${month3}: ${best.map(word).join(" or ")}, ${chances(top, true)} each` : `${month3}: likely ${word(best[0])}, ${chances(top, true)}`;
-    if (!best.includes("closed") && odds[2] >= 1) line += `; closed, ${chances(odds[2], false)}`;
-    return `${line}.`;
-  }
-  function zonesOf(g2, nat) {
-    const out = /* @__PURE__ */ new Set();
-    for (const f of g2.airFleets) if (f.nat === nat && f.ftr + f.bmr > 0) {
-      const z = zoneOfGroup(g2, f);
-      if (z >= 0) out.add(z);
-    }
-    const n = g2.nations[nat];
-    if (n?.atWar.length) {
-      for (const r of g2.regions) {
-        if (r.ctrl !== nat) continue;
-        if (r.nb.some((id) => n.atWar.includes(g2.regions[id].ctrl))) {
-          const z = zoneOfRegion(g2, r.id);
-          if (z >= 0) out.add(z);
-        }
-      }
-    }
-    return out;
-  }
-  function skyView(g2, nat = g2.human) {
-    if (!weatherOn(g2) || !nat || !g2.nations[nat]) return null;
-    const mine4 = [...zonesOf(g2, nat)].sort((a, b) => a - b);
-    const rows = WEATHER.zones.map((z, i) => ({ zone: i, name: zoneName(i), sky: skyOf(g2, i), text: "", forecast: forecastLine(g2, i), snow: z.snow.includes(monthOf(g2.turn) + 1) }));
-    for (const r of rows) r.text = r.sky === "closed" ? `${zoneHead(r.zone)}: closed sky. Nothing flies there this month.` : r.sky === "cloud" ? `${zoneHead(r.zone)}: cloud. Raids and air support count for less.` : `${zoneHead(r.zone)}: clear sky.`;
-    const lines2 = [];
-    const closed = mine4.filter((z) => rows[z].sky === "closed"), cloud = mine4.filter((z) => rows[z].sky === "cloud");
-    for (const z of closed) lines2.push({ sky: "closed", text: rows[z].text, forecast: [rows[z].forecast] });
-    if (cloud.length) {
-      const names = cloud.map((z, i) => i === 0 ? zoneHead(z) : zoneName(z));
-      lines2.push({ sky: "cloud", text: `${names.join(" and ")}: cloud. Raids and air support count for less.`, forecast: cloud.map((z) => cloud.length > 1 ? `${zoneHead(z)}. ${rows[z].forecast}` : rows[z].forecast) });
-    }
-    lines2.push({ sky: "clear", text: closed.length || cloud.length ? "Clear sky everywhere else you fly." : "Clear sky everywhere you fly.", forecast: [] });
-    const told2 = g2.flags["wx:tip"];
-    const tip = closed.length && nat === g2.human && (!told2 || told2 === g2.turn) ? WEATHER.words.tip : null;
-    return { lines: lines2, rows, open: closed.length > 0, report: groundedReport(g2, nat), tip };
-  }
-  function weatherMonth(g2) {
-    if (!weatherOn(g2)) return;
-    const was = g2.turn - 1;
-    for (const nat of Object.keys(g2.nations)) {
-      const n = g2.nations[nat];
-      const kept3 = n.alive && n.atWar.length ? g2.airFleets.filter((f) => f.nat === nat && f.ftr + f.bmr > 0 && skyOf(g2, zoneOfGroup(g2, f), was) === "closed").length : 0;
-      if (kept3) g2.flags[`wx:kept:${nat}`] = was * 1e3 + kept3;
-      else delete g2.flags[`wx:kept:${nat}`];
-    }
-  }
-  function groundedReport(g2, nat) {
-    const v = g2.flags[`wx:kept:${nat}`];
-    if (!v) return null;
-    const turn2 = Math.floor(v / 1e3), k = v % 1e3;
-    if (turn2 !== g2.turn - 1) return null;
-    const zones = [...new Set(g2.airFleets.filter((f) => f.nat === nat).map((f) => zoneOfGroup(g2, f)).filter((z) => z >= 0 && skyOf(g2, z, turn2) === "closed"))];
-    const where = zones.length === 1 ? ` over ${zoneName(zones[0])}` : "";
-    return `In ${MONTHS[monthOf(turn2)]} the closed sky${where} kept ${k} of your air groups on the ground.`;
-  }
-
-  // ../../data/campaign/airversion.json
-  var airversion_default = {
-    _about: "The air version's open pieces (the design director's b482, item 3; the grand campaign only). Each has its own switch: 'on' sets it for new grand campaigns, and a campaign keeps the setting it began with (g.flags 'av:night', 'av:start', 'av:field'). Untouched means unchanged: with every switch off nothing here runs. 'nightGuns' (ruling 107(b)): by night the guns round a target bring down 'share' as many bombers as by day; the bombing they stop is the same. 'startGuns' (ruling 124): every great power opens a grand campaign with anti-aircraft guns round its capital and round the 'provinces' home provinces with the most factories (its own ground, held), player and computer alike: level 'early' in a campaign begun in 'earlyTo' or before, level 'late' in a later one. A province that has guns keeps the higher level. 'field' (ruling 151(b), WRECK THE AIRFIELD): an agent abroad, at war with the host, can wreck the field of a province where an air group of the host's side is based; the numbers are the factory's (intel.json missions.airfield). Every air group based there is grounded for the month the attempt comes off. The other side's services strike at the player's fields too: a plot is aimed at a field with chance 'enemyShare', where the player has an air group based on home ground; otherwise it divides as it always did. Brian switched 'field' on for new grand campaigns in release 2 (22 November) and the start guns on (24 November, 1.5.1 and release 2; a grand campaign saved before that gets them once as it loads, startGunsOnLoad); the night guns stay off.",
-    nightGuns: { on: false, share: 0.5 },
-    startGuns: { on: true, early: 1, late: 2, earlyTo: 1940, provinces: 2 },
-    field: { on: true, enemyShare: 0.25 }
-  };
-
-  // ../../src/campaign/airversion.ts
-  var AIRV = airversion_default;
-  var KEY = { night: "av:night", start: "av:start", field: "av:field" };
-  var airPiece = (g2, p) => g2.flags.open === 1 && g2.flags[KEY[p]] === 1;
-  var nightGunShare = (g2, night) => night && airPiece(g2, "night") ? AIRV.nightGuns.share : 1;
-  function startGunSites(g2, nat) {
-    const n = g2.nations[nat];
-    if (!n?.alive) return [];
-    const out = [];
-    const cap17 = g2.regions[n.capital];
-    if (cap17 && cap17.owner === nat && cap17.ctrl === nat) out.push(cap17.id);
-    const homes = g2.regions.filter((r) => r.owner === nat && r.ctrl === nat && r.fac > 0 && r.id !== n.capital).sort((a, b) => b.fac - a.fac || a.id - b.id);
-    for (const r of homes.slice(0, AIRV.startGuns.provinces)) out.push(r.id);
-    return out;
-  }
-  var startGunLevel = (turn2) => turnToDate(turn2).year <= AIRV.startGuns.earlyTo ? AIRV.startGuns.early : AIRV.startGuns.late;
-  function openAirVersion(g2, majors) {
-    if (AIRV.nightGuns.on) g2.flags[KEY.night] = 1;
-    if (AIRV.field.on) g2.flags[KEY.field] = 1;
-    if (!AIRV.startGuns.on) return;
-    g2.flags[KEY.start] = 1;
-    layStartGuns(g2, majors);
-  }
-  function startGunsOnLoad(g2, majors) {
-    if (!AIRV.startGuns.on || g2.flags.open !== 1 || g2.flags[KEY.start] === 1) return false;
-    g2.flags[KEY.start] = 1;
-    layStartGuns(g2, majors, g2.flags.openFrom ?? 1);
-    return true;
-  }
-  function layStartGuns(g2, majors, began = g2.turn) {
-    const lv = startGunLevel(began);
-    for (const nat of majors) for (const id of startGunSites(g2, nat)) g2.flags[`wk:aa:${id}`] = Math.max(g2.flags[`wk:aa:${id}`] ?? 0, lv);
-  }
-  var fieldWrecked = (g2, region) => g2.flags.fields === 1 && fieldRules(g2) ? fieldShut(g2, region) : g2.flags[`wreck:${region}`] === g2.turn;
-  var wrecked = (g2, f) => f.ship === void 0 && (f.way !== void 0 || fieldShut(g2, f.base));
-  function whyNotField(g2, f) {
-    if (!wrecked(g2, f)) return null;
-    if (f.way !== void 0) return `On its way to ${g2.regions[f.way.to]?.name ?? "another airfield"}: out of the fight until it gets there.`;
-    return g2.flags.fields === 1 && fieldRules(g2) ? `Grounded: the runway at ${g2.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g2.regions[f.base].name}.`;
-  }
-  var groupsOnField = (g2, region, nat) => g2.airFleets.filter((f) => f.base === region && f.ship === void 0 && f.ftr + f.bmr > 0 && nat(f.nat));
-  function wreckField(g2, region, nat) {
-    if (fieldWrecked(g2, region) || !groupsOnField(g2, region, nat).length) return false;
-    if (g2.flags.fields === 1 && fieldRules(g2)) return damageField(g2, region, "agent") !== null;
-    g2.flags[`wreck:${region}`] = g2.turn;
-    return true;
-  }
-
-  // ../../src/campaign/aircampaigns.ts
-  var AC = aircampaigns_default;
-  var acOn = (g2) => g2.flags.open === 1 && g2.flags.ac === 1;
-  var FAR_FIELDS = /* @__PURE__ */ new Map();
-  if (FAR_STAGE) for (const f of far_fields_default.rows) FAR_FIELDS.set(f.region, [...FAR_FIELDS.get(f.region) ?? [], f]);
-  function recordField(g2, region) {
-    const name = g2.regions[region]?.name;
-    let out = 0;
-    for (const f of FAR_FIELDS.get(name) ?? []) if (f.from <= g2.turn) out = Math.max(out, f.class);
-    if (!acOn(g2)) return out;
-    for (const f of AC.fields.rows) if (f.region === name && f.from <= g2.turn) out = Math.max(out, f.class);
-    return out;
-  }
-  var airCampaignsShipped = () => AC.on === true;
-  function setAirCampaigns(g2, on2) {
-    if (on2) g2.flags.ac = 1;
-    else delete g2.flags.ac;
-  }
-  var mem = (g2) => g2.ac ?? (g2.ac = { campaigns: [], next: 1, sky: {}, stock: {} });
-  var open = (g2) => g2.ac ? g2.ac.campaigns.filter((c) => c.off === void 0) : [];
-  var month = (t) => turnToDate(t).label;
-  var foesOf = (g2, nat, region) => /* @__PURE__ */ new Set([g2.regions[region].ctrl]);
-  function radarGuard(g2, nat, region) {
-    const r = g2.regions[region], home = r.owner;
-    return !r.overseas && atWar(g2, nat, home) && allied(g2, home, r.ctrl) && !!g2.nations[home]?.alive && hasTech(g2, home, AIRWAR.sky.radar);
-  }
-  function knockedOut(g2, region, nat) {
-    const holder = g2.regions[region].ctrl;
-    const wx = weatherOn(g2);
-    const bombed = /* @__PURE__ */ new Set();
-    for (let i = g2.airReports.length - 1; i >= 0; i--) {
-      const r = g2.airReports[i];
-      if (r.turn < g2.turn - 1) break;
-      if (r.mission === "superiority" && r.region >= 0 && (r.attNat === nat || allied(g2, r.attNat, nat))) bombed.add(r.region);
-    }
-    let all = 0, fit3 = 0;
-    for (const f of g2.airFleets) {
-      if (f.ftr <= 0 || f.close || !atWar(g2, f.nat, nat) || !guardsLand(g2, f, region, holder)) continue;
-      const n = f.ftr * cover(kmTo(g2, f, region), airRange(f, g2).ftr) * crowding(g2, f);
-      if (n <= 0) continue;
-      all += n;
-      const down = wx && grounded(g2, f) || wrecked(g2, f) || f.ready <= AC.sky.knocked + 1e-9 && bombed.has(f.base);
-      if (!down) fit3 += n;
-    }
-    return all >= AIR.sky.least && fit3 < AIR.sky.least;
-  }
-  function numbers(g2, nat, region) {
-    return { a: airOverBattle(g2, /* @__PURE__ */ new Set([nat]), foesOf(g2, nat, region), region), d: airOverBattle(g2, foesOf(g2, nat, region), /* @__PURE__ */ new Set([nat]), region) };
-  }
-  function settled(s, turn2) {
-    const gap = turn2 - s.turn;
-    if (gap <= 1) return { state: s.state, streak: s.streak };
-    return { state: s.state === "held" && gap <= AC.sky.idle + 1 ? "held" : "contested", streak: 0 };
-  }
-  function skyFought(g2, nat, region, won) {
-    const M2 = mem(g2);
-    let s = M2.sky[region];
-    const ours = !!s && (s.by === nat || allied(g2, s.by, nat));
-    if (!s || !ours) {
-      s = M2.sky[region] = { by: nat, state: "contested", streak: 0, turn: g2.turn, since: g2.turn, best: -2, was: { state: "contested", streak: 0 } };
-    } else if (s.turn !== g2.turn) {
-      s.was = settled(s, g2.turn);
-      s.best = -2;
-      s.turn = g2.turn;
-    }
-    const { a, d } = numbers(g2, nat, region);
-    const T = AIRWAR.sky.own, least = AIR.sky.least;
-    const out = a >= least && a >= T * d && knockedOut(g2, region, nat);
-    const guard = radarGuard(g2, nat, region);
-    const res = out ? 2 : won || !guard && a >= least && a >= T * d ? 1 : d >= least && d >= T * a ? -1 : 0;
-    if (res <= s.best) return s.state;
-    s.best = res;
-    const before = s.state;
-    let { state, streak } = s.was;
-    if (res === 2) {
-      state = "held";
-      streak = Math.max(1, streak);
-    } else if (state === "held") {
-      if (res < 0 || a < AC.sky.keep * d) {
-        state = "contested";
-        streak = 0;
-      }
-    } else {
-      streak = res === 1 ? Math.max(0, streak) + 1 : res === -1 ? Math.min(0, streak) - 1 : 0;
-      state = streak >= AC.sky.months ? "held" : streak <= -AC.sky.months ? "lost" : "contested";
-    }
-    s.state = state;
-    s.streak = streak;
-    if (state === "held") {
-      if (before !== "held") s.won = g2.turn;
-      g2.sky[region] = { nat, turn: g2.turn };
-    } else delete s.won;
-    if (state !== before && state !== "contested") skyNews(g2, s, region, out);
-    return state;
-  }
-  function skyNews(g2, s, region, out) {
-    const adj = g2.nations[s.by].adj, place3 = g2.regions[region].name, foe = g2.nations[g2.regions[region].ctrl]?.adj ?? "enemy";
-    const text = s.state === "held" ? `The ${adj} air force has won the sky over ${place3}: ${out ? `the ${foe} fighters there are knocked out on their fields` : `for ${AC.sky.months} months running the ${foe} air force could not match it there`}. It holds that sky for as long as it keeps the numbers and keeps flying over it.` : `The ${adj} air force has lost the battle for the sky over ${place3}: for ${AC.sky.months} months running the ${foe} fighters there outnumbered it.`;
-    headline(g2, "battle", text, s.by, region, { arm: "air", ...s.state === "held" ? { won: s.by, lost: g2.regions[region].ctrl } : { won: g2.regions[region].ctrl, lost: s.by } });
-  }
-  function skyFight(g2, region) {
-    const s = g2.ac?.sky[region];
-    if (!s || !g2.nations[s.by]?.alive || !atWar(g2, s.by, g2.regions[region].ctrl)) return null;
-    const n = settled(s, g2.turn);
-    return { ...s, now: n.state, run: n.streak };
-  }
-  function skyMonth(g2) {
-    const M2 = g2.ac;
-    if (!M2) return;
-    for (const k of Object.keys(M2.sky)) {
-      const region = Number(k), s = M2.sky[region];
-      if (!g2.nations[s.by]?.alive || !atWar(g2, s.by, g2.regions[region].ctrl) || g2.turn - s.turn > AC.sky.idle + 3) {
-        delete M2.sky[region];
-        continue;
-      }
-      if (s.state !== "held") continue;
-      const { a, d } = numbers(g2, s.by, region);
-      if (g2.turn - s.turn > AC.sky.idle + 1 || a < AIR.sky.least || a < AC.sky.keep * d) {
-        s.state = "contested";
-        s.streak = 0;
-        delete s.won;
-        continue;
-      }
-      g2.sky[region] = { nat: s.by, turn: g2.turn };
-    }
-  }
-  var rate = (row2, dispersed) => {
-    const r = AC.repair[row2];
-    return dispersed && r.dispersed !== void 0 ? r.dispersed : r.perMonth;
-  };
-  var dispersedAt = (g2, victim, row2) => victim === AC.dispersal.nat && g2.turn >= AC.dispersal.from && AC.dispersal.rows.includes(row2);
-  var landsIn = (g2, by2, victim) => g2.order.indexOf(by2) < g2.order.indexOf(victim) ? g2.turn : g2.turn + 1;
-  function addStock(g2, r, kind, by2, cut2, rt) {
-    if (cut2 <= 0) return;
-    const M2 = mem(g2), k = `${r.id}:${kind}`, victim = r.ctrl, when = landsIn(g2, by2, victim);
-    let s = M2.stock[k];
-    if (!s || s.victim !== victim) s = M2.stock[k] = { region: r.id, kind, by: by2, victim, v: 0, rate: rt, at: when - 1, land: {}, carry: 0, mended: 0, done: 0 };
-    const have = s.v + Object.values(s.land).reduce((x, y) => x + y, 0);
-    s.rate = have + cut2 > 0 ? (have * s.rate + cut2 * rt) / (have + cut2) : rt;
-    s.land[when] = Math.min(AC.stock.most, (s.land[when] ?? 0) + cut2);
-    s.by = by2;
-    s.last = { turn: g2.turn, by: by2, cut: (s.last && s.last.turn === g2.turn && s.last.by === by2 ? s.last.cut : 0) + cut2 };
-    if (when === g2.turn) s.done += cut2;
-  }
-  function bombLands(g2, by2, r, cut2, night, aim) {
-    var _a;
-    if (night) ((_a = mem(g2)).night ?? (_a.night = {}))[r.ctrl] = g2.turn;
-    if (cut2 <= 0) return cut2;
-    const row2 = night ? AC.use.night : AC.use.day;
-    const spread = dispersedAt(g2, r.ctrl, row2);
-    const out = spread ? cut2 * AC.dispersal.cut : cut2;
-    if (r.fac > 0 && aim === "works") addStock(g2, r, "works", by2, out, rate(row2, spread));
-    if (r.oil) addStock(g2, r, "oil", by2, out, rate(AC.use.oilfield, false));
-    else if (aim === "oil" && r.fac > 0) addStock(g2, r, "oil", by2, out, rate(AC.use.oil, false));
-    return out;
-  }
-  function stockMonth(g2) {
-    const M2 = g2.ac;
-    if (!M2) return;
-    for (const k of Object.keys(M2.stock)) {
-      const s = M2.stock[k], r = g2.regions[s.region];
-      if (r.ctrl !== s.victim) {
-        delete M2.stock[k];
-        continue;
-      }
-      s.mended = 0;
-      while (s.at < g2.turn - 1) {
-        s.at++;
-        s.v = Math.min(AC.stock.most, s.v * (1 - s.rate) + (s.land[s.at] ?? 0));
-        delete s.land[s.at];
-      }
-      s.mended = s.v * s.rate;
-      s.carry = s.v * (1 - s.rate);
-      s.done = s.land[g2.turn] ?? 0;
-      if (s.carry < AC.stock.least && !Object.keys(s.land).length) delete M2.stock[k];
-    }
-  }
-  function heldDown(g2, r, kind) {
-    const s = acOn(g2) ? g2.ac?.stock[`${r.id}:${kind}`] : void 0;
-    if (!s || s.victim !== r.ctrl) return 0;
-    return Math.min(AC.stock.most, s.carry + (s.land[g2.turn] ?? 0));
-  }
-  function stockLoss(g2, nat) {
-    if (!acOn(g2) || !g2.ac) return 0;
-    let total = 0, down = 0;
-    for (const r of g2.regions) if (r.ctrl === nat) total += r.fac;
-    if (total <= 0) return 0;
-    for (const s of Object.values(g2.ac.stock)) {
-      if (s.kind !== "works" || s.victim !== nat) continue;
-      const r = g2.regions[s.region];
-      if (r.ctrl === nat) down += s.carry * r.fac;
-    }
-    return down / total;
-  }
-  var oilHeld = (g2, r) => heldDown(g2, r, "oil");
-  function bombWorn(g2, nat) {
-    if (!acOn(g2) || !g2.ac) return 0;
-    let w = 0;
-    for (const s of Object.values(g2.ac.stock)) {
-      if (s.kind !== "works" || s.victim !== nat) continue;
-      const r = g2.regions[s.region], size = townSize(g2, r);
-      if (size === "city" || size === "capital") w += AC.will.per * heldDown(g2, r, "works");
-    }
-    return Math.min(AC.will.most, w);
-  }
-  function chainAt(g2, r, record2) {
-    if (r.owner !== r.ctrl) return null;
-    const nat = r.ctrl;
-    const old = record2.find((c) => c.nat === nat && c.from <= g2.turn);
-    if (old) return old;
-    if (stopDef(g2).book) {
-      const row2 = AC.radar.record.find((c) => c.nat === nat && c.from <= g2.turn && (!c.regions || c.regions.includes(r.name)));
-      return row2 && majorsOf(g2).includes(nat) ? row2 : null;
-    }
-    if (!hasTech(g2, nat, AC.radar.tech)) return null;
-    const n = g2.nations[nat];
-    return { nat, from: g2.turn, name: `the ${n?.adj ?? nat} radar chain`, by: n?.name ?? nat, ground: AC.radar.ground };
-  }
-  function gunnerRatio(g2, nat, m, target, night, escorted2) {
-    const G5 = AC.gunners;
-    if (night) return G5.night;
-    if (m === "ground" || m === "line") return G5.ground;
-    if (G5.box.nats.includes(nat)) {
-      const r = m === "strike" || m === "fleet" ? void 0 : g2.regions[target];
-      if (r && nat === G5.b29.nat && g2.turn >= G5.b29.from && G5.b29.vs.includes(r.ctrl) && G5.b29.regions.includes(r.name)) return G5.b29.ratio;
-      return escorted2 ? G5.box.escorted : G5.box.alone;
-    }
-    return rowAt2(G5.day[nat] ?? G5.day._default, g2.turn);
-  }
-  function controlFirst(g2, nat) {
-    if (!acOn(g2) || stopDef(g2).book) return null;
-    const at4 = g2.ac?.night?.[nat];
-    if (at4 === void 0 || g2.turn - at4 > AC.radar.need) return null;
-    return hasTech(g2, nat, AC.radar.tech) && !hasTech(g2, nat, AC.radar.control) ? AC.radar.control : null;
-  }
-  function radarWords(g2, nat, id) {
-    if (!acOn(g2)) return null;
-    const record2 = AIR.radar.chains, without = AIR.radar.without;
-    if (id === AC.radar.tech) {
-      if (stopDef(g2).book) {
-        const rows = [...record2.filter((c) => c.nat === nat), ...majorsOf(g2).includes(nat) ? AC.radar.record.filter((c) => c.nat === nat) : []].sort((a, b) => a.from - b.from);
-        if (!rows.length) return null;
-        return `Its warning chain follows history's, with or without this research: ${rows.map((c) => `over ${c.where ?? "all its ground"} from ${month(c.from)}`).join(", ")}.`;
-      }
-      return `A warning chain over all the ground it holds: every fighter in reach gets up in time to meet a raid, where without one only ${Math.round(without * 10)} in 10 do, and fewer of its aircraft are caught on the ground.`;
-    }
-    if (id === AC.radar.control) {
-      return stopDef(g2).book ? "Its night defence grows with the years as history's did, with or without this research." : "Its fighters are steered onto the bombers in the dark, as well as each year's sets allow. Without this, its night defence stays as it was at the start of the war.";
-    }
-    return null;
-  }
-  var rowAt2 = (rows, t) => {
-    let v = rows[0][1];
-    for (const [from2, x] of rows) if (from2 <= t) v = x;
-    return v;
-  };
-  function nightFighters(g2, nat) {
-    const rows = AC.radar.night[nat] ?? AC.radar.night._default;
-    return stopDef(g2).book || hasTech(g2, nat, AC.radar.control) ? rowAt2(rows, g2.turn) : rows[0][1];
-  }
-  var missionOf = (c) => c.kind === "sky" ? "superiority" : c.night ? "night" : "bomb";
-  function campaignOf(g2, f) {
-    if (!acOn(g2) || f.camp === void 0 || !g2.ac) return null;
-    return g2.ac.campaigns.find((c) => c.id === f.camp && c.off === void 0 && (c.groups.includes(f.id) || c.escorts.includes(f.id))) ?? null;
-  }
-  var inCampaign = (g2, f) => campaignOf(g2, f) !== null;
-  function aimOf(g2, fleets) {
-    for (const f of fleets) {
-      const c = campaignOf(g2, f);
-      if (c) return c.aim;
-    }
-    return "works";
-  }
-  var nameFor = (g2, nat, kind, targets2, night) => {
-    const place3 = g2.regions[targets2[0]].name + (targets2.length > 1 ? ` and ${targets2.length - 1} more` : "");
-    return theWords(kind === "sky" ? `The battle for the sky over ${place3}` : kind === "support" ? `Support for the offensive at ${place3}` : `The bombing of ${place3}${night ? " by night" : ""}`);
-  };
-  function addCampaign(g2, nat, kind, targets2, groups, o, book3) {
-    const M2 = mem(g2);
-    const night = kind === "bomb" && !!o.night;
-    const c = {
-      id: M2.next++,
-      nat,
-      kind,
-      name: o.name ?? nameFor(g2, nat, kind, targets2, night),
-      targets: [...targets2],
-      next: 0,
-      groups: [...groups],
-      escorts: night ? [] : [...o.escorts ?? []],
-      night,
-      aim: o.aim ?? "works",
-      since: g2.turn,
-      log: [],
-      ...book3 !== void 0 ? { book: book3 } : {}
-    };
-    M2.campaigns.push(c);
-    for (const id of [...c.groups, ...c.escorts]) {
-      const f = g2.airFleets.find((x) => x.id === id);
-      if (f) f.camp = c.id;
-    }
-    return c;
-  }
-  function release(g2, c, f) {
-    if (f.camp !== c.id) return;
-    delete f.camp;
-    if (c.kind === "support") delete f.close;
-    if (f.escorts !== void 0 && c.escorts.includes(f.id)) delete f.escorts;
-    if (f.flew !== g2.turn) {
-      f.mission = "support";
-      f.target = -1;
-    }
-  }
-  function endCampaign(g2, c, why) {
-    closeLog(g2, c);
-    c.off = g2.turn;
-    c.why = why;
-    for (const f of g2.airFleets) if (f.camp === c.id) release(g2, c, f);
-    if (c.nat === g2.human) headline(g2, "info", `${c.name} has ended after ${monthsWord(g2.turn - c.since)}: ${why.charAt(0).toLowerCase()}${why.slice(1)}`, c.nat);
-  }
-  var monthsWord = (n) => n <= 0 ? "less than a month" : n === 1 ? "a month" : `${n} months`;
-  var live = (g2, c, ids2) => ids2.map((id) => g2.airFleets.find((f) => f.id === id)).filter((f) => !!f && f.nat === c.nat && f.ftr + f.bmr > 0 && !afloat(f));
-  function behind(g2, nat, t) {
-    const near2 = /* @__PURE__ */ new Set();
-    for (const k of g2.corps) if (k.nat === nat && !k.dead) {
-      near2.add(k.reg);
-      for (const j of g2.regions[k.reg].nb) near2.add(j);
-    }
-    return g2.regions[t].nb.filter((j) => atWar(g2, nat, g2.regions[j].ctrl) && !near2.has(j));
-  }
-  var lostOf = (fs) => fs.reduce((s, f) => s + f.lost.ftr + f.lost.bmr, 0);
-  function closeLog(g2, c) {
-    const e = c.log[c.log.length - 1];
-    if (!e || e.ids === void 0) return;
-    e.lost = Math.max(0, lostOf(e.ids.map((id) => g2.airFleets.find((f) => f.id === id)).filter((f) => !!f)) - (e.base ?? 0));
-    delete e.ids;
-    delete e.base;
-  }
-  function campaignOrders(g2, nat) {
-    if (!acOn(g2) || !g2.ac) return;
-    for (const c of open(g2)) {
-      if (c.nat !== nat) continue;
-      closeLog(g2, c);
-      const main = live(g2, c, c.groups), esc2 = live(g2, c, c.escorts);
-      c.groups = main.map((f) => f.id);
-      c.escorts = esc2.map((f) => f.id);
-      const book3 = c.book !== void 0;
-      if (!main.length) {
-        if (!book3) endCampaign(g2, c, "Its air groups are gone.");
-        continue;
-      }
-      const targets2 = c.targets.filter((t) => g2.regions[t] && atWar(g2, nat, g2.regions[t].ctrl));
-      if (!targets2.length) {
-        if (!book3) endCampaign(g2, c, c.kind === "support" ? "Its offensive is over, the ground taken." : "Its targets are no longer in enemy hands.");
-        continue;
-      }
-      const ready = main.filter((f) => f.flew !== g2.turn);
-      if (!ready.length) continue;
-      let target = -1;
-      if (c.kind === "sky") {
-        const notHeld = targets2.filter((t) => {
-          const s = skyFight(g2, t);
-          return !(s && s.now === "held" && allied(g2, s.by, nat));
-        });
-        const pool = notHeld.length ? notHeld : targets2;
-        const flyable = pool.filter((t) => ready.some((f) => whyNotMission(g2, f, "superiority", t) === null));
-        target = flyable.length ? notHeld.length ? flyable[0] : flyable[c.next++ % flyable.length] : -1;
-        for (const f of ready) if (target >= 0 && whyNotMission(g2, f, "superiority", target) === null) {
-          f.mission = "superiority";
-          f.target = target;
-          f.camp = c.id;
-        }
-      } else if (c.kind === "bomb") {
-        const m = missionOf(c);
-        for (let k = 0; k < targets2.length; k++) {
-          const t = targets2[(c.next + k) % targets2.length];
-          if (!ready.some((f) => f.bmr > 0 && whyNotMission(g2, f, m, t) === null)) continue;
-          target = t;
-          c.next = (c.next + k + 1) % targets2.length;
-          break;
-        }
-        if (target >= 0) {
-          let lead2 = null;
-          for (const f of ready) if (f.bmr > 0 && whyNotMission(g2, f, m, target) === null) {
-            f.mission = m;
-            f.target = target;
-            f.camp = c.id;
-            lead2 ?? (lead2 = f);
-          }
-          if (lead2 && !c.night) {
-            for (const f of esc2) if (f.flew !== g2.turn) {
-              f.mission = "support";
-              f.target = -1;
-              f.escorts = lead2.id;
-              f.camp = c.id;
-            }
-          }
-        }
-      } else {
-        const sky = targets2.find((t) => ready.some((f) => f.ftr > 0 && whyNotMission(g2, f, "superiority", t) === null)) ?? -1;
-        target = targets2[0];
-        for (const f of ready) {
-          f.camp = c.id;
-          if (f.bmr <= 0 || f.kind === "ftr") {
-            if (byHand(g2, nat, "air") ? closeRules(g2) : closeStaffRules(g2)) {
-              f.mission = "support";
-              f.target = -1;
-              f.close = true;
-              delete f.escorts;
-            } else if (sky >= 0 && whyNotMission(g2, f, "superiority", sky) === null) {
-              f.mission = "superiority";
-              f.target = sky;
-            }
-            continue;
-          }
-          const troops = targets2.find((t) => whyNotMission(g2, f, "ground", t) === null);
-          const rear = targets2.flatMap((t) => behind(g2, nat, t)).find((t) => whyNotMission(g2, f, "bomb", t) === null);
-          const pick4 = (g2.turn + f.id) % 2 === 0 ? troops ?? rear : rear ?? troops;
-          if (pick4 !== void 0) {
-            f.mission = troops === pick4 ? "ground" : "bomb";
-            f.target = pick4;
-          }
-        }
-      }
-      const flying3 = [...main, ...esc2].filter((f) => f.camp === c.id);
-      const e = {
-        turn: g2.turn,
-        target,
-        sent: flying3.reduce((s, f) => s + f.ftr + f.bmr, 0),
-        lost: 0,
-        downed: 0,
-        done: 0,
-        ids: flying3.map((f) => f.id),
-        base: lostOf(flying3)
-      };
-      c.log.push(e);
-    }
-  }
-  function campaignResults(g2, nat, reps) {
-    if (!acOn(g2) || !g2.ac) return;
-    for (const c of open(g2)) {
-      if (c.nat !== nat) continue;
-      const e = c.log[c.log.length - 1];
-      if (!e || e.turn !== g2.turn) continue;
-      const ids2 = /* @__PURE__ */ new Set([...c.groups, ...c.escorts]);
-      for (const r of reps) {
-        if (!r.att.some((x) => x.id !== void 0 && ids2.has(x.id))) continue;
-        e.downed += r.def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
-        if (r.mission === "superiority" && r.region >= 0) {
-          const s = skyFight(g2, r.region);
-          if (s) e.sky = s.now;
-        }
-      }
-      if (c.kind !== "sky" && e.target >= 0) {
-        for (const k of ["works", "oil"]) {
-          const s = g2.ac.stock[`${e.target}:${k}`];
-          if (s?.last && s.last.turn === g2.turn && s.last.by === nat) e.done = Math.max(e.done, s.last.cut);
-        }
-      }
-    }
-  }
-  var phaseOf = (row2, turn2) => row2.fly?.find((p) => p.from <= turn2 && turn2 <= p.to) ?? null;
-  var kindOf = (row2, p) => p.kind === "sky" || row2.kind === "sky" ? "sky" : "bomb";
-  function theatreOf2(g2, nat, th) {
-    const side5 = th?.split("-")[1];
-    const split = AC.split[nat];
-    if (split && side5) return { mine: () => true, part: rowAt2(split, g2.turn)[side5] ?? 1 };
-    if (th === "UK-home") return { mine: (f) => {
-      const r = g2.regions[f.base];
-      return !!r && (r.first ?? r.owner) === "UK" && !r.overseas;
-    }, part: 1 };
-    if (th === "USA-eur") return { mine: (f) => !beyondEurope(f.base), part: 1 };
-    if (th === "USA-pac") return { mine: (f) => beyondEurope(f.base), part: 1 };
-    return { mine: () => true, part: 1 };
-  }
-  function strength2(g2, nat, th, bombers) {
-    return airFleetsOf(g2, nat).reduce((s, f) => s + (!afloat(f) && th.mine(f) ? bombers ? f.kind !== "ftr" ? f.bmr : 0 : f.kind !== "bmr" ? f.ftr : 0 : 0), 0);
-  }
-  function bookGroups(g2, nat, targets2, bombers, want, taken2, th, bases) {
-    const fs = airFleetsOf(g2, nat).filter((f) => !afloat(f) && th.mine(f) && !taken2.has(f.id) && (bombers ? f.bmr > 0 && f.kind !== "ftr" : f.ftr > 0 && f.kind !== "bmr"));
-    const size = (f) => bombers ? f.bmr : f.ftr;
-    const range2 = (f) => bombers ? airRange(f, g2).bmr : airRange(f, g2).ftr;
-    const nearFrom = (at4) => Math.min(...targets2.map((t) => km(g2, at4, t)));
-    const near2 = (f) => Math.min(...targets2.map((t) => kmTo(g2, f, t)));
-    const toBase = (at4) => Math.min(...bases.map((b) => km(g2, at4, b)));
-    const out = [];
-    let got = 0;
-    const enough = (f) => want <= 0 || got > 0 && got + size(f) / 2 > want;
-    const can2 = fs.filter((f) => near2(f) <= range2(f)).sort((a, b) => near2(a) - near2(b) || a.id - b.id);
-    for (const f of can2) {
-      if (enough(f)) return out;
-      out.push(f);
-      got += size(f);
-    }
-    if (!bases.length) return out;
-    const rest = fs.filter((f) => !can2.includes(f)).sort((a, b) => toBase(a.base) - toBase(b.base) || a.id - b.id);
-    for (const f of rest) {
-      if (enough(f)) break;
-      const fields = g2.regions.filter((r) => nearFrom(r.id) <= range2(f) && whyNotBase(g2, f, r, true) === null).sort((a, b) => Number(fieldRoom(g2, b.id, f)) - Number(fieldRoom(g2, a.id, f)) || toBase(a.id) - toBase(b.id) || a.id - b.id);
-      if (!fields.length || !rebaseAir(g2, f, fields[0], true)) continue;
-      out.push(f);
-      got += size(f);
-    }
-    return out;
-  }
-  function bookMonth(g2) {
-    if (!stopDef(g2).book) return;
-    const M2 = mem(g2);
-    const taken2 = /* @__PURE__ */ new Set();
-    for (const c of M2.campaigns) if (c.off === void 0 && c.book === void 0) for (const id of [...c.groups, ...c.escorts]) taken2.add(id);
-    AC.book.forEach((row2, i) => {
-      const c = M2.campaigns.find((x) => x.book === i && x.off === void 0);
-      const p = phaseOf(row2, g2.turn);
-      const n = g2.nations[row2.nat];
-      const can2 = !!p && !!n?.alive && n.atWar.length > 0 && !byHand(g2, row2.nat, "air");
-      const targets2 = can2 ? p.regions.map((nm) => g2.byName[nm]?.id).filter((t) => t !== void 0 && atWar(g2, row2.nat, g2.regions[t].ctrl)) : [];
-      if (!can2 || !targets2.length) {
-        if (c) endCampaign(g2, c, p ? "Its targets are out of reach." : "Its months are over.");
-        return;
-      }
-      const kind = kindOf(row2, p);
-      const night = kind === "bomb" && (p.night ?? row2.time === "night");
-      for (const f of airFleetsOf(g2, row2.nat)) if (f.camp === c?.id) delete f.camp;
-      const share = row2.share ? rowAt2(row2.share, g2.turn) : 1;
-      const th = theatreOf2(g2, row2.nat, row2.theatre);
-      const bases = (row2.bases ? rowAt2(row2.bases, g2.turn) : []).map((nm) => g2.byName[nm]?.id).filter((b) => b !== void 0);
-      const ftr = strength2(g2, row2.nat, th, false) * th.part, bmr = strength2(g2, row2.nat, th, true) * th.part;
-      const main = kind === "sky" ? [...bookGroups(g2, row2.nat, targets2, false, share * ftr, taken2, th, bases), ...p.bombers ? bookGroups(g2, row2.nat, targets2, true, share * bmr, taken2, th, bases) : []] : bookGroups(g2, row2.nat, targets2, true, share * (ftr + bmr), taken2, th, bases);
-      for (const f of main) taken2.add(f.id);
-      const esc2 = kind === "bomb" && !night && p.escort ? bookGroups(g2, row2.nat, targets2, false, p.escort * ftr, taken2, th, bases) : [];
-      for (const f of esc2) taken2.add(f.id);
-      const aim = p.aim ?? "works";
-      if (!c) {
-        if (!main.length) return;
-        addCampaign(g2, row2.nat, kind, targets2, main.map((f) => f.id), { name: row2.what, night, escorts: esc2.map((f) => f.id), aim }, i);
-        return;
-      }
-      c.kind = kind;
-      c.night = night;
-      c.aim = aim;
-      if (c.targets.join() !== targets2.join()) {
-        c.targets = targets2;
-        c.next = 0;
-      }
-      c.groups = main.map((f) => f.id);
-      c.escorts = esc2.map((f) => f.id);
-      for (const f of [...main, ...esc2]) f.camp = c.id;
-    });
-  }
-  function airWarMonth(g2) {
-    if (!acOn(g2)) return;
-    stockMonth(g2);
-    skyMonth(g2);
-    bookMonth(g2);
-  }
 
   // ../../src/campaign/atom.ts
   var ATOM = atom_default;
@@ -47988,7 +48299,7 @@
       if (foes.some((c) => c.dug || c.kind === "fort")) plan.lines.push({ label: "Shelter", value: foes.some((c) => c.kind === "fort") ? "Fortress troops under concrete" : "Troops dug in", effect: `Dug in they lose ${Math.round(B2.troops.dug * 100)}% as much, in a fortress ${Math.round(B2.troops.fort * 100)}%` });
     } else if (pick4 === "town") {
       const v = siegeView(g2, r.id);
-      plan.lines.push({ label: "The town", value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
+      plan.lines.push({ label: "The town", value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${townWorksPhrase(g2, r)}`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
       if (town) plan.lines.push({ label: "The shelling", value: town.works >= 0.5 ? `About ${Math.round(town.works)}% of the works broken down` : "Little more can be broken", effect: townHitText(g2, r, town, "shells", false) });
     } else {
       plan.lines.push({ label: "Industry", value: plural2(r.fac, "factory", "factories"), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${tenthPct(plan.nation)} of ${g2.nations[r.ctrl].adj} production` : "Nothing to hit" });
@@ -48733,6 +49044,7 @@
     if (CARRIERSTRIKE_STAGE) g2.flags.carrierStrike = 1;
     if (WINGBYDATE_STAGE) g2.flags.wingByDate = 1;
     if (AIRNAMES_STAGE) g2.flags.airNames = 1;
+    if (CITYDEFENCES_STAGE) g2.flags.cityDefences = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -48765,6 +49077,7 @@
     openFooting(g2);
     openWeather(g2);
     openAirVersion(g2, majorsOf(g2));
+    cityStartLay(g2);
     openSecretWar(g2);
     openManpower(g2);
     numberDivisions(g2);
@@ -54377,16 +54690,19 @@
     return ARSENAL.works[item]?.label ?? "Works";
   }
   function worksUpkeep(g2, nat) {
-    let aa = 0, field4 = 0, strip = 0;
+    let aa = 0, field4 = 0, strip = 0, lights = 0;
+    const lit = cityDefences(g2);
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       aa += g2.flags[`wk:aa:${r.id}`] ?? 0;
       field4 += g2.flags[`wk:field:${r.id}`] ?? 0;
       strip += g2.flags[`wk:strip:${r.id}`] ?? 0;
+      if (lit) lights += g2.flags[`wk:lights:${r.id}`] ?? 0;
     }
     const out = [];
     if (aa > 0) out.push({ key: "works:aa", label: "Anti-aircraft guns", amount: aa * ARSENAL.works.aa.upkeep, count: aa });
     if (field4 > 0) out.push({ key: "works:field", label: "Airfields", amount: strip > 0 ? (field4 - strip) * ARSENAL.works.field.upkeep + strip * ARSENAL.works.strip.upkeep : field4 * ARSENAL.works.field.upkeep, count: field4 });
+    if (lights > 0) out.push({ key: "works:lights", label: ARSENAL.works.lights.label, amount: lights * ARSENAL.works.lights.upkeep, count: lights });
     return out;
   }
   function restoreWorks(g2) {
@@ -54846,8 +55162,8 @@
       const said = carry !== null && carry > 0 && !ceiling2 ? ` ${g2.nations[nat].name} has ${factoriesHeld(g2, nat).held + factoriesHeld(g2, nat).building} of the ${plural3(carry, "factory", "factories")} its industry can carry in this war.` : "";
       out.push({ key: "work:factory", group: "works", label: W2.factory.label, blurb: W2.factory.blurb, size: "one factory", cost, months: W2.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural3(r.fac, "factory", "factories")}${have ? `, ${have} of ${most} new ones built or building` : ""}.${said}` : "", why });
     }
-    const FULL = { yard: "The shipyard at % is as large as a yard can be.", aa: "The guns at % are as heavy as they can be.", field: "The airfields at % are as large as they can be." };
-    const NONE7 = { yard: "no shipyard", aa: "no guns", field: "only rough landing grounds" };
+    const FULL = { yard: "The shipyard at % is as large as a yard can be.", aa: "The guns at % are as heavy as they can be.", field: "The airfields at % are as large as they can be.", lights: "The searchlights at % are as many as they can be." };
+    const NONE7 = { yard: "no shipyard", aa: "no guns", field: "only rough landing grounds", lights: "no searchlights" };
     const level = (what, spec2, now, upkeep2, why) => {
       const next = now + (r ? queued(g2, nat, what, r.id) : 0) + 1;
       const cost = priceOf(g2, nat, `work:${what}`, spec2.cost[Math.min(TOP, next)]);
@@ -54867,6 +55183,7 @@
     };
     level("yard", W2.yard, r ? yardLevel(g2, r) : 0, 0, !r ? pick4 : whyNotWorksHere(g2, nat, r, "Shipyards are built in the home country.", !r.port ? `${r.name} has no harbour.` : null) ?? (!r.port ? `${r.name} has no harbour.` : null));
     level("aa", W2.aa, r ? workLevel(g2, "aa", r.id) : 0, W2.aa.upkeep, !r ? pick4 : r.ctrl !== nat ? "That ground is not in your hands." : null);
+    if (cityDefences(g2)) level("lights", W2.lights, r ? lightsAt(g2, r.id) : 0, W2.lights.upkeep, !r ? pick4 : r.ctrl !== nat ? "That ground is not in your hands." : null);
     if (!fieldRules(g2)) level("field", W2.field, r ? workLevel(g2, "field", r.id) : 0, W2.field.upkeep, !r ? pick4 : r.ctrl !== nat ? "That ground is not in your hands." : null);
     else {
       const now = r ? workLevel(g2, "field", r.id) : 0;
@@ -55031,6 +55348,10 @@
       return;
     }
     if (r.ctrl !== nat) return;
+    if (what === "lights" && !cityDefences(g2)) {
+      n.queue.push(b);
+      return;
+    }
     if (what === "field" && isStripBuild(b) && fieldRules(g2)) {
       if (workLevel(g2, "field", r.id) >= TOP) return;
       g2.flags[`wk:field:${r.id}`] = workLevel(g2, "field", r.id) + 1;
@@ -55040,7 +55361,7 @@
     }
     if (what === "field") setConcrete(g2, r.id);
     g2.flags[`wk:${what}:${r.id}`] = Math.min(TOP, workLevel(g2, what, r.id) + 1);
-    tell2(what === "aa" ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g2, "aa", r.id)}.` : fieldRules(g2) ? `The concrete airfield at ${r.name} is ready: level ${workLevel(g2, "field", r.id)}, serving ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft.` : `The airfields at ${r.name} are ready: level ${workLevel(g2, "field", r.id)}.`);
+    tell2(what === "aa" ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g2, "aa", r.id)}.` : what === "lights" ? `The searchlights at ${r.name} are in place: level ${workLevel(g2, "lights", r.id)}.` : fieldRules(g2) ? `The concrete airfield at ${r.name} is ready: level ${workLevel(g2, "field", r.id)}, serving ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft.` : `The airfields at ${r.name} are ready: level ${workLevel(g2, "field", r.id)}.`);
   }
   function aiArsenal(g2, nat, guns2 = true, fields = true) {
     const n = g2.nations[nat];
@@ -55103,6 +55424,7 @@
   }
   function aiGuns(g2, nat) {
     const n = g2.nations[nat];
+    if (cityDefences(g2)) aiLights(g2, nat);
     const raided = g2.raids[nat];
     if (!raided || g2.turn - raided.turn > 2) return;
     if (n.queue.some((b) => b.what === "work" && b.item === "aa")) return;
@@ -55114,6 +55436,25 @@
     if (!best) return;
     const o = offers(g2, nat, best.id).find((x) => x.key === "work:aa");
     if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g2, nat, "work:aa", best.id);
+  }
+  function aiLights(g2, nat) {
+    const n = g2.nations[nat];
+    const radar = hasTech(g2, nat, AC.radar.control);
+    const fighters = radar ? [] : landFighters(g2, nat);
+    let best = null;
+    for (const r of g2.regions) {
+      if (!isHome(g2, nat, r) || !nightRaided(g2, r.id)) continue;
+      const guns2 = workLevel(g2, "aa", r.id);
+      if (guns2 <= lightsAt(g2, r.id) + queued(g2, nat, "lights", r.id)) continue;
+      if (!radar && !fighters.some((f) => km(g2, f.base, r.id) <= airRange(f, g2).ftr)) continue;
+      const bg = best ? workLevel(g2, "aa", best.id) : -1;
+      if (!best || guns2 > bg || guns2 === bg && r.fac > best.fac) best = r;
+    }
+    if (!best) return false;
+    if (n.queue.some((b) => b.what === "work" && b.item === "lights")) return true;
+    const o = offers(g2, nat, best.id).find((x) => x.key === "work:lights");
+    if (!o || o.why !== null || n.pp < o.cost + PRODUCTION.aiReserve) return false;
+    return !!orderOffer(g2, nat, "work:lights", best.id);
   }
   function airBought(g2, nat) {
     const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 };
@@ -59398,6 +59739,7 @@
     const k = raidFogOn(g2) && g2.regions[t] ? skyKnown(g2, nat, t, sight2) : null;
     const hide = k && !k.live ? fogBits(k) : null;
     const gunsBit = () => hide ? hide.guns : gunsAt(g2, t) ? `level ${gunsAt(g2, t)} guns` : "";
+    const lightsBit = () => hide ? "" : lightsAt(g2, t) ? `level ${lightsAt(g2, t)} searchlights` : "";
     if (kind === "harbour") {
       const there = shipsInPort(g2, t, nat);
       const seen2 = there.filter((f) => fleetKnown(g2, f, nat) === "exact");
@@ -59410,10 +59752,10 @@
     if (kind === "town") {
       const v = siegeView(g2, t);
       const who = sight2[t] === SIGHT.none && !v.by ? "its garrison not known" : v.inside ? `${plural6(v.inside, "corps", "corps")} inside${v.guard > 0 ? " with its guard" : ""}` : "held by its guard alone";
-      return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ""}${v.by ? ", under siege" : ""}${gunsBit() ? `, ${gunsBit()}` : ""}`;
+      return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ""}${v.by ? ", under siege" : ""}${gunsBit() ? `, ${gunsBit()}` : ""}${lightsBit() ? `, ${lightsBit()}` : ""}`;
     }
     if (kind === "bomb" || kind === "night") {
-      const bits = [r.fac > 0 ? plural6(r.fac, "factory", "factories") : "", onNet(t) && !railCut(g2, t) ? railsAt(t).length >= 3 ? "a railway junction" : "a railway" : "", gunsBit(), hide ? hide.fighters : ""];
+      const bits = [r.fac > 0 ? plural6(r.fac, "factory", "factories") : "", onNet(t) && !railCut(g2, t) ? railsAt(t).length >= 3 ? "a railway junction" : "a railway" : "", gunsBit(), lightsBit(), hide ? hide.fighters : ""];
       return bits.filter(Boolean).join(", ");
     }
     if (kind === "line") {
@@ -59873,7 +60215,7 @@
     const mineToo = (nat) => viewer === null || !!nat && allied(g2, nat, viewer);
     return g2.airReports.filter((r) => r.turn === turn2 && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
       const p = r.zone >= 0 ? g2.seas[r.zone] : g2.regions[r.region];
-      return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side5(r.att), defenders: side5(r.def), won: r.won, level: r.level, result: r.result };
+      return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side5(r.att), defenders: side5(r.def), won: r.won, level: r.level, result: r.result, ...r.lights ? { lights: { ...r.lights } } : {} };
     });
   }
   function scout(g2, id, target, nat = g2.human) {
@@ -61774,6 +62116,7 @@
       }
     } else out.radar = transit ? null : radarAt(g2, g2.regions[target]);
     const amb = !sea && !transit && ambushAt(g2, target);
+    const floor = night && !transit && !known ? lightsFloor(g2, target, sky) : 0;
     for (const f of g2.airFleets) {
       if (f.ftr <= 0 || f.mission !== "support" || f.close || !atWar(g2, f.nat, nat)) continue;
       if (!transit && !comesUp(g2, f, m, target, zone)) continue;
@@ -61783,7 +62126,10 @@
       let w = (amb ? d <= reach(f, g2).ftrRange ? AMBUSH() : 0 : cover(d, reach(f, g2).ftrRange)) * crowding(g2, f);
       const deck = f.ship !== void 0;
       if (sea && !deck) w *= C4.seaCover;
-      if (night) w *= acOn(g2) ? nightFighters(g2, f.nat) : C4.night.fighters;
+      if (night) {
+        const k = acOn(g2) ? nightFighters(g2, f.nat) : C4.night.fighters;
+        w *= floor > 0 ? Math.max(k, floor) : k;
+      }
       if (!amb && !out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
       w *= unready;
       if (wx) w *= cloudMet(sky);
@@ -61838,7 +62184,9 @@
     const most = mostBomberLoss(g2, night);
     const L2 = airWar(g2) ? night ? AIRWAR.losses.night : AIRWAR.losses : null;
     const gun2 = cloudGuns(sky, night);
-    const aaGun = gun2 * nightGunShare(g2, night);
+    const cn = night && !transit && cityDefences(g2) ? cityNight(g2, target, out.B, sky, false, known ? { guns: known.aa, lights: 0 } : void 0) : null;
+    const aaGun = gun2 * (cn ? cn.share : nightGunShare(g2, night));
+    if (cn && !known) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
     out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g2, x.f), 0) / out.B : 0;
     out.bomberLoss = out.B > 0 ? Math.min(most, (L2 ? L2.bombers * Math.pow(met2, L2.power) : C4.bombers * met2) * (1 - out.drilled) * I + (night ? C4.night.flak : C4.flak) * gun2 * I) : 0;
     out.aa = m === "bomb" || night || m === "harbour" || m === "town" ? known ? known.aa : gunsAt(g2, target) : 0;
@@ -61936,13 +62284,18 @@
       });
     }
     const ring = known ? "may ring" : "ring";
-    if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} ${harbourOf(place3)}`, effect: "They bring down more of the bombers" });
+    const dark = cn ? `By night they fire ${!cn.radar ? "blind" : cn.lit > 0 ? "by radar and searchlight" : "by radar"}, and bring down about ${Math.round(cn.share * 100)}% as many bombers as they would by day.` : "";
+    if (out.aa && m === "harbour") out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} ${harbourOf(place3)}`, effect: dark || "They bring down more of the bombers" });
     if (m === "town") {
       const r = g2.regions[target], gone = breachOf(g2, r);
-      out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
+      out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
     }
-    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} ${place3}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} the factories of ${place3}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} ${place3}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ${ring} the factories of ${place3}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    if (cn && cn.lights > 0) {
+      const over = `Level ${cn.lights} searchlights over ${place3}`, few = "they help the night fighters a little.";
+      out.lines.push(cn.cloud ? { label: "Searchlights", value: `Cloud over ${place3}`, effect: "The searchlights cannot see the bombers through it." } : !cn.guns ? { label: "Searchlights", value: over, effect: `There are no guns for them to light. They help the night fighters a little.` } : !cn.radar ? { label: "Searchlights", value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." } : cn.sat < 1 ? { label: "Searchlights", value: "More bombers than the lights can hold", effect: `About ${Math.round(out.B).toLocaleString("en-US")} bombers over ${place3}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` } : { label: "Searchlights", value: over, effect: cn.lit >= cn.guns ? `With radar laying the guns, they light every level of the guns, and ${few}` : `With radar laying the guns, they light ${cn.lit} of the ${cn.guns} levels of guns, and ${few}` });
+    }
     if (out.ships.length) {
       const pc = (x) => `${Math.round(x * 100)}%`;
       if (out.surprise) out.lines.push({ label: "Surprise", value: "War was declared this month", effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
@@ -62255,6 +62608,7 @@
       if (acOn(g2)) cut2 = bombLands(g2, nat, r, cut2, night, aimOf(g2, fleets));
       const nation = total > 0 ? cut2 * (r.fac / total) : 0;
       raid(g2, nat, r.ctrl, nation);
+      if (night && through2 > 0) markNightRaid(g2, target);
       value += outputWorth(g2, r, cut2);
       value += atomRaidWorth(g2, nat, r, cut2);
       result = r.fac > 0 && cut2 > 0 ? `The bombing stopped ${Math.round(cut2 * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g2.nations[r.ctrl].adj} production.` : "";
@@ -62453,6 +62807,7 @@
     if (fh) rep.field = { region: fh.region, shut: fh.shut, levels: fh.levels, ground: fh.ground };
     if (transit) rep.ferry = transit.to;
     if (strafed) rep.strafed = strafed;
+    if (a.lights) rep.lights = { ...a.lights };
     g2.airReports.push(rep);
     storyAir(g2, m === "fleet" ? "strike" : m === "harbour" || m === "town" || m === "airfield" ? "bomb" : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns: guns2, ...battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {} });
     if (nicknamesOn(g2)) airRaidFlown(g2, m, { odds: rep.odds, bombers: a.B, bombed, E: a.E, D: a.D, sky: sky || held3 }, a.att.map((x, i) => ({ f: x.f, side: att[i] })), a.def.map((x, i) => ({ f: x.f, side: def[i] })), sea ? -1 : target);
@@ -72174,32 +72529,6 @@
     }
   };
 
-  // ../../data/campaign/defence.json
-  var defence_default = {
-    _about: "Prepared defences (the grand campaign). An army that spends a whole month where it stands, without marching or fighting, digs in whoever commands it, the computer's armies as well as the player's. Against troops who are dug in and in supply the day's luck runs against the attacker, so that odds which would be safe in the open become a gamble, and an attack thrown back from such a line has shot its bolt for the month. Rules in src/campaign/game.ts (assess, resolveBattle, endPhase).",
-    entrench: { auto: true, months: 3, share: [0.5, 0.75, 1] },
-    handover: { fade: 1 },
-    probe: { ap: 2, wear: 1, weight: 3e4, loss: 0.04, org: 0.06 },
-    wear: { perAttack: 1, fullAt: 0.6, guns: 1, regrow: 0.5 },
-    tired: { per: 0.15, most: 3 },
-    hammer: { first: 0.5, second: 1 },
-    frontage: { sides: 3, extra: 1, guns: 2 },
-    prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, surpriseMonths: 1, openingMonths: 3, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
-    staff: { odds: 0 },
-    notes: {
-      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. A corps that leaves the ground leaves its fieldworks behind it (players read 'fieldworks', never 'trenches': Brian, 2026-11-14). With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
-      handover: "Hand over the fieldworks (Version 64). Works belong to the ground. A dug-in corps that marches off, entrains or goes forward after a battle won leaves its positions behind: a corps of its own side standing there without works takes them over at once, and otherwise they wait for the next corps of that side to march or ride in, which has them, as old as they were, from the moment it arrives and keeps them at the month's end though it marched. Standing empty they lose 'fade' months of work at the start of each of their owner's months, and they are gone the moment the enemy sets foot there. Troops driven off their ground leave nothing, and troops falling back or put down by any other means take nothing over. Remove the key to have works lost when a corps leaves, as before Version 64.",
-      probe: "Probe the line (Version 64). One fighting corps of the player's feels out the enemy army in the province beside it: every corps there is identified as a battle would identify it, and the works of each one that is dug in lose 'wear' months where the probing corps has 'weight' men or more, and in proportion where it has fewer (Version 65: a husk of a corps scratches a line, it does not open it). It costs the probing corps 'loss' of its men, 'org' of its organisation and 'ap' of its moves, and it counts as having fought, so it does no digging that month. The defenders lose no men; they count as attacked, so they dig at the pace of troops who were. Nothing changes hands, no battle is filed, no offensive is opened by it, and a line is probed once a month at most. A computer staff probes as the player does since Version 65 (rivals.json, 'soften').",
-      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the fieldworks. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
-      wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the fieldworks. Works are never worn below nothing, and troops whose works are worn under one month lose the fieldworks' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
-      tired: "Defenders who have already fought this month fight the next blow tired (Version 63). Every attack a corps stands against in the field, won or lost, counts against it until its own month begins again: 'per' off its defence for each blow at full weight, up to 'most' blows. The weight of a blow is the same measure the wear on works uses: full at wear.fullAt to 1 or better on the Battle Ticket, in proportion below that. The defenders' losses in men and in organisation go by the same weight, so that a jab by one corps at a great stack costs it almost nothing and tires nobody.",
-      hammer: "The computer's two-wave attack (Version 63). Where its whole force cannot carry a place at the odds its staff asks, it sends a first wave to wear the works and tire the defence and the main body after it in the same month: the first wave must come at 'first' to 1 or better, and the main body must then have the staff's usual odds times 'second'. A slow command plans it too, since it is one operation laid on beforehand.",
-      frontage: "Attacked from 'sides' provinces or more at once, a defence cannot cover every road: each side's roads carry 'extra' more corps. Against fortress works or dug-in troops up to 'guns' artillery corps join an attack without taking room on the roads, since they fire over the heads of the infantry.",
-      staff: "'odds': how much better odds than usual a computer staff asks before it attacks a fully prepared line. At 0 it attacks as it always did, and learns the cost in men.",
-      measured: "Over 72 computer wars to the end of 1944 (Version 57 before, Version 58 after): Berlin fallen in 38 and 25, the German army still deep in Russia in 16 and 7, neither in 10 and 40; Paris falls between 2 and 3 months later. Of 36 wars run on to January 1947 Berlin had fallen in 29 and 7 were undecided. A dug-in, supplied line now throws back an attack at 1.5 to 1 about 4 times in 10 and at 2 to 1 about 1 in 7; nothing is safe under 2.4 to 1. Version 61 (works that wear, the share of each month's digging, the opening offensive, room on the roads), over 24 computer wars to December 1944 against Version 60: Paris falls in October 1940 at the median (November) and by August in 5 (none), Berlin has fallen in 6 (5) and Moscow in 4 (2); finished, supplied lines throw back 60% of attacks at 1.2 to 1.6 to 1 and 26% at 1.6 to 2.2 to 1 (59% and 23%); 280 attacks thrown back wore works down. Over 24 wars played as Germany on history's plan at Colonel, Berlin holds to the end of 1944 in 13 (12). A Soviet player who strikes first in June 1940 takes Berlin from Germany in 6 wars of 8 (4)."
-    }
-  };
-
   // ../../data/campaign/winchance.json
   var winchance_default = {
     _about: "The honest win chance on land (release 2, auto-resolve fix 1; stage.json 'winChance'). An attack in the field throws one luck, a share of the way between 'field' low and high, times the card's odds, and carries the ground at 1.2 or better: the chance is (high - 1.2/odds) / (high - low). The same share of the way between today's luck (0.8 to 1.2, wider against a prepared line) sets the losses, the order, the morale and the level of the victory, so what an attack costs at given odds is what it cost before. Towns and guns caught alone keep today's luck.",
@@ -74712,6 +75041,7 @@
     const mortar = facing2 ? morUp ? 1 - (1 - mortars(g2, attackers2)) * (1 - morUp) : mortars(g2, attackers2) : 0;
     const rushed = town && g2.flags[`siege:${target.id}`] === g2.turn ? SIEGE.assault.hasty[townSize(g2, target)] : 1;
     const hasty = rushed < 1;
+    const flak = town ? townFlakCut(g2, target) : 0;
     for (const c of attackers2) {
       if (wide3 && barred(g2, c, target)) {
         tooSteep++;
@@ -74744,6 +75074,7 @@
         if (town) {
           p *= SIEGE.assault.armour;
           streets = true;
+          if (flak > 0) p *= 1 - flak;
         } else if (target.terrain === "mountain" || target.terrain === "urban" || target.terrain === "marsh") {
           p *= 0.6;
           armorStuck = true;
@@ -74990,7 +75321,7 @@
         // builds 1668 and 1678.)
         label: "The town",
         value: `${townSize(g2, target) === "capital" ? `${place3}, ${theWords(`${theName(g2.nations[target.owner])}'s`)} capital` : `${place3}, a ${TOWNS.words[townSize(g2, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}${served ? "" : `, dug by ${theName(g2.nations[worksBy(target)])}: they give its defenders no cover`}` : ""}`,
-        effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ""}`
+        effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${townWorksWords(g2, target, fortTerm(target, served))}${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ""}`
       });
       if (crewP > 0) {
         const crews = defenders.filter((d) => fortRow(g2, d)).map((d) => d.name).join(", ");
@@ -75251,6 +75582,7 @@
     if (armorShock) lines2.push(at4 ? { label: "Armor", value: `Tank attack up ${Math.round(25 * (1 - at4.strength))}%` } : { label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
     if (armorStuck) lines2.push({ label: "Armor", value: "Tanks in close country", effect: "Tank attack cut to 60%" });
     if (streets) lines2.push({ label: "Armor", value: "Tanks in the streets of the town", effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
+    if (streets && flak > 0) lines2.push(flakLine(flak));
     if (hasty) lines2.push({ label: "A hasty assault", value: "The army has only just come up to the town: it goes in off the march", effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
     if (flank > 1) lines2.push({ label: "Direction", value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
     let faced = null;
@@ -75709,6 +76041,7 @@
   function resolveBattle(g2, attackers2, target, opts = {}) {
     let a = assess(g2, attackers2, target, opts);
     const town = !!opts.town, sieges2 = siegeRules(g2);
+    const flakAt = town && a.lines.some(isFlakLine) ? townFlak(g2, target) : 0;
     const rears = town || opts.breakout ? [] : rearguardsAt(g2, target, (nat) => atWar(g2, nat, armyOf(attackers2[0])));
     const gone = town ? [] : giveWay(g2, a, attackers2, target);
     if (gone.length) {
@@ -75760,6 +76093,7 @@
     const attFrac = attackLoss(RL) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     let attLost = 0, defLost = 0, prisoners = 0;
     let held3 = false, gates = false;
+    let flakOut = null;
     const bled = /* @__PURE__ */ new Map();
     const attW = splitWeights(attackers2, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
     const attPart = (c, i, w = attW[i]) => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g2, c);
@@ -75899,6 +76233,7 @@
         }
         for (const c of attackers2) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
         fall(g2, target, attNat, "storm");
+        flakOut = flakLostWithTown(g2, target, flakAt, townName(target));
       } else if (inField2 && !intoWorks) {
         prisoners += watchMen;
         defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: "inf", divs: Math.max(0.1, Math.round(watch2 * 10) / 10), men: watchMen, lost: watchMen, fate: "surrendered", guard: true });
@@ -75944,6 +76279,7 @@
       prisoners
     };
     if (town) rep.town = true;
+    if (flakOut) rep.lines.push(flakOut);
     if (inField2) rep.guarded = true;
     if (held3) rep.siege = true;
     if (gates) rep.gates = true;
@@ -76092,6 +76428,7 @@
       const left = groundWorks(g2, r.id);
       if (!left || !allied(g2, r.ctrl, left.nat)) clearWorks(g2, r.id);
     }
+    clearTownWorks(g2, r);
     if (groundRules(g2)) {
       liftMines(g2, r);
       const crossed = (far) => again && (atWar(g2, old, far.ctrl) || atWar(g2, prev, far.ctrl)) || takenInWarThisMonth(g2, far) && (atWar(g2, far.ctrl, old) || atWar(g2, far.prev, old));
@@ -77445,6 +77782,7 @@
   function endPhase(g2, nat) {
     if (nat === g2.human) seeCuts(g2);
     digIn(g2, nat);
+    townWorksMonth(g2, nat);
     if (g2.nations[nat].alive) desertWorks(g2, nat, true);
     siegeEmpties(g2);
     mendPrizes(g2, nat);
@@ -78462,7 +78800,7 @@
 
   // ../../src/campaign/orders.ts
   var low = (s) => s.charAt(0).toLowerCase() + s.slice(1);
-  var several = (s) => /(corps|ships|guns|airfields|fortifications|troops)$/.test(s) ? s : /y$/.test(s) ? `${s.slice(0, -1)}ies` : `${s}s`;
+  var several = (s) => /(corps|ships|guns|airfields|searchlights|fortifications|troops)$/.test(s) ? s : /y$/.test(s) ? `${s.slice(0, -1)}ies` : `${s}s`;
   var inMonths2 = (m) => m <= 0 ? "this month" : `in ${m} month${m === 1 ? "" : "s"}`;
   function lineOf3(g2, b, nat) {
     let sign = "civic", label = "town building", holds4 = 1;
@@ -82920,7 +83258,7 @@
     });
     return `put ${begun2.length === 1 ? "a research team" : `${begun2.length} research teams`} to work on ${listAnd3(names)}.`;
   }
-  var orderWords = (g2, b) => b.what === "civic" ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "air" ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "work" ? `${b.item === "aa" ? "anti-aircraft guns" : b.item ?? "works"} at ${g2.regions[b.region].name}` : b.what === "ship" ? `${b.name[0].toLowerCase()}${b.name.slice(1)}` : `${b.name} at ${g2.regions[b.region].name}`;
+  var orderWords = (g2, b) => b.what === "civic" ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "air" ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "work" ? `${b.item === "aa" ? "anti-aircraft guns" : b.item === "lights" ? "searchlights" : b.item ?? "works"} at ${g2.regions[b.region].name}` : b.what === "ship" ? `${b.name[0].toLowerCase()}${b.name.slice(1)}` : `${b.name} at ${g2.regions[b.region].name}`;
   function boughtAir(g2, nat) {
     const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 }, forming = { ftr: 0, bmr: 0 };
     for (const f of airFleetsOf(g2, nat)) {
@@ -84416,6 +84754,7 @@
       if (l.label === "Troops") return { label: l.label, value: "How good the defenders are is not known", effect: "Training and experience count for as much as numbers: identify them first" };
       if (l.label === "Armor" && /without armor/.test(l.value) && k.none.length) return { ...l, value: "No tanks have been seen among the defenders", effect: "Tank attack up 25% if there are none" };
       if (l.label === "Armor" && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: "Tank attack up by as much as 25%: their guns are not known" };
+      if (isFlakLine(l) && k.none.length) return flakFog();
       return l;
     }).filter((l) => !k.none.length || !(l.label === "Machine guns" || l.label === "Tanks alone" || l.label === "Guns alone" || l.label === "Who pays" || l.label === "Minefields" && !minesKnown(g2, target, g2.human)));
     const loneMost = k.none.length && a.faced?.antiTank && a.faced.shock !== null ? SUPPORT.antiTank.alone.cut * (1 - a.faced.antiTank.cover) : 0;
@@ -111776,6 +112115,7 @@
   function buildSign(text) {
     const what = /ordered (.+?)(?: at |, | and |\.|$)/.exec(text)?.[1] ?? "";
     if (/anti-aircraft/i.test(what)) return "aa";
+    if (/searchlights/i.test(what)) return "star";
     return /corps/i.test(what) && !/armou?red|panzer|tank|artillery|engineer|mountain|airborne|parachute|marine|cavalry|mechani[sz]ed|motori[sz]ed/i.test(what) ? "inf" : "star";
   }
   function monthOrders(g2, viewer = g2.human) {
@@ -112466,11 +112806,11 @@
       if (still.has(o.id)) continue;
       const c = o.what === "corps" ? g2.corps.filter((x) => x.nat === me && !x.dead && x.name === o.name).sort((x, y) => y.id - x.id)[0] : void 0;
       if (o.what === "corps" ? !c : g2.regions[o.region]?.ctrl !== me) continue;
-      const item = o.what === "work" ? o.label === "anti-aircraft guns" ? "aa" : o.label === "airfields" || o.sign === "field" ? "field" : null : null;
+      const item = o.what === "work" ? o.label === "anti-aircraft guns" ? "aa" : o.label === "airfields" || o.sign === "field" ? "field" : o.sign === "lights" ? "lights" : null : null;
       if (!o.unit && (item || o.label === "fortifications")) {
         const level = item ? workLevel(g2, item, o.region) : 0;
         const town = g2.regions[o.region] ? townName(g2.regions[o.region]) : "";
-        const text = `${cap16(o.label)} ${item === "aa" ? "ready" : "finished"}`, place3 = level > 0 ? `${town}, level ${level}` : town;
+        const text = `${cap16(o.label)} ${item === "aa" || item === "lights" ? "ready" : "finished"}`, place3 = level > 0 ? `${town}, level ${level}` : town;
         if (!done.some((x) => x.bare && x.text === text && x.place === place3)) done.push({ sign: o.mark, count: 1, text, place: place3, region: o.region, bare: true });
         continue;
       }
@@ -112509,7 +112849,7 @@
         used.add(h);
         continue;
       }
-      const built = h.kind === "info" ? /^The (anti-aircraft guns|airfields) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
+      const built = h.kind === "info" ? /^The (anti-aircraft guns|airfields|searchlights) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
       if (built && card.home.some((x) => x.bare && x.region !== void 0 && g2.regions[x.region]?.name === built[2].replace(/^the /, "") && x.text.toLowerCase().startsWith(built[1]))) {
         used.add(h);
         continue;
@@ -113725,7 +114065,8 @@
       regions: s.regions.map((r) => {
         const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), fields.length ? fieldSize2.get(r.id) ?? 0 : Math.max(workLevel(s, "field", r.id), based2.has(r.id) ? 1 : 0)];
         const own = r.owner && r.owner !== r.ctrl ? { own: r.owner } : {};
-        return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standOf2(r.ctrl), w, ...own } : { id: r.id, ctrl: r.ctrl, stand: standOf2(r.ctrl), ...own };
+        const cd = cityDefences(s) ? cityMarks(s, r) : {};
+        return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standOf2(r.ctrl), w, ...own, ...cd } : { id: r.id, ctrl: r.ctrl, stand: standOf2(r.ctrl), ...own, ...cd };
       }),
       // (The ownership paint: every siege the player knows of, for the besieger's colour creeping over the field. Who
       // stands round the town, how far the siege has gone (the works broken down, or the stores eaten, whichever is
@@ -114190,6 +114531,9 @@
       settledTowns: settledTownsOn(s),
       // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
       townQueue: townQueueOn(s),
+      // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see, a
+      // garrison fortifies its town and the town's heavy guns fire on attacking tanks.
+      cityDefences: cityDefencesOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -114701,11 +115045,38 @@
         foe: foe ? s.nations[foe]?.adj ?? foe : "",
         sky: !sky ? "" : sky === me || allied(s, sky, me) ? "ours" : "theirs",
         skyBy: sky ? s.nations[sky]?.adj ?? sky : "",
-        add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? "It is not your month." : short || (o.why ?? "") } : null
+        add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? "It is not your month." : short || (o.why ?? "") } : null,
+        // (City defences, the switch on only) The searchlights beside the guns, seen as the guns are.
+        ...cityDefences(s) ? { lights: glanceLights(s, id, level, see.own, up) } : {}
       };
     } catch {
       return null;
     }
+  }
+  function glanceLights(s, id, guns2, own, up) {
+    const me = s.human, r = s.regions[id];
+    const level = lightsAt(s, id);
+    const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === "work" && b.item === "lights" && b.region === id).length ?? 0;
+    const o = own ? arsenalOffers(s, id).find((x) => x.key === "work:lights" && x.at === id) : void 0;
+    const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString("en")}.` : "";
+    const line = level <= 0 ? "" : guns2 <= 0 ? `level ${level}: There are no guns for them to light. They help the night fighters a little.` : `level ${level}: ${Math.min(level, guns2)} of the ${guns2} levels of guns are lit by night, under a clear sky`;
+    return {
+      level,
+      lit: Math.min(level, guns2),
+      guns: guns2,
+      radar: radarLays(s, id),
+      going,
+      line,
+      add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? "It is not your month." : short || (o.why ?? "") } : null
+    };
+  }
+  function cityMarks(s, r) {
+    const out = {};
+    const lt = lightsAt(s, r.id), tw = townWorksAt(s, s.regions[r.id]), lost = s.flags[`aal:${r.id}`];
+    if (lt > 0) out.lt = lt;
+    if (tw > 0) out.tw = tw;
+    if (lost !== void 0 && s.turn - lost >= 0 && s.turn - lost <= 1) out.gl = 1;
+    return out;
   }
   function offerSign(s, key7, kind) {
     const [group, item = ""] = key7.split(":");
@@ -114715,7 +115086,7 @@
     if (group === "para") return "para";
     if (group === "air") return item;
     if (group === "ship") return item === "cv" || item === "ss" || item === "tp" ? item : "hull";
-    return { factory: "factory", fort: "defence", yard: "hull", aa: "aa", field: "ftr", strip: "ftr", repair: "wrench" }[item] ?? "scaffold";
+    return { factory: "factory", fort: "defence", yard: "hull", aa: "aa", lights: "lights", field: "ftr", strip: "ftr", repair: "wrench" }[item] ?? "scaffold";
   }
   function glanceCan(s, id, up) {
     const me = s.human;
@@ -114823,6 +115194,13 @@
   }
   var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);
   var goOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), false);
+  function flightLights(l) {
+    const out = {};
+    if (l.level > 0) out.sl = l.level;
+    if (l.cloud) out.cloud = 1;
+    if (l.lit > 0) out.lit = l.lit;
+    return out;
+  }
   var lastAirReport = (s) => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
   function raidsSince(s, since, turns2, skipNat = null) {
     const flights = [], notes = [], focus = [];
@@ -114852,7 +115230,8 @@
             meetFrom: first2 && riser ? riser.base : -1,
             loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
             night: byNight,
-            ...lightGuns && a.bmr >= 1 ? { light: lightGuns } : {}
+            ...lightGuns && a.bmr >= 1 ? { light: lightGuns } : {},
+            ...first2 && cityDefences(s) && r.lights ? flightLights(r.lights) : {}
           });
           first2 = false;
         }
@@ -120510,6 +120889,12 @@ ${standing5}`,
       }
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "citydefencesrule") {
+      setCityDefences(s, part[1] === "on");
+      ok2 = true;
+      note4 = cityDefencesOn(s) ? "Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control's radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months, and the town's heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it." : "Off, the guns are as good by night as by day, and a town is only as strong as its walls and forts.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "settledtownsrule") {
       setSettledTowns(s, part[1] === "on");
       ok2 = true;
@@ -121868,6 +122253,11 @@ ${standing5}`,
     setTownQueue(s, !!on2);
     return { on: townQueueOn(s) };
   };
+  globalThis.TC.cityDefences = (on2) => {
+    const s = game();
+    setCityDefences(s, !!on2);
+    return { on: cityDefencesOn(s) };
+  };
   globalThis.TC.columns = (on2) => {
     const s = game();
     const set = setColumns(s, !!on2);
@@ -121940,6 +122330,10 @@ ${standing5}`,
     townqueuerule: (s) => {
       setTownQueue(s, true);
       return townQueueOn(s);
+    },
+    citydefencesrule: (s) => {
+      setCityDefences(s, true);
+      return cityDefencesOn(s);
     },
     columns: (s) => setColumns(s, true),
     "logistics:lorryShift": (s) => setLogistics(s, "lorryShift", true),
