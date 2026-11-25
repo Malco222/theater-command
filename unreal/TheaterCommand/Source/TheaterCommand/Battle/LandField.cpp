@@ -3727,6 +3727,9 @@ namespace LandField
 				const size_t Was = L.size();
 				Plant(H.KitB, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(1.0, 1.0, 1.0));
 				if (L.size() > Was) L.back().Z = static_cast<float>(H.Floor - 0.1); // (its plinth on the highest ground under it)
+				// (the trial "houses": a desert house's yard is its own floor of beaten earth, laid just over the highest ground
+				// under it, its walls run down past the ground's fall)
+				if (L.size() > Was && H.Model >= 0 && H.Model < static_cast<int>(HouseModels.size()) && HouseModels[static_cast<size_t>(H.Model)].Kind == 10) L.back().Z = static_cast<float>(H.Floor + 0.03);
 			}
 			RegionHost Host(*this, false);
 			Rg->Plants(Host);
@@ -7119,9 +7122,9 @@ namespace LandField
 			M.FarFrom = 300.0f;
 			M.Class = BaseMesh::Draw::House;
 			static const char* const Hurts[4] = { "Whole", "RoofHole", "Gable", "Shell" };
-			static const char* const Kinds[10] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba", "Khata", "Burnt" };
-			const int Kd = std::clamp(HouseModels[K].Kind, 0, 9);
-			const char* const Roofs = Kd == 9 ? (HouseModels[K].Roof == 1 ? "Clay" : "Logs") : Kd >= 7 ? (HouseModels[K].Roof == 1 ? "Thatch" : "Plank") : (HouseModels[K].Roof == 1 ? "Tile" : "Slate");
+			static const char* const Kinds[11] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba", "Khata", "Burnt", "Desert" };
+			const int Kd = std::clamp(HouseModels[K].Kind, 0, 10);
+			const char* const Roofs = Kd == 10 ? (HouseModels[K].Roof == 1 ? "Mud" : HouseModels[K].Roof == 2 ? "Two" : "Lime") : Kd == 9 ? (HouseModels[K].Roof == 1 ? "Clay" : "Logs") : Kd >= 7 ? (HouseModels[K].Roof == 1 ? "Thatch" : "Plank") : (HouseModels[K].Roof == 1 ? "Tile" : "Slate");
 			M.Name = std::string(Kinds[Kd]) + Roofs + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
 		}
 		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not

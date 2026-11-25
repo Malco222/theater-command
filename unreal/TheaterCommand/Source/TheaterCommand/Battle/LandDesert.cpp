@@ -580,6 +580,15 @@ namespace LandScape
 				default: return nullptr;
 				}
 			}
+			// (the trial "houses": the town's flat-roofed houses at the vehicles' detail, LandHouse's Kind 10: limewashed, its
+			// bare mud for the mud brick ones, or its main room of two storeys)
+			bool KitHouse(int K, LandHouse::Spec& Out) const override
+			{
+				if (K != KHouse && K != KHouseStone && K != KHouseTwo) return false;
+				Out.Kind = 10;
+				Out.Roof = K == KHouseStone ? 1 : K == KHouseTwo ? 2 : 0;
+				return true;
+			}
 			void KitLook(int K, LandField::BaseMesh& M) const override
 			{
 				auto Stands = [&M](float Mid, float Half, float Across, float Trunk, float Far) {
