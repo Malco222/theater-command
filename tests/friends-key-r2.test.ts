@@ -1,14 +1,14 @@
 // Supply keeps each country's friends among the holders from one call to the next while friendsKeyOf (game.ts) is
-// the same: it names everything allied() reads of the war. These tests stop a later hand that teaches allied()
-// something new without teaching the key. Every read allied() makes of the game is recorded on the whole-world
-// chart, where the far side's client ties are read too, and each must be one the key also reads; and each thing the
-// key names, changed, changes the key.
+// the same, and its sea lanes' answers about seas that have not changed: it names everything allied() and atWar()
+// read of the war. These tests stop a later hand that teaches either something new without teaching the key. Every
+// read the two make of the game is recorded on the whole-world chart, where the far side's client ties are read too,
+// and each must be one the key also reads; and each thing the key names, changed, changes the key.
 import { describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => { (globalThis as { TC_FAR?: unknown }).TC_FAR = 1; });
 
 import { CLIENTS } from '../src/campaign/far';
-import { allied, createGame, friendsKeyOf, setWar } from '../src/campaign/game';
+import { allied, atWar, createGame, friendsKeyOf, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
 import { farOn } from '../src/campaign/world';
@@ -40,17 +40,21 @@ const readsOf = (g: Game, ask: (seen: Game) => void): Set<string> => {
 
 const wide = (seed: number): Game => startOpen(createGame(seed, null));
 
-describe("supply's kept friends: friendsKeyOf names everything allied() reads", () => {
-  it('on the whole-world chart, every read allied() makes, in peace and in war, is one the key makes too', () => {
+describe("supply's kept friends and lanes: friendsKeyOf names everything allied() and atWar() read", () => {
+  it('on the whole-world chart, every read allied() and atWar() make, in peace and in war, is one the key makes too', () => {
     const g = wide(11);
     expect(farOn(g)).toBe(true);
     expect(Object.keys(CLIENTS).length).toBeGreaterThan(0); // (the far side's ties are asked: not an empty test)
     const ids = [...Object.keys(g.nations), '', 'nobody'];
-    const asks = (seen: Game): void => { for (const a of ids) for (const b of ids) allied(seen, a, b); };
+    const real = Object.keys(g.nations);
+    const asks = (seen: Game): void => {
+      for (const a of ids) for (const b of ids) allied(seen, a, b);
+      for (const a of real) for (const b of ids) atWar(seen, a, b);
+    };
     const key = readsOf(g, (seen) => friendsKeyOf(seen));
     const check = (): void => {
       const missing = [...readsOf(g, asks)].filter((k) => !key.has(k));
-      expect(missing, `allied() reads what friendsKeyOf does not: ${missing.join(', ')}`).toEqual([]);
+      expect(missing, `allied() or atWar() reads what friendsKeyOf does not: ${missing.join(', ')}`).toEqual([]);
     };
     check();
     // A client at war with its patron's enemies and with its patron, and a patron's enemy fallen: tieHolds' other turns.
