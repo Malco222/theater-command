@@ -207,7 +207,10 @@ fi
 # line, is not seen; which function a write stands in is held too: the three noughts put in the tick instead, the
 # clock begins again every frame and the rule is blind as it was); that a stale reading is told as none, and that
 # only a frame that was read keeps the reading fresh; and in the tick, that it hands ReadDark the frame's length and
-# that this is the frame's length. Not held: the rest of ReadDark, and the frame grabber.)
+# that this is the frame's length. Not held: the rest of ReadDark, and the frame grabber; how often, and from where,
+# StartDarkRead() is called (called from the tick each frame it would set the clock to nought each frame, as surely
+# as the three noughts written there); and what the engine's preprocessor makes of the lines, which are read here as
+# text: a write under an "#if" branch that is never compiled is counted, and one put in by a macro is not seen.)
 code_of "$SRC/Battle/LandBattle.cpp" > "$CODE/LandBattle.cpp"
 DARK_BODY="$(sed -n '/^void ALandBattle::ReadDark(double Real)/,/^}/p' "$CODE/LandBattle.cpp" | sed -e 's/^[[:space:]]*//' | grep -v '^$' || true)"
 DARK_WANT="void ALandBattle::ReadDark(double Real)

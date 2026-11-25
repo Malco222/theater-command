@@ -476,8 +476,8 @@ private:
 		bool bNear = true;
 		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
 		bool bWhileManned = false;
-		/** A wireless aerial's length from its mounting, metres (0: any other body): put away near the lens, and for
-		 * the whole of the film's ride on her (DrawArmour, LandEye::AerialShown). */
+		/** A wireless aerial's length from its mounting, metres (0: any other body): put away near the picture's eye,
+		 * and for the whole of the film's ride on her while the film is the picture (DrawArmour, LandEye::AerialShown). */
 		double AerialLong = 0.0;
 		double SootShown = 0.0;
 		/** TK1: whether its far level is a section of its own (a body the crowd merges has none), and whether her
@@ -852,7 +852,9 @@ private:
 	 * is posed (a man more than 80 m from HIS eye as his picture sees him, and from the top view that is every man, is
 	 * the far figure in the bank's poses in the window too, however close the film's own lens stands) and his shade
 	 * (none past 150 m of his eye); the vehicles past 140 m of his eye drawn as far ones, grown in his high view, with
-	 * their barrels' sticks and flatter ink; the effects kit, which lays only what is on his own screen, thinned by
+	 * their barrels' sticks and flatter ink; a vehicle's wireless aerial, put away by how near HIS eye stands to it
+	 * (DrawArmour), so a tank the film rides keeps hers before the film's lens, the thin line through the picture
+	 * that the film as the whole picture no longer has; the effects kit, which lays only what is on his own screen, thinned by
 	 * his distance, its puffs in his lens's plane (a film shot outside his picture has no smoke, bursts, flashes or
 	 * tracers; under his top view the puffs lie flat); and the near ground's detail and grass, laid round his eye.
 	 * All of it goes by how far the film's subject is from his own eye and picture, not by how high he stands: least

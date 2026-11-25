@@ -96,11 +96,15 @@ namespace LandEye
 	 * it away, as a film crew stows the aerial of the tank its camera rides: how much of a vehicle's aerial is drawn,
 	 * 1 the whole of it down to 0 not at all, by how far the picture's eye stands from the nearest point of it. Within
 	 * AerialAway none; from AerialWhole all of it; between them it is drawn that share of its length from its foot
-	 * (it runs out of its mounting as the eye draws off, eased at both ends, so nothing appears or goes at a stroke;
-	 * the longest in the kit, 2.5 m, never stands through more than 24 degrees of the picture, about half the height
-	 * of the film's near lenses). bRidden: the vehicle the film's ride is on (RiddenBy): none of hers for the whole
-	 * shot, however far back the ride stands. Foot: where it is mounted, a field point; Long: its length, taken as
-	 * standing upright (it leans and whips a hand or two).
+	 * (it runs out of its mounting as the eye draws off, eased at both ends, so by the eye's own going nothing
+	 * appears or goes at a stroke). The longest in the kit, 2.5 m, is then never more than about 24 degrees long to
+	 * the eye: looked straight at, a little over half the picture's height through the general's nearest lens (44
+	 * degrees) and under half through the ride's; through a narrower lens, or standing at the picture's side, where
+	 * a flat picture draws everything taller, it takes more. bRidden: the vehicle the film's ride is on (RiddenBy):
+	 * none of hers for the whole shot, however far back the ride stands. Foot: where it is mounted, a field point;
+	 * Long: its length, taken as standing upright (it leans and whips a hand or two). The picture's eye alone: the
+	 * film in its corner window (LandBattle.h, CornerLens) is drawn from the field laid for his own eye, and there a
+	 * ridden tank's aerial stands before the film's lens as it did.
 	 */
 	constexpr double AerialAway = 3.0, AerialWhole = 6.0;
 	double AerialShown(const Vec& Eye, const Vec& Foot, double Long, bool bRidden);

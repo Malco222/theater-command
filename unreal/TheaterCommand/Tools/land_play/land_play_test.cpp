@@ -1980,17 +1980,19 @@ int main(int argc, char** argv)
 
 	// The tanks' wireless aerials near the lens (Brian's picture of 25 November, 16:35Z: the film riding behind a
 	// Sherman's turret, her own aerial a thin dark line through the whole picture). The recording says nothing of an
-	// aerial, so every tank is given the Sherman's own as her model has it: mounted 0.97 m behind her turret's middle
-	// and 0.48 m left of it, 2.5 m up, 2.27 m long, turning with the turret. Each frame of the film, of the aerials
+	// aerial, so every tank is given the Sherman's own as her model has it: on her turret, 1.12 m behind its ring's
+	// middle and 0.48 m left of it (the ring 0.15 m ahead of her own middle), 2.5 m up, 2.27 m long, turning with the
+	// turret about its ring; upright, her hull's pitch and roll left out. Each frame of the film, of the aerials
 	// within AerialWhole of the lens: how much of the picture's height the one standing through most of it takes,
-	// drawn whole (as it was) and drawn as LandEye::AerialShown has the scene draw it.
+	// drawn whole (as it was) and drawn as LandEye::AerialShown has the scene draw it; and what the rule did to them
+	// (the ridden tank's own put away; another's gone, within AerialAway; another's drawn short, between the two).
 	struct WireCount
 	{
-		long Frames = 0, Near = 0, PutAway = 0, HalfWhole = 0, HalfShown = 0, RideWhole = 0;
+		long Frames = 0, Near = 0, RideAway = 0, Gone = 0, Short = 0, HalfWhole = 0, HalfShown = 0, RideWhole = 0;
 		double MostWhole = 0.0, MostShown = 0.0;
 	};
 	WireCount Wires;
-	const double WireBack = 0.97, WireLeft = 0.48, WireUp = 2.5, WireLong = 2.27;
+	const double WireRing = 0.15, WireBack = 1.12, WireLeft = 0.48, WireUp = 2.5, WireLong = 2.27;
 	// (the share of the picture's height a rod from A to B stands through, the part of it inside the picture's width;
 	// the picture 16 wide for 9 high, the lens's roll left out)
 	auto ThroughPicture = [](const LandEye::Pose& P, const Vec& A, const Vec& B)
@@ -2071,7 +2073,7 @@ int main(int argc, char** argv)
 			// (the tanks' wireless aerials near the lens)
 			const int Ridden = LandEye::RiddenBy(Pose);
 			double Whole = 0.0, Shown = 0.0;
-			bool bNear = false, bAway = false, bRideWhole = false;
+			bool bNear = false, bRideAway = false, bGone = false, bShort = false, bRideWhole = false;
 			for (size_t K = 0; K < Rec.Tracks.size(); ++K)
 			{
 				const LandFeed::Track& Tr = Rec.Tracks[K];
@@ -2080,21 +2082,27 @@ int main(int argc, char** argv)
 				if (std::hypot(S.X - Pose.Eye.X, S.Y - Pose.Eye.Y) > LandEye::AerialWhole + 2.0) continue;
 				double Turret = S.F;
 				if (const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle); C && C->bAim) Turret = LandFeed::FacingTo(S.X, S.Y, C->AimX, C->AimY);
+				// (a facing F looks along (sin F, cos F), its left hand (-cos F, sin F): LandFeed::FacingTo)
 				const double Sn = std::sin(Turret), Cs = std::cos(Turret);
-				const Vec Foot(S.X - WireBack * Sn - WireLeft * Cs, S.Y - WireBack * Cs + WireLeft * Sn, GroundAt(S.X, S.Y) + WireUp);
+				const Vec Foot(S.X + WireRing * std::sin(S.F) - WireBack * Sn - WireLeft * Cs, S.Y + WireRing * std::cos(S.F) - WireBack * Cs + WireLeft * Sn, GroundAt(S.X, S.Y) + WireUp);
 				const double Beside = std::clamp(Pose.Eye.Z - Foot.Z, 0.0, WireLong);
 				if ((Pose.Eye - Vec(Foot.X, Foot.Y, Foot.Z + Beside)).Length() >= LandEye::AerialWhole) continue;
 				bNear = true;
-				const double Part = LandEye::AerialShown(Pose.Eye, Foot, WireLong, static_cast<int>(K) == Ridden);
-				bAway = bAway || Part < 1.0;
+				const bool bHers = static_cast<int>(K) == Ridden;
+				const double Part = LandEye::AerialShown(Pose.Eye, Foot, WireLong, bHers);
+				bRideAway = bRideAway || bHers;
+				bGone = bGone || (!bHers && Part <= 0.0);
+				bShort = bShort || (!bHers && Part > 0.0 && Part < 1.0);
 				const double Through = ThroughPicture(Pose, Foot, Foot + Vec(0.0, 0.0, WireLong));
 				Whole = std::max(Whole, Through);
-				bRideWhole = bRideWhole || (static_cast<int>(K) == Ridden && Through > 0.5);
+				bRideWhole = bRideWhole || (bHers && Through > 0.5);
 				if (Part > 0.0) Shown = std::max(Shown, ThroughPicture(Pose, Foot, Foot + Vec(0.0, 0.0, WireLong * Part)));
 			}
 			++Wires.Frames;
 			Wires.Near += bNear ? 1 : 0;
-			Wires.PutAway += bAway ? 1 : 0;
+			Wires.RideAway += bRideAway ? 1 : 0;
+			Wires.Gone += bGone ? 1 : 0;
+			Wires.Short += bShort ? 1 : 0;
 			Wires.HalfWhole += Whole > 0.5 ? 1 : 0;
 			Wires.HalfShown += Shown > 0.5 ? 1 : 0;
 			Wires.RideWhole += bRideWhole ? 1 : 0;
@@ -2829,7 +2837,7 @@ int main(int argc, char** argv)
 		100.0 * ES.ScreenMost, 100.0 * ScreenedShare, 100.0 * ES.ScreenLeave, 100.0 * LensScreenedLeave / std::max(1, LensLooks), 100.0 * ES.ScreenLeave, LongestScreened, LongestScreenedAt);
 	if (ScreenedShare > 0.05) Fault("the picture was screened by things more than 5% of the time");
 	if (LongestScreened > 1.0) Fault("a shot stayed screened by things for over a second");
-	double MostAnywhere = 0.0;
+	double MostStraight = 0.0, MostAside = 0.0;
 	{
 		// (the rule's own figures: none of it within AerialAway of the rod's nearest point, all of it from AerialWhole,
 		// never less of it the farther off and never a step; none of the ridden tank's at any distance; the ride is
@@ -2861,8 +2869,12 @@ int main(int argc, char** argv)
 		if (LandEye::RiddenBy(Ride) != 7 || LandEye::RiddenBy(Beside) != -1) bRule = false;
 		if (!bRule || Step > 0.006) Fault("the wireless aerial's rule is not as it says (none of it within AerialAway, all from AerialWhole, never less the farther off, no step, none of the ridden tank's, the ride the tank shot alone)");
 		// (and its picture, whatever tanks this recording's film came near: the longest aerial in the kit, 2.5 m,
-		// looked straight at from every distance out to 9 m and every height from a metre under its foot to a metre
-		// over its tip, through the narrowest of the near lenses, the general's 44 degrees)
+		// LOOKED STRAIGHT AT, the lens turned to the nearest point of it, from every distance out to 9 m and every
+		// height from a metre under its foot to a metre over its tip, through the general's near lens, 44 degrees. That
+		// look alone is held. The same lens turned aside until the aerial stands at the picture's side, where a flat
+		// picture draws everything taller, is measured beside it and not held; nor is a narrower lens than his, which
+		// draws it taller in proportion: what the film's own lenses made of the aerials it came near is the count above)
+		const double HalfWide = std::atan(std::tan(22.0 * 3.14159265358979323846 / 180.0) * 16.0 / 9.0);
 		for (int H = 1; H <= 180; ++H)
 		{
 			for (int Z = -4; Z <= 14; ++Z)
@@ -2872,13 +2884,24 @@ int main(int argc, char** argv)
 				Lens.Look = Foot + Vec(0.0, 0.0, std::clamp(0.25 * Z, 0.0, 2.5));
 				Lens.Fov = 44.0;
 				const double Part = LandEye::AerialShown(Lens.Eye, Foot, 2.5, false);
-				if (Part > 0.0) MostAnywhere = std::max(MostAnywhere, ThroughPicture(Lens, Foot, Foot + Vec(0.0, 0.0, 2.5 * Part)));
+				if (Part <= 0.0) continue;
+				const Vec Tip = Foot + Vec(0.0, 0.0, 2.5 * Part);
+				MostStraight = std::max(MostStraight, ThroughPicture(Lens, Foot, Tip));
+				// (the look turned about the upright through the eye, by 19 steps out to just inside the picture's side)
+				const Vec Flat = Lens.Look - Lens.Eye;
+				for (int T = 1; T <= 19; ++T)
+				{
+					const double Turn = HalfWide * 0.999 * T / 19.0;
+					LandEye::Pose Aside = Lens;
+					Aside.Look = Lens.Eye + Vec(Flat.X * std::cos(Turn) - Flat.Y * std::sin(Turn), Flat.X * std::sin(Turn) + Flat.Y * std::cos(Turn), Flat.Z);
+					MostAside = std::max(MostAside, ThroughPicture(Aside, Foot, Tip));
+				}
 			}
 		}
 	}
-	std::printf("\nwireless aerials (the Sherman's own stood on every tank, %.2f m long): the lens within %.0f m of one in %.1f%% of the film's frames; drawn whole, as they were, one stood through over half the picture's height in %ld frames (%.1f s; %ld of them the ridden tank's own), %.0f%% of it at the most; put away near the lens (none of one within %.0f m, none of the ridden tank's, in %ld frames) %ld frames, %.0f%% at the most; the longest in the kit, 2.5 m, looked at through a 44 degree lens from anywhere, %.0f%% at the most",
-		WireLong, LandEye::AerialWhole, 100.0 * Wires.Near / std::max(1L, Wires.Frames), Wires.HalfWhole, Wires.HalfWhole * Dt, Wires.RideWhole, 100.0 * Wires.MostWhole, LandEye::AerialAway, Wires.PutAway, Wires.HalfShown, 100.0 * Wires.MostShown, 100.0 * MostAnywhere);
-	if (Wires.MostShown > 0.6 || MostAnywhere > 0.6) Fault("a wireless aerial near the lens stands through most of the picture's height (it is to be put away there: LandEye::AerialShown)");
+	std::printf("\nwireless aerials (the Sherman's own stood on every tank, %.2f m long): the lens within %.0f m of one in %.1f%% of the film's frames; drawn whole, as they were, one stood through over half the picture's height in %ld frames (%.1f s; %ld of them the ridden tank's own), %.0f%% of it at the most; put away near the lens (the ridden tank's own in %ld frames, another's gone within %.0f m in %ld, another's drawn short in %ld), one stood through over half of it in %ld frames, %.0f%% at the most; the longest in the kit, 2.5 m, looked straight at through a 44 degree lens from any place, %.0f%% at the most (turned to the picture's side %.0f%%, not held)",
+		WireLong, LandEye::AerialWhole, 100.0 * Wires.Near / std::max(1L, Wires.Frames), Wires.HalfWhole, Wires.HalfWhole * Dt, Wires.RideWhole, 100.0 * Wires.MostWhole, Wires.RideAway, LandEye::AerialAway, Wires.Gone, Wires.Short, Wires.HalfShown, 100.0 * Wires.MostShown, 100.0 * MostStraight, 100.0 * MostAside);
+	if (Wires.MostShown > 0.6 || MostStraight > 0.6) Fault("a wireless aerial near the lens stands through most of the picture's height (it is to be put away there: LandEye::AerialShown)");
 	Film.Report("this run");
 	{
 		int Men = 0;

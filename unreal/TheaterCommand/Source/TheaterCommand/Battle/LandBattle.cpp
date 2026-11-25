@@ -5088,12 +5088,14 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 	// A wireless aerial near the lens is put away (Brian's picture of 25 November 16:35Z: the film riding behind a
 	// Sherman's turret, her own aerial 2 to 4 m before the lens, a thin dark line through the whole picture): none of
 	// it drawn within 3 m of the picture's eye, all of it from 6 m, between them that share of its length from its
-	// mounting; and none of hers while the film rides her, the film's picture being drawn (as the picture, or in its
-	// corner window, whose own lens counts as the picture's does). LandEye::AerialShown, played in the cloud test.
-	// "-TheaterLandAerialsNear": drawn whole at any distance, as before, for the Mac's with and without.
+	// mounting; and none of hers while the film rides her and the film is the picture. LandEye::AerialShown, played
+	// in the cloud test. By the picture's own eye alone: with his own view the picture, the film in its corner
+	// window is drawn from the field laid for his eye (LandBattle.h, CornerLens), and a tank it rides keeps her
+	// aerial before its lens. "-TheaterLandAerialsNear": drawn whole at any distance, as before, for the Mac's with
+	// and without.
 	static const bool bAerialsNear = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandAerialsNear"));
-	const bool bOwnPicture = S.General.bOn && !S.General.bFilm;
-	const int RiddenTrack = (!bOwnPicture || bCornerLens) ? LandEye::RiddenBy(S.FilmPose) : -1;
+	const bool bOwnPicture = S.bGeneralEye && !S.General.bFilm;
+	const int RiddenTrack = bOwnPicture ? -1 : LandEye::RiddenBy(S.FilmPose);
 	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
 	int32 SootRoom = 40000; // TK1 (soot)
 	for (FBodyDrawn& D : BodiesDrawn)
@@ -5115,10 +5117,6 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			const LandPlay::Vec AerialFoot(Mounting.At.X, Mounting.At.Y, Mounting.At.Z);
 			const bool bRidden = RiddenTrack >= 0 && static_cast<size_t>(D.Vehicle) < S.TrackOfVehicle.size() && S.TrackOfVehicle[static_cast<size_t>(D.Vehicle)] == RiddenTrack;
 			Aerial = LandEye::AerialShown(EyeAt, AerialFoot, D.AerialLong, bRidden);
-			if (bOwnPicture && bCornerLens)
-			{
-				Aerial = FMath::Min(Aerial, LandEye::AerialShown(S.FilmPose.Eye, AerialFoot, D.AerialLong, bRidden));
-			}
 		}
 		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned && Aerial > 0.0;
 		Mesh->SetVisibility(bShown);
