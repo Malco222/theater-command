@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0b0c1443 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6b3ce0ef 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -882,6 +882,8 @@
     legions: false,
     _winChance: "The honest win chance on land (release 2; auto-resolve fix 1, Brian's yes of 23 November 2026 07:11Z and the design director's orders of 07:06Z, 07:27Z and 10:14Z; data/campaign/winchance.json). Its own step inside Units decide: it needs 'unitsDecide' too, and stays off, card and field both, until the 3D field's win share by odds band is within a tenth of the card's curve. Off: every battle throws today's luck and nothing changes. On: the grand campaigns opened from now on with Units decide carry the flag 'winChance' as well, and an attack in the field carries the ground at the record's rate for its odds (wider luck, losses unchanged). A test turns it on for its own games by setting both flags; a run outside the browser by TC_UNITS=1 TC_WINCHANCE=1.",
     winChance: false,
+    _spread: "The field spread (release 2; rules-builder/release2/field-spread/form.md, ruled by the design director 24 November 2026 19:47Z, 'Go ahead with step 1'; src/campaign/spread.ts, data/campaign/spread.json): one draw per battle, keyed on the field ticket's own seed and attempt. It holds the fortune share the field already fights on and one break point per side, the share of its power a side will lose before it quits, drawn about a level that comes from the side's own units (organisation, morale, experience, the general), never from a nation's flag or the date. Its own step inside Units decide: it needs 'unitsDecide' too, and is never on with 'winChance' (setSpread refuses the pair). Bench-only through the form's steps 1-4: nothing reads this key, no grand start offers it, and only a measuring harness sets the flag (setSpread) or lays the draw on its own tickets (spreadKeys). At step 5, if the six bands pass, card and field switch together. Off: no ticket carries reckoning.spread, no die is thrown on the campaign's dice or the field's, and every war and every field is the one without it.",
+    spread: false,
     _unitsDecide: "Units decide (release 2; Brian 23 November 2026 07:11Z and 07:13Z, the core theme; the design director's audit of 07:17Z): battles come from the units each side built, researched and trained, never from a nation's flag or the date (src/campaign/units.ts). Off: nothing behind it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'unitsDecide' (set at a campaign's start only). Its steps so far: the convoy war by cause (data/campaign/convoycause.json). A run outside the browser can force it: TC_UNITS=1 or TC_UNITS=0.",
     unitsDecide: false,
     _nicknames: "Earned nicknames (release 2; Brian's yes of 23 November 2026 12:05Z; src/campaign/nicknames.ts, data/campaign/nicknames.json): a corps that wins several hard fights is given a name by its own army, in its nation's own style, and the name is shown on its flag. Every nation alike; a name changes no number. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'nicknames' (the player can also turn it on or off in a campaign under way: a name is only a name). A run outside the browser can force it: TC_NICKNAMES=1 or TC_NICKNAMES=0.",
@@ -66786,6 +66788,482 @@
     return (Math.atan2((x1 - x0) * k, -(y1 - y0)) * 180 / Math.PI + 360) % 360;
   }
 
+  // ../../data/campaign/spread.json
+  var spread_default = {
+    _about: "The field spread (release 2; rules-builder/release2/field-spread/form.md, ruled by the design director 24 Nov 2026 19:47Z, field-spread/rulings/dd-1947Z.md; stage.json 'spread', bench-only through the form's steps 1-4). One draw per battle on the ticket's own seed and attempt (src/campaign/spread.ts): the fortune share the field already fights on, and one break point W per side, the share of its power a side will lose before it quits, in place of the field's LAND.spent 0.13 / 0.18 (sim.ts spentOf). The field reads each key only where the ticket carries it (src/battle/land/spread.ts). The switch (spreadOn) reads false beside the honest win chance even where both flags were set by hand, besides setSpread refusing the pair (G). setSpread has no first-month check: the bench sets it on saved positions from the four wars (G). The fortune share is held by the draw (spreadDraw) and not written on the ticket: the field draws the same share on the same key itself (sim.ts fortune), and step 5's card reads it from spreadDraw (G). Marks: F from the source, word for word; L literature; D derived by a named script (scratchpad fs/final, fsv/, fsx/; form s10.7); M from memory; G a guess, waiting on the measure.",
+    _level: "L: the middle of a side's draw, 8%: the historian's reading of McQuie, 'in most cases, a force has quit when its casualties reached less than ten percent per battle', as 6-10% (dd-reads-1124.md:37, 66), ruled as the centre at BO:2124 (design-director/round-2-build-order.md). One distribution for attack and defence alike (choice 2 (A), DD 19:47Z). Form s2a.",
+    level: 0.08,
+    _tail: "L: battalions fought to about 40% (Clark 1954, Movchin 1928; dd-reads-1124.md:59-61, 65). G: that 40% sits at the 97.5th percentile, z 1.96 (at the 95th the spread would be 0.98, at the 99th 0.69; fs/final/dist.py). So the spread at one level is ln(0.40 / 0.08) / 1.96 = 0.8211 (D, dist.py; the form's 0.821), as the bench drew it (fs/final/benchq.ts SIG). Lognormal: the historian's reading (dd-reads-1124.md s2).",
+    tail: { W: 0.4, z: 1.96 },
+    _hold: "Each drawn point is held to [0.01, 0.40]: 0.40 is the tail (L, above), 0.01 is G (form s2a). At one level 2.5% of draws sit at the cap (D, dist.py).",
+    hold: [0.01, 0.4],
+    _residual: "D (fsx/brk/spread.py): the spread no cause explains, McQuie's 0.821 with the causes' spread taken out in quadrature. 'staying': the level by causes alone, 0.221, so sqrt(0.821^2 - 0.221^2) = 0.791. Read with N and no ledger, and by the ledger with every part of m at 1 (choice 13 (B); DD 19:47Z: '(B) at its own residual 0.791: re-run, don't reuse 0.766'). 'ledger': staying and all five parts of m (flank, rear, fire, ambush and air: causes.ts reads air harm on a block the tick's blows struck at their damage-weighted weight, elsewhere at the strike's own, as the field's ledger does with the air part at the army), 0.296, so 0.766. 'flankRear': staying and m's flank and rear parts alone, the set-up the DD ruled for 13 (A) (fire, ambush and air to 1), 0.274 on ln(W0 / (1 + aspect/loss)), the same 944 sides of fsx/brk band-cause-s0-k0.0492 rows by spread.py's rule on the aspect part alone (rv/partial.py, which gives 0.791 and 0.766 again from those rows), so sqrt(0.821^2 - 0.274^2) = 0.774. Each set of parts read at the army draws at its own (DD 19:47Z: 're-run, don't reuse 0.766'): none 0.791, flank and rear 0.774, all five 0.766. Any other set (a part alone, for the gate; those rows do not split flank from rear) has none derived, and spreadKeys refuses it unless the harness gives one (residualOf). Its source is the field's own ledger trace (sim.ts ledgerTrace: each side's loss at m = 1, and what each part's own weight adds, flank and rear apart), by spread.py's rule on ln(W0 / (1 + the set's adds / loss)), re-run on the ledger as built, never reused; exact for a set where no blow carries two of its parts (flank, rear, or both), otherwise the sum of the parts' adds in place of their product (G). Owed from the 16-seed bench before any such arm is read.",
+    residual: { staying: 0.791, ledger: 0.766, flankRear: 0.774 },
+    _ref: "G: the reference army the level is read against (form s2c, fs/final/level.py): organisation 1, morale 0.6, experience 0.3, no general. Its staying, (mor0 - 0.2) / (0.5 x max(0.3, 1 - 0.35 xp - 0.03 general)), is 1.609 by the field's own arithmetic (units.ts startNerve; rules.ts nerve; sim.ts suffer). So N is an army's staying over 1.609, and its level is 0.08 x N. The bench's arms divided by 1.626, its geometric-mean army (qsum.py); the two are 1% apart (G). Under N, single blocks read this army for their own nerve (form s2c), and the army ledger's K is the level over this staying, 0.0497. Form 13A had 0.08 / 1.626 = 0.0492; anchoring K so a front-hit army quits at the level is G. N reads each corps' own experience on the ticket, weighted by its share, joiners in; the ledger reads each block's, its divisions' mean (G).",
+    ref: { org: 1, mor: 0.6, xp: 0.3, general: 0 },
+    _move: "D (fs/final/benchsum.cjs on 16 seeds, sum-today-nsym16.txt; form s6): the field reads ln f at c = 0.84 of ln odds, and the break-point ratio at p = 0.54. So the same causes' price leaves the blows by fortune x (Nd/Na)^(p/c), about (Nd/Na)^0.64 (form s2c; choice 1 (A), DD 19:47Z: 'a move counts as one price when the factor taken off the blows is the factor the field reads the level at'). A check, not a source: the nerve draft's p of 0.47 +-0.07 (hlsum.py). Re-measured with the table at step 1b.",
+    move: { p: 0.54, c: 0.84 },
+    _mask: "G (form s8; choice 6 (A), DD 19:47Z): the enemy's bar is shown as the player's staff reads it. It is read against the level his staff reads (the enemy's N where his corps are identified, the reference where not) and held at 0.95 until the enemy breaks. The enemy's draw is never shown: his break cause goes to the other side's player with the shown level as its 'spent' and the shown bar as its 'bar', and its hold fields (holding, held, heldFor, by) read as not reached until he breaks, since they too would tell his draw (G). His 'near breaking' dispatch comes when the bar shown reaches three quarters, never on his true bar, whose moment would tell his draw (G). The mask stays after the battle unless that side broke (G). A small army held at its brink gives ground at its drawn point (sim.ts giveGround): its 'land:gives' dispatch, whose words and moment would tell his draw, is not sent to the other side's player (the log keeps it, blank, as for a block he has not met) (G). The blocks themselves still fall back from that moment, in his sight, and that stands: RULED (A) by the design director, 25 Nov 2026 02:39Z. What a general sees his enemy do on the field is his own sight; the fall-back tells him the point only once it has been reached, a fact of the fight and not a reading of the draw beforehand. The mask covers the staff's reading and the dispatches. A second draw to delay it, and a picture that parts from the fight for a beat, were both refused. One rule both ways: the computer's staff may read the player's blocks falling back at the moment they do, never his drawn point before it.",
+    mask: { hold: 0.95 },
+    _steps: "G (this build): which of step 1b's keys the campaign lays on a ticket under the switch. 'level' lays N, the move and blocks on the reference; 'ledger' lays the army nerve ledger (choice 13). Both stay off until step 1's bench has read the table (form s10.6: step 1, then 1b). The bench lays them on its own tickets (spreadKeys) for 1b's arms.",
+    steps: { level: false, ledger: false },
+    _m: "Choice 13 (A) with the gate (DD 19:47Z): each part of the nerve weight m that a blow carries is read either at the army's ledger (true: the block then reads 1 for it) or at the block as built (false: the ledger reads 1). Weights F: rules.ts:56 guns 1.5; :141 ambush 2 / 2.5; :180-181 machine-gun team 2.5, mortar team 1.8; :184 flank 2 / rear 3; LAND.air.nerve 1. Reading them at the army is G (form 13A). Fire, ambush and air read the winner higher today (17.2% against 14.2%, fsx/brk/tells.py, 8 seeds), so they go to 1 at the army, as the DD ruled, and stay at the block as built, as form s3 has a part that fails the test ('else they stay as built (13 (B))'; a block rule reads neutral only where an army-level term reads the same fact), so no part is priced twice or not at all (G). Flank and rear stand until the 16-seed gate reads them apart (pass mark 2 SE clustered by ticket, G). Every part false is choice 13 (B). The ledger reads each tick's m damage-weighted over its blows (fsx/brk/causes.ts), the block today's per-blow sum (G). Air harm enters the ledger at m = 1 and lands on the block as built, unless the air part is at the army, when the block reads 1 and the ledger reads it as fsx/brk/causes.ts did: at the damage-weighted weight, as built, of the blows that struck that block in the same tick, else (no blow struck it that tick, or it lands outside a tick: handed to the staff, pulled out) at the strike's own weight, the bank's (G). The bank holds what was kept at the summed weight of the tick's blows on that block, so read whole it would weigh the harm by how many blocks fired. The ledger keeps a trace by part, read by nothing in the fight (sim.ts ledgerTrace), with each part's own weight, wherever it is read: air harm's air part at the weight the ledger would read it at. Harm held back for air strikes, and harm a wait's cover spares (hold until relieved), is kept at the blows' weight as built, every part: it lands as air harm, or on the block with that weight and on the ledger at m = 1 (G).",
+    m: { flank: true, rear: true, fire: false, ambush: false, air: false }
+  };
+
+  // ../../src/battle/land/units.ts
+  var startNerve = (org, mor) => Math.min(1, 0.45 + 0.35 * org + 0.2 * (mor ?? 0.6));
+  var ORD3 = (n) => {
+    const s = ["th", "st", "nd", "rd"], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+  var KIND_WORD2 = { inf: "Infantry", mtn: "Mountain", cav: "Cavalry", eng: "Engineers", mot: "Motorized", arm: "Armoured", art: "Artillery", fort: "Fortress" };
+  var TEAM_WORD = { mg: "Machine-Gun Battalion", mor: "Mortar Battalion" };
+  var teamOf = (f) => TEAMS2.includes(f.kind) ? f.kind : void 0;
+  function partsFor(forces, least = LAND2.blocks.least) {
+    const parts2 = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
+    const total = () => parts2.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
+    while (total() < least) {
+      let best = -1, size = 0;
+      parts2.forEach((p2, i) => {
+        if (teamOf(forces[i]) || !p2.some((x) => x.regiment === void 0 && x.divs.length === 1)) return;
+        const each3 = forces[i].share / p2.length;
+        if (each3 > size) {
+          size = each3;
+          best = i;
+        }
+      });
+      if (best < 0) break;
+      const p = parts2[best], j = p.findIndex((x) => x.regiment === void 0 && x.divs.length === 1);
+      p.splice(j, 1, ...Array.from({ length: LAND2.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+    }
+    return parts2;
+  }
+  var BRIGADES = ["UK", "CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
+  function kindWord(nat, k, ym = 0) {
+    if (k === "arm") return nat === "USA" ? "Armored" : nat === "GER" ? "Panzer" : nat === "SOV" || nat === "JAP" ? "Tank" : "Armoured";
+    if (k === "mot") {
+      if (nat === "USA" || nat === "SOV") return "Motorized";
+      if (BRIGADES.includes(nat)) return "Motor";
+      if (nat === "GER") return ym >= 1943 * 12 + 6 ? "Panzergrenadier" : "Motorized";
+      return "Motorised";
+    }
+    if (k === "inf" && nat === "SOV") return "Rifle";
+    if (k === "mtn" && nat === "SOV") return "Mountain Rifle";
+    return KIND_WORD2[k];
+  }
+  function regimentWord(nat, kind, n, i, ym) {
+    const o = ORD3(n);
+    if (kind === "arm") {
+      if (nat === "USA") return `Combat Command ${"ABR"[i] ?? "R"}`;
+      if (nat === "GER") return `Panzer-Regiment ${n}`;
+      if (nat === "SOV") return ym >= 1942 * 12 + 1 ? `${o} Tank Brigade` : `${o} Tank Regiment`;
+      if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
+      return `${o} Tank Regiment`;
+    }
+    const arm2 = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot", ym) : kind === "eng" ? "Engineer" : "Infantry";
+    if (BRIGADES.includes(nat)) return `${o} ${arm2} Brigade`;
+    if (nat === "GER") {
+      const late = ym >= 1942 * 12 + 10;
+      const word3 = kind === "mtn" ? "Gebirgsjäger" : kind === "cav" ? "Reiter" : kind === "mot" ? late ? "Panzergrenadier" : "Infanterie" : kind === "eng" ? "Pionier" : late ? "Grenadier" : "Infanterie";
+      return `${word3}-Regiment ${n}${kind === "mot" && !late ? " (mot.)" : ""}`;
+    }
+    if (nat === "SOV") return `${o} ${kind === "mtn" ? "Mountain Rifle" : kind === "cav" ? "Cavalry" : kind === "mot" ? "Motor Rifle" : kind === "eng" ? "Engineer" : "Rifle"} Regiment`;
+    if (nat === "ITA" && i === 2 && (kind === "inf" || kind === "mtn")) return `${o} Blackshirt Legion`;
+    return `${o} ${arm2} Regiment`;
+  }
+  function armyNames(t, units2, turn2) {
+    const d = turnToDate(turn2), ym = d.year * 12 + d.month + 1;
+    const cut2 = partsFor(t.forces);
+    let j = 0;
+    t.forces.forEach((f, i) => {
+      const team = teamOf(f);
+      const k = team ? "art" : Object.keys(LAND2.speed).includes(f.kind) ? f.kind : "inf";
+      for (const p of cut2[i]) {
+        const u = units2[j++];
+        if (!u || p.regiment === void 0 || team) continue;
+        const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
+        const full = div?.name ?? `${ORD3(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD3(no)} ${kindWord(f.nat, k, ym)}`;
+        const lead2 = /^(\d+)/.exec(full)?.[1];
+        const n = lead2 ? (Number(lead2) - 1) * LAND2.blocks.regiments + p.regiment + 1 : p.regiment + 1;
+        u.short = regimentWord(u.nat, k, n, p.regiment, ym);
+        u.parent = full;
+        u.name = `${u.short}, ${short}`;
+      }
+    });
+  }
+  function makeBlocks(side5, t, power, firstId, least = LAND2.blocks.least, turn2) {
+    const out = [];
+    const ym = turn2 === void 0 ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn2));
+    const cut2 = partsFor(t.forces, least);
+    t.forces.forEach((f, i) => {
+      const team = teamOf(f);
+      const k = team ? "art" : Object.keys(LAND2.speed).includes(f.kind) ? f.kind : "inf";
+      const n = Math.max(1, Math.round(f.divs));
+      const divs = Array.from({ length: n }, (_, d) => {
+        const own = f.divisions?.[d];
+        const no = (f.first ?? 1) + d;
+        return {
+          name: own?.name ?? (team ? `${ORD3(no)} ${TEAM_WORD[team]}` : `${ORD3(no)} ${kindWord(f.nat, k, ym)} Division`),
+          short: own?.short ?? (team ? `${ORD3(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD3(no)} ${kindWord(f.nat, k, ym)}`),
+          str: own?.str ?? f.str,
+          xp: own?.xp ?? f.xp,
+          men: own?.men ?? f.men / n
+        };
+      });
+      const weightOf3 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND2.blocks.regiments : 1);
+      const all = cut2[i].reduce((s, p) => s + weightOf3(p), 0);
+      for (const p of cut2[i]) {
+        const ds = p.divs.map((d2) => divs[d2]);
+        const name = p.regiment !== void 0 ? `${ORD3(p.regiment + 1)} Regiment, ${ds[0].short}` : ds.length === 1 ? ds[0].name : ds.map((d2) => d2.short).join(" and ");
+        const short = p.regiment !== void 0 ? `${ORD3(p.regiment + 1)} Regiment` : ds.length > 1 ? name : ds[0].short;
+        const parent = p.regiment !== void 0 ? ds[0].short : f.name;
+        const [w, d] = team ? LAND2.teams[team].size : LAND2.size[k];
+        const per = team ? LAND2.teams[team].figures : LAND2.figures[k];
+        const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND2.blocks.regiments)) : per;
+        const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
+        const mor0 = startNerve(f.org, f.mor);
+        const share = weightOf3(p) / all;
+        out.push({
+          id: firstId + out.length,
+          side: side5,
+          corps: f.corps,
+          nat: f.nat,
+          kind: k,
+          ...team ? { team } : {},
+          name,
+          short,
+          parent,
+          x: 0,
+          y: 0,
+          face: side5 === "att" ? 0 : Math.PI,
+          str: str0,
+          str0,
+          mor: mor0,
+          mor0,
+          xp: ds.reduce((s, x) => s + x.xp, 0) / ds.length,
+          state: "steady",
+          men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== void 0 ? LAND2.blocks.regiments : 1)),
+          figures0: Math.max(1, Math.ceil(full * str0)),
+          figures: Math.max(1, Math.ceil(full * str0)),
+          tray: full,
+          w,
+          d,
+          act: "idle",
+          speed: 0,
+          power0: power * f.share * share,
+          worth: weightOf3(p),
+          order: null,
+          path: [],
+          dug: !!f.dug,
+          home: [0, 0],
+          still: 99,
+          clear: 99,
+          pinned: false,
+          flankedAt: -99,
+          keepFace: null,
+          met: false,
+          ...f.cross === false ? { dry: true } : {},
+          ...f.wear !== void 0 ? { wear: f.wear } : {},
+          ...f.fresh ? { fresh: f.fresh } : {}
+        });
+      }
+    });
+    return out;
+  }
+  function joinBlocks(t, power, firstId) {
+    const out = [];
+    for (const side5 of ["att", "def"]) {
+      const js = (t[side5].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined > 0 && f.share > 0);
+      if (!js.length) continue;
+      for (const u of makeBlocks(side5, { ...t[side5], forces: js }, power[side5], firstId + out.length, 0, t.turn)) {
+        const j = Math.min(1, js.find((f) => f.corps === u.corps).joined);
+        u.joined = j;
+        u.priced = u.power0;
+        u.power0 = u.priced / j;
+        u.dug = false;
+        out.push(u);
+      }
+    }
+    return out;
+  }
+  var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
+  var MOBILE = ["arm", "mot"];
+  var GAP = 40;
+  function rowsOf2(mine4) {
+    const lines2 = [mine4.filter((u) => FRONT.includes(u.kind)), mine4.filter((u) => MOBILE.includes(u.kind)), mine4.filter((u) => u.kind === "art")];
+    if (!lines2[0].length && lines2[1].length) lines2[0] = lines2[1].splice(0, Math.ceil(lines2[1].length / 2));
+    return lines2;
+  }
+  var rowWidth = (row2) => row2.reduce((s, u) => s + u.w + GAP, -GAP);
+  function bendAt(units2, z, dry) {
+    const att = units2.filter((u) => u.side === "att");
+    const need = (us) => Math.max(0, ...rowsOf2(us).map(rowWidth));
+    const a = need(att.filter((u) => u.dry)), b = need(att.filter((u) => !u.dry)), room2 = z[2] - z[0] - 2 * BEND.clear;
+    const span2 = a + b > 0 ? room2 >= a + b ? a + (room2 - a - b) * a / (a + b) : room2 * a / (a + b) : room2 / 2;
+    return dry === "west" ? z[0] + span2 + BEND.clear : z[2] - span2 - BEND.clear;
+  }
+  function deploy(units2, side5, f) {
+    const mine4 = units2.filter((u) => u.side === side5);
+    const z = f.zones[side5];
+    if (side5 === "att" && f.bend) {
+      const B3 = f.bend, west = B3.dry === "west", inner = (s) => B3.x + s * BEND.clear;
+      const lanes2 = [
+        [mine4.filter((u) => u.dry), west ? 10 : inner(1), west ? inner(-1) : f.w - 10],
+        [mine4.filter((u) => !u.dry), west ? inner(1) : 10, west ? f.w - 10 : inner(-1)]
+      ];
+      for (const [us, lo, hi] of lanes2) if (us.length) drawUp(us, side5, f, (Math.max(lo, z[0]) + Math.min(hi, z[2])) / 2, lo, hi);
+    } else if (f.stream && (f.stream.lie === "up" || f.stream.lie === "shore" && f.stream.side !== "back")) streamLanes(mine4, side5, f);
+    else if (side5 === "def" && f.stream?.lie === "across" && f.stream.join && joinLane(mine4, f)) {
+    } else drawUp(mine4, side5, f, side5 === "def" && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
+    for (const u of mine4) {
+      u.x = Math.min(f.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, u.x));
+      u.y = Math.min(f.h - 40, Math.max(40, u.y));
+      if (f.stream) {
+        for (let k = 0; k < 40 && wetUnder(f, u); k++) u.y += side5 === "att" ? 10 : -10;
+        const y0 = u.y;
+        for (let k = 0; k < 8 && wetUnder(f, u, STREAM.off); k++) u.y += side5 === "att" ? 10 : -10;
+        const onTop = mine4.some((o) => o !== u && Math.abs(o.x - u.x) < (o.w + u.w) / 2 && Math.abs(o.y - u.y) < (o.d + u.d) / 2);
+        if (wetUnder(f, u, STREAM.off) || (side5 === "att" ? u.y > z[3] : u.y < z[1]) || onTop) u.y = y0;
+      }
+      u.home = [u.x, u.y];
+      if (u.dug) digWorks(f, u.x, u.y, u.w, u.d);
+    }
+  }
+  function wetUnder(f, u, off2 = 0) {
+    const hw = u.w / 2 + off2, hd = u.d / 2 + off2, nx = Math.ceil(2 * hw / (f.cell / 2)), ny = Math.ceil(2 * hd / (f.cell / 2));
+    for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
+      const c = Math.floor((u.x - hw + 2 * hw * i / nx) / f.cell), r = Math.floor((u.y - hd + 2 * hd * j / ny) / f.cell);
+      if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
+      const k = GROUNDS[f.ground[r * f.cols + c]];
+      if (k === "water" || k === "bridge" || k === "blown") return true;
+    }
+    return false;
+  }
+  function joinLane(mine4, f) {
+    const J = f.stream.join, z = f.zones.def, y0 = z[1] - 120;
+    const xs = J.course.filter(([x, y]) => y >= y0 && x >= 0 && x <= f.w).map(([x]) => x);
+    if (!xs.length) return false;
+    const clear = J.half * (1 + STREAM.wobble) + f.cell + STREAM.off, west = J.course[0][0] < f.w / 2;
+    const [a, b] = west ? [Math.max(...xs) + clear, f.w - 10] : [10, Math.min(...xs) - clear];
+    const centre = f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
+    drawUp(mine4, "def", f, Math.min(b, Math.max(a, centre)), a, b);
+    return true;
+  }
+  function streamLanes(mine4, side5, f) {
+    const S3 = f.stream, z = f.zones[side5], clear = S3.half * (1 + STREAM.wobble) + f.cell + STREAM.off;
+    const y0 = side5 === "att" ? 0 : z[1] - 120, y1 = side5 === "att" ? z[3] + 120 : f.h;
+    const xs = S3.course.filter(([, y]) => y >= y0 && y <= y1).map(([x]) => x);
+    const lo = Math.min(...xs), hi = Math.max(...xs);
+    const lane = (a, b) => [a, b, Math.max(0, Math.min(b, z[2]) - Math.max(a, z[0]))];
+    const lanes2 = S3.lie === "shore" ? [lo < f.w / 2 ? lane(hi + STREAM.clear, f.w - 10) : lane(10, lo - STREAM.clear)] : [lane(10, lo - clear), lane(hi + clear, f.w - 10)];
+    const open2 = lanes2.filter((l) => l[2] >= 200);
+    const groups = open2.map(() => []), fill8 = open2.map(() => 0);
+    const home = f.town ? open2.findIndex(([a, b]) => f.town.x >= a && f.town.x <= b) : -1;
+    if (home >= 0 && rowWidth(rowsOf2(mine4)[0]) <= open2[home][2]) groups[home].push(...mine4);
+    else for (const u of mine4) {
+      let k = 0;
+      for (let j = 1; j < open2.length; j++) if ((fill8[j] + u.w) / open2[j][2] < (fill8[k] + u.w) / open2[k][2]) k = j;
+      groups[k].push(u);
+      fill8[k] += u.w;
+    }
+    const centre = side5 === "def" && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
+    open2.forEach(([a, b], j) => {
+      if (groups[j].length) drawUp(groups[j], side5, f, Math.min(b, Math.max(a, centre)), a, b);
+    });
+  }
+  function drawUp(mine4, side5, f, cx, lo, hi) {
+    const z = f.zones[side5];
+    const dir = side5 === "att" ? 1 : -1;
+    let front = side5 === "att" ? z[3] - 40 : z[1] + 40;
+    const lines2 = rowsOf2(mine4);
+    if (side5 === "def" && f.streetEdge) {
+      const half = rowWidth(lines2[0]) / 2;
+      const ys2 = f.streetEdge.filter((y, c) => y >= 0 && Math.abs(c * f.cell + f.cell / 2 - cx) <= half).sort((a, b) => a - b);
+      if (ys2.length) front = Math.max(front, ys2[Math.floor(ys2.length / 2)] + LAND2.city.inside);
+      if (f.stream?.front !== void 0) front = Math.min(front, f.stream.front);
+    }
+    const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
+    const wingsAt = (row2) => {
+      const span2 = lines2[0].length * (150 + GAP) / 2;
+      const at4 = row2.map((u, i) => {
+        const left = i % 2 === 0, k = Math.floor(i / 2);
+        return cx + (left ? -1 : 1) * (span2 + 60 + k * (u.w + GAP));
+      });
+      return row2.every((u, i) => at4[i] - u.w / 2 >= x0 && at4[i] + u.w / 2 <= x1) ? at4 : null;
+    };
+    const place2 = (row2, y, wings2) => {
+      const at4 = wings2 ? wingsAt(row2) : null;
+      if (at4) {
+        row2.forEach((u, i) => {
+          u.x = at4[i];
+          u.y = y;
+        });
+        return true;
+      }
+      const width = rowWidth(row2);
+      let x = cx - width / 2;
+      for (const u of row2) {
+        u.x = x + u.w / 2;
+        u.y = y;
+        x += u.w + GAP;
+      }
+      if (lo !== void 0 && hi !== void 0 && row2.length > 0) {
+        const a = row2[0].x - row2[0].w / 2, b = row2[row2.length - 1].x + row2[row2.length - 1].w / 2;
+        const shift = a < x0 ? x0 - a : b > x1 ? x1 - b : 0;
+        for (const u of row2) u.x += shift;
+      }
+      return false;
+    };
+    const held3 = [];
+    if (side5 === "def" && lines2[0].length >= 4) {
+      for (let n2 = Math.max(1, Math.floor(lines2[0].length / 4)); n2 > 0; n2--) {
+        const count4 = (c) => lines2[0].filter((u) => u.corps === c).length;
+        let at4 = -1;
+        for (let i = lines2[0].length - 1; i >= 0; i--) if (at4 < 0 || count4(lines2[0][i].corps) > count4(lines2[0][at4].corps)) at4 = i;
+        held3.unshift(...lines2[0].splice(at4, 1));
+      }
+    }
+    if (lo === void 0 || hi === void 0) {
+      place2(lines2[0], front, false);
+      const wide4 = place2(lines2[1], front - dir * 110, true);
+      if (held3.length) {
+        place2(held3, front - dir * (wide4 || !lines2[1].length ? 110 : 170), false);
+        for (const u of held3) u.reserve = "held";
+      }
+      place2(lines2[2], front - dir * 230, false);
+      return;
+    }
+    const rows = [];
+    const cut2 = (line, at4) => line.forEach((u, i) => {
+      const r = rows[rows.length - 1];
+      if (i > 0 && rowWidth([...r.us, u]) <= x1 - x0) r.us.push(u);
+      else rows.push({ us: [u], at: at4, first: i === 0, wings: false });
+    });
+    cut2(lines2[0], 0);
+    const wide3 = rows.length <= 1 && lines2[1].length > 0 && wingsAt(lines2[1]) !== null;
+    if (wide3) rows.push({ us: lines2[1], at: 110, first: true, wings: true });
+    else cut2(lines2[1], 110);
+    cut2(held3, wide3 || !lines2[1].length ? 110 : 170);
+    for (const u of held3) u.reserve = "held";
+    cut2(lines2[2], 230);
+    const deep = (us) => Math.max(...us.map((u) => u.d));
+    const steps = (gap) => {
+      const ys2 = [];
+      rows.forEach((r, i) => {
+        const behind2 = i ? ys2[i - 1] - dir * (deep(rows[i - 1].us) / 2 + gap + deep(r.us) / 2) : front;
+        ys2.push(!r.first ? behind2 : dir > 0 ? Math.min(front - r.at, behind2) : Math.max(front + r.at, behind2));
+      });
+      return ys2;
+    };
+    const back = dir > 0 ? z[1] : z[3], n = rows.length - 1;
+    const past = (ys2) => n >= 0 && dir * (ys2[n] - back) < deep(rows[n].us) / 2;
+    let ys = steps(GAP);
+    for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
+    rows.forEach((r, i) => place2(r.us, ys[i], r.wings));
+  }
+
+  // ../../src/battle/land/spread.ts
+  var SPREAD = spread_default;
+  function stayingOf(org, mor, xp, general, s) {
+    const N = LAND2.nerve;
+    return (startNerve(org, mor) - N.rout) / (N.perLoss[s] * Math.max(0.3, 1 - N.xp * xp - N.general * general));
+  }
+  var refStaying = (s) => stayingOf(SPREAD.ref.org, SPREAD.ref.mor, SPREAD.ref.xp, SPREAD.ref.general, s);
+  var REF_NERVE = {
+    mor0: startNerve(SPREAD.ref.org, SPREAD.ref.mor),
+    steady: 1 - LAND2.nerve.xp * SPREAD.ref.xp - LAND2.nerve.general * SPREAD.ref.general
+  };
+  var ledgerK = (s) => SPREAD.level / refStaying(s);
+  function nerveSplit(p, on) {
+    const a = p.aspect !== "front" && on[p.aspect];
+    return {
+      army: (a ? p.nm : 1) * (on.fire ? p.fire : 1) * (on.ambush ? p.ambush : 1),
+      block: (a ? 1 : p.nm) * (on.fire ? 1 : p.fire) * (on.ambush ? 1 : p.ambush)
+    };
+  }
+  var NERVE_PARTS = ["flank", "rear", "fire", "ambush", "air"];
+  var noTrace = () => ({ loss: 0, flank: 0, rear: 0, fire: 0, ambush: 0, air: 0 });
+  var weighsOf = (w, dmg) => ({ flank: w.flank / dmg, rear: w.rear / dmg, fire: w.fire / dmg, ambush: w.ambush / dmg });
+
+  // ../../src/campaign/spread.ts
+  var spreadOn = (g2) => unitsDecide(g2) && g2.flags.spread === 1 && g2.flags.winChance !== 1;
+  function zOf(p) {
+    const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
+    const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+    const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+    const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+    const pl = 0.02425;
+    if (p < pl) {
+      const q2 = Math.sqrt(-2 * Math.log(p));
+      return (((((c[0] * q2 + c[1]) * q2 + c[2]) * q2 + c[3]) * q2 + c[4]) * q2 + c[5]) / ((((d[0] * q2 + d[1]) * q2 + d[2]) * q2 + d[3]) * q2 + 1);
+    }
+    if (p > 1 - pl) {
+      const q2 = Math.sqrt(-2 * Math.log(1 - p));
+      return -(((((c[0] * q2 + c[1]) * q2 + c[2]) * q2 + c[3]) * q2 + c[4]) * q2 + c[5]) / ((((d[0] * q2 + d[1]) * q2 + d[2]) * q2 + d[3]) * q2 + 1);
+    }
+    const q = p - 0.5, r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  }
+  function spreadDraw(seed, attempt2) {
+    const tail = attempt2 ? `:${attempt2}` : "";
+    const at4 = (k) => new Rng(hashString(k)).next();
+    return { uF: at4(`fortune:${seed}${tail}`), u: { att: at4(`nerve:${seed}${tail}:att`), def: at4(`nerve:${seed}${tail}:def`) } };
+  }
+  var sigmaOne = () => Math.log(SPREAD.tail.W / SPREAD.level) / SPREAD.tail.z;
+  function breakPoint(u, level, sigma) {
+    const [lo, hi] = SPREAD.hold;
+    return Math.min(hi, Math.max(lo, level * Math.exp(sigma * zOf(Math.min(1 - 1e-9, Math.max(1e-9, u))))));
+  }
+  function levelN(side5, s, known = () => true) {
+    const fs = [...side5.forces, ...side5.joiners ?? []], gen = side5.general?.level ?? 0, ref = refStaying(s);
+    let w = 0, n = 0;
+    for (const f of fs) {
+      w += f.share;
+      n += f.share * (known(f) ? stayingOf(f.org, f.mor, f.xp, gen, s) : ref);
+    }
+    return w > 0 ? n / w / ref : 1;
+  }
+  var PARTS2 = ["flank", "rear", "fire", "ambush", "air"];
+  function residualOf(m, given3) {
+    if (given3 !== void 0) return given3;
+    const at4 = m ? PARTS2.filter((p) => m[p]) : [];
+    if (!at4.length) return SPREAD.residual.staying;
+    if (at4.length === PARTS2.length) return SPREAD.residual.ledger;
+    if (at4.length === 2 && m.flank && m.rear) return SPREAD.residual.flankRear;
+    throw new Error(`field spread: no residual derived for m read at the army by ${at4.join(", ")} alone; give parts.residual (spread.py's rule on those parts)`);
+  }
+  function spreadKeys(t, parts2 = {}) {
+    const level = parts2.level ?? SPREAD.steps.level, ledger3 = level && (parts2.ledger ?? SPREAD.steps.ledger);
+    const { u } = spreadDraw(t.seed, t.attempt);
+    if (!level) {
+      const s1 = sigmaOne();
+      return { W: { att: breakPoint(u.att, SPREAD.level, s1), def: breakPoint(u.def, SPREAD.level, s1) }, ...parts2.shown ? { shown: parts2.shown } : {} };
+    }
+    const m = { ...SPREAD.m, ...parts2.m ?? {} };
+    const sigma = residualOf(ledger3 ? m : null, parts2.residual);
+    const N = { att: levelN(t.att, "att"), def: levelN(t.def, "def") };
+    const W2 = { att: breakPoint(u.att, SPREAD.level * N.att, sigma), def: breakPoint(u.def, SPREAD.level * N.def, sigma) };
+    return {
+      W: W2,
+      N,
+      move: Math.pow(N.def / N.att, SPREAD.move.p / SPREAD.move.c),
+      ...parts2.shown ? { shown: parts2.shown } : {},
+      // Each side's residual draw, held as W is, so its front-on point stays in data hold (fsx/brk/causes.ts arm()).
+      ...ledger3 ? { ledger: { draw: { att: W2.att / (SPREAD.level * N.att), def: W2.def / (SPREAD.level * N.def) }, m } } : {}
+    };
+  }
+  function spreadFor(g2, t) {
+    if (!SPREAD.steps.level) return spreadKeys(t);
+    const seenBy = (s) => (f) => {
+      if (f.corps < 0) return true;
+      const c = g2.corps.find((x) => x.id === f.corps);
+      return !!c && corpsKnown(g2, c, t[s === "att" ? "def" : "att"].nat).level !== "none";
+    };
+    const shown2 = { att: SPREAD.level * levelN(t.att, "att", seenBy("att")), def: SPREAD.level * levelN(t.def, "def", seenBy("def")) };
+    return spreadKeys(t, { shown: shown2 });
+  }
+
   // ../../src/battle/land/ticket.ts
   function goingIn(g2, corps, target) {
     return jointForce(g2, limitAttackers(g2, jointForce(g2, corps, target), target), target);
@@ -66880,7 +67358,7 @@
     const band = oddsBand(g2, a.defenders, a.odds, target.id, g2.human);
     const cardAir = a.air;
     const weighDef = (c) => corpsBase(g2, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)));
-    return {
+    const t = {
       domain: "land",
       kind: "field",
       seed: hashString(`field:${g2.seed}:${g2.turn}:${target.id}:${attNat}`) >>> 0,
@@ -66900,6 +67378,8 @@
       // The history dial's stop: at 1 to 3 the computer general fights in its nation's style, at 4 and 5 the situation's (styles.ts).
       hist: stopOf(g2)
     };
+    if (spreadOn(g2)) t.reckoning.spread = spreadFor(g2, t);
+    return t;
   }
   function withGuard(g2, target, guard, tot, side5) {
     const d = guard > 0 ? guardOf(g2, target) : 0;
@@ -67755,357 +68235,6 @@
     const fire2 = m?.fire?.[face] ?? 0.5;
     if (r12 >= fire2) return "out";
     return r24 < (m?.explodes ?? 0.2) ? "blow" : "burn";
-  }
-
-  // ../../src/battle/land/units.ts
-  var ORD3 = (n) => {
-    const s = ["th", "st", "nd", "rd"], v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
-  };
-  var KIND_WORD2 = { inf: "Infantry", mtn: "Mountain", cav: "Cavalry", eng: "Engineers", mot: "Motorized", arm: "Armoured", art: "Artillery", fort: "Fortress" };
-  var TEAM_WORD = { mg: "Machine-Gun Battalion", mor: "Mortar Battalion" };
-  var teamOf = (f) => TEAMS2.includes(f.kind) ? f.kind : void 0;
-  function partsFor(forces, least = LAND2.blocks.least) {
-    const parts2 = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
-    const total = () => parts2.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
-    while (total() < least) {
-      let best = -1, size = 0;
-      parts2.forEach((p2, i) => {
-        if (teamOf(forces[i]) || !p2.some((x) => x.regiment === void 0 && x.divs.length === 1)) return;
-        const each3 = forces[i].share / p2.length;
-        if (each3 > size) {
-          size = each3;
-          best = i;
-        }
-      });
-      if (best < 0) break;
-      const p = parts2[best], j = p.findIndex((x) => x.regiment === void 0 && x.divs.length === 1);
-      p.splice(j, 1, ...Array.from({ length: LAND2.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
-    }
-    return parts2;
-  }
-  var BRIGADES = ["UK", "CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
-  function kindWord(nat, k, ym = 0) {
-    if (k === "arm") return nat === "USA" ? "Armored" : nat === "GER" ? "Panzer" : nat === "SOV" || nat === "JAP" ? "Tank" : "Armoured";
-    if (k === "mot") {
-      if (nat === "USA" || nat === "SOV") return "Motorized";
-      if (BRIGADES.includes(nat)) return "Motor";
-      if (nat === "GER") return ym >= 1943 * 12 + 6 ? "Panzergrenadier" : "Motorized";
-      return "Motorised";
-    }
-    if (k === "inf" && nat === "SOV") return "Rifle";
-    if (k === "mtn" && nat === "SOV") return "Mountain Rifle";
-    return KIND_WORD2[k];
-  }
-  function regimentWord(nat, kind, n, i, ym) {
-    const o = ORD3(n);
-    if (kind === "arm") {
-      if (nat === "USA") return `Combat Command ${"ABR"[i] ?? "R"}`;
-      if (nat === "GER") return `Panzer-Regiment ${n}`;
-      if (nat === "SOV") return ym >= 1942 * 12 + 1 ? `${o} Tank Brigade` : `${o} Tank Regiment`;
-      if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
-      return `${o} Tank Regiment`;
-    }
-    const arm2 = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot", ym) : kind === "eng" ? "Engineer" : "Infantry";
-    if (BRIGADES.includes(nat)) return `${o} ${arm2} Brigade`;
-    if (nat === "GER") {
-      const late = ym >= 1942 * 12 + 10;
-      const word3 = kind === "mtn" ? "Gebirgsjäger" : kind === "cav" ? "Reiter" : kind === "mot" ? late ? "Panzergrenadier" : "Infanterie" : kind === "eng" ? "Pionier" : late ? "Grenadier" : "Infanterie";
-      return `${word3}-Regiment ${n}${kind === "mot" && !late ? " (mot.)" : ""}`;
-    }
-    if (nat === "SOV") return `${o} ${kind === "mtn" ? "Mountain Rifle" : kind === "cav" ? "Cavalry" : kind === "mot" ? "Motor Rifle" : kind === "eng" ? "Engineer" : "Rifle"} Regiment`;
-    if (nat === "ITA" && i === 2 && (kind === "inf" || kind === "mtn")) return `${o} Blackshirt Legion`;
-    return `${o} ${arm2} Regiment`;
-  }
-  function armyNames(t, units2, turn2) {
-    const d = turnToDate(turn2), ym = d.year * 12 + d.month + 1;
-    const cut2 = partsFor(t.forces);
-    let j = 0;
-    t.forces.forEach((f, i) => {
-      const team = teamOf(f);
-      const k = team ? "art" : Object.keys(LAND2.speed).includes(f.kind) ? f.kind : "inf";
-      for (const p of cut2[i]) {
-        const u = units2[j++];
-        if (!u || p.regiment === void 0 || team) continue;
-        const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
-        const full = div?.name ?? `${ORD3(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD3(no)} ${kindWord(f.nat, k, ym)}`;
-        const lead2 = /^(\d+)/.exec(full)?.[1];
-        const n = lead2 ? (Number(lead2) - 1) * LAND2.blocks.regiments + p.regiment + 1 : p.regiment + 1;
-        u.short = regimentWord(u.nat, k, n, p.regiment, ym);
-        u.parent = full;
-        u.name = `${u.short}, ${short}`;
-      }
-    });
-  }
-  function makeBlocks(side5, t, power, firstId, least = LAND2.blocks.least, turn2) {
-    const out = [];
-    const ym = turn2 === void 0 ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn2));
-    const cut2 = partsFor(t.forces, least);
-    t.forces.forEach((f, i) => {
-      const team = teamOf(f);
-      const k = team ? "art" : Object.keys(LAND2.speed).includes(f.kind) ? f.kind : "inf";
-      const n = Math.max(1, Math.round(f.divs));
-      const divs = Array.from({ length: n }, (_, d) => {
-        const own = f.divisions?.[d];
-        const no = (f.first ?? 1) + d;
-        return {
-          name: own?.name ?? (team ? `${ORD3(no)} ${TEAM_WORD[team]}` : `${ORD3(no)} ${kindWord(f.nat, k, ym)} Division`),
-          short: own?.short ?? (team ? `${ORD3(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD3(no)} ${kindWord(f.nat, k, ym)}`),
-          str: own?.str ?? f.str,
-          xp: own?.xp ?? f.xp,
-          men: own?.men ?? f.men / n
-        };
-      });
-      const weightOf3 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND2.blocks.regiments : 1);
-      const all = cut2[i].reduce((s, p) => s + weightOf3(p), 0);
-      for (const p of cut2[i]) {
-        const ds = p.divs.map((d2) => divs[d2]);
-        const name = p.regiment !== void 0 ? `${ORD3(p.regiment + 1)} Regiment, ${ds[0].short}` : ds.length === 1 ? ds[0].name : ds.map((d2) => d2.short).join(" and ");
-        const short = p.regiment !== void 0 ? `${ORD3(p.regiment + 1)} Regiment` : ds.length > 1 ? name : ds[0].short;
-        const parent = p.regiment !== void 0 ? ds[0].short : f.name;
-        const [w, d] = team ? LAND2.teams[team].size : LAND2.size[k];
-        const per = team ? LAND2.teams[team].figures : LAND2.figures[k];
-        const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND2.blocks.regiments)) : per;
-        const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
-        const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
-        const share = weightOf3(p) / all;
-        out.push({
-          id: firstId + out.length,
-          side: side5,
-          corps: f.corps,
-          nat: f.nat,
-          kind: k,
-          ...team ? { team } : {},
-          name,
-          short,
-          parent,
-          x: 0,
-          y: 0,
-          face: side5 === "att" ? 0 : Math.PI,
-          str: str0,
-          str0,
-          mor: mor0,
-          mor0,
-          xp: ds.reduce((s, x) => s + x.xp, 0) / ds.length,
-          state: "steady",
-          men0: Math.round(ds.reduce((s, x) => s + x.men, 0) / (p.regiment !== void 0 ? LAND2.blocks.regiments : 1)),
-          figures0: Math.max(1, Math.ceil(full * str0)),
-          figures: Math.max(1, Math.ceil(full * str0)),
-          tray: full,
-          w,
-          d,
-          act: "idle",
-          speed: 0,
-          power0: power * f.share * share,
-          worth: weightOf3(p),
-          order: null,
-          path: [],
-          dug: !!f.dug,
-          home: [0, 0],
-          still: 99,
-          clear: 99,
-          pinned: false,
-          flankedAt: -99,
-          keepFace: null,
-          met: false,
-          ...f.cross === false ? { dry: true } : {},
-          ...f.wear !== void 0 ? { wear: f.wear } : {},
-          ...f.fresh ? { fresh: f.fresh } : {}
-        });
-      }
-    });
-    return out;
-  }
-  function joinBlocks(t, power, firstId) {
-    const out = [];
-    for (const side5 of ["att", "def"]) {
-      const js = (t[side5].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined > 0 && f.share > 0);
-      if (!js.length) continue;
-      for (const u of makeBlocks(side5, { ...t[side5], forces: js }, power[side5], firstId + out.length, 0, t.turn)) {
-        const j = Math.min(1, js.find((f) => f.corps === u.corps).joined);
-        u.joined = j;
-        u.priced = u.power0;
-        u.power0 = u.priced / j;
-        u.dug = false;
-        out.push(u);
-      }
-    }
-    return out;
-  }
-  var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
-  var MOBILE = ["arm", "mot"];
-  var GAP = 40;
-  function rowsOf2(mine4) {
-    const lines2 = [mine4.filter((u) => FRONT.includes(u.kind)), mine4.filter((u) => MOBILE.includes(u.kind)), mine4.filter((u) => u.kind === "art")];
-    if (!lines2[0].length && lines2[1].length) lines2[0] = lines2[1].splice(0, Math.ceil(lines2[1].length / 2));
-    return lines2;
-  }
-  var rowWidth = (row2) => row2.reduce((s, u) => s + u.w + GAP, -GAP);
-  function bendAt(units2, z, dry) {
-    const att = units2.filter((u) => u.side === "att");
-    const need = (us) => Math.max(0, ...rowsOf2(us).map(rowWidth));
-    const a = need(att.filter((u) => u.dry)), b = need(att.filter((u) => !u.dry)), room2 = z[2] - z[0] - 2 * BEND.clear;
-    const span2 = a + b > 0 ? room2 >= a + b ? a + (room2 - a - b) * a / (a + b) : room2 * a / (a + b) : room2 / 2;
-    return dry === "west" ? z[0] + span2 + BEND.clear : z[2] - span2 - BEND.clear;
-  }
-  function deploy(units2, side5, f) {
-    const mine4 = units2.filter((u) => u.side === side5);
-    const z = f.zones[side5];
-    if (side5 === "att" && f.bend) {
-      const B3 = f.bend, west = B3.dry === "west", inner = (s) => B3.x + s * BEND.clear;
-      const lanes2 = [
-        [mine4.filter((u) => u.dry), west ? 10 : inner(1), west ? inner(-1) : f.w - 10],
-        [mine4.filter((u) => !u.dry), west ? inner(1) : 10, west ? f.w - 10 : inner(-1)]
-      ];
-      for (const [us, lo, hi] of lanes2) if (us.length) drawUp(us, side5, f, (Math.max(lo, z[0]) + Math.min(hi, z[2])) / 2, lo, hi);
-    } else if (f.stream && (f.stream.lie === "up" || f.stream.lie === "shore" && f.stream.side !== "back")) streamLanes(mine4, side5, f);
-    else if (side5 === "def" && f.stream?.lie === "across" && f.stream.join && joinLane(mine4, f)) {
-    } else drawUp(mine4, side5, f, side5 === "def" && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
-    for (const u of mine4) {
-      u.x = Math.min(f.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, u.x));
-      u.y = Math.min(f.h - 40, Math.max(40, u.y));
-      if (f.stream) {
-        for (let k = 0; k < 40 && wetUnder(f, u); k++) u.y += side5 === "att" ? 10 : -10;
-        const y0 = u.y;
-        for (let k = 0; k < 8 && wetUnder(f, u, STREAM.off); k++) u.y += side5 === "att" ? 10 : -10;
-        const onTop = mine4.some((o) => o !== u && Math.abs(o.x - u.x) < (o.w + u.w) / 2 && Math.abs(o.y - u.y) < (o.d + u.d) / 2);
-        if (wetUnder(f, u, STREAM.off) || (side5 === "att" ? u.y > z[3] : u.y < z[1]) || onTop) u.y = y0;
-      }
-      u.home = [u.x, u.y];
-      if (u.dug) digWorks(f, u.x, u.y, u.w, u.d);
-    }
-  }
-  function wetUnder(f, u, off2 = 0) {
-    const hw = u.w / 2 + off2, hd = u.d / 2 + off2, nx = Math.ceil(2 * hw / (f.cell / 2)), ny = Math.ceil(2 * hd / (f.cell / 2));
-    for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
-      const c = Math.floor((u.x - hw + 2 * hw * i / nx) / f.cell), r = Math.floor((u.y - hd + 2 * hd * j / ny) / f.cell);
-      if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
-      const k = GROUNDS[f.ground[r * f.cols + c]];
-      if (k === "water" || k === "bridge" || k === "blown") return true;
-    }
-    return false;
-  }
-  function joinLane(mine4, f) {
-    const J = f.stream.join, z = f.zones.def, y0 = z[1] - 120;
-    const xs = J.course.filter(([x, y]) => y >= y0 && x >= 0 && x <= f.w).map(([x]) => x);
-    if (!xs.length) return false;
-    const clear = J.half * (1 + STREAM.wobble) + f.cell + STREAM.off, west = J.course[0][0] < f.w / 2;
-    const [a, b] = west ? [Math.max(...xs) + clear, f.w - 10] : [10, Math.min(...xs) - clear];
-    const centre = f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
-    drawUp(mine4, "def", f, Math.min(b, Math.max(a, centre)), a, b);
-    return true;
-  }
-  function streamLanes(mine4, side5, f) {
-    const S3 = f.stream, z = f.zones[side5], clear = S3.half * (1 + STREAM.wobble) + f.cell + STREAM.off;
-    const y0 = side5 === "att" ? 0 : z[1] - 120, y1 = side5 === "att" ? z[3] + 120 : f.h;
-    const xs = S3.course.filter(([, y]) => y >= y0 && y <= y1).map(([x]) => x);
-    const lo = Math.min(...xs), hi = Math.max(...xs);
-    const lane = (a, b) => [a, b, Math.max(0, Math.min(b, z[2]) - Math.max(a, z[0]))];
-    const lanes2 = S3.lie === "shore" ? [lo < f.w / 2 ? lane(hi + STREAM.clear, f.w - 10) : lane(10, lo - STREAM.clear)] : [lane(10, lo - clear), lane(hi + clear, f.w - 10)];
-    const open2 = lanes2.filter((l) => l[2] >= 200);
-    const groups = open2.map(() => []), fill8 = open2.map(() => 0);
-    const home = f.town ? open2.findIndex(([a, b]) => f.town.x >= a && f.town.x <= b) : -1;
-    if (home >= 0 && rowWidth(rowsOf2(mine4)[0]) <= open2[home][2]) groups[home].push(...mine4);
-    else for (const u of mine4) {
-      let k = 0;
-      for (let j = 1; j < open2.length; j++) if ((fill8[j] + u.w) / open2[j][2] < (fill8[k] + u.w) / open2[k][2]) k = j;
-      groups[k].push(u);
-      fill8[k] += u.w;
-    }
-    const centre = side5 === "def" && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
-    open2.forEach(([a, b], j) => {
-      if (groups[j].length) drawUp(groups[j], side5, f, Math.min(b, Math.max(a, centre)), a, b);
-    });
-  }
-  function drawUp(mine4, side5, f, cx, lo, hi) {
-    const z = f.zones[side5];
-    const dir = side5 === "att" ? 1 : -1;
-    let front = side5 === "att" ? z[3] - 40 : z[1] + 40;
-    const lines2 = rowsOf2(mine4);
-    if (side5 === "def" && f.streetEdge) {
-      const half = rowWidth(lines2[0]) / 2;
-      const ys2 = f.streetEdge.filter((y, c) => y >= 0 && Math.abs(c * f.cell + f.cell / 2 - cx) <= half).sort((a, b) => a - b);
-      if (ys2.length) front = Math.max(front, ys2[Math.floor(ys2.length / 2)] + LAND2.city.inside);
-      if (f.stream?.front !== void 0) front = Math.min(front, f.stream.front);
-    }
-    const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
-    const wingsAt = (row2) => {
-      const span2 = lines2[0].length * (150 + GAP) / 2;
-      const at4 = row2.map((u, i) => {
-        const left = i % 2 === 0, k = Math.floor(i / 2);
-        return cx + (left ? -1 : 1) * (span2 + 60 + k * (u.w + GAP));
-      });
-      return row2.every((u, i) => at4[i] - u.w / 2 >= x0 && at4[i] + u.w / 2 <= x1) ? at4 : null;
-    };
-    const place2 = (row2, y, wings2) => {
-      const at4 = wings2 ? wingsAt(row2) : null;
-      if (at4) {
-        row2.forEach((u, i) => {
-          u.x = at4[i];
-          u.y = y;
-        });
-        return true;
-      }
-      const width = rowWidth(row2);
-      let x = cx - width / 2;
-      for (const u of row2) {
-        u.x = x + u.w / 2;
-        u.y = y;
-        x += u.w + GAP;
-      }
-      if (lo !== void 0 && hi !== void 0 && row2.length > 0) {
-        const a = row2[0].x - row2[0].w / 2, b = row2[row2.length - 1].x + row2[row2.length - 1].w / 2;
-        const shift = a < x0 ? x0 - a : b > x1 ? x1 - b : 0;
-        for (const u of row2) u.x += shift;
-      }
-      return false;
-    };
-    const held3 = [];
-    if (side5 === "def" && lines2[0].length >= 4) {
-      for (let n2 = Math.max(1, Math.floor(lines2[0].length / 4)); n2 > 0; n2--) {
-        const count4 = (c) => lines2[0].filter((u) => u.corps === c).length;
-        let at4 = -1;
-        for (let i = lines2[0].length - 1; i >= 0; i--) if (at4 < 0 || count4(lines2[0][i].corps) > count4(lines2[0][at4].corps)) at4 = i;
-        held3.unshift(...lines2[0].splice(at4, 1));
-      }
-    }
-    if (lo === void 0 || hi === void 0) {
-      place2(lines2[0], front, false);
-      const wide4 = place2(lines2[1], front - dir * 110, true);
-      if (held3.length) {
-        place2(held3, front - dir * (wide4 || !lines2[1].length ? 110 : 170), false);
-        for (const u of held3) u.reserve = "held";
-      }
-      place2(lines2[2], front - dir * 230, false);
-      return;
-    }
-    const rows = [];
-    const cut2 = (line, at4) => line.forEach((u, i) => {
-      const r = rows[rows.length - 1];
-      if (i > 0 && rowWidth([...r.us, u]) <= x1 - x0) r.us.push(u);
-      else rows.push({ us: [u], at: at4, first: i === 0, wings: false });
-    });
-    cut2(lines2[0], 0);
-    const wide3 = rows.length <= 1 && lines2[1].length > 0 && wingsAt(lines2[1]) !== null;
-    if (wide3) rows.push({ us: lines2[1], at: 110, first: true, wings: true });
-    else cut2(lines2[1], 110);
-    cut2(held3, wide3 || !lines2[1].length ? 110 : 170);
-    for (const u of held3) u.reserve = "held";
-    cut2(lines2[2], 230);
-    const deep = (us) => Math.max(...us.map((u) => u.d));
-    const steps = (gap) => {
-      const ys2 = [];
-      rows.forEach((r, i) => {
-        const behind2 = i ? ys2[i - 1] - dir * (deep(rows[i - 1].us) / 2 + gap + deep(r.us) / 2) : front;
-        ys2.push(!r.first ? behind2 : dir > 0 ? Math.min(front - r.at, behind2) : Math.max(front + r.at, behind2));
-      });
-      return ys2;
-    };
-    const back = dir > 0 ? z[1] : z[3], n = rows.length - 1;
-    const past = (ys2) => n >= 0 && dir * (ys2[n] - back) < deep(rows[n].us) / 2;
-    let ys = steps(GAP);
-    for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
-    rows.forEach((r, i) => place2(r.us, ys[i], r.wings));
   }
 
   // ../../data/battle/drill.json
@@ -72181,6 +72310,22 @@
       /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
       __publicField(this, "heldFor", { att: 0, def: 0 });
       /**
+       * The field spread's army nerve ledger (step 1b, reckoning.spread.ledger; form 13A): each side's nerve spent (D), its
+       * reserve (R), K, its draw and the parts of m it reads; and T, its trace by part (ledgerTrace), read by nothing in the
+       * fight. Null without the key.
+       */
+      __publicField(this, "led", null);
+      /**
+       * Under the field spread's army ledger, within a tick: each block the tick's blows struck, with their nerve weight as
+       * built (every part), damage-weighted, as fsx/brk/causes.ts read harm landing on a block struck that tick. Air harm the
+       * ledger reads at the army reads this where it has one (airHarm). Null outside a tick and without the ledger.
+       */
+      __publicField(this, "tickM", null);
+      /** Under reckoning.spread.N (step 1b), blocks read the reference army for their own nerve (form s2c). */
+      __publicField(this, "refNerve", false);
+      /** The move's factor on the blows (reckoning.spread.move, step 1b); undefined without the key. */
+      __publicField(this, "lean");
+      /**
        * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
        * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
        */
@@ -72415,6 +72560,29 @@
       const def = makeBlocks("def", ticket.def, D2, att.length + 1, void 0, ticket.turn);
       this.units = [...att, ...def];
       const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
+      const k = ticket.reckoning.spread;
+      if (k?.ledger) {
+        const R2 = { att: 0, def: 0 }, P = { att: 0, def: 0 };
+        for (const u of [...this.units, ...joining]) {
+          R2[u.side] += u.power0 * (u.mor0 - LAND2.nerve.rout);
+          P[u.side] += u.power0;
+        }
+        this.led = {
+          D: { att: 0, def: 0 },
+          R: { att: R2.att / Math.max(1e-9, P.att), def: R2.def / Math.max(1e-9, P.def) },
+          K: { att: ledgerK("att"), def: ledgerK("def") },
+          draw: { ...k.ledger.draw },
+          on: { ...k.ledger.m },
+          T: { att: noTrace(), def: noTrace() }
+        };
+      }
+      if (k?.N) {
+        this.refNerve = true;
+        for (const u of [...this.units, ...joining]) {
+          u.mor0 = REF_NERVE.mor0;
+          u.mor = REF_NERVE.mor0;
+        }
+      }
       this.covered = coveredTanks(ticket, this.units);
       const works = ticket.place.fort >= 1 || def.some((u) => u.kind === "fort");
       this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND2.fresh.upTo, def: !works && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND2.fresh.upTo };
@@ -72429,8 +72597,8 @@
       for (const u of joining) {
         const c = crewFor(u, ticket[u.side].joiners?.find((f) => f.corps === u.corps)?.battles ?? 0);
         if (c) u.crew = c;
-        const k = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
-        if (k) u.cal = k;
+        const k2 = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
+        if (k2) u.cal = k2;
       }
       const dry = ticket.place.dryEnd ?? "west";
       const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf2(FIELD3.w, FIELD3.h).att, dry), dry } : void 0;
@@ -72459,6 +72627,7 @@
       const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
       const roll3 = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
       this.fortune = 1 + LAND2.fortune * (roll3 - 1);
+      if (k?.move !== void 0) this.lean = k.move;
       for (const s of ["att", "def"]) {
         const a = ticket[s].air;
         if (a && a.share > 0 && a.strikes > 0 && a.groups.length) {
@@ -74466,7 +74635,17 @@
         }
         const h = hurt2.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
         h.dmg += blow2.dmg;
-        h.nerve += blow2.nerve;
+        if (this.led && blow2.parts) {
+          const sp = nerveSplit(blow2.parts, this.led.on), pt = blow2.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
+          h.nerve += sp.block;
+          h.dm = (h.dm ?? 0) + blow2.dmg * sp.army;
+          h.built = (h.built ?? 0) + blow2.nerve;
+          h.dn = (h.dn ?? 0) + blow2.dmg * blow2.nerve;
+          w.flank += blow2.dmg * (pt.aspect === "flank" ? pt.nm : 1);
+          w.rear += blow2.dmg * (pt.aspect === "rear" ? pt.nm : 1);
+          w.fire += blow2.dmg * pt.fire;
+          w.ambush += blow2.dmg * pt.ambush;
+        } else h.nerve += blow2.nerve;
         if (!blind) h.blind = false;
         h.from.push([u, blow2.dmg]);
         hurt2.set(t.id, h);
@@ -74478,9 +74657,13 @@
       }
       if (kept2) for (const [id, raw2] of kept2) {
         const h = hurt2.get(id), side5 = other2(this.unit(id).side);
-        this.airNerve[side5].set(id, (this.airNerve[side5].get(id) ?? 0) + raw2 * h.nerve);
+        this.airNerve[side5].set(id, (this.airNerve[side5].get(id) ?? 0) + raw2 * (h.built ?? h.nerve));
       }
-      for (const [id, h] of hurt2) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      if (this.led) {
+        this.tickM = /* @__PURE__ */ new Map();
+        for (const [id, h] of hurt2) if (h.dmg > 0) this.tickM.set(id, (h.dn ?? 0) / h.dmg);
+      }
+      for (const [id, h] of hurt2) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : void 0);
       if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
       if (this.bearers) this.carry();
@@ -74497,6 +74680,7 @@
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
       if (this.cuts.length) this.openCuts();
       this.judge();
+      this.tickM = null;
       this.drill?.step();
     }
     /**
@@ -74688,12 +74872,13 @@
       if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND2.moving;
       if (u.winded !== void 0 && this.t < u.winded) p *= LAND2.double.blows;
       let nerveMul = 1;
+      let fireN = 1, ambushN = 1;
       const SP = LAND2.hide.surprise;
       if (u.sprung !== void 0 && this.t - u.sprung < SP.secs) {
         p *= SP.punch;
-        nerveMul *= t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
+        nerveMul *= ambushN = t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
       }
-      if (u.team === "mor" && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== void 0 && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
+      if (u.team === "mor" && this.hide && this.units.some((f2) => f2.side === u.side && f2.sprung !== void 0 && this.t - f2.sprung < SP.secs && f2.engaged === t.id)) p *= SP.mortar;
       const vague = t.unloc !== void 0 && this.t < t.unloc;
       if (vague) p *= LAND2.hide.locate.fire;
       const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND2.smoke.share : 1;
@@ -74701,7 +74886,7 @@
       if (u.kind === "art") {
         const G5 = gunsOf(u), close3 = this.gap(u, t) < G5.closeAt;
         p *= close3 ? G5.close : G5.punch;
-        if (!close3) nerveMul *= G5.nerve;
+        if (!close3) nerveMul *= fireN = G5.nerve;
         if (u.team && t.kind === "arm") p *= LAND2.teams[u.team].armour;
       }
       if (u.kind === "arm" && LAND2.tanksClose.ground.includes(gu)) p *= LAND2.tanksClose.punch;
@@ -74718,8 +74903,9 @@
       if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND2.hold.within) take2 *= this.holdTake(u, t);
       if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take2 *= LAND2.double.exposed;
       const luck = 1 + LAND2.jitter * (this.rng.next() * 2 - 1);
-      const dmg = p * am * amx * take2 * luck * (u.side === "att" ? this.fortune : 1 / this.fortune) * DT;
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen };
+      const f = this.lean === void 0 ? this.fortune : this.fortune * this.lean;
+      const dmg = p * am * amx * take2 * luck * (u.side === "att" ? f : 1 / f) * DT;
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {} };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
@@ -74727,14 +74913,14 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
-    suffer(t, dmg, nerveMul, from2 = [], blind = false, bare = false) {
+    suffer(t, dmg, nerveMul, from2 = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul, parts2) {
       if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
       if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND2.dug.keep) {
         const take2 = this.groundTake(t), f = Math.min(take2, LAND2.cover[LAND2.wreck.cover]) / Math.max(1e-9, take2);
         if (f < 1) {
           const spared3 = dmg * (1 - f);
           t.debt = (t.debt ?? 0) + spared3;
-          t.debtN = (t.debtN ?? 0) + spared3 * nerveMul;
+          t.debtN = (t.debtN ?? 0) + spared3 * (this.led ? nerveBuilt : nerveMul);
           dmg *= f;
         }
       }
@@ -74742,8 +74928,15 @@
       const before = t.str, had = t.figures;
       t.str = Math.max(0, t.str - share * t.str0);
       const lost = (before - t.str) / t.str0;
-      const steady3 = 1 - LAND2.nerve.xp * t.xp - LAND2.nerve.general * this.generalOf(t.side);
+      const steady3 = this.refNerve ? REF_NERVE.steady : 1 - LAND2.nerve.xp * t.xp - LAND2.nerve.general * this.generalOf(t.side);
       t.mor = Math.max(0, t.mor - lost * LAND2.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady3));
+      if (this.led && lost > 0) {
+        const s = t.side, st = Math.max(0.3, 1 - LAND2.nerve.xp * t.xp - LAND2.nerve.general * this.generalOf(s));
+        this.led.D[s] += t.power0 * lost * LAND2.nerve.perLoss[s] * mArmy * st / this.power[s];
+        const k = t.power0 * lost * LAND2.nerve.perLoss[s] * st / this.power[s], T = this.led.T[s];
+        T.loss += k;
+        for (const p of NERVE_PARTS) T[p] += k * ((parts2?.[p] ?? 1) - 1);
+      }
       t.still = 0;
       t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
       if (this.bearers) {
@@ -75325,15 +75518,69 @@
     }
     /**
      * How near an army is to breaking, 0 to 1: its whole worn state weighted by strength against what an army of its
-     * side will stand (LAND.spent), or half its power running, whichever is nearer. One block running counts only its
-     * own share, so it never takes the army with it while the rest is fresh (ruling 226(2)). The army bar shows this.
+     * side will stand (LAND.spent, or its drawn break point under the field spread: spentOf), or half its power running,
+     * whichever is nearer. One block running counts only its own share, so it never takes the army with it while the rest
+     * is fresh (ruling 226(2)). The army bar shows this, the true one (b474's pulled bar reads it too); what the other
+     * side's player is shown under the field spread is shownBar.
      */
     breaking(s) {
       return this.brink(s).bar;
     }
+    /**
+     * What an army of this side will stand worn: its drawn break point under the field spread (reckoning.spread.W, form
+     * s6), else LAND.spent, read as it stands (a harness may set LAND.spent).
+     */
+    spentOf(s) {
+      return this.ticket.reckoning.spread?.W[s] ?? LAND2.spent[s];
+    }
+    /** The field spread's army ledger's share of its mark (step 1b, form 13A: q = ledger / (K x reserve x draw)); 0 without the ledger. */
+    ledgerShare(s) {
+      const L2 = this.led;
+      return L2 ? L2.D[s] / Math.max(1e-12, L2.K[s] * L2.R[s] * L2.draw[s]) : 0;
+    }
+    /**
+     * The ledger's trace by part, a copy (step 1b; for the bench, choice 13's gate): each side's loss at m = 1, as the
+     * ledger counts it, and what each part's own weight adds to it, wherever the part is read. Null without the ledger.
+     * Read by nothing in the fight, never in view(), so the mask is untouched.
+     */
+    ledgerTrace() {
+      const L2 = this.led;
+      return L2 ? { att: { ...L2.T.att }, def: { ...L2.T.def } } : null;
+    }
+    /** The level a side's bar is shown at to the other side's player under the field spread (the mask, choice 6 (A)): never its draw. */
+    shownLevel(s) {
+      return this.ticket.reckoning.spread?.shown?.[s] ?? SPREAD.level;
+    }
+    /** Whether 'as' sees side s's bar through the mask: under the field spread, the other side's, until it breaks. */
+    masked(s, as) {
+      return !!this.ticket.reckoning.spread && !!as && as !== s && !this.broke[s] && this.over?.broke !== s;
+    }
+    /**
+     * A side's bar as 'as' sees it (form s8; choice 6 (A), DD 19:47Z): his own true; under the field spread the other's as
+     * his staff reads it, worn against the level shown and held at data mask.hold until it breaks, so neither the bar nor
+     * how fast it fills gives away the enemy's draw. No spread, or nobody ('as' absent: b474 reads breaking()), the true bar.
+     */
+    shownBar(s, as) {
+      if (!this.masked(s, as)) return this.breaking(s);
+      const b = this.brink(s);
+      return Math.min(SPREAD.mask.hold, Math.max(b.running / LAND2.breaks, b.worn / this.shownLevel(s)));
+    }
+    /**
+     * What drives a side's bar as 'as' sees it: under the field spread the other side's read against the level shown, its
+     * bar the shown one, and the hold not told (it too would read the draw); the ledger's share left out (G). Otherwise the
+     * true cause.
+     */
+    causeAs(s, as) {
+      const c = this.breakCause(s);
+      if (!this.masked(s, as)) return c;
+      const rest = { ...c };
+      delete rest.ledger;
+      const lv = this.shownLevel(s), w = this.wornShare(s) / lv, r = this.brokenShare(s) / LAND2.breaks;
+      return { ...rest, bar: Math.round(this.shownBar(s, as) * 1e3) / 1e3, spent: lv, by: "none", nearer: r >= w && r > 0 ? "running" : "worn", holding: false, held: false, heldFor: 0 };
+    }
     /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
     brink(s) {
-      const worn = this.wornShare(s), running = this.brokenShare(s), over = worn / LAND2.spent[s];
+      const worn = this.wornShare(s), running = this.brokenShare(s), over = this.led ? this.ledgerShare(s) : worn / this.spentOf(s);
       const holding = over >= 1 && this.freshShare(s) > LAND2.fought;
       return { bar: Math.min(holding ? 0.99 : 1, Math.max(running / LAND2.breaks, over)), worn, running, holding };
     }
@@ -75346,7 +75593,7 @@
      */
     breakCause(s) {
       const r33 = (x) => Math.round(x * 1e3) / 1e3;
-      const b = this.brink(s), w = b.worn / LAND2.spent[s], r = b.running / LAND2.breaks;
+      const b = this.brink(s), w = this.led ? this.ledgerShare(s) : b.worn / this.spentOf(s), r = b.running / LAND2.breaks;
       const mine4 = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
       const on = mine4.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + weightOf(u), 0);
       const steady3 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
@@ -75356,7 +75603,8 @@
         by: Math.max(w, r) < 1 ? "none" : nearer,
         nearer,
         worn: r33(b.worn),
-        spent: LAND2.spent[s],
+        spent: this.spentOf(s),
+        ...this.led ? { ledger: r33(this.ledgerShare(s)) } : {},
         running: r33(b.running),
         breaks: LAND2.breaks,
         fresh: r33(this.freshShare(s)),
@@ -75399,6 +75647,7 @@
      * player sends in again is left to the player (gives stays set until it rallies).
      */
     giveGround(s, left) {
+      const hide = !!this.ticket.reckoning.spread && !this.ticket[s].human && !!this.ticket[other2(s)].human;
       for (const u of this.units) if (u.side === s && u.state === "routing") u.gives = true;
       for (const u of left) {
         if (u.gives || this.fresh(u)) continue;
@@ -75407,7 +75656,9 @@
         if (u.waits) this.endWait(u, "gives");
         this.send(u, { kind: "withdraw", x: u.x, y: s === "att" ? 0 : this.field.h });
         u.engaged = void 0;
-        this.say({ what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
+        const ev = { what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y };
+        if (hide) this.log.push({ t: Math.round(this.t * 10) / 10, ...ev, text: "" });
+        else this.say(ev);
       }
     }
     /** Giving ground at the brink, and still on its way back or running (an order of the player's may send it in again). */
@@ -75426,9 +75677,10 @@
         this.bar[s] = near2;
         if (b.holding) this.heldFor[s] += DT;
         if (b.holding && this.freshHold[s]) this.giveGround(s, left);
-        if (!this.warned[s] && near2 >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
+        const own = !!this.ticket[s].human;
+        if (!this.warned[s] && (this.ticket.att.human || this.ticket.def.human) && (!own && this.ticket.reckoning.spread ? this.shownBar(s, other2(s)) : near2) >= 0.75) {
           this.warned[s] = true;
-          const own = !!this.ticket[s].human, why = own ? this.breakCause(s) : void 0;
+          const why = own ? this.breakCause(s) : void 0;
           this.say({ what: "nearBreak", side: s, text: why ? warnLine(why) : `${this.army(s)} is near breaking.`, ...why ? { brokeBy: why } : {} });
         }
         if (near2 >= 1) {
@@ -75772,7 +76024,7 @@
       }
       const hurt2 = /* @__PURE__ */ new Map();
       for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt2);
-      for (const [id, [d, n]] of hurt2) this.suffer(this.unit(id), d, d > 0 ? n / d * LAND2.air.nerve : LAND2.air.nerve, []);
+      for (const [id, [d, n]] of hurt2) this.airHarm(id, d, d > 0 ? n / d * LAND2.air.nerve : LAND2.air.nerve);
       this.strikes = this.strikes.filter((k) => !k.ended);
     }
     /** One strike's tick, its legs flown together. What each leg lands this tick is added to 'hurt'. */
@@ -75934,6 +76186,25 @@
       return out;
     }
     /**
+     * Air harm landing on a block (flyAir, payAir) at the strike's weight w: today's call, or under the field spread's army
+     * ledger with the air part at the block. With the air part at the army (step 1b) the block reads 1 and the ledger reads
+     * it as fsx/brk/causes.ts did, whose rows its residual is derived from: at the damage-weighted weight of the tick's
+     * blows where they struck that block this tick (tickM), else at w. (w is the bank's: what was held back, at the summed
+     * weight of the blows on that block in the tick it was held, so it would read the harm higher the more blocks fired.)
+     * What a wait's cover spares of it is kept at w, to land on the block (suffer's nerveBuilt: G). The ledger's trace reads
+     * its air part at the ledger's weight, whichever way it is read.
+     */
+    airHarm(id, d, w) {
+      const u = this.unit(id);
+      if (!this.led) {
+        this.suffer(u, d, w, []);
+        return;
+      }
+      const m = this.tickM?.get(id) ?? w;
+      if (this.led.on.air) this.suffer(u, d, 1, [], false, false, m, w, { air: m });
+      else this.suffer(u, d, w, [], false, false, 1, w, { air: m });
+    }
+    /**
      * Handed to the staff, or the day done: what the bank still owes and what strikes in the air still carry is paid
      * where it is owed, at once (the staff settle the rest from where the field stands, the air's share in it).
      */
@@ -75966,7 +76237,7 @@
         for (const l of k.legs) l.done = Math.max(l.done, 1);
         k.ended = true;
       }
-      for (const [id, [d, n]] of hurt2) this.suffer(this.unit(id), d, d > 0 ? n / d : 1, []);
+      for (const [id, [d, n]] of hurt2) this.airHarm(id, d, d > 0 ? n / d : 1);
     }
     /**
      * What the fighters on call still owe, each side's, block by block: the bank, and what strikes in the air carry for
@@ -76033,7 +76304,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.shownBar("att", as), def: this.shownBar("def", as) }, breakingBy: { att: this.causeAs("att", as), def: this.causeAs("def", as) }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
