@@ -112,7 +112,7 @@ function watch(f: Fight, opts: { sections?: boolean; platoons?: boolean; life?: 
       for (const m of keys) {
         if (m.p !== 'fire' || !m.a) continue;
         s.sweeps++;
-        if (Math.abs(wrap(m.f - Math.atan2(m.a[0] - m.x, m.a[1] - m.y))) < (25 * Math.PI) / 180) s.inArc++;
+        if (Math.abs(wrap(m.f - Math.atan2(m.a[0] - m.x, m.a[1] - m.y))) < (10 * Math.PI) / 180) s.inArc++;
         if (close < 30) { s.lifts++; if (Math.hypot(m.a[0] - e.x, m.a[1] - e.y) > Math.max(e.w, e.d) / 2) s.beyond++; }
       }
     }

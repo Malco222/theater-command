@@ -372,7 +372,7 @@ const DR = data as unknown as {
     spell: { on: [number, number]; off: [number, number]; rapidOn: [number, number]; rapidOff: [number, number] };
     burst: { slow: [number, number]; rapid: [number, number] }; switch: [number, number];
     barrel: { quick: string[]; water: string[]; change: [number, number, number, number]; cool: [number, number, number, number] };
-    sweep: { share: number; over: number; every: [number, number] };
+    sweep: { share: number; over: number; every: [number, number]; arc: number; laid: number; turn: number };
     lift: { rapid: number; shift: number; lift: number; beyond: number; mortar: number; deep: number };
     drop: number; duck: { lag: number; for: [number, number]; raw: number; vet: number; gunner: [number, number, number] };
     move: { after: [number, number]; most: [number, number]; shelled: number; far: [number, number]; setup: number };
@@ -4199,9 +4199,10 @@ export class Drill {
       else if (guns.length < 2 || guns.some((o) => o !== g && talking(o))) { w.on = false; w.spell = t + b0 + (b1 - b0) * r; }
       else w.spell = t + 1 + r;
     }
-    const on = w.on && !cooling && !down;
-    if (on) { w.hot += 0.5; w.fired += 0.5; }
     const sw = this.sweepAim(sq, g, w, e, Math.max(0, order.indexOf(g)), order.length, near);
+    // (not until its gunner has come round onto his share: the mount follows his facing)
+    const on = w.on && !cooling && !down && Math.abs(wrap(g.face - sw.lay)) < DR.teamwork.sweep.laid;
+    if (on) { w.hot += 0.5; w.fired += 0.5; }
     g.pose = on ? 'fire' : cooling && quick ? 'wait' : 'deployed';
     g.aim = sw.aim; g.lay = sw.lay; g.rapid = on && rapid ? t + 1 : undefined;
   }
@@ -4229,7 +4230,13 @@ export class Drill {
       ax = e.x + (ax - e.x) * 0.5 + ux * off; ay = e.y + (ay - e.y) * 0.5 + uy * off;
       mx = e.x + (mx - e.x) * 0.5 + ux * off; my = e.y + (my - e.y) * 0.5 + uy * off;
     }
-    return { aim: [clamp(ax, 1, f.w - 1), clamp(ay, 1, f.h - 1)], lay: bearing(g.x, g.y, mx, my) };
+    // (never more than S.arc either side of his facing: the gun swings on its mount, the belt into its box)
+    const lay = bearing(g.x, g.y, mx, my), off = wrap(bearing(g.x, g.y, ax, ay) - lay);
+    if (Math.abs(off) > S.arc) {
+      const r = Math.hypot(ax - g.x, ay - g.y), [dx, dy] = fwd(lay + Math.sign(off) * S.arc);
+      ax = g.x + dx * r; ay = g.y + dy * r;
+    }
+    return { aim: [clamp(ax, 1, f.w - 1), clamp(ay, 1, f.h - 1)], lay };
   }
 
   /** Where a team's mortar's next bomb is laid on block e (atWork): anywhere in it, or past its far side from its own foot once they are within lift.mortar of it. */
@@ -4612,7 +4619,7 @@ export class Drill {
         let turn = rate;
         // (support teams at work: a gunner keeps his tripod laid on the middle of his share as his fire sweeps it, a
         // bearer on the watch his flank)
-        if (m.lay !== undefined) want = m.lay;
+        if (m.lay !== undefined) { want = m.lay; if (CREWED.has(m.role)) turn = Math.min(rate, DR.teamwork.sweep.turn * DT); }
         else if (m.aim) want = bearing(m.x, m.y, m.aim[0], m.aim[1]);
         else if (m.v === 0 && fighting(u)) {
           if (e === undefined) e = this.threat(u);
