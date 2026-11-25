@@ -6,7 +6,7 @@
 // and its owner is told once.
 import { describe, expect, it } from 'vitest';
 import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
-import { canSailTo, cutOff, harbourFor, navalAI, navalUpkeep, sail, zoneOf } from '../src/campaign/navy';
+import { baseSeas, canSailTo, cutOff, fleetReach, harbourFor, navalAI, navalUpkeep, rebase, sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { saveGame } from '../src/campaign/save';
 import { beginHuman, humanUp, orderFleet, stepAI } from '../src/campaign/turn';
@@ -93,6 +93,52 @@ describe('a fleet at sea when a strait shuts behind it', () => {
     expect(sail(g, f, f.home, 'port')).toBe(true);
     expect(g.regions[f.base].name).toBe('Naples');
     expect(f.zone).toBe(f.home);
+  });
+});
+
+// The playtest's #28: Spanish Morocco is a harbour on both sides of the Strait of Gibraltar (the Western Mediterranean and
+// the Iberian Coast). It is no way round the strait: a fleet based there is on the side it came in from.
+describe('a harbour on both sides of a shut strait', () => {
+  /** Italy at war with Britain, holding Spanish Morocco for the test; its 2nd Fleet out on the Iberian Coast first if asked. */
+  function morocco(out = false): { g: Game; f: Fleet; sm: number; med: number; atl: number } {
+    const g = startOpen(createGame(3, 'ITA'));
+    for (let k = 0; !humanUp(g) && k < 60; k++) stepAI(g);
+    if (out) expect(sail(g, fleet(g, 'ITA', '2nd Fleet'), zoneOf(g, 'iberia'), 'patrol')).toBe(true);
+    if (!atWar(g, 'ITA', 'UK')) declareWar(g, 'ITA', 'UK');
+    const r = g.byName['Spanish Morocco'];
+    r.ctrl = 'ITA';
+    const med = zoneOf(g, 'wmed'), atl = zoneOf(g, 'iberia');
+    expect(r.seas).toEqual(expect.arrayContaining([med, atl]));
+    return { g, f: fleet(g, 'ITA', '2nd Fleet'), sm: r.id, med, atl };
+  }
+
+  it('a fleet from the Mediterranean that bases there reaches no sea beyond the strait', () => {
+    const { g, f, sm, med, atl } = morocco();
+    expect(rebase(g, f, g.regions[sm])).toBe(true);
+    expect(f.home).toBe(med);
+    expect(baseSeas(g, f)).toEqual([med]);
+    expect(fleetReach(g, f)).not.toContain(atl);
+    expect(orderFleet(g, f.id, atl, 'raid')).toBe(false);
+  });
+
+  it('a fleet cut off on the Atlantic side that bases there stays on the Atlantic side', () => {
+    const { g, f, sm, med, atl } = morocco(true);
+    expect(f.zone).toBe(atl);
+    expect(cutOff(g, f)).toBe(true);
+    expect(rebase(g, f, g.regions[sm])).toBe(true);
+    expect(f.home).toBe(atl);
+    expect(f.zone).toBe(atl);
+    expect(fleetReach(g, f)).toContain(atl);
+    expect(fleetReach(g, f)).not.toContain(med);
+    expect(cutOff(g, f)).toBe(false);
+  });
+
+  it("the strait's holder, and a nation it is open to, use both its seas as before", () => {
+    const { g, sm, med, atl } = morocco();
+    const uk = g.fleets.find((x) => x.nat === 'UK' && fleetReach(g, x).includes(atl))!;
+    g.regions[sm].ctrl = 'UK';
+    expect(rebase(g, uk, g.regions[sm])).toBe(true);
+    expect(baseSeas(g, uk).sort()).toEqual([med, atl].sort());
   });
 });
 

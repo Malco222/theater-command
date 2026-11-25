@@ -3798,7 +3798,7 @@ function heldWhyId(s: Game, id: number): string {
 function whoSails(s: Game, id: number): string {
   if (!staffRunsDesk(s, 'navy')) return '';
   return fleetKeptByHand(s, id)
-    ? 'Under your own orders: your admirals leave it where you send it.'
+    ? 'Under your own orders: your admirals leave it to you, wherever it is.'
     : 'Your admirals sail it each month. Give it an order yourself and it stays where you send it.';
 }
 const HAND_BACK_TIP = 'Your admirals sail it again from next month, with the rest of the navy.';

@@ -1354,10 +1354,20 @@ export function coastReport(g: Game, att: string): void {
 // ---- Fleet orders -------------------------------------------------------------------------------
 
 /** Seas a fleet can be sent to: those within reach of its base, through straits open to it. */
+/**
+ * The seas a fleet puts to sea in from its base: its home sea, and the base's other seas where no strait shut to it lies
+ * between (1.5.2, the playtest's #28). A harbour on both sides of a strait (Spanish Morocco, on the Iberian Coast and
+ * the Western Mediterranean) is no way round it: a fleet there is on its home sea's side. For every other harbour, and
+ * for the strait's own holder, these are all the base's seas, as before.
+ */
+export function baseSeas(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>): number[] {
+  return f.base >= 0 ? g.regions[f.base].seas.filter((z) => z === f.home || canPass(g, f.home, z, f.nat)) : [f.home];
+}
+
 export function fleetReach(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>): number[] {
   const d = new Int16Array(g.seas.length).fill(-1);
   const q: number[] = [];
-  for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
+  for (const z of baseSeas(g, f)) if (d[z] < 0) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
     if (d[q[i]] >= NAVY.range) continue;
     for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
@@ -1409,8 +1419,7 @@ function seasFrom(g: Game, f: Fleet): Int16Array {
 export function cutOff(g: Game, f: Fleet): boolean {
   if (!atSea(f) || f.zone < 0) return false;
   const d = seasFrom(g, f);
-  const homes = f.base >= 0 ? g.regions[f.base].seas : [f.home];
-  return !homes.some((z) => d[z] >= 0) && d[f.home] < 0;
+  return !baseSeas(g, f).some((z) => d[z] >= 0);
 }
 
 /** The harbour a cut-off fleet would make for: the nearest friendly harbour it can steam to, or null with none. */
@@ -1551,6 +1560,21 @@ export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
   return false;
 }
 
+/**
+ * The sea of this coast a fleet arrives in, sailing from where it is through straits open to it: the coast's first sea
+ * where that one is in reach (always so but where a shut strait splits the coast's seas), else the first that is; -1
+ * where it can reach none. (1.5.2: a fleet that bases at a harbour on both sides of a strait has its home on the side
+ * it came from, not through the strait.)
+ */
+export function landfall(g: Game, f: Fleet, r: Region): number {
+  const seen = new Uint8Array(g.seas.length);
+  const from = atSea(f) ? f.zone : f.home;
+  const q = [from];
+  seen[from] = 1;
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!seen[j] && canPass(g, q[i], j, f.nat)) { seen[j] = 1; q.push(j); }
+  return r.seas.find((z) => seen[z]) ?? -1;
+}
+
 /** Friendly ports a fleet could move its base to. */
 export function baseTargets(g: Game, f: Fleet): Region[] {
   return g.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g, f.nat, r.ctrl) && canSailTo(g, f, r));
@@ -1558,10 +1582,11 @@ export function baseTargets(g: Game, f: Fleet): Region[] {
 
 /** Moves a fleet's base to another friendly port. The fleet spends the month in harbour there. */
 export function rebase(g: Game, f: Fleet, r: Region): boolean {
-  if (!r.port || !r.seas.length || r.id === f.base || !allied(g, f.nat, r.ctrl) || !canSailTo(g, f, r)) return false;
+  const sea = r.port && r.seas.length && r.id !== f.base && allied(g, f.nat, r.ctrl) ? landfall(g, f, r) : -1;
+  if (sea < 0) return false;
   f.base = r.id;
   f.port = r.name;
-  f.home = r.seas[0];
+  f.home = sea;
   f.zone = f.home;
   f.stance = 'port';
   delete f.lane;
