@@ -794,10 +794,11 @@ export interface Fleet extends Storied {
   /**
    * A fleet in passage to a new base (release 2, the far chart; navy.ts, rebase): the base, port and home sea it left
    * (`from`, `fromPort`, `fromHome`, where it is turned back to), the seas of its way in order (`way`), the month it set
-   * out (`set`) and the month it comes in (`due`), and whether it is on its way back (`back`). Its base, port and home
+   * out on that way (`set`) and the month it comes in (`due`), and whether it is on its way back (`back`). `start`: the
+   * month it first set out, where a strait shut on the way has put it on another way since. Its base, port and home
    * are the new harbour's from the month it sets out. Only while its stance is 'passage'.
    */
-  passage?: { from: number; fromPort: string; fromHome: number; way: number[]; set: number; due: number; back?: true };
+  passage?: { from: number; fromPort: string; fromHome: number; way: number[]; set: number; due: number; back?: true; start?: number };
   /**
    * Its air strikes at anchor this month and last (release 2, the far chart; the design director's ruling of 04:33Z, 25
    * November 2026, 2; navy.ts anchorLoss): for each, the month (`t`), the harbour (`at`), the ships sunk (`n`) and

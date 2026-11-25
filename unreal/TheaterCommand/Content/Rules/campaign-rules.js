@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e059a3de 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 35631517 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -46525,9 +46525,10 @@
     let w = 0;
     for (const f of g2.fleets) {
       if (!atSea(f) || !(f.nat === nat || allied(g2, f.nat, nat))) continue;
+      const wings2 = inPassage(f) ? 0 : wingShare(g2, f);
       if (f.zone === z) {
-        for (const c of CLASSES) w += f.ships[c] * S3.ships[c] * (c === "cv" ? wingShare(g2, f) : 1);
-      } else if (f.ships.cv > 0 && g2.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S3.next * wingShare(g2, f);
+        for (const c of CLASSES) w += f.ships[c] * S3.ships[c] * (c === "cv" ? wings2 : 1);
+      } else if (f.ships.cv > 0 && wings2 > 0 && g2.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S3.next * wings2;
     }
     w += airOver(g2, z, nat) * S3.air;
     const me = g2.human;
@@ -46637,6 +46638,10 @@
     if (f.ftr + f.bmr <= 0) return "It has no aircraft fit to fly.";
     if (f.scouted === g2.turn) return "It has flown its reconnaissance this month.";
     if (!g2.nations[f.nat].atWar.length) return "The nation is at peace.";
+    {
+      const c = carrierOf(g2, f);
+      if (c && inPassage(c)) return passageWhy(g2, c);
+    }
     if (weatherOn(g2)) {
       const why = whyNotSky(g2, f, zoneOfSea(g2, z));
       if (why) return why;
@@ -47753,6 +47758,11 @@
     b.fought = Math.max(b.fought, a.fought);
     for (const [k, t] of Object.entries(a.seen ?? {})) if ((b.seen?.[k] ?? -99) < t) (b.seen ?? (b.seen = {}))[k] = t;
     if (a.struck && (!b.struck || b.struck[0] < a.struck[0] || b.struck[0] === a.struck[0] && b.struck[1] < a.struck[1])) b.struck = [a.struck[0], a.struck[1], a.struck[2]];
+    if (a.anchor?.length || b.anchor?.length) {
+      const all = shipCount(b.ships) - b.ships.ss, sa = shipCount(a.ships) - a.ships.ss;
+      const of2 = (x, n) => x.map((e) => ({ ...e, lost: all > 0 ? e.lost * n / all : e.lost, from: e.from.map((o) => ({ ...o })) }));
+      b.anchor = [...of2(b.anchor ?? [], all - sa), ...of2(a.anchor ?? [], sa)];
+    }
     g2.fleets.splice(g2.fleets.indexOf(a), 1);
     moveWings(g2, a, b, a.ships.cv, a.ships.cv);
     g2.supplyDirty = true;
@@ -61623,7 +61633,7 @@
         x.struck = [g2.turn, (x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
         if (m === "harbour" && farOn(g2)) {
           const sunk = shipCount(struck[i].sunk) - struck[i].sunk.ss, had2 = shipCount(struck[i].ships) - struck[i].ships.ss;
-          const from2 = a.att.map((y) => {
+          const from2 = a.att.filter((y) => y.bmr > 0).map((y) => {
             const c = carrierOf(g2, y.f), R2 = reach(y.f, g2, raidJob(m));
             return c && atSea(c) ? { sea: c.zone, field: -1, km: R2.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R2.bmrRange };
           });
@@ -64125,7 +64135,7 @@
     const foe = (x) => {
       if (!foes.includes(x)) foes.push(x);
     };
-    for (const f of g2.fleets) if (f.zone === z && atSea(f) && atWar(g2, f.nat, nat) && fleetPower(g2, f) > 0) foe(f.nat);
+    for (const f of g2.fleets) if (f.zone === z && holdsSea(f) && atWar(g2, f.nat, nat) && fleetPower(g2, f) > 0) foe(f.nat);
     const zone = g2.seas[z];
     const S3 = skiesOver(g2, z);
     if (S3) {
@@ -64746,7 +64756,7 @@
     for (const z of path) for (const j of g2.seas[z].adj) near2.add(j);
     let s = 0;
     for (const f of g2.fleets) {
-      if (!atWar(g2, f.nat, nat) || !surfaceShips(f)) continue;
+      if (!atWar(g2, f.nat, nat) || !surfaceShips(f) || inPassage(f)) continue;
       if (atSea(f)) {
         if (!path.includes(f.zone) && near2.has(f.zone)) s += fleetPower(g2, f);
         continue;
@@ -64797,7 +64807,7 @@
     const wait = [];
     const commanded = {};
     for (const f of g2.fleets) {
-      if (!atWar(g2, f.nat, nat) || !surfaceShips(f) || atSea(f) && f.zone === last) continue;
+      if (!atWar(g2, f.nat, nat) || !surfaceShips(f) || inPassage(f) || atSea(f) && f.zone === last) continue;
       const hand2 = byHand(g2, f.nat, "navy");
       if (!hand2 && (f.duty === "raid" || tiedNow(g2, f)) && f.station !== last) continue;
       if (!fleetReach(g2, f).includes(last)) continue;
@@ -65243,8 +65253,8 @@
   }
   function canSailTo(g2, f, r) {
     const seen2 = new Uint8Array(g2.seas.length);
-    const q = [inPassage(f) ? f.zone : f.home];
-    seen2[q[0]] = 1;
+    const q = farOn(g2) ? [...new Set(wayFrom(g2, f))] : [f.home];
+    for (const z of q) seen2[z] = 1;
     for (let i = 0; i < q.length; i++) {
       if (r.seas.includes(q[i])) return true;
       for (const j of g2.seas[q[i]].adj) if (!seen2[j] && canPass(g2, q[i], j, f.nat)) {
@@ -65310,7 +65320,7 @@
   function voyageWay(g2, f, r) {
     const prev = new Int16Array(g2.seas.length).fill(-2);
     const q = [];
-    for (const z of atSea(f) ? [f.zone] : f.base >= 0 ? g2.regions[f.base].seas : [f.home]) if (prev[z] === -2) {
+    for (const z of wayFrom(g2, f)) if (prev[z] === -2) {
       prev[z] = -1;
       q.push(z);
     }
@@ -65327,6 +65337,19 @@
     }
     return null;
   }
+  var wayFrom = (g2, f) => atSea(f) ? [f.zone] : f.base >= 0 ? g2.regions[f.base].seas : [f.home];
+  function seasOpen(g2, f) {
+    const seen2 = new Uint8Array(g2.seas.length), q = [];
+    for (const z of wayFrom(g2, f)) if (!seen2[z]) {
+      seen2[z] = 1;
+      q.push(z);
+    }
+    for (let i = 0; i < q.length; i++) for (const j of g2.seas[q[i]].adj) if (!seen2[j] && canPass(g2, q[i], j, f.nat)) {
+      seen2[j] = 1;
+      q.push(j);
+    }
+    return seen2;
+  }
   var voyageOf = (seas) => Math.max(1, Math.ceil(seas / NAVY.range));
   function voyageMonths(g2, f, r) {
     if (!farOn(g2)) return 0;
@@ -65341,6 +65364,8 @@
     if (back) f.passage.back = true;
     f.stance = "passage";
     f.zone = passageSea(f.passage, g2.turn);
+    delete f.shadow;
+    delete f.shadowAt;
     g2.supplyDirty = true;
     const due = turnToDate(f.passage.due).label;
     headline(g2, "info", back ? `${cap9(fleetName(f))} turns back for ${f.port}, ${way.length} seas off, due in ${due}.` : `${cap9(fleetName(f))} sails for its new base at ${f.port}, ${way.length} seas off, due in ${due}.`, f.nat, f.base);
@@ -65415,6 +65440,9 @@
     if (!to && anchorLoss(g2, f) > 0) g2.flags[`anc:${f.id}`] = g2.turn;
     return false;
   }
+  function anchorMark(g2, f) {
+    if (anchorLoss(g2, f) > 0 && !safeHarbour(g2, f)) g2.flags[`anc:${f.id}`] = g2.turn;
+  }
   function anchorTold(g2, f) {
     if (!anchorStrikes(g2, f).length || f.nat !== g2.human || !(keptByHand(g2, f) || byHand(g2, f.nat, "navy"))) return;
     const k = `anct:${f.id}`, told2 = g2.flags[k];
@@ -65429,6 +65457,11 @@
     const due = p ? `, due in ${turnToDate(p.due).label}` : "";
     return `${cap9(fleetName(f))} is in passage to ${f.port}, at sea on the way${due}: it strikes, patrols and escorts nothing until it comes in.`;
   }
+  function wayShut(g2, f, p) {
+    const at4 = Math.min((g2.turn - p.set) * NAVY.range, p.way.length) - 1, to = Math.min((g2.turn - p.set + 1) * NAVY.range, p.way.length) - 1;
+    for (let i = Math.max(1, at4 + 1); i <= to; i++) if (!canPass(g2, p.way[i - 1], p.way[i], f.nat)) return true;
+    return false;
+  }
   function steamPassages(g2, nat) {
     for (const f of fleetsOf(g2, nat)) {
       const p = f.passage;
@@ -65442,12 +65475,28 @@
         newBase(g2, f);
         continue;
       }
-      if (g2.turn < p.due) {
+      if (wayShut(g2, f, p)) {
+        const way = voyageWay(g2, f, g2.regions[f.base]);
+        if (!way) {
+          if (!turnBack(g2, f)) newBase(g2, f, farOn(g2), true);
+          continue;
+        }
+        p.start ?? (p.start = p.set);
+        p.way = way;
+        p.set = g2.turn;
+        p.due = g2.turn + voyageOf(way.length) - 1;
+        if (way.length > NAVY.range) {
+          f.zone = passageSea(p, g2.turn);
+          g2.supplyDirty = true;
+          headline(g2, "info", `${cap9(fleetName(f))} finds its way shut, and steams another way to ${f.port}, ${way.length} seas off, due in ${turnToDate(p.due).label}.`, nat, f.base);
+          continue;
+        }
+      } else if (g2.turn < p.due) {
         f.zone = passageSea(p, g2.turn);
         g2.supplyDirty = true;
         continue;
       }
-      const months4 = g2.turn - p.set;
+      const months4 = g2.turn - (p.start ?? p.set);
       delete f.passage;
       f.zone = f.home;
       f.stance = "port";
@@ -65530,7 +65579,10 @@
     const n = g2.nations[nat];
     wingStep(g2, nat);
     steamPassages(g2, nat);
-    for (const f of fleetsOf(g2, nat)) anchorTold(g2, f);
+    for (const f of fleetsOf(g2, nat)) {
+      anchorMark(g2, f);
+      anchorTold(g2, f);
+    }
     for (const given3 of NAVY.fleets) {
       const b = given3.book;
       const booked2 = !!b && g2.flags.open === 1 && b.stops.includes(stopOf(g2)) && dialRuns(g2, nat);
@@ -66359,7 +66411,7 @@
     const gap = screenGap(f);
     if (gap <= 0) return 0;
     let subs = 0;
-    for (const x of g2.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat)) subs += boatsOut(g2, x) * quality(g2, x.nat) * fit2(g2, x);
+    for (const x of g2.fleets) if (x.zone === z && holdsSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat)) subs += boatsOut(g2, x) * quality(g2, x.nat) * fit2(g2, x);
     return Math.min(FLEETS.screen.most, subs * FLEETS.screen.risk * gap);
   }
   function torpedoes(g2, nat) {
@@ -66402,12 +66454,13 @@
     if (!(g2.supply[f.nat] ?? g2.supply[r.ctrl])?.[r.id]) return false;
     return !closedTo(g2, r.seas[0], f.nat);
   }
-  function newBase(g2, f, form2 = farOn(g2)) {
+  function newBase(g2, f, form2 = farOn(g2), shut = false) {
     const old = g2.regions[f.base];
+    const open3 = farOn(g2) ? seasOpen(g2, f) : null;
     const nearest = (ok2) => {
       let best2 = null, bd = 1e9;
       for (const r of g2.regions) {
-        if (!r.port || !r.seas.length || !ok2(r) || !canSailTo(g2, f, r)) continue;
+        if (!r.port || !r.seas.length || !ok2(r) || !canSailTo(g2, f, r) || open3 && !r.seas.some((z) => open3[z])) continue;
         const d = chartDist(g2, r, old);
         if (d < bd) {
           bd = d;
@@ -66417,9 +66470,8 @@
       return best2;
     };
     const best = (form2 ? nearest((r) => haven(g2, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat);
-    if (best) {
-      rebase(g2, f, best);
-      headline(g2, "event", `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
+    if (best && rebase(g2, f, best)) {
+      headline(g2, "event", shut ? `With its way to ${old.name} and back shut, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
       return true;
     }
     nameLosses(g2, f.nat, f.name, f.ships, `scuttle:${g2.turn}:${f.id}`);
@@ -66846,7 +66898,7 @@
     return l;
   }
   function lookTorpedo(g2, f, cls, sunk) {
-    const could = g2.fleets.filter((x) => x.zone === f.zone && atSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat));
+    const could = g2.fleets.filter((x) => x.zone === f.zone && holdsSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat));
     const w = could.map((x) => x.ships.ss * quality(g2, x.nat) * fit2(g2, x));
     const all = w.reduce((a, b) => a + b, 0);
     let by2 = null;
@@ -82455,7 +82507,7 @@
     for (const m of g2.mines) {
       if (m.s <= 0 || !atWar(g2, m.nat, nat)) continue;
       for (const f of g2.fleets) {
-        if (f.nat !== nat || !shipCount(f.ships) || !atSea(f) || f.zone !== m.z && f.home !== m.z) continue;
+        if (f.nat !== nat || !shipCount(f.ships) || !atSea(f) || f.zone !== m.z && (inPassage(f) || f.home !== m.z)) continue;
         const rng = new Rng(hashString(`mine:${g2.seed}:${g2.turn}:${m.z}:${m.nat}:${f.id}`));
         if (rng.next() >= MINES.hit * m.s) continue;
         const c = sinkOne(f, rng.next());
@@ -116168,6 +116220,14 @@ ${next.text}` : ""}` : next ? next.also : "";
       ].filter(Boolean);
       return { nat: card.nat, title: cap1(seaWhat(name)), lines: lines2, buttons: [{ label: "LAY MINES", act: `fleetmines:${id}:${z}`, ok: up, tip: "It sails there and lays a field. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month, until their destroyers sweep it. The field wears down over a few months." }] };
     });
+    const fp = s.fleets.find((x) => x.id === id);
+    const passing = fp?.stance === "passage";
+    const moveTip = (r, tip) => {
+      if (!fp) return tip;
+      if (passing) return passageWhy(s, fp);
+      const m = voyageMonths(s, fp, s.regions[r.id]);
+      return m ? `${tip.replace(/ It spends the month in harbour there\.$/, "")} It is a voyage: ${m === 1 ? "a month" : `${m} months`} at sea on the way, and a month in harbour there when it comes in.` : tip;
+    };
     const may = new Set(s.human && up ? declarable(s) : []);
     const harbours2 = (card.ships > 0 ? strikeHarbours(s, id, (nat) => may.has(nat)) : []).map((h) => {
       const who2 = s.nations[h.holder];
@@ -116177,7 +116237,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         h.launch >= 0 ? `Its aircraft reach it from ${seaWhat(s.seas[h.launch]?.name ?? "sea")}.` : base ? `Beyond its aircraft from ${s.fleets.find((x) => x.id === id)?.port ?? "its base"}: from ${base.name} they reach it.` : "",
         h.atWar ? "" : `${who2 ? upFirst4(theName2(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`
       ].filter(Boolean);
-      const buttons = h.launch >= 0 ? [{ label: "STRIKE FROM THE AIR", act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? "It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month's air war. Ships at anchor cannot manoeuvre." }] : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
+      const buttons = h.launch >= 0 ? [{ label: "STRIKE FROM THE AIR", act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? "It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month's air war. Ships at anchor cannot manoeuvre." }] : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up && !passing, tip: moveTip(base, `Its new home port: from there its aircraft reach ${h.name}.`) }] : [];
       return { nat: h.holder, title: `${h.name}${who2 ? ` (${who2.adj ?? who2.name})` : ""}`, lines: lines2, buttons };
     });
     const fb = s.fleets.find((x) => x.id === id);
@@ -116189,7 +116249,14 @@ ${next.text}` : ""}` : next ? next.also : "";
         `${waits2.words} (${turnToDate(waits2.turn).label}).`,
         staffRunsDesk(s, "navy") ? "You keep it under your own orders: hand it back to your admirals and it goes there with their next month." : "You run the navy yourself: the move is yours to make."
       ],
-      buttons: [{ label: `MOVE BASE TO ${waits2.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: "Its new home port, where the staff's plan has it. It spends the month in harbour there." }]
+      buttons: [{ label: `MOVE BASE TO ${waits2.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up && !passing, tip: moveTip(waits2.region, "Its new home port, where the staff's plan has it. It spends the month in harbour there.") }]
+    }] : [];
+    const away2 = fp && !passing && struckLine(s, fp) ? safeHarbour(s, fp) : null;
+    const withdraw2 = away2 ? [{
+      nat: card.nat,
+      title: away2.name,
+      lines: [`The nearest friendly harbour out of reach of the aircraft that struck it at anchor at ${fp.port}.`],
+      buttons: [{ label: `WITHDRAW TO ${away2.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${away2.id}`, ok: up, tip: moveTip(away2, "Its new home port, out of the strikers' reach. It spends the month in harbour there.") }]
     }] : [];
     const joins = (o?.merge ?? []).map((other4) => {
       const f = fleetView(s, other4);
@@ -116225,6 +116292,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         { heading: "ENEMY FLEETS TO SHADOW", text: "", rows: shadows },
         { heading: "SEAS TO MINE", text: "", rows: minable },
         { heading: "ENEMY HARBOURS TO STRIKE", text: "", rows: harbours2 },
+        { heading: "OUT OF THE STRIKERS' REACH", text: "", rows: withdraw2 },
         { heading: "THE STAFF'S PLAN", text: "", rows: plan },
         { heading: "SEAS IN ITS REACH", text: seas.length ? "" : o?.held ? o.held : up ? "The country is at peace: the fleet keeps its station." : "It is not your month.", rows: seas },
         { heading: "LANES TO ESCORT", text: "", rows: lanes2 },

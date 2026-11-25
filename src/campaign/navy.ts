@@ -583,7 +583,8 @@ export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(
   if (!form) return null;
   const foes: string[] = [];
   const foe = (x: string): void => { if (!foes.includes(x)) foes.push(x); };
-  for (const f of g.fleets) if (f.zone === z && atSea(f) && atWar(g, f.nat, nat) && fleetPower(g, f) > 0) foe(f.nat);
+  // (A fleet in passage holds no sea, as seaSide and SeaPicture read it: holdsSea, release 2, the far chart.)
+  for (const f of g.fleets) if (f.zone === z && holdsSea(f) && atWar(g, f.nat, nat) && fleetPower(g, f) > 0) foe(f.nat);
   const zone = g.seas[z];
   const S = skiesOver(g, z);
   if (S) {
@@ -1404,7 +1405,8 @@ export function sortieAgainst(g: Game, nat: string, path: number[]): number {
   for (const z of path) for (const j of g.seas[z].adj) near.add(j);
   let s = 0;
   for (const f of g.fleets) {
-    if (!atWar(g, f.nat, nat) || !surfaceShips(f)) continue;
+    // (A fleet in passage to a new base comes out against nothing on its way: release 2, the far chart.)
+    if (!atWar(g, f.nat, nat) || !surfaceShips(f) || inPassage(f)) continue;
     if (atSea(f)) { if (!path.includes(f.zone) && near.has(f.zone)) s += fleetPower(g, f); continue; }
     if (keepsHarbour(g, f.nat)) continue;
     if ((f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z))) s += fleetPower(g, f);
@@ -1544,7 +1546,8 @@ export function fleetsAnswer(g: Game, nat: string, path: number[], to?: Region):
   const wait: { f: Fleet; home: boolean }[] = [];
   const commanded: Record<string, boolean> = {};
   for (const f of g.fleets) {
-    if (!atWar(g, f.nat, nat) || !surfaceShips(f) || (atSea(f) && f.zone === last)) continue;
+    // (A fleet in passage to a new base keeps on its way and answers no landing: release 2, the far chart.)
+    if (!atWar(g, f.nat, nat) || !surfaceShips(f) || inPassage(f) || (atSea(f) && f.zone === last)) continue;
     const hand = byHand(g, f.nat, 'navy');
     if (!hand && (f.duty === 'raid' || tiedNow(g, f)) && f.station !== last) continue;
     if (!fleetReach(g, f).includes(last)) continue;
@@ -2121,9 +2124,10 @@ export function escort(g: Game, f: Fleet, lane: string): boolean {
 /** True when a fleet could steam from its present base to this coast, through straits open to it. */
 export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
   const seen = new Uint8Array(g.seas.length);
-  // (A fleet in passage steams from the sea it is on: release 2, the far chart.)
-  const q = [inPassage(f) ? f.zone : f.home];
-  seen[q[0]] = 1;
+  // (Release 2, the far chart: a fleet steams from the sea it is on, at sea, or from its harbour's seas, as its voyage
+  // is reckoned (voyageWay). The old chart reads its home sea.)
+  const q = farOn(g) ? [...new Set(wayFrom(g, f))] : [f.home];
+  for (const z of q) seen[z] = 1;
   for (let i = 0; i < q.length; i++) {
     if (r.seas.includes(q[i])) return true;
     for (const j of g.seas[q[i]].adj) if (!seen[j] && canPass(g, q[i], j, f.nat)) { seen[j] = 1; q.push(j); }
@@ -2227,7 +2231,7 @@ export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
 function voyageWay(g: Game, f: Fleet, r: Region): number[] | null {
   const prev = new Int16Array(g.seas.length).fill(-2);
   const q: number[] = [];
-  for (const z of atSea(f) ? [f.zone] : f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (prev[z] === -2) { prev[z] = -1; q.push(z); }
+  for (const z of wayFrom(g, f)) if (prev[z] === -2) { prev[z] = -1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
     if (r.seas.includes(q[i])) {
       const way: number[] = [];
@@ -2237,6 +2241,17 @@ function voyageWay(g: Game, f: Fleet, r: Region): number[] | null {
     for (const j of g.seas[q[i]].adj) if (prev[j] === -2 && canPass(g, q[i], j, f.nat)) { prev[j] = q[i]; q.push(j); }
   }
   return null;
+}
+
+/** The seas a fleet's way starts from: the sea it is on if at sea, else its base's seas. */
+const wayFrom = (g: Game, f: Fleet): number[] => (atSea(f) ? [f.zone] : f.base >= 0 ? g.regions[f.base].seas : [f.home]);
+
+/** The seas open to a fleet from where it is, through straits open to it: where a voyage of its can lead (voyageWay). */
+function seasOpen(g: Game, f: Fleet): Uint8Array {
+  const seen = new Uint8Array(g.seas.length), q: number[] = [];
+  for (const z of wayFrom(g, f)) if (!seen[z]) { seen[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!seen[j] && canPass(g, q[i], j, f.nat)) { seen[j] = 1; q.push(j); }
+  return seen;
 }
 
 /** Months of a voyage of so many seas: one for each reach of seas, the last of them the month it comes in. */
@@ -2270,6 +2285,9 @@ function setOut(g: Game, f: Fleet, way: number[], from: { base: number; port: st
   if (back) f.passage.back = true;
   f.stance = 'passage';
   f.zone = passageSea(f.passage, g.turn);
+  // It follows no enemy fleet on its way (release 2, shadow.ts): its shadow ends as it sets out.
+  delete f.shadow;
+  delete f.shadowAt;
   g.supplyDirty = true;
   const due = turnToDate(f.passage.due).label;
   headline(g, 'info', back
@@ -2386,6 +2404,14 @@ function withdraws(g: Game, f: Fleet): boolean {
   return false;
 }
 
+/**
+ * A fleet struck at anchor with no friendly harbour out of its strikers' reach: its harbour is marked for its side's air
+ * staff's fighters first (`anc:<fleet>`, air.ts baseByThreat), at the opening of its month, whoever keeps it.
+ */
+function anchorMark(g: Game, f: Fleet): void {
+  if (anchorLoss(g, f) > 0 && !safeHarbour(g, f)) g.flags[`anc:${f.id}`] = g.turn;
+}
+
 /** The player's fleet struck at anchor that he keeps by hand (or whose navy he runs himself): told once a spell of strikes. */
 function anchorTold(g: Game, f: Fleet): void {
   if (!anchorStrikes(g, f).length || f.nat !== g.human || !(keptByHand(g, f) || byHand(g, f.nat, 'navy'))) return;
@@ -2410,10 +2436,19 @@ export function passageWhy(g: Game, f: Fleet): string {
   return `${cap(fleetName(f))} is in passage to ${f.port}, at sea on the way${due}: it strikes, patrols and escorts nothing until it comes in.`;
 }
 
+/** Whether a strait on the reach a fleet in passage steams this month has been shut to it since it set out on its way. */
+function wayShut(g: Game, f: Fleet, p: NonNullable<Fleet['passage']>): boolean {
+  const at = Math.min((g.turn - p.set) * NAVY.range, p.way.length) - 1, to = Math.min((g.turn - p.set + 1) * NAVY.range, p.way.length) - 1;
+  for (let i = Math.max(1, at + 1); i <= to; i++) if (!canPass(g, p.way[i - 1], p.way[i], f.nat)) return true;
+  return false;
+}
+
 /**
  * A nation's fleets in passage at the opening of its month: each steams its next reach, and one whose last reach this
  * is comes in to its new base and lies there this month, with news. One whose new base has fallen on the way makes for
- * the nearest harbour it can, as any fleet whose base is lost (newBase), steamed from where it is.
+ * the nearest harbour it can, as any fleet whose base is lost (newBase), steamed from where it is. One that finds a
+ * strait on this month's reach shut to it steams another way from the sea it is on, by the same reckoning; with no way
+ * open it turns back, and with no way back either it makes for the nearest harbour it can reach.
  */
 function steamPassages(g: Game, nat: string): void {
   for (const f of fleetsOf(g, nat)) {
@@ -2422,8 +2457,21 @@ function steamPassages(g: Game, nat: string): void {
     if (!inPassage(f)) { delete f.passage; continue; }
     if (p.set >= g.turn) continue;
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl)) { newBase(g, f); continue; }
-    if (g.turn < p.due) { f.zone = passageSea(p, g.turn); g.supplyDirty = true; continue; }
-    const months = g.turn - p.set;
+    if (wayShut(g, f, p)) {
+      const way = voyageWay(g, f, g.regions[f.base]);
+      if (!way) { if (!turnBack(g, f)) newBase(g, f, farOn(g), true); continue; }
+      p.start ??= p.set;
+      p.way = way;
+      p.set = g.turn;
+      p.due = g.turn + voyageOf(way.length) - 1;
+      if (way.length > NAVY.range) {
+        f.zone = passageSea(p, g.turn);
+        g.supplyDirty = true;
+        headline(g, 'info', `${cap(fleetName(f))} finds its way shut, and steams another way to ${f.port}, ${way.length} seas off, due in ${turnToDate(p.due).label}.`, nat, f.base);
+        continue;
+      }
+    } else if (g.turn < p.due) { f.zone = passageSea(p, g.turn); g.supplyDirty = true; continue; }
+    const months = g.turn - (p.start ?? p.set);
     delete f.passage;
     f.zone = f.home;
     f.stance = 'port';
@@ -2637,7 +2685,7 @@ export function navalUpkeep(g: Game, nat: string): void {
   // (Release 2, the far chart: its fleets in passage steam on, and those due come in, as the month opens; and a fleet
   // of the player's struck at anchor that he keeps is told once.)
   steamPassages(g, nat);
-  for (const f of fleetsOf(g, nat)) anchorTold(g, f);
+  for (const f of fleetsOf(g, nat)) { anchorMark(g, f); anchorTold(g, f); }
   for (const given of NAVY.fleets) {
     // A row with a book of its own forms by it at the book's stops, for the computer's navy (Force H in June 1940),
     // and for a player's in the start month of a campaign begun later (rider b639).
@@ -3869,7 +3917,8 @@ export function torpedoRisk(g: Game, f: Fleet, z: number): number {
   const gap = screenGap(f);
   if (gap <= 0) return 0;
   let subs = 0;
-  for (const x of g.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += boatsOut(g, x) * quality(g, x.nat) * fit(g, x);
+  // (Boats in passage to a new base fire on nothing on their way: holdsSea, release 2, the far chart.)
+  for (const x of g.fleets) if (x.zone === z && holdsSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += boatsOut(g, x) * quality(g, x.nat) * fit(g, x);
   return Math.min(FLEETS.screen.most, subs * FLEETS.screen.risk * gap);
 }
 
@@ -3923,23 +3972,25 @@ export function haven(g: Game, f: Fleet, r: Region): boolean {
 /**
  * A fleet whose base has fallen makes for the nearest port its nation still holds. Returns false if there is none and
  * the fleet is lost. On the far side it makes for the nearest haven first (`haven`: fed, its own nation's or an ally's
- * at war with the same enemy, and in no closed sea); with none in its reach it reads as it did.
+ * at war with the same enemy, and in no closed sea); with none in its reach it reads as it did. `shut`: a fleet in
+ * passage whose ways on and back are both shut to it (release 2, the far chart), its base still its side's.
  */
-function newBase(g: Game, f: Fleet, form: boolean = farOn(g)): boolean {
+function newBase(g: Game, f: Fleet, form: boolean = farOn(g), shut = false): boolean {
   const old = g.regions[f.base];
+  // (Release 2, the far chart: a move of base is a voyage, so only a harbour an open sea leads to from where it is.)
+  const open = farOn(g) ? seasOpen(g, f) : null;
   const nearest = (ok: (r: Region) => boolean): Region | null => {
     let best: Region | null = null, bd = 1e9;
     for (const r of g.regions) {
-      if (!r.port || !r.seas.length || !ok(r) || !canSailTo(g, f, r)) continue;
+      if (!r.port || !r.seas.length || !ok(r) || !canSailTo(g, f, r) || (open && !r.seas.some((z) => open[z]))) continue;
       const d = chartDist(g, r, old);
       if (d < bd) { bd = d; best = r; }
     }
     return best;
   };
   const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat);
-  if (best) {
-    rebase(g, f, best);
-    headline(g, 'event', `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
+  if (best && rebase(g, f, best)) {
+    headline(g, 'event', shut ? `With its way to ${old.name} and back shut, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
     return true;
   }
   nameLosses(g, f.nat, f.name, f.ships, `scuttle:${g.turn}:${f.id}`); // the names go down with the ships (a record only)
@@ -4720,7 +4771,7 @@ function lookOf(g: Game, nat: string): SubLook {
 
 /** A torpedoing as the scene stages it: the boats' fleets in the sea that could have fired, and one picked on its own key, by their weight as torpedoRisk counts them. */
 function lookTorpedo(g: Game, f: Fleet, cls: ShipClass, sunk: boolean): void {
-  const could = g.fleets.filter((x) => x.zone === f.zone && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat));
+  const could = g.fleets.filter((x) => x.zone === f.zone && holdsSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat));
   const w = could.map((x) => x.ships.ss * quality(g, x.nat) * fit(g, x));
   const all = w.reduce((a, b) => a + b, 0);
   let by: number | null = null;

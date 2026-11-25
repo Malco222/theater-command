@@ -17,7 +17,7 @@
 import data from '../../data/campaign/mines.json';
 import { Rng, hashString } from '../core/rng';
 import { allied, atWar, headline } from './game';
-import { NAVY, atSea, fleetName, fleetPower, fleetReach, passageWhy, sail, shipCount } from './navy';
+import { NAVY, atSea, fleetName, fleetPower, fleetReach, inPassage, passageWhy, sail, shipCount } from './navy';
 import { seaWhere } from './sea-words';
 import { loseStars, mendStars } from './stars';
 import type { Fleet, Game, ShipClass } from './types';
@@ -140,7 +140,8 @@ export function minesStrike(g: Game, nat: string): void {
   for (const m of g.mines) {
     if (m.s <= 0 || !atWar(g, m.nat, nat)) continue;
     for (const f of g.fleets) {
-      if (f.nat !== nat || !shipCount(f.ships) || !atSea(f) || (f.zone !== m.z && f.home !== m.z)) continue;
+      // (A fleet in passage meets a field only on the sea it is on, not off a harbour it has yet to reach: release 2.)
+      if (f.nat !== nat || !shipCount(f.ships) || !atSea(f) || (f.zone !== m.z && (inPassage(f) || f.home !== m.z))) continue;
       const rng = new Rng(hashString(`mine:${g.seed}:${g.turn}:${m.z}:${m.nat}:${f.id}`));
       if (rng.next() >= MINES.hit * m.s) continue;
       const c = sinkOne(f, rng.next());
