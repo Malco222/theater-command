@@ -78,7 +78,7 @@ import { drawMen } from './manpower';
 import { numbersUnderFlag } from './armies';
 import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
 import { station, stationBars, stationed, stationShut, unstation, whyStationBars } from './far';
-import { HISTORY, bookDate, onBook, stopDef } from './history';
+import { HISTORY, bookDate, onBook, stopDef, stopOf } from './history';
 import { characterOf, monthly } from './staff';
 import { neverHis } from './line';
 import { ownPath } from './league';
@@ -641,7 +641,8 @@ function coupMonth(g: Game): void {
 interface WayOp { id: string; declare?: string[]; landings?: { to: string[] }[]; strikes?: { harbour: string }[] }
 
 /**
- * The countries the strike south declares on at stops 4 and 5 (the sandbox playtest of 19 November): not history's
+ * The countries the strike south declares on at stops 3 to 5 (the sandbox playtest of 19 November; stop 3 from the design
+ * director's ruling of 16:30Z, 25 November 2026, Units decide audit item 45): not history's
  * list but those that stand in Japan's way the month it goes. Of the countries the choice names, living, outside
  * Japan's side and not yet at war with it:
  *   - one that fights a power of Japan's bloc stands in its way;
@@ -651,11 +652,12 @@ interface WayOp { id: string; declare?: string[]; landings?: { to: string[] }[];
  *   - one that has only stopped Japan's trade (the freeze) and holds ground the strike goes for is the flank: the
  *     staff strikes it, or hopes to leave it out, by the chance its character gives, drawn once a war.
  * Nobody is in the way unless one of them holds ground the strike goes for. Null where history's list stands: at
- * stops 1 to 3, for every other choice, and where the ties do not read.
+ * stops 1 and 2, for every other choice, and where the ties do not read.
  */
 export function inTheWay(g: Game, nat: string, op: WayOp): string[] | null {
   const P = PACIFIC, R = P?.ready;
-  if (!P || !R || !reads(g) || !stopDef(g).ambitions || nat !== P.power || op.id !== R.choice) return null;
+  // (Stops 3 to 5: Units decide audit item 45, the design director's ruling of 16:30Z, 25 November 2026. Stops 1 and 2 keep the book.)
+  if (!P || !R || !reads(g) || stopOf(g) <= 2 || nat !== P.power || op.id !== R.choice) return null;
   const road = new Set([...(op.landings ?? []).flatMap((L) => L.to), ...(op.strikes ?? []).map((s) => s.harbour), ...Object.keys(R.leads)]);
   const onRoad = (id: string): boolean => [...road].some((nm) => g.byName[nm]?.ctrl === id);
   const open = (op.declare ?? []).filter((id) => !!live(g, id) && !allied(g, nat, id) && !atWar(g, nat, id));

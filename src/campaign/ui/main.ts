@@ -29,7 +29,7 @@ import {
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
-  fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
+  fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderScuttle, orderSplit, previewBombard, whyNotSplit,
   footingOf, orderFootingTo, cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
@@ -96,7 +96,7 @@ import {
 } from '../air';
 import { FIGHTERS, raidCardLines, setFighterTypes } from '../fighters';
 import {
-  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, ownBoatsReach, faultyRaiders, torpedoWords, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip, zoneOf,
+  FLEETS, NAVY, adrift, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, ownBoatsReach, faultyRaiders, torpedoWords, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip, zoneOf,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -253,6 +253,20 @@ const natColor = (id: string): string => g.nations[id]?.color ?? WORLD.nations[i
 const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands|Dominican Republic)/.test(nm) ? `the ${nm}` : nm; };
 const upFirst = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
 /** "Germany", "Germany and Italy", "Germany, Italy, Hungary and 2 more". */
+
+/**
+ * (Release 2, the far chart: navy.ts goAdrift) The orders of a fleet of his that waits at sea with no harbour it can
+ * reach: a change of base, where a harbour is open to it now, and scuttling it (asked twice).
+ */
+let scuttleArmed = '';
+/** The first press of Scuttle, for this fleet in this game this month only: any other asks again. */
+const scuttleKey = (f: Fleet): string => `${g.seed}:${g.turn}:${f.id}`;
+function adriftButtons(f: Fleet, cls = ''): string {
+  const ports = fleetOptions(g, f.id)?.ports ?? [];
+  const c = cls ? ` class="${cls}${ui.rebase ? ' on' : ''}"` : (ui.rebase ? ' class="on"' : '');
+  return `${ports.length ? `<button${c} data-act="rebase" title="Pick a harbour open to it on the map: it makes for it.">Make for a harbour</button>` : ''}<button${cls ? ` class="${cls}"` : ''} data-act="fleetscuttle" title="Its ships go down at sea and are lost for good.">${scuttleArmed === scuttleKey(f) ? 'Scuttle: press again' : 'Scuttle'}</button>`;
+}
+
 function nameList(ids: string[], most = 3): string {
   const names = ids.slice(0, most).map(theName);
   if (ids.length > most) names.push(`${ids.length - most} more`);
@@ -1630,7 +1644,8 @@ function refresh(): void {
   const fl = ui.tab === 'navy' ? myFleet() : null;
   // (Release 2, the far chart: a fleet in passage is held to its way. Its seas and ports are not ringed: it can only be turned back.)
   const onWay = !!fl && fl.stance === 'passage';
-  if (!fl || onWay) ui.rebase = false;
+  // (One waiting at sea with no harbour it could reach may make for one that opens: its ports are ringed then.)
+  if (!fl || (onWay && !adrift(fl))) ui.rebase = false;
   // The coasts the picked fleet's guns can reach: red on the map, and a click on one plans a bombardment.
   shellAt = fl && !onWay && seaWar(g) && g.nations[fl.nat].atWar.length ? fleetOptions(g, fl.id)?.coasts ?? [] : [];
   const af = ui.tab === 'air' ? myAir() : null;
@@ -2608,7 +2623,8 @@ function drawFleetTray(f: Fleet): void {
   const card = fleetView(g, f.id)!;
   const n = g.nations[f.nat];
   const adm = card.admiral;
-  const can = !!myFleet() && n.atWar.length > 0;
+  // (Release 2, the far chart: a fleet of his waiting at sea with no harbour it can reach takes his order at peace too.)
+  const can = !!myFleet() && (n.atWar.length > 0 || adrift(f));
   const pieces = seaWar(g);
   const head = `<div class="tgen"><span class="seal${adm ? '' : ' none'}" style="background:${n.color}">${adm ? esc(initialsOf(adm.name)) : ''}</span><span class="grow"><b>${esc(card.name)}</b><small>${adm ? `Admiral ${esc(surname(adm.name))}, level ${adm.level} · ` : ''}${esc(card.doing)}</small></span></div>`;
   const bar = (label: string, v: number, cls: string, word: string, title: string): string => `<span class="mrow" title="${esc(title)}"><small>${label}</small><span class="meter"><i class="${cls}" style="width:${Math.round(v * 100)}%"></i></span><em>${esc(word)}</em></span>`;
@@ -2621,7 +2637,7 @@ function drawFleetTray(f: Fleet): void {
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
   const orders = can && f.stance === 'passage'
-    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small><button data-act="toport" title="${esc(fleetOptions(g, f.id)?.held ?? '')}">Turn back</button></div>`
+    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${adrift(f) ? adriftButtons(f) : `<button data-act="toport" title="${esc(fleetOptions(g, f.id)?.held ?? '')}">Turn back</button>`}</div>`
     : can
     ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? FLEETS.orders.port.blurb : inHarbour(f))}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="${fleetOptions(g, f.id)?.split ? 'Send some of its ships off as a fleet of their own.' : esc(oneShip(f))}">Split</button>` : ''}</div>`
     : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
@@ -5811,7 +5827,7 @@ function fleetOrders(f: Fleet): string {
   const passing = f.stance === 'passage';
   const will = now === 'raid' ? 'raid shipping' : now === 'hunt' ? 'hunt submarines' : 'patrol';
   let out = `<div class="orders">
-    <div class="acts">${passing ? `<button class="btn small" data-act="toport" title="${esc(o.held ?? '')}">Turn back</button>` : `${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? 'A fleet in harbour refits quickly.' : inHarbour(f))}">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>`}${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>${passing && o.held ? `<p class="sub">${esc(o.held)}</p>` : ''}`;
+    <div class="acts">${passing ? (adrift(f) ? adriftButtons(f, 'btn small') : `<button class="btn small" data-act="toport" title="${esc(o.held ?? '')}">Turn back</button>`) : `${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(atSea(f) ? 'A fleet in harbour refits quickly.' : inHarbour(f))}">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>`}${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a fleet of their own: to escort a lane, to hunt submarines, to shell a coast.">Split off ships</button>' : ''}</div>${passing && o.held ? `<p class="sub">${esc(o.held)}</p>` : ''}`;
   const wings = wingsOfFleet(g, f.id);
   if (wings.length) {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
@@ -5974,7 +5990,7 @@ function navyPane(): string {
     out += crossingNotes();
     out += seaNotes();
     out += laneNotes();
-    out += `<h3>Your fleets</h3>${mine.length ? mine.map((f) => fleetRow(f, order && n.atWar.length > 0) + (order && ui.fleet === f.id && n.atWar.length ? fleetOrders(f) : '')).join('') : '<div class="empty">No ships under your flag.</div>'}`;
+    out += `<h3>Your fleets</h3>${mine.length ? mine.map((f) => fleetRow(f, order && (n.atWar.length > 0 || adrift(f))) + (order && ui.fleet === f.id && (n.atWar.length || adrift(f)) ? fleetOrders(f) : '')).join('') : '<div class="empty">No ships under your flag.</div>'}`;
     const friends = g.fleets.filter((f) => f.nat !== me && afloat(f) && allied(g, f.nat, me)).sort(size);
     const foes = g.fleets.filter((f) => afloat(f) && atWar(g, f.nat, me)).sort(size);
     if (friends.length) out += `<h3>Allied fleets</h3>${friends.map((f) => fleetRow(f, false, true)).join('')}`;
@@ -8615,6 +8631,7 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
+  scuttleArmed = '';
   ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0; ui.seenPass = g.passings.length;
   drawStatic();
   const italy = view === 'italy', west = view === 'west', east = view === 'east';
@@ -8649,6 +8666,7 @@ function continueGame(): boolean {
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = g.reports.length; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = g.seaReports.length;
+  scuttleArmed = '';
   ui.air = -1; ui.airMode = ''; ui.seenAir = g.airReports.length; ui.seenPass = g.passings.length;
   drawStatic();
   const me = g.human;
@@ -9664,6 +9682,17 @@ function onClick(e: MouseEvent): void {
       ui.rebase = false; refresh(); break;
     }
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
+    case 'fleetscuttle': {
+      // (Release 2, the far chart: a fleet of his with no harbour it can reach. Asked twice, since it cannot be undone.)
+      const f = myFleet();
+      if (!f) { refresh(); break; }
+      if (scuttleArmed !== scuttleKey(f)) { scuttleArmed = scuttleKey(f); ui.msg = `Scuttle the ${f.name}? Its ships go down and are lost for good. Press Scuttle again to give the order.`; refresh(); break; }
+      scuttleArmed = '';
+      ui.rebase = false;
+      ui.msg = orderScuttle(g, f.id) ? `The ${f.name} is scuttled.` : `The ${f.name} cannot be scuttled: only a fleet with no harbour it can reach may be.`;
+      if (!myFleet()) ui.fleet = -1;
+      refresh(); break;
+    }
     case 'showsea': openModal(null); ui.sea = id; ui.sel = -1; ui.picked.clear(); ui.tab = 'region'; focusOnPoint(g.seas[id].x, g.seas[id].y); refresh(); break;
     case 'seareport': openModal({ kind: 'seareport', id, back: monthBack() }); break;
     case 'airfleet': {
@@ -10404,7 +10433,7 @@ function onRegion(id: number): void {
   // Under the Navy tab with a fleet picked, a click on a port is a change of base.
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (fl && ui.rebase) {
-    if (fl.stance === 'passage') { ui.rebase = false; ui.msg = fleetOptions(g, fl.id)?.held ?? ''; }
+    if (fl.stance === 'passage' && !adrift(fl)) { ui.rebase = false; ui.msg = fleetOptions(g, fl.id)?.held ?? ''; }
     else if (orderRebase(g, fl.id, id)) ui.rebase = false;
     else ui.msg = `${r.name} cannot be the fleet's base: it has to be a friendly port the ships can steam to.`;
     refresh();

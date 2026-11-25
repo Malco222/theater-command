@@ -829,16 +829,19 @@ export interface Fleet extends Storied {
    * (`from`, `fromPort`, `fromHome`, where it is turned back to), the seas of its way in order (`way`), the month it set
    * out on that way (`set`) and the month it comes in (`due`), and whether it is on its way back (`back`). `start`: the
    * month it first set out, where a strait shut on the way has put it on another way since. Its base, port and home
-   * are the new harbour's from the month it sets out. Only while its stance is 'passage'.
+   * are the new harbour's from the month it sets out. Only while its stance is 'passage'. `adrift`: the month it began
+   * to wait at sea with no harbour it can reach (the design director's ruling of 15:48Z, 25 November 2026, 3): it is
+   * not scuttled, and waits there, doing nothing and open to attack, until one opens (navy.ts goAdrift).
    */
-  passage?: { from: number; fromPort: string; fromHome: number; way: number[]; set: number; due: number; back?: true; start?: number };
+  passage?: { from: number; fromPort: string; fromHome: number; way: number[]; set: number; due: number; back?: true; start?: number; adrift?: number };
   /**
    * Its air strikes at anchor this month and last (release 2, the far chart; the design director's ruling of 04:33Z, 25
    * November 2026, 2; navy.ts anchorLoss): for each, the month (`t`), the harbour (`at`), the ships sunk (`n`) and
    * their share of its surface ships (`lost`), the strikers' weight in the air (`w`), and where they flew from as its
-   * side saw them (`from`: the sea of their carriers, or -1 and the airfield, and how far their bombers reach in km).
+   * side saw them (`from`: the sea of their carriers, or -1 and the airfield, and how far their bombers reach in km;
+   * with the strikers' nation and their carrier fleet, release 2's ruling of 15:48Z, for where they could be next month).
    */
-  anchor?: { t: number; at: number; n: number; lost: number; w: number; from: { sea: number; field: number; km: number }[] }[];
+  anchor?: { t: number; at: number; n: number; lost: number; w: number; from: { sea: number; field: number; km: number; nat?: string; fleet?: number }[] }[];
   /** Where a computer-run fleet goes when it has nothing better to do, and what it does there. */
   station: number;
   duty: Stance;

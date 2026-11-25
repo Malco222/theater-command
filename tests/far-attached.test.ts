@@ -56,6 +56,12 @@ const december = (stop: number, human: string | null = null): Game => {
   navalUpkeep(g, 'USA');
   return g;
 };
+/**
+ * America in the strike south's way. (At stops 3 to 5 the strike declares on those in its way and its landings are cut
+ * to their ground, Units decide audit item 45: America, at war with Germany, stands in it, so the Philippine landings
+ * sail. Left out by the flank's draw, they would not.)
+ */
+const inTheWay = (g: Game): Game => { declareWar(g, 'USA', 'GER'); return g; };
 /** The same war where history is loose, the freeze six months old and the striking fleet gathered: the staff's word is given this month. */
 const ready = (g: Game): Game => { g.flags['pac:freeze'] = g.turn - 2; readinessMonth(g, 'JAP'); g.flags['pac:freeze'] = g.turn - 6; return g; };
 /** Japan at war with Britain this month, and Kota Bharu's beach with nobody on it: a landing there is unfought. */
@@ -235,7 +241,7 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
   });
 
   it("where history is loose: the month Japan strikes, the 5th Division's regiments land with it, the record's lift of eleven carries all ten landings, and the 14th is let go with the Guards", () => {
-    const g = ready(december(3));
+    const g = ready(inTheWay(december(3)));
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
     expect(g.flags['st:done:JAP:south']).toBe(28);
@@ -315,7 +321,7 @@ describe("the 14th Army's rows that land with a division (the Lingayen reading)"
   });
 
   it('where history is loose: the month Japan strikes they land with their divisions, the 9th Infantry and the guns at Lingayen and Kimura at Legaspi', () => {
-    const g = ready(december(3));
+    const g = ready(inTheWay(december(3)));
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
     expect(g.flags['st:done:JAP:south']).toBe(28);

@@ -201,10 +201,11 @@ describe('a fleet struck at anchor', () => {
     const other = g.fleets.find((x) => x.nat === 'USA' && x.id !== f.id && x.base === f.base && x.home === f.home && x.stance === 'port')
       ?? (() => { const x = { ...f, id: g.nextFleet++, name: 'Second Fleet', ships: { ...f.ships }, lost: { ...f.lost }, anchor: undefined }; g.fleets.push(x); return x; })();
     strike(g, f, 0.4);
-    const sa = shipCount(f.ships) - f.ships.ss, sb = shipCount(other.ships) - other.ships.ss;
+    const n = f.anchor![0].n, sa = shipCount(f.ships) - f.ships.ss, sb = shipCount(other.ships) - other.ships.ss;
     expect(merge(g, f, other)).toBe(true);
     expect(other.anchor?.length).toBe(1);
-    expect(anchorLoss(g, other)).toBeCloseTo((0.4 * sa) / (sa + sb), 9);
+    // (Its share is of its ships before the strike, the ships it has and those sunk: of the whole joined fleet so counted.)
+    expect(anchorLoss(g, other)).toBeCloseTo((0.4 * (sa + n)) / (sa + n + sb), 9);
   });
 });
 

@@ -12,7 +12,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
 import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
-import { allied, atWar, headline, routineNews, worksFor } from './game';
+import { allied, atWar, headline, placeName, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
   laneCounts,
@@ -112,7 +112,8 @@ export function fleetDoing(g: Game, f: Fleet): string {
   const sea = g.seas[f.zone]?.name;
   const where = sea ? seaWhere(sea) : 'at sea', what = sea ? seaWhat(sea) : 'the sea';
   if (!atSea(f)) return `In harbour at ${f.port}`;
-  // (Release 2, the far chart: on its way to a new base.)
+  // (Release 2, the far chart: waiting at sea with no harbour it can reach, navy.ts goAdrift; else on its way to a new base.)
+  if (f.stance === 'passage' && f.passage?.adrift !== undefined) return `Waiting at sea ${where}, with no harbour it can reach`;
   if (f.stance === 'passage') return `In passage to ${f.port} ${where}${f.passage ? `, in by ${turnToDate(f.passage.due).label}` : ''}`;
   if (f.stance === 'raid') return `Raiding shipping ${where}`;
   if (f.stance === 'hunt') return `Hunting submarines ${where}`;
@@ -323,7 +324,9 @@ export function whyNotBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, 
   if (f.stance === 'passage') return passageWhy(g, f);
   if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
   if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
-  if (!atWar(g, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
+  // (Release 2: the UI director's wording mark of 17:23Z, 25 November 2026. The place keeps its article, and no verb
+  // agrees with a plural name: "The enemy does not hold the Midlands.")
+  if (!atWar(g, f.nat, r.ctrl)) return `The enemy does not hold ${placeName(r.name)}.`;
   if (gunsRaw(f.ships) < B.least) return `The ${f.name} has too few heavy guns to shell a coast: that is work for battleships and cruisers.`;
   if (f.shelled === g.turn) return `The ${f.name} has already shelled a coast this month.`;
   if (g.flags[`shell:${r.id}`] === g.turn) return `${r.name} has already been shelled this month.`;
@@ -540,7 +543,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   // (Release 2, the far chart: its strikes at anchor go with it, for its staff's weighing of a move: navy.ts anchorLoss.)
-  if (f.anchor) sq.anchor = f.anchor.map((e) => ({ ...e, from: e.from.map((o) => ({ ...o })) }));
+  // (Its share of the loss goes with it; the ships sunk stay on the fleet's own book, counted once.)
+  if (f.anchor) sq.anchor = f.anchor.map((e) => ({ ...e, n: 0, from: e.from.map((o) => ({ ...o })) }));
   if (stars) sq.stars = stars;
   g.fleets.push(sq);
   // Carriers that go take their aircraft with them.
@@ -578,11 +582,36 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   // (Release 2, the far chart: their strikes at anchor go into the one fleet's book, each loss now a share of the
   // whole fleet's surface ships, for its staff's weighing of a move: navy.ts anchorLoss.)
   if (a.anchor?.length || b.anchor?.length) {
-    // (b's ships already count a's here.)
-    const all = shipCount(b.ships) - b.ships.ss, sa = shipCount(a.ships) - a.ships.ss;
-    const of = (x: NonNullable<Fleet['anchor']>, n: number): NonNullable<Fleet['anchor']> =>
-      x.map((e) => ({ ...e, lost: all > 0 ? (e.lost * n) / all : e.lost, from: e.from.map((o) => ({ ...o })) }));
-    b.anchor = [...of(b.anchor ?? [], all - sa), ...of(a.anchor ?? [], sa)];
+    // One raid is one entry: its share of the joined fleet is each side's share weighed by that side's surface ships
+    // before it, which are the ships it has now (b's already count a's here) and those sunk by that raid and by every
+    // later one, wherever (a strike before it, at this harbour or another, sank ships that were not there for it). A
+    // raid in one book weighs nothing on the other side's share; a raid in both, as on a squadron split off and joined
+    // again, keeps the one share it had. With no surface ships on either side, the boats weigh it.
+    type Entry = NonNullable<Fleet['anchor']>[number];
+    const sa = shipCount(a.ships) - a.ships.ss, sb = shipCount(b.ships) - b.ships.ss - sa;
+    const key = (e: Entry): string => `${e.t}|${e.at}|${e.w}|${JSON.stringify(e.from)}`;
+    const keys: string[] = [];
+    const byKey = (x: Fleet): Map<string, Entry> => {
+      const m = new Map<string, Entry>();
+      for (const e of x.anchor ?? []) {
+        const k = key(e), one = m.get(k);
+        // (Two raids alike in a month on the one fleet: their shares and sinkings add, as before.)
+        if (one) m.set(k, { ...one, n: one.n + e.n, lost: one.lost + e.lost });
+        else { m.set(k, e); if (!keys.includes(k)) keys.push(k); }
+      }
+      return m;
+    };
+    const eb = byKey(b), ea = byKey(a);
+    const before = (x: Fleet, now: number, e: Entry | undefined, t: number): number => now + (e?.n ?? 0) + (x.anchor ?? []).filter((y) => y.t > t).reduce((s, y) => s + y.n, 0);
+    const book: NonNullable<Fleet['anchor']> = [];
+    for (const k of keys) {
+      const x = eb.get(k), y = ea.get(k), e = (x ?? y)!;
+      let wb = before(b, sb, x, e.t), wa = before(a, sa, y, e.t);
+      if (wa + wb <= 0) { wa = a.ships.ss; wb = b.ships.ss - a.ships.ss; }
+      const lost = wa + wb > 0 ? ((x?.lost ?? 0) * wb + (y?.lost ?? 0) * wa) / (wa + wb) : Math.max(x?.lost ?? 0, y?.lost ?? 0);
+      book.push({ ...e, n: (x?.n ?? 0) + (y?.n ?? 0), lost, from: e.from.map((o) => ({ ...o })) });
+    }
+    b.anchor = book.sort((p, q) => p.t - q.t);
   }
   g.fleets.splice(g.fleets.indexOf(a), 1);
   moveWings(g, a, b, a.ships.cv, a.ships.cv);

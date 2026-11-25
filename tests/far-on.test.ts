@@ -202,7 +202,13 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
   });
 
   it("moves a computer navy's base in its month, where it holds the place, and leaves a player's fleet to him", () => {
+    // (The book's dated base moves run at stops 1 and 2 only: Units decide audit item 42, 16:19Z of 25 November 2026.)
+    const s3 = grand();
+    s3.turn = 9;
+    startPhase(s3, 'USA');
+    expect(at(s3, fleet(s3, 'USA', 'Pacific Fleet'))).toBe('San Diego');
     const g = grand();
+    setStop(g, 2, true);
     const pf = fleet(g, 'USA', 'Pacific Fleet');
     expect(at(g, pf)).toBe('San Diego');
     g.turn = 9;

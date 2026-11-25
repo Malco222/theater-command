@@ -211,12 +211,15 @@ describe('the strike south at stops 4 and 5: no last month, and from it no waiti
 });
 
 describe("the strike south at stops 4 and 5: those that stand in Japan's way", () => {
-  it('stops 1 to 3 read history\'s choice exactly: the same choice, its three, its strike and its ten landings', () => {
-    for (const stop of [1, 3]) {
+  it('stops 1 and 2 read history\'s choice exactly: the same choice, its three, its strike and its ten landings; stop 3 reads those in its way', () => {
+    for (const stop of [1, 2]) {
       const g = months(december(stop), 4);
       expect(inTheWay(g, 'JAP', SOUTH())).toBeNull();
       expect(asGoes(g, 'JAP', SOUTH())).toBe(SOUTH());
     }
+    // (Units decide audit item 45, the design director's ruling of 16:30Z, 25 November 2026: at stops 3 to 5 alike.)
+    const g = months(december(3), 4);
+    expect(inTheWay(g, 'JAP', SOUTH())).toEqual(leavesAmerica(g) ? ['UK'] : ['USA', 'UK']);
   });
 
   it('Britain, at war with Germany, always; America, neutral with only its trade stopped, by the draw: a cautious staff leaves it out more often than a bold one', () => {

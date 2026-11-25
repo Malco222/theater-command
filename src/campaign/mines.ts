@@ -17,7 +17,7 @@
 import data from '../../data/campaign/mines.json';
 import { Rng, hashString } from '../core/rng';
 import { allied, atWar, headline } from './game';
-import { NAVY, atSea, fleetName, fleetPower, fleetReach, inPassage, passageWhy, sail, shipCount } from './navy';
+import { NAVY, atSea, fleetName, fleetPower, fleetReach, inPassage, passageNext, passageWhy, sail, shipCount } from './navy';
 import { seaWhere } from './sea-words';
 import { loseStars, mendStars } from './stars';
 import type { Fleet, Game, ShipClass } from './types';
@@ -167,7 +167,8 @@ export function minesMonth(g: Game): void {
   for (const m of g.mines) {
     let cut = MINES.decay;
     for (const f of g.fleets) {
-      if (!shipCount(f.ships) || f.ships.dd <= 0 || !atSea(f) || f.zone !== m.z || !atWar(g, f.nat, m.nat)) continue;
+      // (A fleet in passage sweeps nothing on its way: it only crosses the sea. Release 2, the far chart.)
+      if (!shipCount(f.ships) || f.ships.dd <= 0 || !atSea(f) || inPassage(f) || f.zone !== m.z || !atWar(g, f.nat, m.nat)) continue;
       cut += MINES.sweep;
       const knew = fieldKnown(g, m, f.nat);
       learn(m, f.nat);
@@ -216,10 +217,13 @@ export function minesSeen(g: Game, viewer: string | null = g.human): { zone: num
     .map((m) => ({ zone: m.z, nat: m.nat, own: m.nat === viewer || allied(g, m.nat, viewer), word: m.s >= 0.66 ? 'thick' : m.s >= 0.33 ? 'thinning' : 'thin' }));
 }
 
-/** The line for a fleet's panel where it lies in, or sails from, a field of an enemy's it knows of; '' otherwise. */
+/** The line for a fleet's panel where it lies in, sails from or steams onto next, a field of an enemy's it knows of; '' otherwise. */
 export function mineLine(g: Game, f: Fleet): string {
   if (!seaMinesOn(g) || !atSea(f)) return '';
-  const m = (g.mines ?? []).find((x) => (x.z === f.zone || x.z === f.home) && atWar(g, x.nat, f.nat) && fieldKnown(g, x, f.nat));
+  // (As minesStrike reads it at the next month's opening: a fleet in passage meets a field only on the sea it has
+  // steamed onto by then, and none once it is in; one that is not, on the sea it lies in or sails from.)
+  const z = inPassage(f) ? passageNext(g, f) : f.zone;
+  const m = (g.mines ?? []).find((x) => z >= 0 && (x.z === z || (!inPassage(f) && x.z === f.home)) && atWar(g, x.nat, f.nat) && fieldKnown(g, x, f.nat));
   if (!m) return '';
   return `${cap(g.nations[m.nat]?.adj ?? m.nat)} mines ${seaWords(g, m.z)}: it may lose a ship each month it sails there, until destroyers sweep them.`;
 }

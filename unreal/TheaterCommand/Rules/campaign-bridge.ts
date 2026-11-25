@@ -62,7 +62,7 @@ import { startGunsOnLoad } from '../../../src/campaign/airversion';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderShadowFleet, stopShadowFleet, whyNotShadowFleet, orderMinesFleet, whyNotMinesFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  orderAir, orderAirBase, orderFleet, orderScuttle, fleetKeptByHand, handBackFleet, orderShadowFleet, stopShadowFleet, whyNotShadowFleet, orderMinesFleet, whyNotMinesFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, orderHoldRear, orderStandDown, whyNotRearguardOf, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
@@ -99,7 +99,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { adrift, baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -833,7 +833,8 @@ function drawView(step = false) {
       // And the friendly ports it could make its new home. (1.5.1) None for a fleet held where its battle left it this
       // month: the rules refuse it a new base, so no port is tinted to offer one (its seas still say why when hovered).
       // (Release 2, the far chart: and none for a fleet in passage, which keeps on its way or is turned back.)
-      bases: f.nat === s.human && up && f.stance !== 'passage' && !heldWhy(s, f) ? baseTargets(s, f).map((r) => r.id) : [],
+      // (One waiting at sea with no harbour it could reach: the harbours open to it now, where any is.)
+      bases: f.nat === s.human && up && (f.stance !== 'passage' || adrift(f)) && !heldWhy(s, f) ? baseTargets(s, f).map((r) => r.id) : [],
       };
     }),
     // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
@@ -4472,6 +4473,10 @@ function placeJobs(s: Game, region: number): { key: string; label: string; detai
 let wreckAsked = '';
 /** The appointment or decree the player has been asked to confirm, and the month. */
 let cabinetAsked = '';
+/** The fleet the player has been asked to confirm scuttling (release 2, the far chart): the game, the order and the month. */
+let scuttleAsked = '';
+/** (Release 2, the far chart) Why a fleet waiting at sea with no harbour it can reach is not turned back, and what he can do. */
+const ADRIFT_PICK = 'It has no harbour to turn back to: pick a harbour open to it on the map once one opens, or scuttle it.';
 /** The page of the cabinet room that is open (Version 62): its business, the ministers, the decrees or the minutes. Back to its business as each month opens. */
 let cabinetTab: 'now' | 'table' | 'decrees' | 'minutes' = 'now';
 let cabinetTabTurn = -1;
@@ -4596,7 +4601,9 @@ function force(kind: string, id: number) {
     // (Release 2, the far chart: a fleet in passage to a new base offers no sea, and its order to harbour turns it back.)
     const passage = f.stance === 'passage' && f.passage ? { from: f.passage.fromPort } : null;
     if (mine && passage) {
-      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Turn back to ${passage.from}`, detail: 'Back to the harbour it left, steamed from where it is: within its reach it is in this month, beyond it in passage again.', ok: up, why: notNow });
+      // (Waiting at sea with no harbour it can reach, it has none to turn back to: the fourth review, 12.)
+      const lost = adrift(f);
+      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Turn back to ${passage.from}`, detail: 'Back to the harbour it left, steamed from where it is: within its reach it is in this month, beyond it in passage again.', ok: up && !lost, why: lost ? ADRIFT_PICK : notNow });
     } else if (mine) {
       // (1.5.1; the playtester, 25 November) A fleet sent at the enemy this month stays where the battle left it: its
       // seas and its harbour are shown, refused, with the reason, and not offered only to be turned down.
@@ -5670,8 +5677,14 @@ function fleetPage(s: Game, id: number): Page | null {
       // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
       // (1.5.2's #37 and 1.5.1's held fleet, both: the reason it is held comes first, else it says if it is the order now.)
       fl?.stance === 'passage' && fl.passage
-        ? { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` }
+        // (Waiting at sea with no harbour it can reach, it has none to turn back to: a harbour open to it is picked on the
+        // map, as one opens. The fourth review, 25 November 2026, 12.)
+        ? adrift(fl)
+          ? { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: false, tip: `${passageWhy(s, fl)} ${ADRIFT_PICK}` }
+          : { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` }
         : { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held, tip: o?.held || `${card.stance === 'port' ? 'It is in harbour now. ' : ''}Safe from the enemy fleet, and takes no part at sea.` },
+      // (Release 2, the far chart: waiting at sea with no harbour it can reach, it may be scuttled on his order.)
+      ...(fl && adrift(fl) ? [{ label: 'SCUTTLE IT', act: `fleetscuttle:${id}`, ok: up, tip: `${passageWhy(s, fl)} Scuttled, its ships go down at sea and are lost for good.` }] : []),
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
       ...(taskForceOn(s) && fl ? [fl.task
         ? { label: 'RELEASE TASK FORCE', act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP }
@@ -7458,6 +7471,21 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     ok = !!to && orderRebase(s, id, to.region.id);
     note = ok ? `Its new home port is ${to!.region.name}.` : 'It cannot move its base there now.';
     return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
+  if (part[0] === 'fleetscuttle') {
+    // (Release 2, the far chart) 'fleetscuttle:<fleet>' scuttles a fleet of his that waits at sea with no harbour it can reach.
+    // Asked twice, since it cannot be undone (the design director's ruling of 16:05Z, 25 November 2026, 3b).
+    const id = Number(part[1]), fl = s.fleets.find((x) => x.id === id);
+    const name = fl?.name ?? 'The fleet';
+    const asking = `${s.seed}:${action}:${s.turn}`;
+    if (fl && adrift(fl) && fl.nat === s.human && scuttleAsked !== asking) {
+      scuttleAsked = asking;
+      return { ok: false, note: `Scuttle the ${name}? Its ships go down at sea and are lost for good, and it cannot be undone. Press it again to scuttle it.`, fly, flies, open: `fleet:${part[1]}`, view: view() };
+    }
+    scuttleAsked = '';
+    ok = orderScuttle(s, id);
+    note = ok ? `The ${name} is scuttled.` : 'It cannot be scuttled: only a fleet with no harbour it can reach may be.';
+    return { ok, note, fly, flies, open: ok ? 'close' : `fleet:${part[1]}`, view: view() };
   }
   if (part[0] === 'fleetstrikebase') {
     // (Release 2, harbourstrike.ts) 'fleetstrikebase:<fleet>:<port>' moves its base forward, to where its aircraft reach the harbour.

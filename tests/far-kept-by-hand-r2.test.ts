@@ -12,6 +12,7 @@ import { createGame } from '../src/campaign/game';
 import { baseTargets, bookBaseOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
+import { setStop } from '../src/campaign/history';
 import { beginHuman, endHuman, handBackFleet, humanUp, orderRebase, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -27,6 +28,8 @@ function month(g: Game): void {
 /** America's campaign under the admirals (or with the navy his own), at the player's month before the book's move (May 1940 is month 9). */
 function america(staff = true): { g: Game; pf: Fleet } {
   const g = startOpen(createGame(3, 'USA'));
+  // (The book's dated base moves run at stops 1 and 2 only: Units decide audit item 42.)
+  setStop(g, 2, true);
   for (let k = 0; !humanUp(g) && k < 400; k++) stepAI(g);
   setDesk(g, 'navy', staff);
   beginHuman(g);
@@ -66,6 +69,15 @@ describe("the book's base moves and the player's own orders", () => {
     expect(at(h, pf2)).toBe('Pearl Harbor');
     expect(bookBaseOf(h, pf2)).toBeNull();
     expect(h.headlines.some((x) => x.text === 'The Pacific Fleet is ordered to stay at Pearl Harbor.')).toBe(true);
+    // (The dial turned past stop 2 before he hands it back: the move is the book's, so it is dropped. The fourth review, 6.)
+    const k = loadGame(saveGame(g))!;
+    const pf3 = k.fleets.find((f) => f.id === pf.id)!;
+    setStop(k, 3, true);
+    expect(handBackFleet(k, pf.id)).toBe(true);
+    month(k);
+    expect(at(k, pf3)).not.toBe('Pearl Harbor');
+    expect(bookBaseOf(k, pf3)).toBeNull();
+    expect(k.headlines.some((x) => x.text === 'The Pacific Fleet is ordered to stay at Pearl Harbor.')).toBe(false);
   }, 300000);
   it('with the navy his own, the news tells him of the move and the page makes it in one order', () => {
     const { g, pf } = america(false);
