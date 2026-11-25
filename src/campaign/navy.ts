@@ -579,12 +579,14 @@ export function airOver(g: Game, z: number, nat: string, hostile = false, beside
  * where the read closes nothing, and with the far side off (the old chart's form is after release). `form` is the
  * far switch unless a reading asks for the other form on the same month. SeaPicture reads the same from its lists.
  */
-export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(g)): ((x: string) => boolean) | null {
+export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(g), held = false): ((x: string) => boolean) | null {
   if (!form) return null;
   const foes: string[] = [];
   const foe = (x: string): void => { if (!foes.includes(x)) foes.push(x); };
-  // (A fleet in passage holds no sea, as seaSide and SeaPicture read it: holdsSea, release 2, the far chart.)
-  for (const f of g.fleets) if (f.zone === z && holdsSea(f) && atWar(g, f.nat, nat) && fleetPower(g, f) > 0) foe(f.nat);
+  // (Release 2, the far chart. In a sea's read (`held`: seaSide) a fleet in passage holds nothing, as SeaPicture reads it:
+  // holdsSea. Fought, struck or searched for, it is an enemy at sea like any other, and only its enemies' friends at war
+  // with it lend their aircraft against it: the ruling of 03:23Z.)
+  for (const f of g.fleets) if (f.zone === z && (held ? holdsSea(f) : atSea(f)) && atWar(g, f.nat, nat) && fleetPower(g, f) > 0) foe(f.nat);
   const zone = g.seas[z];
   const S = skiesOver(g, z);
   if (S) {
@@ -613,7 +615,7 @@ export interface SeaBalance { ships: number; air: number; total: number }
 /** One side's strength in a sea: its fleets at sea there, and its aircraft within reach. */
 export function seaSide(g: Game, z: number, nat: string, hostile: boolean, form: boolean = farOn(g)): SeaBalance {
   // (The far side: of its friends, those at war with an enemy of its own in this sea: besideIn.)
-  const beside = hostile ? null : besideIn(g, z, nat, form);
+  const beside = hostile ? null : besideIn(g, z, nat, form, true);
   let ships = 0;
   // (A fleet in passage crosses the sea and holds none of it: release 2, the far chart. SeaPicture.afloat reads the same.)
   for (const f of g.fleets) if (f.zone === z && holdsSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) ships += fleetPower(g, f);
@@ -1765,7 +1767,8 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
   const helps: CrossingHelp[] = [];
   if (risk > 0) {
     // The invader's own fleets that could stand in the worst sea and are not there now.
-    const cover = fleetsOf(g, nat).filter((f) => surfaceShips(f) > 0 && !(f.zone === worst.z && atSea(f)) && fleetReach(g, f).includes(worst.z));
+    // (Release 2, the far chart: a fleet in passage to a new base covers no crossing on its way.)
+    const cover = fleetsOf(g, nat).filter((f) => surfaceShips(f) > 0 && !inPassage(f) && !(f.zone === worst.z && atSea(f)) && fleetReach(g, f).includes(worst.z));
     const more = cover.reduce((s, f) => s + fleetPower(g, f), 0);
     const foes = ds.some((d) => d.ships >= 0.5 || d.sortie >= 0.5);
     const tell = (id: CrossingHelp['id'], text: string, r: number): void => { if (r < risk - 0.005) helps.push({ id, text, risk: r }); };
@@ -2595,10 +2598,17 @@ function steamPassages(g: Game, nat: string): void {
     if (!p) continue;
     if (!inPassage(f)) { delete f.passage; continue; }
     if (p.set >= g.turn) continue;
-    if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl)) { newBase(g, f); continue; }
+    // (In harbour at once, within its reach, it lies there this month as a fleet that comes in does: cameIn.)
+    const inNow = (): void => { if (g.fleets.includes(f) && !inPassage(f)) g.flags[`fin:${f.id}`] = g.turn; };
+    if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl)) { newBase(g, f); inNow(); continue; }
     if (wayShut(g, f, p)) {
       const way = voyageWay(g, f, g.regions[f.base]);
-      if (!way) { if (!turnBack(g, f)) newBase(g, f, farOn(g), true); continue; }
+      if (!way) {
+        const left = p.from >= 0 ? g.regions[p.from] : undefined, lost = !left || !allied(g, nat, left.ctrl);
+        if (!turnBack(g, f)) newBase(g, f, farOn(g), lost && left ? `With its way to ${f.port} shut, and ${p.fromPort} lost` : `With its way to ${f.port} and back shut`);
+        inNow();
+        continue;
+      }
       p.start ??= p.set;
       p.way = way;
       p.set = g.turn;
@@ -4114,7 +4124,7 @@ export function haven(g: Game, f: Fleet, r: Region): boolean {
  * at war with the same enemy, and in no closed sea); with none in its reach it reads as it did. `shut`: a fleet in
  * passage whose ways on and back are both shut to it (release 2, the far chart), its base still its side's.
  */
-function newBase(g: Game, f: Fleet, form: boolean = farOn(g), shut = false): boolean {
+function newBase(g: Game, f: Fleet, form: boolean = farOn(g), shut = ''): boolean {
   const old = g.regions[f.base];
   // (Release 2, the far chart: a move of base is a voyage, so only a harbour an open sea leads to from where it is.)
   const open = farOn(g) ? seasOpen(g, f) : null;
@@ -4127,9 +4137,11 @@ function newBase(g: Game, f: Fleet, form: boolean = farOn(g), shut = false): boo
     }
     return best;
   };
-  const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat);
+  // (A fleet whose ways on and back are shut, its base still its side's, takes a friendly harbour as any move of base
+  // may: an ally's too, in no sea closed to it. `haven` reads the enemy that took the base, and there is none here.)
+  const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat || (!!shut && allied(g, f.nat, r.ctrl) && !closedTo(g, r.seas[0], f.nat)));
   if (best && rebase(g, f, best)) {
-    headline(g, 'event', shut ? `With its way to ${old.name} and back shut, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
+    headline(g, 'event', shut ? `${shut}, ${fleetName(f)} makes for ${best.name} instead.` : `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
     return true;
   }
   nameLosses(g, f.nat, f.name, f.ships, `scuttle:${g.turn}:${f.id}`); // the names go down with the ships (a record only)

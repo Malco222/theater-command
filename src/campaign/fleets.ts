@@ -540,7 +540,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   // (Release 2, the far chart: its strikes at anchor go with it, for its staff's weighing of a move: navy.ts anchorLoss.)
-  if (f.anchor) sq.anchor = f.anchor.map((e) => ({ ...e, from: e.from.map((o) => ({ ...o })) }));
+  // (Its share of the loss goes with it; the ships sunk stay on the fleet's own book, counted once.)
+  if (f.anchor) sq.anchor = f.anchor.map((e) => ({ ...e, n: 0, from: e.from.map((o) => ({ ...o })) }));
   if (stars) sq.stars = stars;
   g.fleets.push(sq);
   // Carriers that go take their aircraft with them.
@@ -578,11 +579,20 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   // (Release 2, the far chart: their strikes at anchor go into the one fleet's book, each loss now a share of the
   // whole fleet's surface ships, for its staff's weighing of a move: navy.ts anchorLoss.)
   if (a.anchor?.length || b.anchor?.length) {
-    // (b's ships already count a's here.)
-    const all = shipCount(b.ships) - b.ships.ss, sa = shipCount(a.ships) - a.ships.ss;
-    const of = (x: NonNullable<Fleet['anchor']>, n: number): NonNullable<Fleet['anchor']> =>
-      x.map((e) => ({ ...e, lost: all > 0 ? (e.lost * n) / all : e.lost, from: e.from.map((o) => ({ ...o })) }));
-    b.anchor = [...of(b.anchor ?? [], all - sa), ...of(a.anchor ?? [], sa)];
+    // Each book's shares are of its own fleet's surface ships before its strikes: the ships it has now (b's already
+    // count a's here) and those its strikes of this month and last sank. One raid on both, or on a squadron split off
+    // and joined again, is one entry: its losses added, its strikers' weight once.
+    const sa = shipCount(a.ships) - a.ships.ss, sb = shipCount(b.ships) - b.ships.ss - sa;
+    const had = (x: Fleet, n: number): number => n + (x.anchor ?? []).filter((e) => e.t >= g.turn - 1).reduce((s, e) => s + e.n, 0);
+    const ha = had(a, sa), hb = had(b, sb), H = ha + hb;
+    const book: NonNullable<Fleet['anchor']> = [];
+    for (const [x, h] of [[b, hb], [a, ha]] as const) for (const e of x.anchor ?? []) {
+      const lost = H > 0 ? (e.lost * h) / H : e.lost;
+      const one = book.find((y) => y.t === e.t && y.at === e.at && y.w === e.w && JSON.stringify(y.from) === JSON.stringify(e.from));
+      if (one) { one.lost += lost; one.n += e.n; }
+      else book.push({ ...e, lost, from: e.from.map((o) => ({ ...o })) });
+    }
+    b.anchor = book;
   }
   g.fleets.splice(g.fleets.indexOf(a), 1);
   moveWings(g, a, b, a.ships.cv, a.ships.cv);

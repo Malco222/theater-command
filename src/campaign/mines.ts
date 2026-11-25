@@ -167,7 +167,8 @@ export function minesMonth(g: Game): void {
   for (const m of g.mines) {
     let cut = MINES.decay;
     for (const f of g.fleets) {
-      if (!shipCount(f.ships) || f.ships.dd <= 0 || !atSea(f) || f.zone !== m.z || !atWar(g, f.nat, m.nat)) continue;
+      // (A fleet in passage sweeps nothing on its way: it only crosses the sea. Release 2, the far chart.)
+      if (!shipCount(f.ships) || f.ships.dd <= 0 || !atSea(f) || inPassage(f) || f.zone !== m.z || !atWar(g, f.nat, m.nat)) continue;
       cut += MINES.sweep;
       const knew = fieldKnown(g, m, f.nat);
       learn(m, f.nat);
@@ -219,7 +220,8 @@ export function minesSeen(g: Game, viewer: string | null = g.human): { zone: num
 /** The line for a fleet's panel where it lies in, or sails from, a field of an enemy's it knows of; '' otherwise. */
 export function mineLine(g: Game, f: Fleet): string {
   if (!seaMinesOn(g) || !atSea(f)) return '';
-  const m = (g.mines ?? []).find((x) => (x.z === f.zone || x.z === f.home) && atWar(g, x.nat, f.nat) && fieldKnown(g, x, f.nat));
+  // (As minesStrike reads it: a fleet in passage meets a field only on the sea it is on.)
+  const m = (g.mines ?? []).find((x) => (x.z === f.zone || (!inPassage(f) && x.z === f.home)) && atWar(g, x.nat, f.nat) && fieldKnown(g, x, f.nat));
   if (!m) return '';
   return `${cap(g.nations[m.nat]?.adj ?? m.nat)} mines ${seaWords(g, m.z)}: it may lose a ship each month it sails there, until destroyers sweep them.`;
 }
