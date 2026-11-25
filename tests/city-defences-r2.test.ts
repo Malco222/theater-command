@@ -8,7 +8,7 @@ import { assessAir, fly, type AirAssess } from '../src/campaign/air';
 import { AC } from '../src/campaign/aircampaigns';
 import { setAirPiece } from '../src/campaign/airversion';
 import { raidTargets } from '../src/campaign/airwar';
-import { cityNight, cityNightShare, flakCut, flakCutMost, flakLostWithTown, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
+import { cityNight, cityNightShare, flakCut, flakCutMost, flakLostWithTown, isFlakLine, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
 import { townSize } from '../src/campaign/towns';
 import { beginHuman, humanUp, orderMove, orderStorm, runTurnAI, stepAI, stormOutlook } from '../src/campaign/turn';
@@ -753,6 +753,30 @@ describe('city defences: the town\'s guns against the tanks (slice 4)', () => {
     expect(`wk:aa:${one.town.id}` in one.g.flags).toBe(false);
   });
 
+  // (The design director, 25 Nov 2026 12:18Z: the gun level is lost only where the flak line was on the card.)
+  it('keeps the guns of a town stormed by infantry alone: they played no part, so nothing is charged and no line printed', () => {
+    const { g, town, inside, foot } = lodzStorm(true, { guns: 2 });
+    inside!.str = 0.2; inside!.org = 0.2;
+    expect(townFlak(g, town)).toBe(2);
+    expect(assess(g, [foot], town, { town: true }).lines.some(isFlakLine)).toBe(false);
+    const rep = orderStorm(g, town.id, [foot])!;
+    expect(rep.taken).toBe(true);
+    expect(town.ctrl).toBe('GER');
+    expect(g.flags[`wk:aa:${town.id}`]).toBe(2);
+    expect(`aal:${town.id}` in g.flags).toBe(false);
+    expect(rep.lines.some((l) => l.label === 'Anti-aircraft guns' || /anti-aircraft/.test(l.value))).toBe(false);
+    // The same town stormed with tanks: the card carries the guns' line, and a level is lost, with the line and the mark.
+    const t = lodzStorm(true, { guns: 2 });
+    t.inside!.str = 0.2; t.inside!.org = 0.2;
+    expect(assess(t.g, [t.tank, t.foot], t.town, { town: true }).lines.some(isFlakLine)).toBe(true);
+    const tr = orderStorm(t.g, t.town.id, [t.tank, t.foot])!;
+    expect(tr.taken).toBe(true);
+    expect(tr.lines.some(isFlakLine)).toBe(true);
+    expect(t.g.flags[`wk:aa:${t.town.id}`]).toBe(1);
+    expect(t.g.flags[`aal:${t.town.id}`]).toBe(t.g.turn);
+    expect(tr.lines).toContainEqual({ label: 'Anti-aircraft guns', value: 'The anti-aircraft guns of Lodz fought the tanks over open sights, and one level of them was lost with the town.' });
+  });
+
   it('keeps the guns when the storm is thrown back, when the town had no garrison, or when it falls otherwise', () => {
     // Thrown back.
     const b = lodzStorm(true, { guns: 2 });
@@ -889,18 +913,42 @@ function staffOf(on: boolean, o: { fighters?: boolean; radar?: boolean; night?: 
 const works = (g: Game): string[] => g.nations.GER.queue.filter((b) => b.what === 'work').map((b) => `${b.item}:${g.regions[b.region].name}`);
 
 describe('city defences: the computer orders searchlights where they count (slice 5)', () => {
-  it('after a night raid, with fighters in reach, at the province with the most guns, one order at a time, before more guns', () => {
+  // (The design director, 25 Nov 2026 12:18Z: the computer asks for lights first where they count, and its guns order
+  // then goes ahead in the same month wherever its own guns logic would order it, for a player may order both.)
+  it('after a night raid, with fighters in reach, at the province with the most guns, one order at a time, asked before the guns', () => {
+    const off = staffOf(false, { night: ['Berlin', 'Ruhr'], raided: true });
+    aiArsenal(off, 'GER');
+    const guns = works(off);
+    expect(guns).toEqual(['aa:Ruhr']);
     const g = staffOf(true, { night: ['Berlin', 'Ruhr'], raided: true });
     aiArsenal(g, 'GER');
-    expect(works(g)).toEqual(['lights:Berlin']);
+    expect(works(g)).toEqual(['lights:Berlin', ...guns]);
     aiArsenal(g, 'GER');
-    expect(works(g)).toEqual(['lights:Berlin']);
+    expect(works(g)).toEqual(['lights:Berlin', ...guns]);
   });
 
   it('with Fighter control and no fighters, the lights still count for the guns', () => {
     const g = staffOf(true, { fighters: false, radar: true, night: ['Ruhr'], raided: true });
     aiArsenal(g, 'GER');
-    expect(works(g)).toEqual(['lights:Ruhr']);
+    expect(works(g)).toEqual(['lights:Ruhr', 'aa:Ruhr']);
+  });
+
+  it('a player may order searchlights and guns in one town in one month, money allowing: so may the computer', () => {
+    const g = grand(true);
+    const r = g.byName.Hamburg;
+    expect(orderArsenal(g, 'work:lights', r.id)).not.toBeNull();
+    expect(orderArsenal(g, 'work:aa', r.id)).not.toBeNull();
+    expect(orderArsenal(g, 'work:aa', r.id)).not.toBeNull();
+    expect(g.nations.GER.queue.filter((b) => b.region === r.id).map((b) => b.item)).toEqual(['lights', 'aa', 'aa']);
+    // What stops him is money: a treasury short of the price.
+    g.nations.GER.pp = 0;
+    expect(offer(g, 'work:lights', r.id)!.why).not.toBeNull();
+    expect(orderArsenal(g, 'work:lights', r.id)).toBeNull();
+    // And the computer, held to the same reserve as its guns: with no money above it, it orders neither.
+    const poor = staffOf(true, { night: ['Berlin', 'Ruhr'], raided: true });
+    poor.nations.GER.pp = 0;
+    aiArsenal(poor, 'GER');
+    expect(works(poor)).toEqual([]);
   });
 
   it('with neither radar nor fighters in reach, or with no night raid, or with the lights as many as the guns, it orders guns as today', () => {

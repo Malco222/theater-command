@@ -337,11 +337,14 @@ export const flakFog = (): { label: string; value: string; effect: string } =>
   ({ label: 'Armor', value: 'The garrison may have heavy anti-aircraft guns dug in', effect: `Tank attack cut by as much as ${Math.round(flakCutMost() * 100)}% if it has` });
 
 /**
- * The price (form section 6): a town that had a garrison and guns at the storm's start and falls by storm loses
- * ground.lost levels of its guns ('wk:aa:<region>' goes down, deleted at nought), and the ground keeps the mark
- * 'aal:<region>' = the month it was lost (the art director's scorched pits). Surrender, starvation and handover keep the
- * guns. Returns the result line for the battle's report (the UI director's words, section 6), or null. `level` is
- * townFlak as the storm began; 0 (no garrison, no guns, the switch off) does nothing.
+ * The price (form section 6; the design director, 25 Nov 2026 12:18Z): a town whose guns fought the tanks that stormed
+ * it, and that falls by that storm, loses ground.lost levels of its guns ('wk:aa:<region>' goes down, deleted at
+ * nought), and the ground keeps the mark 'aal:<region>' = the month it was lost (the art director's scorched pits).
+ * The guns are lost only where they fought: where the storm's own card carried their line (flakLine), so tanks
+ * stormed. With no tanks they played no part: nothing is charged, there is no line, and they pass with the town under
+ * the capture rules every town has. Surrender, starvation and handover keep the guns. Returns the result line for the
+ * battle's report (the UI director's words, section 6), or null. `level` is townFlak as the storm began where the
+ * storm's assessment carried the guns' line, else 0; 0 (no tanks, no garrison, no guns, the switch off) does nothing.
  */
 export function flakLostWithTown(g: Game, r: Region, level: number, town: string): { label: string; value: string } | null {
   if (!cityDefences(g) || level <= 0) return null;

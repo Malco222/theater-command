@@ -995,8 +995,11 @@ export function bareFront(g: Game, nat: string): [number, number][] {
  */
 function aiGuns(g: Game, nat: string): void {
   const n = g.nations[nat];
-  // City defences: searchlights before more guns, where a night raid has found them wanting and they count.
-  if (cityDefences(g) && aiLights(g, nat)) return;
+  // City defences: searchlights asked for before more guns, where a night raid has found them wanting and they count.
+  // The guns' own order then goes ahead as it would have, in the same month: a player may order searchlights and guns
+  // in one town in one month, money allowing, and the computer is held to no tighter limit (the design director, 25 Nov
+  // 2026 12:18Z, on the order of asking).
+  if (cityDefences(g)) aiLights(g, nat);
   const raided = g.raids[nat];
   if (!raided || g.turn - raided.turn > 2) return;
   if (n.queue.some((b) => b.what === 'work' && b.item === 'aa')) return;
@@ -1017,9 +1020,9 @@ function aiGuns(g: Game, nat: string): void {
  * (those on order counted), and where the lights count, for it holds Fighter control's radar (aircampaigns.json
  * radar.control: the lights lift the guns) or one of its fighter groups has the province in reach (the night
  * fighters' floor), it orders a level of searchlights at the one with the most levels of guns (ties: the most
- * factories), one order at a time and above the staff's reserve, as its guns. True where the lights take the guns'
- * turn this month: one ordered, or one already on order while more are wanted. Otherwise false, and the guns' order
- * is as it was.
+ * factories), one order of searchlights at a time and above the staff's reserve, as its guns. It is asked first; the
+ * guns' order follows it in the same month as it would without it. True where a level was ordered, or one is already
+ * on order while more are wanted.
  */
 function aiLights(g: Game, nat: string): boolean {
   const n = g.nations[nat];

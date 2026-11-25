@@ -59,7 +59,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { clearTownWorks, flakLine, flakLostWithTown, townFlak, townFlakCut, townWorksMonth, townWorksWords } from './citydefences';
+import { clearTownWorks, flakLine, flakLostWithTown, isFlakLine, townFlak, townFlakCut, townWorksMonth, townWorksWords } from './citydefences';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, fortTerm } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize } from './towns';
@@ -2699,8 +2699,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
-  // (City defences: the town's guns that fire on the stormers' tanks, as the storm begins; 0 with the switch off.)
-  const flakAt = town ? townFlak(g, target) : 0;
+  // (City defences: the town's guns that fired on the stormers' tanks, as the storm begins. Only where the storm's own
+  // assessment priced them, that is where its card carries their line: tanks stormed. With no tanks, or the switch
+  // off, 0. The design director, 25 Nov 2026 12:18Z.)
+  const flakAt = town && a.lines.some(isFlakLine) ? townFlak(g, target) : 0;
   // (Release 2, rearguard.ts) The rearguards holding the field against this attack: they cost the attackers time.
   const rears = town || opts.breakout ? [] : rearguardsAt(g, target, (nat) => atWar(g, nat, armyOf(attackers[0])));
   const gone = town ? [] : giveWay(g, a, attackers, target);
@@ -2929,7 +2931,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (watch > 0) { prisoners += watchMen; defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.round(watch * 10) / 10, men: watchMen, lost: watchMen, fate: 'surrendered', guard: true }); }
       for (const c of attackers) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
       fall(g, target, attNat, 'storm');
-      // (City defences: a town that had a garrison and guns as the storm began loses a level of them with it.)
+      // (City defences: a town whose guns fought the stormers' tanks loses a level of them with it.)
       flakOut = flakLostWithTown(g, target, flakAt, townName(target));
     }
     // (The fortress rows: where a fortress crew went into its works, the guard goes in with it and the town holds.)
