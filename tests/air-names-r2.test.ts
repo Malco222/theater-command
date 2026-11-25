@@ -132,9 +132,9 @@ describe('(b) the role', () => {
     const jg = g.airFleets.find((f) => f.name === 'Jagdgeschwader 2')!, kg = g.airFleets.find((f) => f.name === 'Kampfgeschwader 1')!;
     const uk = g.airFleets.find((f) => f.name === 'No. 11 Group')!, ita = g.airFleets.find((f) => f.name === '3ª Divisione Aerea Bombardamento')!;
     expect(jg.roleNamed).toBe(true);
-    expect(roleWord(jg)).toBeUndefined();
+    expect(roleWord(g, jg)).toBeUndefined();
     expect(groupRow(g, kg).role).toBeUndefined();
-    expect(roleWord(uk)).toBe('fighters');
+    expect(roleWord(g, uk)).toBe('fighters');
     expect(groupRow(g, ita).role).toBeUndefined();
     expect(ita.roleNamed).toBe(true);
   });
@@ -179,7 +179,7 @@ describe('(c) the plain fallback, and Japan\'s island groups', () => {
     expect(a.short).toBe('Truk Ku');
     // A second group at the same field: the navy's numbered form (the historian's list).
     expect(b.name).toBe('701st Kokutai');
-    expect(roleWord(a)).toBe('fighters');
+    expect(roleWord(g, a)).toBe('fighters');
     // Off, the island is the army's like everywhere else (ruling 220's navyBases are empty).
     const h = open(false);
     expect(foundAirFleet(h, 'JAP', { ...truk }, 'X', 'ftr', 50).name).toBe('1st Sentai');

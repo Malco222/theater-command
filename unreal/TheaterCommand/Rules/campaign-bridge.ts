@@ -823,7 +823,7 @@ function drawView() {
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
       // (Release 2, better air unit names and earned names: the role word where the name does not say it, the counter's
       // short form, the name with its earned name set as its arm sets it, and its earned colours. Words and paint only.)
-      ...airWords(f),
+      ...airWords(s, f),
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
     // branch fields its later models early, and one that neglects it keeps the old ones longer. The tanks' year is

@@ -2,6 +2,8 @@
 // 2026 03:18Z (d) and 03:31Z, design-director/air-names-1125.md): what the player reads in a group's diary.
 import { describe, expect, it } from 'vitest';
 import { AIRNICKS, airRaidFlown } from '../src/campaign/airnicks';
+import { setAirNames } from '../src/campaign/airnames';
+import { groupRow } from '../src/campaign/airwar';
 import { createGame } from '../src/campaign/game';
 import { setNicknames } from '../src/campaign/nicknames';
 import { startOpen } from '../src/campaign/staff';
@@ -36,5 +38,40 @@ describe('a group made Guards, in its diary', () => {
     expect(f.nick).toBeDefined();
     const line = f.log!.find((l) => l[1] === 'airnamed')!;
     expect(diaryText(g, f, line)).toMatch(new RegExp(`^Called ${f.nick!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} by its crews after \\d+ missions`));
+  });
+});
+
+describe('with the switches off, a group\'s row carries none of their words', () => {
+  it('no role word beside a name given as ruling 220 gives it, and no called name', () => {
+    const g = startOpen(createGame(1, null));
+    // (A name of ruling 220's says the role itself in English and in German: a word beside it would say it twice,
+    // and the switch is off, so nothing of the switch's words is written.)
+    const jg = g.airFleets.find((f) => f.name === 'Jagdgeschwader 1')!;
+    expect(groupRow(g, jg).role).toBeUndefined();
+    const uk = g.airFleets.find((f) => f.name === 'No. 11 Group')!;
+    expect(groupRow(g, uk).role).toBeUndefined();
+    // An honour nickname the honours rule gives (it is not the earned-names rule) is not set in the air style while
+    // the earned names are off.
+    uk.nick = 'the Old Hands';
+    expect(groupRow(g, uk).called).toBeUndefined();
+    setNicknames(g, true);
+    expect(groupRow(g, uk).called).toBe('No. 11 Group (the Old Hands)');
+  });
+
+  it('on, a group named under the switch still shows its role beside a name that does not say it', () => {
+    const g = createGame(1, null);
+    g.flags.airNames = 1;
+    startOpen(g);
+    // ("No. 1 Group" is named under the switch and its name does not say the role; "No. 11 Group" keeps the name its
+    // command came with, so the word beside it is the switch's while the switch is on.)
+    const own = g.airFleets.find((f) => f.name === 'No. 1 Group')!;
+    const kept = g.airFleets.find((f) => f.name === 'No. 11 Group')!;
+    expect(own.roleNamed).toBe(false);
+    expect(groupRow(g, own).role).toBe('bombers');
+    expect(groupRow(g, kept).role).toBe('fighters');
+    // The switch turned off later does not take the word off a group whose own name was given under it.
+    setAirNames(g, false);
+    expect(groupRow(g, own).role).toBe('bombers');
+    expect(groupRow(g, kept).role).toBeUndefined();
   });
 });

@@ -18,6 +18,7 @@
 import { armedAt, strikeWords } from './atom';
 import { roleWord, shortName } from './airnames';
 import { calledName } from './airnicks';
+import { nicknamesOn } from './nicknames';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate, type TicketLine } from '../core/ticket';
@@ -273,14 +274,19 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) && f.way === undefined ? { sky: [whyNotField(g, f)!] } : {}),
     ...(f.way !== undefined && own ? { way: { to: f.way.to, toName: g.regions[f.way.to]?.name ?? '', left: f.way.sea ? 0 : f.way.stops.length, sea: !!f.way.sea } } : {}),
     // (Release 2: the role beside the name where the name does not say it, the counter's short form, the earned name and colours.)
-    ...airWords(f),
+    ...airWords(g, f),
   };
 }
 
-/** A group's words for the card and the counter (release 2, airnames.ts and airnicks.ts): read by no rule. */
-export function airWords(f: AirFleet): { role?: string; short: string; called?: string; colours?: { scheme: number; tier: number; since: number } } {
-  const role = kindOf(f) === 'mixed' ? undefined : roleWord(f);
-  return { ...(role ? { role } : {}), short: shortName(f), ...(f.nick ? { called: calledName(f) } : {}), ...(f.colours ? { colours: { ...f.colours } } : {}) };
+/**
+ * A group's words for the card and the counter (release 2, airnames.ts and airnicks.ts): read by no rule. Each word
+ * belongs to its own switch: the role word to 'airNames' (roleWord), and the called name, which sets an earned name
+ * beside the group's own in its arm's manner, to 'nicknames', as the names corps earn are shown only under that switch.
+ */
+export function airWords(g: Game, f: AirFleet): { role?: string; short: string; called?: string; colours?: { scheme: number; tier: number; since: number } } {
+  const role = kindOf(f) === 'mixed' ? undefined : roleWord(g, f);
+  const called = f.nick && nicknamesOn(g) ? calledName(f) : undefined;
+  return { ...(role ? { role } : {}), short: shortName(f), ...(called ? { called } : {}), ...(f.colours ? { colours: { ...f.colours } } : {}) };
 }
 
 /** A nation's air groups, in the order of its airfields. */

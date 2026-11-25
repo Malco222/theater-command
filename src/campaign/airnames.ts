@@ -78,9 +78,14 @@ function labelPast(L: string[], k: number): string {
   return `${last} ${k + 2}`;
 }
 
-/** The plain role word shown beside a group's name where the name does not say it: 'fighters' or 'bombers'. */
-export function roleWord(f: AirFleet): string | undefined {
-  if (f.roleNamed) return undefined;
+/**
+ * The plain role word shown beside a group's name where the name does not say it: 'fighters' or 'bombers'. It belongs to
+ * this switch, so it is shown only where the arm's own names are on now, or where the group's own name was given under
+ * the switch and does not say the role (roleNamed false). Ruling 220's names say the role themselves ("1st Fighter
+ * Group", "Jagdgeschwader 1"), so with the switch off nothing is shown beside them.
+ */
+export function roleWord(g: Game, f: AirFleet): string | undefined {
+  if (f.roleNamed || (f.roleNamed === undefined && !airNamesOn(g))) return undefined;
   const kind = f.kind ?? (f.bmr > f.ftr ? 'bmr' : 'ftr');
   return kind === 'bmr' ? 'bombers' : 'fighters';
 }
