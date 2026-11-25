@@ -25,7 +25,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf, standingGuns, type AirForecast,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, seenAgo, squadronsOf, standingGuns, type AirForecast,
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
@@ -635,7 +635,12 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   // target has named apart; out of sight the built guns as last seen, and the standing ones never hidden.)
   const gunsBit = (): string => {
     const S = num(standingGuns()), built = flakGuns(gunsAt(g, t));
-    if (hide) return `${hide.guns} and ${S} light`;
+    // (Out of sight, her 20:08Z marks, item 6: the built guns as last seen, counted as the card counts them.)
+    if (hide && k) {
+      if (k.guns < 0) return `built guns not known and ${S} light`;
+      const was = flakGuns(k.guns), when = seenAgo(k.ago);
+      return was.all ? `about ${num(was.all)} guns built (${num(was.heavy)} heavy) when ${when}, and ${S} light` : `${S} light guns, none built when ${when}`;
+    }
     return built.all ? `${num(built.all)} guns built (${num(built.heavy)} heavy) and ${S} light` : `${S} light guns`;
   };
   if (kind === 'harbour') {
@@ -1310,10 +1315,11 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     out.fog = fog;
     out.gunsKnown = fog.gunLevel >= 0;
     if (hidden) {
-      const when = fog.guns.replace(/^Guns: [^,]*/, '');
-      out.gunsLabel = fog.gunLevel < 0 ? 'Anti-aircraft guns not known' : `${level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns'}${when}`;
+      // (Her 20:08Z marks, items 3 to 5: the months in words, and a none said as none built.)
+      const when = seenAgo(fog.ago);
+      out.gunsLabel = fog.gunLevel < 0 ? 'Anti-aircraft guns not known' : level ? `Level ${level} anti-aircraft guns, ${when}` : `No guns built, ${when}`;
       out.gunsTail = fog.gunLevel < 0 ? 'not scouted' : out.gunsTail;
-      out.gunsCount = fog.gunLevel < 0 ? `guns not known, and ${standing}` : out.gunsCount;
+      out.gunsCount = fog.gunLevel < 0 ? `Guns built here not known, and ${standing}` : out.gunsCount;
       const [lo, hi] = fog.squadrons;
       out.foeSquadrons = hi;
       out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? 'squadron' : 'squadrons'} in range (not scouted)` : fog.fighters === 'Fighters: unknown' ? 'fighters in range not known' : '';
