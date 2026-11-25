@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 88342311f 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0c984b212 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -31242,11 +31242,14 @@
     g2.flags[key7] = g2.turn;
     g2.flags[`sgby:${r.id}`] = Object.keys(g2.nations).indexOf(by2);
     delete g2.flags[`sgm:${r.id}`];
+    let eaten = 0;
     if (g2.flags[`pkt:${r.id}`] !== void 0) {
-      const eaten = Math.min(storesOf(g2, r), Math.floor((g2.flags[`pkte:${r.id}`] ?? 0) / 10));
-      if (eaten > 0 && pocketNat(g2, r) === r.ctrl) g2.flags[`sgm:${r.id}`] = eaten;
+      const pocket = Math.min(storesOf(g2, r), Math.floor((g2.flags[`pkte:${r.id}`] ?? 0) / 10));
+      if (pocket > 0 && pocketNat(g2, r) === r.ctrl) eaten = pocket;
       clearPocket(g2, r);
     }
+    if (trueReach(g2)) eaten = Math.min(storesOf(g2, r), Math.max(eaten, keptStoresRun(g2, r)));
+    if (eaten > 0) g2.flags[`sgm:${r.id}`] = eaten;
     g2.supplyDirty = true;
     tallySiege(g2, "begun");
     const inside2 = garrisonOf(r);
@@ -73926,6 +73929,11 @@
   var roomless = fortRow;
   function portKeep(g2, r) {
     return (fortRows(g2) ? portStores(g2, r) : null) ?? DESERT.stores;
+  }
+  function keptStoresRun(g2, r) {
+    const last = g2.flags[storesKey(r.id)];
+    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= r.since) return 0;
+    return Math.min(portKeep(g2, r), Math.max(0, g2.turn - 1 - last));
   }
   function onPortStores(g2, c) {
     if (!fortRow(g2, c) || !c.supplied) return false;
