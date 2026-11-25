@@ -37,6 +37,7 @@ import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
 import { flagName } from './flagnames';
+import { markStormed, townWorksWords, townWorksWorth } from './citydefences';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -155,8 +156,16 @@ export function breach(g: Game, r: Region, pct: number): number {
   return now / 100;
 }
 
-/** What the town adds to its defenders before any bombardment: so much above 1. */
-const wallsOf = (g: Game, r: Region, works = worksFor(g, r, r.ctrl)): number => SIEGE.bonus[townSize(g, r)] - 1 + (r.fort && works ? SIEGE.fortBonus[r.fort.lv] ?? 0 : 0);
+/** What the fortress works add inside the walls, where they serve the town's defenders (`works`): 0 where they do not. */
+export const fortTerm = (r: Region, works: boolean): number => (r.fort && works ? SIEGE.fortBonus[r.fort.lv] ?? 0 : 0);
+
+/**
+ * What the town adds to its defenders before any bombardment: so much above 1. With the city defences on, the
+ * garrison's town works count beside the forts as the larger of the two, never both (city defences, the design
+ * director's ruling of 25 Nov 2026 02:23Z, choice 6): barricades and a fort are the same kind of protection. Off, the
+ * works' term is 0 and the sum is the walls and the forts as before.
+ */
+const wallsOf = (g: Game, r: Region, works = worksFor(g, r, r.ctrl)): number => SIEGE.bonus[townSize(g, r)] - 1 + Math.max(fortTerm(r, works), townWorksWorth(g, r));
 
 /**
  * How much stronger the defenders fight inside the town. `eased` is the share of the works the guns and engineers
@@ -248,8 +257,21 @@ export const guardWorth = (d: number): string => d >= 0.95 && d < 1.05 ? "1 divi
  * a storm. Fortress works count for the guard only against the share of the attack (`open`, 0 to 1) they do not
  * already slow in the field, so they are never counted twice.
  */
-export const fieldWalls = (g: Game, r: Region, eased: number, open: number): number =>
-  1 + (SIEGE.bonus[townSize(g, r)] - 1 + (r.fort && worksFor(g, r, r.ctrl) ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp(open, 0, 1) : 0)) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
+export const fieldWalls = (g: Game, r: Region, eased: number, open: number): number => {
+  // (City defences: the garrison's town works, where a garrison left any, count as the larger of them and the forts,
+  // scaled by the same open share, so that where the forts already slow the attack in the field nothing is counted
+  // twice. Off, or with no works, the forts' term exactly as before.)
+  const town = townWorksWorth(g, r);
+  const works = town > 0 ? Math.max(fortTerm(r, worksFor(g, r, r.ctrl)), town) * clamp(open, 0, 1)
+    : (r.fort && worksFor(g, r, r.ctrl) ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp(open, 0, 1) : 0);
+  return 1 + (SIEGE.bonus[townSize(g, r)] - 1 + works) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
+};
+
+/**
+ * The garrison's town works in a town line's comma list, after the strength (city defences, the UI director's words,
+ * section 4), the forts counted as the walls count them for the town's holder. '' with none or with the switch off.
+ */
+export const townWorksPhrase = (g: Game, r: Region): string => townWorksWords(g, r, fortTerm(r, worksFor(g, r, r.ctrl)));
 
 /** True while anybody holds the town: a garrison, or its guard. */
 export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 0 || guardOf(g, r) > 0;
@@ -942,6 +964,8 @@ export function storm(g: Game, corps: Corps[], r: Region): BattleReport | null {
   const going = stormForce(g, corps, r);
   if (!going.length || !besieged(g, r) || g.flags[`storm:${r.id}`] === g.turn) return null;
   g.flags[`storm:${r.id}`] = g.turn;
+  // (City defences: a town stormed, won or lost, puts up no works at its holder's month end. Off: nothing written.)
+  markStormed(g, r);
   return resolveBattle(g, going, r, { town: true });
 }
 
@@ -1277,7 +1301,7 @@ export function siegeView(g: Game, region: number, reach?: SeaReach): SiegeView 
   const crew = clock === null ? null : { left: clock, months: Math.max(...garrisonOf(r).filter((c) => !c.dead && fortRow(g, c)).map((c) => crewStores(c) ?? 0)) };
   const lines: string[] = [];
   const pct = Math.round((bonus - 1) * 100);
-  lines.push(`Troops inside ${townName(r)} fight ${pct}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ''}. It has room for ${roomIn(g, r) === 1 ? 'one corps' : `${roomIn(g, r)} corps`}.`);
+  lines.push(`Troops inside ${townName(r)} fight ${pct}% stronger${townWorksPhrase(g, r)}${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ''}. It has room for ${roomIn(g, r) === 1 ? 'one corps' : `${roomIn(g, r)} corps`}.`);
   if (guard > 0) lines.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : 'part of a division'}. ${driveOut(g) && !inside && !by && r.units.some((u) => !u.dead && allied(g, u.nat, r.ctrl)) ? 'With no garrison inside, it fights beside the army in the field, and the town falls with the field.' : 'It holds the town while no army does.'}`);
   // (Ruling 232: only a garrison ordered in beforehand holds the town once the field is lost.)
   if (driveOut(g) && inside && !by) lines.push('The garrison will hold the town after the field is lost: it must then be stormed or starved out.');

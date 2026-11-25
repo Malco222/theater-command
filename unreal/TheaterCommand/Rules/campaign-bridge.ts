@@ -162,6 +162,7 @@ import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
 import { civicAdvice, civicLine, civicReady, civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
 import { addQueue, dropQueue, nextQueued, queueHeads, queueOf, queuedAt, queuedName, setTownQueue, townQueueOn, whyNotQueue } from '../../../src/campaign/townqueue';
+import { cityDefences, cityDefencesOn, lightsAt, radarLays, setCityDefences, townWorksAt } from '../../../src/campaign/citydefences';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
@@ -743,7 +744,11 @@ function drawView(step = false) {
       const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), fields.length ? fieldSize.get(r.id) ?? 0 : Math.max(workLevel(s, 'field', r.id), based.has(r.id) ? 1 : 0)];
       // (The ownership paint: where the holder is not the lawful owner, the owner is named too, for the stripes of occupied ground.)
       const own = r.owner && r.owner !== r.ctrl ? { own: r.owner } : {};
-      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standOf(r.ctrl), w, ...own } : { id: r.id, ctrl: r.ctrl, stand: standOf(r.ctrl), ...own };
+      // (City defences, with the switch on only, each left out at nought, and as open as the guns' level beside them:
+      // 'lt' the searchlights' level, 'tw' the months of the garrison's town works, 'gl' 1 in the month a level of the
+      // town's guns was lost by storm and the month after, for the scorched pits.)
+      const cd = cityDefences(s) ? cityMarks(s, r) : {};
+      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standOf(r.ctrl), w, ...own, ...cd } : { id: r.id, ctrl: r.ctrl, stand: standOf(r.ctrl), ...own, ...cd };
     }),
     // (The ownership paint: every siege the player knows of, for the besieger's colour creeping over the field. Who
     // stands round the town, how far the siege has gone (the works broken down, or the stores eaten, whichever is
@@ -1087,6 +1092,9 @@ function drawView(step = false) {
     settledTowns: settledTownsOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
+    // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see, a
+    // garrison fortifies its town and the town's heavy guns fire on attacking tanks.
+    cityDefences: cityDefencesOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -1581,8 +1589,45 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
       fighters, watch: ours, foe: foe ? s.nations[foe]?.adj ?? foe : '',
       sky: !sky ? '' : sky === me || allied(s, sky, me) ? 'ours' : 'theirs', skyBy: sky ? s.nations[sky]?.adj ?? sky : '',
       add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
+      // (City defences, the switch on only) The searchlights beside the guns, seen as the guns are.
+      ...(cityDefences(s) ? { lights: glanceLights(s, id, level, see.own, up) } : {}),
     };
   } catch { return null; }
+}
+
+/**
+ * (City defences, the switch on) The AIR DEFENCE shelf's searchlights, beside the guns: their level, the levels of the
+ * guns they light by night under a clear sky (one level of guns a level of lights), whether the holder has Fighter
+ * control's radar to lay the guns (without it the lights help only the night fighters), the levels going up, and on
+ * his own town the next level with its price (the UI director's words, "For the map thread": "level {2}: {2} of the
+ * {3} levels of guns are lit by night, under a clear sky").
+ */
+function glanceLights(s: Game, id: number, guns: number, own: boolean, up: boolean) {
+  const me = s.human!, r = s.regions[id];
+  const level = lightsAt(s, id);
+  const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === 'work' && b.item === 'lights' && b.region === id).length ?? 0;
+  const o = own ? arsenalOffers(s, id).find((x) => x.key === 'work:lights' && x.at === id) : undefined;
+  const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : '';
+  // With lights and no guns there is nothing to count: the raid card's own words for that case (the UI director's
+  // section 2, "No guns built"), after the level, rather than "0 of the 0 levels of guns".
+  const line = level <= 0 ? ''
+    : guns <= 0 ? `level ${level}: There are no guns for them to light. They help the night fighters a little.`
+    : `level ${level}: ${Math.min(level, guns)} of the ${guns} levels of guns are lit by night, under a clear sky`;
+  return {
+    level, lit: Math.min(level, guns), guns, radar: radarLays(s, id), going,
+    line,
+    add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
+  };
+}
+
+/** (City defences, the switch on) A region's searchlights, town works and guns lost by storm, for the map: only what is not nought. */
+function cityMarks(s: Game, r: { id: number; ctrl: string; owner: string }): { lt?: number; tw?: number; gl?: number } {
+  const out: { lt?: number; tw?: number; gl?: number } = {};
+  const lt = lightsAt(s, r.id), tw = townWorksAt(s, s.regions[r.id]), lost = s.flags[`aal:${r.id}`];
+  if (lt > 0) out.lt = lt;
+  if (tw > 0) out.tw = tw;
+  if (lost !== undefined && s.turn - lost >= 0 && s.turn - lost <= 1) out.gl = 1;
+  return out;
 }
 
 /** The sign of an arsenal offer on the city's shelf: the order badges' own pictures, and the UI kit's for works. */
@@ -1594,7 +1639,7 @@ function offerSign(s: Game, key: string, kind?: string): string {
   if (group === 'para') return 'para';
   if (group === 'air') return item;
   if (group === 'ship') return item === 'cv' || item === 'ss' || item === 'tp' ? item : 'hull';
-  return ({ factory: 'factory', fort: 'defence', yard: 'hull', aa: 'aa', field: 'ftr', strip: 'ftr', repair: 'wrench' } as Record<string, string>)[item] ?? 'scaffold';
+  return ({ factory: 'factory', fort: 'defence', yard: 'hull', aa: 'aa', lights: 'lights', field: 'ftr', strip: 'ftr', repair: 'wrench' } as Record<string, string>)[item] ?? 'scaffold';
 }
 
 /**
@@ -1719,7 +1764,18 @@ const goOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => co
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
-interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean; /** (The art director's flak brief, 2c.) Bombers over a target on land with no guns built: the light guns any target puts up, as a count above 0. Never on a row over built guns (aa above 0), and on no fighters' row. */ light?: number }
+interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number; /** (Ruling 107.) Flown by night: the place raided shows its searchlights. */ night?: boolean; /** (The art director's flak brief, 2c.) Bombers over a target on land with no guns built: the light guns any target puts up, as a count above 0. Never on a row over built guns (aa above 0), and on no fighters' row. */ light?: number;
+  /** (City defences, the switch on, a night raid) The searchlights at the target from the raid's report: 'sl' their level, 'cloud' 1 where cloud blinded them, 'lit' the share 0 to 1 of the guns' levels firing by searchlight. Each left out at nought. */
+  sl?: number; cloud?: number; lit?: number }
+
+/** (City defences) A night raid's searchlights on its flight row, from the report's own reading: only what is not nought. */
+function flightLights(l: { level: number; cloud: boolean; lit: number }): { sl?: number; cloud?: number; lit?: number } {
+  const out: { sl?: number; cloud?: number; lit?: number } = {};
+  if (l.level > 0) out.sl = l.level;
+  if (l.cloud) out.cloud = 1;
+  if (l.lit > 0) out.lit = l.lit;
+  return out;
+}
 
 const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
 
@@ -1751,6 +1807,7 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
           loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
           night: byNight,
           ...(lightGuns && a.bmr >= 1 ? { light: lightGuns } : {}),
+          ...(first && cityDefences(s) && r.lights ? flightLights(r.lights) : {}),
         });
         first = false;
       }
@@ -7616,6 +7673,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     }
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'citydefencesrule') {
+    // (Release 2, citydefences.ts) City defences, switched by the player in any month.
+    setCityDefences(s, part[1] === 'on');
+    ok = true;
+    note = cityDefencesOn(s)
+      ? 'Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control\'s radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months, and the town\'s heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it.'
+      : 'Off, the guns are as good by night as by day, and a town is only as strong as its walls and forts.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'settledtownsrule') {
     // (Release 2, buildings.ts) Conquered towns settle, switched by the player in any month.
     setSettledTowns(s, part[1] === 'on');
@@ -8798,6 +8864,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).settledTowns = (on: boolean) => { const s = game(); setSettledTowns(s, !!on); return { on: settledTownsOn(s) }; };
 // (Release 2, townqueue.ts) A queue for a town: TC.townQueue(on) at any time; the options page uses act('townqueuerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).townQueue = (on: boolean) => { const s = game(); setTownQueue(s, !!on); return { on: townQueueOn(s) }; };
+// (Release 2, citydefences.ts) City defences: TC.cityDefences(on) at any time; the options page uses act('citydefencesrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).cityDefences = (on: boolean) => { const s = game(); setCityDefences(s, !!on); return { on: cityDefencesOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
 // (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };
@@ -8831,6 +8899,7 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },
   // (Release 2, townqueue.ts: a queue for a town, switched in any month, so an older war takes it too.)
   townqueuerule: (s) => { setTownQueue(s, true); return townQueueOn(s); },
+  citydefencesrule: (s) => { setCityDefences(s, true); return cityDefencesOn(s); },
   columns: (s) => setColumns(s, true),
   'logistics:lorryShift': (s) => setLogistics(s, 'lorryShift', true),
   'logistics:wagons': (s) => setLogistics(s, 'wagons', true),
