@@ -1298,6 +1298,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("carrierStrike"), Out.bCarrierStrike); // (release 2, harbourstrike.ts)
 	Object->TryGetBoolField(TEXT("wingByDate"), Out.bWingByDate); // (release 2, carriers.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
+	Object->TryGetBoolField(TEXT("townQueue"), Out.bTownQueue); // (release 2, townqueue.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
@@ -3420,8 +3421,16 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 					Entry->TryGetNumberField(TEXT("has"), Offer.Has);
 					Entry->TryGetNumberField(TEXT("cost"), Offer.Cost);
 					Entry->TryGetNumberField(TEXT("months"), Offer.Months);
+					Entry->TryGetStringField(TEXT("queue"), Offer.QueueAct); // (release 2, a queue for a town)
+					Entry->TryGetStringField(TEXT("queueLabel"), Offer.QueueLabel);
+					Entry->TryGetNumberField(TEXT("queueLevel"), Offer.QueueLevel);
+					Entry->TryGetNumberField(TEXT("queueCost"), Offer.QueueCost);
+					Entry->TryGetNumberField(TEXT("queueMonths"), Offer.QueueMonths);
+					Entry->TryGetStringField(TEXT("queueAfter"), Offer.QueueAfter);
 				}
 			}
+			(*Plots)->TryGetStringField(TEXT("best"), Info.TownBest); // (release 2, build from the map)
+			(*Plots)->TryGetStringField(TEXT("queued"), Info.TownQueued);
 		}
 	}
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);
@@ -4202,6 +4211,7 @@ namespace
 			(*Counts)->TryGetNumberField(TEXT("ready"), Board.Ready);
 			(*Counts)->TryGetNumberField(TEXT("going"), Board.Going);
 			(*Counts)->TryGetNumberField(TEXT("all"), Board.All);
+			(*Counts)->TryGetNumberField(TEXT("waits"), Board.Waits);
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Towns = nullptr;
 		if (Told->TryGetArrayField(TEXT("towns"), Towns))
@@ -4269,6 +4279,35 @@ namespace
 					(*Going)->TryGetStringField(TEXT("due"), Town.GoingDue);
 					(*Going)->TryGetStringField(TEXT("act"), Town.GoingAct);
 					(*Going)->TryGetBoolField(TEXT("cancel"), Town.bGoingCancel);
+				}
+				// (Release 2, a queue for a town) Absent from an older rules file: the row then shows no queue.
+				const TArray<TSharedPtr<FJsonValue>>* Queue = nullptr;
+				if (Entry->TryGetArrayField(TEXT("queue"), Queue))
+				{
+					for (const TSharedPtr<FJsonValue>& QueueValue : *Queue)
+					{
+						const TSharedPtr<FJsonObject>* QueueEntry = nullptr;
+						if (QueueValue->TryGetObject(QueueEntry))
+						{
+							FHomeQueued& Queued = Town.Queue.AddDefaulted_GetRef();
+							(*QueueEntry)->TryGetStringField(TEXT("line"), Queued.Line);
+							(*QueueEntry)->TryGetStringField(TEXT("label"), Queued.Label);
+							(*QueueEntry)->TryGetStringField(TEXT("act"), Queued.Act);
+						}
+					}
+				}
+				Entry->TryGetStringField(TEXT("wait"), Town.Wait);
+				const TArray<TSharedPtr<FJsonValue>>* Then = nullptr;
+				if (Entry->TryGetArrayField(TEXT("then"), Then))
+				{
+					for (const TSharedPtr<FJsonValue>& ThenValue : *Then)
+					{
+						const TSharedPtr<FJsonObject>* ThenEntry = nullptr;
+						if (ThenValue->TryGetObject(ThenEntry))
+						{
+							ReadHomeBuild(*ThenEntry, Town.Then.AddDefaulted_GetRef());
+						}
+					}
 				}
 			}
 		}

@@ -160,7 +160,8 @@ import grandData from '../../../data/campaign/grand.json';
 import setupBook from '../../../data/campaign/setup-1939.json';
 import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
-import { civicAdvice, civicReady, civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
+import { civicAdvice, civicLine, civicReady, civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
+import { addQueue, dropQueue, nextQueued, queueHeads, queueOf, queuedAt, queuedName, setTownQueue, townQueueOn, whyNotQueue } from '../../../src/campaign/townqueue';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
@@ -1084,6 +1085,8 @@ function drawView(step = false) {
     seekOnce: seekOnceOn(s),
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
+    // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
+    townQueue: townQueueOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -4123,13 +4126,39 @@ function province(id: number) {
       const t = townBuildings(s, r.id);
       if (!t) return null;
       const lineNo = (id: string | null): number => (id ? ['market', 'farm', 'school', 'camp', 'hospital', 'hall'].indexOf(id) : -1);
+      // (Release 2, townqueue.ts) Where BUILD cannot be pressed for the builders or the money, the press that queues the
+      // line's next level instead, and that level's name; nothing with the switch off or outside his month.
+      // (A press of QUEUE queues the level above everything standing, going up and queued in the line, which can be a
+      // level above the one the offer describes: its name, level, price and months, and the level it goes up after,
+      // so that the map and the town card show what the press queues.)
+      const queueOf_ = (line: string): { queue: string; queueLabel: string; queueLevel: number; queueCost: number; queueMonths: number; queueAfter: string } => {
+        const me = t.mine ? s.human : null, l = civicLine(line);
+        if (!me || !l || !humanUp(s) || onEve(s) || whyNotQueue(s, me, r.id, line) !== null) return { queue: '', queueLabel: '', queueLevel: 0, queueCost: 0, queueMonths: 0, queueAfter: '' };
+        const lv = nextQueued(s, me, r.id, line);
+        return { queue: `queue:${r.id}:${line}`, queueLabel: l.levels[lv - 1] ?? '', queueLevel: lv, queueCost: shown(l.cost[lv - 1]), queueMonths: l.months[lv - 1], queueAfter: lv > 1 ? l.levels[lv - 2] : '' };
+      };
       return {
         town: t.town, mine: t.mine, free: t.free, can: t.offers.filter((o) => o.why === null).length,
         list: t.plots.map((p) => (p.line ? `${p.name}: ${p.level > 0 ? p.label : 'going up'}${p.building && p.level > 0 ? ' (next level going up)' : ''}` : 'Free plot')),
         // The same as things to draw: every plot with what stands on it, and every line that could be built or raised.
         size: t.size,
         plots: t.plots.map((p) => ({ line: p.line ?? '', no: lineNo(p.line), name: p.line ? p.name : 'Free plot', label: p.line ? p.label : '', level: p.level, building: p.building, due: p.building && p.due >= 0 ? turnToDate(p.due).label : '', does: p.does })),
-        offers: t.offers.map((o) => ({ line: o.line, no: lineNo(o.line), name: o.name, label: o.label, level: o.level, has: o.has, cost: shown(o.cost), months: o.months, effect: o.effect, blurb: o.blurb, why: !humanUp(s) || onEve(s) ? 'It is not your month.' : o.why ?? '' })),
+        offers: t.offers.map((o) => ({ line: o.line, no: lineNo(o.line), name: o.name, label: o.label, level: o.level, has: o.has, cost: shown(o.cost), months: o.months, effect: o.effect, blurb: o.blurb, why: !humanUp(s) || onEve(s) ? 'It is not your month.' : o.why ?? '', ...queueOf_(o.line) })),
+        // (Release 2, build from the map: the UI director's fix 5) The building the staff would put up here next (the
+        // board's pick, civicAdvice), so the province panel can offer it in one press; and what is queued here, in a line.
+        best: (() => {
+          if (!t.mine || !s.human) return '';
+          const rank = civicAdvice(s, s.human).lines;
+          const open = t.offers.filter((o) => o.why === null || o.poor || queueOf_(o.line).queue).sort((a, b) => rank.indexOf(a.line) - rank.indexOf(b.line));
+          return open[0]?.line ?? '';
+        })(),
+        queued: (() => {
+          const q = t.mine && s.human && townQueueOn(s) ? queuedAt(s, s.human, r.id) : [];
+          if (!q.length) return '';
+          const head = queueHeads(s, s.human!).find((x) => x.q.region === r.id);
+          const wait = !head ? '' : head.after ? ` Goes up after the ${head.after}.` : head.short > 0 ? ` Waits for ${head.short.toLocaleString('en-US')} more.` : ' Goes up at the opening of your next month.';
+          return `Queued: ${q.map((x) => (civicLine(x.line)?.levels[x.level - 1] ?? x.line).toLowerCase()).join(', then ')}.${wait}`;
+        })(),
       };
     })(),
     // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
@@ -5004,10 +5033,19 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
   if (homeFrontOn()) {
     let can = 0;
     try { can = civicReady(s, me.id); } catch { can = 0; }
+    // (Release 2, townqueue.ts; the design director: "the towns chip counts it") Queued buildings waiting for money.
+    let waits: { name: string; short: number }[] = [];
+    try { waits = townQueueOn(s) ? queueHeads(s, me.id).filter((h) => !h.after && h.short > 0) : []; } catch { waits = []; }
+    const waitWords = waits.length ? ` ${waits.slice(0, 3).map((w) => `${upFirst(w.name)} waits for ${w.short.toLocaleString('en-US')} more.`).join(' ')}${waits.length > 3 ? ` And ${waits.length - 3} more wait.` : ''}` : '';
     if (can > 0) {
       out.push({
-        k: 'page:home', t: can === 1 ? 'A TOWN CAN BUILD' : `${can} TOWNS CAN BUILD`,
-        tip: `${can === 1 ? 'One of your towns has' : `${can} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString('en-US')}. Open THE HOME FRONT to build in each with one press.`,
+        k: 'page:home', t: `${can === 1 ? 'A TOWN CAN BUILD' : `${can} TOWNS CAN BUILD`}${waits.length ? `  \u00B7  ${waits.length} WAITING` : ''}`,
+        tip: `${can === 1 ? 'One of your towns has' : `${can} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString('en-US')}. Open THE HOME FRONT to build in each with one press.${waitWords}`,
+      });
+    } else if (waits.length) {
+      out.push({
+        k: 'page:home', t: waits.length === 1 ? 'A QUEUED BUILDING WAITS' : `${waits.length} QUEUED BUILDINGS WAIT`,
+        tip: `The treasury holds ${inHand(me.pp).toLocaleString('en-US')}.${waitWords} Each is ordered for you at the opening of a month once it can be paid for. Open THE HOME FRONT to see the queues.`,
       });
     }
   }
@@ -5925,6 +5963,7 @@ function townPage(s: Game, region: number): Page | null {
   const up = humanUp(s) && !onEve(s);
   const date = (turn: number): string => turnToDate(turn).label;
   const n = t.plots.length;
+  const me = t.mine ? s.human : null;
   const plots: PageRow[] = t.plots.map((p, i) => p.line
     ? {
       nat: '', title: `Plot ${i + 1}  \u00B7  ${p.name}: ${p.level > 0 ? p.label : 'being built'}${p.level > 0 ? `  (level ${p.level} of 3)` : ''}`,
@@ -5937,12 +5976,27 @@ function townPage(s: Game, region: number): Page | null {
     const lines = top ? [`Complete: ${o.hasLabel}.`, o.blurb]
       : going ? [`${o.label} is going up: due ${date(p!.due)}.`, o.blurb]
         : [`${o.has ? 'Next' : 'First'}: ${o.label}  \u00B7  ${moneyWords(o.cost)}  \u00B7  ${monthsWords(o.months)}`, o.effect, o.blurb];
+    // (Release 2, townqueue.ts) Where BUILD cannot be pressed now for the builders or the money, the next level can be queued.
+    const queueWhy = me && townQueueOn(s) ? whyNotQueue(s, me, region, o.line) : 'off';
+    const qLine = civicLine(o.line), qLevel = queueWhy === null ? nextQueued(s, me!, region, o.line) : 0;
+    const queued = queueWhy === null && qLine ? `${qLine.levels[qLevel - 1] ?? o.label} (${moneyWords(qLine.cost[qLevel - 1] ?? o.cost)} at today's price)` : '';
     return {
       nat: '', title: `${o.name}${o.has ? `  \u00B7  ${o.hasLabel}` : ''}`, lines,
-      buttons: top || going ? [] : [{ label: o.has ? 'RAISE' : 'BUILD', act: `civic:${region}:${o.line}`, ok: up && o.why === null, tip: !up ? 'It is not your month.' : o.why ?? `${o.label}: ${o.effect}` }],
+      buttons: [
+        ...(top || going ? [] : [{ label: o.has ? 'RAISE' : 'BUILD', act: `civic:${region}:${o.line}`, ok: up && o.why === null, tip: !up ? 'It is not your month.' : o.why ?? `${o.label}: ${o.effect}` }]),
+        ...(queueWhy === null ? [{ label: 'QUEUE', act: `queue:${region}:${o.line}`, ok: up, tip: !up ? 'It is not your month.' : `${queued}, queued here: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price.` }] : []),
+      ],
     };
   });
+  const queue = me && townQueueOn(s) ? queuedAt(s, me, region) : [];
+  const head = queue.length ? queueHeads(s, me!).find((x) => x.q.region === region) : undefined;
+  const queueRows: PageRow[] = queue.map((q, k) => ({
+    nat: '', title: `${k + 1}.  ${civicLine(q.line)?.levels[q.level - 1] ?? q.line}`,
+    lines: [k > 0 ? 'After the one above.' : !head ? '' : head.after ? `Goes up after the ${head.after}.` : head.short > 0 ? `Waits for ${head.short.toLocaleString('en-US')} more.` : 'Goes up at the opening of your next month.'].filter(Boolean),
+    buttons: [{ label: 'TAKE IT OFF', act: `unqueue:${region}:${k}`, ok: up, tip: up ? 'Comes off the queue. Nothing has been paid for it.' : 'It is not your month.' }],
+  }));
   const sections: Page['sections'] = [{ heading: 'THE PLOTS', text: `${r.name}${r.owner === r.ctrl ? '' : ', conquered ground'}.`, rows: plots }];
+  if (queueRows.length) sections.push({ heading: 'QUEUED HERE', text: 'Ordered for you in this order, at the opening of your month, at that day\'s price.', rows: queueRows });
   if (t.mine) sections.push({ heading: 'WHAT CAN BE BUILT HERE', text: 'One building goes up at a time in a town.', rows: offers });
   return {
     id: `town:${region}`, title: `THE TOWN PLAN  \u00B7  ${t.town.toUpperCase()}`,
@@ -6245,6 +6299,14 @@ interface HomeTown {
   plots: HomePlot[]; best: HomeBuild | null; more: HomeBuild[];
   going: { id: number; name: string; due: string; months: number; cancel: boolean; act: string } | null;
   note: string;
+  /**
+   * (Release 2, a queue for a town: townqueue.ts; empty with that switch off) What is queued here in its order, each
+   * with the press that takes it off; how the first stands ('Waits for 40 more.', 'Goes up after the market hall.');
+   * and what could be queued next, the staff's pick first, each with the press that queues it.
+   */
+  queue: { line: string; label: string; act: string }[];
+  wait: string;
+  then: HomeBuild[];
 }
 interface HomeRaise { key: string; group: string; label: string; cost: number; months: number; where: string; note: string; ok: boolean; why: string; act: string }
 interface HomeOrder { id: number; what: string; name: string; where: string; due: string; months: number; cost: number; cancel: boolean; act: string; share: number; region: number }
@@ -6252,7 +6314,7 @@ interface HomeAgain { ok: boolean; when: string; text: string; cost: number; lef
 interface HomeBoard {
   nation: string; date: string; up: boolean; money: number; net: number;
   tiles: { k: string; label: string; figure: string; sub: string }[];
-  counts: { ready: number; going: number; all: number };
+  counts: { ready: number; going: number; all: number; waits: number };
   towns: HomeTown[]; raise: HomeRaise[]; again: HomeAgain | null; orders: HomeOrder[];
   staff: {
     on: boolean; line: string; label: string; act: string; tip: string; cap: number; caps: { n: number; now: boolean; act: string }[];
@@ -6338,6 +6400,8 @@ function homeBoard(s: Game): HomeBoard | null {
   try { for (const p of ledgerOf(s, me.id).provinces) pays.set(p.id, shown(p.total)); } catch { /* a campaign with no ledger */ }
   const held = s.regions.filter((r) => r.ctrl === me.id).sort((a, b) => (place.get(a.id) ?? 1e6) - (place.get(b.id) ?? 1e6) || (pays.get(b.id) ?? 0) - (pays.get(a.id) ?? 0) || a.id - b.id);
   const towns: HomeTown[] = [];
+  const queueOn = townQueueOn(s);
+  const heads = queueOn ? queueHeads(s, me.id) : [];
   for (const r of held) {
     const t = townBuildings(s, r.id);
     if (!t || !t.mine || !t.plots.length) continue;
@@ -6349,6 +6413,21 @@ function homeBoard(s: Game): HomeBoard | null {
     const b = me.queue.find((x) => x.what === 'civic' && x.region === r.id);
     const going = b ? { id: b.id, name: b.name.split(' at ')[0], due: turnToDate(b.eta).label, months: Math.max(0, b.eta - s.turn), cancel: b.ordered === s.turn && up, act: `home:cancel:${b.id}` } : null;
     const best = open.length ? asBuild(open[0]) : null;
+    // (Release 2, townqueue.ts) The queue: only with its switch on, and only in his own towns.
+    const queued = queueOn ? queuedAt(s, me.id, r.id) : [];
+    const head = queued.length ? heads.find((h) => h.q.region === r.id) : undefined;
+    const lineLabel = (line: string, level: number): string => civicLine(line)?.levels[level - 1] ?? line;
+    const then: HomeBuild[] = !queueOn ? [] : t.offers.map((o) => ({ o, why: whyNotQueue(s, me.id, r.id, o.line) }))
+      .filter((x) => x.why === null)
+      .sort((a, b) => (rank.get(a.o.line) ?? 99) - (rank.get(b.o.line) ?? 99))
+      .map(({ o }) => {
+        const level = nextQueued(s, me.id, r.id, o.line), l = civicLine(o.line);
+        const cost = l ? l.cost[level - 1] : o.cost;
+        return {
+          line: o.line, name: o.name, label: lineLabel(o.line, level), cost: shown(cost), months: l ? l.months[level - 1] : o.months, effect: level === o.level ? o.effect : o.blurb,
+          ok: up, why: up ? '' : notUp, act: `queue:${r.id}:${o.line}`,
+        };
+      });
     towns.push({
       region: r.id, town: t.town, province: r.name, size: t.size, own: r.owner === me.id, pays: pays.get(r.id) ?? 0,
       state: going ? 'going' : !best ? 'done' : open[0].poor ? 'short' : 'ready',
@@ -6356,8 +6435,12 @@ function homeBoard(s: Game): HomeBoard | null {
       best, more: open.slice(1).map(asBuild), going,
       // (why nothing is offered: the one reason every line gives, or that the town is complete)
       note: best || going ? '' : ((whys) => (whys.length && whys.every((w) => w === whys[0]) ? whys[0] : 'Nothing more can be built here now.'))(t.offers.map((o) => o.why ?? '').filter(Boolean)),
+      queue: queued.map((q, k) => ({ line: q.line, label: lineLabel(q.line, q.level), act: `unqueue:${r.id}:${k}` })),
+      wait: !head ? '' : head.after ? `Goes up after the ${head.after}.` : head.short > 0 ? `Waits for ${head.short.toLocaleString('en-US')} more.` : 'Goes up at the opening of your next month.',
+      then,
     });
   }
+  const waits = heads.filter((h) => !h.after && h.short > 0).length;
   const ready = towns.filter((t) => t.state === 'ready' || t.state === 'short').length, goingUp = towns.filter((t) => t.state === 'going').length;
   const book = ordersBookOf(s);
   const orders: HomeOrder[] = me.queue.filter((b) => b.what !== 'civic').slice().sort((a, b) => a.eta - b.eta || a.id - b.id).map((b) => {
@@ -6386,7 +6469,7 @@ function homeBoard(s: Game): HomeBoard | null {
   const tiles = [
     { k: 'money', label: 'TREASURY', figure: money.toLocaleString('en-US'), sub: T && T.budget ? `${net < 0 ? '−' : '+'}${Math.abs(net).toLocaleString('en-US')} a month` : '' },
     { k: 'orders', label: 'ON ORDER', figure: String(orders.length), sub: orders.length ? `next ready ${orders[0].due}` : 'nothing is being raised' },
-    { k: 'towns', label: 'TOWNS', figure: String(towns.length), sub: `${ready} can build  ·  ${goingUp} building` },
+    { k: 'towns', label: 'TOWNS', figure: String(towns.length), sub: `${ready} can build  ·  ${goingUp} building${waits ? `  ·  ${waits} waiting` : ''}` },
     ...(men ? [{ k: 'men', label: 'MEN IN RESERVE', figure: short((men as { men: number }).men), sub: (men as { word: string }).word }] : []),
   ];
   let staff: HomeBoard['staff'] = null;
@@ -6409,7 +6492,7 @@ function homeBoard(s: Game): HomeBoard | null {
       };
     }
   } catch { staff = null; }
-  return { nation: me.name, date: turnToDate(s.turn).label, up, money, net, tiles, counts: { ready, going: goingUp, all: towns.length }, towns, raise, again, orders, staff };
+  return { nation: me.name, date: turnToDate(s.turn).label, up, money, net, tiles, counts: { ready, going: goingUp, all: towns.length, waits }, towns, raise, again, orders, staff };
 }
 
 /** THE HOME FRONT as a room of the rules' own: the same lists as rows, for a game that draws no board of its own. */
@@ -6418,19 +6501,27 @@ function homePage(s: Game): (Page & { home: HomeBoard }) | null {
   if (!h) return null;
   const cash = (n: number): string => n.toLocaleString('en-US');
   const can = h.towns.filter((t) => t.state === 'ready' || t.state === 'short');
+  // (Release 2, townqueue.ts) A town's queue in a line, and the press that queues the staff's pick next.
+  const queueWords = (t: HomeTown): string => (t.queue.length ? `Queued: ${t.queue.map((q) => q.label.toLowerCase()).join(', then ')}. ${t.wait}` : '');
+  const queueButton = (t: HomeTown): PageButton[] => (t.then.length ? [{ label: 'QUEUE', act: t.then[0].act, ok: t.then[0].ok, tip: t.then[0].ok ? `${t.then[0].label}, queued here: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price.` : t.then[0].why }] : []);
   const townRows: PageRow[] = can.slice(0, 60).map((t) => ({
     nat: '', title: `${t.town}${t.town === t.province ? '' : `, ${t.province}`}  ·  ${t.size}${t.pays ? `  ·  pays ${cash(t.pays)}` : ''}`,
-    lines: [`${t.best!.name}: ${t.best!.label}  ·  ${cash(t.best!.cost)}  ·  ${monthsWords(t.best!.months)}`, t.best!.effect],
+    lines: [`${t.best!.name}: ${t.best!.label}  ·  ${cash(t.best!.cost)}  ·  ${monthsWords(t.best!.months)}`, t.best!.effect, queueWords(t)].filter(Boolean),
     buttons: [
       { label: 'BUILD', act: t.best!.act, ok: t.best!.ok, tip: t.best!.ok ? `${t.best!.label}: ${t.best!.effect}` : t.best!.why },
+      ...(t.best!.ok ? [] : queueButton(t)),
       { label: 'TOWN PLAN', act: `open:town:${t.region}`, ok: true, tip: 'Every plot of this town and everything that could be built there.' },
       { label: 'SHOW ON THE MAP', act: `goto:region:${t.region}`, ok: true, tip: 'Looks at the place on the map.' },
     ],
   }));
   const goingRows: PageRow[] = h.towns.filter((t) => t.going).map((t) => ({
-    nat: '', title: `${t.going!.name}  ·  ${t.town}`, lines: [`Due ${t.going!.due}.`],
-    buttons: t.going!.cancel ? [{ label: 'TAKE IT BACK', act: t.going!.act, ok: true, tip: 'The order is taken back and the money returned. Only in the month it was placed.' }] : [],
+    nat: '', title: `${t.going!.name}  ·  ${t.town}`, lines: [`Due ${t.going!.due}.`, queueWords(t)].filter(Boolean),
+    buttons: [...(t.going!.cancel ? [{ label: 'TAKE IT BACK', act: t.going!.act, ok: true, tip: 'The order is taken back and the money returned. Only in the month it was placed.' }] : []), ...queueButton(t)],
   }));
+  const queueRows: PageRow[] = h.towns.flatMap((t) => t.queue.map((q, k) => ({
+    nat: '', title: `${q.label}  ·  ${t.town}`, lines: [k === 0 ? t.wait : `After the ${t.queue[k - 1].label.toLowerCase()}.`],
+    buttons: [{ label: 'TAKE IT OFF', act: q.act, ok: h.up, tip: h.up ? 'Comes off the queue. Nothing has been paid for it.' : 'It is not your month.' }],
+  })));
   const raiseRows: PageRow[] = [
     ...(h.again ? [{ nat: '', title: `Order again${h.again.cost ? `  ·  ${cash(h.again.cost)}` : ''}`, lines: [h.again.text, h.again.left].filter(Boolean), buttons: [{ label: 'ORDER AGAIN', act: h.again.act, ok: h.again.ok, tip: h.again.ok ? 'Places each of these orders again at today\'s price.' : h.again.why }] }] : []),
     ...h.raise.map((o) => ({
@@ -6451,6 +6542,7 @@ function homePage(s: Game): (Page & { home: HomeBoard }) | null {
     sections: [
       { heading: 'TOWNS THAT CAN TAKE A BUILDING', text: can.length ? (can.length > 60 ? `The richest 60 of ${can.length}.` : '') : 'Every town is building or complete.', rows: townRows },
       ...(goingRows.length ? [{ heading: 'GOING UP IN YOUR TOWNS', text: '', rows: goingRows }] : []),
+      ...(queueRows.length ? [{ heading: 'QUEUED IN YOUR TOWNS', text: 'Each is ordered for you at the opening of your month, oldest first, once its builders are free and the treasury can pay, at that day\'s price.', rows: queueRows }] : []),
       { heading: 'RAISE FORCES', text: h.up ? '' : 'It is not your month.', rows: raiseRows },
       { heading: 'ON ORDER', text: orderRows.length ? '' : 'Nothing is being raised.', rows: orderRows },
       // (Release 2, the desk split) Recruitment and towns and trade, each with its own switch: the board draws them on its staff strip.
@@ -7131,9 +7223,13 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       if (b) noteOwnOrder(s, b, key, -1, offer?.label ?? b.name);
       note = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? 'It is not your month.' : offer?.why ?? 'That cannot be ordered now.';
     } else if (part[1] === 'cancel') {
+      // (Release 2, townqueue.ts: what was queued behind a building taken back, and needs it, comes off with it.)
+      const was = s.human ? queueOf(s, s.human).slice() : [];
       ok = orderCancelBuild(s, Number(part[2]));
       if (ok) forgetOwnOrder(Number(part[2]));
-      note = ok ? 'The order is taken back and the money returned.' : 'An order can only be taken back in the month it was placed.';
+      const off = s.human ? was.filter((q) => !queueOf(s, s.human!).includes(q)).map((q) => queuedName(s, q)) : [];
+      const offWords = off.length > 1 ? `${off.slice(0, -1).join(', ')} and ${off[off.length - 1]}` : off[0] ?? '';
+      note = ok ? `The order is taken back and the money returned.${off.length ? ` ${offWords.charAt(0).toUpperCase()}${offWords.slice(1)}, queued behind it, ${off.length === 1 ? 'comes' : 'come'} off the queue too: nothing had been paid.` : ''}` : 'An order can only be taken back in the month it was placed.';
     } else if (part[1] === 'again') {
       const plan = againPlan(s);
       const placed: string[] = [], out = plan ? plan.out.slice() : [];
@@ -7490,6 +7586,34 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = fleetAttackOn(s)
       ? 'Fleet attacks are on: drop one of your fleets on an enemy fleet in reach, and the battle is fought at once, at any odds.'
       : 'Fleet attacks are off: fleets meet only at the month\'s end, where an admiral thinks the odds good enough.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'townqueuerule') {
+    // (Release 2, townqueue.ts) A queue for a town, switched by the player in any month.
+    setTownQueue(s, part[1] === 'on');
+    ok = true;
+    note = townQueueOn(s)
+      ? 'Building queues are on: a town can be given its next buildings in order, and each is ordered for you at the opening of your month, once the builders there are free and the treasury can pay, at that day\'s price.'
+      : 'Building queues are off, and every queue is gone. Nothing on them had been paid.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'queue' || part[0] === 'unqueue') {
+    // (Release 2, townqueue.ts) A building queued for one of the player's towns, or taken off its queue. Nothing is paid either way.
+    const at = Number(part[1]), r = s.regions[at], me = s.human;
+    const town = townBuildings(s, at)?.town ?? r?.name ?? 'the town';
+    if (!me || !humanUp(s) || onEve(s)) {
+      ok = false;
+      note = 'It is not your month.';
+    } else if (part[0] === 'queue') {
+      const why = whyNotQueue(s, me, at, part[2]);
+      const q = why ? null : addQueue(s, me, at, part[2]);
+      ok = !!q;
+      note = q ? `${upFirst(queuedName(s, q))} is queued. It is ordered for you at the opening of a month, once the builders at ${town} are free and the treasury can pay, at that day's price.` : why ?? 'That cannot be queued now.';
+    } else {
+      const q = queuedAt(s, me, at)[Number(part[2])];
+      ok = !!q && dropQueue(s, me, at, Number(part[2]));
+      note = ok && q ? `${upFirst(queuedName(s, q))} comes off the queue. Nothing had been paid for it.` : 'That is not on the queue.';
+    }
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'settledtownsrule') {
@@ -8672,6 +8796,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).breakUp = (on: boolean) => { const s = game(); setBreakUp(s, !!on); return { on: breakUpOn(s) }; };
 // (Release 2, buildings.ts) Conquered towns settle: TC.settledTowns(on) at any time; the options page uses act('settledtownsrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).settledTowns = (on: boolean) => { const s = game(); setSettledTowns(s, !!on); return { on: settledTownsOn(s) }; };
+// (Release 2, townqueue.ts) A queue for a town: TC.townQueue(on) at any time; the options page uses act('townqueuerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).townQueue = (on: boolean) => { const s = game(); setTownQueue(s, !!on); return { on: townQueueOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
 // (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };
@@ -8703,6 +8829,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   fleetwhyrule: (s) => { setFleetWhy(s, true); return fleetWhyOn(s); },
   teamsrule: (s) => { setTeams(s, true); return teamsOn(s); },
   settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },
+  // (Release 2, townqueue.ts: a queue for a town, switched in any month, so an older war takes it too.)
+  townqueuerule: (s) => { setTownQueue(s, true); return townQueueOn(s); },
   columns: (s) => setColumns(s, true),
   'logistics:lorryShift': (s) => setLogistics(s, 'lorryShift', true),
   'logistics:wagons': (s) => setLogistics(s, 'wagons', true),
