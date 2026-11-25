@@ -163,6 +163,7 @@ import { FAR_PATHS } from '../../../src/campaign/far-rows';
 import { warGoesOn } from '../../../src/campaign/domination';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
+import { arrivalWaitOf } from '../../../src/campaign/arrivalwaits';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
@@ -824,6 +825,10 @@ function drawView(step = false) {
       // and why it cannot be ordered to ('' if it can).
       ...(c.nat === s.human && rearguardOn(s) ? { rear: isRearguard(s, c), rearWhy: c.rear ? '' : up ? whyNotRearguardOf(s, c.id) ?? '' : 'It is not your month.' } : {}),
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
+      // (Release 2, the telling, arrivalwaits.ts: the UI director's words of 21:49Z, 25 November 2026, section 2.) A
+      // corps of the player's at the front that a waiting dated arrival is to be formed from: the whole line for its
+      // card's muted note ('An arrival due in Paotow since December 1942, ...'). Only where there is one.
+      ...(c.nat === s.human ? (() => { const w = arrivalWaitOf(s, c); return w ? { arrivalWait: w.whole } : {}; })() : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     // (Version 53: only the fleets the player's side has found. One that is only reported is a flag and a rough

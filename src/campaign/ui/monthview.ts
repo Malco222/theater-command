@@ -109,6 +109,8 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
     ...card.home.filter((h) => h.next).map((h) => ({ html: goods(h), ready: 0, next: h.count })),
     // (In a box where no line has a sign, the lines start at the box's left edge.)
     ...card.also.map((t, i) => ({ html: it(card.home.length + card.research.length ? '<span class="sg"></span>' : '', `<span title="${esc(card.alsoFull[i] ?? t)}">${esc(t)}</span>`, ' also'), ready: 0, next: 0 })),
+    // (The telling, muted: an arrival that waits only for another to form. arrivalwaits.ts.)
+    ...(card.waits ?? []).map((t) => ({ html: it(card.home.length + card.research.length ? '<span class="sg"></span>' : '', `<span>${esc(t)}</span>`, ' also next'), ready: 0, next: 0 })),
   ];
   let homeOver = 0;
   let home = homeAll.slice(0, lines).map((x) => x.html);

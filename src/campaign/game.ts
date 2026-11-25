@@ -55,6 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
+import { formedLine, tellWait, theOf, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -4806,6 +4807,19 @@ const rowLanded = (g: Game, name: string): boolean => ((setup as any).expedition
  */
 const fromWaits = (g: Game, nat: string, from: string[]): boolean => ((setup as any).expeditions as any[] ?? []).some((r2, j) => r2[1] === nat
   && from.includes(r2[2]) && !g.flags[`sent:${j}`] && g.flags[`wait:${j}`] !== undefined && !g.corps.some((x) => x.nat === nat && !x.dead && x.name === r2[2]));
+/**
+ * What holds a dated row of `nat`'s that takes the corps `from` names whole, as the board stands, read for the telling
+ * (arrivalwaits.ts) and never by the rule itself: its named corps at the front (on a live front of its staff's plan, on
+ * the far side; or in contact, an enemy at war on its province or beside it, away from `at`, the province the row
+ * forms in), and the names a waiting row has still to make (the far side's chain, `fromWaits`). Changes nothing.
+ */
+export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined): { front: Corps[]; unformed: string[] } {
+  const far = farOn(g);
+  return {
+    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x)))),
+    unformed: far ? from.filter((n) => fromWaits(g, nat, [n])) : [],
+  };
+}
 
 /**
  * A grand campaign begun after the first day (staff.ts, startOpen): a row whose men history's full-size corps already
@@ -5711,7 +5725,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
       || (inFight && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
-      else { g.flags[`wait:${i}`] = g.turn; return; }
+      else { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     }
     // (The old chart, the grand campaign: a row that takes a named corps whole waits while that corps is in contact, an
     // enemy at war on its province or beside it, as the far side's waits for a live front, and its half year is counted
@@ -5722,7 +5736,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // book's rows keep their book, her ruling of 21:25Z.)
     const formsAt = reg?.id;
     if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && !stopDef(g).book && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
-      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { g.flags[`wait:${i}`] = g.turn; return; }
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
     // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
@@ -5730,6 +5744,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // `sourceAsked`, `menKept`.)
     if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
     if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; g.flags[unmadeKey(i)] = g.turn; return; }
+    const was = waitedOn(g, i); // (the telling: what it waited on, read before its corps are taken: arrivalwaits.ts)
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
     // (An offer the player takes is not struck for the months he took to answer: it stood open. Ruling B8.)
@@ -5903,15 +5918,17 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (o.until) g.flags[`lent:${i}`] = c.id;
     // (A war row that drew divisions from living corps is remembered by its corps until its war is over: above.)
     else if (g.flags.open === 1 && o.war && (c.drew?.length || c.rowed)) g.flags[`lent:${i}`] = c.id;
-    const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
+    const the = theOf(c.name);
     // Troops come ashore at a port across the sea: a colony's, or a foreign one for a nation that lives by its ships.
     // An army that marched there, or is forming up at home, simply arrives.
     const bySea = reg.port && (reg.overseas || (g.nations[nat].seaSupply && reg.owner !== nat));
+    // (The telling: a row of the player's that waited on the front, or came without its corps at the front: arrivalwaits.ts.)
+    const said = formedLine(g, i, was, inFight && own, c, reg, !!bySea);
     // A row that tells its own news says more than the bare arrival would.
-    if (o.news) headline(g, 'event', o.news, nat, reg.id);
+    if (o.news) headline(g, 'event', said?.after ? `${o.news} ${said.after}` : o.news, nat, reg.id);
     // (A living corps come itself under the row keeps the general it has: the line names the row's only where he commands it.)
-    else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
-    else if (nat === g.human) headline(g, 'info', `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
+    else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.${said?.after ? ` ${said.after}` : ''}`, nat, reg.id);
+    else if (nat === g.human) headline(g, 'info', said?.alone ?? `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);
