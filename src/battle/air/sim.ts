@@ -161,6 +161,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private passDraws = new Map<string, number>();
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
+  /**
+   * R5 (the design director, 25 November 2026: "no argmax, and no new draw on the rules' stream"): each group's ledger
+   * of credit, by creditor ('flak' for the guns). Each loss that falls on it credits every group that owed on it that
+   * tick its share of that loss, a fraction; the loss is booked to the one with the largest balance, which gives one
+   * back (creditor). Never a count.
+   */
+  private ledger = new Map<number, Map<number | 'flak', number>>();
   /** Each bomber group's gunners' kills: the enemy fighters whose loss was booked to it (ruling 227), for the campaign's record. */
   private gunKills = new Map<number, number>();
   private stragId = 1;
@@ -1557,13 +1564,29 @@ export class AirSim implements BattleSim<AirUnit> {
     return firing ? { holdIn: left } : {};
   }
 
-  /** The group that owed a group the most this tick takes the next aircraft it loses ('flak' for the guns). */
+  /**
+   * Who a group's next loss is booked to ('flak' for the guns): the fractional ledger (R5), never an argmax and never a
+   * draw. The loss credits each group that owed on it this tick its share of what was owed (a fraction, the shares
+   * summing to one); it is booked to the one of those with the largest balance (on a tie the lower id, the guns last),
+   * which gives one back. So over a battle each creditor's booked losses keep within about one of its share of them, and
+   * two equal groups on one box share its losses, where the largest debt alone gave one of them all.
+   */
   private creditor(u: AirUnit): number | 'flak' | null {
     const m = this.owedBy.get(u.id);
     if (!m || !m.size) return null;
-    let best: number | 'flak' = 'flak', most = -Infinity;
-    for (const [by, k] of m) if (k > most) { most = k; best = by; }
-    m.set(best, most - 1);
+    const due = [...m].filter(([, k]) => k > 0).sort(([a], [b]) => (a === 'flak' ? 1 : b === 'flak' ? -1 : a - b));
+    const all = due.reduce((t, [, k]) => t + k, 0);
+    if (!due.length || all <= 0) return null;
+    const L = this.ledger.get(u.id) ?? new Map<number | 'flak', number>();
+    this.ledger.set(u.id, L);
+    let best: number | 'flak' = due[0][0], most = -Infinity;
+    for (const [by, k] of due) {
+      const v = (L.get(by) ?? 0) + k / all;
+      L.set(by, v);
+      // (A share's rounding is no lead: within a millionth it is a tie.)
+      if (v > most + 1e-9) { most = v; best = by; }
+    }
+    L.set(best, L.get(best)! - 1);
     return best;
   }
 
@@ -1663,7 +1686,7 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /**
    * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
-   * the box's that owed them (ruling 227): the loss's creditor ('by', the group that owed it the most) is the box, and
+   * the box's that owed them (ruling 227): the loss's creditor ('by', booked by the ledger: creditor) is the box, and
    * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
    * theirs, and no lot moves it. Returns the box and the seat, or null.
    */
