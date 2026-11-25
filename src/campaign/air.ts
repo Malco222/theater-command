@@ -740,7 +740,7 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
 const ordinal = (k: number): string => `${k}${k % 100 >= 11 && k % 100 <= 13 ? 'th' : k % 10 === 1 ? 'st' : k % 10 === 2 ? 'nd' : k % 10 === 3 ? 'rd' : 'th'}`;
 
 /** A rung of a country's ladder of air formation names (ruling 220, the historian's data/campaign/air-names.json). */
-export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number; numbers?: { ftr?: number[]; bmr?: number[] } }
+export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number; numbers?: { ftr?: number[]; bmr?: number[]; abroad?: number[] } }
 const NAMES = namesData as unknown as { near: [number, number]; navyBases: string[]; ladders: Record<string, Rung[]> };
 
 /** A country's homeland is lost while it does not hold its own capital. */
@@ -771,6 +771,7 @@ export function nearestRung(rungs: Rung[], kind: 'ftr' | 'bmr', strength: number
   return best;
 }
 
+const reEsc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e). */
 export function formName(form: string, n: number): string {
   return form
@@ -799,9 +800,19 @@ function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, 
     // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation: once it is taken, the next rung.
     if (!/\{n/.test(form)) { if (!taken(form)) return form; left = left.filter((x) => x !== r); continue; }
     // A rung whose numbers went by role in the record lists them (Britain's groups: the historian's read row of 25
-    // November 2026, L): the first of the list for its kind that is free. Where the list runs out, the rung counts on.
+    // November 2026, L): the first of the list for its kind that is free; a number the record gave another country
+    // ('abroad') only while no living group of any nation carries it. Where the list runs out, the lowest whole number
+    // above every number in both of the rung's lists that is free, so that a group never takes a number of the other
+    // kind's list (the UI director's naming mend, 25 November 2026, 14:06Z). No counter is kept for such a rung.
     const nums = r.numbers?.[kind];
-    if (nums) for (const k of nums) { const x = formName(form, k); if (!taken(x)) return x; }
+    if (nums) {
+      const abroad = (k: number): boolean => {
+        const at = form.indexOf('{n}'), word = new RegExp(`(^|[^0-9])${reEsc(form.slice(0, at))}${k}(?![0-9])`);
+        return g.airFleets.some((f) => word.test(f.name));
+      };
+      for (const k of nums) { const x = formName(form, k); if (!taken(x) && !(r.numbers!.abroad?.includes(k) && abroad(k))) return x; }
+      for (let k = Math.max(...(r.numbers!.ftr ?? []), ...(r.numbers!.bmr ?? [])) + 1; ; k++) { const x = formName(form, k); if (!taken(x)) return x; }
+    }
     const key = `agn:${nat}:${kind}:${r.rung}`;
     let name: string;
     do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(form, g.flags[key]); } while (taken(name));
@@ -812,6 +823,10 @@ function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, 
   do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(AIRWAR.groups.names._default[kind], g.flags[key]); } while (taken(name));
   return name;
 }
+
+/** True when `name` is one a rung of the nation's ladder gives from its list of numbers for this kind ("No. 11 Group"). */
+const listedName = (g: Game, nat: string, kind: 'ftr' | 'bmr', name: string, base: Region | null): boolean =>
+  rungsOf(g, nat, base).some((r) => (r.numbers?.[kind] ?? []).some((k) => formName(r.form[kind], k) === name));
 
 /**
  * Splits a fleet as history lists it into air groups of one kind, none larger than the data allows. The fleet
@@ -848,8 +863,14 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     if (i > 0) g.airFleets.splice(at + i, 0, grp);
     out.push(grp);
   });
-  // The names are given once every group is on the list, so that no two of a nation's are alike.
-  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
+  // The names are given once every group is on the list, so that no two of a nation's are alike. A command whose own
+  // name is one its rung's list gives for the kind of its first piece ("No. 11 Group" for Britain's fighters) keeps
+  // that name on the piece its leader stays with; the others take names of the list (the UI director's naming mend,
+  // 25 November 2026, 14:06Z). Any other command's pieces each take a name of the ladder.
+  if (out.length > 1) {
+    const keeps = listedName(g, f.nat, out[0].kind!, f.parent, g.regions[f.base] ?? null);
+    for (const grp of out) grp.name = keeps && grp === out[0] ? f.parent : groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
+  }
   return out;
 }
 
