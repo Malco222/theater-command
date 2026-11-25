@@ -214,3 +214,54 @@ describe("support teams in battle: a team's fire shakes by its own harm (sim.tea
     expect(fought(o, true)).not.toEqual(fought(o, false));
   }, 120_000);
 });
+
+// The staff's half of the ruling (ai.ts defend; the tank and soldier AI thread's line): a defence's line block steps
+// out "to take one that has come round a neighbour's flank". A block's 'engaged' is its target, a team's too, from as
+// far back as it reaches; so before the mend a team block firing on an enemy within the leash of a line block's place
+// drew that block out of it, though no neighbour of the line was in a fight. Silent team blocks alone (no harm done)
+// gave the attack 16 battles in 200 at Prokhorovka that way.
+describe("support teams in battle: a team firing from far back is no neighbour in a fight (ai.ts defend)", () => {
+  type U = { id: number; side: string; kind: string; team?: string; state: string; engaged?: number; reserve?: string };
+  /** The defence given silent team blocks (they stand and aim, and do no harm), on its full line. */
+  const silent = (seed: number): Ticket => {
+    const b = campaign('prokhorovka-1943', seed), o = ownTeams(b).ticket;
+    return { ...b, def: { ...b.def, forces: [...b.def.forces, ...o.def.forces.filter(isOwnTeam).map((f) => ({ ...f, share: f.share * 1e-6 }))] } };
+  };
+  /**
+   * The defence's staff orders that send a line block (no reserve) at an enemy that is not wavering: how many, and how
+   * many of them at an enemy only team blocks of its side had as their target.
+   */
+  const drawnOut = (seed: number, rule: boolean): { orders: number; byTeamsAlone: number } => {
+    const sim = new LandBattle(silent(seed));
+    sim.teamsRule = rule;
+    const units = sim.units as unknown as U[];
+    const order = sim.command.bind(sim);
+    let orders = 0, byTeamsAlone = 0;
+    sim.command = ((c: { do: string; units?: number[]; target?: number }, side: string, ...rest: unknown[]) => {
+      if (side === 'def' && c.do === 'attack' && c.units?.length === 1) {
+        const u = units.find((x) => x.id === c.units![0])!, f = units.find((x) => x.id === c.target)!;
+        if (!u.reserve && f.state !== 'wavering') {
+          const on = units.filter((m) => m.side === 'def' && m.id !== u.id && m.engaged === f.id);
+          orders++;
+          if (on.length && on.every((m) => m.team)) byTeamsAlone++;
+        }
+      }
+      return (order as (...a: unknown[]) => unknown)(c, side, ...rest);
+    }) as typeof sim.command;
+    let guard = 0;
+    while (!sim.over && guard++ < 2_000_000) sim.step();
+    return { orders, byTeamsAlone };
+  };
+
+  it('on, no line block is drawn out by a team alone; off, it is as it was', () => {
+    let on = 0, off = 0, orders = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const a = drawnOut(seed, true), b = drawnOut(seed, false);
+      on += a.byTeamsAlone; off += b.byTeamsAlone; orders += a.orders;
+    }
+    // (the old behaviour is there to be mended, and the mended staff still sends its line out for a neighbour)
+    expect(off).toBeGreaterThan(0);
+    expect(orders).toBeGreaterThan(0);
+    expect(on).toBe(0);
+  }, 240_000);
+});
