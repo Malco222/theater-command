@@ -412,40 +412,47 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 			}
 		}
 	}
-	TArray<const FFoundButton*> Alike;
+	// (1.5.3) The buttons named by the words: where no button's words are these and no more, one with a line of its own
+	// (not on a button inside it) that reads exactly them, as Plain gives both. II Corps' card is named by "II Corps".
+	TArray<int32> ByName;
 	if (!bWhole && !Want.IsEmpty())
 	{
-		// (1.5.3) Where no button's words are these and no more, a button with a line of its own that reads exactly these
-		// words wins over every button that only carries them among others: a card by its name. After a split, "press II
-		// Corps" is II Corps' card, not REJOIN II CORPS DETACHMENT on it, nor the detachment's card, nor XII Corps'. "#2"
-		// counts among those that won.
 		for (const int32 Index : Matched)
 		{
 			if (HasLine(All[Index].Widget.ToSharedRef(), Want))
 			{
-				Alike.Add(&All[Index]);
+				ByName.Add(Index);
 			}
 		}
 	}
 	// (1.5.1) A button whose words are found only because a button inside it carries them gives way to that inner one:
 	// "3rd Infantry" is the division's tile, not the corps' card that holds the tile and has no line of that name of its
 	// own. Where no inner button matches, the outer one is pressed, as before.
-	if (Alike.Num() == 0)
+	// (1.5.3) But a button named by the words keeps the press, and the buttons inside it give way to it instead: after a
+	// split, "press II Corps" is II Corps' card, not REJOIN II CORPS DETACHMENT on it. Only a named button and the ones
+	// inside it are weighed so. The rest keep their screen order as in 1.5.2, and "#2" counts among them as it did:
+	// "press II Corps#2" is still REJOIN II CORPS on the detachment's card, which "II Corps" does not name.
+	TArray<const FFoundButton*> Alike;
+	for (const int32 Index : Matched)
 	{
-		for (const int32 Index : Matched)
+		bool bGivesWay = false;
+		for (int32 Up = All[Index].Parent; Up != INDEX_NONE && !bGivesWay; Up = All[Up].Parent)
 		{
-			bool bHolds = false;
+			bGivesWay = ByName.Contains(Up);
+		}
+		if (!ByName.Contains(Index))
+		{
 			for (const int32 Other : Matched)
 			{
-				for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bHolds; Up = All[Up].Parent)
+				for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bGivesWay; Up = All[Up].Parent)
 				{
-					bHolds = Up == Index;
+					bGivesWay = Up == Index;
 				}
 			}
-			if (!bHolds)
-			{
-				Alike.Add(&All[Index]);
-			}
+		}
+		if (!bGivesWay)
+		{
+			Alike.Add(&All[Index]);
 		}
 	}
 	if (!Alike.IsValidIndex(Which - 1))
