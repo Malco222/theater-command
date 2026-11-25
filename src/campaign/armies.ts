@@ -23,7 +23,7 @@ import data from '../../data/campaign/divisions.json';
 import setup from '../../data/campaign/setup-1939.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
-import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Corps, type Game, type Kind } from './types';
 import { allied, atWar, men } from './game';
 import { generalOf } from './commanders';
 import { grade, STORIES } from './stories';
@@ -292,12 +292,19 @@ export function whyNotOrder(g: Game, c: Corps): string | null {
  * or to attack (Version 84.2.4, on Brian's words of 2026-11-17: "if an enemy army is out of a city i couldnt attack
  * them"). A garrison takes no marching orders, and the sentence names the cure: TAKE THE FIELD, or a sortie where an
  * enemy army stands round the town. One corps is named; several are "They". The corps are of one province.
+ * (The 1.5.3 patch; the 1.5.1 playtest's find 18.) Corps that all went in this month come out with no move
+ * (apOutOfTown), so taking the field is no way to march: they are told when they can, as Warsaw's Defence Command is
+ * on the eve of war. Where the field outside has no room for another corps the old line stands.
  */
 export function garrisonLine(g: Game, cs: Corps[]): string {
   const r = g.regions[cs[0].reg], town = townName(r), one = cs.length === 1;
   const who = one ? `${cs[0].name} is ${(r.garr?.length ?? 0) > 1 ? 'in ' : ''}the garrison of ${town}` : `They are the garrison of ${town}`;
   const shut = g.flags.sieges === 1 && r.units.some((u) => !u.dead && atWar(g, u.nat, r.ctrl));
-  return shut ? `${who}, shut in by the army round it. Order a sortie against that army.` : `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
+  if (shut) return `${who}, shut in by the army round it. Order a sortie against that army.`;
+  // (room outside as siege.ts whyNotTakeField counts it)
+  const room = r.units.filter((u) => allied(g, u.nat, cs[0].nat) && u.kind !== 'eng').length < STACK;
+  if (room && cs.every((c) => c.town === g.turn)) return `${who}. ${one ? 'It' : 'They'} went in this month, and can march out next month.`;
+  return `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
 }
 /** Why the player's corps inside the town of a province take no marching orders, in the rules' sentence; null where he has none inside. */
 export function whyNotOrderGarrison(g: Game, region: number): string | null {

@@ -1064,23 +1064,19 @@ const garrisonHand = (s: Game, ids: unknown): Corps[] => {
 };
 /**
  * Why these corps of his inside a town march nowhere this month, in the sentence the 3D game's pointer gives a
- * garrison in hand (garrisonWhy). One that went in this month has no move once out (apOutOfTown), so it is told when
- * it can march, not to take the field; any other is told the rules' own way out (garrisonLine: TAKE THE FIELD, or a
- * sortie where an army stands round the town). '' where there are none.
+ * garrison in hand (garrisonWhy): the rules' garrisonLine, which tells one that went in this month when it can march
+ * (it has no move once out) and any other the way out (TAKE THE FIELD, or a sortie where an army stands round the
+ * town). '' where there are none.
  */
 function stayLine(s: Game, cs: Corps[]): string {
   if (!cs.length) return '';
-  try {
-    const line = garrisonLine(s, cs), one = cs.length === 1;
-    const cure = ` Order ${one ? 'it' : 'them'} to take the field first.`;
-    const fresh = cs.every((c) => c.town === s.turn && whyNotLeaveTown(s, c) === null);
-    return fresh && line.endsWith(cure) ? `${line.slice(0, -cure.length)} ${one ? 'It' : 'They'} went in this month, and can march out next month.` : line;
-  } catch { return ''; }
+  try { return garrisonLine(s, cs); } catch { return ''; }
 }
 /**
  * An order whose answer says nothing when nothing was done: for a hand that is all garrison, the answer's `key` then
- * carries the reason the 3D game's pointer gives (`why`, asked once the call is over and the garrison back inside).
- * Any other hand, and any answer that did something or said something, is left as it is.
+ * carries the reason the 3D game's pointer gives (`why`, asked once the call is over and the garrison back inside;
+ * where it gives '', the answer stays ''). Any other hand, and any answer that did something or said something, is
+ * left as it is.
  */
 function sayWhyInside<A extends [unknown, ...unknown[]], R>(fn: (...a: A) => R, key: string, idle: (r: R) => boolean, why: (s: Game, cs: Corps[], a: A) => string = (s, cs) => stayLine(s, cs)) {
   return (...a: A): R => {
@@ -1089,10 +1085,41 @@ function sayWhyInside<A extends [unknown, ...unknown[]], R>(fn: (...a: A) => R, 
       const s = game();
       const cs = garrisonHand(s, a[0]);
       const said = out && typeof out === 'object' ? (out as Record<string, unknown>)[key] : undefined;
-      if (cs.length && said === '' && idle(out)) (out as Record<string, unknown>)[key] = why(s, cs, a) || stayLine(s, cs);
+      if (cs.length && said === '' && idle(out)) (out as Record<string, unknown>)[key] = why(s, cs, a);
     } catch { /* (the answer stands as the order gave it) */ }
     return out;
   };
+}
+/** True where the garrison in hand comes out with a move to make and the place is in its reach once out (ComesOutTo in the 3D game). */
+const comesOutTo = (hand: { out: number[]; regions: { id: number }[] }, to: unknown): boolean => hand.out.length > 0 && hand.regions.some((r) => r.id === to);
+/**
+ * (The 1.5.3 review.) For a march or a march up, the garrison's line is the reason only where the 3D pointer gives it
+ * (ComesOutTo): the hand cannot come out with a move to make, or the place is beyond its reach once out. Where it
+ * could come out and get there, nothing stands in its way but what stands in a field army's, and the place's own
+ * answer stands as a field army gets it: '' for a march onto the enemy next door, which is an attack, not a march.
+ */
+function garrisonOrPlace(s: Game, cs: Corps[], a: [unknown, ...unknown[]]): string {
+  return comesOutTo(reachHand(a[0] as number[]), a[1]) ? '' : stayLine(s, cs);
+}
+/**
+ * (The 1.5.3 review; the playtest's find 16.) The march up and the attack, planned with the garrison in hand as if out
+ * of its town (lookOut). A hand that is all garrison and would have no move once out (it went in this month) is
+ * planned nothing, as the 3D game asks for no plan then (GarrisonApproach): the answer says why in the pointer's
+ * words, not that the nearest ground is a month's march off, which it could not set off on. Any other refusal with
+ * nothing said is told why as a march is (garrisonOrPlace).
+ */
+function approachHand(ids: number[], to: number) {
+  const plan = lookOut(approach)(ids, to);
+  try {
+    const s = game();
+    const cs = plan.ok ? [] : garrisonHand(s, ids);
+    if (cs.length) {
+      const hand = reachHand(ids);
+      const why = !hand.out.length || (plan.none === '' && !comesOutTo(hand, to)) ? stayLine(s, cs) : '';
+      if (why) return { ...plan, rows: [], none: why };
+    }
+  } catch { /* (the plan stands as the rules made it) */ }
+  return plan;
 }
 
 
@@ -2624,14 +2651,10 @@ function sally(region: number) {
 /**
  * (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence;
  * '' where he has none there. (The 1.5.3 patch, the playtest's find 18: where every one of them went in this month,
- * and so has no move once out, the sentence says when they can march, not to take the field: stayLine.)
+ * and so has no move once out, the rules' sentence says when they can march, not to take the field: garrisonLine.)
  */
 function garrisonWhy(region: number) {
-  try {
-    const s = game();
-    const why = whyNotOrderGarrison(s, region) ?? '';
-    return { why: why ? stayLine(s, (s.regions[region]?.garr ?? []).filter((c) => c.nat === s.human && !c.dead)) || why : '' };
-  } catch { return { why: '' }; }
+  try { return { why: whyNotOrderGarrison(game(), region) ?? '' }; } catch { return { why: '' }; }
 }
 
 function takeOutlook(ids: number[], to: number) {
@@ -6858,7 +6881,7 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(sayWhyInside(rail, 'said', (r) => !r.moved.length, (_s, _cs, [ids, to]) => railTip(ids, to).no), 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachHand, marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(sayWhyInside(goOut(move), 'note', (r) => !r.moved.length), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach: sayWhyInside(lookOut(approach), 'none', (r) => !r.ok), garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(sayWhyInside(rail, 'said', (r) => !r.moved.length, (s, cs, [ids, to]) => railTip(ids, to).no || stayLine(s, cs)), 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachHand, marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(sayWhyInside(goOut(move), 'note', (r) => !r.moved.length, garrisonOrPlace), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach: approachHand, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.

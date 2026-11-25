@@ -6418,13 +6418,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			// (release 2 and the 1.5.1 patch: a garrison that could come out and get here is told what a right-click would
 			// do as an army in the field is, the rules looking at it as if out; it comes out only as the order goes)
 			const bool bComesOut = !GarrisonTip.IsEmpty() && ComesOutTo(TipRegion);
-			if (!GarrisonTip.IsEmpty() && !bComesOut)
+			// (The 1.5.3 review; the playtest's find 16.) Or an enemy army beyond its reach that it could march up to and
+			// attack once out: the march up and the attack are offered as to its field brothers, planned with it as if out.
+			const FApproachPlan GarrisonRoad = (!GarrisonTip.IsEmpty() && !bComesOut) ? GarrisonApproach(TipRegion) : FApproachPlan();
+			if (!GarrisonTip.IsEmpty() && !bComesOut && !GarrisonRoad.bOk)
 			{
 				Line += TEXT("\n") + GarrisonTip + GarrisonWhere(); // (a garrison in hand is promised no march)
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
-				if (bComesOut)
+				if (bComesOut || GarrisonRoad.bOk)
 				{
 					Line += TEXT("\nThey are inside the town, and come out of it as the order goes.");
 				}
@@ -6542,7 +6545,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					// (Rules 84.2.5; ruling 211(a).) Guns sent forward alone: the refusal on the pointer's paper slip, in ink.
 					Line += TEXT("\n") + Alone;
 				}
-				else if (const FApproachPlan Road = (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
+				else if (const FApproachPlan Road = GarrisonRoad.bOk ? GarrisonRoad : (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
 				{
 					// (The code checker, 17 November.) One test for the tip and the order: the march-up card is promised only
 					// where a right-click opens it (OrderTo asks the same plan, in the same place in its order). (Rules 84.5;
@@ -7870,8 +7873,9 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 	}
 	{
 		const FString Garrison = GarrisonSays();
-		// (a garrison's flag set down where it could go this month once out: the order goes on, as OrderTo has it)
-		if (!Garrison.IsEmpty() && !(bOnTable && ComesOutTo(RegionId)))
+		// (a garrison's flag set down where it could go this month once out, or on an enemy army it could march up to
+		// and attack once out (the 1.5.3 review, the playtest's find 16): the order goes on, as OrderTo has it)
+		if (!Garrison.IsEmpty() && !(bOnTable && (ComesOutTo(RegionId) || GarrisonApproach(RegionId).bOk)))
 		{
 			// (a garrison's flag set down somewhere: it goes back, and is told how it can be moved)
 			Piece->ReturnToRest();
@@ -8966,6 +8970,18 @@ bool ACampaignPlayerController::GarrisonWaits() const
 	return true;
 }
 
+FApproachPlan ACampaignPlayerController::GarrisonApproach(int32 RegionId) const
+{
+	// (The 1.5.3 review; the playtest's find 16. The rules plan the march up with the garrison in hand as if out of its
+	// town: approach is a look in campaign-bridge.ts, and the march it gives brings the garrison out as it goes.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || RegionId == INDEX_NONE || RegionId == ArmyRegion || bHandSpent || FindReach(RegionId) != nullptr || !ComesOut())
+	{
+		return FApproachPlan();
+	}
+	return Session->PlanApproach(PickedCorps, RegionId);
+}
+
 FString ACampaignPlayerController::GarrisonWhere() const
 {
 	// (The design director, 17 November: no hint sends him to a press that does nothing. The sortie and the order to
@@ -9134,8 +9150,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		const FString Garrison = GarrisonSays();
 		// (Release 2 and the 1.5.1 patch, Brian, 24 November 2026: a garrison sent where it could go this month once out
 		// is ordered as an army in the field is. The rules bring it out of its town inside the order's own call, and
-		// only if the order goes: a card's No, the war question's No or a refusal leaves it inside, nothing spent.)
-		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId))
+		// only if the order goes: a card's No, the war question's No or a refusal leaves it inside, nothing spent. The 1.5.3
+		// review, the playtest's find 16: and one sent at an enemy army beyond its reach that it could march up to and
+		// attack once out is given the march up and the attack below, as its field brothers are.)
+		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId) && !GarrisonApproach(RegionId).bOk)
 		{
 			Notify(Garrison + GarrisonWhere(), 10.0); // (a garrison in hand: it is told how it can be moved, and promised no march)
 			return;

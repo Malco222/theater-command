@@ -9858,10 +9858,11 @@ function insideInHand(): string {
   if (ui.sel < 0 || !g.human || !humanUp(g) || ui.tab !== 'region' || heldCorps().length) return '';
   const r = g.regions[ui.sel];
   if (r.units.some((c) => c.nat === g.human && !c.dead)) return '';
-  // (The rules' sentence, the same in both games; the page adds where the order is found.)
+  // (The rules' sentence, the same in both games; the page adds where the order is found. The 1.5.3 patch: a garrison
+  // that went in this month is told when it can march, and is not sent to TAKE THE FIELD, which gives it no move.)
   const line = whyNotOrderGarrison(g, ui.sel);
   if (!line) return '';
-  return besiegers(g, r).length ? `${line} ${fingers() ? 'Press and hold' : 'Right-click'} that army to plan it.` : `${line} TAKE THE FIELD is on the page of ${townName(r)}.`;
+  return besiegers(g, r).length ? `${line} ${fingers() ? 'Press and hold' : 'Right-click'} that army to plan it.` : line.endsWith('to take the field first.') ? `${line} TAKE THE FIELD is on the page of ${townName(r)}.` : line;
 }
 /** A right-click away from a town whose corps are all inside it: the line above, said. True if it was. */
 function insideSaid(id: number): boolean {

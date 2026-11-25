@@ -8,25 +8,30 @@
 //   take the field, which gives it no move. It is told when it can march, and is spent, on the eve too.
 // - 15: the garrison's card read "No moves left this month" although it can march: the view says the moves it has once out.
 // - 14: the reach names the corps of a garrison in hand that come out with an order, for a hand that has a field army too.
+// The two reviews of the patch: a refusal names the garrison only where taking the field is what stands in the way (a
+// garrison that could come out and is sent onto the enemy next door is answered as a field corps is); and the sentence
+// for one that went in this month is the rules' own (garrisonLine), so the corps' card, the province and both games say
+// the same.
 import { describe, expect, it } from 'vitest';
 import { createGame, hostileUnits, relocate } from '../src/campaign/game';
 import { whyNotLand, whyNotShip } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { besieged, garrison } from '../src/campaign/siege';
+import { garrisonLine, whyNotOrder, whyNotOrderGarrison } from '../src/campaign/armies';
 import { startOpen } from '../src/campaign/staff';
 import { townName } from '../src/campaign/towns';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
-type Seen = { id: number; name: string; reg: number; town?: boolean; ap: number; apMax: number; apOut?: number; garrison?: string; nat: string };
+type Seen = { id: number; name: string; reg: number; town?: boolean; ap: number; apMax: number; apOut?: number; garrison?: string; noOrders?: string; nat: string };
 type Row = { id: number; name: string; going: number[]; left: number };
 interface Bridge {
   start(o: unknown): unknown;
   load(text: string): unknown;
   save(): { text: string };
   view(): { eve: boolean; turn: number; corps: Seen[] };
-  reach(ids: number[]): { regions: { id: number }[]; spent: boolean; why: string; out: number[] };
+  reach(ids: number[]): { regions: { id: number; attack: boolean }[]; spent: boolean; why: string; out: number[] };
   garrisonWhy(region: number): { why: string };
   move(ids: number[], to: number): { moved: { id: number; path: number[] }[]; note: string };
   rail(ids: number[], to: number): { moved: unknown[]; said: string };
@@ -142,9 +147,14 @@ describe('find 16: a garrison in hand marches up and attacks as its field brothe
     const t0 = saved();
     const why = TC.garrisonWhy(saar.id).why;
     expect(why).toBe(told(c, saar));
-    // A march onto the enemy army next door (that is an attack: the march is refused) and a march to its own ground.
-    expect(TC.move([c.id], foe).note).toBe(why);
+    // A march to its own ground: taking the field is the way out of the town.
     expect(TC.move([c.id], saar.id).note).toBe(why);
+    // (The review.) A march onto the enemy army next door is an attack, and is refused as such: the garrison could come
+    // out and get there, so nothing stands in its way but what stands in a field army's, and it is answered as a field
+    // army is. The pointer, too, says "Right-click: attack" there, not the garrison's line (ComesOutTo).
+    expect(TC.reach([c.id]).regions.find((r) => r.id === foe)).toMatchObject({ attack: true });
+    expect(TC.move([c.id], foe).note).toBe('');
+    expect(TC.approach([c.id], foe)).toMatchObject({ ok: false, none: '' });
     expect(saved()).toBe(t0);
     // A train: the railway's own reason, which the pointer gives (railTip).
     const ruhr = g.byName['Ruhr'].id;
@@ -159,6 +169,22 @@ describe('find 16: a garrison in hand marches up and attacks as its field brothe
     expect(TC.move([f.id], f.reg).note).toBe('');
     expect(TC.rail([f.id], g2.byName['Ruhr'].id).said).toBe('');
     expect(TC.approach([f.id], g2.byName['Ruhr'].id)).toMatchObject({ ok: false, none: '' });
+    expect(TC.move([f.id], foeBy(g2, g2.byName['Saar'])).note).toBe('');
+  });
+
+  it('a garrison that could not come out with a move is told why wherever it is sent, the enemy next door too', () => {
+    const g = playing();
+    const saar = g.byName['Saar'];
+    const c = inside(g, saar, g.turn); // (went in this month: no move once out)
+    for (const u of saar.units.filter((u) => u.nat === 'GER')) relocate(g, u, g.regions[home(g, saar)]);
+    const foe = foeBy(g, saar);
+    TC.load(saveGame(g));
+    const t0 = saved();
+    const why = fresh(c, saar);
+    expect(TC.garrisonWhy(saar.id).why).toBe(why);
+    expect(TC.move([c.id], foe).note).toBe(why);
+    expect(TC.approach([c.id], foe)).toMatchObject({ ok: false, rows: [], none: why });
+    expect(saved()).toBe(t0);
   });
 
   it('a garrison that cannot come out is refused the march up with the rules\' sentence', () => {
@@ -191,6 +217,8 @@ describe('find 18: a garrison that went in this month says when it can march, an
     const line = 'Warsaw Defence Command is the garrison of Warsaw. It went in this month, and can march out next month.';
     expect(w.garrison).toBe(line);
     expect(TC.garrisonWhy(w.reg).why).toBe(line);
+    // (The review.) The corps' card in both games says the same: the view's noOrders is the rules' whyNotOrder.
+    expect(w.noOrders).toBe(line);
     const t0 = saved();
     const hand = TC.reach([w.id]);
     expect(hand).toMatchObject({ regions: [], spent: true, why: line, out: [] });
@@ -210,13 +238,20 @@ describe('find 18: a garrison that went in this month says when it can march, an
     const g = playing();
     const eifel = g.byName['Eifel'];
     const c = inside(g, eifel, g.turn);
+    // The rules' own sentence, for the corps' card in the browser and the province's paper line (the review).
+    expect(whyNotOrder(g, c)).toBe(fresh(c, eifel));
+    expect(whyNotOrderGarrison(g, eifel.id)).toBe(fresh(c, eifel));
+    expect(garrisonLine(g, [c])).toBe(fresh(c, eifel));
     TC.load(saveGame(g));
     expect(seen(c.id).garrison).toBe(fresh(c, eifel));
+    expect(seen(c.id).noOrders).toBe(fresh(c, eifel));
     expect(TC.garrisonWhy(eifel.id).why).toBe(fresh(c, eifel));
     expect(TC.reach([c.id])).toMatchObject({ regions: [], spent: true, why: fresh(c, eifel), out: [] });
     c.town = EARLIER;
+    expect(whyNotOrder(g, c)).toBe(told(c, eifel));
     TC.load(saveGame(g));
     expect(seen(c.id).garrison).toBe(told(c, eifel));
+    expect(seen(c.id).noOrders).toBe(told(c, eifel));
     expect(TC.garrisonWhy(eifel.id).why).toBe(told(c, eifel));
     const hand = TC.reach([c.id]);
     expect(hand.regions.length).toBeGreaterThan(0);

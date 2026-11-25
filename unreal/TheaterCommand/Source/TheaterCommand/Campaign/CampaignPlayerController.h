@@ -1373,6 +1373,12 @@ private:
 	 */
 	bool GarrisonWaits() const;
 	/**
+	 * (The 1.5.3 review; the playtest's find 16.) A hand that is all garrison and could come out, sent at an enemy army
+	 * beyond its reach: the rules' plan for the march up and the attack, made with it as if out of its town, as for an
+	 * army in the field (bOk false otherwise). The march the card gives brings it out as it goes (CarryOutApproach).
+	 */
+	FApproachPlan GarrisonApproach(int32 RegionId) const;
+	/**
 	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have
 	 * no plan to offer (no enemy army seen there, or it is next door already).
