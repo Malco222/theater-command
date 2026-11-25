@@ -19,7 +19,7 @@ import { clamp } from '../core/math';
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, airPool, assessAir, carrierRules, groupOverSea, groupsOver, km, seaKm, skyDenies, skyOver, skyReach } from './air';
+import { AIR, CARRIERS, airPool, assessAir, carrierRules, fieldNear, groupOverSea, groupsOver, km, nearRow, seaKm, skyDenies, skyOver, skyReach } from './air';
 import { dayShare, oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
 import { capOver, deckWorth, fleetKnown, syncWings, wingShare, wingStep } from './carriers';
@@ -588,7 +588,8 @@ export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(
   const zone = g.seas[z];
   const S = skiesOver(g, z);
   if (S) {
-    for (const f of g.airFleets) if (atWar(g, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g, f, z, S) > 0) foe(f.nat);
+    const near = nearRow(g, z);
+    for (const f of g.airFleets) if (fieldNear(g, near, f.base, z) && atWar(g, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g, f, z, S) > 0) foe(f.nat);
   } else if (zone.coast.length && seaSkyMul(g, z) !== 0) {
     for (const id of zone.coast) {
       const r = g.regions[id];
@@ -620,8 +621,57 @@ export function seaSide(g: Game, z: number, nat: string, hostile: boolean, form:
   return { ships, air, total: ships + air };
 }
 
+/**
+ * (Speed, the far map: the playtest's finding 40, 25 November 2026.) A sea reading: while a question that changes
+ * nothing is answered (the 3D game's list of ports a corps can be shipped to and coasts it can land on, and why not),
+ * each sea's closing and risk for a nation, and each search by sea from a coast, are worked out once and kept to the
+ * end of the question. Asked port by port, the same search from the corps' own port was made again for every port
+ * on the map, and every sea's balance again inside every search: with Japan at war with eight nations, 17 to 21
+ * seconds for one corps in Tokyo. Nothing in such a question moves a ship, an aircraft or a front, so nothing they
+ * read can change while it is asked; the reading is dropped as the question returns, and an order is never asked
+ * inside one. A question about another game (a copy) reads that game afresh.
+ */
+interface SeaReading { g: Game; closed: Map<string, Int8Array>; risk: Map<string, Float64Array>; searches: Map<string, SeaSearch>; steps: Map<string, ConvoySteps> }
+let reading: SeaReading | null = null;
+export function seaReading<T>(g: Game, f: () => T): T {
+  if (reading) return f();
+  reading = { g, closed: new Map(), risk: new Map(), searches: new Map(), steps: new Map() };
+  try { return f(); } finally { reading = null; }
+}
+const readingOf = (g: Game): SeaReading | null => (reading !== null && reading.g === g ? reading : null);
+
 /** A sea is closed to a nation's troopships and supply ships when the enemy is much the stronger there. */
 export function closedTo(g: Game, z: number, nat: string): boolean {
+  const R = readingOf(g);
+  if (!R) return closedNow(g, z, nat);
+  let a = R.closed.get(nat);
+  if (!a) R.closed.set(nat, (a = new Int8Array(g.seas.length).fill(-1)));
+  if (a[z] < 0) a[z] = closedNow(g, z, nat) ? 1 : 0;
+  return a[z] === 1;
+}
+/**
+ * (Speed, the far map: the playtest's finding 41.) closedTo and seaRisk of one sea at once, from one count of each
+ * side: asked one after the other, each counted the enemy's side again, and our own where it needed it. The trade
+ * routes (trade.ts) and every search by sea (seaSearch) ask both of each sea they look at. Same figures, same order.
+ */
+export function seaOdds(g: Game, z: number, nat: string): { shut: boolean; risk: number } {
+  const R = readingOf(g);
+  if (!R) return oddsNow(g, z, nat);
+  let a = R.closed.get(nat), b = R.risk.get(nat);
+  if (!a) R.closed.set(nat, (a = new Int8Array(g.seas.length).fill(-1)));
+  if (!b) R.risk.set(nat, (b = new Float64Array(g.seas.length).fill(NaN)));
+  if (a[z] < 0 || Number.isNaN(b[z])) { const o = oddsNow(g, z, nat); a[z] = o.shut ? 1 : 0; b[z] = o.risk; }
+  return { shut: a[z] === 1, risk: b[z] };
+}
+function oddsNow(g: Game, z: number, nat: string): { shut: boolean; risk: number } {
+  const e = seaSide(g, z, nat, true);
+  const hunters = e.ships + e.air * 0.5;
+  const closes = e.total >= NAVY.closed.min;
+  // (Our own side is counted only where closedTo or seaRisk would have counted it.)
+  const own = closes || hunters > 0 ? seaSide(g, z, nat, false).total : 0;
+  return { shut: closes && e.total >= NAVY.closed.ratio * own, risk: hunters <= 0 ? 0 : hunters / (hunters + 2 * own + NAVY.intercept.sea) };
+}
+function closedNow(g: Game, z: number, nat: string): boolean {
   const e = seaSide(g, z, nat, true);
   if (e.total < NAVY.closed.min) return false;
   return e.total >= NAVY.closed.ratio * seaSide(g, z, nat, false).total;
@@ -772,7 +822,8 @@ export class SeaPicture {
     let gs = this.groups[z];
     if (!gs) {
       gs = [];
-      for (const f of g.airFleets) { const n = groupOverSea(g, f, z, S); if (n > 0) gs.push({ nat: f.nat, n }); }
+      const near = nearRow(g, z);
+      for (const f of g.airFleets) { if (!fieldNear(g, near, f.base, z)) continue; const n = groupOverSea(g, f, z, S); if (n > 0) gs.push({ nat: f.nat, n }); }
       this.groups[z] = gs;
     }
     return gs;
@@ -973,6 +1024,14 @@ export const seaOpenAt = (g: Game, nat: string, r: Region): boolean => r.seas.so
 
 /** How dangerous a sea is for a nation's troopships: 0 when no enemy ship or aircraft is at work there. */
 export function seaRisk(g: Game, z: number, nat: string): number {
+  const R = readingOf(g);
+  if (!R) return riskNow(g, z, nat);
+  let a = R.risk.get(nat);
+  if (!a) R.risk.set(nat, (a = new Float64Array(g.seas.length).fill(NaN)));
+  if (Number.isNaN(a[z])) a[z] = riskNow(g, z, nat);
+  return a[z];
+}
+function riskNow(g: Game, z: number, nat: string): number {
   const e = seaSide(g, z, nat, true);
   const hunters = e.ships + e.air * 0.5;
   if (hunters <= 0) return 0;
@@ -1000,32 +1059,94 @@ export interface SeaSearch { cost: Float64Array; prev: Int16Array }
  * every way into it; closedTo and seaRisk only read the war, and nothing changes during a search).
  */
 export function seaSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean } = {}): SeaSearch {
+  const R = readingOf(g);
+  if (!R) return o.surprise ? surpriseSearch(g, nat, from, o) : searchNow(g, nat, from, o);
+  const k = `${nat}|${from.id}|${o.max ?? 0}|${o.surprise ? 1 : 0}`;
+  let S = R.searches.get(k);
+  if (!S) R.searches.set(k, (S = searchNow(g, nat, from, o)));
+  return S;
+}
+/**
+ * (Speed, the far map: the playtest's finding 41.) A search for a landing by surprise reads nothing of the war but the
+ * straits: every sea weighs the same and none is closed to it. So it is kept, by nation, coast and reach, and used
+ * again while every strait lets that nation's ships through, or not, as it did (canPass, strait by strait). A
+ * computer staff asks it of every harbour for every shore it wants: some twenty thousand times in a far month.
+ * (Nothing that is handed a search changes it.)
+ */
+const SURPRISE = new WeakMap<object, Map<string, SeaSearch>>();
+function surpriseSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): SeaSearch {
+  let m = SURPRISE.get(g.seas);
+  if (!m) SURPRISE.set(g.seas, (m = new Map()));
+  let k = `${nat}|${from.id}|${o.max ?? 0}|`;
+  for (const gt of g.gates) k += canPass(g, gt.a, gt.b, nat) ? '1' : '0';
+  let S = m.get(k);
+  if (!S) {
+    if (m.size >= 50000) m.clear();
+    m.set(k, (S = searchNow(g, nat, from, o)));
+  }
+  return S;
+}
+function searchNow(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): SeaSearch {
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
   const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
+  // (Each sea's closing and risk from one count of its sides: seaOdds.)
+  const look = (z: number): void => { const s = seaOdds(g, z, nat); shutAt[z] = s.shut ? 1 : 0; weightAt[z] = 1 + 20 * s.risk; };
   const shut = (z: number): boolean => {
     if (o.surprise) return false;
-    if (shutAt[z] < 0) shutAt[z] = closedTo(g, z, nat) ? 1 : 0;
+    if (shutAt[z] < 0) look(z);
     return shutAt[z] === 1;
   };
   const weight = (z: number): number => {
-    if (weightAt[z] === 0) weightAt[z] = 1 + (o.surprise ? 0 : 20 * seaRisk(g, z, nat)); // (never 0: at least 1)
+    if (o.surprise) return 1; // (never 0: at least 1)
+    if (shutAt[z] < 0) look(z);
     return weightAt[z];
   };
-  for (const z of from.seas) if (!shut(z)) { cost[z] = weight(z); len[z] = 1; }
-  for (;;) {
-    let a = -1;
-    for (let i = 0; i < N; i++) if (!done[i] && cost[i] < 1e9 && (a < 0 || cost[i] < cost[a])) a = i;
-    if (a < 0) break;
+  // (Speed, the far map: the playtest's finding 41.) The next sea is taken from a heap, cheapest first and of two as
+  // cheap the lower number first, as the scan of every sea took it: the same seas in the same order, the same ways.
+  const heap = new SeaHeap();
+  for (const z of from.seas) if (!shut(z)) { cost[z] = weight(z); len[z] = 1; heap.push(cost[z], z); }
+  while (heap.size) {
+    const c0 = heap.topCost(), a = heap.pop();
+    if (done[a] || c0 !== cost[a] || !(cost[a] < 1e9)) continue;
     done[a] = 1;
     if (o.max && len[a] >= o.max) continue;
     for (const j of g.seas[a].adj) {
       if (done[j] || shut(j) || !canPass(g, a, j, nat)) continue;
       const c = cost[a] + weight(j);
-      if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; }
+      if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; heap.push(c, j); }
     }
   }
   return { cost, prev };
+}
+
+/** A small heap of seas by cost, the lower number first between two as cheap (seaSearch). */
+class SeaHeap {
+  private c: number[] = [];
+  private i: number[] = [];
+  get size(): number { return this.c.length; }
+  topCost(): number { return this.c[0]; }
+  private less(a: number, b: number): boolean { return this.c[a] < this.c[b] || (this.c[a] === this.c[b] && this.i[a] < this.i[b]); }
+  private swap(a: number, b: number): void { const c = this.c[a], i = this.i[a]; this.c[a] = this.c[b]; this.i[a] = this.i[b]; this.c[b] = c; this.i[b] = i; }
+  push(cost: number, z: number): void {
+    let k = this.c.length;
+    this.c.push(cost); this.i.push(z);
+    while (k > 0) { const p = (k - 1) >> 1; if (!this.less(k, p)) break; this.swap(k, p); k = p; }
+  }
+  pop(): number {
+    const top = this.i[0], n = this.c.length - 1;
+    this.swap(0, n); this.c.pop(); this.i.pop();
+    let k = 0;
+    for (;;) {
+      const l = 2 * k + 1, r = l + 1;
+      let m = k;
+      if (l < n && this.less(l, m)) m = l;
+      if (r < n && this.less(r, m)) m = r;
+      if (m === k) break;
+      this.swap(k, m); k = m;
+    }
+    return top;
+  }
 }
 
 /** The cheapest way by sea from a coast to every sea it can reach (seaSearch). */
@@ -1124,7 +1245,16 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
 export const sailReach = (g: Game, nat?: string): number => (farOn(g) && (nat === undefined || ownShips !== nat) ? NAVY.sail?.reach ?? 0 : 0);
 
 /** The fewest seas a nation's ships cross from a coast to every sea (1 for the coast's own seas; closed seas and shut straits kept out), and the sea before each on the way. */
-function convoySteps(g: Game, nat: string, from: Region): { steps: Int16Array; prev: Int16Array } {
+interface ConvoySteps { steps: Int16Array; prev: Int16Array }
+function convoySteps(g: Game, nat: string, from: Region): ConvoySteps {
+  const R = readingOf(g);
+  if (!R) return stepsNow(g, nat, from);
+  const k = `${nat}|${from.id}`;
+  let S = R.steps.get(k);
+  if (!S) R.steps.set(k, (S = stepsNow(g, nat, from)));
+  return S;
+}
+function stepsNow(g: Game, nat: string, from: Region): ConvoySteps {
   const N = g.seas.length, steps = new Int16Array(N), prev = new Int16Array(N).fill(-1);
   const q: number[] = [];
   for (const z of from.seas) if (!closedTo(g, z, nat)) { steps[z] = 1; q.push(z); }

@@ -98,7 +98,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -714,10 +714,12 @@ function drawView() {
     ...((): { cut: number[]; cuts: { region: number; how: string; head: string; line: string; short: string }[] } => {
       if (!groundRules(s)) return { cut: [], cuts: [] };
       try {
-        const known = [...cutsKnown(s).entries()];
+        // (The player's sight as this picture worked it out above, for the list and for each cut's words: asked afresh
+        // for every cut, it was the sight of the whole map again each time. The far map's playtest, finding 41.)
+        const known = [...cutsKnown(s, s.human, seen).entries()];
         return {
           cut: known.map(([id]) => id),
-          cuts: known.map(([id, k]) => { const said = cutSays(s, id); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
+          cuts: known.map(([id, k]) => { const said = cutSays(s, id, s.human, seen); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
         };
       } catch { return { cut: s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id), cuts: [] }; }
     })(),
@@ -3943,16 +3945,20 @@ function railTip(ids: number[], to: number) {
   } catch { return none; }
 }
 
-/** Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
+/**
+ * Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on.
+ * (Asked as one sea reading, navy.ts `seaReading`: each sea's balance and each search by sea from the corps' port
+ * are worked out once for the whole list, not again for every port on the map. The playtest's finding 40.)
+ */
 function seaReach(ids: number[]) {
   const s = game();
   const ports = new Set<number>();
   let beaches: number[] = [];
-  if (humanUp(s) && !onEve(s)) {
+  if (humanUp(s) && !onEve(s)) seaReading(s, () => {
     const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
     for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
     beaches = landingTargets(s, cs).map((r) => r.id);
-  }
+  });
   return { ports: [...ports], beaches };
 }
 
@@ -3966,11 +3972,14 @@ function bySeaWhy(ids: number[], to: number): { why: string } {
   const r = s.regions[to];
   const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
   if (!r || !cs.length) return { why: '' };
-  if (allied(s, cs[0].nat, r.ctrl)) {
-    for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
-    return { why: '' };
-  }
-  return { why: whyNotLand(s, cs, r) ?? '' };
+  // (One sea reading, as `seaReach`: a refusal for lying beyond a month's sailing searches from every port on the way.)
+  return seaReading(s, () => {
+    if (allied(s, cs[0].nat, r.ctrl)) {
+      for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
+      return { why: '' };
+    }
+    return { why: whyNotLand(s, cs, r) ?? '' };
+  });
 }
 
 /** Ships the chosen corps to a friendly port. */
