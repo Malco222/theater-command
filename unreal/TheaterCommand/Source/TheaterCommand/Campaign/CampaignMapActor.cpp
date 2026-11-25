@@ -14047,12 +14047,21 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 			: bTrade ? FLinearColor(0.2f, 0.135f, 0.07f, 0.78f)
 			: FLinearColor(0.86f, 0.93f, 1.0f, 0.5f); // (a sea lane is ruled like a trade route, a fine dotted line in pale ink: no chalk bars on the water)
 		const FLinearColor TradeAtSea(0.9f, 0.84f, 0.66f, 0.42f);
+		// (seam-2, the art director, 25 November 2026: over the chart's seam the lane is ruled the short way. Each
+		// point is counted in the turn of the world nearest the one before it, so the lane from California to
+		// Hawaii is not ruled east across two oceans; what then runs out past the chart's frame is laid on the
+		// other side by the lanes' twin. Without the far side the points are as they were given.)
+		TArray<FVector2D> Chained = Lane.Path;
+		for (int32 Link = 1; Link < Chained.Num(); ++Link)
+		{
+			Chained[Link].X = NearX(Chained[Link].X, Chained[Link - 1].X);
+		}
 		// The lane as a smooth curve through its points, a step every map unit or so.
 		TArray<FVector2D> Curve;
-		const int32 Count = Lane.Path.Num();
+		const int32 Count = Chained.Num();
 		for (int32 K = 0; K + 1 < Count; ++K)
 		{
-			const FVector2D P0 = Lane.Path[FMath::Max(K - 1, 0)], P1 = Lane.Path[K], P2 = Lane.Path[K + 1], P3 = Lane.Path[FMath::Min(K + 2, Count - 1)];
+			const FVector2D P0 = Chained[FMath::Max(K - 1, 0)], P1 = Chained[K], P2 = Chained[K + 1], P3 = Chained[FMath::Min(K + 2, Count - 1)];
 			const int32 Steps = FMath::Clamp(FMath::CeilToInt32(FVector2D::Distance(P1, P2) / 2.0), 2, 400);
 			for (int32 Step = 0; Step < Steps; ++Step)
 			{
@@ -14060,7 +14069,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 				Curve.Add(0.5 * ((2.0 * P1) + (P2 - P0) * T + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * T * T + (3.0 * P1 - P0 - 3.0 * P2 + P3) * T * T * T));
 			}
 		}
-		Curve.Add(Lane.Path.Last());
+		Curve.Add(Chained.Last());
 		// Drawn as dashes, like a course pencilled on a chart; only over the water.
 		const int32 Dash = 1, Gap = 2;
 		TArray<TArray<FVector2D>> Strokes;
@@ -14749,7 +14758,10 @@ void ACampaignMapActor::UpdateSorties()
 		}
 		// Out to the target, a turn over it, and home: the airfield is where the air groups stand, south-west of the town.
 		const FVector2D Field = SortieStart(Flight.Sortie);
-		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Flight.Sortie.To.X, Flight.Sortie.To.Y, 0.3);
+		// (seam-2: the target is counted in the turn of the world nearest the airfield, so a raid over the chart's
+		// seam, Alaska to the Yukon, is flown the short way and not across the whole table)
+		const FVector2D Aimed(NearX(Flight.Sortie.To.X, Field.X), Flight.Sortie.To.Y);
+		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Aimed.X, Aimed.Y, 0.3);
 		const FVector Course = (Aim - Field0).GetSafeNormal2D();
 		const FVector Abeam(-Course.Y, Course.X, 0.0);
 		const double Leg = FVector::Dist2D(Field0, Aim);
@@ -14845,13 +14857,13 @@ void ACampaignMapActor::UpdateSorties()
 			Flight.RivalAt = Now3;
 		}
 		// The course of the raid, pencilled on the table from the airfield to the target while it is flown.
-		const double Length = FVector2D::Distance(Field, Flight.Sortie.To);
+		const double Length = FVector2D::Distance(Field, Aimed);
 		const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 7.0), 2, 200);
 		for (int32 Dash = 0; Dash < Dashes; ++Dash)
 		{
 			TArray<FVector2D> Stroke;
-			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.15) / Dashes));
-			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.75) / Dashes));
+			Stroke.Add(FMath::Lerp(Field, Aimed, (Dash + 0.15) / Dashes));
+			Stroke.Add(FMath::Lerp(Field, Aimed, (Dash + 0.75) / Dashes));
 			// (The art director's round 37: close up the dashes were cream slabs 30 px wide through the middle of the
 			// bombers, and by night the brightest thing after the beams. Thinned below playing height, let down by night.)
 			const double Thin = FMath::Lerp(0.3, 1.0, FMath::SmoothStep(2600.0, 4600.0, static_cast<double>(SortieSeenFrom)));
