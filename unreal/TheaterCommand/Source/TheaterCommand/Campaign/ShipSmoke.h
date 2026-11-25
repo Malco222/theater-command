@@ -74,17 +74,21 @@ namespace TheaterShipSmoke
 	 * measure of how thick, Long (0 to 2) of how far astern.
 	 *
 	 * Lying still: a thin pale wisp that rises a little over a quarter of her length and leans down the wind (it is the
-	 * common sight on the table, and is kept slight). At her best: grey, twice as thick, a length and a half astern
-	 * and blown low. Working up: thick and black, for as long as
-	 * she gathers way. Easing: a little thinner and paler than her speed alone would make it.
+	 * common sight on the table, and is kept slight). At her best: a pale haze still, twice as thick, a length and a
+	 * half astern and blown low. Working up: thick and black, for as long as she gathers way. Easing: a little thinner
+	 * and paler than her speed alone would make it.
+	 *
+	 * (Why a steady fire is pale. The table's sea at working height is a dark blue, about a tenth to a sixth of white
+	 * on the Mac's stills. A pale smoke reads on it strongly and a middle grey weakly; black reads least of all, on
+	 * the water, and is seen where it lies over her wake and herself: so it is made the thickest.)
 	 */
 	inline FFire Fire(double Pace, double Gather, double Much = 1.0, double Long = 1.0)
 	{
 		const double P = Clamp(Pace, 0.0, 1.0);
 		const double Forced = Clamp(Gather / Hard, 0.0, 1.0), Eased = Clamp(-Gather / Hard, 0.0, 1.0);
 		FFire Out;
-		Out.Dark = Clamp(0.22 + 0.33 * P + 0.5 * Forced - 0.15 * Eased, 0.0, 1.0);
-		Out.Thick = Clamp(Clamp(Much, 0.0, 2.0) * Clamp(0.2 + 0.24 * P + 0.24 * Forced - 0.07 * Eased, 0.12, 0.7), 0.0, 0.85);
+		Out.Dark = Clamp(0.08 + 0.12 * P + 0.8 * Forced - 0.06 * Eased, 0.0, 1.0);
+		Out.Thick = Clamp(Clamp(Much, 0.0, 2.0) * Clamp(0.26 + 0.4 * P + 0.3 * Forced - 0.08 * Eased, 0.15, 0.95), 0.0, 1.0);
 		Out.Reach = 1.55 * P * Clamp(Long, 0.0, 2.0);
 		Out.High = 0.28 - 0.14 * P;
 		Out.Lee = 0.36 - 0.16 * P;
@@ -137,9 +141,11 @@ namespace TheaterShipSmoke
 	 * The puff a share Age of its life gone (0 as it leaves the funnel, 1 at the plume's end), of a plume of Count
 	 * puffs from a ship of that Girth. It leaves the funnel small and thick and near it; it grows, thins and is left
 	 * astern faster the older it is, so that the young puffs crowd the funnel where they are small and the old ones
-	 * are spread where they are large. Where the puffs would stand apart like beads (a fast ship's, or the few that
-	 * are drawn from far off), each is drawn out along the plume (Stretch, to three times its width at most) and
-	 * thinned by as much, and the plume is one streak.
+	 * are spread where they are large. Where the puffs would stand apart (a fast ship's, or the few that are drawn
+	 * from far off), each is drawn out along the plume until it reaches its neighbour's middle (Stretch, to four times
+	 * its width at most). The table's soft puff is thick at its middle and nothing at its rim, evenly between: two
+	 * that reach each other's middles are together as thick between them as either is at its own, so the plume is one
+	 * even ribbon, as thick along its middle as the puffs are, and never a row of them.
 	 */
 	inline FPuff Puff(const FFire& Fire, double Age, int Count, double GirthOf)
 	{
@@ -156,14 +162,14 @@ namespace TheaterShipSmoke
 		const double GoesAstern = Fire.Reach * 1.5 * std::sqrt(Young), GoesUp = Fire.High * 0.75 * std::pow(Young, -0.25), GoesLee = Fire.Lee * 1.6 * std::pow(Young, 0.6);
 		const double Goes = std::sqrt(GoesAstern * GoesAstern + GoesUp * GoesUp + GoesLee * GoesLee);
 		const double Gap = Goes / static_cast<double>(Many);
-		Out.Stretch = Out.Size > 1.0e-9 ? Clamp(0.62 * Gap / Out.Size, 1.0, 3.0) : 1.0;
+		Out.Stretch = Out.Size > 1.0e-9 ? Clamp(Gap / Out.Size, 1.0, 4.0) : 1.0;
 		if (Out.Stretch > 1.0 && Goes > 1.0e-9)
 		{
 			Out.RunAstern = GoesAstern / Goes;
 			Out.RunRise = GoesUp / Goes;
 			Out.RunLee = GoesLee / Goes;
 		}
-		Out.Thick = Fire.Thick * Smooth(0.0, 0.07, A) * std::pow(1.0 - A, 1.25) / std::sqrt(Out.Stretch);
+		Out.Thick = Fire.Thick * Smooth(0.0, 0.07, A) * std::pow(1.0 - A, 0.9);
 		return Out;
 	}
 
@@ -175,13 +181,14 @@ namespace TheaterShipSmoke
 
 	/**
 	 * The colour of a puff: as it leaves her, from the pale grey of an easy fire to the brown-black of oil burnt in a
-	 * hurry (Dark); and paler and greyer the older it is, as it thins into the air. Never bright enough or warm enough
-	 * to be taken for a light by night (the map's night rule tells a light by its colour: Tools/ship_smoke checks it).
+	 * hurry (Dark); and paler and greyer the older it is, as it thins into the air. The pale is as light as the smoke
+	 * of the towns' chimneys (0.6), well over the tone of the table's sea. Never bright enough or warm enough to be
+	 * taken for a light by night (the map's night rule tells a light by its colour, from 0.75: Tools/ship_smoke checks it).
 	 */
 	inline FInk Ink(double Dark, double Age)
 	{
 		const double D = Clamp(Dark, 0.0, 1.0), Thinned = 0.55 * Clamp(Age, 0.0, 1.0);
-		const FInk Pale{ 0.47, 0.46, 0.45 }, Oily{ 0.07, 0.066, 0.063 }, Haze{ 0.5, 0.49, 0.48 };
+		const FInk Pale{ 0.6, 0.59, 0.575 }, Oily{ 0.07, 0.066, 0.063 }, Haze{ 0.64, 0.63, 0.62 };
 		const FInk Head{ Pale.R + (Oily.R - Pale.R) * D, Pale.G + (Oily.G - Pale.G) * D, Pale.B + (Oily.B - Pale.B) * D };
 		return FInk{ Head.R + (Haze.R - Head.R) * Thinned, Head.G + (Haze.G - Head.G) * Thinned, Head.B + (Haze.B - Head.B) * Thinned };
 	}
