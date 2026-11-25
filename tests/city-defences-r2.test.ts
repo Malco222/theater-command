@@ -388,7 +388,7 @@ describe('city defences: the guns by night (slice 2)', () => {
       const { g, t } = ruhrByNight({ on, guns: 3, lights: 2 });
       for (const kind of ['night', 'bomb'] as const) {
         const what = raidTargets(g, kind, 'UK').find((x) => x.id === t)!.what;
-        expect(what).toMatch(on ? /level 3 guns, level 2 searchlights$/ : /level 3 guns$/);
+        expect(what).toMatch(on ? /1,080 guns built \(360 heavy\) and 60 light, level 2 searchlights$/ : /1,080 guns built \(360 heavy\) and 60 light$/);
       }
     }
   });
@@ -623,7 +623,7 @@ describe('city defences: a garrison fortifies its town (slice 3)', () => {
     g.flags[`wk:lights:${town.id}`] = 2;
     const t = raidTargets(g, 'town', 'GER').find((x) => x.id === town.id);
     expect(t).toBeDefined();
-    expect(t!.what).toMatch(/fight \d+% stronger, behind 2 months of barricades and strongpoints, 10% of its works broken, under siege, level 2 guns, level 2 searchlights$/);
+    expect(t!.what).toMatch(/fight \d+% stronger, behind 2 months of barricades and strongpoints, 10% of its works broken, under siege, 720 guns built \(240 heavy\) and 60 light, level 2 searchlights$/);
   });
 
   it('runs at the month end, after the month\'s storms', () => {
@@ -1326,9 +1326,9 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     // The low end counts no guns where none were seen: the lights have none of its guns to light.
     expect(line(w.lo.a, 'Searchlights')!.effect).toBe('There are no guns for them to light. They help the night fighters a little.');
     // The targets list hedges the guns under fog and names the lights as they are; with the fog off it names both.
-    expect(raidTargets(r.g, 'night', 'UK').find((x) => x.id === r.t)!.what).toMatch(/guns not known, level 3 searchlights/);
+    expect(raidTargets(r.g, 'night', 'UK').find((x) => x.id === r.t)!.what).toMatch(/built guns not known and 60 light, level 3 searchlights/);
     setRaidFog(r.g, false);
-    expect(raidTargets(r.g, 'night', 'UK').find((x) => x.id === r.t)!.what).toMatch(/level 3 guns, level 3 searchlights$/);
+    expect(raidTargets(r.g, 'night', 'UK').find((x) => x.id === r.t)!.what).toMatch(/1,080 guns built \(360 heavy\) and 60 light, level 3 searchlights$/);
   });
 
   it('a forecast under fog reads no radar the enemy lacks and the cloud as it is; with the switch off it names no lights', () => {
