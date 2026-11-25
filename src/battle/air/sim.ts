@@ -64,8 +64,8 @@ const reachOf = (u: AirUnit): number => Math.min(1, u.fuel0 / SKY.fuel.full);
  * one now and how far down the lane, the lane it is flying, and the bomber box it was escorting when it went down (it
  * still counts over that box: tied).
  */
-// (k: the fight the group carried as it went down, its weight on the troops and its share of the ground fire on every
-// pass; 1 without the strafers' rule.)
+// (k: the fight the group carried as the pass under way began (carries, read afresh at every go-down and every pass),
+// its weight on the troops and its share of the ground fire on that pass; 1 without the strafers' rule.)
 interface Strafing { done: number; run: boolean; p: number; from: [number, number]; to: [number, number]; box: number | null; over: boolean; k: number }
 
 // The names in a dispatch (names.ts), as the tests and the battle's pages have them from here.
@@ -194,6 +194,11 @@ export class AirSim implements BattleSim<AirUnit> {
   /** Each fighter group's passes on the troops; the fighters that have strafed so far, as the campaign counts them. */
   private strafing = new Map<number, Strafing>();
   private strafed = 0;
+  /**
+   * With the strafers' rule on: each of the raid's fighter groups, and the defending fighter groups it has been in contact
+   * with so far (carries). Read by nothing else, and never kept: no view, outcome or save has it.
+   */
+  private met = new Map<number, Set<number>>();
   /** The raid's fighter groups ordered to stay with the bombers (or given any other order): they never go down on their own. */
   private keepUp = new Set<number>();
   /** The bomber box each of the raid's fighter groups was last escorting (it goes down once that box has bombed). */
@@ -810,10 +815,10 @@ export class AirSim implements BattleSim<AirUnit> {
    * By default, as the staff's own raid counts every fighter that came through: each of the raid's fighter groups goes
    * down on the troops once the bombers it escorts have bombed, turned back or gone (at once in a raid with no bombers),
    * as soon as it is out of the fight. Without the strafers' rule an escort that has fought itself out against the
-   * fighters still goes down (its fight with the defence is over, not its guns). With it (the design director, 17:10Z
-   * and 17:23Z), a group goes down with the fight it still carries after its air fight (carries), and one that has
-   * fought itself out goes home. One short of fuel, broken, or given another order does not, and so counts for less: a
-   * choice the campaign books.
+   * fighters still goes down (its fight with the defence is over, not its guns). With it (the design director, 17:10Z,
+   * 17:23Z and 18:14Z), a group goes down with the fight it still carries after its air fight (carries), whether or not
+   * its kill ledger is spent, and one that carries none goes home. One short of fuel, broken, or given another order does
+   * not, and so counts for less: a choice the campaign books.
    */
   private strafeDue(): void {
     for (const u of this.units) {
@@ -842,43 +847,59 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * Whether a group of the raid is still to go down on the troops, or is on its passes: an escort, or one fought out
    * and on its way home with fuel left (strafeDue); never one broken, out of fuel, on the ground, or held up. With the
-   * strafers' rule (17:10Z, ruling 4: "A group that has fought itself out goes home"), only one with fight left: an
-   * escort that carries some, or one on its passes that went down with some.
+   * strafers' rule (17:10Z, ruling 4: "A group that has fought itself out goes home"; 18:14Z and 18:19Z: "None goes
+   * home" means carried = 0), only one that still carries some of its fight (carries). One whose kill ledger is spent
+   * (tire) has finished its air fight, not its fight on the troops: with fight carried it still goes down.
    */
   private willStrafe(u: AirUnit): boolean {
     if (!this.mayStrafe(u) || off(u) || u.state === 'routing' || u.job.do === 'wait') return false;
-    if (this.troops!.law.reach) return (u.job.do === 'strafe' || u.job.do === 'escort') && this.weighs(u) > 0;
+    if (this.troops!.law.reach && !(this.carries(u) > 0)) return false;
     if (u.job.do === 'strafe' || u.job.do === 'escort') return true;
     return u.job.do === 'home' && u.vig < SKY.spent && u.fuel > 0;
   }
 
   /**
-   * A raid on troops with the strafers' rule on (the design director, 17:23Z: "A half-spent group strafes with the fight
-   * it still carries: its weight is in proportion to that fight, with no threshold and no new figure. A group with none
-   * goes home."): the fight a group of the raid still carries, from 1 fresh to 0 fought out. The field's own measure,
-   * the one the 3D game is shown as its ammunition (shown): its fight left above the share at which it breaks off for
-   * home, (vig - SKY.spent) / (1 - SKY.spent). A group handed no share of the fight (none to meet) carries all of it.
-   * Without the rule, 1: every group goes down whole, as before.
+   * A raid on troops with the strafers' rule on: the fight a group of the raid still carries after its air fight, its
+   * weight on the troops and its share of the ground fire (the design director, 17:23Z: "A half-spent group strafes with
+   * the fight it still carries: its weight is in proportion to that fight, with no threshold and no new figure. A group
+   * with none goes home."; 18:14Z: "carried = 1 - (the defenders' weight it met / its own fighters' weight), floor 0";
+   * 18:19Z: "The defenders' weight met is each defending group in contact, at its starting weight, shared by weight among
+   * the raid's groups that met it"). So 1 - the sum, over every defending fighter group it has met so far, of that
+   * group's starting weight over the starting weight of all the raid's fighter groups that have met it; at least 0. The
+   * weights are the field's own (weight, at n0: what the fight itself costs either side is already in the kit). A group
+   * that has met nobody carries all of it. Read afresh each time it is asked: at every go-down and every pass. The kill
+   * ledger (vig) governs the air fight only and weighs strafing nowhere. Without the rule, 1: every group goes down whole.
    */
   private carries(u: AirUnit): number {
     if (!this.troops?.law.reach) return 1;
-    return u.kit0 > 0 ? clamp01((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
+    const met = this.met.get(u.id);
+    if (!met) return 1;
+    let took = 0;
+    for (const d of met) {
+      const v = this.unit(d);
+      if (!v) continue;
+      let by = 0;
+      for (const f of this.units) if (f.side === 'att' && f.air === 'ftr' && this.met.get(f.id)?.has(d)) by += this.weight(f, f.n0);
+      if (by > 0) took += this.weight(v, v.n0) / by;
+    }
+    return Math.max(0, 1 - took);
   }
 
-  /** The share a group of the raid weighs on the troops: on its passes, the fight it went down with; else what it carries now. */
-  private weighs(u: AirUnit): number {
-    return this.strafing.get(u.id)?.k ?? this.carries(u);
+  /** A raid on troops with the strafers' rule on: one of the raid's fighter groups in contact with a defending fighter group. */
+  private meet(a: AirUnit, d: AirUnit): void {
+    const m = this.met.get(a.id);
+    if (m) m.add(d.id); else this.met.set(a.id, new Set([d.id]));
   }
 
   /**
    * Down on the troops: the passes start from the end of the lane nearer the group; each group rakes a strip of its own.
-   * It goes down with the fight it carries then, read once (carries): its weight on the troops and the ground fire it
-   * owes on every pass. A group with none goes home (the strafers' rule, 17:23Z).
+   * With the strafers' rule a group that carries none of its fight goes home (carries, read afresh each time it is sent
+   * down, by the staff or by the player, whether or not it has been down before).
    */
   private goDown(u: AirUnit, box: number | null): void {
     const S = TROOPS.strafe, L = this.lane;
     const was = this.strafing.get(u.id);
-    if (!was && this.carries(u) <= 0) { u.job = { do: 'home' }; return; }
+    if (!(this.carries(u) > 0)) { u.job = { do: 'home' }; return; }
     u.job = { do: 'strafe' };
     if (was) return;
     const raid = this.units.filter((f) => f.side === 'att' && f.air === 'ftr');
@@ -899,10 +920,13 @@ export class AirSim implements BattleSim<AirUnit> {
     const s = this.strafing.get(u.id)!, S = TROOPS.strafe;
     // Jumped: the pass is broken off. A group with fight left turns on its attackers (aimAt); one fought out runs for home.
     if (u.contacts.length) { s.run = false; s.p = 0; if (u.vig < SKY.spent) u.job = { do: 'home' }; return; }
+    // (The strafers' rule, 18:14Z: between passes the fight it carries is read afresh; jumped by a defender it had not met,
+    // it carries less on the passes still to fly, and with none it goes home.)
+    if (!s.run && !(this.carries(u) > 0)) { u.job = { do: 'home' }; return; }
     if (!s.run) {
       if (dist(u.x, u.y, s.from[0], s.from[1]) <= SKY.flakR) u.to = 0;
       if (u.band !== 0 || u.to !== 0 || dist(u.x, u.y, s.from[0], s.from[1]) > 1) return;
-      s.run = true; s.p = 0;
+      s.run = true; s.p = 0; s.k = this.carries(u);
       const len = dist(s.from[0], s.from[1], s.to[0], s.to[1]);
       const words = s.done === 0 ? told(this.called(u), `{N} [goes|go] down to strafe the troops at ${this.place.name}.`) : '';
       this.say('air:strafe', u, words, { from: [Math.round(s.from[0]), Math.round(s.from[1])], to: [Math.round(s.to[0]), Math.round(s.to[1])], width: S.width, dur: Math.round((len / SKY.speed.ftr / SKY.scale) * 10) / 10 });
@@ -969,6 +993,7 @@ export class AirSim implements BattleSim<AirUnit> {
         if (Math.abs(a.band - d.band) > 1 || dist(a.x, a.y, d.x, d.y) > r) continue;
         a.contacts.push(d.id); d.contacts.push(a.id);
         this.fired = true;
+        if (a.air === 'ftr' && this.troops?.law.reach) this.meet(a, d);
         if (before.get(a.id)?.has(d.id)) continue;
         // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
         if (a.air === 'bmr') this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
@@ -1984,12 +2009,14 @@ export class AirSim implements BattleSim<AirUnit> {
    * A raid on troops: the fighters a group is still expected to put on the troops, as passes' shares of it (its
    * fighters now, as the campaign weighs them, times the passes left over the passes a group flies): those of a group on
    * its passes, or of an escort that will go down once its bombers have bombed; none for one held up, gone home or done.
-   * With the strafers' rule, each in proportion to the fight it carries (weighs).
+   * With the strafers' rule, each in proportion to the fight it carries (carries): the pass under way at the share it
+   * began with, the passes not yet begun at what it carries now.
    */
   private passesAhead(u: AirUnit): number {
     if (!this.willStrafe(u)) return 0;
     const s = this.strafing.get(u.id), S = TROOPS.strafe;
-    return (u.n * reachOf(u) * this.weighs(u) * (S.passes - (s?.done ?? 0) - (s?.run ? s.p : 0))) / S.passes;
+    if (this.troops!.law.reach) return (u.n * reachOf(u) * (this.carries(u) * (S.passes - (s?.done ?? 0) - (s?.run ? 1 : 0)) + (s?.run ? s.k * (1 - s.p) : 0))) / S.passes;
+    return (u.n * reachOf(u) * (S.passes - (s?.done ?? 0) - (s?.run ? s.p : 0))) / S.passes;
   }
 
   /**

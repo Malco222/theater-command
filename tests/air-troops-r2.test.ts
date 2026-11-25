@@ -214,16 +214,11 @@ describe('the army under the raid (place.marks; CONTRACT.md section 2)', () => {
 describe('fought out by the computer on both sides', () => {
   it('the events keep to the contract, the men shown never pass the men booked, and the outcome carries the strafing and the cut', () => {
     let strafes = 0, flak = 0, hits = 0;
-    // (Changed on the design director's ruling 4, 17:10Z and 17:23Z: a group strafes with the fight it still carries,
-    // and the French escort fights itself out against the German group over the Saar, so on the computer's own raids
-    // (k 0 to 2) nobody goes down. Setup only: on k 3 the player sends the escort down on the troops at once, with all
-    // its fight, so the strafing passes and their ground fire are still read against the contract.)
-    for (const k of [0, 1, 2, 3]) {
+    for (const k of [0, 1, 2]) {
       const { g, target, ids, nat } = saar(k);
       const t = ticketOf(g, target, ids, nat), M = t.place.marks!;
       const ids0 = new Set(M.pieces.map((p) => p.id));
       const s = new AirSim(t, { show: true });
-      if (k === 3) expect(s.command({ do: 'air:strafe', units: s.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att')).toBe(true);
       fight(s, (sim) => {
         const v = sim.view();
         expect(v.marks).toBeTruthy();
@@ -269,10 +264,6 @@ describe('fought out by the computer on both sides', () => {
     for (const k of [0, 1, 2, 3]) {
       const a = saar(k), b = saar(k);
       const sa = airBattle(ticketOf(a.g, a.target, a.ids, a.nat)) as AirSim;
-      // (Changed on ruling 4, 17:10Z and 17:23Z: left to the computer, the escort fights itself out over the Saar and
-      // goes home without strafing, so it earns no more than one held up. Setup only: the free escort is sent down at
-      // once, with all its fight.)
-      expect(sa.command({ do: 'air:strafe', units: sa.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att')).toBe(true);
       fight(sa);
       const sb = airBattle(ticketOf(b.g, b.target, b.ids, b.nat)) as AirSim;
       const ftr = sb.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id);
@@ -286,56 +277,11 @@ describe('fought out by the computer on both sides', () => {
   });
 });
 
-describe('the strafers\' rule in the field (the design director\'s ruling 4, 17:10Z, and 17:23Z)', () => {
-  // "A half-spent group strafes with the fight it still carries: its weight is in proportion to that fight, with no
-  // threshold and no new figure. A group with none goes home." The fight a group carries is the field's own measure,
-  // (vig - SKY.spent) / (1 - SKY.spent), read once as it goes down. Setup only: a group's fight is set by hand.
-  const spend = (u: AirSim['units'][number], left: number): void => {
-    u.kit = { ftr: u.kit0 * (SKY.spent + (1 - SKY.spent) * left), bmr: 0 };
-    u.vig = (u.kit.ftr + u.kit.bmr) / u.kit0;
-  };
-  it('a group with half its fight left strafes at half weight, and pays the ground fire at half; one fought out goes home', () => {
-    for (const left of [0.5, 0]) {
-      const { g, target, ids, nat } = saar(0);
-      const t = ticketOf(g, target, ids, nat);
-      const s = airBattle(t) as AirSim;
-      const u = s.units.find((x) => x.side === 'att' && x.air === 'ftr')!;
-      expect(u.kit0).toBeGreaterThan(0);
-      spend(u, left);
-      expect(s.command({ do: 'air:strafe', units: [u.id] }, 'att')).toBe(true);
-      const rec = (s as unknown as { strafing: Map<number, { k: number }> }).strafing.get(u.id);
-      if (left === 0) {
-        expect(u.job.do).toBe('home');
-        expect(rec).toBeUndefined();
-      } else {
-        expect(u.job.do).toBe('strafe');
-        expect(rec!.k).toBeCloseTo(left, 12);
-      }
-      fight(s);
-      const o = s.outcome();
-      const whole = u.n0 * Math.min(1, u.fuel0 / SKY.fuel.full);
-      if (left === 0) {
-        expect(s.history().some((e) => e.what === 'air:strafe')).toBe(false);
-        expect(o.strafed).toBe(0);
-        expect(o.strafeFire).toBe(0);
-      } else {
-        // Its passes weigh on the troops at half its fighters, and the ground fire it paid is owed on that half.
-        expect(o.strafed!).toBeGreaterThan(0);
-        expect(o.strafed!).toBeLessThanOrEqual(whole * left + 1e-9);
-        expect(o.strafeFire!).toBeLessThanOrEqual((o.strafed! + (whole * left) / TROOPS.strafe.passes) * t.place.marks!.law.fire + 1e-9);
-      }
-    }
-  });
-});
-
 describe('the commands', () => {
   it('a strafer called up goes back to the sky, sent down again it strafes; no other raid takes the order', () => {
     const { g, target, ids, nat } = saar(1);
     const s = airBattle(ticketOf(g, target, ids, nat)) as AirSim;
     s.ai.att = true; s.ai.def = true;
-    // (Changed on ruling 4, 17:10Z and 17:23Z: left to the computer the escort fights itself out over the Saar and never
-    // goes down. Setup only: the player sends it down at once, with all its fight.)
-    expect(s.command({ do: 'air:strafe', units: s.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att')).toBe(true);
     let guard = 0;
     while (!s.over && !s.units.some((u) => u.job.do === 'strafe') && guard++ < 20_000) s.step();
     const u = s.units.find((x) => x.job.do === 'strafe')!;
@@ -438,5 +384,117 @@ describe('booked back through fly()', () => {
     expect(out.ok, out.note).toBe(true);
     expect(g.airReports.length).toBe(r0 + 1);
     expect(TC.airKinds([]).kinds).toEqual([]);
+  });
+});
+
+// The fight a group carries (the design director, 18:14Z and 18:19Z): "carried = 1 - (the defenders' weight it met / its
+// own fighters' weight), floor 0" ... "the defenders' weight met is each defending group in contact, at its starting
+// weight, shared by weight among the raid's groups that met it" ... "reading the share afresh at every go-down and pass
+// closes both field faults". The raid as round six's first check flew it: the bombers, Groupement de Chasse 3 at Lorraine,
+// Groupement de Chasse 2 moved to Verdun and Groupement de Chasse 1 to Namur, against 2. Jagddivision at a strength the
+// setup sets (setup only).
+describe('the fight a group carries after its air fight (18:14Z): read afresh at every go-down and every pass', () => {
+  const GC3 = 10;
+  function raid(defenders: number) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
+    g.airFleets.find((f) => f.id === 9)!.base = g.regions.find((r) => r.name === 'Namur')!.id;
+    const d = g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = defenders; d.est.ftr = Math.max(d.est.ftr, defenders);
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const s = airBattle(ticketOf(g, target, [38, GC3, 36, 9], 'FRA')) as AirSim;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const S = s as any;
+    const unit = s.units.find((u) => u.side === 'att' && u.corps === GC3)!;
+    // Every pass the group begins (its share k), and the fighters each pass it makes counts on the troops (n: its fighters
+    // as the pass is made).
+    const passes: { k: number; n: number; add: number }[] = [];
+    const pass = S.pass.bind(S);
+    S.pass = (u: AirSim['units'][number]) => {
+      const st = S.strafing.get(u.id), run = st?.run, done = st?.done, was = S.strafed;
+      pass(u);
+      if (u.id !== unit.id || !st) return;
+      if (!run && st.run) passes.push({ k: st.k, n: u.n, add: 0 });
+      if (st.done > done) Object.assign(passes[passes.length - 1], { n: u.n, add: S.strafed - was });
+    };
+    return { s, S, unit, passes };
+  }
+  const reachOf = (u: AirSim['units'][number]): number => Math.min(1, u.fuel0 / SKY.fuel.full);
+
+  it('as the computer flies it: every escort goes down with 1 - D / E of its fight once its own kill ledger is spent, and each pass counts in proportion', () => {
+    const { s, S, unit, passes } = raid(200);
+    const down: { vig: number; c: number }[] = [];
+    const go = S.goDown.bind(S);
+    S.goDown = (u: AirSim['units'][number], box: number | null) => { go(u, box); if (u.id === unit.id && u.job.do === 'strafe') down.push({ vig: u.vig, c: S.carries(u) }); };
+    fight(s);
+    // Every French fighter group met 2. Jagddivision, so each carries 1 less its weight over all of theirs.
+    const W = (u: AirSim['units'][number]): number => S.weight(u, u.n0);
+    const att = s.units.filter((u) => u.side === 'att' && u.air === 'ftr'), def = s.units.filter((u) => u.side === 'def' && u.air === 'ftr');
+    for (const u of att) expect([...S.met.get(u.id)]).toEqual(def.map((d) => d.id));
+    const carry = 1 - def.reduce((t, d) => t + W(d), 0) / att.reduce((t, u) => t + W(u), 0);
+    expect(carry).toBeGreaterThan(0.5);
+    expect(carry).toBeLessThan(0.6);
+    // Ruling 4 on the measure: its air fight over (the ledger spent, vig below SKY.spent), it still goes down with what it carries.
+    expect(down.length).toBeGreaterThan(0);
+    for (const x of down) { expect(x.vig).toBeLessThan(SKY.spent); expect(x.c).toBeCloseTo(carry, 12); }
+    expect(passes.length).toBe(TROOPS.strafe.passes);
+    for (const p of passes) {
+      expect(p.k).toBeCloseTo(carry, 12);
+      expect(p.add).toBeCloseTo((p.n * reachOf(unit) * carry) / TROOPS.strafe.passes, 9);
+    }
+    expect(s.outcome().strafers).toContain(GC3);
+  });
+
+  it('sent down, then to hunt until fought out, then down again: it strafes with what it carries after the hunt, and with none it goes home (round six\'s first check, its first fault)', () => {
+    for (const defenders of [200, 800]) {
+      const { s, S, unit, passes } = raid(defenders);
+      s.ai.att = false; s.ai.def = true;
+      expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+      expect(unit.job.do).toBe('strafe');
+      expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+      let guard = 0;
+      while (!s.over && !(unit.vig < SKY.spent) && guard++ < 40_000) s.step();
+      while (!s.over && unit.contacts.length && guard++ < 40_000) s.step();
+      expect(unit.vig).toBeLessThan(SKY.spent);
+      expect(S.met.get(unit.id)?.size).toBe(1);
+      const carried = S.carries(unit);
+      expect(s.command({ do: 'air:hunt', units: [unit.id] }, 'att')).toBe(true);
+      expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+      while (!s.over && guard++ < 40_000) s.step();
+      if (defenders === 800) {
+        // Outweighed by the defenders it met: it carries none, and the order sends it home.
+        expect(carried).toBe(0);
+        expect(passes).toEqual([]);
+        expect(s.outcome().strafers).not.toContain(GC3);
+      } else {
+        // It carries part of its fight, never all of it: every pass at that share.
+        expect(carried).toBeGreaterThan(0);
+        expect(carried).toBeLessThan(1);
+        expect(passes.length).toBe(TROOPS.strafe.passes);
+        for (const p of passes) { expect(p.k).toBeCloseTo(carried, 12); expect(p.add).toBeCloseTo((p.n * reachOf(unit) * carried) / TROOPS.strafe.passes, 9); }
+      }
+    }
+  });
+
+  it('jumped on its passes by a defender it had not met: the passes flown stand, the passes still to fly count at the less it carries (round six\'s first check, its second fault)', () => {
+    const { s, S, unit, passes } = raid(200);
+    s.ai.att = true; s.ai.def = true;
+    // Sent down at once, before it meets anyone: it carries all of its fight.
+    expect(s.command({ do: 'air:strafe', units: [unit.id] }, 'att')).toBe(true);
+    let guard = 0;
+    while (!s.over && !(S.strafing.get(unit.id)?.done >= 1) && guard++ < 40_000) s.step();
+    expect(S.met.get(unit.id)).toBeUndefined();
+    // (Setup: the German group is put on its tail, at its height, to jump it on its passes.)
+    for (const d of s.units.filter((u) => u.side === 'def' && u.air === 'ftr')) { d.job = { do: 'intercept', on: unit.id }; d.x = unit.x + 300; d.y = unit.y; d.band = unit.band; d.to = unit.band; }
+    while (!s.over && guard++ < 40_000) s.step();
+    expect(S.met.get(unit.id)?.size).toBe(1);
+    const after = S.carries(unit);
+    expect(after).toBeGreaterThan(0);
+    expect(after).toBeLessThan(1);
+    expect(passes[0].k).toBe(1);
+    expect(passes[0].add).toBeCloseTo((passes[0].n * reachOf(unit)) / TROOPS.strafe.passes, 9);
+    expect(passes.length).toBe(TROOPS.strafe.passes);
+    for (const p of passes.slice(1)) { expect(p.k).toBeCloseTo(after, 12); expect(p.add).toBeCloseTo((p.n * reachOf(unit) * after) / TROOPS.strafe.passes, 9); }
   });
 });
