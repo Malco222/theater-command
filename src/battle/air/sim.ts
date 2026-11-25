@@ -19,7 +19,7 @@ import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { bomberGuns, fighterGuns, type GunKind } from './guns';
-import type { AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import type { AirAim, AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
@@ -1785,6 +1785,8 @@ export class AirSim implements BattleSim<AirUnit> {
         skill: this.skill.get(u.id) ?? SKY.pilots.base,
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
+        // R3: the leader's choice ('aim', 'threat', and an escort's 'answer'; types.ts AirAim), read off what the rules hold.
+        ...this.choiceOf(u),
         fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
       };
       return;
@@ -1801,6 +1803,54 @@ export class AirSim implements BattleSim<AirUnit> {
       flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
       ...this.heldLook(u, done),
     };
+  }
+
+  /**
+   * R3 (the design director, pilot-ai 25 November 2026: the leader's choice in the view, shown only): a fighter group's
+   * 'aim', 'threat' and, for an escort, 'answer' (types.ts AirAim). Read only: its job and quarry, the enemy each group
+   * is making for this tick ('after', set as each group moved), contacts and heights. It decides nothing, draws no throw
+   * and keeps nothing; the battle never reads it.
+   */
+  private choiceOf(u: AirUnit): AirAim {
+    const out: AirAim = {};
+    if (!flying(u)) return out;
+    const j = u.job;
+    if (!away(u)) {
+      // An interceptor's quarry; a hunter's or a patrol's, while it is making for one.
+      const q = j.do === 'intercept' ? (this.valid(u, j) ? this.unit(j.on) : undefined) : j.do === 'hunt' || j.do === 'patrol' ? this.unitAfter(u) : undefined;
+      if (q && q.side !== u.side) out.aim = q.air === 'bmr' ? 'bombers' : 'escort';
+      if (j.do === 'escort') {
+        const e = this.unitAfter(u);
+        if (e && e.side !== u.side && e.air === 'ftr') out.answer = { box: this.boxOn(e, u.side)?.id ?? j.on, on: e.id };
+      }
+    }
+    // The enemy fighter group coming down on it: the nearest of those making for it this tick.
+    let by: AirUnit | null = null, bd = Infinity;
+    for (const v of this.units) {
+      if (v.side === u.side || v.air !== 'ftr' || !flying(v) || away(v) || this.after.get(v.id) !== u.id) continue;
+      const d = dist(u.x, u.y, v.x, v.y);
+      if (d < bd) { bd = d; by = v; }
+    }
+    if (by) out.threat = { by: by.id, bounce: by.band > u.band || (by.bounce > 0 && u.contacts.includes(by.id)) };
+    return out;
+  }
+
+  /** The group a group is making for this tick (aim), if any. */
+  private unitAfter(u: AirUnit): AirUnit | undefined {
+    const id = this.after.get(u.id);
+    return id === undefined ? undefined : this.unit(id);
+  }
+
+  /**
+   * The bomber box of side 'side' an enemy fighter group is making for (its quarry), or failing that one it is in
+   * contact with; null for neither.
+   */
+  private boxOn(v: AirUnit, side: Side): AirUnit | null {
+    const isBox = (b: AirUnit | undefined): b is AirUnit => !!b && b.air === 'bmr' && b.side === side && flying(b);
+    const q = v.job.do === 'intercept' ? this.unit(v.job.on) : undefined;
+    if (isBox(q)) return q;
+    for (const i of v.contacts) { const b = this.unit(i); if (isBox(b)) return b; }
+    return null;
   }
 
   /** A strike on a fleet at sea: the bombs fall on the fleet, as the ticket's title names it ("the Mobile Force"), not

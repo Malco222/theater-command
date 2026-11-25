@@ -262,6 +262,31 @@ export interface BomberTold { seat: number; name: string; mark: string; art: num
  */
 export interface AirHitWho { by: number | 'flak'; gun?: string }
 
+/**
+ * The leader's choice in a fighter group's view extra (R3; the design director, pilot-ai 25 November 2026: "R2 ('by'
+ * and 'gun' on air:hit) and R3 (the leader's choice in the view): yes, shown only"), beside 'def', 'pass' and
+ * 'quarry'. Each field is read off what the rules already hold that tick (the group's job and quarry, its contacts,
+ * the enemy each group is making for, the escort's chase): no choice is made for it, no throw drawn, and nothing the
+ * rules read is kept for it. Shown, never counted.
+ *
+ * - 'aim': what its leader has set it on. 'bombers': its quarry is an enemy bomber box; 'escort': its quarry is an
+ *   enemy fighter group (the escort, or for a fighter sweep the enemy's fighters). Given to a group sent at an enemy
+ *   group (an interceptor), and to a hunter or a patrol while it is making for one. 'wait' and 'turn' are R7's (the
+ *   interceptor leader's decisions, not yet built) and never occur yet. Absent for an escort (its choice is 'answer'),
+ *   a group strafing troops, on the ground, homeward or broken, and one making for nobody.
+ * - 'threat': the enemy fighter group coming down on it (the nearest of those making for it this tick), by the id the
+ *   view gives that group, and whether it is a bounce: it is above, so its first contact is a dive from above (or it
+ *   has just dived on it and is in contact). Absent while none is making for it.
+ * - 'answer', an escort only: while it has turned on an enemy fighter group, that group ('on') and the box of its raid
+ *   that group is making for or is in contact with ('box'), or its own box ('with') when that group is on no box.
+ *   Absent while it keeps its place by its bombers.
+ */
+export interface AirAim {
+  aim?: 'bombers' | 'escort' | 'wait' | 'turn';
+  threat?: { by: number; bounce: boolean };
+  answer?: { box: number; on: number };
+}
+
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */
 export interface AirOutcome {
   /** Each campaign group: what it lost, its downed fighter pilots who fly again, and the aircraft it sent up. */
