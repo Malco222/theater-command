@@ -673,7 +673,25 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
+				if (Id == TEXT("breakuprule"))
+				{
+					PickedDivisions.Reset(); // (as 1.5.1's own row does: divisions picked under the old setting are let go)
+				}
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+				// (1.5.1, Brian's hand-check list: a fleet still in hand when the row is flipped is laid out afresh, so that its
+				// pointer, its "Drop ..." line and its first drop follow the new setting; its copy was refreshed only when it
+				// was picked up, and switched back on, its first drop sailed it to the sea instead of opening the ATTACK card)
+				if (FleetInHand != INDEX_NONE)
+				{
+					RefreshOrders();
+				}
+				// (1.5.1, Brian's hand-check list: an army still in hand when the row is flipped has its card laid out afresh,
+				// its division tiles and SPLIT OFF with it, as the fleet in hand is for "Fleets attack fleets"; before, the card
+				// kept the old setting until the army was put down and picked up again)
+				if (ArmyRegion != INDEX_NONE)
+				{
+					RefreshOrders();
+				}
 			}
 			if (!Note.IsEmpty())
 			{
@@ -693,13 +711,6 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			{
 				PutDownAgent();
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
-				// (1.5.1, Brian's hand-check list: a fleet still in hand when the row is flipped is laid out afresh, so that its
-				// pointer, its "Drop ..." line and its first drop follow the new setting; its copy was refreshed only when it
-				// was picked up, and switched back on, its first drop sailed it to the sea instead of opening the ATTACK card)
-				if (FleetInHand != INDEX_NONE)
-				{
-					RefreshOrders();
-				}
 			}
 			if (!Note.IsEmpty())
 			{
@@ -720,13 +731,6 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
-				// (1.5.1, Brian's hand-check list: an army still in hand when the row is flipped has its card laid out afresh,
-				// its division tiles and SPLIT OFF with it, as the fleet in hand is for "Fleets attack fleets"; before, the card
-				// kept the old setting until the army was put down and picked up again)
-				if (ArmyRegion != INDEX_NONE)
-				{
-					RefreshOrders();
-				}
 			}
 			if (!Note.IsEmpty())
 			{
