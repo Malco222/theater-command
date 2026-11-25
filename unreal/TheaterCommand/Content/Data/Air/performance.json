@@ -47,7 +47,7 @@
   "murray": "Murray, Strategy for Defeat: the Luftwaffe 1933-1945 (1983), read in part by the historian on 24 Nov 2026 (historian/air-reads-1124.md).",
   "historian": "The historian's readings of 24 Nov 2026 in this project (historian/air-reads-1124.md and air-reads-2-1124.md).",
   "doctrine": "The rules' src/battle/air/doctrine.ts (the design's table 1.2 and its claim ids D, B and E, checked by the historian's review), read on 25 Nov 2026.",
-  "estimate": "An estimate made in this pass (25 Nov 2026) where no published figure was found or read; the reasoning is in the row's notes. Always marked uncertain, with a range.",
+  "estimate": "An estimate made in this pass (25 Nov 2026) where no published figure was found or read, always marked uncertain, with a range. The turning lift of a slatted or flapped wing is reasoned in its row's notes. The rates of roll not on the wartime chart (rollchart) nor in a trial are judged from size, weight and the reputation of the ailerons, against the charted fighters: the bombers', dive bombers', torpedo bombers' and the Fulmar's; the Soviet, Italian, French and smaller air forces' fighters', the Ki-43's and the Me 262's; and every fighter's rate at high speed where the chart's fall was not recalled.",
   "derived": "Derived here: computed from the row's other figures by the formulas in Battle/AirPerf.h, or, for a stand-in, the rounded mean of the types it stands for."
  },
  "rows": [
@@ -543,7 +543,7 @@
    "roll_kmh": 350,
    "roll_fast_dps": [
     55,
-    "std",
+    "estimate",
     "uncertain",
     40,
     70
@@ -679,7 +679,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     30,
-    "std",
+    "estimate",
     "uncertain",
     20,
     40
@@ -790,16 +790,16 @@
    ],
    "roll_dps": [
     60,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     45,
     75
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],
@@ -902,16 +902,16 @@
    ],
    "roll_dps": [
     45,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     35,
     55
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     40
    ],
@@ -1021,16 +1021,16 @@
    ],
    "roll_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     40
    ],
    "roll_kmh": 250,
    "roll_fast_dps": [
     20,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     15,
     28
    ],
@@ -1141,16 +1141,16 @@
    ],
    "roll_dps": [
     25,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     35
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     18,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     12,
     25
    ],
@@ -1443,7 +1443,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     30,
-    "std",
+    "estimate",
     "uncertain",
     20,
     40
@@ -1585,7 +1585,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     35,
-    "std",
+    "estimate",
     "uncertain",
     25,
     45
@@ -1726,7 +1726,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     30,
-    "std",
+    "estimate",
     "uncertain",
     20,
     40
@@ -2148,7 +2148,7 @@
    ],
    "roll_dps": [
     70,
-    "std",
+    "estimate",
     "uncertain",
     50,
     90
@@ -2156,7 +2156,7 @@
    "roll_kmh": 600,
    "roll_fast_dps": [
     50,
-    "std",
+    "estimate",
     "uncertain",
     40,
     70
@@ -2289,7 +2289,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     18,
-    "std",
+    "estimate",
     "uncertain",
     12,
     25
@@ -2399,16 +2399,16 @@
    ],
    "roll_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
    "roll_kmh": 320,
    "roll_fast_dps": [
     28,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     35
    ],
@@ -2524,7 +2524,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     20,
-    "std",
+    "estimate",
     "uncertain",
     15,
     28
@@ -2642,16 +2642,16 @@
    ],
    "roll_dps": [
     50,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     40,
     60
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],
@@ -3437,7 +3437,7 @@
    "roll_kmh": 350,
    "roll_fast_dps": [
     55,
-    "std",
+    "estimate",
     "uncertain",
     45,
     70
@@ -3804,16 +3804,16 @@
    ],
    "roll_dps": [
     20,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     15,
     30
    ],
    "roll_kmh": 260,
    "roll_fast_dps": [
     15,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     12,
     22
    ],
@@ -3926,16 +3926,16 @@
    ],
    "roll_dps": [
     20,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     15,
     25
    ],
    "roll_kmh": 260,
    "roll_fast_dps": [
     15,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     12,
     20
    ],
@@ -4041,16 +4041,16 @@
    ],
    "roll_dps": [
     15,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     12,
     22
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     12,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     10,
     18
    ],
@@ -4161,16 +4161,16 @@
    ],
    "roll_dps": [
     60,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     50,
     70
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
@@ -4278,16 +4278,16 @@
    ],
    "roll_dps": [
     50,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     40,
     60
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],
@@ -4395,16 +4395,16 @@
    ],
    "roll_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
    "roll_kmh": 240,
    "roll_fast_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     40
    ],
@@ -4514,16 +4514,16 @@
    ],
    "roll_dps": [
     45,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     35,
     55
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     22,
     40
    ],
@@ -4632,16 +4632,16 @@
    ],
    "roll_dps": [
     15,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     12,
     22
    ],
    "roll_kmh": 220,
    "roll_fast_dps": [
     12,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     10,
     18
    ],
@@ -5133,7 +5133,7 @@
    ],
    "roll_dps": [
     85,
-    "std",
+    "estimate",
     "uncertain",
     70,
     100
@@ -5141,7 +5141,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     40,
-    "std",
+    "estimate",
     "uncertain",
     30,
     50
@@ -5261,16 +5261,16 @@
    ],
    "roll_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     40
    ],
    "roll_kmh": 250,
    "roll_fast_dps": [
     20,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     15,
     28
    ],
@@ -5385,16 +5385,16 @@
    ],
    "roll_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     22,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     16,
     30
    ],
@@ -5510,16 +5510,16 @@
    ],
    "roll_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     40
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     20,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     15,
     28
    ],
@@ -5631,16 +5631,16 @@
    ],
    "roll_dps": [
     50,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     40,
     65
    ],
    "roll_kmh": 260,
    "roll_fast_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],
@@ -5744,16 +5744,16 @@
    ],
    "roll_dps": [
     55,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     45,
     65
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     38,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     28,
     48
    ],
@@ -5864,16 +5864,16 @@
    ],
    "roll_dps": [
     60,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     50,
     70
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
@@ -5980,16 +5980,16 @@
    ],
    "roll_dps": [
     65,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     55,
     70
    ],
    "roll_kmh": 360,
    "roll_fast_dps": [
     45,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     35,
     55
    ],
@@ -6111,7 +6111,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     90,
-    "std",
+    "estimate",
     "uncertain",
     70,
     100
@@ -6119,7 +6119,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     50,
-    "std",
+    "estimate",
     "uncertain",
     35,
     60
@@ -6238,7 +6238,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     90,
-    "std",
+    "estimate",
     "uncertain",
     70,
     100
@@ -6246,7 +6246,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     50,
-    "std",
+    "estimate",
     "uncertain",
     35,
     60
@@ -6382,7 +6382,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     90,
-    "std",
+    "estimate",
     "uncertain",
     75,
     105
@@ -6390,7 +6390,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     50,
-    "std",
+    "estimate",
     "uncertain",
     35,
     60
@@ -6515,7 +6515,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     110,
-    "std",
+    "estimate",
     "uncertain",
     90,
     120
@@ -6523,7 +6523,7 @@
    "roll_kmh": 350,
    "roll_fast_dps": [
     60,
-    "std",
+    "estimate",
     "uncertain",
     45,
     75
@@ -6651,7 +6651,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     100,
-    "std",
+    "estimate",
     "uncertain",
     80,
     130
@@ -6659,7 +6659,7 @@
    "roll_kmh": 350,
    "roll_fast_dps": [
     60,
-    "std",
+    "estimate",
     "uncertain",
     45,
     75
@@ -6784,7 +6784,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     85,
-    "std",
+    "estimate",
     "uncertain",
     70,
     120
@@ -6792,7 +6792,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     35,
     60
@@ -6919,7 +6919,7 @@
    "turn_at_m": 1000,
    "roll_dps": [
     110,
-    "std",
+    "estimate",
     "uncertain",
     90,
     140
@@ -6927,7 +6927,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     60,
-    "std",
+    "estimate",
     "uncertain",
     40,
     80
@@ -7044,7 +7044,7 @@
    ],
    "roll_dps": [
     55,
-    "std",
+    "estimate",
     "uncertain",
     40,
     60
@@ -7052,7 +7052,7 @@
    "roll_kmh": 280,
    "roll_fast_dps": [
     40,
-    "std",
+    "estimate",
     "uncertain",
     30,
     50
@@ -7171,16 +7171,16 @@
    ],
    "roll_dps": [
     45,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     35,
     55
    ],
    "roll_kmh": 320,
    "roll_fast_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     22,
     40
    ],
@@ -7291,16 +7291,16 @@
    ],
    "roll_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     28,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     35
    ],
@@ -7422,7 +7422,7 @@
    ],
    "roll_dps": [
     90,
-    "std",
+    "estimate",
     "uncertain",
     75,
     105
@@ -7430,7 +7430,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     35,
     55
@@ -7551,7 +7551,7 @@
    ],
    "roll_dps": [
     95,
-    "std",
+    "estimate",
     "uncertain",
     80,
     110
@@ -7559,7 +7559,7 @@
    "roll_kmh": 350,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     35,
     55
@@ -7672,16 +7672,16 @@
    ],
    "roll_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     24,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     18,
     32
    ],
@@ -7802,7 +7802,7 @@
    ],
    "roll_dps": [
     90,
-    "std",
+    "estimate",
     "uncertain",
     70,
     100
@@ -7810,7 +7810,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     35,
     55
@@ -7924,7 +7924,7 @@
    ],
    "roll_dps": [
     80,
-    "std",
+    "estimate",
     "uncertain",
     65,
     95
@@ -7932,7 +7932,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     40,
-    "std",
+    "estimate",
     "uncertain",
     30,
     50
@@ -8041,16 +8041,16 @@
    ],
    "roll_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
    "roll_kmh": 300,
    "roll_fast_dps": [
     28,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     35
    ],
@@ -8167,16 +8167,16 @@
    ],
    "roll_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     22,
     38
    ],
    "roll_kmh": 240,
    "roll_fast_dps": [
     20,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     15,
     28
    ],
@@ -8298,7 +8298,7 @@
    ],
    "roll_dps": [
     80,
-    "std",
+    "estimate",
     "uncertain",
     60,
     100
@@ -8306,7 +8306,7 @@
    "roll_kmh": 250,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     30,
     60
@@ -8418,7 +8418,7 @@
    ],
    "roll_dps": [
     70,
-    "std",
+    "estimate",
     "uncertain",
     60,
     90
@@ -8426,7 +8426,7 @@
    "roll_kmh": 280,
    "roll_fast_dps": [
     40,
-    "std",
+    "estimate",
     "uncertain",
     30,
     50
@@ -8537,7 +8537,7 @@
    ],
    "roll_dps": [
     85,
-    "std",
+    "estimate",
     "uncertain",
     70,
     100
@@ -8545,7 +8545,7 @@
    "roll_kmh": 300,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     35,
     55
@@ -8667,7 +8667,7 @@
    ],
    "roll_dps": [
     90,
-    "std",
+    "estimate",
     "uncertain",
     70,
     100
@@ -8675,7 +8675,7 @@
    "roll_kmh": 320,
    "roll_fast_dps": [
     45,
-    "std",
+    "estimate",
     "uncertain",
     35,
     55
@@ -9294,16 +9294,16 @@
    ],
    "roll_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
    "roll_kmh": 180,
    "roll_fast_dps": [
     30,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     40
    ],
@@ -9408,16 +9408,16 @@
    ],
    "roll_dps": [
     40,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     30,
     50
    ],
    "roll_kmh": 260,
    "roll_fast_dps": [
     28,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     20,
     35
    ],
@@ -9520,16 +9520,16 @@
    ],
    "roll_dps": [
     50,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     40,
     60
    ],
    "roll_kmh": 280,
    "roll_fast_dps": [
     35,
-    "derived",
-    "derived",
+    "estimate",
+    "uncertain",
     25,
     45
    ],

@@ -89,7 +89,7 @@ namespace AirPerf
 		double VTop = 0.0;       // top level speed, m/s
 		double VDive = 0.0;      // its placard dive limit, m/s (never under VTop)
 		double RMin = 0.0;       // tightest sustained turn at its fighting speed, metres
-		double GMax = 0.0;       // the most g it pulls: its airframe's limit, no more than its pilot stands (6.5)
+		double GMax = 0.0;       // the most g it pulls: its airframe's limit, no more than its pilot stands (6)
 		double RollMax = 0.0;    // peak rate of roll, radians a second
 		double RollTime = 0.0;   // seconds for its roll rate to pick up most of the way (the roll's inertia)
 		double ClimbMost = 0.0;  // initial climb, m/s

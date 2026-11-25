@@ -18,7 +18,8 @@ namespace AirPerf
 		constexpr double Watts = 745.7;      // a horsepower
 		constexpr double PropEta = 0.8;      // a propeller's efficiency in the climb and the turn
 		constexpr double Oswald = 0.8;       // the span's efficiency, e
-		constexpr double PilotG = 6.5;       // the most g a pilot of the war pulled and kept his sight, without a g-suit
+		constexpr double PilotG = 6.0;       // the most g a pilot of the war held and kept his sight, without a g-suit; the
+		                                     // flight core's own ceiling (the air test's "no more than 6 g")
 		constexpr double ClpQuarter = 0.1125; // a straight wing's roll damping, -Clp / 4 (Clp about -0.45)
 
 		/** A figure as the file gives it: [value, source, mark (, low, high)], or a plain number; 0 if absent. */
