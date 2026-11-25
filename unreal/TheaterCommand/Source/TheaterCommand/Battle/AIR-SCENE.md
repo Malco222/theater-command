@@ -1238,16 +1238,21 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the rest of this month's raids". SCRAMBLE opens `BeginLiveCall(Session, "scrambleStart", ["id"])` with `HandBack` set,
    his side the defence; what TC.battleEnd answers at CONTINUE is the month's next answer and goes back through the same
    handler (another scramble, or the month's watch and card). LEAVE calls `TC.scrambleLeave(id, { rest })`, its answer
-   through the same handler. An answer that is not a month's (no `steps`, no `scramble`: the stand-in's `{ ok, note }`)
-   shows the month's answer kept aside, and the log says so. The way out (an empty hand-back) calls TC.scrambleLeave(id);
+   through the same handler. An answer that is not a month's (no `steps`, no `scramble` with a string `id`: the
+   stand-in's `{ ok, note }`) shows the month's answer kept aside, and the log says so. The answer's `note` is said under
+   the map and again after the month's own first line ("February 1940. Your orders. That was a demonstration ..."), which
+   would otherwise take its place at once (the reviewer, 25 November). The way out (an empty hand-back) calls TC.scrambleLeave(id);
    if that fails too, the month in hand is shown and logged. While the card or its battle is up: no order, no key, no
    END THE MONTH. At most three cards a month (then the rest are left with `rest: true`); at most eight stops at all.
+   SCRAMBLE with a battle already up (a set piece's, a land battle's) leaves the raid to the staff, as FlyLive refuses.
    - **The switch:** the Battle rules card's **Scramble your fighters** (`flyDefend`, `AAirBattle::DefendOn`), OFF;
-     `-TheaterAirRuleDefend` on for a run, `-TheaterAirNoRuleDefend` off. FLandLive::Start skips every `fly` key. Before
-     every TC.endMonth the rules are told `TC.scrambleMode('every'|'big'|'never')`: OPTIONS' **Scramble offers** (EVERY
-     RAID / BIG RAIDS ONLY / NEVER, shown with the switch on, kept with the options once changed) with it on, `never`
-     with it off; rules without the call are asked once and logged. A scramble that still comes with the switch off is
-     answered at once with `scrambleLeave(id, { rest: true })`.
+     `-TheaterAirRuleDefend` on for a run, `-TheaterAirNoRuleDefend` off. FLandLive::Start skips every `fly` key. With
+     it on, before every TC.endMonth the rules are told `TC.scrambleMode('every'|'big'|'never')`: OPTIONS' **Scramble
+     offers** (EVERY RAID / BIG RAIDS ONLY / NEVER, shown with the switch on, kept with the options once changed). With
+     it off nothing new is sent: the rules start at `never` at every load, and `never` is sent once only where this load
+     of them was told something else before (the reviewer, 25 November: switch off, the same calls as before). Rules
+     without the call are asked once and logged. A scramble that still comes with the switch off, or with Scramble
+     offers NEVER, is answered at once with `scrambleLeave(id, { rest: true })`.
    - **The defender's read** (with the switch on, any battle he fights as `def`): the top bar's "now about" and HAND IT TO
      THE STAFF's chance are his (the view's `sky.chance` is the raider's), the aim slip speaks of the enemy's raid, the
      question asks to hand over "the fight", and STAY CLOSE and RANGE AHEAD are not offered (he has no bombers to
@@ -1255,7 +1260,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    - **The demonstration:** `-TheaterAirScrambleDemo` (with the switch on) asks the bridge's stand-in, TC.scrambleDemo
      (Rules/scramble-demo.ts), once after TC.endMonth's answer, and treats its offer as if the month had stopped there;
      it books nothing, and when it ends the month's real answer (kept aside) is shown. Step file:
-     air-battles/every-kind/scramble/mac-steps/scramble-demo.steps.txt.
+     air-battles/every-kind/scramble/mac-steps/scramble-demo.steps.txt; the switch off, scramble-off.steps.txt beside it
+     (launched with `-TheaterAirNoRuleDefend`).
    Look for: with the switch off, nothing changes (no card, no OPTIONS row); with it on and the demonstration, END THE
    MONTH stops on the card over Kent; SCRAMBLE opens the battle over Kent with the RAF the side marked YOURS and "now
    about" high; after CONTINUE the month's watch and card come as ever, and nothing of the battle is booked.

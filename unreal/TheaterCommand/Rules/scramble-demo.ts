@@ -7,9 +7,12 @@
 // DEMONSTRATION: nothing it does is booked, and the campaign is exactly as it was when the battle ends.
 //
 //   TC.scrambleMode(mode)    -> { mode }: 'every' (every raid that meets his fighters), 'big' (big raids only; the
-//                               default) or 'never', the 3D game's saved setting, told before every TC.endMonth. Kept here;
-//                               the demonstration offers nothing under 'never' and treats 'big' as 'every' (the real
-//                               month says what a big raid is).
+//                               3D game's OPTIONS default) or 'never', the 3D game's saved setting, told before every
+//                               TC.endMonth while its "Scramble your fighters" is on. Kept here, outside the save; it
+//                               starts at 'never' (the reviewer, 25 November: with the switch off the 3D game asks the
+//                               rules nothing new, so the rules must not stop a month it was never told it may). The
+//                               demonstration offers nothing under 'never' and treats 'big' as 'every' (the real month
+//                               says what a big raid is).
 //   TC.scrambleDemo()        -> the contract's scramble object, { id, kind, target, name, nat, adj, words, ticket: true,
 //                               bombers, escorts, fighters, groups, demo: true }, for the biggest day bombing raid an enemy
 //                               at war with him could fly now on a province of his where his own fighters would rise; or
@@ -118,7 +121,8 @@ export function scrambleCalls(
   game: () => Game,
   airStartOn: (g: Game, kind: string, target: number, ids: number[], nat: string, me: 'att' | 'def', settle?: (fought?: FoughtAir) => unknown) => unknown,
 ) {
-  let mode: ScrambleMode = 'big';
+  // (starts at 'never' until the 3D game tells it otherwise: its switch off, it sends nothing)
+  let mode: ScrambleMode = 'never';
   // (the raids offered, by id: only an id this file offered is flown)
   const offered = new Map<string, Offered>();
   return {

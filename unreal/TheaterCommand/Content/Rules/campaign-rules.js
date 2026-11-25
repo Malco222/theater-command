@@ -88707,7 +88707,7 @@
     return null;
   }
   function scrambleCalls(game2, airStartOn) {
-    let mode = "big";
+    let mode = "never";
     const offered = /* @__PURE__ */ new Map();
     return {
       scrambleMode(m) {

@@ -1228,7 +1228,7 @@ public:
 	/** SCRAMBLE (bFly) or LEAVE IT TO THE STAFF. */
 	void AnswerScramble(bool bFly);
 	void ToggleScrambleRest();
-	/** The card's title ("A GERMAN RAID ON KENT") and its words: who is coming, about how many, what he has to meet them. */
+	/** The card's title ("A German raid on Kent") and its words: who is coming, about how many, what he has to meet them. */
 	FString ScrambleTitle() const;
 	FString ScrambleBody() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
@@ -1808,10 +1808,17 @@ private:
 	bool bScrambleRest = false;
 	bool bScrambleWatch = false;
 	FString ScrambleMode = TEXT("big");
+	// (The reviewer, 25 November: the note a scramble's answer carries, TC.battleEnd's or TC.scrambleLeave's, was said
+	// under the map and at once replaced by the month's own "<date>. Your orders." there, which has the one line. It is
+	// kept here and said with that line (FinishMonth); with the switch off it is always empty.)
+	FString ScrambleNote;
+	/** Everything of a scramble put away: the card, the month it held, this month's count, the tick, the raid flown, the
+	 * note. For a war left or loaded (EnterCampaign, RestoreCampaign): none of it belongs to the next. */
+	void ForgetScramble();
 	/** The month's answer in Month taken: a scramble is offered (or left at once), or the month's watch and card follow as ever. */
 	void MonthAnswered();
 	/** The scramble in Month offered on its card, or left to the staff at once (the switch off, a run that takes pictures,
-	 * the card's tick, enough cards this month) and the month's next answer taken: true either way. False only where the
+	 * Scramble offers NEVER, the card's tick, enough cards this month) and the month's next answer taken: true either way. False only where the
 	 * month has stopped too many times: its scramble is dropped, and the month in hand runs on. */
 	bool OfferScramble();
 	/** TC.scrambleLeave(Id, { rest }), its answer taken as the month's next. */

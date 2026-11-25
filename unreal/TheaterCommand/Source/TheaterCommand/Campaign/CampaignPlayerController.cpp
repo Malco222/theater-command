@@ -1386,6 +1386,7 @@ void ACampaignPlayerController::EnterCampaign()
 	HeldBackCard.Reset();
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
+	ForgetScramble(); // (release 2, the scramble offer: nor a SCRAMBLE card, nor the month it held; the reviewer, 25 November)
 	RoundSeen.Reset();
 	// (The code checker, 17 November.) The last month's newsreel and the first night's word belong to the campaign just
 	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
@@ -10619,8 +10620,7 @@ bool ACampaignPlayerController::RestoreCampaign(const FString& SaveText)
 	PutDownAgent();
 	StopLooking();
 	// (release 2, the scramble offer: a SCRAMBLE card and the month it held belong to the game being left)
-	Scramble = FScrambleCard();
-	ScrambleMonth = FMonthResult();
+	ForgetScramble();
 	if (!Mode->RestoreCampaign(SaveText))
 	{
 		return false;
@@ -12576,10 +12576,14 @@ void ACampaignPlayerController::EndMonth()
 	// ---- (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable".) The rules
 	// are told before every month's end whether the month may stop on an enemy raid he meets himself: his OPTIONS setting
 	// with the Battle rules card's "Scramble your fighters" on, "never" with it off (and in a run that takes pictures).
-	// Rules without the call are harmless: the session asks them once and logs it. A new month: no scramble answered yet.
+	// (The reviewer, 25 November: with the switch off the rules are asked nothing new. The rules start at "never" at every
+	// load, so "never" is only sent where this load of them was told something else before, the switch since turned off;
+	// FCampaignSession::TellScrambleMode keeps what was sent.) Rules without the call are harmless: the session asks them
+	// once and logs it. A new month: no scramble answered yet.
 	bScrambleRest = false;
 	ScrambleRound = 0;
 	ScrambleFlown.Reset();
+	ScrambleNote.Reset();
 	bScrambleWatch = bAlwaysWatch;
 	Session->TellScrambleMode(AAirBattle::DefendOn() && !bScripted ? ScrambleMode : FString(TEXT("never")));
 	// ---- (end release 2)
@@ -12714,12 +12718,15 @@ bool ACampaignPlayerController::OfferScramble()
 		return false;
 	}
 	const bool bSwitchOn = AAirBattle::DefendOn();
-	if (!bSwitchOn || bScripted || bScrambleRest || ScrambleRound > ScrambleCardsAMonth)
+	// (The reviewer, 25 November: OPTIONS' "Scramble offers: NEVER" holds too, though the rules were told and still stop.)
+	const bool bNever = ScrambleMode == TEXT("never");
+	if (!bSwitchOn || bScripted || bNever || bScrambleRest || ScrambleRound > ScrambleCardsAMonth)
 	{
-		// (the switch off, a run that takes pictures, the card's tick, or enough cards this month: his staff meet it, and
-		// every raid left this month, at once)
+		// (the switch off, a run that takes pictures, Scramble offers NEVER, the card's tick, or enough cards this month:
+		// his staff meet it, and every raid left this month, at once)
 		UE_LOG(LogTheater, Display, TEXT("Scramble: %s left to the staff at once (%s)"), *Offer.Id,
-			!bSwitchOn ? TEXT("Scramble your fighters is off") : bScripted ? TEXT("a run that takes pictures") : bScrambleRest ? TEXT("the rest of the month is settled") : TEXT("enough cards this month"));
+			!bSwitchOn ? TEXT("Scramble your fighters is off") : bScripted ? TEXT("a run that takes pictures") : bNever ? TEXT("Scramble offers is NEVER")
+			: bScrambleRest ? TEXT("the rest of the month is settled") : TEXT("enough cards this month"));
 		LeaveScramble(Offer.Id, true);
 		return true;
 	}
@@ -12738,7 +12745,12 @@ bool ACampaignPlayerController::OfferScramble()
 	Scramble.bVisible = true;
 	Scramble.Offer = Offer;
 	Scramble.Since = FPlatformTime::Seconds();
-	CampaignSounds::Play(this, TEXT("bell"), 0.6f);
+	if (ScrambleRound > 1)
+	{
+		// (a later stop in the month rings for itself; the first comes in the same moment as END THE MONTH's own bell,
+		// which is enough: two bells at once, the reviewer, 25 November)
+		CampaignSounds::Play(this, TEXT("bell"), 0.6f);
+	}
 	UE_LOG(LogTheater, Display, TEXT("Scramble: the month stops on %s, a %s raid on %s (%d)%s"), *Offer.Id, *Offer.Adjective, *Offer.Name, Offer.Target, Offer.bDemo ? TEXT(", the bridge's demonstration") : TEXT(""));
 	return true;
 }
@@ -12760,6 +12772,15 @@ void ACampaignPlayerController::AnswerScramble(bool bFly)
 		LeaveScramble(Offer.Id, bScrambleRest);
 		return;
 	}
+	if (!Map.IsValid() || TActorIterator<AAirBattle>(Here) || TActorIterator<ALandBattle>(Here))
+	{
+		// (FlyLive's guards: no table, or a battle already up, a set piece's or a land battle's. Two scenes never run at
+		// once: his staff meet the raid, and the month goes on. The reviewer, 25 November.)
+		UE_LOG(LogTheater, Warning, TEXT("Scramble: %s cannot open (no table, or a battle is already up); left to the staff"), *Offer.Id);
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		LeaveScramble(Offer.Id, bScrambleRest);
+		return;
+	}
 	CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
 	AAirBattle* Sky = Here->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
 	if (!Sky)
@@ -12777,16 +12798,29 @@ void ACampaignPlayerController::AnswerScramble(bool bFly)
 	};
 	if (!Sky->BeginLiveCall(Session, TEXT("scrambleStart"), FCampaignSession::ScrambleArgs(Offer.Id)))
 	{
-		// (the rules would not open it after all: his staff meet the raid, and the month goes on)
+		// (the rules would not open it after all: his staff meet the raid, and the month goes on. The words are kept to be
+		// said with the month's first line too, which takes the line under the map: see ScrambleNote.)
 		Sky->HandBack = nullptr;
 		Sky->Destroy();
-		Notify(TEXT("This raid cannot be flown in the battle in the air: your staff meets it."), 6.0);
+		const FString Cannot = TEXT("This raid cannot be flown in the battle in the air: your staff meets it.");
+		Notify(Cannot, 6.0);
+		ScrambleNote = ScrambleNote.IsEmpty() ? Cannot : ScrambleNote + TEXT(" ") + Cannot;
 		LeaveScramble(Offer.Id, bScrambleRest);
 		return;
 	}
 	LiveRaid = Sky;
 	ScrambleFlown = Offer.Id;
 	UE_LOG(LogTheater, Display, TEXT("Scramble: %s opened live, his side the defence"), *Offer.Id);
+}
+
+void ACampaignPlayerController::ForgetScramble()
+{
+	Scramble = FScrambleCard();
+	ScrambleMonth = FMonthResult();
+	ScrambleRound = 0;
+	bScrambleRest = false;
+	ScrambleFlown.Reset();
+	ScrambleNote.Reset();
 }
 
 void ACampaignPlayerController::ToggleScrambleRest()
@@ -12849,7 +12883,10 @@ void ACampaignPlayerController::TakeScrambleAnswer(const FString& Json)
 	ScrambleMonth = FMonthResult();
 	if (!Note.IsEmpty())
 	{
+		// (said now, under a next card or over the month's watch; and kept, to be said again with the month's first line,
+		// which would otherwise take its place at once: FinishMonth)
 		Notify(Note, 9.0);
+		ScrambleNote = ScrambleNote.IsEmpty() ? Note : ScrambleNote + TEXT(" ") + Note;
 	}
 	if (!Session || !Map.IsValid())
 	{
@@ -13511,8 +13548,20 @@ void ACampaignPlayerController::FinishMonth()
 		{
 			Warning += TEXT(" ") + Alert;
 		}
-		Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders.%s"), *View.Date, *Warning), Warning.IsEmpty() ? 4.0 : 10.0);
+		if (ScrambleNote.IsEmpty())
+		{
+			Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders.%s"), *View.Date, *Warning), Warning.IsEmpty() ? 4.0 : 10.0);
+		}
+		else
+		{
+			// (Release 2, the scramble offer; the reviewer, 25 November.) The line under the map holds one sentence at a
+			// time: what came of the raid he met this month (the note of TC.battleEnd's or TC.scrambleLeave's answer) is said
+			// after the month's first words, not replaced by them, and stands a little longer.
+			const FString MonthLine = View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders.%s"), *View.Date, *Warning);
+			Notify(MonthLine + TEXT(" ") + ScrambleNote, 12.0);
+		}
 	}
+	ScrambleNote.Reset(); // (said, or the war has gone from him: either way it is this month's no longer)
 	if (bReadyDue && bScripted)
 	{
 		SayReady(); // (release 2, new units ready: a picture has the plate at once)

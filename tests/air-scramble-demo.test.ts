@@ -10,7 +10,7 @@
 // same raid (scramble/mac-steps/scramble-demo.steps.txt).
 import { describe, expect, it } from 'vitest';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { DEMO_NOTE } from '../unreal/TheaterCommand/Rules/scramble-demo';
+import { DEMO_NOTE, scrambleCalls } from '../unreal/TheaterCommand/Rules/scramble-demo';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TC = (globalThis as Record<string, unknown>).TC as any;
@@ -28,6 +28,17 @@ function offered() {
 }
 
 describe('release 2: the scramble offer, the bridge\'s demonstration', () => {
+  it('starts at never: told nothing, it offers nothing and reads nothing of the war', () => {
+    // (The reviewer, 25 November: with "Scramble your fighters" off the 3D game sends no TC.scrambleMode at all, so the
+    // rules must start where the switch off leaves them. A fresh set of calls, as at a load of the rules.)
+    const calls = scrambleCalls(() => { throw new Error('the war was read'); }, () => { throw new Error('a raid was flown'); });
+    expect(calls.scrambleDemo()).toBeNull();
+    expect(calls.scrambleMode('sometimes')).toEqual({ mode: 'never' }); // (a word it does not know changes nothing)
+    expect(calls.scrambleMode('big')).toEqual({ mode: 'big' });
+    expect(calls.scrambleMode('never')).toEqual({ mode: 'never' });
+    expect(calls.scrambleDemo()).toBeNull();
+  });
+
   it('offers an enemy raid on him in the contract\'s shape', () => {
     const offer = offered();
     expect(offer).toBeTruthy();

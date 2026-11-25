@@ -111,6 +111,7 @@ bool FCampaignSession::Prepare(FString& OutError)
 	bReady = false;
 	bRunning = false;
 	bNoScrambleMode = false; // (release 2, the scramble offer: the rules about to be loaded are asked afresh)
+	ScrambleModeSent = TEXT("never"); // (and start at "never", as the contract has it, until told otherwise)
 	Host = MakeUnique<FRulesHost>();
 	if (!Host->IsAvailable())
 	{
@@ -3001,6 +3002,12 @@ FMonthResult FCampaignSession::ReadMonth(const TSharedPtr<FJsonObject>& Object)
 	if (Object->TryGetObjectField(TEXT("scramble"), Stop) && Stop)
 	{
 		ReadScrambleOffer(*Stop, Out.Scramble);
+		if (!Out.Scramble.bValid)
+		{
+			// (the reviewer, 25 November: a stop with no id cannot be answered; the month is shown as it came, and the rules
+			// settle that stop themselves at their next TC.endMonth or TC.save, as the contract asks)
+			UE_LOG(LogTheater, Warning, TEXT("Scramble: the month stopped on a scramble with no id; it cannot be answered, and the month is shown as it came"));
+		}
 	}
 	TakeView(Object);
 	return Out;
@@ -3010,7 +3017,9 @@ FMonthResult FCampaignSession::ReadMonth(const TSharedPtr<FJsonObject>& Object)
 
 bool FCampaignSession::TellScrambleMode(const FString& Mode)
 {
-	if (bNoScrambleMode || !bRunning)
+	// (The reviewer, 25 November: with the switch off the game makes the calls it made before, and no new one. The rules
+	// start at "never" at every load, so "never" is sent only where this load of them was told something else since.)
+	if (bNoScrambleMode || !bRunning || (Mode == TEXT("never") && ScrambleModeSent == TEXT("never")))
 	{
 		return false;
 	}
@@ -3022,6 +3031,7 @@ bool FCampaignSession::TellScrambleMode(const FString& Mode)
 		UE_LOG(LogTheater, Display, TEXT("Scramble: these rules have no TC.scrambleMode (%s); the month goes on as before"), *Error);
 		return false;
 	}
+	ScrambleModeSent = Mode;
 	return true;
 }
 
@@ -3074,7 +3084,19 @@ bool FCampaignSession::ReadMonthAnswer(const FString& Json, FMonthResult& Out, F
 	// nothing) is not one, and the month in hand stands.
 	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
 	const TSharedPtr<FJsonObject>* Stop = nullptr;
-	if (!Object->TryGetArrayField(TEXT("steps"), Steps) && !Object->TryGetObjectField(TEXT("scramble"), Stop))
+	const bool bStop = Object->TryGetObjectField(TEXT("scramble"), Stop) && Stop;
+	if (bStop)
+	{
+		// (the reviewer, 25 November: a next scramble counts only where it can be answered, by its id; one without is not
+		// a month's answer, and the month in hand is shown, as the contract's rules settle that stop themselves)
+		FString StopId;
+		if (!(*Stop)->TryGetStringField(TEXT("id"), StopId) || StopId.IsEmpty())
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Scramble: the month's next answer stops on a scramble with no id; it is not taken"));
+			return false;
+		}
+	}
+	else if (!Object->TryGetArrayField(TEXT("steps"), Steps))
 	{
 		return false;
 	}
