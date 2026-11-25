@@ -7,7 +7,8 @@
 // at 18:35Z behind the balance work's stand-to (joinStandTo): it acts only where that has joined and is switched on,
 // and reads a power stood to against as an enemy. These tests join a stand-in for it. For the join (19:13Z): never a
 // fleet its staff or the book holds to a named harbour while that order stands (the striking force's gathering, a cover
-// base, the book's station at stops 1 and 2); at peace a stand-to stands a fleet forward, its one order of the month;
+// base, the book's station at stops 1 and 2, the fleet that goes where its army has gone); at peace a stand-to stands a
+// fleet forward, its one order of the month;
 // a player's fleets only where his navy desk is handed to his admirals.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
@@ -20,6 +21,7 @@ import { km } from '../src/campaign/air';
 import { enemyInReach, foeInReach, foesOf, forwardHarbour, foundFleet, holdTo, inPassage, joinStandTo, navalAI, outOfStrikes, planCrossing, rebase, strikeThreat, voyageMonths } from '../src/campaign/navy';
 import { gatherMonth } from '../src/campaign/readiness';
 import { startOpen } from '../src/campaign/staff';
+import { ferry } from '../src/campaign/ai';
 import type { Fleet, Game } from '../src/campaign/types';
 
 const fleet = (g: Game, nat: string, name: string): Fleet => g.fleets.find((f) => f.nat === nat && f.name === name)!;
@@ -283,6 +285,59 @@ describe('a fleet its staff holds to a named harbour stays there', () => {
     expect(g.regions[mf.base].name).toBe('Etorofu');
     g.flags[`held:${mf.id}`] = g.turn - 1;
     expect(forwardHarbour(g, mf)).not.toBeNull();
+  }, 300000);
+});
+
+describe('the fleet that goes where its army has gone (19:13Z, 3: the order behind the back-and-forth of seed 17)', () => {
+  /** America at war with Germany, its army's first corps across the Atlantic and built up at Alexandria (world.json 'overseas'). */
+  function across(): { g: Game; atl: Fleet; alex: number } {
+    const { g } = opening();
+    if (!g.nations.USA.atWar.includes('GER')) declareWar(g, 'GER', 'USA');
+    const alex = g.byName['Alexandria'].id;
+    g.flags['fy:first:USA'] = 1;
+    g.flags['st:base:USA:atlantic'] = alex + 1;
+    return { g, atl: fleet(g, 'USA', 'Atlantic Fleet'), alex };
+  }
+
+  it("at its army's harbour it is held there while the order stands, and stands forward again only once it lapses", () => {
+    const { g, atl, alex } = across();
+    expect(rebase(g, atl, g.regions[alex], true)).toBe(true);
+    // (No German in reach of Alexandria: unheld, it would stand forward to Tunis.)
+    expect(forwardHarbour(g, atl)?.name).toBe('Tunis');
+    ferry(g, 'USA');
+    expect(atl.base).toBe(alex);
+    // (The order is given after the admirals' month, so it holds the fleet through the next month too.)
+    expect(forwardHarbour(g, atl)).toBeNull();
+    g.turn++;
+    expect(forwardHarbour(g, atl)).toBeNull();
+    const from = g.headlines.length;
+    navalAI(g, 'USA');
+    expect(atl.base).toBe(alex);
+    expect(g.headlines.slice(from).some((h) => /moves its base from Alexandria/.test(h.text))).toBe(false);
+    // (Renewed each month it stands; a month in which the order is not given, it lapses after the month it covers.)
+    ferry(g, 'USA');
+    g.turn++;
+    expect(forwardHarbour(g, atl)).toBeNull();
+    g.turn++;
+    expect(forwardHarbour(g, atl)?.name).toBe('Tunis');
+  }, 300000);
+
+  it('crossing to it, it is held there the next month as well', () => {
+    const { g, atl, alex } = across();
+    expect(at(g, atl)).toBe('Norfolk');
+    const from = g.headlines.length;
+    ferry(g, 'USA');
+    expect(g.headlines.slice(from).some((h) => h.text.startsWith('The Atlantic Fleet crosses the ocean to'))).toBe(true);
+    expect(atl.base).toBe(alex);
+    expect(g.flags[`held:${atl.id}`]).toBe(g.turn + 1);
+  }, 300000);
+
+  it('with balance switched off, nothing is written', () => {
+    const { g, atl, alex } = across();
+    expect(rebase(g, atl, g.regions[alex], true)).toBe(true);
+    standTo.on = false;
+    try { ferry(g, 'USA'); } finally { standTo.on = true; }
+    expect(g.flags[`held:${atl.id}`]).toBeUndefined();
   }, 300000);
 });
 

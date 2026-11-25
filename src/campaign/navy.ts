@@ -2729,10 +2729,12 @@ const FORWARD_MONTHS = 1;
  * strike sails or is called off (readiness.ts, the computer's and a player's admirals'). Standing forward leaves it there
  * while the order stands, never for good (the design director, 19:13Z, 2: else the force gathered at its anchorage
  * stands forward the same month, is ordered back the next, and its strike never comes ready).
- * Written only while standing forward can act, so nothing is saved while it is held.
+ * An order given after the admirals' month (the fleet that goes where its army has gone, ai.ts follow) holds it through
+ * the next month (`ahead`), renewed each month it stands. Written only while standing forward can act, so nothing is
+ * saved while it is held.
  */
-export const holdTo = (g: Game, f: Fleet): void => { if (STAND_TO.on(g)) g.flags[`held:${f.id}`] = g.turn; };
-const heldTo = (g: Game, f: Fleet): boolean => g.flags[`held:${f.id}`] === g.turn;
+export const holdTo = (g: Game, f: Fleet, ahead = 0): void => { if (STAND_TO.on(g)) g.flags[`held:${f.id}`] = Math.max(g.flags[`held:${f.id}`] ?? -1, g.turn + ahead); };
+const heldTo = (g: Game, f: Fleet): boolean => (g.flags[`held:${f.id}`] ?? -1) >= g.turn;
 
 /**
  * At stops 1 and 2 the book's stations and moves are the leash: a fleet the book stations (a row of its own, its start
@@ -2748,9 +2750,8 @@ export const foeInReach = (g: Game, f: Fleet, r: Region): boolean => foeReach(g,
  * Where a fleet with no enemy in its reach stands forward to (the rulings of 18:14Z, 18:23Z and 18:26Z above), or
  * null: balance's stand-to has not joined or is switched off (joinStandTo), its staff or the book holds it to a named
  * harbour (holdTo, a cover base it is asked for, the book's station at stops 1 and 2), it has an enemy in its reach, its
- * country
- * has none, or no friendly harbour open to it, at most a month's voyage away, has one in reach and lies beyond where the
- * enemy could strike from next month. Of those, the fewest months of
+ * country has none, or no friendly harbour open to it, at most a month's voyage away, has one in reach and lies beyond
+ * where the enemy could strike from next month. Of those, the fewest months of
  * voyage; of harbours an equal voyage away, the one with the most of the enemy in reach (a fleet stands forward to
  * reach its war, not a corner of it), then the fewer seas out to it, then the nearest on the chart. None off the far
  * chart.

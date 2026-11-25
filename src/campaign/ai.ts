@@ -16,7 +16,7 @@ import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
 import { byHand } from './depth';
-import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, keptByHand, landCorps, landingOpts, landingTargets, liftLeft, navalAI, onOwnShipping, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
+import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, holdTo, keptByHand, landCorps, landingOpts, landingTargets, liftLeft, navalAI, onOwnShipping, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
@@ -2695,7 +2695,10 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
   const far = (r: Region): number => chartDist(g, r, base);
   for (const f of fleetsOf(g, nat)) {
     // (A fleet of the player's that is his, by hand or with the navy his own, goes where he sends it: the audit, 25 November 2026.)
-    if (!O.fleet?.includes(f.name) || f.base < 0 || !beyondEurope(f.base) || !shipCount(f.ships) || keptByHand(g, f) || byHand(g, nat, 'navy')) continue;
+    if (!O.fleet?.includes(f.name) || f.base < 0 || !shipCount(f.ships) || keptByHand(g, f) || byHand(g, nat, 'navy')) continue;
+    // (Held where its army has gone while this order stands, so the admirals' next month does not stand it forward away:
+    // navy.ts holdTo, the design director's ruling of 19:13Z, 2 and 3. Nothing is written while that rule is held.)
+    if (!beyondEurope(f.base)) { holdTo(g, f, 1); continue; }
     let to: Region | null = null;
     for (const r of g.regions) {
       if (beyondEurope(r) || !r.port || !r.seas.length || !allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || !canSailTo(g, f, r)) continue;
@@ -2703,6 +2706,7 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
     }
     if (!to || !rebase(g, f, to)) continue;
     f.station = to.seas[0];
+    holdTo(g, f, 1);
     headline(g, 'event', `The ${f.name} crosses the ocean to ${to.name}: the ${n.adj} fleet goes where its army has gone, to cover the crossings still to come.`, nat, to.id);
   }
   if (O.air === undefined || g.flags[`fy:air:${nat}`] === g.turn) return;
