@@ -15583,6 +15583,34 @@ namespace
 						]
 					];
 				}
+				// (Release 2, the desk split) Recruitment and towns and trade, each its own switch: YOU or YOUR STAFF, the lit side
+				// the one that stands, a press on the other changes hands. They take the place of the one button.
+				const bool bHalves = Board.StaffDesks.Num() > 0;
+				TSharedRef<SHorizontalBox> Halves = SNew(SHorizontalBox);
+				for (int32 Index = 0; Index < Board.StaffDesks.Num(); ++Index)
+				{
+					const FHomeDesk& Half = Board.StaffDesks[Index];
+					auto Side = [&Look, &Half, OnBrass, Go](const TCHAR* Word, bool bLit) -> TSharedRef<SWidget>
+					{
+						return SNew(SButton).ButtonStyle(bLit ? &Look.SegOn : &Look.Seg).ContentPadding(FMargin(10.0f, 4.0f)).IsFocusable(false)
+							.ToolTipText(bLit ? FText::GetEmpty() : FText::FromString(Half.Tip))
+							.OnClicked_Lambda([Do = bLit ? TFunction<void()>() : Go(Half.Act)]() { if (Do) { Do(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(Word)).Font(Font(TEXT("Bold"), 10, 120)).ColorAndOpacity(bLit ? OnBrass : Cream)
+							];
+					};
+					Halves->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(Index == 0 ? 0.0f : 20.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Half.Name)).Font(SmallCaps()).ColorAndOpacity(Half.bOn ? BrightBrass : Brass)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Side(TEXT("YOU"), !Half.bOn)]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f, 0.0f, 0.0f)[Side(TEXT("YOUR STAFF"), Half.bOn)]
+					];
+				}
+				const FString StaffHead = !Board.StaffHead.IsEmpty() ? Board.StaffHead : Board.bStaffOn ? FString(TEXT("YOUR STAFF GIVES THESE ORDERS")) : FString(TEXT("YOU GIVE THESE ORDERS YOURSELF"));
 				Whole->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 				[
 					SNew(SBorder).BorderImage(&Look.Tile).Padding(FMargin(14.0f, 8.0f, 12.0f, 8.0f))
@@ -15597,11 +15625,15 @@ namespace
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
-								SNew(STextBlock).Text(FText::FromString(Board.bStaffOn ? TEXT("YOUR STAFF GIVES THESE ORDERS") : TEXT("YOU GIVE THESE ORDERS YOURSELF"))).Font(SmallCaps()).ColorAndOpacity(Board.bStaffOn ? BrightBrass : Brass)
+								SNew(STextBlock).Text(FText::FromString(StaffHead)).Font(SmallCaps()).ColorAndOpacity(Board.bStaffOn ? BrightBrass : Brass)
 							]
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 							[
 								SNew(STextBlock).Text(FText::FromString(Board.StaffLine)).Font(Serif(TEXT("Regular"), 11.5f)).ColorAndOpacity(Muted).AutoWrapText(true)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, bHalves ? 7.0f : 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).Visibility(bHalves ? EVisibility::Visible : EVisibility::Collapsed)[Halves]
 							]
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
@@ -15609,9 +15641,9 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(TEXT("MAY SPEND"))).Font(SmallCaps()).ColorAndOpacity(Muted)
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Caps]
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(bHalves ? 0.0f : 14.0f, 0.0f, 0.0f, 0.0f)
 						[
-							OfficeButton(*Board.StaffLabel, BrightBrass, true, Board.StaffTip, Go(Board.StaffAct))
+							bHalves ? SNullWidget::NullWidget : OfficeButton(*Board.StaffLabel, BrightBrass, true, Board.StaffTip, Go(Board.StaffAct))
 						]
 					]
 				];

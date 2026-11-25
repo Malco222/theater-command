@@ -52,7 +52,7 @@ describe('the switches', () => {
     for (const d of DESKS) expect(staffRunsDesk(g, d)).toBe(false);
     const v = commandOf(g)!;
     expect(v.depth).toBe('supreme');
-    expect(v.desks.map((d) => d.id)).toEqual(['research', 'build', 'diplomacy', 'spies', 'air', 'navy']);
+    expect(v.desks.map((d) => d.id)).toEqual(['research', 'build', 'towns', 'diplomacy', 'spies', 'air', 'navy']);
     expect(v.desks.every((d) => !d.staff && d.news === null && d.state.length > 0)).toBe(true);
     expect(v.cap).toBe(DEPTH.cap.start);
     expect(g.headlines.some((h) => h.desk)).toBe(false);
@@ -114,7 +114,7 @@ describe('the three depths', () => {
     expect(fogOn(g)).toBe(true);
     const v = commandOf(g)!;
     expect(v.depth).toBe('theatre');
-    expect(v.depths.find((d) => d.id === 'theatre')!.yours).toEqual(['The armies and their battles', 'Research', 'Building and trade', 'Diplomacy']);
+    expect(v.depths.find((d) => d.id === 'theatre')!.yours).toEqual(['The armies and their battles', 'Research', 'Recruitment', 'Towns and trade', 'Diplomacy']);
   });
 
   it('Supreme command puts everything back on the player\'s desk, and the cabinet can bring him down', () => {
@@ -244,10 +244,11 @@ describe('building and trade left to the staff', () => {
     n.pc = 10;
     const had = dealsOf(g, 'GER').length;
     expect(had).toBeLessThan(housesOf(g, 'GER'));
-    orderDesk(g, 'build', true);
+    // (Release 2: trade is towns and trade's half of what was the building desk.)
+    orderDesk(g, 'towns', true);
     expect(dealsOf(g, 'GER').length).toBe(had + 1);
     expect(n.pc).toBe(10 - TRADE.sign.pc);
-    expect(lines(g, 'build').join(' ')).toMatch(/signed a trade agreement with /);
+    expect(lines(g, 'towns').join(' ')).toMatch(/^Your ministers signed a trade agreement with /);
   });
 });
 

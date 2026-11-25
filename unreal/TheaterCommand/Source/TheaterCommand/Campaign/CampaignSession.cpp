@@ -4351,6 +4351,24 @@ namespace
 					}
 				}
 			}
+			(*Staff)->TryGetStringField(TEXT("head"), Board.StaffHead);
+			const TArray<TSharedPtr<FJsonValue>>* Desks = nullptr;
+			if ((*Staff)->TryGetArrayField(TEXT("desks"), Desks))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Desks)
+				{
+					const TSharedPtr<FJsonObject>* Entry = nullptr;
+					if (!Value->TryGetObject(Entry))
+					{
+						continue;
+					}
+					FHomeDesk& Half = Board.StaffDesks.AddDefaulted_GetRef();
+					(*Entry)->TryGetStringField(TEXT("name"), Half.Name);
+					(*Entry)->TryGetBoolField(TEXT("on"), Half.bOn);
+					(*Entry)->TryGetStringField(TEXT("act"), Half.Act);
+					(*Entry)->TryGetStringField(TEXT("tip"), Half.Tip);
+				}
+			}
 		}
 	}
 }

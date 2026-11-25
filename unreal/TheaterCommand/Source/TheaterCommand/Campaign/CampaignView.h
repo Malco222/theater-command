@@ -857,6 +857,14 @@ struct FHomeTile
 	FString Kind, Label, Figure, Sub;
 };
 
+// (Release 2, the desk split) Recruitment or towns and trade on the board's staff strip: who runs it, and the press that changes hands.
+struct FHomeDesk
+{
+	FString Name; // "RECRUITMENT", "TOWNS AND TRADE"
+	bool bOn = false; // the staff runs it
+	FString Act, Tip; // the press on the side that is not lit
+};
+
 struct FHomeBoard
 {
 	bool bValid = false;
@@ -877,6 +885,9 @@ struct FHomeBoard
 	FString StaffLine, StaffLabel, StaffAct, StaffTip;
 	int32 StaffCap = 0;
 	TArray<int32> StaffCaps;
+	// (Release 2, the desk split) The strip's heading and its two halves; where the rules send none, the one button above.
+	FString StaffHead;
+	TArray<FHomeDesk> StaffDesks;
 };
 
 struct FOfficePage

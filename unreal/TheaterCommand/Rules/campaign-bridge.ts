@@ -54,7 +54,7 @@ import * as everyRule from '../../../src/campaign/turn';
 // (the air war's rules by name too: a rule a later version adds is used when the rules have it, and not missed when they have not)
 import * as everyAirRule from '../../../src/campaign/air';
 import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/danger';
-import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
+import { DEPTH, deskDef, deskRan, type DeskId } from '../../../src/campaign/depth';
 import { deskRuns } from '../../../src/campaign/desks';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, majorsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
@@ -3626,7 +3626,8 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     rows: c.rows.map((x) => ({ picture: x.picture ?? '', sign: x.sign, place: x.place, tag: x.tag, tone: tone(x.tone), a: x.ours ?? '', b: x.theirs ?? '', join: x.join?.word ?? '', joinName: x.join?.name ?? '', text: x.line, figures: figures(x.figures), region: x.region ?? -1, sea: x.sea ?? -1 })),
     none: c.quiet, foot: c.foot, count: c.count,
     home: home.map((x) => ({ sign: x.sign, count: x.count, text: x.text, where: x.where, grey: x.grey, tip: x.tip })),
-    staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: firsts.includes(x) ? `desk:${x.desk}:own` : '' })),
+    // (Release 2, the desk split: recruitment's line that told towns and trade's month too, as the one desk did, takes both back.)
+    staff: staffAll.slice(0, lines).map((x) => ({ text: x.short || x.text, tip: x.text, desk: String(x.desk), act: !firsts.includes(x) ? '' : x.desk === 'build' && bothTold(s) ? 'desk:build+towns:own' : `desk:${x.desk}:own` })),
     elsewhere: c.elsewhere.slice(0, lines).map((x) => ({ nat: x.nat, text: x.text, tip: x.full ?? x.text })),
     rest: over > 0 ? `${over} more ${over === 1 ? 'line' : 'lines'} of news ${over === 1 ? 'is' : 'are'} in the Newsreel.` : "Every figure comes from the month's own battle reports.",
   };
@@ -4987,7 +4988,8 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
     }
   }
   // (Version 66) What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies', 'page:repairs': 'build', 'page:home': 'build' };
+  // (Release 2, the desk split: trade, repairs and the towns' building are towns and trade's.)
+  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'towns', 'page:spies': 'spies', 'page:repairs': 'towns', 'page:home': 'towns' };
   // (a crowded field is the air desk's, as in the browser: its row is not shown while the staff runs the air war)
   return out.filter((t) => { const desk = t.k.startsWith('field:') ? ('air' as DeskId) : theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
 }
@@ -6228,7 +6230,11 @@ interface HomeBoard {
   tiles: { k: string; label: string; figure: string; sub: string }[];
   counts: { ready: number; going: number; all: number };
   towns: HomeTown[]; raise: HomeRaise[]; again: HomeAgain | null; orders: HomeOrder[];
-  staff: { on: boolean; line: string; label: string; act: string; tip: string; cap: number; caps: { n: number; now: boolean; act: string }[] } | null;
+  staff: {
+    on: boolean; line: string; label: string; act: string; tip: string; cap: number; caps: { n: number; now: boolean; act: string }[];
+    /** (Release 2, the desk split) The strip's heading, and recruitment and towns and trade, each with its own switch. */
+    head: string; desks: { name: string; on: boolean; act: string; tip: string }[];
+  } | null;
 }
 
 // What the player ordered from the arsenal by his own press, this month and the last month he ordered in (works are
@@ -6262,7 +6268,7 @@ function ownOrdersBefore(s: Game): { turn: number; list: { key: string; region: 
   if (ordersNow || ordersBefore) return null;
   const me = s.human ? s.nations[s.human] : null;
   let staffed = true;
-  try { staffed = !!pictureCommand(s)?.desks.find((d) => d.id === 'build')?.staff; } catch { staffed = true; }
+  try { staffed = !!pictureCommand(s)?.desks.some((d) => (d.id === 'build' || d.id === 'towns') && d.staff); } catch { staffed = true; }
   if (!me || staffed) return null;
   const offers = arsenalOffers(s, -1);
   const list = me.queue.filter((b) => b.ordered === s.turn - 1 && keyOfBuild(b)).map((b) => ({ key: keyOfBuild(b), region: -1, label: offers.find((o) => o.key === keyOfBuild(b))?.label ?? b.name }));
@@ -6362,7 +6368,22 @@ function homeBoard(s: Game): HomeBoard | null {
   let staff: HomeBoard['staff'] = null;
   try {
     const v = commandOf(s), bar = deskBar(s, 'build');
-    if (v && bar) staff = { on: bar.staff, line: bar.staff ? bar.line : deskRuns(s, 'build'), label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })) };
+    const forces = v?.desks.find((d) => d.id === 'build'), works = v?.desks.find((d) => d.id === 'towns');
+    if (v && bar && forces && works) {
+      const told = [forces.news, works.news].filter((x, i, all): x is string => !!x && all.indexOf(x) === i).join(' ') || 'Nothing to report this month.';
+      const line = forces.staff && works.staff ? `Your staff raises the forces and your ministers run the towns and trade. ${told} What you order here by hand still goes out.`
+        : forces.staff ? `Your staff raises the forces; the towns and trade are yours. ${told} What you order here by hand still goes out.`
+        : works.staff ? `Your ministers run the towns and trade; raising the forces is yours. ${told} What you order here by hand still goes out.`
+        : 'You raise the forces and run the towns and trade yourself. Either can go to your staff, which spends only the share of the treasury you allow it.';
+      staff = {
+        on: forces.staff || works.staff, line, label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })),
+        head: forces.staff && works.staff ? 'YOUR STAFF GIVES THESE ORDERS' : forces.staff || works.staff ? 'YOU AND YOUR STAFF SHARE THESE ORDERS' : 'YOU GIVE THESE ORDERS YOURSELF',
+        desks: [forces, works].map((d) => ({
+          name: d.name.toUpperCase(), on: d.staff, act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`,
+          tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskRuns(s, d.id)} Handed over in your own month, the staff goes to work at once.`,
+        })),
+      };
+    }
   } catch { staff = null; }
   return { nation: me.name, date: turnToDate(s.turn).label, up, money, net, tiles, counts: { ready, going: goingUp, all: towns.length }, towns, raise, again, orders, staff };
 }
@@ -6408,6 +6429,11 @@ function homePage(s: Game): (Page & { home: HomeBoard }) | null {
       ...(goingRows.length ? [{ heading: 'GOING UP IN YOUR TOWNS', text: '', rows: goingRows }] : []),
       { heading: 'RAISE FORCES', text: h.up ? '' : 'It is not your month.', rows: raiseRows },
       { heading: 'ON ORDER', text: orderRows.length ? '' : 'Nothing is being raised.', rows: orderRows },
+      // (Release 2, the desk split) Recruitment and towns and trade, each with its own switch: the board draws them on its staff strip.
+      ...(h.staff ? [{ heading: 'WHO GIVES THESE ORDERS', text: h.staff.line, rows: h.staff.desks.map((d) => ({
+        nat: '', title: `${d.name}  ·  ${d.on ? 'YOUR STAFF' : 'YOU'}`, lines: [],
+        buttons: [{ label: d.on ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: d.act, ok: true, tip: d.tip }],
+      })) }] : []),
     ],
     home: h,
   };
@@ -6891,7 +6917,13 @@ const runsLine = (lead: string, desk: string): string => (lead.toLowerCase().end
 /** The desk a room belongs to, or null: the secret service's room, trade and the towns, the airfield's, a fleet's. (The rooms that only ask a question, such as where a raid is to go, carry no bar.) */
 function deskOfPage(id: string): DeskId | null {
   const head = id.split(':')[0];
-  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' || head === 'home' ? 'build' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
+  // (Release 2, the desk split: trade and the towns are towns and trade's; THE HOME FRONT carries both halves on its own strip.)
+  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' ? 'towns' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
+}
+
+/** (Release 2, the desk split) True where recruitment's staff told towns and trade's month in its own line this month, as the one desk did. */
+function bothTold(s: Game): boolean {
+  try { return staffRunsDesk(s, 'towns') && deskRan(s, 'towns') && s.flags['dk:ran:towns'] !== s.turn; } catch { return false; }
 }
 
 /** For a bar on a desk's own screen: who runs it, a line to read, and the button that changes hands. Null outside the grand campaign. */
@@ -6900,8 +6932,10 @@ function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: 
   try { v = pictureCommand(s); } catch { v = null; }
   const d = v?.desks.find((x) => x.id === desk), def = deskDef(desk);
   if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
+  // (Release 2, the desk split: where the two halves worked as one, towns and trade's month is in recruitment's line.)
+  const news = d.news ?? (desk === 'towns' && bothTold(s) ? v.desks.find((x) => x.id === 'build')?.news ?? null : null);
   return d.staff
-    ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
+    ? { staff: true, line: `${runsLine(def.lead, d.name)} ${news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
     : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${deskRuns(s, desk)} You can take it back in any month.` };
 }
 
@@ -7142,6 +7176,12 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       try { stands = commandOf(s)?.depth === part[1]; } catch { stands = false; }
       ok = !stands && orderDepth(s, part[1]);
       note = ok ? `You play at ${to?.name ?? 'that depth'} now.${to && to.staff.length ? ` Your staff runs ${to.staff.map((k) => lowFirst(deskDef(k)?.name ?? k)).join(', ')}.` : ' Everything is on your own desk.'}` : 'The campaign stands at that depth already.';
+    } else if (part[0] === 'desk' && part[1] === 'build+towns') {
+      // (Release 2, the desk split) Taken back from the month card's line that told both halves' month: both come back.
+      const both = (['build', 'towns'] as DeskId[]).filter((k) => staffRunsDesk(s, k));
+      ok = part[2] === 'own' && both.map((k) => orderDesk(s, k, false)).some(Boolean);
+      const named = both.length > 1 ? 'Recruitment, and towns and trade, are' : `${deskDef(both[0] ?? 'build')?.name ?? ''} is`;
+      note = ok ? `${named} on your own desk again. What your staff ordered this month stands.` : 'Recruitment, and towns and trade, are on your own desk already.';
     } else if (part[0] === 'desk') {
       const def = deskDef(part[1]), staff = part[2] === 'staff';
       ok = !!def && orderDesk(s, part[1] as DeskId, staff);

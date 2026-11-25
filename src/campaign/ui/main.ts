@@ -3070,7 +3070,7 @@ function alertList(): Alert[] {
     });
   }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy', crowded: 'air' };
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'towns', tradecut: 'towns', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy', crowded: 'air' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
@@ -7097,7 +7097,7 @@ const capWord = (c: number): string => (c >= 100 ? 'all' : c === 75 ? 'three qua
 /** The three depths side by side, the chosen one lit, and under them what the chosen one puts on the player's desk. */
 function depthPicker(chosen: string | null, act: string, live = false): string {
   const on = DEPTH.depths.find((d) => d.id === chosen) ?? null;
-  const yours = on ? (['research', 'build', 'diplomacy', 'spies', 'air', 'navy'] as DeskId[]).filter((k) => !on.staff.includes(k)) : [];
+  const yours = on ? (['research', 'build', 'towns', 'diplomacy', 'spies', 'air', 'navy'] as DeskId[]).filter((k) => !on.staff.includes(k)) : [];
   const note = on
     ? `<p>${esc(on.blurb)}</p><ul class="one"><li><b>On your desk:</b> the armies and their battles${yours.length ? `, ${esc(deskNames(yours))}` : ''}.</li>${on.staff.length ? `<li><b>Your staff runs:</b> ${esc(deskNames(on.staff))}.</li>` : ''}<li>${on.cabinet ? (on.canFall ? 'A war cabinet sits behind you, and it can bring you down.' : 'A war cabinet sits behind you. It cannot bring you down.') : 'No war cabinet.'} ${on.fog ? 'The fog of war lies on the map.' : 'No fog of war: every army is in plain sight.'}</li></ul>`
     : '<p>You have made a mix of your own from the switches below. Pick a depth to set them all at once.</p>';
@@ -7113,9 +7113,9 @@ function deskRow(d: CommandView['desks'][number], full: boolean): string {
 
 /** What the staff may spend in a month: four steps, and what is left of this month's allowance. */
 function capPicker(v: CommandView): string {
-  const spends = v.desks.some((d) => d.staff && (d.id === 'build' || d.id === 'spies'));
+  const spends = v.desks.some((d) => d.staff && (d.id === 'build' || d.id === 'towns' || d.id === 'spies'));
   return `<div class="gclevels four">${v.caps.map((c) => `<button class="gclevel${c === v.cap ? ' on' : ''}" data-act="setcap" data-cap="${c}" aria-pressed="${c === v.cap}"><b>${esc(upFirst(capWord(c)))}</b><span>${c}% a month</span></button>`).join('')}</div>
-    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.${v.capNext ? ` The new share takes hold from next month: this month's allowance was already drawn.` : ''}` : 'Nothing your staff runs now spends money: this takes hold when you hand it building and trade, or the secret service.'}</small></div>`;
+    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.${v.capNext ? ` The new share takes hold from next month: this month's allowance was already drawn.` : ''}` : 'Nothing your staff runs now spends money: this takes hold when you hand it recruitment, towns and trade, or the secret service.'}</small></div>`;
 }
 
 /** The fog of war: on, or lifted. */
