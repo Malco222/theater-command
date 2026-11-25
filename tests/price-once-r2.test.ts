@@ -301,6 +301,29 @@ describe('a dated row that names a division a living corps holds (the design dir
     expect(names(g, xv)).toEqual(['7th Panzer Division']);
   });
 
+  it('and with its corps gone when the loan ends, the division stands on where it is, under the names of what it holds, and moves nowhere', () => {
+    // (The row is lent with a month to end in: no six-year war of the gate has reached that end, so it is pinned here.
+    // The design director, 20:29Z, 25 November 2026.)
+    expect(ROWS[rowAt(EIGHTH)][6].until).toBe(JUNE_41);
+    const { g } = balkans();
+    const xv = corps(g, 'XV Corps')!;
+    month(g, MARCH_41);
+    month(g, APRIL_41);
+    const c = corps(g, EIGHTH)!;
+    expect(c.drew!.find((r) => r.name[0] === '8th Panzer Division')!.from).toBe(xv.id);
+    const at = c.reg;
+    removeCorps(g, xv);
+    month(g, JUNE_41);
+    expect(c.dead).toBe(false);
+    expect(c.reg).toBe(at);
+    expect(c.name).toBe(EIGHTH);
+    expect(names(g, c)).toEqual(['8th Panzer Division', '14th Panzer Division']);
+    expect(c.hold).toBe(false);
+    expect(c.drew).toBeUndefined();
+    expect(holders(g, '8th Panzer Division')).toEqual([c]);
+    expect(heldTwice(g)).toEqual([]);
+  });
+
   it('a row never pulls a division out of the theatre it is for: one already there stays with its corps, and the row forms only its new divisions', () => {
     const { g, told, laid } = balkans();
     const xxii = corps(g, 'XXII Corps')!, iii = corps(g, 'III Corps')!;
