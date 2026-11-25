@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 863568df 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 383767e7 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -339,6 +339,8 @@
     shadowRelay: false,
     _seekOnce: "A fleet seeks battle once a month (release 2; the design director's ruling of 25 November 2026, 02:38Z, on the navy thread's finding that a fleet could seek more than once: in every allied nation's month-end meeting, and at month's end after an order of attack that missed or struck a harbour; src/campaign/navy.ts). Each fleet on the seeking side of a fleet action, by the player's order or in any nation's month-end meeting, the player's and the computer's alike, is marked with the month; a marked fleet is left out of every later meeting that month and cannot be sent at the enemy again. An order of attack counts whether it finds its quarry or misses. Defenders are never marked: a fleet that fought can still be found and fought. Off: nothing is marked and every war is the war without it.",
     seekOnce: false,
+    _townQueue: "A queue for a town (release 2; Brian 25 November 2026 13:41Z, 'easy to manage the cities, recruitment, ect'; the design director's ruling seamless-r2-1125.md part B; src/campaign/townqueue.ts). The player lines up what each of his towns builds next; each queued building is a press of BUILD made for him at the opening of his month, straight after his staff's month, at that day's price and through BUILD's own checks. One the treasury cannot pay for waits at the head of its town's queue; one refused for any other reason comes off with a line saying why; a lost town's queue goes, unpaid. The staff never touches it. Off: nothing of it is read or written and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'townQueue' (switchable in any month from OPTIONS). Forced by TC_TOWNQUEUE=1 or 0.",
+    townQueue: false,
     _atomBomb: "The atomic project (release 2; Brian 25 November 2026 01:14Z, 'lets do number 1'; the design director's ruling of 01:27Z; src/campaign/atom.ts, data/campaign/atom.json). Three rows of the Industry branch, then atomic plants that draw a share of a nation's earnings every month for years toward one fixed bill: a large industry finishes them, a small one never. Then a bomb or two, carried by an ordinary bombing raid on an enemy city that is not a capital: the city in ruins and a weight on that country's will to fight through the surrender rules. Spies, bombing and capture set the plants back. The same rules for every country; the book's stops hold the computer to the record's clock. Off: the rows leave the tree and nothing is drawn. On: the grand campaigns opened from now on carry the flag 'atom' (switchable in any month from OPTIONS). Forced by TC_ATOM=1 or 0.",
     atomBomb: false,
     _carrierStrike: "Carrier strikes on harbours by the player's own hand (release 2; Brian 24 November 2026 21:45Z, 'Resume the Pacific for release 2', and the 19 November Pacific playtest's first finding: a player who runs his navy himself had no order to gather a striking force and fly it, and nothing told him why a strike did not fly; src/campaign/harbourstrike.ts). A carrier fleet's page lists the enemy harbours with warships at anchor that its strike aircraft can reach from a sea in its reach, and one order sails it there and sends its wings in. A harbour beyond them names a base from which they reach it; a harbour of a country at peace says to declare war first. The player's order only: no staff reads it, so every computer war is the war without it.",
@@ -399,6 +401,7 @@
   var HEAVYSEAS_STAGE = staged("TC_HEAVYSEAS", "heavySeas");
   var SHADOWRELAY_STAGE = staged("TC_SHADOWRELAY", "shadowRelay");
   var SEEKONCE_STAGE = staged("TC_SEEKONCE", "seekOnce");
+  var TOWNQUEUE_STAGE = staged("TC_TOWNQUEUE", "townQueue");
   var ATOM_STAGE = staged("TC_ATOM", "atomBomb");
   var CARRIERSTRIKE_STAGE = staged("TC_CARRIERSTRIKE", "carrierStrike");
   var WINGBYDATE_STAGE = staged("TC_WINGBYDATE", "wingByDate");
@@ -20349,14 +20352,14 @@
     return { c, took: !!base };
   }
   function rowOver(g2, c, leaving2 = () => false) {
-    const keep2 = [];
+    const keep3 = [];
     const back = /* @__PURE__ */ new Map();
     for (const p of partsOf(g2, c)) {
       const rec = c.drew?.find((r) => r.name[0] === p.name[0]);
       if (!rec) continue;
       const parent = rec.from === c.id || rec.conv ? void 0 : g2.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving2(x));
       if (parent && g2.regions[parent.reg].theatre === g2.regions[c.reg].theatre) back.set(parent, [...back.get(parent) ?? [], p]);
-      else keep2.push(p);
+      else keep3.push(p);
     }
     for (const [parent, ps] of back) {
       assemble(g2, parent, [...partsOf(g2, parent), ...ps]);
@@ -20365,15 +20368,15 @@
         parent.drew = [...had, ...ps.filter((p) => !had.some((r) => r.name[0] === p.name[0])).map((p) => ({ name: p.name, no: p.no, from: parent.id }))];
       }
     }
-    if (!keep2.length) return false;
-    assemble(g2, c, keep2);
+    if (!keep3.length) return false;
+    assemble(g2, c, keep3);
     if (c.rowed) {
       c.name = c.rowed.name;
       c.hold = c.rowed.hold;
       if (c.rowed.stay) c.stay = true;
       else delete c.stay;
     } else {
-      c.name = formationName(keep2.map((p) => p.name)) ?? c.name;
+      c.name = formationName(keep3.map((p) => p.name)) ?? c.name;
       c.hold = false;
       delete c.stay;
     }
@@ -45626,10 +45629,10 @@
     }
     if (!watchersOn(g2)) return;
     const W2 = WATCHERS(), rate2 = watchRate(g2, nat);
-    const keep2 = Math.max(W2.reserve, SECRET.hunters.lead);
+    const keep3 = Math.max(W2.reserve, SECRET.hunters.lead);
     for (const foe of Object.keys(rate2)) {
       if (draw2(g2, g2.turn, "watch", foe) >= rate2[foe]) continue;
-      if (foes.filter((x) => x.nat === foe).length >= mostAgents(foe, g2) - keep2) continue;
+      if (foes.filter((x) => x.nat === foe).length >= mostAgents(foe, g2) - keep3) continue;
       const reg = pickPlace(g2, watchPlaces(g2, nat, foe), watched(g2), g2.turn, "watchwhere", foe);
       if (reg === null) continue;
       const id = g2.intel.foeNext ?? 1;
@@ -47157,15 +47160,15 @@
     const lead2 = wingOf(g2, c.id, "bmr"), cap17 = wingOf(g2, c.id, "ftr");
     if (!lead2 || lead2.bmr <= 0 || lead2.flew === g2.turn || lead2.mission !== "support") return false;
     const can2 = () => whyNotMission(g2, lead2, "harbour", r.id) === null && !assessAir(g2, [lead2], "harbour", r.id).why;
-    const keep2 = { zone: c.zone, stance: c.stance };
+    const keep3 = { zone: c.zone, stance: c.stance };
     let at4 = atSea(c) && can2() ? c.zone : -1;
     if (at4 < 0) {
       for (const z of fleetReach(g2, c)) {
         c.zone = z;
         c.stance = "patrol";
         const ok2 = can2();
-        c.zone = keep2.zone;
-        c.stance = keep2.stance;
+        c.zone = keep3.zone;
+        c.stance = keep3.stance;
         if (ok2) {
           at4 = z;
           break;
@@ -47217,15 +47220,15 @@
       }
       if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready || keptByHand(g2, c)) continue;
       const power = fleetPower(g2, c);
-      const keep2 = { zone: c.zone, stance: c.stance };
+      const keep3 = { zone: c.zone, stance: c.stance };
       let at4 = -1, plan = null;
       for (const z of fleetReach(g2, c)) {
         if (seaSide(g2, z, nat, false).total + power < A.sortie * seaSide(g2, z, nat, true).total) continue;
         c.zone = z;
         c.stance = "patrol";
         const b = bestBlow(g2, nat, lead2, escorts, hit);
-        c.zone = keep2.zone;
-        c.stance = keep2.stance;
+        c.zone = keep3.zone;
+        c.stance = keep3.stance;
         if (b && (!plan || b.v > plan.v)) {
           plan = b;
           at4 = z;
@@ -47827,14 +47830,14 @@
     plan.then = now.loss;
     plan.guardThen = now.guard;
     if (plan.why || plan.bound) return plan;
-    const keep2 = { zone: f.zone, stance: f.stance, lane: f.lane };
+    const keep3 = { zone: f.zone, stance: f.stance, lane: f.lane };
     f.stance = "escort";
     f.lane = lane;
     const then = laneLoss(g2, rt.to, rt.zones, rt.id);
-    f.zone = keep2.zone;
-    f.stance = keep2.stance;
-    if (keep2.lane === void 0) delete f.lane;
-    else f.lane = keep2.lane;
+    f.zone = keep3.zone;
+    f.stance = keep3.stance;
+    if (keep3.lane === void 0) delete f.lane;
+    else f.lane = keep3.lane;
     plan.then = then.loss;
     plan.guardThen = then.guard;
     return plan;
@@ -47866,14 +47869,14 @@
       const huntNow = huntShareOf(g2, f.nat, z, quarry);
       let hunt2 = huntNow;
       if (subs > 0 && seaWar(g2)) {
-        const keep2 = { zone: f.zone, stance: f.stance, lane: f.lane };
+        const keep3 = { zone: f.zone, stance: f.stance, lane: f.lane };
         f.zone = z;
         f.stance = "hunt";
         delete f.lane;
         hunt2 = huntShareOf(g2, f.nat, z, quarry);
-        f.zone = keep2.zone;
-        f.stance = keep2.stance;
-        if (keep2.lane !== void 0) f.lane = keep2.lane;
+        f.zone = keep3.zone;
+        f.stance = keep3.stance;
+        if (keep3.lane !== void 0) f.lane = keep3.lane;
       }
       return {
         // (The far side's one measure gives boats out in parts of a boat: the card counts whole boats, never none where some are out.)
@@ -48500,11 +48503,11 @@
     if (!old || !next || stopOf(g2) > 2 || g2.turn < next.from || g2.turn > next.to) return false;
     if (!atWar(g2, next.patron, next.against) || next.patron !== L2.patron) return false;
     const bk = book(g2);
-    const keep2 = Math.min(c.str * c.divs, next.est);
-    const gone = Math.max(0, c.str * c.divs - keep2);
+    const keep3 = Math.min(c.str * c.divs, next.est);
+    const gone = Math.max(0, c.str * c.divs - keep3);
     returnMen(g2, home, gone);
     teach(g2, home, c.xp);
-    c.str = keep2 / c.divs;
+    c.str = keep3 / c.divs;
     c.full = next.est;
     c.name = next.name;
     bk.done[old.id] = g2.turn;
@@ -48512,7 +48515,7 @@
     L2.name = next.name;
     L2.est = next.est;
     L2.until = next.to;
-    headline(g2, home === g2.human || L2.patron === g2.human ? "info" : "event", `The ${old.name} goes home from ${the(L2.patron, g2)}'s war against ${the(L2.against, g2)}. ${Math.round(keep2 * MEN_PER_DIV).toLocaleString("en-US")} of its volunteers stay on as the ${next.name}.`, home === g2.human ? home : L2.patron === g2.human ? L2.patron : home);
+    headline(g2, home === g2.human || L2.patron === g2.human ? "info" : "event", `The ${old.name} goes home from ${the(L2.patron, g2)}'s war against ${the(L2.against, g2)}. ${Math.round(keep3 * MEN_PER_DIV).toLocaleString("en-US")} of its volunteers stay on as the ${next.name}.`, home === g2.human ? home : L2.patron === g2.human ? L2.patron : home);
     return true;
   }
   function whyHome(g2, home, L2) {
@@ -48700,6 +48703,7 @@
     if (HEAVYSEAS_STAGE) g2.flags.heavySeas = 1;
     if (SHADOWRELAY_STAGE) g2.flags.shadowRelay = 1;
     if (SEEKONCE_STAGE) g2.flags.seekOnce = 1;
+    if (TOWNQUEUE_STAGE) g2.flags.townQueue = 1;
     if (ATOM_STAGE) g2.flags.atom = 1;
     if (CARRIERSTRIKE_STAGE) g2.flags.carrierStrike = 1;
     if (WINGBYDATE_STAGE) g2.flags.wingByDate = 1;
@@ -51893,7 +51897,7 @@
     const base = { id: g2.turn, nat, issued: g2.turn };
     const wing = wingOf2(st);
     const options = [];
-    const takeJob = (t, from2, kind, title, lead2, months4, capital3, money3, corps) => {
+    const takeJob = (t, from2, kind, title, lead2, months4, capital3, money4, corps) => {
       const r = g2.regions[t.p.region], more = t.hard ? D2.take.hard.months : 0, mul2 = t.hard ? D2.take.hard.reward : 1;
       const due = g2.turn + months4 + more;
       return {
@@ -51903,7 +51907,7 @@
         region: r.id,
         due,
         capital: Math.round(capital3 * mul2),
-        money: Math.round(money3 * mul2 * 10) / 10,
+        money: Math.round(money4 * mul2 * 10) / 10,
         ...corps ? { corps } : {},
         ...t.hard ? { hard: true } : {},
         ...t.again ? { again: true } : {},
@@ -52244,11 +52248,11 @@
     const band2 = P.bands.find((b) => score < b.under) ?? P.bands[P.bands.length - 1];
     const size = P.size[townSize(g2, r)] ?? 1;
     const longest = P.months[P.months.length - 1], haste = 1 + P.haste * (longest - months4) / Math.max(1, longest - P.months[0]);
-    const capital3 = band2.capital ? Math.max(1, Math.round(band2.capital * size * haste)) : 0, money3 = round1(income(g2, nat) * band2.money * size * haste);
+    const capital3 = band2.capital ? Math.max(1, Math.round(band2.capital * size * haste)) : 0, money4 = round1(income(g2, nat) * band2.money * size * haste);
     const due = g2.turn + months4 - 1, trust = round1(band2.trust * swing * haste), price = round1(band2.price * swing), back = round1(price * P.back);
     const parts2 = [`the cabinet's trust rises ${trust}`];
     if (capital3) parts2.push(`it votes ${capital3} political capital`);
-    if (money3) parts2.push(`${moneyShown(money3)} for the treasury`);
+    if (money4) parts2.push(`${moneyShown(money4)} for the treasury`);
     const reward = parts2.length > 1 ? `${parts2.slice(0, -1).join(", ")} and ${parts2[parts2.length - 1]}` : parts2[0];
     const oddsWord = odds >= 10 ? "better than 10 to 1" : `${odds >= 1 ? round1(odds) : Math.round(odds * 100) / 100} to 1`;
     const where = depth <= 1 ? "beside your ground or your troops" : `${depth === 2 ? "two" : depth === 3 ? "three" : "four"} provinces from your ground and your troops`;
@@ -52265,7 +52269,7 @@
       bandName: band2.name,
       trust,
       capital: capital3,
-      money: money3,
+      money: money4,
       price,
       back,
       reward,
@@ -53989,8 +53993,8 @@
       if (!got.some((k) => k !== "airfield")) continue;
       const words = listed3(got);
       const many = got.length > 1 || got[0] === "oil";
-      const money3 = Math.round(got.reduce((s, k) => s + prizeMoney(g2, r, k, nat), 0) * 10) / 10;
-      headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} now ${many ? "work" : "works"} for ${theName(g2.nations[nat])}, though the town holds${money3 > 0 ? `: ${money3} a month to its treasury` : ""}.`, nat, r.id);
+      const money4 = Math.round(got.reduce((s, k) => s + prizeMoney(g2, r, k, nat), 0) * 10) / 10;
+      headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} now ${many ? "work" : "works"} for ${theName(g2.nations[nat])}, though the town holds${money4 > 0 ? `: ${money4} a month to its treasury` : ""}.`, nat, r.id);
     }
   }
   function mendPrizes(g2, nat) {
@@ -55124,7 +55128,7 @@
     const wants = programmeWants(g2, nat);
     if (!wants.length) return;
     const men2 = menSpare(g2, nat) >= (specOf(g2, "inf")?.divs ?? 1);
-    const keep2 = PRODUCTION.aiReserve + (men2 ? corpsList(g2, nat, "inf") : 0);
+    const keep3 = PRODUCTION.aiReserve + (men2 ? corpsList(g2, nat, "inf") : 0);
     const inc = income(g2, nat);
     let spare = inc - upkeepTotal(g2, nat);
     const list6 = offers(g2, nat).filter((o) => o.at >= 0 && (o.why === null || o.poor));
@@ -55142,7 +55146,7 @@
       for (const o of mine4) {
         if (spare < o.upkeep * BUDGET.debt.aiMargin) continue;
         const set = purse >= o.cost;
-        if (!set && n.pp < o.cost + keep2) continue;
+        if (!set && n.pp < o.cost + keep3) continue;
         if (set) n.pp += o.cost;
         if (orderOffer(g2, nat, o.key, o.at)) {
           if (set) purse -= o.cost;
@@ -55160,9 +55164,9 @@
     const n = g2.nations[nat];
     if (!C4 || g2.flags.open !== 1 || !budgeted(g2) || nat === g2.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
     const level = (r) => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === "fort" && b.region === r.id).length;
-    const order2 = (r, keep2) => {
+    const order2 = (r, keep3) => {
       const cost = fortCost(g2, nat, r);
-      return cost !== null && n.pp >= cost + keep2 && !!orderFort(g2, nat, r.id);
+      return cost !== null && n.pp >= cost + keep3 && !!orderFort(g2, nat, r.id);
     };
     const idle = corpsList(g2, nat, "inf") + PRODUCTION.aiReserve;
     const coast = watch2.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C4.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
@@ -55408,6 +55412,10 @@
     if (!was) return null;
     g2.flags[`was:${was}`] = g2.turn;
     g2.human = null;
+    if (g2.townQueue?.[was]) {
+      delete g2.townQueue[was];
+      if (!Object.keys(g2.townQueue).length) delete g2.townQueue;
+    }
     return was;
   }
   function fallenNations(g2, viewer = g2.human) {
@@ -55722,15 +55730,15 @@
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct14 = (x) => `${Math.round(x * 1e3) / 10}%`;
-    const keep2 = keepOf(g2, r);
-    if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep2)} more a month`);
+    const keep3 = keepOf(g2, r);
+    if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep3)} more a month`);
     if (l.trade) bits.push(`trade agreements worth ${pct14(l.trade)} more`);
     if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
     if (l.research) bits.push(`research ${pct14(l.research)} faster`);
     if (l.xp && (own || !settledTownsOn(g2))) bits.push("corps raised here start more experienced");
     if (l.drafts) bits.push(`replacements ${pct14(l.drafts)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct14(l.rest)} faster`);
-    if (own && l.tax) bits.push(`${cash(l.tax * keep2)} more tax a month`);
+    if (own && l.tax) bits.push(`${cash(l.tax * keep3)} more tax a month`);
     if (own && l.pc) bits.push(`${l.pc.toFixed(2)} political capital a month`);
     if (!own && l.occupiedShare) bits.push(`the province pays ${pct14(l.occupiedShare)} more of its worth`);
     const s = bits.join(", ");
@@ -55743,22 +55751,22 @@
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct14 = (x) => `${Math.round(x * 1e3) / 10}%`;
-    const keep2 = keepOf(g2, r);
-    if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep2)} a month`);
+    const keep3 = keepOf(g2, r);
+    if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep3)} a month`);
     if (serve && l.trade) bits.push(`trade agreements worth ${pct14(l.trade * lv)} more`);
     if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
     if (serve && l.research) bits.push(`research ${pct14(l.research * lv)} faster`);
     if (own && l.xp) bits.push("corps raised here start more experienced");
     if (serve && l.drafts) bits.push(`replacements ${pct14(l.drafts * lv)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct14(l.rest * lv)} faster`);
-    if (own && l.tax) bits.push(`${cash(l.tax * lv * keep2)} tax a month`);
+    if (own && l.tax) bits.push(`${cash(l.tax * lv * keep3)} tax a month`);
     if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
     if (!own && l.occupiedShare) bits.push(`the province pays ${pct14(l.occupiedShare * lv)} more of its worth`);
     if (!bits.length) return "Stands idle under occupation.";
     const s = bits.join(", ");
     return `${s[0].toUpperCase()}${s.slice(1)}.`;
   }
-  function whyNotCivic(g2, nat, r, line) {
+  function whyNotCivic(g2, nat, r, line, ahead2) {
     const n = g2.nations[nat], l = lineOf2(line);
     if (!civicRules(g2)) return "Towns are built up in the grand campaign.";
     if (!n?.alive || !r || !l) return "Nothing can be built there.";
@@ -55769,16 +55777,19 @@
       if (left <= 0) return "Only administration and medicine can be set up on conquered ground.";
       return `${townName(r)} is still settling after it was taken: every kind of building can go up there in ${left} ${left === 1 ? "month" : "months"}. Administration and medicine can be set up now.`;
     }
-    const lv = civicLevel(g2, line, r.id);
+    const lv = ahead2 ? Math.max(civicLevel(g2, line, r.id), ahead2.level[line] ?? 0) : civicLevel(g2, line, r.id);
     if (lv >= TOP2) return `The ${l.levels[TOP2 - 1].toLowerCase()} is as far as this goes.`;
     const size = townSize(g2, r);
     if (l.size && SIZES.indexOf(size) < SIZES.indexOf(l.size)) return `Needs a ${l.size}: ${townName(r)} is a ${size}.`;
     if (l.ground && !l.ground.includes(r.terrain)) return "The ground here will not carry it.";
+    if (ahead2) return lv === 0 && ahead2.plots >= plotsOf(g2, r) ? `Every building plot at ${townName(r)} is taken or spoken for. A bigger place has more.` : null;
     const busy = building(g2, nat, r.id);
     if (busy.length) return `The builders at ${townName(r)} are busy with the ${busy[0].name.split(" at ")[0].toLowerCase()}.`;
     if (lv === 0 && civicAt(g2, r.id).length >= plotsOf(g2, r)) return `Every building plot at ${townName(r)} is taken. A bigger place has more.`;
     return null;
   }
+  var civicGoing = (g2, nat, region) => building(g2, nat, region)[0] ?? null;
+  var civicLine = (id) => lineOf2(id);
   function civicOffers(g2, nat, region, keeps = false) {
     const r = g2.regions[region], n = g2.nations[nat];
     if (!r || !n) return [];
@@ -55836,12 +55847,12 @@
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       const own = r.owner === nat;
-      const keep2 = keepOf(g2, r);
+      const keep3 = keepOf(g2, r);
       for (const l of CIVIC.lines) {
         const lv = g2.flags[key4(l.id, r.id)] ?? 0;
         if (lv <= 0) continue;
         s.count++;
-        if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep2;
+        if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep3;
         if (l.sup) {
           if (keeps) s.sup += l.sup * lv * (own ? 1 : OCCUPIED);
           else s.farms += (l.moneyElse ?? 0) * lv * (own ? 1 : OCCUPIED);
@@ -55852,7 +55863,7 @@
         if (l.research) s.research += l.research * lv;
         if (l.drafts) s.drafts += l.drafts * lv;
         if (!own) continue;
-        if (l.tax) s.tax += l.tax * lv * keep2;
+        if (l.tax) s.tax += l.tax * lv * keep3;
         if (l.pc) s.pc += l.pc * lv;
       }
     }
@@ -55948,12 +55959,14 @@
     const built = {};
     for (const r of home) for (const { line, level } of civicAt(g2, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
     for (const b of n.queue) if (b.what === "civic" && b.item) built[b.item] = (built[b.item] ?? 0) + 1;
+    const spoken = g2.townQueue?.[nat];
+    const open3 = spoken?.length ? home.filter((r) => !spoken.some((q) => q.region === r.id)) : home;
     for (let k = n.queue.filter((b) => b.what === "civic").length; k < gangs; k++) {
       const have = g2.flags[purse];
       const lines2 = Object.keys(A.mix).sort((x, y) => (built[x] ?? 0) / A.mix[x] - (built[y] ?? 0) / A.mix[y] || A.mix[y] - A.mix[x]);
       let pick4 = null;
       for (const line of lines2) {
-        for (const r of home.slice(0, 30)) {
+        for (const r of open3.slice(0, 30)) {
           const o = civicOffers(g2, nat, r.id, keeps).find((x) => x.line === line);
           if (o && (o.why === null || o.poor)) {
             pick4 = { r, o };
@@ -67762,13 +67775,13 @@
   var lookFleet = (f, n) => ({ fleet: f.id, nat: f.nat, n });
   var lookRaider = (f, n) => ({ ...lookFleet(f, n), heavy: f.ships.bb + f.ships.cv + f.ships.ca });
   function lookOf(g2, nat) {
-    const keep2 = (g2.subLook ?? []).filter((l2) => l2.turn >= g2.turn - 1);
-    let l = keep2.find((x) => x.turn === g2.turn && x.nat === nat);
+    const keep3 = (g2.subLook ?? []).filter((l2) => l2.turn >= g2.turn - 1);
+    let l = keep3.find((x) => x.turn === g2.turn && x.nat === nat);
     if (!l) {
       l = { turn: g2.turn, nat, hunts: [], torpedoes: [], convoys: [] };
-      keep2.push(l);
+      keep3.push(l);
     }
-    g2.subLook = keep2;
+    g2.subLook = keep3;
     return l;
   }
   function lookTorpedo(g2, f, cls, sunk) {
@@ -70179,8 +70192,8 @@
     return { land: land2, port, oil, fac, capital: capital3, total: land2 + port + oil + fac + capital3 };
   }
   function damaged(g2, r, nat, whole2, land0, port0, oil, fac0, capital0, dmg) {
-    const keep2 = 1 - dmg;
-    const land2 = land0 * keep2, port = port0 * keep2, fac = fac0 * keep2, capital3 = capital0 * keep2;
+    const keep3 = 1 - dmg;
+    const land2 = land0 * keep3, port = port0 * keep3, fac = fac0 * keep3, capital3 = capital0 * keep3;
     if (!whole2 && nat === r.ctrl && besieged(g2, r)) {
       const p = SIEGE.pay;
       return { land: land2 * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital3 * p, total: (land2 + port + oil + fac + capital3) * p, siege: true, damage: dmg };
@@ -70577,8 +70590,8 @@
     const cap17 = g2.regions[n.capital];
     if (!isHome(g2, nat, cap17)) return;
     const home = lineFactories(g2, nat);
-    const keep2 = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
-    let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep2(b), 0) : Infinity;
+    const keep3 = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
+    let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep3(b), 0) : Infinity;
     const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" && !isTeam({ kind: b.kind ?? "" }) || b.what === "fort" && (nat === g2.human || g2.flags.open !== 1)).length;
     const most = g2.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
     const u = budgeted(g2) && !armyIdle(g2, nat) ? eliteOf(nat) : null;
@@ -78272,47 +78285,47 @@
 
   // ../../src/campaign/fold.ts
   var foldRules = (g2) => g2.flags.open === 1 && !!MANPOWER.fold;
-  function whyNotFold(g2, keep2, gone) {
+  function whyNotFold(g2, keep3, gone) {
     if (!foldRules(g2)) return "Corps are folded together in the grand campaign.";
-    if (keep2 === gone || keep2.dead || gone.dead) return "There is nothing to fold.";
-    if (keep2.nat !== gone.nat) return "The two corps serve different countries.";
-    if (keep2.kind === "fort" || gone.kind === "fort") return "Fortress troops stay in their works.";
-    if (keep2.reg !== gone.reg || keep2.town !== void 0 || gone.town !== void 0) return "The two corps must stand together in the field, in the same province.";
-    if (keep2.kind !== gone.kind) return "The two corps must be of the same kind.";
-    if ((keep2.elite ?? "") !== (gone.elite ?? "") || !!keep2.airborne !== !!gone.airborne) return "A special formation folds only into another of its own.";
-    if ((keep2.vol ?? "") !== (gone.vol ?? "")) return "Volunteers fold only into a legion of their own country.";
-    if (keep2.joint || gone.joint) return "A corps marching with an ally cannot be folded.";
-    if (atItsPost(keep2) || atItsPost(gone)) return postWords(atItsPost(keep2) ? keep2 : gone, "post") ?? "It takes no orders.";
-    if (keep2.leave !== void 0 || gone.leave !== void 0) return "A corps at home cannot be folded.";
-    if (!keep2.supplied || !gone.supplied) return "Cut off, the cadre has no way home.";
-    for (const c of [keep2, gone]) if (c.full !== void 0 && c.str >= c.full) return `${c.name} is already at full strength for its size.`;
+    if (keep3 === gone || keep3.dead || gone.dead) return "There is nothing to fold.";
+    if (keep3.nat !== gone.nat) return "The two corps serve different countries.";
+    if (keep3.kind === "fort" || gone.kind === "fort") return "Fortress troops stay in their works.";
+    if (keep3.reg !== gone.reg || keep3.town !== void 0 || gone.town !== void 0) return "The two corps must stand together in the field, in the same province.";
+    if (keep3.kind !== gone.kind) return "The two corps must be of the same kind.";
+    if ((keep3.elite ?? "") !== (gone.elite ?? "") || !!keep3.airborne !== !!gone.airborne) return "A special formation folds only into another of its own.";
+    if ((keep3.vol ?? "") !== (gone.vol ?? "")) return "Volunteers fold only into a legion of their own country.";
+    if (keep3.joint || gone.joint) return "A corps marching with an ally cannot be folded.";
+    if (atItsPost(keep3) || atItsPost(gone)) return postWords(atItsPost(keep3) ? keep3 : gone, "post") ?? "It takes no orders.";
+    if (keep3.leave !== void 0 || gone.leave !== void 0) return "A corps at home cannot be folded.";
+    if (!keep3.supplied || !gone.supplied) return "Cut off, the cadre has no way home.";
+    for (const c of [keep3, gone]) if (c.full !== void 0 && c.str >= c.full) return `${c.name} is already at full strength for its size.`;
     const worn = MANPOWER.fold.worn;
-    if (keep2.str >= worn * (keep2.full ?? 1) || gone.str >= worn * (gone.full ?? 1)) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
+    if (keep3.str >= worn * (keep3.full ?? 1) || gone.str >= worn * (gone.full ?? 1)) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
     return null;
   }
   var better = (a, b) => a.level !== b.level ? a.level > b.level : a.xp !== b.xp ? a.xp > b.xp : a.rec.won > b.rec.won;
-  function command(g2, keep2, gone) {
-    const a = generalOf(g2, keep2), b = generalOf(g2, gone);
+  function command(g2, keep3, gone) {
+    const a = generalOf(g2, keep3), b = generalOf(g2, gone);
     const lead2 = b && (!a || better(b, a)) ? b : a;
     return { lead: lead2, out: lead2 === b ? a : b };
   }
-  function foldView(g2, keep2, gone) {
-    const mine4 = keep2.str * keep2.divs, theirs = gone.str * gone.divs;
-    const fill9 = Math.min(keep2.divs * (keep2.full ?? 1), mine4 + theirs), from2 = Math.max(0, fill9 - mine4);
+  function foldView(g2, keep3, gone) {
+    const mine4 = keep3.str * keep3.divs, theirs = gone.str * gone.divs;
+    const fill9 = Math.min(keep3.divs * (keep3.full ?? 1), mine4 + theirs), from2 = Math.max(0, fill9 - mine4);
     const mix4 = (a, b) => fill9 > 0 ? (a * mine4 + b * from2) / fill9 : a;
-    const { lead: lead2, out } = command(g2, keep2, gone);
+    const { lead: lead2, out } = command(g2, keep3, gone);
     const t = cadreTerms(g2, gone.nat, gone);
     const v = {
-      keep: keep2.id,
+      keep: keep3.id,
       gone: gone.id,
-      keepName: keep2.name,
+      keepName: keep3.name,
       goneName: gone.name,
-      why: whyNotFold(g2, keep2, gone),
-      str: fill9 / keep2.divs,
+      why: whyNotFold(g2, keep3, gone),
+      str: fill9 / keep3.divs,
       men: Math.round(fill9 * MEN_PER_DIV),
-      xp: mix4(keep2.xp, gone.xp),
-      org: clamp2(mix4(keep2.org, gone.org) - MANPOWER.fold.org, 0, 1),
-      ap: Math.min(keep2.ap, gone.ap),
+      xp: mix4(keep3.xp, gone.xp),
+      org: clamp2(mix4(keep3.org, gone.org) - MANPOWER.fold.org, 0, 1),
+      ap: Math.min(keep3.ap, gone.ap),
       back: Math.round((mine4 + theirs - fill9) * MEN_PER_DIV),
       general: lead2?.name ?? null,
       stepsDown: out?.name ?? null,
@@ -78320,39 +78333,39 @@
       cadreMonths: t.months,
       cadreMen: t.divs * MEN_PER_DIV
     };
-    if (worksOf(gone) > worksOf(keep2)) v.works = worksOf(gone);
+    if (worksOf(gone) > worksOf(keep3)) v.works = worksOf(gone);
     return v;
   }
   function foldChoices(g2, reg, nat) {
     if (!foldRules(g2)) return [];
     const cs = g2.regions[reg].units.filter((c) => c.nat === nat && !c.dead);
     const out = [];
-    for (const keep2 of cs) for (const gone of cs) if (keep2 !== gone && whyNotFold(g2, keep2, gone) === null) out.push(foldView(g2, keep2, gone));
+    for (const keep3 of cs) for (const gone of cs) if (keep3 !== gone && whyNotFold(g2, keep3, gone) === null) out.push(foldView(g2, keep3, gone));
     return out;
   }
-  function foldCorps(g2, keep2, gone) {
-    if (whyNotFold(g2, keep2, gone) !== null) return false;
-    const v = foldView(g2, keep2, gone), n = g2.nations[keep2.nat], reg = keep2.reg;
-    const mine4 = keep2.str * keep2.divs, fill9 = v.str * keep2.divs, from2 = Math.max(0, fill9 - mine4);
-    if (keep2.mor !== void 0 && gone.mor !== void 0 && fill9 > 0) keep2.mor = (keep2.mor * mine4 + gone.mor * from2) / fill9;
-    keep2.xp = v.xp;
-    keep2.org = v.org;
-    keep2.str = v.str;
-    keep2.ap = v.ap;
-    if (gone.fought) keep2.fought = true;
-    if (gone.pressed) keep2.pressed = true;
-    if ((gone.blows ?? 0) > (keep2.blows ?? 0)) keep2.blows = gone.blows;
-    returnMen(g2, keep2.nat, gone.str * gone.divs - from2);
+  function foldCorps(g2, keep3, gone) {
+    if (whyNotFold(g2, keep3, gone) !== null) return false;
+    const v = foldView(g2, keep3, gone), n = g2.nations[keep3.nat], reg = keep3.reg;
+    const mine4 = keep3.str * keep3.divs, fill9 = v.str * keep3.divs, from2 = Math.max(0, fill9 - mine4);
+    if (keep3.mor !== void 0 && gone.mor !== void 0 && fill9 > 0) keep3.mor = (keep3.mor * mine4 + gone.mor * from2) / fill9;
+    keep3.xp = v.xp;
+    keep3.org = v.org;
+    keep3.str = v.str;
+    keep3.ap = v.ap;
+    if (gone.fought) keep3.fought = true;
+    if (gone.pressed) keep3.pressed = true;
+    if ((gone.blows ?? 0) > (keep3.blows ?? 0)) keep3.blows = gone.blows;
+    returnMen(g2, keep3.nat, gone.str * gone.divs - from2);
     if (v.works !== void 0) {
-      keep2.dug = true;
-      keep2.dugFor = gone.dugFor;
-      if (keep2.ap < keep2.apMax) keep2.relief = true;
+      keep3.dug = true;
+      keep3.dugFor = gone.dugFor;
+      if (keep3.ap < keep3.apMax) keep3.relief = true;
     }
-    const { lead: lead2, out } = command(g2, keep2, gone);
+    const { lead: lead2, out } = command(g2, keep3, gone);
     if (out) appoint(g2, out, null);
-    if (lead2 && lead2.corps !== keep2.id) appoint(g2, lead2, keep2);
-    noteCorps(g2, keep2, "folded", reg, gone.id);
-    noteCorps(g2, gone, "cadre", reg, keep2.id);
+    if (lead2 && lead2.corps !== keep3.id) appoint(g2, lead2, keep3);
+    noteCorps(g2, keep3, "folded", reg, gone.id);
+    noteCorps(g2, gone, "cadre", reg, keep3.id);
     removeCorps(g2, gone);
     gone.str = 0;
     gone.ap = 0;
@@ -78369,7 +78382,7 @@
     delete gone.drew;
     delete gone.rowed;
     (n.cadres ?? (n.cadres = [])).push(gone);
-    if (keep2.nat === g2.human) headline(g2, "info", `${lentAs ?? gone.name} is folded into ${keep2.name} at ${g2.regions[reg].name}: ${v.men.toLocaleString("en-US")} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString("en-US")} sent back to the reserve` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep2.nat, reg);
+    if (keep3.nat === g2.human) headline(g2, "info", `${lentAs ?? gone.name} is folded into ${keep3.name} at ${g2.regions[reg].name}: ${v.men.toLocaleString("en-US")} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString("en-US")} sent back to the reserve` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep3.nat, reg);
     return true;
   }
 
@@ -79937,7 +79950,7 @@
     const field4 = (c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.town === void 0;
     const mine4 = (c) => field4(c) && !c.hold && !c.dyle && c.joint === void 0 && c.leave === void 0 && !massed.has(c.id) && !aside(g2, g2.regions[c.reg], nat);
     const key7 = (c) => `rl:${c.id}`;
-    const keep2 = (c) => {
+    const keep3 = (c) => {
       c.hold = true;
       rested2.push(c);
     };
@@ -79969,7 +79982,7 @@
         }
       }
       if (!inLine3(g2.regions[c.reg]) && g2.flags[key7(c)] === void 0) g2.flags[key7(c)] = g2.turn;
-      keep2(c);
+      keep3(c);
     }
   }
   function gather(g2, nat, ph) {
@@ -81119,7 +81132,6 @@
     return d;
   }
   function teamsUp(g2, nat, enemies, targets2) {
-    if (!teamsOn(g2)) return;
     const teams2 = g2.corps.filter((c) => c.nat === nat && !c.dead && isTeam(c) && !c.hold && !c.town && c.ap > 0 && c.joint === void 0 && c.leave === void 0 && !massed.has(c.id));
     if (!teams2.length) return;
     const foe = (x) => enemies.has(ctl(g2, x)) && atWar(g2, nat, ctl(g2, x));
@@ -81434,12 +81446,12 @@
       seen2.add(c.reg);
       const here = g2.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && thin(u));
       let best = null;
-      for (const keep2 of here) for (const gone of here) {
-        if (keep2 === gone || whyNotFold(g2, keep2, gone) !== null) continue;
+      for (const keep3 of here) for (const gone of here) {
+        if (keep3 === gone || whyNotFold(g2, keep3, gone) !== null) continue;
         if (ceilinged(g2, gone)) continue;
-        const v = foldView(g2, keep2, gone);
+        const v = foldView(g2, keep3, gone);
         if (v.back > 0) continue;
-        if (!best || v.str > best.str || v.str === best.str && (keep2.xp > best.keep.xp || keep2.xp === best.keep.xp && keep2.id < best.keep.id)) best = { keep: keep2, gone, str: v.str };
+        if (!best || v.str > best.str || v.str === best.str && (keep3.xp > best.keep.xp || keep3.xp === best.keep.xp && keep3.id < best.keep.id)) best = { keep: keep3, gone, str: v.str };
       }
       if (best) foldCorps(g2, best.keep, best.gone);
     }
@@ -82576,6 +82588,8 @@
       wrecks: g2.flags.open === 1 ? g2.wrecks : void 0,
       // Mines at sea (release 2, mines.ts): kept only with that switch on, so a save without it is written as it always was.
       mines: g2.flags.open === 1 && g2.flags.seaMines === 1 && g2.mines?.length ? g2.mines : void 0,
+      // A queue for a town (release 2, townqueue.ts): kept only with that switch on and something queued.
+      townQueue: g2.flags.open === 1 && g2.flags.townQueue === 1 && g2.townQueue ? g2.townQueue : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -82763,6 +82777,7 @@
     if (d.wrecks && typeof d.wrecks === "object") g2.wrecks = d.wrecks;
     else for (const r of g2.reports ?? []) wreckBump(g2, r);
     if (Array.isArray(d.mines)) g2.mines = d.mines;
+    if (d.townQueue && typeof d.townQueue === "object") g2.townQueue = d.townQueue;
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -83309,6 +83324,156 @@
   }
   var setStaffCap = (g2, pct14) => setCap(g2, pct14);
 
+  // ../../src/campaign/townqueue.ts
+  var townQueueOn = (g2) => civicRules(g2) && g2.flags.townQueue === 1;
+  function setTownQueue(g2, on2) {
+    if (on2) g2.flags.townQueue = 1;
+    else {
+      delete g2.flags.townQueue;
+      delete g2.townQueue;
+    }
+  }
+  var queueOf = (g2, nat) => townQueueOn(g2) ? g2.townQueue?.[nat] ?? [] : [];
+  var queuedAt = (g2, nat, region) => queueOf(g2, nat).filter((q) => q.region === region);
+  function queuedName(g2, q) {
+    const l = civicLine(q.line), r = g2.regions[q.region];
+    return l && r ? `the ${l.levels[Math.max(0, q.level - 1)].toLowerCase()} at ${townName(r)}` : "a building";
+  }
+  function aheadAt(g2, nat, region) {
+    const level = {};
+    const lines2 = new Set(civicAt(g2, region).map((x) => x.line.id));
+    const going = civicGoing(g2, nat, region);
+    if (going?.item) {
+      level[going.item] = Math.max(level[going.item] ?? 0, civicLevel(g2, going.item, region) + 1);
+      lines2.add(going.item);
+    }
+    for (const q of queuedAt(g2, nat, region)) {
+      level[q.line] = Math.max(level[q.line] ?? 0, q.level);
+      lines2.add(q.line);
+    }
+    return { level, plots: lines2.size };
+  }
+  function whyNotQueue(g2, nat, region, line) {
+    if (!townQueueOn(g2)) return "Building queues are switched off. They can be switched on in OPTIONS.";
+    const r = g2.regions[region], n = g2.nations[nat], l = civicLine(line);
+    if (!r || !n || !l) return "Nothing can be queued there.";
+    const why = whyNotCivic(g2, nat, r, line, aheadAt(g2, nat, region));
+    if (why) return why;
+    const level = nextQueued(g2, nat, region, line);
+    if (!civicGoing(g2, nat, region) && !queuedAt(g2, nat, region).length && level === civicLevel(g2, line, region) + 1 && n.pp >= l.cost[level - 1]) {
+      return "The builders are free and the treasury can pay: BUILD puts it up now.";
+    }
+    return null;
+  }
+  function nextQueued(g2, nat, region, line) {
+    const a = aheadAt(g2, nat, region);
+    return Math.max(civicLevel(g2, line, region), a.level[line] ?? 0) + 1;
+  }
+  function addQueue(g2, nat, region, line) {
+    var _a;
+    if (whyNotQueue(g2, nat, region, line) !== null) return null;
+    const q = { region, line, level: nextQueued(g2, nat, region, line) };
+    g2.townQueue ?? (g2.townQueue = {});
+    ((_a = g2.townQueue)[nat] ?? (_a[nat] = [])).push(q);
+    return q;
+  }
+  function keep2(g2, nat, list6) {
+    if (list6.length) (g2.townQueue ?? (g2.townQueue = {}))[nat] = list6;
+    else if (g2.townQueue) {
+      delete g2.townQueue[nat];
+      if (!Object.keys(g2.townQueue).length) delete g2.townQueue;
+    }
+  }
+  function dropQueue(g2, nat, region, at4) {
+    const all = queueOf(g2, nat);
+    const mine4 = all.filter((q) => q.region === region);
+    const gone = mine4[at4];
+    if (!gone) return false;
+    keep2(g2, nat, all.filter((q) => q !== gone && !(q.region === region && q.line === gone.line && q.level > gone.level)));
+    return true;
+  }
+  function dropBehind(g2, nat, region, line) {
+    const all = queueOf(g2, nat);
+    let top = civicLevel(g2, line, region) + (civicGoing(g2, nat, region)?.item === line ? 1 : 0);
+    const gone = [];
+    for (const q of all) {
+      if (q.region !== region || q.line !== line) continue;
+      if (q.level <= top + 1) top = Math.max(top, q.level);
+      else gone.push(q);
+    }
+    if (gone.length) keep2(g2, nat, all.filter((q) => !gone.includes(q)));
+    return gone;
+  }
+  var money2 = (pp) => Math.floor(pp * BUDGET.scale + 1e-6);
+  function queueHeads(g2, nat) {
+    const n = g2.nations[nat];
+    if (!n) return [];
+    const out = [], seen2 = /* @__PURE__ */ new Set();
+    for (const q of queueOf(g2, nat)) {
+      if (seen2.has(q.region)) continue;
+      const l = civicLine(q.line), going = civicGoing(g2, nat, q.region);
+      const ahead2 = civicLevel(g2, q.line, q.region) + (going?.item === q.line ? 1 : 0);
+      if (!l || q.level <= ahead2) continue;
+      seen2.add(q.region);
+      const lv = Math.min(q.level, ahead2 + 1), cost = Math.round(l.cost[lv - 1] * BUDGET.scale);
+      out.push({ q, name: queuedName(g2, { ...q, level: lv }), cost, short: going ? 0 : Math.max(0, cost - money2(n.pp)), after: going ? going.name.split(" at ")[0].toLowerCase() : "" });
+    }
+    return out;
+  }
+  function pressQueue(g2, nat = g2.human) {
+    if (!nat || !townQueueOn(g2)) return;
+    const n = g2.nations[nat], list6 = g2.townQueue?.[nat];
+    if (!n?.alive || !list6?.length) return;
+    const done = /* @__PURE__ */ new Set(), lost = /* @__PURE__ */ new Set(), out = /* @__PURE__ */ new Set();
+    const begun2 = [], dropped = [], gone = [];
+    const waits2 = [];
+    for (const q of list6) {
+      if (done.has(q.region) || lost.has(q.region)) continue;
+      const r = g2.regions[q.region], l = civicLine(q.line);
+      if (!r || r.ctrl !== nat) {
+        lost.add(q.region);
+        const k = list6.filter((x) => x.region === q.region).length;
+        gone.push(`${r ? townName(r) : "A town"} is lost, and ${k === 1 ? "the building" : `the ${k} buildings`} queued there with it: nothing had been paid.`);
+        continue;
+      }
+      const now = civicLevel(g2, q.line, q.region);
+      if (!l || now >= q.level) {
+        out.add(q);
+        continue;
+      }
+      if (civicGoing(g2, nat, q.region)) {
+        done.add(q.region);
+        continue;
+      }
+      const why = whyNotCivic(g2, nat, r, q.line);
+      if (why) {
+        out.add(q);
+        dropped.push(`${upFirst4(queuedName(g2, q))} comes off the queue. ${why}`);
+        continue;
+      }
+      done.add(q.region);
+      const cost = l.cost[now];
+      if (n.pp < cost) {
+        waits2.push({ name: queuedName(g2, { ...q, level: now + 1 }), cost });
+        continue;
+      }
+      if (!orderCivic(g2, nat, q.region, q.line)) continue;
+      begun2.push(queuedName(g2, { ...q, level: now + 1 }));
+      if (now + 1 >= q.level) out.add(q);
+    }
+    keep2(g2, nat, list6.filter((q) => !out.has(q) && !lost.has(q.region)));
+    const said = [
+      begun2.length ? `From your queue, the builders begin ${listAnd4(begun2)}.` : "",
+      // What each waiting building lacks, from the treasury as the presses left it: the figure the board shows.
+      ...waits2.map((w) => `${upFirst4(w.name)} waits for ${Math.max(1, Math.round(w.cost * BUDGET.scale) - money2(n.pp)).toLocaleString("en-US")} more.`),
+      ...dropped,
+      ...gone
+    ].filter(Boolean);
+    if (said.length) headline(g2, "info", said.join(" "), nat);
+  }
+  var upFirst4 = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
+  var listAnd4 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+
   // ../../src/campaign/finish.ts
   var finishRules = (g2) => g2.flags.open === 1 && !g2.flags.dom && !!LIB.finish;
   var noticeKey = (who, on2) => `fin:${who}:${on2}`;
@@ -83712,7 +83877,7 @@
   var leadOf = (g2, c) => wingsOf(g2, c.id).find((w) => w.kind !== "ftr" && w.bmr > 0);
   var fightersOf = (g2, c) => wingsOf(g2, c.id).find((w) => w.kind === "ftr" && w.ftr > 0);
   function placed2(c, at4, test2) {
-    const keep2 = { zone: c.zone, stance: c.stance, base: c.base, home: c.home };
+    const keep3 = { zone: c.zone, stance: c.stance, base: c.base, home: c.home };
     if (at4.base) {
       c.base = at4.base.id;
       c.home = at4.base.seas[0];
@@ -83726,10 +83891,10 @@
     try {
       return test2();
     } finally {
-      c.zone = keep2.zone;
-      c.stance = keep2.stance;
-      c.base = keep2.base;
-      c.home = keep2.home;
+      c.zone = keep3.zone;
+      c.stance = keep3.stance;
+      c.base = keep3.base;
+      c.home = keep3.home;
     }
   }
   function launchSea(g2, c, r) {
@@ -83950,6 +84115,7 @@
     crowdedNews(g2);
     taskForcesMonth(g2, current2(g2));
     staffMonth(g2);
+    pressQueue(g2);
     ensureSupply(g2);
   }
   function endHuman(g2) {
@@ -84268,8 +84434,8 @@
       return !!c && canOrder(g2, c);
     }) : [];
   }
-  function orderFold(g2, keep2, gone) {
-    const a = g2.corps.find((c) => c.id === keep2), b = g2.corps.find((c) => c.id === gone);
+  function orderFold(g2, keep3, gone) {
+    const a = g2.corps.find((c) => c.id === keep3), b = g2.corps.find((c) => c.id === gone);
     if (!a || !b || !canOrder(g2, a) || !canOrder(g2, b)) return false;
     return foldCorps(g2, a, b);
   }
@@ -85109,7 +85275,11 @@
     return humanUp(g2) ? orderFort(g2, g2.human, region) : null;
   }
   function orderCancelBuild(g2, id) {
-    return humanUp(g2) && cancelBuild(g2, g2.human, id);
+    if (!humanUp(g2)) return false;
+    const b = g2.nations[g2.human]?.queue.find((x) => x.id === id);
+    if (!cancelBuild(g2, g2.human, id)) return false;
+    if (b?.what === "civic" && b.item) dropBehind(g2, g2.human, b.region, b.item);
+    return true;
   }
   function techTree(g2) {
     return g2.human ? techView(g2, g2.human) : null;
@@ -91748,8 +91918,8 @@
             m.v = 0;
             m.el = 1;
             m.until = t + 1.5;
-            const keep2 = m.role === "mg" || roll(this.seed, u.id, m.n, n, 94) < BOOK2.suppress.keep;
-            m.aim = keep2 && close3 && m.role !== "officer" ? this.aimFor(sq, m, e) : void 0;
+            const keep3 = m.role === "mg" || roll(this.seed, u.id, m.n, n, 94) < BOOK2.suppress.keep;
+            m.aim = keep3 && close3 && m.role !== "officer" ? this.aimFor(sq, m, e) : void 0;
             m.pose = m.aim ? this.firePose(m) : "cower";
             continue;
           }
@@ -95826,11 +95996,11 @@
       if (this.t > 0 || this.over) return false;
       const W2 = this.field.w, H = this.field.h, C4 = HEDGE_CELL, near2 = LAND3.hide.hedge.near;
       const cols2 = Math.ceil(W2 / C4), rows = Math.ceil(H / C4), map = new Uint8Array(cols2 * rows);
-      const keep2 = [];
+      const keep3 = [];
       for (const h of hedges) {
         const pts = (h.points ?? []).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
         if (pts.length < 2 || !pts.some(([x, y]) => x >= 0 && x <= W2 && y >= 0 && y <= H)) continue;
-        keep2.push({ kind: h.kind, points: pts });
+        keep3.push({ kind: h.kind, points: pts });
         for (let i = 1; i < pts.length; i++) {
           const [ax, ay] = pts[i - 1], [bx, by2] = pts[i];
           const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - near2) / C4)), c1 = Math.min(cols2 - 1, Math.floor((Math.max(ax, bx) + near2) / C4));
@@ -95838,12 +96008,12 @@
           for (let r = r0; r <= r12; r++) for (let c = c0; c <= c1; c++) if (segGap((c + 0.5) * C4, (r + 0.5) * C4, ax, ay, bx, by2) <= near2) map[r * cols2 + c] = 1;
         }
       }
-      this.hedges = keep2;
+      this.hedges = keep3;
       this.gates = gates.filter((g2) => Number.isFinite(g2.x) && Number.isFinite(g2.y) && g2.x >= 0 && g2.x <= W2 && g2.y >= 0 && g2.y <= H);
-      this.hedgeMap = keep2.length ? map : null;
+      this.hedgeMap = keep3.length ? map : null;
       this.bars = null;
       this.hedgeSegs.clear();
-      for (const h of keep2) for (let i = 1; i < h.points.length; i++) {
+      for (const h of keep3) for (let i = 1; i < h.points.length; i++) {
         const [ax, ay] = h.points[i - 1], [bx, by2] = h.points[i], seg = [ax, ay, bx, by2];
         for (let c = Math.floor(Math.min(ax, bx) / GATE_CELL); c <= Math.floor(Math.max(ax, bx) / GATE_CELL); c++)
           for (let r = Math.floor(Math.min(ay, by2) / GATE_CELL); r <= Math.floor(Math.max(ay, by2) / GATE_CELL); r++) {
@@ -103104,13 +103274,13 @@
           const escort2 = (v) => !away(v) && v.air === "ftr";
           const atEscort = u.def === "escort" && u.kit.ftr > 0;
           const cur = u.job.do === "intercept" ? this.unit(u.job.on) : void 0;
-          const keep2 = (q) => {
+          const keep3 = (q) => {
             if (!u.rise || !q || u.to <= q.band + 1) return;
             u.to = q.band + 1;
             if (u.to <= 1 && u.band <= 1) u.rise = false;
           };
           if (!first2 && cur && this.valid(u, u.job) && (atEscort ? escort2(cur) : loaded(cur))) {
-            keep2(cur);
+            keep3(cur);
             continue;
           }
           const want = u.kit.bmr > 0 || u.kit0 <= 0;
@@ -103125,7 +103295,7 @@
               this.say("air:climb", u, told(this.called(u), this.place.starts[u.corps]?.over ? "Warned by the lookouts, {n} [climbs|climb] to get above the strike." : "Warned by radar, {n} [climbs|climb] to get above the raid."), { to: up });
             } else u.to = Math.max(u.to, 1);
           }
-          keep2(e);
+          keep3(e);
         }
       }
       this.aimAll();
@@ -107723,10 +107893,10 @@
       if (!ab || ab.ready > 0 || ab.winding || !steady2(cv)) return false;
       const p = this.info.get(cv.id);
       const whole2 = SEA.fire.rate * this.output(cv) * SEA.strike.share * SEA.strike.every * this.day(cv.side);
-      const keep2 = this.bringsAir(other3(cv.side)) ? whole2 * this.style(cv.side).cover : 0;
-      const weight6 = whole2 - keep2 + this.cover[cv.id];
-      this.cover[cv.id] = keep2;
-      this.coverHeld[cv.id] = keep2;
+      const keep3 = this.bringsAir(other3(cv.side)) ? whole2 * this.style(cv.side).cover : 0;
+      const weight6 = whole2 - keep3 + this.cover[cv.id];
+      this.cover[cv.id] = keep3;
+      this.coverHeld[cv.id] = keep3;
       const perCarrier = p.fleet.ships.cv > 0 ? Math.round(p.fleet.bombers / p.fleet.ships.cv) : 0;
       const count4 = Math.round(perCarrier * (this.output(cv) / (p.weight * cv.extra.ships0)));
       ab.winding = true;
@@ -109320,12 +109490,12 @@
       const on2 = this.aboard.get(u.id);
       let guests = 0;
       if (on2) {
-        const of2 = 1 / (u.extra.ships + 1), keep2 = Math.max(0, 1 - share - SAILORS.dead.share);
+        const of2 = 1 / (u.extra.ships + 1), keep3 = Math.max(0, 1 - share - SAILORS.dead.share);
         for (const [g2, n] of on2) {
           const hers = n * of2;
           on2.set(g2, n - hers);
           g2.picked[u.side] -= hers;
-          const wet = hers * keep2;
+          const wet = hers * keep3;
           if (wet <= 0) continue;
           let h = this.wrecks.find((k) => k.guest && k.unit === u.id && k.ship === ship2 && k.side === g2.side && k.fleet === g2.fleet);
           if (!h) {
@@ -112020,13 +112190,13 @@
     }
     for (const nat of new Set(banded.filter((b) => b.h.kind === "fall" && b.h.nat).map((b) => b.h.nat))) {
       const same4 = banded.filter((b) => b.h.kind === "fall" && b.h.nat === nat);
-      const keep2 = [...same4].reverse().find((b) => b.h.region === void 0) ?? same4[same4.length - 1];
-      for (const b of same4) if (b !== keep2) banded.splice(banded.indexOf(b), 1);
+      const keep3 = [...same4].reverse().find((b) => b.h.region === void 0) ?? same4[same4.length - 1];
+      for (const b of same4) if (b !== keep3) banded.splice(banded.indexOf(b), 1);
     }
     for (const nat of new Set(banded.filter((b) => b.band.word === "FREED" && b.h.nat).map((b) => b.h.nat))) {
       const both = banded.filter((b) => (b.band.word === "FREED" || b.band.word === "FALLEN") && b.h.nat === nat);
-      const keep2 = both.reduce((a, b) => hs.indexOf(b.h) > hs.indexOf(a.h) ? b : a);
-      for (const b of both) if (b !== keep2) banded.splice(banded.indexOf(b), 1);
+      const keep3 = both.reduce((a, b) => hs.indexOf(b.h) > hs.indexOf(a.h) ? b : a);
+      for (const b of both) if (b !== keep3) banded.splice(banded.indexOf(b), 1);
     }
     const DECLARES = /^(.+?) declares war on (.+)$/;
     for (const b of [...banded]) {
@@ -112047,12 +112217,12 @@
     }
     const onHim = banded.filter((b) => b.h.kind === "war" && !mine4(b.h.nat) && DECLARES.exec(b.band.head)?.[2].replace(/^the /, "") === N.name);
     if (onHim.length > 1) {
-      const [keep2, ...rest] = onHim;
+      const [keep3, ...rest] = onHim;
       const at4 = ` declare war on ${theName(N)}`;
-      keep2.band.head = `${listIn(onHim.map((b, i) => i ? midName(DECLARES.exec(b.band.head)[1]) : DECLARES.exec(b.band.head)[1]), BAND_ROOM - at4.length)}${at4}`;
-      keep2.band.nats = onHim.map((b) => b.h.nat).slice(0, 2);
-      keep2.band.text = onHim.map((b) => b.band.text).join(" ");
-      keep2.rank = Math.min(...onHim.map((b) => b.rank));
+      keep3.band.head = `${listIn(onHim.map((b, i) => i ? midName(DECLARES.exec(b.band.head)[1]) : DECLARES.exec(b.band.head)[1]), BAND_ROOM - at4.length)}${at4}`;
+      keep3.band.nats = onHim.map((b) => b.h.nat).slice(0, 2);
+      keep3.band.text = onHim.map((b) => b.band.text).join(" ");
+      keep3.rank = Math.min(...onHim.map((b) => b.rank));
       for (const b of rest) banded.splice(banded.indexOf(b), 1);
     }
     for (const b of banded) {
@@ -112883,7 +113053,7 @@
     }
     return { on: true, viewer: viewer ?? "", turn: g2.turn, month: monthName(g2.turn), term: BARGAINS.term, round: BARGAINS.round, scale: BUDGET.scale, nations, rows, legions };
   }
-  var money2 = (pp) => `${Math.round(pp * BUDGET.scale)}`;
+  var money3 = (pp) => `${Math.round(pp * BUDGET.scale)}`;
   function stepNear(g2, pp) {
     const steps = g2.human ? bidSteps(g2, g2.human) : [];
     let best = null;
@@ -112902,7 +113072,7 @@
         const g2 = game2();
         const row2 = rowById2(g2, id), step2 = Number.isFinite(Number(pp)) ? stepNear(g2, Number(pp)) : null;
         const why = step2 === null ? "No bid can be made for it." : orderBid(g2, id, step2);
-        const note4 = why ?? `Your bid stands: ${money2(step2)} a month for ${row2?.name ?? "the bargain"}.`;
+        const note4 = why ?? `Your bid stands: ${money3(step2)} a month for ${row2?.name ?? "the bargain"}.`;
         return { ok: why === null, note: note4, view: view3() };
       },
       /** The player, as the seller, chooses a buyer from the bids that stand, or nobody (null). */
@@ -113867,6 +114037,8 @@
       taskForce: taskForceOn(s),
       // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
       fleetWhy: fleetWhyOn(s),
+      // (Release 2, teams.ts) Whether machine-gun and mortar brigades can be raised in this war (every power's, the computer's too).
+      supportTeams: teamsOn(s),
       // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
       rearguard: rearguardOn(s),
       // (Release 2, rearguard.ts) Whether a rearguard's engineers lay charges on the bridges behind it (the switch as set: it works only with rearguards on).
@@ -113896,6 +114068,8 @@
       seekOnce: seekOnceOn(s),
       // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
       settledTowns: settledTownsOn(s),
+      // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
+      townQueue: townQueueOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -114005,7 +114179,7 @@
       total: c.units,
       spied: c.spied,
       head: `${c.spied ? "Your agent reports: " : ""}${c.summary}`,
-      lines: c.lines.map((l) => `${upFirst4(l.label)}, ready ${inMonths2(l.months)}`)
+      lines: c.lines.map((l) => `${upFirst5(l.label)}, ready ${inMonths2(l.months)}`)
     }));
   }
   function glanceSight(s, id, seen2, ally) {
@@ -114270,7 +114444,7 @@
       const row2 = {
         sign: l.mark || (l.unit ? l.sign : ""),
         star: l.elite,
-        name: upFirst4(l.label),
+        name: upFirst5(l.label),
         line: [size, joins, l.unit ? "" : `ready ${l.ready}`].filter(Boolean).join(" · ") || l.name,
         share: Math.min(1, Math.max(0, l.done / Math.max(1, l.need))),
         months: l.months,
@@ -114460,7 +114634,7 @@
       canCancel: b.ordered === s.turn && humanUp(s),
       sign: shownAs?.mark ?? "",
       star: !!shownAs?.elite,
-      words: upFirst4(shownAs?.label ?? b.name),
+      words: upFirst5(shownAs?.label ?? b.name),
       share: shownAs ? Math.min(1, Math.max(0, shownAs.done / shownAs.need)) : b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1
     };
   }
@@ -115194,7 +115368,7 @@
       const rows = list6.map((c) => {
         const when = turnToDate(c.since).label, at4 = s.byName[c.ground[0]];
         return {
-          title: `${upFirst4(theName2(s, c.nat))} claims ${c.name}`,
+          title: `${upFirst5(theName2(s, c.nat))} claims ${c.name}`,
           from: `from ${theName2(s, c.on)}${c.why ? `: ${c.why}` : ""}.`,
           tag: c.state === "marched" ? `At war for it since ${when}` : c.state === "pressing" ? `Pressing its claim since ${when}: it may march` : "A claim it has not pressed",
           state: c.state === "marched" ? 2 : c.state === "pressing" ? 1 : 0,
@@ -116434,8 +116608,8 @@
       if (n.id === s.human || n.id === fallen) continue;
       const mine4 = s.human ? allied(s, s.human, n.id) : false;
       const foe = s.human ? atWar(s, s.human, n.id) : false;
-      if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} has fallen`).toUpperCase(), text: said(n.id) || `${upFirst4(theName2(s, n.id))} is eliminated from the war.`, good: foe });
-      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} is liberated`).toUpperCase(), text: said(n.id) || `${upFirst4(theName2(s, n.id))} is free again, and back in the war.`, good: mine4 || !foe });
+      if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} has fallen`).toUpperCase(), text: said(n.id) || `${upFirst5(theName2(s, n.id))} is eliminated from the war.`, good: foe });
+      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} is liberated`).toUpperCase(), text: said(n.id) || `${upFirst5(theName2(s, n.id))} is free again, and back in the war.`, good: mine4 || !foe });
     }
     if (me0 && s.nations[me0] && !fallen) {
       GOAL_KEYS.forEach((key7, i) => {
@@ -116760,6 +116934,12 @@ ${next.text}` : ""}` : next ? next.also : "";
         const t = townBuildings(s, r.id);
         if (!t) return null;
         const lineNo = (id2) => id2 ? ["market", "farm", "school", "camp", "hospital", "hall"].indexOf(id2) : -1;
+        const queueOf_ = (line) => {
+          const me2 = t.mine ? s.human : null, l = civicLine(line);
+          if (!me2 || !l || !humanUp(s) || onEve(s) || whyNotQueue(s, me2, r.id, line) !== null) return { queue: "", queueLabel: "", queueLevel: 0, queueCost: 0, queueMonths: 0, queueAfter: "" };
+          const lv = nextQueued(s, me2, r.id, line);
+          return { queue: `queue:${r.id}:${line}`, queueLabel: l.levels[lv - 1] ?? "", queueLevel: lv, queueCost: shown(l.cost[lv - 1]), queueMonths: l.months[lv - 1], queueAfter: lv > 1 ? l.levels[lv - 2] : "" };
+        };
         return {
           town: t.town,
           mine: t.mine,
@@ -116769,7 +116949,22 @@ ${next.text}` : ""}` : next ? next.also : "";
           // The same as things to draw: every plot with what stands on it, and every line that could be built or raised.
           size: t.size,
           plots: t.plots.map((p) => ({ line: p.line ?? "", no: lineNo(p.line), name: p.line ? p.name : "Free plot", label: p.line ? p.label : "", level: p.level, building: p.building, due: p.building && p.due >= 0 ? turnToDate(p.due).label : "", does: p.does })),
-          offers: t.offers.map((o) => ({ line: o.line, no: lineNo(o.line), name: o.name, label: o.label, level: o.level, has: o.has, cost: shown(o.cost), months: o.months, effect: o.effect, blurb: o.blurb, why: !humanUp(s) || onEve(s) ? "It is not your month." : o.why ?? "" }))
+          offers: t.offers.map((o) => ({ line: o.line, no: lineNo(o.line), name: o.name, label: o.label, level: o.level, has: o.has, cost: shown(o.cost), months: o.months, effect: o.effect, blurb: o.blurb, why: !humanUp(s) || onEve(s) ? "It is not your month." : o.why ?? "", ...queueOf_(o.line) })),
+          // (Release 2, build from the map: the UI director's fix 5) The building the staff would put up here next (the
+          // board's pick, civicAdvice), so the province panel can offer it in one press; and what is queued here, in a line.
+          best: (() => {
+            if (!t.mine || !s.human) return "";
+            const rank2 = civicAdvice(s, s.human).lines;
+            const open3 = t.offers.filter((o) => o.why === null || o.poor || queueOf_(o.line).queue).sort((a, b) => rank2.indexOf(a.line) - rank2.indexOf(b.line));
+            return open3[0]?.line ?? "";
+          })(),
+          queued: (() => {
+            const q = t.mine && s.human && townQueueOn(s) ? queuedAt(s, s.human, r.id) : [];
+            if (!q.length) return "";
+            const head = queueHeads(s, s.human).find((x) => x.q.region === r.id);
+            const wait = !head ? "" : head.after ? ` Goes up after the ${head.after}.` : head.short > 0 ? ` Waits for ${head.short.toLocaleString("en-US")} more.` : " Goes up at the opening of your next month.";
+            return `Queued: ${q.map((x) => (civicLine(x.line)?.levels[x.level - 1] ?? x.line).toLowerCase()).join(", then ")}.${wait}`;
+          })()
         };
       })(),
       // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
@@ -117379,7 +117574,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const nm = s.nations[id]?.name ?? id;
     return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm;
   };
-  var upFirst4 = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
+  var upFirst5 = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
   var listOf7 = (names) => names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   var motherOf = (s, nat) => {
     const p = isOpen(s) && !s.flags.dom ? patronOf(nat) : null;
@@ -117392,7 +117587,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     if (!f || !n || !s.human) return { ok: false, name: "", lead: "", friends: "", lines: [] };
     const mine4 = bloc(s.nations[s.human]);
     const blocOf = (b) => b === "axis" ? "the Axis" : "the Allies";
-    const The3 = upFirst4(theName2(s, on2));
+    const The3 = upFirst5(theName2(s, on2));
     const trade = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
     const divsOf = (n2) => `${Math.round(n2).toLocaleString("en-US")} division${Math.round(n2) === 1 ? "" : "s"}`;
     const divs = divsOf(fieldArmy(s, on2));
@@ -117416,7 +117611,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       for (const a of moved) {
         const was = TRACK.indexOf(a.from) - 3, now = TRACK.indexOf(a.to) - 3;
         const how = now === 0 ? `no longer leans toward ${blocOf(was > 0 ? "axis" : "allies")}` : Math.abs(now) === 1 ? `begins to lean toward ${blocOf(now > 0 ? "axis" : "allies")}` : `throws in its lot with ${blocOf(now > 0 ? "axis" : "allies")}`;
-        lines2.push(`${upFirst4(theName2(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ""}.`);
+        lines2.push(`${upFirst5(theName2(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ""}.`);
       }
       if (!moved.length) lines2.push("Nobody changes sides over this one attack, but the next may tip them.");
     } else if (f.joins === null && bloc(n) === "league") lines2.push("The neutrals on the track between the blocs take no side in a quarrel with the League.");
@@ -117548,7 +117743,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         out.push({
           k: "page:spies",
           t: found2.length === 1 ? found2[0].watch ? "AN ENEMY WATCHER IS UNCOVERED" : "AN ENEMY AGENT IS UNCOVERED" : `${found2.length} ENEMY AGENTS ARE UNCOVERED`,
-          tip: `${upFirst4(theWords(listNames2(found2.slice(0, 3).map((f) => `${aOrAn(what(f))} ${what(f)}`))))}${found2.length > 3 ? " and more" : ""}. ${watchers === found2.length ? "A watcher helps their side's attacks until arrested." : watchers ? "A saboteur strikes when their time comes, and a watcher helps their side's attacks, until arrested." : "A saboteur strikes when their time comes unless arrested."} They stand on the map in their country's colours. Open THE SECRET SERVICE to arrest ${found2.length === 1 ? "them" : "each"}${room2.doubles ? " or turn them" : ""}.`
+          tip: `${upFirst5(theWords(listNames2(found2.slice(0, 3).map((f) => `${aOrAn(what(f))} ${what(f)}`))))}${found2.length > 3 ? " and more" : ""}. ${watchers === found2.length ? "A watcher helps their side's attacks until arrested." : watchers ? "A saboteur strikes when their time comes, and a watcher helps their side's attacks, until arrested." : "A saboteur strikes when their time comes unless arrested."} They stand on the map in their country's colours. Open THE SECRET SERVICE to arrest ${found2.length === 1 ? "them" : "each"}${room2.doubles ? " or turn them" : ""}.`
         });
       }
       const laid = room2 ? room2.agents.filter((a) => s.intel.agents.find((x) => x.id === a.id)?.net && a.atWork && s.intel.agents.find((x) => x.id === a.id)?.ready === s.turn) : [];
@@ -117580,11 +117775,24 @@ ${next.text}` : ""}` : next ? next.also : "";
       } catch {
         can2 = 0;
       }
+      let waits2 = [];
+      try {
+        waits2 = townQueueOn(s) ? queueHeads(s, me.id).filter((h) => !h.after && h.short > 0) : [];
+      } catch {
+        waits2 = [];
+      }
+      const waitWords2 = waits2.length ? ` ${waits2.slice(0, 3).map((w) => `${upFirst5(w.name)} waits for ${w.short.toLocaleString("en-US")} more.`).join(" ")}${waits2.length > 3 ? ` And ${waits2.length - 3} more wait.` : ""}` : "";
       if (can2 > 0) {
         out.push({
           k: "page:home",
-          t: can2 === 1 ? "A TOWN CAN BUILD" : `${can2} TOWNS CAN BUILD`,
-          tip: `${can2 === 1 ? "One of your towns has" : `${can2} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString("en-US")}. Open THE HOME FRONT to build in each with one press.`
+          t: `${can2 === 1 ? "A TOWN CAN BUILD" : `${can2} TOWNS CAN BUILD`}${waits2.length ? `  ·  ${waits2.length} WAITING` : ""}`,
+          tip: `${can2 === 1 ? "One of your towns has" : `${can2} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString("en-US")}. Open THE HOME FRONT to build in each with one press.${waitWords2}`
+        });
+      } else if (waits2.length) {
+        out.push({
+          k: "page:home",
+          t: waits2.length === 1 ? "A QUEUED BUILDING WAITS" : `${waits2.length} QUEUED BUILDINGS WAIT`,
+          tip: `The treasury holds ${inHand(me.pp).toLocaleString("en-US")}.${waitWords2} Each is ordered for you at the opening of a month once it can be paid for. Open THE HOME FRONT to see the queues.`
         });
       }
     }
@@ -117602,7 +117810,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const out = [];
     if (!s.human) return out;
     const act2 = lastAct(s);
-    if (act2?.winner) out.push(`${upFirst4(theName2(s, act2.winner))} has won the world.`);
+    if (act2?.winner) out.push(`${upFirst5(theName2(s, act2.winner))} has won the world.`);
     else if (act2?.open && !act2.peace) out.push("The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.");
     try {
       const m = pictureMen(s);
@@ -117655,8 +117863,8 @@ ${next.text}` : ""}` : next ? next.also : "";
     }
     const say = needs.includes("enemy aircraft on the field") ? needs.filter((x) => x !== "enemy bombers on the field") : needs;
     return [
-      n ? `${n === 1 ? "One more needs" : `${upFirst4(inWords(n))} more need`} ${orList(say)} here.` : "",
-      yet ? `${yet === 1 ? "One more has" : `${upFirst4(inWords(yet))} more have`} no plans to steal here yet.` : "",
+      n ? `${n === 1 ? "One more needs" : `${upFirst5(inWords(n))} more need`} ${orList(say)} here.` : "",
+      yet ? `${yet === 1 ? "One more has" : `${upFirst5(inWords(yet))} more have`} no plans to steal here yet.` : "",
       ...told2
     ].filter(Boolean).join(" ");
   }
@@ -117741,7 +117949,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const needWords = Math.abs(need - 0.75) < 1e-9 ? "three quarters" : Math.abs(need - 2 / 3) < 1e-3 ? "two thirds" : Math.abs(need - 0.5) < 1e-9 ? "half" : `${Math.round(need * 100)}%`;
     const laidWords = laid === 1 ? "the last country still standing has laid down its arms" : `the last ${laid} countries still standing have laid down their arms`;
     if (act2.winner) {
-      const name = upFirst4(theName2(s, act2.winner)), top1 = board.rows[0];
+      const name = upFirst5(theName2(s, act2.winner)), top1 = board.rows[0];
       note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct13(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct13(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
     } else if (act2.on) note4 = need > 0 ? `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The world goes to the last great power standing, once it holds ${needWords} of it: the countries still standing then lay down their arms.` : `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
     else {
@@ -117766,7 +117974,7 @@ ${next.text}` : ""}` : next ? next.also : "";
             {
               nat: "",
               title: rivals2.length ? `${rivals2.length === 1 ? "One great power" : `${rivals2.length} great powers`} still to beat` : "No great power stands against you",
-              lines: [rivals2.length ? `${upFirst4(listOf7(rivals2.map((id) => theName2(s, id))))}.` : "The first test is met."],
+              lines: [rivals2.length ? `${upFirst5(listOf7(rivals2.map((id) => theName2(s, id))))}.` : "The first test is met."],
               buttons: []
             },
             {
@@ -117861,7 +118069,7 @@ ${next.text}` : ""}` : next ? next.also : "";
           if (buttons.length >= 5) break;
         }
       }
-      rows.push({ nat: mission === "strike" ? "" : s.regions[t].ctrl, title: mission === "strike" ? upFirst4(place3) : `${place3}, ${Math.round(km(s, f.base, t)).toLocaleString("en-US")} km`, lines: lines2, buttons });
+      rows.push({ nat: mission === "strike" ? "" : s.regions[t].ctrl, title: mission === "strike" ? upFirst5(place3) : `${place3}, ${Math.round(km(s, f.base, t)).toLocaleString("en-US")} km`, lines: lines2, buttons });
     }
     return {
       id: `raid:${mission}:${id}`,
@@ -117906,7 +118114,7 @@ ${next.text}` : ""}` : next ? next.also : "";
   function battleReportPage(s, id) {
     const r = s.reports.find((x) => x.id === id);
     if (!r) return null;
-    const nameOf2 = (nat) => upFirst4(theName2(s, nat));
+    const nameOf2 = (nat) => upFirst5(theName2(s, nat));
     const side5 = (units2) => units2.map((u) => ({
       // (Rules 84.3.) Every corps on the report carries its country's word: "German XIX Corps".
       nat: u.nat,
@@ -118148,7 +118356,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       const lines2 = [
         `At anchor: ${h.fleets.join(", ")}${anchorLine(h) ? ` (${anchorLine(h)})` : ""}.`,
         h.launch >= 0 ? `Its aircraft reach it from ${seaWhat(s.seas[h.launch]?.name ?? "sea")}.` : base ? `Beyond its aircraft from ${s.fleets.find((x) => x.id === id)?.port ?? "its base"}: from ${base.name} they reach it.` : "",
-        h.atWar ? "" : `${who2 ? upFirst4(theName2(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`
+        h.atWar ? "" : `${who2 ? upFirst5(theName2(s, h.holder)) : h.holder} is at peace with you. Declare war first: a strike flown in the month war is declared goes in without warning.`
       ].filter(Boolean);
       const buttons = h.launch >= 0 ? [{ label: "STRIKE FROM THE AIR", act: `fleetstrike:${id}:${h.region}`, ok: up && !h.why, tip: h.why ?? "It sails to the nearest sea from which its aircraft reach the harbour, and its wings go in with this month's air war. Ships at anchor cannot manoeuvre." }] : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up && !passing, tip: moveTip(base, `Its new home port: from there its aircraft reach ${h.name}.`) }] : [];
       return { nat: h.holder, title: `${h.name}${who2 ? ` (${who2.adj ?? who2.name})` : ""}`, lines: lines2, buttons };
@@ -118503,6 +118711,7 @@ ${standing5}`,
     const up = humanUp(s) && !onEve(s);
     const date2 = (turn2) => turnToDate(turn2).label;
     const n = t.plots.length;
+    const me = t.mine ? s.human : null;
     const plots2 = t.plots.map((p, i) => p.line ? {
       nat: "",
       title: `Plot ${i + 1}  ·  ${p.name}: ${p.level > 0 ? p.label : "being built"}${p.level > 0 ? `  (level ${p.level} of 3)` : ""}`,
@@ -118513,14 +118722,29 @@ ${standing5}`,
       const p = t.plots.find((x) => x.line === o.line);
       const going = !!p?.building, top = o.has >= 3 && !going;
       const lines2 = top ? [`Complete: ${o.hasLabel}.`, o.blurb] : going ? [`${o.label} is going up: due ${date2(p.due)}.`, o.blurb] : [`${o.has ? "Next" : "First"}: ${o.label}  ·  ${moneyWords(o.cost)}  ·  ${monthsWords(o.months)}`, o.effect, o.blurb];
+      const queueWhy = me && townQueueOn(s) ? whyNotQueue(s, me, region, o.line) : "off";
+      const qLine = civicLine(o.line), qLevel = queueWhy === null ? nextQueued(s, me, region, o.line) : 0;
+      const queued2 = queueWhy === null && qLine ? `${qLine.levels[qLevel - 1] ?? o.label} (${moneyWords(qLine.cost[qLevel - 1] ?? o.cost)} at today's price)` : "";
       return {
         nat: "",
         title: `${o.name}${o.has ? `  ·  ${o.hasLabel}` : ""}`,
         lines: lines2,
-        buttons: top || going ? [] : [{ label: o.has ? "RAISE" : "BUILD", act: `civic:${region}:${o.line}`, ok: up && o.why === null, tip: !up ? "It is not your month." : o.why ?? `${o.label}: ${o.effect}` }]
+        buttons: [
+          ...top || going ? [] : [{ label: o.has ? "RAISE" : "BUILD", act: `civic:${region}:${o.line}`, ok: up && o.why === null, tip: !up ? "It is not your month." : o.why ?? `${o.label}: ${o.effect}` }],
+          ...queueWhy === null ? [{ label: "QUEUE", act: `queue:${region}:${o.line}`, ok: up, tip: !up ? "It is not your month." : `${queued2}, queued here: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price.` }] : []
+        ]
       };
     });
+    const queue = me && townQueueOn(s) ? queuedAt(s, me, region) : [];
+    const head = queue.length ? queueHeads(s, me).find((x) => x.q.region === region) : void 0;
+    const queueRows = queue.map((q, k) => ({
+      nat: "",
+      title: `${k + 1}.  ${civicLine(q.line)?.levels[q.level - 1] ?? q.line}`,
+      lines: [k > 0 ? "After the one above." : !head ? "" : head.after ? `Goes up after the ${head.after}.` : head.short > 0 ? `Waits for ${head.short.toLocaleString("en-US")} more.` : "Goes up at the opening of your next month."].filter(Boolean),
+      buttons: [{ label: "TAKE IT OFF", act: `unqueue:${region}:${k}`, ok: up, tip: up ? "Comes off the queue. Nothing has been paid for it." : "It is not your month." }]
+    }));
     const sections = [{ heading: "THE PLOTS", text: `${r.name}${r.owner === r.ctrl ? "" : ", conquered ground"}.`, rows: plots2 }];
+    if (queueRows.length) sections.push({ heading: "QUEUED HERE", text: "Ordered for you in this order, at the opening of your month, at that day's price.", rows: queueRows });
     if (t.mine) sections.push({ heading: "WHAT CAN BE BUILT HERE", text: "One building goes up at a time in a town.", rows: offers2 });
     return {
       id: `town:${region}`,
@@ -118878,6 +119102,8 @@ ${standing5}`,
     }
     const held3 = s.regions.filter((r) => r.ctrl === me.id).sort((a, b) => (place3.get(a.id) ?? 1e6) - (place3.get(b.id) ?? 1e6) || (pays.get(b.id) ?? 0) - (pays.get(a.id) ?? 0) || a.id - b.id);
     const towns2 = [];
+    const queueOn = townQueueOn(s);
+    const heads = queueOn ? queueHeads(s, me.id) : [];
     for (const r of held3) {
       const t = townBuildings(s, r.id);
       if (!t || !t.mine || !t.plots.length) continue;
@@ -118896,6 +119122,24 @@ ${standing5}`,
       const b = me.queue.find((x) => x.what === "civic" && x.region === r.id);
       const going = b ? { id: b.id, name: b.name.split(" at ")[0], due: turnToDate(b.eta).label, months: Math.max(0, b.eta - s.turn), cancel: b.ordered === s.turn && up, act: `home:cancel:${b.id}` } : null;
       const best = open3.length ? asBuild(open3[0]) : null;
+      const queued2 = queueOn ? queuedAt(s, me.id, r.id) : [];
+      const head = queued2.length ? heads.find((h) => h.q.region === r.id) : void 0;
+      const lineLabel = (line, level) => civicLine(line)?.levels[level - 1] ?? line;
+      const then = !queueOn ? [] : t.offers.map((o) => ({ o, why: whyNotQueue(s, me.id, r.id, o.line) })).filter((x) => x.why === null).sort((a, b2) => (rank2.get(a.o.line) ?? 99) - (rank2.get(b2.o.line) ?? 99)).map(({ o }) => {
+        const level = nextQueued(s, me.id, r.id, o.line), l = civicLine(o.line);
+        const cost = l ? l.cost[level - 1] : o.cost;
+        return {
+          line: o.line,
+          name: o.name,
+          label: lineLabel(o.line, level),
+          cost: shown(cost),
+          months: l ? l.months[level - 1] : o.months,
+          effect: level === o.level ? o.effect : o.blurb,
+          ok: up,
+          why: up ? "" : notUp,
+          act: `queue:${r.id}:${o.line}`
+        };
+      });
       towns2.push({
         region: r.id,
         town: t.town,
@@ -118909,16 +119153,20 @@ ${standing5}`,
         more: open3.slice(1).map(asBuild),
         going,
         // (why nothing is offered: the one reason every line gives, or that the town is complete)
-        note: best || going ? "" : ((whys) => whys.length && whys.every((w) => w === whys[0]) ? whys[0] : "Nothing more can be built here now.")(t.offers.map((o) => o.why ?? "").filter(Boolean))
+        note: best || going ? "" : ((whys) => whys.length && whys.every((w) => w === whys[0]) ? whys[0] : "Nothing more can be built here now.")(t.offers.map((o) => o.why ?? "").filter(Boolean)),
+        queue: queued2.map((q, k) => ({ line: q.line, label: lineLabel(q.line, q.level), act: `unqueue:${r.id}:${k}` })),
+        wait: !head ? "" : head.after ? `Goes up after the ${head.after}.` : head.short > 0 ? `Waits for ${head.short.toLocaleString("en-US")} more.` : "Goes up at the opening of your next month.",
+        then
       });
     }
+    const waits2 = heads.filter((h) => !h.after && h.short > 0).length;
     const ready = towns2.filter((t) => t.state === "ready" || t.state === "short").length, goingUp = towns2.filter((t) => t.state === "going").length;
     const book3 = ordersBookOf(s);
     const orders2 = me.queue.filter((b) => b.what !== "civic").slice().sort((a, b) => a.eta - b.eta || a.id - b.id).map((b) => {
       const l = orderLine(s, b, book3);
       return { id: l.id, what: l.what, name: l.words, where: l.where, due: l.due, months: l.months, cost: shown(b.cost), cancel: l.canCancel && up, act: `home:cancel:${l.id}`, share: l.share, region: l.region };
     });
-    const money3 = inHand(me.pp);
+    const money4 = inHand(me.pp);
     const raise2 = arsenalOffers(s, -1).filter((o) => o.group !== "works").map((o) => ({
       key: o.key,
       group: o.group,
@@ -118928,7 +119176,7 @@ ${standing5}`,
       where: s.regions[o.at]?.name ?? "",
       note: o.note,
       ok: up && !o.why,
-      why: !up ? notUp : o.poor && shown(o.cost) > money3 ? `${(shown(o.cost) - money3).toLocaleString("en-US")} short: the treasury holds ${money3.toLocaleString("en-US")}.` : o.why ?? "",
+      why: !up ? notUp : o.poor && shown(o.cost) > money4 ? `${(shown(o.cost) - money4).toLocaleString("en-US")} short: the treasury holds ${money4.toLocaleString("en-US")}.` : o.why ?? "",
       act: `home:order:${o.key}`
     }));
     const plan = againPlan(s);
@@ -118958,9 +119206,9 @@ ${standing5}`,
     }
     const short = (n) => Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString("en-US");
     const tiles = [
-      { k: "money", label: "TREASURY", figure: money3.toLocaleString("en-US"), sub: T && T.budget ? `${net < 0 ? "−" : "+"}${Math.abs(net).toLocaleString("en-US")} a month` : "" },
+      { k: "money", label: "TREASURY", figure: money4.toLocaleString("en-US"), sub: T && T.budget ? `${net < 0 ? "−" : "+"}${Math.abs(net).toLocaleString("en-US")} a month` : "" },
       { k: "orders", label: "ON ORDER", figure: String(orders2.length), sub: orders2.length ? `next ready ${orders2[0].due}` : "nothing is being raised" },
-      { k: "towns", label: "TOWNS", figure: String(towns2.length), sub: `${ready} can build  ·  ${goingUp} building` },
+      { k: "towns", label: "TOWNS", figure: String(towns2.length), sub: `${ready} can build  ·  ${goingUp} building${waits2 ? `  ·  ${waits2} waiting` : ""}` },
       ...men2 ? [{ k: "men", label: "MEN IN RESERVE", figure: short(men2.men), sub: men2.word }] : []
     ];
     let staff = null;
@@ -118990,19 +119238,22 @@ ${standing5}`,
     } catch {
       staff = null;
     }
-    return { nation: me.name, date: turnToDate(s.turn).label, up, money: money3, net, tiles, counts: { ready, going: goingUp, all: towns2.length }, towns: towns2, raise: raise2, again, orders: orders2, staff };
+    return { nation: me.name, date: turnToDate(s.turn).label, up, money: money4, net, tiles, counts: { ready, going: goingUp, all: towns2.length, waits: waits2 }, towns: towns2, raise: raise2, again, orders: orders2, staff };
   }
   function homePage(s) {
     const h = homeBoard(s);
     if (!h) return null;
     const cash = (n2) => n2.toLocaleString("en-US");
     const can2 = h.towns.filter((t) => t.state === "ready" || t.state === "short");
+    const queueWords = (t) => t.queue.length ? `Queued: ${t.queue.map((q) => q.label.toLowerCase()).join(", then ")}. ${t.wait}` : "";
+    const queueButton = (t) => t.then.length ? [{ label: "QUEUE", act: t.then[0].act, ok: t.then[0].ok, tip: t.then[0].ok ? `${t.then[0].label}, queued here: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price.` : t.then[0].why }] : [];
     const townRows = can2.slice(0, 60).map((t) => ({
       nat: "",
       title: `${t.town}${t.town === t.province ? "" : `, ${t.province}`}  ·  ${t.size}${t.pays ? `  ·  pays ${cash(t.pays)}` : ""}`,
-      lines: [`${t.best.name}: ${t.best.label}  ·  ${cash(t.best.cost)}  ·  ${monthsWords(t.best.months)}`, t.best.effect],
+      lines: [`${t.best.name}: ${t.best.label}  ·  ${cash(t.best.cost)}  ·  ${monthsWords(t.best.months)}`, t.best.effect, queueWords(t)].filter(Boolean),
       buttons: [
         { label: "BUILD", act: t.best.act, ok: t.best.ok, tip: t.best.ok ? `${t.best.label}: ${t.best.effect}` : t.best.why },
+        ...t.best.ok ? [] : queueButton(t),
         { label: "TOWN PLAN", act: `open:town:${t.region}`, ok: true, tip: "Every plot of this town and everything that could be built there." },
         { label: "SHOW ON THE MAP", act: `goto:region:${t.region}`, ok: true, tip: "Looks at the place on the map." }
       ]
@@ -119010,9 +119261,15 @@ ${standing5}`,
     const goingRows = h.towns.filter((t) => t.going).map((t) => ({
       nat: "",
       title: `${t.going.name}  ·  ${t.town}`,
-      lines: [`Due ${t.going.due}.`],
-      buttons: t.going.cancel ? [{ label: "TAKE IT BACK", act: t.going.act, ok: true, tip: "The order is taken back and the money returned. Only in the month it was placed." }] : []
+      lines: [`Due ${t.going.due}.`, queueWords(t)].filter(Boolean),
+      buttons: [...t.going.cancel ? [{ label: "TAKE IT BACK", act: t.going.act, ok: true, tip: "The order is taken back and the money returned. Only in the month it was placed." }] : [], ...queueButton(t)]
     }));
+    const queueRows = h.towns.flatMap((t) => t.queue.map((q, k) => ({
+      nat: "",
+      title: `${q.label}  ·  ${t.town}`,
+      lines: [k === 0 ? t.wait : `After the ${t.queue[k - 1].label.toLowerCase()}.`],
+      buttons: [{ label: "TAKE IT OFF", act: q.act, ok: h.up, tip: h.up ? "Comes off the queue. Nothing has been paid for it." : "It is not your month." }]
+    })));
     const raiseRows = [
       ...h.again ? [{ nat: "", title: `Order again${h.again.cost ? `  ·  ${cash(h.again.cost)}` : ""}`, lines: [h.again.text, h.again.left].filter(Boolean), buttons: [{ label: "ORDER AGAIN", act: h.again.act, ok: h.again.ok, tip: h.again.ok ? "Places each of these orders again at today's price." : h.again.why }] }] : [],
       ...h.raise.map((o) => ({
@@ -119038,6 +119295,7 @@ ${standing5}`,
       sections: [
         { heading: "TOWNS THAT CAN TAKE A BUILDING", text: can2.length ? can2.length > 60 ? `The richest 60 of ${can2.length}.` : "" : "Every town is building or complete.", rows: townRows },
         ...goingRows.length ? [{ heading: "GOING UP IN YOUR TOWNS", text: "", rows: goingRows }] : [],
+        ...queueRows.length ? [{ heading: "QUEUED IN YOUR TOWNS", text: "Each is ordered for you at the opening of your month, oldest first, once its builders are free and the treasury can pay, at that day's price.", rows: queueRows }] : [],
         { heading: "RAISE FORCES", text: h.up ? "" : "It is not your month.", rows: raiseRows },
         { heading: "ON ORDER", text: orderRows.length ? "" : "Nothing is being raised.", rows: orderRows },
         // (Release 2, the desk split) Recruitment and towns and trade, each with its own switch: the board draws them on its staff strip.
@@ -119372,8 +119630,8 @@ ${standing5}`,
           return null;
         }
       })() : null;
-      const keep2 = (list6) => dn && kind === "night" ? [...list6, ...dn.home.filter((id) => !list6.includes(id))] : list6;
-      const carry = keep2(p.picked);
+      const keep3 = (list6) => dn && kind === "night" ? [...list6, ...dn.home.filter((id) => !list6.includes(id))] : list6;
+      const carry = keep3(p.picked);
       const picture = (t, holder) => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || "X"}`;
       const gunsOf2 = (t) => sea || !s.regions[t] || !["bomb", "night", "town", "harbour"].includes(kind) ? -1 : raidFogOn(s) && me ? ((k2) => k2.live ? gunsAt(s, t) : k2.guns)(skyKnown(s, me, t)) : gunsAt(s, t);
       const stops = raidTargetsFor(s, k, -1);
@@ -119441,7 +119699,7 @@ ${standing5}`,
         strip: stops.slice(0, 10).map((t) => {
           let q = previewRaid(s, k, t.id, p.picked);
           if (q.why || !q.picked.length) q = previewRaid(s, k, t.id);
-          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep2(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), guns: gunsOf2(t.id), ...titled(t, t.name) };
+          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep3(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), guns: gunsOf2(t.id), ...titled(t, t.name) };
         }),
         seats: p.seats.map((x) => {
           const stays = !!dn && kind === "night" && dn.home.includes(x.id);
@@ -119762,10 +120020,10 @@ ${standing5}`,
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "fold") {
-      const keep2 = Number(part[1]), gone = Number(part[2]);
-      const a = s.corps.find((c) => c.id === keep2), b = s.corps.find((c) => c.id === gone);
+      const keep3 = Number(part[1]), gone = Number(part[2]);
+      const a = s.corps.find((c) => c.id === keep3), b = s.corps.find((c) => c.id === gone);
       const names = a && b ? [a.name, b.name] : null;
-      ok2 = !!names && orderFold(s, keep2, gone);
+      ok2 = !!names && orderFold(s, keep3, gone);
       note4 = ok2 && names ? `${names[1]} is folded into ${names[0]}. Its cadre waits in the arsenal.` : "They cannot be folded together now.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: ok2 ? "close" : open3, view: view2() };
     }
@@ -119800,9 +120058,12 @@ ${standing5}`,
         if (b) noteOwnOrder(s, b, key7, -1, offer?.label ?? b.name);
         note4 = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? "It is not your month." : offer?.why ?? "That cannot be ordered now.";
       } else if (part[1] === "cancel") {
+        const was = s.human ? queueOf(s, s.human).slice() : [];
         ok2 = orderCancelBuild(s, Number(part[2]));
         if (ok2) forgetOwnOrder(Number(part[2]));
-        note4 = ok2 ? "The order is taken back and the money returned." : "An order can only be taken back in the month it was placed.";
+        const off2 = s.human ? was.filter((q) => !queueOf(s, s.human).includes(q)).map((q) => queuedName(s, q)) : [];
+        const offWords = off2.length > 1 ? `${off2.slice(0, -1).join(", ")} and ${off2[off2.length - 1]}` : off2[0] ?? "";
+        note4 = ok2 ? `The order is taken back and the money returned.${off2.length ? ` ${offWords.charAt(0).toUpperCase()}${offWords.slice(1)}, queued behind it, ${off2.length === 1 ? "comes" : "come"} off the queue too: nothing had been paid.` : ""}` : "An order can only be taken back in the month it was placed.";
       } else if (part[1] === "again") {
         const plan = againPlan(s);
         const placed3 = [], out = plan ? plan.out.slice() : [];
@@ -120044,6 +120305,12 @@ ${standing5}`,
       }
       return { ok: ok2, note: note4, fly: fly2, flies, open: `fleet:${part[1]}`, view: view2() };
     }
+    if (part[0] === "teamsrule") {
+      setTeams(s, part[1] === "on");
+      ok2 = true;
+      note4 = teamsOn(s) ? "Support teams are on: machine-gun and mortar brigades can be raised like artillery, by you and by every other power. The machine guns stiffen a defence against men on foot; the mortars break up the works an attack goes in against." : "Support teams are off: no new machine-gun or mortar brigades can be raised. Brigades already raised stay with their armies.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "fleetwhyrule") {
       setFleetWhy(s, part[1] === "on");
       ok2 = true;
@@ -120097,6 +120364,30 @@ ${standing5}`,
       setFleetAttack(s, part[1] === "on");
       ok2 = true;
       note4 = fleetAttackOn(s) ? "Fleet attacks are on: drop one of your fleets on an enemy fleet in reach, and the battle is fought at once, at any odds." : "Fleet attacks are off: fleets meet only at the month's end, where an admiral thinks the odds good enough.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "townqueuerule") {
+      setTownQueue(s, part[1] === "on");
+      ok2 = true;
+      note4 = townQueueOn(s) ? "Building queues are on: a town can be given its next buildings in order, and each is ordered for you at the opening of your month, once the builders there are free and the treasury can pay, at that day's price." : "Building queues are off, and every queue is gone. Nothing on them had been paid.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "queue" || part[0] === "unqueue") {
+      const at4 = Number(part[1]), r = s.regions[at4], me = s.human;
+      const town = townBuildings(s, at4)?.town ?? r?.name ?? "the town";
+      if (!me || !humanUp(s) || onEve(s)) {
+        ok2 = false;
+        note4 = "It is not your month.";
+      } else if (part[0] === "queue") {
+        const why = whyNotQueue(s, me, at4, part[2]);
+        const q = why ? null : addQueue(s, me, at4, part[2]);
+        ok2 = !!q;
+        note4 = q ? `${upFirst5(queuedName(s, q))} is queued. It is ordered for you at the opening of a month, once the builders at ${town} are free and the treasury can pay, at that day's price.` : why ?? "That cannot be queued now.";
+      } else {
+        const q = queuedAt(s, me, at4)[Number(part[2])];
+        ok2 = !!q && dropQueue(s, me, at4, Number(part[2]));
+        note4 = ok2 && q ? `${upFirst5(queuedName(s, q))} comes off the queue. Nothing had been paid for it.` : "That is not on the queue.";
+      }
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "settledtownsrule") {
@@ -120528,7 +120819,7 @@ ${standing5}`,
     const members = leagueMembers(s);
     const league = {
       founded: leagueFounded(s),
-      full: upFirst4(LEAGUE.full),
+      full: upFirst5(LEAGUE.full),
       since: born !== void 0 ? turnToDate(born).label : "",
       members: members.map((n) => ({
         nat: n.id,
@@ -120546,7 +120837,7 @@ ${standing5}`,
     const where = mine4 === "league" ? `a member of ${LEAGUE.name}${others.length ? `, with ${listOf7(others.map((n) => theName2(s, n.id)))}` : ""}` : mine4 ? `a member of ${mine4 === "axis" ? "the Axis" : "the Allies"}` : TRACK_PHRASE[me.align];
     const path = {
       open: opts.length > 0,
-      lead: opts.length ? `${upFirst4(theName2(s, me.id))} is ${where}. ${foes.length ? `You are at war with ${listOf7(foes.map((x) => theName2(s, x)))}.` : "You are at peace."} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.` : "",
+      lead: opts.length ? `${upFirst5(theName2(s, me.id))} is ${where}. ${foes.length ? `You are at war with ${listOf7(foes.map((x) => theName2(s, x)))}.` : "You are at peace."} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.` : "",
       options: opts.map((o) => {
         const T = PATH_TEXT[o.id];
         let text = T.text;
@@ -120557,7 +120848,7 @@ ${standing5}`,
           ok: o.ok && up,
           now: o.now,
           why: o.ok && !up ? "Not in your month." : o.why,
-          title: !o.now ? T.title : o.id === "join" ? upFirst4(LEAGUE.full) : o.id === "axis" ? "The Axis" : o.id === "allies" ? "The Allies" : T.title,
+          title: !o.now ? T.title : o.id === "join" ? upFirst5(LEAGUE.full) : o.id === "axis" ? "The Axis" : o.id === "allies" ? "The Allies" : T.title,
           text: o.ok || o.now ? text : "",
           final: o.id === "axis" || o.id === "allies" || o.id === "join"
         };
@@ -120615,7 +120906,7 @@ ${standing5}`,
         free: 0,
         doctrine: "",
         money: inHand(me.pp),
-        note: `${upFirst4(theName2(s, me.id))} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
+        note: `${upFirst5(theName2(s, me.id))} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
         bureau: null,
         fields: [],
         others
@@ -120843,7 +121134,7 @@ ${standing5}`,
     const why = whyNotLeagueInvite(s, nat);
     const ok2 = orderLeagueInvite(s, nat);
     const news3 = s.headlines.slice(h0).map((h) => h.text);
-    return { ok: ok2, note: !ok2 ? why ?? "They would not join today." : news3.length ? news3.join(" ") : `${upFirst4(theName2(s, nat))} joins ${LEAGUE.name}.`, view: view2() };
+    return { ok: ok2, note: !ok2 ? why ?? "They would not join today." : news3.length ? news3.join(" ") : `${upFirst5(theName2(s, nat))} joins ${LEAGUE.name}.`, view: view2() };
   }
   function courtNation(nat) {
     const s = game();
@@ -121432,6 +121723,11 @@ ${standing5}`,
     setFleetWhy(s, !!on2);
     return { on: fleetWhyOn(s) };
   };
+  globalThis.TC.supportTeams = (on2) => {
+    const s = game();
+    setTeams(s, !!on2);
+    return { on: teamsOn(s) };
+  };
   globalThis.TC.taskForce = (on2) => {
     const s = game();
     setTaskForce(s, !!on2);
@@ -121446,6 +121742,11 @@ ${standing5}`,
     const s = game();
     setSettledTowns(s, !!on2);
     return { on: settledTownsOn(s) };
+  };
+  globalThis.TC.townQueue = (on2) => {
+    const s = game();
+    setTownQueue(s, !!on2);
+    return { on: townQueueOn(s) };
   };
   globalThis.TC.columns = (on2) => {
     const s = game();
@@ -121507,9 +121808,18 @@ ${standing5}`,
       setFleetWhy(s, true);
       return fleetWhyOn(s);
     },
+    teamsrule: (s) => {
+      setTeams(s, true);
+      return teamsOn(s);
+    },
     settledtownsrule: (s) => {
       setSettledTowns(s, true);
       return settledTownsOn(s);
+    },
+    // (Release 2, townqueue.ts: a queue for a town, switched in any month, so an older war takes it too.)
+    townqueuerule: (s) => {
+      setTownQueue(s, true);
+      return townQueueOn(s);
     },
     columns: (s) => setColumns(s, true),
     "logistics:lorryShift": (s) => setLogistics(s, "lorryShift", true),

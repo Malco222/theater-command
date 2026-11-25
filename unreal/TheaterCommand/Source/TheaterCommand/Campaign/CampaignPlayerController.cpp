@@ -389,6 +389,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, taskforce.ts; Brian 24 November 2026 18:24Z) A fleet with a standing job.
 			Add(TEXT("taskforcerule"), TEXT("Task forces"), TEXT("Send a fleet out on a job (a patrol, a raid, a submarine hunt or a convoy escort) and press MAKE IT A TASK FORCE on its page: that job becomes its standing order. Each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order. It can be switched in any month."),
 				Now.bTaskForce ? TEXT("ON") : TEXT("OFF"), Now.bTaskForce);
+			// (Release 2, teams.ts; Brian 21 November 2026 03:57Z, and his "Both" on 25 November) Machine-gun and mortar brigades.
+			Add(TEXT("teamsrule"), TEXT("Machine gun and mortar brigades"), TEXT("You and every other power can raise machine gun and mortar brigades, the way artillery is raised. They fight beside your corps, never alone."),
+				Now.bSupportTeams ? TEXT("ON") : TEXT("OFF"), Now.bSupportTeams);
 			// (Release 2, fleetwhy.ts) The admirals say why each fleet is where it is.
 			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.
 			Add(TEXT("rearguardrule"), TEXT("Rearguards"), TEXT("A corps of two divisions or fewer (split one off a bigger corps) can be told to HOLD AS REARGUARD from its card: it stays where it stands until your next month while the rest of the army pulls back. An enemy army that attacks it there loses a week or two of its month, so it cannot follow as far, and with Units decide on it shields the troops falling back behind it from the pursuit. It can be switched in any month."),
@@ -438,6 +441,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
 			Add(TEXT("settledtownsrule"), TEXT("Conquered towns settle"), TEXT("A town taken from another country can put up every kind of building once it has been held three months: markets, schools, drill grounds, hospitals, administration, factories, shipyards and forts. Until then it can put up only an administration and a hospital, and its panel says how many months are left. Every country's conquests settle the same way. It can be switched in any month."),
 				Now.bSettledTowns ? TEXT("ON") : TEXT("OFF"), Now.bSettledTowns);
+			// (Release 2, townqueue.ts; Brian 25 November 2026 13:41Z: "easy to manage the cities") What each town builds next, in order.
+			Add(TEXT("townqueuerule"), TEXT("Building queues"), TEXT("Each of your towns can be given its next buildings in order. At the opening of your month, once a town's builders are free and the treasury can pay, the next on its list is ordered for you at that day's price, as if you had pressed BUILD yourself. One the treasury cannot pay for yet waits at the head of its town's list. Your staff never touches a queue. It can be switched in any month."),
+				Now.bTownQueue ? TEXT("ON") : TEXT("OFF"), Now.bTownQueue);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
@@ -673,14 +679,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("townqueuerule") ? Now.bTownQueue
 				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
@@ -13661,6 +13667,24 @@ void ACampaignPlayerController::OrderTownBuilding(const FString& Line)
 	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be built now.")) : Note, 5.0);
 }
 
+void ACampaignPlayerController::ActOnTown(const FString& Act)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || TownBar.Region == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	const int32 Where = TownBar.Region;
+	if (Session->Act(Act, Where, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		TownBar.Picked = INDEX_NONE;
+	}
+	RefreshRegionPanel(Where);
+	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be queued now.")) : Note, 5.0);
+}
+
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
 	THEATER_SPEED_SCOPE(RefreshRegionPanel);
@@ -13868,6 +13892,8 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				TownBar.bMine = Province.bPlotsMine;
 				TownBar.Plots = Province.TownPlots;
 				TownBar.Offers = Province.TownOffers;
+				TownBar.Best = Province.TownBest;
+				TownBar.Queued = Province.TownQueued;
 				TownBar.Title = FText::FromString(Province.Town.IsEmpty() ? Region.Name : Province.Town);
 				TownBar.Sub = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d building plot%s, %s"),
 					Province.TownKind == TEXT("capital") ? TEXT("The capital") : Province.TownKind == TEXT("city") ? TEXT("A city") : Province.TownKind == TEXT("town") ? TEXT("A town") : TEXT("A village"),

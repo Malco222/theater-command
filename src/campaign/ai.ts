@@ -35,7 +35,7 @@ import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
-import { isTeam, TEAMS, teamsOn } from './teams';
+import { isTeam, TEAMS } from './teams';
 import { aiRepair } from './repairs';
 import { aiFieldRepair } from './fieldstate';
 import { REARGUARD, rearguardOn, staffRearguard } from './rearguard';
@@ -3099,10 +3099,10 @@ function doorstep(g: Game, nat: string, goal: Region | null): Int16Array | null 
  * The support teams (release 2, src/campaign/teams.ts): a machine-gun or mortar brigade that stands beside no enemy
  * goes to the nearest sector of its army's front, the sectors opposite the staff's targets first (and for mortars,
  * those facing works), where a fighting corps of its own stands and the sector has not its teams already. Nothing
- * while the teams are off.
+ * where none was ever raised. Brigades raised before the player turned the teams off (release 2's switch, act
+ * 'teamsrule:off') keep going to the front: off stops new ones, it does not leave the ones he faces standing idle.
  */
 export function teamsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<string> | null): void {
-  if (!teamsOn(g)) return;
   const teams = g.corps.filter((c) => c.nat === nat && !c.dead && isTeam(c) && !c.hold && !c.town && c.ap > 0 && c.joint === undefined && c.leave === undefined && !massed.has(c.id));
   if (!teams.length) return;
   const foe = (x: Region): boolean => enemies.has(ctl(g, x)) && atWar(g, nat, ctl(g, x));

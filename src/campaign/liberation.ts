@@ -314,6 +314,12 @@ export function standDown(g: Game): string | null {
   if (!was) return null;
   g.flags[`was:${was}`] = g.turn;
   g.human = null;
+  // (Release 2, townqueue.ts) His towns are lost, and every building he queued in them with them: nothing had been paid.
+  // Freed, his country starts with no queue. (With building queues switched off there is none.)
+  if (g.townQueue?.[was]) {
+    delete g.townQueue[was];
+    if (!Object.keys(g.townQueue).length) delete g.townQueue;
+  }
   return was;
 }
 

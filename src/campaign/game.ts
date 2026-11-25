@@ -52,7 +52,7 @@ import { isTeam, TEAMS, teamsIn } from './teams';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
-import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
+import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
@@ -3269,9 +3269,42 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
 
 // ---- Moving, taking ground, and falling ---------------------------------------------
 
+/**
+ * Whether a province has already changed hands this month, read before anything in the present event touches it: the
+ * low keyed throws of a change of hands (the bridges, the track, scorched earth) keep their key for the month's first
+ * and take the missing side for any after it (the design director's ruling, 25 November 04:55Z), so a province taken
+ * twice in a month is not the same throw twice. Read from what the game holds, so a save in mid-month plays the same.
+ * In the opening month of a later start the ground history laid that month carries this month too (world.ts
+ * settleFallen): there only a province capture() has ever taken (its fellP mark) counts, so laying is no change.
+ * (Belt and braces: in the starts probed (seed 1, months 10 and 22) no laid province has a side at war with its holder
+ * as its r.prev, so takenInWarThisMonth reads such ground as no taking in war without this rule. It holds where one
+ * would: a laid province whose r.prev is an enemy of its holder.)
+ */
+export function changedThisMonth(g: Game, r: Region): boolean {
+  if (r.since !== g.turn) return false;
+  return g.flags.openFrom !== g.turn || g.flags[`fellP:${r.id}`] !== undefined;
+}
+
+/**
+ * Whether the province's change of hands earlier this month was a taking in war: its holder took it from a side it is
+ * still at war with (r.prev), the only change of hands that throws the low dice (capture() throws them only between
+ * sides at war). A peace's or a treaty's handing over, ground laid as a campaign opens, or a taking by a side at peace
+ * threw nothing, so the next throw there is still the month's first and keeps its key. Read before anything in the
+ * present event touches the province.
+ */
+export function takenInWarThisMonth(g: Game, r: Region): boolean {
+  return changedThisMonth(g, r) && r.prev != null && !!g.nations[r.prev] && !!g.nations[r.ctrl] && atWar(g, r.ctrl, r.prev);
+}
+
 export function capture(g: Game, r: Region, nat: string): void {
   const old = r.ctrl;
   if (old === nat) return;
+  // (Read before this capture marks the month: a province taken in war already this month threw the track's dice, and
+  // the scorch roll's where the side then driven out (r.prev) burns; a second taking throws its own. The side driven
+  // out now cannot stand for that: railOnScorch throws only where it burns, so it would salt every such throw, the
+  // month's first among them. Only the last change of hands is held, so a place taken three times, whose first loser
+  // burned and whose second did not, throws the first's key again: the residual.)
+  const prev = r.prev, again = takenInWarThisMonth(g, r), burnt = again && willBurn(g, prev!, r);
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
@@ -3287,7 +3320,12 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
-    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); railOnScorch(g, r, nat, old); }
+    // (A crossing was thrown for already this month where this bank was taken in war, by a side at war with the far
+    // bank's holder (its taker, or the side it drove out, which took it before); or where the far bank was, the same
+    // way round.)
+    const crossed = (far: Region): boolean =>
+      (again && (atWar(g, old, far.ctrl) || atWar(g, prev!, far.ctrl))) || (takenInWarThisMonth(g, far) && (atWar(g, far.ctrl, old) || atWar(g, far.prev!, old)));
+    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat, crossed); railOnCapture(g, r, nat, old, again); railOnScorch(g, r, nat, old, burnt); }
   }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.

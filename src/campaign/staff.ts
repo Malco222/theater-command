@@ -48,8 +48,8 @@ import { inTheWay, pacificGround, runQuays } from './pacific';
 import { roomAt } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { AIRNAMES_STAGE, ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FERRY_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, OFFERS_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE } from './stage';
-import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
+import { AIRNAMES_STAGE, ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FERRY_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, OFFERS_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE } from './stage';
+import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
 import { openQuality } from './units';
@@ -198,6 +198,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (HEAVYSEAS_STAGE) g.flags.heavySeas = 1;
   if (SHADOWRELAY_STAGE) g.flags.shadowRelay = 1;
   if (SEEKONCE_STAGE) g.flags.seekOnce = 1;
+  // A queue for a town (release 2; townqueue.ts).
+  if (TOWNQUEUE_STAGE) g.flags.townQueue = 1;
   // The atomic project (release 2; atom.ts).
   if (ATOM_STAGE) g.flags.atom = 1;
   // Carrier strikes on harbours by the player's own hand (release 2; harbourstrike.ts).

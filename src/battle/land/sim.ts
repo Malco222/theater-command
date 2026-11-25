@@ -452,7 +452,9 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
-    this.rng = new Rng(ticket.seed);
+    // The field's own stream (jitter, searches, HAND IT TO THE STAFF): a second attack on the place this month draws
+    // afresh, as fortune does; never salted by the view or the hand-off (the design director's ruling, 25 November 04:55Z).
+    this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
     this.style = { att: styleFor(ticket, 'att'), def: styleFor(ticket, 'def') };
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
     const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
