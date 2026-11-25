@@ -8731,11 +8731,12 @@ namespace LandField
 		// (each burnt cottage's own burnt ground, in the near tiles, on trial, Tried("burntground"): LandScorch)
 		if (F.Tried("burntground"))
 		{
-			const LandScorch::Laid Burnt = LandScorch::Lay(*this, F);
-			LandScorch::Into(In->TileList, Burnt);
-			LandScorch::Thin(*this, Burnt.Marks); // (the clutter thinned and dried on it: AddBurn, before any clutter is asked for)
+			LandScorch::Laid Burnt = LandScorch::Lay(*this, F);
+			LandScorch::FeedBurn(*this, Burnt.Marks); // (the clutter thinned and dried on it: AddBurn, before any clutter is asked for)
+			ScorchMarks = LandScorch::Into(In->TileList, std::move(Burnt));
 		}
 	}
+	Rgb8 Ground::BurntColourAt(double X, double Y) const { return ScorchMarks ? LandScorch::ColourOver(*ScorchMarks, X, Y, ColourAt(X, Y)) : ColourAt(X, Y); }
 	Ground::~Ground() = default;
 
 	double Ground::HeightAt(double X, double Y, Drawn* OutWhat) const
