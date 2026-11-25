@@ -411,14 +411,20 @@ namespace
 		double Shown() const { return Gen.TiltDegrees() - AutoTiltDeg(Gen.Zoom()); }
 	};
 
-	/** A flight to a view kept with a tilt of his own, taken back by his own hand. The tilt he is left with must be
-	 * judged at the zoom the taking move leaves him at, not the one he is leaving: farther out the automatic tilt is
-	 * steeper, so a tilt of his own that shows now can be swallowed by it, and that one has to be handed back (Rule
-	 * 21: the picture is the truth, and he is never left standing with a tilt of his own he cannot see). One that
-	 * still shows there must stay his own. Two moves change the zoom in the very frame that takes the flight: a notch
-	 * of the wheel, and a unit's card, which follows the unit no nearer than FollowNearest (but not with a pan in the
-	 * same frame, which ends the follow). Each is set up here with its own control beside it, since no scripted battle
-	 * can be relied on to walk into either. */
+	/** A flight to a view kept with a tilt of his own, taken back by his own hand. The tilt he is left with is his own
+	 * only on two counts (Rule 21: the picture is the truth). It must show where the taking move leaves him: farther
+	 * out the automatic tilt is steeper, so a tilt of his own that shows now can be swallowed by it, and right down
+	 * by a man's shoulder his tilt is handed toward the automatic one; either way he must never be left standing
+	 * with a tilt of his own he cannot see. And it must stand clear of the automatic tilt where the move finds him:
+	 * the call sets his tilt off just under the automatic one, and a notch IN lowers the automatic one past it, so
+	 * judged a notch nearer alone a flight taken in its first frame would leave him a tilt that neither he nor the
+	 * flight had turned. One that does both must stay his own; and "stands clear" is not "shows": on the way down
+	 * to a view kept at a man's shoulder the picture has his tilt long after the zoom's own rest would hide it, and
+	 * a notch out then must leave it his. Three moves change the zoom in the very frame that takes the flight: a
+	 * notch of the wheel either way, and a unit's card, which follows the unit no nearer than FollowNearest (but
+	 * not with a pan in the same frame, which ends the follow). And a tilt press that takes the flight in its first
+	 * frame must tilt the view from where it stands, not send it on to the kept view's tilt. Each is set up here
+	 * with its own control beside it, since no scripted battle can be relied on to walk into any of them. */
 	void TiltTakeBench()
 	{
 		const LandGeneralEye::Settings Set;
@@ -428,52 +434,99 @@ namespace
 		struct TakeCase
 		{
 			const char* Name;
-			/** Low over the field, between the zoom under which his tilt is handed toward a man's shoulder and the
-			 * nearest a followed unit is watched from; else the middle of the zoom. */
-			bool bLow;
-			/** How much of his own tilt the kept view shows, degrees. */
+			/** Where the view is kept: 0 the middle of the zoom; 1 low over the field, between the zoom under which
+			 * his tilt is handed toward a man's shoulder and the nearest a followed unit is watched from; 2 right
+			 * down, well under the first, where a notch or two in brings the zoom to its nearest; 3 at a man's
+			 * shoulder itself, his tilt set in the middle of the zoom and carried down to where the shoulder hides
+			 * it (the flight to it comes down from far up, his tilt on the picture until the last of the way). */
+			int Height;
+			/** How much of his own tilt the picture shows as it is set, degrees. */
 			double Want, ShownLeast, ShownMost;
 			/** The taking move: 0 a notch out, 1 a unit's card (followed), 2 a key's pan, 3 a card and a pan in one
-			 * frame (the pan ends the follow as it begins, so nothing holds the zoom off). */
+			 * frame (the pan ends the follow as it begins, so nothing holds the zoom off), 4 a notch in (right down:
+			 * two, to the zoom's nearest), 5 a tilt press of half a degree. */
 			int Move;
-			/** Whether the zoom he is left at hides the tilt (so it must be handed back). */
-			bool bHides;
+			/** Taken in the flight's first frame, before the flight has turned his tilt; else late on, with the tilt
+			 * at the kept one (to the shoulder: on the last of the way down, his tilt still on the picture). */
+			bool bEarly;
+			/** What must come of his tilt: 0 it stays his own and shows; 1 handed back, the zoom he is left at hiding
+			 * it; 2 handed back, having been no tilt as the move found it; 3 within a degree of the automatic one,
+			 * his own or not (his press's half degree is all that was asked); 4 as 0, of a tilt that a second notch
+			 * out would have hidden (so a notch counted twice is caught). */
+			int Must;
+		};
+		// (what the picture would show of a tilt of his own, now showing Shown degrees, so many notches farther out:
+		// from the settings alone, by the soft meeting of his tilt with the automatic one, (D + Soft)^2 / 4 Soft
+		// across Soft either side. A notch-out case is only judged where this puts its answer well clear of the
+		// quarter of a degree that counts as showing, so a change of the notch or of the soft meeting cannot leave
+		// a case asking the rule its question at a set-up whose answer is the other one.)
+		auto ShownOut = [&Set, NotchTilt](double Shown, double Notches)
+		{
+			const double Soft = Set.TiltSoft;
+			const double D = (Shown >= Soft ? Shown : 2.0 * std::sqrt(Soft * std::max(Shown, 0.0)) - Soft) - Notches * NotchTilt;
+			return D >= Soft ? D : D <= -Soft ? 0.0 : (D + Soft) * (D + Soft) / (4.0 * Soft);
 		};
 		const TakeCase Cases[] = {
-			{ "a notch out that hides it", false, 0.45 * NotchTilt, 0.3, 0.8 * NotchTilt, 0, true },
-			{ "a notch out that leaves it showing", false, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 0, false },
-			{ "a unit's card, low, whose follow hides it", true, 0.5, 0.35, 0.75, 1, true },
-			{ "a pan, low, that leaves it showing", true, 0.5, 0.35, 0.75, 2, false },
-			{ "a unit's card and a pan at once, low, that leave it showing", true, 0.5, 0.35, 0.75, 3, false },
+			{ "a notch out that hides it", 0, 0.35 * NotchTilt, 0.25 * NotchTilt, 0.6 * NotchTilt, 0, false, 1 },
+			{ "a notch out that leaves it showing", 0, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 0, false, 0 },
+			{ "a notch's worth of it, a notch out that leaves it showing", 0, NotchTilt, 0.9 * NotchTilt, 1.25 * NotchTilt, 0, false, 4 },
+			{ "a unit's card, low, whose follow hides it", 1, 0.5, 0.35, 0.75, 1, false, 1 },
+			{ "a pan, low, that leaves it showing", 1, 0.5, 0.35, 0.75, 2, false, 0 },
+			{ "a unit's card and a pan at once, low, that leave it showing", 1, 0.5, 0.35, 0.75, 3, false, 0 },
+			{ "a notch in on the flight's first frame, baring a tilt nobody turned", 0, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 4, true, 2 },
+			{ "a notch in late on, that leaves it showing", 0, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 4, false, 0 },
+			{ "notches in right down, to a man's shoulder, which hides it", 2, 3.0, 2.5, 4.5, 4, false, 1 },
+			{ "a pan right down, that leaves it showing", 2, 3.0, 2.5, 4.5, 2, false, 0 },
+			{ "a tilt press on the flight's first frame", 0, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 5, true, 3 },
+			{ "down to a view at a man's shoulder, a notch out on the way that leaves it showing", 3, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 0, false, 0 },
+			{ "down to a view at a man's shoulder, a pan on the way that lets the shoulder hide it", 3, NotchTilt + 4.0, NotchTilt + 2.0, 90.0, 2, false, 1 },
 		};
 		for (const TakeCase& C : Cases)
 		{
 			EyeBench B;
 			B.Still(60);
-			// (to the zoom the case wants: a notch at a time, or a quarter of one low down, each let settle, so the
-			// wish is never driven past the zoom asked for)
-			const double ZoomOver = C.bLow ? 0.225 : 0.52, ZoomStepIn = C.bLow ? 0.25 : 1.0;
+			// (to the zoom the case sets his tilt at: a notch at a time, or a quarter of one lower down, each let
+			// settle, so the wish is never driven past the zoom asked for)
+			const int SetAt = C.Height == 3 ? 0 : C.Height;
+			const double ZoomOver = SetAt == 2 ? 0.07 : SetAt == 1 ? 0.225 : 0.52, ZoomStepIn = SetAt > 0 ? 0.25 : 1.0;
 			for (int K = 0; K < 200 && B.Gen.Zoom() > ZoomOver; ++K) { LandGeneralEye::Input In; In.Zoom = ZoomStepIn; B.Frame(In); B.Still(20); }
-			for (int K = 0; K < 60 && !C.bLow && B.Gen.Zoom() < 0.48; ++K) { LandGeneralEye::Input In; In.Zoom = -1.0; B.Frame(In); B.Still(20); }
+			for (int K = 0; K < 60 && SetAt == 0 && B.Gen.Zoom() < 0.48; ++K) { LandGeneralEye::Input In; In.Zoom = -1.0; B.Frame(In); B.Still(20); }
 			B.Still(180);
 			// (his own tilt turned down by hand until the picture shows what this case wants of it, in the same way)
-			for (int K = 0; K < 400 && B.Shown() < C.Want; ++K) { LandGeneralEye::Input In; In.Tilt = C.bLow ? 0.1 : 0.15; B.Frame(In); B.Still(12); }
+			for (int K = 0; K < 400 && B.Shown() < C.Want; ++K) { LandGeneralEye::Input In; In.Tilt = SetAt > 0 ? 0.1 : 0.15; B.Frame(In); B.Still(12); }
 			B.Still(180);
-			const double ShownBefore = B.Shown(), ZoomBefore = B.Gen.Zoom();
-			const bool bZoomSet = C.bLow ? ZoomBefore > Set.TiltOwnFrom + 0.005 && ZoomBefore < Set.FollowNearest - 0.015 : ZoomBefore > 0.4 && ZoomBefore < 0.6;
-			if (!B.Gen.OwnTilt() || !bZoomSet || ShownBefore < C.ShownLeast || ShownBefore > C.ShownMost)
+			const double ShownBefore = B.Shown(), ZoomSet = B.Gen.Zoom();
+			const bool bZoomSet = SetAt == 2 ? ZoomSet > 0.045 && ZoomSet < 0.075
+				: SetAt == 1 ? ZoomSet > Set.TiltOwnFrom + 0.005 && ZoomSet < Set.FollowNearest - 0.015 : ZoomSet > 0.4 && ZoomSet < 0.6;
+			const double Out1 = ShownOut(ShownBefore, 1.0), Out2 = ShownOut(ShownBefore, 2.0);
+			const bool bClear = SetAt != 0 || C.Move != 0 || C.bEarly || (C.Must == 1 ? Out1 < 0.15 : Out1 > 0.5 && (C.Must != 4 || Out2 < 0.15));
+			if (!B.Gen.OwnTilt() || !bZoomSet || ShownBefore < C.ShownLeast || ShownBefore > C.ShownMost || !bClear)
 			{
-				std::printf("  the tilt bench (%s) could not set its view up: own %d, shown %.2f degrees over the automatic one (%.2f to %.2f wanted) at zoom %.3f\n",
-					C.Name, B.Gen.OwnTilt() ? 1 : 0, ShownBefore, C.ShownLeast, C.ShownMost, ZoomBefore);
+				std::printf("  the tilt bench (%s) could not set its view up: own %d, shown %.2f degrees over the automatic one (%.2f to %.2f wanted) at zoom %.3f, which a notch out would leave at %.2f and two at %.2f\n",
+					C.Name, B.Gen.OwnTilt() ? 1 : 0, ShownBefore, C.ShownLeast, C.ShownMost, ZoomSet, Out1, Out2);
 				Fault("the tilt bench could not set up a tilt of his own to judge");
 				continue;
 			}
+			if (C.Height == 3)
+			{
+				// (and right down with it, a quarter notch at a time, to where a man's shoulder hides it)
+				for (int K = 0; K < 200 && B.Gen.Zoom() > 0.02; ++K) { LandGeneralEye::Input In; In.Zoom = 0.25; B.Frame(In); B.Still(20); }
+				B.Still(120);
+				if (!B.Gen.OwnTilt() || B.Gen.Zoom() > 0.02 || std::abs(B.Shown()) > 0.1)
+				{
+					std::printf("  the tilt bench (%s) could not hide his tilt at a man's shoulder: own %d, shown %.2f degrees at zoom %.3f\n", C.Name, B.Gen.OwnTilt() ? 1 : 0, B.Shown(), B.Gen.Zoom());
+					Fault("the tilt bench could not set up a tilt of his own to judge");
+					continue;
+				}
+			}
+			const double ZoomBefore = B.Gen.Zoom();
 			LandGeneralEye::Input Keep;
 			Keep.KeepView = 0;
 			B.Frame(Keep);
 			if (!B.Gen.ViewKept(0)) { Fault("the tilt bench's view was not kept"); continue; }
-			// (away from it, and his own tilt turned back by hand, so the call and not his hand has the turning of the
-			// tilt on the way back)
+			// (away from it, up from a man's shoulder first, and his own tilt turned back by hand, so the call and not
+			// his hand has the turning of the tilt on the way back)
+			for (int K = 0; K < 60 && C.Height == 3 && B.Gen.Zoom() < 0.28; ++K) { LandGeneralEye::Input In; In.Zoom = -1.0; B.Frame(In); B.Still(20); }
 			for (int K = 0; K < 240; ++K) { LandGeneralEye::Input In; In.PanRight = 1.0; B.Frame(In); }
 			for (int K = 0; K < 4000 && B.Gen.OwnTilt(); ++K) { LandGeneralEye::Input In; In.Tilt = -0.5; B.Frame(In); }
 			B.Still(120);
@@ -481,36 +534,51 @@ namespace
 			LandGeneralEye::Input Call;
 			Call.CallView = 0;
 			B.Frame(Call);
-			// (the flight taken back by his hand late on: in the middle of the zoom once its tilt has come up to the
-			// kept one; low down, where the flight climbs first, once it has come down again to within a hundredth of
-			// the kept zoom, by when the tilt has long been there)
+			// (the flight taken back by his hand. Early: on its first frame. Late on: in the middle of the zoom and
+			// right down, once its tilt has come up to the kept one and the zoom is within a hundredth of the kept
+			// one; low, where the flight climbs first, once it has come down again to within a hundredth of the kept
+			// zoom, by when the tilt has long been there; to a man's shoulder, on the last of the way down, with ten
+			// degrees of his tilt and more still on the picture)
 			int Took = -1;
 			bool bClimbed = false;
+			double ZoomTook = 0.0, ShownTook = 0.0;
 			for (int K = 0; K < 900 && Took < 0 && B.Gen.FlyingTo() == 0; ++K)
 			{
 				bClimbed = bClimbed || B.Gen.Zoom() > ZoomBefore + 0.05;
-				const bool bNow = C.bLow ? bClimbed && B.Gen.Zoom() < ZoomBefore + 0.01 : B.Shown() >= ShownBefore - 0.3;
+				const bool bNow = C.bEarly || (C.Height == 3 ? bClimbed && B.Gen.Zoom() < 0.09 && B.Shown() >= 10.0
+					: C.Height == 1 ? bClimbed && B.Gen.Zoom() < ZoomBefore + 0.01
+					: B.Shown() >= ShownBefore - 0.3 && (C.Height == 0 || B.Gen.Zoom() < ZoomBefore + 0.01));
 				if (!bNow) { B.Still(1); continue; }
+				ZoomTook = B.Gen.Zoom();
+				ShownTook = B.Shown();
 				LandGeneralEye::Input In;
 				if (C.Move == 0) In.Zoom = -1.0;
 				if (C.Move == 1 || C.Move == 3) { In.GoBlock = B.Rec.Tracks[0].Block; In.bFollow = true; }
 				if (C.Move == 2 || C.Move == 3) In.PanRight = 1.0;
+				if (C.Move == 4) In.Zoom = C.Height == 2 ? 2.0 : 1.0;
+				if (C.Move == 5) In.Tilt = 0.5;
 				B.Frame(In);
 				Took = K;
 			}
 			if (Took < 0) { Fault("the tilt bench's flight was over, or never came down, before its tilt could be taken"); continue; }
+			if (C.bEarly && (Took != 0 || std::abs(ShownTook) > 0.1)) Fault("the tilt bench's early take was not of a flight that had yet to turn his tilt");
 			B.Still(360);
 			const double ZoomAfter = B.Gen.Zoom();
 			if (C.Move == 0 && ZoomAfter < ZoomBefore + 0.5 * Set.ZoomStep) Fault("the tilt bench's notch did not take the zoom out");
 			if (C.Move == 1 && std::abs(ZoomAfter - Set.FollowNearest) > 0.01) Fault("the tilt bench's card did not leave the zoom at a followed unit's nearest");
-			if (C.Move >= 2 && std::abs(ZoomAfter - ZoomBefore) > 0.02) Fault("the tilt bench's pan did not leave the zoom where the flight was taking it");
+			if (C.Move >= 2 && C.Move <= 3 && std::abs(ZoomAfter - ZoomBefore) > 0.02) Fault("the tilt bench's pan did not leave the zoom where the flight was taking it");
+			if (C.Move == 4 && (C.Height == 2 ? ZoomAfter > 0.005 : ZoomAfter > ZoomBefore - 0.5 * Set.ZoomStep)) Fault("the tilt bench's notch did not take the zoom in");
 			if (bSay)
-				std::printf("  the tilt bench (%s): shown %.2f degrees at zoom %.3f before, taken on frame %d of the flight, left %.2f degrees at zoom %.3f with his own tilt %s\n",
-					C.Name, ShownBefore, ZoomBefore, Took, B.Shown(), ZoomAfter, B.Gen.OwnTilt() ? "on" : "off");
-			if (C.bHides && (B.Gen.OwnTilt() || std::abs(B.Shown()) > 1.0))
-				Fault("a flight taken by his hand left a tilt of his own on that the zoom he is left at hides");
-			if (!C.bHides && (!B.Gen.OwnTilt() || B.Shown() < 0.25))
+				std::printf("  the tilt bench (%s): shown %.2f degrees at zoom %.3f as set, kept at zoom %.3f, taken on frame %d of the flight at zoom %.3f showing %.2f, left %.2f degrees at zoom %.3f with his own tilt %s\n",
+					C.Name, ShownBefore, ZoomSet, ZoomBefore, Took, ZoomTook, ShownTook, B.Shown(), ZoomAfter, B.Gen.OwnTilt() ? "on" : "off");
+			if ((C.Must == 0 || C.Must == 4) && (!B.Gen.OwnTilt() || B.Shown() < 0.25))
 				Fault("a flight taken by his hand handed back a tilt of his own that still shows where he is left");
+			if (C.Must == 1 && (B.Gen.OwnTilt() || std::abs(B.Shown()) > 1.0))
+				Fault("a flight taken by his hand left a tilt of his own on that the zoom he is left at hides");
+			if (C.Must == 2 && (B.Gen.OwnTilt() || std::abs(B.Shown()) > 0.2))
+				Fault("a flight taken by his hand in its first frame left him a tilt of his own that neither he nor the flight had turned");
+			if (C.Must == 3 && std::abs(B.Shown()) > 1.0)
+				Fault("a flight taken by his hand's tilt press in its first frame went on to the kept view's tilt");
 		}
 	}
 }

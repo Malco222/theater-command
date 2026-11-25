@@ -338,8 +338,11 @@ namespace LandGeneralEye
 		 * the zoom whose eye stands TopUp over the look-at at the top view's tilt. */
 		double TiltOwn(double Zoom, double Own) const;
 		double TiltMostAt(double Zoom) const;
-		/** Whether his own tilt Own shows on the picture at a zoom: as far as that zoom lets it stand, more than a
-		 * quarter of a degree over the automatic tilt there. */
+		/** Whether his own tilt Own stands clear of the automatic tilt at a zoom: more than a quarter of a degree
+		 * over it, the soft meeting counted, whatever a man's shoulder then lets the picture show of it. */
+		bool TiltStands(double Zoom, double Own) const;
+		/** Whether his own tilt Own shows on the picture at a zoom: as far as that zoom lets it stand (TiltMostAt),
+		 * more than a quarter of a degree over the automatic tilt there. */
 		bool TiltShows(double Zoom, double Own) const;
 		double TiltFor(double Zoom, double Own) const { return bOwnTilt ? TiltOwn(Zoom, Own) : TiltAt(Zoom); }
 		double UpOwn(double Zoom, double Own) const;
@@ -356,12 +359,14 @@ namespace LandGeneralEye
 		 * from the swing it has, so nothing rushes on to the kept view and nothing stops dead (bPanned: by a pan or
 		 * a slide, which eases the look-at at his hand's rate; bPlace: the look-at too, not where he has asked for a
 		 * glide of its own). His own tilt, where the flight had the turning of it, stays his own where it comes to
-		 * rest if it shows on the picture there (TiltShows), and else goes on back to the automatic one. ZoomIn is the
-		 * zoom notch of the frame that takes the flight (In.Zoom * ZoomStep), which the frame has yet to take off the
-		 * zoom's wish, and ZoomLeast the nearest zoom the frame will then hold the wish to (FollowNearest where a
-		 * unit's card takes the flight and the unit is followed, else 0): both count towards where the zoom rests,
-		 * so his tilt is judged against the zoom he is going to. A pan begun while the look-at still coasts lets it
-		 * go again at the pan's own rate (Update). */
+		 * rest only if it shows on the picture (TiltShows) at the zoom the taking move leaves him at, and stood
+		 * clear of the automatic tilt (TiltStands) at the zoom's rest as that move found it; else it goes on back
+		 * to the automatic one. ZoomIn is the zoom notch of the frame that takes the flight (In.Zoom * ZoomStep),
+		 * which the frame has yet to take off the zoom's wish, and ZoomLeast the nearest zoom the frame will then
+		 * hold the wish to (FollowNearest where a unit's card takes the flight and the unit is followed, else 0):
+		 * both count towards where the zoom rests. So a notch out or a card's follow cannot leave him a tilt he
+		 * cannot see, and a notch in cannot make his own a tilt that was no tilt before it. A pan begun while the
+		 * look-at still coasts lets it go again at the pan's own rate (Update). */
 		void FlightLetGo(bool bPanned, bool bPlace, double ZoomIn = 0.0, double ZoomLeast = 0.0);
 	};
 }

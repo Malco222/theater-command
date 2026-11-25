@@ -119,9 +119,14 @@ namespace LandGeneralEye
 		return Auto + Over;
 	}
 
+	bool Eye::TiltStands(double Zoom, double Own) const
+	{
+		return TiltOwn(Zoom, Own) - TiltAt(Zoom) > 0.25 * Rad;
+	}
+
 	bool Eye::TiltShows(double Zoom, double Own) const
 	{
-		return TiltOwn(Zoom, std::min(Own, TiltMostAt(Zoom))) - TiltAt(Zoom) > 0.25 * Rad;
+		return TiltStands(Zoom, std::min(Own, TiltMostAt(Zoom)));
 	}
 	double Eye::TiltMostAt(double Zoom) const
 	{
@@ -221,18 +226,25 @@ namespace LandGeneralEye
 		WantH = H + SwingH * std::abs(SwingH) / (2.0 * Set.TurnPush * Rad);
 		WantS = S + SwingS * std::abs(SwingS) / (2.0 * Set.ZoomPush * Set.FlySlower);
 		// (his own tilt, where the call and not his own hand had the turning of it, to the view's tilt or back to the
-		// automatic one: it stays his own where it comes to rest if it shows on the picture there, at the zoom's own
-		// rest; and else it goes on back to the automatic one and is handed back, never left his own, unseen, under
-		// it. Turned back by his own hand before the call, it goes on back as he asked. ZoomIn is the notch he took
-		// the flight with, which this same frame still has to take off the zoom's wish, and ZoomLeast the nearest
-		// the zoom may then stand (a unit's card pressed follows the unit, never nearer than FollowNearest, and
-		// that too is laid on the wish later in this frame): both are part of where the zoom will rest, so his tilt
-		// is judged against the zoom he is going to, not the one he is leaving.)
+		// automatic one: it stays his own where it comes to rest if it shows on the picture there; and else it goes
+		// on back to the automatic one and is handed back, never left his own, unseen, under it. Turned back by his
+		// own hand before the call, it goes on back as he asked. Two things are asked of it. That it SHOWS at the
+		// zoom the taking frame leaves him at: ZoomIn is the notch he took the flight with, which this same frame
+		// still has to take off the zoom's wish, and ZoomLeast the nearest the zoom may then stand (a unit's card
+		// pressed follows the unit, never nearer than FollowNearest, and that too is laid on the wish later in this
+		// frame). Farther out the automatic tilt is steeper and swallows his; right in by a man's shoulder his is
+		// handed toward it (TiltMostAt); so none is left on that he cannot see where he is going. And that it STANDS
+		// clear of the automatic tilt at the zoom's own rest as the taking move finds it, WantS above. The call sets
+		// his tilt off just under the automatic one's soft floor as the view stands, and a notch IN lowers that
+		// floor: judged a notch nearer alone, a flight taken in its first frames by a notch in was left with a tilt
+		// of his own that neither he nor the flight had turned. (Stands, not shows: a tilt of his own that only the
+		// shoulder hides as the take finds it is his still, and a notch out brings it back as it would with no
+		// flight on.)
 		if (bOwnTilt && (bCallToAuto || !bToAuto))
 		{
 			const double Rest = Tl + SwingTl * std::abs(SwingTl) / (2.0 * Set.TiltPush * Rad * Set.FlySlower);
 			const double ZoomRest = std::clamp(std::max(WantS - ZoomIn, ZoomLeast), 0.0, 1.0);
-			bToAuto = !TiltShows(ZoomRest, Rest);
+			bToAuto = !(TiltStands(WantS, Rest) && TiltShows(ZoomRest, Rest));
 			WantTl = bToAuto ? TiltAt(ZoomRest) - (Set.TiltSoft + 1.0) * Rad : Rest;
 		}
 		bCallToAuto = false;
