@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f59f5c0c 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f18610c3 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -47509,9 +47509,10 @@
     if (v) return v;
     const n = g2.nations[nat];
     const war = n.atWar.length > 0;
+    const odds = war ? g2.seas.map((z) => seaOdds(g2, z.id, nat)) : null;
     v = {
-      shut: g2.seas.map((z) => war && closedTo(g2, z.id, nat)),
-      risk: g2.seas.map((z) => war ? seaRisk(g2, z.id, nat) : 0),
+      shut: g2.seas.map((_, i) => !!odds && odds[i].shut),
+      risk: g2.seas.map((_, i) => odds ? odds[i].risk : 0),
       from: []
     };
     const ports = /* @__PURE__ */ new Set(), coasts = /* @__PURE__ */ new Set();
@@ -53001,6 +53002,7 @@
   var airFleetsOf = (g2, nat) => g2.airFleets.filter((f) => f.nat === nat);
   var ROWS = null;
   var ROWS_N = -1;
+  var ROW_KEPT = /* @__PURE__ */ new WeakMap();
   var rowOf = (f) => {
     if (!ROWS || ROWS_N !== AIR.fleets.length) {
       ROWS = /* @__PURE__ */ new Map();
@@ -53010,7 +53012,12 @@
         if (!ROWS.has(k)) ROWS.set(k, r);
       }
     }
-    return ROWS.get(`${f.raised ?? f.nat}|${f.parent ?? f.name}`);
+    const nat = f.raised ?? f.nat, name = f.parent ?? f.name;
+    const kept3 = ROW_KEPT.get(f);
+    if (kept3 && kept3.rows === ROWS && kept3.nat === nat && kept3.name === name) return kept3.row;
+    const row2 = ROWS.get(`${nat}|${name}`);
+    ROW_KEPT.set(f, { rows: ROWS, nat, name, row: row2 });
+    return row2;
   };
   var homeCommand = (f) => !!rowOf(f)?.home;
   var posted = (g2, f) => f.nat !== g2.human && !!rowOf(f)?.posted && hopsBind(g2);
@@ -53428,18 +53435,41 @@
     if (sky !== null && allied(g2, sky, nat)) return false;
     return fightersOver(g2, region, nat) >= AIR.sky.least;
   }
+  var LONGEST = null;
+  function longestReach() {
+    if (LONGEST !== null) return LONGEST;
+    let m = Math.max(CARRIERS.range.ftr, CARRIERS.range.bmr);
+    const up = (x) => {
+      if (x !== void 0) m = Math.max(m, x);
+    };
+    for (const s of Object.values(AIR.nations)) {
+      up(s.ftrRange);
+      up(s.bmrRange);
+    }
+    for (const r of AIR.fleets) {
+      up(r.ftrRange);
+      up(r.bmrRange);
+    }
+    for (const rows of Object.values(AIR.ftrReach ?? {})) for (const r of rows) up(r[1]);
+    for (const rows of Object.values(AIRWAR.day.range)) for (const r of rows) up(r[1]);
+    for (const J of Object.values(AIR.jobs ?? {})) {
+      up(J.cover);
+      for (const r of J.raid) up(r[1]);
+    }
+    return LONGEST = m;
+  }
   var seaDist2 = /* @__PURE__ */ new WeakMap();
   function fieldToSea(g2, base, z) {
     let m = seaDist2.get(g2.seas);
     if (!m) {
-      m = /* @__PURE__ */ new Map();
+      m = [];
       seaDist2.set(g2.seas, m);
     }
-    const k = base * 4096 + z;
-    let d = m.get(k);
-    if (d === void 0) {
+    const row2 = m[base] ?? (m[base] = new Float64Array(g2.seas.length).fill(NaN));
+    let d = row2[z];
+    if (Number.isNaN(d)) {
       d = seaKm(g2, base, z);
-      m.set(k, d);
+      row2[z] = d;
     }
     return d;
   }
@@ -53447,7 +53477,9 @@
     if (f.ship !== void 0 || f.mission === "rest" || f.unfed || f.ftr + f.bmr <= 0 || !g2.regions[f.base]) return 0;
     const n = g2.nations[f.nat];
     if (!n?.alive || !n.atWar.length) return 0;
-    const d = fieldToSea(g2, f.base, z), R2 = reach(f, g2);
+    const d = fieldToSea(g2, f.base, z);
+    if (d > longestReach()) return 0;
+    const R2 = reach(f, g2);
     const most = S3.cover?.[f.raised ?? f.nat];
     const ftr = f.ftr > 0 ? f.ftr * cover(d, most === void 0 ? R2.ftrRange : Math.min(R2.ftrRange, most)) : 0;
     const bmr = f.bmr > 0 && d <= R2.bmrRange ? f.bmr : 0;
@@ -57293,7 +57325,46 @@
     const air2 = airOver(g2, z, nat, hostile, beside) * NAVY.air.weight;
     return { ships, air: air2, total: ships + air2 };
   }
+  var reading = null;
+  function seaReading(g2, f) {
+    if (reading) return f();
+    reading = { g: g2, closed: /* @__PURE__ */ new Map(), risk: /* @__PURE__ */ new Map(), searches: /* @__PURE__ */ new Map(), steps: /* @__PURE__ */ new Map() };
+    try {
+      return f();
+    } finally {
+      reading = null;
+    }
+  }
+  var readingOf = (g2) => reading !== null && reading.g === g2 ? reading : null;
   function closedTo(g2, z, nat) {
+    const R2 = readingOf(g2);
+    if (!R2) return closedNow(g2, z, nat);
+    let a = R2.closed.get(nat);
+    if (!a) R2.closed.set(nat, a = new Int8Array(g2.seas.length).fill(-1));
+    if (a[z] < 0) a[z] = closedNow(g2, z, nat) ? 1 : 0;
+    return a[z] === 1;
+  }
+  function seaOdds(g2, z, nat) {
+    const R2 = readingOf(g2);
+    if (!R2) return oddsNow(g2, z, nat);
+    let a = R2.closed.get(nat), b = R2.risk.get(nat);
+    if (!a) R2.closed.set(nat, a = new Int8Array(g2.seas.length).fill(-1));
+    if (!b) R2.risk.set(nat, b = new Float64Array(g2.seas.length).fill(NaN));
+    if (a[z] < 0 || Number.isNaN(b[z])) {
+      const o = oddsNow(g2, z, nat);
+      a[z] = o.shut ? 1 : 0;
+      b[z] = o.risk;
+    }
+    return { shut: a[z] === 1, risk: b[z] };
+  }
+  function oddsNow(g2, z, nat) {
+    const e = seaSide(g2, z, nat, true);
+    const hunters = e.ships + e.air * 0.5;
+    const closes = e.total >= NAVY.closed.min;
+    const own = closes || hunters > 0 ? seaSide(g2, z, nat, false).total : 0;
+    return { shut: closes && e.total >= NAVY.closed.ratio * own, risk: hunters <= 0 ? 0 : hunters / (hunters + 2 * own + NAVY.intercept.sea) };
+  }
+  function closedNow(g2, z, nat) {
     const e = seaSide(g2, z, nat, true);
     if (e.total < NAVY.closed.min) return false;
     return e.total >= NAVY.closed.ratio * seaSide(g2, z, nat, false).total;
@@ -57571,6 +57642,14 @@
   }
   var seaOpenAt = (g2, nat, r) => r.seas.some((z) => !closedTo(g2, z, nat));
   function seaRisk(g2, z, nat) {
+    const R2 = readingOf(g2);
+    if (!R2) return riskNow2(g2, z, nat);
+    let a = R2.risk.get(nat);
+    if (!a) R2.risk.set(nat, a = new Float64Array(g2.seas.length).fill(NaN));
+    if (Number.isNaN(a[z])) a[z] = riskNow2(g2, z, nat);
+    return a[z];
+  }
+  function riskNow2(g2, z, nat) {
     const e = seaSide(g2, z, nat, true);
     const hunters = e.ships + e.air * 0.5;
     if (hunters <= 0) return 0;
@@ -57586,26 +57665,54 @@
     return seaPathTo(seaSearch(g2, nat, from2, o), to);
   }
   function seaSearch(g2, nat, from2, o = {}) {
+    const R2 = readingOf(g2);
+    if (!R2) return o.surprise ? surpriseSearch(g2, nat, from2, o) : searchNow(g2, nat, from2, o);
+    const k = `${nat}|${from2.id}|${o.max ?? 0}|${o.surprise ? 1 : 0}`;
+    let S3 = R2.searches.get(k);
+    if (!S3) R2.searches.set(k, S3 = searchNow(g2, nat, from2, o));
+    return S3;
+  }
+  var SURPRISE = /* @__PURE__ */ new WeakMap();
+  function surpriseSearch(g2, nat, from2, o) {
+    let m = SURPRISE.get(g2.seas);
+    if (!m) SURPRISE.set(g2.seas, m = /* @__PURE__ */ new Map());
+    let k = `${nat}|${from2.id}|${o.max ?? 0}|`;
+    for (const gt of g2.gates) k += canPass(g2, gt.a, gt.b, nat) ? "1" : "0";
+    let S3 = m.get(k);
+    if (!S3) {
+      if (m.size >= 5e4) m.clear();
+      m.set(k, S3 = searchNow(g2, nat, from2, o));
+    }
+    return S3;
+  }
+  function searchNow(g2, nat, from2, o) {
     const N = g2.seas.length;
     const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
     const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
+    const look = (z) => {
+      const s = seaOdds(g2, z, nat);
+      shutAt[z] = s.shut ? 1 : 0;
+      weightAt[z] = 1 + 20 * s.risk;
+    };
     const shut = (z) => {
       if (o.surprise) return false;
-      if (shutAt[z] < 0) shutAt[z] = closedTo(g2, z, nat) ? 1 : 0;
+      if (shutAt[z] < 0) look(z);
       return shutAt[z] === 1;
     };
     const weight6 = (z) => {
-      if (weightAt[z] === 0) weightAt[z] = 1 + (o.surprise ? 0 : 20 * seaRisk(g2, z, nat));
+      if (o.surprise) return 1;
+      if (shutAt[z] < 0) look(z);
       return weightAt[z];
     };
+    const heap = new SeaHeap();
     for (const z of from2.seas) if (!shut(z)) {
       cost[z] = weight6(z);
       len[z] = 1;
+      heap.push(cost[z], z);
     }
-    for (; ; ) {
-      let a = -1;
-      for (let i = 0; i < N; i++) if (!done[i] && cost[i] < 1e9 && (a < 0 || cost[i] < cost[a])) a = i;
-      if (a < 0) break;
+    while (heap.size) {
+      const c0 = heap.topCost(), a = heap.pop();
+      if (done[a] || c0 !== cost[a] || !(cost[a] < 1e9)) continue;
       done[a] = 1;
       if (o.max && len[a] >= o.max) continue;
       for (const j of g2.seas[a].adj) {
@@ -57615,11 +57722,62 @@
           cost[j] = c;
           prev[j] = a;
           len[j] = len[a] + 1;
+          heap.push(c, j);
         }
       }
     }
     return { cost, prev };
   }
+  var SeaHeap = class {
+    constructor() {
+      __publicField(this, "c", []);
+      __publicField(this, "i", []);
+    }
+    get size() {
+      return this.c.length;
+    }
+    topCost() {
+      return this.c[0];
+    }
+    less(a, b) {
+      return this.c[a] < this.c[b] || this.c[a] === this.c[b] && this.i[a] < this.i[b];
+    }
+    swap(a, b) {
+      const c = this.c[a], i = this.i[a];
+      this.c[a] = this.c[b];
+      this.i[a] = this.i[b];
+      this.c[b] = c;
+      this.i[b] = i;
+    }
+    push(cost, z) {
+      let k = this.c.length;
+      this.c.push(cost);
+      this.i.push(z);
+      while (k > 0) {
+        const p = k - 1 >> 1;
+        if (!this.less(k, p)) break;
+        this.swap(k, p);
+        k = p;
+      }
+    }
+    pop() {
+      const top = this.i[0], n = this.c.length - 1;
+      this.swap(0, n);
+      this.c.pop();
+      this.i.pop();
+      let k = 0;
+      for (; ; ) {
+        const l = 2 * k + 1, r = l + 1;
+        let m = k;
+        if (l < n && this.less(l, m)) m = l;
+        if (r < n && this.less(r, m)) m = r;
+        if (m === k) break;
+        this.swap(k, m);
+        k = m;
+      }
+      return top;
+    }
+  };
   var seaWays = (g2, nat, from2, o) => seaSearch(g2, nat, from2, o);
   function wayTo2(prev, end) {
     const path = [];
@@ -57684,6 +57842,14 @@
   }
   var sailReach = (g2, nat) => farOn(g2) && (nat === void 0 || ownShips !== nat) ? NAVY.sail?.reach ?? 0 : 0;
   function convoySteps(g2, nat, from2) {
+    const R2 = readingOf(g2);
+    if (!R2) return stepsNow(g2, nat, from2);
+    const k = `${nat}|${from2.id}`;
+    let S3 = R2.steps.get(k);
+    if (!S3) R2.steps.set(k, S3 = stepsNow(g2, nat, from2));
+    return S3;
+  }
+  function stepsNow(g2, nat, from2) {
     const N = g2.seas.length, steps = new Int16Array(N), prev = new Int16Array(N).fill(-1);
     const q = [];
     for (const z of from2.seas) if (!closedTo(g2, z, nat)) {
@@ -78147,7 +78313,7 @@
     }
     return best ? { by: best.by, from: best.from } : null;
   }
-  function reading(g2, viewer = g2.human) {
+  function reading2(g2, viewer = g2.human) {
     if (!viewer) return null;
     const n = g2.nations[viewer];
     if (!n?.alive || n.capital < 0 || standsFreed(g2, n)) return null;
@@ -78235,7 +78401,7 @@
     };
   }
   function fallWarning(g2, viewer = g2.human, told2 = false) {
-    const r = reading(g2, viewer);
+    const r = reading2(g2, viewer);
     if (!r) return null;
     const n = g2.nations[r.nat];
     const seat5 = g2.regions[r.region];
@@ -78280,7 +78446,7 @@
     return null;
   }
   function withinReach(g2, viewer = g2.human) {
-    const r = reading(g2, viewer);
+    const r = reading2(g2, viewer);
     return !!r && (r.within || r.twoThirds || r.canFall);
   }
   var KIND_WORDS = { inf: "infantry", mot: "motorized infantry", arm: "tanks", cav: "cavalry", mtn: "mountain troops", art: "guns", eng: "engineers" };
@@ -107777,11 +107943,11 @@
     const s = game();
     const ports = /* @__PURE__ */ new Set();
     let beaches = [];
-    if (humanUp(s) && !onEve(s)) {
+    if (humanUp(s) && !onEve(s)) seaReading(s, () => {
       const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
       for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
       beaches = landingTargets(s, cs).map((r) => r.id);
-    }
+    });
     return { ports: [...ports], beaches };
   }
   function bySeaWhy(ids2, to) {
@@ -107789,14 +107955,16 @@
     const r = s.regions[to];
     const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
     if (!r || !cs.length) return { why: "" };
-    if (allied(s, cs[0].nat, r.ctrl)) {
-      for (const c of cs) {
-        const why = whyNotShip(s, c, r);
-        if (why) return { why };
+    return seaReading(s, () => {
+      if (allied(s, cs[0].nat, r.ctrl)) {
+        for (const c of cs) {
+          const why = whyNotShip(s, c, r);
+          if (why) return { why };
+        }
+        return { why: "" };
       }
-      return { why: "" };
-    }
-    return { why: whyNotLand(s, cs, r) ?? "" };
+      return { why: whyNotLand(s, cs, r) ?? "" };
+    });
   }
   function ship(ids2, to) {
     const s = game();
