@@ -39,6 +39,8 @@ namespace
 		{ TEXT("america"), EKind::TrialWord, TEXT("Battle looks: North American farmland"), TEXT("Fields in North America are laid out in its own big square farms. Off: the European pattern."), TEXT("america"), true, TEXT("AD PASS 23 Nov (some months' stills owed); Mac fps in the final pass"), false },
 		{ TEXT("runs"), EKind::TrialWord, TEXT("Battle looks: men run in their own strides"), TEXT("Men in a squad run each in his own stride instead of in step. Off: in step."), TEXT("runs"), true, TEXT("AD and Mac in the final pass"), false },
 		{ TEXT("deserthouses"), EKind::TrialWord, TEXT("Battle looks: desert towns' houses in full detail"), TEXT(""), TEXT("deserthouses"), false, TEXT("the AD's first review NOT YET (six mends, one more round); no Mac look yet"), false },
+		{ TEXT("city"), EKind::TrialWord, TEXT("Battle looks: ruined cities"), TEXT(""), TEXT("city"), false, TEXT("pass 2 (q82imy 38b6ab24): waits the AD's read of its first mend round and the Mac's 45 fps in a capital's core, with stills"), false },
+		{ TEXT("trigh"), EKind::TrialWord, TEXT("Battle looks: desert wheel tracks"), TEXT(""), TEXT("trigh"), false, TEXT("pass 2 (nu6w43 3e5946b2 + 3b0b72bb): waits the 3D pre-check's compile and its A/B shots (the desert at 31.5N 25.0E)"), false },
 		{ TEXT("wetlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("wet"), true, TEXT("the look of the Battle rules card's Wet mud row (its switch)"), false },
 		{ TEXT("wornlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("worn"), true, TEXT("the look of the Battle rules card's Worn uniforms row (its switch)"), false },
 		{ TEXT("capturedlook"), EKind::TrialWord, TEXT(""), TEXT(""), TEXT("captured"), true, TEXT("the look of the Battle rules card's Captured tanks row (its switch)"), false },
@@ -78,12 +80,17 @@ namespace
 		{ TEXT("ruts"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("mud"), false, TEXT("the AD's last word NOT YET; needs a field fought over in the mud to judge"), false },
 		{ TEXT("bearers"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("bearers"), false, TEXT("standing rule: off (the get-up bug)"), false },
 		{ TEXT("smoke"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("smoke"), false, TEXT("standing rule: off until the tactics mend"), false },
+		{ TEXT("noseArt"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("noseArt"), false, TEXT("pass 2 (air wave 1, 0byihx 805b71bc): the paintings passed the AD; ON once the Mac's C13/C13b shows them placed on the bombers"), false },
+		{ TEXT("flyTroops"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("flyTroops"), false, TEXT("off: no raid on troops has a battle in the air until the air rules thread's side joins, so on it would show nothing"), false },
+		{ TEXT("flyDefend"), EKind::LandRule, TEXT(""), TEXT(""), TEXT("flyDefend"), false, TEXT("off: the month stop it needs is not built yet (the stand-in offer is -TheaterAirScrambleDemo)"), false },
 		// ---- The campaign map ----
 		{ TEXT("monthcard"), EKind::Launch, TEXT("Map: the month card"), TEXT("The month is shown on a leather and brass card with your flag across its head, in place of the desk calendar. Off: the calendar."), TEXT("-TheaterMonthCard"), true, TEXT("mock-up AD PASS 24 Nov 18:56Z; Mac stills in the final pass"), true },
 		{ TEXT("towncard"), EKind::Launch, TEXT("Map: the town card"), TEXT("A province's panel opens on its town's street, with its figures as a card. Off: the plain panel."), TEXT("-TheaterTownCard"), true, TEXT("design AD PASS 24 Nov 17:53Z; Mac stills in the final pass"), true },
-		{ TEXT("far"), EKind::Launch, TEXT("Map: the far side of the world"), TEXT(""), TEXT("-TheaterFar"), false, TEXT("waits for the Japan and Pacific rules to join"), true },
+		{ TEXT("far"), EKind::Launch, TEXT("Map: the far side of the world"), TEXT(""), TEXT("-TheaterFar"), false, TEXT("the Japan and Pacific rules are in (pass 2); waits the front door (42h725 76a3d50d) and the Mac"), true },
 		{ TEXT("monthaside"), EKind::Variable, TEXT("Map: the table moves while the world plays its month"), TEXT("When you end a month, the other countries play theirs while the table goes on moving, instead of holding still until they are done. Off: it holds still. The same month either way."), TEXT("tc.Speed.MonthAside"), true, TEXT("map-speed lane; Mac month ends in the final pass"), false },
 		{ TEXT("wakes"), EKind::Option, TEXT(""), TEXT(""), TEXT("wakes"), true, TEXT("Mac look + AD in the final pass (OPTIONS row Fading wakes)"), false },
+		{ TEXT("nightraid"), EKind::Variable, TEXT("Map: towns under a night raid"), TEXT(""), TEXT("tc.Look.NightRaid"), false, TEXT("pass 2 (city glance f688ee1e): ON after the Mac's stills and the AD"), false },
+		{ TEXT("flakring"), EKind::Variable, TEXT("Map: flak rings round towns"), TEXT(""), TEXT("tc.Look.FlakRing"), false, TEXT("held: the Mac's A11/A12 wait city glance's flak ring mend"), false },
 		// ---- The whole picture (every scene: Look/WholeLook.h; Brian, 25 Nov 03:58Z "better overall graphics") ----
 		{ TEXT("crisp"), EKind::Variable, TEXT("Picture: crisp"), TEXT("The picture is sharpened, and in battle the ground stays clear where it lies at a slant. Off: the softer picture."), TEXT("tc.Look.Crisp"), false, TEXT("held until the AD's read of the cloud mock-ups and the Mac A/B (stills + 45 fps); graphics thread wmdk4s"), false },
 		{ TEXT("depth"), EKind::Variable, TEXT("Battle looks: shade where things meet, near and far"), TEXT("Hedges, woods, tanks and houses sit in the field with the soft shade under and between them, as far as the battle is seen. Off: the shade fades out 80 m from the camera."), TEXT("tc.Look.Depth"), false, TEXT("held until the Mac A/B on a full field (stills + 45 fps) and the AD; graphics thread wmdk4s"), false },
@@ -106,6 +113,11 @@ namespace
 		{ TEXT("lorryshift"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("logistics:lorryShift"), true, TEXT("Mac stills in the final pass (a new war's first month only)"), false },
 		{ TEXT("wagons"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("logistics:wagons"), true, TEXT("Mac stills in the final pass (a new war's first month only)"), false },
 		{ TEXT("dumps"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("logistics:dumps"), true, TEXT("Mac stills in the final pass (a new war's first month only)"), false },
+		{ TEXT("seekonce"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("seekoncerule"), true, TEXT("pass 2 (navy moves): its gate PASSED; Mac look in pass 2"), false },
+		{ TEXT("atom"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("atomrule"), false, TEXT("pass 2: its gate PASSED; waits the Mac's stills and the AD and UI director's read"), false },
+		{ TEXT("airnames"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("airnames"), false, TEXT("pass 2 (air lanes): the air thread adds it after its Mac look"), false },
+		{ TEXT("carrierstrike"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("carrierstrikerule"), false, TEXT("pass 2 (air lanes): off until its Mac look"), false },
+		{ TEXT("wingbydate"), EKind::CampaignRule, TEXT(""), TEXT(""), TEXT("wingbydaterule"), false, TEXT("pass 2 (air lanes): off until its Mac look"), false },
 	};
 
 	/** -TheaterR2Off holds the whole list back for this run; -TheaterR2Without=Key,Key the named features. */
