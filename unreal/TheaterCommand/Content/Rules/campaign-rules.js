@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f16890695 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0febb9739 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -30874,7 +30874,7 @@
     return theWords(cs.length === 1 ? `${name}'s airfield is crowded: ${tail}` : `${cs.length} of your airfields are crowded, ${name}'s worst: ${tail}`);
   }
   var COUNT_HEAD = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
-  var harbourOf = (place2) => /\bHarbou?r$/.test(place2) ? place2 : `the harbour of ${place2}`;
+  var harbourOf = (place2) => /\bHarbou?r$/.test(place2) ? place2 : `the harbour of ${placeName2(place2)}`;
   function crowdedNews(g2) {
     var _a, _b;
     const me = g2.human;
@@ -31819,11 +31819,13 @@
     if (r.mission !== "superiority") return "";
     const NONE_LEFT = 99;
     const sum3 = (ss, k) => ss.reduce((n, x) => n + x[k], 0);
-    const stood = (whose) => `${whose} fighters stood ${r.hold === NONE_LEFT ? "more than 90 to 1" : `about ${r.hold.toFixed(2)} to 1`} against those the defenders could still put up`;
+    const figure = r.hold === NONE_LEFT || r.hold > 90 ? "more than 90 to 1" : Number(r.hold.toFixed(2)) >= 10 ? `about ${counted(r.hold)} to 1` : `about ${r.hold.toFixed(2)} to 1`;
+    const stood = (whose) => `${whose} fighters stood ${figure} against those the defenders could still put up`;
     const leftOver = sum3(r.att, "ftr") - sum3(r.att, "lostFtr");
-    const floor = `but it takes ${AIR.sky.least} fighters still over the target as well${leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? counted(leftOver) : "none"} left` : ""}`;
+    const sent = sum3(r.att, "ftr");
+    const floor = `but it takes at least ${AIR.sky.least} fighters still over the target at the end as well${sent < 1 ? ", and the attackers sent none" : leftOver < AIR.sky.least ? `, and the attackers had ${leftOver > 0 ? counted(leftOver) : "none"} left` : ""}`;
     const usedUp = r.def.length > 0 && r.def.every((x) => x.lostFtr >= x.ftr);
-    return r.sky ? ` The ${g2.nations[r.attNat].adj} air force won the sky over ${r.place}: at the end ${r.hold >= 9 ? "no opposition was left" : stood("its")}.` : brokeOff(r) ? " The sky was not won: the raid was broken off." : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood("the attackers'")}, and it takes ${AIR.sky.win} to 1.` : r.hold >= 9 && !r.def.length ? ` The sky was not won: the defenders put up no fighters, ${floor}.` : r.hold >= 9 && usedUp ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.` : ` The sky was not won: at the end ${stood("the attackers'")}, which is enough, ${floor}.`;
+    return r.sky ? ` The ${g2.nations[r.attNat].adj} air force won the sky over ${placeName2(r.place)}: at the end ${r.hold >= 9 && (!r.def.length || usedUp) ? "no opposition was left" : stood("its")}.` : brokeOff(r) ? " The sky was not won: the raid was broken off." : leftOver < 1 && r.hold < AIR.sky.win ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over the target at the end, and none ${sent < 1 ? "flew" : "were left"}.` : r.hold < AIR.sky.win ? ` The sky was not won: at the end ${stood("the attackers'")}, and it takes ${AIR.sky.win} to 1.` : r.hold >= 9 && !r.def.length ? ` The sky was not won: the defenders put up no fighters, ${floor}.` : r.hold >= 9 && usedUp ? ` The sky was not won: at the end the defenders had no fighters left to put up, ${floor}.` : ` The sky was not won: at the end ${stood("the attackers'")}, which is enough, ${floor}.`;
   }
   function airBattles(g2, nat) {
     const out = [];
@@ -33088,7 +33090,7 @@
     if (lineShut(g2, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
     for (const p of [from2, to]) {
       const out = prizeOut(g2, p, "harbour");
-      if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? "a month" : `${out} months`} more.`;
+      if (out > 0) return `The harbour of ${placeName2(p.name)} is wrecked: no ship will use it for ${out === 1 ? "a month" : `${out} months`} more.`;
     }
     if (hostileUnits(g2, to, c.nat).length) {
       if (siegeRules(g2) && !harbourOpen(g2, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
@@ -40902,7 +40904,7 @@
       const p = g2.regions[target]?.name ?? "";
       return /\bHarbou?r$/.test(p) ? p : `the harbour of ${placeName2(p)}`;
     }
-    if (kind === "town") return g2.regions[target] ? `the defences of ${townName(g2.regions[target])}` : "";
+    if (kind === "town") return g2.regions[target] ? `the defences of ${placeName2(townName(g2.regions[target]))}` : "";
     return g2.regions[target]?.name ?? "";
   }
   var kindFlown = (m) => m === "strike" || m === "fleet" || m === "harbour" || m === "town" ? m : "bomb";
@@ -55676,7 +55678,7 @@
     };
     return { ticket, why: null };
   }
-  var harbourOf2 = (place2) => /\bHarbou?r\b/.test(place2) ? place2 : `the harbour of ${place2}`;
+  var harbourOf2 = (place2) => /\bHarbou?r\b/.test(place2) ? place2 : `the harbour of ${placeName2(place2)}`;
   var OPEN_SEA = { land: [], rivers: [], borders: [], target: [], terrain: "sea", inland: false, north: [0, 1] };
   var seaGround = (turn) => ({ ...OPEN_SEA, north: [Math.round(-Math.sin(turn) * 1e6) / 1e6 + 0, Math.round(Math.cos(turn) * 1e6) / 1e6 + 0] });
   function fromOf(decks) {
@@ -57365,8 +57367,9 @@
   function layBy(g2) {
     const me = g2.human;
     if (g2.corps.some((c) => c.nat === me && !c.dead && isEngineer(c))) return ": an engineer corps can lay one there.";
-    const due = g2.nations[me].queue.filter((b) => b.what === "corps" && b.kind === "eng").map((b) => b.eta).sort((a, b) => a - b)[0];
-    if (due !== void 0) return `: an engineer corps can lay one there. You have one on order in the ARSENAL, due ${turnToDate(due).label}.`;
+    const etas = g2.nations[me].queue.filter((b) => b.what === "corps" && b.kind === "eng").map((b) => b.eta).sort((a, b) => a - b);
+    if (etas.length > 1) return `: an engineer corps can lay one there. You have ${etas.length} on order in the ARSENAL, the first due ${turnToDate(etas[0]).label}.`;
+    if (etas.length === 1) return `: an engineer corps can lay one there. You have one on order in the ARSENAL, due ${turnToDate(etas[0]).label}.`;
     if (offers(g2, me).some((o) => o.key === "corps:eng")) return ": an engineer corps can lay one there. You have none: raise one in the ARSENAL.";
     return ".";
   }
@@ -57642,9 +57645,7 @@
       const had = shipList(x.ships), sunk = shipList(x.sunk);
       return { nat: x.nat, title: x.fleet, lines: [`${had[0].toUpperCase()}${had.slice(1)}${x.admiral ? `. ${x.admiral} commands` : ""}. ${sunk === "no ships" ? "No ships lost." : `Lost ${sunk}.`}`], buttons: [] };
     });
-    const sent = r.att.reduce((n, x) => n + x.ftr, 0), left = r.att.reduce((n, x) => n + x.ftr - x.lostFtr, 0);
-    const few = sent < 1 ? ", and none flew" : left < 1 ? ", and none were left" : left < AIR.sky.least ? `, and only ${num3(left)} ${Math.round(left) === 1 ? "was" : "were"} left` : "";
-    const sky = r.mission !== "superiority" ? "" : r.sky ? ` The ${adj(r.attNat)} air force won the sky over ${r.place}: at the end ${r.hold >= 9 ? "no opposition was left" : `its fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up`}.` : left < AIR.sky.least ? ` The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end${few}.` : r.hold >= AIR.sky.win ? ` The sky was not won: ${num3(left)} fighters were still over it at the end, ${r.hold >= 9 ? "with no opposition left" : `about ${r.hold.toFixed(2)} to 1`}, but they ${r.result === BROKE_OFF_SKY ? "had to turn for home" : "could not stay to hold it"}.` : ` The sky was not won: at the end the ${adj(r.attNat)} fighters stood about ${r.hold.toFixed(2)} to 1 against those the defenders could still put up, and it takes ${AIR.sky.win} to 1.`;
+    const sky = skyWords(g2, r);
     const unready = r.surprise ? " Caught unready: war was declared this month, so the harbour had no warning, its fighters and guns were not manned, and the ships lay at their moorings." : "";
     const where = r.zone >= 0 ? [{ label: `GO TO ${r.place.replace(/^the /i, "THE ").toUpperCase()}`, act: `goto:sea:${r.zone}`, ok: true, tip: "Looks at the place on the map." }] : r.region >= 0 ? [{ label: `GO TO ${r.place.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: "Looks at the place on the map." }] : [];
     return {
