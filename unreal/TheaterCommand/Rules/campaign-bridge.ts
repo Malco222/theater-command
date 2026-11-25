@@ -6942,8 +6942,10 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         return {
           label: 'THE FORECAST  \u00B7  BY DAY OR BY NIGHT', bombers: Math.round(dn.bombers),
           foes: hid && foes <= 0 ? 'Unknown' : foes > 0 ? `${foes.toLocaleString('en-US')}` : 'No', foesWords: hid ? (foes > 0 ? 'enemy fighters known in reach, more may come' : 'fighters in reach: not scouted') : foes > 0 ? 'enemy fighters in reach' : 'fighters in reach',
-          // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them)
-          guns: dn.guns, gunsFigure: hid && dn.gunsKnown === false ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: dn.gunsTail ? `\u00B7 ${dn.gunsTail}` : '', gunsTip: `${dn.gunsLabel}. Each level stops a share of the bombing and brings down more bombers.`,
+          // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them; the
+          // tail the count as the browser's card gives it, the built guns first and the light guns every target has
+          // named apart: the UI director's section B, 25 Nov 2026)
+          guns: dn.guns, gunsFigure: hid && dn.gunsKnown === false ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: 'AA guns', gunsTail: `\u00B7 ${[dn.gunsTail, dn.gunsCount].filter(Boolean).join(' \u00B7 ')}`, gunsTip: `${dn.gunsLabel.replace(/\.$/, '')}. Each level stops a share of the bombing and brings down more bombers.`,
           day: one(dn.day), night: one(dn.night),
           // (new for the 3D card to draw, where it will: what the side knows, a line each, and the band)
           ...(dn.fog ? { fog: { live: dn.fog.live, fighters: dn.fog.fighters, guns: dn.fog.guns, damage: dn.fog.damage, band: dn.fog.band } } : {}),
