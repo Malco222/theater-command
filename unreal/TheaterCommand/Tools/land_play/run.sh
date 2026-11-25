@@ -131,6 +131,10 @@ return best;
   [ "$(sed -n '/^export function makeBlocks(/,/^}/p' "$UNITS" | grep -cF "const k = (team ? 'art' :" || true)" -ge 1 ] || { echo "FAULT: units.ts makeBlocks(), which makes each side's blocks, no longer makes a machine gun or mortar team a gun block (the spotter's ring GUNS AND TEAMS)"; STATUS=1; }
   grep -qF "return Sight + 0.25 * (W > D ? W : D);" "$SRC/Battle/LandSight.h" || { echo "FAULT: LandSight.h FindsWithin no longer adds a quarter of the block's longer side, as sim.ts gap() takes it (the rings' reach)"; STATUS=1; }
 fi
+# (The camera's dark rule reads the drawn picture through the scene, which is not built here: the one line that hands
+# the reading its clock is held. Handed a frame's length instead, as it was through release 1.5.1, the reading asked
+# for a single frame as the battle began and the rule saw nothing all battle; no run here could tell.)
+grep -qF "ReadDark(RealT);" "$SRC/Battle/LandBattle.cpp" || { echo "FAULT: LandBattle.cpp no longer hands the dark reading the scene's running clock (ReadDark(RealT);): the camera's dark rule is blind after its first frame"; STATUS=1; }
 for F in "$@"; do
   case "$F" in *armies.json) continue ;; esac
   "$OUT/land_play_test" "$F" "$ROOT/Content/Data/Sound/mix.json" "$OUT" || STATUS=1
