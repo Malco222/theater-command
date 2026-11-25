@@ -30,6 +30,9 @@ describe("a month's step pictures", () => {
       for (const k of TABLE) expect(k in v, `step picture lacks ${k}`).toBe(true);
     }
     for (const k of [...PANEL, ...TABLE]) expect(k in month!.view, `month picture lacks ${k}`).toBe(true);
+    // (a step's page list holds the towns page alone, where it is open: all the table reads of it; the month's is whole)
+    for (const step of month!.steps) for (const p of step.view!.pages as { id: string }[]) expect(p.id).toBe('towns');
+    expect((month!.view.pages as { id: string }[]).some((p) => p.id !== 'towns')).toBe(true);
     // (and a step's picture, sent as the 3D game is sent it, has none of the panel fields at all)
     const sent = JSON.parse(JSON.stringify(month!.steps[0].view)) as View;
     for (const k of PANEL) expect(k in sent).toBe(false);
