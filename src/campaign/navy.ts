@@ -630,10 +630,21 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
   return lost;
 }
 
+/**
+ * Why a corps inside its town takes no ship (1.5.3; the playtest's find 17), in the railway's own form (whyNoTrain): a
+ * garrison has not moved, and is never told it has. Shut in, it is told so; otherwise it takes the field first.
+ */
+function garrisonAboard(g: Game, c: Corps): string {
+  const from = g.regions[c.reg];
+  return besieged(g, from) ? `${c.name} is shut in the town at ${from.name}. No ship leaves a siege.` : 'A garrison does not take ship: TAKE THE FIELD first.';
+}
+
 /** Why a corps cannot be shipped to a friendly port, or null if it can. */
 export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
+  // (1.5.3; the playtest's find 17.) A garrison has not moved: it is told what it is and how it comes out, as the railway tells it.
+  if (c.town !== undefined) return garrisonAboard(g, c);
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
   if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
@@ -744,6 +755,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
   if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
   if (!from.port) return 'A landing force has to embark at a port.';
+  const inside = cs.find((c) => c.town !== undefined);
+  if (inside) return garrisonAboard(g, inside);
   if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
   if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
