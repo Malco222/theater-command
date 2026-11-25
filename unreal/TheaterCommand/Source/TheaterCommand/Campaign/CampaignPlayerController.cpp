@@ -6711,10 +6711,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
+				// (1.5.3, the 1.5.2 review) A fleet cut off beyond a shut strait is not told a sea is too far: its line says why, as
+				// a right-click there answers it.
 				HoverTip = FText::FromString(!FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s\n%s"), *Name, *Known, *FleetHand.Held)
 					: Held->Reach.Contains(Sea)
 					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s.%s"), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"), *Attack)
 					: Bar ? Name
+					: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s\n%s"), *Name, *FleetHand.Cut)
 					: FString::Printf(TEXT("%s\nToo far for %s this month."), *Name, *Held->Name));
 			}
 			else if (TipRegion == INDEX_NONE)
@@ -7103,8 +7106,11 @@ void ACampaignPlayerController::LayOutFleet()
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(Fleet->Name);
-	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  can reach %d sea%s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
-		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
+	// (1.5.3, the 1.5.2 review) Cut off beyond a shut strait it reaches no sea: its heading says so, not "can reach 0 seas".
+	const FString ReachWords = !FleetHand.Cut.IsEmpty() ? FString(TEXT("cut off beyond a shut strait"))
+		: FString::Printf(TEXT("can reach %d sea%s"), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s"));
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  %s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
+		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), *ReachWords));
 	// (Rules version 72: the sea lift is on the fleet's card, since it is the fleet that covers a crossing. It is in
 	// the card's plain heading and not on its warning line: it is a fact, not an alarm.)
 	if (!View.LiftLine.IsEmpty())
@@ -7239,6 +7245,14 @@ void ACampaignPlayerController::OrderFleetTo(int32 Zone)
 	if (!Fleet->Reach.Contains(Zone))
 	{
 		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		// (1.5.3, the 1.5.2 review) Held where this month's battle left it, or cut off beyond a shut strait (no sea is ringed
+		// for it), it is refused with that reason, held first, as the tray's buttons and the rules give it.
+		const FString HeldOrCut = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Cut;
+		if (!HeldOrCut.IsEmpty())
+		{
+			Notify(HeldOrCut, 8.0);
+			return;
+		}
 		// (Ruling 86.) A route refused because a gate is shut says so.
 		const int32* BarredBy = Fleet->Barred.Find(Zone);
 		const FViewGate* Bar = BarredBy ? Session->GetView().Gates.FindByPredicate([BarredBy](const FViewGate& Each) { return Each.Id == *BarredBy; }) : nullptr;
