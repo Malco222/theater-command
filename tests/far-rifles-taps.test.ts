@@ -561,6 +561,60 @@ describe('the armed level', () => {
     expect(canArm(c.g, 'CHN', 3)).toBe(false);
   });
 
+  it('13. (the common limits) the men in reserve hold the foot drafts and the heavy drafts alike', () => {
+    // No class this month and the levy held off, so the reserve is only what is set here.
+    const was = MANPOWER.class.CHN;
+    MANPOWER.class.CHN = 0;
+    undo.push(() => { MANPOWER.class.CHN = was; });
+    // Foot: a big store, a reserve of 0.2, every foot corps short of its level.
+    const g = grand();
+    g.nations.CHN.pp = 500;
+    store(g, 50);
+    noInflow(g);
+    g.flags['lv:CHN'] = 99;
+    const feet = corpsOf(g).filter((c) => foot(g, c) && !c.vol);
+    knock(g, feet, 0.8);
+    g.flags['mp:CHN'] = 0.2;
+    const m = menLeft(g, 'CHN');
+    expect(m).toBeCloseTo(0.2, 12);
+    const f = rises(feet);
+    try { startPhase(g, 'CHN'); } finally { f.stop(); }
+    expect(f.sum()).toBeGreaterThan(0.1);
+    expect(f.sum()).toBeLessThanOrEqual(m + 1e-9);
+    // Heavy: a full treasury, a reserve of 0.1, an artillery corps of 3 at 0.2 (played, so the treasury stays).
+    const h = grand('CHN');
+    h.nations.CHN.pp = 5000;
+    store(h, 50);
+    noInflow(h);
+    h.flags['lv:CHN'] = 99;
+    const art = addCorps(h, 'CHN', 'An artillery corps', 'art', 3, h.regions[h.nations.CHN.capital].name, {});
+    art.str = 0.2;
+    h.flags['mp:CHN'] = 0.1;
+    const s0 = art.str * art.divs;
+    startPhase(h, 'CHN');
+    expect(art.str * art.divs - s0).toBeGreaterThan(0.01);
+    expect(art.str * art.divs - s0).toBeLessThanOrEqual(0.1 + 1e-9);
+  });
+
+  it("13. (the store's limit) a store that holds a twentieth of the foot drafts twice over lets them all in", () => {
+    const run = (sa: number): number => {
+      const g = grand();
+      men(g);
+      g.nations.CHN.pp = 500;
+      noInflow(g);
+      store(g, sa);
+      const feet = corpsOf(g).filter((c) => foot(g, c) && !c.vol);
+      knock(g, feet, 0.9);
+      const f = rises(feet);
+      try { startPhase(g, 'CHN'); } finally { f.stop(); }
+      return f.sum();
+    };
+    const full = run(50);
+    expect(full).toBeGreaterThan(0.5);
+    // (Twice: the store is asked for by every foot corps' drafts, volunteer corps too, which the measure leaves out.)
+    expect(run(2 * 0.05 * full)).toBeCloseTo(full, 9);
+  });
+
   it("14. a broken corps' rifles are gone", () => {
     const g = grand();
     store(g, 5);
