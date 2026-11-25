@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of bc842b30 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 77c69bb5 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12781,6 +12781,68 @@
     return new LiveBattle(ticketOf(p, s, opts.me ?? null), p, opts);
   }
 
+  // ../../src/battle/land/own-teams.ts
+  var OWN_TEAM_SHARE = 0.04;
+  var OWN_TEAM_KINDS = ["inf", "mtn", "mot"];
+  var OWN_TEAM_ID = -1000001;
+  var WORD = { mg: ["machine guns", "MGs"], mor: ["mortars", "mortars"] };
+  var isOwnTeam = (f) => f.corps <= OWN_TEAM_ID;
+  var brings = (f) => f.corps >= 0 && OWN_TEAM_KINDS.includes(f.kind) && f.share > 0 && f.men > 0;
+  function sideWith(s, next, parents) {
+    const made = [];
+    const forces = s.forces.map((f) => {
+      if (!brings(f)) return f;
+      const keep = 1 - 2 * OWN_TEAM_SHARE;
+      for (const kind of ["mg", "mor"]) {
+        const id = next - made.length, men = Math.max(1, Math.round(f.men * OWN_TEAM_SHARE));
+        const name = `${f.name} ${WORD[kind][0]}`, short = `${f.name} ${WORD[kind][1]}`;
+        parents.set(id, f.corps);
+        made.push({
+          corps: id,
+          name: f.name,
+          nat: f.nat,
+          kind,
+          divs: 1,
+          men,
+          str: f.str,
+          org: f.org,
+          xp: f.xp,
+          ...f.mor !== void 0 ? { mor: f.mor } : {},
+          ...f.dug ? { dug: true } : {},
+          ...f.cross === false ? { cross: false } : {},
+          ...f.wear !== void 0 ? { wear: f.wear } : {},
+          ...f.fresh !== void 0 ? { fresh: f.fresh } : {},
+          divisions: [{ name, short, str: f.str, xp: f.xp, men }],
+          share: f.share * OWN_TEAM_SHARE,
+          battles: f.battles ?? 0
+        });
+      }
+      return {
+        ...f,
+        share: f.share * keep,
+        men: Math.round(f.men * keep),
+        ...f.divisions ? { divisions: f.divisions.map((d) => ({ ...d, men: Math.round(d.men * keep) })) } : {}
+      };
+    });
+    return made.length ? { ...s, forces: [...forces, ...made] } : s;
+  }
+  function ownTeams(t, seen = []) {
+    if ([...t.att.forces, ...t.def.forces].some(isOwnTeam)) return { ticket: t, seen: [...seen] };
+    const parents = /* @__PURE__ */ new Map();
+    const att = sideWith(t.att, OWN_TEAM_ID, parents);
+    const def = sideWith(t.def, OWN_TEAM_ID - parents.size, parents);
+    if (!parents.size) return { ticket: t, seen: [...seen] };
+    const known = new Set(seen);
+    return { ticket: { ...t, att, def }, seen: [...seen, ...[...parents].filter(([, parent]) => known.has(parent)).map(([id]) => id)] };
+  }
+  function ownTeamsLook(look) {
+    if ("ticket" in look && look.ticket) {
+      const o = ownTeams(look.ticket, look.live?.seen ?? []);
+      return o.ticket === look.ticket ? look : { ...look, ticket: o.ticket, live: { ...look.live ?? {}, seen: o.seen } };
+    }
+    return ownTeams(look).ticket;
+  }
+
   // Rules/land-bridge.ts
   var live3 = null;
   var none = { t: 0, men: [], tails: [], rounds: [], events: [], views: [], phases: [], contact: null };
@@ -12839,6 +12901,7 @@
      * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
      */
     landStartTicket(ticketOrLook, opts) {
+      if (opts?.teams === true) ticketOrLook = ownTeamsLook(ticketOrLook);
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
