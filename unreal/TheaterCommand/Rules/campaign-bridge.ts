@@ -974,7 +974,10 @@ function drawView(step = false) {
       }
       return [...seen.values()].flat();
     })(),
-    pages: pagesOf(s),
+    // (A step's picture carries only the towns page, where it is open: the table reads a step's page list for that
+    // alone, to keep ground open for a town's buildings (ShowWar's SetTownPlots); the page list the screens show is the
+    // month's own picture's.)
+    pages: step ? townsPageOnly(s) : pagesOf(s),
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
     // the months it will last and its books in words, and every shipping lane to draw over the sea.
     stores: panel(() => storesOf(s)),
@@ -4652,6 +4655,11 @@ interface Page { id: string; title: string; headline: string; note: string; top:
 
 /** A question about World Domination waiting for its second and third yes. */
 let domAsked = 0;
+
+/** pagesOf's towns page alone, where it is open. */
+function townsPageOnly(s: Game): { id: string; label: string }[] {
+  return s.human && s.nations[s.human] && townBuildings(s, s.nations[s.human].capital) ? [{ id: 'towns', label: 'TOWNS TO BUILD UP' }] : [];
+}
 
 function pagesOf(s: Game): { id: string; label: string }[] {
   const out: { id: string; label: string }[] = [];
