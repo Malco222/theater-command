@@ -8384,6 +8384,15 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bOn ? BrightBrass : Muted)
 						];
 				};
+				// (1.5.2) A fleet's order: dimmed where the rules refuse it (InWhy, its tip then), else with its own tip (InTip). The
+				// dimming and the tip are on the button itself, as a page's are, so a press there and the step player both read them.
+				auto FleetButton = [&OrderButton](const TCHAR* InLabel, bool bInOn, const FString& InWhy, const FString& InTip, TFunction<void()> InDo)
+				{
+					const TSharedRef<SButton> MadeButton = OrderButton(InLabel, bInOn, MoveTemp(InDo));
+					MadeButton->SetEnabled(InWhy.IsEmpty());
+					MadeButton->SetToolTipText(FText::FromString(InWhy.IsEmpty() ? InTip : InWhy));
+					return MadeButton;
+				};
 				if (Army.bFleet)
 				{
 					// A fleet in hand: what it does at sea, the way home, and a card for each ship. (1.5.2) Held where this month's
@@ -8394,34 +8403,26 @@ namespace
 					];
 					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 					[
-						SNew(SBox).IsEnabled(Army.FleetSeaWhy.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetSeaWhy.IsEmpty() ? Army.FleetSeaWhy : FString(TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it."))))
-						[
-							OrderButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
-						]
+						FleetButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), Army.FleetSeaWhy, TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it."),
+							[this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
 					];
 					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, Army.bFleetGrand ? 5.0f : 22.0f, 0.0f)
 					[
-						SNew(SBox).IsEnabled(Army.FleetSeaWhy.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetSeaWhy.IsEmpty() ? Army.FleetSeaWhy : FString(TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet."))))
-						[
-							OrderButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
-						]
+						FleetButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), Army.FleetSeaWhy, TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet."),
+							[this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
 					];
 					if (Army.bFleetGrand)
 					{
 						TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
 						[
-							SNew(SBox).IsEnabled(Army.FleetSeaWhy.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetSeaWhy.IsEmpty() ? Army.FleetSeaWhy : FString(TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do."))))
-							[
-								OrderButton(TEXT("HUNT SUBMARINES"), Army.FleetNext == TEXT("hunt"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("hunt")); } })
-							]
+							FleetButton(TEXT("HUNT SUBMARINES"), Army.FleetNext == TEXT("hunt"), Army.FleetSeaWhy, TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do."),
+								[this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("hunt")); } })
 						];
 					}
 					TrayOrders->AddSlot().AutoWidth()
 					[
-						SNew(SBox).IsEnabled(Army.FleetHomeWhy.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetHomeWhy.IsEmpty() ? Army.FleetHomeWhy : !Army.FleetHomeTip.IsEmpty() ? Army.FleetHomeTip : FString(TEXT("Safe from the enemy fleet, and takes no part at sea."))))
-						[
-							OrderButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), [this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
-						]
+						FleetButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), Army.FleetHomeWhy, !Army.FleetHomeTip.IsEmpty() ? Army.FleetHomeTip : FString(TEXT("Safe from the enemy fleet, and takes no part at sea.")),
+							[this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
 					];
 					if (Army.bFleetGrand)
 					{
