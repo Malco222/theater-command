@@ -37,11 +37,11 @@ export function strafeOn(): boolean {
 // plan and the result read as a pair. Nothing here is shown with the switch off: the card's section is built only
 // where forecastAir gave the card its strafers, and the report's line only from AirReport.strafed, written only then.
 
-/** The UI director's words, 15:04Z. */
+/** The UI director's words, 15:04Z; the line for none as she softened it at 16:04Z. */
 export const STRAFE_WORDS = {
   heading: 'LIKELY TO GO DOWN AND STRAFE',
   note: 'The fighter groups most likely to go down and strafe if the sky is won. Which of them do is settled over the target.',
-  none: 'No fighter group is likely to go down and strafe.',
+  none: 'No fighter group is likely to go down and strafe, though one still may.',
   nobody: 'No fighter group went down to strafe.',
 } as const;
 

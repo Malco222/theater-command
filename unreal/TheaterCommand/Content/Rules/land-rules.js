@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of bd304b6b7 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 232376214 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2603,6 +2603,7 @@
   }
 
   // ../../src/battle/land/units.ts
+  var startNerve = (org, mor) => Math.min(1, 0.45 + 0.35 * org + 0.2 * (mor ?? 0.6));
   var ORD = (n) => {
     const s = ["th", "st", "nd", "rd"], v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
@@ -2712,7 +2713,7 @@
         const per = team ? LAND.teams[team].figures : LAND.figures[k];
         const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND.blocks.regiments)) : per;
         const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
-        const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
+        const mor0 = startNerve(f.org, f.mor);
         const share = weightOf2(p) / all;
         out.push({
           id: firstId + out.length,
@@ -8756,6 +8757,52 @@
     return [(mix(id * 977 + n * 131 + 7) - 0.5) * w * 0.9, (mix(id * 613 + n * 389 + 3) - 0.5) * d * 0.8];
   }
 
+  // ../../data/campaign/spread.json
+  var spread_default = {
+    _about: "The field spread (release 2; rules-builder/release2/field-spread/form.md, ruled by the design director 24 Nov 2026 19:47Z, field-spread/rulings/dd-1947Z.md; stage.json 'spread', bench-only through the form's steps 1-4). One draw per battle on the ticket's own seed and attempt (src/campaign/spread.ts): the fortune share the field already fights on, and one break point W per side, the share of its power a side will lose before it quits, in place of the field's LAND.spent 0.13 / 0.18 (sim.ts spentOf). The field reads each key only where the ticket carries it (src/battle/land/spread.ts). The switch (spreadOn) reads false beside the honest win chance even where both flags were set by hand, besides setSpread refusing the pair (G). setSpread has no first-month check: the bench sets it on saved positions from the four wars (G). The fortune share is held by the draw (spreadDraw) and not written on the ticket: the field draws the same share on the same key itself (sim.ts fortune), and step 5's card reads it from spreadDraw (G). Marks: F from the source, word for word; L literature; D derived by a named script (scratchpad fs/final, fsv/, fsx/; form s10.7); M from memory; G a guess, waiting on the measure.",
+    _level: "L: the middle of a side's draw, 8%: the historian's reading of McQuie, 'in most cases, a force has quit when its casualties reached less than ten percent per battle', as 6-10% (dd-reads-1124.md:37, 66), ruled as the centre at BO:2124 (design-director/round-2-build-order.md). One distribution for attack and defence alike (choice 2 (A), DD 19:47Z). Form s2a.",
+    level: 0.08,
+    _tail: "L: battalions fought to about 40% (Clark 1954, Movchin 1928; dd-reads-1124.md:59-61, 65). G: that 40% sits at the 97.5th percentile, z 1.96 (at the 95th the spread would be 0.98, at the 99th 0.69; fs/final/dist.py). So the spread at one level is ln(0.40 / 0.08) / 1.96 = 0.8211 (D, dist.py; the form's 0.821), as the bench drew it (fs/final/benchq.ts SIG). Lognormal: the historian's reading (dd-reads-1124.md s2).",
+    tail: { W: 0.4, z: 1.96 },
+    _hold: "Each drawn point is held to [0.01, 0.40]: 0.40 is the tail (L, above), 0.01 is G (form s2a). At one level 2.5% of draws sit at the cap (D, dist.py).",
+    hold: [0.01, 0.4],
+    _residual: "D (fsx/brk/spread.py): the spread no cause explains, McQuie's 0.821 with the causes' spread taken out in quadrature. 'staying': the level by causes alone, 0.221, so sqrt(0.821^2 - 0.221^2) = 0.791. Read with N and no ledger, and by the ledger with every part of m at 1 (choice 13 (B); DD 19:47Z: '(B) at its own residual 0.791: re-run, don't reuse 0.766'). 'ledger': staying and all five parts of m (flank, rear, fire, ambush and air: causes.ts reads air harm on a block the tick's blows struck at their damage-weighted weight, elsewhere at the strike's own, as the field's ledger does with the air part at the army), 0.296, so 0.766. 'flankRear': staying and m's flank and rear parts alone, the set-up the DD ruled for 13 (A) (fire, ambush and air to 1), 0.274 on ln(W0 / (1 + aspect/loss)), the same 944 sides of fsx/brk band-cause-s0-k0.0492 rows by spread.py's rule on the aspect part alone (rv/partial.py, which gives 0.791 and 0.766 again from those rows), so sqrt(0.821^2 - 0.274^2) = 0.774. Each set of parts read at the army draws at its own (DD 19:47Z: 're-run, don't reuse 0.766'): none 0.791, flank and rear 0.774, all five 0.766. Any other set (a part alone, for the gate; those rows do not split flank from rear) has none derived, and spreadKeys refuses it unless the harness gives one (residualOf). Its source is the field's own ledger trace (sim.ts ledgerTrace: each side's loss at m = 1, and what each part's own weight adds, flank and rear apart), by spread.py's rule on ln(W0 / (1 + the set's adds / loss)), re-run on the ledger as built, never reused; exact for a set where no blow carries two of its parts (flank, rear, or both), otherwise the sum of the parts' adds in place of their product (G). Owed from the 16-seed bench before any such arm is read.",
+    residual: { staying: 0.791, ledger: 0.766, flankRear: 0.774 },
+    _ref: "G: the reference army the level is read against (form s2c, fs/final/level.py): organisation 1, morale 0.6, experience 0.3, no general. Its staying, (mor0 - 0.2) / (0.5 x max(0.3, 1 - 0.35 xp - 0.03 general)), is 1.609 by the field's own arithmetic (units.ts startNerve; rules.ts nerve; sim.ts suffer). So N is an army's staying over 1.609, and its level is 0.08 x N. The bench's arms divided by 1.626, its geometric-mean army (qsum.py); the two are 1% apart (G). Under N, single blocks read this army for their own nerve (form s2c), and the army ledger's K is the level over this staying, 0.0497. Form 13A had 0.08 / 1.626 = 0.0492; anchoring K so a front-hit army quits at the level is G. N reads each corps' own experience on the ticket, weighted by its share, joiners in; the ledger reads each block's, its divisions' mean (G).",
+    ref: { org: 1, mor: 0.6, xp: 0.3, general: 0 },
+    _move: "D (fs/final/benchsum.cjs on 16 seeds, sum-today-nsym16.txt; form s6): the field reads ln f at c = 0.84 of ln odds, and the break-point ratio at p = 0.54. So the same causes' price leaves the blows by fortune x (Nd/Na)^(p/c), about (Nd/Na)^0.64 (form s2c; choice 1 (A), DD 19:47Z: 'a move counts as one price when the factor taken off the blows is the factor the field reads the level at'). A check, not a source: the nerve draft's p of 0.47 +-0.07 (hlsum.py). Re-measured with the table at step 1b.",
+    move: { p: 0.54, c: 0.84 },
+    _mask: "G (form s8; choice 6 (A), DD 19:47Z): the enemy's bar is shown as the player's staff reads it. It is read against the level his staff reads (the enemy's N where his corps are identified, the reference where not) and held at 0.95 until the enemy breaks. The enemy's draw is never shown: his break cause goes to the other side's player with the shown level as its 'spent' and the shown bar as its 'bar', and its hold fields (holding, held, heldFor, by) read as not reached until he breaks, since they too would tell his draw (G). His 'near breaking' dispatch comes when the bar shown reaches three quarters, never on his true bar, whose moment would tell his draw (G). The mask stays after the battle unless that side broke (G). A small army held at its brink gives ground at its drawn point (sim.ts giveGround): its 'land:gives' dispatch, whose words and moment would tell his draw, is not sent to the other side's player (the log keeps it, blank, as for a block he has not met) (G). The blocks themselves still fall back from that moment, in his sight, and that stands: RULED (A) by the design director, 25 Nov 2026 02:39Z. What a general sees his enemy do on the field is his own sight; the fall-back tells him the point only once it has been reached, a fact of the fight and not a reading of the draw beforehand. The mask covers the staff's reading and the dispatches. A second draw to delay it, and a picture that parts from the fight for a beat, were both refused. One rule both ways: the computer's staff may read the player's blocks falling back at the moment they do, never his drawn point before it.",
+    mask: { hold: 0.95 },
+    _steps: "G (this build): which of step 1b's keys the campaign lays on a ticket under the switch. 'level' lays N, the move and blocks on the reference; 'ledger' lays the army nerve ledger (choice 13). Both stay off until step 1's bench has read the table (form s10.6: step 1, then 1b). The bench lays them on its own tickets (spreadKeys) for 1b's arms.",
+    steps: { level: false, ledger: false },
+    _m: "Choice 13 (A) with the gate (DD 19:47Z): each part of the nerve weight m that a blow carries is read either at the army's ledger (true: the block then reads 1 for it) or at the block as built (false: the ledger reads 1). Weights F: rules.ts:56 guns 1.5; :141 ambush 2 / 2.5; :180-181 machine-gun team 2.5, mortar team 1.8; :184 flank 2 / rear 3; LAND.air.nerve 1. Reading them at the army is G (form 13A). Fire, ambush and air read the winner higher today (17.2% against 14.2%, fsx/brk/tells.py, 8 seeds), so they go to 1 at the army, as the DD ruled, and stay at the block as built, as form s3 has a part that fails the test ('else they stay as built (13 (B))'; a block rule reads neutral only where an army-level term reads the same fact), so no part is priced twice or not at all (G). Flank and rear stand until the 16-seed gate reads them apart (pass mark 2 SE clustered by ticket, G). Every part false is choice 13 (B). The ledger reads each tick's m damage-weighted over its blows (fsx/brk/causes.ts), the block today's per-blow sum (G). Air harm enters the ledger at m = 1 and lands on the block as built, unless the air part is at the army, when the block reads 1 and the ledger reads it as fsx/brk/causes.ts did: at the damage-weighted weight, as built, of the blows that struck that block in the same tick, else (no blow struck it that tick, or it lands outside a tick: handed to the staff, pulled out) at the strike's own weight, the bank's (G). The bank holds what was kept at the summed weight of the tick's blows on that block, so read whole it would weigh the harm by how many blocks fired. The ledger keeps a trace by part, read by nothing in the fight (sim.ts ledgerTrace), with each part's own weight, wherever it is read: air harm's air part at the weight the ledger would read it at. Harm held back for air strikes, and harm a wait's cover spares (hold until relieved), is kept at the blows' weight as built, every part: it lands as air harm, or on the block with that weight and on the ledger at m = 1 (G).",
+    m: { flank: true, rear: true, fire: false, ambush: false, air: false }
+  };
+
+  // ../../src/battle/land/spread.ts
+  var SPREAD = spread_default;
+  function stayingOf(org, mor, xp, general, s) {
+    const N = LAND.nerve;
+    return (startNerve(org, mor) - N.rout) / (N.perLoss[s] * Math.max(0.3, 1 - N.xp * xp - N.general * general));
+  }
+  var refStaying = (s) => stayingOf(SPREAD.ref.org, SPREAD.ref.mor, SPREAD.ref.xp, SPREAD.ref.general, s);
+  var REF_NERVE = {
+    mor0: startNerve(SPREAD.ref.org, SPREAD.ref.mor),
+    steady: 1 - LAND.nerve.xp * SPREAD.ref.xp - LAND.nerve.general * SPREAD.ref.general
+  };
+  var ledgerK = (s) => SPREAD.level / refStaying(s);
+  function nerveSplit(p, on) {
+    const a = p.aspect !== "front" && on[p.aspect];
+    return {
+      army: (a ? p.nm : 1) * (on.fire ? p.fire : 1) * (on.ambush ? p.ambush : 1),
+      block: (a ? 1 : p.nm) * (on.fire ? 1 : p.fire) * (on.ambush ? 1 : p.ambush)
+    };
+  }
+  var NERVE_PARTS = ["flank", "rear", "fire", "ambush", "air"];
+  var noTrace = () => ({ loss: 0, flank: 0, rear: 0, fire: 0, ambush: 0, air: 0 });
+  var weighsOf = (w, dmg) => ({ flank: w.flank / dmg, rear: w.rear / dmg, fire: w.fire / dmg, ambush: w.ambush / dmg });
+
   // ../../src/battle/land/sim.ts
   var other = (s) => s === "att" ? "def" : "att";
   var HEDGE_CELL = 10;
@@ -8877,6 +8924,22 @@
       __publicField(this, "fallBar", { att: 0, def: 0 });
       /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
       __publicField(this, "heldFor", { att: 0, def: 0 });
+      /**
+       * The field spread's army nerve ledger (step 1b, reckoning.spread.ledger; form 13A): each side's nerve spent (D), its
+       * reserve (R), K, its draw and the parts of m it reads; and T, its trace by part (ledgerTrace), read by nothing in the
+       * fight. Null without the key.
+       */
+      __publicField(this, "led", null);
+      /**
+       * Under the field spread's army ledger, within a tick: each block the tick's blows struck, with their nerve weight as
+       * built (every part), damage-weighted, as fsx/brk/causes.ts read harm landing on a block struck that tick. Air harm the
+       * ledger reads at the army reads this where it has one (airHarm). Null outside a tick and without the ledger.
+       */
+      __publicField(this, "tickM", null);
+      /** Under reckoning.spread.N (step 1b), blocks read the reference army for their own nerve (form s2c). */
+      __publicField(this, "refNerve", false);
+      /** The move's factor on the blows (reckoning.spread.move, step 1b); undefined without the key. */
+      __publicField(this, "lean");
       /**
        * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
        * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
@@ -9170,6 +9233,29 @@
       const def = makeBlocks("def", ticket.def, D2, att.length + 1, void 0, ticket.turn);
       this.units = [...att, ...def];
       const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
+      const k = ticket.reckoning.spread;
+      if (k?.ledger) {
+        const R = { att: 0, def: 0 }, P = { att: 0, def: 0 };
+        for (const u of [...this.units, ...joining]) {
+          R[u.side] += u.power0 * (u.mor0 - LAND.nerve.rout);
+          P[u.side] += u.power0;
+        }
+        this.led = {
+          D: { att: 0, def: 0 },
+          R: { att: R.att / Math.max(1e-9, P.att), def: R.def / Math.max(1e-9, P.def) },
+          K: { att: ledgerK("att"), def: ledgerK("def") },
+          draw: { ...k.ledger.draw },
+          on: { ...k.ledger.m },
+          T: { att: noTrace(), def: noTrace() }
+        };
+      }
+      if (k?.N) {
+        this.refNerve = true;
+        for (const u of [...this.units, ...joining]) {
+          u.mor0 = REF_NERVE.mor0;
+          u.mor = REF_NERVE.mor0;
+        }
+      }
       this.covered = coveredTanks(ticket, this.units);
       const works = ticket.place.fort >= 1 || def.some((u) => u.kind === "fort");
       this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo };
@@ -9184,8 +9270,8 @@
       for (const u of joining) {
         const c = crewFor(u, ticket[u.side].joiners?.find((f) => f.corps === u.corps)?.battles ?? 0);
         if (c) u.crew = c;
-        const k = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
-        if (k) u.cal = k;
+        const k2 = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
+        if (k2) u.cal = k2;
       }
       const dry = ticket.place.dryEnd ?? "west";
       const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf(FIELD.w, FIELD.h).att, dry), dry } : void 0;
@@ -9214,6 +9300,7 @@
       const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
       const roll2 = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
       this.fortune = 1 + LAND.fortune * (roll2 - 1);
+      if (k?.move !== void 0) this.lean = k.move;
       for (const s of ["att", "def"]) {
         const a = ticket[s].air;
         if (a && a.share > 0 && a.strikes > 0 && a.groups.length) {
@@ -11233,7 +11320,17 @@
         }
         const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
         h.dmg += blow.dmg;
-        h.nerve += blow.nerve;
+        if (this.led && blow.parts) {
+          const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
+          h.nerve += sp.block;
+          h.dm = (h.dm ?? 0) + blow.dmg * sp.army;
+          h.built = (h.built ?? 0) + blow.nerve;
+          h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
+          w.flank += blow.dmg * (pt.aspect === "flank" ? pt.nm : 1);
+          w.rear += blow.dmg * (pt.aspect === "rear" ? pt.nm : 1);
+          w.fire += blow.dmg * pt.fire;
+          w.ambush += blow.dmg * pt.ambush;
+        } else h.nerve += blow.nerve;
         if (!blind) h.blind = false;
         h.from.push([u, blow.dmg]);
         hurt.set(t.id, h);
@@ -11245,9 +11342,13 @@
       }
       if (kept) for (const [id, raw] of kept) {
         const h = hurt.get(id), side = other(this.unit(id).side);
-        this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve);
+        this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? h.nerve));
       }
-      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      if (this.led) {
+        this.tickM = /* @__PURE__ */ new Map();
+        for (const [id, h] of hurt) if (h.dmg > 0) this.tickM.set(id, (h.dn ?? 0) / h.dmg);
+      }
+      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : void 0);
       if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
       if (this.bearers) this.carry();
@@ -11265,6 +11366,7 @@
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
       if (this.cuts.length) this.openCuts();
       this.judge();
+      this.tickM = null;
       this.drill?.step();
     }
     /**
@@ -11584,12 +11686,13 @@
       if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND.moving;
       if (u.winded !== void 0 && this.t < u.winded) p *= LAND.double.blows;
       let nerveMul = 1;
+      let fireN = 1, ambushN = 1;
       const SP = LAND.hide.surprise;
       if (u.sprung !== void 0 && this.t - u.sprung < SP.secs) {
         p *= SP.punch;
-        nerveMul *= t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
+        nerveMul *= ambushN = t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
       }
-      if (u.team === "mor" && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== void 0 && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
+      if (u.team === "mor" && this.hide && this.units.some((f2) => f2.side === u.side && f2.sprung !== void 0 && this.t - f2.sprung < SP.secs && f2.engaged === t.id)) p *= SP.mortar;
       const vague = t.unloc !== void 0 && this.t < t.unloc;
       if (vague) p *= LAND.hide.locate.fire;
       const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND.smoke.share : 1;
@@ -11597,7 +11700,7 @@
       if (u.kind === "art") {
         const G2 = gunsOf(u), close = this.gap(u, t) < G2.closeAt;
         p *= close ? G2.close : G2.punch;
-        if (!close) nerveMul *= G2.nerve;
+        if (!close) nerveMul *= fireN = G2.nerve;
         if (u.team && t.kind === "arm") p *= LAND.teams[u.team].armour;
       }
       if (u.kind === "arm" && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
@@ -11614,8 +11717,9 @@
       if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
       if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
       const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
-      const dmg = p * am * amx * take * luck * (u.side === "att" ? this.fortune : 1 / this.fortune) * DT;
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen };
+      const f = this.lean === void 0 ? this.fortune : this.fortune * this.lean;
+      const dmg = p * am * amx * take * luck * (u.side === "att" ? f : 1 / f) * DT;
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {} };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
@@ -11623,14 +11727,14 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
-    suffer(t, dmg, nerveMul, from = [], blind = false, bare = false) {
+    suffer(t, dmg, nerveMul, from = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul, parts) {
       if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
       if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
         const take = this.groundTake(t), f = Math.min(take, LAND.cover[LAND.wreck.cover]) / Math.max(1e-9, take);
         if (f < 1) {
           const spared = dmg * (1 - f);
           t.debt = (t.debt ?? 0) + spared;
-          t.debtN = (t.debtN ?? 0) + spared * nerveMul;
+          t.debtN = (t.debtN ?? 0) + spared * (this.led ? nerveBuilt : nerveMul);
           dmg *= f;
         }
       }
@@ -11638,8 +11742,15 @@
       const before = t.str, had = t.figures;
       t.str = Math.max(0, t.str - share * t.str0);
       const lost = (before - t.str) / t.str0;
-      const steady2 = 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
+      const steady2 = this.refNerve ? REF_NERVE.steady : 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
       t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady2));
+      if (this.led && lost > 0) {
+        const s = t.side, st = Math.max(0.3, 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(s));
+        this.led.D[s] += t.power0 * lost * LAND.nerve.perLoss[s] * mArmy * st / this.power[s];
+        const k = t.power0 * lost * LAND.nerve.perLoss[s] * st / this.power[s], T = this.led.T[s];
+        T.loss += k;
+        for (const p of NERVE_PARTS) T[p] += k * ((parts?.[p] ?? 1) - 1);
+      }
       t.still = 0;
       t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
       if (this.bearers) {
@@ -12222,15 +12333,69 @@
     }
     /**
      * How near an army is to breaking, 0 to 1: its whole worn state weighted by strength against what an army of its
-     * side will stand (LAND.spent), or half its power running, whichever is nearer. One block running counts only its
-     * own share, so it never takes the army with it while the rest is fresh (ruling 226(2)). The army bar shows this.
+     * side will stand (LAND.spent, or its drawn break point under the field spread: spentOf), or half its power running,
+     * whichever is nearer. One block running counts only its own share, so it never takes the army with it while the rest
+     * is fresh (ruling 226(2)). The army bar shows this, the true one (b474's pulled bar reads it too); what the other
+     * side's player is shown under the field spread is shownBar.
      */
     breaking(s) {
       return this.brink(s).bar;
     }
+    /**
+     * What an army of this side will stand worn: its drawn break point under the field spread (reckoning.spread.W, form
+     * s6), else LAND.spent, read as it stands (a harness may set LAND.spent).
+     */
+    spentOf(s) {
+      return this.ticket.reckoning.spread?.W[s] ?? LAND.spent[s];
+    }
+    /** The field spread's army ledger's share of its mark (step 1b, form 13A: q = ledger / (K x reserve x draw)); 0 without the ledger. */
+    ledgerShare(s) {
+      const L2 = this.led;
+      return L2 ? L2.D[s] / Math.max(1e-12, L2.K[s] * L2.R[s] * L2.draw[s]) : 0;
+    }
+    /**
+     * The ledger's trace by part, a copy (step 1b; for the bench, choice 13's gate): each side's loss at m = 1, as the
+     * ledger counts it, and what each part's own weight adds to it, wherever the part is read. Null without the ledger.
+     * Read by nothing in the fight, never in view(), so the mask is untouched.
+     */
+    ledgerTrace() {
+      const L2 = this.led;
+      return L2 ? { att: { ...L2.T.att }, def: { ...L2.T.def } } : null;
+    }
+    /** The level a side's bar is shown at to the other side's player under the field spread (the mask, choice 6 (A)): never its draw. */
+    shownLevel(s) {
+      return this.ticket.reckoning.spread?.shown?.[s] ?? SPREAD.level;
+    }
+    /** Whether 'as' sees side s's bar through the mask: under the field spread, the other side's, until it breaks. */
+    masked(s, as) {
+      return !!this.ticket.reckoning.spread && !!as && as !== s && !this.broke[s] && this.over?.broke !== s;
+    }
+    /**
+     * A side's bar as 'as' sees it (form s8; choice 6 (A), DD 19:47Z): his own true; under the field spread the other's as
+     * his staff reads it, worn against the level shown and held at data mask.hold until it breaks, so neither the bar nor
+     * how fast it fills gives away the enemy's draw. No spread, or nobody ('as' absent: b474 reads breaking()), the true bar.
+     */
+    shownBar(s, as) {
+      if (!this.masked(s, as)) return this.breaking(s);
+      const b = this.brink(s);
+      return Math.min(SPREAD.mask.hold, Math.max(b.running / LAND.breaks, b.worn / this.shownLevel(s)));
+    }
+    /**
+     * What drives a side's bar as 'as' sees it: under the field spread the other side's read against the level shown, its
+     * bar the shown one, and the hold not told (it too would read the draw); the ledger's share left out (G). Otherwise the
+     * true cause.
+     */
+    causeAs(s, as) {
+      const c = this.breakCause(s);
+      if (!this.masked(s, as)) return c;
+      const rest = { ...c };
+      delete rest.ledger;
+      const lv = this.shownLevel(s), w = this.wornShare(s) / lv, r = this.brokenShare(s) / LAND.breaks;
+      return { ...rest, bar: Math.round(this.shownBar(s, as) * 1e3) / 1e3, spent: lv, by: "none", nearer: r >= w && r > 0 ? "running" : "worn", holding: false, held: false, heldFor: 0 };
+    }
     /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
     brink(s) {
-      const worn = this.wornShare(s), running = this.brokenShare(s), over = worn / LAND.spent[s];
+      const worn = this.wornShare(s), running = this.brokenShare(s), over = this.led ? this.ledgerShare(s) : worn / this.spentOf(s);
       const holding = over >= 1 && this.freshShare(s) > LAND.fought;
       return { bar: Math.min(holding ? 0.99 : 1, Math.max(running / LAND.breaks, over)), worn, running, holding };
     }
@@ -12243,7 +12408,7 @@
      */
     breakCause(s) {
       const r33 = (x) => Math.round(x * 1e3) / 1e3;
-      const b = this.brink(s), w = b.worn / LAND.spent[s], r = b.running / LAND.breaks;
+      const b = this.brink(s), w = this.led ? this.ledgerShare(s) : b.worn / this.spentOf(s), r = b.running / LAND.breaks;
       const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
       const on = mine.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + weightOf(u), 0);
       const steady2 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
@@ -12253,7 +12418,8 @@
         by: Math.max(w, r) < 1 ? "none" : nearer,
         nearer,
         worn: r33(b.worn),
-        spent: LAND.spent[s],
+        spent: this.spentOf(s),
+        ...this.led ? { ledger: r33(this.ledgerShare(s)) } : {},
         running: r33(b.running),
         breaks: LAND.breaks,
         fresh: r33(this.freshShare(s)),
@@ -12296,6 +12462,7 @@
      * player sends in again is left to the player (gives stays set until it rallies).
      */
     giveGround(s, left) {
+      const hide = !!this.ticket.reckoning.spread && !this.ticket[s].human && !!this.ticket[other(s)].human;
       for (const u of this.units) if (u.side === s && u.state === "routing") u.gives = true;
       for (const u of left) {
         if (u.gives || this.fresh(u)) continue;
@@ -12304,7 +12471,9 @@
         if (u.waits) this.endWait(u, "gives");
         this.send(u, { kind: "withdraw", x: u.x, y: s === "att" ? 0 : this.field.h });
         u.engaged = void 0;
-        this.say({ what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
+        const ev = { what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y };
+        if (hide) this.log.push({ t: Math.round(this.t * 10) / 10, ...ev, text: "" });
+        else this.say(ev);
       }
     }
     /** Giving ground at the brink, and still on its way back or running (an order of the player's may send it in again). */
@@ -12326,9 +12495,10 @@
         if (fall) this.fallBar[s] = Math.max(this.fallBar[s], near);
         if (b.holding) this.heldFor[s] += DT;
         if (b.holding && this.freshHold[s]) this.giveGround(s, left);
-        if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
+        const own = !!this.ticket[s].human;
+        if (!this.warned[s] && (this.ticket.att.human || this.ticket.def.human) && (!own && this.ticket.reckoning.spread ? this.shownBar(s, other(s)) : near) >= 0.75) {
           this.warned[s] = true;
-          const own = !!this.ticket[s].human, why = own ? this.breakCause(s) : void 0;
+          const why = own ? this.breakCause(s) : void 0;
           this.say({ what: "nearBreak", side: s, text: why ? warnLine(why) : `${this.army(s)} is near breaking.`, ...why ? { brokeBy: why } : {} });
         }
         if (near >= 1) {
@@ -12702,7 +12872,7 @@
       }
       const hurt = /* @__PURE__ */ new Map();
       for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt);
-      for (const [id, [d, n]] of hurt) this.suffer(this.unit(id), d, d > 0 ? n / d * LAND.air.nerve : LAND.air.nerve, []);
+      for (const [id, [d, n]] of hurt) this.airHarm(id, d, d > 0 ? n / d * LAND.air.nerve : LAND.air.nerve);
       this.strikes = this.strikes.filter((k) => !k.ended);
     }
     /** One strike's tick, its legs flown together. What each leg lands this tick is added to 'hurt'. */
@@ -12864,6 +13034,25 @@
       return out;
     }
     /**
+     * Air harm landing on a block (flyAir, payAir) at the strike's weight w: today's call, or under the field spread's army
+     * ledger with the air part at the block. With the air part at the army (step 1b) the block reads 1 and the ledger reads
+     * it as fsx/brk/causes.ts did, whose rows its residual is derived from: at the damage-weighted weight of the tick's
+     * blows where they struck that block this tick (tickM), else at w. (w is the bank's: what was held back, at the summed
+     * weight of the blows on that block in the tick it was held, so it would read the harm higher the more blocks fired.)
+     * What a wait's cover spares of it is kept at w, to land on the block (suffer's nerveBuilt: G). The ledger's trace reads
+     * its air part at the ledger's weight, whichever way it is read.
+     */
+    airHarm(id, d, w) {
+      const u = this.unit(id);
+      if (!this.led) {
+        this.suffer(u, d, w, []);
+        return;
+      }
+      const m = this.tickM?.get(id) ?? w;
+      if (this.led.on.air) this.suffer(u, d, 1, [], false, false, m, w, { air: m });
+      else this.suffer(u, d, w, [], false, false, 1, w, { air: m });
+    }
+    /**
      * Handed to the staff, or the day done: what the bank still owes and what strikes in the air still carry is paid
      * where it is owed, at once (the staff settle the rest from where the field stands, the air's share in it).
      */
@@ -12896,7 +13085,7 @@
         for (const l of k.legs) l.done = Math.max(l.done, 1);
         k.ended = true;
       }
-      for (const [id, [d, n]] of hurt) this.suffer(this.unit(id), d, d > 0 ? n / d : 1, []);
+      for (const [id, [d, n]] of hurt) this.airHarm(id, d, d > 0 ? n / d : 1);
     }
     /**
      * What the fighters on call still owe, each side's, block by block: the bank, and what strikes in the air carry for
@@ -12963,7 +13152,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.falling.att !== null || this.falling.def !== null ? { fallBack: { att: this.falling.att !== null, def: this.falling.def !== null } } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.shownBar("att", as), def: this.shownBar("def", as) }, breakingBy: { att: this.causeAs("att", as), def: this.causeAs("def", as) }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.falling.att !== null || this.falling.def !== null ? { fallBack: { att: this.falling.att !== null, def: this.falling.def !== null } } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -13732,7 +13921,9 @@
           units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u), !!this.me && u.side === this.me, this.sim)),
           balance: v.balance,
           zones: v.zones,
-          ...v.breaking ? { breaking: { att: r32(v.breaking.att), def: r32(v.breaking.def) } } : {},
+          // (the bars as the player sees them: under the field spread the enemy's as his staff reads it, the mask; with
+          // nobody playing, or no spread, the true ones, as the view above read them)
+          ...v.breaking ? { breaking: { att: r32(this.sim.shownBar("att", this.me)), def: r32(this.sim.shownBar("def", this.me)) } } : {},
           ...v.contact !== void 0 ? { contact: v.contact } : {},
           ...v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null }])) } : {},
           ...v.setup ? { setup: v.setup } : {},

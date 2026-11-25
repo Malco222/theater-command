@@ -12,6 +12,9 @@ import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './fi
 import { LAND, TEAMS, type Kind, type Team } from './rules';
 import { turnToDate } from '../../core/ticket';
 
+/** A block's starting nerve from its corps' organisation and morale (the field's, makeBlocks; read by the field spread's level too). */
+export const startNerve = (org: number, mor: number | undefined): number => Math.min(1, 0.45 + 0.35 * org + 0.2 * (mor ?? 0.6));
+
 export interface LandOrder {
   kind: 'move' | 'attack' | 'withdraw';
   x: number;
@@ -364,7 +367,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       const per = team ? LAND.teams[team].figures : LAND.figures[k];
       const full = p.regiment !== undefined ? Math.max(1, Math.round(per / LAND.blocks.regiments)) : per;
       const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
-      const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
+      const mor0 = startNerve(f.org, f.mor);
       const share = weightOf(p) / all;
       out.push({
         id: firstId + out.length, side, corps: f.corps, nat: f.nat, kind: k, ...(team ? { team } : {}), name, short, parent,

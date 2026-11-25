@@ -550,8 +550,9 @@ function updateTop(force = false): void {
     airBtn.classList.toggle('is-lit', !!S.scene.air);
     airBtn.classList.toggle('is-off', !a?.ready || over);
   }
-  // How near to breaking (ruling 226(3)): a bar a side, no numbers.
-  const v = { att: b.breaking('att'), def: b.breaking('def') };
+  // How near to breaking (ruling 226(3)): a bar a side, no numbers. Under the field spread the enemy's is as the player's
+  // staff reads it (the mask, shownBar); his own, and its amber warning, read the truth.
+  const v = { att: b.shownBar('att', S.scene.me), def: b.shownBar('def', S.scene.me) };
   const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
   el('brkMe').style.width = `${(Math.min(1, v[me]) * 100).toFixed(1)}%`;
   el('brkThem').style.width = `${(Math.min(1, v[them]) * 100).toFixed(1)}%`;

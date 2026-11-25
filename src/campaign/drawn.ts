@@ -41,7 +41,7 @@ import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setSt
 import { seat } from './commanders';
 import type { Corps, Game, Kind, Region } from './types';
 
-export const DRAWN = words as unknown as { one: string; many: string; conv: string; stood: string };
+export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string };
 
 /** One division as it passes between corps: its place in the corps it stands in, its name and number, its men (0 to 1) and experience, and its corps' order and morale. */
 interface Part { slot: number; name: [string, string]; no: number; str: number; xp: number; org: number; mor?: number }
@@ -151,25 +151,30 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
+  // The divisions living corps hold under the row's own names first: a place one of them stands in is never asked for
+  // again by a division formed out of another, wherever the two stand in the row's name.
   names.forEach((name, slot) => {
-    let h = holder(name[0]);
-    const old = !h ? was?.[name[0]] : undefined;
-    if (old) {
-      // Formed out of another division: from the corps that holds that one, or else out of the home army (never the
-      // player's, unasked; never a corps that holds a division the row names or that an earlier division of the row
-      // is formed out of, so that no place is asked for twice).
-      h = holder(old);
-      if (h && out.some((q) => q.from === h!.c && q.at === h!.at)) h = undefined;
-      if (!h && nat !== g.human) {
-        const named = new Set<Corps | null | undefined>([...names.map((nm) => holder(nm[0])?.c), ...out.map((q) => q.from)]);
-        const c = g.corps.filter((x) => whole(x) && x.kind === 'inf' && !x.hold && x.town === undefined && x.divs >= 2 && g.regions[x.reg].owner === nat && !busy(x) && !named.has(x)).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
-        if (c) h = { c, at: c.divs - 1 };
-      }
-      if (!h) { out.push({ slot, name, from: null, at: -1, conv: old, stays: true }); return; }
-    }
-    if (!h) return;
-    out.push({ slot, name, from: h.c, at: h.at, ...(old ? { conv: old } : {}), stays: stays(h.c) });
+    const h = holder(name[0]);
+    if (h) out.push({ slot, name, from: h.c, at: h.at, stays: stays(h.c) });
   });
+  names.forEach((name, slot) => {
+    const old = !holder(name[0]) ? was?.[name[0]] : undefined;
+    if (!old) return;
+    // Formed out of another division: from the corps that holds that one, or else out of the home army (never the
+    // player's, unasked; never a corps that holds a division the row names or that another division of the row
+    // is formed out of, so that no place is asked for twice).
+    let h = holder(old);
+    if (h && out.some((q) => q.from === h!.c && q.at === h!.at)) h = undefined;
+    if (!h && nat !== g.human) {
+      const named = new Set<Corps | null | undefined>([...names.map((nm) => holder(nm[0])?.c), ...out.map((q) => q.from)]);
+      const c = g.corps.filter((x) => whole(x) && x.kind === 'inf' && !x.hold && x.town === undefined && x.divs >= 2 && g.regions[x.reg].owner === nat && !busy(x) && !named.has(x)).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
+      if (c) h = { c, at: c.divs - 1 };
+    }
+    if (!h) { out.push({ slot, name, from: null, at: -1, conv: old, stays: true }); return; }
+    out.push({ slot, name, from: h.c, at: h.at, conv: old, stays: stays(h.c) });
+  });
+  // (In the order the row's name gives them, as they were always read.)
+  out.sort((a, b) => a.slot - b.slot);
   if (out.length) drawnWatch.tell?.({ turn: g.turn, nat, row: row[2], place: row[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null })) });
   return out;
 }
@@ -280,8 +285,12 @@ export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () =
   for (const [parent, ps] of back) {
     assemble(g, parent, [...partsOf(g, parent), ...ps]);
     // (A parent that is itself on loan holds them as its own from here: when its own row's time is up they stand on
-    // with it, whichever of the two rows is read first, and do not leave as divisions that row raised new.)
-    if (parent.drew || parent.rowed) parent.drew = [...(parent.drew ?? []).filter((r) => !ps.some((p) => p.name[0] === r.name[0])), ...ps.map((p) => ({ name: p.name, no: p.no, from: parent.id }))];
+    // with it, whichever of the two rows is read first, and do not leave as divisions that row raised new. One it had
+    // itself drawn from another corps keeps that record: it goes back there when the parent's own time is up.)
+    if (parent.drew || parent.rowed) {
+      const had = parent.drew ?? [];
+      parent.drew = [...had, ...ps.filter((p) => !had.some((r) => r.name[0] === p.name[0])).map((p) => ({ name: p.name, no: p.no, from: parent.id }))];
+    }
   }
   if (!keep.length) return false;
   assemble(g, c, keep);
@@ -382,7 +391,11 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
   const where = (qs: Claim[]): string => list([...new Set(qs.map((q) => g.regions[q.from!.reg].name))]);
   const lines: string[] = [];
   const mine = claims.filter((q) => q.from && !q.conv), made = claims.filter((q) => q.from && q.conv);
-  if (mine.length) lines.push((mine.length === 1 ? DRAWN.one : DRAWN.many).replace('{names}', cap(list(mine.map((q) => the(q.name[0]))))).replace('{place}', row[5]).replace('{where}', where(mine)));
-  for (const q of made) lines.push(DRAWN.conv.replace('{names}', cap(the(q.name[0]))).replace('{place}', row[5]).replace('{was}', q.conv!).replace('{where}', where([q])));
+  // (A line may say a place more than once: every one of its places is filled.)
+  const fill = (line: string, as: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (all, k: string) => as[k] ?? all);
+  // (Where every one of them stands at the row's own place already, the place is said once: the UI director's `here`.)
+  const there = mine.length > 0 && mine.every((q) => g.regions[q.from!.reg].name === row[5]);
+  if (mine.length) lines.push(fill(there ? (mine.length === 1 ? DRAWN.here : DRAWN.hereMany) : mine.length === 1 ? DRAWN.one : DRAWN.many, { names: cap(list(mine.map((q) => the(q.name[0])))), place: row[5], where: where(mine) }));
+  for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, where: where([q]) }));
   return lines.length ? lines.join(' ') : null;
 }

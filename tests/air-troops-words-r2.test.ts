@@ -4,7 +4,8 @@
 // one, so a strafer who never arrives isn't a broken promise". Her words of 15:04Z, to the letter, no colour on any:
 //   the card: LIKELY TO GO DOWN AND STRAFE; under it, once, muted, "The fighter groups most likely to go down and strafe
 //   if the sky is won. Which of them do is settled over the target."; the groups a row each; with none, "No fighter
-//   group is likely to go down and strafe.";
+//   group is likely to go down and strafe, though one still may." (her line for none as softened at 16:04Z; muted, the
+//   muted line left out above it);
 //   the report: "{No. 11 Group} went down and strafed." / "No fighter group went down to strafe."
 // The card's list is the ids strafersExpected gives the card's own forecast (the same call); the report's names are the
 // groups that really went down, the settled raid's (fly()) or the fought raid's (the battle's). With the switch off
@@ -40,7 +41,7 @@ afterEach(() => { flyKinds([]); strafeWatch.tell = undefined; heard = []; AIR.co
 
 const HEADING = 'LIKELY TO GO DOWN AND STRAFE';
 const NOTE = 'The fighter groups most likely to go down and strafe if the sky is won. Which of them do is settled over the target.';
-const NONE = 'No fighter group is likely to go down and strafe.';
+const NONE = 'No fighter group is likely to go down and strafe, though one still may.';
 const NOBODY = 'No fighter group went down to strafe.';
 const GC1 = 9, GC3 = 10, GC2 = 36, BOMBERS = 38;
 const NAME: Record<number, string> = { [GC1]: 'Groupement de Chasse 1', [GC2]: 'Groupement de Chasse 2', [GC3]: 'Groupement de Chasse 3' };
@@ -81,10 +82,19 @@ describe('the raid card: LIKELY TO GO DOWN AND STRAFE', () => {
     expect(page.sections[at - 1].heading).toBe('FLYING THE RAID');
     expect(page.sections[at]).toEqual({ heading: HEADING, text: NOTE, rows: [{ nat: '', title: 'Groupement de Chasse 3', lines: [], buttons: [] }] });
     expect(page.sections.filter((s) => s.heading === HEADING).length).toBe(1);
-    // The 3D card, through the bridge as the client asks for it.
+    // The 3D card, through the bridge as the client asks for it. (Changed on the sky gate, the design director 16:04Z:
+    // loaded through the bridge the month's other moves are made, and 1. Jagddivision, about 151 fighters able to meet
+    // it, faces Groupement de Chasse 3 alone, short of the 1.65 to 1 that wins the sky: the card's section is the line for
+    // none, to the letter, and the settled raid below sends nobody down.)
     TC.load(saveGame(c.g));
     const card = TC.page(`plan:ground:${c.target}:${p.picked.join('.')}`).card;
-    expect(card.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
+    expect(card.strafe).toEqual({ heading: HEADING, note: '', names: [], none: NONE });
+    // With every German fighter grounded before the load (none can rise: the sky is won) the 3D card names the group,
+    // the muted line once above it: round four's list, still read through the bridge.
+    const w = saar(0);
+    for (const f of w.g.airFleets) if (f.nat === 'GER') f.ftr = 0;
+    TC.load(saveGame(w.g));
+    expect(TC.page(`plan:ground:${w.target}:${p.picked.join('.')}`).card.strafe).toEqual({ heading: HEADING, note: NOTE, names: ['Groupement de Chasse 3'], none: '' });
     // Three groups in reach: each a row, in the raid's order.
     const t = saar(0, 'three');
     const q = planRaid(t.g, 'ground', t.target, t.ids, 'FRA');
@@ -247,7 +257,8 @@ describe('the raid report: who went down', () => {
     TC.load(saveGame(c.g));
     const r = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
     expect(r.ok).toBe(true);
-    expect(r.note.endsWith(' Groupement de Chasse 3 went down and strafed.')).toBe(true);
+    // (Changed on the sky gate, 16:04Z: the sky there is not won, see the card above, so the report says nobody went down.)
+    expect(r.note.endsWith(` ${NOBODY}`)).toBe(true);
     flyKinds([]);
     TC.load(saveGame(saar(0).g));
     const off = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
