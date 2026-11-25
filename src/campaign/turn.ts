@@ -966,6 +966,8 @@ export function orderSetAside(g: Game): boolean {
 // ---- Formations offered out of the player's own corps (ruling B8 of 25 November 2026; whole world only) -------------
 // A dated row that would take corps of his off the map is an offer, never a silent removal (game.ts `rowOffers`). The
 // month's offers are one list; he takes all, takes some, or declines, in his own month. None with the far side off.
+// The end of a loan is in the same list (an offer with `loan`): a lent regiment its division awaits goes home only if
+// he takes it.
 
 /** The player's open offers: what each would form and where, and which of his corps it would take. */
 export const formationOffers = (g: Game): RowOffer[] => rowOffers(g);
@@ -976,12 +978,12 @@ export function whyNotAnswerOffers(g: Game): string | null {
   return g.human === null || !humanUp(g) || onEve(g) ? 'It is not your month.' : null;
 }
 
-/** The player takes an offer: the formation is made as the record made it, out of the corps it names. Null where it formed, else the plain reason it did not; the offer then stands. */
+/** The player takes an offer: the formation is made as the record made it, out of the corps it names (a loan's end: the lent regiment is let go). Null where it was done, else the plain reason it was not; the offer then stands. */
 export function orderTakeFormation(g: Game, id: number): string | null {
   return whyNotAnswerOffers(g) ?? takeOffer(g, id);
 }
 
-/** The player declines an offer: the formation never comes, and his corps stay as they are. */
+/** The player declines an offer: the formation never comes, and his corps stay as they are (a loan's end: the lent regiment stays his for good). */
 export function orderDeclineFormation(g: Game, id: number): boolean {
   return whyNotAnswerOffers(g) === null && declineOffer(g, id);
 }

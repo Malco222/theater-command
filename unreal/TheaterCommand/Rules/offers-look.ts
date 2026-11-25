@@ -7,13 +7,19 @@
 // ready to draw, and hands the player's answer to the rules. With the whole world off there is never an offer, and
 // TC.offers() answers a list of none.
 //
-//   TC.offers()                   -> { count, head, note, can, why, rows: [{ id, name, what, where, region, since, takes: [{ corps, name, where, region, men, size }], line, can, why }] }
+//   TC.offers()                   -> { count, head, note, can, why, rows: [{ id, name, what, where, region, since, takes: [{ corps, name, where, region, men, size }], line, after, can, why, loan }] }
 //                                    `id` is what the two calls below take. `where` is the place it would form this month ('' where nowhere),
 //                                    `takes` the corps of his it would strike off (name, where each stands, its men), `line` the whole of it in
-//                                    one sentence, `can` whether it can be taken now and `why` the reason where it cannot.
+//                                    one sentence, `can` whether it can be taken now and `why` the reason where it cannot. `after` is a sentence
+//                                    for the formations he gives up by declining it, those made out of it ('' where there is none).
+//                                    `loan` is true for the end of a loan: a regiment only lent to a campaign, whose time there is up and whose
+//                                    division awaits it. It is in the same list because it is the same case: the regiment leaves only if he lets
+//                                    it go. Its `name`, `what` and `where` are the lent regiment's own, `takes` is that regiment, and `line` says
+//                                    what it was lent for and what each answer does.
 //   TC.offerTake(ids | 'all')     -> { ok, taken: [id], left: [{ id, name, why }], said, offers, view }: he takes those offers (all the open ones for 'all');
-//                                    one that cannot form this month stays open, with the reason
-//   TC.offerDecline(ids | 'all')  -> { ok, declined: [id], said, offers, view }: those formations never come, and his corps stay as they are
+//                                    one that cannot form this month stays open, with the reason. A loan's end taken: the regiment is let go.
+//   TC.offerDecline(ids | 'all')  -> { ok, declined: [id], said, offers, view }: those formations never come, and his corps stay as they are.
+//                                    A loan's end declined: the regiment stays under his command for good.
 //
 // The same list rides on the month card (campaign-bridge.ts, the card's `offers`), so the card can show the count and
 // the rows without a second call. campaign-bridge.ts adds the calls to TC with Object.assign(TC, offerCalls(game, view)).
@@ -34,8 +40,12 @@ export interface OfferLook {
   takes: OfferTakesLook[];
   /** The whole offer in one sentence. */
   line: string;
+  /** What declining it also gives up: the formations made out of it, in a sentence ('' where there is none). */
+  after: string;
   /** Whether he can take it now, and the reason where he cannot ('' where he can). */
   can: boolean; why: string;
+  /** True for the end of a loan (the lent regiment goes home if he takes it, stays his if he declines); false for a formation offered. */
+  loan: boolean;
 }
 /** The month's one list: how many are open, its heading and the line under it, and whether he can answer now. */
 export interface OffersLook { count: number; head: string; note: string; can: boolean; why: string; rows: OfferLook[] }
@@ -51,7 +61,24 @@ function rowLook(s: Game, o: RowOffer, shut: string | null): OfferLook {
   const forms = o.joins ? `Joins ${o.joins}${where ? ` at ${where}` : ''}` : where ? `Forms at ${where}` : 'Has nowhere to form this month';
   const taking = takes.length ? `, taking ${listed(takes.map((t) => `${t.name} at ${t.where} (${t.size})`))}` : '';
   const why = o.why ?? shut ?? '';
-  return { id: o.id, name: o.name, what, where, region: o.region, since: `Offered in ${turnToDate(o.since).label}`, takes, line: `${forms} (${what.toLowerCase()})${taking}.`, can: !why, why };
+  // (The end of a loan says its own sentence: what it was lent for, and what letting it go and keeping it do.)
+  const line = o.loan ?? `${forms} (${what.toLowerCase()})${taking}.`;
+  const since = `${o.loan === null ? 'Offered in' : 'Its loan ended in'} ${turnToDate(o.since).label}`;
+  const after = o.then.length ? `Declining it also gives up ${listed(o.then)}, which ${o.then.length === 1 ? 'is' : 'are'} made out of it.` : '';
+  return { id: o.id, name: o.name, what, where, region: o.region, since, takes, line, after, can: !why, why, loan: o.loan !== null };
+}
+
+/** "2 formations offered", "1 loan at an end", or both joined. */
+function headOf(forms: number, loans: number): string {
+  const a = forms ? `${forms} formation${forms === 1 ? '' : 's'} offered` : '', b = loans ? `${loans} loan${loans === 1 ? '' : 's'} at an end` : '';
+  return [a, b].filter(Boolean).join(' and ');
+}
+
+/** The line under the heading: what the formations are, what each answer does at a loan's end, and that an offer stands until he answers. (A list of formations alone keeps the words it always had.) */
+function noteOf(forms: number, loans: number): string {
+  const a = forms ? `${forms === 1 ? 'It would be formed' : 'Each would be formed'} out of corps you have, as the record formed ${forms === 1 ? 'it' : 'them'}.` : '';
+  const b = loans ? (loans === 1 ? 'A regiment whose loan is over goes home if you take the offer, and stays yours if you decline.' : 'Regiments whose loans are over go home if you take the offer, and stay yours if you decline.') : '';
+  return [a, b, `Take ${forms + loans === 1 ? 'it or decline' : 'all, take some, or decline'}: an offer stands until you answer.`].filter(Boolean).join(' ');
 }
 
 /** The player's open offers in plain words. A list of none where there is no player, no offer, or the whole world is off. */
@@ -59,11 +86,11 @@ export function offersLook(s: Game): OffersLook {
   let open: RowOffer[] = [];
   try { open = formationOffers(s); } catch { open = []; }
   const shut = open.length ? whyNotAnswerOffers(s) : null;
-  const n = open.length;
+  const n = open.length, loans = open.filter((o) => o.loan !== null).length;
   return {
     count: n,
-    head: n ? `${n} formation${n === 1 ? '' : 's'} offered` : '',
-    note: n ? `${n === 1 ? 'It would be formed' : 'Each would be formed'} out of corps you have, as the record formed ${n === 1 ? 'it' : 'them'}. Take ${n === 1 ? 'it or decline' : 'all, take some, or decline'}: an offer stands until you answer.` : '',
+    head: n ? headOf(n - loans, loans) : '',
+    note: n ? noteOf(n - loans, loans) : '',
     can: n > 0 && !shut, why: shut ?? '',
     rows: open.map((o) => rowLook(s, o, shut)),
   };
@@ -82,24 +109,35 @@ export function offerCalls(game: () => Game, view: () => unknown) {
     offers: (): OffersLook => offersLook(game()),
     offerTake: (ids: unknown) => {
       const s = game();
-      const names = new Map(formationOffers(s).map((o) => [o.id, o.name]));
+      const was = formationOffers(s);
+      const names = new Map(was.map((o) => [o.id, o.name]));
+      const lent = new Set(was.filter((o) => o.loan !== null).map((o) => o.id));
       const taken: number[] = [], left: { id: number; name: string; why: string }[] = [];
       for (const id of asked(s, ids)) {
         const why = orderTakeFormation(s, id);
         if (why === null) taken.push(id); else left.push({ id, name: names.get(id) ?? '', why });
       }
+      const formed = taken.filter((id) => !lent.has(id)), gone = taken.filter((id) => lent.has(id));
+      // (A reason is a sentence of its own, with its capital: it follows a full stop, never a colon.)
       const said = [
-        taken.length ? `${taken.length === 1 ? `${names.get(taken[0])} is formed` : `${taken.length} formations are formed: ${listed(taken.map((id) => names.get(id) ?? ''))}`}.` : '',
-        ...left.map((x) => (x.name ? `${x.name} is not formed: ${x.why}` : x.why)),
+        formed.length ? `${formed.length === 1 ? `${names.get(formed[0])} is formed` : `${formed.length} formations are formed: ${listed(formed.map((id) => names.get(id) ?? ''))}`}.` : '',
+        gone.length ? `${listed(gone.map((id) => names.get(id) ?? ''))} ${gone.length === 1 ? 'is' : 'are'} let go.` : '',
+        ...left.map((x) => (x.name ? `${x.name} ${lent.has(x.id) ? 'stays' : 'is not formed'}. ${x.why}` : x.why)),
       ].filter(Boolean).join(' ');
       return { ok: taken.length > 0 && !left.length, taken, left, said, offers: offersLook(s), view: view() };
     },
     offerDecline: (ids: unknown) => {
       const s = game();
-      const names = new Map(formationOffers(s).map((o) => [o.id, o.name]));
+      const was = formationOffers(s);
+      const names = new Map(was.map((o) => [o.id, o.name]));
+      const lent = new Set(was.filter((o) => o.loan !== null).map((o) => o.id));
       const declined: number[] = [];
       for (const id of asked(s, ids)) if (orderDeclineFormation(s, id)) declined.push(id);
-      const said = declined.length ? `${declined.length === 1 ? `${names.get(declined[0])} is not formed` : `${declined.length} formations are not formed`}: your corps stay as they are.` : '';
+      const unformed = declined.filter((id) => !lent.has(id)), kept = declined.filter((id) => lent.has(id));
+      const said = [
+        unformed.length ? `${unformed.length === 1 ? `${names.get(unformed[0])} is not formed` : `${unformed.length} formations are not formed`}: your corps stay as they are.` : '',
+        kept.length ? `${listed(kept.map((id) => names.get(id) ?? ''))} ${kept.length === 1 ? 'stays' : 'stay'} under your command.` : '',
+      ].filter(Boolean).join(' ');
       return { ok: declined.length > 0, declined, said, offers: offersLook(s), view: view() };
     },
   };

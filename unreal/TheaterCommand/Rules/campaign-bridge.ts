@@ -41,7 +41,8 @@
 //                                          Each corps in the view carries school (at the schools now), schoolTo (the grade it would come back) and schoolWhy (why it cannot go, '' if it can)
 //                                          and wear, how worn its uniforms look, 0.1 fresh to 1 after six weeks in the line (its battles' blocks carry the same)
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
-//   TC.offers()                         -> { count, head, note, can, why, rows }: the formations offered out of the player's own corps (the whole world; Rules/offers-look.ts)
+//   TC.offers()                         -> { count, head, note, can, why, rows }: the formations offered out of the player's own corps, and the loans that have ended (a row with loan: true:
+//                                          a regiment lent to a campaign, which its division awaits, goes home only if he lets it go) (the whole world; Rules/offers-look.ts)
 //   TC.offerTake(ids | 'all')           -> { ok, taken, left, said, offers, view }: he takes those offers; TC.offerDecline(ids | 'all') -> { ok, declined, said, offers, view }
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
@@ -3556,7 +3557,8 @@ interface MonthCard {
    * (Release 2, the whole world; the design director's ruling B8 of 25 November 2026.) The formations offered out of
    * the player's own corps, the month's one list: how many stand open, and each in plain words (Rules/offers-look.ts,
    * the same as TC.offers()). He takes all, takes some or declines with TC.offerTake and TC.offerDecline. A list of
-   * none on the older maps, where no offer is ever made.
+   * none on the older maps, where no offer is ever made. The end of a loan is a row of the same list (`loan`): a
+   * regiment lent to a campaign, which its division awaits, goes home only if he lets it go.
    */
   offers: OffersLook;
 }

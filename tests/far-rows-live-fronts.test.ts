@@ -15,7 +15,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
+import { createGame, declareWar, relocate, rowOffers, startPhase, takeOffer } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { frontsState, onLiveFront } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
@@ -170,10 +170,21 @@ describe("only where the plan's fronts are read", () => {
     }
   });
 
-  it("never for the player: no front is read for his Japan, and his rows come by their dates", () => {
+  it("never for the player: no front is read for his Japan, and his rows are offered by their dates", () => {
     const g = war({ human: 'JAP' });
     expect(frontsState(g, 'JAP')).toEqual([]);
+    // (Since the design director's ruling B8 of 25 November 2026 a row that would take corps of the player's is an
+    // offer. The 25th Army's 18th Division is one, of month 27; while it stood unanswered the 18th Division for
+    // Rangoon came whole in month 32 and took nobody, the same men twice, and this test passed on it. It waits on
+    // his answer now: tests/far-dated-rows-review.test.ts.)
     month(g, 32);
+    expect([row(g, D18), row(g, MALAYA18)]).toEqual([undefined, undefined]);
+    expect(takeOffer(g, index(MALAYA18))).toBeNull();
+    expect(row(g, MALAYA18)).toBeDefined();
+    // No front holds his row back: with Singapore still standing it is offered the month after, and taken it forms.
+    month(g, 33);
+    expect(rowOffers(g).find((o) => o.name === D18)).toMatchObject({ since: 33, why: null });
+    expect(takeOffer(g, index(D18))).toBeNull();
     expect(at(g, row(g, D18)!)).toBe('Rangoon');
     expect(row(g, MALAYA18)).toBeUndefined();
   });

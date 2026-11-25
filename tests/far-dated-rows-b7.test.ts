@@ -213,11 +213,11 @@ describe('B8, a row that would take corps of the player\'s is an offer', () => {
     months(g, 1, 19);
     removeCorps(g, row(g, FORMOSA)!);
     // Asked for before the month turns, it is refused with the reason, and lapses.
-    expect(offer(g, FORTY8)!.why).toMatch(/has lapsed: the corps it was to be formed from are no longer on the map/);
+    expect(offer(g, FORTY8)!.why).toMatch(/has lapsed: the corps it was to be formed from is no longer on the map/);
     month(g, 20);
     expect(offer(g, FORTY8)).toBeUndefined();
     expect(g.flags[`sent:${index(FORTY8)}`]).toBe(2);
-    expect(g.headlines.some((h) => h.text === `The offer to form ${FORTY8} has lapsed: the corps it was to be formed from are no longer on the map.`)).toBe(true);
+    expect(g.headlines.some((h) => h.text === `The offer to form ${FORTY8} has lapsed: the corps it was to be formed from is no longer on the map.`)).toBe(true);
     months(g, 21, 24);
     expect(row(g, FORTY8)).toBeUndefined();
   });

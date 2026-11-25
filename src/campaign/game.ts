@@ -4747,6 +4747,17 @@ const rowTakes = (g: Game, nat: string, o: any): Corps[] => (Array.isArray(o?.fr
  * the board (`from`) keeps the old rule for a computer (they stay where they stand, and only what the row adds from
  * home, `adds`, comes); the player's is an offer (ruling B8, `rowOffers`), and the offer forms by this rule.
  *
+ * (So a row that takes corps on the board is placed by two rules, by who sits in the seat, and the reviewer of
+ * 25 November 2026 asked for one. It is left as it is, and put to the design director as a departure from the
+ * letter of B7, because ruling B8 speaks of exactly these rows and says "the computer's rows as today", and three of
+ * his earlier rulings stand on today's rule, each pinned by a test: the 18th Division is not brought to Rangoon's
+ * coast (17:10Z, 19 November); with Hsuchow lost the garrison stays whole and its detachment waits its half year
+ * and is struck (17:23Z); a row let go by a live front has its half year for its posting from that month, and its
+ * corps stays as it is (05:35Z, 21 November). Tried: read by this rule a computer's 18th Division left the south for
+ * Japan's home islands the month after Singapore fell, with Rangoon still Britain's. The player's offer loses
+ * nothing by it: it stands open, so he may take it at home at once or wait for the posting and take it there, which
+ * is every move the computer has and one more.)
+ *
  * Returns null where the row is not read. Else `waits` (its war has not begun), or the place (`at`, null where its
  * country holds neither a harbour in the theatre nor its capital), the worth that comes where that is not the whole
  * row (`adds`), and `takes` where it is the player's row that would take his corps.
@@ -4829,16 +4840,85 @@ export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string;
 //            card (the 3D game's TC.offers), take all or pick, never a card each.
 //   taken    it does what the rule did before: the corps it names are struck off and the row forms, where the rule
 //            puts it that month (`rowPlace`; away from an unheld posting by ruling B7). Where it cannot form that
-//            month (no room, its war over) he is told why and the offer stands.
+//            month (no room) he is told why and the offer stands.
 //   declined the row never comes, and his corps stay as they are under their own names.
-//   lapses   when a corps it needed is gone from the board, or its own last month (`until`) has come: he is told.
-// A computer's rows are as they were. The state is two flags a row: `offer:N` the month it was made, `offer:n:N`
-// how many corps it named. With the far side off no offer is ever made and neither flag is read.
+//   lapses   when a corps it needed is gone from the board, when the war it was raised for is over, or when its
+//            own last month (`until`) has come: he is told. (An offer whose war was over stood on the card for good
+//            and could never be taken: the mending of 25 November 2026.)
+//   sisters  a row whose men another row releases by cutting a corps (`cut`), or which is itself made from the
+//            formation another row would make (`from`: the 18th Division for Rangoon out of the 25th Army's 18th
+//            Division), waits on his answer while that other row stands as an open offer, and no half year runs
+//            against it for the months he takes (`sourceAsked`). Where he declines that other row, or its offer
+//            lapses, and the corps it would have been made from are still his, the row made from it never comes:
+//            its men are the corps he kept, and nobody is counted twice (`menKept`). The offer says which later
+//            rows he gives up by declining (`then`).
+// A computer's rows are as they were. The state is three flags a row: `offer:N` the month it was made, `offer:n:N`
+// how many corps it named, and `unmade:N` the month he declined it or it lapsed. With the far side off no offer is
+// ever made and none of them is written or read.
+//
+// The end of a loan is the same case where a division awaits the lent corps (the ruling's own words: "rows that take
+// a corps from the player ... never a silent removal"; the reviewer's finding of 25 November 2026). A regiment only
+// lent to a campaign (`until`) left the map when its time was up (`lentOver`) and went home to its division
+// (`comeHome`), the player's as a computer's: Japan's 1st and 6th Tank Regiments the month Singapore was his, the
+// 7th with Bataan. For the player's own country that is an offer in the same list:
+//   made     in the month the loan is over, by the rule that always decided it (`lentOver`). Nothing leaves.
+//   taken    the regiment goes home as the rule had it go: off the map, its worth into its division one for one,
+//            or remembered for a division still to be formed (`comeHome`).
+//   declined it stays his for good under its own name, and is never asked for again. Its division stays short of
+//            its share while the regiment lives, as while it was lent (`awaited`), so nobody is counted twice.
+//   gone     where the regiment is destroyed while the offer stands there is nothing left to ask about.
+// Two flags a row: `leave:N` the month it was made, `kept:N` once he has declined. A computer's loans end as they did.
+//
+// Every other loan ends as it did, for the player too, and that is put to the design director with nothing built: a
+// corps the main army's order of battle counts elsewhere (the South Africans lent to East Africa, the panzer
+// divisions lent to the Balkans) cannot be kept without being counted twice, and a garrison whose record ends in a
+// surrender (`ends`) was never a loan. Only where a division's row awaits the regiment does the game know where its
+// men are counted, and there the choice is a real one.
 
 const offerKey = (i: number): string => `offer:${i}`;
 const offerCount = (i: number): string => `offer:n:${i}`;
 const offerOpen = (g: Game, nat: string, i: number): boolean => farOn(g) && nat === g.human && g.flags[offerKey(i)] !== undefined;
 const offerShut = (g: Game, i: number): void => { delete g.flags[offerKey(i)]; delete g.flags[offerCount(i)]; };
+
+/** The month the player declined a row offered to him, or its offer lapsed: the formation was never made, by his answer or for want of one. */
+const unmadeKey = (i: number): string => `unmade:${i}`;
+/** The places in the list of dated rows of a country's rows that would make a formation of one of these names. */
+const makersOf = (nat: string, names: string[]): number[] => {
+  const out: number[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((r, j) => { if (r[1] === nat && names.includes(r[2])) out.push(j); });
+  return out;
+};
+
+/**
+ * True while a formation this row waits on stands as an offer the player has not answered: the row that would make
+ * its cut (`cut`), with no row having made it; or, for a row made from formations none of which is on the board
+ * (`from`, with no body of its own), the row that would make one of them. Such a row waits on his answer and no half
+ * year runs against it. As built the 21st Division's detachment for Bataan was struck with the offer to cut
+ * Hsuchow's garrison unanswered, and the 18th Division formed whole at Rangoon, taking nobody, with the offer to
+ * form the 25th Army's 18th Division still open. Never with the far side off, and never for a computer.
+ */
+function sourceAsked(g: Game, nat: string, o: any): boolean {
+  if (!farOn(g) || nat !== g.human) return false;
+  const cut = o.cut ? (Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]) : [];
+  if (cut.length && !cut.some((nm) => rowLanded(g, nm)) && makersOf(nat, cut).some((j) => offerOpen(g, nat, j))) return true;
+  return Array.isArray(o.from) && !(o.adds > 0) && rowTakes(g, nat, o).length === 0 && makersOf(nat, o.from).some((j) => offerOpen(g, nat, j));
+}
+
+/**
+ * True for the player's row made from formations none of which is on the board, where one of them was offered to
+ * him and never made (declined, or its offer lapsed: `unmade`) and the corps IT would have been made from still
+ * stand on his board, however many such links back. The row's men are those corps, kept under their own names: the
+ * row never comes (ruling B8: declined, his corps stay as they are; and nobody is counted twice). As built it came
+ * whole and took nobody: declining the 25th Army's 18th Division and then holding Rangoon gave him the 18th Division
+ * twice over. Where the kept corps are gone too, the row is as it always was. Never with the far side off, and never
+ * for a computer.
+ */
+function menKept(g: Game, nat: string, o: any, deep = 0): boolean {
+  if (!farOn(g) || nat !== g.human || !Array.isArray(o?.from) || o.adds > 0 || rowTakes(g, nat, o).length > 0) return false;
+  const rows = (setup as any).expeditions as any[];
+  return makersOf(nat, o.from).some((j) => g.flags[unmadeKey(j)] !== undefined && !rowLanded(g, rows[j][2])
+    && (rowTakes(g, nat, rows[j][6]).length > 0 || (deep < 8 && menKept(g, nat, rows[j][6], deep + 1))));
+}
 
 /** The offer is made: the month, and how many of his corps it names. */
 function offerMade(g: Game, nat: string, i: number, o: any): void {
@@ -4846,11 +4926,19 @@ function offerMade(g: Game, nat: string, i: number, o: any): void {
   g.flags[offerCount(i)] = rowTakes(g, nat, o).length;
 }
 
-/** Why an open offer has lapsed, in plain words: a corps it needed is gone from the map, or its row's own last month has come. Null while it stands. */
+/**
+ * Why an open offer has lapsed, in plain words: its row's own last month has come, the war it was raised for is
+ * over, or a corps it needed is gone from the map (said by the count: "the corps" where it named one, "one of the
+ * 3 corps", "2 of the 3 corps", "the 3 corps"). Null while it stands.
+ */
 function offerGone(g: Game, nat: string, row: any[], i: number): string | null {
   const o = row[6] ?? {}, there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0;
   if (o.until && g.turn >= o.until) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
-  return there >= named ? null : `The offer to form ${row[2]} has lapsed: ${there ? 'one of the corps it was to be formed from is' : 'the corps it was to be formed from are'} no longer on the map.`;
+  if (o.war && !warOn(g, o.war)) return `The offer to form ${row[2]} has lapsed: the war it was raised for is over.`;
+  if (there >= named) return null;
+  const lost = named - there;
+  const which = named === 1 ? 'the corps' : `${lost === named ? 'the' : lost === 1 ? 'one of the' : `${lost} of the`} ${named} corps`;
+  return `The offer to form ${row[2]} has lapsed: ${which} it was to be formed from ${lost === 1 ? 'is' : 'are'} no longer on the map.`;
 }
 
 /** An open offer's month: it lapses where `offerGone` says so, and he is told; else it stands, with any more of his corps it now names counted in. */
@@ -4859,6 +4947,7 @@ function offerStands(g: Game, nat: string, row: any[], i: number): string | null
   if (!gone) { g.flags[offerCount(i)] = Math.max(g.flags[offerCount(i)] ?? 0, rowTakes(g, nat, row[6] ?? {}).length); return null; }
   offerShut(g, i);
   g.flags[`sent:${i}`] = 2;
+  g.flags[unmadeKey(i)] = g.turn;
   headline(g, 'info', gone, nat);
   return gone;
 }
@@ -4869,9 +4958,12 @@ export interface OfferTakes { id: number; name: string; kind: Kind; region: numb
  * An offer as either interface shows it: the row's place in the list of dated rows (`id`), what would form and how
  * big, the month it was made, where it would form this month (`region`, -1 where nowhere; `joins` the corps it would
  * strengthen where it forms no corps of its own), the corps it would take, and why it cannot be taken this month
- * (`why`, null where it can).
+ * (`why`, null where it can). `then` names his later rows that are made from this formation or cut from it, which he
+ * gives up by declining it (`menKept`). The end of a loan is in the same list (a regiment its division awaits,
+ * `loanStays`): `loan` says in plain words what it was lent for and what taking and declining do (null for a
+ * formation offered); its name, size and place are the lent regiment's own, and that regiment is the one it takes.
  */
-export interface RowOffer { id: number; name: string; kind: Kind; divs: number; men: number; since: number; region: number; joins: string | null; takes: OfferTakes[]; why: string | null }
+export interface RowOffer { id: number; name: string; kind: Kind; divs: number; men: number; since: number; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null }
 
 /** One open offer of the player's, read with nothing changed. */
 function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
@@ -4886,7 +4978,6 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     const gone = offerGone(g, nat, row, i);
     if (gone) return gone;
     if (o.stops && !(o.stops as number[]).includes(stopOf(g))) return 'It is not formed at this setting of the history dial.';
-    if (o.war && !warOn(g, o.war)) return 'The war it was raised for is over.';
     if (P.waits) return `It forms once you are at war with ${theName(g.nations[posting.ctrl])}, which holds ${posting.name}.`;
     if (o.cut && !(Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]).some((nm) => rowLanded(g, nm))) return 'The formation its men are released from has not been formed.';
     if (old) return null;
@@ -4894,7 +4985,61 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return `There is no room for another corps at ${reg.name}, or near it.`;
     return null;
   })();
-  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why };
+  // His rows still to come at this stop of the dial that are made out of this formation: cut from it, or made from
+  // it with no other corps of theirs on the board (one that names a corps he keeps by declining is offered still).
+  const names = (x: unknown): string[] => (Array.isArray(x) ? (x as string[]) : typeof x === 'string' ? [x] : []);
+  const then = [...new Set((((setup as any).expeditions as any[]) ?? []).filter((r, j) => r[1] === nat && j !== i && r[2] !== row[2] && !g.flags[`sent:${j}`]
+    && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
+    && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
+      && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
+  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null };
+}
+
+const leaveKey = (i: number): string => `leave:${i}`;
+const keptKey = (i: number): string => `kept:${i}`;
+const leaveOpen = (g: Game, nat: string, i: number): boolean => farOn(g) && nat === g.human && g.flags[leaveKey(i)] !== undefined;
+/** The player's corps a lent row put on the map, while it lives. */
+const lentCorps = (g: Game, nat: string, i: number): Corps | undefined => { const id = g.flags[`lent:${i}`]; return id > 0 ? g.corps.find((x) => x.id === id && x.nat === nat && !x.dead) : undefined; };
+
+/** The place in the list of dated rows of the division whose row awaits a lent corps of that name (`awaits`), or -1 where none does. */
+const awaitedBy = (nat: string, name: string): number => (((setup as any).expeditions as any[]) ?? []).findIndex((r) => r[1] === nat && Array.isArray(r[6]?.awaits) && r[6].awaits.includes(name));
+
+/**
+ * The far side: whether the corps of a lent row stays on the map this month for the player's sake (ruling B8: the
+ * end of a loan takes no corps of his off the map; it is an offer). Only a regiment a division's row awaits is
+ * asked about: there the game knows where its men are counted, so keeping it counts nobody twice. False for every
+ * other lent row, for a computer's row, with the far side off, where the corps is no longer on the map (nothing is
+ * left to ask about), and where he has just said it may go (`taken`): the loan then ends as it always did. True
+ * where he has declined (`kept`), and where the loan is over and the offer is made or stands; the month it is first
+ * over is the month it is made.
+ */
+function loanStays(g: Game, nat: string, row: any[], o: any, i: number, taken: boolean): boolean {
+  if (!farOn(g) || nat !== g.human || awaitedBy(nat, row[2]) < 0) return false;
+  if (!lentCorps(g, nat, i)) { delete g.flags[leaveKey(i)]; return false; }
+  if (g.flags[keptKey(i)]) return true;
+  if (taken) return false;
+  if (g.flags[leaveKey(i)] === undefined && lentOver(g, nat, row, o)) g.flags[leaveKey(i)] = g.turn;
+  return true;
+}
+
+/**
+ * The end of a loan as the list shows it: the lent regiment, where it stands, and what letting it go and keeping it
+ * do. What letting it go does is said as `comeHome` will do it: into its division where that is on the map,
+ * remembered for it where its row has still to form, and lost to it where that row never came or the division is
+ * gone. Null where the regiment is gone.
+ */
+function loanView(g: Game, nat: string, row: any[], i: number): RowOffer | null {
+  const o = row[6] ?? {}, c = lentCorps(g, nat, i), k = awaitedBy(nat, row[2]);
+  if (!c || k < 0) return null;
+  const home = ((setup as any).expeditions as any[])[k];
+  const there = g.flags[`sent:${k}`] === 1 && g.corps.some((x) => x.nat === nat && x.name === home[2] && !x.dead && x.divs === home[4]);
+  const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const lent = `It was lent to ${typeof o.takes === 'string' ? `take ${o.takes}` : Array.isArray(o.holds) ? `hold ${list(o.holds as string[])}` : 'a campaign'}, and its loan is over`;
+  const goes = there ? `it goes home to its division, ${home[2]}`
+    : g.flags[`sent:${k}`] === undefined ? `it goes home, and joins its division, ${home[2]}, when that is formed`
+      : `it leaves the map, for its division, ${home[2]}, is not there to take it`;
+  const mine = { id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) };
+  return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.` };
 }
 
 /** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */
@@ -4902,16 +5047,27 @@ export function rowOffers(g: Game): RowOffer[] {
   const nat = g.human;
   if (nat === null || !farOn(g) || !g.nations[nat]?.alive) return [];
   const out: RowOffer[] = [];
-  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => { if (row[1] === nat && offerOpen(g, nat, i)) out.push(offerView(g, nat, row, i)); });
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    if (row[1] !== nat) return;
+    if (offerOpen(g, nat, i)) out.push(offerView(g, nat, row, i));
+    else if (leaveOpen(g, nat, i)) { const v = loanView(g, nat, row, i); if (v) out.push(v); }
+  });
   return out.sort((a, b) => a.since - b.since || a.id - b.id);
 }
 
 /**
  * The player says yes to an offer (ruling B8): the row forms as the rule always formed it, the corps it names struck
- * off. Null where it formed; else the plain reason it could not this month, with the offer left standing.
+ * off; or, at the end of a loan, the lent regiment goes home as the rule always had it go. Null where it was done;
+ * else the plain reason it could not be this month, with the offer left standing.
  */
 export function takeOffer(g: Game, id: number): string | null {
   const nat = g.human, row = ((setup as any).expeditions as any[] ?? [])[id];
+  // (The end of a loan: he lets the regiment go, and it leaves as the rule always had it leave.)
+  if (nat !== null && row && row[1] === nat && leaveOpen(g, nat, id)) {
+    if (!lentCorps(g, nat, id)) { delete g.flags[leaveKey(id)]; return 'There is no such offer.'; }
+    expeditions(g, nat, id);
+    return g.flags[`lent:${id}`] === -1 ? null : 'It cannot leave this month.';
+  }
   if (nat === null || !row || row[1] !== nat || !offerOpen(g, nat, id)) return 'There is no such offer.';
   const gone = offerStands(g, nat, row, id);
   if (gone) return gone;
@@ -4924,12 +5080,20 @@ export function takeOffer(g: Game, id: number): string | null {
   return null;
 }
 
-/** The player says no to an offer (ruling B8): the row never comes, and his corps stay as they are. False where there is no such offer. */
+/** The player says no to an offer (ruling B8): the row never comes, and his corps stay as they are; or, at the end of a loan, the lent regiment stays his. False where there is no such offer. */
 export function declineOffer(g: Game, id: number): boolean {
   const nat = g.human, row = ((setup as any).expeditions as any[] ?? [])[id];
+  // (The end of a loan: he keeps the regiment, for good.)
+  if (nat !== null && row && row[1] === nat && leaveOpen(g, nat, id)) {
+    delete g.flags[leaveKey(id)];
+    if (!lentCorps(g, nat, id)) return false;
+    g.flags[keptKey(id)] = 1;
+    return true;
+  }
   if (nat === null || !row || row[1] !== nat || !offerOpen(g, nat, id)) return false;
   offerShut(g, id);
   g.flags[`sent:${id}`] = 2;
+  g.flags[unmadeKey(id)] = g.turn;
   return true;
 }
 
@@ -4960,12 +5124,16 @@ function expeditions(g: Game, nat: string, take?: number): void {
       if (g.flags[`sent:${i}`] === 1) estMonth(g, nat, row);
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];
-      if (o.until && id > 0 && lentOver(g, nat, row, o)) {
+      // (The far side: the end of a loan takes no regiment of the player's that its division awaits off the map: it
+      // is an offer, and the regiment stays until he lets it go. Ruling B8, `loanStays`. A computer's loan ends as
+      // it did, and so does everybody's with the far side off.)
+      if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
         // (The far side: a regiment its division awaits comes home to it: `comeHome`. A row whose record ends in a
         // surrender, `ends`, is told as one: `down`, below.)
         if (c) { (o.ends === 'surrender' && farOn(g) ? down : gone).push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
+        if (take === i) delete g.flags[leaveKey(i)];
       }
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
       if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
@@ -5017,6 +5185,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
       if (o.adds > 0) own = true;
       else { g.flags[`wait:${i}`] = g.turn; return; }
     }
+    // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
+    // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
+    // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
+    // formation he did not make, whose corps he kept, never comes. Ruling B8; the mending of 25 November 2026:
+    // `sourceAsked`, `menKept`.)
+    if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
+    if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; g.flags[unmadeKey(i)] = g.turn; return; }
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
     // (An offer the player takes is not struck for the months he took to answer: it stood open. Ruling B8.)

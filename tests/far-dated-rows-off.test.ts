@@ -25,7 +25,8 @@ describe('rulings B7 and B8 with the far switch off', () => {
         for (const nat of g.order) if (g.nations[nat].alive) startPhase(g, nat);
         expect(rowOffers(g), `${human} month ${t}`).toEqual([]);
       }
-      expect(Object.keys(g.flags).filter((k) => k.startsWith('offer:'))).toEqual([]);
+      // (Nor a flag of a loan's end or of a formation never made: the mending after the review of 25 November 2026.)
+      expect(Object.keys(g.flags).filter((k) => /^(offer|leave|kept|unmade):/.test(k))).toEqual([]);
       // The new rule answers for no row, wherever it is posted and whoever holds the place.
       for (const row of rows) expect(postedFor(g, row[1], row, g.byName[row[5]]), row[2]).toBeNull();
       expect(formationOffers(g)).toEqual([]);
