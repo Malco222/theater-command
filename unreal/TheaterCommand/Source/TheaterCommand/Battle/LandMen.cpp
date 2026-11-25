@@ -2093,6 +2093,9 @@ namespace LandMen
 			float Fade = 1.f;
 			bool bVisible = true;
 			bool bUnderCanvas = false;      // alive and riding in a lorry's bed now (his shown stance's): not drawn
+			// Leaving with his block (release 2, SetLeaveWalk): on his way off, and how long he takes to get to his feet first.
+			bool bLeaving = false;
+			float LeaveHold = 0.f;
 			double Last = -1.0;
 			uint32_t Stamp = 0;
 			Lod L = Far;
@@ -2187,6 +2190,9 @@ namespace LandMen
 		std::vector<RoundRow> RoundsRead;
 		std::map<int, std::pair<std::string, std::string>> BlockArmy; // block id -> (army, file army)
 		std::map<int, std::string> BlockCal; // block id -> its guns' calibre as the recording writes it (cal), where it does
+		// (release 2, SetLeaveWalk) block id -> the way to its side's own edge along y: -1 the attack's (y 0), +1 the defence's
+		std::map<int, int> BlockOwn;
+		bool bLeaveWalk = false;
 		/** Uniforms that age (release 2, behind its switch, SetWorn): each block's side's months in the line (the
 		 * recording's sides.<side>.worn), the faded rows made from the armies' (one a row and wear, so no more sets of
 		 * men alike), and whether the look is on. */
@@ -3300,15 +3306,20 @@ namespace LandMen
 
 		void TurnTo(Man& M, int ChIx, double At, double Until)
 		{
+			const double NextChange = static_cast<size_t>(ChIx) + 1 < M.Stances.size() ? M.Stances[static_cast<size_t>(ChIx) + 1].T + M.Info.Delay : 1e18;
+			TurnToStance(M, M.Stances[static_cast<size_t>(ChIx)], At, Until, NextChange);
+		}
+
+		/** A stance turned to: one of his changes' (TurnTo), or the gait he leaves the field in (LeaveAt). */
+		void TurnToStance(Man& M, const Stance& St, double At, double Until, double NextChange)
+		{
 			// A new stance from the rules: turn to it as a man would. Kneeling, going prone and getting up have their own
 			// clips (kneel_down, go_prone, stand_up, go_prone backwards), squeezed to fit before he must move, fire or
 			// change again (the squad brain changes pose every second or two in a bound); within a class it is a fifth
 			// of a second's blend.
-			const Stance& St = M.Stances[static_cast<size_t>(ChIx)];
 			const Class From = M.EndClass;
 			M.Queue.clear();
 			double Begin = At;
-			const double NextChange = static_cast<size_t>(ChIx) + 1 < M.Stances.size() ? M.Stances[static_cast<size_t>(ChIx) + 1].T + M.Info.Delay : 1e18;
 			const bool bOffQuick = St.Play == Stance::Gait;
 			if (From != St.Cl)
 			{
@@ -4099,6 +4110,89 @@ namespace LandMen
 			++M.Stamp;
 		}
 
+		/** M.Shown while he leaves in the gait LeaveAt gave him: no change of his track's (they count from 0; -1 is none). */
+		static constexpr int LeaveShown = -2;
+
+		/**
+		 * A living man on foot whose block has left the battle (release 2, SetLeaveWalk; Brian, 25 November 17:11Z: "some
+		 * soldiers freeze and then disapear"). The rules keep his last point a tenth of a second before he is out, and a
+		 * track read past its last point has no speed, so "carries on at his last speed" stopped every such man dead,
+		 * mid-stride if he was moving, and the scene cut him half a second later. Here he goes on from his last kept
+		 * point along the last stretch of his track that has length (within a second and a half of it), at its speed,
+		 * facing as the rules last had him; a man who was standing, kneeling, lying or cowering gets to his feet, turns
+		 * and walks for his own side's edge at 1.4 m/s. He is in a gait all the way (his own if he was in one on his
+		 * feet, else a walk, a run over 3 m/s), whole for 3 s after he is out and gone half a second later; the scene
+		 * hides him sooner, the first frame he is out of the picture (Crowd::LeftUnseen). The tracked vehicles' way,
+		 * LandFeed::SpotAt, for men.
+		 */
+		void LeaveAt(Man& M, const TrackData& Tr, double Tl, double Now, float& F, float& V)
+		{
+			const size_t N = Tr.T.size();
+			const double TL = Tr.T[N - 1], XL = Tr.X[N - 1], YL = Tr.Y[N - 1];
+			const float FaceL = Tr.F[N - 1];
+			double Dx = 0.0, Dy = 0.0, Speed = 0.0;
+			for (size_t I = N - 1; I > 0 && TL - Tr.T[I] <= 1.5; --I)
+			{
+				const double Lx = Tr.X[I] - Tr.X[I - 1], Ly = Tr.Y[I] - Tr.Y[I - 1];
+				const double Len = std::hypot(Lx, Ly), Span = Tr.T[I] - Tr.T[I - 1];
+				if (Len > 0.05 && Span > 1e-6)
+				{
+					Dx = Lx / Len;
+					Dy = Ly / Len;
+					Speed = std::min(7.0, Len / Span);
+					break;
+				}
+			}
+			const bool bWasStill = Speed < 1.2;
+			if (bWasStill)
+			{
+				// (his own edge: the attack's is y 0, the defence's the field's far side; a block of no side, away from
+				// where he faced, which was the enemy)
+				const auto Own = BlockOwn.find(M.Info.Block);
+				if (Own != BlockOwn.end() && Own->second != 0)
+				{
+					Dx = 0.0;
+					Dy = static_cast<double>(Own->second);
+				}
+				else
+				{
+					Dx = -std::sin(static_cast<double>(FaceL));
+					Dy = -std::cos(static_cast<double>(FaceL));
+				}
+				Speed = 1.4;
+			}
+			if (!M.bLeaving)
+			{
+				M.bLeaving = true;
+				// (on his feet and in a gait already, he keeps it; else he is turned to one, getting up first, and
+				// stays where he is while he does)
+				const Segment& Cur = M.Queue.empty() ? M.Cur : M.Queue.back();
+				const bool bInGait = !bWasStill && Cur.How == Segment::Gait && Cur.Clip >= 0 && M.EndClass == Up;
+				M.LeaveHold = bWasStill ? (M.EndClass == Prone ? 0.45f : M.EndClass == Kneel ? 0.35f : 0.15f) : 0.f;
+				if (!bInGait)
+				{
+					const Stance Gone = StanceOf(*M.S, Tr.Role, Speed > 3.0 ? "run" : "walk", true);
+					if (Gone.Clip >= 0) TurnToStance(M, Gone, Now, M.LeaveHold > 0.f ? Now + static_cast<double>(M.LeaveHold) : -1.0, 1e18);
+				}
+				M.Shown = LeaveShown;
+			}
+			const double Since = Tl - TL, Going = std::max(0.0, Since - static_cast<double>(M.LeaveHold));
+			M.X = XL + Dx * Speed * Going;
+			M.Y = YL + Dy * Speed * Going;
+			V = Going > 0.0 ? static_cast<float>(Speed) : 0.f;
+			// (a man who was still turns the short way to where he goes as he gets up; a moving man faces as he did)
+			F = FaceL;
+			if (bWasStill)
+			{
+				const double Head = std::atan2(Dx, Dy);
+				const double Turn = std::clamp(Since / std::max(0.3, static_cast<double>(M.LeaveHold) + 0.25), 0.0, 1.0);
+				F = static_cast<float>(static_cast<double>(FaceL) + std::remainder(Head - static_cast<double>(FaceL), 2.0 * 3.14159265358979) * Turn);
+			}
+			const double Past = Tl - M.Info.Out;
+			M.Fade = Past <= 3.0 ? 1.f : static_cast<float>(std::max(0.0, 1.0 - (Past - 3.0) / 0.5));
+			if (M.Fade <= 0.f) M.bVisible = false;
+		}
+
 		/** One man one frame. bPose false (a thrifty frame, far from the eye): all he does, his place, his turns of
 		 * pose, his shots and his clips' events, but not his bones (they keep the last frame's; his Stamp stays). A man
 		 * who starts to fall is posed. */
@@ -4126,7 +4220,20 @@ namespace LandMen
 			if (M.State == Man::Alive)
 			{
 				float F = 0.f, V = 0.f;
-				if (M.Info.Out >= 0.0 && Tl > M.Info.Out)
+				const bool bLeaves = bLeaveWalk && M.Info.Out >= 0.0 && !Tr.T.empty() && Tl > Tr.T.back()
+					&& !(M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size() && (M.Stances[static_cast<size_t>(M.Shown)].Aboard || M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f));
+				if (M.bLeaving && !bLeaves)
+				{
+					// (back on the list, or the film wound back: the rules' stance again)
+					M.bLeaving = false;
+					if (M.Shown == LeaveShown) M.Shown = -1;
+				}
+				if (bLeaves)
+				{
+					LeaveAt(M, Tr, Tl, Now, F, V);
+					if (!M.bVisible) return;
+				}
+				else if (M.Info.Out >= 0.0 && Tl > M.Info.Out)
 				{
 					double X0 = 0.0, Y0 = 0.0;
 					size_t Cursor = 0;
@@ -4180,9 +4287,10 @@ namespace LandMen
 				// on his feet when the rules have him go (he would otherwise slide up off the ground at a run).
 				while (M.ChCursor + 1 < M.Stances.size() && M.Stances[M.ChCursor + 1].T <= Tl) ++M.ChCursor;
 				if (M.ChCursor > 0 && M.Stances[M.ChCursor].T > Tl) M.ChCursor = 0;
-				int Want = static_cast<int>(M.ChCursor);
+				// (leaving with his block: the gait LeaveAt turned him to, whatever his last change was)
+				int Want = M.bLeaving ? LeaveShown : static_cast<int>(M.ChCursor);
 				double Until = -1.0;
-				if (M.ChCursor + 1 < M.Stances.size())
+				if (!M.bLeaving && M.ChCursor + 1 < M.Stances.size())
 				{
 					const Stance& Next = M.Stances[M.ChCursor + 1];
 					if (Next.Play == Stance::Gait && Next.Cl == Up && M.EndClass != Up)
@@ -4195,8 +4303,8 @@ namespace LandMen
 						}
 					}
 				}
-				if (M.Shown == static_cast<int>(M.ChCursor) + 1 && Want == static_cast<int>(M.ChCursor)) Want = M.Shown;
-				if (Want != M.Shown)
+				if (!M.bLeaving && M.Shown == static_cast<int>(M.ChCursor) + 1 && Want == static_cast<int>(M.ChCursor)) Want = M.Shown;
+				if (Want != M.Shown && Want >= 0)
 				{
 					TurnTo(M, Want, Now, Until);
 					M.Shown = Want;
@@ -4520,6 +4628,8 @@ namespace LandMen
 			M.Queue.clear();
 			M.Fade = 1.f;
 			M.bVisible = true;
+			M.bLeaving = false;
+			M.LeaveHold = 0.f;
 			M.Last = -1.0;
 			M.FallClip = -1;
 			M.Info.FallClip.clear();
@@ -5042,6 +5152,17 @@ namespace LandMen
 	}
 
 	void Crowd::SetGore(bool bOn) { Inner->bGore = bOn; }
+	void Crowd::SetLeaveWalk(bool bOn) { Inner->bLeaveWalk = bOn; }
+	bool Crowd::Leaving(int Man) const
+	{
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		return Mn.bLeaving && Mn.State == Impl::Man::Alive && Mn.bVisible;
+	}
+	void Crowd::LeftUnseen(int Man)
+	{
+		Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		if (Mn.bLeaving && Mn.State == Impl::Man::Alive) { Mn.Fade = 0.f; Mn.bVisible = false; }
+	}
 	int Crowd::Gored() const { return Inner->GoredN; }
 	uint32_t Crowd::MeshNo(int Man) const { return Inner->Men[static_cast<size_t>(Man)].MeshNo; }
 
@@ -5121,6 +5242,7 @@ namespace LandMen
 		// Each block's army and the soldier file its men are drawn from.
 		I.BlockArmy.clear();
 		I.BlockCal.clear();
+		I.BlockOwn.clear();
 		I.BlockWorn.clear();
 		I.ArmyWorn.clear();
 		I.AgedRows.clear();
@@ -5135,6 +5257,7 @@ namespace LandMen
 			if (!B["cal"].Text().empty()) I.BlockCal[static_cast<int>(B["id"].Num0())] = B["cal"].Text();
 			// (uniforms that age: his side's months in the line, the campaign's, where the recording has them)
 			const std::string Side = B["side"].Text();
+			I.BlockOwn[static_cast<int>(B["id"].Num0())] = Side == "att" ? -1 : Side == "def" ? 1 : 0;
 			if (!Side.empty())
 			{
 				const double Months = std::max(0.0, Root["sides"][Side.c_str()]["worn"].Num0(0.0));
@@ -5445,7 +5568,12 @@ namespace LandMen
 			Mn.Info.Dead = Tr.D;
 			Mn.Info.Out = Tr.D >= 0.0 ? -1.0 : Tr.OutT;
 			// (back on the list after his block left: whole again, as the battle read whole never had him leave)
-			if (Mn.Info.Out < 0.0 && Mn.State == Impl::Man::Alive) { Mn.Fade = 1.f; Mn.bVisible = true; }
+			if (Mn.Info.Out < 0.0 && Mn.State == Impl::Man::Alive)
+			{
+				Mn.Fade = 1.f;
+				Mn.bVisible = true;
+				if (Mn.bLeaving) { Mn.bLeaving = false; if (Mn.Shown == Impl::LeaveShown) Mn.Shown = -1; }
+			}
 			// (only a change new or not yet settled is made again: most men in a delta have only moved)
 			if (Mn.Firm < Tr.Ch.size()) I.MakeStances(Mn);
 		}

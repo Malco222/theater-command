@@ -1305,6 +1305,85 @@ int main(int Argc, char** Argv)
 		}
 	}
 
+	// Men who leave with their block (release 2, Crowd::SetLeaveWalk; Brian, 25 November 17:11Z: "some soldiers freeze
+	// and then disapear"). The rules keep a leaving man's last point a tenth of a second before he is out; read as
+	// standing still from there he stopped dead and was cut. On: a running man runs on, a still man gets up, turns
+	// and walks for his own edge, each whole for 3 s; a dead man lies where he fell; off, every man as before.
+	{
+		std::ostringstream R;
+		R << "{\"seed\": 7, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.1, -1.1]}, \"blocks\": [{\"id\": 1, \"army\": \"GER\", \"nat\": \"GER\", \"side\": \"att\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\", \"side\": \"def\"}], \"men\": ["
+		  // (running north at 4 m/s, out at 5 s)
+		  << "{\"b\": 1, \"k\": 0, \"r\": \"rifle\", \"at\": [[0, 100, 10, 0], [4.9, 100, 29.6, 0]], \"ch\": [[0, \"run\", \"none\", 0, 300, 0, 0]], \"out\": 5.0},"
+		  // (cowering and still, the attack's: his own edge is y 0)
+		  << "{\"b\": 1, \"k\": 1, \"r\": \"rifle\", \"at\": [[0, 110, 10, 0], [4.9, 110, 10, 0]], \"ch\": [[0, \"cower\", \"none\", 0, 300, 0, 0]], \"out\": 5.0},"
+		  // (lying and firing, the defence's: his own edge is the far side)
+		  << "{\"b\": 2, \"k\": 0, \"r\": \"rifle\", \"at\": [[0, 120, 10, 3.14159], [4.9, 120, 10, 3.14159]], \"ch\": [[0, \"fire_prone\", \"none\", 0, 300, 0, 0]], \"out\": 5.0},"
+		  // (killed at 3 s, his block out at 5: he lies where he fell)
+		  << "{\"b\": 2, \"k\": 1, \"r\": \"rifle\", \"at\": [[0, 130, 10, 0], [4.9, 130, 10, 0]], \"ch\": [[0, \"fire_kneel\", \"none\", 0, 300, 0, 0]], \"d\": 3.0, \"out\": 5.0}"
+		  << "], \"rounds\": []}";
+		const GroundFn Level = [](double, double) { return Ground(); };
+		int Faults = 0;
+		double RanOn = 0.0, WalkedCower = 0.0, WalkedProne = 0.0;
+		std::string RunClip = "?", CowerClip = "?", ProneClip = "?";
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			const bool bOn = Pass == 1;
+			Crowd Leavers;
+			Leavers.AddSoldier("GER", Files["GER"]);
+			Leavers.ReadArmies(ReadFile(Argv[3]), Err);
+			Leavers.SetLeaveWalk(bOn);
+			if (!Leavers.Build(R.str(), Level, Err)) { Fail("the leaving men's battle: %s", Err.c_str()); ++Faults; break; }
+			const int Runner = Leavers.Find(1, 0), Cowerer = Leavers.Find(1, 1), Lier = Leavers.Find(2, 0), Fallen = Leavers.Find(2, 1);
+			if (Runner < 0 || Cowerer < 0 || Lier < 0 || Fallen < 0) { Fail("the leaving men's battle: its four men are not all made"); ++Faults; break; }
+			const auto PlaceNow = [&Leavers](int Man, double& X, double& Y, float& Faces) { double Z = 0.0; Leavers.PlaceOf(Man, X, Y, Z, Faces); };
+			int Fr = 0;
+			for (; Fr * Dt <= 5.5; ++Fr) Leavers.Update(Fr * Dt);
+			double X = 0.0, Y = 0.0;
+			float Faces = 0.f;
+			PlaceNow(Runner, X, Y, Faces);
+			if (!bOn)
+			{
+				// (as before: stopped at his last point, half gone)
+				if (std::fabs(Y - 29.6) > 0.05 || Leavers.Leaving(Runner)) { ++Faults; Fail("leaving, switch off: the running man is at y %.2f at 5.5 s (29.6 as before) or counted as leaving", Y); }
+				for (; Fr * Dt <= 6.4; ++Fr) Leavers.Update(Fr * Dt);
+				if (Leavers.Visible(Runner)) { ++Faults; Fail("leaving, switch off: the running man is still drawn at 6.4 s (gone a second after he is out, as before)"); }
+				continue;
+			}
+			RanOn = Y - 29.6;
+			RunClip = Leavers.PlayingOf(Runner).Clip;
+			// (4 m/s for the 0.6 s since his last point, less his own lag of up to 0.2 s)
+			if (!(RanOn > 1.4 && RanOn < 2.6) || std::fabs(X - 100.0) > 0.05) { ++Faults; Fail("leaving: the running man is %.2f m past his last point at 5.5 s and %.2f m aside (1.4 to 2.6 m on, along his way)", RanOn, X - 100.0); }
+			if (RunClip != "run") { ++Faults; Fail("leaving: the running man shows %s, not run", RunClip.c_str()); }
+			if (!Leavers.Visible(Runner) || Leavers.Fade(Runner) < 1.f || !Leavers.Leaving(Runner)) { ++Faults; Fail("leaving: the running man is not whole and counted as leaving at 5.5 s"); }
+			for (; Fr * Dt <= 7.4; ++Fr) Leavers.Update(Fr * Dt);
+			PlaceNow(Cowerer, X, Y, Faces);
+			WalkedCower = 10.0 - Y;
+			CowerClip = Leavers.PlayingOf(Cowerer).Clip;
+			// (the attack's man: up, then south at 1.4 m/s; 2.5 s since his last point, less getting up and his lag)
+			if (!(WalkedCower > 2.2 && WalkedCower < 3.4) || std::fabs(X - 110.0) > 0.05) { ++Faults; Fail("leaving: the cowering man is %.2f m toward his own edge at 7.4 s and %.2f m aside (2.2 to 3.4 m)", WalkedCower, X - 110.0); }
+			if (CowerClip != "walk") { ++Faults; Fail("leaving: the cowering man shows %s, not walk", CowerClip.c_str()); }
+			if (std::fabs(std::remainder(static_cast<double>(Faces) - 3.14159265, 2.0 * 3.14159265)) > 0.1) { ++Faults; Fail("leaving: the cowering man faces %.2f, not his own edge (3.14)", static_cast<double>(Faces)); }
+			PlaceNow(Lier, X, Y, Faces);
+			WalkedProne = Y - 10.0;
+			ProneClip = Leavers.PlayingOf(Lier).Clip;
+			if (!(WalkedProne > 2.0 && WalkedProne < 3.4)) { ++Faults; Fail("leaving: the lying man of the defence is %.2f m toward his own edge at 7.4 s (2.0 to 3.4 m)", WalkedProne); }
+			if (ProneClip != "walk") { ++Faults; Fail("leaving: the lying man shows %s, not walk", ProneClip.c_str()); }
+			if (std::fabs(std::remainder(static_cast<double>(Faces), 2.0 * 3.14159265)) > 0.1) { ++Faults; Fail("leaving: the lying man of the defence faces %.2f, not his own edge (0)", static_cast<double>(Faces)); }
+			PlaceNow(Fallen, X, Y, Faces);
+			if (std::fabs(X - 130.0) > 0.05 || std::fabs(Y - 10.0) > 0.05 || !Leavers.Visible(Fallen) || Leavers.Leaving(Fallen)) { ++Faults; Fail("leaving: the dead man is not lying where he fell (at %.2f, %.2f)", X, Y); }
+			// (out of the picture, the scene hides him for good; the rest whole to 3 s after they are out, gone by 3.8)
+			Leavers.LeftUnseen(Lier);
+			if (Leavers.Visible(Lier)) { ++Faults; Fail("leaving: a man the scene says left unseen is still drawn"); }
+			for (; Fr * Dt <= 7.9; ++Fr) Leavers.Update(Fr * Dt);
+			if (!Leavers.Visible(Cowerer) || Leavers.Fade(Cowerer) < 1.f) { ++Faults; Fail("leaving: the cowering man is not whole 2.9 s after he is out"); }
+			for (; Fr * Dt <= 8.9; ++Fr) Leavers.Update(Fr * Dt);
+			if (Leavers.Visible(Cowerer) || Leavers.Visible(Runner) || Leavers.Visible(Lier)) { ++Faults; Fail("leaving: a leaving man is still drawn 3.9 s after he is out"); }
+			if (!Leavers.Visible(Fallen)) { ++Faults; Fail("leaving: the dead man is gone with his block"); }
+		}
+		std::printf("men who leave with their block (release 2, Crowd::SetLeaveWalk): running, %.2f m on at 5.5 s in %s; cowering, up and %.2f m toward his own edge at 7.4 s in %s; lying, %.2f m in %s; whole to 3 s after they are out, gone by 3.9; the dead man where he fell; off, as before: %s\n",
+			RanOn, RunClip.c_str(), WalkedCower, CowerClip.c_str(), WalkedProne, ProneClip.c_str(), Faults ? "FAIL" : "ok");
+	}
+
 	// Feet.
 	std::printf("\nfeet: %ld gait man-frames, %ld (%.0f%%) at the 1.6 cap (the recording's men move faster than the clips can step, so their feet slide by design)\n",
 		GaitFrames, CappedFrames, GaitFrames ? 100.0 * CappedFrames / GaitFrames : 0.0);

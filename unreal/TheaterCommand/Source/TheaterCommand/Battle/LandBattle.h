@@ -464,8 +464,16 @@ private:
 		float BankFrame[12] = {};
 		/** Effects (R2): his crowd mesh's number when his triangles were made (LandMen::Crowd::MeshNo: a gore fall swaps it). */
 		uint32 MeshNo = 0;
+		/** Where his body was last drawn (release 2, on trial "leave"; metres, the battle's): a man out of the picture
+		 * keeps the body he had, and it must not be left standing where the picture next looks. */
+		bool bDrawnAt = false;
+		double DrawnAt[3] = { 0.0, 0.0, 0.0 };
 	};
 	TArray<FManDrawn> MenDrawn;
+	/** Men who leave with their block walk or run off; no body left where the camera last saw it (trial word "leave"). */
+	bool bLeaveWalk = false;
+	/** Men drawn again in the log span because their old body stood in the picture (the frame log prints it). */
+	int32 MenMovedOn = 0;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> MenMeshes;
 	TArray<float> SkinAt, SkinFacing;
