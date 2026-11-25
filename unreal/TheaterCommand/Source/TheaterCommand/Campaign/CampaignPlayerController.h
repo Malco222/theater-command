@@ -159,7 +159,10 @@ struct FArmyTray
 	bool bFleetGrand = false; // the navy as pieces: it can hunt, escort, shell, split and join
 	int32 FleetAircraft = 0; // the aircraft its carriers bring, if it has carriers
 	FText FleetWarning; // its heavy ships are thinly screened, or its guns have spoken
-	FString FleetHeld; // (1.5.2) why it stays where this month's battle left it: its orders at sea and home are dimmed, with this
+	// (1.5.2) Why its orders at sea are refused (held where this month's battle left it, or cut off beyond a shut strait), and
+	// why its way home is (held, or cut off with no friendly harbour on its side): each dims its buttons, with this as the tip.
+	// FleetHomeTip is the way home's own tip where it is cut off with a harbour on its side to make for. Empty when none applies.
+	FString FleetSeaWhy, FleetHomeWhy, FleetHomeTip;
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast

@@ -285,6 +285,8 @@ struct FFleetHand
 	bool bFleetAttack = false;
 	TArray<int32> Attack;
 	FString Held;
+	// (1.5.2) Cut off at sea beyond a shut strait: its card's line, and the friendly harbour on its side it would make for (empty with none).
+	FString Cut, Haven;
 };
 
 /** What else came of something pressed in a room, beyond its words. */

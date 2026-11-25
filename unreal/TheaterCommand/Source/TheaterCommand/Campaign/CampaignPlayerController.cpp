@@ -7111,11 +7111,19 @@ void ACampaignPlayerController::LayOutFleet()
 		FleetNext = TEXT("patrol");
 	}
 	Tray.FleetNext = FleetNext;
-	Tray.FleetHeld = FleetHand.Held;
+	// (1.5.2) Held where this month's battle left it, all four of its orders are refused with that reason. Cut off beyond
+	// a shut strait, its three at sea are refused with its card's line, and its way home only with no harbour on its side.
+	Tray.FleetSeaWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Cut;
+	Tray.FleetHomeWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Haven.IsEmpty() ? FleetHand.Cut : FString();
+	Tray.FleetHomeTip = !FleetHand.Cut.IsEmpty() && !FleetHand.Haven.IsEmpty()
+		? FString::Printf(TEXT("Cut off beyond a shut strait: it makes for %s, which becomes its base."), *FleetHand.Haven) : FString();
 	Tray.PendingButton = FText::GetEmpty();
-	// (1.5.2) A fleet held where this month's battle left it is told so, and not told to right-click seas it cannot go to.
+	// (1.5.2) A fleet held or cut off is told so, and not told to right-click seas it cannot go to. Its guns can still
+	// shell a coast in red, if one is in reach.
+	const TCHAR* StillShells = FleetHand.Coasts.Num() > 0 ? TEXT(" A coast in red can still be shelled.") : TEXT("");
 	Tray.Hint = FText::FromString(!View.bHumanUp ? TEXT("It is not your month.")
-		: !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s Esc lets it go."), *FleetHand.Held)
+		: !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s Esc lets it go."), *FleetHand.Held, StillShells)
+		: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s%s%s Esc lets it go."), *FleetHand.Cut, FleetHand.Haven.IsEmpty() ? TEXT("") : TEXT(" RETURN TO HARBOUR takes it there."), StillShells)
 		: Tray.bFleetGrand && FleetHand.Coasts.Num() > 0
 		? TEXT("Right-click a ringed sea to send it there, a coast in red to shell it, a port in blue to make it the fleet's home, or its own harbour to bring it in. ORDERS has the rest. Esc lets it go.")
 		: TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go."));
@@ -7270,7 +7278,7 @@ void ACampaignPlayerController::SetFleetStance(const FString& Stance)
 		{
 			// (1.5.2) Refused (held where this month's battle left it, or cut off beyond a shut strait): it says why, and
 			// the button stays on what the fleet is doing, not on the order it was refused.
-			FleetNext = Was;
+			FleetNext = Was == TEXT("raid") || Was == TEXT("hunt") ? Was : FString(TEXT("patrol"));
 			Notify(Note.IsEmpty() ? FString(TEXT("That order cannot be given now.")) : Note, 5.0);
 		}
 	}
@@ -7313,9 +7321,14 @@ void ACampaignPlayerController::FleetToHarbour()
 	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:port"), FleetInHand, Fleet->Home), Note))
 	{
 		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
+		// (1.5.2) Cut off beyond a shut strait it makes for a harbour on its side instead, which becomes its base: the
+		// harbour named is the one it is in now.
+		const FViewFleet* Now = Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
+		const FString Into = Now ? Now->Port : Port;
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 		RefreshOrders();
-		Notify(FString::Printf(TEXT("%s returns to harbour at %s."), *Name, *Port), 5.0);
+		Notify(Into == Port ? FString::Printf(TEXT("%s returns to harbour at %s."), *Name, *Into)
+			: FString::Printf(TEXT("%s cannot reach %s: it makes for %s instead, its new base."), *Name, *Port, *Into), 5.0);
 	}
 	else
 	{

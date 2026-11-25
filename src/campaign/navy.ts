@@ -1447,6 +1447,19 @@ const gateIs = (gt: Gate): string => `${gt.name} ${/s$/.test(gt.name) ? 'are' : 
 function makesHarbour(g: Game, f: Fleet): boolean {
   const r = harbourFor(g, f);
   const was = f.port, gate = shutBetween(g, f);
+  // (Its own harbour may stand on both sides of the strait, as Spanish Morocco does, with the side it sailed from the
+  // far one: it comes in on its own side, and that side's sea becomes its home. rebase() would refuse its own base.)
+  if (r && r.id === f.base) {
+    const sea = landfall(g, f, r);
+    if (sea < 0) return false;
+    f.home = sea;
+    f.zone = sea;
+    f.stance = 'port';
+    delete f.lane;
+    g.supplyDirty = true;
+    syncWings(g);
+    return true;
+  }
   if (!r || !rebase(g, f, r)) return false;
   headline(g, 'info', `${cap(fleetName(f))} cannot reach ${was}${gate ? `: ${gateIs(gate)} shut to it` : ''}. It makes for ${r.name} instead, its new base.`, f.nat);
   return true;

@@ -4108,6 +4108,8 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 	// (The 1.5.1 patch, fleetattack.ts) The enemy fleets it can be dropped on to attack now, and why it stays put once it has.
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack);
 	Object->TryGetStringField(TEXT("held"), Out.Held);
+	Object->TryGetStringField(TEXT("cut"), Out.Cut);
+	Object->TryGetStringField(TEXT("haven"), Out.Haven);
 	const TArray<TSharedPtr<FJsonValue>>* Attack = nullptr;
 	if (Object->TryGetArrayField(TEXT("attack"), Attack))
 	{

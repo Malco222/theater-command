@@ -12,7 +12,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, cutOff, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -1580,9 +1580,12 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   if (!f) return null;
   const war = g.nations[f.nat].atWar.length > 0;
   const held = heldAfterAttack(g, f);
+  // (1.5.2) Cut off at sea beyond a shut strait, every sea and lane in its reach lies beyond the strait: none is offered
+  // only to be refused (sail() turns them all down). Its way out is to harbour, on its side.
+  const cut = cutOff(g, f);
   const out: FleetOptions = {
-    seas: war && !held ? seaOptions(g, f, f.nat) : [],
-    lanes: war && !held ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
+    seas: war && !held && !cut ? seaOptions(g, f, f.nat) : [],
+    lanes: war && !held && !cut ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
     ports: held ? [] : baseTargets(g, f).map((r) => r.id),
     merge: mergeTargets(g, f).map((x) => x.id),

@@ -133,6 +133,30 @@ describe('a harbour on both sides of a shut strait', () => {
     expect(cutOff(g, f)).toBe(false);
   });
 
+  it('a fleet based there that went out to the Atlantic side comes in on that side when the strait shuts (the release review)', () => {
+    // Based at Spanish Morocco from the Mediterranean while the strait was open, out on the Iberian Coast when it shuts,
+    // with no other friendly harbour on that side: its nearest harbour is its own. It comes in on the Atlantic side,
+    // keeping its base, where rebase() would have refused its own base and left it at sea for good.
+    const g = startOpen(createGame(3, 'ITA'));
+    for (let k = 0; !humanUp(g) && k < 60; k++) stepAI(g);
+    const f = fleet(g, 'ITA', '2nd Fleet'), sm = g.byName['Spanish Morocco'];
+    const med = zoneOf(g, 'wmed'), atl = zoneOf(g, 'iberia');
+    sm.ctrl = 'ITA';
+    expect(rebase(g, f, sm)).toBe(true);
+    expect(f.home).toBe(med);
+    expect(sail(g, f, atl, 'patrol')).toBe(true);
+    if (!atWar(g, 'ITA', 'UK')) declareWar(g, 'ITA', 'UK');
+    expect(cutOff(g, f)).toBe(true);
+    for (let r = harbourFor(g, f); r && r.id !== sm.id; r = harbourFor(g, f)) r.ctrl = 'UK';
+    expect(harbourFor(g, f)?.id).toBe(sm.id);
+    expect(orderFleet(g, f.id, f.home, 'port')).toBe(true);
+    expect(f.base).toBe(sm.id);
+    expect(f.home).toBe(atl);
+    expect(f.zone).toBe(atl);
+    expect(f.stance).toBe('port');
+    expect(cutOff(g, f)).toBe(false);
+  });
+
   it("the strait's holder, and a nation it is open to, use both its seas as before", () => {
     const { g, sm, med, atl } = morocco();
     const uk = g.fleets.find((x) => x.nat === 'UK' && fleetReach(g, x).includes(atl))!;
@@ -171,7 +195,17 @@ describe('the cut-off fleet on its page, its panel and the map', () => {
     const button = (TC().page(`fleet:${f.id}`) as PageOut).top.find((b) => b.label === 'RETURN TO HARBOUR')!;
     expect(button.ok).toBe(true);
     expect(button.tip).toBe(`Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.`);
+    // (The release review) Its page offers no sea and no lane to escort either: every one lies beyond the strait.
+    const rows = (TC().page(`fleet:${f.id}`) as PageOut & { sections: { rows: { buttons: { act: string; ok: boolean }[] }[] }[] }).sections.flatMap((x) => x.rows.flatMap((r) => r.buttons));
+    expect(rows.filter((b) => b.ok && (/^fleet:\d+:\d+:(patrol|raid|hunt)$/.test(b.act) || /^fleetescort:/.test(b.act)))).toEqual([]);
+    // A sea order sent anyway is refused with the card's line, not the bare refusal.
+    const tyrr = zoneOf(g, 'tyrr');
+    expect(TC().forceOrder(`fleet:${f.id}:${tyrr}:patrol`)).toMatchObject({ ok: false, note: line });
+    expect(TC().act(`fleet:${f.id}:${tyrr}:raid`)).toMatchObject({ ok: false, note: line });
+    // The 3D tray reads the line and the harbour from the fleet in hand, to dim what it cannot do and name where it goes.
+    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: line, haven: haven.name, held: '' });
     expect((TC().forceOrder(home.key) as { ok: boolean }).ok).toBe(true);
+    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: '', haven: '' });
     const after = TC().force('fleet', f.id) as Panel;
     expect(after.options.some((o) => /:patrol$/.test(o.key))).toBe(true);
     expect(after.lines.some((l) => /^Cut off/.test(l))).toBe(false);
@@ -187,6 +221,7 @@ describe('the cut-off fleet on its page, its panel and the map', () => {
     expect(home.ok).toBe(false);
     expect(home.why).toBe('It is cut off beyond a shut strait, and no friendly harbour on its side can take it.');
     expect((TC().force('fleet', f.id) as Panel).lines).toContain('Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.');
-    expect((TC().forceOrder(home.key) as { ok: boolean }).ok).toBe(false);
+    expect(TC().forceOrder(home.key)).toMatchObject({ ok: false, note: 'Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.' });
+    expect(TC().fleetInHand(f.id)).toMatchObject({ cut: 'Cut off: the Strait of Gibraltar is shut to it. No friendly harbour on its side can take it.', haven: '' });
   });
 });

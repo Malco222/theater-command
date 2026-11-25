@@ -3829,6 +3829,11 @@ function heldWhyId(s: Game, id: number): string {
   const f = s.fleets.find((x) => x.id === id);
   return f ? heldWhy(s, f) : '';
 }
+/** (1.5.2) Why one of the player's fleets was refused an order: held where this month's battle left it, or cut off beyond a shut strait (its card's line). Empty for neither. */
+function fleetWhyId(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id);
+  return !f || f.nat !== s.human ? '' : heldWhy(s, f) || cutOffLine(s, f);
+}
 
 /**
  * (1.5.1; Brian, 24 November 2026 18:32Z: "when i move my navy they go right back to where they were before the next
@@ -3854,7 +3859,7 @@ function forceOrder(key: string) {
   else if (what === 'fleetbase') ok = orderRebase(s, Number(id), Number(a));
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
   else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
-  return { ok, note: ok ? 'The order is given.' : (((what === 'fleet' && a !== 'staff') || what === 'fleetbase') && heldWhyId(s, Number(id))) || 'That order cannot be given now.', view: view() };
+  return { ok, note: ok ? 'The order is given.' : (((what === 'fleet' && a !== 'staff') || what === 'fleetbase') && fleetWhyId(s, Number(id))) || 'That order cannot be given now.', view: view() };
 }
 
 /** Every province's chief town with what the province pays a month and how that ranks (0 to 5), for the map's labels and its wealth view. */
@@ -4499,6 +4504,11 @@ function fleetInHand(id: number) {
       // (The 1.5.1 patch, fleetattack.ts) The enemy fleets it can be dropped on to attack now, and why it stays put this
       // month once it has attacked. Empty while the switch is off.
       fleetAttack: fleetAttackOn(s), attack: o?.attack ?? [], held: o?.held ?? '',
+      // (1.5.2) Cut off beyond a shut strait: its card's line, and the harbour on its side it would make for (empty with none).
+      ...((): { cut: string; haven: string } => {
+        const f = s.fleets.find((x) => x.id === id), cut = f ? cutOffLine(s, f) : '';
+        return { cut, haven: f && cut ? harbourFor(s, f)?.name ?? '' : '' };
+      })(),
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
     };
   } catch {
@@ -5854,7 +5864,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
   } else if (part[0] === 'fleet') {
     ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3] as Stance);
-    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : heldWhyId(s, Number(part[1])) || 'That order cannot be given now.';
+    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : fleetWhyId(s, Number(part[1])) || 'That order cannot be given now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetstaff') {
     ok = handBackFleet(s, Number(part[1]));
@@ -5862,7 +5872,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetescort') {
     ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));
-    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The fleet is bound to the lane'}.` : heldWhyId(s, Number(part[1])) || 'It cannot escort that lane now.';
+    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The fleet is bound to the lane'}.` : fleetWhyId(s, Number(part[1])) || 'It cannot escort that lane now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetshell') {
     const rep2 = orderBombard(s, Number(part[1]), Number(part[2]), part[3] as 'troops' | 'city');
