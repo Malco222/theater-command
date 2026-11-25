@@ -16,11 +16,11 @@ import { describe, expect, it } from 'vitest';
 import { addCorps, createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import * as economy from '../src/campaign/economy';
-import { PRODUCTION, aiProduction, cadreTerms, corpsCost, specOf } from '../src/campaign/economy';
+import { PRODUCTION, aiProduction, cadreTerms, corpsCost, corpsList, specOf } from '../src/campaign/economy';
 import * as manpower from '../src/campaign/manpower';
 import { MANPOWER, classFull, classNow, homeShare, menLeft, menSpare, poolAtStart } from '../src/campaign/manpower';
 import { stockOf } from '../src/campaign/arms';
-import { binds, levelOf } from '../src/campaign/rifles';
+import { RIFLES, binds, levelOf } from '../src/campaign/rifles';
 import { fieldStrength, traitLevy, traitsOf } from '../src/campaign/traits';
 import { foldCorps } from '../src/campaign/fold';
 import chinaStop3 from '../data/campaign/china-stop3.json';
@@ -167,18 +167,31 @@ describe("China's men by the record, laid with its rifles", () => {
     expect(forming(d3.g).some((x) => x.cadre === d3.b.id)).toBe(false);
   });
 
-  it("5. (everyone else) Japan's bank is 16 above its price", () => {
+  it("5. (everyone else) a nation whose store does not bind: the bank is 16 above its price", () => {
+    // Japan's staff raises nothing on the first day whatever its treasury (its army is idle by the far side's reading),
+    // so the bank is shown on China with its rifles row taken out: then nothing binds, its infantry is at its list
+    // price, and the staff asks that price and the 16 kept back, as Japan's and every other nation's does.
     expect(PRODUCTION.aiReserve).toBe(16);
-    const g = war();
-    const n = g.nations.JAP;
-    expect(binds(g, 'JAP')).toBe(false);
-    for (const kind of ['inf', 'mtn']) expect(corpsCost(g, 'JAP', kind)).toBeGreaterThan(0);
-    // Japan's cheapest corps, less one point of the reserve kept back: nothing new is ordered.
-    const cheapest = Math.min(...['inf', 'art', 'arm'].map((k) => corpsCost(g, 'JAP', k)));
-    const before = forming(g, 'JAP').length;
-    n.pp = cheapest + PRODUCTION.aiReserve - 1;
-    aiProduction(g, 'JAP');
-    expect(forming(g, 'JAP').length).toBe(before);
+    const row = RIFLES.nations.CHN;
+    delete RIFLES.nations.CHN;
+    try {
+      const day = (pp: number): Game => {
+        const g = war();
+        expect(binds(g, 'CHN')).toBe(false);
+        // Every corps at full, so the men its corps wait for are none and the reserve's 7.4 are all to spare (with no
+        // rifles row a corps is short up to 1, as today, whatever its 'full').
+        for (const c of g.corps) if (c.nat === 'CHN' && !c.dead) c.str = 1;
+        expect(menSpare(g, 'CHN')).toBeCloseTo(7.4, 9);
+        g.nations.CHN.pp = pp;
+        aiProduction(g, 'CHN');
+        return g;
+      };
+      const price = corpsCost(war(), 'CHN', 'inf');
+      expect(price).toBe(corpsList(war(), 'CHN', 'inf'));
+      expect(price).toBeGreaterThan(0);
+      expect(forming(day(price + PRODUCTION.aiReserve)).map((b) => [b.kind, b.cost])).toEqual([['inf', price]]);
+      expect(forming(day(price + PRODUCTION.aiReserve - 0.01))).toHaveLength(0);
+    } finally { RIFLES.nations.CHN = row; }
   });
 
   it("6. leaves the staff's bank mark for everyone else: Japan with an empty treasury orders nothing", () => {
