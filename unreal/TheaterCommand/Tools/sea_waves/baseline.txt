@@ -352,6 +352,45 @@ step 0's, step 1(a)'s and step 2's steps above unchanged)
       wolf packs med), and 21 places (the Bay of Biscay temperate; Gibraltar, the Alboran Sea, Odessa and Azov med; the
       Red Sea, the Gulf, the Gulf of Mexico, Okinawa, the East China Sea and the Sargasso tropic)
 
+On the release 2 join (light-join-r2, 25 November 2026: step 3's 8570700f merged onto eb5f13eb, the storms' join of
+release 2's 0531fa9b, the storms' work, ocean-r2's 942d9295, graph_pin adapted, Pearl's pin v2 and the cumulus and
+stratocumulus days; nothing wired, and nothing on screen changes). Every runner as above, on what the join plays (12
+recordings and stand-ins: the 9 above, sub-34-hunt-central's file being sub-air-mediterranean-1942.json, and the three
+real wolf-pack nights, convoy-first-pack, convoy-hunted and convoy-hunters), beside other sessions' builds and runs
+(load 3 to 17):
+  Tools/sea_waves/run.sh: SEA WAVES: ALL PASSED. measure_test 38 checks; graph_pin 72; pearl_pin 38 pins, 0 changed;
+    room_scan 27 setters (self-test 8 cases); switches_scan 10 checks, 34 switches, 9 built (self-test 6); bench_table
+    31 cases; bench_dry_run 20; marks_pool_test 12 checks on each of the 12 and 13 over them all; fold_table byte for
+    byte (49 winds); sea_waves_test 80 checks on the 3 battles; gale_pin 13 digests, 0 changed; gale_decks 7 models, 2
+    skipped, 0 moved; gale_test 37 checks; day_extract the same 24 pieces; sea_day_test 82 checks, 0 failed
+  day_extract: of the 24 pieces only one reads otherwise on the join, AirBattle.cpp's SeaHazeInk (b3a33e0a, the art
+    director's mend round of 22 November: 0.44, 0.55, 0.74 to 0.42, 0.60, 0.88). Seed mode never takes it (the sea
+    battle's haze is HazeInk), so seed mode was release 2's own light bit for bit as merged; the core's pin of it
+    (SeaHazeInkToday) and field mode's air scene haze by day with no vis now take release 2's
+  sea_day_test: 82 checks, 0 failed (recordings 1, seed 19, pins 9, fog 3, vis 4, field 23, continuity 3, haze 7,
+    sightings 5, colours 1, water 4, scan 3); the same built with clang++ and under -fsanitize=address,undefined
+    seed: OpenOn's own lines bit for bit over the same 144,144 seeds and places; release 2's own light over 33 days (the
+      12 among them) under the same 11 command lines
+    pins: PlannedEyes against release 2's AimEye, whose overview is SkyWeather->OverviewHeight() (eb5f13eb): 1,300 m,
+      or under a deck the weather's dome draws 150 m under its base, never under 300 (SeaSky.h's OverviewMost,
+      OverviewUnderBase, OverviewLeast, read as they stand); both ends are planned eyes, and the new vis check holds
+      every metre between: 72,072 rays over the 72 fits, worst 1.000000 Cmin, at 1,300 m. "Nothing is wired yet"
+      reads the game's code with its comments blanked and catches SeaDay:: as well as SeaDayCore: the storms'
+      SeaNightCore.h names SeaDayCore in two comments (the hand-off step 11 will make), and no code does
+    every field-mode figure above as measured on 942d9295 (the vis fits, the field's 23, continuity's worst fog 9.0%,
+      sky colours 8.9%, sun-side haze 8.6%, the light on the level sea 8.2%, exposure 5.6%, the material's own haze
+      3.7%, the twilight band's ruling 54.4%, the haze's 23,604 days and 1,638 and 3,276 suns, the night's air 750 of
+      1,500 thinned by at most 10.4 times, the colours' 17,771 hours at worst 1.19 levels), but the sightings, which
+      follow the recordings: 11,908 over 2,432 suns, worst 1.000 Cmin; NightSight at each stand-in's own light holds
+      on all 9 nights (the three real nights: convoy-first-pack the moon, +2.3 stops, 0.540 against the sky, 0.343
+      against the sea; convoy-hunted the glow, +2.4, 0.485 and 0.225; convoy-hunters the moon, +2.4, 0.650 and 0.474)
+  Tools/sea_show/run.sh: the 12 each ALL CHECKS PASSED but for "a frame within budget" under load; sea_under_test 590
+    checks, 0 failed; 1,604 checks in the log with 6 KNOWN. The budget failed alone under load, at 4.1 to 4.5 ms one
+    in a thousand: in 8 of the 12 in a first run (load 5 to 17), in convoy-hunters in a second, back to back, and in
+    convoy-night-air, convoy-night and convoy-first-pack in a third; each passed on its own immediate rerun as run.sh
+    plays it (convoy-hunters 0.505 ms; the three 0.078, 0.073 and 0.359 ms). Nothing the show builds changed
+  Tools/convoy_looks/run.sh: convoy looks 3,991 checks, 0 failed; against the show 741 checks, 0 failed
+
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 
 The Mac, release 1.5 (22 November 05:23-05:32Z, the production lead's frame-time lines,

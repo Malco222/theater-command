@@ -87,6 +87,58 @@ namespace
 		return N;
 	}
 
+	/** The overview's eye under a deck the weather's dome draws (release 2's step 13: ASeaBattle::AimEye takes
+	 * SkyWeather->OverviewHeight(), SeaSky::OverviewHeight: OverviewMost unless a deck is drawn, then OverviewUnderBase
+	 * under its base, never under OverviewLeast), read from Battle/SeaSky.h as it stands. False: not found. */
+	bool OverviewRange(const std::string& Src, double& Least, double& Most)
+	{
+		const std::string Sky = ReadAll(Src + "/Battle/SeaSky.h");
+		const std::regex Line("constexpr double OverviewMost = ([0-9]+\\.[0-9]+), OverviewUnderBase = ([0-9]+\\.[0-9]+), OverviewLeast = ([0-9]+\\.[0-9]+);");
+		std::smatch M;
+		if (!std::regex_search(Sky, M, Line)) return false;
+		Most = std::stod(M[1].str());
+		Least = std::stod(M[3].str());
+		return true;
+	}
+
+	/** A C++ file's code with its comments blanked (// to the line's end, and slash-star to star-slash), its strings and
+	 * lines kept: what the code itself names. */
+	std::string CodeOf(const std::string& Text)
+	{
+		std::string Out = Text;
+		enum { Code, Line, Block, Quote, Char } At = Code;
+		for (size_t K = 0; K < Out.size(); ++K)
+		{
+			const char C = Out[K], Next = K + 1 < Out.size() ? Out[K + 1] : '\0';
+			switch (At)
+			{
+			case Code:
+				if (C == '/' && Next == '/') { At = Line; Out[K] = ' '; }
+				else if (C == '/' && Next == '*') { At = Block; Out[K] = ' '; Out[++K] = ' '; }
+				else if (C == '"') At = Quote;
+				else if (C == '\'') At = Char;
+				break;
+			case Line:
+				if (C == '\n') At = Code;
+				else Out[K] = ' ';
+				break;
+			case Block:
+				if (C == '*' && Next == '/') { At = Code; Out[K] = ' '; Out[++K] = ' '; }
+				else if (C != '\n') Out[K] = ' ';
+				break;
+			case Quote:
+				if (C == '\\') ++K;
+				else if (C == '"' || C == '\n') At = Code;
+				break;
+			case Char:
+				if (C == '\\') ++K;
+				else if (C == '\'' || C == '\n') At = Code;
+				break;
+			}
+		}
+		return Out;
+	}
+
 	std::string Lower(std::string S)
 	{
 		for (char& C : S) C = static_cast<char>(std::tolower(static_cast<unsigned char>(C)));
@@ -495,14 +547,25 @@ namespace
 			std::to_string(TickN) + " Tick line(s)");
 		// (every eye height the shots name, against PlannedEyes)
 		std::set<double> Named;
+		// (release 2's overview, step 13: "SkyWeather ? SkyWeather->OverviewHeight() : 1300.0", its fallback read here and
+		// the heights OverviewHeight gives under a deck, SeaSky.h's OverviewLeast to OverviewMost, below)
 		const std::regex Eyes[] = { std::regex("OutEye = World\\([^,\\n]+,[^,\\n]+,\\s*([0-9]+\\.[0-9]+)\\)"), std::regex("const double EyeUp = ([0-9]+\\.[0-9]+);"),
-			std::regex("for \\(const double Up : \\{ ([0-9.]+), ([0-9.]+), ([0-9.]+) \\}\\)"), std::regex("Sea\\.Spot = FVector2D\\(K < 2 \\? ([0-9.]+) : ([0-9.]+),") };
+			std::regex("for \\(const double Up : \\{ ([0-9.]+), ([0-9.]+), ([0-9.]+) \\}\\)"), std::regex("Sea\\.Spot = FVector2D\\(K < 2 \\? ([0-9.]+) : ([0-9.]+),"),
+			std::regex("OutEye = World\\([^,\\n]+,[^,\\n]+,\\s*SkyWeather \\? SkyWeather->OverviewHeight\\(\\) : ([0-9]+\\.[0-9]+)\\)") };
 		for (const std::regex& R : Eyes)
 		{
 			for (std::sregex_iterator It(Sea.begin(), Sea.end(), R), End; It != End; ++It)
 			{
 				for (size_t K = 1; K < It->size(); ++K) Named.insert(std::stod((*It)[K].str()));
 			}
+		}
+		if (Sea.find("OverviewHeight()") != std::string::npos)
+		{
+			// (an eye OverviewHeight sets: its least and most must be planned, and Fits sweeps every metre between)
+			double Least = -1.0, Most = -1.0;
+			if (!OverviewRange(Src, Least, Most)) Least = Most = -1.0;
+			Named.insert(Least);
+			Named.insert(Most);
 		}
 		const std::set<double> Ours(std::begin(PlannedEyes), std::end(PlannedEyes));
 		std::string Heights;
@@ -522,8 +585,12 @@ namespace
 		const bool bMaterial = CountOf(Build, "reach_sq = times(m, reach, reach,") == 1 && CountOf(Build, "connect(plus(m, reach_sq, 1.0,") == 1 &&
 			CountOf(Build, "lit = lerp(m, seen, times(m, sky_colour, scalar(m, \"HazeTop\"") == 1;
 		Check("pins: the sea material's own haze is lerp(seen, HazeTop x sky, (d/reach)^2 / (1 + (d/reach)^2)), as MaterialHazed works it", bMaterial, "Tools/build_content.py");
-		// (nothing wired: no game file but the core reads it)
-		std::string Readers;
+		// (nothing wired: no game file's code but the core's own names it, its header or its namespace. On the release 2
+		// join the storms' Battle/SeaNightCore.h names SeaDayCore in two comments, the hand-off step 11 will make; a
+		// comment wires nothing, so the code is read with its comments blanked, and the namespace's own name, SeaDay::,
+		// is caught as well as the header's. The comments that name it are said)
+		std::string Readers, Told;
+		const std::regex Wired("SeaDayCore|\\bSeaDay::");
 		for (const auto& E : std::filesystem::recursive_directory_iterator(Src))
 		{
 			if (!E.is_regular_file()) continue;
@@ -531,9 +598,12 @@ namespace
 			if (Path.find("SeaDayCore.") != std::string::npos) continue;
 			const std::string Ext = E.path().extension().string();
 			if (Ext != ".h" && Ext != ".cpp" && Ext != ".inl") continue;
-			if (ReadAll(Path).find("SeaDayCore") != std::string::npos) Readers += E.path().filename().string() + " ";
+			const std::string Text = ReadAll(Path);
+			if (std::regex_search(CodeOf(Text), Wired)) Readers += E.path().filename().string() + " ";
+			else if (std::regex_search(Text, Wired)) Told += E.path().filename().string() + " ";
 		}
-		Check("pins: nothing is wired yet (no game file but the core's own names SeaDayCore)", Readers.empty(), Readers.empty() ? "none" : Readers);
+		Check("pins: nothing is wired yet (no game file's code but the core's own names SeaDayCore or SeaDay::)", Readers.empty(),
+			(Readers.empty() ? std::string("none") : Readers) + (Told.empty() ? "" : "; named in comments only: " + Told));
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -616,7 +686,7 @@ namespace
 	// ---------------------------------------------------------------------------------------------------------------
 	// The vis fit: every planned eye's ray to a ship at vis keeps Cmin.
 
-	void Fits()
+	void Fits(const std::string& Src)
 	{
 		const std::vector<double> Eyes = Planned();
 		int Tried = 0, Bands = 0, Thinned = 0;
@@ -667,6 +737,45 @@ namespace
 			"best ray at 98% of it " + Num(WorstLeast, 4) + " Cmin; " + std::to_string(Thinned) + " thinned");
 		Check("vis: from the lookout a ship at vis keeps under 1.25 Cmin, and at 1.5 vis under Cmin (the vis is still the rules')", LookoutMost < 1.25 && Bad.find("fades-not") == std::string::npos,
 			"most " + Num(LookoutMost, 3) + " Cmin at vis");
+		// (release 2's overview under a deck the weather's dome draws: SeaSky::OverviewHeight puts the eye anywhere from
+		// OverviewLeast to OverviewMost by the deck's base. The fits keep the planned eyes, among them those two; every
+		// metre between is held here to the same Cmin)
+		double OverLeast = -1.0, OverMost = -1.0, OverWorst = 1e9, OverAt = 0.0;
+		int OverRays = 0;
+		const bool bRange = OverviewRange(Src, OverLeast, OverMost) && OverLeast > 0.0 && OverLeast < OverMost;
+		if (bRange)
+		{
+			for (const double Cmin : { 0.05, 0.02, 0.1 })
+			{
+				for (const double Vis : { 300.0, 600.0, 1000.0, 1500.0, 2500.0, 2900.0, 3500.0, 5000.0, 8000.0, 12000.0, 20000.0, 30000.0 })
+				{
+					for (const double FogZ : { 0.0, 50.0 })
+					{
+						const FogFit Fit = FogFor(-std::log(Cmin) / Vis, Eyes, Vis, FogZ, Unit, Cmin);
+						Fog F;
+						F.Density = Fit.Density;
+						F.Falloff = Fit.Falloff;
+						F.HeightZ = FogZ * Unit;
+						for (double Eye = OverLeast; Eye <= OverMost + 1e-9; Eye += 1.0)
+						{
+							++OverRays;
+							const double Seen = FogSeen(F, Eye * Unit, 0.0, Vis * Unit) / Cmin;
+							if (Seen < OverWorst)
+							{
+								OverWorst = Seen;
+								OverAt = Eye;
+							}
+						}
+					}
+				}
+			}
+		}
+		const bool bEnds = std::find(Eyes.begin(), Eyes.end(), OverLeast) != Eyes.end() && std::find(Eyes.begin(), Eyes.end(), OverMost) != Eyes.end();
+		Check("vis: the overview's eye under a deck the weather's dome draws (SeaSky::OverviewHeight, OverviewLeast to OverviewMost), every metre of it, keeps a ship at the rules' vis at Cmin or more",
+			bRange && bEnds && OverWorst >= 1.0 - 1e-9,
+			bRange ? Num(OverLeast, 0) + " to " + Num(OverMost, 0) + " m (both planned: " + (bEnds ? "yes" : "no") + "), " + std::to_string(OverRays) + " rays over the same fits; worst " +
+						 Num(OverWorst, 6) + " Cmin, at " + Num(OverAt, 0) + " m"
+				   : "SeaSky.h's OverviewMost, OverviewUnderBase and OverviewLeast not found");
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -2000,7 +2109,7 @@ int main(int argc, char** argv)
 		{ "seed", [] { SeedIdentity(); } },
 		{ "pins", [&] { Pins(Src); } },
 		{ "fog", [] { FogLine(); } },
-		{ "vis", [] { Fits(); } },
+		{ "vis", [&] { Fits(Src); } },
 		{ "field", [] { FieldRules(); } },
 		{ "continuity", [] { Continuity(); } },
 		{ "haze", [] { HazeRules(); } },

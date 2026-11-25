@@ -71,10 +71,11 @@ namespace SeaDay
 	 * at the horizon for the sea to mirror (SeaSkyLight's still, under the grade of the fit, red 1.08 and blue 0.87). */
 	inline constexpr double SkyOnScreenPixel[3] = { 221.0, 221.0, 223.0 }, SeaSkyPixel[3] = { 229.0, 230.0, 231.0 };
 	inline constexpr double FitRed = 1.08, FitBlue = 0.87;
-	/** The fog's colour (SeaParts::HazeInk), the air scene's over the sea (AirParts::SeaHazeInk), and the sky higher up
-	 * that near water mirrors, as shares of the horizon's (MovingSea's SkyHigh). */
+	/** The fog's colour (SeaParts::HazeInk), the air scene's over the sea (AirParts::SeaHazeInk: release 2's, bluer and
+	 * greener on a1acb552's frames, 22 November; 0.44, 0.55, 0.74 before), and the sky higher up that near water mirrors,
+	 * as shares of the horizon's (MovingSea's SkyHigh). */
 	inline constexpr float HazeInkToday[3] = { 0.58f, 0.67f, 0.76f };
-	inline constexpr double SeaHazeInkToday[3] = { 0.44, 0.55, 0.74 };
+	inline constexpr double SeaHazeInkToday[3] = { 0.42, 0.60, 0.88 };
 	inline constexpr float SkyHighShare[3] = { 0.17f, 0.20f, 0.23f };
 	/** The campaign map's night rule for smoke (CampaignMapActor's SmokeHour at full moonlight). */
 	inline constexpr double SmokeNight[3] = { 0.30, 0.38, 0.58 };
@@ -82,7 +83,9 @@ namespace SeaDay
 	inline constexpr double ClearNightSees = 4000.0;
 	/** The planned eyes over the sea (metres up; ASeaBattle::AimEye and PlanShots, every height they name): the lookout,
 	 * the low rides and near eyes, the water sheets (28 and 60), the high eyes, the both-lines eyes (300, 450, 600) and
-	 * the overview. Every one must see a ship at the rules' vis. */
+	 * the overview (1,300; under a deck the weather's dome draws, SeaSky::OverviewHeight's 150 m under its base, never
+	 * under 300: every height between is kept by these two, which the cloud test sweeps). Every one must see a ship at
+	 * the rules' vis. */
 	inline constexpr double PlannedEyes[] = { 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 30.0, 55.0, 60.0, 70.0, 260.0, 300.0, 450.0, 600.0, 1300.0 };
 
 	// ---------------------------------------------------------------------------------------------------------------
