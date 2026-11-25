@@ -13,6 +13,7 @@
 // Off, nothing here is read and every name is ruling 220's.
 
 import namesData from '../../data/campaign/air-names.json';
+import nickData from '../../data/campaign/nicknames.json';
 import type { AirFleet, Game } from './types';
 
 type Pair<T> = { ftr: T; bmr: T };
@@ -26,7 +27,7 @@ export const AIRNAMES = namesData as unknown as {
   navyIslands: string[];
   navyStations: Record<string, string>;
   fallback: Record<string, Pair<string> & { numbers?: Pair<Label[]> }>;
-  blocked: { names: string[] };
+  blocked: { names: string[]; common: string[] };
 };
 
 /** True where this campaign names its new air groups by the switch's rule. */
@@ -96,5 +97,21 @@ export const shortName = (f: AirFleet): string => f.short ?? f.name;
 // Matched as whole words, so that a short real name ("Ram", "Nice") does not bar a longer word of our own (Tramontana, Fenice).
 const esc = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const BLOCKED = AIRNAMES.blocked.names.map((b) => new RegExp(`(^|[^\\p{L}\\p{N}])${esc(b)}($|[^\\p{L}\\p{N}])`, 'iu'));
-/** True for a name that holds, as whole words, one of the real air units' names on the air block list. */
-export const airBlocked = (name: string): boolean => BLOCKED.some((b) => b.test(name));
+/** A name's words, as the block list's distinctive words are taken: letters and digits, an apostrophe kept inside a word ("Hell's"), lower case. */
+export const wordsOf = (name: string): string[] => (name.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? []).map((w) => w.toLowerCase());
+const COMMON = new Set(AIRNAMES.blocked.common.map((w) => w.toLowerCase()));
+/**
+ * The distinctive words of a blocked name (the design director's review marks of 05:12Z: "the block test also catches a
+ * real nickname's distinctive word, not only the whole string"): every word of it but the common ones (air-names.json
+ * blocked.common, the historian's to edit) and numbers. Taken from both lists, the air units' and the corps'
+ * (nicknames.json 'blocked').
+ */
+export const distinctiveWords = (name: string): string[] => wordsOf(name).filter((w) => !COMMON.has(w) && !/^\p{N}+$/u.test(w));
+export const DISTINCTIVE: ReadonlySet<string> = new Set([...AIRNAMES.blocked.names, ...(nickData as unknown as { blocked: string[] }).blocked].flatMap(distinctiveWords));
+/** The distinctive words of real units' names a name of ours holds (none, for a name we may give). */
+export const distinctiveIn = (name: string): string[] => wordsOf(name).filter((w) => DISTINCTIVE.has(w));
+/**
+ * True for a name that holds, as whole words, one of the real air units' names on the air block list, or a distinctive
+ * word of any real unit's name on either block list.
+ */
+export const airBlocked = (name: string): boolean => BLOCKED.some((b) => b.test(name)) || distinctiveIn(name).length > 0;
