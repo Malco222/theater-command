@@ -5654,8 +5654,20 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // standing, and the 56th's took the Sakaguchi Detachment off the Indies' road. A row with a body of its own
     // (`adds`, the 56th's) comes at that worth and takes nobody, as one brought ashore for a lost posting does. A row
     // with none waits for the front, and its half year is counted from the month the front lets its corps go.)
+    // (And, under the switch 'fromWait' (stage.json; one switch for both charts, the design director's 20:08Z of
+    // 25 November 2026), none standing in contact, an enemy at war on its province or beside it: her ruling of 19:47Z,
+    // "one sentence, both doors: a date never lifts a corps out of a fight". Her 18:47Z ruling guards the rows that
+    // draw a division (drawn.ts, `corpsInContact`); this is the row that takes a named corps whole. As measured over
+    // three whole-world wars to month 66, 29 corps in contact were lifted to another province by this path with no
+    // live front to hold them: the 18th Division out of the line in China for Malaya, Britain's 70th out of Siam to
+    // become the Chindits, a cavalry brigade from Calicut back to Loyang. The same two outcomes as for a live front: a
+    // row with a body of its own comes at that worth and takes nobody, a row with none waits and has its half year
+    // from the month its corps comes free. A corps already standing where the row forms is not lifted, and takes the
+    // row's name as before. Where the player's rows are offers he is asked as before, with his corps in the line or
+    // out of it: taking it is his order, not a date's. Switch off: the flag is read and nothing else.)
     let own = false;
-    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && onLiveFront(g, nat, x))) {
+    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
+      && (onLiveFront(g, nat, x) || (g.flags.fromWait === 1 && !hisOffers(g, nat) && x.reg !== reg?.id && corpsInContact(g, nat, x))))) {
       if (o.adds > 0) own = true;
       else { g.flags[`wait:${i}`] = g.turn; return; }
     }
