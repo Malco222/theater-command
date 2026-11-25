@@ -212,7 +212,10 @@ export const LAND = {
    *     found. At most 'most' slips a battle, none below 'str' of its strength.
    *   back: at 'back' of its strength, or at the rout nerve, it withdraws to its own edge, never routs.
    *   bite: the weight of its blows against its target: b = min(1, r / 'bite'), r its striking weight (power0 x (0.35 +
-   *     0.65 str/str0)) over its target's power0. Every side effect scales with it.
+   *     0.65 str/str0)) over its target's power0. Every side effect scales with it. 0.6 by the gate (the design
+   *     director, 25 November 17:48Z, mend step 2): at 0.15 a team bit a whole block in full and its pin ran attacks
+   *     into the clock (practice fields -0.07 attack wins); at 0.6 a division's bite is about SOV 0.16, GER 0.13,
+   *     UK 0.10, USA 0.06, ITA 0.05, a second or two of its march, and leaders down a quarter as deep.
    *   pin: a block on foot struck by it moves at pace x (1 - 'pace' x b) for 'secs' seconds, at most LAND.pin.most
    *     seconds a battle (men go to ground and crawl).
    *   lead: for 'secs' after a strike, the block steadies on its xp x (1 - 'xp' x b) (its leaders are the ones shot).
@@ -235,7 +238,7 @@ export const LAND = {
     quiet: 5,
     slip: { after: 20, clear: 150, secs: 30, most: 2, str: 0.75 },
     back: 0.5,
-    bite: 0.15,
+    bite: 0.6,
     pin: { pace: 0.5, secs: 8 },
     lead: { xp: 0.5, secs: 30 },
     take: { fragile: 2.5, blast: 1.5 },
@@ -245,9 +248,10 @@ export const LAND = {
   /**
    * Pinned (release 2; the design director's ruling of 25 November 16:30Z, Q3): a block slowed by fire on it (sniper
    * teams now; machine-gun teams' suppression, if it is ruled, the same field): at most 'most' battle seconds a block for
-   * the whole battle, from every cause together, counted only while it moves (LandUnit.pinTo, pinSpent).
+   * the whole battle, from every cause together, counted only while it moves (LandUnit.pinTo, pinSpent). 20 by the
+   * gate (the design director, 25 November 17:48Z, mend step 1; 40 as first ruled).
    */
-  pin: { most: 40 },
+  pin: { most: 20 },
   /**
    * A tank block closed up (release 2): its commanders down inside their hatches, seeing the field through vision slits
    * and periscopes. One meaning for every rule that closes a block up (sniper teams now; the smarter-soldiers thread's
