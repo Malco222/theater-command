@@ -903,6 +903,31 @@ public:
 	void PressPage(const FString& Action);
 	/** The rooms open to the player now, for the buttons that lead to them: ids and labels, in step. */
 	void GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const;
+	/**
+	 * (Release 2; Brian, 25 November 2026: "I want the UI and user experience to feel seamless and easy to manage the
+	 * cities, recruitment, ect".) THE HOME FRONT: one board for every town, raising forces and everything on order,
+	 * under tc.UI.HomeFront (off until the art director passes the Mac's stills; -TheaterHomeFront turns it on for a
+	 * run). It is the rules' own room "home", laid out as a board. Off, no door leads to it and the game is as it was.
+	 */
+	static bool IsHomeFrontStyle();
+	void OpenHomeFront();
+	bool IsHomeFrontOpen() const { return bPageOpen && Page.Home.bValid && IsHomeFrontStyle(); }
+	/** Which towns the board lists: 0 those that can take a building, 1 those building, 2 every town. */
+	int32 GetHomeFilter() const { return HomeFilter; }
+	void SetHomeFilter(int32 Filter);
+	/** The town whose other buildings are unfolded under its row, or none: a second press folds them away. */
+	int32 GetHomeUnfolded() const { return HomeUnfolded; }
+	void UnfoldHomeTown(int32 Region);
+	/** A town built in from the board keeps its row while the board stands, so the list does not jump under the hand. */
+	bool IsHomeKept(int32 Region) const { return HomeKept.Contains(Region); }
+	void BuildFromHome(int32 Region, const FString& Act);
+	/** How many towns the board lists at most (a great power has near two hundred), and the button that lists more. */
+	int32 GetHomeRows() const { return HomeRows; }
+	void ShowMoreHomeTowns();
+	/** How many times the board has been opened: its lists start from their heads each time. */
+	int32 GetHomeOpenings() const { return HomeOpenings; }
+	/** A town's own plan from the board: its card on the map where the town card is shown, and otherwise its room. */
+	void OpenTownFromHome(int32 Region);
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) The month's seals on the map's edge, and a press of
 	// one: the month's card opened at its row (EdgeNews.cpp).
 	const FEdgeNewsBoard& GetEdgeNews() const { return EdgeNews; }
@@ -1706,6 +1731,10 @@ private:
 	bool bGeneralsOpen = false;
 	FOfficePage Page;
 	bool bPageOpen = false;
+	// (Release 2, THE HOME FRONT) The board's own state, kept while it stands: the list shown, the town unfolded, and the
+	// towns built in since it was opened.
+	int32 HomeFilter = 0, HomeUnfolded = INDEX_NONE, HomeRows = 40, HomeOpenings = 0;
+	TSet<int32> HomeKept;
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;

@@ -417,6 +417,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Men in the water, and the call that decides who is saved.
 			Add(TEXT("sailorsrule"), TEXT("Sailors"), TEXT("When a ship goes down in a fleet action fought on the sea field, her men go into the water, and after the fight the side left holding the water picks up who it can. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
 				Now.bSailors ? TEXT("ON") : TEXT("OFF"), Now.bSailors);
+			// (Release 2, the sea field's own water: battle/sea/ticket.ts; Brian 25 November 2026 12:52Z) Friendly torpedoes.
+			Add(TEXT("ownwaterrule"), TEXT("Friendly torpedoes"), TEXT("In a fleet action fought on the sea field, a destroyer holds its torpedoes while one of its own side's ships is in their way, and fires once the way is clear; and every ship keeps out of the way of its own side's torpedoes until they have passed. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
+				Now.bOwnWater ? TEXT("ON") : TEXT("OFF"), Now.bOwnWater);
 			// (Release 2, mines.ts; Brian 24 November 2026 20:38Z) Minefields laid across a narrow sea or off an enemy harbour.
 			Add(TEXT("seaminesrule"), TEXT("Mines at sea"), TEXT("A fleet with destroyers, cruisers or submarines can lay a field of mines from its page with LAY MINES, across a narrow sea or off a harbour an enemy fleet sails from. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month until their destroyers sweep it, and a field wears down over a few months. The computer's admirals lay fields too. It can be switched in any month: off, every field is gone."),
 				Now.bSeaMines ? TEXT("ON") : TEXT("OFF"), Now.bSeaMines);
@@ -705,7 +708,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -713,7 +716,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
-				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
@@ -1820,6 +1823,91 @@ bool ACampaignPlayerController::IsTownCardStyle()
 	return bAsked || CVarTownCard.GetValueOnGameThread() != 0;
 }
 
+namespace
+{
+	// (Release 2; Brian, 25 November 2026: "lets make the campaign map and playing of that feel less choppy and hard to
+	// manage. I want the UI and user experience to feel seamless and easy to manage the cities, recruitment, ect".) THE
+	// HOME FRONT, off until the art director has passed the Mac's stills of it; -TheaterHomeFront turns it on for a run.
+	TAutoConsoleVariable<int32> CVarHomeFront(
+		TEXT("tc.UI.HomeFront"), 0,
+		TEXT("1 shows THE HOME FRONT: a door on the top bar to one board for every town, raising forces and everything on order; 0 the game as before (as -TheaterHomeFront). The door is named by the rules when a campaign's rules are loaded, so set it before the campaign is begun or loaded."));
+}
+
+bool ACampaignPlayerController::IsHomeFrontStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterHomeFront"));
+	return bAsked || CVarHomeFront.GetValueOnGameThread() != 0;
+}
+
+void ACampaignPlayerController::OpenHomeFront()
+{
+	if (IsHomeFrontStyle())
+	{
+		OpenPage(TEXT("home"));
+	}
+}
+
+void ACampaignPlayerController::SetHomeFilter(int32 Filter)
+{
+	if (bPageOpen && Page.Home.bValid && Filter != HomeFilter)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeFilter = FMath::Clamp(Filter, 0, 2);
+		HomeUnfolded = INDEX_NONE;
+		HomeRows = 40;
+		++Page.Revision; // (the board is laid out again as it stands: nothing is asked of the rules)
+	}
+}
+
+void ACampaignPlayerController::ShowMoreHomeTowns()
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeRows += 40;
+		++Page.Revision;
+	}
+}
+
+void ACampaignPlayerController::OpenTownFromHome(int32 Region)
+{
+	if (!bPageOpen || !Page.Home.bValid)
+	{
+		return;
+	}
+	if (IsTownCardStyle())
+	{
+		// (tc.UI.TownCard) The town's card stands on the map: the board is put away, the view goes to the town, and its
+		// card is opened.
+		ClosePage();
+		ShowProvince(Region);
+		OpenTownCard();
+		return;
+	}
+	PressPage(FString::Printf(TEXT("open:town:%d"), Region));
+}
+
+void ACampaignPlayerController::UnfoldHomeTown(int32 Region)
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		HomeUnfolded = HomeUnfolded == Region ? INDEX_NONE : Region;
+		++Page.Revision;
+	}
+}
+
+void ACampaignPlayerController::BuildFromHome(int32 Region, const FString& Act)
+{
+	if (bPageOpen && Page.Home.bValid)
+	{
+		// (the town keeps its row, now with what is going up and TAKE IT BACK, until the board is put away)
+		HomeKept.Add(Region);
+		HomeUnfolded = INDEX_NONE;
+		PressPage(Act);
+	}
+}
+
 void ACampaignPlayerController::OpenTownCard()
 {
 	if (Map.IsValid() && Map->GetSelectedRegion() != INDEX_NONE && Map->GetSelectedRegion() == TownBar.Region && TownBar.Plots.Num() > 0)
@@ -1957,6 +2045,15 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	if (Id == TEXT("home"))
+	{
+		// (Release 2, THE HOME FRONT) Opened afresh: the towns that can take a building, none unfolded, none kept.
+		HomeFilter = 0;
+		HomeUnfolded = INDEX_NONE;
+		HomeRows = 40;
+		++HomeOpenings;
+		HomeKept.Reset();
+	}
 	if (bPageOpen && Id == TEXT("atom"))
 	{
 		// (Release 2, atom.ts; the UI director's marks.) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END

@@ -99,7 +99,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -126,7 +126,7 @@ import { setWingByDate, wingByDateOn } from '../../../src/campaign/carriers';
 import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
-import { sailorsOn, setSailors } from '../../../src/battle/sea/ticket';
+import { ownWaterOn, sailorsOn, setOwnWater, setSailors } from '../../../src/battle/sea/ticket';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { raidFogOn, skyKnown } from '../../../src/campaign/airfog';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
@@ -161,7 +161,7 @@ import grandData from '../../../data/campaign/grand.json';
 import setupBook from '../../../data/campaign/setup-1939.json';
 import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
-import { civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
+import { civicAdvice, civicReady, civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
@@ -716,10 +716,12 @@ function drawView() {
     ...((): { cut: number[]; cuts: { region: number; how: string; head: string; line: string; short: string }[] } => {
       if (!groundRules(s)) return { cut: [], cuts: [] };
       try {
-        const known = [...cutsKnown(s).entries()];
+        // (The player's sight as this picture worked it out above, for the list and for each cut's words: asked afresh
+        // for every cut, it was the sight of the whole map again each time. The far map's playtest, finding 41.)
+        const known = [...cutsKnown(s, s.human, seen).entries()];
         return {
           cut: known.map(([id]) => id),
-          cuts: known.map(([id, k]) => { const said = cutSays(s, id); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
+          cuts: known.map(([id, k]) => { const said = cutSays(s, id, s.human, seen); return { region: id, how: k.how, head: said?.head ?? '', line: said?.line ?? '', short: said?.short ?? '' }; }),
         };
       } catch { return { cut: s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id), cuts: [] }; }
     })(),
@@ -1049,6 +1051,8 @@ function drawView() {
     voyageLog: voyageOn(s),
     // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Whether men go into the water when a ship goes down.
     sailors: sailorsOn(s),
+    // (Release 2, the sea field's own water: battle/sea/ticket.ts) Whether captains mind their own side's torpedoes.
+    ownWater: ownWaterOn(s),
     // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
     seaMines: seaMinesOn(s),
     mines: minesSeen(s),
@@ -2112,6 +2116,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   const seed = options?.seed ?? 1939;
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
+  forgetOwnOrders();
   lastMonth = null;
   lastReel = -9;
   monthBook = null;
@@ -2239,6 +2244,7 @@ function load(text: string) {
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
+  forgetOwnOrders();
   const kept = reportOfSave(g);
   lastMonth = kept.report;
   lastReel = -9;
@@ -3961,16 +3967,20 @@ function railTip(ids: number[], to: number) {
   } catch { return none; }
 }
 
-/** Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
+/**
+ * Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on.
+ * (Asked as one sea reading, navy.ts `seaReading`: each sea's balance and each search by sea from the corps' port
+ * are worked out once for the whole list, not again for every port on the map. The playtest's finding 40.)
+ */
 function seaReach(ids: number[]) {
   const s = game();
   const ports = new Set<number>();
   let beaches: number[] = [];
-  if (humanUp(s) && !onEve(s)) {
+  if (humanUp(s) && !onEve(s)) seaReading(s, () => {
     const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
     for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
     beaches = landingTargets(s, cs).map((r) => r.id);
-  }
+  });
   return { ports: [...ports], beaches };
 }
 
@@ -3984,11 +3994,14 @@ function bySeaWhy(ids: number[], to: number): { why: string } {
   const r = s.regions[to];
   const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
   if (!r || !cs.length) return { why: '' };
-  if (allied(s, cs[0].nat, r.ctrl)) {
-    for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
-    return { why: '' };
-  }
-  return { why: whyNotLand(s, cs, r) ?? '' };
+  // (One sea reading, as `seaReach`: a refusal for lying beyond a month's sailing searches from every port on the way.)
+  return seaReading(s, () => {
+    if (allied(s, cs[0].nat, r.ctrl)) {
+      for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
+      return { why: '' };
+    }
+    return { why: whyNotLand(s, cs, r) ?? '' };
+  });
 }
 
 /** Ships the chosen corps to a friendly port. */
@@ -4701,7 +4714,9 @@ function fortify(region: number) {
 
 function cancel(id: number) {
   const s = game();
-  return { ok: orderCancelBuild(s, id), view: view() };
+  const ok = orderCancelBuild(s, id);
+  if (ok) forgetOwnOrder(id);
+  return { ok, view: view() };
 }
 
 /**
@@ -4732,7 +4747,9 @@ function arsenal(region = -1) {
 /** Places an order from the arsenal. */
 function order(key: string, region = -1) {
   const s = game();
+  const label = arsenalOffers(s, region).find((o) => o.key === key)?.label ?? '';
   const built = orderArsenal(s, key, region);
+  if (built) noteOwnOrder(s, built, key, region, label || built.name); // (release 2, the home front's ORDER AGAIN)
   return { ok: !!built, name: built?.name ?? '', view: view() };
 }
 
@@ -4835,6 +4852,7 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   try { if (pictureGov(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
   // Towns to build up and trade agreements (the grand campaign).
   if (pictureTrade(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
+  if (homeFrontOn() && s.nations[s.human]?.alive && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'home', label: 'THE HOME FRONT' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
   if (pictureDamaged(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
   // (Release 2, columns.ts and logistics.ts) The supply columns, where they run.
@@ -4974,8 +4992,20 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
       tip: `Nothing is being raised or built, and there is ${inHand(me.pp).toLocaleString('en-US')} in the treasury. Open the ARSENAL to order corps, aircraft, ships or works.`,
     });
   }
+  // (Release 2, the home front board; Brian, 25 November 2026.) Money in hand and towns with the builders free: the
+  // chips named idle generals and idle design teams and never an idle town. Only where the game shows the board.
+  if (homeFrontOn()) {
+    let can = 0;
+    try { can = civicReady(s, me.id); } catch { can = 0; }
+    if (can > 0) {
+      out.push({
+        k: 'page:home', t: can === 1 ? 'A TOWN CAN BUILD' : `${can} TOWNS CAN BUILD`,
+        tip: `${can === 1 ? 'One of your towns has' : `${can} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString('en-US')}. Open THE HOME FRONT to build in each with one press.`,
+      });
+    }
+  }
   // (Version 66) What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies', 'page:repairs': 'build' };
+  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies', 'page:repairs': 'build', 'page:home': 'build' };
   // (a crowded field is the air desk's, as in the browser: its row is not shown while the staff runs the air war)
   return out.filter((t) => { const desk = t.k.startsWith('field:') ? ('air' as DeskId) : theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
 }
@@ -5912,6 +5942,8 @@ function townPage(s: Game, region: number): Page | null {
     note: 'A town is a high street with a few empty lots: a village has one, a town two, a city three and the capital four. Each lot takes one kind of building, and each building can be raised two more levels. A lot once built on stays that kind.',
     top: [
       { label: 'SHOW ON THE MAP', act: `goto:region:${region}`, ok: true, tip: 'Looks at the place on the map.' },
+      // (Release 2, THE HOME FRONT) The way back to the board, where the game shows it.
+      ...(homeFrontOn() ? [{ label: 'THE HOME FRONT', act: 'open:home', ok: true, tip: 'Every town of yours on one board, with raising forces and everything on order.' }] : []),
       { label: 'TOWNS TO BUILD UP', act: 'open:towns', ok: true, tip: 'The best place for each kind of building now.' },
       { label: 'TRADE AGREEMENTS', act: 'open:trade', ok: !!tradeLedger(s), tip: 'What the commerce of your towns is traded for.' },
     ],
@@ -6177,6 +6209,225 @@ function townsPage(s: Game): Page | null {
     note: 'Commerce pays into the treasury, farming fills the depots, learning quickens research, training and medicine look after the army, and administration brings in tax and political capital. Pick any province of yours on the map and press TOWN PLAN to see its plots.',
     top: [{ label: 'TRADE AGREEMENTS', act: 'open:trade', ok: !!tradeLedger(s), tip: 'What the commerce of your towns is traded for.' }],
     sections,
+  };
+}
+
+// ---- The home front (release 2; Brian, 25 November 2026) -------------------------------------------------
+// (Brian, 13:41Z: "lets make the campaign map and playing of that feel less choppy and hard to manage. I want the UI
+// and user experience to feel seamless and easy to manage the cities, recruitment, ect".) The United States holds 186
+// towns with 293 plots, each town was a screen of its own and a building four presses, and nothing showed all the
+// towns or everything on order. THE HOME FRONT is one room for every town, raising forces and everything on order.
+// It gives no order of its own (the design director, seamless-r2-1125.md): BUILD is the town plan's own act
+// ('civic:<region>:<line>'), RAISE the arsenal's own order and TAKE IT BACK its own cancel, at the same prices and
+// through the same checks, and the building named for a town is the one the staff would put up there next
+// (civicAdvice, the working-out civicAI makes). ORDER AGAIN repeats the player's own orders of the last month he
+// ordered in, at today's prices; what he ordered is kept here beside the month's report and never in the war.
+
+/** True where the 3D game shows the home front board (-TheaterHomeFront sets it before the rules load): its door among the pages and its chip. The room itself answers either way. */
+const homeFrontOn = (): boolean => !!(globalThis as { TC_HOME_FRONT?: unknown }).TC_HOME_FRONT;
+
+/** A building that could be ordered in a town from the board: BUILD on its row, or one of the others behind its caret. */
+interface HomeBuild { line: string; name: string; label: string; cost: number; months: number; effect: string; ok: boolean; why: string; act: string }
+/** A plot of a town as a mark on its row: built (with its level), going up (with the months left), or free. */
+interface HomePlot { s: 'built' | 'going' | 'free'; line: string; name: string; level: number; months: number }
+interface HomeTown {
+  region: number; town: string; province: string; size: string; own: boolean; pays: number;
+  /** 'ready' the best building can be ordered now, 'short' only money is in the way, 'going' the builders are at work, 'done' nothing more can go up. */
+  state: 'ready' | 'short' | 'going' | 'done';
+  plots: HomePlot[]; best: HomeBuild | null; more: HomeBuild[];
+  going: { id: number; name: string; due: string; months: number; cancel: boolean; act: string } | null;
+  note: string;
+}
+interface HomeRaise { key: string; group: string; label: string; cost: number; months: number; where: string; note: string; ok: boolean; why: string; act: string }
+interface HomeOrder { id: number; what: string; name: string; where: string; due: string; months: number; cost: number; cancel: boolean; act: string; share: number; region: number }
+interface HomeAgain { ok: boolean; when: string; text: string; cost: number; left: string; why: string; act: string }
+interface HomeBoard {
+  nation: string; date: string; up: boolean; money: number; net: number;
+  tiles: { k: string; label: string; figure: string; sub: string }[];
+  counts: { ready: number; going: number; all: number };
+  towns: HomeTown[]; raise: HomeRaise[]; again: HomeAgain | null; orders: HomeOrder[];
+  staff: { on: boolean; line: string; label: string; act: string; tip: string; cap: number; caps: { n: number; now: boolean; act: string }[] } | null;
+}
+
+// What the player ordered from the arsenal by his own press, this month and the last month he ordered in (works are
+// left out: a work belongs to the province it was ordered for). Kept here, never in the war or its save.
+interface OwnOrder { id: number; key: string; region: number; label: string }
+let ordersNow: { turn: number; list: OwnOrder[] } | null = null;
+let ordersBefore: { turn: number; list: OwnOrder[] } | null = null;
+function forgetOwnOrders(): void { ordersNow = null; ordersBefore = null; }
+function noteOwnOrder(s: Game, b: Build, key: string, region: number, label: string): void {
+  if (key.startsWith('work:')) return;
+  if (!ordersNow || ordersNow.turn !== s.turn) {
+    if (ordersNow && ordersNow.list.length) ordersBefore = ordersNow;
+    ordersNow = { turn: s.turn, list: [] };
+  }
+  ordersNow.list.push({ id: b.id, key, region, label });
+}
+function forgetOwnOrder(id: number): void {
+  if (ordersNow) ordersNow.list = ordersNow.list.filter((o) => o.id !== id);
+}
+/** The arsenal key a build on the queue was ordered by, for the forces ORDER AGAIN repeats; '' for anything else. */
+const keyOfBuild = (b: Build): string => (b.what === 'corps' && b.kind && !b.elite && !(b as { airborne?: boolean }).airborne && !b.revive ? `corps:${b.kind}` : b.what === 'air' && b.item ? `air:${b.item}` : b.what === 'ship' && b.item ? `ship:${b.item}` : '');
+/**
+ * The orders ORDER AGAIN would repeat, and the month they were placed in: what the player ordered by his own press in
+ * the last month he ordered in. After a load nothing is remembered, and the queue's own record of last month stands
+ * in where every order on it is his own (he runs building himself); where the staff orders too, there is none until
+ * he has ordered once (the design director, 25 November 2026: never the staff's orders).
+ */
+function ownOrdersBefore(s: Game): { turn: number; list: { key: string; region: number; label: string }[] } | null {
+  const kept = ordersNow && ordersNow.turn < s.turn && ordersNow.list.length ? ordersNow : ordersBefore && ordersBefore.turn < s.turn && ordersBefore.list.length ? ordersBefore : null;
+  if (kept) return kept;
+  if (ordersNow || ordersBefore) return null;
+  const me = s.human ? s.nations[s.human] : null;
+  let staffed = true;
+  try { staffed = !!pictureCommand(s)?.desks.find((d) => d.id === 'build')?.staff; } catch { staffed = true; }
+  if (!me || staffed) return null;
+  const offers = arsenalOffers(s, -1);
+  const list = me.queue.filter((b) => b.ordered === s.turn - 1 && keyOfBuild(b)).map((b) => ({ key: keyOfBuild(b), region: -1, label: offers.find((o) => o.key === keyOfBuild(b))?.label ?? b.name }));
+  return list.length ? { turn: s.turn - 1, list } : null;
+}
+/** "2 infantry corps and 1 fighter wing": orders counted by their kind, in the order first placed. */
+function ordersInWords(labels: string[]): string {
+  const counts = new Map<string, number>();
+  for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const many = (l: string): string => (/(corps|ships)$/i.test(l) ? l : `${l}s`);
+  return listNames([...counts].map(([l, n]) => `${n} ${lowFirst(n === 1 ? l : many(l))}`));
+}
+/** What ORDER AGAIN would place now, in order, with what it must leave out and why: each order by today's offer and today's price, the treasury counted down as it goes. */
+function againPlan(s: Game): { when: string; go: { key: string; region: number; label: string; cost: number }[]; out: { label: string; why: string }[] } | null {
+  const me = s.human ? s.nations[s.human] : null;
+  const before = me ? ownOrdersBefore(s) : null;
+  if (!me || !before) return null;
+  const book = new Map<number, ReturnType<typeof arsenalOffers>>();
+  const offersAt = (region: number) => { if (!book.has(region)) book.set(region, arsenalOffers(s, region)); return book.get(region)!; };
+  let pp = me.pp;
+  const go: { key: string; region: number; label: string; cost: number }[] = [], out: { label: string; why: string }[] = [];
+  for (const it of before.list) {
+    const o = offersAt(it.region).find((x) => x.key === it.key);
+    if (!o) { out.push({ label: it.label, why: 'no longer on offer' }); continue; }
+    if (o.why && !o.poor) { out.push({ label: o.label, why: o.why.replace(/\.$/, '') }); continue; }
+    if (o.cost > pp) { out.push({ label: o.label, why: `${Math.max(1, shown(o.cost) - inHand(pp)).toLocaleString('en-US')} short` }); continue; }
+    pp -= o.cost;
+    go.push({ key: it.key, region: it.region, label: o.label, cost: o.cost });
+  }
+  return { when: turnToDate(before.turn).label, go, out };
+}
+
+/** Everything the board shows, worked out once: the rules' own lists, in the player's money. */
+function homeBoard(s: Game): HomeBoard | null {
+  const me = s.human ? s.nations[s.human] : null;
+  if (!me || !me.alive || !townBuildings(s, me.capital)) return null;
+  const up = humanUp(s) && !onEve(s);
+  const notUp = 'It is not your month.';
+  const advice = civicAdvice(s, me.id);
+  const rank = new Map<string, number>(advice.lines.map((l, i) => [l, i]));
+  const place = new Map<number, number>(advice.home.map((id, i) => [id, i]));
+  const pays = new Map<number, number>();
+  try { for (const p of ledgerOf(s, me.id).provinces) pays.set(p.id, shown(p.total)); } catch { /* a campaign with no ledger */ }
+  const held = s.regions.filter((r) => r.ctrl === me.id).sort((a, b) => (place.get(a.id) ?? 1e6) - (place.get(b.id) ?? 1e6) || (pays.get(b.id) ?? 0) - (pays.get(a.id) ?? 0) || a.id - b.id);
+  const towns: HomeTown[] = [];
+  for (const r of held) {
+    const t = townBuildings(s, r.id);
+    if (!t || !t.mine || !t.plots.length) continue;
+    const asBuild = (o: (typeof t.offers)[number]): HomeBuild => ({
+      line: o.line, name: o.name, label: o.label, cost: shown(o.cost), months: o.months, effect: o.effect,
+      ok: up && o.why === null, why: !up ? notUp : o.poor ? `${Math.max(1, shown(o.cost) - inHand(me.pp)).toLocaleString('en-US')} short: the treasury holds ${inHand(me.pp).toLocaleString('en-US')}.` : o.why ?? '', act: `civic:${r.id}:${o.line}`,
+    });
+    const open = t.offers.filter((o) => o.why === null || o.poor).sort((a, b) => (rank.get(a.line) ?? 99) - (rank.get(b.line) ?? 99));
+    const b = me.queue.find((x) => x.what === 'civic' && x.region === r.id);
+    const going = b ? { id: b.id, name: b.name.split(' at ')[0], due: turnToDate(b.eta).label, months: Math.max(0, b.eta - s.turn), cancel: b.ordered === s.turn && up, act: `home:cancel:${b.id}` } : null;
+    const best = open.length ? asBuild(open[0]) : null;
+    towns.push({
+      region: r.id, town: t.town, province: r.name, size: t.size, own: r.owner === me.id, pays: pays.get(r.id) ?? 0,
+      state: going ? 'going' : !best ? 'done' : open[0].poor ? 'short' : 'ready',
+      plots: t.plots.map((p) => ({ s: !p.line ? 'free' as const : p.building ? 'going' as const : 'built' as const, line: p.line ?? '', name: p.line ? (p.level > 0 ? p.label : p.name) : '', level: p.level, months: p.building ? Math.max(0, p.due - s.turn) : 0 })),
+      best, more: open.slice(1).map(asBuild), going,
+      // (why nothing is offered: the one reason every line gives, or that the town is complete)
+      note: best || going ? '' : ((whys) => (whys.length && whys.every((w) => w === whys[0]) ? whys[0] : 'Nothing more can be built here now.'))(t.offers.map((o) => o.why ?? '').filter(Boolean)),
+    });
+  }
+  const ready = towns.filter((t) => t.state === 'ready' || t.state === 'short').length, goingUp = towns.filter((t) => t.state === 'going').length;
+  const book = ordersBookOf(s);
+  const orders: HomeOrder[] = me.queue.filter((b) => b.what !== 'civic').slice().sort((a, b) => a.eta - b.eta || a.id - b.id).map((b) => {
+    const l = orderLine(s, b, book);
+    return { id: l.id, what: l.what, name: l.words, where: l.where, due: l.due, months: l.months, cost: shown(b.cost), cancel: l.canCancel && up, act: `home:cancel:${l.id}`, share: l.share, region: l.region };
+  });
+  const money = inHand(me.pp);
+  const raise: HomeRaise[] = arsenalOffers(s, -1).filter((o) => o.group !== 'works').map((o) => ({
+    key: o.key, group: o.group, label: o.label, cost: shown(o.cost), months: o.months, where: s.regions[o.at]?.name ?? '', note: o.note,
+    ok: up && !o.why, why: !up ? notUp : o.poor && shown(o.cost) > money ? `${(shown(o.cost) - money).toLocaleString('en-US')} short: the treasury holds ${money.toLocaleString('en-US')}.` : o.why ?? '', act: `home:order:${o.key}`,
+  }));
+  const plan = againPlan(s);
+  const total = plan ? plan.go.reduce((sum, x) => sum + shown(x.cost), 0) : 0;
+  const leftOut = plan && plan.out.length ? `Left out: ${plan.out.map((x) => `${lowFirst(x.label)} (${lowFirst(x.why)})`).join('; ')}.` : '';
+  const again: HomeAgain | null = plan ? {
+    ok: up && plan.go.length > 0, when: plan.when, cost: total, left: leftOut, act: 'home:again',
+    text: plan.go.length ? `As in ${plan.when}: ${ordersInWords(plan.go.map((x) => x.label))}.` : `Nothing of ${plan.when}'s order can be placed now.`,
+    why: !up ? notUp : plan.go.length ? '' : leftOut,
+  } : null;
+  let T: ReturnType<typeof treasuryOf> | null = null;
+  try { T = treasuryOf(s, me.id); } catch { T = null; }
+  const net = T ? T.net : 0;
+  let men: ReturnType<typeof manpowerOf> = null;
+  try { men = manpowerOf(s); } catch { men = null; }
+  const short = (n: number): string => (Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString('en-US'));
+  const tiles = [
+    { k: 'money', label: 'TREASURY', figure: money.toLocaleString('en-US'), sub: T && T.budget ? `${net < 0 ? '−' : '+'}${Math.abs(net).toLocaleString('en-US')} a month` : '' },
+    { k: 'orders', label: 'ON ORDER', figure: String(orders.length), sub: orders.length ? `next ready ${orders[0].due}` : 'nothing is being raised' },
+    { k: 'towns', label: 'TOWNS', figure: String(towns.length), sub: `${ready} can build  ·  ${goingUp} building` },
+    ...(men ? [{ k: 'men', label: 'MEN IN RESERVE', figure: short((men as { men: number }).men), sub: (men as { word: string }).word }] : []),
+  ];
+  let staff: HomeBoard['staff'] = null;
+  try {
+    const v = commandOf(s), bar = deskBar(s, 'build');
+    if (v && bar) staff = { on: bar.staff, line: bar.staff ? bar.line : deskRuns(s, 'build'), label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })) };
+  } catch { staff = null; }
+  return { nation: me.name, date: turnToDate(s.turn).label, up, money, net, tiles, counts: { ready, going: goingUp, all: towns.length }, towns, raise, again, orders, staff };
+}
+
+/** THE HOME FRONT as a room of the rules' own: the same lists as rows, for a game that draws no board of its own. */
+function homePage(s: Game): (Page & { home: HomeBoard }) | null {
+  const h = homeBoard(s);
+  if (!h) return null;
+  const cash = (n: number): string => n.toLocaleString('en-US');
+  const can = h.towns.filter((t) => t.state === 'ready' || t.state === 'short');
+  const townRows: PageRow[] = can.slice(0, 60).map((t) => ({
+    nat: '', title: `${t.town}${t.town === t.province ? '' : `, ${t.province}`}  ·  ${t.size}${t.pays ? `  ·  pays ${cash(t.pays)}` : ''}`,
+    lines: [`${t.best!.name}: ${t.best!.label}  ·  ${cash(t.best!.cost)}  ·  ${monthsWords(t.best!.months)}`, t.best!.effect],
+    buttons: [
+      { label: 'BUILD', act: t.best!.act, ok: t.best!.ok, tip: t.best!.ok ? `${t.best!.label}: ${t.best!.effect}` : t.best!.why },
+      { label: 'TOWN PLAN', act: `open:town:${t.region}`, ok: true, tip: 'Every plot of this town and everything that could be built there.' },
+      { label: 'SHOW ON THE MAP', act: `goto:region:${t.region}`, ok: true, tip: 'Looks at the place on the map.' },
+    ],
+  }));
+  const goingRows: PageRow[] = h.towns.filter((t) => t.going).map((t) => ({
+    nat: '', title: `${t.going!.name}  ·  ${t.town}`, lines: [`Due ${t.going!.due}.`],
+    buttons: t.going!.cancel ? [{ label: 'TAKE IT BACK', act: t.going!.act, ok: true, tip: 'The order is taken back and the money returned. Only in the month it was placed.' }] : [],
+  }));
+  const raiseRows: PageRow[] = [
+    ...(h.again ? [{ nat: '', title: `Order again${h.again.cost ? `  ·  ${cash(h.again.cost)}` : ''}`, lines: [h.again.text, h.again.left].filter(Boolean), buttons: [{ label: 'ORDER AGAIN', act: h.again.act, ok: h.again.ok, tip: h.again.ok ? 'Places each of these orders again at today\'s price.' : h.again.why }] }] : []),
+    ...h.raise.map((o) => ({
+      nat: '', title: `${o.label}  ·  ${cash(o.cost)}  ·  ${monthsWords(o.months)}`, lines: [o.note, o.ok ? '' : o.why].filter(Boolean),
+      buttons: [{ label: 'RAISE', act: o.act, ok: o.ok, tip: o.ok ? o.note : o.why }],
+    })),
+  ];
+  const orderRows: PageRow[] = h.orders.map((o) => ({
+    nat: '', title: `${o.name}  ·  ${cash(o.cost)}`, lines: [`${o.where ? `${o.where}. ` : ''}Due ${o.due}.`],
+    buttons: o.cancel ? [{ label: 'TAKE IT BACK', act: o.act, ok: true, tip: 'The order is taken back and the money returned. Only in the month it was placed.' }] : [],
+  }));
+  const n = h.counts.ready;
+  return {
+    id: 'home', title: `THE HOME FRONT  ·  ${h.nation.toUpperCase()}  ·  ${h.date.toUpperCase()}`,
+    headline: `${h.money >= 0 ? `${cash(h.money)} to spend` : `The treasury is ${cash(-h.money)} overdrawn`}, and ${n === 0 ? 'no town can take a building now' : n === 1 ? 'one town can take a building' : `${n} towns can take a building`}`,
+    note: 'Every town of yours, raising forces and everything on order, in one place. BUILD puts up the building your staff would choose for that town; TOWN PLAN shows every choice.',
+    top: [{ label: 'TRADE AGREEMENTS', act: 'open:trade', ok: !!tradeLedger(s), tip: 'What the commerce of your towns is traded for.' }],
+    sections: [
+      { heading: 'TOWNS THAT CAN TAKE A BUILDING', text: can.length ? (can.length > 60 ? `The richest 60 of ${can.length}.` : '') : 'Every town is building or complete.', rows: townRows },
+      ...(goingRows.length ? [{ heading: 'GOING UP IN YOUR TOWNS', text: '', rows: goingRows }] : []),
+      { heading: 'RAISE FORCES', text: h.up ? '' : 'It is not your month.', rows: raiseRows },
+      { heading: 'ON ORDER', text: orderRows.length ? '' : 'Nothing is being raised.', rows: orderRows },
+    ],
+    home: h,
   };
 }
 
@@ -6601,7 +6852,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'atom' ? atomPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'atom' ? atomPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : id === 'home' ? homePage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'fleetattack' ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
@@ -6658,7 +6909,7 @@ const runsLine = (lead: string, desk: string): string => (lead.toLowerCase().end
 /** The desk a room belongs to, or null: the secret service's room, trade and the towns, the airfield's, a fleet's. (The rooms that only ask a question, such as where a raid is to go, carry no bar.) */
 function deskOfPage(id: string): DeskId | null {
   const head = id.split(':')[0];
-  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' ? 'build' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
+  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' || head === 'home' ? 'build' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
 }
 
 /** For a bar on a desk's own screen: who runs it, a line to read, and the button that changes hands. Null outside the grand campaign. */
@@ -6815,6 +7066,34 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       const v = repairView(s, at);
       try { ok = !!repairCalls.order?.(s, at); } catch { ok = false; }
       note = ok ? `${v?.town ?? 'The town'} is repaired: it pays in full again from this month.` : v?.why ?? 'It cannot be repaired now.';
+    }
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'home') {
+    // (Release 2, the home front board.) Its presses are the arsenal's own order and cancel, and ORDER AGAIN, which
+    // places the player's own orders of the last month he ordered in once more, each through the arsenal's checks at
+    // today's price; one that cannot be met is left out and named.
+    if (part[1] === 'order') {
+      const key = part.slice(2).join(':');
+      const offer = arsenalOffers(s, -1).find((o) => o.key === key);
+      const b = orderArsenal(s, key, -1);
+      ok = !!b;
+      if (b) noteOwnOrder(s, b, key, -1, offer?.label ?? b.name);
+      note = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? 'It is not your month.' : offer?.why ?? 'That cannot be ordered now.';
+    } else if (part[1] === 'cancel') {
+      ok = orderCancelBuild(s, Number(part[2]));
+      if (ok) forgetOwnOrder(Number(part[2]));
+      note = ok ? 'The order is taken back and the money returned.' : 'An order can only be taken back in the month it was placed.';
+    } else if (part[1] === 'again') {
+      const plan = againPlan(s);
+      const placed: string[] = [], out = plan ? plan.out.slice() : [];
+      for (const it of humanUp(s) && plan ? plan.go : []) {
+        const b = orderArsenal(s, it.key, it.region);
+        if (b) { placed.push(it.label); noteOwnOrder(s, b, it.key, it.region, it.label); } else out.push({ label: it.label, why: arsenalOffers(s, it.region).find((o) => o.key === it.key)?.why?.replace(/\.$/, '') ?? 'it cannot be ordered now' });
+      }
+      ok = placed.length > 0;
+      note = !humanUp(s) ? 'It is not your month.' : !plan ? 'There is no earlier order of yours to repeat.'
+        : `${ok ? `Ordered again: ${ordersInWords(placed)}.` : 'Nothing could be ordered again.'}${out.length ? ` Left out: ${out.map((x) => `${lowFirst(x.label)} (${lowFirst(x.why)})`).join('; ')}.` : ''}`;
     }
     return { ok, note, fly, flies, open, view: view() };
   }
@@ -7048,6 +7327,17 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = sailorsOn(s)
       ? 'Sailor rules are on: in fleet actions fought live on the sea field, men go into the water when a ship goes down, and the side left holding the water picks up who it can.'
       : on ? 'Sailor rules work in the grand campaign only.' : 'Sailor rules are off.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'ownwaterrule') {
+    // (Release 2, the sea field's own water: battle/sea/ticket.ts) Captains mind their own side's torpedoes, switched by
+    // the player in any month.
+    const on = part[1] === 'on';
+    setOwnWater(s, on);
+    ok = true;
+    note = ownWaterOn(s)
+      ? "Friendly torpedoes are watched: in fleet actions fought live on the sea field, a destroyer holds its torpedoes while one of its own ships is in their way, and ships keep out of the way of their own side's torpedoes."
+      : on ? 'Watching for friendly torpedoes works in the grand campaign only.' : 'Friendly torpedoes are no longer watched.';
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'fleetshadow') {
@@ -8297,6 +8587,9 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) TC.sailors(on) at any time; the options page uses
 // act('sailorsrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).sailors = (on: boolean) => { const s = game(); setSailors(s, !!on); return { on: sailorsOn(s) }; };
+// (Release 2, the sea field's own water: battle/sea/ticket.ts) TC.ownWater(on) at any time; the options page uses
+// act('ownwaterrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).ownWater = (on: boolean) => { const s = game(); setOwnWater(s, !!on); return { on: ownWaterOn(s) }; };
 // (Release 2: mines.ts, heavyseas.ts, shadow.ts) TC.seaMines(on), TC.heavySeas(on), TC.shadowRelay(on) at any time; the
 // options page uses act('seaminesrule:on' / 'heavyseasrule:on' / 'shadowrelayrule:on', or ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
@@ -8321,6 +8614,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
 // (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };
+// (Release 2, the home front board.) TC.homeFront() answers the board alone, or null where there is none; the room is page('home').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).homeFront = () => homeBoard(game());
 // ---- (Release 2 assembly) The ship list's campaign switches (Brian, 25 November 2026 01:10Z: "turn them on automatically") ----
 // The 3D's release 2 ship list (Source/TheaterCommand/Release2Ship.h) names the grand campaign's release 2 rule switches
 // that ship ON, by the ids OPTIONS presses them with (act('<id>:on')). A grand war takes each one once: as it opens, the

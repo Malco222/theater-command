@@ -69,6 +69,9 @@ export interface SeaPlace {
   air: Record<Side, number>;
   /** Men in the water (release 2's sailor rules): only with the campaign's switch on. Absent, nothing of them is ruled. */
   sailors?: SeaSailors;
+  /** Captains mind their own side's torpedoes (release 2's own water: sim.ts ownWater): only with the campaign's switch
+   *  on (ticket.ts ownWaterOn). Absent, the field is as before to the byte. */
+  ownWater?: true;
 }
 
 /** The band of the water men go into (data/battle/sailors.json water): cold, temperate or warm. */

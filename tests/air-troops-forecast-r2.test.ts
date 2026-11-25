@@ -7,8 +7,10 @@
 // card is the exact expectation of the settled raid, the throws kept same-keyed (4).
 //
 // The raid is lane (a)'s own: France on the German army in the Saar in September 1939. Groupement de Chasse 3 flies from
-// Lorraine, 65 km off, well inside its reach to strafe; Groupement de Chasse 1 is moved to Belfort, 190 km off, inside
-// its fighter range (220 km) but beyond its reach to strafe (0.6 of it, 132 km): it escorts and goes home.
+// Lorraine, 65 km off, well inside its reach to strafe; Groupement de Chasse 1 is moved to Namur, 216 km off, inside
+// its fighter range (220 km) but beyond its reach to strafe (0.9 of it, 198 km; the design director, 13:35Z): it escorts
+// and goes home. (It stood at Belfort, 190 km off, while the reach was 0.6 of the range, 132 km; at 0.9 Belfort is in
+// reach, and the first test says so.)
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchRaid, raidTargets } from '../src/campaign/airwar';
 import { AIR, AIRWAR, airRange, assessAir, canStrafe, forecastAir, kmTo, strafersExpected } from '../src/campaign/air';
@@ -23,14 +25,16 @@ import { AirSim, airBattle } from '../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir, raidGroups } from '../src/battle/air/ticket';
 import { TROOPS } from '../src/battle/air/troops';
 
-type Told = { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; fire: number; weight: number };
+type Told = { route: 'card' | 'settled' | 'fought'; target: number; nat: string; strafers: number[]; fire: number; weight: number; cut?: number };
 let heard: Told[] = [];
 
 afterEach(() => { flyKinds([]); strafeWatch.tell = undefined; heard = []; });
 
-const LORRAINE = 10, BELFORT_GROUP = 9, BOMBERS = 38;
+const LORRAINE = 10, FAR_GROUP = 9, BOMBERS = 38;
+/** Where Groupement de Chasse 1 is put to be out of the reach to strafe: 216 km of its 220, beyond 0.9 of it. */
+const FAR_FIELD = 'Namur';
 
-/** The Saar raid, k-th luck; with `far`, Groupement de Chasse 1 flies from Belfort beside the raid's own groups. */
+/** The Saar raid, k-th luck; with `far`, Groupement de Chasse 1 flies from Namur beside the raid's own groups. */
 function saar(k: number, groups: 'both' | 'far' = 'both') {
   const g = startOpen(createGame(7, 'FRA'));
   setWar(g, 'FRA', 'GER');
@@ -38,9 +42,9 @@ function saar(k: number, groups: 'both' | 'far' = 'both') {
   g.flags.airBattles = k;
   const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
   expect(raidGroups(g, 'ground', target, 'FRA')).toEqual([BOMBERS, LORRAINE]);
-  const far = g.airFleets.find((f) => f.id === BELFORT_GROUP)!;
-  far.base = g.regions.find((r) => r.name === 'Belfort')!.id;
-  const ids = groups === 'both' ? [BOMBERS, LORRAINE, BELFORT_GROUP] : [BOMBERS, BELFORT_GROUP];
+  const far = g.airFleets.find((f) => f.id === FAR_GROUP)!;
+  far.base = g.regions.find((r) => r.name === FAR_FIELD)!.id;
+  const ids = groups === 'both' ? [BOMBERS, LORRAINE, FAR_GROUP] : [BOMBERS, FAR_GROUP];
   return { g, target, ids, nat: 'FRA' };
 }
 const on = (): void => { flyKinds(['ground']); strafeWatch.tell = (x) => { heard.push(JSON.parse(JSON.stringify(x))); }; };
@@ -68,7 +72,7 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       expect(rule).toEqual([LORRAINE]);
       const a = assessAir(c.g, fleetsOf(c.g, c.ids), 'ground', c.target);
       // Both fighter groups are in the raid (each within its fighter range), but only one has the reach to strafe.
-      expect(sorted(a.att.filter((x) => x.ftr > 0).map((x) => x.f.id))).toEqual([BELFORT_GROUP, LORRAINE]);
+      expect(sorted(a.att.filter((x) => x.ftr > 0).map((x) => x.f.id))).toEqual([FAR_GROUP, LORRAINE]);
       const fc = forecastAir(c.g, a, 'ground', c.target);
       expect(sorted(fc.strafers)).toEqual(rule);
       const air = fc.ftrLoss - fc.fire!;
@@ -126,6 +130,36 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       expect(fought.length).toBe(1);
       expect(sorted(fought[0].strafers)).toEqual(rule);
       expect(fought[0].weight).toBe(o.strafed);
+    }
+  });
+
+  it('the ruled reach, 0.9 of the fighter range (13:35Z): a group inside it strafes, one beyond it does not', () => {
+    expect(AIRWAR.ground.reach).toBe(0.9);
+    // Groupement de Chasse 1 (fighter range 220 km): at Belfort, 190 km off (0.86 of its range), inside 0.9 and beyond
+    // the old 0.6; at Namur, 216 km off (0.98), beyond 0.9 though still within its range, so it flies the escort.
+    for (const [field, strafes] of [['Belfort', true], [FAR_FIELD, false]] as const) {
+      const c = saar(0, 'far');
+      c.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = c.g.regions.find((r) => r.name === field)!.id;
+      on();
+      heard = [];
+      const f9 = c.g.airFleets.find((f) => f.id === FAR_GROUP)!;
+      const d = kmTo(c.g, f9, c.target), R = airRange(f9, c.g).ftr;
+      expect(R).toBe(220);
+      expect(d).toBeLessThanOrEqual(R);
+      expect(d / R > 0.6).toBe(true);
+      expect(d <= 0.9 * R).toBe(strafes);
+      const a = assessAir(c.g, fleetsOf(c.g, c.ids), 'ground', c.target);
+      expect(a.att.some((x) => x.f.id === FAR_GROUP && x.ftr > 0)).toBe(true);
+      expect(a.att.filter((x) => x.ftr > 0 && canStrafe(c.g, x)).map((x) => x.f.id)).toEqual(strafes ? [FAR_GROUP] : []);
+      const fc = forecastAir(c.g, a, 'ground', c.target);
+      expect(fc.strafers).toEqual(strafes ? [FAR_GROUP] : []);
+      expect(fc.fire! > 0).toBe(strafes);
+      const s = saar(0, 'far');
+      s.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = s.g.regions.find((r) => r.name === field)!.id;
+      heard = [];
+      launchRaid(s.g, 'ground', s.target, s.ids, s.nat);
+      const settled = heard.find((x) => x.route === 'settled')!;
+      expect(settled.strafers).toEqual(strafes ? [FAR_GROUP] : []);
     }
   });
 
@@ -231,16 +265,16 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
 
 // The card against the settled raid over many lucks (12:59Z, answer 4). The review's own raid: the bombers, Groupement
 // de Chasse 3 at Lorraine (65 km), Groupe 36 moved to Verdun (127 km, inside the reach to strafe but with a crowded field)
-// and Groupement de Chasse 1 at Belfort (190 km, out of reach). AIR.combat.fighters is scaled in setup only, to make the
-// air fight deadlier; no die and no law of the game is changed.
-const REVIEW_IDS = [BOMBERS, LORRAINE, 36, BELFORT_GROUP];
+// and Groupement de Chasse 1 at Namur (216 km of 220, out of reach at 0.9; it stood at Belfort, 190 km, at 0.6).
+// AIR.combat.fighters is scaled in setup only, to make the air fight deadlier; no die and no law of the game is changed.
+const REVIEW_IDS = [BOMBERS, LORRAINE, 36, FAR_GROUP];
 let reviewBase: string | null = null;
 function reviewRaid(k: number) {
   if (!reviewBase) {
     const g = startOpen(createGame(7, 'FRA'));
     setWar(g, 'FRA', 'GER');
     g.airFleets.find((f) => f.id === 36)!.base = g.regions.find((r) => r.name === 'Verdun')!.id;
-    g.airFleets.find((f) => f.id === BELFORT_GROUP)!.base = g.regions.find((r) => r.name === 'Belfort')!.id;
+    g.airFleets.find((f) => f.id === FAR_GROUP)!.base = g.regions.find((r) => r.name === FAR_FIELD)!.id;
     reviewBase = saveGame(g);
   }
   const g = loadGame(reviewBase)!;
@@ -270,7 +304,7 @@ function cardAgainstSettled(mult: number, seeds = 200) {
       const st = heard.filter((x) => x.route === 'settled');
       expect(st.length).toBe(1);
       // Never a group out of reach.
-      expect(st[0].strafers).not.toContain(BELFORT_GROUP);
+      expect(st[0].strafers).not.toContain(FAR_GROUP);
       fire += st[0].fire; weight += st[0].weight;
       if (JSON.stringify(sorted(st[0].strafers)) === JSON.stringify(sorted(card.strafers))) same++;
     }
@@ -320,9 +354,12 @@ describe('the ground fire\'s throws are same-keyed (12:59Z, answer 4)', () => {
     } finally { Rng.prototype.next = nx; AIRWAR.ground.reach = was; }
   }
   it('a group that no longer throws (out of reach) moves no other group\'s throw, no later throw of the raid, and nothing in the month', () => {
-    // Groupe 36 at Verdun (127 km of 220) has the reach at 0.6 and loses it at 0.5 (setup only); its place in the air
-    // fight does not depend on the reach to strafe, so everything but its own ground fire is the same raid.
-    const both = counted(0.6, true), one = counted(0.5, true), off = counted(0.6, false);
+    // Groupe 36 at Verdun (127 km of 220) has the reach at the ruled 0.9 and loses it at 0.5 (setup only); its place in
+    // the air fight does not depend on the reach to strafe, so everything but its own ground fire is the same raid.
+    // (Changed on the 13:35Z ruling: the 'both' and 'off' runs read the ruled figure, 0.9, where they read 0.6.)
+    const R = AIRWAR.ground.reach!;
+    expect(R).toBe(0.9);
+    const both = counted(R, true), one = counted(0.5, true), off = counted(R, false);
     expect(sorted(both.told[0].strafers)).toEqual([LORRAINE, 36]);
     expect(sorted(one.told[0].strafers)).toEqual([LORRAINE]);
     // Groupement de Chasse 3's ground fire, and every other group's book, are the same whether 36 throws or not.
@@ -343,5 +380,67 @@ describe('the ground fire\'s throws are same-keyed (12:59Z, answer 4)', () => {
     // Nothing after the raid moves: the month's own stream stands where it stood.
     expect(one.month).toBe(both.month);
     expect(both.month).toBe(off.month);
+  });
+});
+
+// The card's cut on the troops is an expectation too (the review of the air follow-on, finding 2; the design director,
+// 12:59Z question 4: where a term is not linear the card gives the expectation of the outcome). troopCut clips at
+// airwar.json ground.max; where the clip binds on part of the raid's luck the card's cut is the mean of the settled
+// raid's, not the cut at the expected weight. ground.max is lowered in setup only, to make the clip bind on the Saar.
+describe('the card\'s cut on the troops is the expectation of the settled raid\'s (finding 2)', () => {
+  function cuts(ids: number[], max: number | null, seeds: number, mult = 1) {
+    const was = AIRWAR.ground.max, fw = AIR.combat.fighters;
+    try {
+      if (max !== null) AIRWAR.ground.max = max;
+      AIR.combat.fighters = fw * mult;
+      on();
+      heard = [];
+      const c = reviewRaid(0);
+      const a = assessAir(c.g, fleetsOf(c.g, ids), 'ground', c.target);
+      const fc = forecastAir(c.g, a, 'ground', c.target);
+      const card = heard.filter((x) => x.route === 'card');
+      expect(card.length).toBe(1);
+      expect(card[0].cut).toBe(fc.cut);
+      let sum = 0, clipped = 0;
+      for (let k = 0; k < seeds; k++) {
+        heard = [];
+        const s = reviewRaid(k);
+        launchRaid(s.g, 'ground', s.target, ids, 'FRA');
+        const st = heard.filter((x) => x.route === 'settled');
+        expect(st.length).toBe(1);
+        sum += st[0].cut!;
+        if (st[0].cut! >= AIRWAR.ground.max * cover() * (1 - 1e-12)) clipped++;
+      }
+      return { card: fc.cut, mean: sum / seeds, clipped };
+    } finally { AIRWAR.ground.max = was; AIR.combat.fighters = fw; }
+  }
+  /** The ground's cover at the Saar, which troopCut multiplies the clipped cut by. */
+  const cover = (): number => { const g = reviewRaid(0).g; const r = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!; return AIRWAR.ground.cover[g.regions[r.id].terrain] ?? 1; };
+
+  it('where the clip cannot bind, the card\'s cut is the cut at the expected weight, to the last digit', () => {
+    // At the game's own ground.max the Saar's cut lies far below the clip: the card reads the same with the clip lifted.
+    for (const ids of [REVIEW_IDS, [BOMBERS]]) {
+      const own = cuts(ids, null, 0), lifted = cuts(ids, 1, 0);
+      expect(own.card).toBeGreaterThan(0);
+      expect(own.card).toBe(lifted.card);
+      expect(own.card / cover()).toBeLessThan(AIRWAR.ground.max);
+    }
+  });
+
+  it('the clip binding on part of the luck: the card against the settled mean over 200 lucks (escort and strafers, and bombers alone)', () => {
+    for (const [ids, mult] of [[REVIEW_IDS, 1], [REVIEW_IDS, 30], [[BOMBERS], 1]] as const) {
+      // The clip set at the cut the card expects with no clip: it binds on about half the raid's luck.
+      const free = cuts([...ids], 1, 0, mult).card / cover();
+      const r = cuts([...ids], free, 200, mult);
+      // On part of the luck the settled raid is clipped, on part not.
+      expect(r.clipped).toBeGreaterThan(20);
+      expect(r.clipped).toBeLessThan(180);
+      // The cut at the expected weight would be the clip itself; the card is the mean, below it, as the settled raid is.
+      expect(r.card).toBeLessThan(free * cover());
+      expect(r.mean).toBeLessThan(free * cover());
+      near(r.mean, r.card, 0.01);
+      // And nearer the settled mean than the cut at the expected weight is.
+      expect(Math.abs(r.card - r.mean)).toBeLessThan(Math.abs(free * cover() - r.mean));
+    }
   });
 });

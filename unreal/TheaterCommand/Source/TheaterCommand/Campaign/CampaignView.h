@@ -794,11 +794,97 @@ struct FLessonDoor
 	FString Level, Depth;
 };
 
+// ---- The home front board (release 2; Brian, 25 November 2026) ----------------------------------------------
+// (Brian: "I want the UI and user experience to feel seamless and easy to manage the cities, recruitment, ect".) One
+// room for every town, raising forces and everything on order, as the rules set it out (campaign-bridge.ts, homeBoard).
+
+/** A building that can be ordered in a town from the board: the staff's pick for the town, or one of the others. */
+struct FHomeBuild
+{
+	FString Line, Name, Label, Effect;
+	FString Why; // why BUILD is shut, where it is
+	FString Act; // the town plan's own act, "civic:<region>:<line>"
+	int32 Cost = 0, Months = 0;
+	bool bOk = false;
+};
+
+/** A plot of a town, as a mark on its row. */
+struct FHomePlot
+{
+	FString State; // "built", "going" or "free"
+	FString Line, Name;
+	int32 Level = 0;
+	int32 Months = 0; // months left, where something is going up
+};
+
+struct FHomeTown
+{
+	int32 Region = INDEX_NONE;
+	FString Town, Province, Size;
+	FString State; // "ready", "short" (only money is in the way), "going" or "done"
+	FString Note; // why nothing can go up, where nothing can
+	bool bOwn = true; // false on conquered ground
+	int32 Pays = 0;
+	TArray<FHomePlot> Plots;
+	bool bBest = false;
+	FHomeBuild Best;
+	TArray<FHomeBuild> More;
+	bool bGoing = false; // something is going up: its name, when it is due, and whether it can be taken back
+	int32 GoingId = INDEX_NONE, GoingMonths = 0;
+	FString GoingName, GoingDue, GoingAct;
+	bool bGoingCancel = false;
+};
+
+/** Something the arsenal offers that is raised and not built in a province: a corps, a wing, a ship. */
+struct FHomeRaise
+{
+	FString Key, Group, Label, Where, Note, Why, Act;
+	int32 Cost = 0, Months = 0;
+	bool bOk = false;
+};
+
+struct FHomeOrder
+{
+	int32 Id = INDEX_NONE, Region = INDEX_NONE;
+	FString What, Name, Where, Due, Act;
+	int32 Months = 0, Cost = 0;
+	bool bCancel = false;
+	float Share = 0.0f; // how far along it is, 0 to 1
+};
+
+struct FHomeTile
+{
+	FString Kind, Label, Figure, Sub;
+};
+
+struct FHomeBoard
+{
+	bool bValid = false;
+	FString Nation, Date;
+	bool bUp = false; // his month
+	int32 Money = 0, Net = 0;
+	TArray<FHomeTile> Tiles;
+	int32 Ready = 0, Going = 0, All = 0;
+	TArray<FHomeTown> Towns; // richest first, as the staff ranks them
+	TArray<FHomeRaise> Raise;
+	// ORDER AGAIN: his own orders of the last month he ordered in, at today's prices.
+	bool bAgain = false, bAgainOk = false;
+	FString AgainWhen, AgainText, AgainLeft, AgainWhy, AgainAct;
+	int32 AgainCost = 0;
+	TArray<FHomeOrder> Orders; // soonest ready first
+	// The desk that builds and raises: who runs it, the button that changes hands, and the share the staff may spend.
+	bool bStaff = false, bStaffOn = false;
+	FString StaffLine, StaffLabel, StaffAct, StaffTip;
+	int32 StaffCap = 0;
+	TArray<int32> StaffCaps;
+};
+
 struct FOfficePage
 {
 	bool bValid = false;
 	FRaidCard Card; // (ruling 54) set where the page is a raid being planned
 	FMonthCard Month; // (ruling 64) set where the page is the month's report
+	FHomeBoard Home; // (release 2) set where the page is the home front
 	FString Id;
 	FString Title;
 	FString Headline;
@@ -1227,6 +1313,7 @@ struct FCampaignView
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
 	bool bSailors = false; // (release 2, the sea field's sailor rules: battle/sea/ticket.ts) men go into the water when a ship goes down
+	bool bOwnWater = false; // (release 2, the sea field's own water: battle/sea/ticket.ts) captains mind their own side's torpedoes
 	bool bSeaMines = false; // (release 2, mines.ts) fleets can lay minefields at sea
 	bool bHeavySeas = false; // (release 2, heavyseas.ts) gales blow at sea: fleets slowed, convoys late, shadows lost
 	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)

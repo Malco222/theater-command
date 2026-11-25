@@ -138,6 +138,20 @@ export function setSailors(g: Game, on: boolean): void {
 }
 
 /**
+ * Captains mind their own side's torpedoes (release 2's own water: Brian, 25 November 12:52Z; sim.ts ownWater): on in a
+ * grand campaign whose 'ownWater' flag is set, as the sailor rules are. Set by setOwnWater (the options page's
+ * 'ownwaterrule'); the ticket only reads it.
+ */
+export const ownWaterOn = (g: Game): boolean => g.flags.open === 1 && g.flags.ownWater === 1;
+
+/** Turns the own-water rule on or off in a campaign under way, as the sailor rules' switch is: off deletes the flag, so
+ *  the save is as one that never had it. It changes nothing else. */
+export function setOwnWater(g: Game, on: boolean): void {
+  if (on) g.flags.ownWater = 1;
+  else delete g.flags.ownWater;
+}
+
+/**
  * What the field needs of men in the water for an action in this sea this month, with the switch on: the water's band
  * from the historian's table. The calls are left to the staff (stop for survivors where it holds the water; fight for
  * every ship) until the campaign carries the player's calls and the staff's submarine rule (form B3: the rules
@@ -169,7 +183,7 @@ export function seaTicket(g: Game, m: SeaMeeting): SeaTicket {
     turn: g.turn, date: turnToDate(g.turn).label,
     // The second in the same sea this month is "The second action ...", as the battle stars name it.
     title: seaAction(zone.name, 1 + g.seaReports.filter((r) => r.turn === g.turn && r.zone === m.zone).length),
-    place: { zone: m.zone, zoneName: zone.name, fleets, air, ...(sailors ? { sailors } : {}) },
+    place: { zone: m.zone, zoneName: zone.name, fleets, air, ...(sailors ? { sailors } : {}), ...(ownWaterOn(g) ? { ownWater: true as const } : {}) },
     att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human('att'), fleets.filter((f) => f.side === 'att'), researchOf(g, attNat)),
     def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human('def'), fleets.filter((f) => f.side === 'def'), researchOf(g, defNat)),
     reckoning: { A: m.A, D: m.D, odds, dice: DICE, even: 1 },
@@ -189,7 +203,7 @@ export interface PlainFleet { name: string; nat: string; ships: Partial<SeaShips
  * as the switch would put them on the ticket (its 'early' names fleets by their place in att then def, from 1, as the
  * ids are given here); none where left out.
  */
-export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string; title?: string; research?: Partial<Record<Side, string[]>>; sailors?: SeaSailors }): SeaTicket {
+export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string; title?: string; research?: Partial<Record<Side, string[]>>; sailors?: SeaSailors; ownWater?: boolean }): SeaTicket {
   let id = 1;
   const make = (p: PlainFleet, side: Side): FleetTicket => {
     const ships = { bb: p.ships.bb ?? 0, cv: p.ships.cv ?? 0, ca: p.ships.ca ?? 0, dd: p.ships.dd ?? 0 }, rows = rowsOf(p.rows, ships);
@@ -213,7 +227,7 @@ export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Par
   return {
     domain: 'sea', kind: SEA_KIND, seed: o.seed, turn: 0, date: 'September 1939',
     title: o.title ?? seaAction(o.zoneName ?? 'North Sea'),
-    place: { zone: 0, zoneName: o.zoneName ?? 'North Sea', fleets, air, ...(o.sailors ? { sailors: o.sailors } : {}) },
+    place: { zone: 0, zoneName: o.zoneName ?? 'North Sea', fleets, air, ...(o.sailors ? { sailors: o.sailors } : {}), ...(o.ownWater ? { ownWater: true as const } : {}) },
     att: sideTicket(nat('att'), nat('att'), '#5577aa', o.human === 'att', fleets.filter((f) => f.side === 'att'), o.research?.att),
     def: sideTicket(nat('def'), nat('def'), '#aa5544', o.human === 'def', fleets.filter((f) => f.side === 'def'), o.research?.def),
     reckoning: { A, D, odds, dice: DICE, even: 1 },
