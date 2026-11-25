@@ -6989,12 +6989,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 	{
 		static const bool bPoseLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPoseLog"));
 		const bool bStillAsked = FScreenshotRequest::IsScreenshotRequested();
-		const bool bFilmCut = S.FilmPose.bCut && !S.bGeneralEye;
+		// (his own view is the picture drawn once his eye has begun, unless the film has been given the camera)
+		const bool bOwnView = S.bGeneralEye && !S.General.bFilm;
+		const bool bFilmCut = S.FilmPose.bCut && !bOwnView;
 		if (bFilmCut || bStillAsked || (bPoseLog && FMath::Abs(RealT - PoseLogAt) >= 0.25))
 		{
 			PoseLogAt = RealT;
 			UE_LOG(LogTheater, Display, TEXT("Land battle: %s %s at %.2f s of battle: a %s shot of %d, the film's last left for %s; the lens at %.2f %.2f %.2f looks at %.2f %.2f %.2f through %.1f degrees; the picture last read %.2f dark"),
-				S.bGeneralEye ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
+				bOwnView ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
 				S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject, ANSI_TO_TCHAR(LandEye::NameOf(S.Eye.LastWhy())),
 				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, DarkShare);
 		}
@@ -7200,8 +7202,12 @@ void ALandBattle::ReadDark(double Real)
 	}
 	DarkBacks += Frames.Num();
 	// (a result card up: the whole picture dimmed under it, so no reading till it goes; nor while the night's light is
-	// on the picture, the night before the attack and its dawn)
-	if (State.IsValid() && (State->bCard || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
+	// on the picture, the night before the attack and its dawn; nor while the general's own view is the picture drawn
+	// (his eye begun and the film not given the camera): the film goes on being directed behind it, for its corner
+	// and for his return to it, and a dark reading of HIS view, a wood from above, would have the film leave shots
+	// that are not dark at all. Until the reading had a clock of its own, 25 November, nothing was read and this
+	// could not show.)
+	if (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
 	{
 		DarkShare = -1.0;
 		return;
