@@ -132,7 +132,7 @@ bool UTheaterPlaytestSubsystem::Finish(const ACampaignPlayerController& Player)
 		const double Now = FPlatformTime::Seconds();
 		if (PictureDeadline <= 0.0)
 		{
-			PictureDeadline = Now + 5.0;
+			PictureDeadline = Now + 10.0;
 		}
 		if (!IFileManager::Get().FileExists(*Record.Picture) && Now < PictureDeadline)
 		{
@@ -140,7 +140,9 @@ bool UTheaterPlaytestSubsystem::Finish(const ACampaignPlayerController& Player)
 		}
 		if (!Out.Picture.SetFromFile(Record.Picture))
 		{
-			Pending->SetError(FString::Printf(TEXT("The step was played, but its picture could not be read: %s"), *Record.Picture));
+			// (the step still happened: its verdict and note go with the error, so the caller knows what the game did)
+			Pending->SetError(FString::Printf(TEXT("The step was played (%s%s%s), but its picture could not be read: %s"),
+				*Record.Verdict, Record.Note.IsEmpty() ? TEXT("") : TEXT(": "), *Record.Note, *Record.Picture));
 			return true;
 		}
 	}
