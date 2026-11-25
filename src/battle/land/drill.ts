@@ -728,6 +728,33 @@ export class Drill {
    * life on. Off unless asked (DR.leaders).
    */
   readonly leaders: boolean;
+  /**
+   * Tanks with minds of their own (release 2; Brian, 25 November 2026, 15:57Z: "i dont want the tanks and vehicles
+   * doing the exact same thing as each other. i want everything to see like it has its own mind"; 15:56Z: "should the
+   * tanks be moving or was that the real tactic?"): each tank takes up an order at her own moment, halts briefly at
+   * her own place to fire and moves on while her partner covers, lays her hull to the threat and her turret to her
+   * own arc; the other vehicles and the guns likewise. Looks only (the drill's own dice; the block's place and pace
+   * stay the rules'). It needs neither squad life nor the drill book. Off unless asked (DR.tankmind).
+   */
+  readonly tankmind: boolean;
+  /**
+   * A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: "i never see the machine guns on
+   * the tanks firing"; 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo"): each tank her own
+   * machine-gun mind: short bursts at targets worth the rounds, spells and pauses at her own pace and moment, the guns
+   * her model carries, and a stock of rounds that each burst draws down, so she eases off as it runs low. Looks only
+   * (the drill's own dice). It needs neither squad life nor the drill book; where the book is on as well, this takes
+   * the place of the book's tank bursts. Off unless asked (DR.tankmg).
+   */
+  readonly tankmg: boolean;
+  /**
+   * Men who leave the field are seen leaving (release 2; Brian, 25 November 2026, 17:11Z: "some soldiers freeze and
+   * then disapear"): the men of a routing block run on past the field's edge and do not halt and cower on it, and
+   * the men, vehicles and observers of a block that has left the fight (gone off the edge, or withdrawn at its out
+   * line) stay in view(), each marked `lv`, running or driving to their own edge, and are dropped one by one once
+   * past it. Looks only: the rules never read it, and a battle ends the same with it on or off. Off unless asked
+   * (DR.exits).
+   */
+  readonly exits: boolean;
   /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
   private readonly freshNow = new Set<Man>();
   private readonly sup = new Suppression();
@@ -735,7 +762,7 @@ export class Drill {
   private tankMemo: { t: number; at: Partial<Record<Side, [number, number][]>> } = { t: -1, at: {} };
   private readonly priMemo = new Map<number, { t: number; men: Man[] }>();
 
-  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; scale?: number } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; scale?: number } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
     this.sections = !!opts.sections || !!opts.platoons;
@@ -744,6 +771,9 @@ export class Drill {
     this.hatches = !!opts.hatches;
     this.seasoned = this.life && !!opts.seasoned;
     this.leaders = this.life && !!opts.leaders;
+    this.tankmind = !!opts.tankmind;
+    this.tankmg = !!opts.tankmg;
+    this.exits = !!opts.exits;
     this.byBook = opts.book ?? (this.platoons || this.life);
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
     for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
@@ -3745,6 +3775,7 @@ export class Drill {
    * cover; routing, they drive for their own edge. Each tank's place is where the rules would lay her wreck (sim.ts
    * wreckOffset), so she is never far from it; knocked out, she burns where she stood (falls, wreckSpot).
    */
+  // ---- Tanks with minds of their own (Drill.tankmind): its helpers stand just above tanks(), below this line ----
   private tanks(sq: Squad): void {
     const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq), ph = sq.phase, h = sq.heading;
     const tanks = this.up(sq).filter((m) => m.role === 'tank');
@@ -4439,6 +4470,7 @@ export class Drill {
     this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
   }
 
+  // ---- A tank's machine guns, seen firing (Drill.tankmg): its helpers stand just above mgKill(), below this line ----
   /**
    * Whether the man (model k, or a section's man as the block's count of losses) a tank block took off the enemy's
    * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only;

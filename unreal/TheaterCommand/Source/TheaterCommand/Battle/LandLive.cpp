@@ -121,6 +121,26 @@ namespace
 		// (tests/land-leaders). Off until a Mac off/on line and the art director pass it; -TheaterLandRuleLeaders turns it
 		// on for a run.)
 		{ TEXT("leaders"), TEXT("When the leader falls"), TEXT("When a squad's leader is hit, his men go to ground and hesitate for a few seconds, some looking his way, until the next man takes charge and leads them on. Green squads take longer. Needs Squads of individuals on. Off: a squad carries on as if nothing had happened."), TEXT("TheaterLandNoLeaders"), false, TEXT("TheaterLandRuleLeaders") },
+		// (Tanks with minds of their own, release 2: Brian, 25 November 15:57Z, "i dont want the tanks and vehicles doing
+		// the exact same thing as each other. i want everything to see like it has its own mind". The drill's, looks only:
+		// the block's place and pace stay the rules', and a battle ends the same with it on or off (tests/land-tank-mind).
+		// It needs neither squad life nor the drill book. Off until a Mac off/on line and the art director pass it;
+		// -TheaterLandRuleTankMind turns it on for a run.)
+		{ TEXT("tankmind"), TEXT("Tanks with minds of their own"), TEXT("Each tank and vehicle acts for itself within its platoon's plan: it takes up an order at its own moment, stops briefly at its own spot to fire and moves on while its partner covers, and keeps its hull to the threat and its turret on its own arc. Off: a platoon's tanks drive, halt and turn as one."), TEXT("TheaterLandNoTankMind"), false, TEXT("TheaterLandRuleTankMind") },
+		// (Tank machine guns, release 2: Brian, 25 November 15:55Z, "i never see the machine guns on the tanks firing",
+		// and 15:56Z, "i dont want it to be all the time as thats unrealistic with ammo". The drill's, looks only: a
+		// battle ends the same with it on or off (tests/land-tankmg). It needs neither squad life nor the drill book.
+		// Off until a Mac off/on line and the art director pass it; -TheaterLandRuleTankMg turns it on for a run.)
+		{ TEXT("tankmg"), TEXT("Tank machine guns"), TEXT("Tanks fire their machine guns at enemy soldiers in short bursts, each tank at her own moment and at targets worth the rounds, with pauses between, and they ease off as their ammunition runs down. Off: tanks' machine guns stay silent."), TEXT("TheaterLandNoTankMg"), false, TEXT("TheaterLandRuleTankMg") },
+		// (Only anti-tank weapons take a tank, release 2: Brian, 25 November 15:58Z, "are bullets taking out german
+		// tanks? cannon fire or bazookas should be the only think taking them out". A REAL rule (the rules' sim.pierce,
+		// LAND.pierce): it changes results, so it stays off until the design director's ruling and the paired measure
+		// pass it, then a Mac off/on line; -TheaterLandRulePierce turns it on for a run.)
+		{ TEXT("pierce"), TEXT("Only anti-tank weapons stop tanks"), TEXT("Rifles and machine guns can no longer knock out a tank. A tank falls only to other tanks, to guns, to anti-tank launchers at short range, or to infantry assaulting it up close. Off: infantry fire wears tanks down from as far as it can reach."), TEXT("TheaterLandNoPierce"), false, TEXT("TheaterLandRulePierce") },
+		// (Men who leave the field are seen leaving, release 2: Brian, 25 November 17:11Z, "some soldiers freeze and
+		// then disapear". The drill's, looks only: a battle ends the same with it on or off (tests/land-exits). Off
+		// until a Mac off/on line and the art director pass it; -TheaterLandRuleExits turns it on for a run.)
+		{ TEXT("exits"), TEXT("Soldiers leave the field on foot"), TEXT("Men who run away keep running past the edge of the field, and the men of a unit that falls back are seen running to the rear until they are gone, instead of stopping where they stand and vanishing. Off: a unit that leaves the battle disappears where it is."), TEXT("TheaterLandNoExits"), false, TEXT("TheaterLandRuleExits") },
 		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
 		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
 		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },

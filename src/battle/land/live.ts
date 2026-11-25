@@ -318,6 +318,32 @@ export interface LiveOpts {
    */
   leaders?: boolean;
   /**
+   * Tanks with minds of their own (release 2, looks only; Brian, 25 November 15:57Z: "i want everything to see like it
+   * has its own mind"; Drill.tankmind): each tank and vehicle takes up an order at her own moment, halts briefly at her
+   * own place to fire and moves on while her partner covers, hull to the threat and turret to her own arc. Needs
+   * neither life nor the drill book. Off unless true.
+   */
+  tankmind?: boolean;
+  /**
+   * A tank's machine guns, seen firing (release 2, looks only; Brian, 25 November 15:55Z: "i never see the machine
+   * guns on the tanks firing", 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo";
+   * Drill.tankmg): each tank fires short bursts at targets worth the rounds, at her own pace and moment, with pauses,
+   * and eases off as her rounds run low. Needs neither life nor the drill book. Off unless true.
+   */
+  tankmg?: boolean;
+  /**
+   * Only anti-tank weapons take a tank (release 2, a real rule; Brian, 25 November 15:58Z: "cannon fire or bazookas
+   * should be the only think taking them out"; the rules' sim.pierce, LAND.pierce): foot and support teams hurt a
+   * tank block only with what they carry that can pierce armour. Off unless true.
+   */
+  pierce?: boolean;
+  /**
+   * Men who leave the field are seen leaving (release 2, looks only; Brian, 25 November 17:11Z: "some soldiers freeze
+   * and then disapear"; Drill.exits): routing men run on past the field's edge, and the men of a block that has left
+   * the fight stay in the feed, marked `lv`, until each is past his own edge. Off unless true.
+   */
+  exits?: boolean;
+  /**
    * Direct command (Brian, 03:09Z "do 1 2 and 3"; the rules' switches, sim.ts perUnit and radio). staff: a block he
    * orders is his, and his staff fights the rest of his side. radio: his orders land a few seconds later, longer where
    * the block is hit. Both on for the player unless turned off.
@@ -519,7 +545,7 @@ export class LiveBattle {
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
     if (opts.light === true && !piece) sim.light = true;
-    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}) });
+    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}), ...(opts.tankmind === true ? { tankmind: true } : {}), ...(opts.tankmg === true ? { tankmg: true } : {}), ...(opts.exits === true ? { exits: true } : {}) });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
@@ -534,6 +560,7 @@ export class LiveBattle {
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
+    if (opts.pierce === true) sim.pierce = true;
     if (opts.trucks === true) sim.trucks = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
