@@ -3892,10 +3892,12 @@ void ALandBattle::MakeMen()
 	// posing threads only read them)
 	{
 		const std::vector<LandKit::Benches>* Carriers = &S.Carriers;
-		S.Men->SetSeats([Carriers](double X, double Y, int Block, int SeatOn, int Seat, LandMen::SeatPlace& Out)
+		// (with the trial word `leave`: an overfull lorry's last men have a place in her bed too, LandKit::BenchFor)
+		const bool bFarAft = bLeaveWalk;
+		S.Men->SetSeats([Carriers, bFarAft](double X, double Y, int Block, int SeatOn, int Seat, LandMen::SeatPlace& Out)
 		{
 			LandKit::BenchSeat B;
-			if (Carriers->empty() || !LandKit::BenchFor(*Carriers, X, Y, Block, SeatOn, Seat, B))
+			if (Carriers->empty() || !LandKit::BenchFor(*Carriers, X, Y, Block, SeatOn, Seat, B, bFarAft))
 			{
 				return false;
 			}

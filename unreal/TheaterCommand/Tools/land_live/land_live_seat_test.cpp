@@ -216,11 +216,12 @@ int main(int Argc, char** Argv)
 	}
 	std::printf("  %lld frames to %.0f s: %lld man-frames seated aboard, %lld in a carrier's bed (pelvis %.2f to %.2f m over her root), %lld off any bed, %lld on another man in his own carrier; %lld where two carriers stand in one another (the vehicles' overlap)\n",
 		Frames, End, Aboard, Benched, LeastHigh < 1e8 ? LeastHigh : 0.0, MostHigh, OffBed, Doubled, Through);
-	// ---- An overfull lorry's last men (release 2; Brian, 25 November 17:11Z, "some soldiers freeze and then disapear":
-	// the read's item 5). By his place alone (no word of his seat), the sixteen men the rules stand in a far block's
-	// lorry, a row each 1.1 m from 0.5 m forward of her root to 7.2 m aft: every one has a place in her bed, between
-	// her first bench and her last, the kneeling rows in the order they stand and no two rows on one spot; a man 9 m
-	// aft is on no bed.
+	// ---- An overfull lorry's last men (release 2, the scene's trial word `leave`: BenchFor's bFarAft; Brian, 25
+	// November 17:11Z, "some soldiers freeze and then disapear": the read's item 5). By his place alone (no word of his
+	// seat), the sixteen men the rules stand in a far block's lorry, a row each 1.1 m from 0.5 m forward of her root to
+	// 7.2 m aft: every one has a place in her bed, between her first bench and her last, the kneeling rows in the order
+	// they stand and no two rows on one spot; a man 9 m aft is on no bed. Off, as before: the last two rows (past 5 m
+	// aft) have no seat, and every other man the seat he had.
 	if (bHaveOne)
 	{
 		const std::vector<LandKit::Benches> Alone { One };
@@ -236,7 +237,7 @@ int main(int Argc, char** Argv)
 			X = One.At.X + One.Forward.X * Along + One.Right.X * Across;
 			Y = One.At.Y + One.Forward.Y * Along + One.Right.Y * Across;
 		};
-		int OnBench = 0, Kneeling = 0, NoSeat = 0, Outside = 0, Close = 0;
+		int OnBench = 0, Kneeling = 0, NoSeat = 0, Outside = 0, Close = 0, OffWrong = 0, BenchMoved = 0;
 		double LastKneel = 1e9, Tightest = 1e9;
 		for (int N = 0; N < 8; ++N)
 		{
@@ -244,12 +245,16 @@ int main(int Argc, char** Argv)
 			{
 				double X = 0.0, Y = 0.0;
 				PlaceOf(0.5 - 1.1 * N, Side ? 0.55 : -0.55, X, Y);
-				LandKit::BenchSeat Seat;
-				if (!LandKit::BenchFor(Alone, X, Y, -1, -1, -1, Seat))
+				LandKit::BenchSeat Seat, Before;
+				const bool bBefore = LandKit::BenchFor(Alone, X, Y, -1, -1, -1, Before);
+				if (bBefore != (N < 6)) ++OffWrong;
+				if (!LandKit::BenchFor(Alone, X, Y, -1, -1, -1, Seat, true))
 				{
 					++NoSeat;
 					continue;
 				}
+				// (a man on a bench sits where he sat)
+				if (Seat.bBench && (!bBefore || !Before.bBench || std::hypot(Seat.At.X - Before.At.X, Seat.At.Y - Before.At.Y) > 1e-9)) ++BenchMoved;
 				const double A = (Seat.At - One.At).Dot(One.Forward);
 				if (A > FrontAlong + 0.05 || A < RearAlong - 0.05) ++Outside;
 				if (Seat.bBench)
@@ -272,9 +277,12 @@ int main(int Argc, char** Argv)
 		double X9 = 0.0, Y9 = 0.0;
 		PlaceOf(-9.0, 0.0, X9, Y9);
 		LandKit::BenchSeat Far;
-		const bool bFar = LandKit::BenchFor(Alone, X9, Y9, -1, -1, -1, Far);
-		std::printf("  an overfull lorry by place (sixteen men, a row each 1.1 m to 7.2 m aft of her root; her benches %.2f to %.2f m along her): %d on benches, %d kneeling down her bed, the kneeling rows at least %.2f m apart, %d with no seat, %d outside her benches' length; a man 9 m aft %s\n",
-			RearAlong, FrontAlong, OnBench, Kneeling, Tightest < 1e8 ? Tightest : 0.0, NoSeat, Outside, bFar ? "IS seated" : "is on no bed");
+		const bool bFar = LandKit::BenchFor(Alone, X9, Y9, -1, -1, -1, Far, true);
+		std::printf("  an overfull lorry by place (sixteen men, a row each 1.1 m to 7.2 m aft of her root; her benches %.2f to %.2f m along her): %d on benches, %d kneeling down her bed, the kneeling rows at least %.2f m apart, %d with no seat, %d outside her benches' length; a man 9 m aft %s; off, as before: %s\n",
+			RearAlong, FrontAlong, OnBench, Kneeling, Tightest < 1e8 ? Tightest : 0.0, NoSeat, Outside, bFar ? "IS seated" : "is on no bed",
+			OffWrong == 0 && BenchMoved == 0 ? "the last four men have no seat, the benched men sit where they sat" : "NOT as before");
+		if (OffWrong > 0) Fail(std::to_string(OffWrong) + " of the sixteen men are seated or not, off, otherwise than before (5 m aft)");
+		if (BenchMoved > 0) Fail(std::to_string(BenchMoved) + " benched men of an overfull lorry sit elsewhere than they did");
 		if (NoSeat > 0) Fail(std::to_string(NoSeat) + " of an overfull lorry's sixteen men have no seat by their place");
 		if (Outside > 0) Fail(std::to_string(Outside) + " of an overfull lorry's men are put outside her benches' length");
 		if (Close > 0) Fail(std::to_string(Close) + " kneeling rows of an overfull lorry within 0.15 m of the row before");

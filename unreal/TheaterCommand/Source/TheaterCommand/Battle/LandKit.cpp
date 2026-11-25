@@ -5973,7 +5973,7 @@ namespace LandKit
 		return Out.Left + Out.Righted > 0;
 	}
 
-	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out)
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out, bool bFarAft)
 	{
 		const Benches* Best = nullptr;
 		double BestD = 1e18, Along = 0.0, Across = 0.0;
@@ -6001,14 +6001,14 @@ namespace LandKit
 		if (!Best) for (const Benches& B : All)
 		{
 			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
-			// (to 8 m aft of her root: an overfull lorry's last men stand that far back in the rules, a row each 1.1 m, and
-			// had no seat; the nearest carrier's still, so a lorry close behind her keeps her own men)
-			if (D > 67.0 || D >= BestD)
+			// (bFarAft, to 8 m aft of her root: an overfull lorry's last men stand that far back in the rules, a row each
+			// 1.1 m, and had no seat; the nearest carrier's still, so a lorry close behind her keeps her own men)
+			if (D > (bFarAft ? 67.0 : 36.0) || D >= BestD)
 			{
 				continue;
 			}
 			const double A = Dx * B.Forward.X + Dy * B.Forward.Y, R = Dx * B.Right.X + Dy * B.Right.Y;
-			if (std::fabs(R) > 1.6 || A < -8.0 || A > 3.0)
+			if (std::fabs(R) > 1.6 || A < (bFarAft ? -8.0 : -5.0) || A > 3.0)
 			{
 				continue;
 			}
@@ -6045,7 +6045,7 @@ namespace LandKit
 		const V3& Front = Best->Seat[0];
 		const double FrontAlong = (Front - Best->At).Dot(Best->Forward);
 		double Back = 0.55 * static_cast<double>(Row - Count);
-		if (bByPlace)
+		if (bByPlace && bFarAft)
 		{
 			// (by his place, the men past her benches stand from her last bench's row to 8 m aft of her root: down the
 			// bed's middle in that order, the whole of them fitted between her first bench and her last, so none kneels
