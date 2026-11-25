@@ -336,6 +336,16 @@ private:
 	TArray<FOilLater> OilLater;
 	TArray<FFlakLater> FlakLater;
 	TArray<FLater> Later;
+	/** A take filtered by the family's low-pass table, its filter set again each frame from where the eye is now (a cut
+	 * from far to near opens it; the release 2 sound check, 25 Nov). */
+	struct FFiltered
+	{
+		TWeakObjectPtr<UAudioComponent> Player;
+		FName Family;
+		FVector Where = FVector::ZeroVector;
+	};
+	TArray<FFiltered> Filtered;
+	void RefilterSounds();
 	TSet<FName> SoundsMissing;
 	TSharedPtr<FJsonObject> Mix;
 	bool bBattleBedUp = false;

@@ -931,7 +931,17 @@ namespace LandSound
 			if (N.Weapon == "rifle" || N.Weapon == "mg")
 			{
 				const bool bMg = N.Weapon == "mg";
-				T.Family = bMg ? "mg" : "small_arms";
+				// (a sniper's one aimed round, the rules' sn: his own family where the mix has one, heard across the field and
+				// on the far takes, with their echo, sooner than a section's rifles; while he lies hidden, hd, heard where his
+				// round arrives and never from his spot, the design director's ruling: no bolt, no shout of his, nothing
+				// gives his place away)
+				const bool bSniper = !bMg && N.bSniper && Families.count("sniper") > 0;
+				const bool bUnseen = bSniper && N.bHidden;
+				T.Family = bMg ? "mg" : bSniper ? "sniper" : "small_arms";
+				if (bUnseen) T.At = N.To + Vec(0.0, 0.0, 1.5);
+				const double ShotFar = bUnseen ? Distance(T.At, Ear.At) : Far;
+				const bool bShotOnScreen = bUnseen ? (OnScreen ? OnScreen(T.At) : true) : bOnScreen;
+				if (bSniper) ++(bUnseen ? SniperUnseen : SniperSeen);
 				const Family& F = FamilyOf(T.Family);
 				// (a tank's machine guns are her own row, by army: a German tank's MG 34 is not her infantry's MG 42, the
 				// Sherman's roof .50 not her coaxial .30; an army with no row of its own takes the infantry's)
@@ -945,7 +955,7 @@ namespace LandSound
 				const bool bTeamMg = bMg && N.Role == "hmg" && !N.Mount.empty() && Lists.count("teamMg." + N.Mount) > 0;
 				if (bTeamMg) MgList = "teamMg." + N.Mount;
 				const bool bFarMg = bMg && Far > F.FarFrom;
-				T.Name = Pick(Far > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : bMg ? MgList : Nation("rifle"));
+				T.Name = Pick(ShotFar > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : bMg ? MgList : Nation("rifle"));
 				const double Want = bMg && N.PerSecond > 0.0 ? N.Rounds / N.PerSecond : 0.0;
 				Take Uncut;
 				const int CutsWere = BurstsCut;
@@ -979,7 +989,7 @@ namespace LandSound
 				if (bByClip) ++ShotsByClip;
 				else
 				{
-					bStarted = Start(T, Now, Far, bOnScreen, Out);
+					bStarted = Start(T, Now, ShotFar, bShotOnScreen, Out);
 					bTooFar = bLastTooFar;
 					bMerged = bLastMerged;
 					// (a machine gun's burst crowded out of its recording, every pitch near it sounding, gives way to another
@@ -1059,13 +1069,13 @@ namespace LandSound
 						}
 					}
 				}
-				Count(Now, bMg ? "mg" : "small_arms", Far);
-				if (!bMg && N.Track >= 0)
+				Count(Now, bMg ? "mg" : "small_arms", ShotFar);
+				if (!bMg && !bUnseen && N.Track >= 0)
 				{
 					// The Garand's clip pings out after its eighth round and a new one is pressed in, the bolt slamming
 					// home (close by); a bolt rifle's bolt is worked.
 					const int Shots = ++RifleCount[N.Track];
-					if (Army == "USA" && ClipEvery > 0 && Shots % ClipEvery == 0 && Far < GarandWithin)
+					if (!bSniper && Army == "USA" && ClipEvery > 0 && Shots % ClipEvery == 0 && Far < GarandWithin)
 					{
 						Take Ping = T;
 						Ping.Name = PingTake;
@@ -1083,7 +1093,8 @@ namespace LandSound
 							if (Start(Reload, Now, Far, bOnScreen, Out)) ++Reloads;
 						}
 					}
-					else if (Army != "USA" && Far < BoltWithin && Roll() < BoltChance)
+					// (a sniper works his bolt after every shot, the American's 1903 too)
+					else if ((bSniper || Army != "USA") && Far < BoltWithin && (bSniper || Roll() < BoltChance))
 					{
 						Take Bolt = T;
 						Bolt.Name = Pick(Nation("bolt"));
@@ -1096,7 +1107,7 @@ namespace LandSound
 				Strike(N, Now, Ear, Out);
 				// Shouts in the thick of it: a man of the shooter's side near the ear calls out now and then, more often
 				// as the fight thickens (land.shouts).
-				if (N.Side >= 0 && Far < ShoutWithin)
+				if (!bUnseen && N.Side >= 0 && Far < ShoutWithin)
 				{
 					LastShooter[N.Side] = { Now, N.At, Army };
 					if (MeterNow >= ShoutMeterFrom && Now >= ShoutNext[N.Side] && Shout(N.Side, Army, N.At, Now, 0.0, Ear, Out))

@@ -411,6 +411,7 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 		A.HeardStruck.clear();
 		A.GunDue.clear();
 		A.GunnerDue.clear();
+		A.SoundBattleWas = -1.0;
 		bLate = true;
 	}
 	A.Sky.At(T, A.Planes, A.Guns);

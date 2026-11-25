@@ -551,6 +551,8 @@ namespace LandFeed
 			Row.bCm = R["cm"].Int(0) != 0;
 			Row.bMate = R["m"].Int(0) != 0;
 			Row.Hang = R["hang"].IsNumber() ? R["hang"].Num() : -1.0;
+			Row.bSn = R["sn"].Int(0) != 0;
+			Row.bHd = Row.bSn && R["hd"].Int(0) != 0;
 		}
 
 		bool RoundBefore(const Round& A, const Round& B) { return A.T != B.T ? A.T < B.T : A.N < B.N; }

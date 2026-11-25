@@ -168,6 +168,8 @@ namespace LandSound
 		 * test; and those whose take fires for less than her burst, so it played whole. */
 		std::map<std::string, int> TeamMgTakes;
 		int TeamMgWhole = 0;
+		/** Snipers' rounds heard: from his spot (found), and from where the round arrived (hidden), for the log and test. */
+		int SniperSeen = 0, SniperUnseen = 0;
 		/** Whether a take is on a list the mix names (byNation.mg.GER, tankMg.roof.USA ...), for the test. */
 		bool InList(const std::string& ListName, const std::string& Name) const;
 		bool HasList(const std::string& ListName) const { return Lists.count(ListName) > 0; }
