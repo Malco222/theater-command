@@ -733,6 +733,9 @@ function tell(g: Game, r: Region, text: string, nat: string, parties: string[], 
 
 const placeWords = (g: Game, r: Region): string => (r.cap && r.owner === r.ctrl ? `the capital of ${theName(g.nations[r.owner])}` : `the ${TOWNS.words[townSize(g, r)].toLowerCase()}`);
 const months = (n: number): string => (n <= 1 ? 'a month' : `${n} months`);
+/** Months in words up to ten and in digits above, for the card of a port under true reach (the UI director, 22:08Z). */
+const COUNTED = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const monthsSaid = (n: number): string => (n <= 1 ? 'a month' : `${n <= 10 ? COUNTED[n] : n} months`);
 
 // ---- Investing a town, raising a siege, and the fall --------------------------------------------
 
@@ -1306,12 +1309,19 @@ export function siegeView(g: Game, region: number, reach?: SeaReach): SiegeView 
       lines.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.`
         : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
     }
+  } else if (!trueReach(g)) {
+    lines.push(`Closely invested, its stores would feed the defenders for ${months(stores)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`);
   } else {
     // Under true reach a fortified port overseas living on its kept stores has already eaten some of them: the card
-    // promises what a siege opened now would leave (keptAtOpening), as the siege's own line then reads.
-    const would = stores - Math.min(stores, keptAtOpening(g, r));
-    lines.push(would > 0 ? `Closely invested, its stores would feed the defenders for ${months(would)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`
-      : `Closely invested, its defenders would go hungry at once: its stores have been eaten while no ship came in${r.port ? ', and only ships reaching its harbour could feed them' : ''}.`);
+    // promises what a siege opened now would leave (keptAtOpening), as the siege's own line then reads, and says why
+    // the promise shrank (the UI director's words of 22:08Z, 25 November 2026, the numbers in words).
+    const eaten = Math.min(stores, keptAtOpening(g, r)), would = stores - eaten;
+    if (would <= 0) lines.push(`Closely invested, its defenders would go hungry at once: its stores have been eaten with no ship coming in${r.port ? ', and only ships reaching its harbour could feed them' : ''}.`);
+    else {
+      const ate = monthsSaid(eaten);
+      lines.push(`Closely invested, its stores would feed the defenders for ${monthsSaid(would)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`
+        + (eaten > 0 ? ` ${ate[0].toUpperCase()}${ate.slice(1)} of its stores ${eaten === 1 ? 'has' : 'have'} been eaten with no ship coming in.` : ''));
+    }
   }
   return {
     region, town: townName(r), size, sizeWord: TOWNS.words[size], holder: r.ctrl, by, since: investedOn(g, r), months: shut,

@@ -182,8 +182,10 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       britain(g);
       const late = line();
       expect([on, early, late]).toEqual([on,
-        `Closely invested, its stores would feed the defenders for ${on ? '3 months' : '4 months'}, and for as long as ships can reach its harbour.`,
-        `Closely invested, its stores would feed the defenders for ${on ? '2 months' : '4 months'}, and for as long as ships can reach its harbour.`]);
+        on ? 'Closely invested, its stores would feed the defenders for three months, and for as long as ships can reach its harbour. A month of its stores has been eaten with no ship coming in.'
+          : 'Closely invested, its stores would feed the defenders for 4 months, and for as long as ships can reach its harbour.',
+        on ? 'Closely invested, its stores would feed the defenders for two months, and for as long as ships can reach its harbour. Two months of its stores have been eaten with no ship coming in.'
+          : 'Closely invested, its stores would feed the defenders for 4 months, and for as long as ships can reach its harbour.']);
       // And the siege that opens then says the same.
       round(g, 'ITA', r);
       expect(arrive(g, r, 'ITA')).toBe(false);
@@ -625,7 +627,48 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       if (!on) expect(setTrueReach(g, false)).toBe(true);
       expect([on, trueReach(g), filler(g, r), keptStoresRun(g, r)]).toEqual([on, on, 'UK', 2]);
       expect([on, siegeView(g, r.id)!.lines.at(-1), opened(g, r, 'ITA')]).toEqual([on,
-        `Closely invested, its stores would feed the defenders for ${on ? '2 months' : '4 months'}, and for as long as ships can reach its harbour.`, on ? 2 : 0]);
+        on ? 'Closely invested, its stores would feed the defenders for two months, and for as long as ships can reach its harbour. Two months of its stores have been eaten with no ship coming in.'
+          : 'Closely invested, its stores would feed the defenders for 4 months, and for as long as ships can reach its harbour.', on ? 2 : 0]);
+    }
+  });
+
+  it('W1, the card\'s words (the UI director, 22:08Z): under true reach the months in words, and where the kept stores have been eaten a second sentence says so; off, the old sentence with its digits, byte for byte', () => {
+    const card = (g: Game, r: Region): string[] => siegeView(g, r.id)!.lines;
+    const harbour = ', and for as long as ships can reach its harbour.';
+    for (const on of [false, true]) {
+      // Malta in Italy's month, before Britain's: its stores filled in month `last`, the card read in month 4.
+      for (const [last, words] of [
+        [3, 'Closely invested, its stores would feed the defenders for four months' + harbour],
+        [2, 'Closely invested, its stores would feed the defenders for three months' + harbour + ' A month of its stores has been eaten with no ship coming in.'],
+        [1, 'Closely invested, its stores would feed the defenders for two months' + harbour + ' Two months of its stores have been eaten with no ship coming in.'],
+      ] as const) {
+        const g = war(on);
+        const r = g.byName['Malta'];
+        at(g, r, 4, last);
+        g.phase = g.order.indexOf('ITA');
+        expect([on, last, card(g, r).at(-1)]).toEqual([on, last, on ? words : 'Closely invested, its stores would feed the defenders for 4 months' + harbour]);
+        // One line on the card, never two: as many lines as the card with true reach off in the same month.
+        const off = war(false), m = off.byName['Malta'];
+        at(off, m, 4, last);
+        off.phase = off.order.indexOf('ITA');
+        expect([on, last, card(g, r).length]).toEqual([on, last, card(off, m).length]);
+        expect(card(g, r).filter((l) => l.startsWith('Closely invested')).length).toBe(1);
+      }
+      // A small fortified port whose kept stores have outrun what the town holds (Tobruk, its works staged at their
+      // lowest, one month of stores): the defenders would go hungry at once. Off, the old sentence.
+      const g = war(on);
+      const r = g.byName['Tobruk'];
+      r.fort = { ...r.fort!, lv: 0 };
+      at(g, r, 4, 1);
+      expect([on, storesOf(g, r), keptStoresRun(g, r)]).toEqual([on, 1, 2]);
+      expect([on, card(g, r).at(-1)]).toEqual([on, on
+        ? 'Closely invested, its defenders would go hungry at once: its stores have been eaten with no ship coming in, and only ships reaching its harbour could feed them.'
+        : 'Closely invested, its stores would feed the defenders for a month' + harbour]);
+      // A town with no harbour keeps no stores: the sentence without its harbour clause, the months in words on.
+      const h = war(on);
+      const e = h.byName['El Alamein'];
+      expect([on, e.port, storesOf(h, e)]).toEqual([on, false, 2]);
+      expect([on, card(h, e).at(-1)]).toEqual([on, `Closely invested, its stores would feed the defenders for ${on ? 'two months' : '2 months'}.`]);
     }
   });
 });
