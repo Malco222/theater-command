@@ -59,10 +59,10 @@ for (const row of (setup as any).corps as any[]) {
 for (const [nat, arms] of Object.entries(DIVISIONS.record ?? {})) for (const [kind, ns] of Object.entries(arms)) for (const n of ns ?? []) reserve(nat, kind, n);
 
 /** The numbers a numbered corps' divisions carry, in order. */
-const numbersOf = (c: Corps): number[] => c.nos ?? Array.from({ length: c.divs }, (_, i) => c.dn! + i);
+export const numbersOf = (c: Corps): number[] => c.nos ?? Array.from({ length: c.divs }, (_, i) => c.dn! + i);
 
 /** Lays out a corps' numbers: its first, and the whole list only where they do not run on one from the next. */
-function keepNumbers(c: Corps, list: number[]): void {
+export function keepNumbers(c: Corps, list: number[]): void {
   c.dn = list[0];
   if (list.some((n, i) => n !== list[0] + i)) c.nos = list;
   else delete c.nos;

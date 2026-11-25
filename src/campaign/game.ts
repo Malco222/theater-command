@@ -27,6 +27,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { growCorps, numberCorps } from './armies';
+import { drawHeld, layDrawn, loanOver } from './laidonce';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -3639,7 +3640,9 @@ function expeditions(g: Game, nat: string): void {
       const id = g.flags[`lent:${i}`];
       if (o.until && g.turn >= o.until && id > 0) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
-        if (c) gone.push(c);
+        // (A division is laid once: what the row drew from living corps goes back to them where they stand together,
+        // or stands on where it is; only what it raised new leaves. laidonce.ts.)
+        if (c && loanOver(g, i, c)) gone.push(c);
         g.flags[`lent:${i}`] = -1;
       }
       return;
@@ -3715,8 +3718,14 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    // (A division is laid once, the grand campaign: a read row draws the divisions living corps of its country hold,
+    // and raises none of them a second time. laidonce.ts, data/campaign/laidonce.json.)
+    const held = drawHeld(g, nat, row, reg, g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4]);
+    if (held.line) headline(g, 'info', held.line, nat, reg.id);
+    if (held.n <= 0) return;
+    const c = addCorps(g, nat, row[2], row[3], held.n, reg.id, fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
+    layDrawn(g, i, c, held.drawn);
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
       // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
