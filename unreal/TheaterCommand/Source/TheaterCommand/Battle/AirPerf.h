@@ -21,7 +21,8 @@
  * - The air: the standard atmosphere's density, rho(h) = 1.225 (1 - 2.25577e-5 h)^4.25588 kg/m3 (to 11 km).
  * - Power at a height: the row's power (horsepower, all engines) held from the ground up to its rated height, and above
  *   it falling with the density, P(h) = P x rho(h) / rho(rated); where the historian gave a low gear's power (a two-speed
- *   supercharger's, the Fw 190's), that up to the low gear's height and straight across from there to the rated power.
+ *   or two-stage supercharger's: the Fw 190's, the Spitfire IX's and the P-51's), that up to the low gear's height and
+ *   straight across from there to the rated power (the high gear's).
  *   A propeller's thrust T = 0.8 P / V (no more than at 40 m/s); a jet's T = thrust x (rho(h) / 1.225)^0.7, the same at
  *   every speed.
  * - Drag: its zero-lift drag coefficient from its own top speed (Vt at the height it is reached, where thrust equals
@@ -77,7 +78,7 @@ namespace AirPerf
 		int Engines = 1;
 		double Span = 0.0, Wing = 0.0, Mass = 0.0;
 		double Power = 0.0, PowerM = 0.0;    // all engines' horsepower at its rated height, metres
-		double PowerLow = 0.0, PowerLowM = 0.0; // a two-speed supercharger's low gear: its power and its height (0: none)
+		double PowerLow = 0.0, PowerLowM = 0.0; // a two-speed or two-stage supercharger's low gear: its power and height (0: none)
 		double Thrust = 0.0;                 // a jet's static thrust at sea level, all engines, kN (0: propellers)
 		double Top = 0.0, TopM = 0.0;        // top level speed, true, km/h, at TopM metres
 		double Cruise = 0.0, Stall = 0.0;    // its cruise on operations (true) and its quoted clean stall (indicated), km/h:
