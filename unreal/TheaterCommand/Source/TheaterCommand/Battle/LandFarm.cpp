@@ -1147,9 +1147,10 @@ namespace LandScape
 				// east) at some 7 m; the rides between them open.
 				{
 					const double Step = 4.6;
-					// (on trial, "sprucedepth": the rows shaken loose, so the 4.6 m rhythm does not read from the field; a tree
-					// near the edge asked at its own place, so its metres in are known, not its square's)
-					const double ConJitter = bDepthTrial ? 0.9 : 0.35, AskIn = bDepthTrial ? 5.0 : 1.0;
+					// (on trial, "sprucedepth": the rows shaken loose, 1.2 m, so the 4.6 m rhythm does not read from the field
+					// (at 0.9 a stand's far edge still read as a comb from 30 m up); a tree near the edge asked at its own
+					// place, so its metres in are known, not its square's)
+					const double ConJitter = bDepthTrial ? 1.2 : 0.35, AskIn = bDepthTrial ? 5.0 : 1.0;
 					// (on trial, "sprucedepth": metres in from a wood's edge, read between the coarse squares' middles, so the
 					// wood darkens smoothly inward and not by 10 m squares: a wood's square counts its metres in, any other's
 					// its metres out, never more than it is from the wood)
@@ -1210,21 +1211,32 @@ namespace LandScape
 							if (bCon && bDepthTrial)
 							{
 								// On trial, "sprucedepth": a deep, ragged wood. A stand's age over some 60 m, not 160, and each
-								// tree its own height besides (0.78 to 1.22 of its stand's), so the skyline is broken and not a
-								// comb of one height; one in twelve gone, a gap; within 8 m of the edge one in seven a young
-								// spruce, a third to three fifths grown, under the old ones' boughs.
-								const double Gone = Unit(Hash(Hp, 7)), Own = Unit(Hash(Hp, 8)), Young = Unit(Hash(Hp, 9)), Grown = Unit(Hash(Hp, 10));
+								// tree its own height besides (0.76 to 1.06 of its stand's); one in twelve gone, a gap; within 8 m
+								// of the edge one in seven a young spruce, a third to three fifths grown, under the old ones'
+								// boughs; of the others one in twelve a leader standing proud of its stand, 1.2 to 1.3 of its
+								// height (34 m at most), so that no stand, however even, reads as a comb (the art director's
+								// mend, 25 Nov). (The rest kept under 1.06 so that the leaders show: a skyline is the tallest of
+								// the many trees each sight line crosses, and with the rest up to 1.28 and a leader in eight, as
+								// first asked, an even young stand stayed a comb in the cloud painter.)
+								const double Gone = Unit(Hash(Hp, 7)), Own = Unit(Hash(Hp, 8)), Young = Unit(Hash(Hp, 9)), Grown = Unit(Hash(Hp, 10)), Lead = Unit(Hash(Hp, 11));
 								if (Gone < 1.0 / 12.0) continue;
 								if (Edge < 0.0) Edge = InWood(PX, PY);
 								const double Age = Clamp01(0.5 + 0.9 * Noise(X / 60.0, Y / 60.0, Seed ^ 0xA6E));
-								const double High = (14.0 + 12.0 * Age) * (0.78 + 0.44 * Own) * (Edge < 8.0 && Young < 1.0 / 7.0 ? 0.35 + 0.25 * Grown : 1.0);
+								const bool bYoung = Edge < 8.0 && Young < 1.0 / 7.0;
+								const double Mine = 0.76 + 0.3 * Own;
+								const double Of = bYoung ? Mine * (0.35 + 0.25 * Grown) : Lead < 1.0 / 12.0 ? 1.2 + 0.1 * Own : Mine;
+								const double Stand = 14.0 + 12.0 * Age, High = Stand * Of;
+								// its crown as wide as its stand's, or as its own where it stands taller: in rows 4.6 m apart a
+								// spruce's boughs fill the row whatever its height (crowns narrowed with the shorter trees let the
+								// snow floor through, and the wood read lighter and bluer from above)
+								const double Wide = bYoung ? High : Stand * std::max(Of, 1.0);
 								// deeper in, darker, the snow on its boughs dimmer, as the light under the crowns (full by 30 m
 								// in): its blue down faster than its red and green, so the deep wood keeps its green over blue.
 								// (The sky's fill adds blue to whatever is darker: with blue spared the canopy read bluer from
 								// above than under "spruce" alone, and even with blue down as much as red and green it did,
 								// 8 less blue than green where "spruce" has 12; the art director's mend, 25 Nov.)
 								const double Dk = Smooth(3.0, 30.0, Edge), Lt = 1.0 - 0.3 * Dk, Bl = 1.0 - 0.55 * Dk;
-								H.Plant(Spruce, PX, PY, Yaw, High / 18.6 * (0.85 + 0.2 * Size), High / 18.6, Tint((0.94 + 0.1 * Size) * Lt, (0.96 + 0.08 * Size) * Lt, 0.96 * Bl));
+								H.Plant(Spruce, PX, PY, Yaw, Wide / 18.6 * (0.85 + 0.2 * Size), High / 18.6, Tint((0.94 + 0.1 * Size) * Lt, (0.96 + 0.08 * Size) * Lt, 0.96 * Bl));
 								continue;
 							}
 							if (bCon)
@@ -1675,8 +1687,9 @@ namespace LandScape
 			/**
 			 * The spruce wood with depth on trial (Field::Tried("sprucedepth"), which takes in "spruce"): a deep, ragged wood,
 			 * not a comb of cut-outs of one height at one rhythm. Its trees of their stand's age and each its own height
-			 * besides, a young one here and there along the edge, a gap where one fell, the rows shaken loose; the trees
-			 * darker and cooler deeper in, their snow dimmer, so the eye reads metres of wood behind the first row (Plants);
+			 * besides, a leader here and there standing proud of its stand, a young one here and there along the edge, a gap
+			 * where one fell, the rows shaken loose; the trees darker deeper in (their blue down most, so no bluer), their
+			 * snow dimmer, so the eye reads metres of wood behind the first row (Plants);
 			 * and near too the boughs dark green, the snow on one pad in two of those that face up, as the far crowns
 			 * already are under "spruce" (KitLook).
 			 */
