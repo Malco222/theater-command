@@ -70,7 +70,7 @@ import {
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, orderCorps, provinceYield } from '../../../src/campaign/economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, needsOf, orderCorps, provinceYield } from '../../../src/campaign/economy';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
@@ -1079,8 +1079,9 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
         first = false;
       }
       if (first) continue;
-      // (every raid takes its slot, as in 1.5.1, empty or not: the callers drop the empty ones after taking their two)
-      notes.push(r.result);
+      // (every raid takes its slot, as in 1.5.1, empty or not: the callers drop the empty ones after taking their two;
+      // 1.5.2, playtest #38: trimmed, so a joined note never opens with a space)
+      notes.push(r.result.trim());
       if (r.region >= 0) focus.push(r.region);
       if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
     }
@@ -1449,7 +1450,29 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
 
 /** The whole campaign as text, to be kept and picked up again later. */
 function save() {
-  return { text: saveGame(game()) };
+  const s = game();
+  // (1.5.2, playtest #32.) The month's report is the table's, not the rules': it is written into the save beside the
+  // rules' flags only while the save is made, and taken out again as the save is loaded, so the war itself never
+  // carries it and a save and load gives back the same text.
+  if (!lastMonth && !lastCard) return { text: saveGame(s) };
+  const flags = s.flags as Record<string, unknown>;
+  if (lastMonth) flags.monthReport = lastMonth;
+  if (lastCard) flags.monthCard = lastCard;
+  try { return { text: saveGame(s) }; } finally { delete flags.monthReport; delete flags.monthCard; }
+}
+
+/** The month's report and its card a save carries (see save), each null where the save has none or it does not read right. */
+function reportOfSave(s: Game): { report: typeof lastMonth; card: MonthCard | null } {
+  const flags = s.flags as Record<string, unknown>;
+  const m = flags.monthReport as typeof lastMonth | undefined;
+  const c = flags.monthCard as MonthCard | undefined;
+  delete flags.monthReport;
+  delete flags.monthCard;
+  const fine = !!m && typeof m.date === 'string' && Array.isArray(m.rows) && Array.isArray(m.news)
+    && m.rows.every((r) => r && typeof r.nat === 'string' && typeof r.note === 'string' && typeof r.region === 'number' && r.region < s.regions.length)
+    && m.news.every((x) => typeof x === 'string');
+  const card = !!c && typeof c === 'object' && typeof c.date === 'string' && Array.isArray(c.staff);
+  return { report: fine ? m! : null, card: card ? c! : null };
 }
 
 /** A line about a saved campaign for the opening screen, without loading it. */
@@ -1469,10 +1492,11 @@ function load(text: string) {
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
-  lastMonth = null;
+  const kept = reportOfSave(g);
+  lastMonth = kept.report;
   lastReel = -9;
   monthBook = null;
-  lastCard = null;
+  lastCard = kept.card;
   if (g.human && !humanUp(g)) {
     runOthers(g, null);
     arrive(g);
@@ -3001,7 +3025,7 @@ function endMonth() {
   const newsreel = big ? { date: turnToDate(month0).label, cards: reel.slice(0, 4) } : null;
   lastMonth = {
     date: turnToDate(month0).label,
-    rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
+    rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note?.trim() && !x.moved).map((x) => ({ nat: x.nat, note: x.note.trim(), region: x.focus?.[0] ?? -1, mine: !!x.mine })),
     news: events.map((e) => e.text),
   };
   // (every march that ended is told with the player's own fronts, with the way to go and look at the army)
@@ -3337,16 +3361,32 @@ function province(id: number) {
     })(),
     budget: budgeted(s),
     // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
-    raise: raiseHere ? (Object.keys(PRODUCTION.builds) as Kind[]).map((kind) => {
-      const spec = PRODUCTION.builds[kind];
-      return {
-        kind, label: spec.label, divs: spec.divs, cost: shown(spec.cost), months: spec.months, blurb: spec.blurb,
-        // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
-        keep: budgeted(s) ? shown(corpsUpkeep(kind, spec.divs, 1)) : 0,
-        ok: up && !!n && n.pp >= spec.cost,
-        why: !up ? 'It is not your month.' : n && n.pp < spec.cost ? `Needs ${shown(spec.cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
-      };
-    }) : [],
+    // (1.5.2, playtest #29: the price and the yes or no are the rules' own, the arsenal's offer for this province, so a
+    // button shown open is never refused and one the treasury can pay for is never shut: the nation's own price, the
+    // technology, the men, and whether this province can form up a corps of the kind at all.)
+    raise: raiseHere ? (() => {
+      const offers = new Map(arsenalOffers(s, id).map((o) => [o.key, o]));
+      return (Object.keys(PRODUCTION.builds) as Kind[]).map((kind) => {
+        const spec = PRODUCTION.builds[kind];
+        const o = offers.get(`corps:${kind}`);
+        const price = o?.cost ?? spec.cost;
+        const here = !!o && o.at === id;
+        const need = needsOf(s, kind);
+        const short = r.fac < need ? `${r.name} has not the ${need === 1 ? '1 factory' : `${need} factories`} it needs` : `${r.name} is too steep for tanks to form up`;
+        const why = !up ? 'It is not your month.'
+          : !o ? 'It cannot be ordered now.'
+            : o.poor && n ? `Needs ${shown(price).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.`
+              : o.why ? o.why
+                : !here ? `${short}.${o.at >= 0 ? ` Raise it at ${s.regions[o.at].name}.` : ''}` : '';
+        return {
+          kind, label: spec.label, divs: spec.divs, cost: shown(price), months: spec.months, blurb: spec.blurb,
+          // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
+          keep: budgeted(s) ? shown(corpsUpkeep(kind, spec.divs, 1)) : 0,
+          ok: up && !!o && !o.why && here,
+          why,
+        };
+      });
+    })() : [],
     raiseNote: raiseHere ? '' : home ? 'New corps are raised in the home country and sent out by sea.' : '',
     // Fortifications: the next level, if there is one.
     fort: home && cost !== null ? {
@@ -4503,9 +4543,10 @@ function fleetPage(s: Game, id: number): Page | null {
     return {
       nat: '', title: `${z.name}${z.here ? '  \u00B7  it is here' : ''}`, lines: [`${enemy} ${meet}`, [hunt, risk].filter(Boolean).join(' ')].filter(Boolean),
       buttons: [
-        { label: 'PATROL', act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at('patrol'), tip: 'Seeks out the enemy\'s warships there and guards the convoys that cross it.' },
-        { label: 'RAID SHIPPING', act: `fleet:${id}:${z.zone}:raid`, ok: up && !at('raid'), tip: 'Goes for merchant ships and keeps clear of a fight with the enemy fleet.' },
-        { label: 'HUNT SUBMARINES', act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at('hunt') && card.hunters > 0, tip: card.hunters > 0 ? 'Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks.' : 'It has no destroyers to hunt with.' },
+        // (1.5.2, playtest #37: a button shut because it is the fleet's order now says so, as the side panel does.)
+        { label: 'PATROL', act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at('patrol'), tip: `${at('patrol') ? 'It is doing so now. ' : ''}Seeks out the enemy's warships there and guards the convoys that cross it.` },
+        { label: 'RAID SHIPPING', act: `fleet:${id}:${z.zone}:raid`, ok: up && !at('raid'), tip: `${at('raid') ? 'It is doing so now. ' : ''}Goes for merchant ships and keeps clear of a fight with the enemy fleet.` },
+        { label: 'HUNT SUBMARINES', act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at('hunt') && card.hunters > 0, tip: card.hunters > 0 ? `${at('hunt') ? 'It is doing so now. ' : ''}Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks.` : 'It has no destroyers to hunt with.' },
       ],
     };
   });
@@ -4555,7 +4596,8 @@ function fleetPage(s: Game, id: number): Page | null {
         // (1.5.1) A fleet held where this month's battle left it is refused, with the reason, before either.
         const f = s.fleets.find((x) => x.id === id), cut = !!f && cutOff(s, f), haven = cut ? harbourFor(s, f!) : null;
         return [{ label: 'RETURN TO HARBOUR', act: `fleet:${id}:${f?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held && (!cut || !!haven),
-          tip: o?.held || (cut ? (haven ? `Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.` : 'Cut off beyond a shut strait, and no friendly harbour on its side can take it.') : 'Safe from the enemy fleet, and takes no part at sea.') }];
+          tip: card.stance === 'port' ? 'It is in harbour now. Safe from the enemy fleet, and takes no part at sea.'
+            : o?.held || (cut ? (haven ? `Cut off beyond a shut strait: it makes for ${haven.name}, which becomes its base.` : 'Cut off beyond a shut strait, and no friendly harbour on its side can take it.') : 'Safe from the enemy fleet, and takes no part at sea.') }];
       })(),
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
       ...(wingsOfFleet(s, id).length ? [{ label: 'CARRIER AIRCRAFT', act: `open:wings:${id}`, ok: true, tip: 'The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour.' }] : []),
@@ -4703,12 +4745,15 @@ function forcesPage(s: Game): Page | null {
     const gen = cs.map((c) => generalOf(s, c)?.name).find(Boolean);
     const kinds = new Map<string, number>();
     for (const c of field) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
-    const what = [...kinds.entries()].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(', ');
+    // (1.5.2, playtest #36: each kind with its own count and noun, "1 infantry division, 2 engineer divisions", never
+    // "1 infantry divisions"; the kinds' words as a division is named, "armoured" and "engineer".)
+    const DIV_WORD: Record<string, string> = { Armor: 'armoured', Engineers: 'engineer', Fortress: 'fortress' };
+    const what = [...kinds.entries()].map(([k, n]) => `${n} ${DIV_WORD[k] ?? k.toLowerCase()} division${n === 1 ? '' : 's'}`).join(', ');
     return {
       sort: (moving.length ? 0 : 1) * 1e6 - cs.reduce((n, c) => n + men(c), 0) / 1000,
       row: {
         nat: me, title: `${s.regions[reg].name}${gen ? `  ·  ${gen}` : ''}`,
-        lines: [`${cs.length} corps, ${num(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what} divisions` : ''}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? 'It has used its month, or holds its ground.' : ''].filter(Boolean),
+        lines: [`${cs.length} corps, ${num(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what}` : ''}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? 'It has used its month, or holds its ground.' : ''].filter(Boolean),
         buttons: [{ label: 'GO THERE', act: `goto:army:${reg}`, ok: true, tip: 'Looks at the army and picks it up.' }],
       },
     };
@@ -5004,7 +5049,7 @@ function cabinetPage(s: Game): Page | null {
       (d as { hard?: boolean }).hard ? 'The cabinet knows the place is strongly held: it has given more time and a larger reward.' : '',
       (d as { again?: boolean }).again ? 'The cabinet has asked for this before.' : ''].filter(Boolean),
     buttons: [
-      ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
+      ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:region:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
       ...(doorOf[d.kind as string] ? [{ ...doorOf[d.kind as string], ok: true }] : []),
       (() => {
         const why = up ? whyNotSetAsideDirective(s) : notNow;
@@ -5054,7 +5099,7 @@ function cabinetPage(s: Game): Page | null {
         nat: v.nat, title: `${x.promise.town}  \u00B7  ${x.promise.left <= 1 ? 'due this month' : `${months(x.promise.left)} left`}`,
         lines: [`${x.promise.bandName}. ${x.promise.progress}`, `Kept: ${x.promise.reward}.`],
         buttons: [
-          ...(x.promise.region !== undefined && x.promise.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${x.promise.region}`, ok: true, tip: 'Goes to the town you promised.' }] : []),
+          ...(x.promise.region !== undefined && x.promise.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:region:${x.promise.region}`, ok: true, tip: 'Goes to the town you promised.' }] : []),
           { label: 'TAKE IT BACK', act: 'cabinet:takeback', ok: pw === null, danger: true, tip: pw ?? `You tell the cabinet it cannot be done. Costs ${x.promise.back} of its trust, half of what breaking your word would.` },
         ],
       }] };
@@ -5105,7 +5150,7 @@ function cabinetPage(s: Game): Page | null {
   ] : cabinetTab === 'decrees' ? [
     { heading: 'DECREES', text: 'One step up at a time, for political capital. A step down is free.', rows: decrees }, comes,
   ] : cabinetTab === 'minutes' ? [
-    { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(1)}`).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] as PageRow[] },
+    { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => { const x = Math.round(m.amount * 10) / 10; return `${m.label} ${x > 0 ? '+' : x < 0 ? '\u2212' : ''}${Math.abs(x).toFixed(1)}`; }).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] as PageRow[] },
     { heading: 'MINUTES', text: v.log.length ? v.log.slice(-12).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join('\n') : 'Nothing minuted yet.', rows: [] as PageRow[] },
   ] : [
     { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
