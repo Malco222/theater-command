@@ -68,9 +68,12 @@ describe('a lane with nothing laid weighs nothing with any staff (the design dir
     const base = withoutTheThree(() => MONTHS.map(station));
     // (The rows are back in the list.)
     expect(RES.lanes.filter((l) => NEW.includes(l.id)).map((l) => l.id)).toEqual(NEW);
-    // The ruling's month.
+    // The ruling's month. Turn 28 is hawaii either way, so this line alone would pass even with a cargo laid on the
+    // three rows; it stands only to name the month the ruling speaks of.
     expect(laid[0]).toEqual(base[0]);
-    // And every half-year after it: the same sea, month for month.
+    // The proof is the half-years after it: there a counted lane would pull the boats (with supplies 0.01 laid on the
+    // three rows, turns 41 to 59 go to hawaii, hawaii, hawaii and calrun, by the review of 25 November 2026). The same
+    // sea, month for month.
     expect(laid).toEqual(base);
   });
 

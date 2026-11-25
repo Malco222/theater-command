@@ -30,6 +30,9 @@ import { RES, laneStopped, lanesTo } from '@tc/campaign/resources';
 import { startOpen } from '@tc/campaign/staff';
 import { runTurnAI } from '@tc/campaign/turn';
 
+// Node's own handle on the command line and the error stream; declared here because the tree carries no node types.
+declare const process: { argv: string[]; stderr: { write(s: string): void } };
+
 const seed = +process.argv[2], stop = +(process.argv[3] ?? 3), months = +(process.argv[4] ?? 76);
 const g: any = startOpen(createGame(seed, null));
 if (stop !== 3) setStop(g, stop, true);
@@ -193,5 +196,7 @@ console.log(JSON.stringify({
   advanceSubmarineFleet: { runs, byMonth: advance },
   control: { atlanticTotalTons: g.convoys.atlantic?.total ?? 0, convoys },
   notes: { fleetsStoodDownOrLost: gone },
-  ms: { total, avg: Math.round(total / Math.max(1, months - 1)), slowest: slow },
 }));
+// The wall clock goes to the error stream, so that two runs of one tree print the same JSON byte for byte and a
+// head-beside-base comparison needs no key dropped.
+process.stderr.write(`ms ${JSON.stringify({ total, avg: Math.round(total / Math.max(1, months - 1)), slowest: slow })}\n`);

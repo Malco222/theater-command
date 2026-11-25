@@ -8200,10 +8200,18 @@ function bookBlock(b: Book): string {
 
 const seaNames = (zones: number[]): string => seaWhereList(zones.map((z) => g.seas[z].name));
 
+/** The fleets escorting a lane, as " Escorted by the X." ('' when none is). */
+function laneEscorts(id: string): string {
+  const fs = g.fleets.filter((f) => f.stance === 'escort' && f.lane === id && atSea(f) && shipCount(f.ships) > 0);
+  if (!fs.length) return '';
+  const names = fs.map((f) => `the ${esc(f.name)}`);
+  return ` Escorted by ${names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}.`;
+}
+
 /** Who is escorting a lane, in a sentence for its row. */
 function laneGuards(id: string, own: boolean): string {
-  const fs = g.fleets.filter((f) => f.stance === 'escort' && f.lane === id && atSea(f) && shipCount(f.ships) > 0);
-  if (fs.length) { const names = fs.map((f) => `the ${esc(f.name)}`); return ` Escorted by ${names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}.`; }
+  const escorted = laneEscorts(id);
+  if (escorted) return escorted;
   return own ? ' <b>No fleet is escorting it.</b> Pick up a fleet with destroyers and order it to escort this lane; a fleet that only patrols these seas gives a quarter of the cover.' : ' No fleet is escorting it.';
 }
 
@@ -8227,9 +8235,13 @@ function laneRow(l: Lane, me: string | null): string {
     : mine && l.state !== 'cut' ? (seaWar(g) ? laneGuards(l.id, l.to === me) : ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`)
     : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
   if (uncounted && !halted) {
+    // No urging here: the line above says its loss takes nothing from the stores, so telling the player to escort it or
+    // to send raiders into it would ask for work the game says is worth nothing (the review of 25 November 2026). Only
+    // the fact of who is escorting it, if anyone is, stays.
+    const escorted = l.zones.length && seaWar(g) && mine ? laneEscorts(l.id) : '';
     return `<div class="lane">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">By sea</span><span class="lflow">${esc(uncounted.value)}</span></div>
-    <small>${esc(l.text)} ${esc(uncounted.line)}${esc(fight)}${advice}${key ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+    <small>${esc(l.text)} ${esc(uncounted.line)}${esc(fight)}${escorted}${key ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
   </div>`;
   }
   return `<div class="lane ${l.state}">
