@@ -15,7 +15,8 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, removeCorps, startPhase } from '../src/campaign/game';
+import { createGame, declineOffer, removeCorps, rowOffers, startPhase, takeOffer } from '../src/campaign/game';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import { shipsItsOwn } from '../src/campaign/world';
@@ -110,13 +111,52 @@ describe('the islands by month, with no fighting', () => {
     });
   }
 
-  it("a player's America has the same rows and the same split", () => {
+  // (Moved by the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 3 of the dated
+  // rows: "Oahu's split: an offer too, yes. A reorganisation of the player's own forces is the player's choice." As
+  // first built a player's America had the split made in October 1941 without a word, as a computer's has.)
+  it("a player's America has the same rows, and the split is his to take or decline: offered in October 1941", () => {
     const g = startOpen(createGame(5, 'USA'));
-    months(g, 2, 28);
+    months(g, 2, 26);
+    // Nothing is made: the division and the 298th stand as they were, and the two rows are offered, each with the corps it takes.
+    expect(field(g, ISLAND).map((c) => c.name)).toEqual([HD, G298]);
+    const list = rowOffers(g);
+    expect(list.map((o) => [o.name, g.regions[o.region].name, o.since, o.last, o.takes.map((t) => t.name), o.why])).toEqual([
+      [D25, 'Honolulu', 26, 32, [G298, HD], null], [D24, 'Pearl Harbor', 26, 32, [HD], null]]);
+    expect(field(g, OUTER)).toHaveLength(3);
+    // Taken, in the order of the list, the split happens as the rule has it: the 25th takes its share first, the 24th what is left.
+    const was = sum(g, ISLAND);
+    for (const o of list) expect(takeOffer(g, o.id)).toBeNull();
     expect(field(g, ISLAND).map((c) => [c.name, c.full])).toEqual([[D25, 0.8], [D24, 0.65]]);
+    expect(named(g, HD)).toBeUndefined();
+    expect(sum(g, ISLAND)).toBeCloseTo(was, 6);
+    expect(rowOffers(g)).toEqual([]);
+    months(g, 27, 28);
     expect(sum(g, ISLAND)).toBeGreaterThan(0.95);
     expect(sum(g, ISLAND)).toBeLessThanOrEqual(1.45);
-    expect(field(g, OUTER)).toHaveLength(3);
+  });
+
+  it("declined, his Hawaiian Division stays whole and the two divisions never come out of it; a saved war keeps the offer", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const back = loadGame(saveGame(g))!;
+    expect(rowOffers(back)).toEqual(rowOffers(g));
+    const hd = named(g, HD)!;
+    for (const o of rowOffers(g)) expect(declineOffer(g, o.id)).toBe(true);
+    months(g, 27, 40);
+    expect([named(g, D25), named(g, D24), named(g, HD)]).toEqual([undefined, undefined, hd]);
+    expect(rowOffers(g)).toEqual([]);
+  });
+
+  it('left unanswered, the offers lapse after their half year, and he is told; his corps stay whole', () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 32);
+    expect(rowOffers(g).map((o) => o.name)).toEqual([D25, D24]);
+    const news = g.headlines.length;
+    months(g, 33, 33);
+    expect(rowOffers(g)).toEqual([]);
+    expect(g.headlines.slice(news).map((h) => h.text).filter((t) => /has lapsed/.test(t))).toEqual([
+      `The offer to form ${D25} has lapsed: its time has passed.`, `The offer to form ${D24} has lapsed: its time has passed.`]);
+    expect([named(g, D25), named(g, D24), named(g, HD) !== undefined]).toEqual([undefined, undefined, true]);
   });
 });
 

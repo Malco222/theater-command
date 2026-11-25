@@ -4975,6 +4975,20 @@ const offerKey = (i: number): string => `offer:${i}`;
 const offerCount = (i: number): string => `offer:n:${i}`;
 const offerOpen = (g: Game, nat: string, i: number): boolean => farOn(g) && nat === g.human && g.flags[offerKey(i)] !== undefined;
 const offerShut = (g: Game, i: number): void => { delete g.flags[offerKey(i)]; delete g.flags[offerCount(i)]; };
+/**
+ * A row of the formations list (startPhase, `formRow`) has its number in the one list of offers after the dated
+ * rows, so that an offer's id, its flags and the 3D game's calls name either list alike: Oahu's split is offered by
+ * the same machinery (the design director's ruling of 13:39Z, 25 November 2026, point 3).
+ */
+const formId = (k: number): number => (((setup as any).expeditions as any[]) ?? []).length + k;
+/** The row an offer's id names: a dated row, or a row of the formations list; and which. */
+function offerRow(id: number): { row: any[]; form: boolean } | null {
+  const E = ((setup as any).expeditions as any[]) ?? [];
+  if (!Number.isInteger(id) || id < 0) return null;
+  if (id < E.length) return { row: E[id], form: false };
+  const f = ((setup as any).formations as any[] ?? [])[id - E.length];
+  return f ? { row: f, form: true } : null;
+}
 
 /** The month the player declined a row offered to him, or its offer lapsed: the formation was never made, by his answer or for want of one. */
 const unmadeKey = (i: number): string => `unmade:${i}`;
@@ -5151,6 +5165,19 @@ function loanView(g: Game, nat: string, row: any[], i: number): RowOffer | null 
   return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], last: null, region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.` };
 }
 
+/**
+ * One open offer of a row of the formations list (Oahu's split), read with nothing changed: what would form, where
+ * (`formPlace`, the formations list's own placing) and which of his corps it would take, in the order the row takes
+ * them. It cannot be taken only where it has lapsed or has nowhere to form; it names no later rows (`then`).
+ */
+function formView(g: Game, nat: string, row: any[], id: number): RowOffer {
+  const o = row[6] ?? {}, made = formMade(g, nat, row) ?? [];
+  const reg = formPlace(g, nat, row, made);
+  const takes = made.map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
+  const why = offerGone(g, nat, row, id) ?? (reg ? null : `There is nowhere for it to form: ${row[5]} is not yours.`);
+  return { id, name: row[2], kind: row[3], divs: row[4], men: Math.round(row[4] * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(id)], last: offerLast(g, row, id), region: reg ? reg.id : -1, joins: null, takes, why, then: [], loan: null };
+}
+
 /** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */
 export function rowOffers(g: Game): RowOffer[] {
   const nat = g.human;
@@ -5161,6 +5188,7 @@ export function rowOffers(g: Game): RowOffer[] {
     if (offerOpen(g, nat, i)) out.push(offerView(g, nat, row, i));
     else if (leaveOpen(g, nat, i)) { const v = loanView(g, nat, row, i); if (v) out.push(v); }
   });
+  ((setup as any).formations as any[] ?? []).forEach((row, k) => { if (row[1] === nat && offerOpen(g, nat, formId(k))) out.push(formView(g, nat, row, formId(k))); });
   return out.sort((a, b) => a.since - b.since || a.id - b.id);
 }
 
@@ -5170,7 +5198,19 @@ export function rowOffers(g: Game): RowOffer[] {
  * else the plain reason it could not be this month, with the offer left standing.
  */
 export function takeOffer(g: Game, id: number): string | null {
-  const nat = g.human, row = ((setup as any).expeditions as any[] ?? [])[id];
+  const nat = g.human, at = offerRow(id);
+  // (A row of the formations list, Oahu's split: it forms as that list always formed it, in the month he says yes.)
+  if (at?.form) {
+    if (nat === null || at.row[1] !== nat || !offerOpen(g, nat, id)) return 'There is no such offer.';
+    const gone = offerStands(g, nat, at.row, id);
+    if (gone) return gone;
+    const why = formView(g, nat, at.row, id).why;
+    if (why) return why;
+    if (!formRow(g, nat, at.row, id, true)) return 'It cannot be formed this month.';
+    offerShut(g, id);
+    return null;
+  }
+  const row = at?.row;
   // (The end of a loan: he lets the regiment go, and it leaves as the rule always had it leave.)
   if (nat !== null && row && row[1] === nat && leaveOpen(g, nat, id)) {
     if (!lentCorps(g, nat, id)) { delete g.flags[leaveKey(id)]; return 'There is no such offer.'; }
@@ -5191,9 +5231,9 @@ export function takeOffer(g: Game, id: number): string | null {
 
 /** The player says no to an offer (ruling B8): the row never comes, and his corps stay as they are; or, at the end of a loan, the lent regiment stays his. False where there is no such offer. */
 export function declineOffer(g: Game, id: number): boolean {
-  const nat = g.human, row = ((setup as any).expeditions as any[] ?? [])[id];
+  const nat = g.human, at = offerRow(id), row = at?.row;
   // (The end of a loan: he keeps the regiment, for good.)
-  if (nat !== null && row && row[1] === nat && leaveOpen(g, nat, id)) {
+  if (nat !== null && row && !at!.form && row[1] === nat && leaveOpen(g, nat, id)) {
     delete g.flags[leaveKey(id)];
     if (!lentCorps(g, nat, id)) return false;
     g.flags[keptKey(id)] = 1;
@@ -5561,6 +5601,80 @@ export function endPhase(g: Game, nat: string): void {
   crown(g);
 }
 
+/**
+ * Where a row of the reinforcements or formations list is put down this month, read with nothing changed: its place,
+ * the capital where that is not its side's, and in free play home rather than a friend's ground at peace, and the
+ * nearest ground with room. Null where it does not come (no such ground on this chart, or nowhere its side holds),
+ * and for a row made from corps on the board (`made`, far side) where none of them is left or its place is lost.
+ */
+function formPlace(g: Game, nat: string, row: any[], made: Corps[] | null): Region | null {
+  const n = g.nations[nat];
+  let reg = g.byName[row[5]];
+  // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
+  if (!reg) return null;
+  if (made && (!made.length || !allied(g, nat, reg.ctrl))) return null;
+  if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
+  if (!reg || !allied(g, nat, reg.ctrl)) return null;
+  if (g.flags.open === 1 && row[3] !== 'fort') {
+    // Free play: not on the ground of a friend who is at peace, and never a sixth corps in one province.
+    if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
+    // (The record's own hand: a row by date is counted against five, an island's room or no: form B3, (c).)
+    reg = roomNear(g, nat, reg, true) ?? reg;
+  }
+  return reg;
+}
+
+/**
+ * The corps on the board a row of the formations list is made from (far side: `from`), in the order it names them;
+ * null where it names none, or with the far side off.
+ */
+const formMade = (g: Game, nat: string, row: any[]): Corps[] | null => (farOn(g) && Array.isArray(row[6]?.from)
+  ? (row[6].from as string[]).flatMap((nm) => g.corps.filter((x) => x.nat === nat && !x.dead && x.name === nm)) : null);
+
+/**
+ * A row of the reinforcements or formations list in its month. `id` is a formations row's number in the one list of
+ * offers (`formId`), else -1; `take` is true where the player has just said yes to it (`takeOffer`). True where the
+ * row formed.
+ *
+ * (The far side: a row of the formations list made from the player's own corps on the board is an offer, made in its
+ * month, never a silent removal: the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings,
+ * point 3 of the dated rows, "Oahu's split: an offer too, yes. A reorganisation of the player's own forces is the
+ * player's choice." It is made, stands, lapses and is answered as ruling B8's offers are (`rowOffers`, `takeOffer`,
+ * `declineOffer`, the same flags); taken, the row forms as it always did; declined, his corps stay whole and the row
+ * never comes. As built a player's America had the 24th and 25th Infantry Divisions made out of the Hawaiian
+ * Division's corps in October 1941 without a word, as a computer's has. A computer's rows are as they were.)
+ */
+function formRow(g: Game, nat: string, row: any[], id: number, take = false): boolean {
+  // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
+  if (row[6]?.open && g.flags.open !== 1) return false;
+  // (The far side: a row made from corps on the board, `from`, as a dated expedition's is: the design director's
+  // ruling of 06:21Z of 21 November 2026 to ruling 234, on Oahu's split. A computer staff that ships its own army
+  // is sent no dated expedition (world.ts shipsItsOwn), so America's reorganisations stand in this list, for every
+  // country alike. A reorganisation makes nothing from nothing: the row takes its strength out of the corps it
+  // names, in their order, and never more than they hold; a corps emptied is struck off; with none of them left
+  // the row does not come, and with its own place lost it is never formed at the capital instead.)
+  const made = formMade(g, nat, row);
+  const reg = formPlace(g, nat, row, made);
+  if (!reg) return false;
+  if (made && id >= 0 && nat === g.human && !take) { offerMade(g, nat, id, row[6]); return false; }
+  const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+  // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
+  if (row[6]?.str !== undefined) c.str = row[6].str;
+  if (made) {
+    const want = c.divs * c.str;
+    let got = 0;
+    for (const x of made) {
+      const has = x.divs * x.str, part = Math.min(has, want - got);
+      if (part <= 0) continue;
+      got += part;
+      if (has - part < 1e-9) removeCorps(g, x); else x.str = (has - part) / x.divs;
+    }
+    c.str = got / c.divs;
+    g.supplyDirty = true;
+  }
+  return true;
+}
+
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
@@ -5570,45 +5684,15 @@ export function startPhase(g: Game, nat: string): void {
   // Shipping by the record's dates (ruling 234, rider b630).
   liftDates(g, nat);
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
-  for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
-    if (row[0] !== g.turn || row[1] !== nat) continue;
-    // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
-    if (row[6]?.open && g.flags.open !== 1) continue;
-    let reg = g.byName[row[5]];
-    // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
-    if (!reg) continue;
-    // (The far side: a row made from corps on the board, `from`, as a dated expedition's is: the design director's
-    // ruling of 06:21Z of 21 November 2026 to ruling 234, on Oahu's split. A computer staff that ships its own army
-    // is sent no dated expedition (world.ts shipsItsOwn), so America's reorganisations stand in this list, for every
-    // country alike. A reorganisation makes nothing from nothing: the row takes its strength out of the corps it
-    // names, in their order, and never more than they hold; a corps emptied is struck off; with none of them left
-    // the row does not come, and with its own place lost it is never formed at the capital instead.)
-    const made: Corps[] | null = farOn(g) && Array.isArray(row[6]?.from)
-      ? (row[6].from as string[]).flatMap((nm) => g.corps.filter((x) => x.nat === nat && !x.dead && x.name === nm)) : null;
-    if (made && (!made.length || !allied(g, nat, reg.ctrl))) continue;
-    if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
-    if (!reg || !allied(g, nat, reg.ctrl)) continue;
-    if (g.flags.open === 1 && row[3] !== 'fort') {
-      // Free play: not on the ground of a friend who is at peace, and never a sixth corps in one province.
-      if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
-      reg = roomNear(g, nat, reg, true) ?? reg;
-    }
-    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
-    // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
-    if (row[6]?.str !== undefined) c.str = row[6].str;
-    if (made) {
-      const want = c.divs * c.str;
-      let got = 0;
-      for (const x of made) {
-        const has = x.divs * x.str, take = Math.min(has, want - got);
-        if (take <= 0) continue;
-        got += take;
-        if (has - take < 1e-9) removeCorps(g, x); else x.str = (has - take) / x.divs;
-      }
-      c.str = got / c.divs;
-      g.supplyDirty = true;
-    }
-  }
+  // (A row of the formations list is numbered in the one list of offers after the dated rows: `formId`.)
+  const early = (setup as any).reinforcements as any[];
+  [...early, ...((setup as any).formations ?? [])].forEach((row: any[], j: number) => {
+    if (row[0] !== g.turn || row[1] !== nat) return;
+    formRow(g, nat, row, j >= early.length ? formId(j - early.length) : -1);
+  });
+  // (The far side: the player's reorganisations offered and not yet answered stand or lapse as any offer does: ruling
+  // B8 and the design director's ruling of 13:39Z, 25 November 2026, point 3, `formRow`. Never for a computer.)
+  if (farOn(g) && nat === g.human) ((setup as any).formations ?? []).forEach((row: any[], k: number) => { if (offerOpen(g, nat, formId(k))) offerStands(g, nat, row, formId(k)); });
   // The fortress rows of this month, and those whose orders take them out of their works (the fortress rows' switch on).
   fortsMonth(g, nat);
   expeditions(g, nat);
