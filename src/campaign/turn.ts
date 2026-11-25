@@ -1570,6 +1570,8 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
   const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
   if (ok) stopShadow(f!);
+  // (Moved where the staff's book wanted it, the move that waited for him is made: navy.ts, bookWaits.)
+  if (ok && f!.planBase?.base === g.regions[region].name) delete f!.planBase;
   return ok;
 }
 

@@ -94,7 +94,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, bookBaseOf, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -5241,6 +5241,17 @@ function fleetPage(s: Game, id: number): Page | null {
       : base ? [{ label: `MOVE BASE TO ${base.name.toUpperCase()}`, act: `fleetstrikebase:${id}:${base.id}`, ok: up, tip: `Its new home port: from there its aircraft reach ${h.name}.` }] : [];
     return { nat: h.holder, title: `${h.name}${who ? ` (${who.adj ?? who.name})` : ''}`, lines, buttons };
   });
+  // (The far side's dated rows) A base move of the staff's plan that waits on him: he keeps the fleet, or runs the navy.
+  const fb = s.fleets.find((x) => x.id === id);
+  const waits = fb ? bookBaseOf(s, fb) : null;
+  const plan: PageRow[] = waits ? [{
+    nat: card.nat, title: waits.region.name,
+    lines: [
+      `${waits.words} (${turnToDate(waits.turn).label}).`,
+      staffRunsDesk(s, 'navy') ? 'You keep it under your own orders: hand it back to your admirals and it goes there with their next month.' : 'You run the navy yourself: the move is yours to make.',
+    ],
+    buttons: [{ label: `MOVE BASE TO ${waits.region.name.toUpperCase()}`, act: `fleetbookbase:${id}`, ok: up, tip: 'Its new home port, where the staff\'s plan has it. It spends the month in harbour there.' }],
+  }] : [];
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
     return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
@@ -5273,6 +5284,7 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'ENEMY FLEETS TO SHADOW', text: '', rows: shadows },
       { heading: 'SEAS TO MINE', text: '', rows: minable },
       { heading: 'ENEMY HARBOURS TO STRIKE', text: '', rows: harbours },
+      { heading: 'THE STAFF\'S PLAN', text: '', rows: plan },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
@@ -6536,6 +6548,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : (strikeHarbours(s, id, () => true).find((h) => h.region === r)?.why ?? 'It cannot strike that harbour now.');
     return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
   }
+  if (part[0] === 'fleetbookbase') {
+    // (The far side's dated rows) 'fleetbookbase:<fleet>' moves its base where the staff's plan has it (navy.ts, bookWaits).
+    const id = Number(part[1]), f = s.fleets.find((x) => x.id === id);
+    const to = f ? bookBaseOf(s, f) : null;
+    ok = !!to && orderRebase(s, id, to.region.id);
+    note = ok ? `Its new home port is ${to!.region.name}.` : 'It cannot move its base there now.';
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
   if (part[0] === 'fleetstrikebase') {
     // (Release 2, harbourstrike.ts) 'fleetstrikebase:<fleet>:<port>' moves its base forward, to where its aircraft reach the harbour.
     const id = Number(part[1]), r = Number(part[2]);
@@ -6834,7 +6854,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetstaff') {
     ok = handBackFleet(s, Number(part[1]));
-    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month.` : 'It cannot be handed back now.';
+    const fw = s.fleets.find((x) => x.id === Number(part[1])), plan = fw ? bookBaseOf(s, fw) : null;
+    note = ok ? `${fleetView(s, Number(part[1]))?.name ?? 'The fleet'} is your admirals' to sail again from next month${plan ? `, and goes to ${plan.region.name} as the staff's plan has it` : ''}.` : 'It cannot be handed back now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetescort') {
     ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));

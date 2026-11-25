@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetName, fleetPower, fleetReach, fleetsOf, keptByHand, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
@@ -753,6 +753,12 @@ export function plannedStrike(g: Game, nat: string, fleet: string, harbour: stri
   if (!carrierRules(g) || byHand(g, nat, 'navy')) return false;
   const c = fleetsOf(g, nat).find((f) => f.name === fleet), r = g.byName[harbour];
   if (!c || !r || c.ships.cv <= 0 || !atWar(g, nat, r.ctrl) || !shipsInPort(g, r.id, nat).length) return false;
+  // (A fleet the player keeps under his own orders is not sailed by the plan, nor left at sea after: the audit's
+  // re-check of 25 November 2026. He is told; with carrier strikes on, its own page offers the strike.)
+  if (keptByHand(g, c)) {
+    headline(g, 'info', `The staff's plan has ${fleetName(c)} strike ${r.name} from the air as war comes. You keep it under your own orders, so the plan's strike is not flown.`, nat);
+    return false;
+  }
   const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
   if (!lead || lead.bmr <= 0 || lead.flew === g.turn || lead.mission !== 'support') return false;
   const can = (): boolean => whyNotMission(g, lead, 'harbour', r.id) === null && !assessAir(g, [lead], 'harbour', r.id).why;

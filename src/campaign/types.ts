@@ -791,6 +791,12 @@ export interface Fleet extends Storied {
    */
   ordered?: true;
   /**
+   * A base the staff's book moved it to while it was his (the far side's dated rows, navy.ts `bookWaits`; the audit's
+   * re-check of 25 November 2026): he keeps the fleet by hand, or runs the navy himself, so it waits. Handed back to
+   * the admirals it goes there with their next month; his fleet page offers the move meanwhile. Never on a computer's.
+   */
+  planBase?: { base: string; port: string; home: string; words: string; turn: number };
+  /**
    * A task force's standing job (release 2, taskforce.ts): the sea and what it does there, or the lane it escorts. It
    * comes in to refit when worn and goes back to the job when fit, every month, until he changes or ends it.
    */
