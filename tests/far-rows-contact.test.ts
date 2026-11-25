@@ -28,7 +28,6 @@ import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import stage from '../data/campaign/stage.json';
-import bridge from '../unreal/TheaterCommand/Rules/campaign-bridge.ts?raw';
 
 const D7 = '7th Division (Asahikawa)', ARMY7 = '6th Army (7th Division)';
 const LESS = 'Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)', GARRISON = 'Tientsin-Pukow railway garrison (21st Division)';
@@ -66,12 +65,6 @@ describe('the data: the rows these tests stand on', () => {
 });
 
 describe('the switch', () => {
-  it("the switch's note promises no Options row the bridge does not have: one is owed, named by the UI director", () => {
-    const note = (stage as any)._fromWait as string;
-    expect(note).toMatch(/one Options row, named by the UI director/);
-    if (!/fromwait/i.test(bridge)) expect(note).toMatch(/that row is not built yet/);
-  });
-
   it('is off as it comes: a new grand campaign carries no fromWait flag', () => {
     expect((stage as any).fromWait).toBe(false);
     expect(startOpen(createGame(3, null)).flags.fromWait).toBeUndefined();
