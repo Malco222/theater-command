@@ -21,6 +21,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
+#include "Campaign/ShipWay.h" // (release 2, a fleet under way)
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -131,6 +132,31 @@ namespace
 	TAutoConsoleVariable<int32> CVarOverSeam(
 		TEXT("tc.Far.OverSeam"), 1,
 		TEXT("With the far side on, 1 shows what lies within sight of the chart's seam (141 W) from both sides of it; 0 lays everything once, as before. Release 2."));
+
+	// (Release 2, a fleet under way: the art director's campaign map upgrade 1, 25 November 2026, on Brian's "I want to
+	// keep upleveling the graphics and smoothness of how they move and act to make it feel as real as possible" and
+	// "can we do that for the campaign map too?".) With ships that sail on, a fleet sent to another sea takes a ship's
+	// course (Campaign/ShipWay.h) and not the way's own corners. Off as it comes, until Brian has seen the Mac's film of
+	// the one beside the other; "-TheaterShipWay" turns it on for that film, switch or no switch. The rest are its
+	// measures, for the Mac to try without a build.
+	TAutoConsoleVariable<int32> CVarShipWay(
+		TEXT("tc.Map.ShipWay"), 0,
+		TEXT("1: a fleet that sails takes a ship's course (out on her turning circle, wide round the corners of her way, in on a circle, slow off the mark and round a tight turn, her wake along the water she has crossed); 0: corner to corner, as before. Release 2; off as it comes."));
+	TAutoConsoleVariable<float> CVarShipTurn(
+		TEXT("tc.Map.ShipTurn"), 13.0f,
+		TEXT("With tc.Map.ShipWay: the radius of a fleet's turning circle as she leaves and comes in, in map units."));
+	TAutoConsoleVariable<float> CVarShipSweep(
+		TEXT("tc.Map.ShipSweep"), 45.0f,
+		TEXT("With tc.Map.ShipWay: the radius she rounds a corner of her way on, out at sea, in map units."));
+	TAutoConsoleVariable<float> CVarShipBerth(
+		TEXT("tc.Map.ShipBerth"), 4.0f,
+		TEXT("With tc.Map.ShipWay: how far outside a corner of her way she passes, in map units."));
+	TAutoConsoleVariable<float> CVarShipHelm(
+		TEXT("tc.Map.ShipHelm"), 2.4f,
+		TEXT("With tc.Map.ShipWay: the fastest a fleet's head swings, in radians a second (less: she creeps round her turns and takes longer)."));
+	TAutoConsoleVariable<float> CVarShipPace(
+		TEXT("tc.Map.ShipPace"), 1.0f,
+		TEXT("With tc.Map.ShipWay: her time for a voyage, as a multiple of the 2.8 to 6.5 seconds its length asks."));
 
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
@@ -11946,6 +11972,52 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	}
 	const FRotator Facing(0.0f, LastPieceYaw, 0.0f);
 
+	// (Release 2, a fleet under way: see CVarShipWay.) The way by water is laid as a ship's course and timed, on the
+	// map (map units; the map's own east and south, which are the world's +Y and -X: a quarter turn, the same hand), and
+	// handed to the piece as her times in the world. False where there is no course to sail: she sails as before.
+	static const bool bShipWayAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterShipWay"));
+	const bool bShipWay = bShipWayAsked || CVarShipWay.GetValueOnGameThread() != 0;
+	auto SailShipWay = [this](AArmyPiece* Piece, const TArray<FVector2D>& MapWay) -> bool
+	{
+		TheaterShipWay::FAsk Ask;
+		Ask.Way.reserve(static_cast<size_t>(MapWay.Num()));
+		for (const FVector2D& Point : MapWay)
+		{
+			Ask.Way.push_back(TheaterShipWay::FSpot{ Point.X, Point.Y });
+		}
+		// (A piece at rest faces the table, its bows at the table's yaw: she leaves so and comes to rest so. On the map
+		// a yaw is the angle from east round toward south.)
+		const double Yaw = FMath::DegreesToRadians(static_cast<double>(LastPieceYaw));
+		Ask.Bows = TheaterShipWay::FSpot{ FMath::Cos(Yaw), FMath::Sin(Yaw) };
+		Ask.Rest = Ask.Bows;
+		Ask.Turn = FMath::Max(CVarShipTurn.GetValueOnGameThread(), 0.0f);
+		Ask.Sweep = FMath::Max(CVarShipSweep.GetValueOnGameThread(), 0.0f);
+		Ask.Berth = FMath::Max(CVarShipBerth.GetValueOnGameThread(), 0.0f);
+		Ask.Step = 0.75; // (as closely as the way itself was asked of the water)
+		const TheaterShipWay::FCourse Course = TheaterShipWay::Plan(Ask, [this](TheaterShipWay::FSpot P) { return CoverAt(P.X, P.Y) <= 0.35f; });
+		if (Course.Points.size() < 2 || Course.Length <= 0.0)
+		{
+			return false;
+		}
+		const double Pace = FMath::Clamp(CVarShipPace.GetValueOnGameThread(), 0.25f, 4.0f);
+		const TheaterShipWay::FTimes Times = TheaterShipWay::Time(Course, TheaterShipWay::Seconds(Course.Length) * Pace, FMath::Max(CVarShipHelm.GetValueOnGameThread(), 0.2f));
+		const int32 Many = static_cast<int32>(Times.At.size());
+		TArray<FVector> Where;
+		TArray<FVector2D> Heads;
+		TArray<double> Ran;
+		Where.Reserve(Many);
+		Heads.Reserve(Many);
+		Ran.Reserve(Many);
+		for (size_t K = 0; K < Times.At.size(); ++K)
+		{
+			Where.Add(MapToWorld(Times.At[K].X, Times.At[K].Y, 0.02));
+			Heads.Add(FVector2D(-Times.Head[K].Y, Times.Head[K].X));
+			Ran.Add(Times.Ran[K] * UnitScale);
+		}
+		Piece->SailCourse(Where, Heads, Ran, Times.Tick, LastPieceYaw);
+		return Piece->IsSailing();
+	};
+
 	// ---- Fleets. One at sea lies in the middle of its sea; one in harbour lies off the coast of its base.
 	TSet<int32> Afloat;
 	TMap<FIntPoint, int32> Crowd; // how many pieces are already at a place: (1, sea) or (2, base)
@@ -12044,8 +12116,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			if (bSail)
 			{
 				const FVector Now = Piece->GetActorLocation();
+				const TArray<FVector2D> MapWay = WaterWay(From, At);
 				TArray<FVector> Way;
-				for (const FVector2D& Point : WaterWay(From, At))
+				for (const FVector2D& Point : MapWay)
 				{
 					Way.Add(MapToWorld(Point.X, Point.Y, 0.02));
 				}
@@ -12056,7 +12129,12 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 					{
 						Way[0] = Now; // (down from the hand onto the water as it goes)
 					}
-					Piece->SailAlong(Way, LastPieceYaw);
+					// (Release 2, a fleet under way.) A ship's course for her, where it is asked for. Not for a fleet let
+					// go from the hand, which comes down onto the water as it goes, as before.
+					if (bCarried || !bShipWay || !SailShipWay(Piece, MapWay))
+					{
+						Piece->SailAlong(Way, LastPieceYaw);
+					}
 				}
 			}
 			Afloat.Add(Fleet.Id);

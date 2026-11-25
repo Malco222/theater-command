@@ -107,6 +107,17 @@ public:
 	 * second and a half to three and a half.
 	 */
 	void SailAlong(const TArray<FVector>& Waypoints, float TableYaw);
+	/**
+	 * (Release 2, a fleet under way; Brian, 25 November 2026: "I want to keep upleveling the graphics and smoothness of
+	 * how they move and act to make it feel as real as possible", "can we do that for the campaign map too?") A fleet
+	 * sails a ship's course, laid and timed for her by the map (Campaign/ShipWay.h): out on her own turning circle,
+	 * wide round the corners of her way, in on a circle to lie as the table wants her; slow off the mark, slow round a
+	 * tight turn, carrying her way in. Her passage wake lies along the water her sterns have crossed. Given as her
+	 * times, in the world: where she is at each tick (Each seconds apart), the way her bows point there (a unit, in the
+	 * world's X and Y) and how far she has run. The last of it leaves her on the table's yaw. With fewer than two
+	 * ticks, or tables not of one length, it does nothing.
+	 */
+	void SailCourse(const TArray<FVector>& At, const TArray<FVector2D>& Head, const TArray<double>& Ran, double Each, float TableYaw);
 	/** The yaw every piece turns to, to face the eye: at once, or once a fleet under sail has come to rest. */
 	void FaceTable(float Yaw);
 	bool IsSailing() const { return bMarching && bSailing; }
@@ -290,6 +301,20 @@ private:
 	/** A place of the piece's own reckoning as it is shown: in the turn of the world nearest the eye, where the map has said so. */
 	FVector Shown(const FVector& Place) const;
 	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
+	// (Release 2, a fleet under way: see SailCourse.) Her times: where she is at each tick, the way her bows point
+	// there, and how far she has run, in the world. Empty when she is not on a course of her own.
+	TArray<FVector> SailAt;
+	TArray<FVector2D> SailHead;
+	TArray<double> SailRan;
+	double SailEach = 0.02;
+	float SailLaidYaw = 0.0f; // the table's yaw her course was laid to end on
+	TArray<FVector> WakeLaid; // her passage wake as it was built, straight astern
+	TArray<FVector> WakeBent; // and as it lies now, along the water her sterns have crossed
+	double WakeReach = 0.0; // how far astern of her middle the wake reaches, in her own units
+	double WakeStiff = 0.0; // and how far astern of her middle she is still herself (her ships, to their sterns)
+	bool bWakeBent = false;
+	void BendWake(double Ran, const FVector2D& Bows, double Progress);
+	void StraightenWake();
 	bool bSelected = false;
 	bool bHovered = false;
 
