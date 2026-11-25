@@ -2687,12 +2687,13 @@ export function foesOf(g: Game, nat: string): string[] {
  * The seas on which a fleet meets its country's enemy: a coast its enemy holds, an enemy fleet its side knows of there,
  * at sea or in harbour, or a lane of its enemy's that carries something laid (laneCounts).
  */
-function foeSeaSet(g: Game, f: Fleet): Set<number> {
-  const foes = new Set(foesOf(g, f.nat)), at = new Set<number>();
+function foeSeaSet(g: Game, f: Fleet): Map<number, number> {
+  const foes = new Set(foesOf(g, f.nat)), at = new Map<number, number>();
   if (!foes.size) return at;
-  g.seas.forEach((s, z) => { if (s.coast.some((id) => foes.has(g.regions[id].ctrl))) at.add(z); });
-  for (const x of g.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g, x, f.nat) !== 'none') at.add(x.zone);
-  for (const rt of seaRoutes(g)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) at.add(z);
+  const add = (z: number): void => { at.set(z, (at.get(z) ?? 0) + 1); };
+  g.seas.forEach((s, z) => { for (const id of s.coast) if (foes.has(g.regions[id].ctrl)) add(z); });
+  for (const x of g.fleets) if (foes.has(x.nat) && x.zone >= 0 && shipCount(x.ships) > 0 && fleetKnown(g, x, f.nat) !== 'none') add(x.zone);
+  for (const rt of seaRoutes(g)) if (foes.has(rt.to) && laneCounts(rt)) for (const z of rt.zones) add(z);
   return at;
 }
 
@@ -2701,21 +2702,44 @@ function foeSeaSet(g: Game, f: Fleet): Set<number> {
  * (fleetReach) in calm weather: the enemy seas in reach (those holding an enemy coast, fleet or lane), and how many seas
  * out it first meets one (1 on the harbour's own sea). Nothing in reach is { seas: 0, out: 0 }.
  */
-function foeReach(g: Game, nat: string, r: Region, at: Set<number>): { seas: number; out: number } {
+function foeReach(g: Game, nat: string, r: Region, at: Map<number, number>): { seas: number; out: number } {
   const o = { seas: 0, out: 0 };
   if (!at.size) return o;
+  for (const { z, d } of reachOf(g, nat, r)) if (at.has(z)) { o.seas++; if (!o.out) o.out = d; }
+  return o;
+}
+
+/** The seas in a fleet's reach from a harbour in calm weather, nearest first, each with how many seas out it lies (1 on the harbour's own). */
+function reachOf(g: Game, nat: string, r: Region): { z: number; d: number }[] {
   const d = new Int16Array(g.seas.length).fill(-1), q: number[] = [];
   for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
-    if (at.has(q[i])) { o.seas++; if (!o.out) o.out = d[q[i]]; }
     if (d[q[i]] >= NAVY.range) continue;
     for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, nat)) { d[j] = d[q[i]] + 1; q.push(j); }
   }
-  return o;
+  return q.map((z) => ({ z, d: d[z] }));
+}
+
+/**
+ * The beat a fleet that stands forward takes with its new harbour, by the reading that picked the harbour (the design
+ * director, 20:02Z, 1): of the seas in its reach from there, the one that counts most of the enemy (each enemy coast on
+ * it, each known enemy fleet in it, each enemy lane through it), then the fewer seas out, then the chart's order. A
+ * fleet stands forward to reach its war, and a beat left behind is a war it no longer reaches. -1 with none in reach.
+ */
+function forwardBeat(g: Game, nat: string, r: Region, at: Map<number, number>): number {
+  let best = -1, bw = 0, bd = 0;
+  for (const { z, d } of reachOf(g, nat, r)) {
+    const w = at.get(z) ?? 0;
+    if (w > bw || (w === bw && w > 0 && (d < bd || (d === bd && z < best)))) { best = z; bw = w; bd = d; }
+  }
+  return best;
 }
 
 /** For the tests and the readings: how much of the enemy a fleet would have in its reach from a harbour (foeReach). */
 export const enemyInReach = (g: Game, f: Fleet, r: Region): { seas: number; out: number } => foeReach(g, f.nat, r, foeSeaSet(g, f));
+
+/** For the tests and the readings: the beat a fleet standing forward to a harbour would take there (forwardBeat), or -1. */
+export const beatFrom = (g: Game, f: Fleet, r: Region): number => forwardBeat(g, f.nat, r, foeSeaSet(g, f));
 
 /**
  * The farthest a fleet stands forward on this rule alone: one month's voyage (voyageMonths 1), the game's own turn and
@@ -2796,7 +2820,11 @@ export function forwardHarbour(g: Game, f: Fleet): Region | null {
  */
 function standsForward(g: Game, f: Fleet): boolean {
   const to = forwardHarbour(g, f), from = f.port;
-  if (!to || !rebase(g, f, to)) return false;
+  if (!to) return false;
+  const beat = forwardBeat(g, f.nat, to, foeSeaSet(g, f));
+  if (!rebase(g, f, to)) return false;
+  // (Its beat moves with its base, to the sea there that counts most of the enemy: the design director, 20:02Z, 1.)
+  if (beat >= 0) f.station = beat;
   headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}: no enemy lies within its reach from ${from}.`, f.nat, to.id);
   return true;
 }
