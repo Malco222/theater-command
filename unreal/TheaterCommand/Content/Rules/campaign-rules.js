@@ -120308,7 +120308,7 @@ ${standing5}`,
     if (part[0] === "teamsrule") {
       setTeams(s, part[1] === "on");
       ok2 = true;
-      note4 = teamsOn(s) ? "Support teams are on: machine-gun and mortar brigades can be raised like artillery, by you and by every other power. The machine guns stiffen a defence against men on foot; the mortars break up the works an attack goes in against." : "Support teams are off: no new machine-gun or mortar brigades can be raised. Brigades already raised stay with their armies.";
+      note4 = teamsOn(s) ? "Machine gun and mortar brigades are on: you and every other power can raise them, the way artillery is raised. They fight beside your corps, never alone: the machine guns stiffen a defence against men on foot, the mortars break up the works an attack goes in against." : "Machine gun and mortar brigades are off: no new ones can be raised. Brigades already raised stay with their armies.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "fleetwhyrule") {
