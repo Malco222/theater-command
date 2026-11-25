@@ -16,7 +16,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { DESERT, atWar, computeSupply, createGame, declareWar } from '../src/campaign/game';
-import { SeaPicture, openSeas, zoneOf } from '../src/campaign/navy';
+import { SeaPicture, openSeas, zoneOf, type SeaState } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import type { Game, Region } from '../src/campaign/types';
 
@@ -33,11 +33,21 @@ const pacificWar = (): Game => {
 const BESIDE = ['luzonstrait', 'philsea', 'luzonsea', 'visayan', 'sulu', 'leyte', 'palawan', 'celebes'];
 const ROUND = ['ryukyu', 'echina', 'formosa', 'schina', 'wcarolines', 'marianas', 'bonin', 'indochina', 'molucca', 'natuna', 'makassar'];
 const zones = (g: Game, keys: string[]): Set<number> => new Set(keys.map((k) => zoneOf(g, k)));
-/** Seas closed to one country by hand, on top of whatever the month's own picture closes. */
-const really = SeaPicture.prototype.closed;
+/**
+ * Seas closed to one country by hand, on top of whatever the month's own picture closes. (A sea closed by hand is also
+ * a sea whose state has changed, as it is in play: the supply picture keeps each country's sea lanes while the state
+ * of every sea they asked is the same (game.ts lanesKept, navy.ts SeaPicture.state), and closed() reads nothing else.)
+ */
+const really = SeaPicture.prototype.closed, reallyState = SeaPicture.prototype.state;
 const shutTo = (who: string, shut: () => (z: number) => boolean): void => {
   vi.spyOn(SeaPicture.prototype, 'closed').mockImplementation(function (this: SeaPicture, z: number, nat: string): boolean {
     return (nat === who && shut()(z)) || really.call(this, z, nat);
+  });
+  vi.spyOn(SeaPicture.prototype, 'state').mockImplementation(function (this: SeaPicture, z: number): SeaState | null {
+    const s = reallyState.call(this, z);
+    if (!shut()(z)) return s;
+    const was = s ?? { fleets: [], coasts: [], groups: [], skies: false, wx: 1 };
+    return { ...was, fleets: [...was.fleets, { nat: `shut by hand to ${who}`, power: 0 }] };
   });
 };
 const fed = (g: Game, nat: string, name: string): boolean => !!g.supply[nat][g.byName[name].id];
