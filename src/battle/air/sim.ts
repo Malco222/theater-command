@@ -173,10 +173,17 @@ export class AirSim implements BattleSim<AirUnit> {
   private stragId = 1;
   /**
    * Bombers by name (AirPlace.bombers): each such box's seats, and the seat each straggler holds. Which bomber a loss
-   * is, and which of a box's bombers got a fighter booked to the box, is drawn from a stream of its own in shown and
-   * unshown battles alike, and is never a count: the same aircraft fall at the same moments with the names or without them.
+   * is (or falls out of formation) is drawn from a stream of its own, and which of a box's bombers got a fighter booked
+   * to the box from another (gunRng), in shown and unshown battles alike; neither is ever a count: the same aircraft
+   * fall at the same moments with the names or without them.
    */
   private seatRng: Rng;
+  /**
+   * Which bomber's gunners are credited with a fighter booked to their box (gunnerOf): a stream of its own (fork 73), so
+   * that who is credited never re-throws which named bomber falls next on seatRng, and a change in how losses are
+   * booked leaves the same named crews falling (the design director, 25 November 2026 16:54Z; names carry tours).
+   */
+  private gunRng: Rng;
   private seated = new Map<number, Seated>();
   private stragSeat = new Map<number, number>();
   /** The escort groups that have broken away from their bombers at least once (told once each). */
@@ -256,9 +263,11 @@ export class AirSim implements BattleSim<AirUnit> {
     this.lookRng = this.rng.fork(41);
     this.stragLook = this.rng.fork(43);
     this.hitRng = this.rng.fork(47);
-    // 53 is the crews' (fates.ts: the men past the fifth). 59: which bomber by name a loss is.
+    // 53 is the crews' (fates.ts: the men past the fifth). 59: which bomber by name a loss is, or falls out.
     this.seatRng = this.rng.fork(59);
     this.beatRng = this.rng.fork(61);
+    // 67 is the troops' layout (troops.ts) and 71 their looks. 73: which bomber's gunners a fighter booked to a box is.
+    this.gunRng = this.rng.fork(73);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
@@ -1687,7 +1696,8 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
    * the box's that owed them (ruling 227): the loss's creditor ('by', booked by the ledger: creditor) is the box, and
-   * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
+   * the box is credited, one of its bombers by a stream of its own (gunRng, never seatRng: who is credited must not
+   * move which named bomber falls). A loss booked to an escort or to the guns is
    * theirs, and no lot moves it. Returns the box and the seat, or null.
    */
   private gunnerOf(u: AirUnit, by: number | 'flak' | null | undefined): [number, number] | null {
@@ -1696,7 +1706,7 @@ export class AirSim implements BattleSim<AirUnit> {
     // Any bomber still in formation; failing that, one of the box's stragglers.
     const pool = B.form.length ? B.form : box.strag.map((s) => this.stragSeat.get(s.id)).filter((k): k is number => k !== undefined);
     if (!pool.length) return null;
-    const k = pool[this.seatRng.int(pool.length)];
+    const k = pool[this.gunRng.int(pool.length)];
     const got = B.shot.get(k) ?? {};
     got[u.nat] = (got[u.nat] ?? 0) + 1;
     B.shot.set(k, got);
