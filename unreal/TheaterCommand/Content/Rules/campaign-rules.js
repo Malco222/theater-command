@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a527fdc4 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7b4878e76 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -30909,17 +30909,33 @@
     }
     return false;
   }
-  var feedsBy = (g2, r, x, z, truly) => !closedTo(g2, z, x) && (!truly || garrisonOf(r).every((c) => c.nat === x || !closedTo(g2, z, c.nat)));
-  function fedBySea(g2, r) {
+  var seaReach = (g2, x, forNat) => openSeas(g2, x, void 0, void 0, void 0, void 0, x === forNat ? void 0 : forNat);
+  var walkedOnce = (g2) => {
+    const seen2 = /* @__PURE__ */ new Map();
+    return (x, forNat) => {
+      const k = `${x} ${forNat}`;
+      let o = seen2.get(k);
+      if (!o) seen2.set(k, o = seaReach(g2, x, forNat));
+      return o;
+    };
+  };
+  function fedBySea(g2, r, reach3) {
     if (!trueReach(g2)) return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
-    return feeders(g2, r).some((x) => r.seas.some((z) => feedsBy(g2, r, x, z, true)));
+    const by2 = reach3 ?? ((x, id) => seaReach(g2, x, id));
+    return feeders(g2, r).some((x) => {
+      const o = by2(x, r.ctrl);
+      return r.seas.some((z) => o[z] === 1);
+    });
   }
-  var fed = (g2, r) => fedBySea(g2, r) || fedByBook(g2, r);
+  var fed = (g2, r, reach3) => fedBySea(g2, r, reach3) || fedByBook(g2, r);
   var fedFrom = fed;
   var fedByBook = (g2, r) => besieged(g2, r) && bookFed(g2, r.name, r.ctrl, [...new Set(besiegers(g2, r).map(armyOf))]);
-  function feedingSeas(g2, r) {
-    const who = feeders(g2, r), truly = trueReach(g2);
-    return r.seas.filter((z) => who.some((id) => feedsBy(g2, r, id, z, truly)));
+  function feedingSeas(g2, r, reach3) {
+    const who = feeders(g2, r);
+    if (!trueReach(g2)) return r.seas.filter((z) => who.some((id) => !closedTo(g2, z, id)));
+    const by2 = reach3 ?? ((x, id) => seaReach(g2, x, id));
+    const open3 = who.map((x) => by2(x, r.ctrl));
+    return r.seas.filter((z) => open3.some((o) => o[z] === 1));
   }
   var strength = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
   function ringClosed(g2, r) {
@@ -30941,7 +30957,7 @@
     }
     return !road || out + SIEGE.ringNear * near2 >= need;
   }
-  var garrisonFed = (g2, r) => !besieged(g2, r) || monthsShut(g2, r) <= storesOf(g2, r) || fed(g2, r);
+  var garrisonFed = (g2, r, reach3) => !besieged(g2, r) || monthsShut(g2, r) <= storesOf(g2, r) || fed(g2, r, reach3);
   function joined2(g2, nat, from2, most) {
     const out = [from2];
     for (let i = 0; i < out.length; i++) {
@@ -31487,12 +31503,12 @@
       if (g2.nations[by2]?.alive && besiegers(g2, r).some(fights)) fall(g2, r, by2, "empty");
     }
   }
-  function siegeSupply(g2) {
+  function siegeSupply(g2, reach3) {
     if (!siegeRules(g2)) return;
     for (const r of g2.regions) {
       if (!r.garr || !r.garr.length || !besieged(g2, r)) continue;
-      const fed2 = garrisonFed(g2, r);
-      const outside = r.garr.some((c) => fortRow(g2, c)) ? fedFrom(g2, r) : false;
+      const fed2 = garrisonFed(g2, r, reach3);
+      const outside = r.garr.some((c) => fortRow(g2, c)) ? fedFrom(g2, r, reach3) : false;
       for (const c of r.garr) c.supplied = fortRow(g2, c) ? outside : fed2;
     }
   }
@@ -31540,11 +31556,12 @@
     const inside2 = garrisonOf(r).filter((c) => !c.dead && c.org >= 0.25);
     return { power: SIEGE.sortie * inside2.reduce((s, c) => s + corpsBase(g2, c) * KIND[c.kind].atk, 0), corps: inside2.length };
   }
-  function siegeView(g2, region) {
+  function siegeView(g2, region, reach3) {
     const r = g2.regions[region];
     if (!r || !siegeRules(g2)) return null;
     const size = townSize(g2, r), by2 = besiegerOf(g2, r);
-    const stores2 = storesOf(g2, r), shut = monthsShut(g2, r), bySea = fedBySea(g2, r), byBook = fedByBook(g2, r);
+    const walk2 = trueReach(g2) ? reach3 ?? walkedOnce(g2) : void 0;
+    const stores2 = storesOf(g2, r), shut = monthsShut(g2, r), bySea = !walk2 ? fedBySea(g2, r) : !!by2 && fedBySea(g2, r, walk2), byBook = fedByBook(g2, r);
     const inside2 = garrisonOf(r).length, guard = guardOf(g2, r), bonus = townBonus(g2, r), broken = breachOf(g2, r);
     const left = Math.max(0, stores2 - shut);
     const clock = by2 ? crewClock(g2, r) : null;
@@ -31556,7 +31573,7 @@
     if (driveOut(g2) && inside2 && !by2) lines2.push("The garrison will hold the town after the field is lost: it must then be stormed or starved out.");
     if (by2) {
       const closed = ringClosed(g2, r);
-      const seas = bySea ? feedingSeas(g2, r).map((z) => g2.seas[z].name) : [];
+      const seas = bySea ? feedingSeas(g2, r, walk2).map((z) => g2.seas[z].name) : [];
       lines2.push(bySea ? `Ships still reach the harbour${seas.length ? ` by ${seaWhatList(seas)}` : ""}: the town cannot be starved while they do.${byBook ? " Food comes in across the lake as well, so closing the sea would not starve it." : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? "those waters" : "that water"} to them, starts its stores running down.`}` : byBook ? "Food still comes in across the lake: however close the ring, the town is not starved while no player's troops stand in it." : !closed ? "The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it." : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? "one more month" : `${left} more months`}; after that they go hungry.` : inside2 ? "Its stores are gone: the garrison is starving, and loses men and heart every month." : "Its stores are gone: it is about to give in.");
       if (crew) lines2.push(`Its fortress crews live on their works' own stores: ${crew.left === 1 ? "one month" : `${crew.left} months`} of them left. When they run out the crews give in, whatever the town's own stores.`);
       if (closed && r.cap && r.owner === r.ctrl) {
@@ -31591,8 +31608,8 @@
   }
   function siegesNow(g2) {
     if (!siegeRules(g2)) return [];
-    const out = [];
-    for (const r of g2.regions) if (besieged(g2, r)) out.push(siegeView(g2, r.id));
+    const out = [], walk2 = trueReach(g2) ? walkedOnce(g2) : void 0;
+    for (const r of g2.regions) if (besieged(g2, r)) out.push(siegeView(g2, r.id, walk2));
     return out;
   }
 
@@ -74222,7 +74239,18 @@
       book3.drawn.set(id, { mask: pass, friend: friend2, at: logEnd, seeds, heads, ...drawn, rail: drawn.east ? rail2 : null });
     }
     for (const c of g2.corps) c.supplied = !g2.nations[c.nat].atWar.length || !!g2.supply[c.nat]?.[c.reg];
-    if (field4) siegeSupply(g2);
+    const none4 = truly ? new Uint8Array(g2.seas.length) : null;
+    const townReach = truly ? (x, id) => {
+      const theirs = lanesOf(x);
+      return !theirs ? none4 : x === id ? theirs : carrying(x, id, theirs);
+    } : void 0;
+    if (field4) siegeSupply(g2, townReach);
+    if (field4 && townReach && supplyCheck) {
+      for (const r of g2.regions) {
+        if (!r.garr || !r.garr.length || !besieged(g2, r)) continue;
+        if (fedBySea(g2, r, townReach) !== fedBySea(g2, r) || !sameBytes(feedingSeas(g2, r, townReach), feedingSeas(g2, r))) throw new Error(`the besieged town of ${r.name} read from kept sea lanes in month ${g2.turn} differs from a fresh reading`);
+      }
+    }
     g2.supplyDirty = false;
     resetRailheads(g2);
   }
@@ -116142,7 +116170,7 @@
       return none4;
     }
   }
-  function seaReach(ids2) {
+  function seaReach2(ids2) {
     const s = game();
     const ports = /* @__PURE__ */ new Set();
     let beaches = [];
@@ -120757,7 +120785,7 @@ ${standing5}`,
     work: playerOrder(work),
     force: force2,
     forceOrder: playerOrder(forceOrder),
-    seaReach,
+    seaReach: seaReach2,
     bySeaWhy,
     ship,
     landingPlan,
