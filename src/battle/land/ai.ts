@@ -398,7 +398,10 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
   // Guns: fire on the main effort, the next block of its stretch when one breaks, then on whatever is nearest; they stay
   // where they stand unless nothing is in reach (a deep city).
   for (const g of guns) {
-    if (s.plan) { const t = mainNow(b, P); if (t) g.aim = t.id; else delete g.aim; }
+    // (Support teams in battle, sim.teamsRule: a team is never laid on the main effort's target. It fires on what its own
+    // weapon harms most, the sim's targetOf: the design director, 25 November 20:03Z, mend 2.)
+    if (b.teamsRule && g.team) delete g.aim;
+    else if (s.plan) { const t = mainNow(b, P); if (t) g.aim = t.id; else delete g.aim; }
     if (g.order?.kind !== 'withdraw') gunsUp(b, side, g, foes);
   }
   // The main effort: to its start line, wait there under its guns, then in.
