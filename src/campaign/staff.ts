@@ -1363,11 +1363,16 @@ function frontsKept(g: Game, nat: string, real: Front[]): void {
       if (!elsewhere.has(e) && !(g.turn <= flag(g, `st:push:${nat}`) && flag(g, `st:pushed:${nat}:${e}`))) delete g.flags[k];
     }
   }
-  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten.)
+  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten. One walk
+  // over the flags for this and the marks below: the two kinds of key share no key, and neither reads the other's.)
   const word = `st:on:${nat}:`;
-  for (const k of Object.keys(g.flags)) if (k.startsWith(word) && k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
   const mine = [`${MARK.on}:${nat}:`, `${MARK.rest}:${nat}:`, `${MARK.idle}:${nat}:`];
   for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('st:')) continue;
+    if (k.startsWith(word)) {
+      if (k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
+      continue;
+    }
     const pre = mine.find((m) => k.startsWith(m));
     if (!pre) continue;
     // (A rest lasts its months whatever becomes of the front, and is forgotten when it is over.)
