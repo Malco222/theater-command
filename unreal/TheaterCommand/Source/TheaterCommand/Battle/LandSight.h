@@ -112,8 +112,9 @@ namespace LandSight
 	 * NOT hold this: the mark's line says ANY given a target, which stays true whoever may be given one.)
 	 *
 	 * The numbers are the rules' own, kept here because the scene has no word from the rules for them;
-	 * Tools/land_play/run.sh fails where they, or the rules' lines the mark's words stand on, differ from rules.ts
-	 * and sim.ts (which lines: the list at the head of its guard).
+	 * Tools/land_play/run.sh fails where they, or the rules' lines the mark's words stand on, differ from rules.ts,
+	 * sim.ts and units.ts (which lines: the list at the head of its guard; those on who holds his fire are held
+	 * whole, inside their own function and in their order).
 	 */
 	struct Finds
 	{

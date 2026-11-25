@@ -996,7 +996,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	{
 		const LandSight::Finds Finds;
 		SpotterLines.Add(bHand ? TEXT("RINGS: A HIDDEN ENEMY OF THE RING'S KIND IS SEEN INSIDE IT") : TEXT("RINGS: HIDDEN MEN ON FOOT ARE SEEN INSIDE ONE. PICK A UNIT FOR GUNS AND TANKS"));
-		SpotterLines.Add(FString::Printf(TEXT("MEN LYING IN WAIT FIRE ON TROOPS IN PLAIN SIGHT WITHIN %d m (MACHINE GUNS %d m, IN FOREST %d m)"), static_cast<int32>(Finds.Ambush + 0.5), static_cast<int32>(Finds.AmbushMg + 0.5),
+		SpotterLines.Add(FString::Printf(TEXT("MEN LYING IN WAIT FIRE ON TROOPS IN PLAIN SIGHT WITHIN %d m (MACHINE-GUNS %d m, IN FOREST %d m)"), static_cast<int32>(Finds.Ambush + 0.5), static_cast<int32>(Finds.AmbushMg + 0.5),
 			static_cast<int32>(Finds.AmbushForest + 0.5)));
 		SpotterLines.Add(TEXT("HIDDEN GUNS, MORTARS AND TANKS, AND ANY SENT TO ATTACK OR GIVEN A TARGET, DO NOT WAIT: FULL RANGE"));
 		SpotterLines.Add(TEXT("ONE THAT HAS FIRED IS PLACED AT ONCE INSIDE ITS RING: YOUR FIRE TELLS ON IT IN FULL"));
