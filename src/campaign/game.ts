@@ -4721,7 +4721,10 @@ export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefi
   const mine = (r: Region): boolean => (o.shore ? r.owner === o.shore && allied(g, nat, r.ctrl) : r.ctrl === nat);
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
-    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= roomAt(g, r, nat)) continue;
+    // (Where the book dates this country's rows, stops 1 and 2 of the dial, the record's hand stands over an island's
+    // room: its port is counted against five, as it always was. The design director, 13:58Z 25 November 2026, island
+    // room 1. Elsewhere the island's own room binds the row, as it binds everyone.)
+    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= (bookKept(g, nat) ? STACK : roomAt(g, r, nat))) continue;
     const d = chartDist2(g, r, posting);
     if (d < bd) { bd = d; best = r; }
   }
