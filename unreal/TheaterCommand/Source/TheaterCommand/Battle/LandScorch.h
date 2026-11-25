@@ -360,6 +360,7 @@ namespace LandScorch
 	inline std::vector<Mark> MarksOf(const LandField::Ground& G, const LandField::Field& F)
 	{
 		using namespace Detail;
+		if (!F.Tried("burntground")) return {}; // (on trial: none without the word)
 		const double Wind = 2.0 * Pi * Unit(Hash(F.Seed, 0x3171Dull));
 		const bool bSnow = G.SnowLying() > 0.15;
 		std::vector<Mark> Out;
@@ -720,5 +721,82 @@ namespace LandScorch
 				Tiles[T].ZMax = std::max(Tiles[T].ZMax, From.Positions[K]);
 			}
 		}
+	}
+}
+
+// ====================================================================== for the neighbours (release 2 pass 2)
+//
+// What the rest of the ground reads of the burnt cottages, kept apart from the look above so the look can change
+// without these moving: the rounds the clutter thins in (Ground::AddBurn, the environments' clutter), and the share of
+// light the burn leaves at a place (the vehicles' footprint shade, so a shade on a burn does not darken it twice).
+// All of it empty or 1 without the trial word "burntground", because MarksOf gives no marks then.
+namespace LandScorch
+{
+	/** A round of a mark's burnt ground for the clutter: its middle (field metres), Core (within it the burn is at or
+	 * near its full strength) and Outer (by there it has faded out), metres from the middle. */
+	struct Round
+	{
+		double X = 0.0, Y = 0.0, Core = 0.0, Outer = 0.0;
+	};
+
+	/** The share of the ground's light a burn leaves where it lies: 1 the ground as it is, lower the darker the burn
+	 * (BurnAt's own numbers: as Paint draws it, the ground's lightness times this). */
+	inline double ShareOf(const Burn& B) { return 1.0 - B.A * (1.0 - B.Rel); }
+
+	/** The share of light the burnt ground leaves at a field point: 1 off every mark; where marks meet the smallest of
+	 * theirs (the darker of two drawn, as Lay draws it, never the two multiplied). */
+	inline double ShareAt(const std::vector<Mark>& Marks, double X, double Y)
+	{
+		double Share = 1.0;
+		for (const Mark& M : Marks)
+		{
+			const double DX = X - M.X, DY = Y - M.Y;
+			if (DX * DX + DY * DY > M.Out * M.Out) continue;
+			Share = std::min(Share, ShareOf(BurnAt(M, X, Y)));
+		}
+		return Share;
+	}
+
+	/**
+	 * The rounds a mark's burnt ground gives the clutter. Measured from the mark itself, along 24 ways out from its
+	 * middle every 0.25 m: Core is how far out, on the mean, it is still at least three quarters burnt; Outer how
+	 * far, on the mean, before its fading edge is through (its faint flecks past that left out). Today one round a
+	 * cottage, round its middle; a later change may give more (one along its tongue down the wind, say), so it is a
+	 * list.
+	 */
+	inline std::vector<Round> RoundsOf(const Mark& M)
+	{
+		constexpr int Ways = 24;
+		constexpr double By = 0.25;
+		double SumCore = 0.0, SumOuter = 0.0;
+		for (int K = 0; K < Ways; ++K)
+		{
+			const double Th = 2.0 * Detail::Pi * K / Ways;
+			const double CX = std::cos(Th), CY = std::sin(Th);
+			double Core = 0.0, Outer = 0.0;
+			for (double R = 0.0; R <= M.Out; R += By)
+			{
+				const Burn B = BurnAt(M, M.X + CX * R, M.Y + CY * R);
+				if (B.A >= 0.75) Core = R;
+				if (B.A > 0.0 && B.Rim < 1.0) Outer = R;
+				if (B.D > 0.0 && B.Rim >= 1.0) break; // (out past its fading edge: nothing more of it this way but flecks)
+			}
+			SumCore += Core;
+			SumOuter += Outer;
+		}
+		Round Rd;
+		Rd.X = M.X;
+		Rd.Y = M.Y;
+		Rd.Core = SumCore / Ways;
+		Rd.Outer = std::max(Rd.Core, SumOuter / Ways);
+		return { Rd };
+	}
+
+	/** Gives the ground's clutter every round of every mark (Ground::AddBurn): the near clutter thins and dries on the
+	 * burnt ground. Call it once the ground is built and before its clutter is first asked for, from one thread. */
+	inline void Thin(LandField::Ground& G, const std::vector<Mark>& Marks)
+	{
+		for (const Mark& M : Marks)
+			for (const Round& Rd : RoundsOf(M)) G.AddBurn(Rd.X, Rd.Y, Rd.Core, Rd.Outer);
 	}
 }

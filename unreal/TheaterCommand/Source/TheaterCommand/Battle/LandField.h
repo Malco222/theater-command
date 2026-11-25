@@ -126,7 +126,7 @@ namespace LandField
 		 * frame rate: words between commas ("houses": the bocage's farmhouses, barns and byres built to the vehicles' detail, LandHouse, kit
 		 * models drawn by level in place of their plain built boxes; "church": a church in the farmland's villages; "walltop": Italy's walls
 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
-		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner; "city": LandScape's ruined city look where the rules laid a town or a city with streets; "burntground": the burnt-out cottages each on soft brown burnt ground of its own, LandScorch, in place of the kit's flat dark skirt), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
+		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner; "city": LandScape's ruined city look where the rules laid a town or a city with streets; "burntground": the burnt-out cottages each on soft brown burnt ground of its own, LandScorch, in place of the kit's flat dark skirt, the clutter on it thinned), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
 		 * every ground as passed.
 		 */
 		std::string Trial;

@@ -2446,7 +2446,7 @@ the art director's pass. With the word on:
   product or their sum. It is held off lanes, banks, floors, walls, water and marsh, fading 0.7 to 3.7 m from them.
 - **The switch**: the trial word `burntground` (`Field::Tried("burntground")`, read in LandField's three hooks). The
   game passes it with `-TheaterLandTrial=burntground`; the test reads `LAND_FIELD_TRIAL=burntground`. Without it the
-  field's digests equal release 2 pass 2's (f827915a) on both compilers. The test always lays the same field the
+  field's digests equal release 2 pass 2's (now its newer head, db8f2ccb) on both compilers. The test always lays the same field the
   other way beside it and checks both sides: without the word the kit's skirt is still drawn and no burnt ground is
   laid; with it there is one mark for each cottage and the skirt is gone. The checks of the look itself run only
   with the word.
@@ -2464,13 +2464,25 @@ LATLON="51.0 36.5" SNOW=0.9 MONTH=1, 15 cottages):
 | where two meet | darkest 0.59, against a product of 0.53 | 0.42, against 0.32 |
 | chimney mean | 80,55,46 (the old 56,45,41); lower 112,70,55, top 67,50,42 | the same on its sides |
 
+For the neighbours (a marked block at the end of `LandScorch.h`, so the look above can change without it moving):
+- **The clutter on the burn** is thinned and dried by the environments thread's `Ground::AddBurn`. `RoundsOf(Mark)`
+  gives a mark's rounds: its middle, a Core (how far out, on the mean of 24 ways, it is still three quarters burnt,
+  about 2.5 to 6 m) and an Outer (where its fading edge is through, about 8.5 to 13 m). Today it is one round a
+  cottage; it returns a list so a later change can give more. `Thin` hands every round to `AddBurn`, called from
+  the same hook at the end of the ground's build, only with the word: after the bases are built, before any clutter
+  is asked for, on one thread. Without the word `AddBurn` is never called. In Prokhorovka's 21 cores 463 pieces of
+  clutter stand without the word and 163 with it; off the burnt ground the clutter is the same piece for piece.
+- **The share of light** the burn leaves, for the ground thread's footprint shade: `MarksOf(Ground, Field)` (empty
+  without the word) and `ShareAt(Marks, X, Y)`, which is 1 off every mark, and where marks meet the smallest of
+  theirs (`1 - A (1 - Rel)` from `BurnAt`). The test checks that it is 1 far from every cottage, below 1 inside each
+  mark, never under the darkest share of the marks over a point, and that it has no step over 0.09 between
+  neighbouring points of the laid grid across a fading edge.
+
 Under a tank's footprint shade (LandShade multiplies: belly 0.35, edge 0.5), the mark's mean gives 0.25 and 0.36,
 and its darkest gives 0.15 and 0.21. The old skirt gave 0.16 and 0.23. The material multiplies, so this cannot be
 fixed on the ground's side.
 
 Not done here:
-- The grass clutter on a burn is neither thinned nor browned. Clutter skips only `OcHouse`, so an `OcCut` from this
-  side would change nothing. This needs a bit of the environments thread's own clutter test.
 - The model file still carries the skirt. The models thread is asked to drop 'melt' (or keep it for snow only) and to
   colour the 'soot' shell as burnt brick sooted toward its top.
 

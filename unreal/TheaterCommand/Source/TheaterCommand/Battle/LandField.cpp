@@ -8729,7 +8729,12 @@ namespace LandField
 	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F))
 	{
 		// (each burnt cottage's own burnt ground, in the near tiles, on trial, Tried("burntground"): LandScorch)
-		if (F.Tried("burntground")) LandScorch::Into(In->TileList, LandScorch::Lay(*this, F));
+		if (F.Tried("burntground"))
+		{
+			const LandScorch::Laid Burnt = LandScorch::Lay(*this, F);
+			LandScorch::Into(In->TileList, Burnt);
+			LandScorch::Thin(*this, Burnt.Marks); // (the clutter thinned and dried on it: AddBurn, before any clutter is asked for)
+		}
 	}
 	Ground::~Ground() = default;
 
