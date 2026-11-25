@@ -15219,7 +15219,8 @@ namespace
 			Deal(TEXT("FLYING THE RAID"), Going, TEXT("No group is picked. Add one from those that could join."));
 			// (Release 2, a raid on troops with the strafers' rule on; the UI director's words, as the browser's card has them,
 			// between the raid's own forces and those that could join.) The heading as the card's others; then the muted line
-			// once and a group's name a row (text only: no picture, no tag, no button), or the line for none in place of both.
+			// once and a group's name a row (text only: no picture, no tag, no button), or the line for none in place of both,
+			// drawn as the card's other empty lines are (Deal's: Italic 11, Faint; the UI director, 16:04Z).
 			// Every word is the rules'. With no strafe on the card nothing is added.
 			if (Card.bStrafe)
 			{
@@ -15229,7 +15230,7 @@ namespace
 				{
 					StrafeRows->AddSlot().AutoHeight()
 					[
-						SNew(STextBlock).Text(FText::FromString(Card.StrafeNone)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						SNew(STextBlock).Text(FText::FromString(Card.StrafeNone)).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
 					];
 				}
 				else
