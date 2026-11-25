@@ -609,6 +609,28 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
   if (a[z] < 0) a[z] = closedNow(g, z, nat) ? 1 : 0;
   return a[z] === 1;
 }
+/**
+ * (Speed, the far map: the playtest's finding 41.) closedTo and seaRisk of one sea at once, from one count of each
+ * side: asked one after the other, each counted the enemy's side again, and our own where it needed it. The trade
+ * routes (trade.ts) and every search by sea (seaSearch) ask both of each sea they look at. Same figures, same order.
+ */
+export function seaOdds(g: Game, z: number, nat: string): { shut: boolean; risk: number } {
+  const R = readingOf(g);
+  if (!R) return oddsNow(g, z, nat);
+  let a = R.closed.get(nat), b = R.risk.get(nat);
+  if (!a) R.closed.set(nat, (a = new Int8Array(g.seas.length).fill(-1)));
+  if (!b) R.risk.set(nat, (b = new Float64Array(g.seas.length).fill(NaN)));
+  if (a[z] < 0 || Number.isNaN(b[z])) { const o = oddsNow(g, z, nat); a[z] = o.shut ? 1 : 0; b[z] = o.risk; }
+  return { shut: a[z] === 1, risk: b[z] };
+}
+function oddsNow(g: Game, z: number, nat: string): { shut: boolean; risk: number } {
+  const e = seaSide(g, z, nat, true);
+  const hunters = e.ships + e.air * 0.5;
+  const closes = e.total >= NAVY.closed.min;
+  // (Our own side is counted only where closedTo or seaRisk would have counted it.)
+  const own = closes || hunters > 0 ? seaSide(g, z, nat, false).total : 0;
+  return { shut: closes && e.total >= NAVY.closed.ratio * own, risk: hunters <= 0 ? 0 : hunters / (hunters + 2 * own + NAVY.intercept.sea) };
+}
 function closedNow(g: Game, z: number, nat: string): boolean {
   const e = seaSide(g, z, nat, true);
   if (e.total < NAVY.closed.min) return false;
@@ -1007,29 +1029,63 @@ function searchNow(g: Game, nat: string, from: Region, o: { max?: number; surpri
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
   const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
+  // (Each sea's closing and risk from one count of its sides: seaOdds.)
+  const look = (z: number): void => { const s = seaOdds(g, z, nat); shutAt[z] = s.shut ? 1 : 0; weightAt[z] = 1 + 20 * s.risk; };
   const shut = (z: number): boolean => {
     if (o.surprise) return false;
-    if (shutAt[z] < 0) shutAt[z] = closedTo(g, z, nat) ? 1 : 0;
+    if (shutAt[z] < 0) look(z);
     return shutAt[z] === 1;
   };
   const weight = (z: number): number => {
-    if (weightAt[z] === 0) weightAt[z] = 1 + (o.surprise ? 0 : 20 * seaRisk(g, z, nat)); // (never 0: at least 1)
+    if (o.surprise) return 1; // (never 0: at least 1)
+    if (shutAt[z] < 0) look(z);
     return weightAt[z];
   };
-  for (const z of from.seas) if (!shut(z)) { cost[z] = weight(z); len[z] = 1; }
-  for (;;) {
-    let a = -1;
-    for (let i = 0; i < N; i++) if (!done[i] && cost[i] < 1e9 && (a < 0 || cost[i] < cost[a])) a = i;
-    if (a < 0) break;
+  // (Speed, the far map: the playtest's finding 41.) The next sea is taken from a heap, cheapest first and of two as
+  // cheap the lower number first, as the scan of every sea took it: the same seas in the same order, the same ways.
+  const heap = new SeaHeap();
+  for (const z of from.seas) if (!shut(z)) { cost[z] = weight(z); len[z] = 1; heap.push(cost[z], z); }
+  while (heap.size) {
+    const c0 = heap.topCost(), a = heap.pop();
+    if (done[a] || c0 !== cost[a] || !(cost[a] < 1e9)) continue;
     done[a] = 1;
     if (o.max && len[a] >= o.max) continue;
     for (const j of g.seas[a].adj) {
       if (done[j] || shut(j) || !canPass(g, a, j, nat)) continue;
       const c = cost[a] + weight(j);
-      if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; }
+      if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; heap.push(c, j); }
     }
   }
   return { cost, prev };
+}
+
+/** A small heap of seas by cost, the lower number first between two as cheap (seaSearch). */
+class SeaHeap {
+  private c: number[] = [];
+  private i: number[] = [];
+  get size(): number { return this.c.length; }
+  topCost(): number { return this.c[0]; }
+  private less(a: number, b: number): boolean { return this.c[a] < this.c[b] || (this.c[a] === this.c[b] && this.i[a] < this.i[b]); }
+  private swap(a: number, b: number): void { const c = this.c[a], i = this.i[a]; this.c[a] = this.c[b]; this.i[a] = this.i[b]; this.c[b] = c; this.i[b] = i; }
+  push(cost: number, z: number): void {
+    let k = this.c.length;
+    this.c.push(cost); this.i.push(z);
+    while (k > 0) { const p = (k - 1) >> 1; if (!this.less(k, p)) break; this.swap(k, p); k = p; }
+  }
+  pop(): number {
+    const top = this.i[0], n = this.c.length - 1;
+    this.swap(0, n); this.c.pop(); this.i.pop();
+    let k = 0;
+    for (;;) {
+      const l = 2 * k + 1, r = l + 1;
+      let m = k;
+      if (l < n && this.less(l, m)) m = l;
+      if (r < n && this.less(r, m)) m = r;
+      if (m === k) break;
+      this.swap(k, m); k = m;
+    }
+    return top;
+  }
 }
 
 /** The cheapest way by sea from a coast to every sea it can reach (seaSearch). */

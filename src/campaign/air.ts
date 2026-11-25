@@ -257,6 +257,7 @@ const planes = (n: number, one: string): string => `${n.toLocaleString('en-US')}
 
 export const airFleetsOf = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat);
 let ROWS: Map<string, FleetRow> | null = null, ROWS_N = -1;
+const ROW_KEPT = new WeakMap<object, { rows: Map<string, FleetRow>; nat: string; name: string; row: FleetRow | undefined }>();
 /**
  * A group's row in air.json: its command's, under the country that raised it (a fallen country's group in another's
  * keeping still reads its own row: ruling 199). The first row of that name, as the list is read.
@@ -267,7 +268,15 @@ const rowOf = (f: { nat: string; name: string; parent?: string; raised?: string 
     ROWS_N = AIR.fleets.length;
     for (const r of AIR.fleets) { const k = `${r.nat}|${r.name}`; if (!ROWS.has(k)) ROWS.set(k, r); }
   }
-  return ROWS.get(`${f.raised ?? f.nat}|${f.parent ?? f.name}`);
+  // (Speed, the far map: the playtest's finding 41.) Each group keeps the row it was last found, with the names it was
+  // found by: looked up again only when those names, or the list, have changed. The over-sea air asks it of every
+  // group for every sea.
+  const nat = f.raised ?? f.nat, name = f.parent ?? f.name;
+  const kept = ROW_KEPT.get(f);
+  if (kept && kept.rows === ROWS && kept.nat === nat && kept.name === name) return kept.row;
+  const row = ROWS.get(`${nat}|${name}`);
+  ROW_KEPT.set(f, { rows: ROWS, nat, name, row });
+  return row;
 };
 /** True for a group of a command that guards its own country (air.json 'home'): it does not follow the army across an ocean. */
 export const homeCommand = (f: { nat: string; name: string; parent?: string; raised?: string }): boolean => !!rowOf(f)?.home;
@@ -972,14 +981,34 @@ export function skyDenies(g: Game, nat: string, region: number): boolean {
 
 // ---- The air over a Pacific sea (rulings 184 and 187; the planner's paper 10, section 4) ------------------------------
 
-const seaDist = new WeakMap<object, Map<number, number>>();
-/** seaKm, kept: how far a field lies from a sea never changes on one chart. */
+/**
+ * (Speed, the far map: the playtest's finding 41.) The longest reach any group can have by the tables, its fighters'
+ * or its bombers' (all that `reach` reads them from: air.json's nations, rows, far-side reach and jobs, airwar.json's
+ * dated ranges, carriers.json's). A field farther than this from a sea puts nothing over it. Over the far side's seas
+ * all but a few in a hundred of the checks of each group of the war were of fields beyond it, and each read the
+ * group's whole reach first. The tables are read once; nothing changes them in play.
+ */
+let LONGEST: number | null = null;
+function longestReach(): number {
+  if (LONGEST !== null) return LONGEST;
+  let m = Math.max(CARRIERS.range.ftr, CARRIERS.range.bmr);
+  const up = (x: number | undefined): void => { if (x !== undefined) m = Math.max(m, x); };
+  for (const s of Object.values(AIR.nations)) { up(s.ftrRange); up(s.bmrRange); }
+  for (const r of AIR.fleets) { up(r.ftrRange); up(r.bmrRange); }
+  for (const rows of Object.values(AIR.ftrReach ?? {})) for (const r of rows) up(r[1]);
+  for (const rows of Object.values(AIRWAR.day.range)) for (const r of rows) up(r[1]);
+  for (const J of Object.values(AIR.jobs ?? {})) { up(J.cover); for (const r of J.raid) up(r[1]); }
+  return (LONGEST = m);
+}
+
+const seaDist = new WeakMap<object, (Float64Array | undefined)[]>();
+/** seaKm, kept: how far a field lies from a sea never changes on one chart. (A row of seas for each field.) */
 function fieldToSea(g: Game, base: number, z: number): number {
   let m = seaDist.get(g.seas);
-  if (!m) { m = new Map(); seaDist.set(g.seas, m); }
-  const k = base * 4096 + z;
-  let d = m.get(k);
-  if (d === undefined) { d = seaKm(g, base, z); m.set(k, d); }
+  if (!m) { m = []; seaDist.set(g.seas, m); }
+  const row = (m[base] ??= new Float64Array(g.seas.length).fill(NaN));
+  let d = row[z];
+  if (Number.isNaN(d)) { d = seaKm(g, base, z); row[z] = d; }
   return d;
 }
 
@@ -995,7 +1024,10 @@ export function groupOverSea(g: Game, f: AirFleet, z: number, S: { cover?: Recor
   if (f.ship !== undefined || f.mission === 'rest' || f.unfed || f.ftr + f.bmr <= 0 || !g.regions[f.base]) return 0;
   const n = g.nations[f.nat];
   if (!n?.alive || !n.atWar.length) return 0;
-  const d = fieldToSea(g, f.base, z), R = reach(f, g);
+  const d = fieldToSea(g, f.base, z);
+  // (A field beyond the longest reach in the tables puts nothing over the sea, whatever its group's own reach: as below.)
+  if (d > longestReach()) return 0;
+  const R = reach(f, g);
   const most = S.cover?.[f.raised ?? f.nat];
   const ftr = f.ftr > 0 ? f.ftr * cover(d, most === undefined ? R.ftrRange : Math.min(R.ftrRange, most)) : 0;
   const bmr = f.bmr > 0 && d <= R.bmrRange ? f.bmr : 0;
