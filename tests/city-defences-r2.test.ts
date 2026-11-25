@@ -16,10 +16,11 @@ import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
 import stage from '../data/campaign/stage.json';
 import { ARSENAL, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
-import { CITYDEF, LIGHTS_TOP, cityDefences, cityDefencesOn, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
+import { CITYDEF, LIGHTS_TOP, WORKS_TOP, cityDefences, cityDefencesOn, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
 import { assess, capture, createGame, endPhase, relocate } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
+import { GUARD_TOP } from '../src/campaign/guard';
 import { startOpen } from '../src/campaign/staff';
 import { arsenalOffers, orderArsenal } from '../src/campaign/turn';
 import type { AirFleet, Build, Corps, Game, Region } from '../src/campaign/types';
@@ -682,6 +683,9 @@ describe('city defences: the town\'s guns against the tanks (slice 4)', () => {
     expect(stormA(g, [tank], town) / bare).toBeCloseTo(0.75, 9);
     expect(flakCut(4)).toBe(0.25);
     expect(flakCutMost()).toBeCloseTo(0.21, 9);
+    // The fog's figure is the guns' own top level's cut: the works' top, which the guns' row shares (guard.ts).
+    expect(WORKS_TOP).toBe(GUARD_TOP);
+    expect(flakCutMost()).toBe(flakCut(GUARD_TOP));
   });
 
   it('does nothing against infantry, with no garrison, or with no guns', () => {

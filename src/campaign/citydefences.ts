@@ -33,8 +33,11 @@ export const CITYDEF = data as unknown as {
 /** The entrenching share by months done (defence.json entrench.share), read here as the town works' share. */
 const ENTRENCH = (defence as unknown as { entrench: { share: number[] } }).entrench;
 
-/** The most levels of searchlights a province can have (the guns' own top). */
-export const LIGHTS_TOP = 3;
+/** The top level of a works row, the anti-aircraft guns' and the searchlights' alike (arsenal.ts TOP, guard.ts GUARD_TOP). */
+export const WORKS_TOP = 3;
+
+/** The most levels of searchlights a province can have (the works' own top). */
+export const LIGHTS_TOP = WORKS_TOP;
 
 /** True where the city defences are in play: a game carrying the flag 'cityDefences'. Every new rule reads it first. */
 export const cityDefences = (g: Game): boolean => g.flags.cityDefences === 1;
@@ -221,7 +224,7 @@ export const flakCut = (level: number): number => (level > 0 ? Math.min(CITYDEF.
 export const townFlakCut = (g: Game, r: Region): number => flakCut(townFlak(g, r));
 
 /** The most the town's guns can take from the tanks, where the stormer does not know them: the guns' top level's cut. */
-export const flakCutMost = (): number => flakCut(LIGHTS_TOP);
+export const flakCutMost = (): number => flakCut(WORKS_TOP);
 
 /**
  * The battle card's line for the guns against the tanks (the UI director's words, section 5): a second 'Armor' line
