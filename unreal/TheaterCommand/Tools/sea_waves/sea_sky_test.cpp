@@ -10,7 +10,11 @@
 //     dealt cover rises from none to full in tenths, and the worst gap held as a ceiling (SeaSky::WorstCoverGap);
 //   - a cumulus day laid at the cover that paints its own, seen from the sea (SeaSky::CumulusLaidFor, the sea scene's
 //     follow-up): the whole sky within five hundredths of the day's cover, as far as cumulus can paint (CumulusReach),
-//     the day's rain, light and word its own, and a deck and air's stand-in laid as given;
+//     the day's rain, light and word its own, and a deck and air's stand-in laid as given; from SeaSky::StratoFrom a
+//     broken deck of stratocumulus (the sea scene's ruling), its gaps opened (AirSky::Placing::DeckHoles, by the
+//     measured SeaSky::StratoPainted) to read as the day's cover, its base held to 600 to 1,000 m, its light under it
+//     the laid deck's taken as far as its cover reads, laid byte for byte as AirSky lays that deck, and air's own deck
+//     unchanged with DeckHoles left at -1;
 //   - the overview's eye under a deck the dome draws (the plan's line 941, SeaSky::OverviewHeight);
 //   - the dome picture is the same bytes twice over, and agrees with AirSky::ShadeOf's holes;
 //   - a cloud's bearing and height above the horizon from every planned eye is the line from that eye to its puff,
@@ -387,6 +391,98 @@ namespace
 			const SeaSky::Sky Pictures = SeaSky::Choose(SeaSky::Given(), SeaSky::Take(Review));
 			Check("a cumulus day asked for review pictures is laid as the rules' would be",
 				!Pictures.Day.bDeck && std::fabs(Pictures.Cover - 0.3) < 1e-9 && std::fabs(Pictures.Day.Cover - SeaSky::CumulusLaidFor(0.3)) < 1e-9, Pictures.Why);
+			const SeaSky::Sky Most = FairSky(0.38);
+			Check("a cumulus day between what cumulus can paint and StratoFrom is cumulus laid at the most, and reads that most",
+				!Most.bStrato && !Most.Day.bDeck && Most.Day.Cover == AirSky::CumulusMost && Most.Cover == SeaSky::CumulusReach && Most.DeckHoles < 0.0,
+				Most.Why);
+		}
+		{
+			// (a half-cloudy day drawn as a broken deck of stratocumulus: the sea scene's ruling, 25 November)
+			bool bHoles = true, bFalls = true;
+			for (size_t Step = 1; Step < std::size(SeaSky::StratoPainted); ++Step)
+			{
+				bHoles = bHoles && SeaSky::StratoHoles[Step] > SeaSky::StratoHoles[Step - 1];
+				bFalls = bFalls && SeaSky::StratoPainted[Step] < SeaSky::StratoPainted[Step - 1];
+			}
+			constexpr size_t Last = std::size(SeaSky::StratoPainted) - 1;
+			Check("the broken deck's table: the more of it left out, the less sky it paints, and it spans every cover from StratoFrom to a deck's",
+				bHoles && bFalls && std::size(SeaSky::StratoHoles) == std::size(SeaSky::StratoPainted) && SeaSky::StratoPainted[Last] < SeaSky::StratoFrom
+					&& SeaSky::StratoReach >= AirSky::DeckLeast,
+				Num(SeaSky::StratoPainted[Last]) + " at " + Num(SeaSky::StratoHoles[Last], 2) + " to " + Num(SeaSky::StratoReach) + " at " + Num(SeaSky::StratoHoles[0], 2));
+			bool bOpens = true, bInside = true;
+			double Was = 1.0;
+			for (int Hundredth = 30; Hundredth <= 100; ++Hundredth)
+			{
+				const double Holes = SeaSky::StratoHolesFor(Hundredth / 100.0);
+				bOpens = bOpens && Holes <= Was;
+				bInside = bInside && Holes >= SeaSky::StratoHoles[0] && Holes <= SeaSky::StratoHoles[Last];
+				Was = Holes;
+			}
+			Check("its gaps open as the cover falls, never past the table's ends, and it reads the table backward",
+				bOpens && bInside && std::fabs(SeaSky::StratoHolesFor(SeaSky::StratoPainted[3]) - SeaSky::StratoHoles[3]) < 1e-9
+					&& SeaSky::StratoHolesFor(1.0) == SeaSky::StratoHoles[0] && SeaSky::StratoHolesFor(0.0) == SeaSky::StratoHoles[Last],
+				Num(SeaSky::StratoHolesFor(SeaSky::StratoPainted[3]), 3));
+			const SeaSky::Sky Half = FairSky(0.5);
+			AirSky::Day AsGiven;
+			AsGiven.bGiven = true;
+			AsGiven.Cover = 0.5;
+			Check("a cumulus day of StratoFrom or more is drawn as a broken deck laid at DeckLeast, its gaps opened to read as the day's cover",
+				Half.bLaid && Half.bStrato && Half.Day.bDeck && Half.Day.Cover == AirSky::DeckLeast && std::fabs(Half.Cover - 0.5) < 1e-9
+					&& std::fabs(Half.DeckHoles - SeaSky::StratoHolesFor(0.5)) < 1e-9 && Half.DeckHoles > AirSky::DeckHoleBelow(AirSky::DeckLeast)
+					&& Half.Why.find("cumulus of 0.50 (scattered), drawn as a broken deck of stratocumulus, 700 to 1400 m, its gaps opened at "
+						+ Num(Half.DeckHoles, 2) + " so that it reads 0.50") != std::string::npos,
+				Half.Why);
+			Check("its word and its rain stay the day's own", Half.Day.Word == "scattered" && Half.Rain == SeaSky::RainOf(AsGiven, -1.0) && Half.Rain > 0.0,
+				Half.Day.Word + ", rain " + Num(Half.Rain));
+			SeaSky::Given Low, High;
+			Low.bGiven = High.bGiven = true;
+			Low.Day.bGiven = High.Day.bGiven = true;
+			Low.Day.Cover = High.Day.Cover = 0.45;
+			Low.Day.Base = 300.0;
+			Low.Day.Top = 2600.0;
+			High.Day.Base = 1800.0;
+			High.Day.Top = 4000.0;
+			const SeaSky::Sky Under = SeaSky::Choose(Low, SeaSky::Asked()), Over = SeaSky::Choose(High, SeaSky::Asked());
+			Check("its base is the day's held to 600 to 1,000 m, its top 700 m over it",
+				Under.Day.Base == SeaSky::StratoBaseLeast && Under.Day.Top == SeaSky::StratoBaseLeast + SeaSky::StratoDepth
+					&& Over.Day.Base == SeaSky::StratoBaseMost && Over.Day.Top == SeaSky::StratoBaseMost + SeaSky::StratoDepth,
+				Num(Under.Day.Base, 0) + " to " + Num(Under.Day.Top, 0) + " m, " + Num(Over.Day.Base, 0) + " to " + Num(Over.Day.Top, 0) + " m");
+			Check("and the overview's eye follows its base, 150 m under it",
+				SeaSky::OverviewHeight(Half.Day.bDeck, Half.Day.Base) == Half.Day.Base - SeaSky::OverviewUnderBase,
+				Num(SeaSky::OverviewHeight(Half.Day.bDeck, Half.Day.Base), 0) + " m");
+			const SeaSky::Sky Thick = FairSky(0.72);
+			Check("a cumulus day of more than it can paint reads as the most it paints, at its fewest gaps",
+				Thick.bStrato && Thick.Cover == SeaSky::StratoReach && Thick.DeckHoles == SeaSky::StratoHoles[0], Thick.Why);
+			const AirSky::Lighting HalfLight = SeaSky::LightOf(Half, 1.0), DeckLight = AirSky::LightOf(SeaSky::ReadAs(Half), 1.0);
+			const AirSky::Lighting ThickLight = SeaSky::LightOf(Thick, 1.0), OverTop = SeaSky::LightOf(Half, 0.0);
+			Check("under it the light is the laid deck's taken as far as its cover reads of the most it paints: brighter than the deck's, darker than a clear day's",
+				SeaSky::ReadAs(Half).bDeck && SeaSky::ReadAs(Half).Cover == AirSky::DeckLeast && HalfLight.Sun > DeckLight.Sun && HalfLight.Sun < 1.0
+					&& std::fabs(1.0 - HalfLight.Sun - 0.5 / SeaSky::StratoReach * (1.0 - DeckLight.Sun)) < 1e-9 && HalfLight.Sky > 1.0
+					&& HalfLight.Sky < DeckLight.Sky,
+				"sun " + Num(HalfLight.Sun) + " against the deck's " + Num(DeckLight.Sun) + ", sky " + Num(HalfLight.Sky) + " against " + Num(DeckLight.Sky));
+			Check("at its fewest gaps the deck's own light, and over its top a clear day's",
+				std::fabs(ThickLight.Sun - AirSky::LightOf(SeaSky::ReadAs(Thick), 1.0).Sun) < 1e-9 && OverTop.Sun == 1.0 && OverTop.Sky == 1.0);
+			Check("cumulus and the rules' decks keep air's light for the day as it reads",
+				SeaSky::LightOf(FairSky(0.2), 0.0).Sky == AirSky::LightOf(SeaSky::ReadAs(FairSky(0.2)), 0.0).Sky
+					&& SeaSky::LightOf(GaleSky(), 0.7).Sun == AirSky::LightOf(GaleSky().Day, 0.7).Sun);
+			SeaLookSwitches::Look Review = Asked({ { "TheaterSeaWeather=", "0.5" } });
+			const SeaSky::Sky Pictures = SeaSky::Choose(SeaSky::Given(), SeaSky::Take(Review));
+			Check("a half-cloudy day asked for review pictures is drawn so too", Pictures.bStrato && Pictures.Day.bDeck && std::fabs(Pictures.Cover - 0.5) < 1e-9,
+				Pictures.Why);
+			const SeaSky::Sky Gale = GaleSky();
+			Check("a deck the rules send is no stratocumulus, its gaps air's own", !Gale.bStrato && Gale.DeckHoles < 0.0);
+			const AirSky::Placing P = SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, GaleWind);
+			AirSky::Placing Opened = P;
+			Opened.DeckHoles = Half.DeckHoles;
+			const AirSky::Field Mine = SeaSky::Lay(Half, P);
+			Check("the sea lays it as AirSky lays that deck with those gaps, byte for byte", HashOf(Mine) == HashOf(AirSky::Lay(Half.Day, Opened)) && !Mine.Clouds.empty(),
+				std::to_string(Mine.Clouds.size()) + " tiles");
+			Check("and has fewer tiles than air's own deck at DeckLeast", Mine.Clouds.size() < AirSky::Lay(Half.Day, P).Clouds.size(),
+				std::to_string(Mine.Clouds.size()) + " against " + std::to_string(AirSky::Lay(Half.Day, P).Clouds.size()));
+			AirSky::Placing Said = P;
+			Said.DeckHoles = AirSky::DeckHoleBelow(GaleSky().Day.CoverLaid());
+			Check("AirSky::Placing::DeckHoles left at -1 is air's own deck, the same as its own threshold written out",
+				P.DeckHoles < 0.0 && HashOf(AirSky::Lay(GaleSky().Day, P)) == HashOf(AirSky::Lay(GaleSky().Day, Said)));
 		}
 		{
 			const AirSky::Placing P = SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, GaleWind);
@@ -612,7 +708,9 @@ namespace
 	{
 		const AirSky::Placing P = SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, AirSky::Wind);
 		// (the painter's own checks on the art director's 0.39 laid as it is, not as the sea lays it to read: CumulusLaidFor)
-		const AirSky::Field F = AirSky::Lay(SeaSky::ReadAs(FairSky()), P);
+		AirSky::Day AsPassed = FairSky().Day;
+		AsPassed.Cover = AirSky::DefaultCumulus;
+		const AirSky::Field F = AirSky::Lay(AsPassed, P);
 		Check("a scattered cumulus day lays its clouds", F.Clouds.size() > 50 && !F.Puffs.empty(),
 			std::to_string(F.Clouds.size()) + " clouds, " + std::to_string(F.Puffs.size()) + " puffs, cover " + Num(F.Cover));
 		SeaSky::Dome One, Two;
@@ -715,12 +813,26 @@ namespace
 				Field.Day.Base = 600.0;
 				Field.Day.Top = Field.Day.bDeck ? 2200.0 : 2600.0;
 				Field.Day.Cover = Cover;
-				const AirSky::Field Dealt = SeaSky::Lay(SeaSky::Choose(Field, SeaSky::Asked()), SeaSky::PlacingFor(1942, MiddleX, MiddleY, TestSun, GaleWind));
-				// (each kind measured as above: cumulus over the field's own ring, a deck over its nearer one; cumulus from 100
-				// eyes, since 40 scatter by about a hundredth, as much as air's cumulus grows from 0.3 to 0.4 of cover)
-				const double Seen = Dealt.Clouds.empty() ? 0.0
-					: Field.Day.bDeck ? CapCover(Dealt, 60.0, 10, 20.0, &Sheet, SeaSky::DomeW / 4, SeaSky::DomeH / 4, 3000.0, 4600.0)
-									  : CapCover(Dealt, 60.0, 100, 28.0, &Sheet, SeaSky::DomeW / 4, SeaSky::DomeH / 4);
+				const SeaSky::Sky Chosen = SeaSky::Choose(Field, SeaSky::Asked());
+				const AirSky::Field Dealt = SeaSky::Lay(Chosen, SeaSky::PlacingFor(1942, MiddleX, MiddleY, TestSun, GaleWind));
+				// (each kind as it is laid measured as above: cumulus over the field's own ring, a deck over its nearer one;
+				// cumulus from 100 eyes, since 40 scatter by about a hundredth, as much as air's cumulus grows from 0.3 to 0.4
+				// of cover; the broken stratocumulus as cumulus is, over three seeds, since its gaps are kilometres wide and
+				// one seed's ring of eyes may stand under one)
+				double Seen = 0.0;
+				if (Chosen.bStrato)
+				{
+					for (const uint64_t Seed : { 1942ull, 241ull, 77ull })
+					{
+						Seen += CapCover(SeaSky::Lay(Chosen, SeaSky::PlacingFor(Seed, MiddleX, MiddleY, TestSun, GaleWind)), 60.0, 100, 28.0, &Sheet,
+							SeaSky::DomeW / 4, SeaSky::DomeH / 4) / 3.0;
+					}
+				}
+				else if (!Dealt.Clouds.empty())
+				{
+					Seen = Dealt.Sky.bDeck ? CapCover(Dealt, 60.0, 10, 20.0, &Sheet, SeaSky::DomeW / 4, SeaSky::DomeH / 4, 3000.0, 4600.0)
+										   : CapCover(Dealt, 60.0, 100, 28.0, &Sheet, SeaSky::DomeW / 4, SeaSky::DomeH / 4);
+				}
 				bNeverLess = bNeverLess && Seen >= Before;
 				Before = Seen;
 				Gap = std::max(Gap, Cover - Seen);
@@ -735,13 +847,14 @@ namespace
 			Check("the worst gap between the field's cover and the painted one is no wider than measured (" + Num(SeaSky::WorstCoverGap, 2) + ")",
 				Gap <= SeaSky::WorstCoverGap, Num(Gap, 3));
 		}
-		// The sea's cumulus as it reads (the sea scene's follow-up, 25 November): a day of the rules laid at the cover that
-		// paints its own, by the whole sky seen from the sea, the mean over three seeds. Up to what cumulus can paint
-		// (SeaSky::CumulusReach), within five hundredths of the day's; a day of more, that most.
+		// The sea's cumulus as it reads (the sea scene's follow-up and ruling, 25 November): a day of the rules laid at the
+		// cover that paints its own, by the whole sky seen from the sea, the mean over three seeds: as cumulus up to what
+		// it can paint (SeaSky::CumulusReach), and from SeaSky::StratoFrom as a broken deck of stratocumulus, within five
+		// hundredths of the day's (Sky::Cover).
 		{
 			std::string Reads;
 			bool bReads = true;
-			for (const double Cover : { 0.1, 0.2, 0.3, 0.5 })
+			for (const double Cover : { 0.1, 0.2, 0.3, 0.4, 0.5 })
 			{
 				SeaSky::Given Field;
 				Field.bGiven = true;
@@ -755,11 +868,13 @@ namespace
 				{
 					Seen += WholeCover(SeaSky::Lay(Chosen, SeaSky::PlacingFor(Seed, MiddleX, MiddleY, TestSun, GaleWind)), 10, &Sheet) / 3.0;
 				}
-				const double Want = std::min(Cover, SeaSky::CumulusReach);
-				bReads = bReads && std::fabs(Seen - Want) <= 0.05;
-				Reads += (Reads.empty() ? "" : ", ") + Num(Cover, 1) + " laid at " + Num(Chosen.Day.Cover, 2) + " paints " + Num(Seen);
+				const double Want = Chosen.bStrato ? Cover : std::min(Cover, SeaSky::CumulusReach);
+				bReads = bReads && std::fabs(Chosen.Cover - Want) < 1e-9 && std::fabs(Seen - Want) <= 0.05;
+				Reads += (Reads.empty() ? "" : ", ") + Num(Cover, 1)
+					+ (Chosen.bStrato ? " a broken deck with gaps at " + Num(Chosen.DeckHoles, 2) : " laid at " + Num(Chosen.Day.Cover, 2)) + " paints " + Num(Seen);
 			}
-			Check("a cumulus day paints the sky its cover says, as far as cumulus can (" + Num(SeaSky::CumulusReach) + "), within five hundredths",
+			Check("a cumulus day paints the sky its cover says, as cumulus to " + Num(SeaSky::CumulusReach) + " and from " + Num(SeaSky::StratoFrom, 2)
+					+ " as broken stratocumulus, within five hundredths",
 				bReads, Reads);
 		}
 		// The overview's eye under a deck the dome draws (the plan's line 941).
@@ -968,7 +1083,13 @@ namespace
 		// A broken deck, where its holes can be told apart: the picture's cloud straight overhead against the shade's
 		// own hole over the same board point.
 		const AirSky::Field Broken = SeaSky::Lay(FairSky(0.72), SeaSky::PlacingFor(1942, MiddleX, MiddleY, TestSun, GaleWind));
-		Check("a broken deck is laid for the comparison", !Broken.Clouds.empty() && Broken.Sky.bDeck == false);
+		Check("a heavy cumulus day is laid as a broken deck (the broken stratocumulus)", !Broken.Clouds.empty() && Broken.Sky.bDeck);
+		const AirSky::Field Opened = SeaSky::Lay(FairSky(0.45), SeaSky::PlacingFor(1942, MiddleX, MiddleY, TestSun, GaleWind));
+		const AirSky::DeckShade Strato = SeaSky::ShadeOf(Opened, TestSun, Vec(), 256);
+		const double AirOwn = AirSky::ShadeOf(AirSky::Lay(Opened.Sky, SeaSky::PlacingFor(1942, MiddleX, MiddleY, TestSun, GaleWind)), 256).Mean();
+		Check("a lighter one lays a deck's shade, more of the square in sun through its wider gaps than under air's own deck",
+			Opened.Sky.bDeck && Strato.Side == 256 && Strato.Mean() > AirOwn + 0.05,
+			Num(Strato.Mean()) + " of the sun on the whole at 0.45, air's own deck at 0.6 " + Num(AirOwn));
 		SeaSky::Given Field;
 		Field.bGiven = true;
 		Field.Day.bGiven = true;
@@ -1081,17 +1202,34 @@ namespace
 		const AirSky::Field Fair = SeaSky::Lay(FairSky(0.3), SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, AirSky::Wind));
 		const SeaSky::Rain Dry = SeaSky::RainUnder(Fair, SeaSky::RainOf(Fair.Sky, -1.0), 241);
 		Check("a fair day has no rain and no squall", Dry.Curtains.empty() && Dry.Points.empty() && !SeaSky::SquallOf(Dry).bOn);
-		// A heavy cumulus day: showers under the biggest clouds, each about a quarter of its cloud across.
-		const SeaSky::Sky Heavy = FairSky(0.55);
+		// A cumulus day the rules send rain on: showers under the biggest clouds, each about a quarter of its cloud across.
+		SeaSky::Given Showery;
+		Showery.bGiven = true;
+		Showery.Day.bGiven = true;
+		Showery.Day.Base = 700.0;
+		Showery.Day.Top = 2600.0;
+		Showery.Day.Cover = 0.35;
+		Showery.Rain = 0.6;
+		const SeaSky::Sky Heavy = SeaSky::Choose(Showery, SeaSky::Asked());
 		const AirSky::Field Showers = SeaSky::Lay(Heavy, SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, AirSky::Wind));
 		const SeaSky::Rain Some = SeaSky::RainUnder(Showers, Heavy.Rain, 241);
-		bool bShower = !Some.Curtains.empty();
+		bool bShower = !Some.Curtains.empty() && !Showers.Sky.bDeck;
 		for (const SeaSky::Curtain& Each : Some.Curtains)
 		{
 			bShower = bShower && Each.Radius >= 500.0 && Each.Radius <= 2200.0 && Each.Cloud >= 0;
 		}
-		Check("a heavy cumulus day has showers, each about a quarter of its cloud across", bShower,
+		Check("a wet cumulus day has showers, each about a quarter of its cloud across", bShower,
 			std::to_string(Some.Curtains.size()) + " showers for rain " + Num(Heavy.Rain));
+		// A heavy day of cumulus (0.55, its rain the day's own), drawn as the broken stratocumulus: its rain in bands.
+		const SeaSky::Sky Broken = FairSky(0.55);
+		const SeaSky::Rain Bands = SeaSky::RainUnder(SeaSky::Lay(Broken, SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, AirSky::Wind)), Broken.Rain, 241);
+		bool bBands = Broken.bStrato && !Bands.Curtains.empty();
+		for (const SeaSky::Curtain& Each : Bands.Curtains)
+		{
+			bBands = bBands && Each.Radius >= 1500.0 && Each.Radius <= 3000.0 && Each.Cloud >= 0;
+		}
+		Check("a heavy cumulus day drawn as broken stratocumulus rains as a deck does, in bands one and a half tiles across", bBands,
+			std::to_string(Bands.Curtains.size()) + " bands for rain " + Num(Broken.Rain));
 	}
 
 	// ---- The deck's far sheet -------------------------------------------------------------------------------------

@@ -114,11 +114,17 @@ namespace SeaSky
 		bool bStandIn = false;
 		/** Laid as asked for review (-TheaterSeaWeather=). */
 		bool bAsked = false;
+		/** A cumulus day of StratoFrom or more, drawn as a broken deck of stratocumulus (Day is that deck). */
+		bool bStrato = false;
 		AirSky::Day Day;
-		/** The cover the sky reads as, 0 to 1: the day's, held to what its kind can draw (AirSky::Day::CoverLaid before
-		 * CumulusLaidFor). A cumulus day is laid at more (Day.Cover) so that it paints this much; the night dome hides its
-		 * stars by this, and the cumulus light is this cover's (ReadAs). */
+		/** The cover the sky reads as, 0 to 1: the day's, held to what its kind can draw (AirSky::Day::CoverLaid; cumulus
+		 * to CumulusReach, the broken stratocumulus to StratoReach). A cumulus day is laid at more (Day.Cover) so that it
+		 * paints this much, the stratocumulus with its gaps opened to it (DeckHoles); the night dome hides its stars by
+		 * this, and the cumulus light is this cover's (ReadAs). */
 		double Cover = 0.0;
+		/** The broken stratocumulus's gap threshold (StratoHolesFor), which Lay hands AirSky (Placing::DeckHoles); below
+		 * 0, air's own for the cover laid. */
+		double DeckHoles = -1.0;
 		/** How heavy the rain is, 0 to 1 (RainOf, from Cover). */
 		double Rain = 0.0;
 		/** Why, for the log: "the rules' sky", "stand-in sky: the rules sent none", ... */
@@ -138,16 +144,42 @@ namespace SeaSky
 	 * eyes (25 November). Soft, torn puffs, and the farthest left out of the painter's room, paint about two thirds of the
 	 * footprint a cover lays. */
 	constexpr double CumulusPainted[12] = { 0.0, 0.031, 0.069, 0.091, 0.103, 0.152, 0.184, 0.239, 0.264, 0.291, 0.332, 0.346 };
-	/** The most of the sky cumulus paints at sea: CumulusPainted at AirSky::CumulusMost. A cumulus day of more reads as
-	 * this much (only a deck paints more). */
+	/** The most of the sky cumulus paints at sea: CumulusPainted at AirSky::CumulusMost. A cumulus day of more, under
+	 * StratoFrom, reads as this much (from there the broken stratocumulus paints more). */
 	constexpr double CumulusReach = CumulusPainted[11];
 	/** The cumulus cover a sea battle lays for a day's cover, so that the sky seen from the sea paints what the day says
 	 * (the sea scene's follow-up, 25 November: a cumulus day of 0.5 painted 0.22 of the sky overhead, nearly clear to
 	 * the eye): CumulusPainted read backward, between its steps in a line; from CumulusReach, AirSky::CumulusMost. 0 at
 	 * none, and never less as the cover rises. The sea's own: air's cumulus is laid as given. */
 	double CumulusLaidFor(double Cover);
-	/** The chosen day as it reads (its light, AirSky::LightOf): the day with the cover it paints (Sky::Cover). */
+	/** A cumulus day of this much cover or more is drawn at sea as a broken deck of stratocumulus (the sea scene's ruling,
+	 * 25 November: cumulus paints at most CumulusReach of the sky, so a half-cloudy day drawn as cumulus reads nearly
+	 * clear). A field holds one kind of cloud, so the change is made at once, and nobody sees it happen: a battle keeps
+	 * one cover from start to end. Its word, its rain and its share of the sky stay the day's own. */
+	constexpr double StratoFrom = 0.40;
+	/** Its deck: laid at AirSky::DeckLeast, its base the day's held to StratoBaseLeast to StratoBaseMost [EST: a fair
+	 * weather stratocumulus sheet over the sea lies some 500 to 1,500 m up, a few hundred metres thick], its top
+	 * StratoDepth over its base, its gaps opened (AirSky::Placing::DeckHoles) so that the sky reads as the day's cover. */
+	constexpr double StratoBaseLeast = 600.0, StratoBaseMost = 1000.0, StratoDepth = 700.0;
+	/** The gap thresholds measured (AirSky::Placing::DeckHoles, the noise under which a tile is left out; air's own deck
+	 * at DeckLeast leaves out under 0.48), and what each paints of the whole dome seen from the sea, measured as
+	 * CumulusPainted by Tools/sea_waves/cover_table (its strato mode, base 800 m) over nine seeds of 20 eyes (25
+	 * November). */
+	constexpr double StratoHoles[9] = { 0.48, 0.50, 0.52, 0.54, 0.56, 0.58, 0.60, 0.62, 0.64 };
+	constexpr double StratoPainted[9] = { 0.619, 0.582, 0.540, 0.498, 0.453, 0.408, 0.355, 0.302, 0.257 };
+	/** The most of the sky the broken deck paints at sea (its fewest gaps): a day of more reads as this much. */
+	constexpr double StratoReach = StratoPainted[0];
+	/** The gap threshold that paints a cover: StratoPainted read backward, between its steps in a line; the first
+	 * threshold from StratoReach up, the last under the least it paints. */
+	double StratoHolesFor(double Cover);
+	/** The chosen day as it reads (its light, AirSky::LightOf): a cumulus day with the cover it paints (Sky::Cover); a
+	 * deck, the broken stratocumulus among them, as laid. */
 	AirSky::Day ReadAs(const Sky& Chosen);
+	/** The chosen day's light under its cloud at Under (0 over the deck's top to 1 under its base), as shares of a clear
+	 * day's: AirSky::LightOf(ReadAs), and under the broken stratocumulus the laid deck's taken only as far as its cover
+	 * reads of the most it paints (Sky::Cover over StratoReach: a deck laid at DeckLeast whatever its gaps, its light
+	 * reckoned from that cover, would read darker than its gaps let through; the air scene's note, 25 November). */
+	AirSky::Lighting LightOf(const Sky& Chosen, double Under);
 
 	/** The most puffs the painter draws at once (the plan's ledger: 1,500). */
 	constexpr int MostPuffs = 1500;
@@ -155,7 +187,8 @@ namespace SeaSky
 	 * bombers' band, Sun the way to the key body, Wind the field's (metres a second, the way it blows toward), the sea
 	 * under it. */
 	AirSky::Placing PlacingFor(uint64_t Seed, double MiddleX, double MiddleY, const Vec& Sun, const Vec& Wind);
-	/** AirSky::Lay of the chosen day; an empty field when none is laid. */
+	/** AirSky::Lay of the chosen day, its gaps as chosen (Sky::DeckHoles, over the placing's); an empty field when none
+	 * is laid. */
 	AirSky::Field Lay(const Sky& Chosen, const AirSky::Placing& P);
 
 	// ---- The dome ---------------------------------------------------------------------------------------------------
@@ -225,9 +258,10 @@ namespace SeaSky
 	constexpr double DeckOpenUnder = 0.875;
 	/** The widest the painted cover overhead (the caps over 60 degrees) falls short of the field's over the dealt sweep,
 	 * none to a full overcast in tenths (Tools/sea_waves/sea_sky_test): a ceiling the test holds, for the plan's cover
-	 * line. Measured 25 November at 0.268 and, with cumulus laid to read (CumulusLaidFor), 0.263 (g++) and 0.257 (clang):
-	 * both at a cumulus day of 0.5, which overhead paints 0.24 and the whole sky about CumulusReach. */
-	constexpr double WorstCoverGap = 0.27;
+	 * line. Measured 25 November at 0.268 and, with cumulus laid to read (CumulusLaidFor), 0.263 (g++) and 0.257 (clang),
+	 * both at a cumulus day of 0.5; with that day drawn as broken stratocumulus (StratoFrom), 0.186 on both, at a deck of
+	 * 0.7 (air's own, overhead 0.51), the half-cloudy days now overhead 0.28 at 0.4 and 0.37 at 0.5. */
+	constexpr double WorstCoverGap = 0.19;
 	/** How much of a deck's gaps the dome shuts behind its lids, 0 to 1: none under DeckOpenUnder of cover laid, all of
 	 * them at a full overcast; none on a cumulus day, and none from an eye at or over the deck's base. */
 	double DeckClosing(const AirSky::Field& F, const Vec& Eye);

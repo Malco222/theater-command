@@ -379,8 +379,8 @@ void FSeaWeather::LayDeckSheet()
 		Mesh->SetMaterial(0, Mid);
 	}
 	DeckSheetShown = -2.0;
-	UE_LOG(LogTheater, Display, TEXT("Sea weather: the deck carried on to the horizon as one sheet at %.0f m, %.2f solid (cover %.2f)."),
-		DeckSheetZ, Solid, Chosen.Day.CoverLaid());
+	UE_LOG(LogTheater, Display, TEXT("Sea weather: the deck carried on to the horizon as one sheet at %.0f m, %.2f solid (the sky reads %.2f)."),
+		DeckSheetZ, Solid, Chosen.Cover);
 }
 
 void FSeaWeather::DeckSheetAt(const FVector& EyeWorld)
@@ -623,7 +623,7 @@ AirSky::Lighting FSeaWeather::LightShares(double EyeZMetres) const
 		return AirSky::Lighting();
 	}
 	const double Under = Chosen.Day.bDeck && Sky.Top > Sky.Base ? FMath::Clamp((Sky.Top - EyeZMetres) / (Sky.Top - Sky.Base), 0.0, 1.0) : 0.0;
-	AirSky::Lighting Day = AirSky::LightOf(SeaSky::ReadAs(Chosen), Under); // (a cumulus day's light is the cover it reads as, not the more it is laid at)
+	AirSky::Lighting Day = SeaSky::LightOf(Chosen, Under); // (a day's light is the cover it reads as, not what it is laid at)
 	// (with the shade on the key the sun is taken away point by point instead, the eye's own height no matter)
 	Day.Sun = bShade ? 1.0 : Day.Sun;
 	return Day;

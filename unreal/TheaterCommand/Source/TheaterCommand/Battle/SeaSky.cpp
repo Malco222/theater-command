@@ -62,8 +62,17 @@ namespace SeaSky
 			return Eighths <= 0 ? "clear" : Eighths <= 2 ? "fair" : Eighths <= 4 ? "scattered" : Eighths <= 7 ? "broken" : "overcast";
 		}
 
-		/** The chosen day's cover as it reads, and a cumulus day given a cover laid at what paints it (CumulusLaidFor);
-		 * the log says so. A deck, and a cover not given (air's stand-in, the art director's passed cumulus), as given. */
+		/** A day's cover as the rules or the review switch said it: a cumulus day's as given (from StratoFrom it is drawn
+		 * as stratocumulus, which can paint more than cumulus can lay), anything else as laid (Day::CoverLaid). */
+		double SaidCover(const AirSky::Day& D)
+		{
+			return !D.bDeck && D.Cover >= 0.0 ? Clamp(D.Cover, 0.0, 1.0) : D.CoverLaid();
+		}
+
+		/** The chosen day's cover as it reads, and a cumulus day given a cover laid at what paints it: under StratoFrom
+		 * as cumulus laid at more (CumulusLaidFor), from it as a broken deck of stratocumulus with its gaps opened to it
+		 * (StratoHolesFor); the log says so. A deck, and a cover not given (air's stand-in, the art director's passed
+		 * cumulus), as given. */
 		void LaidToRead(Sky& Out)
 		{
 			Out.Cover = Out.Day.CoverLaid();
@@ -71,6 +80,22 @@ namespace SeaSky
 			{
 				return;
 			}
+			if (Out.Day.Cover >= StratoFrom)
+			{
+				// (the day's word and rain were read before this, from the cumulus day as given)
+				Out.bStrato = true;
+				Out.Cover = std::min(Clamp(Out.Day.Cover, 0.0, 1.0), StratoReach);
+				Out.DeckHoles = StratoHolesFor(Out.Cover);
+				Out.Day.bDeck = true;
+				Out.Day.Cover = AirSky::DeckLeast;
+				Out.Day.Base = Clamp(Out.Day.Base, StratoBaseLeast, StratoBaseMost);
+				Out.Day.Top = Out.Day.Base + StratoDepth;
+				Out.Why += ", drawn as a broken deck of stratocumulus, " + std::to_string(std::lround(Out.Day.Base)) + " to "
+					+ std::to_string(std::lround(Out.Day.Top)) + " m, its gaps opened at " + Spelled(Out.DeckHoles)
+					+ " so that it reads " + Spelled(Out.Cover) + " from the sea";
+				return;
+			}
+			Out.Cover = std::min(Out.Cover, CumulusReach);
 			const double Laid = CumulusLaidFor(Out.Cover);
 			if (Laid != Out.Day.Cover)
 			{
@@ -82,6 +107,8 @@ namespace SeaSky
 
 	static_assert(AirSky::CumulusMost > 0.549 && AirSky::CumulusMost < 0.551,
 		"SeaSky::CumulusPainted is measured at 0, 0.05, ... 0.55: measure it again (Tools/sea_waves/cover_table) for air's new CumulusMost");
+	static_assert(AirSky::DeckLeast > 0.599 && AirSky::DeckLeast < 0.601,
+		"SeaSky::StratoPainted is measured on a deck laid at 0.6: measure it again (Tools/sea_waves/cover_table strato) for air's new DeckLeast");
 
 	// ---- The switches ---------------------------------------------------------------------------------------------
 
@@ -227,10 +254,10 @@ namespace SeaSky
 			Out.Day.bGiven = true;
 			Out.Day.bDeck = Switches.bWeatherDeck;
 			Out.Day.Cover = Switches.WeatherCover;
-			Out.Day.Word = WordOf(Out.Day.CoverLaid());
+			Out.Day.Word = WordOf(SaidCover(Out.Day));
 			Out.Rain = RainOf(Out.Day, Switches.WeatherRain);
 			Out.Why = std::string("a day asked for review pictures: ") + (Out.Day.bDeck ? "a deck" : "cumulus") + " of "
-				+ Spelled(Out.Day.CoverLaid()) + " (" + Out.Day.Word + ")";
+				+ Spelled(SaidCover(Out.Day)) + " (" + Out.Day.Word + ")";
 			LaidToRead(Out);
 			return Out;
 		}
@@ -240,7 +267,7 @@ namespace SeaSky
 			Out.Day = FromRules.Day;
 			Out.Rain = RainOf(Out.Day, FromRules.Rain);
 			Out.Why = std::string("the rules' sky: ") + (Out.Day.bDeck ? "a deck" : "cumulus") + " of "
-				+ Spelled(Out.Day.CoverLaid()) + (Out.Day.Word.empty() ? "" : " (" + Out.Day.Word + ")");
+				+ Spelled(SaidCover(Out.Day)) + (Out.Day.Word.empty() ? "" : " (" + Out.Day.Word + ")");
 			LaidToRead(Out);
 			return Out;
 		}
@@ -281,6 +308,26 @@ namespace SeaSky
 		return AirSky::CumulusMost;
 	}
 
+	double StratoHolesFor(double Cover)
+	{
+		constexpr int Last = static_cast<int>(std::size(StratoPainted)) - 1;
+		if (Cover >= StratoPainted[0])
+		{
+			return StratoHoles[0];
+		}
+		// (the table falls as the threshold rises: more of the deck left out)
+		for (int Step = 1; Step <= Last; ++Step)
+		{
+			if (Cover >= StratoPainted[Step])
+			{
+				const double High = StratoPainted[Step - 1], Low = StratoPainted[Step];
+				const double Along = High > Low ? (High - Cover) / (High - Low) : 1.0;
+				return StratoHoles[Step - 1] + Along * (StratoHoles[Step] - StratoHoles[Step - 1]);
+			}
+		}
+		return StratoHoles[Last];
+	}
+
 	AirSky::Day ReadAs(const Sky& Chosen)
 	{
 		AirSky::Day Read = Chosen.Day;
@@ -289,6 +336,18 @@ namespace SeaSky
 			Read.Cover = Chosen.Cover;
 		}
 		return Read;
+	}
+
+	AirSky::Lighting LightOf(const Sky& Chosen, double Under)
+	{
+		AirSky::Lighting L = AirSky::LightOf(ReadAs(Chosen), Under);
+		if (Chosen.bStrato)
+		{
+			const double Share = Clamp(Chosen.Cover / StratoReach, 0.0, 1.0);
+			L.Sun = 1.0 - Share * (1.0 - L.Sun);
+			L.Sky = 1.0 + Share * (L.Sky - 1.0);
+		}
+		return L;
 	}
 
 	AirSky::Placing PlacingFor(uint64_t Seed, double MiddleX, double MiddleY, const Vec& Sun, const Vec& Wind)
@@ -317,7 +376,13 @@ namespace SeaSky
 		{
 			return AirSky::Field();
 		}
-		return AirSky::Lay(Chosen.Day, P);
+		if (!(Chosen.DeckHoles >= 0.0))
+		{
+			return AirSky::Lay(Chosen.Day, P);
+		}
+		AirSky::Placing Opened = P;
+		Opened.DeckHoles = Chosen.DeckHoles;
+		return AirSky::Lay(Chosen.Day, Opened);
 	}
 
 	// ---- The dome -------------------------------------------------------------------------------------------------

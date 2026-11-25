@@ -1279,8 +1279,8 @@ namespace AirSky
 			// keeps a ragged hole over them, a few scraps of cloud in it; it does not drift, so the hole stays there.
 			const int TilesAcross = 48;
 			const double S = Period / TilesAcross;
-			// (the day's cover: broken at 0.6, the breaks broad; closed at all of it, none)
-			const double HoleBelow = DeckHoleBelow(D.CoverLaid());
+			// (the day's cover: broken at 0.6, the breaks broad; closed at all of it, none; or the battle's own gaps)
+			const double HoleBelow = P.DeckHoles >= 0.0 ? P.DeckHoles : DeckHoleBelow(D.CoverLaid());
 			const double RollTurn = Roll.U(0.0, 2.0 * Pi), RiftTurn = Roll.U(0.0, 2.0 * Pi);
 			struct Spot
 			{

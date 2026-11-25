@@ -125,6 +125,10 @@ namespace AirSky
 		 * the battle gives its own (the sea's field.wind). The cumulus rows and the deck's rolls run along it, at whole
 		 * numbers of waves to the square (WindLattice). */
 		Vec Wind = Vec(3.0, -2.0, 0.0);
+		/** A deck's gaps, where the battle sets its own (the sea's broken stratocumulus, SeaSky::StratoHolesFor): the
+		 * noise under which a tile is left out, as DeckHoleBelow gives it. Below 0 (as made): air's own for the day's
+		 * cover, DeckHoleBelow(Day::CoverLaid()). */
+		double DeckHoles = -1.0;
 	};
 
 	/** The whole-number step across the wind that the rows and rolls repeat on (so they repeat with the square): the
