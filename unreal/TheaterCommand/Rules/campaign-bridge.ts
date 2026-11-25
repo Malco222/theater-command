@@ -186,7 +186,7 @@ import { markedOn, setMarked } from '../../../src/campaign/marked';
 import { thePlace } from '../../../src/campaign/bombers';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
-import { fuelMet } from '../../../src/campaign/resources';
+import { fuelMet, laneNotCounted } from '../../../src/campaign/resources';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -7422,6 +7422,8 @@ function storesOf(s: Game) {
       `${word}: ${amount(bk.stock)} in the depots, which hold ${amount(bk.cap)}.`,
       `Comes in each month: ${amount(bk.made)}.`,
       ...bk.income.filter((l) => Math.abs(l.amount) >= 0.05).map((l) => `   ${l.label}: ${amount(l.amount)}${l.note ? ` (${l.note})` : ''}`),
+      // (A sea lane whose shipping the game does not count says so, in the stores page's own words: resources.ts NOT_COUNTED.)
+      ...v.lanes.flatMap((l) => { const nc = laneNotCounted(s, l); return nc ? [`   ${l.name[0].toUpperCase()}${l.name.slice(1)}: ${nc.value}. ${nc.line}`] : []; }),
       `Goes out each month: ${amount(bk.need)}.`,
       ...bk.spend.filter((l) => Math.abs(l.amount) >= 0.05).map((l) => `   ${l.label}: ${amount(l.amount)}`),
       bk.net >= 0 ? `The stock is ${bk.net > 0.05 ? 'growing' : 'steady'}.` : months <= 0 ? 'The depots are empty.' : `At this rate the depots are empty in ${months} month${months === 1 ? '' : 's'}.`,

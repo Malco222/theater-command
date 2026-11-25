@@ -9,7 +9,7 @@ import data from '../../data/campaign/resources.json';
 import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
 import { allied, atWar, bloc, headline } from './game';
-import { CLASSES, atSea, boatsOut, closedTo, laneLoss, oreRoute, zoneOf } from './navy';
+import { CLASSES, atSea, boatsOut, closedTo, laneCounts, laneLoss, oreRoute, seaRoutes, zoneOf } from './navy';
 import { bargainLanes, carvedShare, replacedDeal } from './bargains';
 import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
@@ -41,6 +41,13 @@ interface LaneRow {
   idle?: string;
   /** Harbours the cargoes sail from: the lane runs while the recipient or an ally holds one of them, and an enemy who holds them all shuts it. */
   ports?: string[];
+  /**
+   * The row's harbours, in 'held' or 'ports', are where its ships land, not where they load (the UI director's words
+   * of 12:57Z, 25 November 2026, part 3, for the Pacific's three lanes): a lane cut at them says it has no port left
+   * to land at, where a lane cut at its loading harbours says nothing sails from them. Only the words change: what
+   * stops the lane is the same rule.
+   */
+  landing?: boolean;
   /** While the lane named here is open, this one carries these shares in place of its own (the aid to the Soviet Union split between two roads). */
   split?: { lane: string; oil: number; sup: number };
   /**
@@ -403,7 +410,7 @@ function laneStopBy(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string
   for (const name of row.held ?? []) {
     const r = g.byName[name];
     if (!r) continue;
-    if (atWar(g, r.ctrl, to)) return cut(`${the(natOf(g, r.ctrl))} holds ${r.name} and the road through it is shut.`);
+    if (atWar(g, r.ctrl, to)) return cut(row.landing ? `${the(natOf(g, r.ctrl))} holds ${r.name} and the lane has no port left to land at.` : `${the(natOf(g, r.ctrl))} holds ${r.name} and the road through it is shut.`);
     if (r.ctrl !== to && !allied(g, r.ctrl, to)) return cut(row.idle ?? `It opens once ${r.name} is in friendly hands.`, 'idle');
   }
   if (row.ports) {
@@ -411,6 +418,8 @@ function laneStopBy(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string
     if (ports.length && !ports.some((r) => r.ctrl === to || allied(g, r.ctrl, to))) {
       const all = ports.length === 1 ? ports[0].name : `${ports.slice(0, -1).map((r) => r.name).join(', ')} and ${ports[ports.length - 1].name}`;
       const foe = ports.every((r) => atWar(g, r.ctrl, to)) ? ports[0].ctrl : null;
+      // (Harbours the ships land at: one holder names them, more than one is "enemy hands". The UI director, 12:57Z of 25 November 2026, part 3.)
+      if (foe && row.landing) return cut(ports.some((r) => r.ctrl !== foe) ? 'Every port the lane lands at is in enemy hands.' : `${the(natOf(g, foe))} holds ${all}${ports.length === 1 ? '' : ','} and the lane has no port left to land at.`);
       if (foe) return cut(`${the(natOf(g, foe))} holds ${all}, and nothing sails from ${ports.length === 1 ? 'it' : 'them'}.`);
       return cut(row.idle ?? `It opens once ${ports.length === 1 ? all : `one of ${all}`} is in friendly hands.`, 'idle');
     }
@@ -593,6 +602,28 @@ export function lanesTo(g: Game, nat: string): Lane[] {
   const need = { oil: needOf(g, nat, 'oil'), sup: needOf(g, nat, 'sup') };
   // (A deal a neutral's bargain replaces follows the bargain's buyer instead, while its seller sells: release 2.)
   return [...RES.lanes.filter((l) => l.to === nat).map((l) => seaLane(g, l, need)), ...RES.deals.filter((d) => d.to === nat && !replacedDeal(g, d.id)).map((d) => deal(g, d)), ...bargainLanes(g, nat)];
+}
+
+/**
+ * What the stores page prints for a lane that carries nothing laid, in place of the share or the tons it would print
+ * (the UI director's words of 12:57Z, 25 November 2026, part 2(b), for the design director's ruling of 12:39Z: "a 0
+ * that stands for 'not read' is not a read zero"). It wears no colour of its own. One place, read by the browser's
+ * stores page and the 3D game's alike.
+ */
+export const NOT_COUNTED = {
+  value: 'Not counted',
+  line: 'Its shipping is not counted in the game, so it adds nothing to these stores, and its loss takes nothing from them.',
+} as const;
+
+/**
+ * The words for a sea lane whose shipping the game does not count (NOT_COUNTED), or null for one that carries
+ * something. It asks the navy's one predicate, the one every staff reads (navy.ts laneCounts), so the page and the
+ * staffs can never disagree. A lane with no seas on this chart is no route of the navy's and keeps its own words.
+ */
+export function laneNotCounted(g: Game, l: Lane): typeof NOT_COUNTED | null {
+  if (l.kind !== 'sea') return null;
+  const rt = seaRoutes(g).find((r) => r.id === l.id);
+  return rt && !laneCounts(rt) ? NOT_COUNTED : null;
 }
 
 /** Every sea lane on the map, whoever it feeds: what an interface draws across the water. */

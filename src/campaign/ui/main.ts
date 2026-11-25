@@ -65,7 +65,7 @@ import { damageOf } from '../citydamage';
 import type { RepairView } from '../repairs';
 import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
-import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
+import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, laneNotCounted, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { PLANS, buildsOwn, planRules } from '../plans';
@@ -8212,6 +8212,10 @@ function laneRow(l: Lane, me: string | null): string {
   const pct = Math.round(l.flow * 100);
   const mine = !!me && (l.to === me || allied(g, l.to, me)), foe = !!me && atWar(g, me, l.to);
   const carries = [l.full.oil > 0.05 ? `oil ${amt(l.oil)} of ${amt(l.full.oil)}` : '', l.full.sup > 0.05 ? `supplies ${amt(l.sup)} of ${amt(l.full.sup)}` : ''].filter(Boolean).join(' · ');
+  // A lane whose shipping the game does not count (the UI director's words, 12:57Z of 25 November 2026, 2(b)): "Not
+  // counted" in place of the share, its line in place of what is sunk, no bar and no colour of its own. A cut or idle
+  // lane keeps its state and the reason, which are no share of a cargo.
+  const uncounted = laneNotCounted(g, l);
   const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
   // What the lane runs on, the last sentence of its row; for a stopped lane, what stopped it and what would start it again (the Pacific's lanes alone: ruling 195(c), sheet 25 box 1).
   const key = laneKey(g, l.id, me), halted = l.state === 'cut' || l.state === 'idle';
@@ -8222,10 +8226,16 @@ function laneRow(l: Lane, me: string | null): string {
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
     : mine && l.state !== 'cut' ? (seaWar(g) ? laneGuards(l.id, l.to === me) : ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`)
     : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
+  if (uncounted && !halted) {
+    return `<div class="lane">
+    <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">By sea</span><span class="lflow">${esc(uncounted.value)}</span></div>
+    <small>${esc(l.text)} ${esc(uncounted.line)}${esc(fight)}${advice}${key ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+  </div>`;
+  }
   return `<div class="lane ${l.state}">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
     <div class="oddsbar" title="${status}"><i style="width:${pct}%"></i></div>
-    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${uncounted ? ` ${esc(uncounted.line)}` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
     ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
   </div>`;
 }
