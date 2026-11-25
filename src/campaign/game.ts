@@ -61,7 +61,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, type SeaReach } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
@@ -1319,8 +1319,19 @@ export function computeSupply(g: Game): void {
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
-  // A garrison shut in its town lives on the town's stores while they last.
-  if (field) siegeSupply(g);
+  // A garrison shut in its town lives on the town's stores while they last. Under true reach a besieged port town is
+  // fed by the very lanes drawn here (siege.ts fedBySea, SeaReach): a nation's own lanes, or its lanes carrying the
+  // holder's stores (carrying), and nothing for a nation with no ships. The siege walks nothing of its own.
+  const none = truly ? new Uint8Array(g.seas.length) : null;
+  const townReach: SeaReach | undefined = truly ? (x, id) => { const theirs = lanesOf(x); return !theirs ? none! : x === id ? theirs : carrying(x, id, theirs); } : undefined;
+  if (field) siegeSupply(g, townReach);
+  // (TC_SUPPLY_CHECK: every besieged town reads the same from the kept lanes as from a fresh walk.)
+  if (field && townReach && supplyCheck) {
+    for (const r of g.regions) {
+      if (!r.garr || !r.garr.length || !besieged(g, r)) continue;
+      if (fedBySea(g, r, townReach) !== fedBySea(g, r) || !sameBytes(feedingSeas(g, r, townReach), feedingSeas(g, r))) throw new Error(`the besieged town of ${r.name} read from kept sea lanes in month ${g.turn} differs from a fresh reading`);
+    }
+  }
   g.supplyDirty = false;
   resetRailheads(g);
 }
