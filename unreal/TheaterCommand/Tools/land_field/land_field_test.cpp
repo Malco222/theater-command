@@ -3587,8 +3587,9 @@ int main(int Argc, char** Argv)
 			Sk.Lon = F.Lon;
 			Sk.Zone = std::round(F.Lon / 15.0) + 1.0; // (the armies' clocks: an hour ahead of the sun's zone, as they mostly kept)
 		}
-		// (the look's own air where its ground is not the bocage's: LandScape::AirOf, as the game sets its haze)
-		const LandScape::Air Air = LandScape::AirOf(LandScape::LookOf(G.LookWord()), G.SnowLying());
+		// (the look's own air where its ground is not the bocage's: LandScape::AirOf, as the game sets its haze; the field's
+		// place, month and trials, the east's summer its own on trial "eastgold")
+		const LandScape::Air Air = LandScape::AirOf(LandScape::LookOf(G.LookWord()), G.SnowLying(), F.Lat, F.Lon, F.Month, F.Trial);
 		if (Air.bSet)
 		{
 			const double Bocage[3] = { 0.62, 0.66, 0.70 };

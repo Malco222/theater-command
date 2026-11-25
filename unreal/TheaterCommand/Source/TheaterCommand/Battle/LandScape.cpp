@@ -317,7 +317,20 @@ namespace LandScape
 		return Clamp01((0.3 + 0.7 * Smooth(0.35, 0.9, Cold)) * Vary);
 	}
 
-	Air AirOf(Look L, double SnowLying)
+	bool EastGold(Look L, double SnowLying, double Lat, double Lon, int Month, const std::string& Trial)
+	{
+		if (L != Look::Farmland || SnowLying > 0.3 || Month < 5 || Month > 9) return false;
+		if (Lat < 44.0 || Lat > 62.0 || Lon < 23.5 || Lon > 60.0) return false;
+		// (the northern forest belt keeps the farmland's own air: Leningrad, the Volkhov and the Svir, Karelia, where the
+		// look picker sends the taiga to Farmland; no steppe dust over their swamps and spruce)
+		if (Is(ClimateAt(Lat, Lon), "taiga")) return false;
+		LandField::Field Words;
+		Words.Trial = Trial;
+		return Words.Tried("eastgold");
+	}
+
+	/** The day's air over a look (AirOf), the east's summer its own where bEastGold (EastGold). */
+	static Air AirFor(Look L, double SnowLying, bool bEastGold)
 	{
 		Air A;
 		auto Ink = [](double* To, double R, double G, double B) { To[0] = R; To[1] = G; To[2] = B; };
@@ -379,6 +392,23 @@ namespace LandScape
 		case Look::Farmland:
 			A.bSet = true;
 			A.SkyLift = 3.2; // (the art director on 849c1bc1: Voronezh's zenith 63,71,85 under a sun 52 degrees up)
+			if (bEastGold)
+			{
+				// (the east's summer on trial "eastgold" (EastGold): Normandy's grade and haze washed its ripe strips to a
+				// near-blown cream, the art director's Voronezh read (236,228,195 against her gold). The summer steppe's dust
+				// hanging warm over the corn: the east set's steppe.json, C2B99E at 4,200 m, its own hue (linear red over
+				// green 1.11, blue over green 0.71, by the 2.2 power the desert's and the Med's inks keep) at about the
+				// bocage's brightness. In the cloud painter, blue over green: the far band 0.98 to 0.83, the near woods 0.94 to
+				// 0.71, the sky 1.06 to 1.01; the yellower 0.41 first tried for blue took them to 0.79, an olive 0.66 and a
+				// grey 0.99 (the art director's mend, 25 November), and the plain grey-warm 0.70,0.68,0.62 hardly warmed the
+				// band (0.92). A little more dust in the sky; her T2 grade as ruled (the look bible's T2 row,
+				// theatres-sheet-rulings-1122.md item 1: middles 0.55, darks 0.50, contrast 1.35, half a stop down, toe 0.55,
+				// red 1.01 and blue 0.99), which keeps more of the gold in the middle tones than Normandy's 0.48)
+				Ink(A.HazeInk, 0.73, 0.66, 0.47);
+				A.HazeDensity = 0.0058;
+				A.SkyDust = 0.8;
+				Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
+			}
 			break;
 		case Look::Rice:
 			// (monsoon.json's A0A898 at 3,500 m: a damp grey-green haze over the paddies, the hills behind in steps; a
@@ -460,6 +490,41 @@ namespace LandScape
 		}
 		// (the farm belt's winter air dry and clear: the windbreaks and the elevator carry over the snow)
 		if (L == Look::America) A.HazeDensity = std::min(A.HazeDensity, 0.0072);
+		return A;
+	}
+
+	Air AirOf(Look L, double SnowLying) { return AirFor(L, SnowLying, false); }
+
+	Air AirOf(Look L, double SnowLying, double Lat, double Lon, int Month, const std::string& Trial)
+	{
+		Air A = AirFor(L, SnowLying, EastGold(L, SnowLying, Lat, Lon, Month, Trial));
+		// (the desert in full sun stopped down, as a cameraman stops down for sand: on the Mac the key and the sky's light
+		// put bright sand at the top of the film's curve, where it lost its colour (217,206,184 for a paint of 177,158,116,
+		// and pale vehicles with it; the art director's gate fault 1 and her ask of 25 November: half a stop first, never
+		// more than one in all). The desert's fields only, on trial "desertstop"; its target on the Mac in full sun: sand
+		// L 180 to 190 with red over green 1.12 or more, the darkest tenth of the frame no lower than L 20)
+		if (L == Look::Desert && SnowLying <= 0.3)
+		{
+			LandField::Field Words;
+			Words.Trial = Trial;
+			if (Words.Tried("desertstop"))
+			{
+				A.Stops -= 0.5;
+			}
+		}
+		// (an island's beach the same way, and milder: its fields run at -0.2 stops under a brighter sky than the
+		// desert's, so sunlit sand washes pale too, but its palms and jungle must not go dark. A third of a stop, to
+		// -0.5 and never past -0.7 (the art director's ask of 25 November), on trial "islandstop"; its target on the
+		// Mac: sunlit sand L 185 to 200, the darkest tenth of the frame L 20 or more, under 30% of the frame dark)
+		if (L == Look::Island && SnowLying <= 0.3)
+		{
+			LandField::Field Words;
+			Words.Trial = Trial;
+			if (Words.Tried("islandstop"))
+			{
+				A.Stops -= 0.3;
+			}
+		}
 		return A;
 	}
 
@@ -571,6 +636,12 @@ namespace LandScape
 	{
 		if (!(Cover > 0.02)) return nullptr;
 		return MakeSnowCover(std::min(1.0, Cover), L, S);
+	}
+
+	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t S, const LandField::Field& F)
+	{
+		if (!(Cover > 0.02)) return nullptr;
+		return MakeSnowCover(std::min(1.0, Cover), L, S, !F.Trial.empty() && F.Tried("wintergrass"));
 	}
 
 	// ------------------------------------------------------------------ the writer

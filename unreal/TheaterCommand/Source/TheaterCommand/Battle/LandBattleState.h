@@ -20,6 +20,7 @@
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
+#include "Battle/LandTeamGun.h"
 #include "Battle/LandWalkPan.h"
 #include "Battle/LandWeather.h"
 #include "Battle/Fates.h"
@@ -128,6 +129,28 @@ struct FLandBattleState
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
 	std::vector<int> ManOf, VehicleOf;
 	std::vector<int> TrackOfMan, TrackOfVehicle;
+
+	/**
+	 * The support teams' weapons (release 2, on trial "teamguns"; Battle/LandTeamGun): a machine gun on its mount or a
+	 * mortar at each team's key man (role hmg or mortar), stepped each frame from where the crowd draws him
+	 * (ALandBattle::MakeTeamGuns). The weapon files read so far; each weapon, with its copies in its file's two instanced
+	 * meshes (-1: none yet); each track's weapon (its row in TeamGuns, -1 none), which the fire reads for her muzzle
+	 * (PlayWorld.Muzzle) and her burst (PlayWorld.GunLook); and the files asked for and not read, each said once.
+	 */
+	struct FTeamGun
+	{
+		int Track = -1, Kind = -1;
+		LandTeamGun::Gun Gun;
+		int32 MountCopy = -1, TurnedCopy = -1;
+		bool bMountShown = false, bTurnedShown = false;
+		/** Her gunner has been told he serves her (LandMen::Crowd::Serve). */
+		bool bServed = false;
+	};
+	bool bTeamGuns = false;
+	std::vector<LandTeamGun::Kind> TeamKinds;
+	std::vector<FTeamGun> TeamGuns;
+	std::vector<int> TeamGunOf;
+	std::vector<std::string> TeamFilesBad;
 
 	/**
 	 * The tank commanders up in their hatches (LandMen riders, the soldiers thread's tank crews): one an American or

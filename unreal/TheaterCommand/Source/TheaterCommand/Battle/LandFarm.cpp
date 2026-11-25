@@ -138,7 +138,11 @@ namespace LandScape
 				bArdennes = F.Lat >= 49.85 && F.Lat <= 51.0 && F.Lon >= 4.6 && F.Lon <= 7.6; // (Sedan, at 49.7, is the Meuse's farmland)
 				bSlate = (F.Lat >= 49.3 && F.Lon < 7.6) || F.Terrain == "hills" || F.Terrain == "mountain";
 				SnowLying = SnowOf(F, Look::Farmland);
-				bSpruceTrial = F.Tried("spruce");
+				// (the trial "sprucedepth" takes in "spruce": its far crowns as that word's, the wood itself deep and ragged)
+				bDepthTrial = F.Tried("sprucedepth");
+				bSpruceTrial = F.Tried("spruce") || bDepthTrial;
+				bGrassTrial = F.Tried("farmgrass");
+				bGold = EastGold(Look::Farmland, SnowLying, F.Lat, F.Lon, F.Month, F.Trial);
 				bBare = Month >= 11 || Month <= 3;
 				// the share of the woods' blocks that are conifer: the Ardennes' spruce plantations most
 				Conifers = bArdennes ? 0.72 : bEast ? 0.45 : 0.28;
@@ -310,8 +314,12 @@ namespace LandScape
 			Tone CropTone(int C, double N1, double N2, double Bands, double Streak) const
 			{
 				const Tone Earth = Varied(Soil, 1.0 + 0.07 * Bands + 0.05 * Streak + 0.04 * N2, 0.0);
-				const Tone Young = Rgb(96, 122, 50), Green = Rgb(82, 112, 44), Ripe = C == Rye ? Rgb(178, 160, 104) : Rgb(194, 154, 66);
-				const Tone Stubble = Rgb(170, 150, 104), Leaves = Rgb(62, 92, 44);
+				const Tone Young = Rgb(96, 122, 50), Green = Rgb(82, 112, 44);
+				// (the east's summer on trial "eastgold": the ripe corn and the stubble a step darker for its own grade, as
+				// the steppe's (LandSteppe: its wheat 170,148,82), so open ground lands at 120 to 160 lit and the far band
+				// gold, not the cream near-blown that Normandy's grade made of them; the far ring's too, through Far)
+				const Tone Ripe = bGold ? (C == Rye ? Rgb(162, 146, 98) : Rgb(176, 144, 64)) : C == Rye ? Rgb(178, 160, 104) : Rgb(194, 154, 66);
+				const Tone Stubble = bGold ? Rgb(152, 134, 92) : Rgb(170, 150, 104), Leaves = Rgb(62, 92, 44);
 				// (the west's wheat in May and June: the glaucous blue-green of the leaf before the ear turns)
 				const Tone Blue = Rgb(82, 108, 74);
 				auto Haze = [&](double G) { return Mixed(Earth, Varied(Young, 1.0 + 0.06 * Streak, 0.0), G); };
@@ -488,11 +496,43 @@ namespace LandScape
 					if (Month >= 6 && Month <= 9) return Grown{ CGrass, 0.55 }; // (the beet's leaves, dressed broad and dark)
 					return Grown{ CClods, 0.45 };
 				case Meadow:
+					if (bGrassTrial && !bBare && SnowLying <= 0.15) return FieldGrass(S, Pick, C);
 					if ((Month == 5 || Month == 6) && Pick < 0.12) return Grown{ LandField::Base::Flowers, 0.3 };
 					return Pick < 0.94 ? Grown{ CGrass, 0.62 } : Grown{ CStalks, 0.2 };
-				case Fallow: return Pick < 0.6 ? Grown{ CGrass, 0.45 } : Grown{ CStalks, 0.35 };
+				case Fallow:
+					if (bGrassTrial && !bBare && SnowLying <= 0.15) return FieldGrass(S, Pick, C);
+					return Pick < 0.6 ? Grown{ CGrass, 0.45 } : Grown{ CStalks, 0.35 };
+				case Pasture:
+					if (bGrassTrial && !bBare && SnowLying <= 0.15) return FieldGrass(S, Pick, C);
+					return Pick < 0.95 ? Grown{ CGrass, 0.5 } : Grown{ CStalks, 0.25 };
 				default: return Pick < 0.95 ? Grown{ CGrass, 0.5 } : Grown{ CStalks, 0.25 };
 				}
+			}
+
+			/**
+			 * The grassland in the growing months (on trial, "farmgrass"): the bocage's own short sward between clumps of
+			 * tussocks, tall grass and flowers, so an eastern pasture is a pasture at a man's eye and not a bare floor with
+			 * a few grass cards on it. The clumps from two noises at odd angles, some 4.6 m and 1.7 m across (no lattice);
+			 * grazing short with a tussock here and there, the hay meadow standing tall and flowered, the fallow rank with
+			 * weeds. Flowers only May to August. No new mesh: LandField's own dressing tints the sward with the ground.
+			 */
+			Grown FieldGrass(const Spot& S, double Pick, int C) const
+			{
+				using B = LandField::Base;
+				const double Ax = 0.809 * S.X - 0.588 * S.Y, Ay = 0.588 * S.X + 0.809 * S.Y;
+				const double Wide = Noise(Ax / 4.6, Ay / 4.6, Seed ^ 0xF6A5);
+				const double Fine = Noise(S.X / 1.7, S.Y / 1.7, Seed ^ 0xF6A6);
+				const double In = Smooth(-0.3, 0.3, Wide + 0.4 * Fine);
+				double Sw = 0.58, Tu = 0.3, Ta = 0.05, Fl = 0.04, Total = 1.3; // (grazing: short, a tussock here and there)
+				B Weed = B::Rosette;
+				if (C == Meadow) { Sw = 0.22; Tu = 0.18; Ta = 0.45; Fl = 0.12; Total = 1.45; Weed = CStalks; }
+				else if (C == Fallow) { Sw = 0.25; Tu = 0.3; Ta = 0.2; Fl = 0.07; Total = 1.2; Weed = CStalks; }
+				const double Clumped = 0.15 + 1.7 * In, Between = 1.2 - 0.45 * In;
+				if (Pick < Sw) return Grown{ B::Sward, Total * Between };
+				if (Pick < Sw + Tu) return Grown{ B::Tuft, Total * Clumped };
+				if (Pick < Sw + Tu + Ta) return Grown{ B::TallGrass, Total };
+				if (Pick < Sw + Tu + Ta + Fl) return Grown{ Month >= 5 && Month <= 8 ? B::Flowers : B::Tuft, Total * Clumped };
+				return Grown{ Weed, Total * (Weed == B::Rosette ? Clumped : 1.0) };
 			}
 
 			bool Dress(LandField::Placed& P, const Spot& S, double U4, double U5, double U6, double U7) const override
@@ -632,20 +672,52 @@ namespace LandScape
 					M.FarFrom = 220.0f;
 					// (on trial: the snow-laden spruce far off, as the map and the high eyes see a wood of it, a dark mass
 					// some 40,55,45 flecked with snow, not a grey static: its boughs darkened, one snow point in three kept
-					// white; the art director's winter carry, 20:08Z. Near, as built.)
+					// white; the art director's winter carry, 20:08Z. Near, as built, but under "sprucedepth" below.)
 					if (bSpruceTrial && SnowLying > 0.2)
-						for (size_t P = 0; P < M.Far.Colours.size(); ++P)
-						{
-							const Tone C = Tone{ static_cast<double>(M.Far.Colours[P].R), static_cast<double>(M.Far.Colours[P].G), static_cast<double>(M.Far.Colours[P].B) };
-							const double L = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
-							// (the art director, 23:42Z: green-black, about 40,55,45 as seen with green at or over blue, one mass
-							// with snow flecks: the boughs written greener and with less blue than that, as the map read them a
-							// quarter darker and the sky's fill added blue (38,56,34 read 31,42,44), half the
-							// speckle and half the flecks of the first try, which read blue-black and static)
-							const Tone Bough = Varied(Rgb(50, 72, 36), 0.93 + 0.14 * Unit(Hash(Seed ^ 0x5E5, P)), 0.0);
-							const Tone T = L > 170.0 && Unit(Hash(Seed ^ 0x5E6, P)) < 0.17 ? C : L > 170.0 ? Bough : Mixed(C, Bough, 0.9);
-							M.Far.Colours[P] = LandField::Rgb8{ static_cast<uint8_t>(std::clamp(T.R, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.G, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.B, 0.0, 255.0)) };
-						}
+					{
+						// (a level's boughs darkened, its snow kept white where Kept says and else a bough's)
+						auto Darken = [this](LandField::Mesh& Me, auto&& Kept) {
+							for (size_t P = 0; P < Me.Colours.size(); ++P)
+							{
+								const Tone C = Tone{ static_cast<double>(Me.Colours[P].R), static_cast<double>(Me.Colours[P].G), static_cast<double>(Me.Colours[P].B) };
+								const double L = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
+								// (the art director, 23:42Z: green-black, about 40,55,45 as seen with green at or over blue, one mass
+								// with snow flecks: the boughs written greener and with less blue than that, as the map read them a
+								// quarter darker and the sky's fill added blue (38,56,34 read 31,42,44), half the
+								// speckle and half the flecks of the first try, which read blue-black and static)
+								const Tone Bough = Varied(Rgb(50, 72, 36), 0.93 + 0.14 * Unit(Hash(Seed ^ 0x5E5, P)), 0.0);
+								const Tone T = L > 170.0 && Kept(P) ? C : L > 170.0 ? Bough : Mixed(C, Bough, 0.9);
+								Me.Colours[P] = LandField::Rgb8{ static_cast<uint8_t>(std::clamp(T.R, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.G, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.B, 0.0, 255.0)) };
+							}
+						};
+						Darken(M.Far, [this](size_t P) { return Unit(Hash(Seed ^ 0x5E6, P)) < 0.17; });
+						// (on trial, "sprucedepth": near too, so the wall a soldier sees is the mass the map sees, not a
+						// half-white grey one, 46% of it snow on the Mac: the boughs as far off; the snow only on the pads that
+						// face up (more than 0.6 of their normal up), one pad in two of those, each pad white or green whole
+						// (its points joined by its triangles), not a speckle of points. One in two leaves the cloud painter's
+						// wall some 23% snow where it was 48%, the 20 to 30% asked; one in three left it 16%.)
+						if (bDepthTrial)
+							for (LandField::Mesh* Me : { &M.Near, &M.Mid })
+							{
+								std::vector<uint32_t> Pad(Me->Points());
+								for (size_t P = 0; P < Pad.size(); ++P) Pad[P] = static_cast<uint32_t>(P);
+								auto Root = [&Pad](uint32_t P) {
+									while (Pad[P] != P)
+									{
+										Pad[P] = Pad[Pad[P]];
+										P = Pad[P];
+									}
+									return P;
+								};
+								for (size_t T = 0; T + 2 < Me->Triangles.size(); T += 3)
+									for (size_t C = 1; C < 3; ++C) Pad[Root(Me->Triangles[T + C])] = Root(Me->Triangles[T]);
+								const bool bFacings = Me->Normals.size() >= 3 * Pad.size();
+								Darken(*Me, [&](size_t P) {
+									const uint32_t R0 = Root(static_cast<uint32_t>(P));
+									return bFacings && Me->Normals[3 * static_cast<size_t>(R0) + 2] > 0.6f && Unit(Hash(Seed ^ 0x5E7, R0)) < 0.5;
+								});
+							}
+					}
 					break;
 				case KBirch:
 					M.bTree = true;
@@ -790,7 +862,8 @@ namespace LandScape
 						W.Blade(0.0, 0.0, 0.0, -TY * 0.5, TX * 0.5, High * 0.92, 0.025, Rgb(112, 92, 64), Rgb(140, 118, 84));
 						if (B % 2 == 0)
 						{
-							W.Bead(TX, TY, High + 0.005, R.Range(0.016, 0.024), R.Range(0.028, 0.04), Rgb(150, 132, 104), Rgb(104, 88, 64));
+							const double Deep = R.Range(0.028, 0.04), Bulk = R.Range(0.016, 0.024);
+							W.Bead(TX, TY, High + 0.005, Bulk, Deep, Rgb(150, 132, 104), Rgb(104, 88, 64));
 						}
 						else
 						{
@@ -875,7 +948,9 @@ namespace LandScape
 						for (int K = 0; K < 12 && !bChurch; ++K)
 						{
 							const double A = K * 2.0 * Pi / 12.0 + Ring * 0.37, D = Ring * 8.0;
-							bChurch = H.Church(TX + D * std::cos(A), TY + D * std::sin(A), RC.Range(-0.1, 0.1), RC.Next() < 0.3 ? 1 : 0);
+							const int Kind = RC.Next() < 0.3 ? 1 : 0;
+							const double Turn = RC.Range(-0.1, 0.1);
+							bChurch = H.Church(TX + D * std::cos(A), TY + D * std::sin(A), Turn, Kind);
 						}
 				}
 				// Houses fronting the roads through the village, both sides, a few metres back; now and then a long-house
@@ -1147,6 +1222,22 @@ namespace LandScape
 				// east) at some 7 m; the rides between them open.
 				{
 					const double Step = 4.6;
+					// (on trial, "sprucedepth": the rows shaken loose, 1.2 m, so the 4.6 m rhythm does not read from the field
+					// (at 0.9 a stand's far edge still read as a comb from 30 m up); a tree near the edge asked at its own
+					// place, so its metres in are known, not its square's)
+					const double ConJitter = bDepthTrial ? 1.2 : 0.35, AskIn = bDepthTrial ? 5.0 : 1.0;
+					// (on trial, "sprucedepth": metres in from a wood's edge, read between the coarse squares' middles, so the
+					// wood darkens smoothly inward and not by 10 m squares: a wood's square counts its metres in, any other's
+					// its metres out, never more than it is from the wood)
+					auto InWood = [&](double X, double Y) {
+						const double U = std::clamp((X + B) / CS - 0.5, 0.0, CNX - 1.0), V = std::clamp((Y + B) / CS - 0.5, 0.0, CNY - 1.0);
+						const int I = std::min(static_cast<int>(U), CNX - 2), J = std::min(static_cast<int>(V), CNY - 2);
+						auto In = [&](int A, int Bj) {
+							const size_t C = static_cast<size_t>(Bj) * CNX + A;
+							return CKind[C] == KWoods ? static_cast<double>(CEdge[C]) : -static_cast<double>(CEdge[C]);
+						};
+						return Lerp(Lerp(In(I, J), In(I + 1, J), U - I), Lerp(In(I, J + 1), In(I + 1, J + 1), U - I), V - J);
+					};
 					// (a grid in the compartments' own frame, so the spruce stand in their rows: its reach the field and its
 					// band turned into that frame)
 					double U0 = 1e9, U1 = -1e9, V0 = 1e9, V1 = -1e9;
@@ -1180,16 +1271,49 @@ namespace LandScape
 							if (!bCon && Keep > 0.45) continue; // (the broadleaf sparser: some 7 m apart)
 							if (bCon && Keep < 0.04) continue; // (a gap where one fell)
 							const double J1u = Unit(Hash(Hp, 2)), J2u = Unit(Hash(Hp, 3)), Yaw = 2.0 * Pi * Unit(Hash(Hp, 4)), Size = Unit(Hash(Hp, 5)), Kind = Unit(Hash(Hp, 6));
-							const double PX = X + (bCon ? 0.35 : 2.4) * (J1u - 0.5), PY = Y + (bCon ? 0.35 : 2.4) * (J2u - 0.5);
+							const double PX = X + (bCon ? ConJitter : 2.4) * (J1u - 0.5), PY = Y + (bCon ? ConJitter : 2.4) * (J2u - 0.5);
 							int CK = KOpen;
 							const double CE = Coarse(PX, PY, CK);
 							if (CE > CReach && CK != KWoods) continue;
-							if (CE < CReach + 1.0)
+							double Edge = -1.0; // (metres in, where asked)
+							if (CE < CReach + AskIn)
 							{
 								const Spot S = H.At(PX, PY);
 								if (S.Kind != KWoods || S.Edge < 1.0) continue;
+								Edge = S.Edge;
 							}
 							if (!H.Free(PX, PY, 1.6)) continue; // (clear of a lane's floor and its walls)
+							if (bCon && bDepthTrial)
+							{
+								// On trial, "sprucedepth": a deep, ragged wood. A stand's age over some 60 m, not 160, and each
+								// tree its own height besides (0.76 to 1.06 of its stand's); one in twelve gone, a gap; within 8 m
+								// of the edge one in seven a young spruce, a third to three fifths grown, under the old ones'
+								// boughs; of the others one in twelve a leader standing proud of its stand, 1.2 to 1.3 of its
+								// height (34 m at most), so that no stand, however even, reads as a comb (the art director's
+								// mend, 25 Nov). (The rest kept under 1.06 so that the leaders show: a skyline is the tallest of
+								// the many trees each sight line crosses, and with the rest up to 1.28 and a leader in eight, as
+								// first asked, an even young stand stayed a comb in the cloud painter.)
+								const double Gone = Unit(Hash(Hp, 7)), Own = Unit(Hash(Hp, 8)), Young = Unit(Hash(Hp, 9)), Grown = Unit(Hash(Hp, 10)), Lead = Unit(Hash(Hp, 11));
+								if (Gone < 1.0 / 12.0) continue;
+								if (Edge < 0.0) Edge = InWood(PX, PY);
+								const double Age = Clamp01(0.5 + 0.9 * Noise(X / 60.0, Y / 60.0, Seed ^ 0xA6E));
+								const bool bYoung = Edge < 8.0 && Young < 1.0 / 7.0;
+								const double Mine = 0.76 + 0.3 * Own;
+								const double Of = bYoung ? Mine * (0.35 + 0.25 * Grown) : Lead < 1.0 / 12.0 ? 1.2 + 0.1 * Own : Mine;
+								const double Stand = 14.0 + 12.0 * Age, High = Stand * Of;
+								// its crown as wide as its stand's, or as its own where it stands taller: in rows 4.6 m apart a
+								// spruce's boughs fill the row whatever its height (crowns narrowed with the shorter trees let the
+								// snow floor through, and the wood read lighter and bluer from above)
+								const double Wide = bYoung ? High : Stand * std::max(Of, 1.0);
+								// deeper in, darker, the snow on its boughs dimmer, as the light under the crowns (full by 30 m
+								// in): its blue down faster than its red and green, so the deep wood keeps its green over blue.
+								// (The sky's fill adds blue to whatever is darker: with blue spared the canopy read bluer from
+								// above than under "spruce" alone, and even with blue down as much as red and green it did,
+								// 8 less blue than green where "spruce" has 12; the art director's mend, 25 Nov.)
+								const double Dk = Smooth(3.0, 30.0, Edge), Lt = 1.0 - 0.3 * Dk, Bl = 1.0 - 0.55 * Dk;
+								H.Plant(Spruce, PX, PY, Yaw, Wide / 18.6 * (0.85 + 0.2 * Size), High / 18.6, Tint((0.94 + 0.1 * Size) * Lt, (0.96 + 0.08 * Size) * Lt, 0.96 * Bl));
+								continue;
+							}
 							if (bCon)
 							{
 								// a stand's age: its spruce of a height, 14 to 26 m, the stands blending (no square blocks)
@@ -1632,6 +1756,21 @@ namespace LandScape
 			bool bEast = false, bRussia = false, bArdennes = false, bSlate = true, bBare = false;
 			/** The winter spruce on trial (Field::Tried("spruce")): from above a dark mass flecked with snow (KitLook). */
 			bool bSpruceTrial = false;
+			/** The growing months' grassland on trial "farmgrass" (FieldGrass): the bocage's sward and tussocks, in clumps. */
+			bool bGrassTrial = false;
+			/** The east's summer on trial "eastgold" (LandScape::EastGold): its ripe corn and stubble a step darker
+			 * (CropTone), for its own grade. */
+			bool bGold = false;
+			/**
+			 * The spruce wood with depth on trial (Field::Tried("sprucedepth"), which takes in "spruce"): a deep, ragged wood,
+			 * not a comb of cut-outs of one height at one rhythm. Its trees of their stand's age and each its own height
+			 * besides, a leader here and there standing proud of its stand, a young one here and there along the edge, a gap
+			 * where one fell, the rows shaken loose; the trees darker deeper in (their blue down most, so no bluer), their
+			 * snow dimmer, so the eye reads metres of wood behind the first row (Plants);
+			 * and near too the boughs dark green, the snow on one pad in two of those that face up, as the far crowns
+			 * already are under "spruce" (KitLook).
+			 */
+			bool bDepthTrial = false;
 			double SnowLying = 0.0, Conifers = 0.3, Ca = 1.0, Sa = 0.0;
 			Tone Soil = Rgb(126, 102, 78), GrassT = Rgb(92, 134, 54);
 			/** The breakup's grid (2 a point: Lt, Wm), 10 m. */

@@ -217,6 +217,30 @@ camera comes back to its shot.
   `-TheaterLandTornProcedural` keeps them all procedural; `-TheaterLandTornSettle=` (3 s) and `-TheaterLandTornBakeMs=`
   (1 ms) tune it. The effects kit's own painted crater marks stay off in this scene (the holes are the torn earth's);
   `-TheaterLandKitScars` brings them back for an A/B.
+- **The burnt coat (release 2, on trial: `-TheaterLandTrial=burntcoat`, off; `-TheaterLandNoBurntCoat` off whatever
+  the trial).** A burnt-out wreck goes to three colours in place of one sooty black (the art director's brief of 25
+  November, for every army). `LandKit` gives every point of every mesh its own burnt colour at load (`Mesh::Burnt`,
+  read with `Mesh::BurntOf`; `Model::bBurntCoat` says so): soot above and round what the smoke poured from (her
+  `engine`, `fire.*` and `ring` sockets; it climbs), under overhangs, in stains, and over what the fire left coolest,
+  where her paint charred and keeps a little of its tone; rust, from a dark scale to a red-brown with a thin soot
+  film, in streaks down upright plates, on her tracks and running gear; and pale ash in flakes on what looks up and on
+  the thin band of rubber round a tank's road wheel, never on a plate's edge. A lorry's, a half-track's or a
+  motorcycle's tyre (a wheel whose rubber is more than about a quarter of its radius) chars, with its ash lying on it
+  in flakes: a clean pale ring reads as a white-walled tyre. A vent's reach goes with her width, is halved on what is
+  no longer than a motorcycle and its sidecar, and is counted from her nearest skin where a fire's place hangs in the
+  air of an open body (a half-track's). The near mesh is cut along the ash's line (`CutAlong`, long edges only:
+  some 3 to 6% more near triangles, the far mesh untouched), so a flake ends at an edge with a soft shoulder and does
+  not fade across a 25 cm plate. Her live paint is as it was: the coat changes only what a point burns to and how far.
+  Near wrecks take it in `LandParts::FromBody`; far ones carry it in their instanced pieces' texture coordinates
+  (`LandCrowd`'s `PieceMesh`: red beside the soot weight, green and blue in a second coordinate) and `M_LandSteel`
+  reads it where its `BurntByPoint` is 1. **`M_LandSteel` must be rebuilt for the far wrecks**
+  (`TC_REBUILD=M_LandSteel`); with the old one they stay the one black until they come near. The cloud's sheet:
+  `LAND_KIT_BURNT=1` (three hulls before and after, and one burnt out among live ones from 150 m), `=more` (twelve
+  other kinds) or `=bikes` (the motorcycles) with `Tools/land_kit/land_picture.cpp`, her marks the game's own so they
+  burn with her skin; `LAND_KIT_MASK=1` writes each picture's vehicle and sunlit pixels beside it for measuring. The
+  vehicles' suite has its own section (`THE BURNT COAT`; `LAND_KIT_ONLY_BURNT=1` runs it alone): off as before, her
+  own points and paint untouched under the cut, and soot, rust and ash together on what does not look down. Not yet:
+  the half minute of burning takes her paint straight to these colours; black first and rust after would be truer.
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built
@@ -1838,6 +1862,47 @@ the climate's look exactly as it did, byte for byte.
   `LAND_FIELD_PICTURES=<folder>` for the pictures and `LAND_FIELD_EYE="x y angle [height]"` to stand the camera in a
   street (a place inside a building is moved to the nearest ground with a view). `Tools/land_city/city_fields.ts`
   writes test fields from the rules' own city builder.
+
+## The support teams' machine guns and mortars (release 2, off until passed)
+
+Brian, 25 November 2026: "Where are the machine gun teams and mortar teams", "There should be machine gun teams that
+lay down suppressing fire, such as the German MG 42 and the US machine gun". The rules already field them (a block of
+team `mg` or `mor`: three key men of role `hmg` or `mortar`, each with his loaders); until now each was drawn as a
+rifleman. On trial `-TheaterLandTrial=teamguns` (off; `-TheaterLandNoTeamGuns` off whatever the word says, for a paired
+run) each key man has his weapon:
+
+- **The models** (`Content/Models/Battle`, made by `tools/battle-models/land/support_guns.py` on the tank modeller's
+  kit): `HmgMG42`, `HmgMG34`, `HmgM1919`, `HmgM1917`, `HmgVickers`, `HmgMaxim`, `HmgType92`, `HmgHotchkiss`,
+  `HmgBreda37`; `MortarGER`, `MortarUSA`, `MortarUK`, `MortarSOV`, `MortarJAP`, `MortarITA`, `MortarFRA`. A machine
+  gun's parts are `mount` (the tripod or wheeled carriage, its origin on the ground under the pin), `cradle` (swings)
+  and `gun` (tips); a mortar's `mortar` and `tube`. Sockets: `seat` (the key man's own root), `seat.loader`, `muzzle`,
+  `feed`, the grips, `box` or `rounds`, the Maxim's `pull`. The picture sheet: `LAND_KIT_SUPPORT=1` to the painter
+  (`Tools/land_kit/land_picture.cpp`).
+- **Which file, where it stands** (`Battle/LandTeamGun`, plain C++): `FileFor` by the block's army, the role and the
+  month (the MG 34 until May 1942, the MG 42 after; an army with none of its own takes the nearest shape). `Gun::Step`
+  each frame: set up with the model's seat on the key man where the crowd draws him, swung and laid on his aim (45
+  and 20 degrees a second, stopped at the model's limits; a mortar turned whole); on his right shoulder while the team
+  moves (the Maxim rolled behind him by her trail); left where she stood when he falls; not drawn while he is hidden,
+  riding or mounted.
+- **In the scene** (`ALandBattle::MakeTeamGuns`, after the men are posed and before the fire is stepped): two instanced
+  meshes a file, the mount and what turns (`LandParts::BodiesMesh`: the fine level, the plain one from 90 m; gone past
+  460 m), placed by `LandParts::BankedAt` as a man is. `PlayWorld.Muzzle` gives a team's rounds her own muzzle and
+  tells her of each burst (she shakes 6 mm back along her bore a round); `PlayWorld.GunLook` gives her own burst
+  (`LandTeamGun::BurstOf`: the MG 42's 18 rounds in 0.9 s, where a section's gun fires 8), which `LandPlay` hands to
+  the sound as well.
+- **The gunner** (`LandMen::Crowd::Serve`): his rifle laid down, lying behind a low gun (`fire_prone`, whose hands
+  reach her grips) or kneeling at a high one or at his tube (`fire_kneel`), until his file brings `hmg_fire_prone`,
+  `hmg_fire_sit` or `mortar_sight`, which are used by name as soon as it has them.
+- **Checked in the cloud**: `Tools/land_kit/run.sh` (the section THE SUPPORT TEAMS' WEAPONS: every army's file reads;
+  seat, swing, lay, limits, bursts, carried, rolled, left, not drawn; `LAND_KIT_ONLY_TEAMGUNS=1` runs it alone) and
+  `Tools/land_show/run.sh` (the support teams' key men). The engine's part (`MakeTeamGuns`, `BodiesMesh`) has not been
+  compiled or seen: the Mac's first build and stills are owed.
+- **Not in this**: the loaders are where the drill puts them (the model's `seat.loader` is not read yet), no belt
+  runs through the gun, a mortar's bomb is not seen dropped. Suppression itself is the rules' (the smarter-fighting
+  thread's), not the scene's.
+
+Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
+`islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.
 
 ## Packaging
 

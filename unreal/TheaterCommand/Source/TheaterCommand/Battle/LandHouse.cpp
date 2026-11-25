@@ -1019,7 +1019,9 @@ namespace LandHouse
 					const double Out = RK.Range(0.35, 0.95) * (bLeft ? -1.0 : 1.0);
 					const double A = (bLeft ? O.A0 - 0.2 : O.A1 + 0.2) + RK.Range(-0.04, 0.04);
 					const double Z = bHead ? O.Z1 + (O.What == OpShop ? 0.66 : 0.22) : O.Z0 - 0.12;
-					Lay(O.Face, A, Z, bHead ? Out : Pi - Out, RK.Range(0.3, 1.1), RK.Range(0.005, 0.009) + 0.0015 * P.Hurt);
+					const double Deep_ = RK.Range(0.005, 0.009) + 0.0015 * P.Hurt;
+					const double Size_ = RK.Range(0.3, 1.1);
+					Lay(O.Face, A, Z, bHead ? Out : Pi - Out, Size_, Deep_);
 				}
 			}
 			for (int F = 0; F < 4; ++F)
@@ -1027,7 +1029,10 @@ namespace LandHouse
 				const Face Fc = FaceOf(P, F);
 				if (Fc.bGable || RK.Next() > 0.35 + 0.15 * P.Hurt) continue;
 				const double A = RK.Range(0.8, std::max(0.81, Fc.Len - 0.8));
-				Lay(F, A, RenderTop(P, Fc, F, A) - 0.08, Pi + RK.Range(-0.15, 0.15), RK.Range(0.8, 2.4), RK.Range(0.006, 0.01) + 0.0015 * P.Hurt);
+				const double Deep_ = RK.Range(0.006, 0.01) + 0.0015 * P.Hurt;
+				const double Size_ = RK.Range(0.8, 2.4);
+				const double Turn_ = Pi + RK.Range(-0.15, 0.15);
+				Lay(F, A, RenderTop(P, Fc, F, A) - 0.08, Turn_, Size_, Deep_);
 			}
 			for (const auto& [F, M] : Bursts)
 			{
@@ -1035,7 +1040,9 @@ namespace LandHouse
 				for (int J = 0; J < N; ++J)
 				{
 					const double Ang = RK.Range(0.0, 2.0 * Pi), R0 = RK.Range(0.04, 0.12);
-					Lay(F, M.first + R0 * std::sin(Ang), M.second + R0 * std::cos(Ang), Ang, RK.Range(0.3, 0.9), RK.Range(0.006, 0.011));
+					const double Deep_ = RK.Range(0.006, 0.011);
+					const double Size_ = RK.Range(0.3, 0.9);
+					Lay(F, M.first + R0 * std::sin(Ang), M.second + R0 * std::cos(Ang), Ang, Size_, Deep_);
 				}
 			}
 		}
@@ -3105,7 +3112,8 @@ namespace LandHouse
 					B.Quad1(C - A - Wv, C + A - Wv, C + A + Wv + Up * 0.006, C - A + Wv + Up * 0.006, SC, Up);
 				}
 				const double HX = std::clamp(L.X + (R.Next() < 0.5 ? -1.0 : 1.0) * (L.HW + 1.4), -IX + 1.0, IX - 1.0), HY = L.Side * (IY - R.Range(1.3, 2.2));
-				HayMound(B, P, V3{ HX, HY, 0.02 }, R.Range(0.9, 1.3), R.Range(0.7, 1.0), R.Range(0.5, 0.8), R.Range(0.0, Pi), Hash(K0, 0x4B, static_cast<uint64_t>(std::llround((L.X + 50.0) * 10.0))), 0.72 * FloorK(HX, HY));
+				const double Yaw_ = R.Range(0.0, Pi), C_ = R.Range(0.5, 0.8), B_ = R.Range(0.7, 1.0), A_ = R.Range(0.9, 1.3);
+				HayMound(B, P, V3{ HX, HY, 0.02 }, A_, B_, C_, Yaw_, Hash(K0, 0x4B, static_cast<uint64_t>(std::llround((L.X + 50.0) * 10.0))), 0.72 * FloorK(HX, HY));
 			}
 		}
 
@@ -4390,12 +4398,14 @@ namespace LandHouse
 				if (R.Next() < 0.25)
 				{
 					// (a fallen slate or tile, flat)
-					B.Box(At3 + Up * 0.03, AX * R.Range(0.1, 0.16), AY * R.Range(0.07, 0.12), AZ * 0.006, Mixed(P.K.Roof, P.K.Soot, R.Range(0.0, 0.4)), 16);
+					const double Soot_ = R.Range(0.0, 0.4), Wy_ = R.Range(0.07, 0.12), Wx_ = R.Range(0.1, 0.16);
+					B.Box(At3 + Up * 0.03, AX * Wx_, AY * Wy_, AZ * 0.006, Mixed(P.K.Roof, P.K.Soot, Soot_), 16);
 				}
 				else
 				{
 					const double Sz = R.Range(0.1, 0.24) * Big;
-					B.Box(At3, AX * Sz * R.Range(1.0, 1.8), AY * Sz, AZ * Sz * R.Range(0.6, 1.0), StoneOwn(P, Hash(Seed, static_cast<uint64_t>(K))), 16);
+					const double Hz_ = R.Range(0.6, 1.0), Lx_ = R.Range(1.0, 1.8);
+					B.Box(At3, AX * Sz * Lx_, AY * Sz, AZ * Sz * Hz_, StoneOwn(P, Hash(Seed, static_cast<uint64_t>(K))), 16);
 				}
 			}
 		}
@@ -4470,7 +4480,8 @@ namespace LandHouse
 				{
 					const double X = R.Range(-IX + 1.2, IX - 1.2);
 					if (P.Hurt == 2 && P.Broken * X > 0.5 * P.L - 3.6) continue;
-					HayMound(B, P, V3{ X, R.Range(-IY + 1.0, IY - 1.0), P.Loft }, R.Range(1.0, 1.8), R.Range(0.8, 1.3), R.Range(0.5, 0.9), R.Range(0.0, Pi), Hash(P.Key ^ 0x4A71, static_cast<uint64_t>(K)), P.Hurt == 2 ? 0.8 : 1.0);
+					const double Yaw_ = R.Range(0.0, Pi), C_ = R.Range(0.5, 0.9), B_ = R.Range(0.8, 1.3), A_ = R.Range(1.0, 1.8), Y_ = R.Range(-IY + 1.0, IY - 1.0);
+					HayMound(B, P, V3{ X, Y_, P.Loft }, A_, B_, C_, Yaw_, Hash(P.Key ^ 0x4A71, static_cast<uint64_t>(K)), P.Hurt == 2 ? 0.8 : 1.0);
 				}
 			}
 			if (P.Hurt == 3)
@@ -4547,7 +4558,11 @@ namespace LandHouse
 					const double Yw = R.Range(0.0, Pi);
 					const V3 AX{ std::cos(Yw), std::sin(Yw), 0.0 }, AY{ -std::sin(Yw), std::cos(Yw), 0.0 };
 					if (R.Next() < 0.3) B.Beam(At3, At3 + AX * R.Range(0.4, 1.0) + Up * 0.03, 0.04, 0.025, Mixed(Rgb(110, 90, 66), P.K.Char, 0.5), Up, 0);
-					else B.Box(At3 + Up * 0.008, AX * R.Range(0.1, 0.15), AY * R.Range(0.07, 0.11), Up * 0.007, Mixed(P.K.Roof, P.K.Soot, R.Range(0.0, 0.5)), 16);
+					else
+					{
+						const double Soot_ = R.Range(0.0, 0.5), Wy_ = R.Range(0.07, 0.11), Wx_ = R.Range(0.1, 0.15);
+						B.Box(At3 + Up * 0.008, AX * Wx_, AY * Wy_, Up * 0.007, Mixed(P.K.Roof, P.K.Soot, Soot_), 16);
+					}
 				}
 				Heap(B, P, V3{ std::clamp(P.HoleX, -0.5 * P.L + 1.5, 0.5 * P.L - 1.5), P.HoleSide * (0.5 * P.D + 0.75), -0.25 }, 1.1, 0.5, 0.28, 0.0, 12, 3, P.Key ^ 0x51E, true);
 			}
@@ -11165,7 +11180,7 @@ namespace LandHouse
 			void Bricks(Pen& B, const Plan& P, const Plan::Scab& S, bool bFine)
 			{
 				const Block& Bk = BlockOf(P, S.Blk);
-				const double Off = bFine ? (S.Hang == 0 ? 0.013 : 0.01) : 0.05, Zm = Bk.bYard ? Bk.Zp - 0.4 : Bk.Zr, SkimMost = 0.5;
+				const double Off = bFine ? (S.Hang == 0 ? 0.013 : 0.01) : 0.05, Zm = Bk.bYard ? Bk.Zp - 0.4 : Bk.Zr, SkimMost = 0.5, Under = 0.8;
 				// (under a limewashed wall the damp leaves its salts on the bricks it bared: pale, within a step of the wall's
 				// own value from across the street; the bare mud house's are near its wall's already)
 				const double Pale = P.bMud ? 0.0 : 0.4;
@@ -11233,7 +11248,7 @@ namespace LandHouse
 					const double LoB = S.Hang == 0 ? std::min(0.128, R.Hi) : std::min(R.Lo + 0.023, R.Hi), HiB = std::max(LoB, R.Hi - 0.02);
 					// (a foot's upper half still skimmed with what is left of the wall's own coat, more of it the higher: its
 					// top within a step of the wall's value, its bricks bare only low down)
-					const Col Coat = S.Hang == 0 ? WallCol(P, Bk, C, std::max(0.0, R.Hi) + 0.03, 0) : P.Mud;
+					const Col Coat = S.Hang == 0 ? WallCol(P, Bk, C, std::max(0.0, R.Hi) + 0.03, 0) : P.Mud, Skim = Scaled(Coat, Under);
 					const double Thin = S.Hang == 0 ? Smooth(0.0, 0.7, EndsOf(S, St[I])) : 1.0;
 					double Was = R.Lo;
 					for (size_t J = 0; J < NR; ++J)
@@ -11245,9 +11260,9 @@ namespace LandHouse
 						const double Tone = Noise01(St[I] / 0.45, Z / 0.35, S.Seed ^ 0x12);
 						Col Cc = !bFine ? Scaled(Mixed(P.Brick, Joint, 0.35), 0.95 + 0.08 * Tone) : Q.Tone == 1 ? Scaled(Joint, S.Hang == 0 ? 0.95 : 0.85) : Q.Tone == 2 ? Lip : Scaled(Joint, (Q.Tone == 3 ? 0.84 : Q.Tone == 4 ? 0.7 : 0.94) + 0.1 * Tone);
 						// (the ground's dust on what stands in it)
-						Cc = Mixed(Cc, P.Dust, 0.42 * Smooth(0.3, 0.0, Z));
+						Cc = Mixed(Cc, P.Dust, (S.Hang == 0 ? 0.54 : 0.42) * Smooth(0.3, 0.0, Z));
 						// (and along its ends the coat not yet gone, thinner toward the middle)
-						if (S.Hang == 0) Cc = Mixed(Coat, Mixed(Mixed(Cc, Salt, Pale), Coat, SkimMost * Smooth(0.3, 1.0, Z / std::max(0.06, R.Hi))), Thin);
+						if (S.Hang == 0) Cc = Mixed(Coat, Mixed(Mixed(Cc, Salt, Pale), Skim, SkimMost * Smooth(0.3, 1.0, Z / std::max(0.06, R.Hi))), Thin);
 						Zs[I * NR + J] = Z;
 						Id[I * NR + J] = B.Vert(Skin(P, Bk, C, Z, Q.bEdge ? Flat : Off), WallN(P, Bk, C, std::min(Z, Zm)), Cc);
 					}
@@ -11272,11 +11287,11 @@ namespace LandHouse
 					return (I + ((K & 1) != 0 ? 0.5 : 0.0) + 0.1 * (Unit(Hash(Bk.Key ^ 0xB1D, static_cast<uint64_t>(K + 4096), static_cast<uint64_t>(I + 65536))) - 0.5)) * Bl;
 				};
 				// (a foot's brick: the wall's coat it is skimmed toward, and the band's top where it stands)
-				Col SkimTo = P.Mud;
+				Col SkimTo = P.Mud, SkimUnder = P.Mud;
 				double SkimHi = 1.0;
 				auto Put = [&](double Pm, double Z, const Col& C) {
 					const Column Cn = Along(Bk, Pm);
-					return B.Vert(Skin(P, Bk, Cn, Z, Lift), WallN(P, Bk, Cn, std::min(Z, Zm)), S.Hang == 0 ? Mixed(SkimTo, Mixed(Mixed(C, Salt, Pale), SkimTo, SkimMost * Smooth(0.3, 1.0, Z / SkimHi)), Smooth(0.0, 0.7, EndsOf(S, Pm))) : C);
+					return B.Vert(Skin(P, Bk, Cn, Z, Lift), WallN(P, Bk, Cn, std::min(Z, Zm)), S.Hang == 0 ? Mixed(SkimTo, Mixed(Mixed(C, Salt, Pale), SkimUnder, SkimMost * Smooth(0.3, 1.0, Z / SkimHi)), Smooth(0.0, 0.7, EndsOf(S, Pm))) : C);
 				};
 				const int K0 = static_cast<int>(std::floor((Zlo - 0.02) / Ch)), K1 = static_cast<int>(std::ceil((Zhi + 0.02) / Ch));
 				const int I0 = static_cast<int>(std::floor(S.Pm0 / Bl)) - 1, I1 = static_cast<int>(std::ceil(S.Pm1 / Bl)) + 1;
@@ -11313,6 +11328,7 @@ namespace LandHouse
 						{
 							SkimHi = std::max(0.06, BareOf(P, Bk, S, Pm[2]).Hi);
 							SkimTo = WallCol(P, Bk, Along(Bk, Pm[2]), SkimHi + 0.03, 0);
+							SkimUnder = Scaled(SkimTo, Under);
 						}
 						if (bWhole && Unit(Hash(Kb, 3)) < 0.14)
 						{
@@ -11549,18 +11565,19 @@ namespace LandHouse
 				for (int K = 0; U < Fc.Half - 0.3; ++K)
 				{
 					const uint64_t Kb = Hash(Seed, 0x10 + static_cast<uint64_t>(K));
-					bool bFree = true;
+					// (a pole gone, its place left empty: the row the more uneven for it)
+					bool bFree = Unit(Hash(Kb, 5)) > 0.12;
 					for (const Gap& G : Bk.Gaps)
 						if (G.Look != 3 && G.Face == F && std::fabs(U - G.U) < 0.5 * G.W + 0.25 && Z > G.Z0 - 0.2 && Z < G.Z1 + 0.3) bFree = false;
 					for (const Spout& Sp : Bk.Spouts)
 						if (Sp.F == F && std::fabs(U - Sp.U) < 0.22) bFree = false;
 					if (bFree)
 					{
-						const double R = 0.055 + 0.022 * Unit(Hash(Kb, 1)), Len = 0.15 + 0.17 * Unit(Hash(Kb, 2));
+						const double R = 0.05 + 0.03 * Unit(Hash(Kb, 1)), Len = 0.07 + 0.35 * Unit(Hash(Kb, 2));
 						const Col C = Varied(P.Wood, 0.8 + 0.3 * Unit(Hash(Kb, 3)), 0.03);
 						B.Tube(InWall(P, Bk, F, U, Z, Z, 0.08), InWall(P, Bk, F, U, Z - 0.015, Z, -Len), R, 0.93 * R, 7, C, true);
 					}
-					U += 0.72 + 0.28 * Unit(Hash(Kb, 4));
+					U += 0.52 + 0.78 * Unit(Hash(Kb, 4));
 				}
 			}
 

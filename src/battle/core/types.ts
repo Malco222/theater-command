@@ -253,6 +253,14 @@ export interface FieldTicket<P = unknown> {
    */
   scars?: { count: number; months: number };
   /**
+   * The place's own dress (release 2, looks only; "a card, then an island battle"): the 3D look the campaign names for
+   * this ground ("island": beach, reef and palms; "jungle": a big island's inland fight) and its latitude and longitude
+   * in degrees, for the sun, the weather and the men's front. The campaign sets them (the islands' table); the land
+   * battle's header passes them on only with its "island" option on, and nothing in the fight reads them.
+   */
+  look?: string;
+  latLon?: [number, number];
+  /**
    * Mud memory (release 2): of those battles, the ones fought in the mud, and the months since the last; absent where
    * none was. Looks only: the field keeps their old ruts.
    */

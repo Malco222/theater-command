@@ -461,6 +461,7 @@ namespace LandMen
 		bool bGait = false, bCapped = false, bBlending = false, bShooting = false;
 		float Speed = 0.f;              // metres a battle second over the ground
 		float Lie = 0.f;
+		bool bRifleDown = false;        // his rifle laid down by him (a spotter, a radio man, a served weapon's gunner)
 	};
 
 	/**
@@ -504,6 +505,11 @@ namespace LandMen
 	 * under him whose stance's gore falls hold none from under he may take, Gun where it is known. Empty where his
 	 * stance's gore falls hold none he may take at all (no gore fall for him: Crowd::SetGore gores him not). */
 	std::string GoreSide(const Soldier& Twin, const GoreStrike& Strike);
+
+	/** The front a place on the earth is dressed for when the battle's file does not say ("desert", "china", "pacific",
+	 * "south", "east" or "west"): the armies' colours and finishes are picked by it. Longitude is east positive, and may
+	 * be given past the date line either way. */
+	const char* FrontAt(double Lat, double Lon);
 
 	class Crowd
 	{
@@ -795,6 +801,12 @@ namespace LandMen
 		bool Frozen(int Man) const;
 		/** Falling now (his fall's clip, or a man killed lying going limp): every frame of it is drawn. */
 		bool IsFalling(int Man) const;
+		/** He serves a support team's weapon that the scene draws at his place (Battle/LandTeamGun; release 2, on trial
+		 * "teamguns"): 1 lying behind his machine gun, 2 kneeling or sitting at it or at his mortar. Either way his rifle
+		 * is laid down and his hands are on her while his pose is `fire` or `deployed` (the soldiers' own clips where his
+		 * file has them: hmg_fire_prone, hmg_fire_sit, mortar_sight). 0, as he is made: his role's stance as before.
+		 * Said when his weapon is first drawn; his stances are taken again from then. */
+		void Serve(int Man, int How);
 		/** Changes whenever his mesh would: skin him again only when it moved. */
 		uint32_t Stamp(int Man) const;
 		Lod LodOf(int Man) const;

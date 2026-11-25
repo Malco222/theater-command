@@ -102,11 +102,11 @@ namespace
 		V3 Lo = V3(1e9, 1e9, 1e9), Hi = V3(-1e9, -1e9, -1e9);
 	};
 
-	/** A vehicle's bodies as triangles, at her pose, each point's colour taken toward burnt black by its soot weight. */
+	/** A vehicle's bodies as triangles, at her pose, each point's colour taken toward its burnt colour by its soot weight
+	 * (the model's one sooty black; with the burnt coat on, the point's own soot, rust or ash: Mesh::BurntOf). */
 	void AddVehicle(const Vehicle& V, double SootShare, Scene& S)
 	{
 		const Model& M = V.Look();
-		const Colour Burnt = FromPicture(M.BurntColour[0], M.BurntColour[1], M.BurntColour[2]);
 		for (size_t B = 0; B < M.Bodies.size(); ++B)
 		{
 			const Body& Bo = M.Bodies[B];
@@ -121,7 +121,8 @@ namespace
 				P[I] = Pl.Point(V3(Me.Points[I * 3], Me.Points[I * 3 + 1], Me.Points[I * 3 + 2]));
 				Nm[I] = Pl.Way(V3(Me.Normals[I * 3], Me.Normals[I * 3 + 1], Me.Normals[I * 3 + 2]));
 				const Colour Own = FromPicture(Me.Colours[I * 4], Me.Colours[I * 4 + 1], Me.Colours[I * 4 + 2]);
-				C[I] = Mix(Own, Burnt, Clamp01(Me.Soot[I] * SootShare));
+				const uint8_t* To = Me.BurntOf(I, M.BurntColour);
+				C[I] = Mix(Own, FromPicture(To[0], To[1], To[2]), Clamp01(Me.Soot[I] * SootShare));
 				Lo = V3(std::min(Lo.X, P[I].X), std::min(Lo.Y, P[I].Y), std::min(Lo.Z, P[I].Z));
 				Hi = V3(std::max(Hi.X, P[I].X), std::max(Hi.Y, P[I].Y), std::max(Hi.Z, P[I].Z));
 			}
@@ -236,8 +237,20 @@ namespace
 		// period marking for the month (the British flash, then star); bClose looks at the mark that faces the camera most,
 		// close enough that it fills nearly half the picture's height.
 		bool bMarks = false, bClose = false;
+		// A coat the rules picked for her army (LandKit's Dress::Coat, release 2: "japan"); empty: as her owner has her.
+		std::string Coat;
 		int CloseAmong = 99; // (the close look picks among her first this many marks: the Tiger's hull crosses, not her turret's)
 		int Year = 1944, Month = 7;
+		// The burnt coat (release 2, LandKit's Dress::bBurntCoat, the trial word "burntcoat"): her wreck in soot, rust and
+		// ash; and others standing in the same picture (LAND_KIT_BURNT=1: one burnt out among live ones, from 150 m).
+		bool bBurntCoat = false;
+		struct Other
+		{
+			std::string ModelName, Nation;
+			Vehicle::Pin Pin;
+			double SootShare = 0.0;
+		};
+		std::vector<Other> Others;
 		// A farmhouse's panel instead (release 2, LandHouse, LAND_KIT_HOUSE=1): its damage (0 whole to 3 a shell), its
 		// level (0 near, 1 middle, 2 far), roof and look; the sun's own bearing where given; a close look aimed at a point
 		// from a way (bAim).
@@ -522,6 +535,7 @@ namespace
 		// (a damp brown loam, the patches faint, so the ground reads as plain earth and not as sand)
 		const Colour Earth = FromPicture(102, 90, 72), EarthDark = FromPicture(90, 79, 63), Haze = FromPicture(196, 192, 182);
 		std::vector<Colour> Lit(Count);
+		std::vector<uint8_t> Body(Count, 0); // (the vehicle's own pixels, LAND_KIT_MASK=1: for measuring her without the ground)
 		for (int Py = 0; Py < H; ++Py)
 		{
 			for (int Px = 0; Px < W; ++Px)
@@ -551,6 +565,7 @@ namespace
 					const double Sky = 0.55 + 0.45 * N.Z;
 					const double Low = 0.72 + 0.28 * Smooth(0.0, 0.9, Pt.Z); // the running gear sits in the shade of the hull
 					Lit[I] = Albedo[I] * (SunLight * Sunny + SkyLight * (Sky * Low) + Bounce * (0.5 - 0.5 * N.Z));
+					Body[I] = Sunny > 0.25 ? 2 : 1;
 				}
 				else if (GroundZ < 1e29)
 				{
@@ -619,6 +634,34 @@ namespace
 		std::fprintf(File, "P6\n%d %d\n255\n", OW, OH);
 		std::fwrite(Picture.data(), 1, Picture.size(), File);
 		std::fclose(File);
+		if (std::getenv("LAND_KIT_MASK"))
+		{
+			// (255 the vehicle in the sun, 128 the vehicle in shade, 0 not all the vehicle)
+			std::vector<uint8_t> Mask(static_cast<size_t>(OW) * OH);
+			for (int Y = 0; Y < OH; ++Y)
+			{
+				for (int X = 0; X < OW; ++X)
+				{
+					int Hers = 0, Sunlit = 0;
+					for (int J = 0; J < Out; ++J)
+					{
+						for (int I = 0; I < Out; ++I)
+						{
+							const uint8_t Of = Body[static_cast<size_t>(Y * Out + J) * W + (X * Out + I)];
+							Hers += Of != 0;
+							Sunlit += Of == 2;
+						}
+					}
+					Mask[static_cast<size_t>(Y) * OW + X] = static_cast<uint8_t>(Hers < Out * Out ? 0 : Sunlit == Out * Out ? 255 : 128);
+				}
+			}
+			if (std::FILE* Mf = std::fopen((Path + ".mask.pgm").c_str(), "wb"))
+			{
+				std::fprintf(Mf, "P5\n%d %d\n255\n", OW, OH);
+				std::fwrite(Mask.data(), 1, Mask.size(), Mf);
+				std::fclose(Mf);
+			}
+		}
 		return true;
 	}
 }
@@ -673,7 +716,11 @@ int main(int argc, char** argv)
 	std::map<std::string, std::unique_ptr<Model>> Models;
 	auto ModelFor = [&](const std::string& Name, const std::string& Nation, const Panel& For) -> const Model*
 	{
-		const std::string Key = Name + "|" + Nation + (For.bMarks ? "|marks " + std::to_string(For.Year * 100 + For.Month) : std::string());
+		// (the month belongs in the key whatever the panel shows, not only for a marks panel: a model whose file gives
+		// its army's face by month (the Type 97's khaki, then two camouflages) is a different model in each, and two
+		// panels a year apart were being painted from whichever was loaded first)
+		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat)
+			+ (For.bBurntCoat ? "|burnt" : "");
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -688,6 +735,8 @@ int main(int argc, char** argv)
 			D.bMarks = For.bMarks;
 			D.Year = For.Year;
 			D.Month = For.Month;
+			D.Coat = For.Coat;
+			D.bBurntCoat = For.bBurntCoat;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -1167,6 +1216,235 @@ int main(int argc, char** argv)
 			Panels.push_back(P);
 		}
 	}
+	// (LAND_KIT_JAPAN=1: Japan's own tank and field gun instead, release 2's Battle rules row "Japan's own tank and gun"
+	// (-TheaterLandRuleJapan): the Type 97 and the 75 mm gun beside the generic light tank and the German howitzer they
+	// stand in for today, each in Japan's own coat)
+	const bool bJapanSheet = std::getenv("LAND_KIT_JAPAN") != nullptr;
+	struct JapanLook
+	{
+		const char* File;
+		const char* Model;
+		const char* Nation;
+		int Year, Month;
+		double Turret, Gun, Hatches, FireAge, DeathAge, Bearing, Up, Soot;
+		bool bBrewUp;
+		const char* Coat;
+		const char* Caption;
+	};
+	// (the gun, the light tank and the lorry are shared with other armies and have no Japanese coat in their files: the
+	// rules send one for her whole army with the row on, blocks[].coat "japan", and the game keeps it with its other
+	// owners' coats)
+	const JapanLook JapanLooks[] = {
+		{ "jap_type97_a", "Type97", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "", "Type 97 Chi-Ha, May 1942: turret 40\xC2\xB0 off, hatches open" },
+		{ "jap_type97_b", "Type97", "JAP", 1943, 8, 0.0, 6.0, 0.0, 0.08, -1.0, 72.0, 15.0, 0.0, false, "", "Type 97, August 1943: her later coat, just after a shot" },
+		{ "jap_type97_c", "Type97", "JAP", 1942, 5, -14.0, -6.0, 0.0, -1.0, 3.5, 36.0, 18.0, 0.35, false, "", "Type 97: knocked out, hatches thrown, gun drooped" },
+		{ "jap_type97_d", "Type97", "JAP", 1944, 3, 0.0, 0.0, 0.0, -1.0, 4.5, -48.0, 20.0, 1.0, true, "", "Type 97: brewed up and burnt out" },
+		{ "jap_gun75", "Gun75", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "japan", "75 mm field gun in Japan's coat: deployed, laid at 35\xC2\xB0" },
+		{ "jap_gun75_fire", "Gun75", "JAP", 1942, 5, 0.0, 18.0, 0.0, 0.06, -1.0, 48.0, 12.0, 0.0, false, "japan", "the 75 mm gun just after a shot, the barrel back" },
+		{ "jap_light", "LightTank", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "japan", "the light tank that still plays her light blocks, in Japan's coat" },
+		{ "jap_lorry", "Truck", "JAP", 1942, 5, 0.0, 0.0, 0.0, -1.0, -1.0, 52.0, 16.0, 0.0, false, "japan", "the lorry her infantry ride, in Japan's coat" },
+		{ "jap_type97_side", "Type97", "JAP", 1942, 5, 0.0, 2.0, 0.0, -1.0, -1.0, 90.0, 5.0, 0.0, false, "", "Type 97 from the side, May 1942: her road wheels' rubber tyres" },
+		{ "jap_type97_side43", "Type97", "JAP", 1943, 8, 0.0, 2.0, 0.0, -1.0, -1.0, -90.0, 7.0, 0.0, false, "", "her other side, August 1943: green, earth and light brown" },
+		{ "jap_gun75_was", "Gun75", "JAP", 1942, 5, 0.0, 35.0, 0.0, -1.0, -1.0, 62.0, 14.0, 0.0, false, "", "round 1: the same gun in her maker's olive" },
+		{ "jap_light_was", "LightTank", "JAP", 1942, 5, -40.0, 4.0, 1.0, -1.0, -1.0, 42.0, 17.0, 0.0, false, "", "round 1: the light tank as it was" },
+	};
+	for (const JapanLook& K : JapanLooks)
+	{
+		if (!bJapanSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = K.Nation;
+		P.Year = K.Year;
+		P.Month = K.Month;
+		P.Pin.Turret = K.Turret;
+		P.Pin.Gun = K.Gun;
+		P.Pin.Hatches = K.Hatches;
+		P.Pin.FireAge = K.FireAge;
+		P.Pin.DeathAge = K.DeathAge;
+		P.Pin.bBrewUp = K.bBrewUp;
+		P.CameraBearing = K.Bearing;
+		P.CameraUp = K.Up;
+		P.SootShare = K.Soot;
+		P.Coat = K.Coat;
+		P.Caption = K.Caption;
+		Panels.push_back(P);
+	}
+	// (LAND_KIT_SUPPORT=1: the support teams' weapons instead, release 2: each army's machine gun on its mount from her
+	// quarter and from the gunner's side, then each army's mortar; =side for every one square from the side)
+	const bool bSupportSheet = std::getenv("LAND_KIT_SUPPORT") != nullptr;
+	const std::string SupportSet = bSupportSheet ? std::getenv("LAND_KIT_SUPPORT") : "";
+	struct SupportLook
+	{
+		const char* File;
+		const char* Model;
+		double Gun, Bearing, Up;
+		const char* Caption;
+	};
+	const SupportLook SupportLooks[] = {
+		{ "sup_mg42", "HmgMG42", 0.0, 38.0, 16.0, "Germany: MG 42 on the Lafette, set low" },
+		{ "sup_mg42_back", "HmgMG42", 0.0, -150.0, 22.0, "the same from the gunner's left: the sight, the belt and its box" },
+		{ "sup_mg34", "HmgMG34", 0.0, 38.0, 16.0, "Germany until mid 1942: MG 34 in the same mount" },
+		{ "sup_m1919", "HmgM1919", 0.0, 38.0, 16.0, "United States: Browning M1919A4 on the M2 tripod" },
+		{ "sup_m1919_back", "HmgM1919", 0.0, -150.0, 22.0, "the same from the gunner's left" },
+		{ "sup_m1917", "HmgM1917", 0.0, 38.0, 16.0, "the water-cooled Browning (Poland's wz. 30)" },
+		{ "sup_vickers", "HmgVickers", 0.0, 38.0, 16.0, "Britain: Vickers on the Mk IV tripod, its condenser can" },
+		{ "sup_vickers_back", "HmgVickers", 0.0, 150.0, 22.0, "the same from the gunner's right: the belt comes in from the right" },
+		{ "sup_maxim", "HmgMaxim", 0.0, 38.0, 16.0, "Soviet Union: Maxim on the Sokolov wheeled mount" },
+		{ "sup_maxim_back", "HmgMaxim", 0.0, 150.0, 22.0, "the same from the gunner's right: the trail and its handle" },
+		{ "sup_type92", "HmgType92", 0.0, 38.0, 16.0, "Japan: Type 92, its strip in from the left" },
+		{ "sup_type92_back", "HmgType92", 0.0, -150.0, 22.0, "the same from the gunner's left" },
+		{ "sup_hotchkiss", "HmgHotchkiss", 0.0, 38.0, 16.0, "France (and China): Hotchkiss of 1914" },
+		{ "sup_breda", "HmgBreda37", 0.0, 38.0, 16.0, "Italy: Breda Mod. 37" },
+		{ "sup_mortar_ger", "MortarGER", 0.0, 50.0, 14.0, "Germany: 8 cm mortar, three bombs laid ready" },
+		{ "sup_mortar_ger_back", "MortarGER", 0.0, -140.0, 24.0, "the same from behind and left: the sight on the collar" },
+		{ "sup_mortar_usa", "MortarUSA", 0.0, 50.0, 14.0, "United States: 81 mm mortar" },
+		{ "sup_mortar_uk", "MortarUK", 0.0, 50.0, 14.0, "Britain: 3-inch mortar" },
+		{ "sup_mortar_sov", "MortarSOV", 0.0, 50.0, 14.0, "Soviet Union: 82 mm mortar on its round plate" },
+		{ "sup_mortar_jap", "MortarJAP", 0.0, 50.0, 14.0, "Japan: Type 97 mortar" },
+		{ "sup_mortar_ita", "MortarITA", 0.0, 50.0, 14.0, "Italy: 81 mm mortar" },
+		{ "sup_mortar_fra", "MortarFRA", 0.0, 50.0, 14.0, "France: 81 mm Brandt mortar" },
+	};
+	for (const SupportLook& K : SupportLooks)
+	{
+		if (!bSupportSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = "any";
+		P.Pin.Gun = K.Gun;
+		P.CameraBearing = SupportSet == "side" ? 90.0 : K.Bearing;
+		P.CameraUp = SupportSet == "side" ? 4.0 : K.Up;
+		P.Caption = K.Caption;
+		if (SupportSet == "side" && std::string(K.File).find("_back") != std::string::npos)
+		{
+			continue;
+		}
+		Panels.push_back(P);
+	}
+	// (LAND_KIT_BURNT=1: the burnt coat's own sheet instead, release 2's trial word "burntcoat": a grey hull, an olive one
+	// and Japan's khaki, each burnt out as it was (one sooty colour) and with the coat (soot, rust and ash), from her
+	// quarter and from above and behind; then one burnt out among live ones from 150 m, both ways)
+	const bool bBurntSheet = std::getenv("LAND_KIT_BURNT") != nullptr;
+	struct BurntLook
+	{
+		const char* File;
+		const char* Model;
+		const char* Nation;
+		int Year, Month;
+		double Turret, Bearing, Up;
+		bool bBrewUp, bCoat;
+		const char* Caption;
+	};
+	const BurntLook BurntLooks[] = {
+		{ "burnt_pz4_was", "PanzerIV", "GER", 1941, 6, -14.0, 36.0, 18.0, false, false, "Panzer IV in grey, burnt out: as it was, one sooty colour" },
+		{ "burnt_pz4", "PanzerIV", "GER", 1941, 6, -14.0, 36.0, 18.0, false, true, "the same with the burnt coat: soot, rust and ash" },
+		{ "burnt_pz4_top", "PanzerIV", "GER", 1941, 6, -14.0, -142.0, 40.0, false, true, "from above and behind: her decks and engine louvres" },
+		{ "burnt_sherman_was", "Sherman", "USA", 1944, 7, -14.0, 36.0, 18.0, false, false, "Sherman in olive, burnt out: as it was" },
+		{ "burnt_sherman", "Sherman", "USA", 1944, 7, -14.0, 36.0, 18.0, false, true, "the same with the burnt coat" },
+		{ "burnt_sherman_top", "Sherman", "USA", 1944, 7, -14.0, -142.0, 40.0, false, true, "from above and behind" },
+		{ "burnt_type97_was", "Type97", "JAP", 1942, 5, 0.0, -48.0, 20.0, true, false, "Type 97 in khaki, brewed up: as it was" },
+		{ "burnt_type97", "Type97", "JAP", 1942, 5, 0.0, -48.0, 20.0, true, true, "the same with the burnt coat, her turret thrown" },
+		{ "burnt_type97_side", "Type97", "JAP", 1942, 5, 0.0, 90.0, 7.0, false, true, "from the side: her tyres burnt to ash on the rims, her tracks rusted" },
+		// (LAND_KIT_BURNT=more: the other kinds of thing that burn, for a look at every army's)
+		{ "more_t34", "T34", "SOV", 1943, 7, -14.0, 36.0, 18.0, false, true, "T-34" },
+		{ "more_tiger", "Tiger", "GER", 1944, 7, -14.0, 36.0, 18.0, false, true, "Tiger" },
+		{ "more_truck", "Truck", "GER", 1944, 7, 0.0, 40.0, 18.0, false, true, "lorry" },
+		{ "more_hanomag", "Hanomag", "GER", 1944, 7, 0.0, 40.0, 18.0, false, true, "half-track" },
+		{ "more_jeep", "Jeep", "USA", 1944, 7, 0.0, 40.0, 20.0, false, true, "jeep" },
+		{ "more_gun", "leFH18", "GER", 1944, 7, 0.0, 62.0, 14.0, false, true, "field gun" },
+		{ "more_light", "LightTank", "UK", 1942, 5, -14.0, 36.0, 18.0, false, true, "light tank" },
+		{ "more_semovente", "Semovente", "ITA", 1942, 10, 0.0, 36.0, 18.0, false, true, "Semovente" },
+		{ "more_panther_top", "Panther", "GER", 1944, 7, -14.0, -142.0, 40.0, false, true, "Panther from above and behind" },
+		{ "more_m3", "M3Halftrack", "USA", 1944, 7, 0.0, 40.0, 24.0, false, true, "American half-track" },
+		{ "more_stug", "StuG3", "GER", 1943, 7, 0.0, 36.0, 18.0, false, true, "assault gun" },
+		{ "more_car", "ArmouredCar", "UK", 1942, 5, -14.0, 36.0, 18.0, false, true, "armoured car" },
+		// (LAND_KIT_BURNT=bikes: the smallest things that burn, a motorcycle and its sidecar)
+		{ "bike_r75_was", "R75", "GER", 1942, 6, 0.0, 40.0, 20.0, false, false, "motorcycle and sidecar, burnt out: as it was" },
+		{ "bike_r75", "R75", "GER", 1942, 6, 0.0, 40.0, 20.0, false, true, "the same with the burnt coat" },
+		{ "bike_r75_far", "R75", "GER", 1942, 6, 0.0, -130.0, 30.0, false, true, "from above and behind" },
+		{ "bike_rikuo", "Rikuo", "JAP", 1942, 5, 0.0, 40.0, 20.0, false, true, "Japan's motorcycle and sidecar" },
+		{ "bike_m72", "M72", "SOV", 1943, 7, 0.0, 40.0, 20.0, false, true, "the Soviet one" },
+		{ "bike_solo", "Motorcycle", "GER", 1942, 6, 0.0, 40.0, 20.0, false, true, "a motorcycle" },
+	};
+	const std::string BurntSet = bBurntSheet ? std::getenv("LAND_KIT_BURNT") : "";
+	const bool bBurntMore = BurntSet == "more" || BurntSet == "bikes";
+	for (const BurntLook& K : BurntLooks)
+	{
+		if (!bBurntSheet)
+		{
+			break;
+		}
+		const std::string Head = std::string(K.File).substr(0, 5);
+		if ((Head == "more_" ? "more" : Head == "bike_" ? "bikes" : "") != (bBurntMore ? BurntSet : std::string()))
+		{
+			continue;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = K.Nation;
+		P.Year = K.Year;
+		P.Month = K.Month;
+		P.Pin.Turret = K.Turret;
+		P.Pin.DeathAge = 4.5;
+		P.Pin.bBrewUp = K.bBrewUp;
+		P.CameraBearing = K.Bearing;
+		P.CameraUp = K.Up;
+		P.SootShare = 1.0;
+		P.bBurntCoat = K.bCoat;
+		// (her marks the game's own, painted on her skin, so they burn with it as they do in the game)
+		P.bMarks = true;
+		P.Caption = K.Caption;
+		Panels.push_back(P);
+	}
+	for (int Coat = 0; Coat < 2 && bBurntSheet && !bBurntMore; ++Coat)
+	{
+		// (a troop of Shermans crossing the picture, 150 m off: the second burnt out, the fourth knocked out and not burnt)
+		Panel P;
+		P.File = Coat ? "burnt_150" : "burnt_150_was";
+		P.ModelName = "Sherman";
+		P.Nation = "USA";
+		P.Pin.X = -16.0;
+		P.Pin.Y = 3.0;
+		P.Pin.Heading = 0.2;
+		P.Pin.Turret = 20.0;
+		P.bBurntCoat = Coat != 0;
+		const double At[3][3] = { { -5.0, -2.0, -0.3 }, { 6.0, 2.5, 0.1 }, { 17.0, -1.0, 0.5 } };
+		for (int I = 0; I < 3; ++I)
+		{
+			Panel::Other O;
+			O.ModelName = "Sherman";
+			O.Nation = "USA";
+			O.Pin.X = At[I][0];
+			O.Pin.Y = At[I][1];
+			O.Pin.Heading = At[I][2];
+			O.Pin.Turret = I == 1 ? -30.0 : -14.0;
+			if (I == 0)
+			{
+				O.Pin.DeathAge = 4.5;
+				O.SootShare = 1.0;
+			}
+			if (I == 2)
+			{
+				// (knocked out and never alight: the game lays no soot on her, LandKit's Vehicle::Soot rises only as she burns)
+				O.Pin.DeathAge = 3.5;
+			}
+			P.Others.push_back(O);
+		}
+		P.bAim = true;
+		P.AimAt = V3(0.0, 0.0, 1.2);
+		P.AimFrom = V3(0.35, -0.92, 0.12);
+		P.AimDistance = 150.0;
+		P.Caption = Coat ? "150 m, with the coat: the second is burnt out, the last knocked out" : "150 m, as it was: the second is burnt out, the last knocked out";
+		Panels.push_back(P);
+	}
 	struct TankLook
 	{
 		const char* Model;
@@ -1176,7 +1454,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet || bHouseSheet)
+		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet)
 		{
 			break;
 		}
@@ -1211,7 +1489,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet && !bHouseSheet)
+	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
@@ -1312,8 +1590,23 @@ int main(int argc, char** argv)
 		V.PinPose(*M, P.Pin, Flat);
 		Scene S;
 		AddVehicle(V, P.SootShare, S);
+		std::vector<std::unique_ptr<Vehicle>> Beside;
+		for (const Panel::Other& O : P.Others)
+		{
+			Panel As = P;
+			As.ModelName = O.ModelName;
+			As.Nation = O.Nation;
+			const Model* Om = ModelFor(O.ModelName, O.Nation, As);
+			if (!Om)
+			{
+				return 1;
+			}
+			Beside.push_back(std::make_unique<Vehicle>());
+			Beside.back()->PinPose(*Om, O.Pin, Flat);
+			AddVehicle(*Beside.back(), O.SootShare, S);
+		}
 		const size_t Unmarked = S.Tris.size();
-		if (!P.bMarks)
+		if (!P.bMarks && P.Others.empty())
 		{
 			AddMarks(V, S); // (the pictures' own flat marks, where the game's are off)
 		}

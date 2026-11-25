@@ -3,7 +3,8 @@
 # tank, gun and lorry of a recorded battle through it at 60 frames a second, checking what Brian's brief asks of them
 # (no NaN, bodies joined, the turret no faster than its control, the barrel's recoil on every shot, a wreck still,
 # nothing sunk into or floating over the ground) and timing it. Builds with clang too when it is here, with the Mac's
-# strictest warning (a loop that can run only once fails the Mac build).
+# strictest warning (a loop that can run only once fails the Mac build). Battle/LandTeamGun (the support teams' weapons,
+# release 2) is built and checked with them.
 # Usage: Tools/land_kit/run.sh [recording.json]   (default: Content/Data/LandBattles/normandy-1944.json)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -15,9 +16,9 @@ FLAGS="-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I$SRC"
 # LandCrater's scars read the field's hedges and lanes (OldLinesOf), so the field's own code links in too.
 FIELD="$SRC/Battle/LandField.cpp $SRC/Battle/LandHouse.cpp $SRC/Battle/LandSteppe.cpp $SRC/Battle/LandScape.cpp $SRC/Battle/LandDesert.cpp $SRC/Battle/LandMed.cpp $SRC/Battle/LandTropic.cpp $SRC/Battle/LandFarm.cpp $SRC/Battle/LandSnow.cpp $SRC/Battle/LandDry.cpp $SRC/Battle/LandAsia.cpp $SRC/Battle/LandAmerica.cpp $SRC/Battle/LandPlain.cpp $SRC/Battle/LandCity.cpp $SRC/Battle/LandJson.cpp"
 if command -v clang++ >/dev/null 2>&1; then
-  clang++ $FLAGS -Wunreachable-code-aggressive "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" $FIELD \
+  clang++ $FLAGS -Wunreachable-code-aggressive "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" "$SRC/Battle/LandTeamGun.cpp" $FIELD \
     -o "$OUT/land_kit_test_clang"
 fi
 CXX="${CXX:-g++}"
-$CXX $FLAGS "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" $FIELD -o "$OUT/land_kit_test"
+$CXX $FLAGS "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" "$SRC/Battle/LandTeamGun.cpp" $FIELD -o "$OUT/land_kit_test"
 "$OUT/land_kit_test" "$ROOT/Content" "$@"

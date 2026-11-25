@@ -370,6 +370,14 @@ private:
 	TArray<int32> FreeReels;
 	int32 ReelTracksSeen = 0;
 	bool bReelTried = false;
+	/** The support teams' weapons (release 2, on trial "teamguns": a machine gun on its mount or a mortar at each team's
+	 * key man; Battle/LandTeamGun, the state's TeamGuns): each weapon file's two meshes instanced, its mount ([2 * its
+	 * kind]) and what turns on it and is carried ([2 * its kind + 1]); the copies of a live battle's reset given back to
+	 * Free, by mesh; how many tracks have been looked at for a key man. */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> TeamGunCopies;
+	TArray<TArray<int32>> FreeTeamGunCopies;
+	int32 TeamGunTracksSeen = 0;
 	/** The wires whose ends a lineman held last frame (their Id): curled again when he lets them go unspliced. */
 	TArray<int32> SplicedWires;
 	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B), and for the clutter each
@@ -997,6 +1005,12 @@ private:
 	/** This frame's linemen: each one's reel in his hands or by his knee, and a cut wire's two ends in his fists while
 	 * he splices it (the soldiers' splice_kneel and its `hands` keys). */
 	void MakeReels();
+	/** The support teams' weapons placed for this frame (release 2, on trial "teamguns"): each key man's met so far
+	 * stepped from where the crowd draws him, LifeDt life seconds on, and its two instances moved. After the men are
+	 * posed and before the fire is stepped, whose flashes leave these muzzles. */
+	void MakeTeamGuns(double LifeDt);
+	/** A weapon file's row in the state's TeamKinds, read and its two meshes made the first time (-1: not read). */
+	int32 TeamGunKind(const std::string& File);
 	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
 	void MakeRuts();
 	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */

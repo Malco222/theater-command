@@ -126,8 +126,9 @@ namespace LandScape
 	class Winter final : public Snow
 	{
 	public:
-		Winter(double InCover, Look L, uint64_t InSeed) : Snow(InCover, L, InSeed)
+		Winter(double InCover, Look L, uint64_t InSeed, bool bInGrassTrial) : Snow(InCover, L, InSeed)
 		{
+			bGrassTrial = bInGrassTrial;
 			// How much of the ground the snow hides on the whole, and how much its thin patches and drifts still show:
 			// a dusting patchy, deep snow even.
 			Lay = Lerp(0.42, 1.0, Smooth(0.06, 0.62, Cover));
@@ -387,6 +388,17 @@ namespace LandScape
 				const double UThin = Unit(Ht), UTurn = Unit(Hash(Ht, 1)), UShade = Unit(Hash(Ht, 2));
 				if (bOpenCountry && UThin > 0.7) return false;
 				if (bOpenCountry) P.Scale = static_cast<float>(P.Scale * 0.7);
+				P.Yaw = static_cast<float>(WindYaw + 0.6 * (UTurn - 0.5));
+				const double Shade = 0.94 + 0.12 * UShade;
+				P.Tint = Tint(Shade, Shade, Shade * 1.02);
+			}
+			// (on trial, "wintergrass": the farmland's dry stalks, last summer's dock and thistle and grass gone to seed,
+			// dead as its grass is and bent the same way; and fewer of them through a deep snow, more of them under it)
+			if (bGrassTrial && Under == Look::Farmland && P.Kind == B::Clut2)
+			{
+				const uint64_t Ht = Hash(Seed ^ 0x57A1, static_cast<uint64_t>(std::llround(P.X * 5.0)), static_cast<uint64_t>(std::llround(P.Y * 5.0)));
+				const double UThin = Unit(Ht), UTurn = Unit(Hash(Ht, 1)), UShade = Unit(Hash(Ht, 2));
+				if (Depth >= 0.15 && UThin > 0.55) return false;
 				P.Yaw = static_cast<float>(WindYaw + 0.6 * (UTurn - 0.5));
 				const double Shade = 0.94 + 0.12 * UShade;
 				P.Tint = Tint(Shade, Shade, Shade * 1.02);
@@ -744,6 +756,24 @@ namespace LandScape
 				return;
 			default: break;
 			}
+			// (on trial, "wintergrass": the farmland's dry stalks, last summer's dock and thistle and seeding grass, weathered
+			// to a grey-brown by the winter, not the gold they stood in at the harvest; each point's value kept, a shade under
+			// (grey reads lighter than gold of one value), so they read against the snow as before. Their tips bent downwind,
+			// a snow tail in their lee.)
+			if (bGrassTrial && B == K::Clut2 && Under == Look::Farmland)
+			{
+				const Tone Weathered = Rgb(146, 136, 120);
+				for (LandField::Rgb8& C : M.Near.Colours) C = Byte(Mixed(OfByte(C), Varied(Weathered, 0.92 * Lum(OfByte(C)) / Lum(Weathered), 0.0), 0.95));
+				for (LandField::Rgb8& C : M.Far.Colours) C = Byte(Mixed(OfByte(C), Varied(Weathered, 0.92 * Lum(OfByte(C)) / Lum(Weathered), 0.0), 0.85));
+				for (LandField::Mesh* Me : { &M.Near, &M.Far })
+					for (size_t P = 0; P + 2 < Me->Positions.size(); P += 3)
+					{
+						const double Z = Me->Positions[P + 2];
+						Me->Positions[P] = static_cast<float>(Me->Positions[P] + 0.2 * Z * Z);
+					}
+				Tail(M.Near);
+				return;
+			}
 			// (the farmland's grass tuft, built dead and bent by its region: its snow tail)
 			if (B == K::Clut0 && Under == Look::Farmland) Tail(M.Near);
 			if (B >= K::Tuft) return; // (the other clutter as built; a region's own clutter is its to dress)
@@ -802,11 +832,13 @@ namespace LandScape
 		static constexpr int GNX = 421, GNY = 321;
 		std::vector<float> Grid;
 		bool bOpenCountry = false, bBroadleafWoods = true;
+		/** On trial, "wintergrass": the farmland's dry stalks dressed as its grass is. */
+		bool bGrassTrial = false;
 		Tone Dirt = Loam;
 	};
 
-	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t S)
+	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t S, bool bGrassTrial)
 	{
-		return std::make_unique<Winter>(Cover, L, S);
+		return std::make_unique<Winter>(Cover, L, S, bGrassTrial);
 	}
 }

@@ -394,6 +394,25 @@ export interface LiveOpts {
   /** Jeeps and motorcycles (release 2, looks only; sim.light): out ahead with a block's screen or behind it. A campaign battle's only; off unless true. */
   light?: boolean;
   /**
+   * Japan's own tank and field gun (release 2, looks only; the Japan/Pacific thread's finding, 25 November: Japan
+   * fought in a borrowed light tank and a German howitzer). On, a Japanese armoured block is drawn as the Type 97 and
+   * a Japanese battery as the 75 mm field gun, the models the fight's own table already names for her
+   * (shells.ts), and every Japanese block is marked for her own coat (blocks[].coat "japan"), which the 3D game puts
+   * on the models she shares with other armies: the gun, the lorry, the light tank. A campaign battle's only; off
+   * unless true (the art director's stills and a Mac reading first).
+   */
+  japan?: boolean;
+  /**
+   * Island ground (release 2, looks only; "a card, then an island battle", the Japan/Pacific thread's batch 3): on, a
+   * campaign battle on ground the campaign has dressed (ticket.look, ticket.latLon) is drawn as that place. The
+   * header's field.look names the 3D look ("island": beach, reef and palms; "jungle": a big island's inland fight) and
+   * sky.latLon carries the place's own latitude and longitude, for its sun, its weather and the men's front (without
+   * it every campaign battle is drawn at 49 N 0 E, which is Normandy). Off unless true: the island look has not passed
+   * the art director or the Mac. Off, or on a ticket with neither key, the header is byte for byte what it was; a set
+   * piece keeps its own, and a sky given outright with its own latLon keeps that.
+   */
+  island?: boolean;
+  /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
    * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
@@ -421,9 +440,18 @@ export function yearOf(t: FieldTicket<LandPlace>): number {
  * IV, a Tiger, a StuG, a T-34, a light tank and three guns so far, so each nation is drawn with the nearest it has, in
  * its own coat (LandKit dresses a model in its owner's colours), until the art director's models for every theatre come
  * (Brian, 22 November: "it's a world war game not just France"). The Nth tank of a side, for a mix.
+ *
+ * `own`: the nations whose own models the game now has are drawn with them instead of the nearest (the Battle rules
+ * card's switch, off until the art director and the Mac pass them). Japan's are the first: the Type 97 medium tank
+ * (1938 on; her earlier blocks keep the light tank) and the 75 mm field gun, which the fight's own table (shells.ts)
+ * already names for her.
  */
-export function standInModel(kind: string, nat: string, year: number, n: number): string {
+export function standInModel(kind: string, nat: string, year: number, n: number, own = false): string {
   const axis = ['GER', 'ITA', 'JAP', 'HUN', 'ROM', 'BUL', 'FIN'].includes(nat);
+  if (own && nat === 'JAP') {
+    if (kind === 'art') return 'Gun75';
+    if (year >= 1938) return 'Type97';
+  }
   if (kind === 'art') return nat === 'SOV' ? 'ZiS3' : axis ? 'leFH18' : 'Howitzer105';
   if (nat === 'GER') return year >= 1943 ? ['PanzerIV', 'PanzerIV', 'Tiger', 'StuG3'][n % 4] : year >= 1941 ? ['PanzerIV', 'StuG3', 'LightTank'][n % 3] : ['LightTank', 'PanzerIV'][n % 2];
   if (nat === 'SOV') return year >= 1941 ? ['T34', 'T34', 'LightTank'][n % 3] : 'LightTank';
@@ -473,6 +501,8 @@ export class LiveBattle {
   private wreckPer: number | null = null;
   /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground, old wrecks). */
   private looks: { worn: boolean; mud: boolean; scars: boolean; wrecks: boolean; wet: boolean } = { worn: true, mud: true, scars: true, wrecks: true, wet: true };
+  /** The place's own dress passed on to the 3D game (release 2, LiveOpts.island): a campaign battle's only. */
+  private island = false;
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
@@ -526,6 +556,7 @@ export class LiveBattle {
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wrecks: opts.wrecks !== false, wet: opts.wet !== false };
+    this.island = !piece && opts.island === true;
     // (old wrecks: the armour's real vehicles over the tank models it is drawn with; a block's worth is its divisions by
     // their strength, a regiment a third)
     const armour = sim.allBlocks().filter((u) => u.kind === 'arm' && u.figures0 > 0);
@@ -547,17 +578,21 @@ export class LiveBattle {
       if (model) sim.vehicleIs(u.id, model);
       // A campaign battle (no piece): the nearest model the 3D game has for the nation and year, looks only, so the
       // battle stays the one the campaign priced (the fight never reads it).
-      else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+      else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++, opts.japan === true);
       const took = caught && u.kind === 'arm' && caughtLeft[u.side] > 0 ? caught[u.side as 'att' | 'def'] : undefined;
       if (took) {
         caughtLeft[u.side]--;
-        model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+        model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0, opts.japan === true);
       }
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
         ...(u.joined !== undefined ? { joins: true } : {}), ...(took ? { captured: took.from } : {}),
+        // (release 2, the "japan" row: a Japanese block's vehicles in her own coat where the model is one she shares with
+        // other armies and its file has no Japanese paint, the field gun, the lorry, the light tank; the 3D game keeps
+        // the coat by this name. Looks only, a campaign battle's only: a set piece is as the historian drew it.)
+        ...(!piece && opts.japan === true && u.nat === 'JAP' ? { coat: 'japan' } : {}),
         // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
         // read before the battle opens)
         ...((mls) => (mls.length ? { mls } : {}))(this.drill.modelsFor(u)),
@@ -580,7 +615,9 @@ export class LiveBattle {
       ...(t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
       ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
       ...(t.oldWrecks && t.oldWrecks.count > 0 && this.looks.wrecks ? { oldWrecks: { count: t.oldWrecks.count, months: t.oldWrecks.months, nats: { ...t.oldWrecks.nats }, ...(this.wreckPer ? { per: this.wreckPer } : {}) } } : {}),
-      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
+      // (the place's own latitude and longitude, release 2 on its "island" option: only where the sky has none)
+      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } }
+        : { sky: this.island && t.latLon && !this.skyOf.latLon ? { ...this.skyOf, latLon: t.latLon } : this.skyOf }),
       sides: {
         att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}), ...(t.att.worn !== undefined && this.looks.worn ? { worn: t.att.worn } : {}) },
         def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}), ...(t.def.worn !== undefined && this.looks.worn ? { worn: t.def.worn } : {}) },
@@ -590,6 +627,8 @@ export class LiveBattle {
         zones: f.zones, town: f.town, place: t.place,
         ...(f.storeys ? { storeys: f.storeys } : {}), ...(f.landmark ? { landmark: f.landmark } : {}), ...(f.stream ? { stream: f.stream } : {}),
         ...(this.steppe ? { steppe: this.steppe } : {}),
+        // (the 3D look the campaign names for this ground, release 2 on its "island" option: LandScape reads it first)
+        ...(this.island && t.look ? { look: t.look } : {}),
       },
       limit: LAND.limit, contact: null, end: 0,
       blocks: this.blocks,

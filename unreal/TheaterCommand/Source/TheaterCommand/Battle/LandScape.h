@@ -95,7 +95,7 @@ namespace LandScape
 		double HazeDensity = 0.0069;                 // at the field's ground (LandBattle's HazeDensity)
 		double SkyDust = 0.6;                        // LandBattle's SkyDust
 		double Grade[4] = { 0.45, 0.48, 1.0, 1.02 }; // the colour kept in the darks and the middles; red and blue gain
-		double Stops = -0.5;                         // exposure (LandBattle's half stop down)
+		double Stops = -0.5;                         // exposure (LandBattle's half stop down; the desert's half a stop more on trial "desertstop", an island's a third on "islandstop")
 		double Contrast = 1.42;                      // BattleLook's
 		double Toe = 0.55;                           // the film's toe (Unreal's own)
 		double KeyKelvin = 0.0;                      // 0: the battle's own
@@ -104,6 +104,18 @@ namespace LandScape
 		double SkyLift = 1.0;                        // the sky's own pixels under a high sun (LandBattle's SkyLift; 1: as drawn)
 	};
 	Air AirOf(Look L, double Snow);
+	/**
+	 * The east's summer graded as its own theatre (release 2, on trial "eastgold" until the art director passes it on the
+	 * Mac): the farmland of the Eastern Front east of 23.5 degrees (LandFarm's Russia: the Ukraine, Belarus, western
+	 * Russia to the Urals, 44 to 62 north; Voronezh, Kursk, Kharkov, Orel; not the northern forest belt, the climate's
+	 * taiga: Leningrad, the Svir, Karelia) from May to September with no snow lying (0.3 or less). Its air is the art
+	 * director's T2, warm gold where Normandy's grade washed it to cream, and LandFarm lays its ripe corn and stubble a
+	 * step darker for it. Trial: the field's words (Field::Tried's reading of them).
+	 */
+	bool EastGold(Look L, double Snow, double Lat, double Lon, int Month, const std::string& Trial);
+	/** The day's air as above, for the field's place, month and trials (the recording's sky.latLon, its date's month and
+	 * "-TheaterLandTrial=", as the field was laid from them): the east's summer its own where EastGold holds. */
+	Air AirOf(Look L, double Snow, double Lat, double Lon, int Month, const std::string& Trial);
 
 	// ------------------------------------------------------------------ numbers (a region's own noise; LandField keeps its own)
 
@@ -434,6 +446,8 @@ namespace LandScape
 	/** The region for a look (null for the bocage and the steppe), and the snow over it (null where none lies). */
 	std::unique_ptr<Region> Make(Look L, const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
+	/** The same, the field's trial words read ("wintergrass": the farmland's dry stalks dead and bent as its grass is). */
+	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed, const LandField::Field& F);
 
 	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
 	// LandAmerica.cpp, LandPlain.cpp, LandCity.cpp, LandSnow.cpp).
@@ -449,7 +463,7 @@ namespace LandScape
 	/** Whether the rules laid a town or a city here big enough to fight in its streets: any suburb, industry or park
 	 * cell, or enough built cells (the city look's test; release 2, on trial "city"). */
 	bool IsCityField(const LandField::Field& F);
-	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
+	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed, bool bGrassTrial = false);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */
 	struct Writer

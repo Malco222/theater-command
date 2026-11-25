@@ -25,9 +25,11 @@ weapon triangles, and every clip's `weapon` is "none" (the weapon bone rides 2 m
   climb_net (up a scrambling net, the net 0.3 m ahead of his root; `climb` metres a loop); row and sit_raft (the
   root on the thwart's or the raft's top);
 - on deck at a gun and giving up (release 2, the sea scene), keyed on his rig: hands_up, gun_layer, gun_trainer,
-  gun_loader (a round about every 5 s) and ammo_passer (root `hatch`), with their wheel, sight, round and pair
-  blocks. `--only gun` draws them (stills); `--only graft` adds just these five to the delivered file (backed up
-  first), leaving every other clip and key in it as it is, as run_styles.py added the runs.
+  gun_loader (a round about every 5 s), the passers ammo_passer, ammo_passer_50 and ammo_passer_70 to _110 every
+  0.05 m (root `hatch`) with ammo_passer_wait, and the carrier ammo_carrier_take, _walk, _wait and _give, with their
+  wheel, sight, round and pair blocks. `--only gun` draws them (stills); `--only graft` adds just these (GUN_CLIPS)
+  to the delivered file (backed up first) and rewrites the gun crew's lines of its about and water block, leaving
+  every other clip and key in it as it is, as run_styles.py added the runs.
 """
 
 import json
@@ -153,8 +155,9 @@ elif WHO == "uk":
     VARIANTS = {
         "white_cap": {"hat": "E4E1D8",
                       "about": "the summer and the Mediterranean: the cap's white cover over the crown"},
-        "sweater": {"shirt_own": "D3CAB2",
-                    "about": "the cream roll-neck sea jersey of the North Atlantic escorts and the submarines"},
+        "sweater": {"shirt_own": "AEA285",     # (oatmeal, the art director's 22 November: cream read as summer white)
+                    "about": "the oatmeal (undyed wool) roll-neck sea jersey of the North Atlantic escorts, Coastal "
+                             "Forces and the submarines"},
         "gun_crew": {"about": "a gun crew's man: the same colours, with a steel helmet (a helmet finish, the flat "
                               "broad-brimmed helmet in dark grey 4E5550) drawn in place of the cap (helmet_paints)"},
     }
@@ -1460,7 +1463,8 @@ def c_gun_trainer(t):
 # ---- the loader: takes a round from the man behind him on his left, lays it in the tray and rams it home
 ROUND_LONG = 0.72                  # (m: a fixed round, the shell and its case, nose to base)
 ROUND_R = 0.05                     # (m: its case's radius, for the pictures)
-BREECH = (1.02, -0.08, 1.12)       # (m: the chamber's mouth in the loader's frame)
+BREECH = (1.02, -0.08, 1.02)       # (m: the chamber's mouth in the loader's frame: the boats' guns sit 1.00-1.05 m
+                                   #  over the casing, the sea scene measured, 25 November; was 1.12)
 BORE = (1.0, 0.0, 0.05)            # (the bore's line at the gun's resting elevation)
 LOAD_LONG = 5.0
 TAKE_T = 0.75                      # (s: he has it; the passer lets go)
@@ -1505,21 +1509,27 @@ def _mix(a, b, u):
     return {"blend": [(1.0 - u, a), (u, b)]}
 
 
+LOAD_TRUNK = [(0.0, (46.0, 24.0, 0.0, 0.08)), (TAKE_T, (46.0, 24.0, 0.0, 0.08)), (1.65, (4.0, 10.0, 0.0, 0.05)),
+              (2.45, (-2.0, 30.0, 0.03, 0.08)), (2.75, (-2.0, 30.0, 0.03, 0.08)), (3.05, (-3.0, 33.0, 0.12, 0.08)),
+              (3.5, (-2.0, 22.0, 0.08, 0.05)), (4.4, (42.0, 24.0, 0.0, 0.08))]
+# (his trunk through the loop: turn to his left, lean forward (degrees), lunge toward the gun and crouch (m); bent
+#  at the knees and the hips enough that both hands reach the round where it is taken and laid: a loader lifting
+#  a 15-25 kg round from waist height and laying it at the breech, 1.02 m over the deck)
+
+
 @water_clip("gun_loader", LOAD_LONG, loop=True, root="deck",
             events=[sev(TAKE_T, "round_taken", "round_handoff"), sev(3.0, "ram", "shell_ram"),
                     sev(3.3, "breech_close", "breech_close")],
-            about="A deck gun's loader, behind the breech: turned to his left he takes a round from the man behind "
-                  "him (ammo_passer), swings it round to his chest, lays it in the tray nose first and rams it home "
+            about="A deck gun's loader, behind the breech: turned to his left he takes a round from the passer "
+                  "(ammo_passer or another passer clip) or the carrier (ammo_carrier_give), swings it round to his chest, lays it in the tray nose first and rams it home "
                   "with his right fist, lunging after it; the breech closes and he turns back for the next, one round "
                   "about every 5 s. The `round` block gives the round's base, its nose's way and when it is shown (in "
                   "his hands, then sliding into the chamber), and the chamber's mouth, in the root's frame.")
 def c_gun_loader(t):
     tt = t % LOAD_LONG
     # his trunk: turned to the left to take it, square to the gun to lay it, lunging in on the ram
-    turn, lean, lunge = eased([(0.0, (38.0, 6.0, 0.0)), (TAKE_T, (38.0, 9.0, 0.0)), (1.65, (4.0, 8.0, 0.0)),
-                               (2.45, (-2.0, 20.0, 0.03)), (2.75, (-2.0, 21.0, 0.03)), (3.05, (-3.0, 27.0, 0.12)),
-                               (3.5, (-2.0, 18.0, 0.08)), (4.4, (34.0, 6.0, 0.0))], tt, LOAD_LONG)
-    P = body(MAN["pz"] - 0.05 - 0.25 * lunge, x=-0.03 + lunge, pitch=0.35 * lean, yaw=0.4 * turn,
+    turn, lean, lunge, crouch = eased(LOAD_TRUNK, tt, LOAD_LONG)
+    P = body(MAN["pz"] - 0.05 - 0.25 * lunge - crouch, x=-0.03 + lunge, pitch=0.35 * lean, yaw=0.4 * turn,
              bend=(0.65 * lean, 0.0, 0.6 * turn), neck=(-0.3 * lean, 0.0, 0.25 * turn), head=(-0.25 * lean, 0.0, 0.15 * turn))
     planted(P, (0.2, 0.17), (-0.2, -0.14), 14.0, -20.0, pole=(1.0, 0.3, 0.15))
     base, d, _ = loader_round(min(tt, 2.75))
@@ -1547,63 +1557,575 @@ def c_gun_loader(t):
     return S.breathe(P, t, LOAD_LONG / 2, 1.2)
 
 
-# ---- the passer: up through the hatch behind the gun, handing the rounds up from below
+# ---- the passer: up through the hatch behind the gun, handing the rounds up from below; and where the hatch is too
+# far from the loader for one man's reach, the carrier, who takes them at the hatch and walks them along the casing
+# (the sea scene, 25 November: hatches 0.75 to 4.6 m from the loader's take, as the boats' guns train)
 PASS_LONG = LOAD_LONG
-HATCH_DOWN = 0.90                  # (m: the rung he stands on, under the deck)
+HATCH_DOWN = 0.90                  # (m: the rung he takes the rounds on, under the deck)
+HATCH_HALF = 0.30                  # (m: half the hatch's opening, fore and aft and across: under the deck his legs, his
+                                   #  hands and the round stay inside it)
+RUNG = 0.25                        # (m: from rung to rung of its ladder)
 PASSER_AT = (-0.32, 0.30, 0.0)     # (m: his root from the loader's, so the round passes from hand to hand)
 PASS_HOLD = (0.05, 0.22)           # (along the round from its base: his right hand, his left, under it)
+SHELL_HOLD = (0.60, 0.82)          # (the far reaching passers' and the carrier's: his left hand, his right, under the
+                                   #  round's shell, clear of the loader's, who takes it by its base and its case)
+Z_UP = np.array((0.0, 0.0, 1.0))
 
 
-def passer_round(t):
-    """The round he holds up (its base, its nose's way, shown), in his own frame: at the loader's take, moved by
-    PASSER_AT; low, he takes the next from a man below."""
-    give = np.array(TAKE_AT) - np.array(PASSER_AT)
-    d0 = _n(TAKE_WAY)
-    low, dl = np.array((0.04, 0.0, -0.42)), _n((0.3, -0.1, 0.95))     # (nose up, out of the hatch's mouth)
-    keys = [(0.0, tuple(give) + tuple(d0)), (TAKE_T, tuple(give) + tuple(d0)), (1.1, tuple(give + (0.0, 0.0, -0.05)) + tuple(d0)),
-            (2.3, tuple(low) + tuple(dl)), (2.6, tuple(low) + tuple(dl)), (3.9, tuple(give) + tuple(d0))]
+def held(keys, t):
+    """Values keyed [(t, tuple)], eased in and out at each key and held after the last (a clip that does not loop)."""
+    ts = [k[0] for k in keys]
+    if t <= ts[0]:
+        return np.asarray(keys[0][1], float)
+    if t >= ts[-1]:
+        return np.asarray(keys[-1][1], float)
+    i = max(j for j in range(len(keys)) if ts[j] <= t)
+    u = sm((t - ts[i]) / (ts[i + 1] - ts[i]))
+    a, b = np.asarray(keys[i][1], float), np.asarray(keys[i + 1][1], float)
+    return a + (b - a) * u
+
+
+def grip(base, d, f, side, fingers="fwd", off=(0.0, 0.0, 0.0)):
+    """A hand under the round, f of its length along from its base, palm up against it (moved by `off`). `fingers`
+    fwd: across the round, pointing on from his forearm (away from his shoulder on that side, so the wrist is never
+    turned back on itself); first: the first passer's (across it, to his right)."""
+    d = _n(d)
+    if fingers == "first":
+        n, a = Z_UP, _n(np.cross(d, Z_UP))
+        at = base + f * ROUND_LONG * d - 0.045 * Z_UP
+    else:
+        n = _n(Z_UP - (Z_UP @ d) * d)
+        a = _n(np.cross(n, d))
+        at = base + f * ROUND_LONG * d - 0.045 * n
+        reach = np.array((at[0], at[1] - side * 0.185))          # (from his shoulder, level)
+        if a[0] * reach[0] + a[1] * reach[1] < 0.0:
+            a = -a
+    return world_hand(np.asarray(at) + np.asarray(off, float), a, n, (-0.2, side * 1.0, -0.9))
+
+
+def across(alpha, c, z=0.95):
+    """A round held across in front of him by its shell (SHELL_HOLD), its nose `alpha` degrees round from pointing
+    back at him toward his right, his hands' middle c ahead of him: its base's point and its nose's way."""
+    a = math.radians(alpha)
+    d = _n((-math.cos(a), -math.sin(a), 0.05))
+    mid = 0.5 * (SHELL_HOLD[0] + SHELL_HOLD[1]) * ROUND_LONG
+    base = np.array((c, 0.0, 0.0)) - mid * d
+    base[2] = z
+    return base, d
+
+
+def taker(base, d):
+    """Where the loader stands for this round to be his take (TAKE_AT, its nose TAKE_WAY):
+    his root and his turn (degrees to the left) in the giver's frame."""
+    tw = _n(TAKE_WAY)
+    turn = math.degrees(math.atan2(d[1], d[0]) - math.atan2(tw[1], tw[0]))
+    turn = (turn + 180.0) % 360.0 - 180.0
+    c, s = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    ta = np.array(TAKE_AT)
+    root = np.array((base[0] - (c * ta[0] - s * ta[1]), base[1] - (s * ta[0] + c * ta[1]), 0.0))
+    return root, turn
+
+
+def rung_steps(h):
+    """His feet's steps from the rung he gives on (h under the deck) down to HATCH_DOWN after he lets go, and back up
+    with the next round: [(foot, from t, to t, the rung's depth)]."""
+    n = int(round((HATCH_DOWN - h) / RUNG))
+    if n <= 0:
+        return []
+    if n == 1:
+        return [("r", 1.05, 1.35, HATCH_DOWN), ("l", 1.35, 1.65, HATCH_DOWN), ("r", 2.65, 2.95, h), ("l", 2.95, 3.25, h)]
+    mid = h + RUNG
+    return [("r", 1.0, 1.3, mid), ("l", 1.3, 1.6, HATCH_DOWN), ("r", 1.6, 1.9, HATCH_DOWN),
+            ("r", 2.62, 2.9, mid), ("l", 2.9, 3.2, h), ("r", 3.2, 3.5, h)]
+
+
+def passer(reach, give, way, hold, fingers, rung, trunk_give, trunk_low, low, path=(), trunk_rise=None):
+    """A passer: where he gives the round and how it lies, his grip, the rung he gives on, his trunk (lean forward,
+    the pelvis's x, crouch, yaw to his left) giving and taking it from below (and, if given, as it rises at 3.3 s),
+    the round low (base, way), and its keys (t, base, way) from there up to the give, clear of the loader (see
+    PASS_PATHS)."""
+    give = np.asarray(give, float)
+    steps = rung_steps(rung)
+    root, turn = taker(give, way)
+    back = (8.0, -0.05, 0.0, 0.0)       # (climbing, his hips back from the ladder, so a raised knee keeps off its rungs)
+    trunk = [(0.0, trunk_give), (TAKE_T, trunk_give)] + ([(1.2, back)] if steps else []) + \
+        [(2.3, trunk_low), (2.6, trunk_low)] + ([(3.3, trunk_rise)] if trunk_rise else []) + [(3.9, trunk_give)]
+    return {"reach": float(np.hypot(give[0], give[1])), "nominal": reach, "give": give, "way": _n(way), "hold": hold,
+            "fingers": fingers, "rung": rung, "steps": steps,
+            "low": (np.asarray(low[0], float), _n(low[1])), "trunk": trunk, "loader_root": root, "loader_turn": turn,
+            "path": [(k[0], np.asarray(k[1], float), _n(k[2])) for k in path]}
+
+
+UP_T = 2.45                         # (s: round_up: the next round shows in his hands, low in front of him, as if handed up
+                                    #  to him past his legs (a 0.72 m round has no room beside them in the 0.6 m opening))
+
+
+def _turned(d, deg):
+    """The way d turned deg degrees to his left, about the upright."""
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return _n((c * d[0] - s * d[1], s * d[0] + c * d[1], d[2]))
+
+
+SHELL_MID = 0.5 * (SHELL_HOLD[0] + SHELL_HOLD[1]) * ROUND_LONG     # (m: from the base to his hands' middle, by the shell)
+# PASS_PATHS: how the round comes up from below to the give, clear of the loader. In the loader's own frame the give is
+# always his take, so his loop (laying it in the tray, the ram, turning back) sweeps the same space round it for every
+# passer: his left thigh lies under the round there, and his arms work the tray beside it until about 3.4 s. So the
+# round never rises under the give: the first passers (holding it by its base, behind the loader on his left) take it
+# from below with its nose turned 60 degrees to their left, lift it so on their left (clear of their own heads), and
+# swing the nose round onto the loader's take from 3.3 s; the far passers (across in front of them by the shell) take it
+# low on their right (hands 0.48 m ahead, 0.22 m right, 0.30 m up, the same for every reach), its base turned 40 degrees
+# ahead, lift it there (hands 0.3 m to the right, 0.7 m up, at most 0.5 m ahead) and bring it across onto the give from
+# 3.15 s. Laid out by a search over these keys against the loader's loop
+# (his bones every 1/30 s, his round, the breech), then checked on the rig. The low takes are 0.27 to 0.30 m over the
+# deck, so a passer stood up to 0.125 m lower (a hatch higher than the loader's deck) keeps his arms off the deck plate.
+PASS_PATHS = {
+    "first": {"low": ((0.25, 0.22, 0.27), 60.0), "rise": (3.3, (-0.02, 0.25, 0.88), 60.0), "swing": (3.6, (-0.01, 0.11, 0.94), 30.0)},
+    "fwd": {"low": ((0.48, -0.22, 0.30), -40.0), "rise": (3.15, (-0.05, -0.30, 0.70), -30.0, 0.50), "swing": (3.55, -0.10)},
+}
+
+
+def first_path(give, way, rise=None):
+    """The first passers' round from below (base, way) and its keys up to the give (PASS_PATHS first: the rise's base
+    at (give x + dx, y, z), or `rise`'s, the swing's at (give x + dx, give y + dy, z))."""
+    P = PASS_PATHS["first"]
+    lb = np.asarray(P["low"][0], float)
+    ld = _turned(way, P["low"][1])
+    rt, (rx, ry, rz), ra = rise or P["rise"]
+    st_, (sx, sy, sz), sa = P["swing"]
+    return (lb, ld), [(rt, np.array((give[0] + rx, ry, rz)), _turned(way, ra)),
+                      (st_, np.array((give[0] + sx, give[1] + sy, sz)), _turned(way, sa))]
+
+
+def across_path(give, way):
+    """The far passers' round from below and its keys up to the give, by his hands' middle (PASS_PATHS fwd: low at
+    the same place for every reach, the rise's at (give x + dx, y, z) but at most `most` ahead, the swing's beside
+    the give)."""
+    P = PASS_PATHS["fwd"]
+    gm = give + SHELL_MID * way
+    ml, al = P["low"]
+    ld = _turned(way, al)
+    low = (np.asarray(ml, float) - SHELL_MID * ld, ld)
+    rt, (dxr, yr, zr), ar, most = P["rise"]
+    rd = _turned(way, ar)
+    rise = (rt, np.array((min(gm[0] + dxr, most), yr, zr)) - SHELL_MID * rd, rd)
+    st_, ys = P["swing"]
+    swing = (st_, gm + np.array((0.0, ys, 0.0)) - SHELL_MID * way, way)
+    return low, [rise, swing]
+
+
+PASSERS = {}
+# The first passers' trunk (lean, the pelvis's x, crouch, yaw to his left): giving, taking it from below, and turned to
+# his left as it rises there, so his right hand reaches the base across him.
+FIRST_GIVE, FIRST_LOW, FIRST_RISE = (16.0, 0.12, 0.0, 0.0), (24.0, 0.0, 0.04, 8.0), (12.0, 0.06, 0.0, 25.0)
+_g0 = np.array(TAKE_AT) - np.array(PASSER_AT)
+_lo, _pa = first_path(_g0, _n(TAKE_WAY))
+PASSERS["ammo_passer"] = passer(float(np.hypot(_g0[0], _g0[1])), _g0, TAKE_WAY, (PASS_HOLD[1], PASS_HOLD[0]), "first",
+                                HATCH_DOWN, FIRST_GIVE, FIRST_LOW, _lo, _pa, FIRST_RISE)
+# (his hips 0.14 m nearer the deck's forward edge as he gives it, leaning 16 degrees, so both hands reach it (his
+#  right was 33 mm short); he takes the next turned a little to his left, the round's nose that way, clear of the
+#  loader on his right)
+# The farther passers. Each is laid out so that, as its pair says, the loader stands clear of the hatch (his feet
+# 0.12 m or more outside its opening): at 0.5 m as the first passer, holding the round by its base, a rung up; from
+# 0.70 m to 1.10 m every 0.05 m (the sea scene picks the nearest, so its 4 cm test holds within 2.5 cm), across in front
+# of him by its shell (the loader's hands at its base and case), the nose `alpha` degrees round from pointing back at
+# him (75 at 0.70 m to 60 at 1.10 m): to 0.80 m on the low rung (0.90 m under the deck: a rung up, his head was in the
+# round), from 0.85 m a rung up (0.65 m) to give and down to the low rung to take.
+PASS_REACHES = [round(0.70 + 0.05 * k, 2) for k in range(9)]
+
+
+def pass_alpha(r):
+    return 75.0 - 37.5 * (r - 0.70)
+
+
+def pass_rung(r):
+    return HATCH_DOWN if r <= 0.80 + 1e-6 else HATCH_DOWN - RUNG
+
+
+def pass_trunk(r):
+    """His trunk (lean, the pelvis's x, crouch, yaw to his left) giving at reach r, and taking it from below."""
+    lean = 12.0 + 40.0 * (r - 0.70) if pass_rung(r) >= HATCH_DOWN else 12.0 + 20.0 * (r - 0.70)
+    return (lean, 0.14, 0.0, 0.0), (26.0, -0.02, 0.04, -12.0)
+
+
+_g5 = 0.5 * np.array((math.cos(math.atan2(_g0[1], _g0[0])), math.sin(math.atan2(_g0[1], _g0[0])), 0.0)) + (0.0, 0.0, TAKE_AT[2])
+# (a rung up, he lifts it lower and nearer him, turned less, so his right hand reaches its base and his knee, coming up
+#  the ladder, keeps inside the hatch)
+_lo, _pa = first_path(_g5, _n(TAKE_WAY), rise=(3.3, (-0.12, 0.15, 0.82), 60.0))
+PASSERS["ammo_passer_50"] = passer(0.5, _g5, TAKE_WAY, (PASS_HOLD[1], PASS_HOLD[0]), "first", HATCH_DOWN - RUNG,
+                                   FIRST_GIVE, FIRST_LOW, _lo, _pa, (16.0, 0.03, 0.0, 14.0))
+for _r in PASS_REACHES:
+    _al = pass_alpha(_r)
+    _a = math.radians(_al)
+    _c = math.sqrt(_r * _r - (0.71 * ROUND_LONG * math.sin(_a)) ** 2) - 0.71 * ROUND_LONG * math.cos(_a)
+    _b, _d = across(_al, _c)
+    _lo, _pa = across_path(_b, _d)
+    _tg, _tl = pass_trunk(_r)
+    PASSERS["ammo_passer_%d" % round(_r * 100)] = passer(_r, _b, _d, SHELL_HOLD, "fwd", pass_rung(_r), _tg, _tl, _lo, _pa)
+
+
+STEP_MID = (0.32, -0.02, 0.50)     # (m: his hands' middle, the round hidden, as he climbs down for the next)
+
+
+def passer_round(t, name="ammo_passer"):
+    """The round he holds up (its base, its nose's way, shown), in his own frame: at the give, where the loader's take
+    is in the pair; low, he takes the next from a man below; then up by its path to the give."""
+    V = PASSERS[name]
+    G, d = V["give"], V["way"]
+    lb, ld = V["low"]
+    if V["steps"]:                     # (hidden: his hands come in near him as he climbs down)
+        dm = _n(d + ld)
+        mid = (1.25, np.array(STEP_MID) - 0.5 * (V["hold"][0] + V["hold"][1]) * ROUND_LONG * dm, dm)
+    else:
+        mid = (1.1, G + (0.0, 0.0, -0.05), d)
+    keys = [(0.0, G, d), (TAKE_T, G, d), mid, (2.3, lb, ld), (2.6, lb, ld)] + list(V["path"]) + [(3.9, G, d)]
     tt = t % PASS_LONG
-    v = eased(keys, tt, PASS_LONG)
-    return v[:3], _n(v[3:]), (1.0 if (tt < TAKE_T or tt >= 2.45) else 0.0)
+    v = eased([(k[0], tuple(k[1]) + tuple(k[2])) for k in keys], tt, PASS_LONG)
+    return v[:3], _n(v[3:]), (1.0 if (tt < TAKE_T or tt >= UP_T) else 0.0)
 
 
-@water_clip("ammo_passer", PASS_LONG, loop=True, root="hatch",
-            events=[sev(2.45, "round_up", "round_lift")],
-            about="Handing the rounds up through a hatch behind a deck gun: stood on a rung 0.9 m under the deck (the "
-                  "root at the hatch's middle on the deck, facing the gun's way), the deck at his waist, he holds a round "
-                  "up for the loader, lets it go as the loader takes it, stoops to take the next from below and lifts it "
-                  "up again, one about every 5 s. Played beside gun_loader from the same moment: `pair` gives the "
-                  "loader's root from his, so the round passes from hand to hand; `round` as the loader's.")
-def c_ammo_passer(t):
+def rung_at(V, s, t):
+    """How deep foot s stands under the deck at t, and how far through a step it is (0 standing, 1 mid-step)."""
+    h = V["rung"]
+    for f, t0, t1, to in V["steps"]:
+        if f != s:
+            continue
+        if t >= t1:
+            h = to
+        elif t > t0:
+            u = (t - t0) / (t1 - t0)
+            return h + (to - h) * sm(u), math.sin(math.pi * u)
+        else:
+            break
+    return h, 0.0
+
+
+FREE_OFF = (0.04, 0.0, -0.10)       # (m: his hands from the round while it is hidden, going down for the next: ahead, out, down)
+
+
+def passer_pose(name, t):
+    V = PASSERS[name]
     tt = t % PASS_LONG
-    base, d, sh = passer_round(tt)
-    stoop = eased([(0.0, (12.0, 0.0)), (TAKE_T, (12.0, 0.0)), (2.3, (34.0, 0.04)), (2.6, (34.0, 0.04)), (3.9, (12.0, 0.0))],
-                  tt, PASS_LONG)
-    P = body(MAN["pz"] - HATCH_DOWN - 0.02 - stoop[1], x=-0.02, pitch=0.3 * stoop[0], yaw=-14.0,
-             bend=(0.7 * stoop[0], 0.0, -10.0), neck=(-0.4 * stoop[0] - 4.0, 0.0, 4.0), head=(-0.3 * stoop[0] - 4.0, 0.0, 4.0))
+    base, d, sh = passer_round(tt, name)
+    lean, px, crouch, yaw = eased(V["trunk"], tt, PASS_LONG)
+    deep = {}
+    for s in ("l", "r"):
+        deep[s] = rung_at(V, s, tt)
+    P = body(MAN["pz"] - max(deep["l"][0], deep["r"][0]) - 0.02 - crouch, x=px, pitch=0.3 * lean, yaw=yaw,
+             bend=(0.7 * lean, 0.0, 0.714 * yaw), neck=(-0.4 * lean - 4.0, 0.0, -0.286 * yaw),
+             head=(-0.3 * lean - 4.0, 0.0, -0.286 * yaw))
     for s, side in (("l", 1.0), ("r", -1.0)):
-        P["foot_" + s] = {"at": (0.02, side * 0.12, -HATCH_DOWN + MAN["ankle"]), "yaw": side * 6.0, "pole": (1.0, side * 0.2, 0.1)}
+        h, u = deep[s]
+        P["foot_" + s] = {"at": (0.02 - 0.05 * u, side * 0.12, -h + MAN["ankle"] + 0.04 * u), "yaw": side * 6.0,
+                          "pole": (1.0, side * 0.2, 0.1)}
     P["shin_feet"] = 0.0
-    z = np.array((0.0, 0.0, 1.0))
-    al = _n(np.cross(d, z))
     let_go = ramp(tt, TAKE_T, TAKE_T + 0.3) * (1.0 - ramp(tt, 1.9, 2.3))
-    for s, side, f in (("l", 1.0, PASS_HOLD[1]), ("r", -1.0, PASS_HOLD[0])):
-        at = base + f * ROUND_LONG * d - 0.045 * z
-        hold = world_hand(at, al, z, (-0.2, side * 1.0, -0.9))
-        free = world_hand(at - np.array((0.14, 0.0, 0.16)), al, z, (-0.2, side * 1.0, -0.9))
+    for s, side, f in (("l", 1.0, V["hold"][0]), ("r", -1.0, V["hold"][1])):
+        hold = grip(base, d, f, side, V["fingers"])
+        free = grip(base, d, f, side, V["fingers"], off=(FREE_OFF[0], side * FREE_OFF[1], FREE_OFF[2]))
         P["hand_" + s] = _mix(hold, free, let_go)
         P["fingers_" + s] = 45.0
         P["thumb_" + s] = 30.0
     return S.breathe(P, t, PASS_LONG / 2, 1.2)
 
 
-GUN_CLIPS = ("hands_up", "gun_layer", "gun_trainer", "gun_loader", "ammo_passer")
+def _pass_events(name):
+    ev = [sev(UP_T, "round_up", "round_lift")]
+    for f, t0, t1, to in PASSERS[name]["steps"]:
+        ev.append(sev(t1, "footstep", "footstep", bone="foot_" + f))
+    return sorted(ev, key=lambda e: e["t"])
+
+
+@water_clip("ammo_passer", PASS_LONG, loop=True, root="hatch", events=_pass_events("ammo_passer"),
+            about="Handing the rounds up through a hatch behind a deck gun: stood on a rung 0.9 m under the deck (the "
+                  "root at the hatch's middle on the deck, facing the gun's way), the deck at his waist, he holds a round "
+                  "up for the loader, lets it go as the loader takes it, stoops for the next (it shows in his hands at "
+                  "round_up, low in front of him, its nose turned to his left, as if handed up past him), lifts it so "
+                  "on his left and swings it round onto the loader's take as the loader turns back, clear of the "
+                  "loader's legs and body, one about every 5 s. Played beside gun_loader from the same moment: "
+                  "`pair` gives the loader's root from his, so the round passes from hand to hand; `round` as the "
+                  "loader's. While a carrier is away from the hatch, ammo_passer_wait holds the next one ready.")
+def c_ammo_passer(t):
+    return passer_pose("ammo_passer", t)
+
+
+def _reach_clip(name):
+    V = PASSERS[name]
+    climb = ("climbing a rung (%.2f m under the deck) to give it and back down to take the next" % V["rung"]) if V["steps"] \
+        else "on the rung 0.9 m under the deck"
+    hold = ("holds the round up by its base, as ammo_passer does, the loader ahead of him on his right facing his "
+            "way" if V["fingers"] == "first" else "holds the round out across in front of him by its shell, its base "
+            "toward the loader")
+    low = ("stoops for the next (it shows in his hands at round_up, low in front of him, its nose turned to his left, "
+           "as if handed up past him), lifts it so on his left and swings it round onto the loader's take as the "
+           "loader turns back" if V["fingers"] == "first" else "stoops for the next (it shows in his hands at round_up, "
+           "low on his right, as if handed up past him), lifts it there and brings it across onto the loader's take as "
+           "the loader turns back")
+    about = ("The passer for a hatch farther from the loader: his root at the hatch's middle, the loader's take %.2f m "
+             "from it (`pair`). Up through the hatch, %s, he %s, lets it go as the loader takes it, and %s, clear of "
+             "the loader's legs and body (his hands come onto it as at his take), one about every 5 s. Played with "
+             "gun_loader from the same moment; turn him on his root so the round's base meets the loader's take, within "
+             "the pair's turn_within degrees of its hatch_bearing."
+             % (V["reach"], climb, hold, low))
+
+    @water_clip(name, PASS_LONG, loop=True, root="hatch", events=_pass_events(name), about=about)
+    def c(t):
+        return passer_pose(name, t)
+    return c
+
+
+for _k in sorted(PASSERS):
+    if _k != "ammo_passer":
+        _reach_clip(_k)
+PASS_CLIPS = tuple(sorted(PASSERS, key=lambda k: PASSERS[k]["reach"]))
+
+
+PW_LONG = 5.0                      # (s: the loader's loop, so a wait of whole loops ends on ammo_passer's first frame)
+
+
+def passer_wait_round(t):
+    """The round ammo_passer holds up ready while the carrier is away: at his give at the loop's ends (so it runs on
+    into ammo_passer from its start, and back), let down a little in the middle to rest his arms."""
+    V = PASSERS["ammo_passer"]
+    u = math.sin(math.pi * (t % PW_LONG) / PW_LONG) ** 2
+    return V["give"] + np.array((-0.05 * u, 0.02 * u, -0.08 * u)), V["way"], 1.0
+
+
+@water_clip("ammo_passer_wait", PW_LONG, loop=True, root="hatch",
+            about="ammo_passer holding the next round up ready at his give while the carrier is away from the hatch: "
+                  "letting it down a little and lifting it again, his weight easing on the rung. Its ends are "
+                  "ammo_passer's first frame, so it runs on into ammo_passer (from its start, as the carrier comes to "
+                  "take) and back out of it at its end. `round` as ammo_passer's.")
+def c_ammo_passer_wait(t):
+    V = PASSERS["ammo_passer"]
+    u = math.sin(math.pi * (t % PW_LONG) / PW_LONG) ** 2
+    lean, px, crouch, yaw = np.array(V["trunk"][0][1], float) + np.array((-4.0, -0.03, 0.03, 2.0)) * u
+    h = V["rung"]
+    P = body(MAN["pz"] - h - 0.02 - crouch, x=px, pitch=0.3 * lean, yaw=yaw,
+             bend=(0.7 * lean, 0.0, 0.714 * yaw), neck=(-0.4 * lean - 4.0, 0.0, -0.286 * yaw),
+             head=(-0.3 * lean - 4.0, 0.0, -0.286 * yaw))
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        P["foot_" + s] = {"at": (0.02, side * 0.12, -h + MAN["ankle"]), "yaw": side * 6.0, "pole": (1.0, side * 0.2, 0.1)}
+    P["shin_feet"] = 0.0
+    base, d, _ = passer_wait_round(t)
+    for s, side, f in (("l", 1.0, V["hold"][0]), ("r", -1.0, V["hold"][1])):
+        P["hand_" + s] = grip(base, d, f, side, V["fingers"])
+        P["fingers_" + s] = 45.0
+        P["thumb_" + s] = 30.0
+    return S.breathe(P, t, PW_LONG / 2, 1.2)
+
+
+# ---- the carrier: takes the round from ammo_passer, carries it along the casing (the game moves his root), waits if he
+# must, and gives it to the loader, by its shell. He stands on the loader's left, turned to face across him: the gun's
+# tray and breech run ahead of the loader on his right, and a man holding the round's shell from there would stand in
+# the tray (the first build put him there). So he holds the round across his front with its nose to his left and its
+# base to his right, where the loader takes it; and at the hatch he takes it from ammo_passer the same way, standing
+# ahead of the passer, beside the round's middle on its left, turned to face across it and the passer's front.
+CARRY_MID = (0.28, 0.0, 1.10)      # (m: his hands' middle carrying it, the round across his front, its nose to his left)
+CARRY_WAY = (0.0, 1.0, 0.05)
+CARRY_HOLD = (0.65, 0.86)          # (along the round from its base: his right hand, his left, under its shell, clear of
+                                   #  the loader's left hand and forearm as he takes it by the base and case)
+CT_LONG = 2.2
+GIVE_LEAD = 10.0 / 3.0             # (s: the loader's time in his loop as the give starts, the loop before his take:
+                                   #  after his breech_close (3.3 s), on the keys' 1/15 s grid)
+GIVE_T = LOAD_LONG - GIVE_LEAD + TAKE_T         # (s: the take, in the give: 2.5)
+CG_LONG = GIVE_T + 1.4
+CARRIER_WAY = _turned(_n(TAKE_WAY), 90.0)       # (the round's way as he gives it, and takes it: forward and to his left)
+CARRIER_GIVE = (np.array((0.42, 0.0, 0.0)) - SHELL_MID * CARRIER_WAY, CARRIER_WAY)
+CARRIER_GIVE[0][2] = TAKE_AT[2]                 # (its base, at the loader's take; his hands' middle 0.42 m ahead of him)
+CARRIER_TAKE_YAW = -90.0                        # (his turn from ammo_passer's facing as he takes, degrees to the left)
+CARRIER_TAKE_AT = PASSERS["ammo_passer"]["give"] - np.array((CARRIER_GIVE[0][1], -CARRIER_GIVE[0][0], 0.0)) - \
+    np.array((0.0, 0.0, PASSERS["ammo_passer"]["give"][2]))
+# (his root in ammo_passer's frame as he takes: so ammo_passer's give is CARRIER_GIVE in his own frame)
+CARRY_GAIT = S.Gait(1.2, 1.1, 0.6, 0.06, center=-0.085, width=0.11, heel=-12.0, push=44.0, flat=(0.12, 0.45),
+                    base=-0.02, bob=0.01)
+CARRY_Z0 = float(np.mean(CARRY_GAIT.zs))
+
+
+def _low_across(base, d, mid=(0.30, 0.0, 0.10)):
+    """The round lying across in front of him on its way `d`, the shell's middle (SHELL_HOLD) at `mid`, lifted by
+    the hand's thickness under it."""
+    m = 0.5 * (SHELL_HOLD[0] + SHELL_HOLD[1]) * ROUND_LONG
+    b = np.asarray(mid, float) - m * d + 0.045 * _n(Z_UP - (Z_UP @ d) * d)
+    return b, d
+
+
+def carry_round(dz=0.0, dy=0.0):
+    b, d = _low_across(np.zeros(3), _n(CARRY_WAY), mid=np.array(CARRY_MID) + (0.0, dy, dz))
+    return b, d
+
+
+def carrier_body(turn, lean, crouch, x=0.0):
+    return body(MAN["pz"] - 0.02 - crouch, x=x, pitch=0.3 * lean, yaw=0.4 * turn,
+                bend=(0.65 * lean, 0.0, 0.6 * turn), neck=(-0.3 * lean, 0.0, 0.25 * turn), head=(-0.25 * lean, 0.0, 0.15 * turn))
+
+
+def carrier_hands(P, base, d, free=0.0, rest=0.0, rest_x=0.0):
+    for s, side, f in (("l", 1.0, CARRY_HOLD[1]), ("r", -1.0, CARRY_HOLD[0])):     # (the nose to his left)
+        h = grip(base, d, f, side)
+        if free > 0.0:
+            h = _mix(h, grip(base, d, f, side, off=(-0.08, 0.0, -0.04)), free)
+        if rest > 0.0:
+            h = _mix(h, world_hand((0.04 + rest_x, side * 0.22, 0.86), (0.0, 0.0, -1.0), (0.0, -side, 0.0),
+                                   (-1.0, side * 0.3, 0.0)), rest)
+        P["hand_" + s] = h
+        P["fingers_" + s] = 45.0 * (1.0 - rest) + 20.0 * rest
+        P["thumb_" + s] = 30.0 * (1.0 - rest) + 15.0 * rest
+    return P
+
+
+def carrier_take_round(t):
+    """The round in the carrier's hands as he takes it (his frame): at ammo_passer's give, then across his front."""
+    g, tw = CARRIER_GIVE
+    cb, cd = carry_round()
+    v = held([(0.0, tuple(g) + tuple(tw)), (TAKE_T, tuple(g) + tuple(tw)), (1.75, tuple(cb) + tuple(cd))], t)
+    return v[:3], _n(v[3:]), (1.0 if t >= TAKE_T else 0.0)
+
+
+TAKE_TRUNK = [(0.0, (0.0, 4.0, 0.0)), (0.55, (0.0, 20.0, 0.06)), (TAKE_T, (0.0, 20.0, 0.06)), (1.75, (0.0, 4.0, 0.0))]
+
+
+@water_clip("ammo_carrier_take", CT_LONG, root="deck", events=[sev(TAKE_T, "round_taken", "round_handoff")],
+            about="The carrier takes a round from ammo_passer at the hatch: coming in empty handed (from walk or "
+                  "idle) he bends to it and puts both hands under its shell while the passer holds its base (standing "
+                  "ahead of the passer, beside the round's middle on its left, facing across it), takes it at 0.75 s "
+                  "and draws it in across his front to carry it, its nose to his left; it ends standing, carrying. "
+                  "Played from the same moment as ammo_passer's loop, his root and yaw where `pair` puts them from "
+                  "the passer's, both on the hatch's deck.")
+def c_carrier_take(t):
+    turn, lean, crouch = held(TAKE_TRUNK, t)
+    P = carrier_body(turn, lean, crouch)
+    planted(P, (0.08, 0.13), (-0.04, -0.13), 12.0, -8.0, pole=(1.0, 0.3, 0.15))
+    b, d, _ = carrier_take_round(t)
+    carrier_hands(P, b, d, rest=1.0 - ramp(t, 0.0, 0.55))       # (his hands come in to it from his sides)
+    return S.breathe(P, t, CT_LONG, 1.0)
+
+
+def carrier_walk_round(t):
+    g = CARRY_GAIT
+    ph = 2 * math.pi * t / g.long
+    return carry_round(g.pelvis_z(t) - CARRY_Z0, 0.7 * 0.014 * math.cos(ph))
+
+
+@water_clip("ammo_carrier_walk", CARRY_GAIT.long, loop=True, stride=CARRY_GAIT.stride, root="deck",
+            events=[sev(0.0, "footstep", "footstep", bone="foot_l"), sev(CARRY_GAIT.long / 2, "footstep", "footstep", bone="foot_r")],
+            about="The carrier walking along the casing with a round across his front, both hands under its shell, a "
+                  "shorter step for its weight: move the root on at stride / long metres a second.")
+def c_carrier_walk(t):
+    P = body(MAN["pz"])
+    S.gait_pose(CARRY_GAIT, t, 4.0, 3.0, 0.014, P)
+    P["shin_feet"] = 0.0
+    ph = 2 * math.pi * t / CARRY_GAIT.long
+    P["neck"] = (-4.0, 0.0, 1.5 * math.cos(ph + 0.4))
+    P["head"] = (-4.0 + 1.0 * math.cos(2 * ph), 0.0, 1.0 * math.cos(ph + 0.4))
+    b, d = carrier_walk_round(t)
+    carrier_hands(P, b, d)
+    return S.breathe(P, t, CARRY_GAIT.long * 2, 0.8)
+
+
+WAIT_LONG = 4.0
+
+
+def carrier_wait_round(t):
+    w = math.sin(2 * math.pi * t / WAIT_LONG)
+    return carry_round(-0.004 * abs(w), 0.012 * w)
+
+
+@water_clip("ammo_carrier_wait", WAIT_LONG, loop=True, root="deck",
+            about="The carrier standing with a round across his front, waiting for the loader (or, empty handed, use "
+                  "idle for the passer): his weight shifting a little from foot to foot.")
+def c_carrier_wait(t):
+    w = math.sin(2 * math.pi * t / WAIT_LONG)
+    P = carrier_body(1.5 * w, 3.0, 0.01)
+    P["pelvis_at"] = (0.0, 0.012 * w, -0.03 - 0.004 * abs(w))
+    planted(P, (0.04, 0.13), (-0.02, -0.13), 8.0, -8.0)
+    b, d = carrier_wait_round(t)
+    carrier_hands(P, b, d)
+    return S.breathe(P, t, WAIT_LONG, 1.0)
+
+
+STEP_IN = 0.45                     # (m: he waits this far back from where he gives, steps in to give and back out, clear
+                                   #  of the loader's loop the rest of the time)
+# He steps in as the loader turns back from the breech, so the round is where the loader takes it (by 0.65 s, the
+# loader's 3.9 s, as the passers' are) before the loader's hands come round to it, and holds it there for him.
+GIVE_STEPS = [("r", 0.05, 0.30, 1.0), ("l", 0.30, 0.55, 1.0), ("l", GIVE_T + 0.30, GIVE_T + 0.60, 0.0),
+              ("r", GIVE_T + 0.60, GIVE_T + 0.90, 0.0)]
+# (each foot's step: from t to t, ending stepped in (1) or back (0))
+
+
+def give_step(t):
+    """How far in he is (his pelvis: 0 where he waits, 1 where he gives), and each foot's (how far in, its lift)."""
+    feet = {}
+    for s in ("l", "r"):
+        at, lift = 0.0, 0.0
+        for f, t0, t1, to in GIVE_STEPS:
+            if f != s:
+                continue
+            if t >= t1:
+                at = to
+            elif t > t0:
+                u = (t - t0) / (t1 - t0)
+                at, lift = at + (to - at) * sm(u), 0.05 * math.sin(math.pi * u)
+                break
+            else:
+                break
+        feet[s] = (at, lift)
+    k = ramp(t, 0.05, 0.55) * (1.0 - ramp(t, GIVE_T + 0.30, GIVE_T + 0.90))
+    return k, feet
+
+
+GIVE_DIP = (0.3, -0.08)            # (the round's way in: how far along, and how low under the give, at 0.325 s)
+
+
+def carrier_give_round(t):
+    cb, cd = carry_round()
+    gb, gd = CARRIER_GIVE
+    gb = gb + np.array((STEP_IN, 0.0, 0.0))
+    m = cb + GIVE_DIP[0] * (gb - cb)
+    m[2] = gb[2] + GIVE_DIP[1]         # (in under the loader's left arm as it comes back from the breech)
+    v = held([(0.0, tuple(cb) + tuple(cd)), (0.325, tuple(m) + tuple(_n(cd + gd))), (0.65, tuple(gb) + tuple(gd)),
+              (GIVE_T, tuple(gb) + tuple(gd)), (GIVE_T + 0.35, tuple(gb + (0.0, 0.0, -0.05)) + tuple(gd))], t)
+    return v[:3], _n(v[3:]), (1.0 if t < GIVE_T else 0.0)
+
+
+GIVE_TRUNK = [(0.0, (0.0, 4.0, 0.0)), (0.325, (0.0, 22.0, 0.08)), (0.65, (0.0, 20.0, 0.06)), (GIVE_T, (0.0, 20.0, 0.06)),
+              (GIVE_T + 0.85, (0.0, 6.0, 0.02)), (GIVE_T + 1.35, (0.0, 2.0, 0.0))]
+
+
+@water_clip("ammo_carrier_give", CG_LONG, root="deck",
+            events=[sev(GIVE_T, "round_given", None)] +
+                   [sev(t1, "footstep", "footstep", bone="foot_" + f) for f, t0, t1, to in GIVE_STEPS],
+            about="The carrier gives the round to the loader: from where he waits (ammo_carrier_wait, his root) he steps "
+                  "0.45 m in as the loader turns back from the breech, holds the round out across in front of him by "
+                  "its shell where the loader takes it, lets it go as the loader takes it, steps back out and lets his "
+                  "arms down; it ends where it began, standing empty handed (walk back, or idle). Started when "
+                  "gun_loader's loop is at 3.33 s (10/3, after his breech_close), the loop before the one he takes "
+                  "it in (so the loader takes it at this clip's 2.42 s, his own 0.75 s); his root where `pair` puts it from the loader's. Its "
+                  "round_given event has no sound of its own (the loader's round_taken plays it).")
+def c_carrier_give(t):
+    turn, lean, crouch = held(GIVE_TRUNK, t)
+    k, feet = give_step(t)
+    P = carrier_body(turn, lean, crouch, x=STEP_IN * k)
+    planted(P, (0.04, 0.13), (-0.02, -0.13), 8.0, -8.0)
+    for s in ("l", "r"):
+        at, lift = feet[s]
+        x, y, z = P["foot_" + s]["at"]
+        P["foot_" + s]["at"] = (x + STEP_IN * at, y, z + lift)
+    b, d, _ = carrier_give_round(t)
+    carrier_hands(P, b, d, free=ramp(t, GIVE_T, GIVE_T + 0.25), rest=ramp(t, GIVE_T + 0.2, GIVE_T + 0.95),
+                  rest_x=STEP_IN * k)
+    return S.breathe(P, t, CG_LONG, 1.0)
+
+
+CARRY_CLIPS = ("ammo_carrier_take", "ammo_carrier_walk", "ammo_carrier_wait", "ammo_carrier_give")
+
+
+GUN_CLIPS = ("hands_up", "gun_layer", "gun_trainer", "gun_loader") + PASS_CLIPS + ("ammo_passer_wait",) + CARRY_CLIPS
 
 
 def gun_json(data, rig):
-    """The gun crew's blocks: the wheel and sight of gun_layer and gun_trainer, the round of gun_loader and ammo_passer
-    (in the root's frame, the game's axes: y to his right)."""
-    g = lambda p: [round(float(p[0]), 4), round(float(-p[1]), 4), round(float(p[2]), 4)]  # noqa: E731
+    """The gun crew's blocks: the wheel and sight of gun_layer and gun_trainer, the round of gun_loader, the passers
+    and the carrier, and their pairs (in the root's frame, the game's axes: y to his right)."""
+    g = lambda p: [round(float(p[0]), 4) + 0.0, round(float(-p[1]), 4) + 0.0, round(float(p[2]), 4) + 0.0]  # noqa: E731
     for name, s, long, turn in (("gun_layer", 1.0, LAY_LONG, lay_turn), ("gun_trainer", -1.0, TRAIN_LONG, train_turn)):
         d = data["clips"].get(name)
         if d is None:
@@ -1634,20 +2156,97 @@ def gun_json(data, rig):
                                 "the loop, drawn while shown (from the take until it is home in the chamber); "
                                 "`breech` is the chamber's mouth and `bore` the barrel's line, in the root's frame: put "
                                 "the gun's breech there"}
-    ps = data["clips"].get("ammo_passer")
-    if ps is not None:
+    def track(fn, long):
         tr = []
-        for k in range(int(round(PASS_LONG * 15)) + 1):
+        for k in range(int(round(long * 15)) + 1):
             t = k / 15.0
-            b, dd, sh = passer_round(t)
+            r = fn(t)
+            b, dd = r[0], r[1]
+            sh = r[2] if len(r) > 2 else 1.0
             tr.append([round(t, 4), sh] + g(b) + g(dd))
+        return tr
+    yaw = lambda turn: round(-float(turn), 1) + 0.0  # noqa: E731  (a turn to his left here; the game's yaw, + to the right)
+    for name in PASS_CLIPS:
+        ps = data["clips"].get(name)
+        if ps is None:
+            continue
+        V = PASSERS[name]
+        c_, s_ = math.cos(math.radians(V["loader_turn"])), math.sin(math.radians(V["loader_turn"]))
+        q = -np.asarray(V["loader_root"], float)
+        hat = np.array((c_ * q[0] + s_ * q[1], -s_ * q[0] + c_ * q[1], 0.0))      # (the hatch's middle, the loader's frame)
+        fromtake = hat - np.array((TAKE_AT[0], TAKE_AT[1], 0.0))
+        bearing = round(-math.degrees(math.atan2(fromtake[1], fromtake[0])), 1) + 0.0     # (the game's: + to his right)
+        within = 15 if V["reach"] < 0.825 else 30
         ps["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"],
-                       "track": tr, "about": "the round he passes up, as gun_loader's (shown from when he lifts it from "
-                                             "below until the loader takes it)"}
-        ps["pair"] = {"loader_root": g(-np.array(PASSER_AT)), "same_facing": True, "same_time": True,
-                      "about": "the loader's root from his (the game's axes), both facing the same way, both clips "
-                               "played from the same moment: the round then passes from his hands to the loader's at "
-                               "t = %.2f s" % TAKE_T}
+                       "track": track(lambda t, name=name: passer_round(t, name), PASS_LONG),
+                       "about": "the round he passes up, as gun_loader's (shown from when he lifts it from below until "
+                                "the loader takes it)"}
+        ps["pair"] = {"loader_root": g(V["loader_root"]), "loader_yaw": yaw(V["loader_turn"]),
+                      "same_facing": abs(V["loader_turn"]) < 0.5, "same_time": True, "reach": round(V["reach"], 3),
+                      "rung": V["rung"], "take_t": TAKE_T, "give_z": round(float(V["give"][2]), 3),
+                      "hatch_at": g(hat), "hatch_bearing": bearing, "turn_within": within,
+                      "about": "the loader's root from his and the loader's yaw from his (the game's axes and yaw, + to "
+                               "the right), both clips played from the same moment: the round then passes from his hands "
+                               "to the loader's at t = %.2f s, its base give_z over his root as over the loader's. `reach` "
+                               "is from his root to the loader's take (the round's base then), level; `hatch_at` is the "
+                               "hatch's middle from the loader's root (the loader's frame, the game's axes) and "
+                               "`hatch_bearing` its bearing from the loader's take, degrees from the way he faces, + to his "
+                               "right. Pick the clip whose reach is nearest the hatch's (they are 0.05 m apart from 0.70 "
+                               "to 1.10 m, so within 0.025 m) and turn him on his root by the difference in bearing, so "
+                               "the round's base meets the loader's take. Checked on the rig at this bearing and turned "
+                               "15 and 30 degrees either way: up to `turn_within` degrees the men keep apart and the "
+                               "loader's feet off the opening, though the loader's forearms meet the round up to 3 cm "
+                               "deeper as his hands come round to it (and the nearer passers' arm can touch the loader's "
+                               "thigh by up to 4 cm as they let go); farther round, his feet come over the opening or "
+                               "the men meet: use the carrier. Turned, the round's way in his hands is not the loader's "
+                               "at the take: ease it over to the loader's track's way through the 0.2 s after the take. "
+                               "Where the hatch's deck stands higher than the loader's (dz), put his root dz lower (he "
+                               "stands that much lower on the ladder; checked clear of the hatch's sides to 0.125 m): "
+                               "with the loader only, not with the carrier" % TAKE_T}
+    pw = data["clips"].get("ammo_passer_wait")
+    if pw is not None:
+        pw["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"],
+                       "track": track(passer_wait_round, PW_LONG),
+                       "about": "the round he holds up ready, as ammo_passer's at its start"}
+    cr = data["clips"].get("ammo_carrier_take")
+    if cr is not None:
+        cr["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"],
+                       "track": track(carrier_take_round, CT_LONG),
+                       "about": "the round he takes: shown from the take (the passer holds it before)"}
+        cr["pair"] = {"with": "ammo_passer", "carrier_root": g(CARRIER_TAKE_AT), "carrier_yaw": yaw(CARRIER_TAKE_YAW),
+                      "same_time": True, "take_t": TAKE_T,
+                      "about": "his root and yaw from ammo_passer's (the passer's frame, the game's axes and yaw, + to the "
+                               "right: he faces across the passer's front, at its left), both roots on the hatch's deck "
+                               "(do not lower the passer by the hatch's height over the loader's deck here: that is for "
+                               "his pair with the loader): play this clip from the moment ammo_passer's loop starts and "
+                               "he takes the round from the passer's hands at t = %.2f s" % TAKE_T}
+    for name, fn, long in (("ammo_carrier_walk", carrier_walk_round, CARRY_GAIT.long), ("ammo_carrier_wait", carrier_wait_round, WAIT_LONG)):
+        cw = data["clips"].get(name)
+        if cw is not None:
+            cw["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"],
+                           "track": track(fn, long), "about": "the round he carries, across his front"}
+    cg = data["clips"].get("ammo_carrier_give")
+    if cg is not None:
+        gb, gd = CARRIER_GIVE
+        gb = gb + np.array((STEP_IN, 0.0, 0.0))
+        root, turn = taker(gb, gd)                 # (the loader's root and turn from his clip's root, where he waits)
+        c, s_ = math.cos(math.radians(-turn)), math.sin(math.radians(-turn))
+        back = np.array((-(c * root[0] - s_ * root[1]), -(s_ * root[0] + c * root[1]), 0.0))
+        cg["round"] = {"length": ROUND_LONG, "radius": ROUND_R, "track_fields": ["t", "shown", "x", "y", "z", "dx", "dy", "dz"],
+                       "track": track(carrier_give_round, CG_LONG),
+                       "about": "the round he gives: shown until the loader takes it"}
+        cg["pair"] = {"with": "gun_loader", "carrier_root": g(back), "carrier_yaw": yaw(-turn), "loader_root": g(root),
+                      "loader_yaw": yaw(turn), "same_time": False, "start_at_loader_t": GIVE_LEAD, "take_t": GIVE_T,
+                      "loader_take_t": TAKE_T, "step_in": STEP_IN, "reach": round(float(np.hypot(gb[0], gb[1])), 3),
+                      "about": "`carrier_root` and `carrier_yaw`: his root and yaw from the loader's (the loader's frame, "
+                               "the game's axes and yaw); `loader_root` and `loader_yaw` the other way. His root is where "
+                               "he waits (ammo_carrier_wait there, clear of the loader's loop) and where the clip ends: he "
+                               "steps step_in metres forward to give and back out. Start this clip when gun_loader's loop "
+                               "is at start_at_loader_t (%.2f s), the loop before the take: the round is where the loader "
+                               "takes it before his hands come round to it, and passes to him at this clip's take_t (%.2f "
+                               "s), the loader's loader_take_t (%.2f s) in his next loop. For the gun's first round, start "
+                               "the loader at his start_at_loader_t with it (empty handed, turning back from the breech)"
+                               % (GIVE_LEAD, GIVE_T, TAKE_T)}
     return data
 
 
@@ -1675,7 +2274,7 @@ ABOUT = {
            "under the arms, its mouth tube up on the left. He carries no weapon (every clip's weapon is none). His "
            "colours are the file's own paints (new_paints, colours: kapok = the lifebelt's cover, shirt_own = the "
            "jersey, trousers_own, hat, ties = the mouth tube), not an army's; colour_variants gives the white cap "
-           "cover of the summer and the Mediterranean, the cream sea jersey of the Atlantic escorts, and the gun "
+           "cover of the summer and the Mediterranean, the oatmeal sea jersey of the Atlantic escorts, and the gun "
            "crew's steel helmet. Clips on deck from the motion capture; over the side and in the water keyed on his "
            "rig, the root at the sea's surface (water block)."),
     "ger": (" The German sailor: soldier.py's man (the same 32 bones) as a rating of the Navy at his action station, "
@@ -1788,8 +2387,10 @@ def water_json(data, rig):
                  "float_dead. Picked up: climb_net up the side, or into a boat (row, sit_raft)",
         "events": "splash (splash_body: his feet into the water; height is the drop), surface (surface_gasp: his "
                   "head out again), water_stroke and water_kick (swim_breast), net_grab (climb_net, the hand), "
-                  "oar_catch (row: the blade in), round_taken, ram and breech_close (gun_loader), round_up "
-                  "(ammo_passer); the deck clips' footsteps as the soldiers'",
+                  "oar_catch (row: the blade in), round_taken, ram and breech_close (gun_loader), round_taken "
+                  "(ammo_carrier_take, from the passer), round_given (ammo_carrier_give: no sound of its own, the "
+                  "loader's round_taken plays it), round_up (the ammo_passer clips), footstep (a passer's feet on the "
+                  "hatch's rungs, the carrier's on deck); the deck clips' footsteps as the soldiers'",
         "gun_crew": GUN_CREW,
         "no_weapon": "he has no weapon: the file has no weapon triangles; the weapon bone rides 2 m under his root "
                      "in the water clips",
@@ -1800,9 +2401,32 @@ def water_json(data, rig):
 GUN_CREW = ("on deck, keyed on his rig (the root on the deck under his feet): hands_up (surrendering, hands raised open "
             "above the head, a slow sway); a deck gun's crew: gun_layer (the gun's left, the elevating handwheel and the "
             "sight), gun_trainer (its right, the training handwheel, mirrored), gun_loader (takes a round from the "
-            "passer on his left, lays it in the tray and rams it, about one every 5 s) and ammo_passer (in a hatch "
-            "behind, the root at its middle: hands the rounds up, in step with the loader; `pair` gives the loader's "
-            "root from his). Each clip's wheel, sight and round blocks say where the gun's parts go in its root's frame")
+            "passer or the carrier on his left, lays it in the tray and rams it, about one every 5 s), the passers "
+            "ammo_passer (behind him on his left, 0.32 m from the loader's take, on the rung 0.9 m down, holding the "
+            "round by its base) and ammo_passer_50 (0.5 m, the same grip, a rung up to give and down to take the "
+            "next), ammo_passer_70, _75 ... _110 (0.70 to 1.10 m every 0.05 m, holding the round out across in front "
+            "by its shell: to 0.80 m on the rung 0.9 m down, from 0.85 m a rung up to give and down to take the next), "
+            "each in a hatch, the root at its middle: they hand the rounds up in step with the loader, `pair` giving "
+            "the loader's root and yaw from theirs, their `reach` and where the hatch lies from the loader "
+            "(`hatch_at`, `hatch_bearing`): pick the nearest reach and turn him on his root to meet the take (the "
+            "round's way at the take turns with him); where the hatch's deck stands dz higher than the loader's, put "
+            "his root dz lower (with the loader only). The next round shows in his hands at round_up, low in front "
+            "of him, as if handed up past him. ammo_passer_wait (ammo_passer holding one ready while the carrier is "
+            "away, a 5 s loop); and for a hatch farther off, the carrier, who holds the round across his front, its "
+            "nose to his left: ammo_carrier_take (at the hatch, from ammo_passer, from that loop's start, reaching in "
+            "empty handed, standing ahead of the passer beside the round's middle, facing across it, both on the "
+            "hatch's deck), ammo_carrier_walk (along the casing, the game moving his root, routed clear of the loader "
+            "and the gun), ammo_carrier_wait (on the loader's left, where he waits, clear of the loader's loop), "
+            "ammo_carrier_give (started at the loader's 3.33 s, after his breech_close, the loop before his take: "
+            "steps in 0.45 m, holds it where the loader takes it at his 0.75 s, steps back; 3.82 s long, ending at "
+            "the loader's 2.15 s), each with its `round` and `pair`. A carrier's round trip (give, walk back, take, "
+            "walk to wait) is 6.0 + D / 1.25 + D / 0.92 s at the least, D the walk (m) from where he takes to where "
+            "he waits: with ammo_passer's loop started at the loader's (2.15 + D / 1.25) s, N = ceil(round trip / 5) "
+            "carriers in turn keep the loader's 5 s (D to 2.1 m: N = 2; to 4.7 m: 3). With two or more, the next "
+            "waits with his round about 0.8 m back along his way in, clear of the one giving, and walks in when that "
+            "one's give ends (the loader's 2.15 s), by the loader's 3.33 s. Fewer carriers give a round every 5N / "
+            "carriers s, the loader waiting at his 3.33 s (the breech shut) until one stands ready. Each clip's "
+            "wheel, sight and round blocks say where the gun's parts go in its root's frame")
 
 
 def paints_json(data):
@@ -1982,12 +2606,34 @@ GUN_SHOTS = [
     ("passer_give", "ammo_passer", 0.4, (0.15, 0.0, 0.4), 3.2, 14.0, 40.0, ("gun",)),
     ("passer_low", "ammo_passer", 2.45, (0.15, 0.0, 0.1), 3.2, 20.0, 40.0, ("gun",)),
     ("hands_up_back", "hands_up", 3.0, (0.0, 0.0, 1.05), 4.2, 6.0, 200.0, ("gun",)),
+    ("passer_50", "ammo_passer_50", 0.4, (0.2, 0.0, 0.45), 3.4, 14.0, 300.0, ("gun",)),
+    ("passer_70", "ammo_passer_70", 0.4, (0.3, 0.0, 0.45), 3.4, 14.0, 300.0, ("gun",)),
+    ("passer_90", "ammo_passer_90", 0.4, (0.35, 0.0, 0.55), 3.6, 14.0, 300.0, ("gun",)),
+    ("passer_110", "ammo_passer_110", 0.4, (0.4, 0.0, 0.55), 3.8, 14.0, 300.0, ("gun",)),
+    ("passer_110_climb", "ammo_passer_110", 2.95, (0.15, 0.0, 0.35), 3.4, 18.0, 40.0, ("gun",)),
+    ("passer_110_low", "ammo_passer_110", 2.45, (0.15, 0.0, 0.25), 3.2, 20.0, 40.0, ("gun",)),
+    ("passer_90_rise", "ammo_passer_90", 3.3, (0.3, -0.1, 0.55), 3.6, 16.0, 40.0, ("gun",)),
+    ("passer_wait", "ammo_passer_wait", 2.0, (0.15, 0.0, 0.4), 3.2, 14.0, 40.0, ("gun",)),
+    ("carrier_take", "ammo_carrier_take", 0.8, (0.0, 0.1, 0.9), 3.6, 12.0, 60.0, ("gun",)),
+    ("carrier_carry", "ammo_carrier_take", 2.2, (0.15, 0.0, 1.0), 3.4, 10.0, 40.0, ("gun",)),
+    ("carrier_walk", "ammo_carrier_walk", 0.3, (0.15, 0.0, 1.0), 3.6, 8.0, 60.0, ("gun",)),
+    ("carrier_wait", "ammo_carrier_wait", 1.0, (0.15, 0.0, 1.0), 3.4, 8.0, 320.0, ("gun",)),
+    ("carrier_give", "ammo_carrier_give", 0.7, (0.6, 0.1, 1.0), 3.6, 12.0, 320.0, ("gun",)),
+    ("carrier_done", "ammo_carrier_give", 3.8, (0.15, 0.0, 1.0), 3.6, 8.0, 320.0, ("gun",)),
 ]
 GUN_LABELS = {"hands_up": "hands_up: surrendering, a slow sway", "layer": "gun_layer: eye at the sight, elevating wheel",
               "trainer": "gun_trainer: the other side, training wheel", "loader_take": "gun_loader: takes the round",
               "loader_lay": "lays it in the tray", "loader_ram": "rams it home (event ram)",
               "passer_give": "ammo_passer: holds it up from the hatch", "passer_low": "stoops for the next",
-              "hands_up_back": "hands_up from behind"}
+              "hands_up_back": "hands_up from behind",
+              "passer_50": "ammo_passer_50: holds it out, 0.5 m reach", "passer_70": "ammo_passer_70: 0.7 m reach",
+              "passer_90": "ammo_passer_90: a rung up, 0.9 m reach", "passer_110": "ammo_passer_110: a rung up, 1.1 m",
+              "passer_110_climb": "climbing back up with the next", "passer_110_low": "takes the next low on his right",
+              "passer_90_rise": "ammo_passer_90: brings it across",
+              "passer_wait": "ammo_passer_wait: one ready, the carrier away",
+              "carrier_take": "ammo_carrier_take: at the hatch, by the shell", "carrier_carry": "swung across to carry",
+              "carrier_walk": "ammo_carrier_walk: along the casing", "carrier_wait": "ammo_carrier_wait",
+              "carrier_give": "ammo_carrier_give: steps in, holds it out", "carrier_done": "stepped back out, arms down"}
 LABELS = {
     "usa": ["American sailor: chambray shirt, dungarees, kapok vest, white hat",
             "From behind: the vest's back, its channels",
@@ -2039,11 +2685,30 @@ def gun_props(name, t):
     deck = kit.material("hull", kit.hex_rgb("6F757A"), rough=0.6)
     brass = kit.material("brass", kit.hex_rgb("B08A3E"), rough=0.35)
     made = []
-    if name == "ammo_passer":
+    hatch, turned = None, False
+    if name in PASSERS or name == "ammo_passer_wait":
+        hatch = np.zeros(3)
+    elif name == "ammo_carrier_take":       # (the passer's hatch in his frame: he is turned 90 degrees from the passer)
+        c_, s_ = math.cos(math.radians(-CARRIER_TAKE_YAW)), math.sin(math.radians(-CARRIER_TAKE_YAW))
+        q = -np.asarray(CARRIER_TAKE_AT, float)
+        hatch, turned = np.array((c_ * q[0] - s_ * q[1], s_ * q[0] + c_ * q[1], 0.0)), True
+    if hatch is not None:
         for c, sz in (((0.0, 0.95, -0.03), (2.6, 1.3, 0.06)), ((0.0, -0.95, -0.03), (2.6, 1.3, 0.06)),
                       ((0.95, 0.0, -0.03), (1.3, 0.6, 0.06)), ((-0.95, 0.0, -0.03), (1.3, 0.6, 0.06))):
-            made.append(slab(c, sz, deck, "deck"))
-        b, d, sh = passer_round(t)
+            if turned:
+                c, sz = (-c[1], c[0], c[2]), (sz[1], sz[0], sz[2])
+            made.append(slab(hatch + np.array(c), sz, deck, "deck"))
+        if name in PASSERS:
+            b, d, sh = passer_round(t, name)
+        elif name == "ammo_passer_wait":
+            b, d, sh = passer_wait_round(t)
+        else:
+            b, d, sh = carrier_take_round(t)
+    elif name in CARRY_CLIPS:
+        made.append(slab((0.3, 0.0, -0.03), (3.0, 2.4, 0.06), deck, "deck"))
+        r = {"ammo_carrier_walk": carrier_walk_round, "ammo_carrier_wait": carrier_wait_round,
+             "ammo_carrier_give": carrier_give_round}[name](t)
+        b, d, sh = r[0], r[1], (r[2] if len(r) > 2 else 1.0)
     else:
         made.append(slab((0.3, 0.0, -0.03), (3.0, 2.4, 0.06), deck, "deck"))
         sh = 0.0
@@ -2115,7 +2780,7 @@ def picture(info, fast=False, shots=None, out_name=None, labels=None, title=None
             bpy.data.objects.remove(o)
         made = _sets(kind, name, t)
         bd.location.z = -6.0 if kind and kind[0] in ("sea", "spar", "deck") else (-0.4 if kind and kind[0] == "seat" else
-                                                                               (-1.6 if name == "ammo_passer" else
+                                                                               (-1.6 if name in PASSERS or name == "ammo_passer_wait" else
                                                                                 (-0.1 if kind and kind[0] == "gun" else 0.0)))
         if t is None:
             J = JUMPS[name]
@@ -2132,13 +2797,20 @@ def picture(info, fast=False, shots=None, out_name=None, labels=None, title=None
 
 SHARED = "/mnt/project-files/battle-models/land/soldier/"
 BACKUP = "/home/user/art/sailors/backup/"
+GUN_ABOUT_WAS = (" Also keyed on his rig, on deck: hands_up (surrendering) and a deck gun's crew, gun_layer, gun_trainer, "
+                 "gun_loader and ammo_passer (water: gun_crew).")
+GUN_ABOUT_OLD = (GUN_ABOUT_WAS, " Also keyed on his rig, on deck: hands_up (surrendering) and a deck gun's crew, gun_layer, "
+                 "gun_trainer, gun_loader, the passers (ammo_passer and ammo_passer_50 to _110) and the carrier "
+                 "(ammo_carrier_take, _walk, _wait and _give) (water: gun_crew).")
 GUN_ABOUT = (" Also keyed on his rig, on deck: hands_up (surrendering) and a deck gun's crew, gun_layer, gun_trainer, "
-             "gun_loader and ammo_passer (water: gun_crew).")
+             "gun_loader, the passers (ammo_passer, ammo_passer_50, ammo_passer_70 to _110 every 0.05 m, "
+             "ammo_passer_wait) and the carrier (ammo_carrier_take, _walk, _wait and _give) (water: gun_crew).")
 
 
 def graft(info, folder=SHARED):
     """The new deck clips (GUN_CLIPS) made on his rig and added to the delivered file, nothing else in it touched but
-    those clips, a line of its about and of its water block (read fresh, backed up, written whole)."""
+    those clips, the gun crew's lines of its about (and the British jersey's word there) and of its water block (its
+    hatch root, events and gun_crew), read fresh, backed up, written whole."""
     import shutil
     t0 = time.time()
     kit.fresh(S.FPS)
@@ -2170,6 +2842,9 @@ def graft(info, folder=SHARED):
     D["water"]["roots"]["hatch"] = ROOTS["hatch"]
     D["water"]["events"] = mini["water"]["events"]
     D["water"]["gun_crew"] = GUN_CREW
+    for was in GUN_ABOUT_OLD:
+        D["about"] = D["about"].replace(was, "")
+    D["about"] = D["about"].replace("the cream sea jersey of the Atlantic escorts", "the oatmeal sea jersey of the Atlantic escorts")
     if GUN_ABOUT not in D["about"]:
         D["about"] += GUN_ABOUT
     text = json.dumps(D, separators=(",", ":"), allow_nan=False)      # (a NaN anywhere stops it here, the file untouched)

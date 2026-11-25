@@ -13,6 +13,7 @@
 #include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandScape.h"
 #include "Battle/LandShade.h"
+#include "Battle/LandTeamGun.h"
 #include "Battle/LandVat.h" // SO1
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -266,6 +267,19 @@ namespace LandParts
 		{
 			return Else;
 		}
+	}
+
+	/** The year of a recording's date ("July 1944"), 1944 if none is named. */
+	static int YearOf(const std::string& Date)
+	{
+		for (size_t K = 0; K + 3 < Date.size(); ++K)
+		{
+			if (Date[K] == '1' && Date[K + 1] == '9' && Date[K + 2] >= '0' && Date[K + 2] <= '9' && Date[K + 3] >= '0' && Date[K + 3] <= '9')
+			{
+				return 1900 + (Date[K + 2] - '0') * 10 + (Date[K + 3] - '0');
+			}
+		}
+		return 1944;
 	}
 
 	/** The month of a recording's date ("July 1944"), 7 if none is named. */
@@ -737,6 +751,132 @@ namespace LandParts
 		return BankManMesh(Owner, Name, At, Facing, Paint, Ink, U);
 	}
 
+	/** Some of a battle model's bodies at rest (a support weapon's mount, or what turns on it and is carried:
+	 * Battle/LandTeamGun) as one mesh on Ink for instancing, as PropMesh makes a whole prop, with their plain level drawn
+	 * from FarFrom metres off at the usual lens (0, or no plain level: the fine one alone). Null where they have no
+	 * points. */
+	static UStaticMesh* BodiesMesh(UObject* Owner, const FName& Name, const LandKit::Model& Prop, const std::vector<int>& Bodies, UMaterialInterface* Ink, double U, double FarFrom)
+	{
+		if (!Ink)
+		{
+			return nullptr;
+		}
+		TArray<FMeshDescription> Descriptions;
+		Descriptions.SetNum(2);
+		int32 Filled = 0;
+		for (int32 Level = 0; Level < 2; ++Level)
+		{
+			if (Level == 1 && FarFrom <= 0.0)
+			{
+				break;
+			}
+			std::vector<float> At, Facing;
+			std::vector<uint8_t> Shades;
+			std::vector<uint32_t> Triangles;
+			for (const int B : Bodies)
+			{
+				if (B < 0 || static_cast<size_t>(B) >= Prop.Bodies.size())
+				{
+					continue;
+				}
+				const LandKit::Body& Body = Prop.Bodies[static_cast<size_t>(B)];
+				const LandKit::Mesh& M = Level == 1 ? Body.Far : Body.Near;
+				const size_t Count = M.Points.size() / 3;
+				if (Count == 0 || M.Normals.size() != M.Points.size() || M.Colours.size() < Count * 4)
+				{
+					continue;
+				}
+				const uint32_t First = static_cast<uint32_t>(At.size() / 3);
+				for (size_t K = 0; K < Count; ++K)
+				{
+					At.push_back(M.Points[K * 3] + static_cast<float>(Body.Pivot.X));
+					At.push_back(M.Points[K * 3 + 1] + static_cast<float>(Body.Pivot.Y));
+					At.push_back(M.Points[K * 3 + 2] + static_cast<float>(Body.Pivot.Z));
+					Facing.insert(Facing.end(), { M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2] });
+					Shades.insert(Shades.end(), { M.Colours[K * 4], M.Colours[K * 4 + 1], M.Colours[K * 4 + 2] });
+				}
+				// (each triangle's last two corners swapped, as PropMesh's: KitFront)
+				for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+				{
+					if (M.Triangles[K] < Count && M.Triangles[K + 1] < Count && M.Triangles[K + 2] < Count)
+					{
+						Triangles.insert(Triangles.end(), { First + M.Triangles[K], First + M.Triangles[K + 2], First + M.Triangles[K + 1] });
+					}
+				}
+			}
+			const int32 Points = static_cast<int32>(At.size() / 3);
+			if (Points <= 0 || Triangles.empty())
+			{
+				break;
+			}
+			// (as BankManMesh lays a man's: one corner a point, colours as sRGB bytes, any tangent across the normal)
+			FMeshDescription& D = Descriptions[Level];
+			FStaticMeshAttributes Attributes(D);
+			Attributes.Register();
+			auto Positions = Attributes.GetVertexPositions();
+			auto Normals = Attributes.GetVertexInstanceNormals();
+			auto Tangents = Attributes.GetVertexInstanceTangents();
+			auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+			auto Colours = Attributes.GetVertexInstanceColors();
+			auto Uvs = Attributes.GetVertexInstanceUVs();
+			Uvs.SetNumChannels(1);
+			const FPolygonGroupID Group = D.CreatePolygonGroup();
+			Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
+			D.ReserveNewVertices(Points);
+			D.ReserveNewVertexInstances(Points);
+			D.ReserveNewTriangles(static_cast<int32>(Triangles.size() / 3));
+			TArray<FVertexInstanceID> Corners;
+			Corners.SetNum(Points);
+			for (int32 I = 0; I < Points; ++I)
+			{
+				const size_t K = static_cast<size_t>(I) * 3;
+				const FVertexID Vertex = D.CreateVertex();
+				Positions[Vertex] = FVector3f(At[K] * U, At[K + 1] * U, At[K + 2] * U);
+				const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+				const FVector3f Normal = FVector3f(Facing[K], Facing[K + 1], Facing[K + 2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+				Normals[Corner] = Normal;
+				const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
+				Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
+				Signs[Corner] = 1.0f;
+				Colours[Corner] = FVector4f(FLinearColor(FColor(Shades[K], Shades[K + 1], Shades[K + 2], 255)));
+				Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+				Corners[I] = Corner;
+			}
+			for (size_t K = 0; K + 2 < Triangles.size(); K += 3)
+			{
+				const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(Triangles[K])], Corners[static_cast<int32>(Triangles[K + 1])],
+					Corners[static_cast<int32>(Triangles[K + 2])] };
+				D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+			}
+			Filled = Level + 1;
+		}
+		if (Filled == 0)
+		{
+			return nullptr;
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		TArray<const FMeshDescription*> Levels;
+		for (int32 Level = 0; Level < Filled; ++Level)
+		{
+			Levels.Add(&Descriptions[Level]);
+		}
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		// (the plain level from its distance, by the share of the screen the mesh's bounds fill: ThingMesh's way)
+		FStaticMeshRenderData* Drawn = Made->GetRenderData();
+		if (Drawn && Filled > 1 && Drawn->LODResources.Num() > 1)
+		{
+			const double Reach = FMath::Max(1.0, static_cast<double>(Made->GetBounds().SphereRadius));
+			Drawn->ScreenSize[1].Default = ScreenAt(Reach, FarFrom, U);
+		}
+		return Made;
+	}
+
 	/** Where a banked man stands in Unreal's frame, from his WorldFrame (field = R * own + T, R row-major, the field's x
 	 * east and y north): Unreal's x is the field's y and its y the field's x, so his own axes go to Unreal by R with its
 	 * first two rows swapped. R is a mirror (his axes are left-handed, the field's right-handed) and the swap another,
@@ -772,8 +912,9 @@ namespace LandParts
 	static constexpr double StalkClear = 3.5, StalkEyeLow = 2.5, StalkEyeHigh = 3.0;
 
 	/** A body of a battle model (model axes, metres from its pivot: x forward, y right, z up, as Unreal's own) as the
-	 * engine takes it, its colours taken toward the burnt colour by Soot. Each triangle's last two corners are swapped
-	 * (KitFront). */
+	 * engine takes it, its colours taken toward the burnt colour by Soot: Burnt, the model's one, or with the burnt coat
+	 * on (release 2, the trial word "burntcoat") each point's own soot, rust or ash (LandKit::Mesh::BurntOf). Each
+	 * triangle's last two corners are swapped (KitFront). */
 	static void FromBody(const LandKit::Mesh& M, const uint8_t* Burnt, double Soot, double U, TArray<FVector>& P, TArray<FVector>& N, TArray<FColor>& C, TArray<int32>* T)
 	{
 		const int32 Count = static_cast<int32>(M.Count());
@@ -787,7 +928,8 @@ namespace LandParts
 			N[I] = FVector(M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2]);
 			const double S = Soot > 0.0 && K < M.Soot.size() ? FMath::Clamp(M.Soot[K] * Soot, 0.0, 1.0) : 0.0;
 			auto Mixed = [S](uint8_t From, uint8_t To) { return static_cast<uint8>(FMath::RoundToInt(From + (To - From) * S)); };
-			C[I] = FColor(Mixed(M.Colours[K * 4], Burnt[0]), Mixed(M.Colours[K * 4 + 1], Burnt[1]), Mixed(M.Colours[K * 4 + 2], Burnt[2]), M.Colours[K * 4 + 3]);
+			const uint8_t* Own = M.BurntOf(K, Burnt);
+			C[I] = FColor(Mixed(M.Colours[K * 4], Own[0]), Mixed(M.Colours[K * 4 + 1], Own[1]), Mixed(M.Colours[K * 4 + 2], Own[2]), M.Colours[K * 4 + 3]);
 		}
 		if (T)
 		{
@@ -1590,6 +1732,30 @@ bool ALandBattle::Open()
 		S.Life = FMath::Clamp(Life, 0.5, 4.0);
 	}
 
+	// The support teams' weapons (release 2, -TheaterLandTrial=teamguns; Brian, 25 November 2026: "Where are the machine
+	// gun teams and mortar teams", "There should be machine gun teams that lay down suppressing fire, such as the German
+	// MG 42 and the US machine gun"): a machine gun on its mount or a mortar drawn at each team's key man, set up where
+	// he fires, carried when the team moves, left where he falls (Battle/LandTeamGun, MakeTeamGuns); its bursts and its
+	// flash from its own muzzle (PlayWorld.Muzzle and GunLook below). Off: every team's key man a rifleman, as before.
+	// -TheaterLandNoTeamGuns turns it off under the word, for a paired run.
+	S.bTeamGuns = LandParts::OnTrial("teamguns") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoTeamGuns"));
+	// (a battle before this one on the same actor: its weapons' meshes go with its state, which read their files)
+	for (const TObjectPtr<UInstancedStaticMeshComponent>& Old : TeamGunCopies)
+	{
+		if (Old)
+		{
+			Old->DestroyComponent();
+		}
+	}
+	TeamGunCopies.Reset();
+	FreeTeamGunCopies.Reset();
+	TeamGunTracksSeen = 0;
+	S.TeamKinds.clear();
+	S.TeamGuns.clear();
+	S.TeamGunOf.clear();
+	S.TeamFilesBad.clear();
+	UE_LOG(LogTheater, Log, TEXT("Land battle: the support teams' machine guns and mortars %s"), S.bTeamGuns ? TEXT("ON (-TheaterLandTrial=teamguns, release 2)") : TEXT("off"));
+
 	// The men (LandMen) and the tanks (LandKit), each reading the recording for itself.
 	Took = LandParts::Seconds();
 	MakeMen();
@@ -1638,6 +1804,13 @@ bool ALandBattle::Open()
 				{
 					bFound = V.SocketAt("coax", T, At, Facing);
 				}
+				// (a turret machine gun in place of a coaxial, for a tank that carries one instead: the Type 97's and
+				// the Ha-Go's, mounted in the back of the turret. Before the main gun's place, which would flash her
+				// 57 mm for a burst of machine-gun fire.)
+				if (!bFound && !Socket.empty())
+				{
+					bFound = V.SocketAt("turret_mg", T, At, Facing);
+				}
 				if (!bFound)
 				{
 					bFound = V.SocketAt("muzzle", T, At, Facing);
@@ -1649,6 +1822,32 @@ bool ALandBattle::Open()
 					return true;
 				}
 				return false;
+			}
+			// (release 2, "teamguns": a support team's key man fires his weapon, not his rifle: the round leaves her own
+			// muzzle as she stands set up this frame, and she is told of the burst, to shake through it. Her burst's
+			// length is in life's seconds, the gun's clock the battle's.)
+			if (K < St.TeamGunOf.size() && St.TeamGunOf[K] >= 0)
+			{
+				FLandBattleState::FTeamGun& Served = St.TeamGuns[static_cast<size_t>(St.TeamGunOf[K])];
+				const LandTeamGun::Kind& ServedKind = St.TeamKinds[static_cast<size_t>(Served.Kind)];
+				LandMen::Vec3 GunAt, GunWay;
+				if (Served.Gun.MuzzleAt(ServedKind, GunAt, GunWay))
+				{
+					int BurstRounds = 0;
+					double BurstRate = 0.0;
+					const double LifeRate = FMath::Max(0.25, St.Life);
+					if (LandTeamGun::BurstOf(ServedKind.File, BurstRounds, BurstRate) && BurstRate > 0.0)
+					{
+						Served.Gun.Fired(T, BurstRounds / BurstRate / LifeRate, BurstRate * LifeRate);
+					}
+					else
+					{
+						Served.Gun.Fired(T, 0.3 / LifeRate, 1.0);
+					}
+					OutAt = LandPlay::Vec(GunAt.X, GunAt.Y, GunAt.Z);
+					OutFacing = LandPlay::Vec(GunWay.X, GunWay.Y, GunWay.Z);
+					return true;
+				}
 			}
 			if (K < St.ManOf.size() && St.ManOf[K] >= 0 && St.Men)
 			{
@@ -1763,6 +1962,37 @@ bool ALandBattle::Open()
 				return std::string();
 			};
 		}
+	}
+	if (S.bTeamGuns)
+	{
+		// (release 2, "teamguns": a support team's machine gun set up on its mount fires her own burst, longer than a
+		// section's gun's, LandTeamGun::BurstOf; her look as the flash's switch gives it, or none. Over whatever GunLook
+		// was set above.)
+		TWeakPtr<FLandBattleState> Weak(State);
+		const std::function<std::string(int, const std::string&, const std::string&, const std::string&, int&, double&)> LookBefore = PlayWorld.GunLook;
+		PlayWorld.GunLook = [Weak, LookBefore](int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond) -> std::string
+		{
+			const std::string GunsLook = LookBefore ? LookBefore(Track, Weapon, Army, Role, OutRounds, OutPerSecond) : std::string();
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || Track < 0 || Weapon != "mg")
+			{
+				return GunsLook;
+			}
+			const FLandBattleState& St = *Pinned;
+			const size_t K = static_cast<size_t>(Track);
+			if (K < St.TeamGunOf.size() && St.TeamGunOf[K] >= 0)
+			{
+				const FLandBattleState::FTeamGun& Served = St.TeamGuns[static_cast<size_t>(St.TeamGunOf[K])];
+				int BurstRounds = 0;
+				double BurstRate = 0.0;
+				if (Served.Gun.Is == LandTeamGun::Gun::State::SetUp && LandTeamGun::BurstOf(St.TeamKinds[static_cast<size_t>(Served.Kind)].File, BurstRounds, BurstRate))
+				{
+					OutRounds = BurstRounds;
+					OutPerSecond = BurstRate;
+				}
+			}
+			return GunsLook;
+		};
 	}
 	{
 		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
@@ -2175,7 +2405,7 @@ bool ALandBattle::Open()
 		Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
 		// (the recording's grade where it gives one, over the look's own where its ground is not the bocage's: LandScape)
-		const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying());
+		const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying(), Rec.Weather.Lat, Rec.Weather.Lon, LandParts::MonthOf(Rec.Date), LandParts::TrialWords());
 		LandParts::Grade(Lens->PostProcessSettings, &Rec.Weather, &LookAir);
 		// The footprint shade lighter where snow lies (LandShade::SnowStrength; the art director's Mac pass 1, B4: a
 		// jeep stood in a near-black patch on the snow), over LoadInks' strength ("-TheaterLandFootShade=").
@@ -4404,6 +4634,13 @@ void ALandBattle::MakeArmour()
 		UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' lower third takes the field's own ground, %.3f, %.3f, %.3f (linear), some 44 in 100 of it (the snow lying %.2f)"),
 			Dust.R, Dust.G, Dust.B, Snowed);
 	}
+	// The burnt coat (release 2, on trial: "-TheaterLandTrial=burntcoat", off until the art director and a Mac reading
+	// pass; the art director's brief of 25 November for every army's wrecks): a burnt-out wreck goes to soot, rust and
+	// ash, each point to its own (LandKit's Dress::bBurntCoat), in place of one sooty black. "-TheaterLandNoBurntCoat"
+	// off whatever the trial. The far wrecks' own colours need M_LandSteel rebuilt (Tools/build_content.py,
+	// TC_REBUILD=M_LandSteel): with the old one they stay the one black until they come near.
+	Armour->bBurntCoat = LandParts::OnTrial("burntcoat") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoBurntCoat"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: the burnt coat %s"), Armour->bBurntCoat ? TEXT("ON (-TheaterLandTrial=burntcoat, release 2): wrecks in soot, rust and ash") : TEXT("off"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
@@ -6088,7 +6325,7 @@ void ALandBattle::HideTheTable()
 	LandScape::Air LookAir;
 	if (State.IsValid() && State->Field)
 	{
-		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying());
+		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying(), State->Rec.Weather.Lat, State->Rec.Weather.Lon, LandParts::MonthOf(State->Rec.Date), LandParts::TrialWords());
 	}
 	// (Release 2, the whole picture: the far shade is lighter under a closed canopy, the jungle; Look/WholeLook.h)
 	WholeLook::FieldLaid(State.IsValid() && State->Field && LandScape::LookOf(State->Field->LookWord()) == LandScape::Look::Jungle);
@@ -7200,6 +7437,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 		SeatCarriers();
 		RideLorries();
 		S.Men->Update(Shown);
+		// (release 2, "teamguns": the support teams' weapons at their key men as just posed, before the fire below,
+		// whose flashes leave their muzzles; their swing and lay by life's clock)
+		MakeTeamGuns(Real * S.SpeedNow);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();
@@ -8715,6 +8955,230 @@ void ALandBattle::MakeStretchers()
 	if (bTouched)
 	{
 		Copies->MarkRenderInstancesDirty();
+	}
+}
+
+int32 ALandBattle::TeamGunKind(const std::string& File)
+{
+	FLandBattleState& S = *State;
+	for (size_t K = 0; K < S.TeamKinds.size(); ++K)
+	{
+		if (S.TeamKinds[K].File == File)
+		{
+			return static_cast<int32>(K);
+		}
+	}
+	if (File.empty() || std::find(S.TeamFilesBad.begin(), S.TeamFilesBad.end(), File) != S.TeamFilesBad.end())
+	{
+		return -1;
+	}
+	// The tank modeller's kit's weapon (Content/Models/Battle: x forward, its root on the ground under its pin), read
+	// the first time a team that serves it is met: its mount one mesh, what turns on it and is carried another.
+	FString Text;
+	LandKit::Model Prop;
+	LandTeamGun::Kind Kind;
+	std::string Why;
+	UStaticMesh* Mount = nullptr;
+	UStaticMesh* Turned = nullptr;
+	const FString Name = LandParts::Wide(File);
+	if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models/Battle") / (Name + TEXT(".json")))))
+	{
+		Why = "no such file";
+	}
+	else if (Prop.Load(LandParts::Narrow(Text), LandKit::Dress(), Why) && Kind.Read(Prop, Why))
+	{
+		// (names of their own each time: a battle before this one on the same actor made meshes of the same weapon)
+		Mount = LandParts::BodiesMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(TEXT("LandTeamGunMount_") + Name))), Prop, Kind.Mount, ThingInk, UnitsPerMetre, 90.0);
+		Turned = LandParts::BodiesMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(TEXT("LandTeamGunTurned_") + Name))), Prop, Kind.Turned, ThingInk, UnitsPerMetre, 90.0);
+		if (!Mount || !Turned)
+		{
+			Why = "its mount or what turns on it has no points";
+		}
+	}
+	if (!Mount || !Turned)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Models/Battle/%s.json not read (%s): its teams' key men are drawn without their weapon"), *Name, *LandParts::Wide(Why));
+		S.TeamFilesBad.push_back(File);
+		return -1;
+	}
+	Kind.File = File;
+	for (int32 Half = 0; Half < 2; ++Half)
+	{
+		UStaticMesh* Made = Half == 0 ? Mount : Turned;
+		PropMeshes.Add(Made);
+		const FString CopiesName = (Half == 0 ? TEXT("LandTeamGunMounts_") : TEXT("LandTeamGunsTurned_")) + Name;
+		UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), FName(*CopiesName)));
+		Copies->SetupAttachment(Root);
+		Copies->SetStaticMesh(Made);
+		Copies->SetMaterial(0, ThingInk);
+		Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Copies->SetCanEverAffectNavigation(false);
+		Copies->SetCullDistances(FMath::RoundToInt32(380.0 * UnitsPerMetre), FMath::RoundToInt32(460.0 * UnitsPerMetre));
+		Copies->RegisterComponent();
+		TeamGunCopies.Add(Copies);
+		FreeTeamGunCopies.AddDefaulted();
+	}
+	S.TeamKinds.push_back(Kind);
+	UE_LOG(LogTheater, Log, TEXT("Land battle: a support weapon read, %s (%s): %s%s, fed from the %s, swings %.0f left and %.0f right"), *Name, *LandParts::Wide(Kind.Title),
+		Kind.bMortar ? TEXT("a mortar") : TEXT("a machine gun"), Kind.bWheeled ? TEXT(" on wheels") : TEXT(""), Kind.FeedSide < 0 ? TEXT("left") : Kind.FeedSide > 0 ? TEXT("right") : TEXT("muzzle"),
+		Kind.Left, Kind.Right);
+	return static_cast<int32>(S.TeamKinds.size()) - 1;
+}
+
+void ALandBattle::MakeTeamGuns(double LifeDt)
+{
+	FLandBattleState& S = *State;
+	if (!S.bTeamGuns || !S.Men || !S.Field || !ThingInk)
+	{
+		return;
+	}
+	LAND_SCOPE(TeamGuns);
+	const FTransform Gone(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	TArray<bool> Touched;
+	Touched.Init(false, TeamGunCopies.Num());
+	// The key men met so far (a live battle's come with its pieces; its reset makes every track again, from 0: its
+	// weapons are put away, their copies kept for the next).
+	if (TeamGunTracksSeen > static_cast<int32>(S.Rec.Tracks.size()))
+	{
+		for (const FLandBattleState::FTeamGun& G : S.TeamGuns)
+		{
+			const int32 Copy[2] = { G.MountCopy, G.TurnedCopy };
+			const bool bShown[2] = { G.bMountShown, G.bTurnedShown };
+			for (int32 Half = 0; Half < 2; ++Half)
+			{
+				const int32 Mesh = G.Kind * 2 + Half;
+				if (Copy[Half] >= 0 && TeamGunCopies.IsValidIndex(Mesh) && TeamGunCopies[Mesh])
+				{
+					if (bShown[Half])
+					{
+						TeamGunCopies[Mesh]->UpdateInstanceTransform(Copy[Half], Gone, true, false, true);
+						Touched[Mesh] = true;
+					}
+					FreeTeamGunCopies[Mesh].Add(Copy[Half]);
+				}
+			}
+		}
+		S.TeamGuns.clear();
+		S.TeamGunOf.clear();
+		TeamGunTracksSeen = 0;
+	}
+	const int Year = LandParts::YearOf(S.Rec.Date), Month = LandParts::MonthOf(S.Rec.Date);
+	for (; TeamGunTracksSeen < static_cast<int32>(S.Rec.Tracks.size()); ++TeamGunTracksSeen)
+	{
+		const LandFeed::Track& Tr = S.Rec.Tracks[static_cast<size_t>(TeamGunTracksSeen)];
+		S.TeamGunOf.resize(static_cast<size_t>(TeamGunTracksSeen) + 1, -1);
+		if (Tr.J != 0 || (Tr.Role != "hmg" && Tr.Role != "mortar"))
+		{
+			continue;
+		}
+		const LandFeed::Block* Block = S.Rec.BlockOf(Tr.Block);
+		const int32 Kind = Block ? TeamGunKind(LandTeamGun::FileFor(Block->Army, Tr.Role, Year, Month)) : -1;
+		if (Kind < 0)
+		{
+			continue;
+		}
+		FLandBattleState::FTeamGun G;
+		G.Track = TeamGunTracksSeen;
+		G.Kind = Kind;
+		// (told of her bursts by the fire, PlayWorld.Muzzle; a team's three not in step until then)
+		G.Gun.bByRounds = true;
+		G.Gun.Phase = FMath::Frac(TeamGunTracksSeen * 0.6180339887);
+		S.TeamGunOf[static_cast<size_t>(TeamGunTracksSeen)] = static_cast<int>(S.TeamGuns.size());
+		S.TeamGuns.push_back(G);
+	}
+	if (Touched.Num() < TeamGunCopies.Num())
+	{
+		Touched.SetNumZeroed(TeamGunCopies.Num());
+	}
+	if (S.TeamGuns.empty())
+	{
+		for (int32 Mesh = 0; Mesh < Touched.Num(); ++Mesh)
+		{
+			if (Touched[Mesh] && TeamGunCopies[Mesh])
+			{
+				TeamGunCopies[Mesh]->MarkRenderInstancesDirty();
+			}
+		}
+		return;
+	}
+	const std::function<double(double, double)> Height = [this](double X, double Y) { return GroundZ(X, Y); };
+	for (FLandBattleState::FTeamGun& G : S.TeamGuns)
+	{
+		const size_t T = static_cast<size_t>(G.Track);
+		if (T >= S.Rec.Tracks.size() || G.Kind < 0 || static_cast<size_t>(G.Kind) >= S.TeamKinds.size())
+		{
+			continue;
+		}
+		const LandFeed::Track& Tr = S.Rec.Tracks[T];
+		const LandTeamGun::Kind& Kind = S.TeamKinds[static_cast<size_t>(G.Kind)];
+		const int32 Man = T < S.ManOf.size() ? S.ManOf[T] : -1;
+		// What her gunner is doing: the rules' pose and aim; his place and facing where the crowd draws him.
+		LandTeamGun::Crew C;
+		const LandFeed::Spot Spot = LandFeed::SpotAt(Tr, S.Battle);
+		const LandFeed::Change* Change = LandFeed::ChangeAt(Tr, S.Battle);
+		C.X = Spot.X;
+		C.Y = Spot.Y;
+		C.Facing = Spot.F;
+		C.Way = Spot.Way;
+		C.Pose = Change ? Change->Pose : std::string("idle");
+		C.bAim = Change && Change->bAim;
+		C.AimX = Change ? Change->AimX : 0.0;
+		C.AimY = Change ? Change->AimY : 0.0;
+		C.bDown = (Tr.Fell >= 0.0 && S.Battle >= Tr.Fell) || (Tr.Wounded >= 0.0 && S.Battle >= Tr.Wounded);
+		C.bShown = false;
+		if (Man >= 0 && Man < S.Men->Count())
+		{
+			// (her gunner serves her from the first frame he is in the crowd: his rifle laid down, lying behind a low
+			// gun, kneeling at a high one or at his tube)
+			if (!G.bServed)
+			{
+				S.Men->Serve(Man, Kind.bKneels ? 2 : 1);
+				G.bServed = true;
+			}
+			C.bDown = C.bDown || S.Men->IsFalling(Man) || S.Men->Frozen(Man);
+			C.bShown = S.Men->Visible(Man) && S.Men->Fade(Man) >= 0.5f && !HiddenMan(Man);
+			const LandMen::Xform& Frame = S.Men->WorldFrame(Man);
+			C.Frame = &Frame;
+			if (!C.bDown)
+			{
+				const LandMen::Vec3 Ahead = Frame.Turn(LandMen::Vec3{ 1.f, 0.f, 0.f });
+				C.X = Frame.T[0];
+				C.Y = Frame.T[1];
+				if (std::hypot(static_cast<double>(Ahead.X), static_cast<double>(Ahead.Y)) > 0.5)
+				{
+					C.Facing = std::atan2(static_cast<double>(Ahead.X), static_cast<double>(Ahead.Y));
+				}
+			}
+		}
+		G.Gun.Step(Kind, C, S.Battle, LifeDt, Height);
+		// Her two instances: moved while she is drawn, put away when she is not.
+		const bool bShow[2] = { G.Gun.MountShown(), G.Gun.TurnedShown() };
+		bool* bShown[2] = { &G.bMountShown, &G.bTurnedShown };
+		int32* Copy[2] = { &G.MountCopy, &G.TurnedCopy };
+		for (int32 Half = 0; Half < 2; ++Half)
+		{
+			const int32 Mesh = G.Kind * 2 + Half;
+			UInstancedStaticMeshComponent* Copies = TeamGunCopies.IsValidIndex(Mesh) ? TeamGunCopies[Mesh].Get() : nullptr;
+			if (!Copies || (!bShow[Half] && !*bShown[Half]))
+			{
+				continue;
+			}
+			if (*Copy[Half] < 0)
+			{
+				*Copy[Half] = FreeTeamGunCopies[Mesh].Num() > 0 ? FreeTeamGunCopies[Mesh].Pop(EAllowShrinking::No) : Copies->AddInstance(Gone, true);
+			}
+			const FTransform At = !bShow[Half] ? Gone : LandParts::BankedAt(Half == 0 ? G.Gun.MountFrame() : G.Gun.TurnedFrame(Kind), UnitsPerMetre);
+			Copies->UpdateInstanceTransform(*Copy[Half], At, true, false, true);
+			*bShown[Half] = bShow[Half];
+			Touched[Mesh] = true;
+		}
+	}
+	for (int32 Mesh = 0; Mesh < Touched.Num(); ++Mesh)
+	{
+		if (Touched[Mesh] && TeamGunCopies.IsValidIndex(Mesh) && TeamGunCopies[Mesh])
+		{
+			TeamGunCopies[Mesh]->MarkRenderInstancesDirty();
+		}
 	}
 }
 

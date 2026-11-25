@@ -255,10 +255,16 @@ namespace LandKit
 		 * wreck (LandHulk, release 2) to burn each stuff its own way. A point added after the file's (a captor's mark)
 		 * has none: Paints may be shorter than Count(). */
 		std::vector<uint8_t> Paints;
+		/** r, g, b a point (8-bit sRGB): the colour THIS point burns to, where the burnt coat is on (release 2,
+		 * Dress::bBurntCoat): soot, rust or ash by where the point is and which way it looks. Empty: every point burns to
+		 * the model's one BurntColour, as before. BurntOf reads either. */
+		std::vector<uint8_t> Burnt;
 		std::vector<uint32_t> Triangles;// three point numbers a triangle
 		/** A track body's links (Near): the run of points of each, in the order of Model::Links(Side). */
 		std::vector<uint32_t> LinkFirst, LinkCount;
 		size_t Count() const { return Soot.size(); }
+		/** The colour point K burns to: its own (Burnt) where the burnt coat is on, else the model's one (Whole). */
+		const uint8_t* BurntOf(size_t K, const uint8_t* Whole) const { return Burnt.size() >= (K + 1) * 3 ? &Burnt[K * 3] : Whole; }
 	};
 
 	struct Body
@@ -302,6 +308,12 @@ namespace LandKit
 		/** Swaps chosen over the month's and the nation's (swap group -> choice), where the model has that choice: Men in
 		 * lorries (the Battle rules card's row) carries her men with the Truck's tilt stowed ("tilt" -> "off"). */
 		std::map<std::string, std::string> Force;
+		/** A coat the rules pick for her whole army (release 2, behind its switch; the recording's blocks[].coat): the
+		 * name of one the game keeps for a model several armies share (NationCoat), put on in place of what her owner
+		 * would otherwise get there. "japan": Japan's khaki broken with earth brown, on the field gun, the lorry and
+		 * the light tank that stand in for her, so they are one army with her own Type 97. A model with coats of its
+		 * own in its file is let be. Empty, or a name the game does not keep: as before. */
+		std::string Coat;
 		/** Swaps the rules pick for her (release 2, the track's "sw": a motorcycle's sidecar, a staff jeep's gun put
 		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
 		 * that choice; any other is let be. */
@@ -314,6 +326,12 @@ namespace LandKit
 		 * the game's own road dust, on her lower third and her running gear (the art director: 30 to 50 in 100 of the
 		 * field's colour there). A negative red: none, as before. */
 		double FieldDust[3] = { -1.0, -1.0, -1.0 };
+		/** The burnt coat (release 2, on its own switch, the trial word "burntcoat"; the art director's brief of 25
+		 * November, for every army's wrecks): a burnt-out wreck goes to three colours in place of one. Soot (the model's
+		 * BurntColour) above and round what the smoke poured from and under overhangs, ash grey on faces that look up and
+		 * on a burnt tyre's rim, rust on upright plates and the running gear, in patches some 0.3 to 0.8 m across; never
+		 * ash on an edge. Each point's colour is kept in Mesh::Burnt. Off: one colour, as before. */
+		bool bBurntCoat = false;
 	};
 
 	class Model
@@ -339,6 +357,9 @@ namespace LandKit
 		uint8_t BurntColour[3] = { 38, 33, 29 };
 		/** The file's paint names, in its order (Mesh::Paints numbers them). */
 		std::vector<std::string> PaintNames;
+		/** The burnt coat (release 2, Dress::bBurntCoat) was on when she was loaded: every point of every mesh of hers
+		 * has a burnt colour of its own (Mesh::Burnt: soot, rust or ash), and BurntColour is her soot alone. */
+		bool bBurntCoat = false;
 
 		// The controls (controls, running): parts by number, -1 where the model has none.
 		int Turret = -1, Gun = -1, Barrel = -1, Traverse = -1, Hull = -1, Breech = -1;
@@ -684,6 +705,7 @@ namespace LandKit
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
 		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
+		std::string Coat;       // a coat the rules picked for her army (the recording's "coat", release 2: "japan"); empty: as before
 		std::vector<std::string> Extra; // models her vehicles are drawn with besides her own (the header's "mls", release 2): read before her men come; "Jeep|mg=off": with those swaps
 	};
 
@@ -827,6 +849,9 @@ namespace LandKit
 		/** The field's own ground on every vehicle's lower third (release 2, tc.Look.Worn; Dress::FieldDust). A negative
 		 * red: none, as before. Set before Load. */
 		double FieldDust[3] = { -1.0, -1.0, -1.0 };
+		/** The burnt coat (release 2, the trial word "burntcoat"; Dress::bBurntCoat): on, every vehicle's wreck burns to
+		 * soot, rust and ash, each point to its own. Off unless set; set before Load. */
+		bool bBurntCoat = false;
 
 	private:
 		std::vector<Vehicle> All;

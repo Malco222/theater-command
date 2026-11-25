@@ -47,6 +47,9 @@ if command -v clang++ >/dev/null 2>&1; then
   clang++ ${LAND_SHOW_FLAGS:-} $STRICT -Wunreachable-code-aggressive -pthread "$HERE/land_worn_men_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_worn_men_test_clang"
 fi
 STATUS=0
+# The men's front by the place on the earth (the Pacific past the date line, Formosa off the China coast).
+$CXX $FLAGS -pthread "$HERE/land_front_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_front_test"
+"$OUT/land_front_test" || STATUS=1
 for F in "$@"; do
   "$OUT/land_show_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
   "$OUT/land_bank_test" "$F" "$SOLDIERS" "$ROOT/Content/Data/LandBattles/armies.json" "$SOLDIERS/pose_bank.json" || STATUS=1

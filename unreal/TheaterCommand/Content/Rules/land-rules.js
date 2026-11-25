@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 2802bf170 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of fb9c9416e 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12910,8 +12910,12 @@
     const m = /(19[34]\d)/.exec(t.date ?? "");
     return m ? Number(m[1]) : 1942;
   }
-  function standInModel(kind, nat, year, n) {
+  function standInModel(kind, nat, year, n, own = false) {
     const axis = ["GER", "ITA", "JAP", "HUN", "ROM", "BUL", "FIN"].includes(nat);
+    if (own && nat === "JAP") {
+      if (kind === "art") return "Gun75";
+      if (year >= 1938) return "Type97";
+    }
     if (kind === "art") return nat === "SOV" ? "ZiS3" : axis ? "leFH18" : "Howitzer105";
     if (nat === "GER") return year >= 1943 ? ["PanzerIV", "PanzerIV", "Tiger", "StuG3"][n % 4] : year >= 1941 ? ["PanzerIV", "StuG3", "LightTank"][n % 3] : ["LightTank", "PanzerIV"][n % 2];
     if (nat === "SOV") return year >= 1941 ? ["T34", "T34", "LightTank"][n % 3] : "LightTank";
@@ -12947,6 +12951,8 @@
       __publicField(this, "wreckPer", null);
       /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground, old wrecks). */
       __publicField(this, "looks", { worn: true, mud: true, scars: true, wrecks: true, wet: true });
+      /** The place's own dress passed on to the 3D game (release 2, LiveOpts.island): a campaign battle's only. */
+      __publicField(this, "island", false);
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -12998,6 +13004,7 @@
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
       this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wrecks: opts.wrecks !== false, wet: opts.wet !== false };
+      this.island = !piece && opts.island === true;
       const armour = sim.allBlocks().filter((u) => u.kind === "arm" && u.figures0 > 0);
       const models = armour.reduce((s, u) => s + u.figures0, 0);
       const real = armour.reduce((s, u) => s + (AFV_PER_DIV.arm ?? 0) * (u.worth ?? u.figures0 / Math.max(1, u.tray)), 0);
@@ -13010,11 +13017,11 @@
         if (a && u.kind === "arm") model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
         else if (a && u.kind === "art" && !u.team) model = a.gun;
         if (model) sim.vehicleIs(u.id, model);
-        else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+        else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++, opts.japan === true);
         const took = caught && u.kind === "arm" && caughtLeft[u.side] > 0 ? caught[u.side] : void 0;
         if (took) {
           caughtLeft[u.side]--;
-          model = standInModel("arm", took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+          model = standInModel("arm", took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0, opts.japan === true);
         }
         return {
           id: u.id,
@@ -13037,6 +13044,10 @@
           ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {},
           ...u.joined !== void 0 ? { joins: true } : {},
           ...took ? { captured: took.from } : {},
+          // (release 2, the "japan" row: a Japanese block's vehicles in her own coat where the model is one she shares with
+          // other armies and its file has no Japanese paint, the field gun, the lorry, the light tank; the 3D game keeps
+          // the coat by this name. Looks only, a campaign battle's only: a set piece is as the historian drew it.)
+          ...!piece && opts.japan === true && u.nat === "JAP" ? { coat: "japan" } : {},
           // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
           // read before the battle opens)
           ...((mls) => mls.length ? { mls } : {})(this.drill.modelsFor(u))
@@ -13065,7 +13076,8 @@
         ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
         ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
         ...t.oldWrecks && t.oldWrecks.count > 0 && this.looks.wrecks ? { oldWrecks: { count: t.oldWrecks.count, months: t.oldWrecks.months, nats: { ...t.oldWrecks.nats }, ...this.wreckPer ? { per: this.wreckPer } : {} } } : {},
-        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
+        // (the place's own latitude and longitude, release 2 on its "island" option: only where the sky has none)
+        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.island && t.latLon && !this.skyOf.latLon ? { ...this.skyOf, latLon: t.latLon } : this.skyOf },
         sides: {
           att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {}, ...t.att.worn !== void 0 && this.looks.worn ? { worn: t.att.worn } : {} },
           def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {}, ...t.def.worn !== void 0 && this.looks.worn ? { worn: t.def.worn } : {} }
@@ -13085,7 +13097,9 @@
           ...f.storeys ? { storeys: f.storeys } : {},
           ...f.landmark ? { landmark: f.landmark } : {},
           ...f.stream ? { stream: f.stream } : {},
-          ...this.steppe ? { steppe: this.steppe } : {}
+          ...this.steppe ? { steppe: this.steppe } : {},
+          // (the 3D look the campaign names for this ground, release 2 on its "island" option: LandScape reads it first)
+          ...this.island && t.look ? { look: t.look } : {}
         },
         limit: LAND.limit,
         contact: null,
@@ -13357,7 +13371,8 @@
         aa: opts?.aa === true,
         light: opts?.light === true,
         life: opts?.life === true,
-        hatches: opts?.hatches === true
+        hatches: opts?.hatches === true,
+        japan: opts?.japan === true
       });
       return live3.header();
     },
@@ -13405,6 +13420,8 @@
         light: o.light === true,
         life: o.life === true,
         hatches: o.hatches === true,
+        japan: o.japan === true,
+        island: o.island === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},

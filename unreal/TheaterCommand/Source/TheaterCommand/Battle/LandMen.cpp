@@ -2071,6 +2071,8 @@ namespace LandMen
 			// bIdle: he had no change yet, so his one stance is the idle Build gives such a man.
 			size_t Firm = 0;
 			bool bIdle = false;
+			/** He serves a support team's weapon drawn at his place (Crowd::Serve): 1 lying behind it, 2 kneeling at it. */
+			uint8_t Serves = 0;
 
 			// Now.
 			enum Life : uint8_t { Alive, Falling, Settling, Rest } State = Alive;
@@ -3000,7 +3002,7 @@ namespace LandMen
 		// ---------------------------------------------------------------------------------------------------------
 		// Poses of the rules, drawn.
 		// ---------------------------------------------------------------------------------------------------------
-		Stance StanceOf(const Soldier& S, const std::string& Role, const std::string& Pose, bool bMoving) const
+		Stance StanceOf(const Soldier& S, const std::string& Role, const std::string& Pose, bool bMoving, int Serves = 0) const
 		{
 			Stance St;
 			St.Pose = Pose;
@@ -3047,6 +3049,24 @@ namespace LandMen
 				// with the tripod's own recoil; and the crew carrying gun, tripod and boxes when it moves.
 				Use(bGunner ? "lmg_burst" : "fire_prone", Stance::Hold, Prone);
 				St.bFiring = true;
+				if (Serves != 0)
+				{
+					// (release 2's "teamguns": his gun stands at his place on its mount, Battle/LandTeamGun, so his rifle
+					// is laid down and his hands are on her: lying behind a low gun, where fire_prone's hands reach her
+					// grips; kneeling behind a high one or one on wheels, as fire_kneel holds, until his file brings the
+					// soldiers' own clips, hmg_fire_prone and hmg_fire_sit)
+					const char* Own = Serves == 2 ? "hmg_fire_sit" : "hmg_fire_prone";
+					const char* Else = Serves == 2 ? "fire_kneel" : "fire_prone";
+					Use(S.ClipIndex(Own) >= 0 ? Own : Else, Stance::Hold, Serves == 2 ? Kneel : Prone);
+					St.bRifleDown = true;
+				}
+			}
+			else if (Role == "mortar" && Serves != 0 && (Pose == "fire" || Pose == "deployed"))
+			{
+				// (release 2's "teamguns": his tube stands at his right knee, so his rifle is laid down and his hands are
+				// up at her sight: mortar_sight where his file has it, else fire_kneel's hands, which are there)
+				Use(S.ClipIndex("mortar_sight") >= 0 ? "mortar_sight" : "fire_kneel", Stance::Hold, Kneel);
+				St.bRifleDown = true;
 			}
 			else if (Role == "mortar" && (Pose == "fire" || Pose == "deployed"))
 			{
@@ -4822,7 +4842,7 @@ namespace LandMen
 					const Stance& O = Mn.Stances[B - 1];
 					if (O.bMoving == bMoving && O.Pose == Cg.Pose) Like = &O;
 				}
-				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving);
+				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving, Mn.Serves);
 				St.T = Cg.T;
 				St.SeatOn = Cg.SeatOn;
 				St.Seat = Cg.Seat;
@@ -5052,12 +5072,7 @@ namespace LandMen
 				// From the place on the earth, roughly: the lead can say it outright.
 				const J& LL = Root["sky"]["latLon"];
 				const double Lat = LL.Number(0, 49.0), Lon = LL.Number(1, 0.0);
-				if (Lat < 36.0 && Lon > -18.0 && Lon < 40.0) I.Front = "desert";
-				else if (Lon >= 95.0 && Lon < 125.0 && Lat > 18.0) I.Front = "china";
-				else if (Lon >= 95.0 || (Lat < 20.0 && Lon > 60.0)) I.Front = "pacific";
-				else if (Lat >= 36.0 && Lat < 47.0 && Lon >= 6.0 && Lon < 24.0) I.Front = "south";
-				else if (Lon >= 15.0) I.Front = "east";
-				else I.Front = "west";
+				I.Front = FrontAt(Lat, Lon);
 			}
 		}
 
@@ -5548,6 +5563,28 @@ namespace LandMen
 		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
 		return Mn.State == Impl::Man::Falling || Mn.State == Impl::Man::Settling;
 	}
+	void Crowd::Serve(int Man, int How)
+	{
+		if (Man < 0 || Man >= static_cast<int>(Inner->Men.size()))
+		{
+			return;
+		}
+		Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		const uint8_t Now = static_cast<uint8_t>(How < 0 ? 0 : How > 2 ? 2 : How);
+		if (Mn.Serves == Now)
+		{
+			return;
+		}
+		// (his stances taken again now, with his weapon served, as when his first changes come: a battle read whole makes
+		// them only once, so nothing later would; and he turns to the one he is in on his next frame)
+		Mn.Serves = Now;
+		Mn.Stances.clear();
+		Mn.Firm = 0;
+		Mn.bIdle = false;
+		Mn.Shown = -1;
+		Mn.ChCursor = 0;
+		Inner->MakeStances(Mn);
+	}
 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
 	void Crowd::SetRun(RunFn Run) { Inner->Run = std::move(Run); }
 	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
@@ -5910,6 +5947,28 @@ namespace LandMen
 		const auto Found = Inner->Armies.find(Army);
 		return Found != Inner->Armies.end() ? Found->second.StandIn : std::string();
 	}
+	const char* FrontAt(double Lat, double Lon)
+	{
+		// (any longitude, however far past the line, in one step; a place that is no number at all is dressed as no
+		// place given, 49 N 0 E: the pre-check's note of 25 November, a loop here would never end on an infinite one)
+		if (!std::isfinite(Lat) || !std::isfinite(Lon))
+		{
+			Lat = 49.0;
+			Lon = 0.0;
+		}
+		Lon = std::remainder(Lon, 360.0);
+		if (Lat < 36.0 && Lon > -18.0 && Lon < 40.0) return "desert";
+		// (the China coast and the country behind it. Formosa, the Pescadores and the north of Luzon, east of 119.5 and
+		// south of 26, are the Pacific's: the Japan and Pacific thread's finding of 25 November)
+		if (Lon >= 95.0 && Lon < 125.0 && Lat > 18.0 && !(Lon >= 119.5 && Lat < 26.0)) return "china";
+		// (the Pacific runs on past the date line: Hawaii, Midway, the Aleutians and Alaska, out to the sea off the
+		// Americas' own coast. Before, a place east of the line was read as a negative longitude and dressed for the west.)
+		if (Lon >= 95.0 || Lon < -125.0 || (Lat < 20.0 && Lon > 60.0)) return "pacific";
+		if (Lat >= 36.0 && Lat < 47.0 && Lon >= 6.0 && Lon < 24.0) return "south";
+		if (Lon >= 15.0) return "east";
+		return "west";
+	}
+
 	const std::string& Crowd::FrontName() const { return Inner->Front; }
 
 	void Crowd::SetFallKind(int Man, const std::string& Kind)
@@ -6284,6 +6343,7 @@ namespace LandMen
 		P.Rate = Mn.Cur.How == Segment::Gait ? Mn.Cur.Rate : Mn.Cur.How == Segment::Loop ? Mn.Cur.Rate : Mn.Cur.How == Segment::Once ? static_cast<float>((Mn.Cur.To - Mn.Cur.From) / Mn.Cur.Dur) : 0.f;
 		P.bCapped = Mn.Cur.bCapped;
 		P.bBlending = Mn.bPrev;
+		P.bRifleDown = Mn.Cur.bRifleDown;
 		return P;
 	}
 
