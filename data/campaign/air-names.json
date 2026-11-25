@@ -253,7 +253,7 @@
   }
  },
  "blocked": {
-  "_note": "Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, with the twelve Italian names the air thread named on 25 November). Over-blocking does no harm. A battle's city is not blocked (the historian: the Soviet manner shared one city among many units).",
+  "_note": "Real air units' names, nicknames and honour titles that no name of ours may hold, matched as whole words (the historian's 'blocked', air-unit-names-r2.json, 309 names, all arms, Italy's air division names of June 1940 among them; and two more, Sirio and Zeffiro, that are the air thread's own, added on 25 November: 311 in all). Over-blocking does no harm. A battle's city is not blocked (the historian: the Soviet manner shared one city among many units).",
   "names": [
    "Abbeville Kids",
    "Ace of Clubs",
