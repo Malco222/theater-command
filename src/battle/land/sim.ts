@@ -480,6 +480,14 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   escort = false;
   /**
+   * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
+   * tanks? cannon fire or bazookas should be the only think taking them out"): with it on, what a block of foot or a
+   * support team can do to a tank block comes only from what it carries that can pierce armour (LAND.pierce), never
+   * from its rifles and machine guns. A real rule: it changes results, so it is off unless turned on (the bridge's
+   * { pierce: true }, the Battle rules card's row), and with it off every battle is as before to the last figure.
+   */
+  pierce = false;
+  /**
    * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
    * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
    * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
@@ -2126,7 +2134,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; teamwork?: boolean; scale?: boolean | number }): Drill {
+  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; teamwork?: boolean; scale?: boolean | number }): Drill {
     if (this.drill) return this.drill;
     const { scale, ...rest } = opts ?? {};
     // True: the battle's own N; a number: that N (a recording or a test that sets its own).
