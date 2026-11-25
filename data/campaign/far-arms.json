@@ -1,5 +1,6 @@
 {
   "_about": "China's rifles on the whole world (the design director's rulings of 05:37Z and 05:44Z of 25 November 2026, on pacific-japan/dd-form-arms-1125.md, sections 3, 4, 14 and 15, and the historian's historian/china-arms-1125.md): the far side's rows for the stock of arms (src/campaign/arms.ts) and the rifles' rule (src/campaign/rifles.ts), laid over data/campaign/arms.json and data/campaign/rifles.json while the far side's switch is on (src/campaign/far-rows.ts). Kept by hand. China's rifles shelf stands at 0 on the first day (the historian's read: no rifles in depots and in no unit on 1 September 1939, D, U; China's call-up depot row reads 0, confirmed at 05:44Z). It fills from three arsenals, each while China holds its place, at rifles a month over 21,300 rifles to China's division's worth: Chungking 3,000, Hunan 1,000, Kweichow 500 (D; the places U), the 4,500 a month that is the record's own net rise, from the first day, no date laid. And from four roads, each a chain of places on the chart from where its cargoes start to Kunming or Lanchow or Canton, every step beside the last: the Burma Road, 1,250 tons a month at 2 rifles a ton (D); the Sinkiang road, 650 tons a month at 2 a ton, sold by the Soviet Union (D); the Haiphong railway and the road from Hong Kong, 0 tons (the record: a French embargo on munitions from 1938; Hong Kong and Canton shut by Japan's hold on Tungkun and Canton from the first day, the first of them in the road's order named). A road is cut by land only in this piece: the sea leg is the next slice's. With no rifles shelf of the Soviet Union's on this line, the seller's interim test stands in (G): a seller at war with a great power sends nothing; a seller that has fallen sends nothing, shelf or none. Figures marked as the form marks them: L read, D derived, M memory, U uncertain, G a guess.",
+  "_fallen": "rifles.json 'fallen': the news, once, of a road's seller fallen (the design director's 18:30Z of 25 November 2026: a fallen seller is dry, \"but its fall is news once\"; a seller that still stands and sends nothing is no news). Placeholder words until the UI director gives hers; {seller} and {road} are filled with the names the road news already uses, each at the start of its sentence: \"The Soviet Union has fallen. The Sinkiang road carries no more rifles.\"",
   "arms.json": {
     "nations": {
       "CHN": {
@@ -26,6 +27,7 @@
         "binds": true
       }
     },
+    "fallen": "{seller} has fallen. {road} carries no more rifles.",
     "roads": [
       {
         "id": "burma-road",

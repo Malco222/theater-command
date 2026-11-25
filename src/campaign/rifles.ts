@@ -17,7 +17,8 @@
 //   rflc:<road>  for the news, once: 0 while the road ran with its load when last read (a road of 0 tons, running);
 //                minus the month it was found running dry (its seller sent nothing), which is no news; else the month
 //                it was found cut, kept while a cut road comes back dry, so that "runs again" is told only when
-//                its rifles can come
+//                its rifles can come; and half a month further from 0 once its seller's fall was told, while the
+//                seller stays fallen (roadNews)
 // and the shelves' own flags (arms.ts: sa:<nat>, sam:<nat>). A corps on order that drew rifles carries what it drew in
 // its Build's 'rifles' (divisions' worth), so the save keeps it and a cancel can give it back.
 
@@ -35,7 +36,7 @@ export interface RiflesRow { perDiv: number; refit?: number; binds?: boolean }
 /** A road that brings a nation rifles. 'past' runs in order from where its cargoes start to where they reach the receiver. */
 export interface RoadRow { id: string; name: string; to: string; past: string[]; tons: number; perTon: number; seller?: string }
 
-export const RIFLES = data as unknown as { sellerPerDiv: number; nations: Record<string, RiflesRow>; roads: RoadRow[] };
+export const RIFLES = data as unknown as { sellerPerDiv: number; nations: Record<string, RiflesRow>; roads: RoadRow[]; fallen?: string };
 
 const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 const pos = (x: unknown): number => Math.max(0, num(x));
@@ -271,15 +272,36 @@ export function riflesMonth(g: Game, nat: string): void {
  * A road running dry (its seller sends nothing) is no news either way, and a cut road that comes back dry is not told
  * as running: it is told when its rifles can come. Told to the receiver's seat only, as the books tell a seat.
  *
+ * But a seller's fall is news once (the design director's 18:30Z of 25 November 2026): the month a road is first found
+ * dry because its seller has fallen, its receiver's seat is told so, and never again for that road while the seller
+ * stays fallen, whether the road is cut and freed meanwhile or not. That it was told is kept in the road's own flag,
+ * as half a month further from 0 (so its sign, and the month it was cut or ran dry, still read as before); the half
+ * comes off when the seller stands again. A seller that stands and sends nothing, at war or with nothing to spare, is
+ * still no news. A road whose seller has fallen when it is first read is not news either.
+ *
  * (So a war nobody plays gains only the rflc: flags, and a whole-save print of one, as the identity runs make, can
  * never show a headline of this module's. A played receiver's save gains one headline at each change told here.)
  */
 function roadNews(g: Game, nat: string, road: RoadRow, now: RoadNow): void {
-  const k = kCut(road.id), was = g.flags[k];
+  const k = kCut(road.id);
+  let was = g.flags[k];
   const mark = now.state === 'cut' ? g.turn : now.state === 'dry' ? -g.turn : 0;
-  // (The first reading of a road is no change: a road cut on the first day is not news.)
-  if (was === undefined) { g.flags[k] = mark; return; }
+  const gone = !!road.seller && !g.nations[road.seller]?.alive, fell = gone && now.state === 'dry';
+  // (The half that says the fall was told comes off once the seller stands again.)
+  if (was !== undefined && !gone && !Number.isInteger(was)) g.flags[k] = was = Math.trunc(was);
+  const told = was !== undefined && !Number.isInteger(was);
+  /** A mark with the told half: half a month further from 0, so its sign is kept. */
+  const half = (x: number): number => (x > 0 ? x + 0.5 : x < 0 ? x - 0.5 : x);
+  // (The first reading of a road is no change: a road cut on the first day is not news, nor a seller fallen by then.)
+  if (was === undefined) { g.flags[k] = gone ? half(mark) : mark; return; }
   const wasCut = was > 0, wasDry = was < 0;
+  if (fell) {
+    if (told) return;
+    // (A cut road keeps its cut month, so that its running again is told when the seller stands again.)
+    g.flags[k] = half(wasCut || wasDry ? was : mark);
+    if (nat === g.human) { const says = fallWords(g, road); if (says) headline(g, 'info', says, nat); }
+    return;
+  }
   let says = '';
   if (now.state === 'cut') {
     if (wasCut) return;
@@ -291,8 +313,18 @@ function roadNews(g: Game, nat: string, road: RoadRow, now: RoadNow): void {
     if (was === 0) return;
     if (wasCut) says = runsWords(g, road);
   }
-  g.flags[k] = mark;
+  g.flags[k] = told ? half(mark) : mark;
   if (says && nat === g.human) headline(g, 'info', says, nat);
+}
+
+/**
+ * Words to the UI director, placeholders until hers come: the news of a seller's fall, from the far side's rows
+ * ('fallen', beside the roads: "{seller} has fallen. {road} carries no more rifles."). Nothing is told where no words
+ * are laid.
+ */
+function fallWords(g: Game, road: RoadRow): string {
+  const words = typeof RIFLES.fallen === 'string' ? RIFLES.fallen : '';
+  return words && road.seller ? words.replace('{seller}', nameOf(g, road.seller, true)).replace('{road}', cap(road.name)) : '';
 }
 
 /**
