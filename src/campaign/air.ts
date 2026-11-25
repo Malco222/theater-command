@@ -57,7 +57,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { chartDist, mapDist, nearX } from './wrap';
+import { chartDist, globeDist, globeLeg, mapDist, nearX } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
@@ -583,14 +583,23 @@ export interface Transit { from: number; to: number }
 
 /**
  * How far a group's fighters have to fly to meet aircraft on the leg between two fields (ferry.ts): to the nearest
- * point of that straight leg on the chart, either field included, the way the reach of every fighter is measured.
+ * point of that straight leg on the chart, either field included, the way the reach of every fighter is measured (km):
+ * on the globe where an end of the leg or the group's own place is of the far side (wrap.ts globeLeg, as chartDist
+ * reads it; the join's read of r2-head-1125k, fault 1), else the map's straight line as it always was.
  */
 export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
-  const p = groupAt(g, f), A = g.regions[from], B = g.regions[to];
+  return legKmAt(g, groupAt(g, f), from, to);
+}
+
+/** legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so). */
+export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
+  const A = g.regions[from], B = g.regions[to];
   const bx = nearX(g, B.x, A.x), px = nearX(g, p.x, A.x);
   const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
   const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
-  return Math.hypot(px - (A.x + t * dx), p.y - (A.y + t * dy)) * AIR.kmPerUnit;
+  const qx = A.x + t * dx, qy = A.y + t * dy;
+  if (globeLeg(g, A, B, p.region, p.sea)) return globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit;
+  return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;
 }
 
 /** Where a group flies from, for a map to draw: its airfield, or the sea (or harbour) its carriers are in. */
