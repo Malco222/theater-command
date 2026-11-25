@@ -15744,7 +15744,13 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (FFrontFire& Fire : FrontFires) { Brought(Fire.At); }
 		for (FBattleSmoke& Battle : Battles) { Brought(Battle.Where); }
 		for (FBombSmoke& Smoke : BombSmokes) { Brought(Smoke.Root); }
-		for (FFlakBurst& Burst : FlakBursts) { Brought(Burst.At); }
+		// (NOT the flak bursts. A raid is not drawn in the turn nearest the EYE: UpdateSorties counts its airfield
+		// beside the eye and then its target beside that airfield, so a raid over the far ocean can fly a whole world
+		// from the eye, and the guns' fire (Muzzle + ToRaid), the searchlight beams and the pencilled course all
+		// follow the flight, not the eye. Every burst, heavy or light, is born at Flight.At, so it is already in its
+		// raid's turn; bringing it to the eye's instead would hang the smoke a world from the bombers that drew it
+		// and from the pits that fired, and a burst already in the air would jump a world as the eye crossed the
+		// seam, leaving its own raid behind. City glance, 25 November 2026, found by a second read of seam-4.)
 		for (TPair<FVector, double>& Down : SetDowns) { Brought(Down.Key); }
 		for (FVector4& Fire : ColumnFires)
 		{
