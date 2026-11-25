@@ -111,8 +111,19 @@ struct FLandBattleState
 			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0, WasRate = 1.0, NowRate = 1.0;
 		};
 		std::map<int, FChuteMan> ChuteMen;
+		/** The release 2 sound check (25 Nov 2026), -TheaterLandAirSound beside -TheaterLandAirSupport: the fighters on call
+		 * heard (ALandBattle::SoundOverhead); off, silent as before. By plane key: its pass or dive heard, its wing guns'
+		 * next take due (real seconds); by the ground's gun, its next burst due; the hits and strikes already heard. */
+		bool bSoundAsked = false, bSound = false;
+		std::set<int> Passed, Dived, HeardHit, HeardStruck;
+		std::map<int, double> GunDue, GunnerDue;
+		int GunTakes = 0, Passes = 0, GroundBursts = 0;
 	};
 	FAirSupport AirSupport;
+	/** The release 2 sound check: each vehicle's commander's hatch as it was last frame (Vehicle::HatchOpen, 0 shut to 1
+	 * open; under 0 not yet seen), for the clang of it shutting on its rim or swinging open to its stop (land.bodyCues
+	 * hatch_shut, hatch_open: silent until a real take passes Brian's ear). */
+	std::vector<double> HatchWas;
 	Fates::Table FatesTable;
 
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */

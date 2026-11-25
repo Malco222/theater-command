@@ -569,6 +569,9 @@ private:
 		int32 Use = 0;
 	};
 	TArray<FMoving> Moving;
+	/** The fighters on call's takes that fly with them (a pass, a dive, a burst of the wing guns): Track is the plane's key
+	 * (SoundOverhead). */
+	TArray<FMoving> OverheadMoving;
 	/** Takes started in the last two seconds, for the ears' dulling after a blast close by. */
 	struct FRecent
 	{
@@ -986,6 +989,9 @@ private:
 	/** The sound's tally in the log, every 20 s and at the end. */
 	void LogSound() const;
 	void PlayEngines();
+	/** The fighters on call over the field heard (release 2 sound check, -TheaterLandAirSound): before the frame's noises
+	 * are mixed, as FlyOver has drawn them. */
+	void SoundOverhead();
 	UAudioComponent* StartTake(const TCHAR* Name, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const FName& Name);

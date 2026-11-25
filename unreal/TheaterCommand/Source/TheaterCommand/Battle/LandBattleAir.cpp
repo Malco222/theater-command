@@ -404,6 +404,13 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 		A.Struck.clear();
 		A.Firing.clear();
 		A.Gunning.clear();
+		// (and what of them was heard, so that it is heard again: the release 2 sound check, SoundOverhead)
+		A.Passed.clear();
+		A.Dived.clear();
+		A.HeardHit.clear();
+		A.HeardStruck.clear();
+		A.GunDue.clear();
+		A.GunnerDue.clear();
 		bLate = true;
 	}
 	A.Sky.At(T, A.Planes, A.Guns);
