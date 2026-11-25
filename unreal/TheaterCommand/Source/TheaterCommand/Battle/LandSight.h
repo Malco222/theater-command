@@ -121,6 +121,14 @@ namespace LandSight
 	 * the field's word 'woods' where the block's middle stands), and each holding kind's reach against its hold. A
 	 * hold written into whatever calls targetOf, or into live() or onHedge(), which those lines call, would not be
 	 * seen there; nor would more ground called woods by field.ts coverAt(), which the run does not read).
+	 *
+	 * (Sniper teams, release 2, behind their own switch, off as this was written, 25 November: none of the above changes
+	 * for any other block, and the run holds that. With them on, three of the mark's words are no longer whole and must
+	 * change before the mark and sniper teams are on together: a sniper team is a gun block to the rules (team 'snp')
+	 * but is seen as men on foot, in the Foot ring, not the guns and teams'; it holds no fire in hiding, firing at its
+	 * whole reach (LAND.teams.snp), and its shot does not give it away at once: each shot is found only by odds
+	 * (LAND.snipers.find), so "its first shot gives it away" is not said of it; and a tank block a sniper's shot has
+	 * closed up sees a hidden block only within LAND.closed.sight of its ring, half, for LAND.closed.secs, 30 s.)
 	 */
 	struct Finds
 	{

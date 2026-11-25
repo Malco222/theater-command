@@ -100,8 +100,16 @@ else
   grep -qF "inf: 'foot', mtn: 'foot', cav: 'foot', eng: 'foot', mot: 'wheels', arm: 'tracks', art: 'guns'" "$RULES" || { echo "FAULT: rules.ts MOTION no longer sorts the kinds as the spotter's rings name them (on foot; guns and teams; tanks and motorised)"; STATUS=1; }
   grep -qF "this.gap(u, e) <= sight))) delete u.unloc" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer locates a block found by its fire once an enemy is within its sight (the spotter's mark's line on one that has fired)"; STATUS=1; }
   grep -qF "if (vague) p *= LAND.hide.locate.fire;" "$SIM" || { echo "FAULT: sim.ts no longer strikes a block found by its fire, not yet located, at the locate share (the spotter's mark's line on one that has fired)"; STATUS=1; }
-  grep -qF "const sight = H.sight[MOTION[u.kind]];" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer takes the sight distance from the hidden block's own kind (the spotter's rings' words)"; STATUS=1; }
-  grep -qF "fighting(e) && this.gap(u, e) <= Math.max(sight, heard) && (this.gap(u, e) <= heard || !veiled(e))" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer sees a hidden block by a fighting enemy within its sight, or heard, and not through smoke (the spotter's rings, and its smoke line)"; STATUS=1; }
+  # (Sniper teams, release 2, behind their own switch: a sniper team is a gun block, team 'snp', that moves and is seen
+  # as men on foot (motionOf), and a tank block a sniper has made close up (closedTo, LAND.closed) sees a hidden block
+  # from nearer for a while. Neither touches any other block: motionOf is MOTION by kind for every block but a sniper
+  # team, and closedTo is set in one place only, by a sniper team's shot at a tank. So with sniper teams off the rings
+  # and their words are as they were; with them on, the mark's words must change (LandSight.h, Finds' note).)
+  [ "$(grep -cxF "const motionOf = (u: LandUnit): Motion => (u.team === 'snp' ? 'foot' : MOTION[u.kind]);" "$SIM" || true)" = "1" ] || { echo "FAULT: sim.ts motionOf() is no longer how a block moves by its kind (MOTION) for every block but a sniper team, which goes on foot (the spotter's rings by kind; LandSight.h Finds' note on sniper teams)"; STATUS=1; }
+  grep -qF "const sight = H.sight[motionOf(u)];" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer takes the sight distance from the hidden block's own kind (the spotter's rings' words)"; STATUS=1; }
+  grep -qF "const sees = (e: LandUnit): number => (e.closedTo !== undefined && this.closed(e) ? sight * LAND.closed.sight : sight);" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer gives every enemy block the hidden block's whole sight distance but a tank closed up by a sniper (LandSight.h Finds' note on sniper teams)"; STATUS=1; }
+  [ "$(grep -cE '(^|[^[:alnum:]_])closedTo[[:space:]]*=[^=]' "$SIM" || true)" = "1" ] && grep -qF "if (u.team === 'snp' && t.kind === 'arm') { if (!blind) t.closedTo = " "$SIM" || { echo "FAULT: sim.ts sets a block's closedTo (it sees a hidden block from nearer) somewhere other than, or besides, a sniper team's shot at a tank (LandSight.h Finds' note on sniper teams)"; STATUS=1; }
+  grep -qF "fighting(e) && this.gap(u, e) <= Math.max(sees(e), heard) && (this.gap(u, e) <= heard || !veiled(e))" "$SIM" || { echo "FAULT: sim.ts spotHidden() no longer sees a hidden block by a fighting enemy within its sight, or heard, and not through smoke (the spotter's rings, and its smoke line)"; STATUS=1; }
   grep -qE "heard: \{ foot: 0, wheels: 0, tracks: [0-9]+, guns: 0, fixed: 0 \}" "$RULES" || { echo "FAULT: rules.ts LAND.hide.heard no longer hears tracks alone (LandSight.h says a lorried block is not heard)"; STATUS=1; }
   # (The lines of sim.ts that say who holds his fire in hiding are held WHOLE, inside their own function and in their
   # order: a search for the words alone would pass a hold added on the same line or the same words in another
@@ -139,21 +147,36 @@ return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w
   # this.unit() in sim.ts, dist() in core/geometry.ts, coverAt() in field.ts. A hold written into one of them, or
   # into whatever calls targetOf, a factor in dist(), or more ground called woods by coverAt(), would not be seen
   # here.)
+  # (Two rows behind their own switches stand in it too, and change nothing for any other block. Sniper teams (team
+  # 'snp'): silent while under fire or slipping away, no hold in hiding (it fires from hiding at its whole reach and
+  # may be found for each shot), only what it sees as a sniper (sniperSees) and its own choice of man (sniperPick).
+  # Support teams in battle (teamsRule, ai.ts ownArm: the machine gun and mortar teams alone): which target in reach
+  # their weapon harms most; never a sniper team. NOT held: sniperSees, sniperPick and ownArm themselves.)
   TARGET_WANT="targetOf(u: LandUnit): LandUnit | null {
 const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
 if (u.kind === 'art' && marching) return null;
 if (u.order?.kind === 'withdraw') return null;
 let reach = reachOf(u);
+const snp = u.team === 'snp';
+if (snp && ((u.quietTo !== undefined && this.t < u.quietTo) || u.slipTo !== undefined)) return null;
 if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
-if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));
+if (u.hid && u.order?.kind !== 'attack' && !snp) reach = Math.min(reach, this.ambushAt(u));
 let best: LandUnit | null = null, score = Infinity;
+const T = this.teamsRule && ownArm(u) ? LAND.teams[u.team] : null;
+let harm = 0;
 for (const e of this.units) {
 if (e.side === u.side || !live(e) || e.hid) continue;
 const d = this.gap(u, e);
-if (d > reach) continue;
+if (d > reach || (snp && !this.sniperSees(u, e, d))) continue;
 if (u.order?.kind === 'attack' && u.order.target === e.id) return e;
 const off = Math.abs(turn(u.face, bearing(u.x, u.y, e.x, e.y)));
-const s = d * (1 + off) * (e.state === 'routing' ? 2 : 1);
+const s = d * (1 + off) * (snp ? this.sniperPick(e) : e.state === 'routing' ? 2 : 1);
+if (T) {
+const h = (e.kind === 'arm' ? T.armour : 1) * (d < T.closeAt ? T.close : 1);
+if (h < harm - 1e-9 || (h <= harm + 1e-9 && s >= score)) continue;
+harm = h; score = s; best = e;
+continue;
+}
 if (s < score) { score = s; best = e; }
 }
 if (!best && u.search && this.hide) {
