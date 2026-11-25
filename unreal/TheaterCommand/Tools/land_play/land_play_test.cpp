@@ -2317,6 +2317,46 @@ int main(int argc, char** argv)
 		if (HiddenAt != "where the round arrived" || !bFamily) Fault("a hidden sniper's report was not heard where his round arrived");
 		if (!bSpotClear) Fault("a hidden sniper was heard from his own spot (his report, bolt or a shout)");
 		if (Probe.SniperSeen != 2 || Probe.SniperUnseen != 3) Fault("the snipers' rounds were not all heard as snipers'");
+		// (and with a mix that has no sniper row, as an older one: still nothing from his spot, his report where it lands)
+		std::string Older = MixText;
+		const size_t SniperRow = Older.find("\"sniper\": {");
+		LandSound::Mixer Plain;
+		std::string PlainError;
+		bool bPlainClear = true, bPlainAtVictim = false;
+		if (SniperRow != std::string::npos && Plain.Begin(Older.replace(SniperRow, 8, "\"sniper_x\""), Rec.Seed, PlainError))
+		{
+			LandSound::Listener Ear;
+			Ear.At = Vec(0.0, 0.0, 1.5);
+			Ear.CameraHeight = 1.5;
+			const Vec Spot(20.0, 0.0, 1.0), Victim(150.0, 40.0, 0.0);
+			for (int K = 0; K < 3; ++K)
+			{
+				LandPlay::Noise N;
+				N.Kind = LandPlay::NoiseKind::Shot;
+				N.Weapon = "rifle";
+				N.Role = "sniper";
+				N.Army = "GER";
+				N.Side = 1;
+				N.Track = 7;
+				N.bSniper = true;
+				N.bHidden = true;
+				N.At = Spot;
+				N.From = Spot;
+				N.To = Victim;
+				std::vector<LandSound::Take> Got;
+				Plain.Hear(N, 820.0 + 60.0 * K, 820.0 + 60.0 * K, 1.0, Ear, Got);
+				for (const LandSound::Take& T : Got)
+				{
+					if (std::abs(T.At.X - Spot.X) < 5.0 && std::abs(T.At.Y - Spot.Y) < 5.0) bPlainClear = false;
+					if (T.Family == "small_arms" && std::abs(T.At.X - Victim.X) < 1.0 && std::abs(T.At.Y - Victim.Y) < 1.0) bPlainAtVictim = true;
+				}
+			}
+		}
+		std::printf("snipers with a mix that has no sniper row: hidden heard %s, his spot %s\n",
+			bPlainAtVictim ? "where the round arrived" : "WRONG", bPlainClear ? "silent" : "HEARD");
+		if (SniperRow == std::string::npos) Fault("the mix has no distance.sniper row to take out for the older-mix probe");
+		if (!PlainError.empty()) Fault(("the probe mix without the sniper row did not load: " + PlainError).c_str());
+		if (!bPlainClear || !bPlainAtVictim) Fault("with no sniper row in the mix, a hidden sniper was heard from his own spot");
 	}
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
 	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots kept on their own recording at a half step, %d other takes nearer than their far takes kept on theirs at a half step, %d moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",

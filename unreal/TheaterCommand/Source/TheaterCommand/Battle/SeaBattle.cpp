@@ -6322,7 +6322,10 @@ UAudioComponent* ASeaBattle::Sound(const FName& Name, const FVector& Where, cons
 		{
 			Filtered.RemoveAt(0);
 		}
-		Filtered.Add({ Heard, Family, Where });
+		FFiltered& Kept = Filtered.AddDefaulted_GetRef();
+		Kept.Player = Heard;
+		Kept.Family = Family;
+		Kept.Where = Where;
 		Heard->SetLowPassFilterEnabled(true);
 		Heard->SetLowPassFilterFrequency(FMath::Min(20000.0f, SeaParts::TableLpf(Mix, Family, FVector::Dist(Where, Eye->GetActorLocation()) / UnitsPerMetre)));
 	}
@@ -6338,7 +6341,7 @@ void ASeaBattle::RefilterSounds()
 	// Each filtered take's low-pass from the eye's distance now (the family's table, SeaParts::TableLpf), so a take started
 	// far off opens up when the picture cuts in close; let go once it has played out. While the eye is under water the
 	// takes are left as they are (one started under it keeps the muffle's lower filter, FSeaUnder::Muffle, from its start).
-	const FVector EyeAt = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
+	// (from EyeAt, the camera's place as its shot sets it, without the under-water shake)
 	for (int32 K = Filtered.Num() - 1; K >= 0; --K)
 	{
 		UAudioComponent* Player = Filtered[K].Player.Get();

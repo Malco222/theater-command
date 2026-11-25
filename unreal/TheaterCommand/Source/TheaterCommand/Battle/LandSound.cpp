@@ -933,15 +933,15 @@ namespace LandSound
 				const bool bMg = N.Weapon == "mg";
 				// (a sniper's one aimed round, the rules' sn: his own family where the mix has one, heard across the field and
 				// on the far takes, with their echo, sooner than a section's rifles; while he lies hidden, hd, heard where his
-				// round arrives and never from his spot, the design director's ruling: no bolt, no shout of his, nothing
-				// gives his place away)
+				// round arrives and never from his spot, the design director's ruling, whatever the mix: no bolt, no shout of
+				// his, nothing gives his place away)
 				const bool bSniper = !bMg && N.bSniper && Families.count("sniper") > 0;
-				const bool bUnseen = bSniper && N.bHidden;
+				const bool bUnseen = !bMg && N.bSniper && N.bHidden;
 				T.Family = bMg ? "mg" : bSniper ? "sniper" : "small_arms";
 				if (bUnseen) T.At = N.To + Vec(0.0, 0.0, 1.5);
 				const double ShotFar = bUnseen ? Distance(T.At, Ear.At) : Far;
 				const bool bShotOnScreen = bUnseen ? (OnScreen ? OnScreen(T.At) : true) : bOnScreen;
-				if (bSniper) ++(bUnseen ? SniperUnseen : SniperSeen);
+				if (!bMg && N.bSniper) ++(bUnseen ? SniperUnseen : SniperSeen);
 				const Family& F = FamilyOf(T.Family);
 				// (a tank's machine guns are her own row, by army: a German tank's MG 34 is not her infantry's MG 42, the
 				// Sherman's roof .50 not her coaxial .30; an army with no row of its own takes the infantry's)
