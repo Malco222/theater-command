@@ -1365,3 +1365,48 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    (`Tools/air_show/air_perf_test`, run by `run.sh`) checks every figure's source and mark, that every model named is
    found, and each type's limits inside their bounds. Not yet wired into the flight core (`AirShow`): until it is, every
    battle flies as before (wave 1's join, 25 November; numbered 54 by the wave-2 plan).
+
+59. **Earned colours** (release 2; Brian, 25 November 2026 03:27Z: "unique colorings or markings like the tuskegee
+   airmen"). A group the rules say has earned colours flies its nation's scheme of the art director's palette
+   (Content/Data/Air/unit-colours.json, copied unchanged in substance from art-director/air-colours, fifth issue of
+   25 November 12:34Z, the final one; the historian checked it twice) as far as it has earned it. The board's place.corpsMarks (airLook,
+   airStart and the replays: corps, nat, scheme 0 to 15, tier 1 to 3, name) is read by AirFeed's one line
+   (AirUnitColours::ReadMarks, the one small function to change if it is renamed); each view's extra.corps is already
+   each group's Corps (item 51). Step 1 the spinner (the Me 262: its nose cap); a bomber's spinners and the top sixth of
+   its fin. Step 2 adds a narrow band right behind the spinner (a radial's cowl front lip; a bomber's every cowl), never
+   wider than the spinner is long, never the whole nose. Step 3 adds the tail in the scheme's pattern on the tail's own
+   height and chord: Britain the rudder, France the fin, the rest fin and rudder; twin fins both, both faces. By night
+   (place.night, or a machine with black undersides: the Lancaster, the Wellington) every colour x0.55, the cream the
+   palette's grey, the pattern on the tail's top half; a winter month (the painter's, December to February) at full
+   strength. Glass, crews, tyres, blades, rivets and seams, lamps, nose art and tallies are never recoloured; the
+   markings stay on top, over a plain patch of the first colour on a checks or stripes tail: shaped as the marking and a
+   little larger, on its own face, and only for a marking on a part its nation colours (Britain's fin flash and France's
+   rudder stripes need none; Savoy's cross has one under its arms and shield, the field behind it in the pattern); by
+   night only where the patch reaches the pattern's half, and then whole. The nickname is never painted.
+   How: Battle/AirUnitColours (plain) finds each model's airscrews, cowls and fins once from its near shape (a newer
+   file by its parts, an older one from its geometry) and lays the coat on the near and far shapes, parting triangles
+   at the colours' edges. AirBattleUnitColours.cpp and .inl (Unreal): PlaneMesh's one line copies the aircraft's shape
+   once per look ("Bf109:GER|colours GER 0 t3 day"), coloured, kept beside the plain one with its far shape, so every
+   aircraft of a group (and any group with the same look on the same model) draws and is copied as one; its light shape
+   is made from the coloured far one as any other's. A shape is checked against its model's file before it is coloured
+   (one that is not its file's flies plain, and the log says so); where the near shape takes the look and the far one
+   does not, the aircraft flies plain (the near shape alone has no airscrews at a distance). The coloured shapes of an earlier battle are let go at
+   the next battle's first aircraft with colours on. Shown, never counted.
+   Off until the art director has scored the Mac's stills: the Battle rules card's
+   **Earned colours** (FLandLive's rule `unitColours`, never sent to the land rules); `-TheaterAirUnitColours` on for a
+   run, `-TheaterAirNoUnitColours` off, `-TheaterRulesFlip=unitColours` clicks the card's switch. Off, UnitColoursShape
+   returns at the switch and the aircraft is made exactly as before; on, a group with no row flies plain.
+   The cloud test (Tools/air_show/air_unit_colours_test.cpp, in run.sh): the palette, the five patterns, the board's
+   rows, all 31 aircraft models at 7 nations' schemes by day and night, steps 0 to 3, near and far (where each region
+   lies, by the regions and by the file's own part names; nothing else recoloured; each patch only round its marking on
+   its own face, measured from the marking as the miniatures draw it; each step adding its own; the parted triangles
+   covering what they were cut from), and a hand-made raid's board. Cloud previews, the hand-made raid (unit_colours_raid.json.gz, never committed) and the
+   Mac's steps: air-battles/unit-colours/r2/ (NOTES.md).
+   Look for (`-TheaterAirBattle=unit_colours_raid -TheaterAirUnitColours`, the raid copied in locally as NOTES.md says):
+   the log's "Air battle: earned colours:" lines (on, then each group and model with its step and scheme); the 354th's
+   Mustangs with a purple spinner and a narrow orange band behind it, the 303rd's B-17s with bottle green spinners and
+   fin tip, Jagdgeschwader 1's Fw 190s with an orange spinner, a purple band at the cowl's lip and the tail halved orange
+   over cream; nothing else recoloured, near and far alike; on a checks or stripes tail with a marking (the Yak's star,
+   the MC.202's or SM.79's cross), the marking on its own plain patch and the pattern round it; a short hitch the first time a coloured model appears (its
+   file read once a battle); the frame rate as before.
+   (Joined onto wave 1 on 25 November; numbered 59, after the wave-2 plan's 55 to 58.)
