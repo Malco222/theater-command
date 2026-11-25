@@ -4,7 +4,8 @@
 // the switch off nothing of theirs is ever set; that they hide in a town's houses, fire from hiding beyond any ambush's
 // range and are found in time; that what they do to a block is a capped pin and nerve, never harm to a tank; that a team
 // never routs and slips away at most twice; and that the men drawn are sniper and spotter pairs whose rounds are aimed
-// singly, never two of a team at once, whose kills are shots, never shells, and whose hidden shots show no flash.
+// singly, never two of a team at once, whose kills are shots, never shells, and whose hidden shots show no flash, nor
+// any dispatch where the shooter lies.
 import { describe, expect, it } from 'vitest';
 import groundCard from '../data/campaign/ground.json';
 import { LAND, LandBattle, PRACTICE_GROUNDS, partsFor, practiceTicket, sniperShare, withSnipers, withTeams } from '../src/battle/land';
@@ -141,6 +142,26 @@ describe('sniper teams: on the field', () => {
     expect(out.pinMost).toBeGreaterThan(0);
     expect(out.pinMost).toBeLessThanOrEqual(LAND.pin.most + 1e-9);
     expect(out.slipsMost).toBeLessThanOrEqual(LAND.snipers.slip.most);
+  }, 240_000);
+
+  it('never places a hidden enemy sniper in a dispatch: his first shot is told where it lands', () => {
+    const t = withSnipers(ticket('urban', 3));
+    const b = new LandBattle({ ...t, att: { ...t.att, human: true } });
+    b.ai.att = b.ai.def = true;
+    b.hideOn();
+    const theirs = new Set(b.units.filter((u) => u.team === 'snp' && u.side === 'def').map((u) => u.id));
+    let placed = 0, firedHidden = 0, told = 0;
+    for (let k = 0; !b.over && k < 60000; k++) {
+      b.step();
+      for (const id of theirs) { const u = b.unit(id)!; if (u.hid && u.engaged !== undefined) firedHidden++; }
+      for (const e of b.view('att').events) {
+        for (const id of [e.unit, e.by]) if (id !== undefined && theirs.has(id) && b.unit(id)!.hid) placed++;
+        if (e.what === 'contact' && e.unit === undefined && /troops are attacking your/.test(e.text)) told++;
+      }
+    }
+    expect(firedHidden).toBeGreaterThan(0);
+    expect(told).toBeGreaterThan(0);
+    expect(placed).toBe(0);
   }, 240_000);
 
   it('draws sniper and spotter pairs: single aimed rifle rounds, kills that are shots and never shells, the spotter on his glasses beside him', () => {

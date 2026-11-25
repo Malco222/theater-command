@@ -2782,7 +2782,17 @@ export class LandBattle implements BattleSim<LandUnit> {
       // He knows a block one of his has fought, his guns' target too, and one of theirs that has struck his in contact;
       // their guns firing from far back are not contact (b464(2)). Fire on cover finds nothing yet.
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; if (!blind) t.found = true; }
-      if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
+      if (!u.met) {
+        u.met = true;
+        // A hidden sniper team's first shot (the design director's sniper ruling Q7, guard 3): the player it falls on
+        // hears of it where his block is struck, never where the shooter lies, and the dispatch names nothing of him,
+        // with the fog of war on or off (hidden is hidden).
+        const unseen = u.team === 'snp' && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
+        if (u.side === 'att' || !t.met) {
+          if (unseen) this.say({ what: 'contact', side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
+          else this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
+        }
+      }
       // A sniper team's shot at a tank block is at her commanders' heads: no blow, no harm, no hold on her (Q3); she
       // closes up (LAND.closed). It draws no die.
       if (u.team === 'snp' && t.kind === 'arm') { if (!blind) t.closedTo = Math.round((this.t + LAND.closed.secs) * 1000) / 1000; continue; }
