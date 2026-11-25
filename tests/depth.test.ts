@@ -1,6 +1,6 @@
 // Version 66: how deep the player plays (the grand campaign; none of it in the historical scenarios).
 //
-// 1. Six desks the player can run himself or leave to his staff: research, building and trade, diplomacy, the secret
+// 1. Seven desks the player can run himself or leave to his staff: research, recruitment, towns and trade (one desk, building and trade, until release 2), diplomacy, the secret
 //    service, the air war, the navy. For research, building, the air war and the navy the staff is the routine a
 //    computer nation uses. Armies and battles are always the player's.
 // 2. The staff spends only out of the share of the treasury the player allows it for the month.
