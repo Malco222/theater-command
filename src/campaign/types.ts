@@ -723,6 +723,12 @@ export interface Fleet extends Storied {
   lane?: string;
   /** Month the player last sent this fleet straight at an enemy fleet: once a month (release 2, fleetattack.ts; written only under that switch). */
   attacked?: number;
+  /**
+   * Month this fleet last sought battle: on the seeking side of a fleet action, by order or in a month-end meeting, or
+   * sent at the enemy by an order that missed (release 2, the switch 'seekOnce'; written only under it). It seeks no
+   * more that month; it can still be found and fought.
+   */
+  sought?: number;
   /** Month the fleet last shelled a coast: its guns speak once a month (the grand campaign). */
   shelled?: number;
   /** The month each nation last had this fleet in contact: it fought it, was shelled by it, or was struck by its aircraft (the grand campaign). */

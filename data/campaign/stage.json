@@ -48,5 +48,7 @@
   "_heavySeas": "Heavy seas (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts, data/campaign/heavyseas.json). Gales blow under a closed sky at sea, mostly in winter: ships can sail into a sea in a gale but not on through it that month, convoys through one are late, and a shadow may lose its quarry in one. The same for every country. Switchable in any month from OPTIONS.",
   "heavySeas": false,
   "_shadowRelay": "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
-  "shadowRelay": false
+  "shadowRelay": false,
+  "_seekOnce": "A fleet seeks battle once a month (release 2; the design director's ruling of 25 November 2026, 02:38Z, on the navy thread's finding that a fleet could seek more than once: in every allied nation's month-end meeting, and at month's end after an order of attack that missed or struck a harbour; src/campaign/navy.ts). Each fleet on the seeking side of a fleet action, by the player's order or in any nation's month-end meeting, the player's and the computer's alike, is marked with the month; a marked fleet is left out of every later meeting that month and cannot be sent at the enemy again. An order of attack counts whether it finds its quarry or misses. Defenders are never marked: a fleet that fought can still be found and fought. Off: nothing is marked and every war is the war without it.",
+  "seekOnce": false
 }

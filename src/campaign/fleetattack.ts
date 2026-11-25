@@ -22,7 +22,7 @@ import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
 import { allied, atWar, headline, worksFor } from './game';
 import { fogOn } from './intel';
-import { CLASSES, NAVY, airOver, atSea, fleetAction, fleetName, fleetPower, fleetReach, sail, seaRng, shipCount, surfaceShips } from './navy';
+import { CLASSES, NAVY, airOver, atSea, fleetAction, fleetName, fleetPower, fleetReach, hasSought, markSought, sail, seaRng, shipCount, surfaceShips } from './navy';
 import { lossAt, shares, type SeaPlanFleet, type SeaPlanSide } from './seaplan';
 import { seaWhere } from './sea-words';
 import type { Fleet, Game, SeaReport, Ships } from './types';
@@ -80,6 +80,8 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
   if (surfaceShips(f) <= 0) return 'Submarines fight no fleet action: they raid shipping, and escorts hunt them.';
   if (f.attacked === g.turn) return `The ${f.name} has already been sent at the enemy this month.`;
+  // (Release 2, seekOnce) A fleet that sought battle in an earlier meeting this month (its own side's or an ally's).
+  if (hasSought(g, f)) return `The ${f.name} has already sought battle this month: a fleet seeks battle once a month.`;
   const t = g.fleets.find((x) => x.id === target);
   if (!t || !shipCount(t.ships) || fleetKnown(g, t, f.nat) === 'none') return 'No such enemy fleet is known.';
   if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;
@@ -94,8 +96,9 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
 
 /** Ours: the fleet, and every fleet of its side already patrolling that sea that is at war with the enemy's side. */
 function oursIn(g: Game, f: Fleet, zone: number, foe: string): Fleet[] {
+  // (Release 2, seekOnce) A fleet there that has sought battle this month does not join in: it seeks once a month.
   return [f, ...g.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === 'patrol' && surfaceShips(x) > 0
-    && (x.nat === f.nat || allied(g, x.nat, f.nat)) && atWar(g, x.nat, foe))];
+    && !hasSought(g, x) && (x.nat === f.nat || allied(g, x.nat, f.nat)) && atWar(g, x.nat, foe))];
 }
 
 /** His: the target, and every fleet of his side that stands with it (patrolling that sea, or lying in that harbour). */
@@ -253,6 +256,8 @@ export function orderFleetAttack(g: Game, id: number, target: number): FleetAtta
   const at = groundOf(g, f, t)!;
   if (!sail(g, f, at.zone, 'patrol')) return null;
   f.attacked = g.turn;
+  // (Release 2, seekOnce) The order is the month's seek whether it finds the enemy or not: the search was the effort.
+  markSought(g, [f]);
   const news = g.headlines.length;
   const told = (): string => g.headlines.slice(news).reverse().find((h) => h.kind === 'battle')?.text ?? '';
   const zone = g.seas[at.zone];

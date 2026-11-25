@@ -917,7 +917,9 @@
     _heavySeas: "Heavy seas (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts, data/campaign/heavyseas.json). Gales blow under a closed sky at sea, mostly in winter: ships can sail into a sea in a gale but not on through it that month, convoys through one are late, and a shadow may lose its quarry in one. The same for every country. Switchable in any month from OPTIONS.",
     heavySeas: false,
     _shadowRelay: "The shadow relay (release 2; Brian 24 November 2026 20:38Z, 'yes to all'; src/campaign/shadow.ts, data/campaign/shadow.json 'relay'). Read only with shadowing on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. Switchable in any month from OPTIONS.",
-    shadowRelay: false
+    shadowRelay: false,
+    _seekOnce: "A fleet seeks battle once a month (release 2; the design director's ruling of 25 November 2026, 02:38Z, on the navy thread's finding that a fleet could seek more than once: in every allied nation's month-end meeting, and at month's end after an order of attack that missed or struck a harbour; src/campaign/navy.ts). Each fleet on the seeking side of a fleet action, by the player's order or in any nation's month-end meeting, the player's and the computer's alike, is marked with the month; a marked fleet is left out of every later meeting that month and cannot be sent at the enemy again. An order of attack counts whether it finds its quarry or misses. Defenders are never marked: a fleet that fought can still be found and fought. Off: nothing is marked and every war is the war without it.",
+    seekOnce: false
   };
 
   // ../../src/campaign/stage.ts
@@ -967,6 +969,7 @@
   var SEAMINES_STAGE = staged("TC_SEAMINES", "seaMines");
   var HEAVYSEAS_STAGE = staged("TC_HEAVYSEAS", "heavySeas");
   var SHADOWRELAY_STAGE = staged("TC_SHADOWRELAY", "shadowRelay");
+  var SEEKONCE_STAGE = staged("TC_SEEKONCE", "seekOnce");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -32725,6 +32728,7 @@
     if (SEAMINES_STAGE) g2.flags.seaMines = 1;
     if (HEAVYSEAS_STAGE) g2.flags.heavySeas = 1;
     if (SHADOWRELAY_STAGE) g2.flags.shadowRelay = 1;
+    if (SEEKONCE_STAGE) g2.flags.seekOnce = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -47786,7 +47790,7 @@
       const z = zone.id;
       const foes = g2.fleets.filter((f) => f.zone === z && atSea(f) && atWar(g2, f.nat, nat) && shipCount(f.ships) > 0);
       if (!foes.length) continue;
-      const mine4 = g2.fleets.filter((f) => f.zone === z && f.stance === "patrol" && f.shadow === void 0 && surfaceShips(f) > 0 && (f.nat === nat || allied(g2, f.nat, nat) && foes.some((e) => atWar(g2, f.nat, e.nat))));
+      const mine4 = g2.fleets.filter((f) => f.zone === z && f.stance === "patrol" && f.shadow === void 0 && !hasSought(g2, f) && surfaceShips(f) > 0 && (f.nat === nat || allied(g2, f.nat, nat) && foes.some((e) => atWar(g2, f.nat, e.nat))));
       if (!mine4.some((f) => f.nat === nat)) continue;
       const rng = seaRng(g2, `battle:${z}:${nat}`);
       const met2 = foes.filter((f) => surfaceShips(f) > 0 && (f.stance === "patrol" || rng.chance(NAVY.battle.catchRaider)));
@@ -47821,6 +47825,7 @@
     const where = at4 ? `at ${at4.port}` : seaWhere(zone.name);
     const A = sum3(mine4) + airA, D2 = Math.max(1, (at4 ? sum3(met2) * at4.anchor + at4.shore : sum3(met2)) + airD);
     const att = mine4.map(sideOf2), def = met2.map(sideOf2);
+    markSought(g2, mine4);
     const played = seaField.fought?.({ turn: g2.turn, zone: z, nat, mine: mine4.map((f) => f.id), met: met2.map((f) => f.id), A, D: D2, airA, airD });
     const R2 = played ? played.R : A / D2 * rng.range(0.8, 1.2);
     const won = R2 >= 1;
@@ -47950,6 +47955,15 @@
     return !!ev && g2.flags.open === 1 && nat !== g2.human && !!g2.flags[ev];
   }
   var keptByHand = (g2, f) => f.ordered === true && f.nat === g2.human;
+  var seekOnceOn = (g2) => g2.flags.open === 1 && g2.flags.seekOnce === 1;
+  function setSeekOnce(g2, on) {
+    if (on) g2.flags.seekOnce = 1;
+    else delete g2.flags.seekOnce;
+  }
+  var hasSought = (g2, f) => seekOnceOn(g2) && f.sought === g2.turn;
+  function markSought(g2, fs) {
+    if (seekOnceOn(g2)) for (const f of fs) f.sought = g2.turn;
+  }
   function navalAI(g2, nat, orders2) {
     if (byHand(g2, nat, "navy")) return;
     const n = g2.nations[nat];
@@ -56661,6 +56675,7 @@
     if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
     if (surfaceShips(f) <= 0) return "Submarines fight no fleet action: they raid shipping, and escorts hunt them.";
     if (f.attacked === g2.turn) return `The ${f.name} has already been sent at the enemy this month.`;
+    if (hasSought(g2, f)) return `The ${f.name} has already sought battle this month: a fleet seeks battle once a month.`;
     const t = g2.fleets.find((x) => x.id === target);
     if (!t || !shipCount(t.ships) || fleetKnown(g2, t, f.nat) === "none") return "No such enemy fleet is known.";
     if (!atWar(g2, f.nat, t.nat)) return `${g2.nations[t.nat]?.name ?? t.nat} is not at war with ${g2.nations[f.nat].name}.`;
@@ -56671,7 +56686,7 @@
     return null;
   }
   function oursIn(g2, f, zone, foe) {
-    return [f, ...g2.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === "patrol" && surfaceShips(x) > 0 && (x.nat === f.nat || allied(g2, x.nat, f.nat)) && atWar(g2, x.nat, foe))];
+    return [f, ...g2.fleets.filter((x) => x.id !== f.id && x.zone === zone && x.stance === "patrol" && surfaceShips(x) > 0 && !hasSought(g2, x) && (x.nat === f.nat || allied(g2, x.nat, f.nat)) && atWar(g2, x.nat, foe))];
   }
   function theirsAt(g2, f, t, at4) {
     const side5 = (x) => x.id !== t.id && (x.nat === t.nat || allied(g2, x.nat, t.nat)) && atWar(g2, x.nat, f.nat) && shipCount(x.ships) > 0;
@@ -56795,6 +56810,7 @@
     const at4 = groundOf2(g2, f, t);
     if (!sail(g2, f, at4.zone, "patrol")) return null;
     f.attacked = g2.turn;
+    markSought(g2, [f]);
     const news3 = g2.headlines.length;
     const told2 = () => g2.headlines.slice(news3).reverse().find((h) => h.kind === "battle")?.text ?? "";
     const zone = g2.seas[at4.zone];
@@ -90644,6 +90660,8 @@
       gales: [...galeSeas(s)],
       // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
       shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
+      // (Release 2, navy.ts) Whether a fleet seeks battle at most once a month, by order or at a month's end.
+      seekOnce: seekOnceOn(s),
       // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
       settledTowns: settledTownsOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
@@ -96098,6 +96116,12 @@ ${standing5}`,
       note4 = part[0] === "seaminesrule" ? seaMinesOn(s) ? "Mines at sea are on: a fleet with destroyers, cruisers or submarines can lay a field from its page, across a narrow sea or off an enemy harbour." : "Mines at sea are off: every field is gone." : part[0] === "heavyseasrule" ? heavySeasOn(s) ? "Heavy seas are on: gales blow under a closed sky at sea, mostly in winter. Ships can sail into a gale but not on through it, and convoys through one are late." : "Heavy seas are off: no gale blows at sea." : shadowRelayOn(s) ? "The shadow relay is on: a shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact." : on ? "The shadow relay will work once shadowing is on." : "The shadow relay is off: shadows stay on station as long as they keep contact.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "seekoncerule") {
+      setSeekOnce(s, part[1] === "on");
+      ok2 = true;
+      note4 = seekOnceOn(s) ? "One battle sought a month is on: a fleet that attacked, by your order or at a month's end, seeks no other battle that month. It can still be attacked." : "One battle sought a month is off: a fleet at sea can seek battle again in its allies' months.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
     if (part[0] === "fleetmines") {
       const id = Number(part[1]), z = Number(part[2]);
       const name = s.fleets.find((x) => x.id === id)?.name ?? "The fleet";
@@ -97414,6 +97438,11 @@ ${standing5}`,
     setShadowRelay(s, !!on);
     return { on: shadowRelayOn(s) };
   };
+  globalThis.TC.seekOnce = (on) => {
+    const s = game();
+    setSeekOnce(s, !!on);
+    return { on: seekOnceOn(s) };
+  };
   globalThis.TC.fleetWhy = (on) => {
     const s = game();
     setFleetWhy(s, !!on);
@@ -97484,6 +97513,10 @@ ${standing5}`,
     shadowrelayrule: (s) => {
       setShadowRelay(s, true);
       return shadowRelayOn(s);
+    },
+    seekoncerule: (s) => {
+      setSeekOnce(s, true);
+      return seekOnceOn(s);
     },
     fleetwhyrule: (s) => {
       setFleetWhy(s, true);

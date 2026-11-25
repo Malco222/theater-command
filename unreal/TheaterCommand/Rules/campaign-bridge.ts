@@ -95,7 +95,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -985,6 +985,8 @@ function drawView() {
     gales: [...galeSeas(s)],
     // (Release 2, shadow.ts) Whether a shadow's fuel runs out and a fresh squadron takes over (the switch as set: it works only with shadowing on).
     shadowRelay: s.flags.open === 1 && s.flags.shadowRelay === 1,
+    // (Release 2, navy.ts) Whether a fleet seeks battle at most once a month, by order or at a month's end.
+    seekOnce: seekOnceOn(s),
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
@@ -6510,6 +6512,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : (shadowRelayOn(s) ? 'The shadow relay is on: a shadow\'s fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact.' : on ? 'The shadow relay will work once shadowing is on.' : 'The shadow relay is off: shadows stay on station as long as they keep contact.');
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'seekoncerule') {
+    // (Release 2, navy.ts) One battle sought a month, switched by the player in any month.
+    setSeekOnce(s, part[1] === 'on');
+    ok = true;
+    note = seekOnceOn(s)
+      ? 'One battle sought a month is on: a fleet that attacked, by your order or at a month\'s end, seeks no other battle that month. It can still be attacked.'
+      : 'One battle sought a month is off: a fleet at sea can seek battle again in its allies\' months.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetmines') {
     // (Release 2, mines.ts) 'fleetmines:<fleet>:<sea>' sails it there and lays a field.
     const id = Number(part[1]), z = Number(part[2]);
@@ -7734,6 +7745,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heavySeas = (on: boolean) => { const s = game(); setHeavySeas(s, !!on); return { on: heavySeasOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shadowRelay = (on: boolean) => { const s = game(); setShadowRelay(s, !!on); return { on: shadowRelayOn(s) }; };
+// (Release 2, navy.ts) One battle sought a month: TC.seekOnce(on) at any time; the options page uses act('seekoncerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seekOnce = (on: boolean) => { const s = game(); setSeekOnce(s, !!on); return { on: seekOnceOn(s) }; };
 // (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
@@ -7766,6 +7779,7 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   seaminesrule: (s) => { setSeaMines(s, true); return seaMinesOn(s); },
   heavyseasrule: (s) => { setHeavySeas(s, true); return heavySeasOn(s); },
   shadowrelayrule: (s) => { setShadowRelay(s, true); return shadowRelayOn(s); },
+  seekoncerule: (s) => { setSeekOnce(s, true); return seekOnceOn(s); },
   fleetwhyrule: (s) => { setFleetWhy(s, true); return fleetWhyOn(s); },
   settledtownsrule: (s) => { setSettledTowns(s, true); return settledTownsOn(s); },
   columns: (s) => setColumns(s, true),

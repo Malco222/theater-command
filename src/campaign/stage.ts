@@ -153,3 +153,8 @@ export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
 export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
 /** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
 export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');
+
+// A fleet seeks battle once a month (release 2; the design director's ruling of 25 November 2026, 02:38Z; navy.ts):
+// the grand campaigns opened while it is true carry the flag 'seekOnce'. Forced by TC_SEEKONCE.
+/** True where new grand campaigns open with each fleet seeking battle at most once a month (stage.json 'seekOnce'). */
+export const SEEKONCE_STAGE: boolean = staged('TC_SEEKONCE', 'seekOnce');
