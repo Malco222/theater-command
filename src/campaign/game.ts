@@ -5145,8 +5145,20 @@ function offerMade(g: Game, nat: string, i: number, o: any): void {
  * and otherwise no last month: it stands until he answers. As first mended the half year reached those too: the
  * skeptic's review of 25 November 2026.)
  */
+/**
+ * A row's words as the rule of dated rows reads them (`expeditions`): its setup words, with the war and the share
+ * (`takes`) the map line's table gives a stood war row in the grand campaign (drawn.ts countingFor). Every reader of
+ * when a row comes, or what it waits for, reads them here, so the offers page and the rule read the same war: as
+ * merged, rowsAwaitingWar read the setup row's war, and listed Italy's Ciamuria and XXVI Corps as waiting for the war
+ * with Britain while the rule held them for the war with Greece (the skeptic's review of 25 November 2026).
+ */
+function countedWords(g: Game, nat: string, row: any[], base: any = row[6] ?? {}): any {
+  const counted = countingFor(g, nat, row);
+  return counted && (counted.war || counted.takes) ? { ...base, ...(counted.war ? { war: counted.war } : {}), ...(counted.takes ? { takes: counted.takes } : {}) } : base;
+}
+
 function offerLast(g: Game, nat: string, row: any[], i: number): number | null {
-  const o = row[6] ?? {};
+  const o = countedWords(g, nat, row);
   if (!offerRow(i)?.form && !farRow(g, nat, row)) return o.until ? o.until - 1 : null;
   const half = rowDue(g, i, row, o) + 6;
   return o.until ? Math.min(o.until - 1, half) : half;
@@ -5158,7 +5170,7 @@ function offerLast(g: Game, nat: string, row: any[], i: number): number | null {
  * 3 corps", "2 of the 3 corps", "the 3 corps"). Null while it stands.
  */
 function offerGone(g: Game, nat: string, row: any[], i: number): string | null {
-  const o = row[6] ?? {}, there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0, last = offerLast(g, nat, row, i);
+  const o = countedWords(g, nat, row), there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0, last = offerLast(g, nat, row, i);
   if (last !== null && g.turn > last) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
   if (o.war && !warOn(g, o.war)) return `The offer to form ${row[2]} has lapsed: the war it was raised for is over.`;
   // (A row of the formations list takes its strength out of the corps it names, in their order, and does not come
@@ -5359,7 +5371,7 @@ export function rowsAwaitingWar(g: Game): { id: number; name: string; with: stri
   if (nat === null || !offersOn(g) || g.flags.open !== 1 || !g.nations[nat]?.alive || shipsItsOwn(g, nat)) return [];
   const out: { id: number; name: string; with: string; pair: [string, string] | null; place: string; offer: boolean }[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
-    const o = row[6] ?? {};
+    const o = countedWords(g, nat, row);
     if (row[1] !== nat || g.flags[`sent:${i}`] || offerOpen(g, nat, i) || leaveOpen(g, nat, i)) return;
     // (As the board stands, the row would take corps of his: when its war begins it is an offer, not a formation.)
     const offer = rowTakes(g, nat, o).length > 0;
@@ -5471,8 +5483,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (The stood war rows, drawn.ts and counting.json: in the grand campaign such a row waits for the war the table
     // names for it, and takes the share of a corps the table names, as W Force's row takes its brigade. The setup row
     // keeps its own words, so no historical scenario moves.)
-    const counted = countingFor(g, nat, row);
-    const o0 = counted && (counted.war || counted.takes) ? { ...o00, ...(counted.war ? { war: counted.war } : {}), ...(counted.takes ? { takes: counted.takes } : {}) } : o00;
+    const o0 = countedWords(g, nat, row, o00);
     const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
