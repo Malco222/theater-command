@@ -1574,6 +1574,14 @@ private:
 	// towns built in since it was opened.
 	int32 HomeFilter = 0, HomeUnfolded = INDEX_NONE, HomeRows = 40, HomeOpenings = 0;
 	TSet<int32> HomeKept;
+	// (Release 2, tc.UI.Ease: Esc steps back one screen at a time.) The pages this one was reached from by their own
+	// doors, the nearest last; and the town whose card was opened from THE HOME FRONT, whose Esc goes back to the board.
+	TArray<FString> PageTrail;
+	int32 TownFromHomeRegion = INDEX_NONE;
+	/** (tc.UI.Ease) Esc on a page: the page it was reached from, if there is one. */
+	bool StepBackPage();
+	/** (tc.UI.Ease) THE HOME FRONT again as it was left: the same towns listed, the same rows unfolded and kept. */
+	void ReturnToHomeFront();
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;

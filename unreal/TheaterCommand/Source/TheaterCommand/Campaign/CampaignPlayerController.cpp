@@ -1847,6 +1847,7 @@ void ACampaignPlayerController::OpenTownFromHome(int32 Region)
 		ClosePage();
 		ShowProvince(Region);
 		OpenTownCard();
+		TownFromHomeRegion = IsEaseStyle() && IsTownCardOpen() ? Region : INDEX_NONE; // (release 2, tc.UI.Ease: Esc goes back to the board)
 		return;
 	}
 	PressPage(FString::Printf(TEXT("open:town:%d"), Region));
@@ -1891,6 +1892,7 @@ void ACampaignPlayerController::OpenTownCard()
 
 void ACampaignPlayerController::CloseTownCard()
 {
+	TownFromHomeRegion = INDEX_NONE; // (release 2, tc.UI.Ease)
 	if (bTownCardOpen)
 	{
 		bTownCardOpen = false;
@@ -2010,6 +2012,8 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	PageTrail.Reset(); // (release 2, tc.UI.Ease: a page opened from outside its rooms begins a new way back)
+	TownFromHomeRegion = INDEX_NONE;
 	if (Id == TEXT("home"))
 	{
 		// (Release 2, THE HOME FRONT) Opened afresh: the towns that can take a building, none unfolded, none kept.
@@ -2040,7 +2044,54 @@ void ACampaignPlayerController::ClosePage()
 		RejoinHeldBack(); // (closed without its order)
 	}
 	bPageOpen = false;
+	PageTrail.Reset(); // (release 2, tc.UI.Ease)
 	LessonPageChanged();
+}
+
+bool ACampaignPlayerController::StepBackPage()
+{
+	FCampaignSession* Session = GetSession();
+	if (!IsEaseStyle() || !Session || !bPageOpen || PageTrail.Num() == 0)
+	{
+		return false;
+	}
+	// (Release 2, tc.UI.Ease) Back through the door it came in by: the room it was reached from, read afresh. A room
+	// that no longer reads (what it was of has gone) is passed by for the one before it.
+	while (PageTrail.Num() > 0)
+	{
+		const FString Back = PageTrail.Pop();
+		FOfficePage Was = Session->Page(Back, SelectedRegion);
+		if (Was.bValid)
+		{
+			if (HeldBackSquadron != INDEX_NONE && Back != HeldBackCard)
+			{
+				RejoinHeldBack(); // (as a room's own door does: the split was for the card being left)
+			}
+			CampaignSounds::Play(this, TEXT("click"), 0.6f);
+			Was.Revision = Page.Revision + 1;
+			Page = MoveTemp(Was);
+			LessonPageChanged();
+			return true;
+		}
+	}
+	return false;
+}
+
+void ACampaignPlayerController::ReturnToHomeFront()
+{
+	// (Release 2, tc.UI.Ease) As OpenPage("home"), which begins the board afresh, but kept as he left it.
+	const int32 Filter = HomeFilter, Unfolded = HomeUnfolded, Rows = HomeRows, Openings = HomeOpenings;
+	const TSet<int32> Kept = HomeKept;
+	OpenPage(TEXT("home"));
+	if (bPageOpen && Page.Home.bValid)
+	{
+		HomeFilter = Filter;
+		HomeUnfolded = Unfolded;
+		HomeRows = Rows;
+		HomeOpenings = Openings; // (the same opening: each list keeps its place)
+		HomeKept = Kept;
+		++Page.Revision;
+	}
 }
 
 void ACampaignPlayerController::PressPage(const FString& Action)
@@ -2119,9 +2170,26 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		// A door from one room to another: the raid planner from the airfield, and back.
 		CampaignSounds::Play(this, TEXT("click"), 0.6f);
 		const int32 Opened = Page.Revision + 1;
-		Page = Session->Page(Action.Mid(5), SelectedRegion);
+		const FString Left = Page.Id, Into = Action.Mid(5);
+		Page = Session->Page(Into, SelectedRegion);
 		Page.Revision = Opened;
 		bPageOpen = Page.bValid;
+		if (IsEaseStyle() && bPageOpen && Left != Into)
+		{
+			// (Release 2, tc.UI.Ease) The way back for Esc: a room's own BACK takes the last step off it, any other door adds one.
+			if (PageTrail.Num() > 0 && PageTrail.Last() == Into)
+			{
+				PageTrail.Pop();
+			}
+			else if (!Left.IsEmpty())
+			{
+				PageTrail.Add(Left);
+				if (PageTrail.Num() > 16)
+				{
+					PageTrail.RemoveAt(0);
+				}
+			}
+		}
 		LessonPageChanged();
 		return;
 	}
@@ -6021,7 +6089,7 @@ void ACampaignPlayerController::Escape()
 			AtomBackAt = FPlatformTime::Seconds();
 			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
 		}
-		else
+		else if (!StepBackPage()) // (release 2, tc.UI.Ease: back to the room it was reached from, where there is one)
 		{
 			ClosePage();
 		}
@@ -6036,7 +6104,13 @@ void ACampaignPlayerController::Escape()
 	}
 	else if (IsTownCardOpen())
 	{
+		// (release 2, tc.UI.Ease: a town opened from THE HOME FRONT goes back to the board, as he left it)
+		const bool bToBoard = IsEaseStyle() && TownFromHomeRegion != INDEX_NONE && TownFromHomeRegion == TownBar.Region;
 		CloseTownCard(); // (tc.UI.TownCard: Esc goes back one card, to the province)
+		if (bToBoard)
+		{
+			ReturnToHomeFront();
+		}
 	}
 	else if (AgentInHand != INDEX_NONE)
 	{
