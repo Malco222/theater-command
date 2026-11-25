@@ -20,9 +20,13 @@
  *     of the town, lies one more ring of villas on their lawns, inside the town's own measure.
  *
  * Where it is and is not: cities and capitals only; never one packed into a small province (it is built tall
- * already); Europe's kits, the Americas' and the railway town's at first (the walled town, the timber town, thatch
- * and tin and the Indian town are as they were). No dice are thrown for it, on or off: the town of today is not moved,
- * and the town seen from high up is laid out as the near one is.
+ * already). "tc.Map.GrandCities" is Europe's kits, the Americas' and the railway town's. The far side's four kits
+ * have their own switch, "tc.Map.GrandCitiesFar", so that each half can pass the Mac or wait apart from the other,
+ * and their own manner: the walled town and the timber town carry corner towers under eaves and hall roofs in place
+ * of turrets and domes (and a walled town's lawns keep clear of its wall); the Indian town's accents are its own white
+ * domes; thatch and tin keeps the heart it has, and at its edge the suburb's villas are white bungalows under tin,
+ * each with a veranda. No dice are thrown for it, on or off: the town of today is not moved, and the town seen from
+ * high up is laid out as the near one is.
  *
  * The towns are built again when the switch is turned (ACampaignMapActor's tick, beside "tc.Speed.TownSquares"): that
  * is one long frame, as when the cities leave room for a quarter. Decoration only: no rule reads it and nothing of it
@@ -34,10 +38,19 @@ namespace
 	TAutoConsoleVariable<int32> CVarGrandCities(
 		TEXT("tc.Map.GrandCities"), 0,
 		TEXT("1: the cities and capitals of the campaign map stand in their grander form (a fuller heart under steeper roofs, turrets and small domes over it, gardens and villas at the edge; every house of the town as it was stays where it stood); 0: the towns as they were. The towns are built again when it is turned."));
+	TAutoConsoleVariable<int32> CVarGrandCitiesFar(
+		TEXT("tc.Map.GrandCitiesFar"), 0,
+		TEXT("1: the same grander form for the cities and capitals of the far side's own kits, each in its own manner (the walled town and the timber town: corner towers under eaves and hall roofs; the Indian town: its white domes; thatch and tin: white bungalows with verandas at its edge); 0: those towns as they were. The towns are built again when it is turned."));
 }
 
 bool ACampaignMapActor::GrandCitiesWanted()
 {
 	static const bool bGrandCitiesAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterGrandCities"));
 	return bGrandCitiesAsked || CVarGrandCities.GetValueOnGameThread() != 0;
+}
+
+bool ACampaignMapActor::GrandCitiesFarWanted()
+{
+	static const bool bGrandCitiesFarAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterGrandCitiesFar"));
+	return bGrandCitiesFarAsked || CVarGrandCitiesFar.GetValueOnGameThread() != 0;
 }

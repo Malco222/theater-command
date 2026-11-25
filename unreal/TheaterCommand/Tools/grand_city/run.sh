@@ -5,7 +5,8 @@
 # square; the terraces step down from it; a turret or a dome stays under a capital's own dome. The suburb never takes
 # a block the builder may lay, never passes the town's own measure, thins toward its rim, keeps off the roads out of
 # the town; its villas stand on their lawns, clear of each other and of their trees, and two gardens never meet, over
-# towns made by chance.
+# towns made by chance. The far side's kits (7 to 10): which kit builds what, every accent no higher than a block's
+# dome in Europe and clear over its own block's ridges, and a walled town's lawns never within the margin of its wall.
 # Usage: Tools/grand_city/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

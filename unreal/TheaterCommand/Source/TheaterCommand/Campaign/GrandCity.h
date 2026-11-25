@@ -96,6 +96,61 @@ namespace TheaterGrandCity
 		return Kind == EAccent::Turret ? TurretTall(Tall) + TurretCap : Kind == EAccent::Dome ? DrumTall(Tall) + DomeRise + DomeSpike : 0.0;
 	}
 
+	// ---- The far side's own (the town kits 7 to 10): the same grander form, in each kit's own manner of building.
+	//
+	// The walled town (7) and the timber town (8) build in tiers under eaves, as their own great buildings do: there
+	// the turret is a corner tower with an eave, a small upper storey and a pointed roof, and the dome is a hall roof,
+	// a low square storey under one wide tent of tile. The Indian town (10) is flat-roofed: every one of its accents is
+	// a dome on a drum, in its own whitewash. Thatch and tin (9) stays as low as it is, with no accents: its grandeur
+	// is at its edge, where the suburb's villas are white bungalows under tin, each with a veranda.
+
+	/** True for the four kits of the far side. */
+	inline bool FarKit(int Look) { return Look >= 7 && Look <= 10; }
+	/** True for the kits that build in tiers under eaves (the walled town and the timber town). */
+	inline bool EavesKit(int Look) { return Look == 7 || Look == 8; }
+	/** True for the kit that keeps the heart it has (thatch and tin): no fuller middle and no accents, the suburb only. */
+	inline bool LowKit(int Look) { return Look == 9; }
+	/**
+	 * The corner tower under eaves: on the turret's shaft an eave this far out all round and this deep, a step up to an
+	 * upper storey this wide and tall, and its pointed roof this wide and high. It tops out where a block's dome does.
+	 */
+	inline constexpr double EaveOut = 0.12, EaveDeep = 0.07, EaveStep = 0.05, UpperWide = 0.3, UpperTall = 0.12, UpperCapWide = 0.26, UpperCap = 0.12;
+	inline double EavesTowerTop(double Tall) { return TurretTall(Tall) + EaveStep + UpperTall + UpperCap; }
+	/** The hall roof: a square storey in the block's court, as wide as the drum, under one tent of tile this far out all round and this high. */
+	inline constexpr double HallEave = 0.14, HallRoof = 0.24;
+	inline double HallTop(double Tall) { return DrumTall(Tall) + HallRoof; }
+	/** The highest point of a block's accent in a kit of the far side. */
+	inline double KitAccentTop(int Look, EAccent Kind, double Tall)
+	{
+		if (Kind == EAccent::None || LowKit(Look))
+		{
+			return 0.0;
+		}
+		if (EavesKit(Look))
+		{
+			return Kind == EAccent::Turret ? EavesTowerTop(Tall) : HallTop(Tall);
+		}
+		return AccentTop(Look == 10 ? EAccent::Dome : Kind, Tall); // (the flat-roofed Indian town: every one a dome)
+	}
+	/**
+	 * The walled town's wall stands as a square, this share of the town's measure from its middle on each side (the
+	 * builder's own WallRing). A lawn is laid wholly inside it or wholly outside it, this far (in house-units) clear
+	 * of it, never under it.
+	 */
+	inline constexpr double WalledRing = 0.9, WallClear = 0.2;
+	/** True where a lawn from (LowA, LowB) to (HighA, HighB), in the plan's own measure, lies clear of a square wall Ring from the middle. */
+	inline bool ClearOfWall(double LowA, double HighA, double LowB, double HighB, double Ring, double Margin)
+	{
+		const double MostA = std::fmax(std::fabs(LowA), std::fabs(HighA)), MostB = std::fmax(std::fabs(LowB), std::fabs(HighB));
+		if (MostA < Ring - Margin && MostB < Ring - Margin)
+		{
+			return true; // (wholly inside the walls)
+		}
+		return LowA > Ring + Margin || HighA < -Ring - Margin || LowB > Ring + Margin || HighB < -Ring - Margin; // (or wholly beyond one side)
+	}
+	/** The bungalow's veranda: a roof of tin this far out all round the house, this share of the way up its wall, and this thick. */
+	inline constexpr double VerandaOut = 0.22, VerandaAt = 0.8, VerandaThick = 0.025;
+
 	// ---- The garden suburb.
 
 	/** A garden: a lawn about the middle of its block (A along the town's streets and B across them, from the block's middle), and trees at its corners. */

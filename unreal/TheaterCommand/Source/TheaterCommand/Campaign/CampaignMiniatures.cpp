@@ -3143,9 +3143,14 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	const bool bCapital = Site.Tier >= 3;
 	const bool bPacked = Site.bPacked;
 	// (Release 2, grander great cities: Campaign/GrandCity.h. The same town, every house where it stood, with a fuller
-	// heart, a turret or a dome on some of its blocks, and gardens at its edge. Europe's kits and the Americas' at first;
-	// never a packed town, which is built tall already. Nothing of it is thrown on the dice.)
-	const bool bGrand = Site.bGrand && !bPacked && (Look <= 6 || Look == 11);
+	// heart, a turret or a dome on some of its blocks, and gardens at its edge. Europe's kits, the Americas' and the
+	// railway town's behind one switch, the far side's four kits behind another; never a packed town, which is built
+	// tall already. Nothing of it is thrown on the dice.)
+	const bool bGrand = !bPacked && (TheaterGrandCity::FarKit(Look) ? Site.bGrandFar : Site.bGrand);
+	// (The far side's kits, behind their own switch: the walled town and the timber town build their accents in tiers
+	// under eaves, the Indian town's are its own white domes, and thatch and tin keeps the heart it has: its grander
+	// form is its edge.)
+	const bool bGrandTall = bGrand && !TheaterGrandCity::LowKit(Look);
 	const double PitchA = 1.95 * Um, PitchB = 1.5 * Um; // a block and its street, along and across
 	const double BlockA = PitchA - 0.3 * Um, BlockB = PitchB - 0.28 * Um; // the block itself
 	// The square: two blocks deep, and four wide before a capital's landmark.
@@ -3296,6 +3301,11 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		{
 			return false;
 		}
+		// (The walled town: a lawn lies wholly inside its wall or wholly outside it, never under it.)
+		if (Look == 7 && !TheaterGrandCity::ClearOfWall(LawnA - HalfLong, LawnA + HalfLong, LawnB - HalfWide, LawnB + HalfWide, Reach * TheaterGrandCity::WalledRing, TheaterGrandCity::WallClear * Um))
+		{
+			return false;
+		}
 		Box(Stand(LawnA, LawnB, Lift), FVector(Garden.Long, Garden.Wide, Thick) * U, Lawn, Yaw0);
 		if (!bFar)
 		{
@@ -3400,13 +3410,13 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			// (A town packed into a small province is built tight and tall: closed blocks round its square, half as
 			// tall again, and tall terraces to its edge, with no parks and no houses standing apart.)
 			const bool bClosed = bSquareCorner || (bPacked ? (FMath::Abs(A) < SquareHalfA + PitchA && FMath::Abs(B) < SquareHalfB + PitchB) : (Ring < Heart && Local < 0.86));
-			const double Storeys = bPacked ? 1.3 : bGrand ? TheaterGrandCity::Storeys(Ring, Heart, Middle) : 1.0;
+			const double Storeys = bPacked ? 1.3 : bGrandTall ? TheaterGrandCity::Storeys(Ring, Heart, Middle) : 1.0;
 			if (bClosed)
 			{
 				// The heart: a closed block, four wings round a courtyard, taller toward the square.
 				// (grander: it keeps its cornice to the heart's edge, under a steeper roof)
-				const double Tall = bPacked ? 1.45 : bGrand ? TheaterGrandCity::HeartTall(Ring / Heart) : FMath::Lerp(1.25, 0.88, FMath::Min(Ring / Heart, 1.0));
-				const double BlockRoof = bGrand ? TheaterGrandCity::HeartRoof : 0.14;
+				const double Tall = bPacked ? 1.45 : bGrandTall ? TheaterGrandCity::HeartTall(Ring / Heart) : FMath::Lerp(1.25, 0.88, FMath::Min(Ring / Heart, 1.0));
+				const double BlockRoof = bGrandTall ? TheaterGrandCity::HeartRoof : 0.14;
 				bMute = bFar;
 				for (const double Side : { -1.0, 1.0 })
 				{
@@ -3419,20 +3429,39 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 					// (from high up: the whole block as one piece)
 					House(Stand(A, B), BlockA / Um * U, BlockB / Um * U, Tall * U, (bFlatRoofs ? 0.04 : BlockRoof) * U, PaintAt(WallsOf, I, J), Leads, Yaw0);
 				}
-				else if (bGrand && !bSquareCorner)
+				else if (bGrandTall && !bSquareCorner)
 				{
 					// (Grander.) Over the roofs of some of the heart's blocks, chosen by where the block stands: a turret
 					// on its corner nearest the square, or a small dome on a drum in its court. Both are lower and
 					// smaller than a capital's own dome, and the blocks that stand in the square before it carry
-					// neither. Under flat roofs every one of them is a dome.
+					// neither. Under flat roofs every one of them is a dome. (In the walled town and the timber town
+					// the turret is a corner tower under eaves and the dome a hall roof, in the kit's own paints.)
 					const TheaterGrandCity::EAccent Crown = TheaterGrandCity::Accent(I, J, Site.Seed);
+					const bool bEaves = TheaterGrandCity::EavesKit(Look);
 					if (Crown == TheaterGrandCity::EAccent::Turret && !bFlatRoofs)
 					{
 						const double TurretA = A + (A > 0.0 ? -1.0 : 1.0) * (BlockA * 0.5 - 0.21 * Um), TurretB = B + (B > 0.0 ? -1.0 : 1.0) * (BlockB * 0.5 - 0.21 * Um);
 						const double TurretHigh = TheaterGrandCity::TurretTall(Tall) * U;
 						const FVector TurretFoot = Stand(TurretA, TurretB);
 						Box(TurretFoot + FVector(0.0, 0.0, 0.5 * TurretHigh), FVector(TheaterGrandCity::TurretWide * U, TheaterGrandCity::TurretWide * U, TurretHigh), Ashlar, Yaw0);
-						Pillar(TurretFoot + FVector(0.0, 0.0, TurretHigh), TheaterGrandCity::TurretCapWide * U, 0.0, TheaterGrandCity::TurretCap * U, Verdigris, 8);
+						if (bEaves)
+						{
+							const double UpperFoot = TurretHigh + TheaterGrandCity::EaveStep * U;
+							Pillar(TurretFoot + FVector(0.0, 0.0, TurretHigh), (0.5 * TheaterGrandCity::TurretWide + TheaterGrandCity::EaveOut) * U, 0.35 * TheaterGrandCity::TurretWide * U, TheaterGrandCity::EaveDeep * U, Verdigris, 8);
+							Box(TurretFoot + FVector(0.0, 0.0, UpperFoot + 0.5 * TheaterGrandCity::UpperTall * U), FVector(TheaterGrandCity::UpperWide, TheaterGrandCity::UpperWide, TheaterGrandCity::UpperTall) * U, Ashlar, Yaw0);
+							Pillar(TurretFoot + FVector(0.0, 0.0, UpperFoot + TheaterGrandCity::UpperTall * U), TheaterGrandCity::UpperCapWide * U, 0.0, TheaterGrandCity::UpperCap * U, Verdigris, 8);
+						}
+						else
+						{
+							Pillar(TurretFoot + FVector(0.0, 0.0, TurretHigh), TheaterGrandCity::TurretCapWide * U, 0.0, TheaterGrandCity::TurretCap * U, Verdigris, 8);
+						}
+					}
+					else if (Crown != TheaterGrandCity::EAccent::None && bEaves)
+					{
+						const double HallHigh = TheaterGrandCity::DrumTall(Tall) * U;
+						const FVector HallFoot = Stand(A, B);
+						Box(HallFoot + FVector(0.0, 0.0, 0.5 * HallHigh), FVector(TheaterGrandCity::DrumWide * U, TheaterGrandCity::DrumWide * U, HallHigh), Ashlar, Yaw0);
+						Pillar(HallFoot + FVector(0.0, 0.0, HallHigh), (0.5 * TheaterGrandCity::DrumWide + TheaterGrandCity::HallEave) * U, 0.0, TheaterGrandCity::HallRoof * U, Verdigris, 8);
 					}
 					else if (Crown != TheaterGrandCity::EAccent::None)
 					{
@@ -3573,8 +3602,18 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 						continue;
 					}
 					Windows = Villa.bLit ? AllWindows : nullptr;
-					House(Stand(VillaA, VillaB), Villa.Long * U, Villa.Wide * U, Villa.High * U, (bFlatRoofs ? 0.04 : Villa.Roof) * U,
-						FLinearColor(FColor::FromHex(WallsOf[Look][Villa.Wall])), FLinearColor(FColor::FromHex(RoofsOf[Look][Villa.Tile])), Yaw0 + Villa.Turn);
+					if (TheaterGrandCity::LowKit(Look))
+					{
+						// (Thatch and tin: the suburb's villas are white bungalows under tin, each with its veranda.)
+						House(Stand(VillaA, VillaB), Villa.Long * U, Villa.Wide * U, Villa.High * U, Villa.Roof * U, Ashlar, Verdigris, Yaw0 + Villa.Turn);
+						Box(Stand(VillaA, VillaB) + FVector(0.0, 0.0, TheaterGrandCity::VerandaAt * Villa.High * U),
+							FVector(Villa.Long + TheaterGrandCity::VerandaOut, Villa.Wide + TheaterGrandCity::VerandaOut, TheaterGrandCity::VerandaThick) * U, Verdigris, Yaw0 + Villa.Turn);
+					}
+					else
+					{
+						House(Stand(VillaA, VillaB), Villa.Long * U, Villa.Wide * U, Villa.High * U, (bFlatRoofs ? 0.04 : Villa.Roof) * U,
+							FLinearColor(FColor::FromHex(WallsOf[Look][Villa.Wall])), FLinearColor(FColor::FromHex(RoofsOf[Look][Villa.Tile])), Yaw0 + Villa.Turn);
+					}
 					Windows = AllWindows;
 				}
 			}
