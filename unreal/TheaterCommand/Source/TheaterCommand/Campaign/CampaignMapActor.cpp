@@ -4722,7 +4722,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	FMiniatureMesh Model;
 	const double Unit = UnitScale * 2.1; // the size the towns are built to
 	int32 Count = 0;
-	int32 RingTowns = 0, RingAsked = 0, RingSeated = 0, RingRows = 0, RingTwos = 0, RingNone = 0; // (release 2, the flak brief: what the ring came to, for the log)
+	int32 RingTowns = 0, RingAsked = 0, RingSeated = 0, RingRows = 0, RingTwos = 0, RingNone = 0, RingPlots = 0; // (release 2, the flak brief: what the ring came to, for the log)
 	// (The flak ring's second mend.) Which of a town's six public plots are built on or going up, a bit a line, as
 	// ShowCivic was last given them: a pit makes way for those.
 	TMap<int32, int32> PlotsTaken;
@@ -5261,6 +5261,9 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					// is taken away. The first pit by the track never moves (ruling 125): there the plot loses, as today.
 					// (Every pit in the way is lifted before any is set down again, so that a pit is tried against the
 					// others where they will stand, and never against a place another pit is about to leave.)
+					// (Whether the ground alone seated a ring, before any pit made way: the art director, 03:39Z, has a
+					// town that loses its ring to a public building counted apart from one whose ground never seated it.)
+					const bool bRingedBefore = Seated.Num() >= 3 || (Guns < 3 && Seated.Num() == 2);
 					TArray<double, TInlineAllocator<9>> Displaced; // (the home bearings of the pits lifted, the last seated first)
 					for (int32 InTheWay = Seated.Num() - 1; InTheWay >= 1; --InTheWay)
 					{
@@ -5301,7 +5304,8 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 						// (the art director, 25 November 2026: the log names any town that seats under two thirds of its pits,
 						// one that seats only two, and one that falls back, in those words, so that they can be counted)
 						UE_LOG(LogTheater, Display, TEXT("Flak ring: %s (level %d) seats %d of the %d pits it asks%s"), *Region.Name, Guns, Seated.Num(), Asked,
-							!bRinged ? TEXT(" and falls back to the row") : Seated.Num() == 2 ? TEXT(", on two sides of the town") : TEXT(""));
+							!bRinged ? (bRingedBefore ? TEXT(" and falls back to the row, its pits having made way for a public building") : TEXT(" and falls back to the row"))
+								: Seated.Num() == 2 ? TEXT(", on two sides of the town") : TEXT(""));
 					}
 					if (bRinged)
 					{
@@ -5316,6 +5320,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					else
 					{
 						++RingRows; // (it keeps today's row)
+						RingPlots += bRingedBefore ? 1 : 0; // (and of those, the towns whose ground did seat a ring)
 					}
 				}
 				else if (bFlakRing)
@@ -5432,8 +5437,9 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	{
 		// (for the reader of a picture run: how many towns have guns, how many pits their levels ask and how many found a seat)
 		// (the mend of 25 November 2026: and how many seat only two, fall back to the row, or have no ground for a gun at all)
-		UE_LOG(LogTheater, Display, TEXT("Flak ring (tc.Look.FlakRing): %d towns with guns, %d pits asked, %d seated in rings, %d towns seat only two, %d towns fall back to the row, %d towns have nowhere to stand a gun"),
-			RingTowns, RingAsked, RingSeated, RingTwos, RingRows, RingNone);
+		// (her ask of 03:39Z: and, of the towns that fall back, how many do so because pits made way for a public building)
+		UE_LOG(LogTheater, Display, TEXT("Flak ring (tc.Look.FlakRing): %d towns with guns, %d pits asked, %d seated in rings, %d towns seat only two, %d towns fall back to the row (%d of them for a public building), %d towns have nowhere to stand a gun"),
+			RingTowns, RingAsked, RingSeated, RingTwos, RingRows, RingPlots, RingNone);
 	}
 }
 
