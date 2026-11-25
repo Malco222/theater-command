@@ -2360,7 +2360,10 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   const sum = (fs: Fleet[]): number => fs.reduce((s, f) => s + fleetPower(g, f), 0);
   const names = (fs: Fleet[]): string => { const l = fs.map(fleetName); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
   const where = at ? `at ${at.port}` : `in the ${zone.name}`;
-  const A = sum(mine) + airA, D = Math.max(1, (at ? sum(met) * at.anchor + at.shore : sum(met)) + airD);
+  // (1.5.3, playtest #26) Each side's strength as it came to the battle, summed before any ship goes down: the report's
+  // "before the battle" line was summed after the sinkings.
+  const powA = sum(mine), powD = sum(met);
+  const A = powA + airA, D = Math.max(1, (at ? powD * at.anchor + at.shore : powD) + airD);
   const att = mine.map(sideOf), def = met.map(sideOf);
   const R = (A / D) * rng.range(0.8, 1.2);
   const won = R >= 1;
@@ -2371,7 +2374,7 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
   const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
   const lines: TicketLine[] = [
-    { label: 'Forces', value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum(mine))} against ${Math.round(sum(met))} before the battle` },
+    { label: 'Forces', value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(powA)} against ${Math.round(powD)} before the battle` },
   ];
   if (airA > 0.5 || airD > 0.5) lines.push({ label: 'Air', value: airA > airD ? 'The attacker has the stronger air cover from the coast' : airD > airA ? 'The defender has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
   const flag = (fs: Fleet[]): string => fs.filter((f) => f.admiral).map((f) => `${f.admiral!.name}${f.admiral!.level > 1 ? ` (level ${f.admiral!.level})` : ''}`).join(', ') || 'no admiral named';
@@ -2401,7 +2404,8 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   if (at) {
     rep.port = at.port;
     const n = airA > 0.5 || airD > 0.5 ? 2 : 1;
-    lines.splice(n, 0, { label: 'In harbour', value: `The ${names(met)} ${met.length === 1 ? 'was' : 'were'} caught at anchor at ${at.port}`, effect: `Ships at anchor fight at ${Math.round(at.anchor * 100)}% of their weight` });
+    // (1.5.3, playtest #26) "The Battle Fleet was caught", not "The the Battle Fleet": a fleet's name brings its own article.
+    lines.splice(n, 0, { label: 'In harbour', value: `${cap(names(met))} ${met.length === 1 ? 'was' : 'were'} caught at anchor at ${at.port}`, effect: `Ships at anchor fight at ${Math.round(at.anchor * 100)}% of their weight` });
     if (at.shore > 0) lines.splice(n + 1, 0, { label: 'Shore batteries', value: `The guns of ${at.port} fire on the attackers`, effect: `Worth ${Math.round(at.shore)} to the defence` });
   }
   g.seaReports.push(rep);

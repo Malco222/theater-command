@@ -2,7 +2,8 @@
 // report's strength line: no rule reads any of them, and the card stays a forecast that throws no die.
 //   25  a fleet the player's side has only reported keeps its name and its port to itself, in every refusal and on the card;
 //   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly; a battleship
-//       or carrier the likely count rounds away, though it may well go down, named on that line;
+//       or carrier the likely count rounds away, though it may well go down, named on that line; and in the sea report,
+//       "The Battle Fleet was caught at anchor" (not "The the"), and each side's strength summed before the sinkings;
 //   33  odds whose two ends read the same are said once: "More than 10 to 1 all day".
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
@@ -250,6 +251,33 @@ describe('26: a heavy ship at real risk is named on the likely line', () => {
     for (const side of ['ours', 'theirs'] as const) for (const c of ['bb', 'cv'] as const) {
       if (plan.expected[side][c] < HEAVY_RISK) expect(plan.risk[side]).not.toContain(c);
     }
+  });
+});
+
+describe('26: the sea report of an attack in harbour', () => {
+  it('"The Home Fleet was caught at anchor", and the strength before the battle is the strength the card gave', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = germany(seed);
+      setFog(g, false);
+      const battle = fleet(g, 'Battle Fleet'), home = fleet(g, 'Home Fleet');
+      sail(g, home, home.home, 'port');
+      const plan = planFleetAttack(g, battle.id, home.id, null)!;
+      const forecast = plan.lines.find((l) => l.label === 'Forces')!.effect!;
+      const out = orderFleetAttack(g, battle.id, home.id)!;
+      expect(out.outcome).toBe('fought');
+      const lines = out.report!.lines;
+      expect(lines.find((l) => l.label === 'In harbour')!.value).toBe(`The Home Fleet was caught at anchor at ${home.port}`);
+      expect(lines.find((l) => l.label === 'Forces')!.effect).toBe(`${forecast} before the battle`);
+      for (const l of lines) expect(`${l.value} ${l.effect ?? ''}`).not.toMatch(/\bthe the\b/i);
+    }
+    // A name with no article of its own reads bare: "Force H was caught at anchor" (the Home Fleet under that name).
+    const g = germany(3);
+    setFog(g, false);
+    const battle = fleet(g, 'Battle Fleet'), home = fleet(g, 'Home Fleet');
+    sail(g, home, home.home, 'port');
+    home.name = 'Force H';
+    const out = orderFleetAttack(g, battle.id, home.id)!;
+    expect(out.report!.lines.find((l) => l.label === 'In harbour')!.value).toBe(`Force H was caught at anchor at ${home.port}`);
   });
 });
 
