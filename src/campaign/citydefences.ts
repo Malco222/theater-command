@@ -157,7 +157,7 @@ export function markStormed(g: Game, r: Region): void {
 
 /**
  * The town works at the end of `nat`'s month (beside digIn, after every storm of the month has been fought): a town it
- * holds with a living corps of its garrison inside, and not stormed since its last month end, gains a month, to
+ * holds with a living corps of its own in the garrison, and not stormed since its last month end, gains a month, to
  * works.most, under siege too; a town of its with no garrison loses one. Works on ground that has changed holder are
  * cleared whoever's month it is. Off: nothing is read or written.
  */
@@ -171,7 +171,9 @@ export function townWorksMonth(g: Game, nat: string): void {
     const stormed = g.flags[hit] !== undefined;
     if (stormed) delete g.flags[hit];
     const m = g.flags[key] ?? 0;
-    if (garrisonOf(r).some((c) => !c.dead)) {
+    // His own corps only (form section 5, "at least one of his corps inside"): an ally's corps in the garrison puts up
+    // nothing for him. A corps in a garrison never marches joint, so its nation is its army.
+    if (garrisonOf(r).some((c) => !c.dead && c.nat === nat)) {
       if (stormed || m >= CITYDEF.works.most) continue;
       g.flags[key] = m + 1;
       g.flags[by] = idx;

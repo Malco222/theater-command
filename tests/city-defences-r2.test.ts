@@ -458,6 +458,24 @@ describe('city defences: a garrison fortifies its town (slice 3)', () => {
     expect(townWorksAt(s.g, s.town)).toBe(2);
   });
 
+  it('grows only for the holder\'s own corps: a garrison of an ally\'s corps alone puts up nothing, and the works fade', () => {
+    const { g, town, inside } = lodzTown(true);
+    // Lodz held by Poland with only another nation's living corps inside.
+    inside!.nat = 'GBR';
+    expect(town.ctrl).toBe('POL');
+    expect(town.garr!.some((c) => !c.dead)).toBe(true);
+    townWorksMonth(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(0);
+    expect(worksFlags(g, town)).toEqual([]);
+    layWorks(g, town, 2);
+    townWorksMonth(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(1);
+    // One of his own corps inside, and it grows again.
+    inside!.nat = 'POL';
+    townWorksMonth(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(2);
+  });
+
   it('gains nothing at the month end after a storm, won or lost, and grows again the month after', () => {
     const { g, town, inside, ger } = lodzTown(true);
     layWorks(g, town, 1);
