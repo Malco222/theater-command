@@ -4784,6 +4784,13 @@ const UNLESS = new Set<string>(((setup as any).expeditions as any[] ?? []).map((
  * under history (a row settled is marked 1; one the grand campaign gave up on, or never sent, 2).
  */
 const rowLanded = (g: Game, name: string): boolean => ((setup as any).expeditions as any[] ?? []).some((row, i) => row[2] === name && (g.flags[`came:${i}`] !== undefined || g.flags[`sent:${i}`] === 1));
+/**
+ * True where a corps a row takes whole (`from`) is not on the board because the dated row of its country that makes it
+ * waits, unsent (`wait:`), and no living corps carries that name yet. Read by `expeditions` under the switch 'fromWait'
+ * alone, on the far side: the row that names it waits with it, and has its half year from the month it comes.
+ */
+const fromWaits = (g: Game, nat: string, from: string[]): boolean => ((setup as any).expeditions as any[] ?? []).some((r2, j) => r2[1] === nat
+  && from.includes(r2[2]) && !g.flags[`sent:${j}`] && g.flags[`wait:${j}`] !== undefined && !g.corps.some((x) => x.nat === nat && !x.dead && x.name === r2[2]));
 
 /**
  * A grand campaign begun after the first day (staff.ts, startOpen): a row whose men history's full-size corps already
@@ -5676,9 +5683,15 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // from the month its corps comes free. A corps already standing where the row forms is not lifted, and takes the
     // row's name as before. Where the player's rows are offers he is asked as before, with his corps in the line or
     // out of it: taking it is his order, not a date's. Switch off: the flag is read and nothing else.)
+    // (Under the same switch, a row whose named corps is not on the board because the dated row that makes it waits,
+    // unsent, is held as that row's corps would hold it: the 18th Division's row at Rangoon names the 25th Army's
+    // 18th Division, whose row at Hainan waits while the 21st Army's 18th Division is in the line at Tungkun. As built
+    // the Rangoon row found nobody to take and came whole from nobody, and the Hainan row, its corps come free, made a
+    // second 18th Division beside it. `fromWaits`.)
     let own = false;
-    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
-      && (onLiveFront(g, nat, x) || (g.flags.fromWait === 1 && !hisOffers(g, nat) && x.reg !== reg?.id && corpsInContact(g, nat, x))))) {
+    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
+      && (onLiveFront(g, nat, x) || (g.flags.fromWait === 1 && !hisOffers(g, nat) && x.reg !== reg?.id && corpsInContact(g, nat, x))))
+      || (g.flags.fromWait === 1 && !hisOffers(g, nat) && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
       else { g.flags[`wait:${i}`] = g.turn; return; }
     }
