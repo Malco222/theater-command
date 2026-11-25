@@ -5,12 +5,15 @@
 //     month" where a harbour on its side can take it, and with none says nothing more than its cut-off line.
 //  2. The browser rings no sea for it (fleetReach still counts from its base, beyond the strait, as the staffs and the
 //     rules want), and a click on a sea, or on its work, is refused with its cut-off line.
+//  3. (The review of 2.) The browser's paper, its hint bar and a right-click on land no longer tell it to click a ringed
+//     sea: they give its cut-off line, as the 3D game's tray does. A fleet also held where this month's battle left it is
+//     refused with that reason first, as the bridge answers it (fleetWhyId).
 import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { cutOff, cutOffLine, fleetReach, harbourFor, rebase, sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { saveGame } from '../src/campaign/save';
-import { beginHuman, humanUp, orderFleet, stepAI } from '../src/campaign/turn';
+import { beginHuman, fleetOptions, humanUp, orderFleet, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import browser from '../src/campaign/ui/main.ts?raw';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -128,14 +131,67 @@ describe('the cut-off fleet on the browser map', () => {
     expect(fleetReach(g, f)).toContain(zoneOf(g, 'tyrr'));
     expect(orderFleet(g, f.id, zoneOf(g, 'tyrr'), 'patrol')).toBe(false);
     expect(orderFleet(g, f.id, f.zone, 'raid')).toBe(false);
-    // The browser answers each refusal with the line before any other reason.
-    expect(browser).toContain('if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = cutOffLine(g, fl) || (gateBar(g, fl, z)?.line ?? ');
-    expect(browser).toContain(': cutOffLine(g, f) || `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;');
-    expect(browser).toContain(': cutOffLine(g, f) || `The ${f.name} cannot be given orders now.`;');
+    // The browser answers each refusal with the line before any other reason (fleetWhy: held first, then cut off).
+    expect(browser).toContain('if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = fleetWhy(fl) || (gateBar(g, fl, z)?.line ?? ');
+    expect(browser).toContain(': fleetWhy(f) || `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;');
+    expect(browser).toContain(': fleetWhy(f) || `The ${f.name} cannot be given orders now.`;');
     // Its list of seas says so in place of "click a ringed sea".
-    expect(browser).toContain('const reachLine = !cut ? `It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here.');
+    expect(browser).toContain(' : !cut ? `It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here.');
     // Not cut off, no line: the old reasons stand.
     expect(orderFleet(g, f.id, f.home, 'port')).toBe(true);
     expect(cutOffLine(g, f)).toBe('');
+  });
+});
+
+describe("the browser's paper for a cut-off fleet in hand", () => {
+  it('the hint bar, a right-click on land and its work buttons give its cut-off line, not "click a ringed sea"', () => {
+    // Each line that sends a fleet in hand to a ringed sea is said only when fleetStuck has nothing to say.
+    expect(browser).toContain('return f ? fleetStuck(f) || `Click a ringed sea to send the ${f.name} there.` : ');
+    expect(browser).toContain('if (fl) return id >= 0 ? fleetStuck(fl) || `The ${fl.name} keeps to the sea: click a ringed sea to send it there.` : \'\';');
+    expect(browser).toContain('} else if (f) ui.msg = fleetStuck(f) || `Click a ringed sea: the ${f.name} will ${seaWork(ui.stance)} there.`;');
+    // fleetStuck is the 3D tray's line: held first, then its cut-off line, its way home where a harbour on its side can
+    // take it, and the red coasts its guns can still shell.
+    expect(browser).toContain('const held = heldLine(f), cut = held ? \'\' : cutOffLine(g, f);');
+    expect(browser).toContain("return `${held || cut}${cut && harbourFor(g, f) ? ' Return to port takes it to a harbour on its side.' : ''}${shellAt.length ? ' Click a red coast to shell it.' : ''}`;");
+    expect(browser).toContain('return heldLine(f) || cutOffLine(g, f);');
+
+    // The rules give the browser what the bridge gives the 3D tray (fleetInHand's cut and homeTip): the same cut-off line,
+    // and a way home exactly where a harbour on its side can take it.
+    const { g, f } = outPast();
+    TC().load(saveGame(g));
+    const hand = TC().fleetInHand(f.id) as { cut: string; homeTip: string; held: string };
+    expect(hand.cut).toBe(cutOffLine(g, f));
+    expect(hand.held).toBe('');
+    expect(!!hand.homeTip).toBe(!!harbourFor(g, f));
+    expect(harbourFor(g, f)).not.toBeNull();
+    for (let r = harbourFor(g, f); r; r = harbourFor(g, f)) r.ctrl = 'UK';
+    TC().load(saveGame(g));
+    const none = TC().fleetInHand(f.id) as { cut: string; homeTip: string };
+    expect(none.cut).toBe(cutOffLine(g, f));
+    expect(none.cut).toMatch(/No friendly harbour on its side can take it\.$/);
+    expect(none.homeTip).toBe('');
+  });
+
+  it('held where this month\'s battle left it as well as cut off, it is refused with the held reason first, as the bridge answers', () => {
+    const { g, f } = outPast();
+    f.attacked = g.turn;
+    const held = fleetOptions(g, f.id)!.held!;
+    expect(held).toBe(`The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`);
+    expect(cutOffLine(g, f)).toMatch(/^Cut off: /);
+    expect(harbourFor(g, f)).not.toBeNull();
+    // Return to port would take it to a harbour on its side, but it is held: the rules refuse it, and every sea.
+    expect(orderFleet(g, f.id, f.home, 'port')).toBe(false);
+    expect(orderFleet(g, f.id, f.zone, 'raid')).toBe(false);
+    // The bridge answers with the held reason, not the cut-off line, and its page's seas say the same.
+    TC().load(saveGame(g));
+    const home = (TC().force('fleet', f.id) as Panel).options.find((o) => o.key.endsWith(':port'))!;
+    const out = TC().forceOrder(home.key) as { ok: boolean; note: string };
+    expect(out.ok).toBe(false);
+    expect(out.note).toBe(held);
+    expect(page(f.id).sections.find((x) => x.heading === 'SEAS IN ITS REACH')?.text).toBe(held);
+    // The browser asks the held reason first (fleetWhy, fleetStuck) and its list of seas gives it in place of the cut-off line.
+    expect(browser).toContain('return f.attacked === g.turn ? fleetOptions(g, f.id)?.held ?? \'\' : \'\';');
+    expect(browser).toContain('const cut = o.held ? \'\' : cutOffLine(g, f);');
+    expect(browser).toContain('const reachLine = o.held ? esc(o.held) : !cut ? ');
   });
 });

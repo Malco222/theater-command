@@ -1843,7 +1843,7 @@ function noOrderLine(id: number, z: number): string {
   if (!me || (id < 0 && z < 0)) return '';
   // A fleet in hand keeps to the sea (a right-click on a sea has already sent it there).
   const fl = ui.tab === 'navy' ? myFleet() : null;
-  if (fl) return id >= 0 ? `The ${fl.name} keeps to the sea: click a ringed sea to send it there.` : '';
+  if (fl) return id >= 0 ? fleetStuck(fl) || `The ${fl.name} keeps to the sea: click a ringed sea to send it there.` : '';
   // An air group in hand flies from land, and a carrier's wing from its fleet.
   const af = ui.tab === 'air' ? myAir() : null;
   if (af) return id >= 0 ? '' : af.ship !== undefined ? `${theGroup(af.name)} goes where its fleet goes: pick the fleet up to move it.` : `${theGroup(af.name)} is based on land: right-click a province with an airfield to move it there.`;
@@ -1993,7 +1993,7 @@ function hintText(): string {
   if (ui.tab === 'navy') {
     const f = myFleet();
     if (f && ui.rebase) return `New base for the ${f.name}: click any blue port. The fleet spends the month in harbour there.`;
-    return f ? `Click a ringed sea to send the ${f.name} there.` : 'Pick one of your fleets in the list to give it orders.';
+    return f ? fleetStuck(f) || `Click a ringed sea to send the ${f.name} there.` : 'Pick one of your fleets in the list to give it orders.';
   }
   if (ui.tab === 'air' && airWar(g) && g.human) {
     const f = myAir();
@@ -5495,9 +5495,10 @@ function fleetOrders(f: Fleet): string {
   if (o.merge.length) {
     out += `<h3>Join another fleet here</h3>${o.merge.map((id) => { const x = g.fleets.find((q) => q.id === id)!; return `<div class="pickrow">${hullIcon(x)}<span class="grow"><b>${esc(x.name)}</b><br>${small(esc(capital(shipList(x.ships))))}</span><button class="btn small" data-act="fleetjoin" data-id="${id}" title="The ships of the ${esc(f.name)} sail under the ${esc(x.name)}'s flag from now on.">Join it</button></div>`; }).join('')}`;
   }
-  // (1.5.3, the 1.5.2 review) Cut off beyond a shut strait, no sea is offered or ringed: its line says why, and where it can go.
-  const cut = cutOffLine(g, f);
-  const reachLine = !cut ? `It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${will} there.`
+  // (1.5.3, the 1.5.2 review) Held where this month's battle left it, or cut off beyond a shut strait, no sea is offered: its
+  // line says why, held first as the 3D game's page says it, and a cut-off fleet's line where it can go (no sea is ringed).
+  const cut = o.held ? '' : cutOffLine(g, f);
+  const reachLine = o.held ? esc(o.held) : !cut ? `It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${will} there.`
     : `${esc(cut)} Every sea in its reach lies beyond the shut strait${harbourFor(g, f) ? '. <b>Return to port</b> takes it to a harbour on its side.' : ', so it stays at sea.'}`;
   out += `<h3>Seas in reach</h3><p class="sub" style="margin:0 0 6px">Fleet strength ${num(fleetPower(g, f))}. ${reachLine}</p>${rows}</div>`;
   return out;
@@ -8543,6 +8544,28 @@ function myFleet(): Fleet | null {
   const f = g.fleets.find((x) => x.id === ui.fleet);
   return f && f.nat === g.human && shipCount(f.ships) > 0 ? f : null;
 }
+/** (1.5.3) Why one of the player's fleets stays where this month's battle left it, in the rules' words (fleetOptions().held), as the bridge's heldWhy gives it. '' when it is not held. */
+function heldLine(f: Fleet): string {
+  return f.attacked === g.turn ? fleetOptions(g, f.id)?.held ?? '' : '';
+}
+/**
+ * (1.5.3, the 1.5.2 review) Why one of the player's fleets is refused an order, as the 3D game answers it (the bridge's
+ * fleetWhyId): held where this month's battle left it first, then cut off beyond a shut strait (its card's line). '' for
+ * neither.
+ */
+function fleetWhy(f: Fleet): string {
+  return heldLine(f) || cutOffLine(g, f);
+}
+/**
+ * (1.5.3, the 1.5.2 review) What the paper tells the player of a fleet in hand that is held or cut off, in place of
+ * "click a ringed sea": it can be sent to no sea (and a cut-off one has none ringed). As the 3D game's tray says it: why,
+ * the way home where a harbour on its side can take it, and the coasts its guns can still shell. '' for neither.
+ */
+function fleetStuck(f: Fleet): string {
+  const held = heldLine(f), cut = held ? '' : cutOffLine(g, f);
+  if (!held && !cut) return '';
+  return `${held || cut}${cut && harbourFor(g, f) ? ' Return to port takes it to a harbour on its side.' : ''}${shellAt.length ? ' Click a red coast to shell it.' : ''}`;
+}
 
 /** Opens an airfield under the Air tab: the groups based there and what each is doing. */
 function openAirfield(id: number): void {
@@ -8592,8 +8615,9 @@ function onSea(z: number): void {
     else if (atSea(fl) && fl.zone === z && fl.stance === ui.stance) ui.msg = `The ${fl.name} is already in the ${g.seas[z].name}.`;
     else {
       const stayed = atSea(fl) && fl.zone === z;
-      // (1.5.3) Cut off beyond a shut strait, it is refused with its card's line, as the 3D game answers it (the bridge's fleetWhyId).
-      if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = cutOffLine(g, fl) || (gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`);
+      // (1.5.3) Held where this month's battle left it, or cut off beyond a shut strait, it is refused with that reason, as the
+      // 3D game answers it (the bridge's fleetWhyId).
+      if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = fleetWhy(fl) || (gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`);
       // The piece does not move when only its work changes, so the line says what was ordered.
       else ui.msg = stayed ? `The ${fl.name} stays in the ${g.seas[z].name} and will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`
         : `Ordered: the ${fl.name} sails to ${ui.stance === 'raid' ? 'raid shipping in' : ui.stance === 'hunt' ? 'hunt submarines in' : 'patrol'} the ${g.seas[z].name}.`;
@@ -9008,8 +9032,8 @@ function onClick(e: MouseEvent): void {
       if (f && atSea(f) && f.stance !== 'escort') {
         // The piece does not move when only its work changes, so the line says what was ordered, as a click on its sea does.
         // (The order it is already under is the lit button: pressed again, it stands.)
-        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays in the ${g.seas[f.zone].name} and will ${seaWork(ui.stance)} there.` : cutOffLine(g, f) || `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;
-      } else if (f) ui.msg = `Click a ringed sea: the ${f.name} will ${seaWork(ui.stance)} there.`;
+        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays in the ${g.seas[f.zone].name} and will ${seaWork(ui.stance)} there.` : fleetWhy(f) || `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;
+      } else if (f) ui.msg = fleetStuck(f) || `Click a ringed sea: the ${f.name} will ${seaWork(ui.stance)} there.`;
       refresh(); break;
     }
     case 'fleetsec': {
@@ -9077,7 +9101,7 @@ function onClick(e: MouseEvent): void {
     case 'toport': {
       // The order is said as it is given (ruling 204(d)): the piece may not move on the map at this zoom.
       const f = myFleet();
-      if (f) ui.msg = !atSea(f) ? inHarbour(f) : orderFleet(g, f.id, f.home, 'port') ? `Ordered: the ${f.name} returns to ${f.port}.` : cutOffLine(g, f) || `The ${f.name} cannot be given orders now.`;
+      if (f) ui.msg = !atSea(f) ? inHarbour(f) : orderFleet(g, f.id, f.home, 'port') ? `Ordered: the ${f.name} returns to ${f.port}.` : fleetWhy(f) || `The ${f.name} cannot be given orders now.`;
       ui.rebase = false; refresh(); break;
     }
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
