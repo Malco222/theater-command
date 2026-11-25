@@ -4,6 +4,7 @@
 #include "Battle/DeckCrewCore.h"
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
+#include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the "Sea look:" line)
 #include "Battle/SeaSailors.h"
 #include "Battle/SeaShow.h"
 #include "Battle/ShipGuns.h"
@@ -47,6 +48,8 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
+#include "RenderTimer.h" // (the release 2 ocean, step 0: the threads' times, as the photographer reads them)
+#include "RHI.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Sound/SoundAttenuation.h"
@@ -1479,6 +1482,20 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
 	Speed = FMath::Clamp(static_cast<double>(Pace), 0.25, 4.0);
+	// (the release 2 ocean plan, step 0: a bench run, Tools/sea_bench.sh's "-TheaterSeaBench=drop,span": the frames by
+	// thread counted only after the first drop seconds of play, while the fanless Air warms, and the scene quits span
+	// seconds after that, or at the battle's end, its lines said; "drop,end" plays to the battle's end, the fight with
+	// it; it draws nothing differently)
+	{
+		FString Bench;
+		TArray<FString> BenchBits;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBench="), Bench, false) && Bench.ParseIntoArray(BenchBits, TEXT(","), false) == 2)
+		{
+			ThreadsFrom = FMath::Max(1.0, FCString::Atod(*BenchBits[0]));
+			const double BenchSpan = FCString::Atod(*BenchBits[1]);
+			BenchUntil = BenchSpan > 0.0 ? ThreadsFrom + FMath::Max(10.0, BenchSpan) : 1.0e12;
+		}
+	}
 	// U1 hook (under water): a recording named by its path ("-TheaterSeaBattle=Tools/sea_show/stand-ins/convoy-night.json"),
 	// so a Mac can play a convoy night before the battle's own recordings of one land; its pictures named by its file. Only
 	// in a development build: a shipped game plays what is staged with it.
@@ -1519,6 +1536,31 @@ bool ASeaBattle::BeginMonthScene(const FString& Text, const FString& Name)
 bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString& Where)
 {
 	using namespace SeaParts;
+	// (the release 2 ocean plan, step 0: the sea's look read once, as the scene opens, and kept for the "Sea look:" line:
+	// the tier in force, 0 until step 15 builds it, and every switch of the release 2 sea asked for, read as the engine
+	// reads them, a value to the next space, a flag whole; each step that builds a switch writes its value in force here)
+	SeaLook = SeaLookSwitches::Read([](const SeaLookSwitches::Switch& One, std::string& Value)
+		{
+			const FString Name(UTF8_TO_TCHAR(One.Name));
+			FString Got;
+			const bool bAsked = SeaLookSwitches::TakesValue(One) ? FParse::Value(FCommandLine::Get(), *Name, Got, false) : FParse::Param(FCommandLine::Get(), *Name);
+			Value = TCHAR_TO_UTF8(*Got);
+			return bAsked;
+		});
+	// (the release 2 ocean plan, step 1(a), pay first: DrawMarks' two meshes sent again in place while their shape holds,
+	// -TheaterSeaMarksPool=1; by default, until the Mac's A/B, both made afresh every frame, as today)
+	bMarksPool = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaMarksPool=");
+	// S6 hook (heavy weather; the look bible's S6, the release 2 ocean plan steps 6(b) and 12(b)): the bow sheets under
+	// -TheaterSeaSpray=1, and the hulls' ice under -TheaterSeaIce=1 (the frost set on the stage below). Both off by default:
+	// nothing is drawn. The gale is false here until step 14(c) lands it (the sea gale switch, another thread's, which is not
+	// built and so is read nowhere yet): Beaufort 7 and over, its green seas and spindrift, are the gale's own, and that step
+	// passes its own flag in on this line. The spray's core takes winds to the gale's 24.4 m/s and gates 7 and over behind it
+	// (Battle/FleetSpray, held to it by Tools/sea_waves/spray_test.cpp). The switch is taken here, in its place among the
+	// others, and the last battle's spray dropped at once (a recording that cannot be read leaves none); the spray is made
+	// once the battle's seed is read, below.
+	const bool bSeaSpray = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaSpray=");
+	Weather.Reset();
+	const bool bSeaIce = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaIce=");
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -1542,6 +1584,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		return false;
 	}
 	const uint64 Seed = Rec.Seed ? Rec.Seed : 239;
+	FHeavyWeather::Open(Weather, bSeaSpray, false, Seed); // S6 hook (heavy weather): the bow sheets, with the battle's seed (above)
 	State = MakeShared<FSeaBattleState>(Seed);
 	FSeaBattleState& S = *State;
 	S.Rec = std::move(Rec);
@@ -1579,6 +1622,7 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// the sea inside her hull; the sea's face everywhere else)
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 		{
+			++GroundAsks; // (the release 2 ocean plan, step 0: its asks counted a frame, SayThreadsAndLook)
 			FVector Deck;
 			if (!bOnWater && Stage && Stage->DeckUnder(Point, Deck))
 			{
@@ -1638,6 +1682,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	{
 		Effects->SetSun(Stage->TowardSun());
 	}
+	// S6 hook (ship ice): the frost of the battle's place, month and wind set on the stage, which glazes each hull's colours
+	// as LayShip lays her (Battle/ShipIce; -TheaterSeaIce=1 only, so by default the hulls are laid as made).
+	if (bSeaIce) { FHeavyWeather::Ice(Stage, S.Rec.Board, S.Show.WindSpeed(), S.Show.WindFrom(), S.BeginT); } // S6 hook (ship ice)
 
 	// The paint: the wakes and tracks see-through and unlit (M_Highlight, by each point's alpha), the aircraft as the
 	// air battle's.
@@ -1760,6 +1807,23 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		}
 	}
 	TakeTheRoom(SunAzimuth, SunElevation);
+	// The clouds and the weather (the release 2 ocean plan, step 13): the day's sky from the recording's field, laid
+	// through the air battle's own clouds, with the cloud dome, the clouds' shade on the sea and the far rain behind
+	// their own switches. Nothing is drawn unless one is asked for.
+	{
+		SkyWeather = MakeUnique<FSeaWeather>();
+		FSeaWeather::FRoom WeatherRoom;
+		WeatherRoom.Owner = this;
+		WeatherRoom.Root = Root;
+		WeatherRoom.Key = BattleKey;
+		WeatherRoom.Sun = Stage ? Stage->TowardSun() : FRotator(SunElevation, SunAzimuth, 0.0).Vector();
+		WeatherRoom.UnitsPerMetre = UnitsPerMetre;
+		// (a night action: light{sun} under the horizon, as the convoy nights give it)
+		WeatherRoom.bNight = S.Rec.Board.bLight && S.Rec.Board.SunUp < 0.0;
+		WeatherRoom.bPictures = !ShotFolder.IsEmpty();
+		const SeaShow::Vec Blow = S.Show.Wind();
+		SkyWeather->Begin(WeatherRoom, SeaLook, Text, Seed, Middle, Middle, FVector2D(Blow.X, Blow.Y));
+	}
 	if (Effects)
 	{
 		// (the sky is set: the kit's far smoke pales into the haze the screen shows at the horizon)
@@ -1801,6 +1865,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		Below.UnitsPerMetre = UnitsPerMetre;
 		Under->Bind(Below, S.Rec.Board);
 	}
+	// (the release 2 ocean plan, step 11: night fighting's looks, off by default: -TheaterSeaNightFight=1 lays the
+	// searchlights' beams and the fleet's star shells, by the recording's own light; Battle/SeaNight)
+	Night.Begin(FSeaNight::FRoom{ this, Root.Get(), UnitsPerMetre }, S.Show, SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaNightFight="), Seed);
 
 	PlanShots();
 	if (!ShotFolder.IsEmpty())
@@ -2076,6 +2143,12 @@ void ASeaBattle::GiveBackTheRoom()
 		return;
 	}
 	bRoomTaken = false;
+	// The weather's hook (step 13): the key lamp's light function given back as it was, and the dome, the sheets and
+	// the rain taken down.
+	if (SkyWeather)
+	{
+		SkyWeather->GiveBack();
+	}
 	for (const FKeptHaze& Kept : KeptHazes)
 	{
 		if (UExponentialHeightFogComponent* Fog = Kept.Haze.Get())
@@ -2208,6 +2281,8 @@ void ASeaBattle::LayAndSteer()
 		// A boat (ruling 241) drawn as far under as the show has her dived. D1 hook (convoy looks): the submarine scene's
 		// boat states (surfaced, periscope, deep) may give her own heave here.
 		const double Heave = FConvoyLooks::Steer(SubLooks, Root, Stage, Effects.Get(), S.Show, UnitsPerMetre, S.BattleT, bSkipping, bOnWater, Ship); // D1 hook (convoy looks)
+		// S6 hook (heavy weather): her bow's sheet of spray, for the 4 ships nearest the eye (nothing unless -TheaterSeaSpray=1)
+		FHeavyWeather::Ship(Weather, Effects.Get(), S.Show, Ship, UnitsPerMetre, S.BattleT, bSkipping, bOnWater); // S6 hook (bow spray)
 		// U1 hook (under water): the boat in the picture shaken by a burst near her, under the water only
 		Stage->Steer(Ship.Key, At, Face, Ship.Heel + (Under ? Under->Shudder(Ship.Key, S.BattleT) : 0.0), Ship.Pitch, Heave);
 		// (an enemy boat the player has not found: steered in her place, so that found she is where she should be, but not
@@ -3318,6 +3393,13 @@ void ASeaBattle::DrawMarks()
 		}
 	}
 
+	// (the release 2 ocean plan, step 1(a), pay first: under -TheaterSeaMarksPool=1 the same points and triangles, each
+	// mesh made afresh only when its shape changes, else its points sent again in place; Battle/SeaMarksPool.h)
+	if (bMarksPool)
+	{
+		DrawMarksPooled(FV, FN, FU, FC, FT, DV, DN, DC, DT, bInk);
+		return;
+	}
 	if (Foam && bInk)
 	{
 		if (FV.Num() == 0)
@@ -3355,6 +3437,61 @@ void ASeaBattle::DrawMarks()
 	if (MarkInk)
 	{
 		Marks->SetMaterial(0, MarkInk);
+	}
+}
+
+void ASeaBattle::DrawMarksPooled(const TArray<FVector>& FV, const TArray<FVector>& FN, const TArray<FVector2D>& FU, const TArray<FColor>& FC, const TArray<int32>& FT,
+	TArray<FVector>& DV, TArray<FVector>& DN, TArray<FColor>& DC, TArray<int32>& DT, bool bInk)
+{
+	// (the release 2 ocean plan, step 1(a), pay first: DrawMarks' end as today's, each mesh kept while its shape holds: the
+	// foam on the wake ink where the build has it; the marks, the oil, and the foam too where there is no wake ink, the oil
+	// first, under it)
+	if (Foam && bInk)
+	{
+		PoolMarks(FoamShape, Foam, FV, FT, FN, FU, FC, FoamInk);
+	}
+	if (!Marks)
+	{
+		return;
+	}
+	if (!bInk)
+	{
+		const int32 Base = DV.Num();
+		DV.Append(FV);
+		DN.Append(FN);
+		DC.Append(FC);
+		for (const int32 K : FT)
+		{
+			DT.Add(K + Base);
+		}
+	}
+	PoolMarks(MarksShape, Marks, DV, DT, DN, TArray<FVector2D>(), DC, MarkInk);
+}
+
+void ASeaBattle::PoolMarks(SeaMarksPool::Shape& Into, UProceduralMeshComponent* Mesh, const TArray<FVector>& V, const TArray<int32>& T, const TArray<FVector>& N,
+	const TArray<FVector2D>& U, const TArray<FColor>& C, UMaterialInterface* Ink)
+{
+	// (the release 2 ocean plan, step 1(a): the frame's own points and triangles held to the shape the mesh was last made
+	// with; made afresh, as today, when it is new or changed; while it holds, only the points' places, UVs and colours sent
+	// again in place, the normals as made (DrawMarks lays every one straight up); cleared once when there is nothing to
+	// draw, then nothing sent until there is)
+	switch (SeaMarksPool::Next(Into, T.GetData(), T.Num(), V.Num()))
+	{
+	case SeaMarksPool::Send::Clear:
+		Mesh->ClearMeshSection(0);
+		break;
+	case SeaMarksPool::Send::Make:
+		Mesh->CreateMeshSection(0, V, T, N, U, C, TArray<FProcMeshTangent>(), false);
+		if (Ink)
+		{
+			Mesh->SetMaterial(0, Ink);
+		}
+		break;
+	case SeaMarksPool::Send::Update:
+		Mesh->UpdateMeshSection(0, V, TArray<FVector>(), U, C, TArray<FProcMeshTangent>());
+		break;
+	case SeaMarksPool::Send::Nothing:
+		break;
 	}
 }
 
@@ -5954,7 +6091,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		}
 		const FVector2D Aside(Way.Y, -Way.X);
 		const FVector2D From = A - Way * 2200.0 + Aside * 1500.0;
-		OutEye = World(From.X, From.Y, 1300.0);
+		OutEye = World(From.X, From.Y, SkyWeather ? SkyWeather->OverviewHeight() : 1300.0); // (step 13: under a deck the dome draws)
 		OutLook = World(Middle.X, Middle.Y, 0.0);
 		OutLens = 55.0;
 		return true;
@@ -6036,6 +6173,12 @@ void ASeaBattle::AimEye()
 	EyeFacing = Looking.Rotation();
 	EyeLens = Lens;
 	ShotNow = Want;
+	// The weather's hook (step 13): the cloud dome round the eye, painted again at each cut; the far deck sheet, the
+	// haze band and the rain where they are laid.
+	if (SkyWeather)
+	{
+		SkyWeather->Tick(EyeAt, TicksSinceCut == 0, S.BattleT);
+	}
 	// U1 hook (under water): a burst's shock in the eye, on the camera only (never in EyeAt, so no cut comes of it)
 	Eye->SetActorLocationAndRotation(EyeAt + (Under ? Under->ShakeAt(S.BattleT) : FVector::ZeroVector), EyeFacing);
 	Eye->GetCameraComponent()->SetFieldOfView(static_cast<float>(EyeLens));
@@ -6115,6 +6258,11 @@ void ASeaBattle::SayFrameTimes()
 	const FIntPoint Size = GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
 		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
+	SayThreadsAndLook(); // (the release 2 ocean plan, step 0)
+	if (SkyWeather)
+	{
+		SkyWeather->SayFrameTimes(); // (step 13: the cloud dome's paints)
+	}
 	if (Under)
 	{
 		Under->SayFrameTimes(); // U1 hook (under water): the frames under the water, said apart
@@ -6124,6 +6272,24 @@ void ASeaBattle::SayFrameTimes()
 		const SeaShow::Checks& Kept = State->Show.Checked();
 		UE_LOG(LogTheater, Display, TEXT("Sea battle: men in the water %d of %d shown (%.0f%%), %d at once at the most; %d rafts, %d boats, %d floats in all, %d slicks; the wreck meshes %d points at the most."),
 			Kept.MenKept, Kept.MenReal, 100.0 * State->Show.MenShare(), Kept.MostMen, Kept.Rafts, Kept.Boats, Kept.Floats, Kept.Slicks, WrecksMostDrawn);
+	}
+}
+
+void ASeaBattle::SayThreadsAndLook() const
+{
+	// (the release 2 ocean plan, step 0, measure first: the frames by thread, the most of the three a frame being what the
+	// frame guard will watch, and the kit's ground asks; Tools/sea_bench.sh reads the line)
+	const FString Split(UTF8_TO_TCHAR(SeaFrames::Line(Threads, ThreadsFrom).c_str()));
+	UE_LOG(LogTheater, Display, TEXT("%s"), *Split);
+	// (and the sea's look as OpenOn applied it: its tier, 0 being release 1.5's sea as made, until step 15 builds the tier;
+	// every switch of the release 2 sea in force; and any asked for before its step has landed, which changes nothing)
+	const FString Look(UTF8_TO_TCHAR(SeaLookSwitches::Line(SeaLook).c_str()));
+	UE_LOG(LogTheater, Display, TEXT("%s"), *Look);
+	FHeavyWeather::Say(Weather); // S6 hook (bow spray): its sheets and the most puffs alive, once a battle
+	if (bMarksPool) // (the release 2 ocean plan, step 1(a): DrawMarks' meshes, what each was sent, once a battle)
+	{
+		const FString Pools(UTF8_TO_TCHAR(SeaMarksPool::Line(FoamShape, MarksShape).c_str()));
+		UE_LOG(LogTheater, Display, TEXT("%s"), *Pools);
 	}
 }
 
@@ -6382,6 +6548,10 @@ void ASeaBattle::Tick(float DeltaSeconds)
 				{
 					Quit(TEXT("the recorded action could not be played"));
 				}
+				else if (BenchUntil > 0.0) // (the release 2 ocean plan, step 0: a bench run quits too, not left to its watchdog)
+				{
+					Quit(TEXT("the bench's recorded action could not be played"));
+				}
 				SetActorTickEnabled(false);
 			}
 		}
@@ -6409,6 +6579,17 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		{
 			Under->Took(Took); // U1 hook (under water): the frames under the water timed apart too
 		}
+		if (RealT >= ThreadsFrom) // (the release 2 ocean plan, step 0: the same frame by thread, as the speed log reads them, and whole)
+		{
+			Threads.Add(FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(GRHIThreadTime),
+				FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), 1000.0 * Took, GroundAsks, S.BattleT);
+		}
+	}
+	GroundAsks = 0;
+	if (BenchUntil > 0.0 && (RealT >= BenchUntil || S.BattleT >= S.EndT + 12.0))
+	{
+		Quit(TEXT("the bench run is over")); // (the release 2 ocean plan, step 0: Tools/sea_bench.sh)
+		return;
 	}
 	bLastFrameApart = false;
 	RealT += Dt;
@@ -6475,6 +6656,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		}
 	}
 	DrawWrecks();
+	Night.Tick(S.Show, S.BattleT, bSkipping || bSkippedOn, EyeAt); // (step 11: night fighting's beams and star shells)
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600, ViewH = 1000;
@@ -6669,6 +6851,12 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 		Under->End();
 		Under.Reset();
 	}
+	if (SkyWeather) // (step 13: a dome paint still on a pool thread waited for, and the room given back, however the scene ends)
+	{
+		SkyWeather->End();
+		SkyWeather.Reset();
+	}
+	Night.End(); // (step 11: night fighting's lamps out and its mesh cleared before the room is given back)
 	HideScreen();
 	for (UAudioComponent* Bed : { DayBed.Get(), BattleBed.Get() })
 	{

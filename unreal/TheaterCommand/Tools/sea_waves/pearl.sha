@@ -1,0 +1,67 @@
+# What the release 2 ocean plan keeps word for word, each by its SHA-256 (pearl_pin.sh; step 0, pinned at 10f85ffb).
+# A change here lands only with the change it pins, in the same commit.
+# Release 2: five pins re-pinned on the release 2 join (2f89c8e5), each with its reason above it. The trees that made these
+# changes (release 1.5 and the sea lane) had no pearl_pin, so the re-pin could not come in their own commits. None moves
+# what Pearl's or Midway's sea draws at tier 0 (the rulings: /mnt/project-files/sea-scene/pearl-pin-r2.patch's header).
+# Re-pinned at the release 2 join (2f89c8e5): 1de26028 (air scene, 22 Nov, AIR-SCENE 39; in release 1.5 23951a1a and 1.5.1
+# 3e098f1f, so in release 2 from its base; 10f85ffb forked before it) adds one line, "TanksAlight.Reset();": a stage raised
+# again forgets which oil tanks a bomb set alight. It draws nothing on the sea, shore, ships' ride, haze, sky or grade; no switch.
+64c557aae70f50870bae9016d4cde7502a5a5a4b4fe6a27e1156ea7ff230c6b5  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::Raise
+4d36aa7bc11da4e577df9740ecd64e5c91640a99e4dadfd081470885db1d5235  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::RaiseSea
+9ce3efd9cd8133ede4dd65d4b9d29916f64c2f90430f25c93106dcd8b9ddabc4  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::BuildSea
+fdec05d605cbad4d405c18494c34428aea8181e8ab6fd16f56ed610d25b02aeb  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::MovingSea
+db05b077033588c07447e5c9fdc676e1b7bd295918fbd703856d564945689a92  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::ShoreAt
+8a05a4347cd596c0a46b83a886208b040eb42b452dad1034b4ecba8b68ef24f8  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::MoveShip
+58da624893457fb90667959ad5082635f4094bd9da6dacd66d0930df3d569fe8  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::Steer
+9ab0101c9cab115b418c869c47c7e8a03d7eba9f6e85eb345e1d056f6b4f608b  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::GroundZ
+b64d1e537264b4e63dd813df2ae84cfe9c50c8c6043e8e2a676056d7f024e7dd  body Source/TheaterCommand/Battle/AirStage.cpp AAirStage::GroundAside
+6a6b87149de56f59a7f30aeeccf392c4faae8781f69ba3582def08c4ded6a807  body Source/TheaterCommand/Battle/SeaFace.cpp SeaFace::MakeFoam
+fc0b0ec586495bfff65ee9996b10d0cbd16f1eeeabd41abb53ae34d207e3725b  body Source/TheaterCommand/Battle/SeaFace.cpp SeaFace::MakeShore
+aeb6e7867830e7b5ca518c37c9e906ac15632d4264bcfad9a48caed9805a101c  body Source/TheaterCommand/Campaign/CampaignBattleLook.cpp BattleLook::AirHaze
+7bba1b2db1b9eb5e430520aa9e108812af9399405e707dd372cf80544d5acb41  body Source/TheaterCommand/Campaign/CampaignBattleLook.cpp BattleLook::AirSkyBegin
+49104fc45f46e226ef3eff9f6367ee1498e12ff1b60c47ace1958cc2972a290b  body Source/TheaterCommand/Campaign/CampaignBattleLook.cpp BattleLook::AirSkyEnd
+0d742687d1ddb98faa235dd022af1527295e018f3f39e03c64147ec53e92d73b  body Source/TheaterCommand/Campaign/CampaignBattleLook.cpp BattleLook::Grade
+1097bb0aedad0eb961d4dc24aee47ee06bc58fcba13849fbdee26f47323e1938  line Source/TheaterCommand/Battle/AirStage.h Raise
+8d905a80929450b355d87c8028ad5396a36fbc13893579a81f1cf06affab282e  line Source/TheaterCommand/Battle/AirStage.h RaiseSea
+c652673ec1353e90ce385ab5c4c0fe49612f3e2eca583ac270c377d916126c1d  line Source/TheaterCommand/Battle/AirStage.h Steer
+a51875235c34667e4b95a625989441521ea021ee1382ced484b834b8cd459af7  line Source/TheaterCommand/Battle/AirStage.h GroundZ
+1eaa5029087d0d31651356430d32fab5ca6bae68c54a27ff12c60152a430e7c8  line Source/TheaterCommand/Battle/AirStage.h std::function<double
+3a884fcbccce36a215def73fcbfbed37d3075e92449ac36e6c196107f8660b8f  line Source/TheaterCommand/Battle/AirStage.h BuildSea
+e80d78e166459c165caec8cff54e603625e2a1ad4817e3ff32d22edd8c03f1b9  line Source/TheaterCommand/Battle/AirStage.h MovingSea
+9c6c1ef1d6f7e70715328c5bf6e6992c976c73c3c32813d1c8810dff0e1f1413  line Source/TheaterCommand/Battle/AirStage.h ShoreAt
+052e84425b7f38d77fa8e90911efb5b81ef6a6475ee141f783dabbfecff7cac0  line Source/TheaterCommand/Battle/AirStage.h MoveShip
+# Pinned new at the release 2 join (2f89c8e5): the haze over a stage's sea, as release 2 draws it. AirHaze's body above holds
+# the fade, not its colour; release 1.5 moved the sea's ink (13a87e46 to 0.42,0.60,0.88 by b3a33e0a) and gave the haze band
+# over a stage the sea's ink, which no pin here saw. These hold the colour, the land's ink, the fog's colour, AirHaze's call
+# (30 km, 1.2 times over the sea) and the band's tint.
+6184148321f472eca854d77cbd004ac05af8865e575460e5acc1adad55da9a55  line Source/TheaterCommand/Battle/AirBattle.cpp AirHazeInk
+618e0ae7ff063494b5be7dfe473dbf56c565bf6d33da2aaeb481265c521c36ac  line Source/TheaterCommand/Battle/AirBattle.cpp SeaHazeInk
+c9eef3c76dbbba190d7043092e2474ed6bd4e9134e08dda9526c4924cafee406  line Source/TheaterCommand/Battle/AirBattle.cpp Fog->SetFogInscatteringColor
+9a850bdfcc7dd723266e9dbf474ac16d3d2887732d49efc1869798fd461ab804  line Source/TheaterCommand/Battle/AirBattle.cpp BattleLook::AirHaze
+d8bcdb8d6b86288aef6fac70073352031ceaa9746dc54a1892ba40d7ed69ed40  line Source/TheaterCommand/Battle/AirBattle.cpp HazeBandInk->SetVectorParameterValue
+d564d19ae78f5c72e9e57e2da8007e3677d801f7663bd3d23f2e3c508d92bdfe  file Source/TheaterCommand/Campaign/CampaignBattleLook.h
+1f41bb28b873b5b5cb745e8009554ec6b981b9656c08a0fca7b73e8cf3ab1d72  file Source/TheaterCommand/Battle/ConvoyLooksCore.h
+# Re-pinned at the release 2 join (2f89c8e5): 5ff6b021 (the sea scene's deck gun crews, wonnkr; with the wolf-pack nights in
+# 55419eb6, into release 2 by b2e59242, pre-check CLEAR 25 Nov 02:21Z) moves MountOf's Troopship bow-gun deck from 12.53 m to
+# 12.75 m, where that gun's crew stand. MountOf is read only by SeaBattle and DeckCrewCore (the sea scene's crews, no switch);
+# the air stage's ShipLooks reads only HitLookFamily. Pearl and Midway draw nothing from it.
+21fec7dae058122ba0227298c2b54132ff3b245d365f125bd1a3ef3f805347b1  file Source/TheaterCommand/Battle/ConvoyLooksCore.cpp
+6b34770296d2f660bc5f9fffd86117633d85f6c7eeb31fa5d704d55b446d9624  file Source/TheaterCommand/Battle/ShipGuns.h
+f4b1190a7eaa4992913579bda8f45d7f9519d0494d386213c968274ed04844d1  file Source/TheaterCommand/Battle/ShipGuns.cpp
+# LandMen.h and .cpp re-pinned at the release 2 join (2f89c8e5): the land lane's byte copies as release 2 carries them, the
+# effects head 07bf753a (93a38a96) over the ground join 8135f412 (uhhxrn 6d446429), the effects join f0f3b25a (m5em30) and
+# release 1.5's (7ebd568f, 06cc3f4a, d41b1a5e): riders, lorry benches, run styles ("runs"), uniforms that age and captured kit,
+# gore falls (-TheaterLandGore), bail-out (-TheaterLandBailOut), chutes (-TheaterLandChutes), ON by 485bb365's ship list, each
+# passed by the art director and its lane's reviews. No air-scene file includes LandMen.h (the ground battle and the sea scene's
+# SeaSailors and DeckCrewCore do), so Pearl's and Midway's sea draw nothing from it.
+13675ecfd624f9712a710f6cef618bdde60b870b14e81bcec5251620ec4dcb5e  file Source/TheaterCommand/Battle/LandMen.h
+# (LandMen.cpp: as LandMen.h above.)
+51db227540c8c104c474d4c0830f1ddefd766614202c301a462c003b0f51d6e0  file Source/TheaterCommand/Battle/LandMen.cpp
+# Re-pinned at the release 2 join (2f89c8e5): 13a87e46 (air scene, the art director's notes of 22 Nov 04:16Z, AIR-SCENE 25; in
+# release 1.5 and 1.5.1, so in release 2 from its base; 10f85ffb forked before it) changes 4 bytes: palette[8] "concrete" from
+# the warm 8F8B83 to the cool grey 8A8D90, painted only on the "works" mesh (1876 of its 1905 points: quays, docks, pads, aprons).
+# The land, shallows, reef and works geometry, the ground heights, the sun, palms, tanks, hangars, yard, runways and the test's
+# 23 ships are as pinned: no shore, harbour, depth, ship or haze moves, and MakeShore reads geometry only, so the sea and the
+# shore line are as made.
+20add35f1d1ef5077f4e098807fb7e53a1b6ebcdeca731a2162b4a1bf0da1e4b  file Content/Data/Stages/oahu.json
+b72bbae455adff05728e08aae8d88becde80d04181cca3a5aa6d7b7da6dbcaf0  file Content/Data/Stages/midway.json

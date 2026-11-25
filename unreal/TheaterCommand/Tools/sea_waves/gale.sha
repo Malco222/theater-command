@@ -1,0 +1,22 @@
+# The gale's pin (Tools/sea_waves/gale_pin.cpp; the release 2 ocean plan, step 14(c)): FleetWaves' outputs at winds to 13.8 m/s,
+# under its own cap and the gale's, and SeaFace's whitecaps and shore, as gale_pin.cpp built against 942d9295 (ocean-r2's head)
+# gives them, with g++ -std=c++20 -O2. A "<name>@clang" line is clang++'s own, where it lays the floats a little differently at
+# 942d9295 itself (the grid, the meshes, PlaceOf and the chip's float text). Rewritten at the sea scene's review of 73c7c69d
+# (25 November): chip, edges, mesh and place join the nine, each written by this file built against 942d9295's own sources.
+c7f91ed0f5e4f91e  chip
+12abbd7b41a5cc93  drawn
+6f6e75a795158d9e  edges
+5e289af863c28f3b  grid
+7be4c14fe1139ddf  lanes
+51a8c6e936d46138  make
+0b75086329e537c6  mesh
+56e3c35e2555aaab  near
+80a3847d6ab026bf  place
+ae3328c4735c208f  ride
+38c20c0a89b590b7  seaface
+ea8a681081a15aa7  stage
+b3f6c52d6bf4997f  sum
+39241295723ed91a  chip@clang
+adbe1dced9a0edf3  grid@clang
+af9d6cc84b0976b6  mesh@clang
+c2ac7b233a72feff  place@clang

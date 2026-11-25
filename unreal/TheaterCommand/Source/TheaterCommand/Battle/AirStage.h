@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Battle/ShipLooks.h"
+#include "Battle/ShipIce.h" // S6 hook (ship ice)
 #include "Effects/BattleEffects.h"
 
 #include <functional>
@@ -82,6 +83,9 @@ public:
 	 * the water's paint keeps its colour on the screen under another.
 	 */
 	void SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon, const FVector2D& GradeRedBlue = FVector2D(1.08, 0.87));
+	/** S6 hook (ship ice; the sea battle's, before its ships are laid, under -TheaterSeaIce=1): the frost each hull is glazed by
+	 * as LayShip lays her (Battle/ShipIce). Never set, as in every air battle, Pearl Harbor and Midway: none, the hulls as made. */
+	void SetFrost(const ShipIce::Frost& Given) { Frost = Given; }
 	/**
 	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians
 	 * clockwise from north, the board's), her heel (degrees, plus: her starboard side down) and her pitch on the swell
@@ -310,6 +314,8 @@ private:
 	double SeaDownwind = 250.0, SeaWind = 0.0, SeaPatchTilt = 60.0;
 	FLinearColor SeaSky = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	FVector2D SeaGrade = FVector2D(1.08, 0.87);
+	/** S6 hook (ship ice): the frost the sea battle set (SetFrost); none by default. */
+	ShipIce::Frost Frost;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */

@@ -1,0 +1,17 @@
+# The release 2 sea's asks to the rules (the release 2 ocean plan, step 4(a)). Each: when it was asked, of whom, what,
+# and what the scene does until it lands. Checked again at each Mac look check; one still open at the release 2 look
+# check goes to Brian as the stand-in question.
+
+ASKED 24 November 2026, of the naval rules (the "Build the real-time naval battles" thread), by the sea scene thread.
+For every sea battle the recorder writes, fleet actions included, emit in its field:
+  when.hour        the local solar hour of the action (0 to 24)
+  light            {sun {up, from}, moon {lit, up, from}, vis}: the sun's height and bearing, the moon's share lit,
+                   height and bearing (degrees; bearings clockwise from north), how far a ship is seen (metres)
+  sky              {cover 0-1, kind cumulus|deck|squalls, base, top (metres), rain 0-1, word}, dealt from the
+                   campaign's weather.ts zone sky the same way air's sky.place.cloud is
+  sea              {swell {height (m), period (s), from (deg)}, fetch (km)}
+UNTIL IT LANDS: the three real fleet recordings (two-lines, light-ships, samar) carry none of these, so the scene draws
+them as today; the convoy nights carry light and night only. Battle/SeaLookField reads every part the moment it is
+there, and says on the log which parts a battle gave ("not given" for each missing). The stand-ins in
+Tools/sea_waves/stand-ins (samar-dawn, north-atlantic-gale, fleet-swell) are review material only, never a gate.
+STATUS 25 November 2026: open.

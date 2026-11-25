@@ -120,7 +120,21 @@ namespace AirSky
 		double GroundTop = -1.0;
 		/** The most puffs drawn at once (the painter's room: its mesh's size, and its work each time the eye moves). */
 		int MostPuffs = 4000;
+		/** The wind the clouds drift on and line up along (board axes, metres a second, the way it blows toward): the
+		 * air battle's own (Wind, the same numbers, written out so a Placing made before Wind is set still has it) unless
+		 * the battle gives its own (the sea's field.wind). The cumulus rows and the deck's rolls run along it, at whole
+		 * numbers of waves to the square (WindLattice). */
+		Vec Wind = Vec(3.0, -2.0, 0.0);
+		/** A deck's gaps, where the battle sets its own (the sea's broken stratocumulus, SeaSky::StratoHolesFor): the
+		 * noise under which a tile is left out, as DeckHoleBelow gives it. Below 0 (as made): air's own for the day's
+		 * cover, DeckHoleBelow(Day::CoverLaid()). */
+		double DeckHoles = -1.0;
 	};
+
+	/** The whole-number step across the wind that the rows and rolls repeat on (so they repeat with the square): the
+	 * way across the wind, (-Wind.Y, Wind.X), as long as (2, 3) and rounded; the air battle's wind (3, -2) gives (2, 3)
+	 * exactly. No wind: (2, 3). */
+	void WindLattice(const Vec& W, int& OutX, int& OutY);
 
 	/**
 	 * The sheet of cloud shapes the puffs are drawn from (the art director's trade-cumulus brief, item 4: torn cloud
@@ -221,6 +235,9 @@ namespace AirSky
 		/** Which laying this is (each Lay its own number), so a painter knows a field it has not painted before. A field
 		 * changed after it is laid is laid again. */
 		uint64_t Serial = 0;
+		/** The wind it was laid for (Placing::Wind) and its whole-number step across it (WindLattice). */
+		Vec Wind = Vec(3.0, -2.0, 0.0);
+		int AcrossX = 2, AcrossY = 3;
 
 		/** The wind's carry after so many air seconds: cumulus drift; a deck stays. */
 		Vec DriftAt(double AirSeconds) const;

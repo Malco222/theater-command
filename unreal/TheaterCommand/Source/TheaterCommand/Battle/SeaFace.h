@@ -64,4 +64,23 @@ namespace SeaFace
 	 * times. Count: up to 300 to 160 m (fewer where the picture has no room), of which the sea breaks some.
 	 */
 	std::vector<uint8_t> MakeFoam(int Size, double TileMetres, int Count = 300);
+
+	/**
+	 * The wind's streaks (the release 2 ocean plan, step 14(c): the gale, its own switch; the fleet's sea alone reads it, so
+	 * Pearl Harbor's and Midway's sea, MakeFoam and MakeShore are as they were). WMO's Beaufort scale: at 7 "white foam from
+	 * breaking waves begins to be blown in streaks along the direction of the wind", at 8 "the foam is blown in well-marked
+	 * streaks", at 9 "dense streaks of foam". Size pixels a side, repeating, laid as the whitecaps' picture is: u along the
+	 * wind (downwind) and v across it, TileMetres to the picture. Four numbers a pixel, 0 to 255:
+	 *  red   a streak's foam: a long thin line along the wind, [EST] 15 to 120 m long and 0.4 to 2 m wide (most narrow),
+	 *        wandering a metre or so across as it goes, beaded and broken along its length, thinning out at both ends;
+	 *        most gathered in rows along the wind [EST] 8 to 25 m apart (where the wind's drift gathers the foam), the rest
+	 *        anywhere; 0 between them;
+	 *  green its rank, 0 to 1, one value over each streak and carried a little way out round it (so a read between pixels
+	 *        never mixes two): the sea shows a streak where its rank is under the wind's share (FleetWaves::StreakShareOf),
+	 *        so a stronger wind keeps a lighter wind's streaks and adds more;
+	 *  blue  how far along it a point lies: 0 at its upwind end, 1 at its downwind end;
+	 *  alpha a fine mottle, for the foam's grain.
+	 * No two streaks touch (two pixels between). Count: up to 260 to 256 m (fewer where the picture has no room).
+	 */
+	std::vector<uint8_t> MakeStreaks(int Size, double TileMetres, int Count = 260);
 }

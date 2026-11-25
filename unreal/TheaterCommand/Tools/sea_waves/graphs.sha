@@ -1,0 +1,24 @@
+# The materials Tools/build_content.py builds, each pinned by the SHA-256 of its canonical graph (graph_pin.py).
+# The release 2 ocean plan, step 0: pinned at 10f85ffb, before any edit to build_content.py. A later step may add
+# materials after M_UnderSea, but leaves every hash here as it is; a change here lands only with the change it pins.
+# (The graphs as fake_unreal.py stands in for the engine, its pictures included: a change to that model re-pins
+# here, in the same commit.)
+# (pinned from build_content.py 3a17021999a5cb7b...)
+# (Release 2, 25 November: M_MapSurface re-pinned on the release 2 build list, its one change release 2's own, made
+# before this pin came to it: used_with_instanced_static_meshes, for the air battle's far aircraft and the ground's
+# instanced pieces (AS1). Its graph is node for node as before. The other 14 unmoved.)
+8b433f8eb9518cb97b0d787edfe1563d3edc5c12c9c9826d352bd06ef8f4a8a0  M_MapSurface
+8ed9058add55531fa691e636ee80e1176d864f2cae63f29b46490278c2389fd2  M_Solid
+ccdae1791cd80d869beaa28f8e06a6f2b2de80b007de3a4093738a6935b1b7f6  M_Highlight
+54c8141339a877465083610609321c04fa0cff2f6297efbd1e3c2c99d4ad2a53  M_Flag
+47b438fba56a7f92c45ea6637bdcc89715ff2aea6fcab7b9285bfdd488c8c054  M_Land
+f137a7bae885647528012b47906d92b2461108323e407806285809937bc3144a  M_Sea
+d7efe5297fe38fa459ff3072cc2dc0b12746076bbd5272fd0d39e338ba7ea162  M_Wake
+d65fccf356abec8e3de54f388749fa28a5d466d0af8e50e0e246ac09a6c38bdf  M_FlakSmoke
+b79d2c57463fdfbfc68f9c20b28fa7c154719d8e97073fe8cb002f428a444f0b  M_Beam
+c10d183a31d56e7b33b46de8c33601ea4a14f9021fdf46f0b2f17f959c49d43f  M_FlakLit
+05b0de3f3be18c353fb3e9fd820e063e10973dd068e825e4aee31078de5d4b55  M_Glow
+5a8d610bdd5d78e8ba005f7c16348f353235715718eb5a76cc854752d385ae1d  M_Cloud
+4f58c2b839c6ac53de6a24bf5dd27cbe8b8cae569e72e2a5551b0159881a2ad0  M_DeckShade
+506c4e18ea31b2dbc03580781c15ebf4ad67cce462fefe8cf568869b5f4c22f0  M_StageSea
+877a3ff44cc2ca6a98511cade137bb06c36fbc6388a9cd394eb916fce28691c4  M_UnderSea

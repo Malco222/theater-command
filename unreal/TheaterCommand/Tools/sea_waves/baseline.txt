@@ -1,0 +1,298 @@
+# The release 2 sea's baseline (the release 2 ocean plan, step 0, (g)): what the cloud tests count with every switch of
+# the release 2 sea at today's value (tier 0, release 1.5's sea as made), and what the Mac measured of release 1.5.
+# Every later step's runs are held to these counts. A count changes only with the change that changes it, and its line
+# here changes in the same commit. The frame-budget numbers are the cloud Xeon's and move from run to run; they are
+# here to see drift, not to be matched.
+
+Tree: 10f85ffb (Sea scene: join review fixes (deck-gun column, pattern judged as laid)), and step 0's lines.
+Run: ocean-measure-r1, 24 November 2026 (before step 0's lines: ocean-measure-r0pre, the same counts);
+ocean-measure-r2 (the review's fixes to step 0: the same counts in both existing runners); and ocean-measure-r3 (the
+second review's: 22 November's picture runs replayed, and the paired differences' 99% interval; the same counts).
+
+Tools/sea_show/run.sh
+  recordings, each ALL CHECKS PASSED: 9 of 9
+    the battles' own: light-ships (569 s), samar (435 s), two-lines (638 s)
+    the stand-ins: convoy-night-air, convoy-night (620 s), sub-34-hunt-central, wolf-pack-abandon, wolf-pack-abeam,
+    wolf-pack-surrender (600 s each)
+  sea_under_test: 408 checks, 0 failed
+  in all 1,155 "ok" lines in the log (the recordings and sea_under_test), the same in r0pre, r1, r2 and r3, in
+  step 1(a)'s ocean-marks-r1 and ocean-marks-r2, and in step 2's ocean-waves-r1, ocean-waves-r2 and ocean-waves-r3
+  a frame within budget (the show's own frame on the cloud Xeon, the least of three plays; one in a thousand / mean, ms):
+                          r0pre            r1               r2               r3
+    light-ships           0.506 / 0.065    0.519 / 0.066    0.724 / 0.073    0.389 / 0.067
+    samar                 0.768 / 0.112    0.754 / 0.116    0.794 / 0.115    0.768 / 0.125
+    two-lines             0.411 / 0.060    0.437 / 0.065    0.369 / 0.061    0.233 / 0.054
+    ocean-marks-r1 (step 1(a)): light-ships 0.457 / 0.063, samar 0.746 / 0.116, two-lines 0.281 / 0.056. (Its first
+    run, beside other runs on the same four cores, load 6 to 13, failed the budget alone, in four recordings, 4.1 to
+    4.6 ms one in a thousand: run again alone, every check passed.)
+    ocean-marks-r2 (step 1(a), the review's fixes; run alone): light-ships 0.444 / 0.062, samar 0.736 / 0.113, two-lines
+    0.376 / 0.062
+    ocean-waves-r1 (step 2; run alone, load about 2.5): light-ships 0.358 / 0.061, samar 0.730 / 0.112, two-lines
+    0.397 / 0.060
+    ocean-waves-r2 (step 2, the review's fixes; run alone, load about 4 with its four recordings at once): light-ships
+    0.249 / 0.039, samar 0.526 / 0.075, two-lines 0.166 / 0.036 (a quicker host than the runs before: nothing the
+    show plays changed)
+    ocean-waves-r3 (step 2, the third review's fixes; beside other sessions' renders, load 8 to 15): light-ships
+    0.235 / 0.039, samar 0.345 / 0.071, two-lines 0.156 / 0.035
+
+Tools/convoy_looks/run.sh
+  convoy looks: 3,795 checks, 0 failed
+  convoy looks against the show: 423 checks, 0 failed
+  (the same in step 1(a)'s ocean-marks-r1 and ocean-marks-r2, and in step 2's ocean-waves-r1, ocean-waves-r2 and
+  ocean-waves-r3)
+
+Tools/sea_waves/run.sh (step 0's own)
+  measure_test: 38 checks, 0 failed (31 in r1; r2 adds the RHI thread, the whole frame over the same frames, the
+    battle's span counted, the look read once as the scene opens, and a bench run's quit when its recording fails;
+    step 1(a) (ocean-marks-r1 and r2) adds -TheaterSeaMarksPool= as the scene takes it, and its "Sea look:" line now
+    says the one switch built: "1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0.")
+  graph_pin: 55 checks, 0 failed; 15 materials pinned in graphs.sha (M_MapSurface, M_Solid, M_Highlight, M_Flag, M_Land,
+    M_Sea, M_Wake, M_FlakSmoke, M_Beam, M_FlakLit, M_Glow, M_Cloud, M_DeckShade, M_StageSea, M_UnderSea)
+  pearl_pin: 33 pins, 0 changed; bUseUnity = false; CampaignMapActor, CampaignHUD, CampaignPlayerController as at 10f85ffb
+  room_scan: 24 setters, every one given back; self-test 8 cases
+  switches_scan: 10 checks; self-test 6 cases; the game's own switches: 260 (with -TheaterSeaBench=, 261)
+  bench_table self-test: 31 cases (13 in r1; 21 in r2, which pairs each tier with its own round's tier 0, leaves out
+    runs not done, never pools window sizes, and lists plain tier 0 in run order with the heat; r3 reads 22 November's
+    lines only beside their replays, and counts a difference by the 99% interval on the paired differences' mean, with
+    each run's own noise in a case of its own)
+  bench_dry_run: 20 checks (14 in r2, new then: Tools/sea_bench.sh itself, with a stand-in for the engine; r3 adds the
+    replays' command lines, their pictures not kept, SEA_BENCH_REPLAY=0, and the replays' own window and sound, 18;
+    step 1(a)'s ocean-marks-r2 adds a tier 0 block, SEA_BENCH_TIERS=0 with SEA_BENCH_HELD_ARGS: the switch asked of the
+    held runs alone, and the table's block 0, each held run against plain tier 0 of its own round)
+
+Tools/sea_waves/run.sh, step 1(a)'s (pay first: DrawMarks' meshes kept while their shape holds, -TheaterSeaMarksPool=1;
+run ocean-marks-r2, 24 November 2026, on 16b091e4 and step 1(a)'s lines with the review's fixes; the counts of step 0's
+steps above unchanged but measure_test's and bench_dry_run's)
+  marks_extract: 18 pieces of SeaBattle.cpp cut out (DrawMarks, LayWakes, DrawMarksPooled, PoolMarks, World, BoardOf;
+    SeaParts' helpers; the structs they use)
+  marks_pool_test: 12 checks a recording, 0 failed, each of the 9 (the battles' own three and the six stand-ins), then
+    13 checks over them all, 0 failed (37 lines of the game's pinned and 4 more on the game's source; 5 of the rule's
+    own cases; 9 of 9 played, every kind of mark found, and the gate over them all)
+  every frame at 30 a second to 12 s past the last view, the game's own DrawMarks today's way and kept, with the wake
+  ink and without (four scenes): kept draws today's, triangle for triangle, each the same three points in order; the
+  same bounds and material; made afresh (CreateMeshSection) exactly when the shape changed (the points' count or a
+  triangle), sent again in place (UpdateMeshSection, no normals) while it held, cleared once; no frame sends more points
+  than today's, and no mesh makes its render proxy afresh more often (the gate)
+  the foam's mesh on the wake ink, and the oil's (frames; made afresh / sent again in place; points a frame, today's
+  own; the share of today's render proxies kept), and the marks' mesh with no wake ink (the oil and the foam):
+                          frames   foam: made / again   points   kept     oil: made / again   kept    no ink: kept
+    light-ships           17428    14360 /  3068        21615    17.6%    10 /  9805          99.9%   27.2%
+    samar                 13408    11597 /  1811        23549    13.5%     7 /  5815          99.9%   22.3%
+    two-lines             19498    17128 /  2370        24278    12.2%    12 / 10499          99.9%   20.1%
+    convoy-night-air      18961     4883 / 14078        14855    74.2%     9 / 17747          99.9%   81.2%
+    convoy-night          18961     4493 / 14468        13745    76.3%     6 / 10790          99.9%   82.8%
+    sub-34-hunt-central    9301     1235 /  8066         2744    86.7%     3 /  3542          99.9%   89.7%
+    wolf-pack-abandon     18361     3376 / 14985         7278    81.6%     1 / 10795          100.0%  86.6%
+    wolf-pack-abeam       18361     3330 / 15031         7181    81.9%     4 / 10852          100.0%  86.6%
+    wolf-pack-surrender   18361     3345 / 15016         7233    81.8%     4 / 10852          100.0%  86.5%
+  (sub-34-hunt-central is stand-ins/sub-air-mediterranean-1942.json. Nothing cleared in any: no mesh, once drawn, went
+  empty; the oil's mesh sent nothing on the frames before the first oil.)
+  over them all: the foam's proxies made afresh 63,747 kept against today's 152,640 (58.2% kept), the oil's 56 against
+  90,753 (99.9%), the marks' with no ink 53,857 against 152,640 (64.7%); points a frame the same, today's own
+  every kind of mark found in today's own meshes with the wake ink, by its shape and paint (triangles over every frame):
+  the wakes' churned bands 1,020,202,400; the wakes' foam 897,097,440; bow waves 168,687,552; the white water along her
+  sides 253,031,328; foam walls 337,375,104; the arms of her wave 84,343,776; the boils at her stern 126,515,664;
+  torpedo tracks 92,325,888; men's rings 92,944,320; broken ships' boils and rings 5,777,280; oil 55,895,552; of no kind
+  known 0 of 3,134,196,304
+  The engine's per-point data path, emulated on every 10th frame, costs the same either way (samar's foam 3.450 ms a
+  frame made afresh, 3.469 sent again in place, four recordings at once beside other runs; 2.528 and 2.533 in an
+  earlier pass): what is saved is only the fixed cost of a proxy made afresh, on the frames above, and only the Mac's
+  A/B times it (SEA_BENCH_TIERS=0 SEA_BENCH_HELD_ARGS=-TheaterSeaMarksPool=1). The ledger's -0.3 to -1.0 ms is
+  withdrawn; booked at 0 until then.
+  (ocean-marks-r1's pool of fixed quads was dropped in r2: four points a quad, none shared, it sent four to five times
+  today's points every frame.)
+
+Tools/sea_waves/run.sh, step 2's (the wave core: Battle/FleetWaves.{h,cpp}, namespace FleetWaves, as the plan names it
+(SeaWaves is already a member of AAirStage), the chip's Battle/FleetWavesGpu.inl and the whitecaps' gate by wind
+Battle/FleetWavesFold.inl; nothing wired into the game, so nothing on screen changes; run ocean-waves-r1, 24 November
+2026, on 3a789ca3 and step 2's files; and ocean-waves-r2, 25 November, the review's fixes, its last pass with the
+patch's band eased onto the main mesh's own surface; and ocean-waves-r3, 25 November, the third review's fixes, below;
+the counts of step 0's and step 1(a)'s steps above unchanged)
+  fold_table: the whitecaps' gate written again, byte for byte Battle/FleetWavesFold.inl (49 winds: 0.5 to 24 m/s by
+    halves, and the gale's 24.4); from r2 each head is read under the whitecaps' picture (SeaFace::MakeFoam(512, 160),
+    the head's shape), so the table moved with it
+  sea_waves_test: 66 checks, 0 failed (spectrum 7, pairs 5, seeds 4, folding and whitecaps 2, slopes 3, road 2, wraps
+    4, weights 2, grid 6, snaps 3, patch 5, patch reach 3, chord 1, references 2, SeaNear 6, chip 5, chip scan 2, params
+    2, lanes 1, ride 1), the ride on the battles' own three recordings; its params, OUT/waves/sea_waves_params.json (61
+    vectors: Rough and PatchEase join). r1 had 55: r2 adds each band's pair against Spectrum() over its own band (323
+    bands, worst 0.000%; the displaced trains' share in their bands is now their integral, within 1%), the MPC's Rough
+    (Cox-Munk and the capped wind) with the .inl's Mode 2 slopes plus its remainder Cox-Munk wherever they are under it
+    (1584 of 1584 pixels), the whitecaps read with the head's shape (worst 8.0% of Monahan), Grid(N, RingsFor(S)) in
+    the ledger's caps for 231 seas (every wind to the gale's 24.4, no swell, 1.8 m 12 s and 3 m 16 s: at most 7 rings,
+    57,127 points at 96, 98,663 at 128; r1's line at 96 and 8 rings dropped for it), the patch's points from EaseEnd
+    round her unsnapped place the main mesh's own surface (the new check: 59,868 points, worst 0.0000 mm, 22,268 of them
+    easing onto it), the patch across its own snaps under 1 cm anywhere, its edge and notches included (29 snaps, 8,700
+    points, worst 0.000 mm; the review's first pass held only "under 1 cm, or within ChordBound where its edge passes",
+    28 snaps, worst 12.61 cm), the patch in whatever ring holds a far subject (1.5, 2 and 3 km from 14, 28 and 60 m
+    eyes, 8 and 13.8 m/s with and without a swell, hulls of 100, 180 and 250 m: 864 of 864) with every train of half
+    her length whole for every length (288 of 288 each, held; the first pass held only the 250 m battleship's and
+    noted 100 m hulls whole in 261 of 288) and hulls of 100, 180 and 250 m at every 15 deg heading and 8 m offset over
+    a whole snap both ways (64,512 of 64,512 whole), SeaNear over the whole reach of any train and on to 3 km with no
+    FarZ, and over the subject's patch at 4 m and at 8 m (88,000 points, worst 0.000 mm; weight reaches 1,573 m at
+    most), its N = 128 cost and the frame's sum at the shots' eyes, and the chip scan of every index in a ?: arm (2 of 2
+    clamped, 38 arms)
+  its costs on the cloud Xeon, in the thread's own time, the least of a few rounds and of up to 3 s more while over (a
+  busy neighbour slows every round of a stretch by up to 1.7 times, which the thread's own time does not take out):
+                          cap        ocean-waves-r1          ocean-waves-r2
+    BuildNear (96)        0.2 ms     0.193 ms (3 levels)     0.182 ms (the busiest of eleven frames, a 6 m eye, a 4 m
+                                                             patch: every ring any train has weight on, at most 7 levels
+                                                             and the subject's block, now only the patch's ease, 73,259
+                                                             nodes; 0.172 in the pass before; 0.199 in the first pass,
+                                                             its block the whole square)
+    BuildNear (128)       0.35 ms    -                       0.251 ms (129 x 129 levels; its own line; 0.273 first)
+    SampleLevel           6 ns       5.74 ns                 4.26 ns (the bilinear sample alone, the plan's measured 6)
+    SampleNear            12 ns      14.40 ns (20 ns [EST]   9.81 ns (the level from the bits of the point's distance,
+                                     cap then)               no search or branch, then the sample; 11.62 first)
+    BuildNear + 10k SampleNear + the ride, at the shots' eyes, 0.3 ms: 14 m 0.245, 18 m 0.242, 28 m 0.219, 55 m 0.201 ms
+                                     (13.8 m/s and a 2.5 m swell, the subject 1.8 km out; the first pass 0.299, 0.298,
+                                     0.277, 0.267: little margin then)
+    the ride, 40 hulls    0.02 ms    samar 0.0150, two-lines 0.0115, light-ships 0.0063 ms a frame (r2: 0.0142, 0.0108,
+                                     0.0079)
+  (r2's first pass failed one line, the chip's weights' cell at 1.29e-05 of the core's against 1e-5: the subject's own
+  place went to the chip from Origin, 24 km out in float. PatchEase now carries her offset from the patch's middle, and
+  the later passes, every step of this runner, passed: 1.17e-06, and 7.28e-07 in the last; the chip's points within
+  0.173 mm of the core's, its ease onto the main mesh among them.)
+  ocean-waves-r3 (the third review's fixes; run beside other sessions' renders, load 6 to 15): every step of this
+  runner passed; fold_table byte for byte again (49 winds; the table has a fourth column, FarHead, the whitecaps' head
+  where their trains have faded under the pixel); sea_waves_test: 80 checks, 0 failed (r2's 66, and patch sweep 2,
+  patch walks 3, SeaNear 4 more, SeaNear world 3, foam depths 2; its params 62 vectors: Fade joins). The new and moved
+  lines:
+    grid: Grid(N, RingsFor(S, N)), at most 8 rings at 96 (65,016 points) and 7 at 128 (98,663), for 231 seas
+    patch sweep: 85,104 cuts (hulls of 100, 180 and 250 m from 50 m to 3 km in 5 m Chebyshev steps, bearings 0, 22.5,
+      45 and 90 deg, eyes 14, 28 and 60 m, 8 and 13.8 m/s with and without a swell): 79,576 whole, 0 outside plan v2's
+      stated gaps (near 544, mid 36, far 4,948); at a true Chebyshev 3 km, ten seeds a wind: 1,080 of 1,080 with a
+      patch, 666 whole, 414 in the stated far gap
+    patch walks (out, in and the eye away, 1, 0.5 and 0.1 m a frame at 10 m/s, the sea clock held): 108 switches, 0
+      forced, 0 made while shown, the patch at nought the main mesh's own surface (0.0000 mm); fine over coarse at most
+      0.170; worst 894.5 mm a 1 m step and 151.6 mm a 0.1 m step (fade steps at 1.5 km, where the main mesh is flat; at
+      a held presence 168.8 and 17.9 mm), at a switch 3.53 mm. The review's "under 2 mm at the fine step" is not met
+      (plan v2, step 2)
+    SeaNear world: a Near not yet built reads 0; DrawnSurfaceZ holds every drawn point (5.0e-10 m); SampleNear at a
+      world point within 23.5 mm of DrawnSurfaceZ (rms 1.18 mm; the rest point's own height off by up to 253 mm)
+    foam depths: the chip's heads and tails within 8.6e-4 of FoamDrawn from 3 m to 8 km; the drawn cover within 6.3% of
+      Monahan from 50 m to 8 km at Beaufort 3 to 7
+  and its costs (the rest surface's lines as before, the world reads' new ones):
+                          cap        ocean-waves-r3
+    BuildNear (96)        0.2 ms     0.181 ms (the heights alone, bShifts false: the rest surface)
+    with the shifts       0.4 ms     0.310 ms (the world reads'; 0.331 alone)
+    BuildNear (128)       0.35 ms    0.262 ms
+    with the shifts       0.5 ms     0.450 ms (0.416 alone)
+    SampleLevel           6 ns       4.33 ns
+    SampleNearRest        12 ns      9.56 ns (r2's SampleNear, the rest point's height)
+    SampleNear (world)    35 ns      29.99 ns (the shift's read, the step back, the height's read)
+    BuildNear + 10k SampleNearRest + the ride, at the shots' eyes, 0.3 ms: 14 m 0.243, 18 m 0.244, 28 m 0.214, 55 m 0.203
+    BuildNear with shifts + 10k SampleNear + the ride, 0.6 ms: 14 m 0.484, 18 m 0.478, 28 m 0.455, 55 m 0.424
+    the ride, 40 hulls    0.02 ms    samar 0.0137, two-lines 0.0105, light-ships 0.0078 ms a frame
+  Not in it yet, with their steps: the hull's own waves (step 9a's checks) and the predicted eye against AimEye's mirror
+  (step 9's).
+
+Tools/sea_waves/run.sh, step 14(c)'s (the gale: storms at Beaufort 7, 8 and 9 behind -TheaterSeaGale, off by default,
+Brian's and the art director's decision; FleetWaves' gale (the cap to 24.4 m/s, GaleFetchOf, StreakShareOf,
+PaintLanesGale), Battle/FleetRideGale.h (the ride's own limits at 7 to 9 as data, no ride code: step 5 is not built) and
+SeaFace::MakeStreaks; run ocean-gale-r2, 25 November 2026, on 73c7c69d and the sea scene's review of it (the green water
+counted once, in the sea the scene draws, the boats at their drawn trim, no heave limit, LimitAt the art director's to
+13.8 m/s, the pins as measured, gale_pin's four new digests), beside three other sessions; the counts of step 0's, step
+1(a)'s and step 2's steps above unchanged, and nothing on screen changes: the switch is in the table, off, and not
+built, because the game does not draw the fleet's sea yet)
+  gale_pin: 13 digests below today's 13.8 m/s cap, 0 changed since 942d9295 (make, drawn, stage, near, sum, ride, grid,
+    lanes, seaface, and from r2 edges, mesh, place and chip, in gale.sha; every field Make gives at every tenth of a
+    metre a second to 13.8, three seeds, with a swell and without, with a fetch and without, under the show's cap and
+    under the gale's; the drawn frame, the stage's pixel reads, the near grid and its samples, the ride on 40 hulls, the
+    whitecaps' picture (MakeFoam(512, 160)) and a shore; edges: U 0, 1e-9 and the cap's either side, a cap of 0 and
+    under, 0 and 16 pixel trains, fetches of 1 m and 10,000 km, and every bearing round the circle and past it; mesh:
+    Grid at 96 and 128 and Patch(); place: PlaceOf now and before, WeightsAt, DrawnSurfaceZ, NearShift, FoamFade and
+    HeadShapeAt; chip: Gpu::Run, the chip's float twin, at every mode, on the grid and the patch, at 96 and 128).
+    Per-compiler pins where 942d9295 itself lays the floats differently under clang: grid, mesh, place and chip
+    ("<name>@clang" in gale.sha); base and tree agree under each compiler, which is what the pin is for. A change of the
+    chip's 2 pi to 6.2831f in FleetWavesGpu.inl is caught
+  gale_decks: 7 models measured, 2 skipped (no model of her own: the corvette's and the frigate's rows are estimates),
+    0 moved (each row's bow, waist and stern deck read again out of Content/Models/Ships/<Model>.json within 5 cm, and
+    the model's length and beam within 10 cm)
+  gale_test: 37 checks, 0 failed (spectrum to 24.4 m/s 2, WMO's heights and periods 6, whitecaps at gale winds 2, the
+    wind's streaks 6, the ride's limits 6, freeboard 7, the lane's footprint 4, the source scan 4); its report in
+    OUT/gale/gale_freeboard.txt and the streaks' picture in OUT/gale/streaks.rgba. g++ and clang (-Wshadow-all) give
+    the same report byte for byte
+  the sea by Beaufort as built (WMO-No. 558's rows; the gale's own sea is duration-limited, a gale of 17.5 hours, CERC
+  1984 eq. 3-35, and the fully raised one Pierson-Moskowitz as the show lays it):
+    B7 (13.9-17.1 m/s; WMO probable 4.0 m, most 5.5 m)   the gale's 4.04 m Tp 10.0 s at the row's foot (fetch 324 km)
+                                                         to 5.23 m Tp 11.1 s at its head; fully raised at its middle
+                                                         5.05 m Tp 11.3 s
+    B8 (17.2-20.7 m/s; probable 5.5 m, most 7.5 m)       5.27 m Tp 11.1 s (360 km) to 6.64 m Tp 12.2 s; fully raised
+                                                         7.54 m Tp 13.8 s
+    B9 (20.8-24.4 m/s; probable 7.0 m, most 10.0 m)      6.68 m Tp 12.2 s (396 km) to 8.16 m Tp 13.2 s; fully raised
+                                                         10.73 m Tp 16.5 s
+    at the cap the duration-limited sea of a 17.5-hour gale is 4.0028 m (fetch 322.4 km) and the gale's sea a
+    micrometre a second over it 3.9992 m, against the show's 0.021 x 13.8^2 = 3.9992 m, so nothing jumps when the
+    switch raises the cap (GaleHours 18 fails it); the peak period steps down by 1.14% there and rises above it
+    the least J over a 1 km square at 2 m, over all 144 gale seas (every wind from 14 m/s to the cap, three seeds,
+    fetch-limited and fully raised, with a 4 m 14 s swell and without): 0.5428 (the plan's "J above 0.15")
+    the whitecaps' drawn cover within 1.6% of Monahan: B8 8.54% against 8.68%, B9 15.62% against 15.85%
+    the wind's streaks drawn (StreakShareOf x the picture): 12 m/s 0.37%, 13.9 1.36%, 17.2 4.15%, 20.8 6.38%,
+    24.4 7.64% of the sea
+  the ride's limits: FleetRideGale::LimitAt is the art director's AtForce over RideOf's rows at every wind to 13.8 m/s
+  (every hundredth, hulls of 40 to 300 m: 41,430 cases, worst 0 deg; the roll period RideOf's, interpolated), and climbs
+  only above the cap, without a jump, to the rule's rows at Beaufort 7, 8 and 9 (a 114 m destroyer's roll 13.20, 16.11,
+  18.32 deg, pitch 5.35, 6.43, 7.26). Heave is not limited (no HeaveMost: step 5 as amended 25 November)
+  the freeboard tests (green water over each deck: the share of 400 s at 4 Hz, each instant counted once (a deck is wet
+  when the water stands over it on either side), the most of four headings and both speeds (her class's and hove to,
+  3 m/s), in the sea the scene draws (the gale's own at each row's middle wind, GaleFetchOf's fetch; at 13.8 and 12.3
+  m/s the show's); the ride as step 5 lays it (heave and pitch through its light low-pass at 0.4 Tp, her roll oscillator
+  at RideOf's period), roll and pitch soft-limited at 1.1 x LimitAt, heave not limited; a surfaced boat at the trim the
+  game draws her at (ConvoyLooksCore's StepBoat: awash, her casing 0.5 m over the still sea, her model lowered 1.27 m
+  for the VIIC, 2.10 m for the USA boat and 1.50 m for any other); bow / waist / stern, % of the time):
+                               Beaufort 7             Beaufort 8             Beaufort 9             the cap, 13.8 m/s
+    destroyer                  0 / 0 / 0              0 / 0.75 / 0           0 / 1.44 / 0.06        0 / 0 / 0
+    destroyer (USA)            0 / 0 / 0              0 / 0.25 / 0           0 / 0.44 / 0           0 / 0 / 0
+    destroyer (JAP)            0 / 0 / 0              0 / 0.75 / 0           0 / 1.62 / 0           0 / 0 / 0
+    destroyer (GER)            0 / 0 / 0              0 / 0.44 / 0           0 / 0.94 / 0           0 / 0 / 0
+    frigate (River) [EST]      0 / 0 / 0.56           0 / 0.19 / 3.00        0 / 1.19 / 4.75        0 / 0 / 0
+    corvette (Flower) [EST]    0 / 4.12 / 1.19        0 / 9.94 / 5.75        0 / 14.88 / 10.81      0 / 1.69 / 0.31
+    U-boat (Type VIIC)         24.25 / 41.06 / 42.50  27.44 / 45.06 / 46.50  31.19 / 47.00 / 44.94  19.19 / 39.38 / 37.94
+    submarine (USA)            13.69 / 41.12 / 40.38  20.50 / 44.31 / 45.31  25.37 / 46.69 / 44.12  10.06 / 38.56 / 35.06
+    submarine (any other navy) 21.81 / 39.12 / 39.56  25.75 / 43.25 / 45.19  30.12 / 45.69 / 42.75  17.44 / 36.25 / 35.12
+    a boat's casing is drawn 0.25 m over the still sea at her side (the convoy looks' "awash, so the swell runs over
+    it"), so it washes near half the time at any wind from Beaufort 6 (the VIIC's waist 39.75% at 12.3 m/s): that is
+    the look as the game already draws it, not the gale's. Her tanks blown (at her model's waterline) the VIIC's waist
+    is 3.81 / 9.62 / 14.12%. Every destroyer's forecastle, weather deck and quarterdeck stay dry at 13.8 and 12.3 m/s
+    (step 5's check as amended); a boat's casing and a corvette's waist wash there. The look's forecastle stays dry: its
+    low-pass has no hull period and no bow swell-up: with a hull's own heave and pitch (5.75 s, damping 0.25 [EST]) the
+    destroyer's bow is wet 0.19% at B8 and 1.62% at B9, her waist 1.81% and 3.00% (the report gives it for every
+    destroyer; gale_test checks every bow is wet at B9 under it). FleetRideGale::GreenMost and GreenBelow hold each of
+    the 108 shares as measured (within 0.003 and a twentieth, either way): the look's, not the ships'. The look's heave
+    rms over an hour is its transfer function's at her encounter frequencies: all 432 runs together -0.34%, 5 over 5%,
+    worst 12.6%
+  its costs on the cloud Xeon (least of a few rounds, beside three other sessions):
+                          942d9295        the gale
+    the lane, 512 x 512 over 2.5 km, 40 ships' wakes (2,400 points), 4 oil discs, 40 hulls (each alone, least of 41,
+    three rounds):
+                          11.745 ms       12.522 ms (PaintLanesGale: PaintLanes' own red and green, plus the blue
+                                          footprint, worked only in each hull's own box of texels; +0.777 ms, +6.6%, and
+                                          1.00 MB of picture against 0.50 MB, RGBA8 against RG8. 73c7c69d's in the same
+                                          rounds 12.816 ms, +1.071 ms; interleaved with PaintLanes, +0.63 to 0.81 ms
+                                          against its +1.45 to 1.50). The lane is laid when the wake has moved, not
+                                          every frame.
+    MakeStreaks(512, 160) -               81.780 ms once as the look opens (MakeFoam(512, 160) beside it: 72.957 ms)
+    Make (the sea itself)  0.002 ms       0.002 ms at 22.6 and at 24.4 m/s: the same 10 displaced and 12 pixel trains
+    GaleFetchOf                           23 ns a call, StreakShareOf 3 ns (both read once a look, not a frame)
+    DrawnFor + BuildNear (96, with shifts), 8 rings, an 18 m eye and a subject 2.5 km out:
+                          0.308 ms        0.315 ms at 22.6 m/s (Hs 7.42 m), 0.322 ms at 24.4 m/s (Hs 8.16 m): the gale
+                                          adds no ring and no train, so the near grid costs what the ledger booked
+  (every step of the full runner passed, SEA WAVES: ALL PASSED, with step 0's, step 1(a)'s and step 2's counts as
+  above; step 2's "SampleNear at a world point costs 35 ns or less" read 30.33 ns this time, so r1's 35.44 ns was the
+  host's load, as the review found: both trees 28.3 ns there)
+
+Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
+
+The Mac, release 1.5 (22 November 05:23-05:32Z, the production lead's frame-time lines,
+/mnt/project-files/sea-b34a-ride-and-frame-times.txt; the whole frame from 1 s of play, mean / 95th / 99th, ms; 2881x1786)
+Picture runs (water sheets; samar's 10 pictures), not whole battles: the camera on the planned shots, skipping ahead
+between them. No command line was kept, so their sound is not known.
+  two-lines     9.5 / 11.4 / 13.7   a water sheet (-TheaterSeaWaterSheet), 24 pictures: 3647 frames over 35 s
+  light-ships   9.2 / 11.3 / 15.4   a water sheet, 24 pictures: 3729 frames over 34 s
+  samar        14.2 / 22.8 / 31.0   its own shots, 10 pictures: 11724 frames over 167 s
+  samar-warm-grade (-TheaterSeaGrade, a different grade) 17.2 / 31.2 / 45.8, 9728 frames over 167 s, 10 pictures: not a
+  second run of samar as made, and not replayed (its grade's values were not kept)
+  These are read only beside the bench's replays of the same runs (SEA_BENCH_REPLAY, 5 rounds unless told); the
+  bench's whole-battle runs are held to their own interleaved tier 0. The bench (Tools/sea_bench.sh) has not run yet.
+  Its first table, the replays against these lines and tier 0 against tier 0 asked for tier 1 and not built (an A/A
+  run: the bench's own noise), goes here.

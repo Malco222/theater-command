@@ -91,6 +91,24 @@ namespace AirSky
 
 	const Vec Wind(3.0, -2.0, 0.0);
 
+	void WindLattice(const Vec& W, int& OutX, int& OutY)
+	{
+		OutX = 2;
+		OutY = 3;
+		const double Flat = std::sqrt(W.X * W.X + W.Y * W.Y);
+		if (!(Flat > 1e-6))
+		{
+			return;
+		}
+		const double Long = std::sqrt(13.0) / Flat;
+		const int AX = static_cast<int>(std::lround(-W.Y * Long)), AY = static_cast<int>(std::lround(W.X * Long));
+		if (AX != 0 || AY != 0)
+		{
+			OutX = AX;
+			OutY = AY;
+		}
+	}
+
 	double PlaceDeck(double& Base, double& Top, double Band, double LowBand, std::string& OutWhy)
 	{
 		OutWhy.clear();
@@ -148,7 +166,7 @@ namespace AirSky
 		{
 			return Vec();
 		}
-		return Wind * std::max(0.0, AirSeconds);
+		return this->Wind * std::max(0.0, AirSeconds);
 	}
 
 	Vec Field::ShiftNear(int CloudIndex, double X, double Y) const
@@ -868,6 +886,9 @@ namespace AirSky
 		F.Ground = P.Ground;
 		F.GroundTop = P.GroundTop;
 		F.Serial = ++Layings;
+		F.Wind = P.Wind;
+		WindLattice(F.Wind, F.AcrossX, F.AcrossY);
+		const double LatX = F.AcrossX, LatY = F.AcrossY;
 		double Base = std::max(150.0, D.Base);
 		double Top = std::max(D.Top, Base + 300.0);
 		if (D.bDeck)
@@ -884,7 +905,7 @@ namespace AirSky
 		const uint64_t NoiseSeed = P.Seed * 0xD1B54A32D192ED03ull + 77;
 		const Vec Sun = P.Sun.Unit(Vec(-0.35, -0.45, 0.82));
 		const Vec SunFlat = Vec(Sun.X, Sun.Y, 0.0).Unit(Vec(0.0, -1.0, 0.0));
-		F.WindWay = std::atan2(Wind.Y, Wind.X);
+		F.WindWay = std::atan2(F.Wind.Y, F.Wind.X);
 		F.HoleTurn = Roll.U(0.0, 2.0 * Pi);
 		// (each puff as laid; the caller sets its edge and its shading where they differ from a soft one's. The puff is
 		// the last laid only until the next is: the reference is not kept)
@@ -914,15 +935,15 @@ namespace AirSky
 			// (the streets narrower than the lanes between them: the wave squared, the art director's brief on build 1768,
 			// loose streets along the trade wind broken into clumps, clear lanes of open sea between them)
 			const double RowTurn = Roll.U(0.0, 2.0 * Pi);
-			auto Crowd = [&F, RowTurn, NoiseSeed](double X, double Y)
+			auto Crowd = [&F, RowTurn, NoiseSeed, LatX, LatY](double X, double Y)
 			{
 				const double LX = X - F.Origin.X, LY = Y - F.Origin.Y;
-				const double Wave = 0.5 + 0.5 * std::cos(2.0 * Pi * 3.0 * (2.0 * LX + 3.0 * LY) / Period + RowTurn);
+				const double Wave = 0.5 + 0.5 * std::cos(2.0 * Pi * 3.0 * (LatX * LX + LatY * LY) / Period + RowTurn);
 				const double Clump = Noise(LX, LY, Period / 14.0, 14, NoiseSeed + 2);
 				return 0.6 * Wave * Wave + 0.4 * Clump;
 			};
 			// (downwind, level: the way the tops lean and the lee sides fray)
-			const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+			const Vec Down = Vec(F.Wind.X, F.Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 			const double Wanted = D.CoverLaid() * Period * Period;
 			const double Fatter = Smooth((D.CoverLaid() - DefaultCumulus) / (CumulusMost - DefaultCumulus));
 			// (each kind of day its own clouds, the art director, 20 November 22:37Z: a fair day's small flat fair-weather
@@ -1258,8 +1279,8 @@ namespace AirSky
 			// keeps a ragged hole over them, a few scraps of cloud in it; it does not drift, so the hole stays there.
 			const int TilesAcross = 48;
 			const double S = Period / TilesAcross;
-			// (the day's cover: broken at 0.6, the breaks broad; closed at all of it, none)
-			const double HoleBelow = DeckHoleBelow(D.CoverLaid());
+			// (the day's cover: broken at 0.6, the breaks broad; closed at all of it, none; or the battle's own gaps)
+			const double HoleBelow = P.DeckHoles >= 0.0 ? P.DeckHoles : DeckHoleBelow(D.CoverLaid());
 			const double RollTurn = Roll.U(0.0, 2.0 * Pi), RiftTurn = Roll.U(0.0, 2.0 * Pi);
 			struct Spot
 			{
@@ -1279,7 +1300,7 @@ namespace AirSky
 					// (and its cells lined up in rolls along the wind, about 2.4 km apart, the breaks lying in the troughs between
 					// them; and a few long rifts along the rolls, broken into lengths: the art director's winter-deck steer. The
 					// wind (3, -2) runs along the rolls, the waves across it, (2, 3), whole numbers of them to the square's side)
-					const double Across = 2.0 * Pi * (2.0 * LX + 3.0 * LY) / Period;
+					const double Across = 2.0 * Pi * (LatX * LX + LatY * LY) / Period;
 					const double Rolls = 0.5 + 0.5 * std::cos(5.0 * Across + RollTurn);
 					const double Rift = Smooth((std::cos(2.0 * Across + RiftTurn) - 0.955) / 0.035) * Smooth((Noise(LX, LY, Period / 8.0, 8, NoiseSeed + 5) - 0.45) / 0.12);
 					const double N = (Noise(LX, LY, Period / 9.0, 9, NoiseSeed) * 0.45 + Noise(LX, LY, Period / 27.0, 27, NoiseSeed + 1) * 0.55) * 0.72 + 0.28 * Rolls - 0.4 * Rift;
