@@ -11550,18 +11550,19 @@ namespace LandHouse
 				for (int K = 0; U < Fc.Half - 0.3; ++K)
 				{
 					const uint64_t Kb = Hash(Seed, 0x10 + static_cast<uint64_t>(K));
-					bool bFree = true;
+					// (a pole gone, its place left empty: the row the more uneven for it)
+					bool bFree = Unit(Hash(Kb, 5)) > 0.12;
 					for (const Gap& G : Bk.Gaps)
 						if (G.Look != 3 && G.Face == F && std::fabs(U - G.U) < 0.5 * G.W + 0.25 && Z > G.Z0 - 0.2 && Z < G.Z1 + 0.3) bFree = false;
 					for (const Spout& Sp : Bk.Spouts)
 						if (Sp.F == F && std::fabs(U - Sp.U) < 0.22) bFree = false;
 					if (bFree)
 					{
-						const double R = 0.055 + 0.022 * Unit(Hash(Kb, 1)), Len = 0.15 + 0.17 * Unit(Hash(Kb, 2));
+						const double R = 0.05 + 0.03 * Unit(Hash(Kb, 1)), Len = 0.07 + 0.35 * Unit(Hash(Kb, 2));
 						const Col C = Varied(P.Wood, 0.8 + 0.3 * Unit(Hash(Kb, 3)), 0.03);
 						B.Tube(InWall(P, Bk, F, U, Z, Z, 0.08), InWall(P, Bk, F, U, Z - 0.015, Z, -Len), R, 0.93 * R, 7, C, true);
 					}
-					U += 0.72 + 0.28 * Unit(Hash(Kb, 4));
+					U += 0.52 + 0.78 * Unit(Hash(Kb, 4));
 				}
 			}
 
