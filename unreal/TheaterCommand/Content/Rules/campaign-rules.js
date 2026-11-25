@@ -62238,16 +62238,17 @@ ${next.text}` : ""}` : next ? next.also : "";
       const doing2 = `${fleetView(s, f2.id)?.doing ?? (f2.stance === "port" ? `In harbour at ${f2.port}` : f2.stance === "raid" ? `Raiding shipping in the ${sea}` : `On patrol in the ${sea}`)}.`;
       const mine5 = f2.nat === s.human;
       if (mine5) {
+        const held2 = heldWhy(s, f2);
         const reach3 = fleetReach(s, f2).slice().sort((a, b) => a === f2.zone ? -1 : b === f2.zone ? 1 : 0);
         for (const z of reach3) {
           const here = f2.zone === z && f2.stance === "patrol";
-          options.push({ key: `fleet:${id}:${z}:patrol`, label: `Patrol the ${s.seas[z].name}`, detail: "Seeks out enemy warships there and guards the convoys.", ok: up && !here, why: here ? "It is doing so now." : notNow });
+          options.push({ key: `fleet:${id}:${z}:patrol`, label: `Patrol the ${s.seas[z].name}`, detail: "Seeks out enemy warships there and guards the convoys.", ok: up && !here && !held2, why: here ? "It is doing so now." : notNow || held2 });
         }
         for (const z of reach3) {
           const here = f2.zone === z && f2.stance === "raid";
-          options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: "Goes for merchant ships and avoids a fight with the enemy fleet.", ok: up && !here, why: here ? "It is doing so now." : notNow });
+          options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: "Goes for merchant ships and avoids a fight with the enemy fleet.", ok: up && !here && !held2, why: here ? "It is doing so now." : notNow || held2 });
         }
-        options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port", why: f2.stance === "port" ? "It is in harbour now." : notNow });
+        options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port" && !held2, why: f2.stance === "port" ? "It is in harbour now." : notNow || held2 });
         if (staffRunsDesk(s, "navy") && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: "Hand it back to your admirals", detail: HAND_BACK_TIP, ok: up, why: notNow });
       }
       const who = mine5 ? whoSails(s, id) : "";
@@ -62287,6 +62288,13 @@ ${next.text}` : ""}` : next ? next.also : "";
       options
     };
   }
+  function heldWhy(s, f) {
+    return f.nat === s.human && f.attacked === s.turn ? fleetOptions(s, f.id)?.held ?? "" : "";
+  }
+  function heldWhyId(s, id) {
+    const f = s.fleets.find((x) => x.id === id);
+    return f ? heldWhy(s, f) : "";
+  }
   function whoSails(s, id) {
     if (!staffRunsDesk(s, "navy")) return "";
     return fleetKeptByHand(s, id) ? "Under your own orders: your admirals leave it where you send it." : "Your admirals sail it each month. Give it an order yourself and it stays where you send it.";
@@ -62301,7 +62309,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     else if (what === "fleetbase") ok = orderRebase(s, Number(id), Number(a));
     else if (what === "air") ok = orderAir(s, Number(id), a, Number(b));
     else if (what === "airbase") ok = orderAirBase(s, Number(id), Number(a));
-    return { ok, note: ok ? "The order is given." : "That order cannot be given now.", view: view2() };
+    return { ok, note: ok ? "The order is given." : (what === "fleet" || what === "fleetbase") && heldWhyId(s, Number(id)) || "That order cannot be given now.", view: view2() };
   }
   function townsList() {
     const s = game();
@@ -63015,7 +63023,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       headline: `${card.doing}`,
       note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ""}`,
       top: [
-        { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: "Safe from the enemy fleet, and takes no part at sea." },
+        { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port" && !o?.held, tip: o?.held || "Safe from the enemy fleet, and takes no part at sea." },
         ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
         ...wingsOfFleet(s, id).length ? [{ label: "CARRIER AIRCRAFT", act: `open:wings:${id}`, ok: true, tip: "The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour." }] : []
       ],
@@ -64350,7 +64358,7 @@ ${standing5}`,
       note4 = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? "its new airfield"}.` : "It cannot move there now.";
     } else if (part[0] === "fleet") {
       ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3]);
-      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The order is given"}.` : "That order cannot be given now.";
+      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The order is given"}.` : heldWhyId(s, Number(part[1])) || "That order cannot be given now.";
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetstaff") {
       ok = handBackFleet(s, Number(part[1]));
@@ -64358,7 +64366,7 @@ ${standing5}`,
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetescort") {
       ok = orderEscort(s, Number(part[1]), part.slice(2).join(":"));
-      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The fleet is bound to the lane"}.` : "It cannot escort that lane now.";
+      note4 = ok ? `${fleetView(s, Number(part[1]))?.doing ?? "The fleet is bound to the lane"}.` : heldWhyId(s, Number(part[1])) || "It cannot escort that lane now.";
       return { ok, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetshell") {
       const rep2 = orderBombard(s, Number(part[1]), Number(part[2]), part[3]);
