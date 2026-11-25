@@ -1112,7 +1112,7 @@ namespace ConvoyLook
 			{ "Freighter", true, { "Freighter", "turret.Y", -61.6, 8.14, 2.15, 2.15, 1.25, 180.0, 150.0 } },
 			{ "Tanker", false, { "Tanker", "turret.A", 65.6, 7.53, 1.8, 1.8, 1.0, 0.0, 150.0 } },
 			{ "Tanker", true, { "Tanker", "turret.Y", -69.4, 7.53, 2.25, 2.25, 1.25, 180.0, 150.0 } },
-			{ "Troopship", false, { "Troopship", "turret.A", 81.6, 12.53, 1.8, 1.8, 1.0, 0.0, 150.0 } },
+			{ "Troopship", false, { "Troopship", "turret.A", 81.6, 12.75, 1.8, 1.8, 1.0, 0.0, 150.0 } },
 			{ "Troopship", true, { "Troopship", "turret.Y", -90.6, 11.88, 2.25, 2.25, 1.25, 180.0, 150.0 } },
 		};
 		for (const Row& R : Rows)

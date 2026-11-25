@@ -45,15 +45,22 @@ namespace SeaSailors
 		Climb,  // climb_net: up a rescuer's side
 		Row,    // row: pulling an oar on a thwart
 		Sit,    // sit_raft: on a raft's deck or a boat's boards
-		Stand,  // idle: on a deck, standing to a gun (a gun's crew, ConvoyLook::GunCrewOf), or on a struck boat's casing (his
-		        //   hands up too, until the sailor files have a clip of a man standing with his hands raised: cower reads as
-		        //   taking cover, not as giving up)
+		Stand,  // idle: on a deck, or on a struck boat's casing (his hands up too where a file has no hands_up)
 		Duck,   // cower: crouched on a deck as a shell strikes or falls close aboard
 		Walk,   // walk: along a struck boat's casing to his place (1.417 m a stride of 1.133 s: the show's 1.25 m/s)
 		Run,    // run: out to her side before he goes over (2.435 m a stride of 0.8 s: the show's 3 m/s)
+		// (the gun crew's and the surrender's clips, the files' since 24 November (27 clips): a file without them still
+		// reads, its men standing (idle) for hands up and its gun unmanned (Has))
+		HandsUp, // hands_up: a struck boat's man giving up, his hands raised open over his head
+		Layer,   // gun_layer: a deck gun's layer at its left, his hands on the elevating handwheel, his eye at the sight
+		Trainer, // gun_trainer: its trainer at its right, the training handwheel (the layer's stance mirrored)
+		Loader,  // gun_loader: behind its breech, taking a round from the passer, laying it in the tray and ramming it
+		Passer,  // ammo_passer: in a hatch behind the gun, handing the rounds up (the root at the hatch's middle on the deck)
 		Count
 	};
 	constexpr int Acts = static_cast<int>(Act::Count);
+	/** The acts every sailor file must have (Fall to Run); the rest a file may lack (Crew::Has). */
+	constexpr int ActsNeeded = static_cast<int>(Act::HandsUp);
 	const char* ClipName(Act A);
 	/** The army of a nation's sailors as the files name it ("USA", "JAP", "GBR", "GER", "ITA", "SOV"), from the show's
 	 * nation (USA, UK, GER, ITA, JAP, SOV, as the recordings write them) or the scene's tag (us, gb, de, it, jp, su). */
@@ -80,6 +87,40 @@ namespace SeaSailors
 
 	/** The paint numbers of the sailor files' own paints, and of the army paints they wear. */
 	constexpr int Boots = 2, Skin = 7, Soles = 12, Kapok = 41, Shirt = 42, Trousers = 43, Hat = 44, Ties = 45;
+
+	/** A gun crew clip's handwheel and sight (gun_layer's and gun_trainer's `wheel` and `sight`), in its root's frame
+	 * (his own axes, metres): the wheel's hub, the way its axle points, its rim's radius and how far round it is turned
+	 * through the clip (Turn: t, degrees, by twos), and where his eye is (the sight's eyepiece just ahead of it along x). */
+	struct Wheel
+	{
+		float Hub[3] = { 0.f, 0.f, 0.f };
+		float Axis[3] = { 1.f, 0.f, 0.f };
+		float Radius = 0.f;
+		std::vector<float> Turn;
+		float Eye[3] = { 0.f, 0.f, 0.f };
+	};
+	/** A gun crew clip's round (gun_loader's and ammo_passer's `round`), in its root's frame: its length and radius, the
+	 * chamber's mouth (Breech: where its base lies rammed home) and the bore's way (the loader's only), and its track (t,
+	 * shown, its base x y z, its nose's way dx dy dz: by eights). */
+	struct Round
+	{
+		float Long = 0.f, Radius = 0.f;
+		bool bBreech = false;
+		float Breech[3] = { 0.f, 0.f, 0.f };
+		float Bore[3] = { 1.f, 0.f, 0.f };
+		std::vector<float> Track;
+	};
+	/** Where a round is at a time in its clip: shown or not (in the hands, or home and hidden), its base and its nose's way. */
+	struct RoundAt
+	{
+		bool bShown = false;
+		LandMen::Vec3 Base, Way;
+	};
+
+	/** A wheel's turn (degrees) and a round's place at a time in a clip Long seconds long (looped): its blocks' tracks
+	 * eased between their keys; a round shown as its key at or before the time says. */
+	float TurnAt(const Wheel& W, float Long, float Time);
+	bool RoundAlong(const Round& R, float Long, float Time, RoundAt& Out);
 
 	/** How a man is shown now: which file, which act at which time in its clip, his root (board metres) and heading;
 	 * bMirror, the file's man drawn left for right (an oarsman on her starboard side: the clip pulls an oar on his right,
@@ -138,6 +179,29 @@ namespace SeaSailors
 		const std::string& Army(int K) const { return Read[static_cast<size_t>(K)].Army; }
 		/** A clip's length (seconds) for an act. */
 		float Long(int K, Act A) const;
+		/** Whether file K has the clip for an act (every file has Fall to Run; the gun crew's and hands_up only the files
+		 * of 24 November on). */
+		bool Has(int K, Act A) const
+		{
+			const int I = static_cast<int>(A);
+			return K >= 0 && static_cast<size_t>(K) < Read.size() && I >= 0 && I < Acts && Read[static_cast<size_t>(K)].Clip[I] >= 0;
+		}
+		/** File K's clip for an act (its events: the loader's round_taken, ram and breech_close, the passer's round_up);
+		 * null where the file lacks it. */
+		const LandMen::Clip* ClipOf(int K, Act A) const
+		{
+			return Has(K, A) ? &File(K).Clips[static_cast<size_t>(Read[static_cast<size_t>(K)].Clip[static_cast<int>(A)])] : nullptr;
+		}
+		/** The gun crew clips' blocks: the layer's or the trainer's wheel and sight (null for any other act, or a file
+		 * without them), the loader's or the passer's round, and the loader's root from the passer's (`pair`: same facing,
+		 * same time). */
+		const Wheel* WheelOf(int K, Act A) const;
+		const Round* RoundOf(int K, Act A) const;
+		bool PairOf(int K, LandMen::Vec3& OutLoaderRoot) const;
+		/** How far round the wheel is turned (degrees) at a time in the layer's or the trainer's clip. */
+		float WheelTurn(int K, Act A, float Time) const;
+		/** The round at a time in the loader's or the passer's clip; false where the file has no such round. */
+		bool RoundNow(int K, Act A, float Time, RoundAt& Out) const;
 		/** File K's dress for a man: Variant 0 most men's, 1 the one in seven's (the first of its colour_variants with
 		 * colours: the American officer's khaki, the Japanese grey-green, the British cap's white cover, the German and
 		 * Italian summer white). Not bWarm (SummerWhites false), no man wears white: the one in seven takes the file's
@@ -168,6 +232,9 @@ namespace SeaSailors
 		int Skin(int K, Act A, float Time, LandMen::Lod L, std::vector<float>& OutAt, std::vector<float>& OutFacing) const;
 		/** The middle of his two hands (his own axes), doing A at Time. */
 		LandMen::Vec3 Hands(int K, Act A, float Time) const;
+		/** Where a bone's head is (his own axes), doing A at Time: the gun's wheels, breech and round are put where the
+		 * clips' hands are, and Tools/convoy_looks checks they meet. A bone the file lacks: his root. */
+		LandMen::Vec3 BoneAt(int K, Act A, float Time, const char* Bone) const;
 		/** His oar pulling (the row clip's `oar` track, his own axes, metres over the seat): its handle at Time and its
 		 * rowlock, on his right (bMirror: his left). False where the file has no track (then Hands and LockOut). */
 		bool Oar(int K, float Time, bool bMirror, LandMen::Vec3& OutHandle, LandMen::Vec3& OutLock) const;
@@ -197,8 +264,15 @@ namespace SeaSailors
 			std::vector<float> Handle;
 			// (its colour_variants that give colours, in the file's order, by name)
 			std::vector<std::pair<std::string, Dress>> Others;
+			// (the gun crew clips' blocks, where it has those clips: the layer's and the trainer's wheels, the loader's and
+			// the passer's rounds, the pair)
+			Wheel Wheels[2];
+			Round Rounds[2];
+			bool bPair = false;
+			LandMen::Vec3 Pair;
 		};
 		std::vector<FileRead> Read;
 		void Frames(int K, Act A, float Time, LandMen::Xform* Out) const;
+		static void ReadGunBlocks(const std::string& Text, const int* Clip, Wheel* OutWheels, Round* OutRounds, bool& OutPair, LandMen::Vec3& OutPairRoot);
 	};
 }
