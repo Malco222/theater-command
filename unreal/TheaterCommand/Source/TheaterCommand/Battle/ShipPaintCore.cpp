@@ -302,8 +302,9 @@ namespace ShipPaintCore
 		}
 		// (the material lifts what faces the sky by up x TopLight x metal x Wear: so the Wear is the skin's first look if it
 		// is on, and else the light alone's, too little to lay a mottle anyone could see; and the TopLight set is the light
-		// asked over that Wear, so the lift is the light asked either way. With the skin and no light, none, as the sea has
-		// always drawn: never the map's 0.26)
+		// asked over that Wear, so the lift is the same either way, as a Wear of 1 gives with the light itself (1 + the
+		// light x the metal: 254/255 of the light on unworn steel). With the skin and no light, none, as the sea has always
+		// drawn: never the map's 0.26)
 		Out.Wear = bSkin ? FirstLookWear : SeaLightAloneWear;
 		Out.TopLight = (bLight ? O.TopLight : SeaTopLightToday) / Out.Wear;
 		Out.bChipsOff = true;

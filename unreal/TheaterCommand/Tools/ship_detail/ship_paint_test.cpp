@@ -508,8 +508,9 @@ int main(int Argc, char** Argv)
 				"a review switch asked for in the month's scene is off and said as 0 on the \"Sea look:\" line; in a battle, as asked", std::string("in the month's scene ") + InMonth.Given[0].Value + ", in a battle " + InBattle.Given[0].Value);
 		}
 		{
-			// (the light switch takes a value: off or 0, none; 1 or on, the art director's 0.10; a top light from 0.0 to 0.30;
-			// anything else refused, said in the log and taken as off; in the month's scene, off whatever is asked)
+			// (the light switch takes a value: off or 0, none; 1 or on, the art director's 0.10; a top light from 0.0 to 0.30,
+			// to at most four places after the point; anything else refused, said in the log and taken as off, a light too fine
+			// for the "Sea look:" line to say among it; in the month's scene, off whatever is asked)
 			int LightAt = -1;
 			for (int K = 0; K < SeaLookSwitches::Count; ++K)
 			{
@@ -525,7 +526,8 @@ int main(int Argc, char** Argv)
 			const LightAsked Asked[] = { { "1", true, ShipPaintCore::SeaTopLight, false }, { "on", true, ShipPaintCore::SeaTopLight, false }, { "0.08", true, 0.08f, false },
 				{ "0.10", true, 0.10f, false }, { "0.12", true, 0.12f, false }, { "0.26", true, ShipPaintCore::MapTopLight, false }, { "0.30", true, 0.30f, false },
 				{ "0", true, 0.0f, false }, { "off", true, 0.0f, false }, { "0.31", true, 0.0f, true }, { "1.0", true, 0.0f, true }, { "-0.1", true, 0.0f, true },
-				{ "bright", true, 0.0f, true }, { "0.10", false, 0.0f, false }, { "1", false, 0.0f, false } };
+				{ "bright", true, 0.0f, true }, { "0.0001", true, 0.0001f, false }, { "0.10000", true, 0.10f, false }, { "0.00001", true, 0.0f, true },
+				{ "0.0000000001", true, 0.0f, true }, { "0.10", false, 0.0f, false }, { "1", false, 0.0f, false } };
 			std::string Took;
 			bool bRight = LightAt >= 0;
 			for (const LightAsked& One : Asked)
@@ -539,7 +541,7 @@ int main(int Argc, char** Argv)
 			const size_t Refusal = Scene.find("if (ShipLight.bRefused)");
 			Check(bRight && Refusal != std::string::npos && Refusal > Open && Refusal < OpenEnd && Has(Scene, "Paint.TopLight = bShipLight ? ShipLight.Value : -1.0f;") &&
 					  ShipPaintCore::SeaTopLightMost == 0.30f,
-				"-TheaterSeaShipLight= takes off or 0, 1 or on (0.10), or a top light from 0.0 to 0.30 for the ink; anything else refused (said in the log) and off; the month's scene off",
+				"-TheaterSeaShipLight= takes off or 0, 1 or on (0.10), or a top light from 0.0 to 0.30 to four places for the ink; anything else refused (said in the log) and off; the month's scene off",
 				Took);
 		}
 		Check(Has(Minis, "Raw->ShipPlanks.Add(Paint == TEXT(\"planks\"));") && Has(Minis, "At.bDeckWood = Raw->ShipPlanks.IsValidIndex(Kind) && Raw->ShipPlanks[Kind];"),
@@ -975,13 +977,18 @@ int main(int Argc, char** Argv)
 				Out.Set = (Steel.TopLight >= 0.0f ? 1 : 0) + (Steel.Wear > 0.0f ? 1 : 0) + (Steel.bBlots ? 1 : 0) + (Steel.bChipsOff ? 1 : 0);
 				return Out;
 			};
-			const float Deck = MetalOf(127), Plank = MetalOf(255), Roughness = 0.55f;
+			// (a steel point's finish as the reader marks it: 128 less half its wear, the wear held to 0 to 100, so 128 unworn
+			// (wear 0 or 1), which the graph reads as 254/255 metal, to 78 at the most wear, all metal; a plank, 255: none)
+			const std::string Reader = ReadAll(Src + "/Campaign/CampaignMiniatures.cpp");
+			const bool bReaderFinish = Has(Reader, "const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;\n\t\t\t\tFresh.Finish = bShipSteel ? static_cast<uint8>(128 - Worn / 2) : 255;");
+			const int SteelUnworn = 128, SteelMostWorn = 128 - 100 / 2;
+			const float Plank = MetalOf(255), Roughness = 0.55f;
 			std::string Lifts, Params;
 			bool bDeckLift = true, bPlank = true, bAlike = true, bNoChips = true, bAsMade = true, bOff = false, bSets = true;
 			float AloneMottle = 0.0f, SkinMottle = 0.0f;
 			for (const float Light : { 0.0f, 0.08f, ShipPaintCore::SeaTopLight, 0.12f, ShipPaintCore::MapTopLight })
 			{
-				float DeckLift[2] = { 0.0f, 0.0f };
+				float DeckLift[2][2] = { { 0.0f, 0.0f }, { 0.0f, 0.0f } };
 				Ink Inks[2];
 				for (const bool bSkin : { false, true })
 				{
@@ -1007,9 +1014,16 @@ int main(int Argc, char** Argv)
 						// (the light alone: a Wear, the TopLight over it, no chips, and nothing else)
 						bSets = bSets && Made.Set == 3 && Steel.Wear > 0.0f && Steel.TopLight == Light / Steel.Wear && !Steel.bBlots && Steel.bChipsOff;
 					}
-					// (a steel deck facing the sky, worn as the reader marks it, alpha 127: all metal; a plank, alpha 255: none)
-					DeckLift[bSkin ? 1 : 0] = Lift(1.0f, Deck, Made.TopLight, Made.Wear);
-					bDeckLift = bDeckLift && std::abs(DeckLift[bSkin ? 1 : 0] - (1.0f + Light)) < 1e-3f;
+					// (a steel deck facing the sky at every finish the reader gives steel, unworn (128, 254/255 metal) to the most
+					// worn (78, all metal): lifted by 1 + T x its metal, as the map's sum gives the light at a Wear of 1, so
+					// 254/255 of the light where unworn and the light itself where worn; a plank, alpha 255: never)
+					for (int Alpha = SteelMostWorn; Alpha <= SteelUnworn; ++Alpha)
+					{
+						const float Lifted = Lift(1.0f, MetalOf(Alpha), Made.TopLight, Made.Wear);
+						bDeckLift = bDeckLift && std::abs(Lifted - (1.0f + Light * MetalOf(Alpha))) < 1e-6f;
+						DeckLift[bSkin ? 1 : 0][0] = Alpha == SteelUnworn ? Lifted : DeckLift[bSkin ? 1 : 0][0];
+						DeckLift[bSkin ? 1 : 0][1] = Alpha == SteelUnworn - 1 ? Lifted : DeckLift[bSkin ? 1 : 0][1];
+					}
 					bPlank = bPlank && Lift(1.0f, Plank, Made.TopLight, Made.Wear) == 1.0f;
 					// (no chip anywhere, at every finish and every corner and step of the noise: the metal stays 0, the roughness as made)
 					for (int Alpha = 0; Alpha <= 255; ++Alpha)
@@ -1046,8 +1060,8 @@ int main(int Argc, char** Argv)
 						}
 					}
 				}
-				Lifts += std::string(Lifts.empty() ? "" : "; ") + "light " + (Light > 0.0f ? Num(Light, 2) : std::string("off")) + ": alone " + Num(DeckLift[0], 4) + ", with the skin " +
-						 Num(DeckLift[1], 4);
+				Lifts += std::string(Lifts.empty() ? "" : "; ") + "light " + (Light > 0.0f ? Num(Light, 2) : std::string("off")) + ": alone " + Num(DeckLift[0][0], 4) + " unworn, " +
+						 Num(DeckLift[0][1], 4) + " worn, with the skin " + Num(DeckLift[1][0], 4) + ", " + Num(DeckLift[1][1], 4);
 				Params += std::string(Params.empty() ? "" : "; ") + (Light > 0.0f ? Num(Light, 2) : std::string("off")) + " alone " +
 						  (Inks[0].Set == 0 ? std::string("nothing set") : "Wear " + Num(Inks[0].Wear, 2) + " TopLight " + Num(Inks[0].TopLight, 2)) + ", skin Wear " + Num(Inks[1].Wear, 2) +
 						  " TopLight " + Num(Inks[1].TopLight, 2);
@@ -1055,7 +1069,9 @@ int main(int Argc, char** Argv)
 			Check(bOff && bAsMade, "with both switches off nothing is set on the steel ink: as made, TopLight 0.26 with no Wear to lift by, so no lift, no mottle, no chips", "nothing set");
 			Check(bSets, "the light alone sets Wear, TopLight (the light over the Wear) and ChipAt, nothing else; the skin its own Wear 1.0, the light itself (0 if off), BlotTiling and ChipAt",
 				Params);
-			Check(bDeckLift && Deck == 1.0f, "a steel deck facing the sky is lifted by the light asked, 1 + T within 0.001 (0.08, 0.10, 0.12, 0.26), with or without the skin, and by nothing with the light off",
+			Check(bDeckLift && bReaderFinish && std::abs(MetalOf(SteelUnworn) - 254.0f / 255.0f) < 1e-6f && MetalOf(SteelUnworn - 1) == 1.0f && MetalOf(SteelMostWorn) == 1.0f,
+				"a steel deck facing the sky is lifted by 1 + T x its metal within 0.000001 at every finish the reader gives steel (128 unworn, 254/255 metal; 127 to 78 worn, all "
+				"metal), for 0.08, 0.10, 0.12 and 0.26, with or without the skin, and by nothing with the light off",
 				Lifts);
 			Check(bAlike, "the light alone lifts every finish (alpha 0 to 255), facing every way, exactly as the skin with the same light does", "within 0.000001");
 			Check(bPlank && Plank == 0.0f, "a plank (not metal, alpha 255) is never lifted, whatever the light", "metal " + Num(Plank, 1));

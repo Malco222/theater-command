@@ -59,7 +59,10 @@ namespace ShipPaintCore
 	 * The material lifts by up x TopLight x metal x Wear, and the sea's steel ink has never had Wear, so the sea has drawn no
 	 * top light at all. SteelOf gives the ink the Wear the lift needs, with or without the skin: with the skin, the first
 	 * look's own (SeaFirstLookWear); with the light alone, so little (SeaLightAloneWear) that its blot mottle cannot be seen,
-	 * and TopLight raised to match, so the lift is the light asked either way. */
+	 * and TopLight raised to match, so the lift is the same either way, and the same as the map's sum gives for that light
+	 * at a Wear of 1: 1 + the light x the metal. Unworn steel is marked alpha 128 by the reader, which the material reads as
+	 * 254/255 metal, so an unworn steel deck facing the sky is lifted by 254/255 of the light (1.0996 at 0.10, 1.2590 at
+	 * 0.26); a worn one (alpha 127 and below, all metal) by the light itself (1.10, 1.26). */
 	inline constexpr float SeaTopLight = 0.10f;
 	/** The most top light -TheaterSeaShipLight= takes as a number (anything over it is refused and taken as off). */
 	inline constexpr float SeaTopLightMost = 0.30f;
@@ -77,8 +80,9 @@ namespace ShipPaintCore
 	 * In M_MapSurface the Wear does three things: it lets the lift through (1 + up x TopLight x metal x Wear), it lays the
 	 * blot mottle (the colour times a mix of 1 and 0.8 + 0.42 of the blot, by Wear x (metal/2 + 1/2)), and it lets the chips
 	 * through (times Wear; held off by ChipAt at SeaChipAt anyway). At 0.01, with TopLight set to the light divided by it,
-	 * the lift is the light asked, while the mottle moves a colour by at most 0.22 in 100 (0.01 x 0.22): less than one
-	 * level of 255 anywhere, so the light alone looks like the light alone, not like the skin. */
+	 * the lift is what a Wear of 1 gives with the light itself (1 + the light x the metal), while the mottle moves a colour
+	 * by at most 0.22 in 100 (0.01 x 0.22): less than one level of 255 anywhere, so the light alone looks like the light
+	 * alone, not like the skin. */
 	inline constexpr float SeaLightAloneWear = 0.01f;
 	/** The material's chips held off at sea (its "ChipAt", -0.78 as made): its chip is metal (0.85), smoother than the paint
 	 * (0.34) and coloured "ChipColour", so a rust-coloured chip draws as a near-black, glossy fleck, never as the dark of a
@@ -175,7 +179,8 @@ namespace ShipPaintCore
 	 * off, nothing is set. With the skin (FirstLookWear above 0): its Wear, its blots, the chips held off, and the top light
 	 * asked (none, SeaTopLightToday, if not). With the light alone: the Wear SeaLightAloneWear, the chips held off, and
 	 * nothing else. Either way the ink's TopLight is the light asked divided by the Wear set, so a steel deck facing the sky
-	 * is lifted by the light asked, 1 + T, whether the skin is on or not. */
+	 * is lifted by 1 + T x its metal, whether the skin is on or not: 1 + 254/255 x T on unworn steel (the reader's alpha
+	 * 128; 1.0996 at 0.10), 1 + T on worn steel (alpha 127 to 78, all metal). */
 	Steel SteelOf(const Options& O, float FirstLookWear);
 
 	/** A wooden deck's most under the skin (linear, each channel): the art director's 150,135,110 with room for the blot

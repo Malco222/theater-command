@@ -190,8 +190,30 @@ namespace SeaLookSwitches
 		return true;
 	}
 
+	/** The finest a review switch's number is taken to: four places after the point (0.0001), not counting zeros at the
+	 * end (0.10000 is 0.1). A number given finer, such as 0.0000000001, is refused and taken as off, so NumberSaid can
+	 * always say the value in force back exactly and never says a light that is on as 0 or as 0.000000000. */
+	inline constexpr int NumberPlaces = 4;
+
+	/** How many places after the point plain digits give, not counting zeros at the end (0.125: 3, 0.10000: 1, 1: 0). */
+	inline int PlacesOf(const std::string& Text)
+	{
+		const size_t Point = Text.find('.');
+		if (Point == std::string::npos)
+		{
+			return 0;
+		}
+		size_t End = Text.size();
+		while (End > Point + 1 && Text[End - 1] == '0')
+		{
+			--End;
+		}
+		return static_cast<int>(End - Point - 1);
+	}
+
 	/** A number as the "Sea look:" line says it: 0 for none, else with two places at least (0.10) and as many more as it
-	 * needs to be read back as the same number (0.125). */
+	 * needs to be read back as the same number (0.125). Every number TakeReviewNumber takes (at most NumberPlaces places)
+	 * is said back exactly within four places. */
 	inline std::string NumberSaid(float Value)
 	{
 		if (Value == 0.0f)
@@ -222,9 +244,10 @@ namespace SeaLookSwitches
 	};
 
 	/** A review switch that takes a number: off or 0, none (0); 1 or on, OnValue; a number in plain digits from 0 to Most,
-	 * that number; anything else refused and taken as off. As TakeReview, it is taken only where review pictures are made
-	 * (bReview): in the month's sea scene inside a campaign it is off, whatever was asked. Its value in force is written
-	 * back into the look (NumberSaid: 0, or the number as 0.10), so the "Sea look:" line says what was applied. */
+	 * given to at most NumberPlaces places after the point, that number; anything else refused and taken as off. As
+	 * TakeReview, it is taken only where review pictures are made (bReview): in the month's sea scene inside a campaign it
+	 * is off, whatever was asked. Its value in force is written back into the look (NumberSaid: 0, or the number as 0.10),
+	 * so the "Sea look:" line says what was applied. */
 	inline Number TakeReviewNumber(Look& InForce, const char* Name, bool bReview, float OnValue, float Most)
 	{
 		Number Out;
@@ -249,7 +272,7 @@ namespace SeaLookSwitches
 			{
 				Out.Value = OnValue;
 			}
-			else if (PlainNumber(Word, Got) && Got <= Most)
+			else if (PlainNumber(Word, Got) && Got <= Most && PlacesOf(Word) <= NumberPlaces)
 			{
 				Out.Value = Got;
 			}

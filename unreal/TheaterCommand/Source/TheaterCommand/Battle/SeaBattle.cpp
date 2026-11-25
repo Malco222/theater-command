@@ -1584,16 +1584,17 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// (the ship detail plan, round 1: the ships at sea, each off by default and each for review pictures until the art
 	// director's Mac check, so, as the reel's two, never taken in the month's scene inside a campaign.
 	// -TheaterSeaShipLight=: the file's shade on each point and the ships' top light, the art director's 0.10 asked as 1 or
-	// on, or a top light of its own from 0.0 to 0.30 (0.08, 0.12, or the map's 0.26 to compare), with or without the skin;
-	// off or 0 for none; anything else refused and taken as off. -TheaterSeaShipSkin=1: the rust ramp, the ruled salt, the
-	// wooden deck held, and M_MapSurface's own wear on the sea's steel ink, its blot mottle with no chips; both set on the
-	// stage once the sea is raised, below, before a ship is laid. -TheaterSeaShipShade=1: occlusion, contact shadows of
-	// 0.3 m and shadow quality 3, taken with the room and given back as the scene ends.)
+	// on, or a top light of its own from 0.0 to 0.30 to at most four places (0.08, 0.12, or the map's 0.26 to compare),
+	// with or without the skin; off or 0 for none; anything else (0.0000000001 among it) refused and taken as off.
+	// -TheaterSeaShipSkin=1: the rust ramp, the ruled salt, the wooden deck held, and M_MapSurface's own wear on the sea's
+	// steel ink, its blot mottle with no chips; both set on the stage once the sea is raised, below, before a ship is laid.
+	// -TheaterSeaShipShade=1: occlusion, contact shadows of 0.3 m and shadow quality 3, taken with the room and given back
+	// as the scene ends.)
 	const SeaLookSwitches::Number ShipLight = SeaLookSwitches::TakeReviewNumber(SeaLook, "TheaterSeaShipLight=", !bMonthScene, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
 	if (ShipLight.bRefused)
 	{
-		UE_LOG(LogTheater, Warning, TEXT("Sea battle: -TheaterSeaShipLight=%s refused: it takes off, 0, 1, on, or a top light from 0.0 to %.2f. Taken as off."),
-			UTF8_TO_TCHAR(ShipLight.Typed.c_str()), ShipPaintCore::SeaTopLightMost);
+		UE_LOG(LogTheater, Warning, TEXT("Sea battle: -TheaterSeaShipLight=%s refused: it takes off, 0, 1, on, or a top light from 0.0 to %.2f to at most %d places after the point. Taken as off."),
+			UTF8_TO_TCHAR(ShipLight.Typed.c_str()), ShipPaintCore::SeaTopLightMost, SeaLookSwitches::NumberPlaces);
 	}
 	const bool bShipLight = ShipLight.Value > 0.0f;
 	const bool bShipSkin = SeaLookSwitches::TakeReview(SeaLook, "TheaterSeaShipSkin=", !bMonthScene);

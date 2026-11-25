@@ -360,8 +360,10 @@ int main(int Argc, char** Argv)
 		Said.push_back(PoolLine);
 
 		// the ship detail plan's light switch, a review switch that takes a number (OpenOn, TakeReviewNumber): off or 0, none;
-		// 1 or on, the art director's 0.10; a number in plain digits from 0.0 to 0.30, that top light; anything else refused
-		// and taken as off; in the month's sea scene, off whatever was asked. The line says the value in force.
+		// 1 or on, the art director's 0.10; a number in plain digits from 0.0 to 0.30, to at most four places after the point,
+		// that top light; anything else refused and taken as off (a light too fine for the line to say, as 0.0000000001, among
+		// it); in the month's sea scene, off whatever was asked. The line says the value in force, and says back exactly
+		// every value it takes: each of the 3,000 from 0.0001 to 0.3000.
 		{
 			struct LightCase
 			{
@@ -381,6 +383,9 @@ int main(int Argc, char** Argv)
 				{ "-0.1", true, 0.0f, true, "0" }, { "1e-1", true, 0.0f, true, "0" }, { "0x0.1", true, 0.0f, true, "0" }, { "0.1.2", true, 0.0f, true, "0" },
 				{ "", true, 0.0f, true, "0" }, { ".", true, 0.0f, true, "0" }, { "nan", true, 0.0f, true, "0" }, { " 0.1", true, 0.0f, true, "0" },
 				{ "0.1x", true, 0.0f, true, "0" }, { "yes", true, 0.0f, true, "0" },
+				{ "0.0000000001", true, 0.0f, true, "0" }, { "0.00000000001", true, 0.0f, true, "0" }, { "0.000000001", true, 0.0f, true, "0" },
+				{ "0.00001", true, 0.0f, true, "0" }, { "0.12345", true, 0.0f, true, "0" }, { "0.0001", true, 0.0001f, false, "0.0001" },
+				{ "0.0825", true, 0.0825f, false, "0.0825" }, { "0.10000", true, 0.10f, false, "0.10" }, { "0.0000", true, 0.0f, false, "0" },
 				{ "1", false, 0.0f, false, "0" }, { "0.12", false, 0.0f, false, "0" }, { "junk", false, 0.0f, false, "0" },
 			};
 			int LightAt = -1;
@@ -400,15 +405,32 @@ int main(int Argc, char** Argv)
 				Wrong += bRight ? 0 : 1;
 				FirstWrong = !bRight && FirstWrong.empty() ? std::string("\"") + Case.Typed + "\" took " + std::to_string(Took.Value) + ", said " + Asks.Given[0].Value : FirstWrong;
 			}
+			// (every value it takes, 0.0001 to 0.3000: on, and said back as the very number in force, never as 0)
+			int SweepWrong = 0;
+			std::string FirstSweepWrong;
+			for (int K = 1; K <= 3000; ++K)
+			{
+				char Typed[16] = {};
+				std::snprintf(Typed, sizeof(Typed), "0.%04d", K);
+				Look Asks;
+				Asks.Given.push_back(Asked{ LightAt, Typed });
+				const SeaLookSwitches::Number Took = TakeReviewNumber(Asks, "TheaterSeaShipLight=", true, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
+				float Back = -1.0f;
+				const bool bRight = Took.Value > 0.0f && !Took.bRefused && SeaLookSwitches::PlainNumber(Asks.Given[0].Value, Back) && Back == Took.Value &&
+									Has(Line(Asks), "-TheaterSeaShipLight=" + Asks.Given[0].Value + " (asked)");
+				SweepWrong += bRight ? 0 : 1;
+				FirstSweepWrong = !bRight && FirstSweepWrong.empty() ? std::string("\"") + Typed + "\" took " + std::to_string(Took.Value) + ", said " + Asks.Given[0].Value : FirstSweepWrong;
+			}
 			Look Twelve, Unasked;
 			Twelve.Given.push_back(Asked{ LightAt, "0.12" });
 			const SeaLookSwitches::Number Took = TakeReviewNumber(Twelve, "TheaterSeaShipLight=", true, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
 			const SeaLookSwitches::Number NotAsked = TakeReviewNumber(Unasked, "TheaterSeaShipLight=", true, ShipPaintCore::SeaTopLight, ShipPaintCore::SeaTopLightMost);
 			const std::string LightLine = Line(Twelve);
-			Check("-TheaterSeaShipLight= takes off or 0 (none), 1 or on (0.10), or a top light from 0.0 to 0.30; anything else refused and taken as off; never in the month's scene; said as in force",
-				LightAt >= 0 && Wrong == 0 && Took.Value == 0.12f && NotAsked.Value == 0.0f && !NotAsked.bRefused && Line(Unasked) == Plain && ShipPaintCore::SeaTopLightMost == 0.30f &&
+			Check("-TheaterSeaShipLight= takes off or 0 (none), 1 or on (0.10), or a top light from 0.0 to 0.30 to four places; anything else refused and taken as off; never in the month's scene; said as in force",
+				LightAt >= 0 && Wrong == 0 && SweepWrong == 0 && Took.Value == 0.12f && NotAsked.Value == 0.0f && !NotAsked.bRefused && Line(Unasked) == Plain && ShipPaintCore::SeaTopLightMost == 0.30f &&
 					LightLine == "Sea look: tier 0 (release 1.5's sea, as made); 14 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0.12 (asked), -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off.",
-				std::to_string(std::size(Cases) - Wrong) + " of " + std::to_string(std::size(Cases)) + " values as ruled" + (FirstWrong.empty() ? "" : "; " + FirstWrong) + "; " + LightLine);
+				std::to_string(std::size(Cases) - Wrong) + " of " + std::to_string(std::size(Cases)) + " values as ruled" + (FirstWrong.empty() ? "" : "; " + FirstWrong) + "; " +
+					std::to_string(3000 - SweepWrong) + " of 3000 from 0.0001 to 0.3000 said back exactly" + (FirstSweepWrong.empty() ? "" : "; " + FirstSweepWrong) + "; " + LightLine);
 		}
 
 		// a table of the test's own, some built: what a later step's line says
