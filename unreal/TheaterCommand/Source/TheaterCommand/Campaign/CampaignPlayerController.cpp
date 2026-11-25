@@ -407,6 +407,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Men in the water, and the call that decides who is saved.
 			Add(TEXT("sailorsrule"), TEXT("Sailors"), TEXT("When a ship goes down in a fleet action fought on the sea field, her men go into the water, and after the fight the side left holding the water picks up who it can. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
 				Now.bSailors ? TEXT("ON") : TEXT("OFF"), Now.bSailors);
+			// (Release 2, the sea field's own water: battle/sea/ticket.ts; Brian 25 November 2026 12:52Z) Friendly torpedoes.
+			Add(TEXT("ownwaterrule"), TEXT("Friendly torpedoes"), TEXT("In a fleet action fought on the sea field, a destroyer holds its torpedoes while one of its own side's ships is in their way, and fires once the way is clear; and every ship keeps out of the way of its own side's torpedoes until they have passed. It works only in fleet actions fought live; those settled without the sea field are as before. It can be switched in any month."),
+				Now.bOwnWater ? TEXT("ON") : TEXT("OFF"), Now.bOwnWater);
 			// (Release 2, mines.ts; Brian 24 November 2026 20:38Z) Minefields laid across a narrow sea or off an enemy harbour.
 			Add(TEXT("seaminesrule"), TEXT("Mines at sea"), TEXT("A fleet with destroyers, cruisers or submarines can lay a field of mines from its page with LAY MINES, across a narrow sea or off a harbour an enemy fleet sails from. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month until their destroyers sweep it, and a field wears down over a few months. The computer's admirals lay fields too. It can be switched in any month: off, every field is gone."),
 				Now.bSeaMines ? TEXT("ON") : TEXT("OFF"), Now.bSeaMines);
@@ -670,7 +673,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -678,7 +681,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
-				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{

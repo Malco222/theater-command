@@ -125,7 +125,7 @@ import { setWingByDate, wingByDateOn } from '../../../src/campaign/carriers';
 import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
-import { sailorsOn, setSailors } from '../../../src/battle/sea/ticket';
+import { ownWaterOn, sailorsOn, setOwnWater, setSailors } from '../../../src/battle/sea/ticket';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { raidFogOn, skyKnown } from '../../../src/campaign/airfog';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
@@ -1045,6 +1045,8 @@ function drawView() {
     voyageLog: voyageOn(s),
     // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) Whether men go into the water when a ship goes down.
     sailors: sailorsOn(s),
+    // (Release 2, the sea field's own water: battle/sea/ticket.ts) Whether captains mind their own side's torpedoes.
+    ownWater: ownWaterOn(s),
     // (Release 2, mines.ts) Whether fleets can lay mines at sea, and the fields the player knows of: his side's and the enemy's he has found.
     seaMines: seaMinesOn(s),
     mines: minesSeen(s),
@@ -7041,6 +7043,17 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : on ? 'Sailor rules work in the grand campaign only.' : 'Sailor rules are off.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'ownwaterrule') {
+    // (Release 2, the sea field's own water: battle/sea/ticket.ts) Captains mind their own side's torpedoes, switched by
+    // the player in any month.
+    const on = part[1] === 'on';
+    setOwnWater(s, on);
+    ok = true;
+    note = ownWaterOn(s)
+      ? "Friendly torpedoes are watched: in fleet actions fought live on the sea field, a destroyer holds its torpedoes while one of its own ships is in their way, and ships keep out of the way of their own side's torpedoes."
+      : on ? 'Watching for friendly torpedoes works in the grand campaign only.' : 'Friendly torpedoes are no longer watched.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'fleetshadow') {
     // (Release 2, shadow.ts) 'fleetshadow:<fleet>:<enemy fleet>' sets it to shadow that fleet; 'fleetshadow:<fleet>:off' ends it.
     const id = Number(part[1]);
@@ -8281,6 +8294,9 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 // (Release 2, the sea field's sailor rules: battle/sea/ticket.ts) TC.sailors(on) at any time; the options page uses
 // act('sailorsrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).sailors = (on: boolean) => { const s = game(); setSailors(s, !!on); return { on: sailorsOn(s) }; };
+// (Release 2, the sea field's own water: battle/sea/ticket.ts) TC.ownWater(on) at any time; the options page uses
+// act('ownwaterrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).ownWater = (on: boolean) => { const s = game(); setOwnWater(s, !!on); return { on: ownWaterOn(s) }; };
 // (Release 2: mines.ts, heavyseas.ts, shadow.ts) TC.seaMines(on), TC.heavySeas(on), TC.shadowRelay(on) at any time; the
 // options page uses act('seaminesrule:on' / 'heavyseasrule:on' / 'shadowrelayrule:on', or ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).seaMines = (on: boolean) => { const s = game(); setSeaMines(s, !!on); return { on: seaMinesOn(s) }; };

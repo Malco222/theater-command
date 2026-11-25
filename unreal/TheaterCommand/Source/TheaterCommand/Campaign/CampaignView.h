@@ -1227,6 +1227,7 @@ struct FCampaignView
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
 	bool bSailors = false; // (release 2, the sea field's sailor rules: battle/sea/ticket.ts) men go into the water when a ship goes down
+	bool bOwnWater = false; // (release 2, the sea field's own water: battle/sea/ticket.ts) captains mind their own side's torpedoes
 	bool bSeaMines = false; // (release 2, mines.ts) fleets can lay minefields at sea
 	bool bHeavySeas = false; // (release 2, heavyseas.ts) gales blow at sea: fleets slowed, convoys late, shadows lost
 	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)
