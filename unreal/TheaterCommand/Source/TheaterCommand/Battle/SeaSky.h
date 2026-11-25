@@ -115,7 +115,11 @@ namespace SeaSky
 		/** Laid as asked for review (-TheaterSeaWeather=). */
 		bool bAsked = false;
 		AirSky::Day Day;
-		/** How heavy the rain is, 0 to 1 (RainOf). */
+		/** The cover the sky reads as, 0 to 1: the day's, held to what its kind can draw (AirSky::Day::CoverLaid before
+		 * CumulusLaidFor). A cumulus day is laid at more (Day.Cover) so that it paints this much; the night dome hides its
+		 * stars by this, and the cumulus light is this cover's (ReadAs). */
+		double Cover = 0.0;
+		/** How heavy the rain is, 0 to 1 (RainOf, from Cover). */
 		double Rain = 0.0;
 		/** Why, for the log: "the rules' sky", "stand-in sky: the rules sent none", ... */
 		std::string Why;
@@ -128,6 +132,22 @@ namespace SeaSky
 	 * 0.45 of cover, three of the six curtains from 0.55), and a closed deck's rain (none at 0.85, three curtains at 0.97
 	 * and over [EST: a sky of nine tenths or more under nimbostratus is mostly a raining one]). */
 	double RainOf(const AirSky::Day& D, double GivenRain);
+
+	/** What cumulus laid at 0, 0.05, ... AirSky::CumulusMost paints of the whole dome seen from the sea (each pixel the
+	 * same piece of sky, as a sky's eighths are counted), measured by Tools/sea_waves/cover_table over nine seeds of 20
+	 * eyes (25 November). Soft, torn puffs, and the farthest left out of the painter's room, paint about two thirds of the
+	 * footprint a cover lays. */
+	constexpr double CumulusPainted[12] = { 0.0, 0.031, 0.069, 0.091, 0.103, 0.152, 0.184, 0.239, 0.264, 0.291, 0.332, 0.346 };
+	/** The most of the sky cumulus paints at sea: CumulusPainted at AirSky::CumulusMost. A cumulus day of more reads as
+	 * this much (only a deck paints more). */
+	constexpr double CumulusReach = CumulusPainted[11];
+	/** The cumulus cover a sea battle lays for a day's cover, so that the sky seen from the sea paints what the day says
+	 * (the sea scene's follow-up, 25 November: a cumulus day of 0.5 painted 0.22 of the sky overhead, nearly clear to
+	 * the eye): CumulusPainted read backward, between its steps in a line; from CumulusReach, AirSky::CumulusMost. 0 at
+	 * none, and never less as the cover rises. The sea's own: air's cumulus is laid as given. */
+	double CumulusLaidFor(double Cover);
+	/** The chosen day as it reads (its light, AirSky::LightOf): the day with the cover it paints (Sky::Cover). */
+	AirSky::Day ReadAs(const Sky& Chosen);
 
 	/** The most puffs the painter draws at once (the plan's ledger: 1,500). */
 	constexpr int MostPuffs = 1500;
@@ -203,9 +223,11 @@ namespace SeaSky
 	/** A deck's cover under which its gaps are left open (seven eighths: broken); from it to a full overcast the dome
 	 * shuts them behind the lids (DeckClosing). */
 	constexpr double DeckOpenUnder = 0.875;
-	/** The widest the painted cover falls short of the field's over the dealt sweep, none to a full overcast in tenths
-	 * (Tools/sea_waves/sea_sky_test, measured 25 November): a ceiling the test holds, for the plan's cover line. */
-	constexpr double WorstCoverGap = 0.28;
+	/** The widest the painted cover overhead (the caps over 60 degrees) falls short of the field's over the dealt sweep,
+	 * none to a full overcast in tenths (Tools/sea_waves/sea_sky_test): a ceiling the test holds, for the plan's cover
+	 * line. Measured 25 November at 0.268 and, with cumulus laid to read (CumulusLaidFor), 0.263 (g++) and 0.257 (clang):
+	 * both at a cumulus day of 0.5, which overhead paints 0.24 and the whole sky about CumulusReach. */
+	constexpr double WorstCoverGap = 0.27;
 	/** How much of a deck's gaps the dome shuts behind its lids, 0 to 1: none under DeckOpenUnder of cover laid, all of
 	 * them at a full overcast; none on a cumulus day, and none from an eye at or over the deck's base. */
 	double DeckClosing(const AirSky::Field& F, const Vec& Eye);

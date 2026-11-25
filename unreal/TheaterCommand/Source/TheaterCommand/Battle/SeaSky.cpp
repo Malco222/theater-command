@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>
 #include <mutex>
 #include <utility>
 
@@ -60,7 +61,27 @@ namespace SeaSky
 			const int Eighths = static_cast<int>(std::lround(Clamp(Cover, 0.0, 1.0) * 8.0));
 			return Eighths <= 0 ? "clear" : Eighths <= 2 ? "fair" : Eighths <= 4 ? "scattered" : Eighths <= 7 ? "broken" : "overcast";
 		}
+
+		/** The chosen day's cover as it reads, and a cumulus day given a cover laid at what paints it (CumulusLaidFor);
+		 * the log says so. A deck, and a cover not given (air's stand-in, the art director's passed cumulus), as given. */
+		void LaidToRead(Sky& Out)
+		{
+			Out.Cover = Out.Day.CoverLaid();
+			if (Out.Day.bDeck || !(Out.Day.Cover >= 0.0))
+			{
+				return;
+			}
+			const double Laid = CumulusLaidFor(Out.Cover);
+			if (Laid != Out.Day.Cover)
+			{
+				Out.Day.Cover = Laid;
+				Out.Why += ", laid at " + Spelled(Laid) + " so that it reads so from the sea";
+			}
+		}
 	}
+
+	static_assert(AirSky::CumulusMost > 0.549 && AirSky::CumulusMost < 0.551,
+		"SeaSky::CumulusPainted is measured at 0, 0.05, ... 0.55: measure it again (Tools/sea_waves/cover_table) for air's new CumulusMost");
 
 	// ---- The switches ---------------------------------------------------------------------------------------------
 
@@ -210,6 +231,7 @@ namespace SeaSky
 			Out.Rain = RainOf(Out.Day, Switches.WeatherRain);
 			Out.Why = std::string("a day asked for review pictures: ") + (Out.Day.bDeck ? "a deck" : "cumulus") + " of "
 				+ Spelled(Out.Day.CoverLaid()) + " (" + Out.Day.Word + ")";
+			LaidToRead(Out);
 			return Out;
 		}
 		if (FromRules.bGiven)
@@ -219,6 +241,7 @@ namespace SeaSky
 			Out.Rain = RainOf(Out.Day, FromRules.Rain);
 			Out.Why = std::string("the rules' sky: ") + (Out.Day.bDeck ? "a deck" : "cumulus") + " of "
 				+ Spelled(Out.Day.CoverLaid()) + (Out.Day.Word.empty() ? "" : " (" + Out.Day.Word + ")");
+			LaidToRead(Out);
 			return Out;
 		}
 		if (Switches.bStandIn)
@@ -228,10 +251,44 @@ namespace SeaSky
 			Out.Day = StandIn();
 			Out.Rain = RainOf(Out.Day, -1.0);
 			Out.Why = "stand-in sky: the rules sent none";
+			LaidToRead(Out);
 			return Out;
 		}
 		Out.Why = "no clouds: the rules sent no sky";
 		return Out;
+	}
+
+	double CumulusLaidFor(double Cover)
+	{
+		if (!(Cover > 0.0))
+		{
+			return 0.0;
+		}
+		if (Cover >= CumulusReach)
+		{
+			return AirSky::CumulusMost;
+		}
+		constexpr int Last = static_cast<int>(std::size(CumulusPainted)) - 1;
+		for (int Step = 1; Step <= Last; ++Step)
+		{
+			if (Cover <= CumulusPainted[Step])
+			{
+				const double Low = CumulusPainted[Step - 1], High = CumulusPainted[Step];
+				const double Along = High > Low ? (Cover - Low) / (High - Low) : 1.0;
+				return std::min(AirSky::CumulusMost, AirSky::CumulusMost * (Step - 1 + Along) / Last);
+			}
+		}
+		return AirSky::CumulusMost;
+	}
+
+	AirSky::Day ReadAs(const Sky& Chosen)
+	{
+		AirSky::Day Read = Chosen.Day;
+		if (Chosen.bLaid && !Read.bDeck && Read.Cover >= 0.0)
+		{
+			Read.Cover = Chosen.Cover;
+		}
+		return Read;
 	}
 
 	AirSky::Placing PlacingFor(uint64_t Seed, double MiddleX, double MiddleY, const Vec& Sun, const Vec& Wind)

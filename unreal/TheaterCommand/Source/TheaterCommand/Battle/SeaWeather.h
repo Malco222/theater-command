@@ -104,7 +104,7 @@ public:
 	/** How heavy the rain is, 0 to 1: what the rain at the eye (FWeatherFall) must be given too, so the two agree. */
 	double RainStrength() const { return Chosen.bLaid ? Chosen.Rain : 0.0; }
 	/** How much of the sky is cloud, 0 to 1 (the night dome thins its stars by it; 0 with no sky laid). */
-	double CoverShare() const { return Chosen.bLaid ? Chosen.Day.CoverLaid() : 0.0; }
+	double CoverShare() const { return Chosen.bLaid ? Chosen.Cover : 0.0; }
 	/** How much the clouds take off the sun over the whole square, 0 to 1 (M_FleetSea's CloudShade darkens the crests'
 	 * glow and the sky's reflection by it); 0 with no shade laid. */
 	double CloudShade() const;

@@ -8,6 +8,9 @@
 //   - the painted cover as the plan's line 940 now has it (the sea scene, 25 November; the old 5 per cent cannot hold):
 //     the measured figures pinned, none at a clear sky, nine tenths and more at a full overcast, never less as the
 //     dealt cover rises from none to full in tenths, and the worst gap held as a ceiling (SeaSky::WorstCoverGap);
+//   - a cumulus day laid at the cover that paints its own, seen from the sea (SeaSky::CumulusLaidFor, the sea scene's
+//     follow-up): the whole sky within five hundredths of the day's cover, as far as cumulus can paint (CumulusReach),
+//     the day's rain, light and word its own, and a deck and air's stand-in laid as given;
 //   - the overview's eye under a deck the dome draws (the plan's line 941, SeaSky::OverviewHeight);
 //   - the dome picture is the same bytes twice over, and agrees with AirSky::ShadeOf's holes;
 //   - a cloud's bearing and height above the horizon from every planned eye is the line from that eye to its puff,
@@ -339,6 +342,53 @@ namespace
 			Check("rain given by the rules stands", std::fabs(SeaSky::RainOf(Deck, 0.25) - 0.25) < 1e-9);
 		}
 		{
+			// (the sea's cumulus laid at the cover that paints the day's: the sea scene's follow-up, 25 November)
+			bool bRises = true, bInside = true;
+			double Was = -1.0;
+			for (int Hundredth = 0; Hundredth <= 100; ++Hundredth)
+			{
+				const double Laid = SeaSky::CumulusLaidFor(Hundredth / 100.0);
+				bRises = bRises && Laid >= Was;
+				bInside = bInside && Laid >= 0.0 && Laid <= AirSky::CumulusMost;
+				Was = Laid;
+			}
+			bool bTable = true;
+			for (size_t Step = 1; Step < std::size(SeaSky::CumulusPainted); ++Step)
+			{
+				bTable = bTable && SeaSky::CumulusPainted[Step] > SeaSky::CumulusPainted[Step - 1];
+			}
+			Check("the table of what cumulus paints rises at every step, from none at none",
+				bTable && SeaSky::CumulusPainted[0] == 0.0 && std::size(SeaSky::CumulusPainted) == 12, Num(SeaSky::CumulusReach) + " at the most");
+			Check("the cover laid for a day's is none at none, never less as the day's rises, and never over CumulusMost",
+				SeaSky::CumulusLaidFor(0.0) == 0.0 && bRises && bInside);
+			Check("it reads the table backward: each step's painted share is laid at that step",
+				std::fabs(SeaSky::CumulusLaidFor(SeaSky::CumulusPainted[4]) - 0.20) < 1e-9 && std::fabs(SeaSky::CumulusLaidFor(SeaSky::CumulusPainted[8]) - 0.40) < 1e-9,
+				Num(SeaSky::CumulusLaidFor(SeaSky::CumulusPainted[4])) + ", " + Num(SeaSky::CumulusLaidFor(SeaSky::CumulusPainted[8])));
+			Check("from the most cumulus paints up, it is laid at CumulusMost",
+				SeaSky::CumulusLaidFor(SeaSky::CumulusReach) == AirSky::CumulusMost && SeaSky::CumulusLaidFor(0.5) == AirSky::CumulusMost
+					&& SeaSky::CumulusLaidFor(1.0) == AirSky::CumulusMost);
+			const SeaSky::Sky Fair = FairSky(0.2);
+			Check("a cumulus day of the rules is laid at more, reads as its own cover, and the log says both",
+				Fair.bLaid && std::fabs(Fair.Cover - 0.2) < 1e-9 && std::fabs(Fair.Day.Cover - SeaSky::CumulusLaidFor(0.2)) < 1e-9 && Fair.Day.Cover > 0.25
+					&& Fair.Why.find("cumulus of 0.20 (scattered), laid at " + Num(Fair.Day.Cover, 2)) != std::string::npos, Fair.Why);
+			AirSky::Day AsGiven = Fair.Day;
+			AsGiven.Cover = 0.2;
+			Check("its rain and its light are the cover it reads as",
+				Fair.Rain == SeaSky::RainOf(AsGiven, -1.0) && std::fabs(SeaSky::ReadAs(Fair).Cover - 0.2) < 1e-9
+					&& AirSky::LightOf(SeaSky::ReadAs(Fair), 0.0).Sky == AirSky::LightOf(AsGiven, 0.0).Sky);
+			const SeaSky::Sky Gale = GaleSky();
+			Check("a deck is laid as given", Gale.Day.bDeck && Gale.Day.Cover == 0.95 && Gale.Cover == 0.95
+				&& Gale.Why.find("laid at") == std::string::npos, Gale.Why);
+			SeaLookSwitches::Look Look = Asked({ { "TheaterSeaSkyStandIn=", "1" } });
+			const SeaSky::Sky StandIn = SeaSky::Choose(SeaSky::Given(), SeaSky::Take(Look));
+			Check("and air's stand-in (no cover given: the art director's passed cumulus) as it is",
+				StandIn.Day.Cover < 0.0 && std::fabs(StandIn.Cover - AirSky::DefaultCumulus) < 1e-9 && StandIn.Why.find("laid at") == std::string::npos, StandIn.Why);
+			SeaLookSwitches::Look Review = Asked({ { "TheaterSeaWeather=", "0.3" } });
+			const SeaSky::Sky Pictures = SeaSky::Choose(SeaSky::Given(), SeaSky::Take(Review));
+			Check("a cumulus day asked for review pictures is laid as the rules' would be",
+				!Pictures.Day.bDeck && std::fabs(Pictures.Cover - 0.3) < 1e-9 && std::fabs(Pictures.Day.Cover - SeaSky::CumulusLaidFor(0.3)) < 1e-9, Pictures.Why);
+		}
+		{
 			const AirSky::Placing P = SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, GaleWind);
 			Check("the placing: the board's middle the target, no ships' hole, no bombers' band, room for 1,500 puffs",
 				std::fabs(P.TargetX - MiddleX) < 1e-9 && std::fabs(P.TargetY - MiddleY) < 1e-9 && !P.bShips && P.Band == 0.0 && P.LowBand == 0.0
@@ -535,10 +585,34 @@ namespace
 		return Sum / std::max(1, Eyes);
 	}
 
+	/** The share of the whole sky under cloud seen from the sea (SeaSky::Dome::Cover: each pixel the same piece of sky,
+	 * as a sky's eighths are counted), from a ring of eyes 5 to 8.6 km round the board's middle at a quarter of the
+	 * picture, as Tools/sea_waves/cover_table measures SeaSky::CumulusPainted. */
+	double WholeCover(const AirSky::Field& F, int Eyes, const std::vector<uint8_t>* Sheet)
+	{
+		double Sum = 0.0;
+		for (int K = 0; K < Eyes; ++K)
+		{
+			const double Round = 2.0 * Pi * (K % 10) / 10.0 + 0.31 * (K / 10);
+			const double Away = 5000.0 + 3600.0 * (K / 10) / std::max(1, (Eyes - 1) / 10);
+			AirSky::Painter Paint;
+			SeaSky::DomeHow How;
+			How.W = SeaSky::DomeW / 4;
+			How.H = SeaSky::DomeH / 4;
+			How.Sheet = Sheet;
+			SeaSky::Dome D;
+			SeaSky::PaintDome(F, Vec(MiddleX + Away * std::cos(Round), MiddleY + Away * std::sin(Round), 28.0), Vec(), TestSun,
+				Rgb(1.0f, 1.0f, 1.0f), Paint, D, How);
+			Sum += D.Cover();
+		}
+		return Sum / std::max(1, Eyes);
+	}
+
 	void DomeChecks()
 	{
 		const AirSky::Placing P = SeaSky::PlacingFor(241, MiddleX, MiddleY, TestSun, AirSky::Wind);
-		const AirSky::Field F = SeaSky::Lay(FairSky(), P);
+		// (the painter's own checks on the art director's 0.39 laid as it is, not as the sea lays it to read: CumulusLaidFor)
+		const AirSky::Field F = AirSky::Lay(SeaSky::ReadAs(FairSky()), P);
 		Check("a scattered cumulus day lays its clouds", F.Clouds.size() > 50 && !F.Puffs.empty(),
 			std::to_string(F.Clouds.size()) + " clouds, " + std::to_string(F.Puffs.size()) + " puffs, cover " + Num(F.Cover));
 		SeaSky::Dome One, Two;
@@ -660,6 +734,33 @@ namespace
 			// (the worst gap, measured 25 November, kept as a ceiling: it may shrink, never grow)
 			Check("the worst gap between the field's cover and the painted one is no wider than measured (" + Num(SeaSky::WorstCoverGap, 2) + ")",
 				Gap <= SeaSky::WorstCoverGap, Num(Gap, 3));
+		}
+		// The sea's cumulus as it reads (the sea scene's follow-up, 25 November): a day of the rules laid at the cover that
+		// paints its own, by the whole sky seen from the sea, the mean over three seeds. Up to what cumulus can paint
+		// (SeaSky::CumulusReach), within five hundredths of the day's; a day of more, that most.
+		{
+			std::string Reads;
+			bool bReads = true;
+			for (const double Cover : { 0.1, 0.2, 0.3, 0.5 })
+			{
+				SeaSky::Given Field;
+				Field.bGiven = true;
+				Field.Day.bGiven = true;
+				Field.Day.Base = 600.0;
+				Field.Day.Top = 2600.0;
+				Field.Day.Cover = Cover;
+				const SeaSky::Sky Chosen = SeaSky::Choose(Field, SeaSky::Asked());
+				double Seen = 0.0;
+				for (const uint64_t Seed : { 1942ull, 241ull, 77ull })
+				{
+					Seen += WholeCover(SeaSky::Lay(Chosen, SeaSky::PlacingFor(Seed, MiddleX, MiddleY, TestSun, GaleWind)), 10, &Sheet) / 3.0;
+				}
+				const double Want = std::min(Cover, SeaSky::CumulusReach);
+				bReads = bReads && std::fabs(Seen - Want) <= 0.05;
+				Reads += (Reads.empty() ? "" : ", ") + Num(Cover, 1) + " laid at " + Num(Chosen.Day.Cover, 2) + " paints " + Num(Seen);
+			}
+			Check("a cumulus day paints the sky its cover says, as far as cumulus can (" + Num(SeaSky::CumulusReach) + "), within five hundredths",
+				bReads, Reads);
 		}
 		// The overview's eye under a deck the dome draws (the plan's line 941).
 		Check("the overview stays at 1,300 m with no deck drawn, whatever the base", SeaSky::OverviewHeight(false, 450.0) == 1300.0

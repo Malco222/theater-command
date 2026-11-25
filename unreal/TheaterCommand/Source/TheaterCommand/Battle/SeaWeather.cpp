@@ -623,7 +623,7 @@ AirSky::Lighting FSeaWeather::LightShares(double EyeZMetres) const
 		return AirSky::Lighting();
 	}
 	const double Under = Chosen.Day.bDeck && Sky.Top > Sky.Base ? FMath::Clamp((Sky.Top - EyeZMetres) / (Sky.Top - Sky.Base), 0.0, 1.0) : 0.0;
-	AirSky::Lighting Day = AirSky::LightOf(Chosen.Day, Under);
+	AirSky::Lighting Day = AirSky::LightOf(SeaSky::ReadAs(Chosen), Under); // (a cumulus day's light is the cover it reads as, not the more it is laid at)
 	// (with the shade on the key the sun is taken away point by point instead, the eye's own height no matter)
 	Day.Sun = bShade ? 1.0 : Day.Sun;
 	return Day;
