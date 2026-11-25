@@ -1,6 +1,7 @@
 #include "Battle/SeaBattle.h"
 
 #include "Battle/AirStage.h"
+#include "Battle/DeckCrewCore.h"
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaSailors.h"
@@ -77,6 +78,19 @@ struct FSeaBattleState
 	SeaSailors::Crew Crew;
 	std::vector<SeaSailors::Dress> Dresses;
 	std::map<std::string, int> DressAt;
+	/** The guns' crews (Battle/DeckCrewCore): each armed ship's watch by her key, stepped every frame whether she is drawn
+	 * or not, and each sailor file's gun clips' blocks, by file. */
+	std::map<int, DeckCrew::Watch> GunWatches;
+	std::map<int, DeckCrew::Blocks> GunBlocks;
+	/** Each ship's gun her crew work (by her key twice, one more for a merchant's stern gun): its mount on her model and
+	 * its shape, the stage's name for it; an empty shape where her model has none. */
+	struct FGunOf
+	{
+		ConvoyLook::GunMount Mount;
+		DeckCrew::GunShape Shape;
+		FString Part;
+	};
+	std::map<int, FGunOf> GunsOf;
 };
 
 namespace SeaParts
@@ -1124,9 +1138,102 @@ namespace SeaParts
 	/** A pose bank mesh's key: its file, dress, act, pose, level, whether drawn left for right and whether black with oil. */
 	static int64 SailorKey(int32 File, int32 Dress, int32 What, int32 Pose, int32 Lod, bool bMirror, bool bOiled)
 	{
-		// (sixteen acts and sixteen poses of each at the most: a seventeenth act or pose would share another's key)
-		static_assert(SeaSailors::Acts <= 16, "SailorKey packs an act in four bits");
-		return ((((((static_cast<int64>(File) * 64 + Dress) * 16 + What) * 16 + Pose) * 4 + Lod) * 2 + (bMirror ? 1 : 0)) * 2 + (bOiled ? 1 : 0));
+		// (sixty-four acts and sixty-four poses of each at the most: the gun crew's and hands up made nineteen acts, past the
+		// sixteen this packed until then; Tools/convoy_looks checks PosesOf)
+		static_assert(SeaSailors::Acts <= 64, "SailorKey packs an act in six bits");
+		return ((((((static_cast<int64>(File) * 64 + Dress) * 64 + What) * 64 + Pose) * 4 + Lod) * 2 + (bMirror ? 1 : 0)) * 2 + (bOiled ? 1 : 0));
+	}
+
+	/** A place in a man's own axes (metres: x forward, y to his right, z up) where his transform puts it, on the board
+	 * (the wreck mesh's metres: x east, y north). */
+	static FVector GunBoard(const FTransform& Man, double Units, double X, double Y, double Z)
+	{
+		const FVector Placed = Man.TransformPosition(FVector(X, Y, Z) * Units);
+		return FVector(Placed.Y, Placed.X, Placed.Z) / Units;
+	}
+
+	/**
+	 * A gun's handwheel where a layer's or a trainer's clip has his hands (Battle/DeckCrewCore): its rim about its hub,
+	 * square to its axle (his x), turned as his clip turns it (a spoke across it and a handle on its rim show the turn),
+	 * and its shaft from the hub into the gun (ShaftAhead along his x, ShaftIn toward the gun: to his right at its left
+	 * side, bGunOnRight); in his own axes, as his transform lays him.
+	 */
+	static void DrawGunWheel(FWreckMesh& Mesh, const FTransform& Man, double Units, const SeaSailors::Wheel& W, float Turned, double ShaftAhead, double ShaftIn, bool bGunOnRight)
+	{
+		static const FColor Iron(58, 60, 62, 128);
+		const int32 Rim = 10;
+		const double Hx = W.Hub[0], Hy = W.Hub[1], Hz = W.Hub[2], R = W.Radius;
+		auto RimAt = [&](double Angle) { return GunBoard(Man, Units, Hx, Hy + R * FMath::Cos(Angle), Hz + R * FMath::Sin(Angle)); };
+		for (int32 Seg = 0; Seg < Rim; ++Seg)
+		{
+			Mesh.Rod(RimAt(2.0 * UE_DOUBLE_PI * Seg / Rim), RimAt(2.0 * UE_DOUBLE_PI * (Seg + 1) / Rim), 0.011, 4, Iron);
+		}
+		const double Spoke = FMath::DegreesToRadians(static_cast<double>(Turned));
+		Mesh.Rod(RimAt(Spoke), RimAt(Spoke + UE_DOUBLE_PI), 0.008, 3, Iron);
+		const FVector Grip = RimAt(Spoke);
+		Mesh.Rod(Grip, GunBoard(Man, Units, Hx - 0.07, Hy + R * FMath::Cos(Spoke), Hz + R * FMath::Sin(Spoke)), 0.012, 4, Iron);
+		Mesh.Rod(GunBoard(Man, Units, Hx, Hy, Hz), GunBoard(Man, Units, Hx + ShaftAhead, Hy + (bGunOnRight ? ShaftIn : -ShaftIn), Hz), 0.018, 4, Iron);
+	}
+
+	/** A gun's sight where a layer's or a trainer's clip has his eye: its eyepiece just ahead of his eye along his x, its
+	 * tube on forward, and a bracket down to the wheel's shaft (W's hub, the shaft's end as DrawGunWheel draws it). */
+	static void DrawGunSight(FWreckMesh& Mesh, const FTransform& Man, double Units, const SeaSailors::Wheel& W, double ShaftAhead, double ShaftIn, bool bGunOnRight)
+	{
+		static const FColor Black(30, 31, 33, 128);
+		const FVector Eyepiece = GunBoard(Man, Units, W.Eye[0] + 0.03, W.Eye[1], W.Eye[2]);
+		const FVector Objective = GunBoard(Man, Units, W.Eye[0] + 0.33, W.Eye[1], W.Eye[2]);
+		Mesh.Rod(Eyepiece, Objective, 0.022, 6, Black);
+		Mesh.Rod(Objective, GunBoard(Man, Units, W.Hub[0] + ShaftAhead, W.Hub[1] + (bGunOnRight ? ShaftIn : -ShaftIn), W.Hub[2]), 0.012, 4, Black);
+	}
+
+	/** A round in a man's hands (his own axes: its base and its nose's way, metres), its brass case and its shell; a round
+	 * not shown drawn as nothing at its base (the mesh keeps its shape while he works). */
+	static void DrawGunRound(FWreckMesh& Mesh, const FTransform& Man, double Units, const SeaSailors::RoundAt& R, double Long, double Radius)
+	{
+		static const FColor Brass(176, 136, 62, 128), Shell(92, 96, 88, 128);
+		const double Thick = R.bShown ? Radius : 0.001, Length = R.bShown ? Long : 0.002;
+		const FVector Base = GunBoard(Man, Units, R.Base.X, R.Base.Y, R.Base.Z);
+		const FVector Joint = GunBoard(Man, Units, R.Base.X + R.Way.X * Length * 0.62, R.Base.Y + R.Way.Y * Length * 0.62, R.Base.Z + R.Way.Z * Length * 0.62);
+		const FVector Nose = GunBoard(Man, Units, R.Base.X + R.Way.X * Length, R.Base.Y + R.Way.Y * Length, R.Base.Z + R.Way.Z * Length);
+		Mesh.Rod(Base, Joint, Thick, 6, Brass);
+		Mesh.Rod(Joint, Nose, Thick * 0.85, 6, Shell);
+	}
+
+	/** A ready-use rack at a loader's left (his own axes, as his transform lays him): two uprights from the deck to a
+	 * cradle under where the round waits on it (Battle/DeckCrewCore's RackRound, its base and nose), its round's length
+	 * apart. */
+	static void DrawGunRack(FWreckMesh& Mesh, const FTransform& Man, double Units, const DeckCrew::Blocks& Kit)
+	{
+		static const FColor Steel(70, 74, 70, 128);
+		SeaSailors::RoundAt Waits;
+		if (!DeckCrew::RackRound(Kit, 0.f, Waits))
+		{
+			return;
+		}
+		const double Cradle = Kit.Loading.Radius + 0.01;
+		for (const double Share : { 0.15, 0.85 })
+		{
+			const double X = Waits.Base.X + Waits.Way.X * Kit.Loading.Long * Share, Y = Waits.Base.Y + Waits.Way.Y * Kit.Loading.Long * Share;
+			const double Z = Waits.Base.Z + Waits.Way.Z * Kit.Loading.Long * Share - Cradle;
+			Mesh.Rod(GunBoard(Man, Units, X, Y, 0.0), GunBoard(Man, Units, X, Y, Z), 0.015, 4, Steel);
+			Mesh.Rod(GunBoard(Man, Units, X, Y - 0.06, Z), GunBoard(Man, Units, X, Y + 0.06, Z), 0.012, 4, Steel);
+		}
+	}
+
+	/** A hatch open on a deck (Her: its middle on the deck, her turn, Unreal's world): its dark opening and its lid raised
+	 * on its far side from the gun (Away: the way from the gun to the hatch, her own axes). */
+	static void DrawGunHatch(FWreckMesh& Mesh, const FTransform& Her, double Units, const FVector2D& Away)
+	{
+		static const FColor Dark(16, 17, 19, 128), Lid(84, 88, 92, 128);
+		const FVector2D A = Away.GetSafeNormal(), B(-A.Y, A.X);
+		const double Half = 0.33;
+		auto On = [&](double OnAlong, double OnAcross, double OnUp) { return GunBoard(Her, Units, A.X * OnAlong + B.X * OnAcross, A.Y * OnAlong + B.Y * OnAcross, OnUp); };
+		const FVector Upward = (On(0.0, 0.0, 1.0) - On(0.0, 0.0, 0.0)).GetSafeNormal();
+		Mesh.Quad(On(-Half, -Half, 0.03), On(Half, -Half, 0.03), On(Half, Half, 0.03), On(-Half, Half, 0.03), Upward, Dark);
+		// (its lid on its hinge at the far edge, stood up and a little over)
+		const FVector Outward = (On(1.0, 0.0, 0.0) - On(0.0, 0.0, 0.0)).GetSafeNormal();
+		Mesh.Quad(On(Half, -Half, 0.03), On(Half + 0.1, -Half, 0.68), On(Half + 0.1, Half, 0.68), On(Half, Half, 0.03), -Outward, Lid);
+		Mesh.Quad(On(Half + 0.02, -Half, 0.03), On(Half + 0.12, -Half, 0.68), On(Half + 0.12, Half, 0.68), On(Half + 0.02, Half, 0.03), Outward, Lid);
 	}
 
 	/**
@@ -3452,6 +3559,157 @@ void ASeaBattle::DrawWrecks()
 	// where he is; the rest as copies of the pose bank's meshes. A live mesh or a banked copy not drawn this frame is put
 	// away after.
 	const bool bFiles = S.Crew.Files() > 0 && WreckInk != nullptr;
+	// A gun's crew at it (Battle/DeckCrewCore; the review of 23 November: no one served the gun; Brian, 24 November: the
+	// files' own gun clips): each armed ship's watch stepped every frame from what the show says of her, near or far, drawn
+	// or hidden, so her crew are where they should be as she comes into sight and her loader keeps time with her rounds.
+	// Its men are drawn where the show draws her (none on a boat it hides) and the stage her gun (GunDeck: not as she goes
+	// down), within LiveReach of the eye, on her deck as the stage lays her and her gun, as the men in the water are (the
+	// nearest skinned live, the rest the pose bank's copies, below); their work's cues heard at their hands ("body": only
+	// zoomed in; silent where the sound is not brought in). They are not the show's men, and are keyed apart, below 0.
+	struct FGunManned
+	{
+		int32 ShipKey = 0;
+		int32 CrewFile = -1, CrewDress = 0;
+		const FSeaBattleState::FGunOf* Mounted = nullptr;
+		const DeckCrew::Blocks* Kit = nullptr;
+		DeckCrew::Told Said;
+		// (a boat's hatch open while her crew are up, the passer in it where he hands up: on her deck, her turn there, and
+		// the way to it from the gun; the loader's rounds from a ready-use rack at his left where no passer hands them up)
+		bool bHatchOpen = false, bRack = false;
+		FTransform Hatch = FTransform::Identity;
+		FVector2D HatchAway = FVector2D(1.0, 0.0);
+	};
+	struct FGunHand
+	{
+		int32 Mine = 0;  // his key (below 0)
+		int32 GunAt = 0; // his gun's place in GunsManned
+		int32 Who = 0;   // his role (DeckCrew::Role)
+		bool bAtGun = false;
+		DeckCrew::Shown Is;
+		FVector Feet = FVector::ZeroVector;
+		FQuat Turn = FQuat::Identity;
+		double Pixels = 0.0;
+	};
+	std::vector<FGunManned> GunsManned;
+	std::vector<FGunHand> GunHands;
+	if (Stage && S.Crew.Files() > 0)
+	{
+		std::vector<DeckCrew::Cue> GunCues;
+		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		{
+			if (Ship.Class != "ss" && Ship.Class != "mv")
+			{
+				continue;
+			}
+			const bool bAftMount = Ship.Class == "mv" && Ship.bAftGun;
+			const int32 MountKey = Ship.Key * 2 + (bAftMount ? 1 : 0);
+			auto Known = S.GunsOf.find(MountKey);
+			if (Known == S.GunsOf.end())
+			{
+				FString ModelFile;
+				FVector ModelStretch = FVector::OneVector;
+				if (!Stage->ShipModel(Ship.Key, ModelFile, ModelStretch) || ModelFile.IsEmpty())
+				{
+					continue;
+				}
+				FSeaBattleState::FGunOf Found;
+				Found.Mount = ConvoyLook::MountOf(std::string(TCHAR_TO_UTF8(*FPaths::GetCleanFilename(ModelFile))), bAftMount);
+				Found.Shape = DeckCrew::ShapeOf(Found.Mount);
+				Found.Part = UTF8_TO_TCHAR(Found.Mount.Part.c_str());
+				Known = S.GunsOf.emplace(MountKey, Found).first;
+			}
+			const FSeaBattleState::FGunOf& Mounted = Known->second;
+			const int32 CrewFile = Mounted.Shape.File.empty() ? -1 : S.Crew.FileFor(Ship.Nation);
+			if (CrewFile < 0)
+			{
+				continue;
+			}
+			auto Kit = S.GunBlocks.find(CrewFile);
+			if (Kit == S.GunBlocks.end())
+			{
+				Kit = S.GunBlocks.emplace(CrewFile, DeckCrew::BlocksOf(S.Crew, CrewFile)).first;
+			}
+			if (!Kit->second.bGun)
+			{
+				continue;
+			}
+			const DeckCrew::Told Said = DeckCrew::TellOf(Ship);
+			DeckCrew::Watch& Crewed = S.GunWatches[Ship.Key];
+			GunCues.clear();
+			DeckCrew::Step(Crewed, Said, Mounted.Shape, Mounted.Mount, Kit->second, Now, &GunCues);
+			if (!bFiles || !Crewed.bManned || !Ship.bShown || DistanceTo(Ship.At.X, Ship.At.Y, 0.0) > LiveReach + Ship.Long * 0.5)
+			{
+				continue;
+			}
+			FGunManned Manned;
+			Manned.ShipKey = Ship.Key;
+			Manned.CrewFile = CrewFile;
+			Manned.CrewDress = DressFor(S, Ship.Nation, CrewFile, 0);
+			Manned.Mounted = &Mounted;
+			Manned.Kit = &Kit->second;
+			Manned.Said = Said;
+			Manned.bRack = !Crewed.bHanding;
+			const int32 GunAt = static_cast<int32>(GunsManned.size());
+			FVector CueAt[DeckCrew::Roles] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+			bool bCueAt[DeckCrew::Roles] = { false, false, false, false };
+			for (int32 Who = 0; Who < DeckCrew::Roles; ++Who)
+			{
+				const DeckCrew::Shown& Is = Crewed.Men[Who];
+				if (!DeckCrew::Drawn(Is, Ship))
+				{
+					continue;
+				}
+				FVector FeetAt = FVector::ZeroVector;
+				FQuat HerTurn = FQuat::Identity;
+				if (!Stage->GunDeck(Ship.Key, Mounted.Part, Is.At.Root.Fore, Is.At.Root.Right, Is.At.Root.Up, FeetAt, HerTurn))
+				{
+					break;
+				}
+				const FVector BoardAt = BoardOf(FeetAt);
+				const double Seen = DistanceTo(BoardAt.X, BoardAt.Y, BoardAt.Z);
+				const double HandPixels = 0.45 * PerRadian / Seen;
+				if (Seen > LiveReach || HandPixels < 0.5)
+				{
+					continue;
+				}
+				// (his own feet on her deck, his own turn hers and then his facing: she heels and pitches, and he with her)
+				FGunHand Gunner;
+				Gunner.Mine = -(Ship.Key * DeckCrew::Roles + Who + 1);
+				Gunner.GunAt = GunAt;
+				Gunner.Who = Who;
+				Gunner.bAtGun = Crewed.Hands[Who].Now == DeckCrew::Phase::AtGun;
+				Gunner.Is = Is;
+				Gunner.Feet = FeetAt;
+				Gunner.Turn = HerTurn * FQuat(FVector::UpVector, FMath::DegreesToRadians(Is.At.Facing));
+				Gunner.Pixels = HandPixels;
+				GunHands.push_back(Gunner);
+				// (her hatch open while a man of hers is up: a boat's only, a merchant has none by her gun)
+				Manned.bHatchOpen = Mounted.Shape.bBoat;
+				CueAt[Who] = FeetAt + Gunner.Turn.RotateVector(FVector(0.4, 0.0, 1.0) * UnitsPerMetre);
+				bCueAt[Who] = true;
+			}
+			const DeckCrew::GunShape& Fitted = Mounted.Shape;
+			if (Fitted.bBoat && Manned.bHatchOpen)
+			{
+				// (her own hatch, where her crew come up and the passer stands: the one opening drawn, on her middle line)
+				const DeckCrew::Spot HatchSpot = DeckCrew::HatchOf(Fitted, Mounted.Mount);
+				FVector HatchWorld = FVector::ZeroVector;
+				FQuat HatchTurn = FQuat::Identity;
+				Manned.bHatchOpen = Stage->GunDeck(Ship.Key, Mounted.Part, HatchSpot.Fore, HatchSpot.Right, HatchSpot.Up, HatchWorld, HatchTurn);
+				Manned.Hatch = FTransform(HatchTurn, HatchWorld);
+				Manned.HatchAway = FVector2D(HatchSpot.Fore >= 0.0 ? 1.0 : -1.0, 0.0);
+			}
+			for (const DeckCrew::Cue& Heard : GunCues)
+			{
+				const int32 Whose = static_cast<int32>(Heard.Who);
+				if (Whose >= 0 && Whose < DeckCrew::Roles && bCueAt[Whose])
+				{
+					Sound(FName(UTF8_TO_TCHAR(Heard.Name.c_str())), CueAt[Whose], TEXT("body"), 1.0f, false);
+				}
+			}
+			GunsManned.push_back(Manned);
+		}
+	}
 	TSet<int32> LiveKeys, SlotsDrawn;
 	if (bFiles)
 	{
@@ -3462,6 +3720,14 @@ void ASeaBattle::DrawWrecks()
 			if (Pixels >= FMath::Max(LiveLeast, DetailFrom))
 			{
 				Nearest.Add(TPair<double, int32>(Pixels, Man.Key));
+			}
+		}
+		// (and a gun's crew, as near: keyed below 0)
+		for (const FGunHand& Gunner : GunHands)
+		{
+			if (Gunner.Pixels >= FMath::Max(LiveLeast, DetailFrom))
+			{
+				Nearest.Add(TPair<double, int32>(Gunner.Pixels, Gunner.Mine));
 			}
 		}
 		Nearest.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key > B.Key; });
@@ -3893,98 +4159,230 @@ void ASeaBattle::DrawWrecks()
 			}
 		}
 	}
-	// A gun's crew at it (the review of 23 November: no one served the gun): a boat's deck gun's or a merchant's gun's men
-	// while the show has it laid and she is up (ConvoyLook::GunCrewOf: gone at the diving alarm, or as her gun is dropped),
-	// on its deck by its mount as the stage draws it trained (GunDeck), standing to it, or crouched for a moment after a
-	// shell strikes her or falls close aboard her: copies of the pose bank's men (the sailor files' idle and cower), only
-	// within LiveReach of the eye. They are not the show's men (Men: those over the side and in the water), and are keyed
-	// apart from them, below 0; put away with any banked man not drawn this frame, below.
-	if (bFiles && Stage)
+	// A gun's crew at it (gathered above: GunHands, at their guns GunsManned): each man drawn as the men in the water are
+	// (the nearest skinned live; the rest copies of the pose bank's men, the nearest pose already made where this frame's
+	// builds are spent; no stand-in), as his transform lays him on her deck; and what he works with, in his own axes at
+	// the time in his clip he is drawn at: the layer's and the trainer's handwheels at their hands, turning as they turn
+	// them, and their sights at their eyes; the round in the loader's hands (slid home along the gun's own bore as he rams
+	// it) and in the passer's; a boat's hatch open while her crew are up, and the passer's scuttle while he is in it. Each
+	// round is drawn while its man works, as nothing while it is not in his hands, so the near mesh keeps its shape.
+	if (bFiles)
 	{
-		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		const int32 LayerRole = static_cast<int32>(DeckCrew::Role::Layer), TrainerRole = static_cast<int32>(DeckCrew::Role::Trainer);
+		const int32 LoaderRole = static_cast<int32>(DeckCrew::Role::Loader), PasserRole = static_cast<int32>(DeckCrew::Role::Passer);
+		for (const FGunHand& Gunner : GunHands)
 		{
-			if ((Ship.Class != "ss" && Ship.Class != "mv") || !Ship.bGunLaid || !Ship.bShown || DistanceTo(Ship.At.X, Ship.At.Y, 0.0) > LiveReach + Ship.Long * 0.5)
+			const FGunManned& Manned = GunsManned[static_cast<size_t>(Gunner.GunAt)];
+			const DeckCrew::Shown& Is = Gunner.Is;
+			const int32 CrewFile = Manned.CrewFile, CrewDress = Manned.CrewDress;
+			bool bDrawnByFile = false;
+			float ShownTime = Is.Time;
+			if (LiveKeys.Contains(Gunner.Mine))
 			{
-				continue;
-			}
-			FString ModelFile;
-			FVector ModelStretch = FVector::OneVector;
-			if (!Stage->ShipModel(Ship.Key, ModelFile, ModelStretch) || ModelFile.IsEmpty())
-			{
-				continue;
-			}
-			const ConvoyLook::GunMount Gun = ConvoyLook::MountOf(std::string(TCHAR_TO_UTF8(*FPaths::GetCleanFilename(ModelFile))), Ship.Class == "mv" && Ship.bAftGun);
-			const int32 File = S.Crew.FileFor(Ship.Nation);
-			if (Gun.File.empty() || File < 0)
-			{
-				continue;
-			}
-			ConvoyLook::CrewIn Told;
-			Told.bLaid = Ship.bGunLaid;
-			Told.Dive = Ship.Class == "ss" ? Ship.Dive : std::string();
-			Told.Dived = Ship.Dived;
-			Told.Train = Ship.Train;
-			Told.ShakenAt = Ship.ShakenAt;
-			Told.T = Now;
-			Told.Key = Ship.Key;
-			const std::vector<ConvoyLook::CrewMan> Gunners = ConvoyLook::GunCrewOf(Gun, Told);
-			const int32 Dress = DressFor(S, Ship.Nation, File, 0);
-			const FString GunPart = UTF8_TO_TCHAR(Gun.Part.c_str());
-			for (int32 K = 0; K < static_cast<int32>(Gunners.size()); ++K)
-			{
-				const ConvoyLook::CrewMan& Gunner = Gunners[static_cast<size_t>(K)];
-				FVector Feet = FVector::ZeroVector;
-				FQuat Her = FQuat::Identity;
-				if (!Stage->GunDeck(Ship.Key, GunPart, Gunner.Fore, Gunner.Right, Gun.Deck, Feet, Her))
+				int32 LiveSlot = INDEX_NONE;
+				for (int32 Each = 0; Each < SailorLiveOf.Num() && LiveSlot == INDEX_NONE; ++Each)
 				{
-					break;
+					LiveSlot = SailorLiveOf[Each].Man == Gunner.Mine ? Each : INDEX_NONE;
 				}
-				const FVector Board = BoardOf(Feet);
-				const double D = DistanceTo(Board.X, Board.Y, Board.Z);
-				const double Pixels = 0.45 * PerRadian / D;
-				if (D > LiveReach || Pixels < 0.5)
+				for (int32 Each = 0; Each < SailorLiveOf.Num() && LiveSlot == INDEX_NONE; ++Each)
 				{
-					continue;
+					LiveSlot = SailorLiveOf[Each].Man == 0 && !SlotsDrawn.Contains(Each) ? Each : INDEX_NONE;
 				}
-				const SeaSailors::Act What = Gunner.bDuck ? SeaSailors::Act::Duck : SeaSailors::Act::Stand;
-				const int32 Pose = S.Crew.PoseOf(File, What, static_cast<float>(Now + Gunner.Clip));
-				const int32 Level = Pixels >= MidLodFrom ? LandMen::Mid : LandMen::Far;
-				const int32 Copy = SailorCopy(SailorKey(File, Dress, static_cast<int32>(What), Pose, Level, false, false), File, Dress, static_cast<int32>(What), Pose, Level, false, false, Builds);
-				if (Copy < 0)
+				if (LiveSlot == INDEX_NONE && SailorLive.Num() < LiveMost)
 				{
-					continue;
+					UProceduralMeshComponent* LiveMesh = NewObject<UProceduralMeshComponent>(this, FName(*FString::Printf(TEXT("SeaSailorLive%d"), SailorLive.Num())));
+					LiveMesh->SetupAttachment(Root);
+					LiveMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					LiveMesh->SetCastShadow(true);
+					LiveMesh->bUseAsyncCooking = false;
+					LiveMesh->RegisterComponent();
+					LiveSlot = SailorLive.Add(LiveMesh);
+					SailorLiveOf.AddDefaulted();
 				}
-				// (his own feet on her deck, his own turn hers and then his facing: she heels and pitches, and he with her)
-				const FTransform Put(Her * FQuat(FVector::UpVector, FMath::DegreesToRadians(Gunner.Facing)), Feet);
-				const int32 Mine = -(Ship.Key * ConvoyLook::CrewMost + K + 1);
-				FBankedSailor* Had = SailorBanked.Find(Mine);
-				if (!Had)
+				const LandMen::Lod LiveLevel = Gunner.Pixels >= NearLodFrom ? LandMen::Near : LandMen::Mid;
+				const int64 LiveMade = SailorKey(CrewFile, CrewDress, 0, 0, static_cast<int32>(LiveLevel), false, false);
+				const bool bLiveAfresh = LiveSlot == INDEX_NONE || SailorLiveOf[LiveSlot].Man != Gunner.Mine || SailorLiveOf[LiveSlot].Made != LiveMade;
+				if (LiveSlot != INDEX_NONE && (!bLiveAfresh || LiveNew > 0))
 				{
-					Had = &SailorBanked.Add(Mine, FBankedSailor());
-				}
-				if (Had->Copy != Copy)
-				{
-					SailorAway(*Had);
-					TArray<int32>& Free = SailorFree[Copy];
-					if (Free.Num() > 0)
+					FLiveSailor& LiveShows = SailorLiveOf[LiveSlot];
+					UProceduralMeshComponent* LiveMesh = SailorLive[LiveSlot];
+					std::vector<float> SkinAt, SkinFacing;
+					const int32 SkinCount = S.Crew.Skin(CrewFile, Is.What, Is.Time, LiveLevel, SkinAt, SkinFacing);
+					TArray<FVector> LivePoints, LiveNormals;
+					LivePoints.Reset(SkinCount);
+					LiveNormals.Reset(SkinCount);
+					for (int32 Vert = 0; Vert < SkinCount; ++Vert)
 					{
-						Had->Slot = Free.Pop();
-						SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, Put, false, false, true);
+						const size_t At3 = static_cast<size_t>(Vert) * 3;
+						LivePoints.Add(FVector(SkinAt[At3], SkinAt[At3 + 1], SkinAt[At3 + 2]) * UnitsPerMetre);
+						LiveNormals.Add(FVector(SkinFacing[At3], SkinFacing[At3 + 1], SkinFacing[At3 + 2]));
+					}
+					if (bLiveAfresh)
+					{
+						// (a new man or a new level: his triangles and colours with his points)
+						--LiveNew;
+						const std::vector<uint32_t>& LiveTris = S.Crew.Triangles(CrewFile, LiveLevel);
+						TArray<int32> LiveCorners;
+						LiveCorners.Reset(static_cast<int32>(LiveTris.size()));
+						for (const uint32_t Corner : LiveTris)
+						{
+							LiveCorners.Add(static_cast<int32>(Corner));
+						}
+						std::vector<uint8_t> LiveRgb;
+						S.Crew.Paint(CrewFile, LiveLevel, S.Dresses[static_cast<size_t>(CrewDress)], 0.0, LiveRgb);
+						TArray<FColor> LiveColours;
+						LiveColours.Reset(SkinCount);
+						for (int32 Vert = 0; Vert < SkinCount; ++Vert)
+						{
+							const size_t At3 = static_cast<size_t>(Vert) * 3;
+							LiveColours.Add(FColor(LiveRgb[At3], LiveRgb[At3 + 1], LiveRgb[At3 + 2], 255));
+						}
+						LiveMesh->ClearAllMeshSections();
+						LiveMesh->CreateMeshSection(0, LivePoints, LiveCorners, LiveNormals, TArray<FVector2D>(), LiveColours, TArray<FProcMeshTangent>(), false);
+						LiveMesh->SetMaterial(0, WreckInk);
+						LiveShows.Man = Gunner.Mine;
+						LiveShows.Made = LiveMade;
 					}
 					else
 					{
-						Had->Slot = SailorCopies[Copy]->AddInstance(Put, false);
+						LiveMesh->UpdateMeshSection(0, LivePoints, LiveNormals, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
 					}
-					Had->Copy = Copy;
+					LiveMesh->SetRelativeLocationAndRotation(Gunner.Feet, Gunner.Turn);
+					LiveMesh->SetVisibility(true);
+					SlotsDrawn.Add(LiveSlot);
+					bDrawnByFile = true;
 				}
-				else
+			}
+			if (!bDrawnByFile)
+			{
+				const int32 WhatIndex = static_cast<int32>(Is.What);
+				const int32 BankLevel = Gunner.Pixels >= MidLodFrom ? LandMen::Mid : LandMen::Far;
+				const int32 BankOtherLevel = BankLevel == LandMen::Mid ? static_cast<int32>(LandMen::Far) : static_cast<int32>(LandMen::Mid);
+				const int32 BankPose = S.Crew.PoseOf(CrewFile, Is.What, Is.Time);
+				int32 BankCopy = SailorCopy(SailorKey(CrewFile, CrewDress, WhatIndex, BankPose, BankLevel, false, false), CrewFile, CrewDress, WhatIndex, BankPose, BankLevel, false, false, Builds);
+				int32 BankShown = BankPose;
+				if (BankCopy == -1)
 				{
-					SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, Put, false, false, true);
+					// (this frame's builds spent, as after a cut: the nearest pose of his act already made, at his level or
+					// the other)
+					const int32 BankPoses = SeaSailors::PosesOf(Is.What);
+					for (int32 Apart = 0; BankCopy < 0 && Apart < BankPoses; ++Apart)
+					{
+						for (const int32 BankWay : { -1, 1 })
+						{
+							const int32 NextPose = ((BankPose + BankWay * Apart) % BankPoses + BankPoses) % BankPoses;
+							for (const int32 BankLv : { BankLevel, BankOtherLevel })
+							{
+								const int32* MadeCopy = BankCopy < 0 ? SailorCopyOf.Find(SailorKey(CrewFile, CrewDress, WhatIndex, NextPose, BankLv, false, false)) : nullptr;
+								if (MadeCopy && *MadeCopy >= 0)
+								{
+									BankCopy = *MadeCopy;
+									BankShown = NextPose;
+								}
+							}
+						}
+					}
 				}
-				Had->At = Feet;
-				Had->Yaw = Put.Rotator().Yaw;
-				Had->bSeen = true;
-				SailorDirty[Copy] = 1;
+				if (BankCopy >= 0)
+				{
+					ShownTime = S.Crew.PoseTime(CrewFile, Is.What, BankShown);
+					const FTransform BankPut(Gunner.Turn, Gunner.Feet);
+					FBankedSailor* BankHad = SailorBanked.Find(Gunner.Mine);
+					if (!BankHad)
+					{
+						BankHad = &SailorBanked.Add(Gunner.Mine, FBankedSailor());
+					}
+					if (BankHad->Copy != BankCopy)
+					{
+						// (into the copies of his new pose: a slot put away there before, or a new one)
+						SailorAway(*BankHad);
+						TArray<int32>& BankFree = SailorFree[BankCopy];
+						if (BankFree.Num() > 0)
+						{
+							BankHad->Slot = BankFree.Pop();
+							SailorCopies[BankCopy]->UpdateInstanceTransform(BankHad->Slot, BankPut, false, false, true);
+						}
+						else
+						{
+							BankHad->Slot = SailorCopies[BankCopy]->AddInstance(BankPut, false);
+						}
+						BankHad->Copy = BankCopy;
+					}
+					else
+					{
+						// (she heels and pitches under him, and the gun trains: put where he is every frame)
+						SailorCopies[BankCopy]->UpdateInstanceTransform(BankHad->Slot, BankPut, false, false, true);
+					}
+					BankHad->At = Gunner.Feet;
+					BankHad->Yaw = BankPut.Rotator().Yaw;
+					BankHad->bSeen = true;
+					SailorDirty[BankCopy] = 1;
+					bDrawnByFile = true;
+				}
+			}
+			// (what he works with: only where he is drawn, and big enough to see it, a wheel a pixel or more across)
+			if (!bDrawnByFile || Gunner.Pixels < DetailFrom)
+			{
+				continue;
+			}
+			const FTransform ManAt(Gunner.Turn, Gunner.Feet);
+			const DeckCrew::GunShape& Fitted = Manned.Mounted->Shape;
+			const DeckCrew::Blocks& GunKit = *Manned.Kit;
+			if ((Gunner.Who == LayerRole || Gunner.Who == TrainerRole) && Gunner.bAtGun)
+			{
+				// (the layer at the gun's left, it on his right; the trainer at its right; the wheel held still while he
+				// crouches)
+				const bool bLayer = Gunner.Who == LayerRole;
+				const SeaSailors::Wheel& Handwheel = GunKit.Wheels[bLayer ? 0 : 1];
+				const float Turned = Is.bAtWork ? SeaSailors::TurnAt(Handwheel, GunKit.Long[Gunner.Who], ShownTime) : 0.f;
+				DrawGunWheel(NearMesh, ManAt, UnitsPerMetre, Handwheel, Turned, Fitted.ShaftAhead, Fitted.ShaftIn, bLayer);
+				DrawGunSight(NearMesh, ManAt, UnitsPerMetre, Handwheel, Fitted.ShaftAhead, Fitted.ShaftIn, bLayer);
+			}
+			else if (Gunner.Who == LoaderRole && Is.bAtWork)
+			{
+				// (the gun's chamber's mouth and its bore's way in his own axes, as the stage trains and lifts it)
+				double BoreWay[3] = { 1.0, 0.0, 0.0 };
+				const DeckCrew::Spot MouthHer = DeckCrew::BreechOf(Fitted, GunKit, Manned.Mounted->Mount, Manned.Said.Train, Manned.Said.Elevation, BoreWay);
+				const DeckCrew::Spot MouthHis = DeckCrew::ToHim(Is.At, MouthHer);
+				DeckCrew::Post FacingOnly = Is.At;
+				FacingOnly.Root = DeckCrew::Spot();
+				const DeckCrew::Spot BoreHis = DeckCrew::ToHim(FacingOnly, DeckCrew::Spot{ BoreWay[0], BoreWay[1], BoreWay[2] });
+				const LandMen::Vec3 MouthAt = { static_cast<float>(MouthHis.Fore), static_cast<float>(MouthHis.Right), static_cast<float>(MouthHis.Up) };
+				const LandMen::Vec3 BoreAt = { static_cast<float>(BoreHis.Fore), static_cast<float>(BoreHis.Right), static_cast<float>(BoreHis.Up) };
+				SeaSailors::RoundAt InHands;
+				if (!DeckCrew::LoaderRound(GunKit, ShownTime, Fitted.bBoat, MouthAt, BoreAt, InHands))
+				{
+					InHands.bShown = false;
+				}
+				DrawGunRound(NearMesh, ManAt, UnitsPerMetre, InHands, GunKit.Loading.Long, GunKit.Loading.Radius);
+				// (no passer handing it up: the next round waiting on a ready-use rack at his left until he takes it, where
+				// the passer's hands would hold it; drawn as nothing once he has it, so the mesh keeps its shape)
+				SeaSailors::RoundAt Racked;
+				if (!Manned.bRack || !DeckCrew::RackRound(GunKit, ShownTime, Racked))
+				{
+					Racked.bShown = false;
+				}
+				DrawGunRound(NearMesh, ManAt, UnitsPerMetre, Racked, GunKit.Loading.Long, GunKit.Loading.Radius);
+				if (Manned.bRack)
+				{
+					DrawGunRack(NearMesh, ManAt, UnitsPerMetre, GunKit);
+				}
+			}
+			else if (Gunner.Who == PasserRole && Is.bAtWork)
+			{
+				SeaSailors::RoundAt Handed;
+				if (!SeaSailors::RoundAlong(GunKit.Passing, GunKit.Long[PasserRole], ShownTime, Handed))
+				{
+					Handed.bShown = false;
+				}
+				DrawGunRound(NearMesh, ManAt, UnitsPerMetre, Handed, GunKit.Passing.Long, GunKit.Passing.Radius);
+			}
+		}
+		for (const FGunManned& Manned : GunsManned)
+		{
+			if (Manned.bHatchOpen && Manned.Mounted != nullptr && Manned.Mounted->Shape.bBoat)
+			{
+				DrawGunHatch(NearMesh, Manned.Hatch, UnitsPerMetre, Manned.HatchAway);
 			}
 		}
 	}
@@ -4015,6 +4413,13 @@ void ASeaBattle::DrawWrecks()
 		{
 			if (SailorDirty[Copy])
 			{
+				// (a copy whose every slot is put away hidden, no draw of its shrunken men; shown again as one is used: the
+				// review of 24 November, the gun crews' poses passed through a copy at a time)
+				const bool bAnyIn = SailorFree[Copy].Num() < SailorCopies[Copy]->GetInstanceCount();
+				if (SailorCopies[Copy]->IsVisible() != bAnyIn)
+				{
+					SailorCopies[Copy]->SetVisibility(bAnyIn);
+				}
 				SailorCopies[Copy]->MarkRenderStateDirty();
 				SailorDirty[Copy] = 0;
 			}

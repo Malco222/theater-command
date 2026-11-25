@@ -115,6 +115,155 @@ namespace SeaSailors
 		{
 			return Number == Skin ? 0.85 : Number == Hat ? 0.75 : Number == Kapok ? 0.6 : 0.9;
 		}
+
+		/** The text of a clip's object in a sailor file (from its name to the next clip's): where its blocks are looked for. */
+		std::pair<size_t, size_t> ClipSpan(const std::string& Text, const char* Name)
+		{
+			const std::string Head = std::string("\"") + Name + "\":{\"long\":";
+			const size_t At = Text.find(Head);
+			if (At == std::string::npos)
+			{
+				return { std::string::npos, std::string::npos };
+			}
+			const size_t Next = Text.find("\":{\"long\":", At + Head.size());
+			return { At, Next == std::string::npos ? Text.size() : Next };
+		}
+
+		/** The numbers of an array named Key ("hub": [x, y, z]) in a block's text (From to To): Count of them, or none. */
+		bool ArrayIn(const std::string& Text, size_t From, size_t To, const char* Key, float* Out, size_t Count)
+		{
+			const size_t At = Text.find(std::string("\"") + Key + "\":[", From);
+			if (At == std::string::npos || At >= To)
+			{
+				return false;
+			}
+			const size_t Open = Text.find('[', At), Close = Text.find(']', Open);
+			const std::vector<double> V = Close < To ? Numbers(Text, Open, Close) : std::vector<double>();
+			if (V.size() != Count)
+			{
+				return false;
+			}
+			for (size_t K = 0; K < Count; ++K)
+			{
+				Out[K] = static_cast<float>(V[K]);
+			}
+			return true;
+		}
+
+		/** A number named Key in a block's text. */
+		bool NumberIn(const std::string& Text, size_t From, size_t To, const char* Key, float& Out)
+		{
+			const std::string Head = std::string("\"") + Key + "\":";
+			const size_t At = Text.find(Head, From);
+			if (At == std::string::npos || At >= To)
+			{
+				return false;
+			}
+			char* End = nullptr;
+			const double V = std::strtod(Text.c_str() + At + Head.size(), &End);
+			if (End == Text.c_str() + At + Head.size())
+			{
+				return false;
+			}
+			Out = static_cast<float>(V);
+			return true;
+		}
+
+		/** A track of rows of Width numbers named Key ("turn": [[t, degrees], ...]) in a block's text: at least two rows. */
+		std::vector<float> TrackIn(const std::string& Text, size_t From, size_t To, const char* Key, size_t Width)
+		{
+			const size_t At = Text.find(std::string("\"") + Key + "\":[[", From);
+			if (At == std::string::npos || At >= To)
+			{
+				return {};
+			}
+			const size_t Open = Text.find("[[", At), Close = Text.find("]]", Open);
+			if (Close == std::string::npos || Close >= To)
+			{
+				return {};
+			}
+			const std::vector<double> V = Numbers(Text, Open, Close);
+			if (V.size() < Width * 2 || V.size() % Width != 0)
+			{
+				return {};
+			}
+			return std::vector<float>(V.begin(), V.end());
+		}
+
+		/** The block named Key ("wheel") in a clip's text: from its brace to the end of the clip's text it lies in. */
+		std::pair<size_t, size_t> BlockIn(const std::string& Text, std::pair<size_t, size_t> Clip, const char* Key)
+		{
+			if (Clip.first == std::string::npos)
+			{
+				return Clip;
+			}
+			const size_t At = Text.find(std::string("\"") + Key + "\":{", Clip.first);
+			if (At == std::string::npos || At >= Clip.second)
+			{
+				return { std::string::npos, std::string::npos };
+			}
+			return { Text.find('{', At), Clip.second };
+		}
+
+		/** The end of a block (its closing brace): after its track's last row where it has one (Key), else its first. */
+		size_t BlockEnd(const std::string& Text, std::pair<size_t, size_t> Block, const char* Key)
+		{
+			const size_t Track = Text.find(std::string("\"") + Key + "\":[[", Block.first);
+			const size_t From = Track != std::string::npos && Track < Block.second ? Text.find("]]", Track) : Block.first;
+			const size_t Close = From == std::string::npos ? From : Text.find('}', From);
+			return Close == std::string::npos || Close > Block.second ? Block.second : Close;
+		}
+	}
+
+	void Crew::ReadGunBlocks(const std::string& Text, const int* Clip, Wheel* OutWheels, Round* OutRounds, bool& OutPair, LandMen::Vec3& OutPairRoot)
+	{
+		// (gun_layer and gun_trainer: the wheel, its turn, and the sight's eye; kept only whole)
+		const Act Wheeled[2] = { Act::Layer, Act::Trainer };
+		for (int W = 0; W < 2; ++W)
+		{
+			Wheel Got;
+			const std::pair<size_t, size_t> Span = ClipSpan(Text, ClipName(Wheeled[W]));
+			const std::pair<size_t, size_t> Block = BlockIn(Text, Span, "wheel"), Sight = BlockIn(Text, Span, "sight");
+			if (Clip[static_cast<int>(Wheeled[W])] < 0 || Block.first == std::string::npos || Sight.first == std::string::npos)
+			{
+				continue;
+			}
+			const size_t WheelEnd = BlockEnd(Text, Block, "turn"), SightEnd = BlockEnd(Text, Sight, "-");
+			Got.Turn = TrackIn(Text, Block.first, WheelEnd, "turn", 2);
+			if (ArrayIn(Text, Block.first, WheelEnd, "hub", Got.Hub, 3) && ArrayIn(Text, Block.first, WheelEnd, "axis", Got.Axis, 3) &&
+			    NumberIn(Text, Block.first, WheelEnd, "radius", Got.Radius) && Got.Radius > 0.f && !Got.Turn.empty() &&
+			    ArrayIn(Text, Sight.first, SightEnd, "eye", Got.Eye, 3))
+			{
+				OutWheels[W] = std::move(Got);
+			}
+		}
+		// (gun_loader and ammo_passer: the round, the loader's with the chamber's mouth and the bore; the passer's pair)
+		const Act Handed[2] = { Act::Loader, Act::Passer };
+		for (int R = 0; R < 2; ++R)
+		{
+			Round Got;
+			const std::pair<size_t, size_t> Span = ClipSpan(Text, ClipName(Handed[R]));
+			const std::pair<size_t, size_t> Block = BlockIn(Text, Span, "round");
+			if (Clip[static_cast<int>(Handed[R])] < 0 || Block.first == std::string::npos)
+			{
+				continue;
+			}
+			const size_t End = BlockEnd(Text, Block, "track");
+			Got.Track = TrackIn(Text, Block.first, End, "track", 8);
+			Got.bBreech = ArrayIn(Text, Block.first, End, "breech", Got.Breech, 3) && ArrayIn(Text, Block.first, End, "bore", Got.Bore, 3);
+			if (NumberIn(Text, Block.first, End, "length", Got.Long) && NumberIn(Text, Block.first, End, "radius", Got.Radius) && Got.Long > 0.f &&
+			    !Got.Track.empty() && (R == 1 || Got.bBreech))
+			{
+				OutRounds[R] = std::move(Got);
+			}
+			if (R == 1)
+			{
+				const std::pair<size_t, size_t> Pair = BlockIn(Text, Span, "pair");
+				float Root[3] = { 0.f, 0.f, 0.f };
+				OutPair = Pair.first != std::string::npos && ArrayIn(Text, Pair.first, BlockEnd(Text, Pair, "-"), "loader_root", Root, 3);
+				OutPairRoot = { Root[0], Root[1], Root[2] };
+			}
+		}
 	}
 
 	const char* ArmyOf(const std::string& Nation)
@@ -150,6 +299,11 @@ namespace SeaSailors
 		case Act::Duck: return "cower";
 		case Act::Walk: return "walk";
 		case Act::Run: return "run";
+		case Act::HandsUp: return "hands_up";
+		case Act::Layer: return "gun_layer";
+		case Act::Trainer: return "gun_trainer";
+		case Act::Loader: return "gun_loader";
+		case Act::Passer: return "ammo_passer";
 		default: return "";
 		}
 	}
@@ -157,8 +311,11 @@ namespace SeaSailors
 	int PosesOf(Act A)
 	{
 		// (about one a fifth of a second of a quick loop, fewer for the slow ones: 64 in all for the men in the water and
-		// their boats, 10 more for a gun's crew, whose stand is slow and whose crouch is held, and 10 more for a struck boat's
-		// crew walking and running on her casing: 84)
+		// their boats, 10 more for a man standing on a deck and his crouch, which is held, and 10 more for a struck boat's
+		// crew walking and running on her casing: 84; and the gun crew's, banked only past the nearest few (live nearer):
+		// a slow sway of hands up, the layer's and the trainer's small turns of their wheels a third of a second apart, the
+		// loader's and the passer's work (the same moment of each, played together) as many, a far man's small (the review
+		// of 24 November: thirty of each made up to 84 copies a navy at each level, every one a draw): 56 more)
 		switch (A)
 		{
 		case Act::Fall: return 4;
@@ -175,6 +332,11 @@ namespace SeaSailors
 		case Act::Duck: return 4;
 		case Act::Walk: return 6;
 		case Act::Run: return 4;
+		case Act::HandsUp: return 8;
+		case Act::Layer: return 12;
+		case Act::Trainer: return 12;
+		case Act::Loader: return 12;
+		case Act::Passer: return 12;
 		default: return 1;
 		}
 	}
@@ -191,7 +353,7 @@ namespace SeaSailors
 		for (int A = 0; A < Acts; ++A)
 		{
 			F.Clip[A] = F.S->ClipIndex(ClipName(static_cast<Act>(A)));
-			if (F.Clip[A] < 0)
+			if (F.Clip[A] < 0 && A < ActsNeeded)
 			{
 				OutError = std::string("no clip ") + ClipName(static_cast<Act>(A));
 				return false;
@@ -295,6 +457,9 @@ namespace SeaSailors
 			}
 			P = Close;
 		}
+		// (the gun crew clips' blocks, each in its own clip: the layer's and the trainer's wheel and sight, the loader's and
+		// the passer's round, the passer's pair; a clip without its block, or a file without the clip, keeps none)
+		ReadGunBlocks(Text, F.Clip, F.Wheels, F.Rounds, F.bPair, F.Pair);
 		// (the row clip's oar: its rowlock, then its handle's track)
 		const size_t Lock = Text.find("\"rowlock\"");
 		if (Lock != std::string::npos)
@@ -380,8 +545,98 @@ namespace SeaSailors
 
 	float Crew::Long(int K, Act A) const
 	{
-		const FileRead& F = Read[static_cast<size_t>(K)];
-		return F.S->Clips[static_cast<size_t>(F.Clip[static_cast<int>(A)])].Long;
+		// (0 for a clip the file lacks: a pose bank of one, a time of 0)
+		const LandMen::Clip* Of = ClipOf(K, A);
+		return Of ? Of->Long : 0.f;
+	}
+
+	const Wheel* Crew::WheelOf(int K, Act A) const
+	{
+		if (!Has(K, A) || (A != Act::Layer && A != Act::Trainer))
+		{
+			return nullptr;
+		}
+		const Wheel& W = Read[static_cast<size_t>(K)].Wheels[A == Act::Layer ? 0 : 1];
+		return W.Radius > 0.f ? &W : nullptr;
+	}
+
+	const Round* Crew::RoundOf(int K, Act A) const
+	{
+		if (!Has(K, A) || (A != Act::Loader && A != Act::Passer))
+		{
+			return nullptr;
+		}
+		const Round& R = Read[static_cast<size_t>(K)].Rounds[A == Act::Loader ? 0 : 1];
+		return R.Long > 0.f ? &R : nullptr;
+	}
+
+	bool Crew::PairOf(int K, LandMen::Vec3& OutLoaderRoot) const
+	{
+		if (K < 0 || static_cast<size_t>(K) >= Read.size() || !Read[static_cast<size_t>(K)].bPair)
+		{
+			return false;
+		}
+		OutLoaderRoot = Read[static_cast<size_t>(K)].Pair;
+		return true;
+	}
+
+	float TurnAt(const Wheel& W, float Long, float Time)
+	{
+		const size_t Keys = W.Turn.size() / 2;
+		if (Keys < 2)
+		{
+			return 0.f;
+		}
+		const float T = Wrapped(Time, Long);
+		size_t I = 0;
+		while (I + 2 < Keys && W.Turn[(I + 1) * 2] <= T)
+		{
+			++I;
+		}
+		const float* P = &W.Turn[I * 2];
+		const float* Q = &W.Turn[(I + 1) * 2];
+		const float Span = Q[0] - P[0];
+		const float U = Span > 1e-6f ? std::clamp((T - P[0]) / Span, 0.f, 1.f) : 0.f;
+		return P[1] + (Q[1] - P[1]) * U;
+	}
+
+	bool RoundAlong(const Round& R, float Long, float Time, RoundAt& Out)
+	{
+		const size_t Keys = R.Track.size() / 8;
+		if (Keys < 2)
+		{
+			return false;
+		}
+		const float T = Wrapped(Time, Long);
+		size_t I = 0;
+		while (I + 2 < Keys && R.Track[(I + 1) * 8] <= T)
+		{
+			++I;
+		}
+		const float* P = &R.Track[I * 8];
+		const float* Q = &R.Track[(I + 1) * 8];
+		const float Span = Q[0] - P[0];
+		const float U = Span > 1e-6f ? std::clamp((T - P[0]) / Span, 0.f, 1.f) : 0.f;
+		// (shown as the key at or before the time says: in the hands from the key it is taken at, hidden from the key it is
+		// home at)
+		Out.bShown = (U >= 1.f ? Q[1] : P[1]) > 0.5f;
+		Out.Base = { P[2] + (Q[2] - P[2]) * U, P[3] + (Q[3] - P[3]) * U, P[4] + (Q[4] - P[4]) * U };
+		const float Wx = P[5] + (Q[5] - P[5]) * U, Wy = P[6] + (Q[6] - P[6]) * U, Wz = P[7] + (Q[7] - P[7]) * U;
+		const float L = std::sqrt(Wx * Wx + Wy * Wy + Wz * Wz);
+		Out.Way = L > 1e-6f ? LandMen::Vec3{ Wx / L, Wy / L, Wz / L } : LandMen::Vec3{ 1.f, 0.f, 0.f };
+		return true;
+	}
+
+	float Crew::WheelTurn(int K, Act A, float Time) const
+	{
+		const Wheel* W = WheelOf(K, A);
+		return W ? TurnAt(*W, Long(K, A), Time) : 0.f;
+	}
+
+	bool Crew::RoundNow(int K, Act A, float Time, RoundAt& Out) const
+	{
+		const Round* R = RoundOf(K, A);
+		return R && RoundAlong(*R, Long(K, A), Time, Out);
 	}
 
 	Placed Crew::Place(int K, const SeaShow::ManOut& M, const Aboard& Where, double Now, double LandedAt) const
@@ -451,18 +706,25 @@ namespace SeaSailors
 			Loop(Act::Dead, Now + Own * Long(K, Act::Dead));
 			break;
 		// A struck boat's crew on her casing (SeaShow::Hands), his feet at At.Z: up out of her hatch or down her bridge's
-		// after end hand over hand, in time with how far he has come; standing at his place (his hands up shown standing
-		// until the files have a clip of it); walking to it and running to her side, his steps from when he set off.
+		// after end hand over hand, in time with how far he has come; standing at his place, his hands up (hands_up, where
+		// his file has it, else standing); walking to it and running to her side, his steps from when he set off.
 		case Swim::Hatch:
 			// (down her bridge's after end, the clip runs back: climbing down)
 			Loop(Act::Climb, M.At.Z / 0.45 * Long(K, Act::Climb));
 			P.Z = M.At.Z;
 			break;
 		case Swim::Stand:
-		case Swim::HandsUp:
 			Loop(Act::Stand, Now + Own * Long(K, Act::Stand));
 			P.Z = M.At.Z;
 			break;
+		case Swim::HandsUp:
+		{
+			// (his hands raised where his file has the clip, else standing as before it: idle)
+			const Act Up = Has(K, Act::HandsUp) ? Act::HandsUp : Act::Stand;
+			Loop(Up, Now + Own * Long(K, Up));
+			P.Z = M.At.Z;
+			break;
+		}
 		case Swim::Walk:
 			Loop(Act::Walk, M.Since);
 			P.Z = M.At.Z;
@@ -528,10 +790,25 @@ namespace SeaSailors
 
 	void Crew::Frames(int K, Act A, float Time, LandMen::Xform* Out) const
 	{
+		// (a clip the file lacks shown as standing: no caller asks for one, Has says)
 		const FileRead& F = Read[static_cast<size_t>(K)];
+		const int Clip = F.Clip[static_cast<int>(A)] >= 0 ? F.Clip[static_cast<int>(A)] : F.Clip[static_cast<int>(Act::Stand)];
 		LandMen::Pose P;
-		LandMen::Sample(F.S->Clips[static_cast<size_t>(F.Clip[static_cast<int>(A)])], Time, P);
+		LandMen::Sample(F.S->Clips[static_cast<size_t>(Clip)], Time, P);
 		LandMen::BoneFrames(*F.S, P, Out);
+	}
+
+	LandMen::Vec3 Crew::BoneAt(int K, Act A, float Time, const char* Bone) const
+	{
+		const FileRead& F = Read[static_cast<size_t>(K)];
+		const int B = F.S->BoneIndex(Bone);
+		if (B < 0 || B >= LandMen::MaxBones)
+		{
+			return {};
+		}
+		LandMen::Xform Fr[LandMen::MaxBones];
+		Frames(K, A, Time, Fr);
+		return Fr[B].Point(F.S->Bones[static_cast<size_t>(B)].Head);
 	}
 
 	int Crew::Skin(int K, Act A, float Time, LandMen::Lod L, std::vector<float>& OutAt, std::vector<float>& OutFacing) const
