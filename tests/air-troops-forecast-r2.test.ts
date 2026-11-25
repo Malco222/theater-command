@@ -138,9 +138,8 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
     // Groupement de Chasse 1 (fighter range 220 km): at Belfort, 190 km off (0.86 of its range), inside 0.9 and beyond
     // the old 0.6; at Namur, 216 km off (0.98), beyond 0.9 though still within its range, so it flies the escort.
     // (Changed on the sky gate, the design director 16:04Z: Groupement de Chasse 1 alone, 150 fighters, cannot win the sky
-    // from the German group over the Saar, so as the raid stands the settled raid sends nobody down from either field.
-    // The reach is read again with the German fighters grounded in setup (none rose: the sky is won), where it alone
-    // decides.)
+    // from the German group over the Saar, so as the raid stands nobody goes down from either field. The reach is read
+    // again with the German fighters grounded in setup (none rose: the sky is won), where it alone decides.)
     for (const [field, strafes, clear] of [['Belfort', true, false], [FAR_FIELD, false, false], ['Belfort', true, true], [FAR_FIELD, false, true]] as const) {
       const c = saar(0, 'far');
       c.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = c.g.regions.find((r) => r.name === field)!.id;
@@ -158,8 +157,8 @@ describe('the strafers: card, settled raid and fought raid charge the ground fir
       expect(a.att.filter((x) => x.ftr > 0 && canStrafe(c.g, x)).map((x) => x.f.id)).toEqual(strafes ? [FAR_GROUP] : []);
       const fc = forecastAir(c.g, a, 'ground', c.target);
       expect(skyWon(c.g, a)).toBe(clear);
-      expect(fc.strafers).toEqual(strafes ? [FAR_GROUP] : []);
-      expect(fc.fire! > 0).toBe(strafes);
+      expect(fc.strafers).toEqual(strafes && clear ? [FAR_GROUP] : []);
+      expect(fc.fire! > 0).toBe(strafes && clear);
       const s = saar(0, 'far');
       s.g.airFleets.find((f) => f.id === FAR_GROUP)!.base = s.g.regions.find((r) => r.name === field)!.id;
       if (clear) s.g.airFleets.find((f) => f.id === 3)!.ftr = 0;
@@ -475,6 +474,32 @@ function gateRaid(k: number, defenders: number) {
   const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
   return { g, target };
 }
+function gateAgainstSettled(defenders: number, seeds = 200) {
+  on();
+  heard = [];
+  const c = gateRaid(0, defenders);
+  const a = assessAir(c.g, fleetsOf(c.g, REVIEW_IDS), 'ground', c.target);
+  const fc = forecastAir(c.g, a, 'ground', c.target);
+  const s = strafersExpected(c.g, a, fc.ftrLoss - fc.fire!);
+  const card = heard.filter((x) => x.route === 'card');
+  expect(card.length).toBe(1);
+  expect(card[0].strafers).toEqual(s.ids);
+  expect(card[0].fire).toBeCloseTo(fc.fire!, 12);
+  expect(card[0].weight).toBeCloseTo(s.weight, 12);
+  let fire = 0, weight = 0, cut = 0, won = 0;
+  const named: Record<number, number> = {};
+  for (let k = 0; k < seeds; k++) {
+    heard = [];
+    const r = gateRaid(k, defenders);
+    launchRaid(r.g, 'ground', r.target, REVIEW_IDS, 'FRA');
+    const st = heard.filter((x) => x.route === 'settled');
+    expect(st.length).toBe(1);
+    fire += st[0].fire; weight += st[0].weight; cut += st[0].cut!;
+    if (st[0].strafers.length) won++;
+    for (const id of st[0].strafers) named[id] = (named[id] ?? 0) + 1;
+  }
+  return { fc, s, card: card[0], fire: fire / seeds, weight: weight / seeds, cut: cut / seeds, won, named, seeds };
+}
 
 describe('the sky gate (the design director, 16:04Z): a group goes down only where its side won the sky', () => {
   it('the rules\' own test, read over the target: no defender, or every one lost, wins it; 1.65 to 1 of those left and sky.least of the raid\'s own', () => {
@@ -502,6 +527,55 @@ describe('the sky gate (the design director, 16:04Z): a group goes down only whe
     // A strong defence (800): lost.
     const s = gateRaid(0, 800);
     expect(skyWon(s.g, assessAir(s.g, fleetsOf(s.g, REVIEW_IDS), 'ground', s.target))).toBe(false);
+  });
+
+  it('surely won (the review\'s raid as built): the card as before to the last digit, and the settled raid sends its strafers down on every luck', () => {
+    const r = gateAgainstSettled(200);
+    expect(r.s.gate).toBeUndefined();
+    expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
+    expect(r.won).toBe(r.seeds);
+    near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
+  });
+
+  it('surely lost (800 German fighters): the card names none and charges no ground fire; nobody goes down on any luck; the cut is the bombers\' alone', () => {
+    const r = gateAgainstSettled(800);
+    expect(r.s.gate).toBeUndefined();
+    expect(r.card.strafers).toEqual([]);
+    expect(r.fc.strafers).toEqual([]);
+    expect(r.fc.fire).toBe(0);
+    expect(r.card.weight).toBe(0);
+    expect(r.won).toBe(0);
+    expect(r.fire).toBe(0);
+    expect(r.weight).toBe(0);
+    near(r.cut, r.fc.cut, 0.01);
+    // The reach is still there: it is the sky that keeps them up.
+    const c = gateRaid(0, 800);
+    expect(byRule(c.g, c.target, REVIEW_IDS)).toEqual([LORRAINE, 36]);
+  });
+
+  it('near the edge (309 German fighters): the card against the settled mean over 200 lucks, and the groups it names are those more likely than not to go down', () => {
+    const r = gateAgainstSettled(309);
+    // Won on part of the luck only.
+    expect(r.s.gate).toBeDefined();
+    expect(r.won).toBeGreaterThan(20);
+    expect(r.won).toBeLessThan(r.seeds);
+    // The lane's own tolerances: fire and weight within 3%, the cut within 1%.
+    near(r.fire, r.card.fire, 0.03); near(r.weight, r.card.weight, 0.03); near(r.cut, r.fc.cut, 0.01);
+    expect(sorted(r.card.strafers)).toEqual([LORRAINE, 36]);
+    for (const id of [LORRAINE, 36]) expect(r.named[id]).toBeGreaterThan(r.seeds / 2);
+  });
+
+  it('past the edge (315 German fighters): the sky won on about a quarter of the lucks; the card names none, and is the settled mean within the lane\'s 8%', () => {
+    const r = gateAgainstSettled(315);
+    expect(r.s.gate).toBeDefined();
+    expect(r.won).toBeGreaterThan(20);
+    expect(r.won).toBeLessThan(r.seeds / 2);
+    expect(r.card.strafers).toEqual([]);
+    expect(r.fc.fire).toBeGreaterThan(0);
+    // (A step's mean over 200 lucks is the noisiest figure the lane proves: its own widest tolerance, the 8% of the
+    // thirty-times-deadlier raid.)
+    near(r.fire, r.card.fire, 0.08); near(r.weight, r.card.weight, 0.08); near(r.cut, r.fc.cut, 0.08);
+    for (const id of [LORRAINE, 36]) expect(r.named[id] ?? 0).toBeLessThan(r.seeds / 2);
   });
 
   it('switched off: the sky is not read, and every figure is as on the lane\'s switch off', () => {

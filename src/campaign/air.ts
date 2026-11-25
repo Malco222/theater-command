@@ -4333,16 +4333,31 @@ export function canStrafe(g: Game, x: { f: AirFleet; d: number }): boolean {
  * E[k | luck] = min(F, air x luck x share), and over the luck that is the mean of a clipped line: not linear, which is
  * where the card's old "even spread of losses, keep = 1 - air / E" went wrong (the clip at F, and losses counted on the
  * whole group F against a share counted on F x esc x crowd). The ground fire and the weight are linear in what is left,
- * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left.
+ * so their means follow from E[k]. A group is named when it is more likely than not to have a fighter left; with the
+ * sky gate (16:04Z), more likely than not to win the sky and have a fighter left, and every figure is taken over the
+ * lucks on which the sky is won (skyGate).
  */
-export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number; parts: StrafePart[] } {
+export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: number[]; left: number; fire: number; weight: number; parts: StrafePart[]; gate?: SkyGate } {
   const L = AIR.combat.luck, lo = 1 - L, hi = 1 + L, fire = AIRWAR.ground.fire;
+  // (The sky gate, the design director 16:04Z: in the settled raid a group goes down only when the sky is won, skyWon.
+  // Sure to be won on every luck, the card is as it was, to the last digit; sure to be lost, nobody goes down.)
+  const gate = skyGate(g, a, air);
   const ids: number[] = [];
   const parts: StrafePart[] = [];
   let left = 0, weight = 0;
+  if (gate === 'lost') return { ids, left, fire: 0, weight, parts };
   for (const x of a.att) {
     if (!(x.ftr > 0) || !canStrafe(g, x)) continue;
     const F = x.f.ftr, c = x.esc * x.crowd, m = a.E > 0 ? air * (x.ftr / a.E) : 0;
+    parts.push({ F, c, m, keep: 1 - c * fire });
+    if (gate !== 'won') {
+      // Won on part of the luck: the chance the sky is won and the group has a fighter left, and what it leaves then.
+      const l = gate.mean((u) => c * (F - Math.min(F, m * u)));
+      if (gate.mean((u) => Math.max(0, Math.min(1, F - m * u))) > 0.5) ids.push(x.f.id);
+      left += l;
+      weight += l * (1 - c * fire);
+      continue;
+    }
     // E[min(F, m u)] for u even on [lo, hi]; and the chance a fighter is left, P(roll(m u) < F).
     const lost = m <= 0 ? 0 : clipMean(m, F, lo, hi);
     const some = m <= 0 ? 1 : chanceBelow(m, F, lo, hi);
@@ -4350,9 +4365,117 @@ export function strafersExpected(g: Game, a: AirAssess, air: number): { ids: num
     if (some > 0.5) ids.push(x.f.id);
     left += l;
     weight += l * (1 - c * fire);
-    parts.push({ F, c, m, keep: 1 - c * fire });
   }
-  return { ids, left, fire: left * fire, weight, parts };
+  return gate === 'won' ? { ids, left, fire: left * fire, weight, parts } : { ids, left, fire: left * fire, weight, parts, gate };
+}
+
+/**
+ * The sky gate as the card weighs it (the design director, 16:04Z; skyWon): over the settled raid's three lucks, each
+ * even on [1 - combat.luck, 1 + combat.luck], the escort's (u: its air losses), the defenders' (their losses to the
+ * escort) and the bombers' (ub: the bombers lost, and so the defenders their gunners bring down, as gunsDown counts
+ * them), whether the sky is won after the air fight. The rolls' whole numbers are taken at their means, as the card
+ * takes them everywhere. 'won' or 'lost' where it is so on every luck; otherwise, for a given u and ub, the chance over
+ * the defenders' luck, in closed form (sky), and `mean`, the mean over the escort's luck of that chance (taken in closed
+ * form over the bombers' luck) times a term of the escort's luck.
+ */
+export interface SkyGate {
+  sky: (u: number, ub: number) => number;
+  /** The breaks over the bombers' luck, for a given u, between which sky is linear in ub. */
+  breaks: (u: number) => number[];
+  /** Over the escort's luck, the mean of f(u) x (the chance over the other two lucks that the sky is won). */
+  mean: (f: (u: number) => number) => number;
+  /** The same, of sum over ub of an integrand: E over (u, ub) of h(u, ub, sky), the bombers' luck split at its breaks. */
+  mean2: (h: (u: number, ub: number, p: number) => number, cuts: (u: number) => number[]) => number;
+}
+
+function skyGate(g: Game, a: AirAssess, air: number): 'won' | 'lost' | SkyGate {
+  const C = AIR.combat, lo = 1 - C.luck, hi = 1 + C.luck;
+  // The defenders as skyWon weighs them: q a fighter's weight over the target, s the group's share of their losses.
+  const def = a.D > 0 ? a.def.map((x) => ({ F: x.f.ftr, est: x.f.est.ftr, q: x.w * worth(g, x.f) * (a.height ? 1 : techMul(g, x.f.nat, 'radar')), s: (x.f.ftr * x.w) / a.D })).filter((d) => d.F > 0 && d.q > 0 && d.s > 0) : [];
+  if (!def.length) return 'won';
+  const Dnow = (X: number): number => def.reduce((t, d) => t + Math.min(d.est, d.F - Math.min(d.F, X * d.s)) * d.q, 0);
+  const Xall = Math.max(...def.map((d) => d.F / d.s));
+  // The raid's fighters as the escort's luck u leaves them, as skyWon counts them and weighs them.
+  const att = a.att.map((x) => ({ F: x.f.ftr, c: x.esc * x.crowd, v: worth(g, x.f), m: a.E > 0 ? air * (x.ftr / a.E) : 0 }));
+  const Eleft = (u: number): number => att.reduce((t, x) => t + x.c * (x.F - Math.min(x.F, x.m * u)), 0);
+  const Epow = (u: number): number => att.reduce((t, x) => t + x.c * (x.F - Math.min(x.F, x.m * u)) * x.v, 0);
+  // hold = K x Epow / D (skyHold, its type edge and height); the sky is won when D <= K x Epow / win, or D is 0.
+  const K = skyHold(a, 1, 1);
+  const seen = new Map<number, number>();
+  const Xstar = (u: number): number => {
+    const was = seen.get(u);
+    if (was !== undefined) return was;
+    const X = Xfor(u);
+    seen.set(u, X);
+    return X;
+  };
+  const Xfor = (u: number): number => {
+    const thr = Eleft(u) >= AIR.sky.least ? (K * Epow(u)) / AIR.sky.win : 0;
+    if (Dnow(0) <= thr) return 0;
+    let x0 = 0, x1 = Xall;
+    for (let i = 0; i < 64; i++) { const mid = (x0 + x1) / 2; if (Dnow(mid) <= thr) x1 = mid; else x0 = mid; }
+    return x1;
+  };
+  // The defenders' losses: d x their luck, and the bombers' gunners' kills, gk x the bombers lost (gunsDown is linear
+  // in them; a raid on troops does not read the target there), the bombers lost B x min(most, bomberLoss x ub).
+  const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
+  const share = se + sd > 0 ? se / (se + sd) : 0;
+  const d = C.fighters * intensity('ground') * Math.min(a.E, a.D) * clashOf(g, 'ground') * 2 * share;
+  const gk = gunsDown(g, a, false, 1, 'ground', -1), most = mostBomberLoss(g), slope = gk * a.B * a.bomberLoss;
+  const Gb = (ub: number): number => gk * a.B * Math.min(most, a.bomberLoss * ub);
+  const at = (X: number, ub: number): number => (d > 0 ? Math.max(0, Math.min(1, (hi - (X - Gb(ub)) / d) / (hi - lo))) : Gb(ub) >= X ? 1 : 0);
+  // On every luck: won where the worst (the escort's most losses, the defenders' and gunners' fewest) wins it.
+  if (d * lo + Gb(lo) >= Xstar(hi)) return 'won';
+  if (d * hi + Gb(hi) < Xstar(lo)) return 'lost';
+  const kink = slope > 0 && a.bomberLoss > 0 ? most / a.bomberLoss : Infinity;
+  const breaks = (u: number): number[] => {
+    const X = Xstar(u), out = [lo, hi];
+    if (kink > lo && kink < hi) out.push(kink);
+    // Where the chance reaches 0 or 1 (or the gunners alone decide it): Gb(ub) = X - d x hi, X - d x lo, X.
+    if (slope > 0) for (const y of [X - d * hi, X - d * lo, X]) { const ub = y / slope; if (ub > lo && ub < hi && ub < kink) out.push(ub); }
+    return out;
+  };
+  // The escort's luck, split where a group's loss reaches the whole group and where the fighters left pass sky.least.
+  const knots = [lo, hi];
+  for (const x of att) if (x.m > 0 && x.F / x.m > lo && x.F / x.m < hi) knots.push(x.F / x.m);
+  if ((Eleft(lo) >= AIR.sky.least) !== (Eleft(hi) >= AIR.sky.least)) {
+    let u0 = lo, u1 = hi;
+    for (let i = 0; i < 64; i++) { const mid = (u0 + u1) / 2; if (Eleft(mid) >= AIR.sky.least) u0 = mid; else u1 = mid; }
+    knots.push(u0);
+  }
+  knots.sort((x, y) => x - y);
+  // Composite Simpson's rule over u, 24 panels between each pair of knots; over ub, Simpson on each piece between the
+  // breaks, where the integrand is a quadratic (a line times a line), so that part is exact.
+  const N = 24;
+  const overU = (f: (u: number) => number): number => {
+    let sum = 0;
+    for (let i = 0; i + 1 < knots.length; i++) {
+      const u0 = knots[i], u1 = knots[i + 1];
+      if (!(u1 > u0)) continue;
+      const h = (u1 - u0) / N;
+      // (Just inside each end, so a step at a knot is read from the piece's own side.)
+      const ev = (k: number): number => f(k === 0 ? u0 + 1e-12 * (u1 - u0) : k === N ? u1 - 1e-12 * (u1 - u0) : u0 + k * h);
+      let t = ev(0) + ev(N);
+      for (let k = 1; k < N; k++) t += (k % 2 ? 4 : 2) * ev(k);
+      sum += (t * h) / 3;
+    }
+    return sum / (hi - lo);
+  };
+  const overB = (u: number, h: (ub: number) => number, more: number[]): number => {
+    const xs = [...breaks(u), ...more.filter((b) => b > lo && b < hi)].sort((x, y) => x - y);
+    let sum = 0;
+    for (let i = 0; i + 1 < xs.length; i++) {
+      const b0 = xs[i], b1 = xs[i + 1];
+      if (b1 > b0) sum += ((b1 - b0) / 6) * (h(b0) + 4 * h((b0 + b1) / 2) + h(b1));
+    }
+    return sum / (hi - lo);
+  };
+  const sky = (u: number, ub: number): number => at(Xstar(u), ub);
+  return {
+    sky, breaks,
+    mean: (f) => overU((u) => { const X = Xstar(u); return f(u) * overB(u, (ub) => at(X, ub), []); }),
+    mean2: (h, cuts) => overU((u) => { const X = Xstar(u); return overB(u, (ub) => h(u, ub, at(X, ub)), cuts(u)); }),
+  };
 }
 
 /**
@@ -4376,7 +4499,7 @@ export interface StrafePart { F: number; c: number; m: number; keep: number }
  * before this, to the last digit. The rolls' whole numbers and each strafer's own ground-fire luck are taken at their
  * means (linear terms, except where they move the clip by a fraction of an aircraft).
  */
-function troopCutExpected(g: Game, a: AirAssess, r: Region, foes: Corps[], nat: string, through: number, s: { weight: number; parts: StrafePart[] }): number {
+function troopCutExpected(g: Game, a: AirAssess, r: Region, foes: Corps[], nat: string, through: number, s: { weight: number; parts: StrafePart[]; gate?: SkyGate }): number {
   const G = AIRWAR.ground, w = troopWeight(g, nat);
   const linear = troopCut(r, foes, (through + s.weight * G.fighters) * w);
   const divs = foes.reduce((t, c) => t + c.divs, 0);
@@ -4388,6 +4511,16 @@ function troopCutExpected(g: Game, a: AirAssess, r: Region, foes: Corps[], nat: 
   // through(ub) = T0 - beta x ub.
   const T0 = bl < 1 ? through / (1 - bl) : through, beta = bl < 1 ? (through * bl) / (1 - bl) : 0;
   if (T0 - beta * lo + S(lo) <= M) return linear;
+  // (The sky gate, 16:04Z: won on part of the luck only. The strafers weigh on the troops only where the sky is won;
+  // the bombers' luck moves both what gets through and the gunners' share in winning it, so the two lucks are taken
+  // together: over the bombers' luck exactly, piece by piece between the breaks of the gate and of the clip.)
+  const gate = s.gate;
+  if (gate) {
+    const clip = (y: number): number => Math.min(M, y);
+    const cuts = (u: number): number[] => (beta > 0 ? [(T0 + S(u) - M) / beta, (T0 - M) / beta] : []);
+    const sum = gate.mean2((u, ub, p) => p * clip(T0 - beta * ub + S(u)) + (1 - p) * clip(T0 - beta * ub), cuts);
+    return sum * (w / (G.scale + G.perDiv * divs)) * (G.cover[r.terrain] ?? 1);
+  }
   // E over the bombers' luck of min(M, A - beta ub), in closed form.
   const overB = (A: number): number => {
     if (beta <= 0) return Math.min(M, A);
