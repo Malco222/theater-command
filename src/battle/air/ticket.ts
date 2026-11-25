@@ -225,6 +225,8 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   // the air fight that have the reach to strafe.)
   const fire = marks ? (armed.fire !== undefined ? armed.fire : Math.min(armed.ftrLoss, a.E * marks.law.fire)) : 0;
   // The army's own light guns, for the picture, where the card counted none round the target (a raid with no bombers).
+  // (The picture is the guns' own ring where guns are built, else the light guns every target has, never both: the art
+  // director's flak brief, 2c. So the scene stands the same guns as before the count named the standing ones apart.)
   const lightGuns = marks ? marks.pieces.reduce((t, p) => t + (p.what === 'aa' ? p.n : 0), 0) : 0;
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
@@ -232,7 +234,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     clash: airWar(g) && m !== 'superiority' ? AIRWAR.losses.clash : 1,
     law: { bombers: L.bombers, power: L.power, most, escort, guns: a.defence },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
-    gunLoss: a.gunLoss, flakGuns: { light: a.guns.light || lightGuns, heavy: a.guns.heavy },
+    gunLoss: a.gunLoss, flakGuns: { light: a.guns.light || a.standing || lightGuns, heavy: a.guns.heavy },
     worth: { att: a.E > 0 ? a.Epow / a.E / hx : 1, def: a.D > 0 ? (a.Dpow / a.D) * hx : 1 },
     forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss, ...(marks ? { fire } : {}) },
     chance: fc.success,

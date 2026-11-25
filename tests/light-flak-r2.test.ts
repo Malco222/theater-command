@@ -3,7 +3,7 @@
 // round the target when a bomber flight's row says so (`light`, a count above 0); a target with guns built shows
 // the guns' own ring (`aa`) and never both.
 import { describe, expect, it } from 'vitest';
-import { AIR, flakGuns } from '../src/campaign/air';
+import { AIR, standingGuns } from '../src/campaign/air';
 import { planRaid, raidTargets } from '../src/campaign/airwar';
 import { workLevel } from '../src/campaign/arsenal';
 import { createGame } from '../src/campaign/game';
@@ -49,15 +49,15 @@ describe('light flak on a raid\'s flights (release 2)', () => {
     const { g, target, ids } = table('bomb');
     const rows = flown(g, 'bomb', target, ids);
     expect(rows.every((r) => r.bombers)).toBe(true);
-    for (const r of rows) { expect(r.region).toBe(target); expect(r.aa).toBe(0); expect(r.light).toBe(flakGuns(0).light); }
-    expect(flakGuns(0).light).toBeGreaterThan(0);
+    for (const r of rows) { expect(r.region).toBe(target); expect(r.aa).toBe(0); expect(r.light).toBe(standingGuns()); }
+    expect(standingGuns()).toBeGreaterThan(0);
   });
 
   it('the fighters that go with them say nothing: light flak is the bombers\' row alone', () => {
     const { g, target, ids } = table('bomb', true);
     const rows = flown(g, 'bomb', target, ids);
     expect(rows.some((r) => r.bombers) && rows.some((r) => !r.bombers)).toBe(true);
-    for (const r of rows) expect(r.light).toBe(r.bombers ? flakGuns(0).light : undefined);
+    for (const r of rows) expect(r.light).toBe(r.bombers ? standingGuns() : undefined);
   });
 
   it('a fight for the sky by fighters alone has no light flak', () => {
@@ -69,7 +69,7 @@ describe('light flak on a raid\'s flights (release 2)', () => {
     expect(AIR.combat.night.flak).toBeGreaterThan(0);
     const { g, target, ids } = table('night');
     const rows = flown(g, 'night', target, ids);
-    for (const r of rows) { expect(r.night).toBe(true); expect(r.light).toBe(r.bombers ? flakGuns(0).light : undefined); }
+    for (const r of rows) { expect(r.night).toBe(true); expect(r.light).toBe(r.bombers ? standingGuns() : undefined); }
     expect(rows.some((r) => r.light)).toBe(true);
   });
 
