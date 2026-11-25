@@ -581,8 +581,35 @@ export function seaSide(g: Game, z: number, nat: string, hostile: boolean, form:
   return { ships, air, total: ships + air };
 }
 
+/**
+ * (Speed, the far map: the playtest's finding 40, 25 November 2026.) A sea reading: while a question that changes
+ * nothing is answered (the 3D game's list of ports a corps can be shipped to and coasts it can land on, and why not),
+ * each sea's closing and risk for a nation, and each search by sea from a coast, are worked out once and kept to the
+ * end of the question. Asked port by port, the same search from the corps' own port was made again for every port
+ * on the map, and every sea's balance again inside every search: with Japan at war with eight nations, 17 to 21
+ * seconds for one corps in Tokyo. Nothing in such a question moves a ship, an aircraft or a front, so nothing they
+ * read can change while it is asked; the reading is dropped as the question returns, and an order is never asked
+ * inside one. A question about another game (a copy) reads that game afresh.
+ */
+interface SeaReading { g: Game; closed: Map<string, Int8Array>; risk: Map<string, Float64Array>; searches: Map<string, SeaSearch>; steps: Map<string, ConvoySteps> }
+let reading: SeaReading | null = null;
+export function seaReading<T>(g: Game, f: () => T): T {
+  if (reading) return f();
+  reading = { g, closed: new Map(), risk: new Map(), searches: new Map(), steps: new Map() };
+  try { return f(); } finally { reading = null; }
+}
+const readingOf = (g: Game): SeaReading | null => (reading !== null && reading.g === g ? reading : null);
+
 /** A sea is closed to a nation's troopships and supply ships when the enemy is much the stronger there. */
 export function closedTo(g: Game, z: number, nat: string): boolean {
+  const R = readingOf(g);
+  if (!R) return closedNow(g, z, nat);
+  let a = R.closed.get(nat);
+  if (!a) R.closed.set(nat, (a = new Int8Array(g.seas.length).fill(-1)));
+  if (a[z] < 0) a[z] = closedNow(g, z, nat) ? 1 : 0;
+  return a[z] === 1;
+}
+function closedNow(g: Game, z: number, nat: string): boolean {
   const e = seaSide(g, z, nat, true);
   if (e.total < NAVY.closed.min) return false;
   return e.total >= NAVY.closed.ratio * seaSide(g, z, nat, false).total;
@@ -934,6 +961,14 @@ export const seaOpenAt = (g: Game, nat: string, r: Region): boolean => r.seas.so
 
 /** How dangerous a sea is for a nation's troopships: 0 when no enemy ship or aircraft is at work there. */
 export function seaRisk(g: Game, z: number, nat: string): number {
+  const R = readingOf(g);
+  if (!R) return riskNow(g, z, nat);
+  let a = R.risk.get(nat);
+  if (!a) R.risk.set(nat, (a = new Float64Array(g.seas.length).fill(NaN)));
+  if (Number.isNaN(a[z])) a[z] = riskNow(g, z, nat);
+  return a[z];
+}
+function riskNow(g: Game, z: number, nat: string): number {
   const e = seaSide(g, z, nat, true);
   const hunters = e.ships + e.air * 0.5;
   if (hunters <= 0) return 0;
@@ -961,6 +996,14 @@ export interface SeaSearch { cost: Float64Array; prev: Int16Array }
  * every way into it; closedTo and seaRisk only read the war, and nothing changes during a search).
  */
 export function seaSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean } = {}): SeaSearch {
+  const R = readingOf(g);
+  if (!R) return searchNow(g, nat, from, o);
+  const k = `${nat}|${from.id}|${o.max ?? 0}|${o.surprise ? 1 : 0}`;
+  let S = R.searches.get(k);
+  if (!S) R.searches.set(k, (S = searchNow(g, nat, from, o)));
+  return S;
+}
+function searchNow(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): SeaSearch {
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
   const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
@@ -1085,7 +1128,16 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
 export const sailReach = (g: Game, nat?: string): number => (farOn(g) && (nat === undefined || ownShips !== nat) ? NAVY.sail?.reach ?? 0 : 0);
 
 /** The fewest seas a nation's ships cross from a coast to every sea (1 for the coast's own seas; closed seas and shut straits kept out), and the sea before each on the way. */
-function convoySteps(g: Game, nat: string, from: Region): { steps: Int16Array; prev: Int16Array } {
+interface ConvoySteps { steps: Int16Array; prev: Int16Array }
+function convoySteps(g: Game, nat: string, from: Region): ConvoySteps {
+  const R = readingOf(g);
+  if (!R) return stepsNow(g, nat, from);
+  const k = `${nat}|${from.id}`;
+  let S = R.steps.get(k);
+  if (!S) R.steps.set(k, (S = stepsNow(g, nat, from)));
+  return S;
+}
+function stepsNow(g: Game, nat: string, from: Region): ConvoySteps {
   const N = g.seas.length, steps = new Int16Array(N), prev = new Int16Array(N).fill(-1);
   const q: number[] = [];
   for (const z of from.seas) if (!closedTo(g, z, nat)) { steps[z] = 1; q.push(z); }

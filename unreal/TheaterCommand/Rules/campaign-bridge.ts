@@ -98,7 +98,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { baseTargets, bookBaseOf, fleetReach, landingTargets, seaAt as seaUnder, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, bookBaseOf, fleetReach, landingTargets, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -3932,16 +3932,20 @@ function railTip(ids: number[], to: number) {
   } catch { return none; }
 }
 
-/** Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
+/**
+ * Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on.
+ * (Asked as one sea reading, navy.ts `seaReading`: each sea's balance and each search by sea from the corps' port
+ * are worked out once for the whole list, not again for every port on the map. The playtest's finding 40.)
+ */
 function seaReach(ids: number[]) {
   const s = game();
   const ports = new Set<number>();
   let beaches: number[] = [];
-  if (humanUp(s) && !onEve(s)) {
+  if (humanUp(s) && !onEve(s)) seaReading(s, () => {
     const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
     for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
     beaches = landingTargets(s, cs).map((r) => r.id);
-  }
+  });
   return { ports: [...ports], beaches };
 }
 
@@ -3955,11 +3959,14 @@ function bySeaWhy(ids: number[], to: number): { why: string } {
   const r = s.regions[to];
   const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
   if (!r || !cs.length) return { why: '' };
-  if (allied(s, cs[0].nat, r.ctrl)) {
-    for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
-    return { why: '' };
-  }
-  return { why: whyNotLand(s, cs, r) ?? '' };
+  // (One sea reading, as `seaReach`: a refusal for lying beyond a month's sailing searches from every port on the way.)
+  return seaReading(s, () => {
+    if (allied(s, cs[0].nat, r.ctrl)) {
+      for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
+      return { why: '' };
+    }
+    return { why: whyNotLand(s, cs, r) ?? '' };
+  });
 }
 
 /** Ships the chosen corps to a friendly port. */
