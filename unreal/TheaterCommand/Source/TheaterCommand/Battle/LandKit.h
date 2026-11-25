@@ -309,6 +309,11 @@ namespace LandKit
 		/** National marks (release 2, "-TheaterLandMarks"): her owner's plain period marking painted on her skin at each
 		 * of her file's mark places (Model::Marks). Off: none, as before. */
 		bool bMarks = false;
+		/** The field's own ground (release 2, the whole picture's worn paint, tc.Look.Worn; linear light, the field's mean
+		 * paint with its hue held inside an earth box, WholeLook::FieldDust): a third layer of dirt over her file's dust and haze or
+		 * the game's own road dust, on her lower third and her running gear (the art director: 30 to 50 in 100 of the
+		 * field's colour there). A negative red: none, as before. */
+		double FieldDust[3] = { -1.0, -1.0, -1.0 };
 	};
 
 	class Model
@@ -819,6 +824,9 @@ namespace LandKit
 		/** National marks (release 2, Brian's 24 Nov ask for the tanks' country markings): on, every vehicle wears her
 		 * owner's plain period marking at her file's mark places (Dress::bMarks). Off unless set; set before Load. */
 		bool bMarks = false;
+		/** The field's own ground on every vehicle's lower third (release 2, tc.Look.Worn; Dress::FieldDust). A negative
+		 * red: none, as before. Set before Load. */
+		double FieldDust[3] = { -1.0, -1.0, -1.0 };
 
 	private:
 		std::vector<Vehicle> All;

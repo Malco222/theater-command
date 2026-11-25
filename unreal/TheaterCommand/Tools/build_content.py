@@ -76,7 +76,7 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
+def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, worn=False, alpha_rough=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
     (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
@@ -86,7 +86,17 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     crowd_poses.)
     (With sway, M_LandBlades, the ground battle's grass, corn, shrubs and trees that the wind bends: the same surface,
     leaning and springing with the gusts (wind_sway), and the gusts' sheen over its colour (wind_sheen). Brian, 23
-    November: "can we make the grass, trees, and sky more visually realistic and epic?")"""
+    November: "can we make the grass, trees, and sky more visually realistic and epic?")
+    (With worn, M_LandWorn, the ground battle's vehicles' worn paint, release 2's tc.Look.Worn (Look/WholeLook.h): the
+    same surface with the soot, its mottle in two layers at periods that are no multiple of each other ("Blot2Tiling",
+    mixed by "Blot2Mix") so no patch comes round on one hull, each layer shifted by "BlotShift" (red and green the first
+    layer's, blue and alpha the second's; C++ gives each vehicle her own, so a troop in line is not stamped alike), and the
+    roughness moved with the mottle by "WearRough": the darker patches smoother, the paler rougher, as worn paint is (the
+    art director, 25 November 05:45Z). Every other material is built as before: nothing here runs without worn.)
+    (With alpha_rough, M_LandManWorn and M_LandCrowdWorn, the men's inks under tc.Look.Worn: the mesh's alpha is each
+    paint's roughness, which the men's looks write with the switch on (cloth about 0.9, skin 0.55, leather 0.45), so
+    neither painted metal nor a wake is read from it; a point left whole, 255, keeps "Roughness". Every other material is
+    built as before.)"""
     m = new_material(name)
     # (the air battle draws its aircraft past 300 m with this surface by instancing, AS1; the ground battle its hedges,
     # trees and grass)
@@ -171,10 +181,15 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     wear = scalar(m, "Wear", 0.0, 300, -1500)
     # (A ship's wake and bow wave are paint laid on the water, which the mesh marks by an alpha of 240: no metal, and
     # by night it is dimmed with the sea by "WakeTone", which is white unless C++ says otherwise.)
-    on_water = one_in(m, unreal.MaterialExpressionSaturate,
-                      plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (colour, "A"), -0.9412, -1100, -1380), -1000, -1380), -60.0, -900, -1380), 1.0, -800, -1380), -700, -1380)
-    metal = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, one_in(m, unreal.MaterialExpressionOneMinus, (colour, "A"), -900, -1500), 2.0, -750, -1500), -600, -1500),
-                  one_in(m, unreal.MaterialExpressionOneMinus, on_water, -600, -1420), -500, -1480)
+    if alpha_rough:
+        # (the men's alpha is their paint's roughness: no metal and no wake in it)
+        on_water = node(m, unreal.MaterialExpressionConstant, -700, -1380, r=0.0)
+        metal = node(m, unreal.MaterialExpressionConstant, -500, -1480, r=0.0)
+    else:
+        on_water = one_in(m, unreal.MaterialExpressionSaturate,
+                          plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (colour, "A"), -0.9412, -1100, -1380), -1000, -1380), -60.0, -900, -1380), 1.0, -800, -1380), -700, -1380)
+        metal = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, one_in(m, unreal.MaterialExpressionOneMinus, (colour, "A"), -900, -1500), 2.0, -750, -1500), -600, -1500),
+                      one_in(m, unreal.MaterialExpressionOneMinus, on_water, -600, -1420), -500, -1480)
     own = node(m, unreal.MaterialExpressionTransformPosition, -1500, -1700,
                transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
                transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
@@ -187,10 +202,20 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     spread = plus(m, own_xy, times(m, own_z, skew, -1100, -1600), -950, -1700)
     chip_uv = times(m, spread, scalar(m, "ChipTiling", 0.035, -950, -1580), -800, -1700)
     blot_uv = times(m, spread, scalar(m, "BlotTiling", 0.009, -950, -1480), -800, -1560)
+    if worn:
+        blot_shift = vector(m, "BlotShift", (0.0, 0.0, 0.0, 0.0), -1100, -1380)
+        blot_uv = plus(m, blot_uv, pair(m, (blot_shift, "R"), (blot_shift, "G"), -950, -1380), -700, -1480)
     speck = node(m, unreal.MaterialExpressionTextureSample, -600, -1750, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
     connect(chip_uv, "", speck, "UVs")
     blot = node(m, unreal.MaterialExpressionTextureSample, -600, -1560, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
     connect(blot_uv, "", blot, "UVs")
+    mottle_n = (blot, "R")
+    if worn:
+        blot2_uv = plus(m, times(m, spread, scalar(m, "Blot2Tiling", 0.0016, -950, -1300), -800, -1300),
+                        pair(m, (blot_shift, "B"), (blot_shift, "A"), -950, -1240), -700, -1280)
+        blot2 = node(m, unreal.MaterialExpressionTextureSample, -600, -1300, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+        connect(blot2_uv, "", blot2, "UVs")
+        mottle_n = lerp(m, (blot, "R"), (blot2, "R"), scalar(m, "Blot2Mix", 0.5, -600, -1200), -450, -1250)
     # (a chip where the fine noise and the broad one are both high: chips come in patches, not evenly. They gather
     # where a vehicle is knocked about, its nose, its track guards and its hatches, which the mesh marks by taking
     # its alpha down from a half toward nothing: there the paint gives way far more readily.)
@@ -204,8 +229,9 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     connect(posed_facing if crowd else node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
     lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, -750, -2100), scalar(m, "TopLight", 0.26, -750, -2000), -600, -2050),
                                  times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)
-    weathered = times(m, times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
-                                               times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)
+    mottle = lerp(m, 1.0, plus(m, times(m, mottle_n, 0.42, -350, -1500), 0.8, -200, -1500),
+                  times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500)
+    weathered = times(m, times(m, tinted, mottle, 600, -900), lit_top, 700, -1000)
     tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
     tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
     if sway:
@@ -254,7 +280,17 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     to_property(posed_facing if crowd else tooth, "", unreal.MaterialProperty.MP_NORMAL)
 
     # (bare metal is smoother than paint: the lamp glints on the chips)
-    to_property(lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    rough = lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200)
+    if alpha_rough:
+        # (each paint's own roughness from the mesh's alpha; a point left whole keeps "Roughness")
+        whole = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (colour, "A"), -0.996, -450, 440), 1000.0, -300, 440), -150, 440)
+        rough = lerp(m, (colour, "A"), rough, whole, 0, 400)
+    if worn:
+        # (the mottle is 1 where the paint is as painted, under 1 where it is darker, over 1 where paler: the roughness
+        # moves with it, so a dark oily patch has a little sheen and a pale dusty one none, and stays within 0 to 1)
+        rough = one_in(m, unreal.MaterialExpressionSaturate,
+                       plus(m, rough, times(m, plus(m, mottle, -1.0, -250, 320), scalar(m, "WearRough", 1.3, -250, 380), -100, 340), 0, 260), 150, 260)
+    to_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(scalar(m, "Specular", 0.25, -450, 300), "", unreal.MaterialProperty.MP_SPECULAR)
     finish(m)
 
@@ -2667,6 +2703,39 @@ def build_land_steel_or_tell():
             unreal.log_error("Theater Command: and the half-built M_LandSteel could not be removed:\n" + traceback.format_exc())
 
 
+def build_land_worn_or_tell():
+    """M_LandWorn (M_MapSurface with the soot and the worn paint, see build_map_surface) is the ground battle's alone and
+    only with tc.Look.Worn on; without it the switch leaves the vehicles their even coat, said once. Whatever goes wrong
+    in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_map_surface("M_LandWorn", soot=True, worn=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_LandWorn was not built (with worn on the vehicles keep their even coat):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandWorn"):
+                eal.delete_asset(f"{MATERIALS}/M_LandWorn")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandWorn could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_men_worn_or_tell(name, crowd):
+    """M_LandManWorn and M_LandCrowdWorn (M_MapSurface and M_LandCrowd reading each paint's roughness from the mesh's
+    alpha, see build_map_surface) are the ground battle's alone and only with tc.Look.Worn on; without either the men keep
+    one roughness and their looks write none, said once. Whatever goes wrong in them is told, and the rest of the content
+    is built as before."""
+    import traceback
+    try:
+        build_map_surface(name, crowd=crowd, alpha_rough=True)
+    except Exception:
+        unreal.log_error(f"Theater Command: {name} was not built (with worn on the men keep one roughness):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/{name}"):
+                eal.delete_asset(f"{MATERIALS}/{name}")
+        except Exception:
+            unreal.log_error(f"Theater Command: and the half-built {name} could not be removed:\n" + traceback.format_exc())
+
+
 def build_land_leaves_or_tell():
     """M_LandLeaves is the ground battle's alone, and the battle falls back to its solid sprigs without it: whatever goes
     wrong in it is told, and the rest of the content is built as before."""
@@ -2907,14 +2976,16 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # M_LandShade, the footprint shade under tanks, guns and men, the same; M_LandStalks, the corn's stalks near the lens,
 # the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
 # after a change to M_MapSurface. M_LandCrowd, the mid and far men as posed instances (SO1), the same:
-# TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
+# TC_REBUILD=M_LandCrowd after a change to M_MapSurface. M_LandWorn, the vehicles' worn paint (release 2, tc.Look.Worn),
+# the same: built when missing, TC_REBUILD=M_LandWorn after a change to M_MapSurface; and the men's, M_LandManWorn and
+# M_LandCrowdWorn, the same: TC_REBUILD=M_LandManWorn,M_LandCrowdWorn after a change to M_MapSurface or crowd_poses.)
 # (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
 # Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
 # (The wind and the clouds' shadows, release 2, 23 November: M_LandBlades, the grass, corn and trees the wind bends, and
 # M_LandCloudShade, the clouds' shadows on the field, the same; they and M_LandSurface, M_LandLeaves and M_LandStalks read
 # Tools/land_look/T_LandCloudWind.png: TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks
 # once, and again after make_sky_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandWorn", build_land_worn_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandManWorn", lambda: build_land_men_worn_or_tell("M_LandManWorn", False)), ("M_LandCrowdWorn", lambda: build_land_men_worn_or_tell("M_LandCrowdWorn", True)), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

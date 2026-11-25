@@ -25,6 +25,7 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/TheaterSpeed.h"
+#include "Look/WholeLook.h"
 #include "Components/AudioComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -1158,8 +1159,13 @@ void ALandBattle::LoadInks()
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandStalks is missing (run Tools/build_content.sh): the corn keeps its bundles to the lens."));
 		}
 	}
-	ManInk = Ink(0.85f, 0.2f, 0.0f);
+	// (release 2, the whole picture's worn paint, tc.Look.Worn: with it on, the men's ink reads each paint's roughness from
+	// their points, and this battle's vehicles each take their own worn ink as their bodies are made (MakeBodies); the
+	// steel ink itself stays plain for the aircraft over the field and the old wrecks. Nothing with it off.
+	// Look/WholeLook.h)
+	ManInk = WholeLook::MenInk(Ink(0.85f, 0.2f, 0.0f), this);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
+	WholeLook::WornOpen(SteelInk.Get());
 	// The wind and the sky's life (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually
 	// realistic and epic?"), each on its own switch and all three with "-TheaterLandEpic", off until the art director
 	// and the Mac's frame rate pass them. Built by build_content.py (TC_REBUILD=M_LandBlades,M_LandCloudShade,
@@ -3660,6 +3666,12 @@ void ALandBattle::MakeMen()
 	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
 	{
 		UMaterialInterface* CrowdInk = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandCrowd.M_LandCrowd"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		// (release 2, tc.Look.Worn: the crowd reads each paint's roughness from its points too, as the near men's ink does.
+		// Look/WholeLook.h)
+		if (WholeLook::MenRough())
+		{
+			CrowdInk = WholeLook::MenParent(true);
+		}
 		if (!CrowdInk || !ManInk)
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandCrowd is missing (run Tools/build_content.sh): far men are drawn a mesh a pose, mid men skinned."));
@@ -4157,6 +4169,23 @@ void ALandBattle::BankOut(FManDrawn& D)
 
 // ---- The tanks, guns and lorries -------------------------------------------------------------------------------
 
+namespace
+{
+	/** The field's mean paint as linear light (WholeLook::GroundMean on the painted field's own size, as the cloud block
+	 * reads it): water not counted, as rivers, ponds and flooded ground mirror the sky. Release 2, the whole picture: the
+	 * bounce (tc.Look.Bounce) and the ground on the vehicles' lower third (tc.Look.Worn). */
+	FLinearColor FieldMeanPaint(const LandField::Ground& Painted, const LandFeed::Field& Plan)
+	{
+		return WholeLook::GroundMean([&Painted](double X, double Y)
+		{
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			Painted.HeightAt(X, Y, &What);
+			const auto C = Painted.ColourAt(X, Y);
+			return FColor(C.R, C.G, C.B, static_cast<uint8>(What == LandField::Drawn::Water ? 0 : 255)); // (alpha 0: not counted)
+		}, Plan.Cols * Plan.Cell, Plan.Rows * Plan.Cell);
+	}
+}
+
 void ALandBattle::MakeArmour()
 {
 	FLandBattleState& S = *State;
@@ -4267,6 +4296,22 @@ void ALandBattle::MakeArmour()
 	// Army's red star, the British flash before July 1943. Off: none, as before.
 	Armour->bMarks = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMarks"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: national marks %s"), Armour->bMarks ? TEXT("painted on (-TheaterLandMarks, release 2)") : TEXT("off"));
+	// (release 2, the whole picture's worn paint, tc.Look.Worn: the field's own ground on every vehicle's lower third and
+	// running gear, a third layer over her dust (LandKit's Dress::FieldDust), its mean paint read as the bounce reads it
+	// and its hue held inside an earth box, so grass never greens a hull. Off: none, as before. Look/WholeLook.h)
+	if (WholeLook::WornOn())
+	{
+		// (on snow the field's mean is the snow's own: packed snow in the running gear keeps its white, not the earth box's
+		// cream, as much as snow lies; the ground thread's read, 25 Nov 12:47Z)
+		const FLinearColor Mean = FieldMeanPaint(*FieldPtr, S.Rec.Ground);
+		const float Snowed = static_cast<float>(FMath::Clamp(FieldPtr->SnowLying(), 0.0, 1.0));
+		const FLinearColor Dust = FMath::Lerp(WholeLook::FieldDust(Mean), FLinearColor(Mean.R, Mean.G, Mean.B, 1.0f), Snowed);
+		Armour->FieldDust[0] = Dust.R;
+		Armour->FieldDust[1] = Dust.G;
+		Armour->FieldDust[2] = Dust.B;
+		UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' lower third takes the field's own ground, %.3f, %.3f, %.3f (linear), some 44 in 100 of it (the snow lying %.2f)"),
+			Dust.R, Dust.G, Dust.B, Snowed);
+	}
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
@@ -5221,13 +5266,14 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			{
 				LandParts::FromBody(Body.Near, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
 				Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-				Mesh->SetMaterial(0, SteelInk);
+				// (release 2, tc.Look.Worn: her own worn ink; the steel ink with it off. Look/WholeLook.h)
+				Mesh->SetMaterial(0, WholeLook::VehicleInk(SteelInk.Get(), static_cast<int32>(V), this));
 			}
 			if (bFarSection) // TK1
 			{
 				LandParts::FromBody(Body.Far, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
 				Mesh->CreateMeshSection(1, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-				Mesh->SetMaterial(1, SteelInk);
+				Mesh->SetMaterial(1, WholeLook::VehicleInk(SteelInk.Get(), static_cast<int32>(V), this));
 				Mesh->SetMeshSectionVisible(1, Body.Near.Triangles.empty());
 			}
 			BodyMeshes.Add(Mesh);
@@ -5943,6 +5989,8 @@ void ALandBattle::HideTheTable()
 	{
 		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying());
 	}
+	// (Release 2, the whole picture: the far shade is lighter under a closed canopy, the jungle; Look/WholeLook.h)
+	WholeLook::FieldLaid(State.IsValid() && State->Field && LandScape::LookOf(State->Field->LookWord()) == LandScape::Look::Jungle);
 	double HazeStart = 0.0, HazeDensity = LookAir.bSet ? LookAir.HazeDensity : 0.0069, HazeFalloff = 0.1, HazeMost = 0.98;
 	LandLook::Asked(TEXT("TheaterLandHaze="), { &HazeStart, &HazeDensity, &HazeFalloff, &HazeMost });
 	HazeFalloff = FMath::Max(0.0, HazeFalloff);
@@ -6140,9 +6188,36 @@ void ALandBattle::HideTheTable()
 			const double Snowed = State.IsValid() && State->Field ? FMath::Clamp(State->Field->SnowLying(), 0.0, 1.0) : 0.0;
 			double SnowBelow = 2.0;
 			LandLook::Asked(TEXT("TheaterLandSnowBelow="), { &SnowBelow });
-			const FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			// (Release 2, the whole picture's bounce, tc.Look.Bounce (Look/WholeLook.h; agreed with the ground and environments
+			// threads, 25 Nov 04:26Z; the art director's first read 04:46Z): every ground gives back its own colour as snow
+			// does, the field's paint read once here on a grid and laid as a solid colour under the sky light, so the desert's
+			// sand lifts a hull's shaded side warm and the grass gives a little green. Its hue is pulled inside the art
+			// director's box, it follows the sun's true height (none under the horizon), it is halved under a closed canopy
+			// (WholeLook::BounceLight), and water gives none (rivers, ponds and flooded ground mirror the sky; the island's sea
+			// lies beyond the field). Through a night before the attack the sky's lower half stays as shipped, and the bounce
+			// is laid as the picture comes up from black on the battle (WholeLook::Dawn, from NightLook). Off, and on a
+			// snowy field (snow's own, as shipped), the block below is as it was.)
+			const bool bBounceAll = WholeLook::BounceOn() && State.IsValid() && State->Field && Snowed < 0.25 && Below > 0.0 && Skies.Num() > 0;
+			bool bBounceNow = false;
+			FLinearColor Bounce(0.0f, 0.0f, 0.0f, 1.0f);
+			if (bBounceAll)
+			{
+				const auto* Painted = State->Field.get();
+				const FLinearColor Mean = FieldMeanPaint(*Painted, State->Rec.Ground);
+				// (the sun's true height at the hour it was laid, not the picture's sun, which is held 8 degrees up)
+				float SunHour = static_cast<float>(Hour);
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHour="), SunHour))
+				{
+					SunHour = FMath::Clamp(SunHour, 5.0f, 20.0f);
+				}
+				const double SunHeight = WholeLook::SunHeight(State->Rec.Weather.Lat, LandParts::MonthOf(State->Rec.Date), SunHour);
+				Bounce = WholeLook::BounceLight(Mean, LandScape::LookOf(Painted->LookWord()) == LandScape::Look::Jungle, SunHeight);
+				bBounceNow = !State->Night.Playing();
+			}
 			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 4.0));
-			const FLinearColor Field = FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
+			// (the bounce's mean already holds whatever snow is painted on the field: laid alone, not mixed with snow's again)
+			const FLinearColor Field = bBounceNow ? Bounce : FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
 			// (the engine lays this colour over the sky's lower half only when the lower half is a solid colour, which
 			// the flag the engine still calls "black" says: with it off, as it was, the colour was ignored and the lower
 			// half was the table's cubemap's dark ground, so the hull's shaded side stayed 18-22 on the Mac at Valdai,
@@ -6151,9 +6226,10 @@ void ALandBattle::HideTheTable()
 			// to 1, as the air battle's light from below (AirBattle.cpp): the scalings above carry into the alpha (0.78 at
 			// full snow, past 1 above 1.15) and the engine may weigh the colour by it. "-TheaterLandSnowBelowOld" keeps
 			// the cubemap's on snow too, to set the two side by side)
-			const bool bSolidBelow = Snowed >= 0.25 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld"));
+			const bool bSolidBelow = bBounceNow || (Snowed >= 0.25 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld")));
 			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f; snow's strength %.2f, -TheaterLandSnowBelow=), %s"), Field.R, Field.G, Field.B, Snowed, SnowBelow,
-				bSolidBelow ? TEXT("laid as a solid colour") : Snowed >= 0.25 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (little or no snow)"));
+				bBounceNow ? TEXT("laid as a solid colour, the field's own (tc.Look.Bounce)") : bBounceAll ? TEXT("the cubemap's own through the night before the attack; the field's own (tc.Look.Bounce) laid at the dawn")
+				: bSolidBelow ? TEXT("laid as a solid colour") : Snowed >= 0.25 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (little or no snow)"));
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
@@ -6168,6 +6244,10 @@ void ALandBattle::HideTheTable()
 					Sky->SetLowerHemisphereColor(FLinearColor(Field.R, Field.G, Field.B, 1.0f));
 					Sky->RecaptureSky();
 				}
+			}
+			if (bBounceAll && !bBounceNow)
+			{
+				WholeLook::BounceAtDawn(Skies, Bounce);
 			}
 		}
 	}
@@ -6737,6 +6817,7 @@ void ALandBattle::ShowTheTable()
 		return;
 	}
 	bTableHidden = false;
+	WholeLook::FieldGone();
 	if (SkyDay.IsValid())
 	{
 		if (APostProcessVolume* Over = SkyDay->Grade.Get())
@@ -7617,6 +7698,12 @@ void ALandBattle::NightLook()
 		return;
 	}
 	const LandNight::Frame& F = State->NightNow;
+	if (!F.bNight)
+	{
+		// (release 2, the whole picture: the ground's bounce held through the night laid now, the picture still black from
+		// the dip and the light 4.6 stops down; nothing when none waits. Look/WholeLook.h)
+		WholeLook::Dawn();
+	}
 	FPostProcessSettings& Lens = Eye->GetCameraComponent()->PostProcessSettings;
 	const bool bWant = F.bNight || F.Dark > 0.0 || F.Black > 0.0;
 	if (bWant && !NightLens.bKept)
@@ -10356,6 +10443,9 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		ShowTheTable();
 	}
+	// (the whole picture's far shade and any bounce waiting for the dawn go with the battle, however it ends: a world torn
+	// down or the game quit never shows the table again)
+	WholeLook::FieldGone();
 	if (State.IsValid())
 	{
 		const FLandBattleState& S = *State;

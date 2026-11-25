@@ -7,6 +7,7 @@
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Actor.h"
 #include "HAL/PlatformTime.h"
+#include "Look/WholeLook.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -253,6 +254,12 @@ UMaterialInterface* FLandCrowd::InkFor(const LandKit::Model& Model, FKind& Kind)
 		}
 	}
 	UMaterialInterface* Sooty = SootParent.Get();
+	// (release 2, the whole picture's worn paint, tc.Look.Worn: while the battle wears its paint the far pieces are inked
+	// on M_LandWorn, which has this soot too, so the paint does not change at the hand-over. Look/WholeLook.h)
+	if (UMaterialInterface* Worn = WholeLook::FarParent())
+	{
+		Sooty = Worn;
+	}
 	if (!Sooty || !Scene)
 	{
 		return Plain;
@@ -269,6 +276,7 @@ UMaterialInterface* FLandCrowd::InkFor(const LandKit::Model& Model, FKind& Kind)
 		Ink->CopyParameterOverrides(From);
 	}
 	Ink->SetVectorParameterValue(TEXT("BurntColour"), FLinearColor(Model.BurntColour[0] / 255.0f, Model.BurntColour[1] / 255.0f, Model.BurntColour[2] / 255.0f, 1.0f));
+	WholeLook::WearFar(Ink, Kind.Name); // (release 2, tc.Look.Worn: nothing on M_LandSteel)
 	Keep->Add(Ink);
 	// (its own settings, given back when the general's view is put away)
 	Kind.Ink = Ink;
