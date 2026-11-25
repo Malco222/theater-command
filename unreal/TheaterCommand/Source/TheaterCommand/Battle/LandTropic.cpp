@@ -594,14 +594,18 @@ namespace LandScape
 				Tone Floor(const Spot& S, double Cover, double Litter, double Bare) const
 				{
 					const double Crest = Read(S.X, S.Y, 2), Drift = Read(S.X, S.Y, 1), Lit_ = Read(S.X, S.Y, 3);
-					Tone T = bSand ? Mixed(Rgb(190, 166, 120), Rgb(212, 188, 142), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)))
+					Tone T = bSand ? Mixed(Rgb(190, 168, 122), Rgb(212, 190, 144), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)))
 								   : Mixed(Rgb(212, 202, 174), Rgb(238, 232, 212), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)));
-					T = Mixed(T, bSand ? Rgb(164, 144, 106) : Rgb(178, 172, 150), 0.6 * Smooth(-0.1, -0.4, Crest));
+					T = Mixed(T, bSand ? Rgb(164, 148, 116) : Rgb(178, 172, 150), 0.6 * Smooth(-0.1, -0.4, Crest));
 					T = Breakup(T, S.X, S.Y, 0.6);
 					const double Fine = Read(S.X, S.Y, 5);
-					T = Mixed(T, Mixed(Rgb(158, 140, 108), Rgb(132, 116, 90), Clamp01(0.5 + 0.8 * Fine)), Clamp01(0.6 * Litter * Smooth(-0.35, 0.4, Lit_)));
+					// (on trial "islandsand" the frond litter greyer, so the sand in the palms' shade goes grey-tan, not mustard)
+					T = Mixed(T, bSand ? Mixed(Rgb(150, 138, 116), Rgb(124, 114, 98), Clamp01(0.5 + 0.8 * Fine)) : Mixed(Rgb(158, 140, 108), Rgb(132, 116, 90), Clamp01(0.5 + 0.8 * Fine)), Clamp01(0.6 * Litter * Smooth(-0.35, 0.4, Lit_)));
 					const double Green = Clamp01(Cover * Smooth(0.2, 0.42, Drift));
-					T = Mixed(T, Mixed(Rgb(112, 130, 62), Rgb(150, 154, 96), Clamp01(0.5 - 0.9 * Fine)), 0.6 * Green);
+					// (on trial "islandsand" the creepers a cooler green and thinner over the sand: in the palms' shade the old
+					// yellow-green read as mustard)
+					T = bSand ? Mixed(T, Mixed(Rgb(100, 124, 78), Rgb(136, 146, 104), Clamp01(0.5 - 0.9 * Fine)), 0.45 * Green)
+							  : Mixed(T, Mixed(Rgb(112, 130, 62), Rgb(150, 154, 96), Clamp01(0.5 - 0.9 * Fine)), 0.6 * Green);
 					return Varied(T, 1.0 + 0.03 * S.Broad, 0.0);
 			}
 
