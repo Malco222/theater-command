@@ -4,7 +4,7 @@
 // a page of its own ('airreport:<id>'), the raids of the month are listed with theirs ('airreports'), and a raid that
 // has been flown names its report as the page that comes next.
 import { describe, expect, it } from 'vitest';
-import { AIR } from '../src/campaign/air';
+import { AIR, BROKE_OFF_SKY } from '../src/campaign/air';
 import { FLIP } from '../src/campaign/airfought';
 import { airAct, airPage, raidsToRead } from '../src/campaign/airpages';
 import { launchRaid, planRaid, raidTargets } from '../src/campaign/airwar';
@@ -182,9 +182,23 @@ describe('a raid that has been flown has its report (the patch after 1.5.1)', ()
     // One left reads as one.
     r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 30, lostFtr: i ? 0 : 29 }));
     expect(page(g, `airreport:${r.id}`).note).toContain('fighters still over it at the end, and only 1 was left.');
-    // Fighters enough left and the sky still not won (the raid turned for home, or its groups crowded the sky): no count is quoted against the 50.
-    r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 80, lostFtr: 0 }));
-    expect(page(g, `airreport:${r.id}`).note).toContain(`The sky was not won: it takes at least ${AIR.sky.least} fighters still over it at the end.`);
+    // Fighters enough left, odds enough, and the sky still not won: never "it takes 50" to a player who had more.
+    // The count and the odds are given, and why: too few could stay over a target at the edge of their range...
+    r.att = r.att.map((x, i) => ({ ...x, ftr: i ? 0 : 158, lostFtr: 0 }));
+    r.hold = 1.8; r.result = '';
+    note = page(g, `airreport:${r.id}`).note;
+    expect(note).toContain('The sky was not won: 158 fighters were still over it at the end, about 1.80 to 1, but they could not stay to hold it.');
+    expect(note).not.toContain('it takes at least');
+    // ...or they gave the fight up before it was joined (the rules' own sentence for that, which the note also carries).
+    r.result = BROKE_OFF_SKY;
+    note = page(g, `airreport:${r.id}`).note;
+    expect(note).toContain(`${BROKE_OFF_SKY} `);
+    expect(note).toContain('The sky was not won: 158 fighters were still over it at the end, about 1.80 to 1, but they had to turn for home.');
+    // Nothing left to oppose them: no ratio of 99.
+    r.hold = 99;
+    note = page(g, `airreport:${r.id}`).note;
+    expect(note).toContain('158 fighters were still over it at the end, with no opposition left, but they had to turn for home.');
+    expect(note).not.toContain('99');
   });
 
   it('a raid that did not pay is never said to have been beaten off: its bombs may have landed', () => {

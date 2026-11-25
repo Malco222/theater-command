@@ -472,6 +472,8 @@ export function skyByNumbers(g: Game, aN: Set<string>, dN: Set<string>, region: 
 
 // ---- Close air support (Brian's ask of 2026-11-18, 18:58Z; air.json 'close') ----------------------------------------
 
+/** What a fight for the sky's report says when its fighters gave it up before meeting anyone (the raid report reads it to say why the sky was not won). */
+export const BROKE_OFF_SKY = 'The fighters broke off and turned for home before they met the enemy.';
 export const CLOSE = AIR.close;
 /** True where fighter groups may be put on ground support: the grand campaign, with the switch on. */
 export const closeRules = (g: Game): boolean => CLOSE.on === true && g.flags.open === 1;
@@ -2212,7 +2214,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     : sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
 
   // The report's own words for a battle given up, which the map's note shows first (campaign-bridge act).
-  if (quit === 'att') result = m === 'superiority' ? 'The fighters broke off and turned for home before they met the enemy.' : `The raid broke off and turned for home before it met the enemy${bombed > 0 ? '' : ', its bombs jettisoned'}.`;
+  if (quit === 'att') result = m === 'superiority' ? BROKE_OFF_SKY : `The raid broke off and turned for home before it met the enemy${bombed > 0 ? '' : ', its bombs jettisoned'}.`;
   g.flags.airBattles = (g.flags.airBattles ?? 0) + 1;
   const troops = m === 'ground' || m === 'line' ? g.regions[target].units.find((u) => !u.dead && atWar(g, nat, u.nat))?.nat : undefined;
   const defNat = troops ?? struck?.[0]?.nat ?? def[0]?.nat ?? (sea ? '' : g.regions[target].ctrl);
