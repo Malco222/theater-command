@@ -81,6 +81,12 @@ export interface FoughtAir {
    * fighters the ground fire brought down are already among 'lost'. Absent for any other raid.
    */
   strafed?: number;
+  /**
+   * With the strafers' rule on (strafers.ts): the groups that went down on the troops on the field and paid its ground
+   * fire, by campaign group id, and the fighters that fire brought down (among 'lost'). Absent otherwise.
+   */
+  strafers?: number[];
+  strafeFire?: number;
 }
 
 /**
@@ -97,6 +103,11 @@ export interface TroopLaw {
   bomber: number; fighter: number;
   /** The share of the strafing fighters the ground fire brings down. */
   fire: number;
+  /**
+   * With the strafers' rule on (strafers.ts): the groups with the reach to strafe, by campaign group id; only they go
+   * down on the troops, and each fighter of theirs that does pays 'fire'. Absent otherwise: every fighter may go down.
+   */
+  reach?: number[];
   /** What troops dug in keep of the cut; the cut's share lost in men and guns; what a point of the cut on one division is worth. */
   dug: number; str: number; value: number;
 }
