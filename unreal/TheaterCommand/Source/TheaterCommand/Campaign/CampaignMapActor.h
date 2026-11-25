@@ -1274,9 +1274,20 @@ private:
 		int32 Seed = 0; // no two alike
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
 		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
+		bool bLight = false; // (release 2, the flak brief, 2c) light flak: pale, half the size, lower, and soon gone
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
+	// (Release 2, the art director's flak brief of 24 November 2026; "tc.Look.FlakRing", off as it comes.) The heavy
+	// guns of a town as they stand on the table: where each barrel ends and which way it points, by region. With the
+	// ring on, each is seen to fire from there while a raid is over the town.
+	struct FFlakGun
+	{
+		FVector Muzzle = FVector::ZeroVector;
+		FVector Bore = FVector::UpVector;
+	};
+	TMap<int32, TArray<FFlakGun>> FlakGuns;
+	bool bFlakRingShown = false; // (the buildings as they stand were laid with the ring on)
 	// (The art director's round 36: "the lobes are round".) The smoke of a burst is one or two of her own painted
 	// shapes, torn at the edge and never round: twelve on one sheet, four shapes at each of three ages. Each is a
 	// flat picture turned to the wind and to the eye.

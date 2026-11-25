@@ -156,6 +156,7 @@ import {
 import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 import { seaWhat, seaWhere } from '../../../src/campaign/sea-words';
+import { patrolLoss } from '../../../src/campaign/seapatrol';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
@@ -4334,7 +4335,8 @@ function force(kind: string, id: number) {
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
   const base = s.regions[f.base];
-  const targetName = (m: AirMission, t: number) => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+  // (A strike on shipping and a sea patrol against submarines are aimed at a sea; every other mission at a province.)
+  const targetName = (m: AirMission, t: number) => (m === 'strike' || m === 'seapatrol' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
   const doing = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ''}.`;
   const mine = f.nat === s.human;
   if (mine) {
@@ -4916,7 +4918,8 @@ function lastActPage(s: Game): Page | null {
 // ---- The air war: airfields, the groups on them, and the planning of a raid --------------------------------
 
 const craftOf = (ftr: number, bmr: number): string => [ftr >= 1 ? `${Math.round(ftr).toLocaleString('en-US')} fighters` : '', bmr >= 1 ? `${Math.round(bmr).toLocaleString('en-US')} bombers` : ''].filter(Boolean).join(', ') || 'no aircraft fit to fly';
-const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+/** Where a group's mission is aimed: a sea for a strike on shipping and a sea patrol against submarines, else a province. */
+const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' || m === 'seapatrol' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
 const airDoing = (s: Game, f: Game['airFleets'][number]): string => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ''}`;
 const RAID_TITLE: Record<string, string> = { bomb: 'A BOMBING RAID BY DAY', night: 'RAIDS BY NIGHT', superiority: 'A FIGHT FOR THE SKY', strike: 'A STRIKE ON SHIPPING' };
 
@@ -6801,12 +6804,21 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   if (part[0] === 'air') {
     const f = s.airFleets.find((x) => x.id === Number(part[1]));
     const m = part[2] as AirMission, t = Number(part[3]);
+    // (A strike on shipping and a sea patrol against submarines are aimed at a sea; every other mission at a province.)
+    const sea = m === 'strike' || m === 'seapatrol';
     // What the raid will meet, as the planner worked it out: guns round the target, fighters rising, likely losses.
     const before = f && t >= 0 ? previewAirOrder(s, f.id, m, t) : null;
-    const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: '', loss: 0 };
+    // (A sea patrol's losses are its own (seapatrol.ts patrolLoss): the operational share of the aircraft on patrol and
+    // the fighters' part where enemy fighters meet it, never a target's guns, as a share of the group's bombers.)
+    const lossOf = (a: NonNullable<typeof before>): number => {
+      if (m !== 'seapatrol' || !f) return forecastAir(s, a, m, t).bomberLoss;
+      const x = patrolLoss(s, f, t);
+      return f.bmr >= 1 ? (x.op + x.fighters) / f.bmr : 0;
+    };
+    const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: lossOf(before) } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
     note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
-    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
+    if (ok && f && t >= 0) { const p = sea ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: sea ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';

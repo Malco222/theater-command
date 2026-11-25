@@ -4620,6 +4620,12 @@ static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSort
 		Fly->TryGetBoolField(TEXT("bombers"), Sortie.bBombers);
 		Fly->TryGetBoolField(TEXT("escort"), Sortie.bEscort);
 		Fly->TryGetNumberField(TEXT("aa"), Sortie.Flak);
+		{
+			// (Release 2, the flak brief, 2c.) "light": 1 on a bomber flight over a target with no built guns.
+			int32 LightGuns = 0;
+			Fly->TryGetNumberField(TEXT("light"), LightGuns);
+			Sortie.bLightFlak = LightGuns > 0;
+		}
 		Fly->TryGetStringField(TEXT("meet"), Sortie.Meet);
 		Fly->TryGetNumberField(TEXT("meetFrom"), Sortie.MeetFrom);
 		Fly->TryGetBoolField(TEXT("night"), Sortie.bNight);

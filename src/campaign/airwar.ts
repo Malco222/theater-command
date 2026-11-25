@@ -27,7 +27,9 @@ import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, wh
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
-import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
+import { CLASSES, NAVY, aswKit, atSea, shipList, surfaceShips } from './navy';
+import { patrolSeas, watchWith } from './seapatrol';
+import { airKnown, airMetWords, seaSeenWords } from './seasight';
 import { airfieldOpenTo } from './prizes';
 import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
@@ -207,6 +209,11 @@ export interface GroupRow {
   sky?: string[];
 }
 
+/** A sea patrol's line on its group's row (Q8, the UI director's words): the sea, and the share of the waters it reaches that its side's patrols watch. */
+function patrolDoing(g: Game, f: AirFleet, z: number, w = watchWith(g, f, z)): string {
+  return `Patrol ${seaWhat(g.seas[z].name)} against submarines: watches about ${pct(w.share)} of the waters it reaches`;
+}
+
 /** The bomber group a fighter group is ordered to stick with, if that group still flies. */
 const escorted = (g: Game, f: AirFleet): AirFleet | null => (f.escorts === undefined ? null : g.airFleets.find((x) => x.id === f.escorts && x.nat === f.nat && x.bmr > 0) ?? null);
 
@@ -222,6 +229,8 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
   const doing = away ? `Flew against ${place} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
     : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
+    // (Release 2, the sea patrol: the share of the waters it reaches that its side's patrols watch.)
+    : f.mission === 'seapatrol' && g.seas[f.target] ? patrolDoing(g, f, f.target)
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
     // (Ground support, air.json 'close': it is held for the armies and meets no raid, so its row must not say it is on patrol.)
     : f.close && !deck ? 'On ground support: on call over its own side\'s battles within its reach, and meets no raid'
@@ -334,6 +343,20 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     }
     if (!bombers.length) out.push({ key: 'escort', label: 'Escort a bomber group', on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: '' });
   }
+  // The sea patrol against submarines (release 2, Units decide, once it is live; seapatrol.ts): a land bomber
+  // group watches one sea of its side's convoys and sea lanes all month, and flies nothing else. (Each order says what
+  // its side last saw there, with the month, through the panel's one function, the sight its staff counts from
+  // (seasight.ts boatsKnown and airKnown; the design director's ruling of 24 November 2026 17:54Z, Q4 (a)): the boats
+  // last seen there, and where its own side's boats have met the enemy's aircraft there, what they met. With the
+  // player's fog of war lifted, both show the truth.)
+  if (kind === 'bmr' && !deck) for (const z of patrolSeas(g, f)) {
+    const w = watchWith(g, f, z), sea = g.seas[z];
+    const met = airKnown(g, f.nat, z) ? ` ${airMetWords(g, f.nat, z)}.` : '';
+    out.push({
+      key: `sea:${z}`, label: `Patrol ${seaWhat(sea.name)} against submarines`, on: !away && f.mission === 'seapatrol' && f.target === z, why: gone,
+      forecast: `${patrolDoing(g, f, z, w)}. Its aircraft attack the boats they find there${aswKit(g, f.nat).radar && aswKit(g, f.nat).asdic ? ', by night and in fog too, with their radar' : ', and keep the rest down; without sea-search radar and depth charges they sink few'}. While it patrols it flies no raid, meets no raid and escorts no bomber, and regains ${pct(AIR.ready.flying)} readiness a month in place of ${pct(AIR.ready.support)}. ${seaSeenWords(g, f.nat, z)}.${met}`,
+    });
+  }
   // Close air support (Brian's ask of 2026-11-18, air.json 'close'): a land fighter group flies over its own side's
   // battles in reach, in place of meeting raids and escorting.
   if (closeRules(g) && kind !== 'bmr' && !deck) out.push({
@@ -347,7 +370,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   return out;
 }
 
-/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on) or 'rest'. */
+/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on), 'sea:<sea id>' (a sea patrol against submarines, once the patrol is live) or 'rest'. */
 export function setGroupJob(g: Game, id: number, key: string, nat: string | null = g.human): boolean {
   const f = mine(g, id, nat);
   const job = f ? groupJobs(g, id, nat).find((j) => j.key === key) : undefined;
@@ -355,6 +378,7 @@ export function setGroupJob(g: Game, id: number, key: string, nat: string | null
   if (key === 'rest') { delete f.escorts; delete f.close; return setMission(g, f, 'rest'); }
   if (key === 'close') { delete f.escorts; f.close = true; return setMission(g, f, 'support'); }
   delete f.close;
+  if (key.startsWith('sea:')) { delete f.escorts; return setMission(g, f, 'seapatrol', Number(key.split(':')[1])); }
   if (key === 'patrol') delete f.escorts; else f.escorts = Number(key.split(':')[1]);
   return setMission(g, f, 'support');
 }
@@ -425,6 +449,7 @@ function whyNotSeat(g: Game, f: AirFleet, kind: RaidKind, target: number): strin
   if (f.flew === g.turn) return 'It has flown its raid this month.';
   if (f.mission === 'rest') return 'It is resting and refitting.';
   if (isOffensive(f.mission)) return 'It already has orders for the month.';
+  if (f.mission === 'seapatrol') return 'It is patrolling the sea against submarines this month.';
   return whyNotMission(g, f, kind, target);
 }
 

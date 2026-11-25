@@ -869,8 +869,10 @@ export interface ConvoyMonth {
   fought?: 'field' | 'clamped';
   /** Release 2, with Units decide (the convoy war by cause), record only: of subsLost, the boats the convoy's escorts sank in their attacks on it. */
   byEscorts?: number;
+  /** Release 2, with Units decide and the sea patrol live (seapatrol.ts), record only: of subsLost, the boats the receiving nation's aircraft on patrol sank in the route's seas. */
+  byAircraft?: number;
   /** Release 2, with Units decide and the route's convoy count laid (the one-pass ruling), record only: the boats on station on the route, the convoys that sailed (both ways), those sighted and attacked, the incidents with the escort, the boats a convoy attacked (the pack), and, where the tons are counted from the convoys' side, the ships a convoy attacked lost, on average. */
-  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number };
+  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number; watched?: number };
 }
 
 /** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
@@ -891,8 +893,9 @@ export interface SubLook {
   /** sunk: false where damage control kept her afloat (ruling 240, C3): the same hit, told the same. */
   torpedoes: { fleet: number; zone: number; cls: ShipClass; sunk: boolean; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }[];
   /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
-  /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false), the air cover's kind, and the boats its escorts sank there. */
-  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range'; lost?: number }[] }[];
+  /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false; groups is its escort-group training), the air cover's kind, and the boats its escorts sank there. */
+  /** Also with Units decide only, kits: each allied navy with destroyers answering attacks in the sea, keyed by its nation, with its own kit; where none answers, the convoy's own nation alone. The scene keys its escorts' looks by it, so each navy's escorts are drawn with their own kit. It is look only: no rule reads it. */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean; groups: boolean }; kits?: Record<string, { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean; groups: boolean }>; cover?: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; lost?: number }[] }[];
 }
 
 export interface Headline {
@@ -1181,7 +1184,8 @@ export interface PlanPhase {
 /** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
 /** 'line' is a raid on the fieldworks of an enemy line (the grand campaign): the bombers take months off the works of the troops dug in there. */
 /** 'airfield' is a raid on one enemy airfield (airfields as targets, behind its switch): its runway, hangars and the aircraft parked there. */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield';
+/** 'seapatrol' is a standing patrol of one sea against submarines (release 2, Units decide, once it is live; seapatrol.ts): its target is the sea. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield' | 'seapatrol';
 
 export interface AirLeader {
   name: string;
@@ -1278,7 +1282,7 @@ export interface AirFleet extends Storied {
   /** The strength it is kept at. */
   est: { ftr: number; bmr: number };
   mission: AirMission;
-  /** A region for superiority and bombing, a sea for a strike on shipping, -1 for none. */
+  /** A region for superiority and bombing, a sea for a strike on shipping or a sea patrol, -1 for none. */
   target: number;
   /** 0..1: how fit the fleet is to fly. */
   ready: number;
@@ -1611,6 +1615,15 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
+  /**
+   * Release 2, with Units decide and the sea patrol live (seapatrol.ts): the boats each nation's aircraft on patrol sank
+   * in its month, by the boats' nation ('sunk'), by sea ('seas'), and by sea and the boats' nation ('at'), which the
+   * boats' own side reads as its boats lost to aircraft there (seasight.ts); and its part of the watch its patrols kept
+   * against the boats on station in each sea that month, by sea and the boats' nation ('met': the parts of a boat's time
+   * watched by its aircraft with anti-submarine kit and without), which the boats' own side reads as the aircraft its
+   * boats met there.
+   */
+  patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number>; at?: Record<number, Record<string, number>>; met?: Record<number, Record<string, { kit: number; none: number }>> }>;
   /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
   columns?: Record<string, ColumnRun[]>;
   /** Release 2 (logistics.ts), forward dumps on: the dumps stocked or being stocked beyond the railheads. Absent otherwise. */
@@ -1808,6 +1821,21 @@ export interface StolenOrder {
 /** A line in the secret service's file: what happened, to whom, where, and whether it was good news. */
 export interface IntelNote { turn: number; agent: string; nat: string; reg: number; what: string; text: string; good: boolean }
 
+/** How a side saw the other at sea: its convoys attacked, its escort met them, its patrols sighted them, it sank them, its search found them, or its boats were kept down or attacked from the air. */
+export type SightHow = 'attack' | 'incident' | 'sighting' | 'loss' | 'search' | 'keptDown';
+
+/**
+ * What one side last saw of the other in one sea (seasight.ts): the enemy boats it saw on station there, and the enemy
+ * aircraft on patrol its own boats met there. Each part has its own month, since a side may watch a sea for boats in a
+ * month its own boats are not there, and the other way round.
+ */
+export interface SeaSight {
+  /** The enemy boats seen on station there (an expected count, as the convoy count is), the month, and how they were seen. */
+  boats?: { t: number; n: number; how: SightHow[] };
+  /** The enemy patrol as its own boats met it there: the parts of a boat's time watched by aircraft with anti-submarine kit and without (seapatrol.ts Watch), its boats lost to aircraft there, the month, and how. */
+  air?: { t: number; kit: number; none: number; lost: number; how: SightHow[] };
+}
+
 export interface Intel {
   agents: Agent[];
   next: number;
@@ -1824,6 +1852,12 @@ export interface Intel {
   sea?: Record<number, number>;
   /** Seas each computer staff's aircraft have searched, and the month they did (ruling 52): by nation, then by sea. */
   seaBy?: Record<string, Record<number, number>>;
+  /**
+   * Where each side last saw the other at sea (release 2, Units decide, written and read only while the sea patrol is
+   * live; seasight.ts): by nation, then by sea, the enemy boats it last saw there and the enemy aircraft its own boats
+   * last met there, each with its month. Absent until the patrol is live.
+   */
+  seaSight?: Record<string, Record<number, SeaSight>>;
   /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.

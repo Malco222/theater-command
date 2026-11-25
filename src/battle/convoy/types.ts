@@ -62,8 +62,12 @@ export interface ConvoyPlace {
   /** Kit and habits by navy. */
   kit: Record<string, ConvoyKit>;
   habits: Record<string, ConvoyHabits>;
-  /** The card's figures (ConvoyMeeting): raid, guard, G, L and the month's tons, for the card and the after card. */
-  card: { raid: number; guard: number; G: number; L: number; tons: number; count?: ConvoyCountRecord };
+  /**
+   * The card's figures (ConvoyMeeting): raid, guard, G, L and the month's tons, for the card and the after card. With the
+   * sea patrol live, 'sight' is what the player's side last saw, in his panel's words (campaign/seasight.ts): the boats
+   * last seen on the route's seas, and where he holds boats the aircraft last met over the night's sea.
+   */
+  card: { raid: number; guard: number; G: number; L: number; tons: number; count?: ConvoyCountRecord; sight?: string[] };
   /** Striking and capture (subSurrender): off until the design director and the historian rule its share. */
   surrender: boolean;
   /** The player's own nation where his side holds allies' pieces too: he commands only his own, the staff the rest (ruling 241 Q4). */
