@@ -7,6 +7,7 @@
 #include "Battle/SeaFrames.h" // (the release 2 ocean, step 0: the frames by thread)
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
 #include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
+#include "Battle/SeaNight.h" // (the release 2 ocean, step 11: night fighting's looks, -TheaterSeaNightFight=)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -173,6 +174,7 @@ private:
 	TUniquePtr<FConvoyLooks> SubLooks; // D1 hook (convoy looks)
 	TUniquePtr<FSeaUnder> Under;       // U1 hook (under water)
 	int32 UnderWindow = INDEX_NONE;    // U1 hook (under water): the window AimEye stands in (FSeaUnder::ByHandWindow his own dive)
+	FSeaNight Night;                   // (the release 2 ocean, step 11: the searchlights and the fleet's star shells; off, it draws nothing)
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;

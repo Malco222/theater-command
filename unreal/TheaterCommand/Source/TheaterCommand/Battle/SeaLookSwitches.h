@@ -48,6 +48,7 @@ namespace SeaLookSwitches
 		{ "TheaterSeaSkyCapture=", "0", "2", "11", false },
 		{ "TheaterSeaWakeLane=", "0", "2", "12", false },
 		{ "TheaterSeaSpray=", "0", "2", "6, 12", false },
+		{ "TheaterSeaNightFight=", "0", "2", "11", true },
 		{ "TheaterSeaClouds=", "0", "3", "13", false },
 		{ "TheaterSeaCloudShade=", "0", "3", "13", false },
 		{ "TheaterSeaRain=", "0", "3", "13", false },

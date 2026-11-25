@@ -46,6 +46,7 @@ TABLE = [
     ("TheaterSeaSkyCapture=", "0, 1", "0", "2", "11", False),
     ("TheaterSeaWakeLane=", "0, 1", "0", "2", "12", False),
     ("TheaterSeaSpray=", "0, 1", "0", "2", "6, 12", False),
+    ("TheaterSeaNightFight=", "0, 1", "0", "2", "11", True),
     ("TheaterSeaClouds=", "0, dome, puffs", "0", "3", "13", False),
     ("TheaterSeaCloudShade=", "0, 1", "0", "3", "13", False),
     ("TheaterSeaRain=", "0, 1", "0", "3", "13", False),
