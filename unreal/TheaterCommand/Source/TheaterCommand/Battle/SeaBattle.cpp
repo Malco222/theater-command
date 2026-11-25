@@ -5,9 +5,11 @@
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the "Sea look:" line)
+#include "Battle/SeaReel.h" // (the ship detail plan, R1.1: the BEFORE reel)
 #include "Battle/SeaSailors.h"
 #include "Battle/SeaShow.h"
 #include "Battle/ShipGuns.h"
+#include "Battle/ShipPaintCore.h" // (the ship detail plan, round 1: the ships' paint at sea)
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -19,6 +21,7 @@
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/TheaterStillMesh.h"
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -36,6 +39,7 @@
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -66,6 +70,13 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+// (the ship detail plan, R1.1: the reel reads the engine's draw calls and primitives of the last frame, GNumDrawCallsRHI
+// and GNumPrimitivesDrawnRHI, only where this engine has them, which the Mac's check in the reel's run sheet says; until
+// it is set to 1 here, the reel's lines say "draw calls not read")
+#ifndef THEATER_SEA_REEL_DRAW_CALLS
+#define THEATER_SEA_REEL_DRAW_CALLS 0
+#endif
 
 /** What the scene keeps of the action: the recording, the playback core, and the battle's clock. */
 struct FSeaBattleState
@@ -1550,6 +1561,15 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// (the release 2 ocean plan, step 1(a), pay first: DrawMarks' two meshes sent again in place while their shape holds,
 	// -TheaterSeaMarksPool=1; by default, until the Mac's A/B, both made afresh every frame, as today)
 	bMarksPool = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaMarksPool=");
+	// (the ship detail plan, R1.1: the BEFORE reel's two switches, taken only in a picture run and never in the month's
+	// scene, their values in force written back for the "Sea look:" line; Battle/SeaReel.h)
+	{
+		const SeaReel::Taken Reel = SeaReel::Take(SeaLook, !ShotFolder.IsEmpty() && !bMonthScene);
+		ReelShots = Reel.Shots;
+		ReelRide = Reel.Strip;
+		bReel = !ReelShots.empty();
+		bRideStrip = ReelRide.bOn;
+	}
 	// S6 hook (heavy weather; the look bible's S6, the release 2 ocean plan steps 6(b) and 12(b)): the bow sheets under
 	// -TheaterSeaSpray=1, and the hulls' ice under -TheaterSeaIce=1 (the frost set on the stage below). Both off by default:
 	// nothing is drawn. The gale is false here until step 14(c) lands it (the sea gale switch, another thread's, which is not
@@ -1561,6 +1581,14 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	const bool bSeaSpray = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaSpray=");
 	Weather.Reset();
 	const bool bSeaIce = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaIce=");
+	// (the ship detail plan, round 1: the ships at sea, each off by default and each for review pictures until the art
+	// director's Mac check. -TheaterSeaShipLight=1: the file's shade on each point and the ships' top light, 0.10;
+	// -TheaterSeaShipSkin=1: the rust ramp, the ruled salt and M_MapSurface's own wear on the sea's steel ink; both set on
+	// the stage once the sea is raised, below, before a ship is laid. -TheaterSeaShipShade=1: occlusion, contact shadows of
+	// 0.3 m and shadow quality 3, taken with the room and given back as the scene ends.)
+	const bool bShipLight = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShipLight=");
+	const bool bShipSkin = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShipSkin=");
+	bShipShade = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShipShade=");
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -1685,6 +1713,19 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	// S6 hook (ship ice): the frost of the battle's place, month and wind set on the stage, which glazes each hull's colours
 	// as LayShip lays her (Battle/ShipIce; -TheaterSeaIce=1 only, so by default the hulls are laid as made).
 	if (bSeaIce) { FHeavyWeather::Ice(Stage, S.Rec.Board, S.Show.WindSpeed(), S.Show.WindFrom(), S.BeginT); } // S6 hook (ship ice)
+	// (the ship detail plan, round 1: the ships' paint at sea, set on the stage before it lays a ship. The map, Pearl Harbor
+	// and Midway never set it, so they lay today's paint; so does this scene with both switches off.)
+	if (bShipLight || bShipSkin)
+	{
+		ShipPaintCore::Options Paint;
+		Paint.bShade = bShipLight;
+		Paint.TopLight = bShipLight ? ShipPaintCore::SeaTopLight : -1.0f;
+		Paint.bRustRamp = bShipSkin;
+		Stage->SetShipPaint(Paint, bShipSkin ? ShipPaintCore::SeaFirstLookWear : 0.0f);
+		UE_LOG(LogTheater, Display, TEXT("Sea battle: the ships' paint at sea: the file's shade %s, the top light %s, the rust ramp %s."),
+			bShipLight ? TEXT("on") : TEXT("off"), bShipLight ? *FString::Printf(TEXT("%.2f"), ShipPaintCore::SeaTopLight) : TEXT("the material's own"),
+			bShipSkin ? *FString::Printf(TEXT("on, with the steel ink's own wear at %.1f"), ShipPaintCore::SeaFirstLookWear) : TEXT("off"));
+	}
 
 	// The paint: the wakes and tracks see-through and unlit (M_Highlight, by each point's alpha), the aircraft as the
 	// air battle's.
@@ -1807,6 +1848,27 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		}
 	}
 	TakeTheRoom(SunAzimuth, SunElevation);
+	// (the ship detail plan, round 1, -TheaterSeaShipShade=1: the soft shade in corners and under things, the contact shadows
+	// and the finer sun shadows, which the map's speed trims switch off for the whole game, back at sea as the land battle
+	// has them; the console's own values kept and given back however the scene ends, EndPlay)
+	if (bShipShade && KeptShipShade.IsEmpty())
+	{
+		static const TPair<const TCHAR*, const TCHAR*> SeaShade[] = {
+			{ TEXT("r.AmbientOcclusionLevels"), TEXT("-1") },
+			{ TEXT("r.ContactShadows"), TEXT("1") },
+			{ TEXT("sg.ShadowQuality"), TEXT("3") },
+		};
+		for (const TPair<const TCHAR*, const TCHAR*>& One : SeaShade)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(One.Key))
+			{
+				KeptShipShade.Add(TPair<FString, FString>(One.Key, Variable->GetString()));
+				Variable->Set(One.Value, ECVF_SetByCode);
+			}
+		}
+		UE_LOG(LogTheater, Display, TEXT("Sea battle: the shade at sea: occlusion, contact shadows (%s) and shadow quality 3, %d of 3 settings found."),
+			KeptShipContact >= 0.0f ? TEXT("0.3 m of world on the sun") : TEXT("no sun's lamp found for their length"), KeptShipShade.Num());
+	}
 	// The clouds and the weather (the release 2 ocean plan, step 13): the day's sky from the recording's field, laid
 	// through the air battle's own clouds, with the cloud dome, the clouds' shade on the sea and the far rain behind
 	// their own switches. Nothing is drawn unless one is asked for.
@@ -1870,6 +1932,10 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	Night.Begin(FSeaNight::FRoom{ this, Root.Get(), UnitsPerMetre }, S.Show, SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaNightFight="), Seed);
 
 	PlanShots();
+	if (bReel || bRideStrip)
+	{
+		ReelPlan(); // (the ship detail plan, R1.1: the reel's shots kept, or the ride strip's one)
+	}
 	if (!ShotFolder.IsEmpty())
 	{
 		IFileManager::Get().MakeDirectory(*ShotFolder, true);
@@ -2074,6 +2140,16 @@ void ASeaBattle::TakeTheRoom(double SunAzimuth, double SunElevation)
 			Kept.Colour = Sky->GetLightColor();
 		}
 	}
+	// (the ship detail plan, round 1, -TheaterSeaShipShade=1: the sun's contact shadow a world length, 0.3 m, as the land
+	// battle's, enough to ground a gun house or a boat on her deck; given back in GiveBackTheRoom)
+	if (bShipShade && BattleKey.IsValid() && KeptShipContact < 0.0f)
+	{
+		KeptShipContact = BattleKey->ContactShadowLength;
+		bKeptShipContactInWorld = BattleKey->ContactShadowLengthInWS;
+		BattleKey->ContactShadowLengthInWS = true;
+		BattleKey->ContactShadowLength = 0.3f * static_cast<float>(UnitsPerMetre);
+		BattleKey->MarkRenderStateDirty();
+	}
 	LightTheBattle();
 }
 
@@ -2210,6 +2286,14 @@ void ASeaBattle::GiveBackTheRoom()
 			}
 		}
 	}
+	// (the ship detail plan, round 1: the sun's own contact shadow again, -TheaterSeaShipShade=1)
+	if (KeptShipContact >= 0.0f && BattleKey.IsValid())
+	{
+		BattleKey->ContactShadowLength = KeptShipContact;
+		BattleKey->ContactShadowLengthInWS = bKeptShipContactInWorld;
+		BattleKey->MarkRenderStateDirty();
+	}
+	KeptShipContact = -1.0f;
 	BattleKey.Reset();
 	KeptHazes.Reset();
 	KeptLamps.Reset();
@@ -2268,7 +2352,12 @@ void ASeaBattle::LayAndSteer()
 			Given.Nation = SeaParts::Wide(Ship.Nation);
 			Given.At = At;
 			Given.Face = Face;
+			const uint64 LaidFrom = bReel || bRideStrip ? FPlatformTime::Cycles64() : 0; // (the ship detail plan, R1.1: each laying timed)
 			Stage->SetShips(TArray<FStageShip>{ Given });
+			if (bReel || bRideStrip)
+			{
+				ReelLaid(Ship.Key, Given.Class, Given.Nation, FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64() - LaidFrom));
+			}
 			Laid.Add(Ship.Key);
 			double Long = Ship.Long;
 			FVector Bow = FVector::ZeroVector;
@@ -6190,6 +6279,11 @@ void ASeaBattle::TakePictures()
 	{
 		return;
 	}
+	if (bRideStrip)
+	{
+		RideStripFrame(); // (the ship detail plan, R1.1: a picture every frame of the strip, then the scene quits)
+		return;
+	}
 	FSeaBattleState& S = *State;
 	if (!Shots.IsValidIndex(NextPicture))
 	{
@@ -6216,6 +6310,10 @@ void ASeaBattle::TakePictures()
 		PictureAt = RealT;
 		++PicturesTaken;
 		bLastFrameApart = true;
+		if (bReel) // (the ship detail plan, R1.1: held until 8 s after the picture or 3 s before the next kept shot)
+		{
+			ReelHoldUntil = SeaReel::HoldUntil(S.BattleT, Shots.IsValidIndex(NextPicture + 1) ? Shots[NextPicture + 1].At : S.EndT + 15.0);
+		}
 		if (Shot.Kind == ESeaShot::Water && Shot.Spot.X < 0.0)
 		{
 			// (the ride strip: each ship's pose as the show gives it, to read the frame against; a ship's pitch plus is by
@@ -6231,9 +6329,17 @@ void ASeaBattle::TakePictures()
 			}
 		}
 	}
+	else if (bReel && PictureAt >= 0.0 && S.BattleT < ReelHoldUntil)
+	{
+		// (the ship detail plan, R1.1: the reel's shot held, its frames counted, the camera on it)
+	}
 	else if (PictureAt >= 0.0 && RealT >= PictureAt + 0.5)
 	{
 		// (half a second for the picture to be written before the camera moves on)
+		if (bReel)
+		{
+			ReelSayShot(Shot); // (the ship detail plan, R1.1: the held shot's numbers)
+		}
 		Shot.bTaken = true;
 		++NextPicture;
 		PictureAt = -1.0;
@@ -6259,6 +6365,10 @@ void ASeaBattle::SayFrameTimes()
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
 		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
 	SayThreadsAndLook(); // (the release 2 ocean plan, step 0)
+	if (bReel || bRideStrip)
+	{
+		UE_LOG(LogTheater, Display, TEXT("%s"), UTF8_TO_TCHAR(SeaReel::LaidSum(ReelLaidMs).c_str())); // (the ship detail plan, R1.1)
+	}
 	if (SkyWeather)
 	{
 		SkyWeather->SayFrameTimes(); // (step 13: the cloud dome's paints)
@@ -6300,6 +6410,153 @@ void ASeaBattle::Quit(const FString& Why)
 	SetActorTickEnabled(false);
 	UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
 	FPlatformMisc::RequestExit(false);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The BEFORE reel (the ship detail plan, R1.1; Battle/SeaReel.h): review pictures only, each switch off by default, so
+// none of this runs unless -TheaterSeaReel= or -TheaterSeaRideStrip= is asked for with -TheaterSeaBattleShots=.
+
+void ASeaBattle::ReelPlan()
+{
+	if (bRideStrip)
+	{
+		// (one shot, a hit's eye on her, which follows her each frame; its name is for the pictures only)
+		FShot Ride;
+		Ride.Kind = ESeaShot::Hit;
+		Ride.Subject = ReelRide.Ship;
+		Ride.At = ReelRide.From;
+		Ride.Name = UTF8_TO_TCHAR(SeaReel::RideName(ReelRide.Ship).c_str());
+		Shots.Reset();
+		Shots.Add(Ride);
+		UE_LOG(LogTheater, Display, TEXT("Sea battle: ride strip of ship %d from %.3f s for %.0f s: a picture and a line every frame, then the scene quits."), ReelRide.Ship,
+			ReelRide.From, ReelRide.Seconds);
+		return;
+	}
+	// (the reel's "under": the first window under the water that is not its -burst picture)
+	FString FirstUnder;
+	for (const FShot& Shot : Shots)
+	{
+		if (Shot.Kind == ESeaShot::Under && !Shot.Name.EndsWith(TEXT("-burst")))
+		{
+			FirstUnder = Shot.Name;
+			break;
+		}
+	}
+	const int32 Planned = Shots.Num();
+	std::vector<std::string> Seen;
+	for (const FShot& Shot : Shots)
+	{
+		Seen.push_back(SeaReel::Unnumbered(std::string(TCHAR_TO_UTF8(*Shot.Name))));
+		if (!FirstUnder.IsEmpty() && Shot.Name == FirstUnder)
+		{
+			Seen.push_back("under");
+		}
+	}
+	// (their planned numbers and moments unchanged)
+	Shots.RemoveAll([this, &FirstUnder](const FShot& Shot)
+		{ return !SeaReel::Keeps(ReelShots, std::string(TCHAR_TO_UTF8(*Shot.Name)), !FirstUnder.IsEmpty() && Shot.Name == FirstUnder); });
+	std::vector<std::pair<std::string, double>> Kept;
+	for (const FShot& Shot : Shots)
+	{
+		Kept.emplace_back(std::string(TCHAR_TO_UTF8(*Shot.Name)), Shot.At);
+	}
+	std::vector<std::string> Missing;
+	for (const std::string& One : ReelShots)
+	{
+		if (std::find(Seen.begin(), Seen.end(), One) == Seen.end())
+		{
+			Missing.push_back(One);
+		}
+	}
+	UE_LOG(LogTheater, Display, TEXT("%s"), UTF8_TO_TCHAR(SeaReel::OpenLine(ReelShots, Planned, Kept, Missing).c_str()));
+}
+
+void ASeaBattle::ReelCount(double Took)
+{
+	FSeaBattleState& S = *State;
+	if (!Shots.IsValidIndex(NextPicture) || !SeaReel::Counts(ShotNow == NextPicture, TicksSinceCut >= SeaParts::SettleTicks, bLastFrameApart, RealT, Took,
+		Shots[NextPicture].At, S.BattleT, PictureAt >= 0.0, RealT - PictureAt))
+	{
+		return;
+	}
+	// (the ship parts on screen: the stage's own meshes, not its ground, sea and works, drawn in the last frame; on their
+	// far mesh where that section is the one shown)
+	int32 Parts = 0, Far = 0;
+	TArray<UProceduralMeshComponent*> Meshes;
+	Stage->GetComponents(Meshes);
+	for (const UProceduralMeshComponent* Mesh : Meshes)
+	{
+		if (Mesh && !Mesh->IsA<UTheaterStillMesh>() && Mesh->IsVisible() && Mesh->WasRecentlyRendered(0.1f))
+		{
+			++Parts;
+			Far += Mesh->IsMeshSectionVisible(1) ? 1 : 0;
+		}
+	}
+#if THEATER_SEA_REEL_DRAW_CALLS
+	const int32 Calls = GNumDrawCallsRHI[0], Prims = GNumPrimitivesDrawnRHI[0];
+#else
+	const int32 Calls = -1, Prims = -1;
+#endif
+	// (the threads' times read as the threads' line reads them, Tick's Threads.Add)
+	ReelHeld.Add(FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(GRHIThreadTime),
+		FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), 1000.0 * Took, S.BattleT, Parts, Far, Calls, Prims);
+}
+
+void ASeaBattle::ReelLaid(int32 Key, const FString& Class, const FString& Nation, double Ms)
+{
+	FString File;
+	FVector Stretch = FVector::OneVector;
+	if (!Stage || !Stage->ShipModel(Key, File, Stretch) || File.IsEmpty())
+	{
+		File.Empty();
+	}
+	else
+	{
+		File = FPaths::GetCleanFilename(File) + TEXT(".json");
+	}
+	const std::string Line = SeaReel::LaidLine(Key, std::string(TCHAR_TO_UTF8(*Class)), std::string(TCHAR_TO_UTF8(*Nation)), std::string(TCHAR_TO_UTF8(*File)), Ms,
+		State.IsValid() ? State->BattleT : 0.0, bSkipping);
+	UE_LOG(LogTheater, Display, TEXT("%s"), UTF8_TO_TCHAR(Line.c_str()));
+	ReelLaidMs.push_back(static_cast<float>(Ms));
+	ReelHeld.Lay(Ms);
+}
+
+void ASeaBattle::ReelSayShot(const FShot& Shot)
+{
+	const std::string Line = SeaReel::ShotLine(std::string(TCHAR_TO_UTF8(*Shot.Name)), SeaReel::WordsOf(static_cast<int>(Shot.Kind)), Shot.Subject, Shot.At, ReelHeld);
+	UE_LOG(LogTheater, Display, TEXT("%s"), UTF8_TO_TCHAR(Line.c_str()));
+	ReelHeld = SeaReel::Held();
+	ReelHoldUntil = -1.0;
+}
+
+void ASeaBattle::RideStripFrame()
+{
+	FSeaBattleState& S = *State;
+	if (SeaReel::RideOver(ReelRide, S.BattleT) || !Shots.IsValidIndex(0))
+	{
+		if (QuitAt < 0.0)
+		{
+			QuitAt = RealT + 1.5; // (the last pictures written first)
+		}
+		else if (RealT >= QuitAt)
+		{
+			Quit(TEXT("the ride strip is taken"));
+		}
+		return;
+	}
+	if (!SeaReel::InRide(ReelRide, S.BattleT) || ShotNow != 0 || TicksSinceCut < SeaParts::SettleTicks)
+	{
+		return;
+	}
+	const std::string Picture = SeaReel::RidePicture(std::string(TCHAR_TO_UTF8(*RecordKey)), ReelRide.Ship, RideFrame);
+	FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, FString(UTF8_TO_TCHAR(Picture.c_str()))), true, false);
+	const SeaShow::ShipOut* Ship = S.Show.Ship(ReelRide.Ship);
+	const std::string Line = SeaReel::RideLine(RideFrame, S.BattleT, ReelRide.Ship, Ship ? Ship->Class : std::string("not in the show"), Ship ? Ship->Heel : 0.0,
+		Ship ? Ship->Pitch : 0.0, Ship ? Ship->Heave : 0.0);
+	UE_LOG(LogTheater, Display, TEXT("%s"), UTF8_TO_TCHAR(Line.c_str()));
+	++RideFrame;
+	++PicturesTaken;
+	bLastFrameApart = true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -6591,6 +6848,10 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		Quit(TEXT("the bench run is over")); // (the release 2 ocean plan, step 0: Tools/sea_bench.sh)
 		return;
 	}
+	if (bReel)
+	{
+		ReelCount(Took); // (the ship detail plan, R1.1: the frame just drawn, counted to its kept shot)
+	}
 	bLastFrameApart = false;
 	RealT += Dt;
 	// A picture run skips the quiet stretch before its next picture, keeping what lasts (ships gone down, oil burning).
@@ -6869,6 +7130,15 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		GiveBackTheRoom(); // (taken down in the game: the table comes back as it was)
 	}
+	// (the ship detail plan, round 1: the map's own shade again, however the scene ends, -TheaterSeaShipShade=1)
+	for (const TPair<FString, FString>& Kept : KeptShipShade)
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Kept.Key))
+		{
+			Variable->Set(*Kept.Value, ECVF_SetByCode);
+		}
+	}
+	KeptShipShade.Reset();
 	if (bTablePutAway)
 	{
 		bTablePutAway = false;

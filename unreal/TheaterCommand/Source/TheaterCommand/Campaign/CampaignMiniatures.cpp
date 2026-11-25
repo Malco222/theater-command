@@ -1,5 +1,6 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Misc/ScopeExit.h"
+#include "Battle/ShipPaintCore.h"
 #include "Campaign/CampaignMiniatureParts.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
@@ -643,6 +644,7 @@ bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
 bool FMiniatureMesh::bTorpedoLoad = false;
+ShipPaintCore::Options FMiniatureMesh::ShipPaint;
 
 int32 FMiniatureMesh::SchemeOf(const FString& Name)
 {
@@ -1134,7 +1136,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours)
 	const int32 Livery = Raw->bAircraft ? SchemeStanding(Raw->SchemeFrom) : 0;
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
-		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString());
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString())
+		+ (Raw->bShip ? FString(UTF8_TO_TCHAR(ShipPaintCore::KeyOf(ShipPaint).c_str())) : FString()); // (nothing for today's paint: Battle/ShipPaintCore)
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -1228,6 +1231,20 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// and a shade of the paint for what lies in shadow under the hull.)
 		FLinearColor BattleSecond = Paint;
 		UnitTable::Paint2(Tag, BattleSecond);
+		// (a ship file's colours that are not a point's own paint, for Battle/ShipPaintCore: its rust, the reader's dried salt
+		// and, where it has more than eight paints, its black for soot; each as the engine's linear colour, as made here)
+		ShipPaintCore::Palette ShipColours;
+		if (Raw->bShip)
+		{
+			ShipColours.Rust = { Raw->Rust.R, Raw->Rust.G, Raw->Rust.B, Raw->Rust.A };
+			const FLinearColor DriedSalt(FColor(214, 210, 198));
+			ShipColours.Salt = { DriedSalt.R, DriedSalt.G, DriedSalt.B, DriedSalt.A };
+			ShipColours.bSoot = Raw->PaintColours.Num() > 8;
+			if (ShipColours.bSoot)
+			{
+				ShipColours.Soot = { Raw->PaintColours[8].R, Raw->PaintColours[8].G, Raw->PaintColours[8].B, Raw->PaintColours[8].A };
+			}
+		}
 		// (painted metal chips: upper and under surfaces, nose, spinner, guns, legs, a bomb. Glass, rubber, scribed lines and soot do not.)
 		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
@@ -1237,26 +1254,25 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				// (The ship modeller's paints, by the file's own names (hull, upper, deck, planks, steel, black, canvas, glass, ...),
 				// each in the file's own colour. Painted steel is metal and chips where the file says it is worn, in her rust's
 				// own streaks; soot from her funnels and guns darkens what it lies on; dried salt whitens her sides low down.
-				// Wood, canvas, rope, cork, lino, glass, a tarpaulin, a crate: not metal.)
+				// Wood, canvas, rope, cork, lino, glass, a tarpaulin, a crate: not metal. The sum is Battle/ShipPaintCore's, today's
+				// bit for bit unless the sea battle's stage asks otherwise: Tools/ship_detail/ship_paint_test.cpp.)
 				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
 				const bool bShipSteel = Raw->ShipMetal.IsValidIndex(Kind) && Raw->ShipMetal[Kind];
 				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
 				Fresh.Finish = bShipSteel ? static_cast<uint8>(128 - Worn / 2) : 255;
-				FLinearColor Coat = Raw->PaintColours[Kind];
-				const bool bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
-				if (bPainted && Worn > 0)
-				{
-					Coat = FMath::Lerp(Coat, Raw->Rust, 0.55f * Worn / 100.0f);
-				}
-				if (Raw->Salt.IsValidIndex(K) && Raw->Salt[K] > 0 && bPainted)
-				{
-					Coat = FMath::Lerp(Coat, FLinearColor(FColor(214, 210, 198)), 0.45f * FMath::Min(Raw->Salt[K], 100) / 100.0f);
-				}
-				if (Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 4 && Raw->PaintColours.Num() > 8)
-				{
-					Coat = FMath::Lerp(Coat, Raw->PaintColours[8], 0.6f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
-				}
-				Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
+				const FLinearColor& Own = Raw->PaintColours[Kind];
+				ShipPaintCore::Point At;
+				At.Paint = { Own.R, Own.G, Own.B, Own.A };
+				At.bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
+				At.Wear = Worn;
+				At.Salt = Raw->Salt.IsValidIndex(K) ? Raw->Salt[K] : -1;
+				At.Soot = Raw->Soot.IsValidIndex(K) ? Raw->Soot[K] : -1;
+				At.Shade = Raw->Worn.IsValidIndex(K) ? Raw->Worn[K] : -1.0f;
+				At.X = Raw->Points[K].X;
+				At.Y = Raw->Points[K].Y;
+				At.Z = Raw->Points[K].Z;
+				const ShipPaintCore::Linear Coat = ShipPaintCore::Paint(At, ShipColours, ShipPaint);
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], FLinearColor(Coat.R, Coat.G, Coat.B, Coat.A).ToFColor(true));
 				continue;
 			}
 			if (Raw->bAircraft && PlanePaints.Num() > 0)

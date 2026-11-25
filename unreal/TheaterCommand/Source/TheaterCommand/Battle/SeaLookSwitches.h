@@ -67,6 +67,14 @@ namespace SeaLookSwitches
 		{ "TheaterSeaCoast", "off", "extra", "14", false },
 		{ "TheaterSeaTurrets=", "0", "own", "16", false },
 		{ "TheaterSeaStepDown=", "0", "1", "15", false },
+		// (the ship detail plan, round 1: the ships at sea, each for review pictures until the art director's Mac check; the
+		// light, the file's shade on each point and the top light; the skin, the rust ramp and the material's own wear; the
+		// shade, occlusion, contact shadows and shadow quality; and the reel's two, R1.1's measured shots)
+		{ "TheaterSeaShipLight=", "0", "review", "R1.3", true },
+		{ "TheaterSeaShipSkin=", "0", "review", "R1.4", true },
+		{ "TheaterSeaShipShade=", "0", "review", "R1.3", true },
+		{ "TheaterSeaReel=", "off", "review", "R1.1", true },
+		{ "TheaterSeaRideStrip=", "off", "review", "R1.1", true },
 	};
 	inline constexpr int Count = static_cast<int>(sizeof(All) / sizeof(All[0]));
 

@@ -375,12 +375,14 @@ namespace StageParts
 	 * where the game has it, else the kit's code-built miniature (near only), fitted to her size where it is to be
 	 * (FitHull, NamedHull), and the stretch that took. False where there is none, or no far one.
 	 */
-	static bool HullModel(const FStageShip& Given, bool bFar, double U, FMiniatureMesh& Model, FString& OutFile, FVector& OutStretch)
+	static bool HullModel(const FStageShip& Given, bool bFar, double U, FMiniatureMesh& Model, FString& OutFile, FVector& OutStretch,
+		const ShipPaintCore::Options& Paint = ShipPaintCore::Options())
 	{
 		OutFile = ShipFileOf(Given);
 		OutStretch = FVector::OneVector;
 		{
 			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal: the kit's; the modeller's say so point by point)
+			TGuardValue<ShipPaintCore::Options> Painting(FMiniatureMesh::ShipPaint, Paint); // (today's unless the sea battle asked: SetShipPaint)
 			if (!OutFile.IsEmpty() && !Model.Sculpted(OutFile, Given.Nation, FVector::ZeroVector, U, 0.0, bFar))
 			{
 				OutFile.Empty();
@@ -1744,6 +1746,31 @@ void AAirStage::BuildWorks()
 // ---------------------------------------------------------------------------------------------------------------
 // The ships.
 
+void AAirStage::SetShipPaint(const ShipPaintCore::Options& Given, float FirstLookWear)
+{
+	ShipPaint = Given;
+	if (!SteelInk)
+	{
+		return;
+	}
+	if (Given.TopLight >= 0.0f)
+	{
+		SteelInk->SetScalarParameterValue(TEXT("TopLight"), Given.TopLight);
+	}
+	if (FirstLookWear > 0.0f)
+	{
+		// (the material's chips a metre and a half apart and its blots seven, on the ship's own metres, where the map's
+		// pieces take theirs in the table's measure; the chips the dark of a rust source, so worn paint never goes whiter)
+		const float Metre = static_cast<float>(UnitsPerMetre);
+		const ShipPaintCore::Linear Chip = { ShipPaintCore::ToLinear(ShipPaintCore::Source.R / 255.0f), ShipPaintCore::ToLinear(ShipPaintCore::Source.G / 255.0f),
+			ShipPaintCore::ToLinear(ShipPaintCore::Source.B / 255.0f), 1.0f };
+		SteelInk->SetScalarParameterValue(TEXT("Wear"), FirstLookWear);
+		SteelInk->SetScalarParameterValue(TEXT("ChipTiling"), 1.0f / (1.6f * Metre));
+		SteelInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (7.0f * Metre));
+		SteelInk->SetVectorParameterValue(TEXT("ChipColour"), FLinearColor(Chip.R, Chip.G, Chip.B, 1.0f));
+	}
+}
+
 void AAirStage::SetShips(const TArray<FStageShip>& Given)
 {
 	for (const FStageShip& Ship : Given)
@@ -1822,7 +1849,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 	{
 		FMiniatureMesh Model;
 		const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
-		if (!StageParts::HullModel(Given, false, UnitsPerMetre, Model, Ship.File, Ship.Stretch))
+		if (!StageParts::HullModel(Given, false, UnitsPerMetre, Model, Ship.File, Ship.Stretch, ShipPaint))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s; ship %d is not drawn."), *Name, Given.Id);
 			Ships.Remove(Given.Id);
@@ -1899,7 +1926,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 			FMiniatureMesh Far;
 			FString FarFile;
 			FVector FarStretch;
-			if (StageParts::HullModel(Given, true, UnitsPerMetre, Far, FarFile, FarStretch) && FarFile == Ship.File)
+			if (StageParts::HullModel(Given, true, UnitsPerMetre, Far, FarFile, FarStretch, ShipPaint) && FarFile == Ship.File)
 			{
 				// (her guns out of the far one too, where it says its points' parts; else it keeps them stowed, and her guns
 				// drawn on their own show only near)
@@ -2109,7 +2136,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now, const 
 		FMiniatureMesh Model;
 		FString File;
 		FVector Stretch;
-		StageParts::HullModel(Ship->Given, false, UnitsPerMetre, Model, File, Stretch);
+		StageParts::HullModel(Ship->Given, false, UnitsPerMetre, Model, File, Stretch, ShipPaint);
 		if (File.IsEmpty())
 		{
 			StageParts::InStagePaint(Model, Ship->Given.Nation); // (as she was drawn whole: the stage's Measure 1 on the kit's miniature)
