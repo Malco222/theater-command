@@ -6895,6 +6895,19 @@ namespace
 						[
 							Chip(NextArmyPill())
 						]
+						// (Release 2, tc.UI.SeaWaits; Brian's card, 25 November 2026: "waits behind a button".) The month's scene at
+						// sea, held back after the enemy's moves near him: one press plays it, any time this month.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, -2.0f, 0.0f, 10.0f)
+						[
+							Chip(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMonthSeaOffered() ? EVisibility::Visible : EVisibility::Collapsed; })
+							.ToolTipText(FText::FromString(TEXT("This month at sea, as film: about half a minute. A click or any key brings you back to the map.")))
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskMonthSea(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Font(Typed(9.0f, true)).ColorAndOpacity(Cream)
+								.Text(FText::FromString(TEXT("THE MONTH AT SEA  \u00B7  WATCH")))
+							])
+						]
 						// (Rules 84.2.6; sheet 35.) The alarm that names the cure, first in the tray, above every other row.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
