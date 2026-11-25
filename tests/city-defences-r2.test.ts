@@ -1114,6 +1114,32 @@ describe('city defences in the bridge (slice 5)', () => {
     expect(l.line).not.toMatch(/0 of the 0/);
   });
 
+  it('the AIR DEFENCE shelf\'s searchlights line has a twin for one level of guns, for every level lit, and for one of several', () => {
+    // The UI director, 25 Nov 2026 21:16Z. {L} is the lights' level and {G} the guns'.
+    const lineAt = (guns: number, lights: number): string => {
+      const g = britain(true);
+      const id = g.byName.London.id;
+      g.flags[`wk:aa:${id}`] = guns;
+      g.flags[`wk:lights:${id}`] = lights;
+      TC().load(saveGame(g));
+      const l = (TC().province(id) as { glance: { air: Record<string, unknown> | null } }).glance.air!.lights as { level: number; lit: number; guns: number; line: string };
+      expect([l.level, l.guns, l.lit]).toEqual([lights, guns, Math.min(lights, guns)]);
+      return l.line;
+    };
+    // One level of guns: there is nothing to count, whatever the lights' level.
+    expect(lineAt(1, 1)).toBe('level 1: the guns are lit by night, under a clear sky');
+    expect(lineAt(1, 3)).toBe('level 3: the guns are lit by night, under a clear sky');
+    // Every level lit, of two or of three, and with lights to spare.
+    expect(lineAt(2, 2)).toBe('level 2: every level of guns is lit by night, under a clear sky');
+    expect(lineAt(3, 3)).toBe('level 3: every level of guns is lit by night, under a clear sky');
+    expect(lineAt(2, 3)).toBe('level 3: every level of guns is lit by night, under a clear sky');
+    // One of several takes the singular verb.
+    expect(lineAt(2, 1)).toBe('level 1: one of the two levels of guns is lit by night, under a clear sky');
+    expect(lineAt(3, 1)).toBe('level 1: one of the three levels of guns is lit by night, under a clear sky');
+    // Two of three, as before.
+    expect(lineAt(3, 2)).toBe('level 2: two of the three levels of guns are lit by night, under a clear sky');
+  });
+
   it('a night raid\'s flight row carries the searchlights from its report, only with the switch on', () => {
     for (const on of [true, false]) {
       const g = britain(on);

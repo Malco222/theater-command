@@ -1609,7 +1609,9 @@ function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
  * control's radar to lay the guns (without it the lights help only the night fighters) and the levels going up (the
  * UI director's words, "For the map thread": "level {2}: {2} of the {3} levels of guns are lit by night, under a clear
  * sky"). The counts after the level are in words, "level 2: two of the three levels of guns are lit by night, under a
- * clear sky" (the UI director, 25 Nov 2026 20:36Z); the level itself stays a digit. The next level's offer lives in one
+ * clear sky" (the UI director, 25 Nov 2026 20:36Z); the level itself stays a digit. The counted form has its twins
+ * (the UI director, 25 Nov 2026 21:16Z): one level of guns reads "the guns are lit", every level lit reads "every level
+ * of guns is lit", and "one of the two levels of guns is lit" takes the singular. The next level's offer lives in one
  * place, `work:lights` in `glance.can`, and not here (the UI director).
  */
 function glanceLights(s: Game, id: number, guns: number) {
@@ -1619,11 +1621,15 @@ function glanceLights(s: Game, id: number, guns: number) {
   // With lights and no guns there is nothing to count: the raid card's own words for that case (the UI director's
   // section 2, "No guns built"), after the level, rather than "0 of the 0 levels of guns". The town is one the side
   // sees, so it takes the known form, with the small letter after the colon (the UI director, 25 Nov 2026 20:33Z).
+  const lit = Math.min(level, guns);
   const line = level <= 0 ? ''
     : guns <= 0 ? `level ${level}: there are no guns built here for them to light. They help the night fighters a little.`
-    : `level ${level}: ${inWords(Math.min(level, guns))} of the ${inWords(guns)} levels of guns are lit by night, under a clear sky`;
+    : guns === 1 ? `level ${level}: the guns are lit by night, under a clear sky`
+    : lit >= guns ? `level ${level}: every level of guns is lit by night, under a clear sky`
+    : lit === 1 ? `level ${level}: one of the ${inWords(guns)} levels of guns is lit by night, under a clear sky`
+    : `level ${level}: ${inWords(lit)} of the ${inWords(guns)} levels of guns are lit by night, under a clear sky`;
   return {
-    level, lit: Math.min(level, guns), guns, radar: radarLays(s, id), going,
+    level, lit, guns, radar: radarLays(s, id), going,
     line,
   };
 }
