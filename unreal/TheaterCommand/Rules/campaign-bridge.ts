@@ -6998,8 +6998,9 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
       // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report then says
       // who went down, to the side that flew it. Added whole after the cut, so the line is never cut. Nothing with the
-      // switch off: no report carries the field then.)
-      const strafe = s.airReports.filter((r) => r.id > air0).map((r) => strafedLine(r, s.human)).filter(Boolean).join(' ');
+      // switch off: no report carries the field then. A raid fought out carries the line on its after card, so the note
+      // leaves it there and the line is said once: the fourth round's check.)
+      const strafe = air.after ? '' : s.airReports.filter((r) => r.id > air0).map((r) => strafedLine(r, s.human)).filter(Boolean).join(' ');
       if (strafe) note = note ? `${note} ${strafe}` : strafe;
     }
     // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.
