@@ -23,14 +23,19 @@ def main(folder, out):
         for line in f:
             name, _, words = line.rstrip("\n").partition("\t")
             captions[name] = words
-    across = len(ROWS[0])
+    rows = ROWS
+    if any(name not in captions for row in ROWS for name in row):
+        # (another sheet's panels, the national marks' (LAND_KIT_MARKS=1): three across in the painter's order)
+        names = list(captions)
+        rows = [names[i:i + 3] for i in range(0, len(names), 3)]
+    across = len(rows[0])
     panel_w = (WIDE - 2 * EDGE - (across - 1) * GAP) // across
     panel_h = round(panel_w * 3 / 4)
-    high = 2 * EDGE + len(ROWS) * (panel_h + CAPTION) + (len(ROWS) - 1) * GAP
+    high = 2 * EDGE + len(rows) * (panel_h + CAPTION) + (len(rows) - 1) * GAP
     sheet = Image.new("RGB", (WIDE, high), (240, 237, 230))
     draw = ImageDraw.Draw(sheet)
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
-    for r, row in enumerate(ROWS):
+    for r, row in enumerate(rows):
         for c, name in enumerate(row):
             x = EDGE + c * (panel_w + GAP)
             y = EDGE + r * (panel_h + CAPTION + GAP)

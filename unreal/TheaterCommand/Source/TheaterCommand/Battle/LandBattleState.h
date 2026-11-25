@@ -3,6 +3,9 @@
 // The ground battle's plain C++ state, kept apart from the actor's header so that the cores' standard-library types
 // never pass through Unreal's header tool. Only LandBattle.cpp and LandBattleScreen.cpp include it.
 
+#include "Battle/LandAir.h"
+#include "Battle/LandBail.h"
+#include "Battle/LandBurn.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
 #include "Battle/LandEye.h"
@@ -19,7 +22,9 @@
 #include "Battle/LandWalkPan.h"
 #include "Battle/Fates.h"
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,6 +39,11 @@ struct FLandBattleState
 	LandPlay::Replay Play;
 	LandSound::Mixer Mix;
 	LandEye::Director Eye;
+	/** (Camera specials, release 2) -TheaterLandWhistle: the attack's officer blows his whistle as he steps off, the
+	 * film opening on him (LandEye WhistleAt, WhistleMan); and whether it has sounded. */
+	bool bWhistleOn = false, bWhistleBlown = false;
+	/** The earned names by block id, for the film's card (-TheaterLandNickCard): empty strings where none. */
+	TMap<int32, FString> NickOfBlock;
 	/** The walk pan's plan once chosen (-TheaterLandWalkPan, the Mac recipe's look 7; it asks EyeWorld below). */
 	LandWalkPan::Plan Pan;
 	LandDesk::Desk Desk;
@@ -51,6 +61,38 @@ struct FLandBattleState
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
+	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
+	LandBurn::Director Burns;
+	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
+	LandBail::Book Bails;
+	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
+	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
+	struct FAirSupport
+	{
+		bool bAsked = false, bOn = false, bMade = false;
+		LandAir::Sky Sky;
+		size_t Built = 0;                // the recording's air notes the plan was made from
+		double Told = -1.0;              // the battle time the kit was last told up to (under 0: not yet)
+		std::vector<LandAir::Plane> Planes;
+		std::vector<LandAir::Gunner> Guns;
+		std::vector<LandAir::Happen> Happens;
+		std::set<int> Firing, Gunning;   // the kit's guns firing now: the planes' (GunIdOf) and the ground's (GunnerIdOf)
+		std::set<int> Falling, Hit, Struck; // planes by key: going down with a trail, hit, into the ground
+		/** Effects (R2): the downed pilots (-TheaterLandChutes): each one now, by his plane's key the shape his mesh was
+		 * last built to (his canopy's open share in the air; 2 and its slump once down), and once down his man in the
+		 * crowd and the clips he is blended between. */
+		bool bChutes = false;
+		std::vector<LandAir::Chute> ChutesNow;
+		struct FChuteMan
+		{
+			double Shape = -1.0;
+			int Man = -1;
+			std::string File, Clip, WasClip;
+			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0;
+		};
+		std::map<int, FChuteMan> ChuteMen;
+	};
+	FAirSupport AirSupport;
 	Fates::Table FatesTable;
 
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
@@ -111,20 +153,32 @@ struct FLandBattleState
 	/** Each vehicle looked at for seats yet (her men seated, or none to seat). */
 	std::vector<uint8_t> SeatedDone;
 
+	/**
+	 * The carriers' benches as they stand this frame (the lorries and half-tracks whose models have bench seats,
+	 * rider.1 to rider.10: LandKit::BenchesNow), for the lorried men aboard (LandMen's SeatFn, LandKit::BenchFor; Brian,
+	 * 23 November 14:10Z: "troops are stuck under the truck"). Made before the men are posed (SeatCarriers); read by the
+	 * men's posing threads at once, never written then.
+	 */
+	std::vector<LandKit::Benches> Carriers;
+
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;
 	/** The camera's world as the film has it (Open), kept for the general's view. */
 	LandEye::World EyeWorld;
 	/** The general's view (LandGeneralEye, the camera thread's): his own camera over the field while the film is not
 	 * asked for; what he does to it this frame (the screen fills it: keys held, slides, wheel, pinch, a double click),
-	 * the turn keys held (-1..1), whether it is begun, and the film and his view switched this frame (the picture cuts). */
+	 * the turn keys and the tilt keys held (-1..1), whether it is begun, and the film and his view switched this frame
+	 * (the picture cuts). */
 	LandGeneralEye::Eye GeneralEye;
 	LandGeneralEye::Input GeneralIn;
-	double GeneralTurnHeld = 0.0;
+	double GeneralTurnHeld = 0.0, GeneralTiltHeld = 0.0;
 	bool bGeneralEye = false, bEyeSwitched = false;
 
 	/** The camera's pose this frame and the words on the screen. */
 	LandEye::Pose Pose;
+	/** The film director's own pose this frame, kept while the general's view has the camera (the film in a corner,
+	 * release 2). */
+	LandEye::Pose FilmPose;
 	LandDesk::Words Words;
 
 	/** Battle seconds shown, and real seconds since the battle opened. */

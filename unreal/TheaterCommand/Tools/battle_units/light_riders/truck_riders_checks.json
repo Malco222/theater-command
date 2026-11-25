@@ -1,0 +1,1179 @@
+{
+ "how": "truck_riders.py check_all on the pattern man the same way, at every bench seat and way out (the Truck with her tilt stowed; the ways out with her board or doors opened as her dismount clip leaves them).",
+ "clips": {
+  "bench_ride": [
+   {
+    "at": "Truck rider.1",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.2",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.3",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.4",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.5",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.6",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.7",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.8",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.9",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.10",
+    "deepest_m": 0.0175,
+    "where": [
+     3.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.1",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.2",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.3",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.4",
+    "deepest_m": 0.0392,
+    "where": [
+     2.4,
+     "calf_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.5",
+    "deepest_m": 0.08,
+    "where": [
+     2.267,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.6",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.7",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.8",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.9",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.10",
+    "deepest_m": 0.0143,
+    "where": [
+     1.733,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.1",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.2",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.3",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.4",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.5",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.6",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.7",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.8",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.9",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.10",
+    "deepest_m": 0.03,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "die_bench_slump": [
+   {
+    "at": "Truck rider.1",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.2",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.3",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.4",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.5",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.6",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.7",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.8",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.9",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Truck rider.10",
+    "deepest_m": 0.0174,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.1",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.2",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.3",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.4",
+    "deepest_m": 0.0387,
+    "where": [
+     0.4,
+     "calf_l"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.5",
+    "deepest_m": 0.08,
+    "where": [
+     0.4,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.6",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.7",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.8",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.9",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "Hanomag rider.10",
+    "deepest_m": 0.0142,
+    "where": [
+     1.067,
+     "spine_02"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.1",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.2",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.3",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.4",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.5",
+    "deepest_m": 0.0312,
+    "where": [
+     0.533,
+     "upperarm_r"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.6",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.7",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.8",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.9",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   },
+   {
+    "at": "M3Halftrack rider.10",
+    "deepest_m": 0.0291,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.1142
+   }
+  ],
+  "bench_rise_l": [
+   {
+    "at": "Truck rider.1",
+    "deepest_m": 0.017,
+    "where": [
+     1.067,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.2",
+    "deepest_m": 0.017,
+    "where": [
+     1.067,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.3",
+    "deepest_m": 0.017,
+    "where": [
+     1.067,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.4",
+    "deepest_m": 0.017,
+    "where": [
+     1.067,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.5",
+    "deepest_m": 0.017,
+    "where": [
+     1.067,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.1",
+    "deepest_m": 0.0234,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.2",
+    "deepest_m": 0.0234,
+    "where": [
+     0.0,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.3",
+    "deepest_m": 0.0421,
+    "where": [
+     0.133,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.4",
+    "deepest_m": 0.0421,
+    "where": [
+     0.933,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.2",
+    "deepest_m": 0.0299,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.3",
+    "deepest_m": 0.0299,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.4",
+    "deepest_m": 0.0299,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_rise_r": [
+   {
+    "at": "Truck rider.6",
+    "deepest_m": 0.0145,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.7",
+    "deepest_m": 0.0145,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.8",
+    "deepest_m": 0.0145,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.9",
+    "deepest_m": 0.0145,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.10",
+    "deepest_m": 0.0145,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.6",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.7",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.8",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.9",
+    "deepest_m": 0.0234,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.7",
+    "deepest_m": 0.0299,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.8",
+    "deepest_m": 0.0299,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.9",
+    "deepest_m": 0.0299,
+    "where": [
+     0.267,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_sit_l": [
+   {
+    "at": "Truck rider.1",
+    "deepest_m": 0.0131,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.2",
+    "deepest_m": 0.0131,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.3",
+    "deepest_m": 0.0131,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.4",
+    "deepest_m": 0.0131,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.5",
+    "deepest_m": 0.0131,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.1",
+    "deepest_m": 0.0233,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.2",
+    "deepest_m": 0.0233,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.3",
+    "deepest_m": 0.0412,
+    "where": [
+     1.2,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.4",
+    "deepest_m": 0.0425,
+    "where": [
+     0.533,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.2",
+    "deepest_m": 0.0299,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.3",
+    "deepest_m": 0.0299,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.4",
+    "deepest_m": 0.0299,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_sit_r": [
+   {
+    "at": "Truck rider.6",
+    "deepest_m": 0.0155,
+    "where": [
+     0.267,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.7",
+    "deepest_m": 0.0155,
+    "where": [
+     0.267,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.8",
+    "deepest_m": 0.0155,
+    "where": [
+     0.267,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.9",
+    "deepest_m": 0.0155,
+    "where": [
+     0.267,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Truck rider.10",
+    "deepest_m": 0.0155,
+    "where": [
+     0.267,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.6",
+    "deepest_m": 0.0233,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.7",
+    "deepest_m": 0.0233,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.8",
+    "deepest_m": 0.0233,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Hanomag rider.9",
+    "deepest_m": 0.0233,
+    "where": [
+     1.067,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.7",
+    "deepest_m": 0.0296,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.8",
+    "deepest_m": 0.0296,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.9",
+    "deepest_m": 0.0296,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_rise_l_fore": [
+   {
+    "at": "Hanomag rider.5",
+    "deepest_m": 0.0799,
+    "where": [
+     0.0,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.5",
+    "deepest_m": 0.0634,
+    "where": [
+     0.4,
+     "lowerarm_r"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_rise_r_fore": [
+   {
+    "at": "Hanomag rider.10",
+    "deepest_m": 0.0545,
+    "where": [
+     0.8,
+     "upperarm_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.10",
+    "deepest_m": 0.03,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_sit_l_fore": [
+   {
+    "at": "Hanomag rider.5",
+    "deepest_m": 0.0797,
+    "where": [
+     0.667,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.5",
+    "deepest_m": 0.0674,
+    "where": [
+     0.933,
+     "lowerarm_r"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_sit_r_fore": [
+   {
+    "at": "Hanomag rider.10",
+    "deepest_m": 0.024,
+    "where": [
+     0.533,
+     "foot_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "M3Halftrack rider.10",
+    "deepest_m": 0.0297,
+    "where": [
+     1.333,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_rise_l_aft": [
+   {
+    "at": "M3Halftrack rider.1",
+    "deepest_m": 0.0296,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_rise_r_aft": [
+   {
+    "at": "M3Halftrack rider.6",
+    "deepest_m": 0.0298,
+    "where": [
+     0.133,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_sit_l_aft": [
+   {
+    "at": "M3Halftrack rider.1",
+    "deepest_m": 0.03,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "bench_sit_r_aft": [
+   {
+    "at": "M3Halftrack rider.6",
+    "deepest_m": 0.0299,
+    "where": [
+     1.2,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "out_tail_a": [
+   {
+    "at": "Truck step",
+    "deepest_m": 0.0006,
+    "where": [
+     0.0,
+     "foot_r"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "out_tail_b": [
+   {
+    "at": "Truck step",
+    "deepest_m": 0.0006,
+    "where": [
+     0.0,
+     "foot_r"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "out_doors_a": [
+   {
+    "at": "Hanomag step",
+    "deepest_m": 0.0165,
+    "where": [
+     0.8,
+     "calf_l"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "out_doors_b": [
+   {
+    "at": "Hanomag step",
+    "deepest_m": 0.041,
+    "where": [
+     0.8,
+     "calf_l"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "out_door_a": [
+   {
+    "at": "M3Halftrack step",
+    "deepest_m": 0.015,
+    "where": [
+     0.667,
+     "calf_r"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "out_door_b": [
+   {
+    "at": "M3Halftrack step",
+    "deepest_m": 0.0177,
+    "where": [
+     1.467,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ]
+ }
+}

@@ -23,7 +23,10 @@ class ALandBattle;
  * film (this screen as before), Esc the map again or his hand put down. His view (LandGeneralEye): W A S D or the arrows
  * move it, Q E turn it, the wheel or a pinch zooms, a two-finger slide or the middle button drags the ground, the
  * pointer at the screen's edge moves it, a double click on the ground glides there, a unit's card clicked twice follows
- * that unit.
+ * that unit. Its tilt is his too (Brian, 24 November): Shift with W or S (or the up and down arrows), or Option (Alt)
+ * with a two-finger slide or the middle drag (up and down tilt, across turns), tilts it from the usual angle to almost
+ * straight down, kept as he zooms; O or TOP VIEW looks straight down on the field from about 100 m up, and again goes
+ * back as it was.
  */
 class SLandBattleScreen : public SLeafWidget
 {
@@ -66,6 +69,10 @@ private:
 	};
 	mutable TArray<FButton> Buttons;
 	mutable double LastTopShare = 0.0;
+	/** (Camera specials, release 2) The earned name carded on the picture (the pose's Card, a block id; -1 none) and the
+	 * real second it came up, for its fade. */
+	mutable int32 CardUp = -1;
+	mutable double CardSince = 0.0;
 	/** The tags as drawn this frame, for a click on one (local units). */
 	struct FTagBox
 	{
@@ -84,6 +91,8 @@ private:
 	FVector2D HoverAt = FVector2D(-1.0, -1.0);
 	/** The view's keys held handed to the scene (and let go of all at once when the screen loses the keyboard). */
 	void HandViewKeys();
+	/** The film in a corner's picture (release 2, -TheaterLandCorner), as a brush. */
+	mutable FSlateBrush CornerBrush;
 	/** The two flags' brushes, made once their pictures are there. */
 	mutable FSlateBrush FlagBrush[2];
 	mutable bool bFlagMade[2] = { false, false };

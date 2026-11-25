@@ -1326,7 +1326,7 @@ int main(int Argc, char** Argv)
 		C4.Build(RecText, GroundAt, Err);
 		const int Before = C4.Count();
 		static const char* const Pieces[] = { "Jeep", "Kubelwagen", "GAZ67", "Fiat508", "Kurogane", "FieldCar", "R75", "M72", "Rikuo", "WLA", "M20", "Alce", "Motorcycle" };
-		int Checked = 0, Riders = 0, Seats = 0;
+		int Checked = 0, Riders = 0, Seats = 0, WaysOut = 0;
 		double SitLo = 1e9, SitHi = -1e9;
 		for (const auto& KV : Files)
 		{
@@ -1380,11 +1380,18 @@ int main(int Argc, char** Argv)
 					if (!Finite(HeadAt) || !Finite(HipsAt)) { Fail("%s %s: NaN posed", KV.first.c_str(), Cl.Name.c_str()); continue; }
 					const double Over = HeadAt.Z - R.Seat.T[2];
 					if (Cl.bLoop) { SitLo = std::min(SitLo, Over); SitHi = std::max(SitHi, Over); }
+					// (a way out, the soldiers thread's out_tail, out_door(s) and bail_ clips: he leaves his seat by design, his
+					// root going with him to the ground or onto the hull, so only his start is on his seat)
+					const bool bWayOut = Cl.Name.rfind("out_", 0) == 0 || Cl.Name.rfind("bail_", 0) == 0;
+					if (bWayOut && Ti > 0)
+					{
+						++WaysOut;
+					}
 					// (sitting, his head some 0.6 to 0.9 m over his seat; the jeep's gunner standing on her floor, 1.5 m and more;
 					// slumped, lower, never under the seat by more than a car's door)
-					if (Cl.bLoop ? (Over < 0.35 || Over > 1.95) : (Over < -0.6 || Over > 1.95))
+					else if (Cl.bLoop ? (Over < 0.35 || Over > 1.95) : (Over < -0.6 || Over > 1.95))
 						Fail("%s %s on %s at %.2f s: his head %.2f m over the seat", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str(), Times[Ti], Over);
-					if (std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]) > 1.1 || std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]) > 0.8)
+					if (!(bWayOut && Ti > 0) && (std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]) > 1.1 || std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]) > 0.8))
 						Fail("%s %s on %s at %.2f s: his head %.2f m and hips %.2f m off his seat", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str(), Times[Ti],
 							std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]), std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]));
 					const bool bStowed = Gun >= 0 && F[Gun].R[0] == 0.f && F[Gun].R[4] == 0.f && F[Gun].R[8] == 0.f;
@@ -1417,8 +1424,8 @@ int main(int Argc, char** Argv)
 		for (int Man = 0; Man < Before && bSame; ++Man) bSame = !C4.IsRider(Man);
 		if (!bSame || C4.Count() != Before + Riders) Fail("the seated men changed the battle's men (%d men, %d before)", C4.Count(), Before);
 		if (Riders > 0)
-			std::printf("  %d poses of %d seat clips in %d files checked (on his seat, his gun as the clip says, shown as told); sitting, his head %.2f to %.2f m over the seat\n",
-				Checked, Seats, Riders, SitLo, SitHi);
+			std::printf("  %d poses of %d seat clips in %d files checked (on his seat, his gun as the clip says, shown as told; %d poses of a way out off it by design); sitting, his head %.2f to %.2f m over the seat\n",
+				Checked, Seats, Riders, WaysOut, SitLo, SitHi);
 	}
 
 	// Frame time.

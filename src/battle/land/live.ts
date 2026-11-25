@@ -39,7 +39,8 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 /** Angle difference the short way round. */
 const turn = (a: number, b: number): number => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
-/** A point [t, x, y, f] and a change [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1], as the recording writes them. */
+/** A point [t, x, y, f] and a change [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1], as the recording
+ * writes them; a man aboard adds his vehicle's k and his seat in her bed [..., seatOn, seat] (MenOut.sv). */
 type Pt = number[];
 type Ch = (number | string | null)[];
 
@@ -120,7 +121,8 @@ export class LiveKeeper {
   see(t: number, b: number, m: MenOut, fo: boolean): void {
     const key = keyOf(b, m, fo);
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
-    const ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+    const ch: Ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+    if (m.sv) ch.push(m.sv[0], m.sv[1]);
     let k = this.men.get(key);
     if (!k) {
       k = {
@@ -130,7 +132,7 @@ export class LiveKeeper {
       this.men.set(key, k);
       this.order.push(k);
     } else {
-      if (k.ch.slice(1).some((v, i) => v !== ch[i + 1])) { k.ch = ch; k.newCh.push(ch); }
+      if (k.ch.length !== ch.length || k.ch.slice(1).some((v, i) => v !== ch[i + 1])) { k.ch = ch; k.newCh.push(ch); }
       this.keep(k, p);
     }
     if (m.s !== undefined && k.shot !== m.s) { k.shot = m.s; k.newS.push(m.s); }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Battle/LandField.h"
+#include "Battle/LandHouse.h"
 
 #include <cmath>
 #include <cstdint>
@@ -358,6 +359,10 @@ namespace LandScape
 		 * over it, a tank rolls over it): it may lie across a recorded men's way, never a vehicles'. One that stands
 		 * taller after all (its model read or built higher) is taken up off the men's ways once the models are built. */
 		virtual bool KitLow(int Slot) const { (void)Slot; return false; }
+		/** The trial "houses" (release 2): a kit slot whose houses LandHouse builds to the vehicles' detail instead of its
+		 * model (Out its kind and roof; LandField gives each house's footprint and look): false where the slot keeps its
+		 * model. */
+		virtual bool KitHouse(int Slot, LandHouse::Spec& Out) const { (void)Slot; (void)Out; return false; }
 		/** How many steps down the frame budget's ladder of nearer far-draw distances the game takes for this ground (0,
 		 * GS9's own, to 4; production/theatre-budgets-1122/budgets.md section B): its dense woods' trees and shrubs turn
 		 * plain, to crowns and out sooner. By its look unless the region says. */

@@ -78,6 +78,29 @@ namespace LandSight
 	/** The month (1 to 12) a recording's date names; July where none. */
 	int MonthOf(const std::string& Date);
 
+	/**
+	 * The spotter's mark (release 2; Brian, 24 November 20:38Z): how near one of his blocks must come to find an enemy
+	 * hidden in woods or on a hedge line, as the rules have it (src/battle/land/rules.ts, LAND.hide.sight and heard;
+	 * sim.ts, spotHidden and gap). A hidden block is found once a fighting enemy block's edge is within the hidden one's
+	 * own sight distance, by how it moves: men lying still under the trees are seen last, guns before them, lorries and
+	 * tanks first; and a tank or lorry on the move in cover is heard farther off still. The metres between two blocks'
+	 * edges are those between their middles less a quarter of each one's longer side. So about one of his blocks lies a
+	 * ring for each kind of enemy: a hidden one of that kind inside it is found. The enemy's own size only widens it (a
+	 * point is taken, the least). The rules know no rise or hedge here: the ring is round.
+	 *
+	 * The numbers are the rules' own, kept here because the scene has no word from the rules for them;
+	 * Tools/land_play/run.sh fails where they differ from rules.ts.
+	 */
+	struct Finds
+	{
+		/** Hidden men on foot, hidden guns, hidden lorries and tanks: found within this of his block's edge, metres. */
+		double Foot = 60.0, Guns = 100.0, Vehicles = 150.0;
+		/** A hidden tank on the move is heard within this, metres. */
+		double Heard = 350.0;
+	};
+	/** A ring's reach from the middle of a block W wide and D deep: the rules' sight and a quarter of its longer side. */
+	inline double FindsWithin(double Sight, double W, double D) { return Sight + 0.25 * (W > D ? W : D); }
+
 	class Room
 	{
 	public:

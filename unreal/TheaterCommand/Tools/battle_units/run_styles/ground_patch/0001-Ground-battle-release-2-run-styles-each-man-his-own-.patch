@@ -1,0 +1,266 @@
+From 571eeed0768f8cacd109284f17593a3d1048ad30 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 23 Nov 2026 05:55:07 +0000
+Subject: [PATCH] Ground battle (release 2): run styles, each man his own
+ runner (behind the "runs" trial)
+
+Brian, 23 Nov: "multiple animations of the players running so not all players
+are running exactly the same at the same time". The soldier files now carry
+three more runs and three more advances (run_b/c/d, advance_b/c/d: other
+runners' motion capture, the soldiers thread's run_styles.py), each naming the
+clip it is a style of (style_of). LandMen reads that (Soldier::Styles); with
+Crowd::SetRunStyles on, each man's gait plays his own one of the four by his
+seed (the same runner running or advancing), at his speed over the clip's own,
+so the long striders step slower than the short ones and no two keep step. Far
+men banked in poses show the base clip's poses. Off unless set; the scene sets
+it on the "runs" trial, "-TheaterLandNoRunStyles" off.
+
+land_show_test: LAND_SHOW_RUN_STYLES=1 plays it; the four runners each on at
+least a tenth of the running, and none but the file's own with it off.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz3YSqBqHKxvTEycWyM
+---
+ .../TheaterCommand/Battle/LandBattle.cpp      | 11 ++++++
+ .../Source/TheaterCommand/Battle/LandField.h  |  2 +-
+ .../Source/TheaterCommand/Battle/LandMen.cpp  | 35 +++++++++++++++++++
+ .../Source/TheaterCommand/Battle/LandMen.h    | 15 ++++++++
+ .../Tools/land_show/land_show_test.cpp        | 31 ++++++++++++++++
+ 5 files changed, 93 insertions(+), 1 deletion(-)
+
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
+index 7555131a..2145790e 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
+@@ -2856,6 +2856,17 @@ void ALandBattle::MakeMen()
+ 			UE_LOG(LogTheater, Display, TEXT("Land battle: uniforms that age ON (%s)"), Months >= 0.0 ? *FString::Printf(TEXT("%.0f months in the line, both sides"), Months) : TEXT("each side's months in the line from the recording"));
+ 		}
+ 	}
++	// Run styles (release 2, on trial: "-TheaterLandTrial=runs"; Brian's 23 Nov "not all players are running exactly the
++	// same at the same time"): each man runs and advances as his own one of his file's four runners, so a squad on the
++	// move is not one man copied; "-TheaterLandNoRunStyles" off whatever the trial (the player's switch).
++	{
++		const bool bRuns = LandParts::OnTrial("runs") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRunStyles"));
++		Crowd->SetRunStyles(bRuns);
++		if (bRuns)
++		{
++			UE_LOG(LogTheater, Display, TEXT("Land battle: run styles ON (each man his own runner)"));
++		}
++	}
+ 	// The armies' colours and stand-ins (armies.json), read first: an army with no soldier file of its own is drawn with
+ 	// the file its row names, else the Pole's (LandMen's MakeMan; never a side left blank).
+ 	{
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandField.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandField.h
+index ae31d2c6..ce438df4 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandField.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandField.h
+@@ -119,7 +119,7 @@ namespace LandField
+ 		 * The looks on trial (release 2), each behind its switch until the art director passes it and the Mac holds its
+ 		 * frame rate: words between commas ("church": a church in the farmland's villages; "walltop": Italy's walls
+ 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
+-		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
++		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
+ 		 * every ground as passed.
+ 		 */
+ 		std::string Trial;
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.cpp
+index 5a8bf55a..365bab4a 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.cpp
+@@ -769,6 +769,7 @@ namespace LandMen
+ 			Cl.Long = static_cast<float>(C["long"].Num0(1.0));
+ 			Cl.Stride = static_cast<float>(C["stride"].Num0(0.0));
+ 			Cl.bLoop = C["loop"].K == J::Bool ? C["loop"].B : C["loop"].Num0() != 0.0;
++			Cl.StyleOf = C["style_of"].Text("");
+ 			if (C["end_offset"].Size() >= 3)
+ 			{
+ 				Cl.bEndOffset = true;
+@@ -873,6 +874,17 @@ namespace LandMen
+ 			}
+ 			if (Cl.LeftFoot < 0.f) Cl.LeftFoot = 0.f;
+ 		}
++		// (release 2's run styles: each clip with its styles; a style of no clip, or of a style, stands alone)
++		Styles.assign(Clips.size(), std::vector<int>());
++		for (size_t I = 0; I < Clips.size(); ++I)
++		{
++			if (Clips[I].StyleOf.empty()) continue;
++			const int B = ClipIndex(Clips[I].StyleOf);
++			if (B < 0 || !Clips[static_cast<size_t>(B)].StyleOf.empty() || !Clips[I].bLoop || !Clips[static_cast<size_t>(B)].bLoop) continue;
++			std::vector<int>& V = Styles[static_cast<size_t>(B)];
++			if (V.empty()) V.push_back(B);
++			V.push_back(static_cast<int>(I));
++		}
+ 
+ 		const char* LodNames[LodCount] = { "near", "mid", "far" };
+ 		for (int L = 0; L < LodCount; ++L)
+@@ -1547,6 +1559,7 @@ namespace LandMen
+ 			bool bShotsDirty = false;
+ 			size_t ShotCur = 0;
+ 			float PhaseSeed = 0.f;
++			float StylePick = 0.f;          // which of a clip's styles is his (SetRunStyles), a share
+ 			std::string FallKindWanted;
+ 			// The kill: what struck him, from where.
+ 			double KillT = -1.0;
+@@ -1664,6 +1677,7 @@ namespace LandMen
+ 		std::map<std::string, double> ArmyWorn; // (an army's months, for a rider, who has no block: AddRider)
+ 		std::map<std::tuple<const ArmyColours*, int, int>, ArmyColours> AgedRows;
+ 		bool bWornLook = false;
++		bool bRunStyles = false;        // each man his own runner (SetRunStyles)
+ 		double WornForced = -1.0;
+ 		bool bSections = false;     // the recording has followers (the drill's sections)
+ 		GroundFn GroundAt;
+@@ -1796,6 +1810,13 @@ namespace LandMen
+ 					const auto It = BankInstead.find(S.Clips[Ci].Name);
+ 					if (It != BankInstead.end()) Cy = CycleNamed(It->second);
+ 				}
++				// (a run style with no poses of its own: the poses of the clip it is a style of, or of that clip's stand-in)
++				if (Cy.empty() && !S.Clips[Ci].StyleOf.empty())
++				{
++					Cy = CycleNamed(S.Clips[Ci].StyleOf);
++					const auto It = BankInstead.find(S.Clips[Ci].StyleOf);
++					if (Cy.empty() && It != BankInstead.end()) Cy = CycleNamed(It->second);
++				}
+ 				B.CycleOf[Ci] = std::move(Cy);
+ 			}
+ 			const double Took = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T0).count();
+@@ -2372,6 +2393,16 @@ namespace LandMen
+ 			return H == Stance::Gait ? Segment::Gait : H == Stance::Loop ? Segment::Loop : Segment::Hold;
+ 		}
+ 
++		/** His own runner for a gait's clip (SetRunStyles): one of the clip's styles by his StylePick, else the clip. */
++		int StyleOf(const Man& M, int Clip) const
++		{
++			if (!bRunStyles || Clip < 0 || !M.S || static_cast<size_t>(Clip) >= M.S->Styles.size()) return Clip;
++			const std::vector<int>& V = M.S->Styles[static_cast<size_t>(Clip)];
++			if (V.size() < 2) return Clip;
++			const size_t K = std::min(V.size() - 1, static_cast<size_t>(M.StylePick * static_cast<float>(V.size())));
++			return V[K];
++		}
++
+ 		Segment SegmentOf(const Man& M, const Stance& St, double Start, float BlendIn) const
+ 		{
+ 			Segment G;
+@@ -2386,6 +2417,7 @@ namespace LandMen
+ 			G.LieA = G.LieB = St.Cl == Prone ? 1.f : 0.f;
+ 			G.Rate = G.How == Segment::Loop ? M.Info.Jitter * static_cast<float>(Life) : 1.f;
+ 			G.Phase = M.PhaseSeed;
++			if (G.How == Segment::Gait) G.Clip = StyleOf(M, G.Clip);
+ 			if (bClipShotsRef && *bClipShotsRef && St.bFiring && G.How == Segment::Hold)
+ 			{
+ 				// The test's switch: the firing poses loop their own clips again, shots and all.
+@@ -3709,6 +3741,7 @@ namespace LandMen
+ 			Mn.Info.Delay = 0.2 * Unit01(Who ^ 0xDE1Aull);
+ 			Mn.Info.Jitter = static_cast<float>(0.95 + 0.1 * Unit01(Who ^ 0x7177E5ull));
+ 			Mn.PhaseSeed = static_cast<float>(Unit01(Who ^ 0x57E9ull));
++			Mn.StylePick = static_cast<float>(Unit01(Who ^ 0x5717E5ull));
+ 			MakeStances(Mn);
+ 			// His mesh without his helmet (where a finish is drawn) and his face's rest points, made now rather than on
+ 			// the frame he first comes into view (a few milliseconds each the first time).
+@@ -4386,6 +4419,7 @@ namespace LandMen
+ 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
+ 	void Crowd::SetRun(RunFn Run) { Inner->Run = std::move(Run); }
+ 	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
++	void Crowd::SetRunStyles(bool bOn) { Inner->bRunStyles = bOn; }
+ 	void Crowd::SetWorn(bool bOn, double ForcedMonths)
+ 	{
+ 		Inner->bWornLook = bOn;
+@@ -4887,6 +4921,7 @@ namespace LandMen
+ 		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them)
+ 		Mn.Info.Finish = -1;
+ 		Mn.PhaseSeed = static_cast<float>(Unit01(Seed ^ 0x57E9ull));
++		Mn.StylePick = static_cast<float>(Unit01(Seed ^ 0x5717E5ull));
+ 		Mn.bVisible = false;
+ 		RestPose(Mn.Now);
+ 		for (int L = 0; L < LodCount; ++L)
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.h
+index 731b308a..2beffe80 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandMen.h
+@@ -128,6 +128,9 @@ namespace LandMen
+ 		float FlashT = -1.f;            // the first muzzle_flash's time (the shot), -1 none
+ 		float ReleaseT = -1.f;          // grenade_release's, -1 none
+ 		float LeftFoot = -1.f;          // the left foot's (or elbow's) step as a share of the loop, for keeping step
++		/** Release 2's run styles (the soldiers thread's run_styles.py): the clip this one is another runner's take of
++		 * ("run" for run_b, run_c, run_d; "advance" for advance_b...), empty for any other clip. */
++		std::string StyleOf;
+ 		/** A tank clip's places (its "places"): the vehicle model (Piece, its file's name: "Sherman") and its socket his
+ 		 * root goes to, moved by Offset (forward, right, up of the socket's facing). Empty for a man on his feet. */
+ 		struct Seat
+@@ -204,6 +207,9 @@ namespace LandMen
+ 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
+ 		 * three falls by the table. */
+ 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
++		/** Per clip, the clip and its styles (its own first, then each clip whose StyleOf names it, in the file's order):
++		 * run, run_b, run_c, run_d. Empty for a clip with no styles. */
++		std::vector<std::vector<int>> Styles;
+ 
+ 		int ClipIndex(const std::string& Name) const;
+ 		int BoneIndex(const std::string& Name) const;
+@@ -454,6 +460,15 @@ namespace LandMen
+ 		 * ForcedMonths at 0 or more stands in for both sides' (the Mac's off/on line). Off unless set.
+ 		 */
+ 		void SetWorn(bool bOn, double ForcedMonths = -1.0);
++		/**
++		 * Run styles (release 2, Brian's 23 Nov: "not all players are running exactly the same at the same time"): on,
++		 * each man runs and advances as his own one of the file's runners (its run and the run's styles, run_b, run_c,
++		 * run_d: other men's motion capture, each with his own stride, so at one speed each steps at his own beat),
++		 * chosen by his seed, the same runner whether he runs or advances. His feet stay on the ground as before (the
++		 * clip at his speed over its own). Far men banked in poses show the base clip's. Any time: a man takes his runner
++		 * at his next change of gait. Off unless set (each man the file's own run, as before).
++		 */
++		void SetRunStyles(bool bOn);
+ 		/** The detail levels' bounds, in metres as the picture sees him (SeenDistance, a 50 degree lens's): Near under
+ 		 * NearTo, Mid under MidTo, Far beyond, each crossed back with a twentieth's give. 25 and 120 unless set; the scene
+ 		 * sets them by his height on the screen (the battle-scale plan's GS3). */
+diff --git a/unreal/TheaterCommand/Tools/land_show/land_show_test.cpp b/unreal/TheaterCommand/Tools/land_show/land_show_test.cpp
+index ff354ae6..2fa8dcbf 100644
+--- a/unreal/TheaterCommand/Tools/land_show/land_show_test.cpp
++++ b/unreal/TheaterCommand/Tools/land_show/land_show_test.cpp
+@@ -331,6 +331,11 @@ int main(int Argc, char** Argv)
+ 	const char* ThriftEnv = std::getenv("LAND_SHOW_THRIFT");
+ 	const bool bThrift = ThriftEnv && std::string(ThriftEnv) == "1";
+ 	C.SetThrift(bThrift);
++	// LAND_SHOW_RUN_STYLES=1: each man his own runner (Crowd::SetRunStyles, the scene's "runs" trial)
++	const char* StylesEnv = std::getenv("LAND_SHOW_RUN_STYLES");
++	const bool bRunStyles = StylesEnv && std::string(StylesEnv) == "1";
++	C.SetRunStyles(bRunStyles);
++	if (bRunStyles) std::printf("run styles: each man his own runner (Crowd::SetRunStyles)\n");
+ 	const char* ThreadsEnv = std::getenv("LAND_SHOW_THREADS");
+ 	const int Threads = std::max(1, ThreadsEnv ? std::atoi(ThreadsEnv) : 4);
+ 	if (bThrift) std::printf("thrifty: far men posed every 2nd to 4th frame by their distance (Crowd::SetThrift)\n");
+@@ -1161,6 +1166,32 @@ int main(int Argc, char** Argv)
+ 		std::printf("\nclips shown (share of man-frames):");
+ 		for (size_t K = 0; K < V.size() && K < 16; ++K) std::printf(" %s %.1f%%;", V[K].second.c_str(), 100.0 * V[K].first / std::max(1L, ManFrames));
+ 		std::printf("\n");
++		// Run styles: the men on the run show the four runners, none of them the most by far; off, only the file's own.
++		long Runs[4] = { 0, 0, 0, 0 };
++		for (const auto& KV : ClipFrames)
++		{
++			const std::string& Nm = KV.first;
++			for (const char* Base : { "run", "advance" })
++			{
++				const std::string B(Base);
++				if (Nm == B) Runs[0] += KV.second;
++				else if (Nm == B + "_b") Runs[1] += KV.second;
++				else if (Nm == B + "_c") Runs[2] += KV.second;
++				else if (Nm == B + "_d") Runs[3] += KV.second;
++			}
++		}
++		const long AllRuns = Runs[0] + Runs[1] + Runs[2] + Runs[3];
++		std::printf("run styles: of %ld man-frames running or advancing, own %.0f%%, b %.0f%%, c %.0f%%, d %.0f%%\n", AllRuns,
++			100.0 * Runs[0] / std::max(1L, AllRuns), 100.0 * Runs[1] / std::max(1L, AllRuns), 100.0 * Runs[2] / std::max(1L, AllRuns),
++			100.0 * Runs[3] / std::max(1L, AllRuns));
++		if (!bRunStyles && Runs[0] != AllRuns) Fail("run styles off, yet %ld man-frames ran as another runner", AllRuns - Runs[0]);
++		if (bRunStyles && AllRuns > 2000)
++		{
++			for (int K = 0; K < 4; ++K)
++			{
++				if (Runs[K] < AllRuns / 10) Fail("run styles on, yet runner %d shows on only %.1f%% of the running", K, 100.0 * Runs[K] / AllRuns);
++			}
++		}
+ 	}
+ 
+ 	// The tank commanders (Crowd::AddRider): each crew file's tank clips on the seats their places name, as the scene
+-- 
+2.43.0
+

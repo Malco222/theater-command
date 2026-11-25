@@ -208,7 +208,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Kit20", "Kit21", "Kit22", "Kit23", "Kit24", "Kit25", "Kit26", "Kit27", "Kit28", "Kit29", "Kit30", "Kit31", "Kit32", "Kit33", "Kit34", "Kit35", "Kit36", "Kit37", "Kit38", "Kit39", "Kit40", "Kit41", "Kit42", "Kit43", "Kit44", "Kit45", "Kit46", "Kit47", "Kit48", "Kit49", "Kit50", "Kit51", "Kit52", "Kit53", "Kit54", "Kit55", "Kit56", "Kit57", "Kit58", "Kit59", "Kit60", "Kit61", "Kit62", "Kit63", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 	static_assert(sizeof(BaseNames) / sizeof(BaseNames[0]) == static_cast<size_t>(LandField::Base::Count), "a name for every base");
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
@@ -809,6 +809,7 @@ int main(int Argc, char** Argv)
 	if (const char* V = std::getenv("LAND_FIELD_WEATHER")) F.Weather = V; // (the campaign's weather word: "mud")
 	if (const char* V = std::getenv("LAND_FIELD_MONTH")) F.Month = std::atoi(V);
 	if (const char* V = std::getenv("LAND_FIELD_TERRAIN")) F.Terrain = V;
+	if (std::getenv("LAND_FIELD_OLD_RIVER_BED")) F.bOldRiverBed = true; // (the game's -TheaterLandOldRiverBed: Field::bOldRiverBed)
 	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings
 	// (Content/Models/East: the recording's folder's ../../Models/East), as the game reads them.
 	if (const Json* St = Fj->Get("steppe"); St && St->K == Json::Object)
@@ -1019,6 +1020,232 @@ int main(int Argc, char** Argv)
 		// (a leaf card mesh carries its picture's place at every point; no other mesh has any)
 		if (!(Bm.Cards.Uvs.size() == 2 * Bm.Cards.Points() && Bm.Near.Uvs.empty() && Bm.Far.Uvs.empty() && Bm.Sprigs.Uvs.empty())) BadCards += std::string(" ") + BaseNames[B];
 		if (!Bm.Cards.Empty()) ++Carded;
+	}
+	// LAND_FIELD_DIGEST=1: a digest of everything laid (the tiles' three meshes, the ring, every base's levels, every
+	// instance), so a change meant to leave the ground as it was can be shown to (the same digest before and after).
+	if (std::getenv("LAND_FIELD_DIGEST"))
+	{
+		auto Mix = [](uint64_t H, const void* P, size_t N) {
+			const unsigned char* C = static_cast<const unsigned char*>(P);
+			for (size_t I = 0; I < N; ++I) H = (H ^ C[I]) * 1099511628211ull;
+			return H;
+		};
+		auto Of = [&Mix](uint64_t H, const LandField::Mesh& M) {
+			H = Mix(H, M.Positions.data(), M.Positions.size() * sizeof(float));
+			H = Mix(H, M.Normals.data(), M.Normals.size() * sizeof(float));
+			H = Mix(H, M.Colours.data(), M.Colours.size() * sizeof(LandField::Rgb8));
+			H = Mix(H, M.Uvs.data(), M.Uvs.size() * sizeof(float));
+			return Mix(H, M.Triangles.data(), M.Triangles.size() * sizeof(uint32_t));
+		};
+		uint64_t Tiles = 1469598103934665603ull, Ring = Tiles, Bases = Tiles, Things = Tiles;
+		for (const LandField::Tile& Tl : G.Tiles()) Tiles = Of(Of(Of(Tiles, Tl.Near), Tl.Far), Tl.Built);
+		for (const LandField::Tile& Tl : G.Ring()) Ring = Of(Of(Of(Ring, Tl.Near), Tl.Far), Tl.Built);
+		for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
+		{
+			const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
+			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far, &Bm.Cards, &Bm.Sprigs }) Bases = Of(Bases, *M);
+			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
+			{
+				const float Pose[6] = { P.X, P.Y, P.Z, P.Yaw, P.Scale, P.ScaleZ };
+				Things = Mix(Mix(Things, Pose, sizeof(Pose)), &P.Tint, sizeof(P.Tint));
+			}
+		}
+		std::printf("  digest: tiles %016llx, ring %016llx, bases %016llx, instances %016llx\n", static_cast<unsigned long long>(Tiles), static_cast<unsigned long long>(Ring),
+		            static_cast<unsigned long long>(Bases), static_cast<unsigned long long>(Things));
+	}
+	// The bocage's farmhouses built to the vehicles' detail (release 2, the trial "houses", LandHouse), and their barns and
+	// byres: each kind a kit slot drawn as a building, near, its middle level from 90 m and plain from 300 m; every one
+	// standing on its house's floor, its levels within their triangle budgets (a farmhouse's or a barn's near some 25 to 40
+	// thousand, as a vehicle's; a byre's from 18 thousand), every point a number and within the house's reach, and its
+	// normals of unit length. The village church the same, whole in one slot (nave, chancel and tower; its near some 75 to
+	// 90 thousand, three buildings' worth, its middle at most 14 thousand, its far 1.5), standing once where the village has one.
+	// The village's houses the same, each its own (their near some 6 to 45 thousand: a rendered cottage's few stones, a
+	// rubble house of three storeys).
+	if (F.Tried("houses") && LookLaid == "bocage")
+	{
+		int Kinds = 0, Barns = 0, Byres = 0, Churches = 0, Village = 0;
+		size_t Standing = 0, NearFew = static_cast<size_t>(-1), NearMost = 0, MidMost = 0, FarMost = 0;
+		size_t VNearFew = static_cast<size_t>(-1), VNearMost = 0, VMidMost = 0, VFarMost = 0, VNear = 0;
+		std::string Bad;
+		for (int K = 0; K < LandField::KitSlots; ++K)
+		{
+			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			const LandField::BaseMesh& Bm = G.BaseOf(B);
+			const bool bByre = Bm.Name.rfind("Byre", 0) == 0;
+			if (Bm.Class == LandField::BaseMesh::Draw::House && Bm.Name.rfind("Church", 0) == 0)
+			{
+				Churches += static_cast<int>(G.Instances(B).size());
+				std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(),
+				            Bm.MidFrom, Bm.FarFrom);
+				if (Bm.Near.Tris() < 60000 || Bm.Near.Tris() > 90000 || Bm.Mid.Tris() > 14000 || Bm.Far.Tris() > 1500 || Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight)
+					Bad += " " + Bm.Name + " (its levels)";
+				for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
+				{
+					bool bOk = M->Normals.size() == M->Positions.size() && M->Colours.size() * 3 == M->Positions.size();
+					for (size_t I = 0; bOk && I + 2 < M->Positions.size(); I += 3)
+					{
+						const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
+						const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
+						if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > 18.0f || std::fabs(Y) > 8.0f || Z < -6.0f || Z > 32.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+					}
+					for (const uint32_t Ix : M->Triangles)
+						if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
+					if (!bOk) Bad += " " + Bm.Name + " (a point)";
+				}
+				for (const LandField::Placed& P : G.Instances(B))
+				{
+					LandField::Drawn What = LandField::Drawn::Beyond;
+					const double Z = G.HeightAt(P.X, P.Y, &What);
+					if (What != LandField::Drawn::Floor || std::fabs(Z - P.Z) > 0.02) Bad += Fmt(" church %.0f", P.X) + Fmt(",%.0f (off its floor)", P.Y);
+				}
+				continue;
+			}
+			const bool bVillage = Bm.Name.rfind("House", 0) == 0;
+			if (Bm.Class != LandField::BaseMesh::Draw::House || (Bm.Name.rfind("Farmhouse", 0) != 0 && Bm.Name.rfind("Barn", 0) != 0 && !bByre && !bVillage)) continue;
+			if (bVillage)
+			{
+				Village += static_cast<int>(G.Instances(B).size());
+				VNearFew = std::min(VNearFew, Bm.Near.Tris());
+				VNearMost = std::max(VNearMost, Bm.Near.Tris());
+				VMidMost = std::max(VMidMost, Bm.Mid.Tris());
+				VFarMost = std::max(VFarMost, Bm.Far.Tris());
+				VNear += Bm.Near.Tris();
+				if (std::getenv("LAND_FIELD_HOUSES"))
+					std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(), Bm.MidFrom, Bm.FarFrom);
+			}
+			else ++Kinds;
+			Barns += Bm.Name.rfind("Barn", 0) == 0 ? static_cast<int>(G.Instances(B).size()) : 0;
+			Byres += bByre ? static_cast<int>(G.Instances(B).size()) : 0;
+			if (!bVillage)
+			{
+			Standing += G.Instances(B).size();
+			// (a burnt-out shell has no roof: its near level some 13 thousand; a byre, low, some 21 thousand whole)
+			if (Bm.Name.find("Shell") == std::string::npos && !bByre) NearFew = std::min(NearFew, Bm.Near.Tris());
+			else if (Bm.Near.Tris() < (bByre && Bm.Name.find("Shell") == std::string::npos ? 18000u : 8000u)) Bad += " " + Bm.Name + " (too few)";
+			NearMost = std::max(NearMost, Bm.Near.Tris());
+			MidMost = std::max(MidMost, Bm.Mid.Tris());
+			FarMost = std::max(FarMost, Bm.Far.Tris());
+			std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(),
+			            Bm.MidFrom, Bm.FarFrom);
+			}
+			if (Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight) Bad += " " + Bm.Name + " (its levels)";
+			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
+			{
+				bool bOk = M->Normals.size() == M->Positions.size() && M->Colours.size() * 3 == M->Positions.size();
+				for (size_t I = 0; bOk && I + 2 < M->Positions.size(); I += 3)
+				{
+					const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
+					const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
+					if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > 12.0f || std::fabs(Y) > 8.0f || Z < -6.0f || Z > 16.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+				}
+				for (const uint32_t Ix : M->Triangles)
+					if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
+				if (!bOk) Bad += " " + Bm.Name + " (a point)";
+			}
+			for (const LandField::Placed& P : G.Instances(B))
+			{
+				LandField::Drawn What = LandField::Drawn::Beyond;
+				const double Z = G.HeightAt(P.X, P.Y, &What);
+				if (What != LandField::Drawn::Floor || std::fabs(Z - P.Z) > 0.02) Bad += Fmt(" %.0f", P.X) + Fmt(",%.0f (off its floor)", P.Y);
+			}
+		}
+		std::printf("  farmhouses, barns and byres at the vehicles' detail: %zu standing (%d barns, %d byres) in %d kinds; near %zu to %zu triangles, middle at most %zu, far at most %zu; the church %d; the tiles' built %zu\n", Standing, Barns,
+		            Byres, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost, Churches, T.BuiltTris);
+		std::printf("  the village's houses at the vehicles' detail: %d standing; near %zu to %zu triangles (%zu in all), middle at most %zu, far at most %zu\n", Village, VNearFew == static_cast<size_t>(-1) ? 0 : VNearFew, VNearMost, VNear, VMidMost, VFarMost);
+		Check(Kinds > 0 && Standing > 0 && Barns > 0 && Byres > 0 && Bad.empty() && (NearFew == static_cast<size_t>(-1) || NearFew >= 15000) && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200 && Churches == (T.bChurch ? 1 : 0),
+		      "the trial \"houses\": each bocage farmhouse, barn, byre and the church at the vehicles' detail, on its floor, three levels within budget", Fmt("%.0f standing, ", static_cast<double>(Standing)) + Fmt("church %.0f, ", static_cast<double>(Churches)) + "bad:" + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+		Check(Village > 0 && (VNearFew == static_cast<size_t>(-1) || VNearFew >= 6000) && VNearMost <= 45000 && VMidMost <= 6000 && VFarMost <= 1200,
+		      "the trial \"houses\": the village's houses at the vehicles' detail, each its own, three levels within budget", Fmt("%.0f standing", static_cast<double>(Village)));
+	}
+	// The east's kit houses built to the vehicles' detail (the same trial: Brian 24 November, every theatre's houses): the
+	// farmland's log izbas, plank-roofed and thatched (LandHouse's Kind 7), four looks of each, each a kit slot drawn as a
+	// building with its three levels, each house planted on its floor (as the kit's model: a tenth of a metre down), within
+	// its footprint and its triangle budgets.
+	if (F.Tried("houses") && LookLaid == "farmland" && F.Lon >= 15.5)
+	{
+		size_t Standing = 0, NearFew = static_cast<size_t>(-1), NearMost = 0, MidMost = 0, FarMost = 0, Near = 0;
+		int Kinds = 0;
+		std::string Bad;
+		for (int K = 0; K < LandField::KitSlots; ++K)
+		{
+			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			const LandField::BaseMesh& Bm = G.BaseOf(B);
+			const bool bKhata = Bm.Name.rfind("Khata", 0) == 0;
+			if ((Bm.Name.rfind("Izba", 0) != 0 && !bKhata) || Bm.Class != LandField::BaseMesh::Draw::House) continue;
+			++Kinds;
+			// (an izba 7.5 by 7.2 m with its porch and woodpile; a khata 9.18 by 6.46 m, its snow lip some 0.2 m past the eaves)
+			const float HalfX = bKhata ? 4.85f : 4.6f, HalfY = bKhata ? 3.5f : 4.0f;
+			Standing += G.Instances(B).size();
+			Near += Bm.Near.Tris() * G.Instances(B).size();
+			NearFew = std::min(NearFew, Bm.Near.Tris());
+			NearMost = std::max(NearMost, Bm.Near.Tris());
+			MidMost = std::max(MidMost, Bm.Mid.Tris());
+			FarMost = std::max(FarMost, Bm.Far.Tris());
+			std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(), Bm.MidFrom, Bm.FarFrom);
+			// (LAND_FIELD_HOUSES=1: where each stands, and which way its front faces, degrees from east)
+			if (std::getenv("LAND_FIELD_HOUSES"))
+				for (const LandField::Placed& P : G.Instances(B)) std::printf("      at %.0f, %.0f, its front %.0f degrees\n", P.X, P.Y, std::fmod(P.Yaw * 180.0 / 3.14159265358979 + 90.0 + 720.0, 360.0));
+			if (Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight) Bad += " " + Bm.Name + " (its levels)";
+			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
+			{
+				bool bOk = M->Normals.size() == M->Positions.size() && M->Colours.size() * 3 == M->Positions.size();
+				for (size_t I = 0; bOk && I + 2 < M->Positions.size(); I += 3)
+				{
+					const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
+					const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
+					if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > HalfX || std::fabs(Y) > HalfY || Z < -6.0f || Z > 9.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+				}
+				for (const uint32_t Ix : M->Triangles)
+					if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
+				if (!bOk) Bad += " " + Bm.Name + " (a point)";
+			}
+		}
+		std::printf("  the east's izbas and khatas at the vehicles' detail: %zu standing in %d looks; near %zu to %zu triangles (%zu in all), middle at most %zu, far at most %zu\n", Standing, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, Near, MidMost, FarMost);
+		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 15000 && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
+		      "the trial \"houses\": the east's izbas and khatas at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+	}
+	// The east's burnt-out houses (the same trial): the kit's chimney a burnt-out izba or khata at the vehicles' detail
+	// (LandHouse's Kind 9) on its house's footprint, its ash bed's skirt run down into the ground; four looks of each; in
+	// sight with the chimney's own shape; within its footprint (its ashes 0.55 m past it) and its triangle budgets.
+	if (F.Tried("houses") && LookLaid == "farmland" && F.Lon >= 15.5)
+	{
+		size_t Standing = 0, NearMost = 0, MidMost = 0, FarMost = 0, NearFew = static_cast<size_t>(-1);
+		int Kinds = 0;
+		std::string Bad;
+		for (int K = 0; K < LandField::KitSlots; ++K)
+		{
+			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			const LandField::BaseMesh& Bm = G.BaseOf(B);
+			if (Bm.Name.rfind("Burnt", 0) != 0 || Bm.Class != LandField::BaseMesh::Draw::House) continue;
+			++Kinds;
+			const bool bClay = Bm.Name.rfind("BurntClay", 0) == 0;
+			const float HalfX = (bClay ? 4.59f : 3.75f) + 0.6f, HalfY = (bClay ? 3.23f : 3.6f) + 0.6f;
+			Standing += G.Instances(B).size();
+			NearFew = std::min(NearFew, Bm.Near.Tris());
+			NearMost = std::max(NearMost, Bm.Near.Tris());
+			MidMost = std::max(MidMost, Bm.Mid.Tris());
+			FarMost = std::max(FarMost, Bm.Far.Tris());
+			std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m; in sight %s, %.2f m across\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(), Bm.MidFrom, Bm.FarFrom, Bm.bSight ? "yes" : "no", Bm.SightAcross * Bm.Radius);
+			if (std::getenv("LAND_FIELD_HOUSES"))
+				for (const LandField::Placed& P : G.Instances(B)) std::printf("      at %.0f, %.0f, %.1f m up, turned %.0f degrees\n", P.X, P.Y, P.Z, std::fmod(P.Yaw * 180.0 / 3.14159265358979 + 720.0, 360.0));
+			if (Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || !Bm.bSight || Bm.SightAcross * Bm.Radius > 9.0f) Bad += " " + Bm.Name + " (its levels or its sight)";
+			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
+			{
+				bool bOk = M->Normals.size() == M->Positions.size() && M->Colours.size() * 3 == M->Positions.size();
+				for (size_t I = 0; bOk && I + 2 < M->Positions.size(); I += 3)
+				{
+					const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
+					const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
+					if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > HalfX || std::fabs(Y) > HalfY || Z < -5.5f || Z > 6.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+				}
+				for (const uint32_t Ix : M->Triangles)
+					if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
+				if (!bOk) Bad += " " + Bm.Name + " (a point)";
+			}
+		}
+		std::printf("  the east's burnt-out houses at the vehicles' detail: %zu standing in %d looks; near %zu to %zu triangles, middle at most %zu, far at most %zu\n", Standing, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost);
+		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 8000 && NearMost <= 30000 && MidMost <= 3000 && FarMost <= 200,
+		      "the trial \"houses\": the east's burnt-out houses at the vehicles' detail, three levels within budget, in sight as the chimney", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
 	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
 	// point's normal turned out, its underside darker than its top.

@@ -207,6 +207,31 @@ namespace LandMen
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
+		/** deaths_gore[stance][kind] = clip names: a gore twin's falls (soldier_<ARMY>_gore.json: the same bones, its skin
+		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
+		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
+		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
+		/** A gore twin's cuts (its gore.cuts, in order: bit k of a joined point's mask), each by its bone, and its
+		 * caps' points per level ([first, count], the stump's and the limb's). Empty but in a twin. A cut is off where
+		 * its bone has left the joint its parent holds (more than a centimetre). */
+		struct Cut
+		{
+			std::string Bone;
+			int BoneIx = -1;
+			int Stump[LodCount][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } }, Limb[LodCount][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } };
+		};
+		std::vector<Cut> Cuts;
+		/** A gore twin's joined skin (its gore.joined, per level): the points its hard weights at the cuts would crack
+		 * open at a bent joint, with the man's own weights, skinned so while none of the cuts in its mask is off
+		 * (the art director, 18:34Z: the caps hidden in him till his limb goes). */
+		struct Joined
+		{
+			std::vector<uint32_t> Point;
+			std::vector<uint8_t> Part, Part2;
+			std::vector<float> W2;
+			std::vector<uint16_t> Mask;
+		};
+		Joined Joins[LodCount];
 		/** Per clip, the clip and its styles (its own first, then each clip whose StyleOf names it, in the file's order):
 		 * run, run_b, run_c, run_d. Empty for a clip with no styles. */
 		std::vector<std::vector<int>> Styles;
@@ -248,6 +273,25 @@ namespace LandMen
 		Vec3 Normal { 0.f, 0.f, 1.f };
 	};
 	using GroundFn = std::function<Ground(double X, double Y)>;
+
+	/**
+	 * A seat in a vehicle's bed: a lorried man aboard (the rules' pose "mounted") was drawn kneeling on the ground where
+	 * the rules seat him, so under his lorry (Brian, 23 November 14:10Z: "troops are stuck under the truck"). The scene
+	 * says where his bench is: its top (field metres, its height the field's), the bed's floor beside it, and the way he
+	 * faces on it (radians clockwise from north, as a man's heading). Inboard: the bench faces the bed's middle; a man
+	 * past the benches kneels in the bed's middle at its front, facing aft.
+	 */
+	struct SeatPlace
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		double Floor = 0.0;
+		float Facing = 0.f;
+		bool bBench = true;   // false: no bench left for him (the bed's middle)
+	};
+	/** The seat for a man aboard: his place (the rules', on his vehicle's bed), his block, and the rules' vehicle (her k in
+	 * that block) and seat in her bed (two abreast, the odd ones on her right, front to back), each -1 where the rules
+	 * did not say; false where no vehicle carries him. Asked from several threads at once, as GroundFn is. */
+	using SeatFn = std::function<bool(double X, double Y, int Block, int SeatOn, int Seat, SeatPlace& Out)>;
 
 	/**
 	 * Where a man stands: his root on the field (x, y), his heading, and how far his body lies along the ground's slope
@@ -351,6 +395,28 @@ namespace LandMen
 
 		/** The soldier file drawn for an army's men (by the file's army: "GER", "POL" for the Americans until theirs). */
 		void AddSoldier(const std::string& FileArmy, std::shared_ptr<const Soldier> S);
+		/**
+		 * Effects (R2): the gore twin (soldier_<ARMY>_gore.json) of the file added under that name, after it (AddSoldier).
+		 * The crowd keeps the twin's mesh, faces, helmets and gore falls with the file's own clips and sockets, so a man
+		 * swapped to it mid-battle keeps every clip he had. False, and why: no such file, its bones not the file's, or no
+		 * gore falls in it (deaths_gore).
+		 */
+		bool AddGore(const std::string& FileArmy, const Soldier& Twin, std::string& OutWhy);
+		/**
+		 * Shell and tank hits throw men and take limbs off (release 2, behind -TheaterLandGore; Brian, 22 November: "make
+		 * more graphic animations if a guy gets shot or blown up", "with limbs coming off"). On: a man killed by a shell,
+		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
+		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (a field gun's 0.55 at
+		 * the burst, a tank's 0.5, a mortar's 0.45, a grenade's 0.3) and fall away to none at its reach (12, 10, 8 and 4
+		 * m); a man lying or in cover half that. The same battle gores the same men every time (his own dice). Who dies
+		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
+		 */
+		void SetGore(bool bOn);
+		/** Men who fell as their file's gore twin so far in this play. */
+		int Gored() const;
+		/** Changes when his mesh becomes another (a gore fall, or back at a replay from the start): his triangles and
+		 * colours are made again (LookOf), so a drawn man's must be too. */
+		uint32_t MeshNo(int Man) const;
 		/** Content/Data/LandBattles/armies.json: each army's colours and its helmet rule. */
 		bool ReadArmies(const std::string& Text, std::string& OutError);
 
@@ -412,6 +478,12 @@ namespace LandMen
 			int FromClip = -1;
 			float FromTime = 0.f;
 			float W = 1.f;
+			/** Effects (R2): his gun never drawn, whatever his clip holds (a tank's crew bailing out in the tankers'
+			 * infantry clips, which carry a rifle; the art director, 23 November). False: as before. */
+			bool bUnarmed = false;
+			/** Effects (R2): his root (bone 0) Clip's alone while FromClip blends out: the soldiers' bail clips move
+			 * it, and his seat moves on with them where each ends (a crewman bailing out). False: as before. */
+			bool bOwnRoot = false;
 		};
 		void SetRide(int Man, const Ride& R);
 		bool IsRider(int Man) const;
@@ -433,6 +505,13 @@ namespace LandMen
 		 * man than the usual one does (tan of half the usual 50 deg over tan of half this lens's, both vertical): the
 		 * levels go by his distance over Zoom, so a long lens's men 120 m off are drawn at the middle level. */
 		void SetEye(double X, double Y, double Z, double Zoom = 1.0);
+		/** Where the men aboard vehicles sit (SeatFn): set once; without it a man aboard kneels where the rules have him. A
+		 * file with a seated clip (car_ride_back, release 2's riders) sits him on the bench; one without kneels him on the
+		 * bed's floor beside it. */
+		void SetSeats(SeatFn Fn);
+		/** Whether a man is aboard a vehicle now (the stance he shows), and the rules' word for it: his block, her k in it
+		 * and his seat in her bed (each -1 where the rules did not say). */
+		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const;
 		/** Plays every man to the battle's time. Forward only: going back starts over from the beginning, silently. */
 		void Update(double BattleTime);
 		/**
@@ -506,7 +585,7 @@ namespace LandMen
 		float SeenDistance(int Man) const;
 		/** Points a skin of him writes at that level (the body, then his helmet's finish). */
 		int PointsOf(int Man, Lod L) const;
-		/** His triangles and colours at that level (the same all battle: read once). */
+		/** His triangles and colours at that level (the same all battle, read once, unless his MeshNo changes). */
 		const Look& LookOf(int Man, Lod L);
 		/**
 		 * Skins him at that level: PointsOf * 3 floats each into OutAt and OutFacing (Facing may be null). Different men

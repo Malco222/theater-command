@@ -1,0 +1,182 @@
+{
+ "soldier_CHN.json": {
+  "seed": 13,
+  "nation": "JAP",
+  "fit_mm": 0.38
+ },
+ "soldier_FRA.json": {
+  "seed": 7,
+  "nation": "_default",
+  "fit_mm": 0.39
+ },
+ "soldier_GER.json": {
+  "seed": 3,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_GER_gore.json": {
+  "seed": 3,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_GER_panzer.json": {
+  "seed": 41,
+  "nation": "_default",
+  "fit_mm": 0.39
+ },
+ "soldier_GER_sailor.json": {
+  "seed": 191,
+  "nation": "_default",
+  "fit_mm": 0.38
+ },
+ "soldier_ITA.json": {
+  "seed": 23,
+  "nation": "_default",
+  "fit_mm": 0.35
+ },
+ "soldier_ITA_desert.json": {
+  "seed": 23,
+  "nation": "_default",
+  "fit_mm": 0.35
+ },
+ "soldier_ITA_sailor.json": {
+  "seed": 167,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_JAP.json": {
+  "seed": 11,
+  "nation": "JAP",
+  "fit_mm": 0.38
+ },
+ "soldier_JAP_sailor.json": {
+  "seed": 57,
+  "nation": "JAP",
+  "fit_mm": 0.34
+ },
+ "soldier_POL.json": {
+  "seed": 7,
+  "nation": "_default",
+  "fit_mm": 0.37
+ },
+ "soldier_SOV.json": {
+  "seed": 19,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_SOV_sailor.json": {
+  "seed": 211,
+  "nation": "_default",
+  "fit_mm": 0.38
+ },
+ "soldier_SOV_snow.json": {
+  "seed": 19,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_SOV_winter.json": {
+  "seed": 19,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_UK.json": {
+  "seed": 7,
+  "nation": "_default",
+  "fit_mm": 0.37
+ },
+ "soldier_UK_sailor.json": {
+  "seed": 149,
+  "nation": "_default",
+  "fit_mm": 0.38
+ },
+ "soldier_USA.json": {
+  "seed": 85,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_USA_bar.json": {
+  "seed": 85,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_USA_bar_gore.json": {
+  "seed": 85,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_USA_bazooka.json": {
+  "seed": 118,
+  "nation": "_default",
+  "fit_mm": 0.35
+ },
+ "soldier_USA_bazooka_gore.json": {
+  "seed": 118,
+  "nation": "_default",
+  "fit_mm": 0.35
+ },
+ "soldier_USA_gore.json": {
+  "seed": 85,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_USA_loader.json": {
+  "seed": 146,
+  "nation": "_default",
+  "fit_mm": 0.34
+ },
+ "soldier_USA_loader_gore.json": {
+  "seed": 146,
+  "nation": "_default",
+  "fit_mm": 0.34
+ },
+ "soldier_USA_medic.json": {
+  "seed": 140,
+  "nation": "_default",
+  "fit_mm": 0.34
+ },
+ "soldier_USA_medic_gore.json": {
+  "seed": 140,
+  "nation": "_default",
+  "fit_mm": 0.34
+ },
+ "soldier_USA_nco.json": {
+  "seed": 192,
+  "nation": "_default",
+  "fit_mm": 0.37
+ },
+ "soldier_USA_nco_gore.json": {
+  "seed": 192,
+  "nation": "_default",
+  "fit_mm": 0.37
+ },
+ "soldier_USA_para.json": {
+  "seed": 171,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_USA_para_gore.json": {
+  "seed": 171,
+  "nation": "_default",
+  "fit_mm": 0.36
+ },
+ "soldier_USA_radio.json": {
+  "seed": 163,
+  "nation": "_default",
+  "fit_mm": 0.37
+ },
+ "soldier_USA_radio_gore.json": {
+  "seed": 163,
+  "nation": "_default",
+  "fit_mm": 0.37
+ },
+ "soldier_USA_sailor.json": {
+  "seed": 233,
+  "nation": "_default",
+  "fit_mm": 0.35
+ },
+ "soldier_USA_tanker.json": {
+  "seed": 214,
+  "nation": "_default",
+  "fit_mm": 0.35
+ }
+}

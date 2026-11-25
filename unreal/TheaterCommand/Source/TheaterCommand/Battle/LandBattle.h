@@ -24,6 +24,7 @@ class UInstancedStaticMeshComponent;
 class UMeshComponent;
 class UPointLightComponent;
 class UProceduralMeshComponent;
+class USceneCaptureComponent2D;
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -31,6 +32,7 @@ class USoundBase;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UTexture2D;
+class UTextureRenderTarget2D;
 struct FLandBattleState;
 namespace LandCarpet
 {
@@ -118,6 +120,12 @@ public:
 	 * presses CONTINUE on the after card, with LiveResult's answer (empty where there is none), after the table is back.
 	 */
 	TFunction<void(const FString&)> HandBack;
+	/**
+	 * (release 2, camera specials) The names corps have earned (nicknames.ts), by the campaign's corps id, where the map
+	 * shows them on the flags: given by the campaign before the battle opens. With -TheaterLandNickCard the film cards a
+	 * corps' name on its first kill it can show (LandEye World::Nickname, by the block's corps). Empty: no card.
+	 */
+	TMap<int32, FString> CorpsNicknames;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time
@@ -155,6 +163,16 @@ public:
 	bool IsShotHeld() const { return bShotHeld; }
 	/** The flag pictures for the bar's two ends: the attack's (his) and the defence's. */
 	UTexture2D* FlagOf(int32 Side) const;
+	/** The film in a corner (release 2, "-TheaterLandCorner"): the film director's shot drawn small this frame, for
+	 * the general's screen to show in its window; null where it is off or the film has the whole screen. */
+	UTextureRenderTarget2D* CornerPicture() const
+	{
+		if (!bCornerShown)
+		{
+			return nullptr;
+		}
+		return CornerFilm;
+	}
 
 private:
 	TSharedPtr<FLandBattleState> State;
@@ -357,6 +375,9 @@ private:
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> CraterMeshes;
+	/** Effects (R2): the fighters on call, one mesh a plane by its key (FlyOver). */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UProceduralMeshComponent>> AirSupportMeshes;
 	/** The track marks (LandCrater::Ruts), the same way: one mesh a 64 m patch, a section for each 48 pieces, sent again
 	 * a quarter second after a piece is laid in it. */
 	UPROPERTY()
@@ -403,6 +424,8 @@ private:
 		 * last put at (his WorldFrame's R and T), so a man standing still is not put again. */
 		int32 BankCopy = -1, BankSlot = -1;
 		float BankFrame[12] = {};
+		/** Effects (R2): his crowd mesh's number when his triangles were made (LandMen::Crowd::MeshNo: a gore fall swaps it). */
+		uint32 MeshNo = 0;
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
@@ -707,6 +730,12 @@ private:
 	};
 	TArray<FShot> Shots;
 	int32 ShotsTaken = 0;
+	/** The camera specials in a picture run (release 2): the special on the screen now (LandEye::Special as a number, -1
+	 * none), since when (real seconds), whether its still is taken, and how many were. */
+	int32 SpStillKind = -1;
+	double SpStillFrom = 0.0;
+	bool bSpStillTaken = false;
+	int32 SpStills = 0;
 	double QuitAt = -1.0, CardShotAt = -1.0;
 	bool bCardShot = false;
 
@@ -786,6 +815,33 @@ private:
 	/** Pressed through his pointer (the place on the screen), else given directly (off the screen). */
 	bool bScriptByHand = false;
 	int32 ScriptStills = 0;
+	/** "-TheaterLandTopViewAt=<battle seconds>" (the Mac's check of his top view, 24 November): when it is pressed (-1
+	 * none; -2 not yet read) and how far the check has gone. */
+	double TopCheckAt = -2.0;
+	int32 TopCheckStep = 0;
+	/** The Mac's check of his kept views, the spotter's mark and the film in a corner (release 2,
+	 * "-TheaterLandViewsAt=<battle seconds>": -1 none; -2 not yet read) and how far it has gone. */
+	double ViewsCheckAt = -2.0;
+	int32 ViewsCheckStep = 0;
+	/**
+	 * The film in a corner (release 2; Brian, 24 November 20:38Z): while he commands from his own view, the film
+	 * director's shot in a small window. A second picture of the field, drawn small through the film's lens every few
+	 * frames. Off without "-TheaterLandCorner" until the Mac holds 45 fps with it and the art director has passed it;
+	 * "-TheaterLandCornerWide=<pixels>" (480), "-TheaterLandCornerEvery=<frames>" (2: every other frame) and
+	 * "-TheaterLandCornerNoShadows" are the Mac's trials. CornerOn: 1 on, 0 off, -1 not yet read.
+	 */
+	UPROPERTY()
+	TObjectPtr<USceneCaptureComponent2D> CornerLens;
+	UPROPERTY()
+	TObjectPtr<UTextureRenderTarget2D> CornerFilm;
+	int32 CornerOn = -1, CornerWide = 480, CornerEvery = 2, CornerFrame = 0, CornerTaken = 0;
+	bool bCornerShown = false;
+	double CornerMs = 0.0;
+	/** Each frame after the lens is aimed: the film's shot taken for the window, where it is shown. */
+	void FilmCorner();
+	/** The spotter's mark (release 2, "-TheaterLandSpotter", off without it): 1 on, 0 off, -1 not yet read. On only
+	 * where the battle hides anyone (the Forest ambushes rule). */
+	int32 SpotterOn = -1;
 	/** His units the walk has used, and where it set those it carried into the woods. */
 	TArray<int32> ScriptUsed;
 	TArray<FVector2D> ScriptTaken;
@@ -821,11 +877,18 @@ private:
 	void MakeRiders();
 	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
 	void RideTanks();
+	/** Effects (R2): the crews of knocked-out tanks getting out, -TheaterLandBailOut (LandBail). */
+	void BailOut();
+	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; Battle/LandBattleAir.cpp):
+	 * each plane drawn where the plan has it, its guns, the ground's guns firing up at it, and the one lost going down. */
+	void FlyOver();
 	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
 	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
 	void SeatLight(int32 FromVehicle);
 	/** Each of them seated and posed for this frame (with RideTanks). */
 	void RideLight();
+	/** The lorries' and half-tracks' benches as they stand now, for the men aboard (FLandBattleState::Carriers). */
+	void SeatCarriers();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */

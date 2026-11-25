@@ -615,6 +615,22 @@ namespace LandParts
 		return Made;
 	}
 
+	/**
+	 * Which of a battle model's triangle corners goes to the engine at place I (LandKit's meshes: the tanks, guns, lorries,
+	 * cars and props): each triangle's last two swapped. The model files wind a triangle's corners counter-clockwise seen
+	 * from its front in their own axes; the engine draws the side it sees them clockwise from (the campaign's own reader
+	 * turns them so, FMiniatureMesh::Face), and the files' axes go to the engine's with no mirror on the way. Handed over
+	 * as they stood, every vehicle was drawn inside out: from outside the inner side of her far walls, and whatever stood
+	 * inside her, her commander's legs and his hatch's floor, drawn over the walls in front of him (Brian, 23 November
+	 * 14:45Z to 15:05Z: "some of the tanks you can see through the back of them", "every tank appears to be see
+	 * through", his Tiger's commander seen whole through her turret). The men and the field are wound for the engine
+	 * already (their mirror on the way, LandMen::WorldOf and World's swap) and are not turned.
+	 */
+	static constexpr int32 KitFront(int32 I)
+	{
+		return I % 3 == 1 ? I + 1 : I % 3 == 2 ? I - 1 : I;
+	}
+
 	/** A far man of the soldier pose bank (SO1: one baked set in one pose, LandMen::Crowd::BankMesh and BankLook) as a
 	 * mesh of its own on the men's ink, for instancing: his own axes (x forward, y to his right, z up: the same hand as
 	 * Unreal's) as the mesh's, metres to Unreal's units; colours as sRGB bytes (see ThingMesh). Null where the points
@@ -685,7 +701,8 @@ namespace LandParts
 
 	/** A battle model's bodies at rest (a prop: the field telephone, the cable reel, the stretcher; LandKit's shape) as
 	 * one mesh on Ink for instancing: its own axes (x forward, y right, z up, Unreal's hand), each body's points from its
-	 * pivot; Far its plain level, else its fine one. Null where the model has no points. */
+	 * pivot, its triangles turned for the engine (KitFront); Far its plain level, else its fine one. Null where the model
+	 * has no points. */
 	static UStaticMesh* PropMesh(UObject* Owner, const FName& Name, const LandKit::Model& Prop, bool bFar, UMaterialInterface* Ink, double U)
 	{
 		std::vector<float> At, Facing;
@@ -707,9 +724,10 @@ namespace LandParts
 				Facing.insert(Facing.end(), { M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2] });
 				Paint.Rgb.insert(Paint.Rgb.end(), { M.Colours[K * 4], M.Colours[K * 4 + 1], M.Colours[K * 4 + 2] });
 			}
-			for (const uint32_t T : M.Triangles)
+			// (each triangle's last two corners swapped, as FromBody's: KitFront)
+			for (size_t K = 0; K < M.Triangles.size(); ++K)
 			{
-				Paint.Triangles.push_back(First + T);
+				Paint.Triangles.push_back(First + M.Triangles[static_cast<size_t>(KitFront(static_cast<int32>(K)))]);
 			}
 			Paint.Points += static_cast<int>(Count);
 		}
@@ -751,7 +769,8 @@ namespace LandParts
 	static constexpr double StalkClear = 3.5, StalkEyeLow = 2.5, StalkEyeHigh = 3.0;
 
 	/** A body of a battle model (model axes, metres from its pivot: x forward, y right, z up, as Unreal's own) as the
-	 * engine takes it, its colours taken toward the burnt colour by Soot. */
+	 * engine takes it, its colours taken toward the burnt colour by Soot. Each triangle's last two corners are swapped
+	 * (KitFront). */
 	static void FromBody(const LandKit::Mesh& M, const uint8_t* Burnt, double Soot, double U, TArray<FVector>& P, TArray<FVector>& N, TArray<FColor>& C, TArray<int32>* T)
 	{
 		const int32 Count = static_cast<int32>(M.Count());
@@ -772,7 +791,7 @@ namespace LandParts
 			T->SetNumUninitialized(static_cast<int32>(M.Triangles.size()));
 			for (int32 I = 0; I < T->Num(); ++I)
 			{
-				(*T)[I] = static_cast<int32>(M.Triangles[static_cast<size_t>(I)]);
+				(*T)[I] = static_cast<int32>(M.Triangles[static_cast<size_t>(KitFront(I))]);
 			}
 		}
 	}
@@ -1439,6 +1458,13 @@ bool ALandBattle::Open()
 				UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *LandParts::Wide(Lay.Trial));
 			}
 		}
+		// (release 1.5's mend: a river's water drawn 2 m under its banks, not cut down to sea level through hills;
+		// "-TheaterLandOldRiverBed" draws it as before)
+		Lay.bOldRiverBed = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandOldRiverBed"));
+		if (Lay.bOldRiverBed)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandOldRiverBed: the rivers drawn at the rules' sea level, as before 1.5's mend"));
+		}
 		if (Lay.Steppe.bOn)
 		{
 			// The steppe's cottages, ruins, poles, wattle, sweeps, ricks and birches: the east kit's models
@@ -1607,6 +1633,79 @@ bool ALandBattle::Open()
 			OutNormal = LandPlay::Vec(Normal.X, Normal.Y, Normal.Z);
 			return true;
 		};
+		// Effects (R2): each gun's own flash (-TheaterLandGunFlash; Brian, 23 November: "how does the gun fire look when
+		// they shoot? can we make the mussel flash realistic?"). The kit's looks are muzzle.look.<look> in
+		// battle-fx-guns.json, laid over the recipe in Open: star, the MG 42's spikes; cone, a flash hider's narrow cone
+		// (the Bren, the DP, the BAR, the Japanese Type 99); open, a heavy machine gun's long tongue (the M1919, the Maxim,
+		// the Vickers); tank, a machine gun in a tank's mantlet; smg, a squad leader's sub-machine gun, a burst of pistol
+		// rounds with no tracer; rifle, a full-power rifle's flash and the haze it leaves; brake, a gun with a muzzle
+		// brake, its side jets and the dust they throw aside. Off: none, every flash by its row as before.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGunFlash")))
+		{
+			PlayWorld.GunLook = [Weak](int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond) -> std::string
+			{
+				const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+				if (!Pinned.IsValid() || Track < 0)
+				{
+					return std::string();
+				}
+				FLandBattleState& St = *Pinned;
+				const size_t K = static_cast<size_t>(Track);
+				const bool bVehicle = K < St.VehicleOf.size() && St.VehicleOf[K] >= 0 && St.Armour;
+				if (Weapon == "tank" || Weapon == "at" || Weapon == "gun")
+				{
+					// (a muzzle brake by her model: the Tiger's and the Panther's, the long Panzer IV's and the StuG's, the
+					// ZiS-3's and the SU-76's, the 25-pounder's on the Sexton)
+					if (!bVehicle)
+					{
+						return std::string();
+					}
+					const std::string& Name = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])].Look().Name;
+					for (const char* Braked : { "Tiger", "Panther", "Panzer IV", "StuG", "ZiS-3", "SU-76", "Sexton", "Firefly" })
+					{
+						if (Name.find(Braked) != std::string::npos)
+						{
+							return std::string("brake");
+						}
+					}
+					return std::string();
+				}
+				if (Weapon == "mg")
+				{
+					if (Role == "tank" || bVehicle)
+					{
+						return std::string("tank");
+					}
+					if (Role == "hmg")
+					{
+						return Army == "GER" ? std::string("star") : std::string("open");
+					}
+					// (the squad's gun: the MG 42's star; a flash hider's cone on the Bren, the DP, the BAR, the Type 96 and
+					// 99; the Italian Breda and the French FM 24/29 an open flame)
+					if (Army == "GER") return std::string("star");
+					if (Army == "ITA" || Army == "FRA") return std::string("open");
+					return std::string("cone");
+				}
+				if (Weapon == "rifle")
+				{
+					// (a squad leader drawn with a sub-machine gun, his file's _smg or _nco: a burst of pistol rounds,
+					// as his clip's cue sounds it; the MP 40 and the Sten about 9 a second, the Thompson 11, the PPSh 15)
+					if (K < St.ManOf.size() && St.ManOf[K] >= 0 && St.Men)
+					{
+						const std::string& File = St.Men->Info(St.ManOf[K]).FileArmy;
+						const auto Ends = [&File](const std::string& Tail) { return File.size() >= Tail.size() && File.compare(File.size() - Tail.size(), Tail.size(), Tail) == 0; };
+						if (Ends("_smg") || Ends("_nco"))
+						{
+							OutRounds = Army == "SOV" ? 5 : 4;
+							OutPerSecond = Army == "SOV" ? 15.0 : Army == "USA" ? 11.0 : 9.0;
+							return std::string("smg");
+						}
+					}
+					return std::string("rifle");
+				}
+				return std::string();
+			};
+		}
 	}
 	{
 		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
@@ -1763,6 +1862,43 @@ bool ALandBattle::Open()
 			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
 			return Pinned.IsValid() && Pinned->General.Hides(Block);
 		};
+		// (Effects (R2): the crews' bail-out, -TheaterLandBailOut: whether a vehicle's crew may get out at her end, a tank
+		// or an armoured car with a fates row, as BailOut makes her crew. The camera asks it before her kill, so the film's
+		// first bail-out is watched for (LandEye Settings::BailNear) and held when BailOut tells it her crew is out. Off:
+		// never, and the film is as it was)
+		EyeWorld.Bails = [Weak](int Track)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || !Pinned->Bails.bOn || !Pinned->Armour)
+			{
+				return false;
+			}
+			const FLandBattleState& P = *Pinned;
+			const std::vector<LandKit::Vehicle>& All = P.Armour->Vehicles();
+			for (size_t V = 0; V < P.TrackOfVehicle.size() && V < All.size(); ++V)
+			{
+				if (P.TrackOfVehicle[V] != Track)
+				{
+					continue;
+				}
+				const LandKit::Vehicle& Veh = All[V];
+				const LandKit::Model& Look = Veh.Look();
+				const bool bHatches = Look.Kind == "tank" || (Look.Kind == "car" && (Look.Name.find("rmoured") != std::string::npos || Look.Name.find("rmored") != std::string::npos));
+				if (!bHatches)
+				{
+					return false;
+				}
+				for (const Fates::Way& Each : P.FatesTable.Ways())
+				{
+					if (Each.Key == Veh.FateKey)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+			return false;
+		};
 		LandEye::Settings Set;
 		Set.Own = 0;
 		Set.Seed = Rec.Seed ? Rec.Seed : 1;
@@ -1786,6 +1922,48 @@ bool ALandBattle::Open()
 		{
 			Set.MassFrom = 0.0;
 		}
+		// (Camera specials, release 2, Brian's yes of 23 November 19:52Z: each its own switch, OFF until the art director
+		// passes its stills and the Mac holds 45 fps. Off, the film is the same frame for frame.
+		// -TheaterLandWhistle: the attack opens on its officer blowing his whistle as the first men step off, then the
+		// opening aerial. -TheaterLandLastStand: once a battle, a cut-off section down to a handful, still firing, held
+		// 4 to 9 s from where two of them are seen. -TheaterLandNickCard: a corps' earned name carded on the first kill of
+		// its men the film can go to, about 3 s, once a name; "-TheaterLandNickCard=The Iron Ravens" gives that name to
+		// the attacker's foot and tanks on a set piece, for the stills and the Mac's A/B.)
+		Set.bWhistle = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandWhistle"));
+		Set.bLastStand = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandLastStand"));
+		S.bWhistleOn = Set.bWhistle;
+		S.bWhistleBlown = false;
+		S.NickOfBlock.Reset();
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNickCard")) || FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandNickCard=")) != nullptr)
+		{
+			FString TestName;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandNickCard="), TestName);
+			for (const LandFeed::Block& B : Rec.Blocks)
+			{
+				if (B.Kind != "inf" && B.Kind != "arm")
+				{
+					continue;
+				}
+				if (const FString* Earned = CorpsNicknames.Find(B.Corps))
+				{
+					S.NickOfBlock.Add(B.Id, *Earned);
+				}
+				else if (!TestName.IsEmpty() && B.Side == 0)
+				{
+					S.NickOfBlock.Add(B.Id, TestName);
+				}
+			}
+			if (S.NickOfBlock.Num() > 0)
+			{
+				EyeWorld.Nickname = [Weak](int Block)
+				{
+					const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+					const FString* Name = Pinned.IsValid() ? Pinned->NickOfBlock.Find(Block) : nullptr;
+					return Name ? std::string(TCHAR_TO_UTF8(**Name)) : std::string();
+				};
+			}
+			UE_LOG(LogTheater, Log, TEXT("Land battle: the film cards earned names (-TheaterLandNickCard): %d blocks carry one"), S.NickOfBlock.Num());
+		}
 		// (the dark rule's reading of the drawn frame, when the game has its viewport to read)
 		StartDarkRead();
 		if (DarkGrab.IsValid())
@@ -1805,6 +1983,22 @@ bool ALandBattle::Open()
 
 	// The effects kit: shells, guns, tracer, fires, the camera's jolt; the ground under a point is the ground drawn.
 	Effects = MakeUnique<FBattleEffects>();
+	// Effects (R2): the film fire (-TheaterLandFilmFire, LandBurn; Brian, 23 November: "the tank on fire doesnt look
+	// realistic"): each wreck's own story, and its look (battle-fx-film.json) laid over the recipe for this battle.
+	S.Burns = LandBurn::Director();
+	S.Burns.bAsked = true;
+	S.Burns.bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandFilmFire"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: wrecks' fire %s"), S.Burns.bOn ? TEXT("as a film shows it (-TheaterLandFilmFire, release 2)") : TEXT("as before"));
+	if (S.Burns.bOn)
+	{
+		Effects->LayOver(TEXT("battle-fx-film.json"));
+	}
+	// Effects (R2): each gun's own flash (-TheaterLandGunFlash, PlayWorld.GunLook above): its looks laid over the recipe
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGunFlash")))
+	{
+		Effects->LayOver(TEXT("battle-fx-guns.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: each gun's own flash (-TheaterLandGunFlash, release 2)"));
+	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
 			return FVector(Point.X, Point.Y, FieldPtr->HeightAt(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre) * UnitsPerMetre);
@@ -1847,6 +2041,11 @@ bool ALandBattle::Open()
 	S.Holes.Drawn = [FieldPtr](double X, double Y) { return FieldPtr->DrawnZ(X, Y); };
 	// (-TheaterLandCraterOldEdge: the crater's edge as before the art director's 23 November seam, for the A/B)
 	S.Holes.bOldEdge = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCraterOldEdge"));
+	// Effects (R2): crater variety (-TheaterLandCraterVariety; Brian, 23 November: "make the explosion craters different
+	// varations so its not always the same"): each hole its own size, fuze, slant along the way its round came, soot
+	// star and subsoil (LandCrater::Field::bVariety). Off: every hole as before.
+	S.Holes.bVariety = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCraterVariety"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: shell holes %s"), S.Holes.bVariety ? TEXT("each their own (-TheaterLandCraterVariety, release 2)") : TEXT("as before"));
 	// (Brian, 22 November: "explosions should create craters": a mortar bomb's or a shell's hole dug into open ground,
 	// the ground drawn cut away over its bowl; "-TheaterLandShallowHoles" lays them all over the ground as before)
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShallowHoles")))
@@ -2613,12 +2812,13 @@ void ALandBattle::LayThings()
 			{
 				Plain = FMath::Min(Plain, static_cast<double>(RungShrubPlain));
 			}
-			else if (bHouse && Step >= 0)
+			else if (bHouse)
 			{
 				Plain = FMath::Min(Plain, 300.0);
 			}
-			// (a region's kit: its file's middle level from MidFrom, where it has one and the plain level is well beyond)
-			if (Step >= 0 && !Shape.Mid.Empty() && !Shape.Far.Empty() && Shape.MidFrom * 1.2 < Plain)
+			// (a region's kit: its file's middle level from MidFrom, where it has one and the plain level is well beyond;
+			// and the bocage's farmhouses built to the vehicles' detail, the trial "houses": LandHouse's middle level)
+			if ((Step >= 0 || bHouse) && !Shape.Mid.Empty() && !Shape.Far.Empty() && Shape.MidFrom * 1.2 < Plain)
 			{
 				Further.Add({ &Shape.Mid, static_cast<double>(Shape.MidFrom), true });
 			}
@@ -3197,11 +3397,33 @@ void ALandBattle::MakeMen()
 			Armies.Add(Army + Suffix);
 		}
 	}
+	// Soldiers at the vehicles' detail (release 2, -TheaterLandDetailMen; Brian, 23 November: "the soldiers at the same
+	// level of artistic detail as the vehicles, tanks, and planes"): where the soldiers thread has made an army's
+	// detailed man (Models/Soldiers/Detail/soldier_<ARMY>.json, the German rifleman first), he is drawn in its place,
+	// and his gore twin is read from the same folder (a twin is fitted to its own man's body). Off: the Detail folder
+	// is not read. A detailed file that does not load falls back to the usual one.
+	const bool bDetailMen = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandDetailMen"));
+	TSet<FString> DetailArmies;
 	int32 Files = 0;
 	for (const FString& Army : Armies)
 	{
+		const FString Name = TEXT("soldier_") + Army + TEXT(".json");
 		FString Text;
-		if (!FFileHelper::LoadFileToString(Text, *(Folder / (TEXT("soldier_") + Army + TEXT(".json")))))
+		if (bDetailMen && FFileHelper::LoadFileToString(Text, *(Folder / TEXT("Detail") / Name)))
+		{
+			auto Detail = std::make_shared<LandMen::Soldier>();
+			std::string Why;
+			if (Detail->Load(LandParts::Narrow(Text), Why))
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle: %s from Models/Soldiers/Detail"), *Name);
+				Crowd->AddSoldier(LandParts::Narrow(Army), Detail);
+				DetailArmies.Add(Army);
+				++Files;
+				continue;
+			}
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: Detail/%s: %s (the usual file instead)"), *Name, *LandParts::Wide(Why));
+		}
+		if (!FFileHelper::LoadFileToString(Text, *(Folder / Name)))
 		{
 			continue;
 		}
@@ -3214,6 +3436,33 @@ void ALandBattle::MakeMen()
 		}
 		Crowd->AddSoldier(LandParts::Narrow(Army), One);
 		++Files;
+	}
+	// Effects (R2): shell and tank hits throw men and take limbs off (-TheaterLandGore; Brian, 22 November: "make more
+	// graphic animations if a guy gets shot or blown up", "with limbs coming off"): each file's gore twin, where the
+	// soldiers thread has made one with its gore falls (soldier_<ARMY>_gore.json), kept beside it; a man killed near a
+	// shell's burst may fall as it (LandMen::Crowd::SetGore). Off: no twin read, every man falls as before.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGore")))
+	{
+		int32 Twins = 0;
+		for (const FString& Army : Armies)
+		{
+			FString Text;
+			const FString TwinFolder = DetailArmies.Contains(Army) ? Folder / TEXT("Detail") : Folder;
+			if (!Crowd->SoldierFile(LandParts::Narrow(Army)) || !FFileHelper::LoadFileToString(Text, *(TwinFolder / (TEXT("soldier_") + Army + TEXT("_gore.json")))))
+			{
+				continue;
+			}
+			LandMen::Soldier Twin;
+			std::string Why;
+			if (!Twin.Load(LandParts::Narrow(Text), Why) || !Crowd->AddGore(LandParts::Narrow(Army), Twin, Why))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: soldier_%s_gore.json not used (gore): %s"), *Army, *LandParts::Wide(Why));
+				continue;
+			}
+			++Twins;
+		}
+		Crowd->SetGore(true);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: shell and tank hits take limbs off ON (gore twins of %d soldier files)"), Twins);
 	}
 	std::string Error;
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
@@ -3345,6 +3594,26 @@ void ALandBattle::MakeMen()
 		}
 	}
 	S.Men = std::move(Crowd);
+	// (the men aboard on their carriers' benches: read from the carriers as SeatCarriers left them this frame; the men's
+	// posing threads only read them)
+	{
+		const std::vector<LandKit::Benches>* Carriers = &S.Carriers;
+		S.Men->SetSeats([Carriers](double X, double Y, int Block, int SeatOn, int Seat, LandMen::SeatPlace& Out)
+		{
+			LandKit::BenchSeat B;
+			if (Carriers->empty() || !LandKit::BenchFor(*Carriers, X, Y, Block, SeatOn, Seat, B))
+			{
+				return false;
+			}
+			Out.X = B.At.X;
+			Out.Y = B.At.Y;
+			Out.Z = B.At.Z;
+			Out.Floor = B.Floor;
+			Out.Facing = static_cast<float>(B.Heading);
+			Out.bBench = B.bBench;
+			return true;
+		});
+	}
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
 	S.TrackOfMan.assign(static_cast<size_t>(S.Men->Count()), -1);
 	for (size_t K = 0; K < S.Rec.Tracks.size(); ++K)
@@ -3546,6 +3815,13 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 				D.Stamp = 0xFFFFFFFFu;
 				continue;
 			}
+		}
+		// Effects (R2): his mesh another's now (-TheaterLandGore: fallen as his file's gore twin, or back at a replay from
+		// the start): his triangles and colours made again, as at a new level
+		if (D.MeshNo != Crowd.MeshNo(Man))
+		{
+			D.MeshNo = Crowd.MeshNo(Man);
+			D.Lod = -1;
 		}
 		LandMen::Lod Level = Crowd.LodOf(Man);
 		if (!D.Mesh.IsValid() || D.Lod != static_cast<int32>(Level))
@@ -3838,6 +4114,37 @@ void ALandBattle::MakeArmour()
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
+	// Tanks rolling smoothly (release 2, -TheaterLandSmoothTanks, or -TheaterLandSmoothTanks=<seconds> up to 0.45; Brian,
+	// 23 November: "have the tanks move more smooth and not rigid and zig zagging"): each tank's line blended over 0.4
+	// battle seconds either way and her hull along it (LandKit::Vehicle::SmoothTanks). Off: every tank on the rules' line
+	// as before.
+	{
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSmoothTanks="), Asked))
+		{
+			Armour->SmoothTanks = FMath::Clamp(FCString::Atod(*Asked), 0.0, 0.45);
+		}
+		else if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSmoothTanks")))
+		{
+			Armour->SmoothTanks = 0.4;
+		}
+		UE_LOG(LogTheater, Log, TEXT("Land battle: tanks %s"), Armour->SmoothTanks > 0.0 ? *FString::Printf(TEXT("roll smoothly, their lines blended over %.2f s (-TheaterLandSmoothTanks, release 2)"), Armour->SmoothTanks) : TEXT("on the rules' line as before"));
+	}
+	// Effects (R2): the crews' bail-out (-TheaterLandBailOut, LandBail; Brian, 23 November: "if a tank gets hit people
+	// try and get out before it explosdes"). A brew-up waits 5.5 to 10 s of life after the hit (the fates table's own
+	// brew_up step), knocked out first while her crew climb out.
+	S.Bails = LandBail::Book();
+	S.Bails.bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBailOut"));
+	if (S.Bails.bOn)
+	{
+		Armour->BrewWaitLeast = 5.5;
+		Armour->BrewWaitMost = 10.0;
+	}
+	UE_LOG(LogTheater, Log, TEXT("Land battle: crews %s"), S.Bails.bOn ? TEXT("get out of their knocked-out vehicles (-TheaterLandBailOut, release 2)") : TEXT("stay inside as before"));
+	// (and smoke to cover them, -TheaterLandBailSmoke, release 2, off until the art director and a 45 fps reading pass;
+	// Brian, 23 November 20:09Z: with her enemy close, her commander may throw a smoke grenade toward it from his hatch)
+	S.Bails.bSmoke = S.Bails.bOn && FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBailSmoke"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: bail-out smoke %s"), S.Bails.bSmoke ? TEXT("on (-TheaterLandBailSmoke, release 2)") : TEXT("off"));
 	// Captured kit (release 2, on trial: "-TheaterLandTrial=captured"): a block the recording marks captured (the
 	// campaign's, blocks[].captured) in her captor's coat over her maker's; "-TheaterLandNoCaptured" off whatever the
 	// trial (the player's switch on the Battle rules card); "-TheaterLandCapturedTest" every other attacker tank block drawn
@@ -3848,6 +4155,12 @@ void ALandBattle::MakeArmour()
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle: captured kit ON%s"), Armour->bCapturedTest ? TEXT(" (test: every other attacker tank block taken from the defender)") : TEXT(""));
 	}
+	// National marks (release 2, "-TheaterLandMarks", off until the art director and a Mac reading pass; Brian, 24
+	// November, the tanks' country markings): every vehicle wears her owner's plain period marking at her file's mark
+	// places, painted on her skin (LandKit's Dress::bMarks): the Germans' beam cross, the Allies' white star, the Red
+	// Army's red star, the British flash before July 1943. Off: none, as before.
+	Armour->bMarks = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMarks"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: national marks %s"), Armour->bMarks ? TEXT("painted on (-TheaterLandMarks, release 2)") : TEXT("off"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
@@ -3957,7 +4270,9 @@ void ALandBattle::MakeRiders()
 			if (C && !C->bButtoned)
 			{
 				R.Killed = Veh.Died;
-				R.Dies = Veh.bBrewUp ? static_cast<int>(FRider::Kinds) : ((Seed >> 41) & 1) ? static_cast<int>(FRider::Slump) : static_cast<int>(FRider::Drop);
+				// (Effects (R2): a brew-up that waits, BrewWait, kills him as a knocked-out tank does; he goes with her
+				// turret when her ammunition goes)
+				R.Dies = Veh.bBrewUp && Veh.BrewWait <= 0.0 ? static_cast<int>(FRider::Kinds) : ((Seed >> 41) & 1) ? static_cast<int>(FRider::Slump) : static_cast<int>(FRider::Drop);
 			}
 		}
 		R.Man = S.Men->AddRider(File, Veh.Nation, Seed);
@@ -4147,6 +4462,302 @@ void ALandBattle::RideTanks()
 		Ride.Clip = R.Clips[Want];
 		Ride.Time = Time;
 		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
+void ALandBattle::BailOut()
+{
+	// Effects (R2): the crews' bail-out (-TheaterLandBailOut, LandBail; Brian, 23 November: "if a tank gets hit people
+	// try and get out before it explosdes"). At her kill her crew is made from the fates table's crew_out steps (her own
+	// dice), each man a rider of the crowd in his own file (the tankers', or his army's), and each frame posed where
+	// LandBail says he is: up out of his hatch, along her deck, down, and away; cut down, wounded, caught by her blast,
+	// or on fire.
+	LAND_SCOPE(BailOut);
+	FLandBattleState& S = *State;
+	if (!S.Bails.bOn || !S.Men || !S.Armour)
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	if (S.Bails.Made.size() < All.size())
+	{
+		S.Bails.Made.resize(All.size(), 0);
+		S.Bails.Crews.resize(All.size());
+		S.Bails.Smoked.resize(All.size(), 0);
+	}
+	const LandField::Ground* FieldPtr = S.Field.get();
+	const std::function<double(double, double)> Ground = [FieldPtr](double X, double Y) { return FieldPtr ? FieldPtr->HeightAt(X, Y) : 0.0; };
+	const int32 MenBefore = S.Men->Count();
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Vehicle& Veh = All[V];
+		if (S.Bails.Made[V] || Veh.Died < 0.0 || S.Battle < Veh.Died)
+		{
+			continue;
+		}
+		S.Bails.Made[V] = 1;
+		const LandKit::Model& Look = Veh.Look();
+		// (a tank or an armoured car: the men of a gun, a lorry or a half-track are the crowd's own already)
+		const bool bHatches = Look.Kind == "tank" || (Look.Kind == "car" && (Look.Name.find("rmoured") != std::string::npos || Look.Name.find("rmored") != std::string::npos));
+		const Fates::Way* Way = nullptr;
+		for (const Fates::Way& Each : S.FatesTable.Ways())
+		{
+			if (Each.Key == Veh.FateKey)
+			{
+				Way = &Each;
+				break;
+			}
+		}
+		if (!bHatches || !Way)
+		{
+			continue;
+		}
+		// (tankers where the army has them, the art director's notes of 23 November: "riflemen climbing out of a Tiger
+		// would break it at once". Her second note: an army with no tankers' file still bails out, in its own infantry
+		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; said once,
+		// until the soldiers' thread makes its tankers' file)
+		const std::string Tankers = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
+		const bool bTankers = !Tankers.empty() && S.Men->SoldierFile(Tankers);
+		const std::string File = bTankers ? Tankers : Veh.Nation;
+		if (!bTankers)
+		{
+			static TSet<FString> Told;
+			const FString Nation = LandParts::Wide(Veh.Nation);
+			if (!Told.Contains(Nation))
+			{
+				Told.Add(Nation);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden (bail-out)"), *Nation);
+			}
+		}
+		if (!S.Men->SoldierFile(File))
+		{
+			continue;
+		}
+		LandBail::Wreck W;
+		W.Fate = Veh.FateKey;
+		W.Way = Way;
+		W.Middle = LandBail::V3{ Veh.Root.At.X, Veh.Root.At.Y, Veh.Root.At.Z };
+		W.Heading = Veh.Heading;
+		W.Wide = Look.Wide > 0.5 ? Look.Wide : 3.0;
+		W.Long = Look.Long > 1.0 ? Look.Long : 6.0;
+		const LandBail::V3 Right{ std::cos(Veh.Heading), -std::sin(Veh.Heading), 0.0 };
+		// Her hatches: the commander's, the driver's, and the loader's and the hull gunner's across from them.
+		LandKit::V3 Spot, Way3;
+		std::vector<LandBail::V3> Pair;
+		for (const char* Name : { "commander", "fire.3" })
+		{
+			if (Veh.SocketNow(Name, Spot, Way3) || (std::string(Name) == "commander" && Veh.SocketNow("fire.2", Spot, Way3)))
+			{
+				Pair.push_back(LandBail::V3{ Spot.X, Spot.Y, Spot.Z });
+			}
+		}
+		if (Pair.empty())
+		{
+			continue;
+		}
+		W.Exits = Pair;
+		for (const LandBail::V3& E : Pair)
+		{
+			const double Aside = (E.X - W.Middle.X) * Right.X + (E.Y - W.Middle.Y) * Right.Y;
+			const double Across = std::abs(Aside) < 0.2 ? 0.9 : -2.0 * Aside;
+			W.Exits.push_back(LandBail::V3{ E.X + Right.X * Across, E.Y + Right.Y * Across, E.Z });
+		}
+		// (away from her enemy: back the way she faced, unless the shot that killed her came from behind)
+		bool bFromBehind = false;
+		for (const LandKit::Battle::KillEnd& K : S.Armour->Ends)
+		{
+			bFromBehind = bFromBehind || (K.Track == Veh.Index && K.Face == "rear");
+		}
+		W.Away = Veh.Heading + (bFromBehind ? 0.0 : PI);
+		W.Blast = Veh.bBrewUp && Veh.BrewWait > 0.0 ? Veh.BrewWait * S.Life : -1.0;
+		W.bBurns = Veh.bBrewUp || Veh.FateKey == "tank.brew_up" || Veh.FateKey == "tank.turret_off" || Veh.FateKey == "tank.engine_fire" || Veh.FateKey == "tank.knocked_out_later_burns";
+		W.bUnderFire = S.Rec.End <= 0.0 || S.Battle < S.Rec.End - 5.0;
+		{
+			// (the enemy who can see her men in the open: her nearest living enemy, a man or a vehicle, 1 within 150 m,
+			// falling to a tenth at 600 m and beyond, a tenth with none on the field)
+			double Nearest = 1e30;
+			for (int32 I = 0; I < S.Men->Count(); ++I)
+			{
+				const LandMen::ManInfo& Info = S.Men->Info(I);
+				if (Info.Army == Veh.Nation || (Info.Dead >= 0.0 && Info.Dead <= S.Battle) || S.Men->IsRider(I))
+				{
+					continue;
+				}
+				double Mx = 0.0, My = 0.0, Mz = 0.0;
+				float Facing = 0.f;
+				if (S.Men->PlaceAsPosed(I, Mx, My, Mz, Facing))
+				{
+					Nearest = std::min(Nearest, std::hypot(Mx - W.Middle.X, My - W.Middle.Y));
+				}
+			}
+			for (const LandKit::Vehicle& Other : All)
+			{
+				if (Other.Nation != Veh.Nation && (Other.Died < 0.0 || Other.Died > S.Battle))
+				{
+					Nearest = std::min(Nearest, std::hypot(Other.Root.At.X - W.Middle.X, Other.Root.At.Y - W.Middle.Y));
+				}
+			}
+			W.Threat = Nearest <= 150.0 ? 1.0 : Nearest >= 600.0 ? 0.1 : 1.0 - 0.9 * (Nearest - 150.0) / 450.0;
+		}
+		W.MostMen = Look.Kind == "car" ? 3 : Look.Long < 5.3 ? 3 : Look.Long < 6.0 ? 4 : 5;
+		// (her sides, back and bow blocked where another vehicle, living or a wreck, stands close beside her there: her
+		// men drop off the side away from her enemy, another way only where that is blocked; the art director, 19:33Z)
+		{
+			const LandBail::V3 Fwd{ std::sin(Veh.Heading), std::cos(Veh.Heading), 0.0 };
+			const double HalfL = 0.5 * W.Long, HalfW = 0.5 * W.Wide;
+			for (const LandKit::Vehicle& Other : All)
+			{
+				if (Other.Index == Veh.Index)
+				{
+					continue;
+				}
+				const double Dx = Other.Root.At.X - W.Middle.X, Dy = Other.Root.At.Y - W.Middle.Y;
+				const double Al = Dx * Fwd.X + Dy * Fwd.Y, As = Dx * Right.X + Dy * Right.Y;
+				if (std::abs(Al) < HalfL + 1.0 && std::abs(As) > HalfW - 0.5 && std::abs(As) < HalfW + 4.5)
+				{
+					W.Blocked[As > 0.0 ? 0 : 1] = true;
+				}
+				if (std::abs(As) < HalfW + 0.5 && std::abs(Al) > HalfL - 0.5 && std::abs(Al) < HalfL + 4.5)
+				{
+					W.Blocked[Al < 0.0 ? 2 : 3] = true;
+				}
+			}
+		}
+		// (the soldiers' bail clips, where his file has all four: out of the hatch, off her hull, on fire)
+		{
+			const LandMen::Soldier* Sol = S.Men->SoldierFile(File);
+			W.bClips = Sol && Sol->ClipIndex("bail_climb_out") >= 0 && Sol->ClipIndex("bail_jump_down") >= 0
+				&& Sol->ClipIndex("burning_run") >= 0 && Sol->ClipIndex("burning_fall_roll") >= 0;
+			// (and the step down off her turret's roof onto her deck, where his file has it: the soldiers' 18:52Z)
+			W.bStep = W.bClips && Sol->ClipIndex("bail_step_down") >= 0;
+			// (her roof over his boots in the hatch, where the soldiers measured it; else the clip's own 0.95 m)
+			W.RoofUp = Look.Name.find("Sherman") != std::string::npos ? 1.07 : Look.Name.find("Tiger") != std::string::npos ? 0.97
+				: Look.Name.find("PanzerIV") != std::string::npos || Look.Name.find("Panzer IV") != std::string::npos ? 0.82 : 0.95;
+		}
+		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
+		W.Ground = Ground;
+		W.bSmoke = S.Bails.bSmoke;
+		// (the battle's wind, as the kit's smoke drifts in it: her commander throws his smoke a little upwind)
+		W.Wind = S.Rec.Weather.bWind ? LandBail::V3{ S.Rec.Weather.WindX, S.Rec.Weather.WindY, 0.0 } : LandBail::V3{ 2.6, 1.2, 0.0 };
+		S.Bails.Crews[V] = LandBail::Make(W);
+		// (the camera's first bail-out: her crew's first man up and her ammunition going, battle seconds after her kill;
+		// nobody out, -1, and the film holds her end as any other)
+		{
+			double FirstOut = -1.0;
+			for (const LandBail::Man& M : S.Bails.Crews[V].Men)
+			{
+				FirstOut = FirstOut < 0.0 ? M.Out : FMath::Min(FirstOut, M.Out);
+			}
+			const int Track = V < S.TrackOfVehicle.size() ? S.TrackOfVehicle[V] : -1;
+			S.Eye.BailOut(Track, FirstOut >= 0.0 ? FirstOut / S.Life : -1.0, W.Blast >= 0.0 ? W.Blast / S.Life : -1.0);
+		}
+		for (size_t K = 0; K < S.Bails.Crews[V].Men.size(); ++K)
+		{
+			LandBail::Book::Him H;
+			H.Vehicle = static_cast<int>(V);
+			H.K = K;
+			H.File = File;
+			H.Man = S.Men->AddRider(File, Veh.Nation, W.Seed ^ ((K + 1) * 0x9E3779B97F4A7C15ull));
+			if (H.Man >= 0)
+			{
+				S.Bails.Men.push_back(H);
+			}
+		}
+		UE_LOG(LogTheater, Log, TEXT("Land battle: %s's crew (%s): %s"), *LandParts::Wide(Look.Name), *LandParts::Wide(Veh.FateKey), *LandParts::Wide(S.Bails.Crews[V].Story));
+	}
+	if (S.Men->Count() != MenBefore)
+	{
+		MenDrawn.SetNum(S.Men->Count());
+	}
+	// (smoke: her commander's grenade gushing grey-white where it landed, from the moment it lands, drawn down the wind
+	// into a low plume: the kit's "grenade", the art director's 24 November)
+	if (Effects && S.Bails.bSmoke)
+	{
+		for (size_t V = 0; V < S.Bails.Crews.size() && V < All.size(); ++V)
+		{
+			const LandBail::Crew& C = S.Bails.Crews[V];
+			const double Since = (S.Battle - All[V].Died) * S.Life;
+			if (C.SmokeAt < 0.0 || S.Bails.Smoked[V] || All[V].Died < 0.0 || Since < C.SmokeAt)
+			{
+				continue;
+			}
+			S.Bails.Smoked[V] = 1;
+			if (Since < C.SmokeAt + C.SmokeS)
+			{
+				Effects->SmokeScreen(World(C.SmokeTo.X, C.SmokeTo.Y, C.SmokeTo.Z), static_cast<float>(C.SmokeAcross),
+					static_cast<float>(C.SmokeAt + C.SmokeS - Since), TEXT("grenade"), -1);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: %s's commander's smoke is up, %.0f m across for %.0f s"),
+					*LandParts::Wide(All[V].Look().Name), C.SmokeAcross, C.SmokeS);
+			}
+		}
+	}
+	// Each man where he is now.
+	for (size_t I = 0; I < S.Bails.Men.size(); ++I)
+	{
+		LandBail::Book::Him& H = S.Bails.Men[I];
+		const LandKit::Vehicle& Veh = All[static_cast<size_t>(H.Vehicle)];
+		const LandBail::Man& M = S.Bails.Crews[static_cast<size_t>(H.Vehicle)].Men[H.K];
+		const double Since = (S.Battle - Veh.Died) * S.Life;
+		const LandBail::Pose P = LandBail::PoseAt(M, Since, Ground);
+		const LandMen::Soldier* Sol = S.Men->SoldierFile(H.File);
+		const int Clip = P.bShown && Sol ? Sol->ClipIndex(P.Clip) : -1;
+		LandMen::Crowd::Ride Ride;
+		// (a man on fire: the kit's flames on him, moving with him, lower once he is down)
+		if (Effects && P.bShown && P.bOnFire)
+		{
+			const int32 Id = LandBail::Book::FireIdOf(I);
+			const FVector Chest = World(P.Root.X, P.Root.Y, P.Root.Z + (P.bMoving ? 0.9 : 0.3));
+			if (!H.bLit)
+			{
+				H.bLit = true;
+				// (his clothes alight in patches, not a bonfire: a small vent of flame, its smoke trailing from him as
+				// he runs; once it dies its thin grey wisp goes on, a man smoking where he lies)
+				Effects->Vent(Chest, 0.22f, static_cast<float>(FMath::Max(1.0, M.FireOut - Since)), Id);
+			}
+			else
+			{
+				const LandBail::Pose Next = LandBail::PoseAt(M, Since + 0.1, Ground);
+				const FVector Velocity = WorldWay((Next.Root.X - P.Root.X) * 10.0, (Next.Root.Y - P.Root.Y) * 10.0, 0.0) * UnitsPerMetre;
+				Effects->BurnMove(Id, Chest, Velocity);
+			}
+		}
+		if (Clip < 0)
+		{
+			H.Clip.clear();
+			S.Men->SetRide(H.Man, Ride);
+			continue;
+		}
+		if (P.Clip != H.Clip)
+		{
+			H.WasClip = H.Clip;
+			H.WasTime = H.NowTime;
+			H.Switched = S.Battle;
+			H.Clip = P.Clip;
+		}
+		H.NowTime = P.Time;
+		const double Blended = H.Switched >= 0.0 ? (S.Battle - H.Switched) * S.Life / 0.25 : 1.0;
+		const int WasClip = H.WasClip.empty() ? -1 : Sol->ClipIndex(H.WasClip);
+		if (WasClip >= 0 && Blended < 1.0)
+		{
+			Ride.FromClip = WasClip;
+			Ride.FromTime = static_cast<float>(H.WasTime + (S.Battle - H.Switched) * S.Life);
+			Ride.W = static_cast<float>(FMath::Clamp(Blended, 0.0, 1.0));
+		}
+		const double Fx = std::sin(P.Facing), Fy = std::cos(P.Facing);
+		float* R = Ride.Seat.R;
+		// (his axes: forward along his facing, right of it, up; as RideTanks lays a commander's)
+		R[0] = static_cast<float>(Fx); R[1] = static_cast<float>(Fy); R[2] = 0.f;
+		R[3] = static_cast<float>(Fy); R[4] = static_cast<float>(-Fx); R[5] = 0.f;
+		R[6] = 0.f; R[7] = 0.f; R[8] = 1.f;
+		Ride.Seat.T[0] = static_cast<float>(P.At.X);
+		Ride.Seat.T[1] = static_cast<float>(P.At.Y);
+		Ride.Seat.T[2] = static_cast<float>(P.At.Z);
+		Ride.bShown = true;
+		Ride.Clip = Clip;
+		Ride.Time = static_cast<float>(P.Time);
+		Ride.bUnarmed = true; // (a crewman out of his tank: his file's infantry clips carry a rifle he has not got)
+		Ride.bOwnRoot = M.bClips; // (the bail clips move his root, and PoseAt moves his seat on where each ends)
+		S.Men->SetRide(H.Man, Ride);
 	}
 }
 
@@ -4342,6 +4953,32 @@ void ALandBattle::RideLight()
 		Ride.Seat.T[2] = static_cast<float>(Feet.Z);
 		Ride.bShown = true;
 		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
+void ALandBattle::SeatCarriers()
+{
+	LAND_SCOPE(SeatCarriers);
+	FLandBattleState& S = *State;
+	S.Carriers.clear();
+	if (!S.Armour)
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Vehicle& Veh = All[V];
+		// (not while she is off the field or hidden: her men aboard are hers to hide too)
+		if (Veh.Fade < 0.5 || HiddenVehicle(static_cast<int32>(V)))
+		{
+			continue;
+		}
+		LandKit::Benches B;
+		if (LandKit::BenchesNow(Veh, B))
+		{
+			S.Carriers.push_back(B);
+		}
 	}
 }
 
@@ -6098,7 +6735,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
 		// (the tank commanders on their tanks as just posed, and the light cars' and motorcycles' men in their seats)
 		RideTanks();
+		BailOut(); // (Effects (R2): the crews' bail-out, -TheaterLandBailOut)
 		RideLight();
+		SeatCarriers();
 		S.Men->Update(Shown);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -6113,6 +6752,27 @@ void ALandBattle::Tick(float DeltaSeconds)
 		LAND_SCOPE(Rules);
 		S.Play.Step(From, S.Battle, S.Fx, S.Noises, S.Losses);
 	}
+	// (Camera specials, release 2, -TheaterLandWhistle: the officer the film opens on blows as he steps off, the attack's
+	// whistle (LandSound's contact list, side 0) where he stands; the recording's own contact whistle still comes later)
+	if (S.bWhistleOn && !S.bWhistleBlown && !bNight && S.Eye.WhistleAt() >= 0.0 && S.Battle >= S.Eye.WhistleAt())
+	{
+		S.bWhistleBlown = true;
+		const int32 Man = S.Eye.WhistleMan();
+		if (Man >= 0 && Man < static_cast<int32>(S.Rec.Tracks.size()))
+		{
+			const LandFeed::Track& Officer = S.Rec.Tracks[static_cast<size_t>(Man)];
+			const LandFeed::Spot Here = LandFeed::SpotAt(Officer, S.Battle);
+			const LandFeed::Block* Unit = S.Rec.BlockOf(Officer.Block);
+			LandPlay::Noise N;
+			N.T = S.Battle;
+			N.Kind = LandPlay::NoiseKind::Contact;
+			N.At = LandPlay::Vec(Here.X, Here.Y, (S.EyeWorld.Height ? S.EyeWorld.Height(Here.X, Here.Y) : 0.0) + 1.6);
+			N.Army = Unit ? Unit->Army : std::string();
+			N.Side = 0;
+			N.Track = Man;
+			S.Noises.push_back(N);
+		}
+	}
 	if (bShotHeld)
 	{
 		S.Eye.Hold(true);
@@ -6126,6 +6786,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 		const double EyeMark = LandParts::Seconds();
 		const long StepsWere = S.Eye.Steps();
 		S.Pose = bNight ? S.NightNow.Pose : S.Eye.Update(S.Battle, S.Real, Real);
+		// (kept for the film in a corner: his own view takes S.Pose below)
+		S.FilmPose = S.Pose;
 		const double EyeFrameMs = (LandParts::Seconds() - EyeMark) * 1000.0;
 		EyeMs += EyeFrameMs;
 		EyeMostMs = FMath::Max(EyeMostMs, EyeFrameMs);
@@ -6165,6 +6827,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The picture: the camera, the ground round it, the men and the tanks.
 	LandFell::Phase("tick: the lens aimed");
 	AimEye(static_cast<float>(Real));
+	LandFell::Phase("tick: the film in a corner");
+	FilmCorner();
 	if (Live.IsValid())
 	{
 		LandFell::Phase("tick: the general's screen");
@@ -6198,6 +6862,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// they are drawn this frame), then the shell holes and the tracks dug and settled (the field's: their time is counted
 	// in FieldMs).
 	PlayEffects();
+	FlyOver(); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the breaches");
 	MakeBreaches();
@@ -7700,7 +8365,7 @@ void ALandBattle::MakeCraters()
 		{
 			continue;
 		}
-		if (!S.Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, std::string(Under.Fx)))
+		if (!S.Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, std::string(Under.Fx), E.Way.X, E.Way.Y)) // (Effects (R2): its way, read by crater variety only)
 		{
 			continue;
 		}
@@ -7966,9 +8631,9 @@ void ALandBattle::MakeRuts()
 	{
 		return;
 	}
-	// Each tank, lorry and towed gun that moves on the ground leaves her tracks' marks behind her (the middles of her
-	// tracks are her dust sockets, at her tail): pressed grass, torn stubble or plough, and in standing corn the corn
-	// between her tracks laid flat. A knocked-out tank, or one gone from the field, lays none; seen to jump (a seek), her
+	// Each tank, lorry and towed gun that moves on the ground leaves her tracks' marks behind her (laid from the front of
+	// her tracks' ground, under her: Vehicle::TreadLeft): pressed grass, torn stubble or plough, and in standing corn the
+	// corn between her tracks laid flat. A knocked-out tank, or one gone from the field, lays none; seen to jump (a seek), her
 	// marks start afresh.
 	for (const LandKit::Vehicle& V : S.Armour->Vehicles())
 	{
@@ -7982,7 +8647,7 @@ void ALandBattle::MakeRuts()
 			continue;
 		}
 		const double Width = LandCrater::Ruts::TrackWidthOf(V.Look().Name, V.Look().Kind);
-		if (S.Ruts.Drive(V.Index, V.DustLeft.X, V.DustLeft.Y, V.DustRight.X, V.DustRight.Y, Width))
+		if (S.Ruts.Drive(V.Index, V.TreadLeft.X, V.TreadLeft.Y, V.TreadRight.X, V.TreadRight.Y, Width))
 		{
 			// (the grass and corn squares under her laid again, without what she flattened, LandCarpet)
 			if (Carpet.IsValid())
@@ -8149,6 +8814,32 @@ void ALandBattle::PlayArmourEvents()
 	// The tanks' own beats: what the fire (LandPlay) does not already draw and sound. Her gun's flash and its shot are
 	// the round's, the strike's sparks the round's landing, the spent case the mix's: those are left out here.
 	static TSet<FString> Unknown;
+	// Effects (R2): the film fire (-TheaterLandFilmFire, read in Open). A wreck's fire and smoke loops are left out
+	// below and her own plan is played after the loop instead.
+	// (her story, made once at her kill from how the fates table says she ended, her size and her own dice)
+	auto PlanOf = [&S](size_t I) -> LandBurn::Director::Her&
+	{
+		LandBurn::Director::Her& L = S.Burns.Of(I);
+		if (!L.bMade)
+		{
+			const LandKit::Vehicle& V = S.Armour->Vehicles()[I];
+			LandKit::V3 Spot, Way;
+			LandBurn::Wreck Wr;
+			Wr.Fate = V.FateKey;
+			Wr.bBrewUp = V.bBrewUp;
+			Wr.bRing = V.SocketNow("ring", Spot, Way);
+			Wr.bHatch = V.SocketNow("fire.2", Spot, Way);
+			Wr.bDriver = V.SocketNow("fire.3", Spot, Way);
+			Wr.Class = LandBurn::ClassOf(V.Look().Kind, V.Look().Name, V.Look().Long);
+			Wr.Seed = (static_cast<uint64_t>(V.Index) + 1ull) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(std::llround(std::max(0.0, V.Died) * 1000.0));
+			Wr.Left = (std::max(V.BurnUntil, S.Rec.End) + 8.0 - V.Died) * S.Life;
+			L.Story = LandBurn::Make(Wr);
+			L.bMade = true;
+			UE_LOG(LogTheater, Log, TEXT("Land battle: %s's wreck (%s, %s): %s"), *LandParts::Wide(V.Look().Name),
+				Wr.Fate.empty() ? TEXT("no fate") : *LandParts::Wide(Wr.Fate), *LandParts::Wide(Wr.Class), *LandParts::Wide(L.Story.Story));
+		}
+		return L;
+	};
 	for (const LandKit::Event& E : S.Armour->Events)
 	{
 		FString Fx = LandParts::Wide(E.Fx);
@@ -8167,13 +8858,33 @@ void ALandBattle::PlayArmourEvents()
 		// ammunition's blast) or a lorry is knocked out (its fire starting). Some 8 m across for a tank (the art
 		// director's ruling), 6 for a lorry; it rolls on as she was moving. Her own fire burns on after it as before.
 		if (Effects && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
-			&& (Fx == TEXT("magazine_blast") || (Fx == TEXT("fire_start") && S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)].Look().Kind == "carrier")))
+			&& (Fx == TEXT("magazine_blast") || (Fx == TEXT("fire_start") && S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)].Look().Kind == "carrier"))
+			&& (!S.Burns.bOn || PlanOf(static_cast<size_t>(E.Vehicle)).Story.bBurns)) // (Effects (R2): a lorry shot through that does not burn)
 		{
 			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
 			LandKit::V3 Deck, DeckWay;
 			const FVector BallAt = V.SocketNow("engine", Deck, DeckWay) ? World(Deck.X, Deck.Y, Deck.Z) : At;
 			const FVector Rolling = WorldWay(V.Velocity.X, V.Velocity.Y, V.Velocity.Z) * (UnitsPerMetre / S.Life);
 			Effects->FuelBall(BallAt, V.Look().Kind == "carrier" ? 6.0f : 8.0f, Rolling);
+		}
+		// Effects (R2), the film fire: her fire and smoke loops are her plan's (below); the puff of smoke as she is
+		// struck is a grey push of smoke, not a small fire; the brew-up's jets a flash jetting up out of each hatch for
+		// half a second (the art director, 15:26Z 23 November), the fuel ball rolling on into black smoke. The
+		// magazine's blast and the hatch blown open stay as they were.
+		if (S.Burns.bOn && Effects && Fx.Contains(TEXT("flame_jet")))
+		{
+			Effects->CookOff(At, Up, 0.8f, 1, 0.2f, 0.5f, -1.0f, E.Key);
+			Fx.Reset();
+		}
+		if (S.Burns.bOn && Effects && !Fx.IsEmpty() && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
+			&& !Fx.Contains(TEXT("flame_jet")) && !Fx.Contains(TEXT("magazine")) && !Fx.Contains(TEXT("brew")) && !Fx.Contains(TEXT("cook"))
+			&& (Fx.Contains(TEXT("fire")) || Fx.Contains(TEXT("burn")) || Fx.Contains(TEXT("smoke"))))
+		{
+			if (Fx == TEXT("smoke_burst"))
+			{
+				Effects->Steam(E.Key + 100000, At, FVector::UpVector, 0.7f, 5.0f, TEXT("smoke"));
+			}
+			Fx.Reset();
 		}
 		if (Effects && !Fx.IsEmpty())
 		{
@@ -8225,6 +8936,47 @@ void ALandBattle::PlayArmourEvents()
 		}
 	}
 	S.Armour->Events.clear();
+	// Effects (R2), the film fire: each wreck's calls as they fall due, at her sockets as she lies now (the open ring,
+	// her hatches, her engine deck; her middle where her model has none of that name). Her numbers in the kit are her
+	// own (LandBurn::Director::IdOf), so a call laid again (a wisp's next stretch) takes up its own.
+	if (S.Burns.bOn && Effects)
+	{
+		const std::vector<LandKit::Vehicle>& Vs = S.Armour->Vehicles();
+		for (size_t I = 0; I < Vs.size(); ++I)
+		{
+			const LandKit::Vehicle& V = Vs[I];
+			if (V.Died < 0.0 || S.Battle < V.Died)
+			{
+				continue;
+			}
+			LandBurn::Director::Her& L = PlanOf(I);
+			const double Since = (S.Battle - V.Died) * S.Life;
+			while (L.Next < L.Story.Calls.size() && L.Story.Calls[L.Next].At <= Since)
+			{
+				const LandBurn::Call& C = L.Story.Calls[L.Next++];
+				LandKit::V3 Spot, Way;
+				FVector At, Up = FVector::UpVector;
+				if (V.SocketNow(C.Socket, Spot, Way) || V.SocketNow("engine", Spot, Way))
+				{
+					At = World(Spot.X, Spot.Y, Spot.Z);
+					Up = WorldWay(Way.X, Way.Y, Way.Z).GetSafeNormal(0.01, FVector::UpVector);
+				}
+				else
+				{
+					At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z + 0.8);
+				}
+				const int32 Id = LandBurn::Director::IdOf(I, C.Slot);
+				const float Across = static_cast<float>(C.Across), Seconds = static_cast<float>(C.Seconds);
+				switch (C.What)
+				{
+				case LandBurn::Do::Fire: Effects->Burn(At, Across, Seconds, Id); break;
+				case LandBurn::Do::Vent: Effects->Vent(At, Across, Seconds, Id); break;
+				case LandBurn::Do::Cook: Effects->CookOff(At, Up, Across, C.Pops, static_cast<float>(C.Over), static_cast<float>(C.Jet), -1.0f, Id); break;
+				case LandBurn::Do::Wisp: Effects->Steam(Id, At, Up, Across, Seconds, LandParts::Wide(C.Kind)); break;
+				}
+			}
+		}
+	}
 }
 
 void ALandBattle::PlayMenEvents()
@@ -8862,6 +9614,7 @@ void ALandBattle::TakeShots()
 	// (a still asked only once the one before it is taken: Sedan asked 05 before 06 was taken, and the second ask
 	// overrode the first. The shots are sorted by their time; the camera director, 22 November)
 	bool bBeforeTaken = true;
+	const int32 TakenBefore = ShotsTaken;
 	for (FShot& Shot : Shots)
 	{
 		if (Shot.bTaken)
@@ -8889,6 +9642,33 @@ void ALandBattle::TakeShots()
 				bUnfit ? TEXT(" (no fit place found for it: placed anyway; the film would have turned it away)") : TEXT(""));
 		}
 		bBeforeTaken = Shot.bTaken;
+	}
+	// (the camera specials, release 2, when their switches are on: a still of each special's shot once it has held
+	// 1.5 s, sp-whistle-N, sp-nickname-N, sp-last-stand-N, for the art director; never on a frame a timed picture was
+	// taken, whose ask it would override; the camera director, 24 November)
+	const LandEye::Special Sp = S.Pose.Sp;
+	if (Sp == LandEye::Special::Whistle || Sp == LandEye::Special::Nick || Sp == LandEye::Special::Stand)
+	{
+		if (S.Pose.bCut || SpStillKind != static_cast<int32>(Sp))
+		{
+			SpStillKind = static_cast<int32>(Sp);
+			SpStillFrom = RealT;
+			bSpStillTaken = false;
+		}
+		if (!bSpStillTaken && RealT - SpStillFrom >= 1.5 && ShotsTaken == TakenBefore)
+		{
+			bSpStillTaken = true;
+			const TCHAR* SpName = Sp == LandEye::Special::Whistle ? TEXT("whistle") : Sp == LandEye::Special::Nick ? TEXT("nickname") : TEXT("last-stand");
+			const FString Name = FString::Printf(TEXT("sp-%s-%d"), SpName, ++SpStills);
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Name + TEXT(".png")), true, false);
+			++ShotsTaken;
+			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d, card on block %d"), *Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
+				S.Pose.Card);
+		}
+	}
+	else
+	{
+		SpStillKind = -1;
 	}
 	if (S.bCard && !bCardShot)
 	{

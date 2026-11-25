@@ -175,6 +175,8 @@ export interface Man {
   went?: number;
   /** A trooper's horse holder (the holder's k), while he mounts again (Drill.board). */
   bus?: number;
+  /** Getting down from his lorry (Drill.alight): the battle time his turn comes to go over her tailboard (hopOut). */
+  out?: number;
   /** The shot stamp a round was last made for (Drill.fire), and when a rifleman's next shot (a machine gun's burst) goes. */
   fired?: number;
   burst?: number;
@@ -312,6 +314,13 @@ export interface MenOut {
   ml?: string;
   /** Her model's swaps the drill picks (Man.sw): {swap: choice}. */
   sw?: Record<string, string>;
+  /**
+   * Aboard (p 'mounted'): his lorry's or carrier's number in the block (her k) and his seat in her bed (seatNo: two
+   * abreast, the odd ones on her right, front to back), so the 3D game sits him on that bench of the vehicle it draws
+   * (a man drawn where the rules seat him knelt on the ground under her: Brian, 23 November 14:10Z, "troops are stuck
+   * under the truck").
+   */
+  sv?: [number, number];
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -417,7 +426,7 @@ const tankTop = (sq: { speed: number; u: LandUnit }): number => Math.max(TANK_TO
  * the last `span` seconds (a block the rules jostle back and forth in a fight makes none, however far its box moves);
  * slow is also a block standing.
  */
-const MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 0.05, saddle: 1, span: 3 };
+const MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 0.05, saddle: 1, span: 3, hop: 0.4, hopMost: 8, tail: 4.2, clear: 2.5 };
 /** Men of a block with lorries or horses may be this much further out than foot before the ring carries them (ring). */
 const RIDERS_RING = 120;
 const COVER_OF: Partial<Record<Ground, CoverKind>> = { works: 'works', bunker: 'works', buildings: 'building', industry: 'building', suburb: 'building', woods: 'woods', rock: 'rock', rough: 'rough', field: 'field' };
@@ -510,6 +519,14 @@ interface Squad {
   slow: number;
   /** Battle time the block, down, began to mount again (its lorries coming up for the men, the holders with the horses). */
   boarding?: number;
+  /**
+   * Battle time the block began to get down from its lorries, its men over the tailboards one by one (Drill.hopOut), and
+   * when its last man was down (its lorries stand a moment more while the men clear their tails, then pull back).
+   */
+  hop?: number;
+  left?: number;
+  /** Each lorried man's seat in his lorry's bed, numbered once a lorry (seatNo): no two of her men on one seat. */
+  seats?: Map<Man, number>;
   /**
    * Down and on the move: its lorries (its horse holders) keep close behind it, ready to take the men up again, from its
    * first second at a pace faster than men on foot keep until it has stood three seconds; else they wait back in cover.
@@ -1894,6 +1911,9 @@ export class Drill {
     if (u.kind === 'arm') { this.tanks(sq); return; }
     if (u.kind === 'art') { if (u.team) this.teams(sq); else this.guns(sq); return; }
     if (sq.boarding !== undefined) { this.board(sq); return; }
+    // Getting down from the lorries, a man at a time over each tailboard: the block's phase takes them once the last is
+    // down, each from the tail of his lorry to his place, as on a fresh phase.
+    if (sq.hop !== undefined) { if (!this.hopOut(sq)) return; sq.since = t; }
     this.lorries(sq);
     if ((u.kind === 'mot' || u.kind === 'cav') && !sq.down) { this.mounted(sq); return; }
     switch (ph) {
@@ -2940,10 +2960,54 @@ export class Drill {
     }
   }
 
-  /** Off the lorries and horses where they are, each on his feet: the block's phase then sends him to his place. */
+  /**
+   * Off the lorries and horses. A trooper is down where he sits his horse, on his feet. Lorried men get down over their
+   * lorry's tailboard one at a time, the back of her bed first, the two benches turn about (hopOut), the lorries standing
+   * meanwhile; the block's phase then sends each man to his place.
+   * (Down where they sat, they stood in the lorry's footprint, under her: Brian, 23 November 14:10Z, "troops are stuck
+   * under the truck ... they then hop out and start engaging enemies".)
+   */
   private alight(sq: Squad): void {
     sq.boarding = undefined;
-    for (const m of sq.men) if (m.fell === undefined && (m.pose === 'mounted' || m.pose === 'ride')) { m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.cover = 'none'; }
+    const t = this.b.t, aboard: Man[] = [];
+    for (const m of sq.men) {
+      if (m.fell !== undefined || (m.pose !== 'mounted' && m.pose !== 'ride')) continue;
+      if (m.pose === 'mounted' && sq.veh.length) { aboard.push(m); continue; }
+      m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.cover = 'none';
+    }
+    if (!aboard.length) return;
+    const by = new Map<number, Man[]>();
+    for (const m of aboard) { const i = this.lorryIx(sq, m), l = by.get(i); if (l) l.push(m); else by.set(i, [m]); }
+    for (const l of by.values()) l.sort((a, c) => this.seatNo(sq, c) - this.seatNo(sq, a)).forEach((m, n) => { m.out = t + n * MOUNT.hop; });
+    sq.hop = t; sq.left = undefined;
+    for (const v of sq.veh) { v.spot = [v.x, v.y]; v.slotAt = v.spot; v.pose = 'parked'; v.v = 0; }
+  }
+
+  /**
+   * Getting down (alight): each man, his turn come, over his lorry's tailboard onto the ground a stride behind her, on
+   * his bench's side, and off at a run to clear her tail (the left bench's men to her left, the right's to her right,
+   * the back benches' nearest), kneeling there till the last of the block is down; the lorries stand meanwhile. A man
+   * still aboard after MOUNT.hopMost seconds goes at once. True once every man is down.
+   */
+  private hopOut(sq: Squad): boolean {
+    const t = this.b.t;
+    let still = false;
+    for (const v of sq.veh) { v.v = 0; v.pose = 'parked'; v.spot = [v.x, v.y]; }
+    for (const m of sq.men) {
+      if (m.out === undefined) continue;
+      if (m.fell !== undefined || m.pose !== 'mounted' || !sq.veh.length) { m.out = undefined; continue; }
+      if (t < m.out && t - (sq.hop ?? t) < MOUNT.hopMost) { still = true; continue; }
+      m.out = undefined;
+      const v = this.lorryOf(sq, m), j = this.seatNo(sq, m), side = j % 2 ? 1 : -1, row = Math.floor(j / 2);
+      [m.x, m.y] = toWorld(v, v.face, side * 0.45, -MOUNT.tail);
+      m.face = wrap(v.face + Math.PI); m.went = 0;
+      m.spot = toWorld(v, v.face, side * (1.6 + 0.5 * row), -MOUNT.tail - 1.5 - 0.4 * row); m.slotAt = m.spot;
+      m.pose = 'run'; m.v = 3.5; m.aim = undefined; m.hidden = undefined; m.cover = 'none'; m.until = t + 1;
+    }
+    for (const m of sq.men) if (m.fell === undefined && m.out === undefined && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
+    if (still) return false;
+    sq.hop = undefined; sq.left = t;
+    return true;
   }
 
   /**
@@ -2954,6 +3018,8 @@ export class Drill {
   private mountUp(sq: Squad): void {
     const u = sq.u;
     sq.boarding = this.b.t;
+    sq.hop = sq.left = undefined;
+    for (const m of sq.men) m.out = undefined;
     // Every lorry on its way to its men (a lorry halted is one waiting for them to climb in: board).
     for (const v of sq.veh) if (v.pose === 'parked') v.pose = 'drive';
     const men = sq.men.filter((m) => this.stands(sq, m));
@@ -3000,11 +3066,31 @@ export class Drill {
   private lorryIx(sq: Squad, m: Man): number { return (m.lor ?? (sq.tier >= 1 ? m.sec ?? m.k : m.k)) % sq.veh.length; }
   /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
   private seat(sq: Squad, m: Man): [number, number] {
-    const v = this.lorryOf(sq, m);
+    const v = this.lorryOf(sq, m), j = this.seatNo(sq, m);
     // Drawn as sections, a section to a lorry (a gun's crew to its tractor): its key man first, close benches.
-    if (sq.tier >= 1) { const j = m.seat ?? m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
-    const j = Math.floor((m.k - (sq.of !== undefined ? DR.mech.base : 0)) / sq.veh.length);
+    if (sq.tier >= 1) return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2));
     return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
+  }
+
+  /**
+   * His seat's number in his lorry's bed (seat): two abreast, the odd ones on her right, front to back. Each lorry's men
+   * are numbered once, in their sections' own order (a section to a lorry keeps its seats: its key man first); where
+   * sections share a lorry (more sections than lorries) they sit turn about, so no two men have one seat (they sat on
+   * one another: the seats' cloud test, 23 November).
+   */
+  private seatNo(sq: Squad, m: Man): number {
+    const own = (x: Man): number => (sq.tier >= 1 ? x.seat ?? x.j ?? 0 : Math.floor((x.k - (sq.of !== undefined ? DR.mech.base : 0)) / sq.veh.length));
+    if (!sq.seats) {
+      sq.seats = new Map();
+      const by = new Map<number, Man[]>();
+      for (const x of sq.men) {
+        if (x.role === 'holder') continue;
+        const i = this.lorryIx(sq, x), l = by.get(i);
+        if (l) l.push(x); else by.set(i, [x]);
+      }
+      for (const l of by.values()) l.map((x, i) => ({ x, o: own(x), i })).sort((a, c) => a.o - c.o || a.i - c.i).forEach(({ x }, n) => sq.seats!.set(x, n));
+    }
+    return sq.seats.get(m) ?? own(m);
   }
 
   /**
@@ -3112,6 +3198,8 @@ export class Drill {
       }
     }
     if (u.kind !== 'mot' || !sq.down) return;
+    // Their men just down behind them (hopOut): they stand a moment more while the men clear their tails.
+    if (sq.left !== undefined && t < sq.left + MOUNT.clear && sq.phase !== 'flee') { for (const v of sq.veh) { v.v = 0; v.pose = 'parked'; v.spot = [v.x, v.y]; } return; }
     sq.veh.forEach((v, i) => {
       if (sq.phase === 'flee' || sq.phase === 'fallback' || sq.close) {
         const s = toWorld(u, u.face, (i - 0.5) * 20, -u.d / 2 - (sq.close ? 30 : 40));
@@ -3977,6 +4065,7 @@ export class Drill {
       if (u.state === 'withdrawn' && !sq.men.some((m) => m.fell !== undefined)) continue;
       const men = sq.men.filter((m) => m.fell !== undefined || m.job !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
         const o = one(m);
+        if (m.pose === 'mounted' && m.fell === undefined && sq.veh.length) o.sv = [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
         if (mark !== undefined && m.fell === undefined && grp(m) === mark && m.role !== 'lorry' && m.role !== 'holder') o.ld = 1;
         return o;
       });

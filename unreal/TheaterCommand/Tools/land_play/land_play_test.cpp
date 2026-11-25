@@ -73,6 +73,9 @@ namespace
 		int Crossed = 0, Edged = 0;
 		double CutReal = 0.0;
 		double LostSince = -1.0, LostLongest = 0.0, LostAt = 0.0;
+		/** The special shot the longest lost spell ended in, and the shot's kind (the special shots' diagnosis). */
+		LandEye::Special LostSp = LandEye::Special::None;
+		LandEye::Kind LostKind = LandEye::Kind::Open;
 		double Next = 0.0;
 		// (the look's way: yaw and pitch, degrees; its swing a frame ago, degrees a second)
 		bool bWay = false, bSwing = false;
@@ -314,7 +317,14 @@ namespace
 			if (bMan && bUp && P.Shot != LandEye::Kind::Tank && P.Shot != LandEye::Kind::Track && D.Lost(B))
 			{
 				if (LostSince < 0.0) LostSince = R;
-				if (R - LostSince > LostLongest) { LostLongest = R - LostSince; LostAt = B; }
+				if (R - LostSince > LostLongest) { LostLongest = R - LostSince; LostAt = B; LostSp = P.Sp; LostKind = P.Shot; }
+				if (std::getenv("LAND_PLAY_LOST") && R - LostSince >= 3.9 && R - LostSince < 4.15)
+				{
+					std::printf("  lost 4 s at battle %.2f (real %.2f): %s on %d, held %.2f s; falls near:", B, R, LandEye::NameOf(P.Shot), P.Subject, R - CutReal);
+					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+						if (Rec->Tracks[I].Fell >= B - 3.0 && Rec->Tracks[I].Fell <= B + 3.0) std::printf(" %zu@%.2f", I, Rec->Tracks[I].Fell);
+					std::printf("\n");
+				}
 			}
 			else LostSince = -1.0;
 		}
@@ -330,6 +340,7 @@ namespace
 				Label, Bursts, BurstsKept, Set.OwnClear * 0.8, 100.0 * OwnNear / std::max(1, OwnFrames), OwnFrames, 100.0 * Set.OwnMost,
 				100.0 * OwnFilled / std::max(1, OwnLooks), 100.0 * Crossed * Share, 100.0 * Edged * Share, LostLongest, LostAt, Kick, KickAt, Kick999,
 				PanKick, PanKickAt, Knocked, KnockedSeen);
+			if (LostSp != LandEye::Special::None) std::printf(" (in a %s shot, %s)", LandEye::NameOf(LostSp), LandEye::NameOf(LostKind));
 			std::printf("; in the fight %.0f%% at a soldier's eye level (2.2 m or under), %.0f%% on the film's own section", 100.0 * EyeLevel / std::max(1, FightFrames),
 				100.0 * OnSquad / std::max(1, FightFrames));
 			std::printf("; the lens in a burst's cloud %.2f%% of frames, the longest %.2f s (battle %.1f)", 100.0 * CloudFrames / std::max(1, Frames), CloudLongest, CloudAt);
@@ -800,6 +811,36 @@ int main(int argc, char** argv)
 	// (the choice's share by steps alone, so a run is the same on any machine; LAND_PLAY_CHOOSE_MS=ms tries the clock's
 	// share as the game has it, ms a frame)
 	ES.ChooseMs = std::getenv("LAND_PLAY_CHOOSE_MS") ? std::atof(std::getenv("LAND_PLAY_CHOOSE_MS")) : 0.0;
+	// The first bail-out (LAND_PLAY_BAIL=1, as the scene with -TheaterLandBailOut): every tank's crew may get out; at her
+	// kill (BailOut, below) five crews in six do, as the effects thread's LandBail plays them.
+	const bool bBailTest = std::getenv("LAND_PLAY_BAIL") != nullptr;
+	if (bBailTest) EW.Bails = [&Rec](int T) { return Rec.Tracks[static_cast<size_t>(T)].Role == "tank"; };
+	// The special shots (Brian's yes, 23 November 19:52Z; each as the scene's own switch): LAND_PLAY_WHISTLE=1 the
+	// whistle start, LAND_PLAY_NICK=1 a nickname for every infantry and armoured block (=side: one a side), LAND_PLAY_STAND=1 the last stand.
+	const bool bWhistleTest = std::getenv("LAND_PLAY_WHISTLE") != nullptr;
+	const bool bNickTest = std::getenv("LAND_PLAY_NICK") != nullptr;
+	const bool bStandTest = std::getenv("LAND_PLAY_STAND") != nullptr;
+	ES.bWhistle = bWhistleTest;
+	ES.bLastStand = bStandTest;
+	// (LAND_PLAY_WHISTLE=hidden: the attacker's foot hidden from the player all battle, the officer among them: the whistle
+	// cannot be shown, and the film must still open on its aerial. A check of its own: the ride film, on those hidden men,
+	// fails its gates in it)
+	const bool bWhistleHidden = bWhistleTest && std::string(std::getenv("LAND_PLAY_WHISTLE")) == "hidden";
+	if (bWhistleHidden)
+		EW.Hidden = [&Rec](int B)
+		{
+			const LandFeed::Block* Bk = Rec.BlockOf(B);
+			return Bk && Bk->Side == 0 && Bk->Kind == "inf";
+		};
+	if (bNickTest)
+		EW.Nickname = [&Rec](int B)
+		{
+			// (LAND_PLAY_NICK=side: one name for every block of a side, as a corps' name carried by all its blocks)
+			const char* How = std::getenv("LAND_PLAY_NICK");
+			const LandFeed::Block* Bk = Rec.BlockOf(B);
+			if (!Bk || (Bk->Kind != "inf" && Bk->Kind != "arm")) return std::string();
+			return How && std::string(How) == "side" ? "Side " + std::to_string(Bk->Side) : "Nick " + std::to_string(B);
+		};
 	LandEye::Director Eye;
 	Eye.Begin(Rec, EW, ES);
 	LandDesk::Desk Desk;
@@ -860,6 +901,21 @@ int main(int argc, char** argv)
 	bool bFocusWas = false;
 	double FocusPullMost = 0.0, FocusWas = 0.0, FocusShotAt = -1.0;
 	std::vector<double> FocusOff;
+	// (the first bail-out: the crews that got out, those on a bail watch then, the hold's lens at her hit, and the tanks'
+	// ends the hold kept the film from)
+	int BailCrews = 0, BailWatched = 0, BailEndsPassed = 0;
+	// (the special shots: each one's frames held, its card's frames, and the lens at its moment: the step-off, the kill's
+	// landing, the middle of the stand)
+	struct SpecialSeen
+	{
+		int HoldFrames = 0, CardFrames = 0, MenIn = 0;
+		bool bLooked = false, bIn = false;
+		double Off = 0.0, Up = 0.0;
+	};
+	std::vector<SpecialSeen> SpSeen;
+	bool bBailLensSeen = false;
+	double BailLensOff = 0.0, BailLensUp = 0.0;
+	bool bBailInPicture = false;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
 	// (the frame the whole mass was placed in: its steps and time)
@@ -1569,13 +1625,76 @@ int main(int argc, char** argv)
 		Takes.clear();
 		Play.Step(From, Battle, Fx, Noises, Losses);
 		PlaceMovers(Battle);
+		// (the scene's call at a tank's kill, before the camera's frame: five crews in six get out, the first man up 0.6 to
+		// 2.4 life seconds after the hit, every second one brewing up 5.5 to 10 s after it; battle seconds to the camera)
+		if (bBailTest)
+		{
+			for (size_t I = 0; I < Rec.Tracks.size(); ++I)
+			{
+				const LandFeed::Track& Tr = Rec.Tracks[I];
+				if (Tr.Role != "tank" || Tr.bTwin || !(Tr.Fell > From && Tr.Fell <= Battle)) continue;
+				const uint64_t H = (static_cast<uint64_t>(I) + 1) * 0x9E3779B97F4A7C15ull ^ Rec.Seed;
+				const double U1 = static_cast<double>((H >> 11) % 1000) / 1000.0, U2 = static_cast<double>((H >> 23) % 1000) / 1000.0;
+				const bool bOut = (H >> 37) % 6 != 0, bBrew = (H >> 41) % 2 == 0;
+				if (bOut)
+				{
+					++BailCrews;
+					if (Pose.Subject == static_cast<int>(I) && Eye.BailWatchNow() && Eye.BailBeats().empty()) ++BailWatched;
+				}
+				if (!Eye.BailBeats().empty() && Eye.BailBeats().back().Left < 0.0) ++BailEndsPassed;
+				if (std::getenv("LAND_PLAY_BAILS")) std::printf("  bail-out: track %zu at %.1f, %s, the film %s on %d%s\n", I, Tr.Fell, bOut ? "her crew gets out" : "nobody gets out",
+					LandEye::NameOf(Pose.Shot), Pose.Subject, Eye.BailWatchNow() ? " (a bail watch)" : "");
+				Eye.BailOut(static_cast<int>(I), bOut ? (0.6 + 1.8 * U1) / Life : -1.0, bBrew ? (5.5 + 4.5 * U2) / Life : -1.0);
+			}
+		}
 		const auto E0 = std::chrono::steady_clock::now();
 		const long Steps0 = Eye.Steps();
 		Pose = Eye.Update(Battle, Real, Dt);
+		if (bBailTest && !bBailLensSeen && !Eye.BailBeats().empty() && Eye.BailBeats().front().Hit >= 0.0)
+		{
+			// (the lens as she is hit: how far off her and how high, and whether she is in the picture)
+			bBailLensSeen = true;
+			const LandFeed::Track& Tb = Rec.Tracks[static_cast<size_t>(Eye.BailBeats().front().Track)];
+			const LandFeed::Spot S = LandFeed::SpotAt(Tb, Battle);
+			const LandEye::Vec At(S.X, S.Y, GroundAt(S.X, S.Y) + 1.3);
+			BailLensOff = std::hypot(Pose.Eye.X - S.X, Pose.Eye.Y - S.Y);
+			BailLensUp = Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y);
+			bBailInPicture = LandEye::InPicture(Pose, At);
+		}
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
 		const long FrameSteps = Eye.Steps() - Steps0;
 		StepsByFrame.push_back(FrameSteps);
 		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
+		if (Pose.bCut && std::getenv("LAND_PLAY_CUTS")) std::printf("  cut at %.2f (real %.2f) to %s on %d%s%s, the last left for %s\n", Battle, Real, LandEye::NameOf(Pose.Shot), Pose.Subject,
+			Pose.Sp != LandEye::Special::None ? ", " : "", Pose.Sp != LandEye::Special::None ? LandEye::NameOf(Pose.Sp) : "", LandEye::NameOf(Eye.LastWhy()));
+		if (bWhistleTest || bNickTest || bStandTest)
+		{
+			const std::vector<LandEye::Director::SpecialBeat>& Sb = Eye.SpecialBeats();
+			SpSeen.resize(Sb.size());
+			for (size_t K = 0; K < Sb.size(); ++K)
+			{
+				const LandEye::Director::SpecialBeat& B = Sb[K];
+				SpecialSeen& M = SpSeen[K];
+				if (B.CutReal < 0.0) continue;
+				const bool bInHold = Real >= B.CutReal && Real < B.CutReal + B.Hold && (B.Left < 0.0 || Real < B.Left);
+				if (!bInHold) continue;
+				++M.HoldFrames;
+				if (B.Sp == LandEye::Special::Nick && Pose.Card == B.Block) ++M.CardFrames;
+				const bool bMoment = B.Sp == LandEye::Special::Stand ? Real >= B.CutReal + 0.5 * B.Hold : Battle >= B.At;
+				if (M.bLooked || !bMoment) continue;
+				M.bLooked = true;
+				const LandFeed::Track& Tw = Rec.Tracks[static_cast<size_t>(B.Who)];
+				const LandFeed::Spot S = LandFeed::SpotAt(Tw, Battle);
+				M.Off = std::hypot(Pose.Eye.X - S.X, Pose.Eye.Y - S.Y);
+				M.Up = Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y);
+				M.bIn = LandEye::InPicture(Pose, LandEye::Vec(S.X, S.Y, GroundAt(S.X, S.Y) + (Tw.IsVehicle() ? 1.3 : 0.9)));
+				for (const int Mn : B.Men)
+				{
+					const LandFeed::Spot Sm = LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(Mn)], Battle);
+					if (LandEye::InPicture(Pose, LandEye::Vec(Sm.X, Sm.Y, GroundAt(Sm.X, Sm.Y) + 0.8))) ++M.MenIn;
+				}
+			}
+		}
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
 		{
@@ -2334,7 +2453,20 @@ int main(int argc, char** argv)
 	// view to a man's shoulder, walks the view through the hedges, turns it round, slides it, runs it to the field's
 	// edges, follows a tank and his own section, then wanders at random. The eye must never stand under the ground, in a
 	// thing or among the stalks, the look-at never leave the field by more than its margin, and nothing jolt.
+	// Then again with his own tilt (Brian, 24 November: "it's hard to move the angle of the camera to see a good troop
+	// movement from above"): tilted down by hand, the top view pressed and pressed again, zoomed to the shoulder and out
+	// with his tilt kept, tilted back to the automatic tilt, a tank and his section followed from above, then a wander
+	// that also tilts and presses the top view. The same rules hold; the top view must look down from about 100 m, his
+	// tilt be kept through the zoom, and the view tilt with the zoom again once tilted all the way back.
+	// And a third time with his kept views (Brian, 24 November 20:38Z, release 2: saved views): three kept (the opening
+	// one from high up, one low and turned, one in the top view), each called back and reached; a number never kept is
+	// kept by its first press and does not move the view; calls on each other's heels, a call while following a tank,
+	// then a wander that also keeps and calls. The same rules hold, and a called view must be reached as it was kept.
+	for (int GenRun = 0; GenRun < 3; ++GenRun)
 	{
+		const bool bTiltRun = GenRun == 1, bViewRun = GenRun == 2;
+		if (bTiltRun && std::getenv("LAND_PLAY_NO_TILT")) continue;
+		if (bViewRun && std::getenv("LAND_PLAY_NO_VIEWS")) continue;
 		LandGeneralEye::Eye Gen;
 		const double* Za = Rec.Ground.ZoneAtt;
 		const double* Zd = Rec.Ground.ZoneDef;
@@ -2363,12 +2495,128 @@ int main(int argc, char** argv)
 		double ZWas = 0.0, ZWas2 = 0.0, WorstRise = 0.0, WorstRiseAt = 0.0;
 		int GCuts = 0;
 		bool CutWas = false;
-		const double End = 260.0;
+		const double End = bViewRun ? 200.0 : 260.0;
+		// (the kept views' own checks: each view as it stood when kept, the call being timed, and the worst a called view
+		// was missed by once it should have been reached)
+		struct KeptAs { bool bKept = false, bOwn = false; double X = 0.0, Y = 0.0, H = 0.0, S = 0.0, Tilt = 0.0; };
+		KeptAs Kept[LandGeneralEye::ViewCount];
+		int Called = -1, Calls = 0, Reached = 0, Keeps = 0, FlyFrames = 0;
+		double CalledAt = 0.0, CheckAt = -1.0, MissPlace = 0.0, MissZoom = 0.0, MissTurn = 0.0, MissTilt = 0.0, LongestFlight = 0.0, FirstPressMoved = 0.0;
+		Vec FirstPressAt;
+		double FirstPressUntil = -1.0;
+		// (the tilted run's own checks: the top view's steepest and highest, his tilt after the zoom out, the view back to
+		// tilting with the zoom, and how often the top view and his tilt were on)
+		double TopTiltBest = 0.0, TopUpBest = 0.0, KeptTilt = -1.0, NearTilt = 0.0;
+		int BackToAuto = -1, TopFrames = 0, OwnFrames = 0, TopPresses = 0;
 		while (R < End)
 		{
 			LandGeneralEye::Input In;
 			auto Notch = [&](double Way, double Every) { if (R >= NextNotch) { In.Zoom = Way; NextNotch = R + Every; } };
-			if (R < 2.0) {}
+			auto Once = [&](double At) { return R >= At && R - Dt < At; };
+			if (bTiltRun)
+			{
+				if (R < 2.0) {}
+				else if (R < 5.0) In.Tilt = 40.0 * Dt;
+				else if (R < 7.0) In.PanAhead = 1.0;
+				else if (R < 12.0) {}
+				else if (R < 13.0) In.bTopView = Once(12.5);
+				else if (R < 18.0) In.Turn = 45.0 * Dt;
+				else if (R < 26.0) Notch(1.0, 0.25);
+				else if (R < 34.0) In.PanAhead = 1.0;
+				else if (R < 40.0) Notch(-1.0, 0.25);
+				else if (R < 46.0) { In.bTopView = Once(40.0); if (R > 41.0) In.PanRight = 1.0; }
+				else if (R < 52.0) In.Tilt = -40.0 * Dt;
+				else if (R < 60.0) { In.SlideRight = (static_cast<int>(R / 2.0) % 2 ? 1.0 : -1.0) * 0.012; In.SlideAhead = 0.006; }
+				else if (R < 64.0) In.bTopView = Once(60.0);
+				else if (R < 70.0) Notch(1.0, 0.3);
+				else if (R < 78.0) In.PanAhead = 1.0;
+				else if (R < 110.0)
+				{
+					if (Once(78.0)) In.GoBlock = TankBlock;
+					In.bFollow = true;
+					if (R < 84.0) Notch(1.0, 0.25);
+				}
+				else if (R < 140.0)
+				{
+					if (Once(110.0)) { In.GoBlock = Eye.SquadBlock(); In.bTopView = true; }
+					In.bFollow = true;
+					if (R > 115.0 && R < 117.0) In.Tilt = 30.0 * Dt;
+					if (R < 118.0) Notch(1.0, 0.3);
+				}
+				else
+				{
+					if (R >= NextWander)
+					{
+						NextWander = R + 1.5 + 3.0 * Roll();
+						Wander = LandGeneralEye::Input();
+						const double Pick = Roll();
+						if (Pick < 0.3) { Wander.PanRight = Roll() * 2.0 - 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.4) { Wander.EdgeRight = Roll() < 0.5 ? -1.0 : 1.0; Wander.bLockEdgePan = Roll() < 0.3; }
+						else if (Pick < 0.5) Wander.Turn = (Roll() * 2.0 - 1.0) * 60.0 * Dt;
+						else if (Pick < 0.65) Wander.Zoom = Roll() < 0.5 ? 1.0 : -1.0;
+						else if (Pick < 0.85) { Wander.Tilt = (Roll() * 2.0 - 1.0) * 50.0 * Dt; if (Roll() < 0.5) Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.93) Wander.bTopView = true;
+						else Wander.SlideRight = (Roll() * 2.0 - 1.0) * 0.01;
+					}
+					In = Wander;
+					if (In.Zoom != 0.0) { if (R < NextNotch) In.Zoom = 0.0; else NextNotch = R + 0.3; }
+					// (a press is one frame's)
+					Wander.bTopView = false;
+				}
+			}
+			else if (bViewRun)
+			{
+				if (R < 2.0) {}
+				else if (R < 6.0) { if (Once(2.0)) In.KeepView = 0; Notch(1.0, 0.25); }
+				else if (R < 12.0) In.PanAhead = 1.0;
+				else if (R < 15.0) In.Turn = 45.0 * Dt;
+				else if (R < 16.0) { if (Once(15.5)) In.KeepView = 1; }
+				else if (R < 17.0) In.bTopView = Once(16.0);
+				else if (R < 22.0) In.PanRight = 1.0;
+				else if (R < 24.0) { if (Once(22.5)) In.KeepView = 2; }
+				else if (R < 32.0) { if (Once(24.0)) In.CallView = 0; }
+				else if (R < 40.0) { if (Once(32.0)) In.CallView = 1; }
+				else if (R < 48.0) { if (Once(40.0)) In.CallView = 2; }
+				else if (R < 49.0) { if (Once(48.0)) In.CallView = 3; }
+				else if (R < 52.0) In.PanAhead = 1.0;
+				else if (R < 62.0)
+				{
+					// (calls on each other's heels: the last one stands)
+					if (Once(52.0)) In.CallView = 1;
+					if (Once(53.0)) In.CallView = 0;
+					if (Once(53.5)) In.CallView = 2;
+					if (Once(54.2)) In.CallView = 1;
+				}
+				else if (R < 90.0)
+				{
+					if (Once(62.0)) In.GoBlock = TankBlock;
+					In.bFollow = R < 75.0;
+					if (R < 66.0) Notch(1.0, 0.25);
+					if (Once(75.0)) In.CallView = 0;
+				}
+				else
+				{
+					if (R >= NextWander)
+					{
+						NextWander = R + 1.5 + 3.0 * Roll();
+						Wander = LandGeneralEye::Input();
+						const double Pick = Roll();
+						if (Pick < 0.3) { Wander.PanRight = Roll() * 2.0 - 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.4) Wander.Turn = (Roll() * 2.0 - 1.0) * 60.0 * Dt;
+						else if (Pick < 0.52) Wander.Zoom = Roll() < 0.5 ? 1.0 : -1.0;
+						else if (Pick < 0.6) Wander.Tilt = (Roll() * 2.0 - 1.0) * 50.0 * Dt;
+						else if (Pick < 0.65) Wander.bTopView = true;
+						else if (Pick < 0.92) Wander.CallView = static_cast<int>(Roll() * 4.0) % 4;
+						else Wander.KeepView = static_cast<int>(Roll() * 4.0) % 4;
+					}
+					In = Wander;
+					if (In.Zoom != 0.0) { if (R < NextNotch) In.Zoom = 0.0; else NextNotch = R + 0.3; }
+					// (a press is one frame's)
+					Wander.bTopView = false;
+					Wander.CallView = Wander.KeepView = -1;
+				}
+			}
+			else if (R < 2.0) {}
 			else if (R < 8.0) Notch(1.0, 0.25);
 			else if (R < 28.0) In.PanAhead = 1.0;
 			else if (R < 36.0) In.Turn = 45.0 * Dt;
@@ -2409,9 +2657,104 @@ int main(int argc, char** argv)
 			B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
 			R += Dt;
 			PlaceMovers(B);
+			if (bViewRun)
+			{
+				// (a view as it stands when kept: by Shift's press, or by the first press of a number never kept)
+				const int Keeping = In.KeepView >= 0 ? In.KeepView : In.CallView >= 0 && !Gen.ViewKept(In.CallView) ? In.CallView : -1;
+				if (Keeping >= 0)
+				{
+					KeptAs& K = Kept[Keeping];
+					const Vec La = Gen.LookAt();
+					K.bKept = true;
+					K.X = La.X;
+					K.Y = La.Y;
+					K.H = Gen.Heading();
+					K.S = Gen.Zoom();
+					K.bOwn = Gen.OwnTilt();
+					K.Tilt = Gen.TiltDegrees();
+					++Keeps;
+					if (In.KeepView < 0)
+					{
+						FirstPressAt = La;
+						FirstPressUntil = R + 1.0;
+					}
+					// (kept anew while a call to it was being timed: the call is no longer the test's to judge)
+					if (Keeping == Called) Called = -1;
+				}
+				else if (In.CallView >= 0)
+				{
+					Called = In.CallView;
+					CalledAt = R;
+					CheckAt = R + 7.9;
+					++Calls;
+				}
+				// (his own hand on the view: the call is over)
+				if (In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.SlideRight != 0.0 || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.GoBlock >= 0) Called = -1;
+			}
 			const auto GT0 = std::chrono::steady_clock::now();
 			const LandEye::Pose P = Gen.Update(In, Dt, B);
 			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GT0).count();
+			if (bViewRun)
+			{
+				FlyFrames += Gen.Flying() ? 1 : 0;
+				if (R < FirstPressUntil)
+				{
+					const Vec La = Gen.LookAt();
+					FirstPressMoved = std::max(FirstPressMoved, std::hypot(La.X - FirstPressAt.X, La.Y - FirstPressAt.Y));
+				}
+				if (Called >= 0)
+				{
+					const KeptAs& K = Kept[Called];
+					const Vec La = Gen.LookAt();
+					double Turned = (Gen.Heading() - K.H) * 180.0 / 3.14159265358979;
+					while (Turned > 180.0) Turned -= 360.0;
+					while (Turned < -180.0) Turned += 360.0;
+					const double Place = std::hypot(La.X - K.X, La.Y - K.Y), Zoomed = std::abs(Gen.Zoom() - K.S), Tilted = std::abs(Gen.TiltDegrees() - K.Tilt);
+					const bool bThere = Place < 1.5 && Zoomed < 0.01 && std::abs(Turned) < 1.0 && Tilted < 1.5;
+					if (std::getenv("LAND_PLAY_VIEWS") && static_cast<int>((R + Dt) * 2.0) != static_cast<int>(R * 2.0))
+					{
+						std::printf("  view %d called at %.1f, now %.2f: %.1f m off, zoom %.3f off, turn %+.1f off, tilt %.1f off, flying %d at %d own %d top %d\n", Called, CalledAt, R + Dt, Place, Zoomed, Turned, Tilted,
+							Gen.Flying() ? 1 : 0, Gen.ViewAt(), Gen.OwnTilt() ? 1 : 0, Gen.TopView() ? 1 : 0);
+					}
+					if (bThere || R >= CheckAt)
+					{
+						if (bThere)
+						{
+							++Reached;
+							LongestFlight = std::max(LongestFlight, R - CalledAt);
+						}
+						else
+						{
+							MissPlace = std::max(MissPlace, Place);
+							MissZoom = std::max(MissZoom, Zoomed);
+							MissTurn = std::max(MissTurn, std::abs(Turned));
+							MissTilt = std::max(MissTilt, Tilted);
+							std::printf("  view %d called at real %.1f not reached by %.1f: %.1f m off, zoom %.3f off, turn %+.1f off, tilt %.1f off (waited %d, braked %d)\n", Called, CalledAt, R, Place, Zoomed, Turned, Tilted,
+								Gen.WaitedFrames(), Gen.BrakedFrames());
+						}
+						Called = -1;
+					}
+				}
+			}
+			if (bTiltRun)
+			{
+				TopPresses += In.bTopView ? 1 : 0;
+				TopFrames += Gen.TopView() ? 1 : 0;
+				OwnFrames += Gen.OwnTilt() ? 1 : 0;
+				if (Gen.TopView() && R > 13.0 && R < 18.0)
+				{
+					TopTiltBest = std::max(TopTiltBest, Gen.TiltDegrees());
+					TopUpBest = std::max(TopUpBest, P.Eye.Z - P.Look.Z);
+				}
+				if (R > 45.0 && R < 45.0 + Dt) KeptTilt = Gen.TiltDegrees();
+				// (a second and a half after the zoom came right in)
+				if (R >= 25.9 && R < 26.0) NearTilt = std::max(NearTilt, Gen.TiltDegrees());
+				if (BackToAuto < 0 && R > 46.0 && !Gen.OwnTilt()) BackToAuto = static_cast<int>(R * 10.0);
+				if (std::getenv("LAND_PLAY_TILT") && static_cast<int>((R + Dt) * 4.0) != static_cast<int>(R * 4.0))
+				{
+					std::printf("  tilt at %.2f: zoom %.3f tilt %.1f own %d top %d, eye %.1f over the look-at, %.1f over the ground\n", R + Dt, Gen.Zoom(), Gen.TiltDegrees(), Gen.OwnTilt() ? 1 : 0, Gen.TopView() ? 1 : 0, P.Eye.Z - P.Look.Z, P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y));
+				}
+			}
 			Spent += Ms;
 			GSlowest = std::max(GSlowest, Ms);
 			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d, asked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), Gen.AskedNow());
@@ -2474,17 +2817,36 @@ int main(int argc, char** argv)
 			Yaw = Y;
 			Pitch = Pt;
 		}
-		std::printf("\ngeneral's view: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
-			GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
+		std::printf("\ngeneral's view%s: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
+			bTiltRun ? ", tilted by hand" : bViewRun ? ", kept views" : "", GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear < 1e8 ? LowestNear : 0.0, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
 		if (Under > 0) Fault("the general's view went under the ground");
 		if (InThing > 0) Fault("the general's view stood in a thing or a man");
 		if (InCorn > 0) Fault("the general's view stood among the stalks");
 		if (OffField > 0) Fault("the general's view looked off the field past its margin");
 		if (Kicks > 0) Fault("the general's view jolted (a look kick over 1200 deg/s/s)");
 		if (Lifted > 0) Fault("the general's view jolted up or down (over 1200 deg/s/s as the picture sees it)");
-		if (LowestNear > 2.5) Fault("the general's view never came down to a man's shoulder");
+		if (LowestNear > 2.5 && !bTiltRun && !bViewRun) Fault("the general's view never came down to a man's shoulder");
 		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
 		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
+		if (bViewRun)
+		{
+			std::printf("\ngeneral's view, kept views: %d kept, %d called, %d reached as kept before his hand took the view again (the longest flight %.1f s); the worst miss %.1f m, zoom %.3f, turn %.1f degrees, tilt %.1f degrees; a first press moved the view %.2f m; flying %.0f s",
+				Keeps, Calls, Reached, LongestFlight, MissPlace, MissZoom, MissTurn, MissTilt, FirstPressMoved, FlyFrames * Dt);
+			if (MissPlace > 0.0 || MissZoom > 0.0 || MissTurn > 0.0 || MissTilt > 0.0) Fault("a kept view called back was not reached as it was kept");
+			if (Reached < 5) Fault("the general's kept views were hardly called (under 5 reached)");
+			if (FirstPressMoved > 0.5) Fault("the first press of a view never kept moved the view");
+			if (!Gen.ViewKept(0) || !Gen.ViewKept(1) || !Gen.ViewKept(2) || !Gen.ViewKept(3)) Fault("a kept view was lost");
+		}
+		if (bTiltRun)
+		{
+			std::printf("\ngeneral's view, tilted by hand: the top view looked down %.1f degrees from %.0f m over the look-at; his tilt %.1f degrees after the zoom to the shoulder and out; at the nearest zoom tilted %.1f degrees once settled; back to tilting with the zoom at %.1f s; top view on %.0f s (%d presses), his own tilt %.0f s",
+				TopTiltBest, TopUpBest, KeptTilt, NearTilt, BackToAuto * 0.1, TopFrames * Dt, TopPresses, OwnFrames * Dt);
+			// (his tilt handed back toward the shoulder: zoomed right in, the view looks along the ground as it always has)
+			if (NearTilt > LandGeneralEye::Settings().TiltNear + 1.0) Fault("the general's own tilt was not handed back to the automatic one at the nearest zoom");
+			if (TopTiltBest < 79.0 || TopUpBest < 95.0) Fault("the general's top view did not look almost straight down from about 100 m");
+			if (KeptTilt < 84.0) Fault("the general's own tilt was not kept through the zoom to the shoulder and out");
+			if (BackToAuto < 0 || BackToAuto > 560) Fault("the general's view did not go back to tilting with the zoom once tilted all the way back");
+		}
 	}
 	if (bOnlyGen)
 	{
@@ -2946,10 +3308,99 @@ int main(int argc, char** argv)
 		const int Calls = Eye.RadioCalls(), Went = static_cast<int>(Eye.RadioBeats().size());
 		std::printf("radio call, then the barrage: %d fresh calls for fire, the film went to %d of the callers (%.0f s apart at the least), %d salvos cut to or held for, %d of them in the picture as they landed\n",
 			Calls, Went, RadioGapLeast < 1e8 ? RadioGapLeast : 0.0, RadioBarrages, RadioSeen);
+		if (std::getenv("LAND_PLAY_RADIO"))
+			for (const LandEye::Director::RadioBeat& Bt : Eye.RadioBeats()) std::printf("  radio: call at %.1f by %d, its salvo at %.1f, %s\n", Bt.T, Bt.Caller, Bt.Land, Bt.bBarrage ? "cut to or held for" : "MISSED");
 		if (Calls >= 3 && Went == 0) Fault("the film went to none of the radio calls");
 		if (RadioGapLeast < ES.RadioEvery - 0.5) Fault("the film went to radio calls more often than RadioEvery");
 		if (Went > 0 && RadioBarrages * 2 < Went) Fault("most radio calls were not followed by their barrage");
 		if (RadioBarrages > 0 && RadioSeen * 4 < RadioBarrages * 3) Fault("a radio call's barrage was cut to but its first salvo landed out of the picture");
+	}
+	// The first bail-out (the effects thread's ask, 23 November): with crews getting out, the film's first bail watch on a
+	// crew that does is held for it, 10 to 15 s from her hit, from 18 to 45 m off her and no higher than 2.6 m, she in
+	// the picture; left early only for a shell or fuel ball at the lens, a man at it, or the scene's own cut; once.
+	if (!bOnlyGen && bBailTest)
+	{
+		const std::vector<LandEye::Director::BailBeat>& Bb = Eye.BailBeats();
+		const LandEye::Director::BailBeat* B0 = Bb.empty() ? nullptr : &Bb.front();
+		const double HeldFor = B0 && B0->Hit >= 0.0 ? (B0->Left >= 0.0 ? B0->Left : Real) - B0->Hit : 0.0;
+		std::printf("bail-out: %d crews got out, %d bail watches placed, %d of the crews on one as they were hit; ", BailCrews, Eye.BailWatches(), BailWatched);
+		if (B0) std::printf("the first held on track %d for %.1f s of %.1f asked (left for %s), the lens %.0f m off her, %.1f m up, she %s the picture; %d tanks' ends passed in the hold\n",
+			B0->Track, HeldFor, B0->Hold, B0->Left >= 0.0 ? LandEye::NameOf(B0->LeftWhy) : "the battle's end", BailLensOff, BailLensUp, bBailInPicture ? "in" : "NOT in", BailEndsPassed);
+		else std::printf("none held\n");
+		if (BailWatched > 0 && !B0) Fault("a bail watch on a crew getting out was not held for it");
+		if (Bb.size() > 1) Fault("more than one bail-out was held");
+		if (B0 && (B0->Hold < ES.BailLeast - 1e-6 || B0->Hold > ES.BailMost + 1e-6)) Fault("a bail-out's hold was asked outside BailLeast to BailMost");
+		if (B0 && B0->Left >= 0.0 && HeldFor > B0->Hold + 0.25) Fault("a bail-out was held past its hold");
+		const bool bRescue = B0 && (B0->LeftWhy == LandEye::Why::Burst || B0->LeftWhy == LandEye::Why::Rescue || B0->LeftWhy == LandEye::Why::Dark || B0->LeftWhy == LandEye::Why::Gone);
+		if (B0 && B0->Left >= 0.0 && HeldFor < B0->Hold - 0.25 && !bRescue) Fault("a bail-out's hold was cut short by the film's own wants");
+		if (B0 && bBailLensSeen && (BailLensOff < 18.0 || BailLensOff > 45.0 || BailLensUp > 2.6 || !bBailInPicture)) Fault("a bail-out's lens was not 18 to 45 m off her, low, with her in the picture as she was hit");
+	}
+	// The special shots (Brian's yes, 23 November 19:52Z, release 2): each held firm for its own time from its cut, left
+	// sooner only for a rescue (a shell, a fuel ball, a man or a thing at the lens, a dark picture, its man gone); the
+	// whistle on its officer in the picture as he steps off, the film opened on it followed by the opening aerial; a
+	// nickname's card on the picture all its hold, its shooter in it as the kill lands, at most NickMost, NickEvery apart;
+	// one last stand, at least two of its men in the picture at its middle.
+	if (!bOnlyGen && (bWhistleTest || bNickTest || bStandTest))
+	{
+		const std::vector<LandEye::Director::SpecialBeat>& Sb = Eye.SpecialBeats();
+		SpSeen.resize(Sb.size());
+		int Whistles = 0, Cards = 0, Stands = 0, NamesAgain = 0;
+		double LastCard = -1e9, CardGap = 1e9;
+		std::vector<std::string> Carded;
+		for (size_t K = 0; K < Sb.size(); ++K)
+		{
+			const LandEye::Director::SpecialBeat& B = Sb[K];
+			const SpecialSeen& M = SpSeen[K];
+			const double HeldFor = B.CutReal < 0.0 ? 0.0 : (B.Left >= 0.0 ? B.Left : Real) - B.CutReal;
+			std::printf("%s: %s at %.1f on track %d (block %d)", LandEye::NameOf(B.Sp), B.Sp == LandEye::Special::Whistle ? "step-off" : B.Sp == LandEye::Special::Nick ? "first kill lands" : "stand",
+				B.At, B.Who, B.Block);
+			if (B.CutReal < 0.0)
+			{
+				std::printf(", MISSED (nothing fit on him, or no cut in time)\n");
+				continue;
+			}
+			std::printf(", cut at %.2f to %s, held %.1f s of %.1f (left for %s)", B.Cut, LandEye::NameOf(B.Shot), HeldFor, B.Hold, B.Left >= 0.0 ? LandEye::NameOf(B.LeftWhy) : "the battle's end");
+			if (M.bLooked) std::printf("; the lens %.0f m off him, %.1f m up, he %s the picture", M.Off, M.Up, M.bIn ? "in" : "NOT in");
+			else std::printf("; left before its moment");
+			if (B.Sp == LandEye::Special::Nick) std::printf("; card on %d of %d frames", M.CardFrames, M.HoldFrames);
+			if (B.Sp == LandEye::Special::Stand && M.bLooked) std::printf("; %d of its %zu men in the picture at its middle", M.MenIn, B.Men.size());
+			if (B.Sp == LandEye::Special::Stand) std::printf("; its end %.1f", B.To);
+			std::printf("\n");
+			const bool bRescue = B.LeftWhy == LandEye::Why::Burst || B.LeftWhy == LandEye::Why::Rescue || B.LeftWhy == LandEye::Why::Dark || B.LeftWhy == LandEye::Why::Gone || B.LeftWhy == LandEye::Why::Lost;
+			if (B.Left >= 0.0 && HeldFor < B.Hold - 0.25 && !bRescue) Fault("a special shot's hold was cut short by the film's own wants");
+			if (B.Left >= 0.0 && HeldFor > B.Hold + 0.25) Fault("a special shot was held past its hold");
+			if (M.bLooked && !M.bIn && B.Sp != LandEye::Special::Stand) Fault("a special shot's man was not in the picture at its moment");
+			if (B.Sp == LandEye::Special::Whistle)
+			{
+				++Whistles;
+				const auto& Lg = Eye.Log();
+				if (B.At <= ES.WhistleOpen && (Lg.size() < 2 || Lg[1].second != LandEye::Kind::Open || B.Cut > 1.0)) Fault("the film opening on the whistle was not followed by the opening aerial");
+			}
+			if (B.Sp == LandEye::Special::Nick)
+			{
+				++Cards;
+				const std::string Name = EW.Nickname ? EW.Nickname(B.Block) : std::string();
+				if (std::find(Carded.begin(), Carded.end(), Name) != Carded.end()) ++NamesAgain;
+				Carded.push_back(Name);
+				CardGap = std::min(CardGap, B.CutReal - LastCard);
+				LastCard = B.CutReal;
+				if (M.CardFrames < M.HoldFrames * 9 / 10) Fault("a nickname's card was not on the picture through its hold");
+			}
+			if (B.Sp == LandEye::Special::Stand)
+			{
+				++Stands;
+				if (M.bLooked && M.MenIn < 2) Fault("a last stand's men were not in the picture");
+			}
+		}
+		std::printf("special shots: %d whistle, %d nickname cards, %d last stands (the whistle's step-off %.1f on track %d)\n", Whistles, Cards, Stands, Eye.WhistleAt(), Eye.WhistleMan());
+		if (bWhistleTest && !bWhistleHidden && Eye.WhistleAt() >= 0.0 && Whistles == 0) Fault("the whistle start was not shot");
+		if (bWhistleHidden && Whistles > 0) Fault("a whistle was shot on an officer hidden from the player");
+		if (bWhistleHidden && !Eye.Log().empty() && Eye.Log()[0].first < 1.0) Fault("the film did not open on its aerial with the whistle's officer hidden");
+		if (Whistles > 1) Fault("more than one whistle");
+		if (Cards > ES.NickMost) Fault("more nickname cards than NickMost");
+		if (Cards > 1 && CardGap < ES.NickEvery - 1e-6) Fault("two nickname cards nearer than NickEvery");
+		if (Stands > 1) Fault("more than one last stand");
+		if (NamesAgain > 0) Fault("one nickname carded twice in a battle");
 	}
 	// The film's shallow focus (the graphics audit's E9, Brian's D3): the close follow shots in it, never a wide, never
 	// switched in the middle of a shot, the distance held near its man (the Mac's cost is paid only in these frames).

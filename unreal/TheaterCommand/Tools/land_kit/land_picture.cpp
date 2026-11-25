@@ -4,11 +4,14 @@
 // views. Writes one picture a panel (PPM) and a list of captions; land_sheet.py lays them out on the sheet.
 // Usage: land_picture <Content folder> <out folder>
 
+#include "Battle/LandHouse.h"
 #include "Battle/LandKit.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -94,6 +97,7 @@ namespace
 			double X0, Y0, X1, Y1;
 		};
 		std::vector<Box> Feet; // the ground footprints of bodies that touch the ground (the earth darkens under them)
+		double GroundSnow = 0.0; // (a burnt-out house's winter panels: the snow lying on the ground round it, 0 to 1)
 		V3 Lo = V3(1e9, 1e9, 1e9), Hi = V3(-1e9, -1e9, -1e9);
 	};
 
@@ -227,7 +231,49 @@ namespace
 		double SootShare = 0.0;
 		double CameraBearing = 40.0, CameraUp = 16.0; // degrees: from her toward the camera (0 ahead of her), and above
 		bool bFullRecoil = false;                      // find the moment the barrel is fully back
+		// National marks (release 2, LandKit's Dress::bMarks): painted on her skin by the game's own code, in her owner's
+		// period marking for the month (the British flash, then star); bClose looks at the mark that faces the camera most,
+		// close enough that it fills nearly half the picture's height.
+		bool bMarks = false, bClose = false;
+		int CloseAmong = 99; // (the close look picks among her first this many marks: the Tiger's hull crosses, not her turret's)
+		int Year = 1944, Month = 7;
+		// A farmhouse's panel instead (release 2, LandHouse, LAND_KIT_HOUSE=1): its damage (0 whole to 3 a shell), its
+		// level (0 near, 1 middle, 2 far), roof and look; the sun's own bearing where given; a close look aimed at a point
+		// from a way (bAim).
+		int House = -1, HouseLevel = 0, HouseRoof = 0;
+		int HouseKind = 0; // (0 the farmhouse, 1 its barn, 2 its byre: LAND_KIT_HOUSE=farm; 3 the church; 6 a village house)
+		double HouseLong = 12.4, HouseDeep = 6.8; // (a village house's footprint, LAND_KIT_HOUSE=village)
+		int HouseStoreys = 2;
+		double HouseSnow = 0.0; // (the east's houses: the snow on its roof)
+		uint64_t HouseKey = 1;
+		double SunBearing = -1000.0;
+		bool bAim = false;
+		V3 AimAt, AimFrom;
+		double AimDistance = 5.0;
 	};
+
+	/** A farmhouse's level as triangles, its floor FloorUp over the plain earth. */
+	void AddHouse(const LandField::Mesh& M, double FloorUp, Scene& S)
+	{
+		for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+		{
+			Tri Out;
+			for (int K = 0; K < 3; ++K)
+			{
+				const size_t I = M.Triangles[T + static_cast<size_t>(K)];
+				Out.P[K] = V3(M.Positions[I * 3], M.Positions[I * 3 + 1], M.Positions[I * 3 + 2] + FloorUp);
+				Out.N[K] = V3(M.Normals[I * 3], M.Normals[I * 3 + 1], M.Normals[I * 3 + 2]);
+				Out.C[K] = FromPicture(M.Colours[I].R, M.Colours[I].G, M.Colours[I].B);
+				// (only what stands above the earth frames the picture)
+				if (Out.P[K].Z > -0.05)
+				{
+					S.Lo = V3(std::min(S.Lo.X, Out.P[K].X), std::min(S.Lo.Y, Out.P[K].Y), std::min(S.Lo.Z, Out.P[K].Z));
+					S.Hi = V3(std::max(S.Hi.X, Out.P[K].X), std::max(S.Hi.Y, Out.P[K].Y), std::max(S.Hi.Z, Out.P[K].Z));
+				}
+			}
+			S.Tris.push_back(Out);
+		}
+	}
 
 	/** The sun's shadow: depth toward the sun, an orthographic map over everything that casts. */
 	struct ShadowMap
@@ -323,7 +369,7 @@ namespace
 		const int Out = 3; // supersampled three times each way
 		const int W = 560 * Out, H = 420 * Out;
 		// The low sun of a July morning in Normandy, from the camera's right (fifteen degrees up).
-		const double SunBearing = (P.CameraBearing + 62.0) * Rad, SunUp = 15.0 * Rad;
+		const double SunBearing = (P.SunBearing > -999.0 ? P.SunBearing : P.CameraBearing + 62.0) * Rad, SunUp = 15.0 * Rad;
 		const V3 Sun(std::sin(SunBearing) * std::cos(SunUp), std::cos(SunBearing) * std::cos(SunUp), std::sin(SunUp));
 		ShadowMap Shadow;
 		Shadow.Build(S, Sun);
@@ -332,9 +378,32 @@ namespace
 		const double Fov = 28.0 * Rad;
 		const double F = (H * 0.5) / std::tan(Fov * 0.5);
 		const double Bearing = (P.CameraBearing) * Rad + V.Heading, Up = P.CameraUp * Rad;
-		const V3 Toward(std::sin(Bearing) * std::cos(Up), std::cos(Bearing) * std::cos(Up), std::sin(Up));
+		V3 Toward(std::sin(Bearing) * std::cos(Up), std::cos(Bearing) * std::cos(Up), std::sin(Up));
 		V3 Target = (S.Lo + S.Hi) * 0.5;
 		double Distance = 20.0;
+		// (a close look at one mark: the one facing the camera most, seen a little from her quarter and above)
+		std::vector<MarkPlace> Places;
+		V.MarksNow(Places);
+		const MarkPlace* Close = nullptr;
+		for (const MarkPlace& K : Places)
+		{
+			if (P.bClose && &K - Places.data() < P.CloseAmong && (!Close || K.Facing.Unit().Dot(Toward) > Close->Facing.Unit().Dot(Toward)))
+			{
+				Close = &K;
+			}
+		}
+		if (P.bAim)
+		{
+			Toward = P.AimFrom.Unit();
+			Target = P.AimAt;
+			Distance = P.AimDistance;
+		}
+		else if (Close)
+		{
+			Toward = (Close->Facing.Unit() * 0.85 + Toward * 0.3 + V3(0.0, 0.0, 0.2)).Unit();
+			Target = Close->At;
+			Distance = Close->Radius / (0.42 * std::tan(Fov * 0.5));
+		}
 		V3 Cam, Fwd, Right, CamUp;
 		auto Frame = [&]()
 		{
@@ -343,7 +412,7 @@ namespace
 			Right = Fwd.Cross(V3(0.0, 0.0, 1.0)).Unit();
 			CamUp = Right.Cross(Fwd).Unit();
 		};
-		for (int Pass = 0; Pass < 4; ++Pass)
+		for (int Pass = 0; Pass < (Close || P.bAim ? 0 : 4); ++Pass)
 		{
 			Frame();
 			double X0 = 1e9, X1 = -1e9, Y0 = 1e9, Y1 = -1e9;
@@ -351,6 +420,10 @@ namespace
 			{
 				for (const V3& Q : T.P)
 				{
+					if (Q.Z < -0.05)
+					{
+						continue; // (what is under the earth, a plinth's footing, a heap's rim)
+					}
 					const V3 D = Q - Cam;
 					const double Z = D.Dot(Fwd);
 					const double X = D.Dot(Right) / Z, Y = D.Dot(CamUp) / Z;
@@ -366,6 +439,15 @@ namespace
 			Distance *= Fill;
 		}
 		Frame();
+		// (LAND_KIT_CAMERA=1: where the camera stood and what it looked at, beside the picture, for measuring it)
+		if (std::getenv("LAND_KIT_CAMERA"))
+		{
+			if (std::FILE* Cf = std::fopen((Path + ".camera").c_str(), "wb"))
+			{
+				std::fprintf(Cf, "%.6f %.6f %.6f %.6f %.6f %.6f\n", Cam.X, Cam.Y, Cam.Z, Target.X, Target.Y, Target.Z);
+				std::fclose(Cf);
+			}
+		}
 
 		// The vehicle drawn into a depth, a normal, a colour and a place for every pixel.
 		const size_t Count = static_cast<size_t>(W) * H;
@@ -461,7 +543,10 @@ namespace
 						N = -N;
 					}
 					const V3 Pt = Where[I];
-					const double Sunny = std::max(0.0, N.Dot(Shadow.L)) * Shadow.Lit(Pt + N * 0.015, 0.02);
+					// (its bias grows with the slope to the sun and the map's texel, the soft lookup reaching 2.4 texels round:
+					// a large flat wall in a slanting sun, a church's far off, otherwise shadows itself in streaks)
+					const double NL = std::max(0.0, N.Dot(Shadow.L)), Slope = std::min(4.0, std::sqrt(std::max(0.0, 1.0 - NL * NL)) / std::max(NL, 0.05));
+					const double Sunny = NL * Shadow.Lit(Pt + N * 0.015, 0.02 + 2.5 * Shadow.Texel * Slope);
 					const double Sky = 0.55 + 0.45 * N.Z;
 					const double Low = 0.72 + 0.28 * Smooth(0.0, 0.9, Pt.Z); // the running gear sits in the shade of the hull
 					Lit[I] = Albedo[I] * (SunLight * Sunny + SkyLight * (Sky * Low) + Bounce * (0.5 - 0.5 * N.Z));
@@ -470,7 +555,7 @@ namespace
 				{
 					const double Patch = Noise2(Ground.X * 0.35, Ground.Y * 0.35) * 0.6 + Noise2(Ground.X * 1.3, Ground.Y * 1.3) * 0.4;
 					const double Grain = 0.9 + 0.2 * Noise2(Ground.X * 9.0, Ground.Y * 9.0);
-					const Colour Soil = Mix(Earth, EarthDark, Smooth(0.25, 0.85, Patch)) * Grain;
+					const Colour Soil = Mix(Mix(Earth, EarthDark, Smooth(0.25, 0.85, Patch)) * Grain, FromPicture(240, 242, 246) * (0.97 + 0.03 * Grain), S.GroundSnow);
 					double Under = 1.0;
 					for (const Scene::Box& B : S.Feet)
 					{
@@ -536,6 +621,40 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A painted panel read back (P6, 8 bits), for laying two side by side. */
+	bool ReadPicture(const std::string& Path, int& W, int& H, std::vector<uint8_t>& Out)
+	{
+		std::FILE* File = std::fopen(Path.c_str(), "rb");
+		if (!File)
+		{
+			return false;
+		}
+		int Most = 0;
+		const bool bOk = std::fscanf(File, "P6 %d %d %d", &W, &H, &Most) == 3 && Most == 255 && std::fgetc(File) != EOF && W > 0 && H > 0;
+		if (bOk)
+		{
+			Out.resize(static_cast<size_t>(W) * H * 3);
+		}
+		const bool bRead = bOk && std::fread(Out.data(), 1, Out.size(), File) == Out.size();
+		std::fclose(File);
+		return bRead;
+	}
+	bool WritePicture(const std::string& Path, int W, int H, const std::vector<uint8_t>& Pixels)
+	{
+		std::FILE* File = std::fopen(Path.c_str(), "wb");
+		if (!File)
+		{
+			return false;
+		}
+		std::fprintf(File, "P6\n%d %d\n255\n", W, H);
+		std::fwrite(Pixels.data(), 1, Pixels.size(), File);
+		std::fclose(File);
+		return true;
+	}
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 3)
@@ -550,9 +669,9 @@ int main(int argc, char** argv)
 		OutNormal = V3(0.0, 0.0, 1.0);
 	};
 	std::map<std::string, std::unique_ptr<Model>> Models;
-	auto ModelFor = [&](const std::string& Name, const std::string& Nation) -> const Model*
+	auto ModelFor = [&](const std::string& Name, const std::string& Nation, const Panel& For) -> const Model*
 	{
-		const std::string Key = Name + "|" + Nation;
+		const std::string Key = Name + "|" + Nation + (For.bMarks ? "|marks " + std::to_string(For.Year * 100 + For.Month) : std::string());
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -564,6 +683,9 @@ int main(int argc, char** argv)
 			auto M = std::make_unique<Model>();
 			Dress D;
 			D.Nation = Nation;
+			D.bMarks = For.bMarks;
+			D.Year = For.Year;
+			D.Month = For.Month;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -575,6 +697,425 @@ int main(int argc, char** argv)
 	};
 
 	std::vector<Panel> Panels;
+	// (LAND_KIT_MARKS=1: the national marks' own sheet instead, release 2's -TheaterLandMarks)
+	const bool bMarksSheet = std::getenv("LAND_KIT_MARKS") != nullptr;
+	struct MarkLook
+	{
+		const char* File;
+		const char* Model;
+		const char* Nation;
+		int Year, Month;
+		bool bClose;
+		double Bearing, Up, Soot, DeathAge;
+		const char* Caption;
+		int CloseAmong = 99;
+	};
+	const MarkLook MarkLooks[] = {
+		{ "marks_sherman", "Sherman", "USA", 1944, 7, false, 42.0, 15.0, 0.0, -1.0, "M4 Sherman, American, July 1944: the white star, hull and turret" },
+		{ "marks_sherman_close", "Sherman", "USA", 1944, 7, true, 42.0, 15.0, 0.0, -1.0, "the Sherman's hull star, close" },
+		{ "marks_tiger", "Tiger", "GER", 1944, 7, false, -128.0, 16.0, 0.0, -1.0, "Tiger, German, July 1944: the cross on her hull's sides only" },
+		{ "marks_tiger_close", "Tiger", "GER", 1944, 7, true, -128.0, 12.0, 0.0, -1.0, "the Tiger's hull cross, close", 2 },
+		{ "marks_t34", "T34", "SOV", 1943, 7, false, 42.0, 16.0, 0.0, -1.0, "T-34, Soviet, July 1943: the plain red star on the turret" },
+		{ "marks_t34_close", "T34", "SOV", 1943, 7, true, 42.0, 14.0, 0.0, -1.0, "the T-34's red star on her sloped turret" },
+		{ "marks_sexton", "Sexton", "UK", 1944, 7, false, 42.0, 15.0, 0.0, -1.0, "Sexton, British, July 1944: the Allies' white star" },
+		{ "marks_light_uk_1942", "LightTank", "UK", 1942, 5, true, 42.0, 14.0, 0.0, -1.0, "light tank, British, May 1942: the white-red-white flash" },
+		{ "marks_semovente", "Semovente", "ITA", 1942, 10, true, 42.0, 14.0, 0.0, -1.0, "Semovente, Italian, October 1942: the company's red patch" },
+		{ "marks_light_jap", "LightTank", "JAP", 1942, 1, true, -30.0, 14.0, 0.0, -1.0, "light tank, Japanese, January 1942: the star on her front" },
+		{ "marks_jeep", "Jeep", "USA", 1944, 7, false, 42.0, 22.0, 0.0, -1.0, "jeep, American: bonnet and side stars" },
+		{ "marks_truck", "Truck", "GER", 1944, 7, true, 42.0, 14.0, 0.0, -1.0, "the lorry in German hands: the cross on her door" },
+		{ "marks_panther", "Panther", "GER", 1944, 7, false, 42.0, 16.0, 0.0, -1.0, "Panther, German, July 1944: the cross on her hull's sides" },
+		{ "marks_panther_close", "Panther", "GER", 1944, 7, true, 42.0, 12.0, 0.0, -1.0, "the Panther's hull cross, close" },
+		{ "marks_stug", "StuG3", "GER", 1943, 7, false, 42.0, 15.0, 0.0, -1.0, "StuG III, German, July 1943: the hull's crosses" },
+	};
+	for (const MarkLook& K : MarkLooks)
+	{
+		if (!bMarksSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = K.Nation;
+		P.Year = K.Year;
+		P.Month = K.Month;
+		P.bMarks = true;
+		P.bClose = K.bClose;
+		P.CameraBearing = K.Bearing;
+		P.CameraUp = K.Up;
+		P.SootShare = K.Soot;
+		P.Pin.DeathAge = K.DeathAge;
+		P.Caption = K.Caption;
+		P.CloseAmong = K.CloseAmong;
+		Panels.push_back(P);
+	}
+	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses; LAND_KIT_HOUSE=farm
+	// its barn's and byre's)
+	const bool bHouseSheet = std::getenv("LAND_KIT_HOUSE") != nullptr;
+	const bool bFarmSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "farm";
+	const bool bChurchSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "church";
+	const bool bVillageSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "village";
+	const bool bEastSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "east";
+	auto HouseSpec = [](const Panel& P)
+	{
+		LandHouse::Spec H;
+		// (the bocage's farmstead's three, as LandField lays them)
+		H.Kind = P.HouseKind;
+		// (and the village's church, its nave as LandField's LayChurch lays it, its chancel and tower with it)
+		H.Long = P.HouseKind == 1 ? 15.0 : P.HouseKind == 2 ? 13.0 : P.HouseKind == 3 ? 18.0 : 14.0;
+		H.Deep = P.HouseKind == 1 ? 8.4 : P.HouseKind == 2 ? 6.8 : P.HouseKind == 3 ? 8.6 : 7.2;
+		H.Storeys = P.HouseKind == 0 ? 2 : 1;
+		// (a village house: its own footprint and storeys, as LandField lays them along the village's lanes; the east's houses
+		// their own footprints)
+		if (P.HouseKind >= 6)
+		{
+			H.Long = P.HouseLong;
+			H.Deep = P.HouseDeep;
+			H.Storeys = P.HouseStoreys;
+		}
+		H.Roof = P.HouseRoof;
+		H.Hurt = P.House;
+		H.Key = P.HouseKey;
+		H.Snow = P.HouseSnow;
+		return H;
+	};
+	if (bHouseSheet)
+	{
+		struct HouseLook
+		{
+			const char* File;
+			int Hurt, Level, Roof;
+			uint64_t Key;
+			double Bearing, Up, Sun;
+			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves;
+			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them); the
+			         // church's: 4 its belfry and spire's foot, 5 the tower's west door, 6 the cross, 7 where tower and nave meet,
+			         // 8 the tower's south face under its lower string course; a village house's: 9 its shop, 13 the biggest
+			         // place up its front where its render has come away, 14 its strikes there at their thickest; the izba's 17,
+			         // 18, 19, the khata's 20, 21 and the burnt-out house's 22, 23, 24 (as set below)
+			double AimDistance;
+			const char* Caption;
+			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house, 7 the east's izba, 8 the
+			          // steppe's khata, 9 a burnt-out house
+			double Long = 12.4, Deep = 6.8; // (a village house's)
+			int Storeys = 2;
+			double Snow = 0.0; // (the east's: the snow lying on its roof, 0 to 1)
+		};
+		const HouseLook HouseLooks[] = {
+			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate", 0 },
+			{ "house_slate_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: gutter, downpipe, water butt", 0 },
+			{ "house_tile", 0, 0, 1, 2, 34.0, 12.0, 110.0, -1, 0.0, "another: cream limestone, flat clay tiles", 0 },
+			{ "house_window", 0, 0, 0, 7, -24.0, 4.0, 62.0, 0, 3.6, "close: quoins, sill, casements, shutters", 0 },
+			{ "house_door", 0, 0, 0, 7, 20.0, 6.0, 80.0, 1, 5.6, "close: the door, its keystone, fanlight and step", 0 },
+			{ "house_eaves", 0, 0, 0, 7, -30.0, 6.0, 60.0, 2, 7.5, "close: chimney, ridge tiles, eaves' kick", 0 },
+			{ "house_roofhole", 1, 0, 0, 7, -38.0, 24.0, 62.0, -1, 0.0, "damage 1: a shell through the roof", 0 },
+			{ "house_gable", 2, 0, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down", 0 },
+			{ "house_shell", 3, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell", 0 },
+			{ "house_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (drawn from about 90 m)", 0 },
+			{ "house_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (drawn from 300 m)", 0 },
+			{ "house_gable_far", 2, 2, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "a gable down, far level", 0 },
+			// (the level switches as the game shows them: the land battle's 70 degree lens on a screen 1,920 wide sees at 90 m
+			// what this painter's 28 degree one, 560 wide, sees at 55 m, and at 300 m what it sees at 184 m; laid in pairs below)
+			{ "switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 0 },
+			{ "switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 0 },
+			{ "switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 0 }, // (not laid out: for measuring the far against it)
+			{ "switch90_shell_near", 3, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "switch90_shell_mid", 3, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
+			{ "zz_shell_close", 3, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "", 0 },
+			{ "zz_shell_mid", 3, 1, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "", 0 },
+			{ "zz_gable_close", 2, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "", 0 },
+			{ "zz_gable90_near", 2, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "zz_gable90_mid", 2, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 0 },
+			{ "zz_shell_inner", 3, 0, 0, 7, -12.0, 28.0, 62.0, 3, 11.0, "", 0 },
+			{ "zz_house_verge", 0, 0, 0, 8, 70.0, 8.0, 62.0, 3, 16.0, "", 0 },
+		};
+		// (the farm's barn and byre: LAND_KIT_HOUSE=farm)
+		const HouseLook FarmLooks[] = {
+			{ "barn_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman barn: cart doors under an oak lintel, slits", 1 },
+			{ "barn_open", 0, 0, 1, 4, 26.0, 10.0, 100.0, -1, 0.0, "another, flat tile: a leaf open on the dark", 1 },
+			{ "barn_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: slits, no gutter, the loft's door", 1 },
+			{ "barn_door", 0, 0, 0, 7, 18.0, 6.0, 80.0, 1, 7.5, "close: the cart doors, ledged, on strap hinges", 1 },
+			{ "barn_door_open", 0, 0, 1, 8, -30.0, 8.0, 100.0, 1, 9.0, "close: both leaves open, the day on the straw inside", 1 },
+			{ "barn_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage 1: roof holed, hay on the loft", 1 },
+			{ "barn_gable", 2, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 2: a gable down", 1 },
+			{ "barn_shell", 3, 0, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "damage 3: burnt out, the bare rubble inside", 1 },
+			{ "barn_shell_mid", 3, 1, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "burnt out, middle level (same camera)", 1 },
+			{ "barn_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 1 },
+			{ "barn_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (from 300 m)", 1 },
+			{ "byre_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the byre: stable doors, barred windows", 2 },
+			{ "byre_tile", 0, 0, 1, 2, 30.0, 12.0, 110.0, -1, 0.0, "another, flat tile, limestone", 2 },
+			{ "byre_door", 0, 0, 0, 7, 22.0, 5.0, 80.0, 1, 5.0, "close: a stable door, its window", 2 },
+			{ "byre_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage 1: roof holed", 2 },
+			{ "byre_gable", 2, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 2: a gable down", 2 },
+			{ "byre_shell", 3, 0, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "damage 3: burnt out", 2 },
+			{ "byre_shell_mid", 3, 1, 0, 7, -38.0, 20.0, 62.0, -1, 0.0, "burnt out, middle level (same camera)", 2 },
+			{ "byre_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 2 },
+			{ "byre_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (from 300 m)", 2 },
+			// (the level switches as the game shows them, as the farmhouse's)
+			{ "barn_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "barn at 90 m: near level", 1 },
+			{ "barn_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "barn at 90 m: middle level", 1 },
+			{ "barn_switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "barn at 300 m: far level", 1 },
+			{ "byre_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "byre at 90 m: near level", 2 },
+			{ "byre_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "byre at 90 m: middle level", 2 },
+			{ "barn_switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "barn at 300 m: middle level", 1 },
+			// (close looks for working on them, painted only when LAND_KIT_ONLY names them)
+			{ "zz_barn_inside", 3, 0, 0, 7, -12.0, 30.0, 62.0, 3, 13.0, "", 1 },
+			{ "zz_barn_pitch", 0, 0, 0, 8, 70.0, 8.0, 62.0, 3, 16.0, "", 1 },
+			{ "zz_barn_gable90_near", 2, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 1 },
+			{ "zz_barn_gable90_mid", 2, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "", 1 },
+			{ "zz_gable90_back_near", 2, 0, 0, 7, 140.0, 4.0, 210.0, 3, 55.0, "", 0 },
+			{ "zz_gable90_back_mid", 2, 1, 0, 7, 140.0, 4.0, 210.0, 3, 55.0, "", 0 },
+		};
+		// (the village's church: LAND_KIT_HOUSE=church)
+		const HouseLook ChurchLooks[] = {
+			{ "church_whole", 0, 0, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "Norman church: nave, chancel, tower and stone spire", 3 },
+			{ "church_east", 0, 0, 0, 7, 128.0, 9.0, 210.0, -1, 0.0, "from the east: the chancel, the nave's gable over it", 3 },
+			{ "church_other", 0, 0, 0, 2, 32.0, 12.0, 110.0, -1, 0.0, "another, its other stone", 3 },
+			{ "church_door", 0, 0, 0, 7, 18.0, 4.0, 80.0, 1, 9.0, "close: the south door, voussoirs, hood mould, oak", 3 },
+			{ "church_window", 0, 0, 0, 7, -22.0, 2.0, 62.0, 0, 5.0, "close: a nave window, leaded, under its ring", 3 },
+			{ "church_west", 0, 0, 0, 7, -90.0, 6.0, 120.0, 5, 13.0, "the tower's west door and window", 3 },
+			{ "church_belfry", 0, 0, 0, 7, -60.0, 8.0, 62.0, 4, 15.0, "close: belfry, parapet, pinnacles, lucarnes", 3 },
+			{ "church_tower_weather", 0, 0, 0, 7, -25.0, 6.0, 62.0, 8, 9.0, "close: the tower weathered under its string course", 3 },
+			{ "church_cross", 0, 0, 0, 7, -40.0, 6.0, 62.0, 6, 6.5, "close: the finial, the cross, the gilt cock", 3 },
+			{ "church_cross_b", 0, 0, 0, 7, 62.0, 12.0, 62.0, 6, 6.5, "the cross and cock, another heading", 3 },
+			{ "church_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage: a shell through the nave's roof", 3 },
+			{ "church_mid", 0, 1, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 3 },
+			{ "church_far", 0, 2, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 3 },
+			{ "church_roofhole_mid", 1, 1, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "roof holed, middle level", 3 },
+			{ "church_roofhole_far", 1, 2, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "roof holed, far level", 3 },
+			{ "church_hole_mid", 1, 1, 0, 7, -10.0, 42.0, 62.0, 3, 24.0, "the hole, middle level, seen at 24 m", 3 },
+			{ "church_hole_far", 1, 2, 0, 7, -10.0, 42.0, 62.0, 3, 24.0, "the hole, far level, seen at 24 m", 3 },
+			{ "church_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "church at 90 m: near level", 3 },
+			{ "church_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "church at 90 m: middle level", 3 },
+			{ "church_switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 3 }, // (not laid out: for measuring the far against it)
+			{ "church_switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "church at 300 m: middle level", 3 },
+			{ "church_switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "church at 300 m: far level", 3 },
+			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
+			{ "zz_church_junction", 0, 0, 0, 7, -55.0, 28.0, 62.0, 7, 14.0, "", 3 },
+			{ "zz_church_chancel", 0, 0, 0, 7, 60.0, 22.0, 62.0, 3, 24.0, "", 3 },
+		};
+		// (the village's houses: LAND_KIT_HOUSE=village; aim 9 its shop's front, 13 a place its render came away, 14 its
+		// strikes, 15 the front's broken end where a gable fell (to the house's +x), 16 the -x gable's attic)
+		const HouseLook VillageLooks[] = {
+			{ "village_render_shop", 0, 0, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "village house: lime render, its shop below", 6, 12.4, 6.8, 2 },
+			{ "village_shop", 0, 0, 0, 10, -20.0, 4.0, 62.0, 9, 7.5, "close: the shop's front, fascia, glass, door", 6, 12.4, 6.8, 2 },
+			{ "village_render_spall", 0, 0, 0, 3, 18.0, 4.0, 100.0, 13, 3.4, "close: the render come away to the rubble, its cracks", 6, 12.4, 6.8, 2 },
+			{ "village_lime_shop", 0, 0, 1, 11, 30.0, 10.0, 110.0, -1, 0.0, "another: cream limestone, flat tile, its shop boarded", 6, 11.4, 6.6, 2 },
+			{ "village_rubble", 0, 0, 0, 5, -40.0, 11.0, 62.0, -1, 0.0, "another: the bocage's rubble, slate", 6, 13.6, 7.0, 2 },
+			{ "village_cottage", 0, 0, 1, 12, 34.0, 12.0, 110.0, -1, 0.0, "a cottage of one storey, rendered, tile", 6, 9.4, 6.4, 1 },
+			{ "village_pocks", 1, 0, 0, 36, -16.0, 4.0, 62.0, 14, 3.0, "close: a burst's splinters in the render", 6, 12.4, 6.8, 2 },
+			{ "village_roofhole", 1, 0, 0, 10, 150.0, 22.0, 62.0, -1, 0.0, "damage 1: a shell through the roof (from behind)", 6, 12.4, 6.8, 2 },
+			{ "village_gable", 2, 0, 0, 10, -36.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down", 6, 12.4, 6.8, 2 },
+			{ "village_broken_top", 2, 0, 0, 10, -30.0, 10.0, 62.0, 15, 6.5, "close: its broken top, the render gone in a band", 6, 12.4, 6.8, 2 },
+			{ "village_top_above", 2, 0, 0, 10, -15.0, 20.0, 62.0, 15, 3.0, "close, from above: the broken top's stones", 6, 12.4, 6.8, 2 },
+			{ "village_shell", 3, 0, 0, 10, -36.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell", 6, 12.4, 6.8, 2 },
+			{ "village_mid", 0, 1, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 6, 12.4, 6.8, 2 },
+			{ "village_far", 0, 2, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 6, 12.4, 6.8, 2 },
+			{ "village_shell_mid", 3, 1, 0, 10, -36.0, 18.0, 62.0, -1, 0.0, "burnt out, middle level", 6, 12.4, 6.8, 2 },
+			{ "village_switch90_near", 0, 0, 0, 10, -36.0, 4.0, 62.0, 3, 55.0, "house at 90 m: near level", 6, 12.4, 6.8, 2 },
+			{ "village_switch90_mid", 0, 1, 0, 10, -36.0, 4.0, 62.0, 3, 55.0, "house at 90 m: middle level", 6, 12.4, 6.8, 2 },
+			{ "village_switch300_near", 0, 0, 0, 10, -36.0, 4.0, 62.0, 3, 184.0, "", 6, 12.4, 6.8, 2 }, // (not laid out: for measuring)
+			{ "village_switch300_mid", 0, 1, 0, 10, -36.0, 4.0, 62.0, 3, 184.0, "house at 300 m: middle level", 6, 12.4, 6.8, 2 },
+			{ "village_switch300_far", 0, 2, 0, 10, -36.0, 4.0, 62.0, 3, 184.0, "house at 300 m: far level", 6, 12.4, 6.8, 2 },
+			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
+			{ "zz_roof_front", 1, 0, 0, 10, -36.0, 22.0, 62.0, -1, 0.0, "", 6, 12.4, 6.8, 2 },
+			{ "zz_attic", 1, 0, 0, 10, -120.0, 25.0, 62.0, 16, 9.0, "", 6, 12.4, 6.8, 2 },
+			{ "zz_top_b", 2, 0, 0, 10, 20.0, 35.0, 62.0, 15, 3.0, "", 6, 12.4, 6.8, 2 },
+			{ "zz_farm_top", 2, 0, 0, 7, -30.0, 10.0, 62.0, 15, 6.5, "", 0, 14.0, 7.2, 2 },
+		};
+		// (the east's houses: LAND_KIT_HOUSE=east; the izba, Kind 7, Roof 0 planks or 1 thatch, its footprint LandFarm's 7.5 by
+		// 7.2 m; aim 17 its street gable's windows, 18 its front corner's log ends, 19 its ridge's end at the street gable)
+		const HouseLook EastLooks[] = {
+			{ "izba_planks", 0, 0, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the east: a log izba, carved frames, plank roof", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch", 0, 0, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "another: thatched, other paint", 7, 7.5, 7.2, 1 },
+			{ "izba_back", 0, 0, 0, 7, 205.0, 12.0, 250.0, -1, 0.0, "from behind: the woodpile along the back wall", 7, 7.5, 7.2, 1 },
+			{ "izba_porch", 0, 0, 0, 7, -32.0, 9.0, 62.0, -1, 0.0, "from the other side: the porch, the plank door", 7, 7.5, 7.2, 1 },
+			{ "izba_window", 0, 0, 0, 7, 18.0, 4.0, 62.0, 0, 3.4, "close: a carved frame, its shutters, the curtain", 7, 7.5, 7.2, 1 },
+			{ "izba_gable", 0, 0, 0, 7, 80.0, 6.0, 62.0, 17, 7.0, "close: the street gable, three windows, its towel", 7, 7.5, 7.2, 1 },
+			{ "izba_door", 0, 0, 0, 7, -18.0, 6.0, 62.0, 1, 5.5, "close: the porch on its posts, the door", 7, 7.5, 7.2, 1 },
+			{ "izba_corner", 0, 0, 0, 7, 48.0, 8.0, 62.0, 18, 2.8, "close: the corner, log ends, rings, boulders", 7, 7.5, 7.2, 1 },
+			{ "izba_horse", 0, 0, 0, 7, 62.0, 14.0, 62.0, 19, 3.6, "close: the ridge log's horse head, the barge boards", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_close", 0, 0, 1, 3, 60.0, 16.0, 62.0, 19, 4.5, "close: the thatch's courses, the straw ridge, poles", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_blue", 0, 0, 0, 13, 18.0, 4.0, 62.0, 0, 4.4, "paint, one colour a house, worn: faded blue", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_white", 0, 0, 0, 1, 18.0, 4.0, 62.0, 0, 4.4, "white, its shutters bare wood", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_red", 0, 0, 0, 10, 18.0, 4.0, 62.0, 0, 4.4, "ochre-red, its shutters bare wood", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_green", 0, 0, 0, 26, 18.0, 4.0, 62.0, 0, 4.4, "faded green, its shutters white", 7, 7.5, 7.2, 1 },
+			{ "izba_snow", 0, 0, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "in winter: the snow on its roof", 7, 7.5, 7.2, 1, 1.0 },
+			{ "izba_thatch_snow", 0, 0, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "thatched, in winter", 7, 7.5, 7.2, 1, 1.0 },
+			{ "izba_snow_mid", 0, 1, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "in winter, middle level", 7, 7.5, 7.2, 1, 1.0 },
+			{ "izba_mid", 0, 1, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 7, 7.5, 7.2, 1 },
+			{ "izba_far", 0, 2, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_mid", 0, 1, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "thatched, middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_far", 0, 2, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "thatched, far level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch90_near", 0, 0, 0, 7, 42.0, 4.0, 62.0, 3, 55.0, "izba at 90 m: near level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch90_mid", 0, 1, 0, 7, 42.0, 4.0, 62.0, 3, 55.0, "izba at 90 m: middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch300_near", 0, 0, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "", 7, 7.5, 7.2, 1 }, // (not laid out: for measuring)
+			{ "izba_switch300_mid", 0, 1, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch300_far", 0, 2, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: far level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_switch90_near", 0, 0, 1, 3, 38.0, 4.0, 62.0, 3, 55.0, "thatched at 90 m: near level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_switch90_mid", 0, 1, 1, 3, 38.0, 4.0, 62.0, 3, 55.0, "thatched at 90 m: middle level", 7, 7.5, 7.2, 1 },
+			// (the khata, Kind 8, the kit's Khata's footprint 9.18 by 6.46 m; aim 20 its eaves' corner, 21 a hip by the ridge)
+			{ "khata_front", 0, 0, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the steppe: a whitewashed khata, hipped thatch", 8, 9.18, 6.46, 1 },
+			{ "khata_other", 0, 0, 0, 4, -40.0, 11.0, 62.0, -1, 0.0, "another: its wash, its paint", 8, 9.18, 6.46, 1 },
+			{ "khata_back", 0, 0, 0, 7, 210.0, 12.0, 250.0, -1, 0.0, "from behind", 8, 9.18, 6.46, 1 },
+			{ "khata_window", 0, 0, 0, 7, 16.0, 4.0, 62.0, 0, 3.4, "close: a window deep in the clay (some shuttered)", 8, 9.18, 6.46, 1 },
+			{ "khata_door", 0, 0, 0, 7, -20.0, 6.0, 62.0, 1, 5.0, "close: the door, the prizba", 8, 9.18, 6.46, 1 },
+			{ "khata_eaves", 0, 0, 0, 7, 50.0, 8.0, 62.0, 20, 3.4, "close: the eaves cut over the rafters' ends", 8, 9.18, 6.46, 1 },
+			{ "khata_hip", 0, 0, 0, 7, 60.0, 22.0, 62.0, 21, 4.5, "close: the hip, the ridge's roll, the chimney", 8, 9.18, 6.46, 1 },
+			{ "khata_snow", 0, 0, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "in winter", 8, 9.18, 6.46, 1, 1.0 },
+			{ "khata_mid", 0, 1, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 8, 9.18, 6.46, 1 },
+			{ "khata_far", 0, 2, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 8, 9.18, 6.46, 1 },
+			{ "khata_snow_mid", 0, 1, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "in winter, middle level", 8, 9.18, 6.46, 1, 1.0 },
+			{ "khata_switch90_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "khata at 90 m: near level", 8, 9.18, 6.46, 1 },
+			{ "khata_switch90_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "khata at 90 m: middle level", 8, 9.18, 6.46, 1 },
+			{ "khata_switch300_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "", 8, 9.18, 6.46, 1 }, // (not laid out: for measuring)
+			{ "khata_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: middle level", 8, 9.18, 6.46, 1 },
+			{ "khata_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: far level", 8, 9.18, 6.46, 1 },
+			// (the burnt-out house, Kind 9: Roof 0 an izba burnt down on the izba's footprint, 1 a khata roofless on the khata's;
+			// aim 22 its stove's mouth, 23 its chimney's broken top, 24 its front corner at the ground, 25 its stove's side, 26 a khata's wall top)
+			{ "burnt_logs", 0, 0, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "burnt out: an izba's logs, its stove standing", 9, 7.5, 7.2, 1 },
+			{ "burnt_clay", 0, 0, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "a khata burnt out: its clay walls, roofless", 9, 9.18, 6.46, 1 },
+			{ "burnt_other", 0, 0, 0, 4, -40.0, 16.0, 62.0, -1, 0.0, "another: the stove the other way", 9, 7.5, 7.2, 1 },
+			{ "burnt_stove", 0, 0, 0, 7, 20.0, 8.0, 62.0, 22, 3.2, "close: the stove's mouth, its plaster fallen", 9, 7.5, 7.2, 1 },
+			{ "burnt_patch", 0, 0, 0, 7, 22.0, 6.0, 62.0, 25, 3.3, "close: the plaster torn from the stove's bricks", 9, 7.5, 7.2, 1 },
+			{ "burnt_chimney", 0, 0, 0, 7, 40.0, 10.0, 62.0, 23, 3.0, "close: the chimney's broken top", 9, 7.5, 7.2, 1 },
+			{ "burnt_corner", 0, 0, 0, 7, 48.0, 18.0, 62.0, 24, 3.4, "close: charred logs in the ashes", 9, 7.5, 7.2, 1 },
+			{ "burnt_clay_corner", 0, 0, 1, 7, 48.0, 14.0, 62.0, 24, 3.8, "close: the clay wall's corner at the ground", 9, 9.18, 6.46, 1 },
+			{ "burnt_clay_top", 0, 0, 1, 7, 24.0, 18.0, 62.0, 26, 6.5, "close: the clay wall's broken top, its soot, a rafter", 9, 9.18, 6.46, 1 },
+			{ "burnt_snow", 0, 0, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "in winter", 9, 7.5, 7.2, 1, 1.0 },
+			{ "burnt_clay_snow", 0, 0, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "the khata's, in winter", 9, 9.18, 6.46, 1, 1.0 },
+			{ "burnt_mid", 0, 1, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 9, 7.5, 7.2, 1 },
+			{ "burnt_far", 0, 2, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "the far level (from 300 m)", 9, 7.5, 7.2, 1 },
+			{ "burnt_clay_mid", 0, 1, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "the khata's, middle level", 9, 9.18, 6.46, 1 },
+			{ "burnt_switch90_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "burnt out at 90 m: near level", 9, 7.5, 7.2, 1 },
+			{ "burnt_switch90_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "burnt out at 90 m: middle level", 9, 7.5, 7.2, 1 },
+			{ "burnt_switch300_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "", 9, 7.5, 7.2, 1 }, // (not laid out: for measuring)
+			{ "burnt_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "burnt out at 300 m: middle level", 9, 7.5, 7.2, 1 },
+			{ "burnt_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "burnt out at 300 m: far level", 9, 7.5, 7.2, 1 },
+		};
+		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
+		const char* Only = std::getenv("LAND_KIT_ONLY");
+		const std::vector<HouseLook> Looks = bEastSheet ? std::vector<HouseLook>(std::begin(EastLooks), std::end(EastLooks))
+			: bVillageSheet ? std::vector<HouseLook>(std::begin(VillageLooks), std::end(VillageLooks))
+			: bChurchSheet ? std::vector<HouseLook>(std::begin(ChurchLooks), std::end(ChurchLooks))
+			: bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
+		for (const HouseLook& K : Looks)
+		{
+			if (!Only && K.File[0] == 'z') continue;
+			if (Only && ("," + std::string(Only) + ",").find("," + std::string(K.File) + ",") == std::string::npos
+				&& !(std::strncmp(K.File, "switch", 6) == 0 && ("," + std::string(Only) + ",").find(",switch") != std::string::npos))
+			{
+				continue;
+			}
+			Panel P;
+			P.File = K.File;
+			P.House = K.Hurt;
+			P.HouseLevel = K.Level;
+			P.HouseRoof = K.Roof;
+			P.HouseKey = K.Key;
+			P.HouseKind = K.Kind;
+			P.HouseLong = K.Long;
+			P.HouseDeep = K.Deep;
+			P.HouseStoreys = K.Storeys;
+			P.HouseSnow = K.Snow;
+			P.CameraBearing = K.Bearing;
+			P.CameraUp = K.Up;
+			P.SunBearing = K.Sun;
+			P.Caption = K.Caption;
+			if (K.Aim >= 0)
+			{
+				std::vector<LandHouse::Hole> Holes;
+				LandHouse::Holes(HouseSpec(P), Holes);
+				V3 At(0.0, 0.0, 0.0);
+				for (const LandHouse::Hole& H : Holes)
+				{
+					// (a window low in the front, or its door: a barn's cart doors, a byre's stable door)
+					if (H.Face == 0 && ((K.Aim == 0 && (((H.What == 0 || H.What == 7) && H.Z0 < 2.0) || H.What == 9)) || (K.Aim == 1 && (H.What == 1 || H.What == 3 || H.What == 6 || H.What == 10)) || (K.Aim == 9 && H.What == 12)))
+					{
+						At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
+						break;
+					}
+				}
+				// (a village house's render: the biggest place up its front where it has come away, 13; or the thickest of its
+				// strikes there, 14, the one with most others within half a metre)
+				if (K.Aim == 13)
+				{
+					double Most = 0.0;
+					for (const LandHouse::Hole& H : Holes)
+						if (H.What == 13 && H.Face == 0 && H.Z0 > 1.0 && H.Wide * (H.Z1 - H.Z0) > Most)
+						{
+							Most = H.Wide * (H.Z1 - H.Z0);
+							At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
+						}
+				}
+				if (K.Aim == 14)
+				{
+					int Most = -1;
+					for (const LandHouse::Hole& H : Holes)
+					{
+						if (H.What != 14 || H.Face != 0) continue;
+						int N = 0;
+						for (const LandHouse::Hole& O : Holes)
+							N += O.What == 14 && O.Face == 0 && std::hypot(O.X - H.X, O.Z0 - H.Z0) < 0.5;
+						if (N > Most)
+						{
+							Most = N;
+							At = V3(H.X, H.Y, 0.15 + H.Z0);
+						}
+					}
+				}
+				if (K.Aim == 15) At = V3(0.5 * K.Long - 1.2, 0.5 * K.Deep, 0.15 + 4.2);
+				if (K.Aim == 16) At = V3(-0.5 * K.Long, 0.0, 0.15 + 6.9);
+				// (the izba's: its street gable, the +x one, at its windows' tops; its front corner there; its ridge's end)
+				if (K.Aim == 17) At = V3(0.5 * K.Long - 0.4, -0.3, 0.15 + 2.6);
+				if (K.Aim == 18) At = V3(0.5 * K.Long - 0.45, 0.5 * K.Deep - 0.9, 0.15 + 1.2);
+				if (K.Aim == 19) At = V3(0.5 * K.Long - 0.3, -0.3, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.6);
+				// (the khata's: its eaves' front corner over the +x end; a hip by the ridge's end)
+				if (K.Aim == 20) At = V3(0.5 * K.Long - 0.7, 0.5 * K.Deep - 0.7, 0.15 + LandHouse::EavesOf(HouseSpec(P)) - 0.3);
+				if (K.Aim == 21) At = V3(0.5 * K.Long - 2.2, 0.0, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.5);
+				// (the burnt-out house's: its stove's mouth, its chimney's top, its front corner at the ground; 25 its stove's
+				// side to the room, looked at from a little off its square)
+				double SideBearing = -1.0;
+				for (const LandHouse::Hole& H : Holes)
+				{
+					if (K.Aim == 22 && H.What == 15) At = V3(H.X, H.Y, 0.5 * (H.Z0 + H.Z1));
+					if (K.Aim == 23 && H.What == 16) At = V3(H.X, H.Y, H.Z1 - 0.35);
+					if (K.Aim == 25 && H.What == 17)
+					{
+						At = V3(H.X, H.Y, 0.5 * (H.Z0 + H.Z1));
+						SideBearing = H.Face == 1 ? 90.0 + K.Bearing : 270.0 - K.Bearing;
+					}
+				}
+				if (K.Aim == 24) At = V3(0.5 * K.Long - 0.6, 0.5 * K.Deep - 0.6, 0.35);
+				// (26: a khata's front wall's broken top, along from its corner)
+				if (K.Aim == 26) At = V3(0.5 * K.Long - 2.4, 0.5 * K.Deep - 0.3, 1.5);
+				if (K.Aim == 2)
+				{
+					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);
+				}
+				if (K.Aim == 3)
+				{
+					At = V3(0.0, 0.0, 0.15 + 0.5 * LandHouse::RidgeOf(HouseSpec(P)));
+				}
+				// (the church's tower stands west of its nave, 18 m long, the tower 5.8 m square, its cornice at 17.5 m and its
+				// spire's point at 28 m)
+				if (K.Aim == 4) At = V3(-11.9, 0.0, 0.15 + 19.6);
+				if (K.Aim == 5) At = V3(-14.8, 0.0, 0.15 + 4.0);
+				if (K.Aim == 6) At = V3(-11.9, 0.0, 0.15 + 29.7);
+				if (K.Aim == 7) At = V3(-8.6, 0.0, 0.15 + 10.5);
+				if (K.Aim == 8) At = V3(-11.9, 2.9, 0.15 + 6.4);
+				P.bAim = true;
+				P.AimAt = At;
+				const double Bearing = SideBearing >= 0.0 ? SideBearing : K.Bearing;
+				P.AimFrom = V3(std::sin(Bearing * Rad) * std::cos(K.Up * Rad), std::cos(Bearing * Rad) * std::cos(K.Up * Rad), std::sin(K.Up * Rad));
+				P.AimDistance = K.AimDistance;
+			}
+			Panels.push_back(P);
+		}
+	}
 	struct TankLook
 	{
 		const char* Model;
@@ -584,6 +1125,10 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
+		if (bMarksSheet || bHouseSheet)
+		{
+			break;
+		}
 		Panel A;
 		A.File = std::string(T.Model) + "_a";
 		A.ModelName = T.Model;
@@ -615,6 +1160,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
+	if (!bMarksSheet && !bHouseSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
@@ -655,7 +1201,39 @@ int main(int argc, char** argv)
 	}
 	for (Panel& P : Panels)
 	{
-		const Model* M = ModelFor(P.ModelName, P.Nation);
+		if (P.House >= 0)
+		{
+			LandHouse::Levels L;
+			LandHouse::Build(HouseSpec(P), L);
+			const LandField::Mesh& M = P.HouseLevel == 0 ? L.Near : P.HouseLevel == 1 ? L.Mid : L.Far;
+			Scene S;
+			// (a burnt-out house lies in the yard, with no floor to stand over it; in winter the yard's snow round it)
+			AddHouse(M, P.HouseKind == 9 ? 0.0 : 0.15, S);
+			{
+				const LandHouse::Spec Hs = HouseSpec(P);
+				if (Hs.Kind == 9) S.GroundSnow = Smooth(0.03, 0.5, Hs.Snow);
+				S.Feet.push_back({ -0.5 * Hs.Long, -0.5 * Hs.Deep, 0.5 * Hs.Long, 0.5 * Hs.Deep });
+				if (Hs.Kind == 3)
+				{
+					S.Feet.push_back({ 0.5 * Hs.Long, -3.3, 0.5 * Hs.Long + 7.2, 3.3 });
+					S.Feet.push_back({ -0.5 * Hs.Long - 5.8, -2.9, -0.5 * Hs.Long, 2.9 });
+				}
+			}
+			const std::string Path = OutDir + "/" + P.File + ".ppm";
+			Vehicle None;
+			if (!Paint(S, P, None, Path))
+			{
+				std::printf("cannot write %s\n", Path.c_str());
+				return 1;
+			}
+			if (!P.Caption.empty())
+			{
+				std::fprintf(Captions, "%s\t%s (%zu triangles)\n", P.File.c_str(), P.Caption.c_str(), M.Tris());
+			}
+			std::printf("  %s (near %zu, middle %zu, far %zu triangles)\n", Path.c_str(), L.Near.Tris(), L.Mid.Tris(), L.Far.Tris());
+			continue;
+		}
+		const Model* M = ModelFor(P.ModelName, P.Nation, P);
 		if (!M)
 		{
 			return 1;
@@ -682,7 +1260,10 @@ int main(int argc, char** argv)
 		Scene S;
 		AddVehicle(V, P.SootShare, S);
 		const size_t Unmarked = S.Tris.size();
-		AddMarks(V, S);
+		if (!P.bMarks)
+		{
+			AddMarks(V, S); // (the pictures' own flat marks, where the game's are off)
+		}
 		// (a fire chars the marks with the paint round them)
 		const Colour Burnt = FromPicture(M->BurntColour[0], M->BurntColour[1], M->BurntColour[2]);
 		for (size_t I = Unmarked; I < S.Tris.size(); ++I)
@@ -700,6 +1281,55 @@ int main(int argc, char** argv)
 		}
 		std::fprintf(Captions, "%s\t%s\n", P.File.c_str(), P.Caption.c_str());
 		std::printf("  %s (%zu triangles)\n", Path.c_str(), S.Tris.size());
+	}
+	// The level switches: the house's left half as one level draws it and its right half as the next, at the distance the
+	// game changes from one to the other, the middle of the picture enlarged pixel for pixel (Zoom) so the step shows.
+	if (bHouseSheet)
+	{
+		struct Switch
+		{
+			const char* File;
+			const char* Left;
+			const char* Right;
+			int Zoom;
+			const char* Caption;
+		};
+		const Switch Switches[] = {
+			{ "house_switch90", "switch90_near", "switch90_mid", 2, "at 90 m, enlarged 2x: near | middle" },
+			{ "house_switch300", "switch300_mid", "switch300_far", 4, "at 300 m, enlarged 4x: middle | far" },
+			{ "house_switch90_shell", "switch90_shell_near", "switch90_shell_mid", 2, "the shell at 90 m, 2x: near | middle" },
+			{ "church_switch90", "church_switch90_near", "church_switch90_mid", 2, "church at 90 m, enlarged 2x: near | middle" },
+			{ "church_switch300", "church_switch300_mid", "church_switch300_far", 4, "church at 300 m, enlarged 4x: middle | far" },
+		};
+		for (const Switch& K : Switches)
+		{
+			int LW = 0, LH = 0, RW = 0, RH = 0;
+			std::vector<uint8_t> L, R;
+			if (!ReadPicture(OutDir + "/" + K.Left + ".ppm", LW, LH, L) || !ReadPicture(OutDir + "/" + K.Right + ".ppm", RW, RH, R) || LW != RW || LH != RH)
+			{
+				continue;
+			}
+			std::vector<uint8_t> Out(L.size());
+			for (int Y = 0; Y < LH; ++Y)
+			{
+				for (int X = 0; X < LW; ++X)
+				{
+					const int SX = LW / 2 + (X - LW / 2) / K.Zoom - (X < LW / 2 && (X - LW / 2) % K.Zoom ? 1 : 0);
+					const int SY = LH / 2 + (Y - LH / 2) / K.Zoom - (Y < LH / 2 && (Y - LH / 2) % K.Zoom ? 1 : 0);
+					const std::vector<uint8_t>& From = X < LW / 2 ? L : R;
+					for (int C = 0; C < 3; ++C)
+					{
+						Out[(static_cast<size_t>(Y) * LW + X) * 3 + C] = X == LW / 2 ? 235 : From[(static_cast<size_t>(SY) * LW + SX) * 3 + C];
+					}
+				}
+			}
+			if (!WritePicture(OutDir + "/" + K.File + ".ppm", LW, LH, Out))
+			{
+				return 1;
+			}
+			std::fprintf(Captions, "%s\t%s\n", K.File, K.Caption);
+			std::printf("  %s/%s.ppm (%s | %s)\n", OutDir.c_str(), K.File, K.Left, K.Right);
+		}
 	}
 	std::fclose(Captions);
 	return 0;

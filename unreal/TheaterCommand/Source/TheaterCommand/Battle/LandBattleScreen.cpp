@@ -5,6 +5,7 @@
 #include "Battle/LandBattleState.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
@@ -239,6 +240,8 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			Tops.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
 		}
 		Tops.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
+		// (his view from above in one press, lit while it is on; pressed again, back as it was)
+		Tops.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
 	}
 	auto TopWidth = [&](const FTop& P) { return WideOf(P.Label, TopFace) + 18.0 + WideOf(P.Key, TopCapFace) + 16.0; };
 	double TopsW = 0.0;
@@ -388,6 +391,36 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		const double X = Size.X * 0.5 - WideOf(Said, SaidFace) * 0.5;
 		Fill(X - 6.0, Size.Y - 94.0 - CardsH, WideOf(Said, SaidFace) + 12.0, 20.0, Plate, 6);
 		Write(Said, X, Size.Y - 92.0 - CardsH, SaidFace, BrightBrass, 7);
+	}
+
+	// ---- (Camera specials, release 2, -TheaterLandNickCard) A corps' earned name on the picture while the film holds
+	// on its first kill: low on the left, in quotes, old gold on a dark scroll with brass edges, as the map letters it over
+	// the flag; up in a quarter second, down as the shot is left. ----
+	{
+		const FString* Earned = S.Pose.Card >= 0 && !bGeneral ? S.NickOfBlock.Find(S.Pose.Card) : nullptr;
+		if (!Earned || Earned->IsEmpty())
+		{
+			CardUp = -1;
+		}
+		else
+		{
+			if (CardUp != S.Pose.Card)
+			{
+				CardUp = S.Pose.Card;
+				CardSince = S.Real;
+			}
+			const float Up = static_cast<float>(FMath::Clamp((S.Real - CardSince) / 0.25, 0.0, 1.0));
+			const FString Said = FString::Printf(TEXT("\u201C%s\u201D"), **Earned);
+			const FSlateFontInfo NameFace = Serif(TEXT("Bold"), 22.0f);
+			const double Wd = WideOf(Said, NameFace) + 36.0, Ht = 40.0;
+			const double X = FMath::Max(24.0, Size.X * 0.07), Y = Size.Y - 150.0 - CardsH - Ht;
+			const FLinearColor Fade(1.0f, 1.0f, 1.0f, Up);
+			Fill(X, Y, Wd, Ht, Brass * Fade, 8);
+			Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, Leather * FLinearColor(1.0f, 1.0f, 1.0f, 0.92f * Up), 9);
+			Fill(X + 4.0, Y + 4.0, Wd - 8.0, 1.0, Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f * Up), 10);
+			Fill(X + 4.0, Y + Ht - 5.0, Wd - 8.0, 1.0, Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f * Up), 10);
+			Write(Said, X + 18.0, Y + 6.0, NameFace, BrightBrass * Fade, 11);
+		}
 	}
 
 	// ---- The strip, bottom right: the speeds, a new shot, this shot held (and, the film over a battle of his, the map
@@ -932,6 +965,29 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 	}
 
+	// ---- The spotter's mark (release 2, -TheaterLandSpotter): looking down on the field, a pale ring on the ground
+	// round each of his fighting units; a hidden enemy inside it is found. Every unit's ring for hidden men; a unit in
+	// hand's brighter, with dashed rings farther out for hidden guns and vehicles, each with its word. ----
+	for (const FLandGeneralShown::SightStroke& R : G.Sights)
+	{
+		TArray<FVector2D> Points;
+		Points.Reserve(static_cast<int32>(R.Points.size()));
+		for (const std::pair<double, double>& P : R.Points)
+		{
+			Points.Add(Local(P.first, P.second));
+		}
+		const FLinearColor Ink = R.bChosen ? BrightBrass * FLinearColor(1.0f, 1.0f, 1.0f, R.Kind == 0 ? 0.95f : 0.7f) : Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f);
+		Lines(Points, Ink, R.bChosen && R.Kind == 0 ? 2.0f : 1.5f, 1);
+	}
+	for (const FLandGeneralShown::SightWord& W : G.SightWords)
+	{
+		const FVector2D At = Local(W.X, W.Y);
+		const FString Words = FString::Printf(TEXT("%s %d m"), W.Kind == 0 ? TEXT("MEN") : W.Kind == 1 ? TEXT("GUNS") : TEXT("VEHICLES"), static_cast<int32>(W.Metres + 0.5));
+		const FSlateFontInfo Face = Typed(10.0f, true, 30);
+		Fill(At.X + 6.0, At.Y - 9.0, WideOf(Words, Face) + 10.0, 18.0, Plate, 2);
+		Write(Words, At.X + 11.0, At.Y - 8.0, Face, BrightBrass, 3);
+	}
+
 	// ---- The routes of his orders: brass, bright for those in hand; dashed and faint while still on the air, solid and
 	// bright once it has landed. ----
 	for (const FLandGeneralShown::Route& R : G.Routes)
@@ -1218,6 +1274,63 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		Fill(At.X - 2.0, At.Y - 2.0, 4.0, 4.0, Ink, 9);
 	}
 
+	// ---- The film in a corner (release 2, -TheaterLandCorner; Brian, 24 November 20:38Z): the film director's shot in
+	// a small window at the top left while he commands from his own view, in a brass frame; a click on it, or C, gives
+	// the film the whole screen. ----
+	if (UTextureRenderTarget2D* Film = Scene->CornerPicture())
+	{
+		if (CornerBrush.GetResourceObject() != Film)
+		{
+			CornerBrush.SetResourceObject(Film);
+			CornerBrush.ImageSize = FVector2D(480.0f, 270.0f);
+			CornerBrush.DrawAs = ESlateBrushDrawType::Image;
+		}
+		const double Wd = FMath::Clamp(Size.X * 0.22, 240.0, 420.0), Ht = Wd * 9.0 / 16.0, X = 18.0, Y = 82.0;
+		Fill(X - 2.0, Y - 2.0, Wd + 4.0, Ht + 4.0, Brass, 10);
+		Fill(X - 1.0, Y - 1.0, Wd + 2.0, Ht + 2.0, DeskInk, 11);
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 12, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &CornerBrush, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
+		// (its name and its key on a small plate at its foot)
+		const FSlateFontInfo FilmFace = Typed(10.0f, true, 30);
+		const FString FilmWords = TEXT("THE FILM: C FILLS THE SCREEN");
+		Fill(X, Y + Ht - 20.0, WideOf(FilmWords, FilmFace) + 14.0, 20.0, Plate, 13);
+		Write(FilmWords, X + 7.0, Y + Ht - 18.0, FilmFace, Cream, 14);
+		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), FString(TEXT("general:film")) });
+	}
+
+	// ---- His kept views (release 2; Brian, 24 November 20:38Z, saved views): four small chips under the clock, each
+	// with its number: lit where he stands at one, plain where one is kept, faint where none is yet. A click flies
+	// there (never kept: it is kept as the view stands); Shift and a click keeps it anew. F1 to F4, or Option with 1
+	// to 4, do the same. ----
+	{
+		const FSlateFontInfo ViewsFace = Typed(10.0f, true, 30);
+		const double ChipW = 24.0, ChipH = 22.0, ChipGap = 4.0;
+		const FString ViewsWord = TEXT("VIEWS");
+		const double ChipsW = ChipW * LandGeneralEye::ViewCount + ChipGap * (LandGeneralEye::ViewCount - 1), WordW = WideOf(ViewsWord, ViewsFace);
+		double X = Size.X - 22.0 - ChipsW;
+		const double Y = 78.0;
+		Fill(X - WordW - 17.0, Y - 4.0, WordW + 17.0 + ChipsW + 6.0, ChipH + 8.0, Plate, 10);
+		Write(ViewsWord, X - WordW - 9.0, Y + 3.0, ViewsFace, Muted, 11);
+		for (int32 K = 0; K < LandGeneralEye::ViewCount; ++K)
+		{
+			const bool bKept = S.GeneralEye.ViewKept(K), bAt = S.GeneralEye.ViewAt() == K;
+			const FLinearColor Ink = bAt ? DeskInk : bKept ? Cream : Muted;
+			Fill(X, Y, ChipW, ChipH, bKept ? Brass : Track, 11);
+			Fill(X + 1.0, Y + 1.0, ChipW - 2.0, ChipH - 2.0, bAt ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, 12);
+			const FString Number = FString::FromInt(K + 1);
+			Write(Number, X + (ChipW - WideOf(Number, ChipFace)) * 0.5, Y + 3.0, ChipFace, Ink, 13);
+			Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + ChipW), static_cast<float>(Y + ChipH)), FString::Printf(TEXT("general:view:%d"), K) });
+			X += ChipW + ChipGap;
+		}
+		// (the spotter's mark's one line, under them, while its rings are up)
+		if (G.bSights)
+		{
+			const FString Line = bHand ? TEXT("RINGS: A HIDDEN ENEMY INSIDE ONE IS FOUND") : TEXT("RINGS: HIDDEN MEN INSIDE ONE ARE FOUND. PICK A UNIT FOR GUNS AND VEHICLES");
+			const double LineW = WideOf(Line, ViewsFace);
+			Fill(Size.X - 22.0 - LineW - 12.0, Y + ChipH + 8.0, LineW + 18.0, 20.0, Plate, 10);
+			Write(Line, Size.X - 22.0 - LineW - 3.0, Y + ChipH + 10.0, ViewsFace, Cream, 11);
+		}
+	}
+
 	// ---- What a click would do, by the pointer. ----
 	if (!G.Would.empty() && G.PointerX >= 0.0)
 	{
@@ -1267,6 +1380,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Ends.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
 			}
 			Ends.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
+			Ends.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
 		}
 		double Whole = 0.0;
 		for (const FPart& P : Ends)
@@ -1627,6 +1741,11 @@ void SLandBattleScreen::Do(const FString& Action)
 		}
 		Scene->SetSpeed(Speed);
 	}
+	else if (Action.StartsWith(TEXT("general:view:")))
+	{
+		// (a kept view's chip: flown to; with Shift, kept anew as the view stands)
+		Scene->GeneralDo((FSlateApplication::Get().GetModifierKeys().IsShiftDown() ? FString(TEXT("keepview:")) : FString(TEXT("view:"))) + Action.Mid(13));
+	}
 	else if (Action.StartsWith(TEXT("general:")))
 	{
 		Scene->GeneralDo(Action.Mid(8));
@@ -1778,12 +1897,19 @@ FReply SLandBattleScreen::OnTouchGesture(const FGeometry& Geometry, const FPoint
 	}
 	// A trackpad: two fingers sliding drag the ground under them (the view goes the other way); a pinch zooms (about
 	// a notch a tenth of the fingers' spread); a twist turns the view. Handled here, the slide is not also a wheel.
+	// With Option (Alt) held the slide tilts and turns the view instead: fingers up look further down on the field (a
+	// slide the screen's height, 120 degrees), across turns it (the screen's width, 180 degrees).
 	const FVector2D Size = Geometry.GetLocalSize();
 	const FVector2D Delta = Event.GetGestureDelta();
 	switch (Event.GetGestureType())
 	{
 	case EGestureEvent::Scroll:
-		if (Size.X > 0.0 && Size.Y > 0.0)
+		if (Size.X > 0.0 && Size.Y > 0.0 && (Event.IsAltDown() || FSlateApplication::Get().GetModifierKeys().IsAltDown()))
+		{
+			S->GeneralIn.Tilt -= Delta.Y / Size.Y * 120.0;
+			S->GeneralIn.Turn -= Delta.X / Size.X * 180.0;
+		}
+		else if (Size.X > 0.0 && Size.Y > 0.0)
 		{
 			S->GeneralIn.SlideRight -= Delta.X / Size.X;
 			S->GeneralIn.SlideAhead += Delta.Y / Size.Y;
@@ -1821,6 +1947,7 @@ void SLandBattleScreen::HandViewKeys()
 	S->GeneralIn.PanRight = On(2u) - On(1u);
 	S->GeneralIn.PanAhead = On(4u) - On(8u);
 	S->GeneralTurnHeld = On(32u) - On(16u);
+	S->GeneralTiltHeld = On(64u) - On(128u);
 }
 
 void SLandBattleScreen::OnFocusLost(const FFocusEvent& Event)
@@ -1839,7 +1966,8 @@ FReply SLandBattleScreen::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Ev
 	{
 		return FReply::Unhandled();
 	}
-	ViewKeys &= ~Bit;
+	// (W or S let go ends its tilt too, Shift or not: held with Shift it tilted the view, 64 and 128)
+	ViewKeys &= ~(Bit | (Bit == 4u || Bit == 8u ? Bit << 4 : 0u));
 	HandViewKeys();
 	return FReply::Handled();
 }
@@ -1857,7 +1985,13 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 		if (FLandBattleState* S = Battle->EditState())
 		{
 			LandGeneralEye::Input& In = S->GeneralIn;
-			if (bSliding && Size.X > 0.0 && Size.Y > 0.0)
+			if (bSliding && Size.X > 0.0 && Size.Y > 0.0 && Event.IsAltDown())
+			{
+				// (the middle drag with Alt (Option) tilts and turns the view, as the trackpad's slide does)
+				In.Tilt -= Event.GetCursorDelta().Y / Size.Y * 120.0;
+				In.Turn -= Event.GetCursorDelta().X / Size.X * 180.0;
+			}
+			else if (bSliding && Size.X > 0.0 && Size.Y > 0.0)
 			{
 				In.SlideRight -= Event.GetCursorDelta().X / Size.X;
 				In.SlideAhead += Event.GetCursorDelta().Y / Size.Y;
@@ -1919,17 +2053,39 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 			}
 			Do(FString::Printf(TEXT("speed:%g"), Speed));
 		};
-		const uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
+		uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
 			: Key == EKeys::S || Key == EKeys::Down ? 8u : Key == EKeys::Q ? 16u : Key == EKeys::E ? 32u : 0u;
+		// (Shift with W or S, or the up and down arrows: his view tilted further down or back, not moved)
+		if (Event.IsShiftDown() && (Bit == 4u || Bit == 8u))
+		{
+			Bit <<= 4;
+		}
 		if (S->General.bFilm)
 		{
 			if (Key == EKeys::Escape || Key == EKeys::C) { Scene->GeneralDo(TEXT("map")); return FReply::Handled(); }
 		}
 		else if (Bit != 0u)
 		{
-			// (his view's keys, held: the scene moves the view while they are down)
+			// (his view's keys, held: the scene moves the view while they are down. W or S walks, or with Shift
+			// tilts, never both at once: the key repeats, so Shift pressed or let go while it is held switches which)
+			if (Bit == 4u || Bit == 64u || Bit == 8u || Bit == 128u)
+			{
+				const uint32 Pair = Bit == 4u || Bit == 64u ? (4u | 64u) : (8u | 128u);
+				ViewKeys &= ~Pair;
+			}
 			ViewKeys |= Bit;
 			HandViewKeys();
+			return FReply::Handled();
+		}
+		else if (const int32 ViewKey = Key == EKeys::F1 ? 0 : Key == EKeys::F2 ? 1 : Key == EKeys::F3 ? 2 : Key == EKeys::F4 ? 3
+			: !Event.IsAltDown() ? -1 : Key == EKeys::One ? 0 : Key == EKeys::Two ? 1 : Key == EKeys::Three ? 2 : Key == EKeys::Four ? 3 : -1; ViewKey >= 0)
+		{
+			// (his kept views: F1 to F4, or Option with 1 to 4 where the Mac keeps the F keys for itself, fly to one;
+			// with Shift the view as it stands is kept under that number)
+			if (!Event.IsRepeat())
+			{
+				Scene->GeneralDo(FString::Printf(TEXT("%s:%d"), Event.IsShiftDown() ? TEXT("keepview") : TEXT("view"), ViewKey));
+			}
 			return FReply::Handled();
 		}
 		else if (Key == EKeys::SpaceBar)
@@ -1964,6 +2120,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
+		else if (Key == EKeys::O) { Scene->GeneralDo(TEXT("topview")); return FReply::Handled(); }
 		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
 		else
