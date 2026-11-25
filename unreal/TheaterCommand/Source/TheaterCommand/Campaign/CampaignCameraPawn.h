@@ -42,6 +42,13 @@ public:
 	 * nothing is seen to happen.
 	 */
 	void SetWrap(double InWest, double InEast) { WrapWest = InWest; WrapEast = InEast; bWraps = InEast > InWest; }
+	/**
+	 * (Release 2, the far side: the art director's seam-2, 25 November 2026.) Called in the frame the eye comes in
+	 * again at the other end of the world, after its view is set: the table shows its pieces and the screen its names
+	 * on the eye's side of the chart's seam, and both must come round in the same frame as the eye, or for one frame
+	 * they are a whole world behind it. Unset, nothing is called.
+	 */
+	TFunction<void()> CameRound;
 
 	/** For pictures of the whole world: lets the eye be sent higher than the player can take it. */
 	void SetTopZoom(float InTop) { TopZoom = InTop; }

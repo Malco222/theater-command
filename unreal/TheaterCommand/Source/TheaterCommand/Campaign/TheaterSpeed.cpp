@@ -692,15 +692,27 @@ namespace TheaterSpeed
 		}
 	}
 
+	// (Release 2, the far side: where the eye looks along the world's +Y and how far round the world is; see RoundWorld.
+	// The game's own thread only.)
+	static double SeamEyeAlong = 0.0, SeamSpan = 0.0;
+
+	void RoundWorld(double EyeAlong, double Span)
+	{
+		SeamEyeAlong = EyeAlong;
+		SeamSpan = FMath::Max(Span, 0.0);
+	}
+
 	bool FEye::Project(const FVector& World, FVector2D& OutScreen) const
 	{
+		// (the point in the turn of the world nearest the eye, where the world goes round; as given where it does not)
+		const FVector Seen = SeamSpan > 0.0 ? FVector(World.X, World.Y + FMath::RoundToDouble((SeamEyeAlong - World.Y) / SeamSpan) * SeamSpan, World.Z) : World;
 		if (!bOwn)
 		{
-			return Player && Player->ProjectWorldLocationToScreen(World, OutScreen, false);
+			return Player && Player->ProjectWorldLocationToScreen(Seen, OutScreen, false);
 		}
 		// (The controller's own way then lets PostProcessWorldToScreen have its say; the campaign's controller leaves
 		// it as the engine has it, which says yes and changes nothing.)
-		return FSceneView::ProjectWorldToScreen(World, Rect, ViewProjection, OutScreen);
+		return FSceneView::ProjectWorldToScreen(Seen, Rect, ViewProjection, OutScreen);
 	}
 
 	int32 SlotFor(const TCHAR* Name)
