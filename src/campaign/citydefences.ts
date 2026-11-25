@@ -195,3 +195,61 @@ export function townWorksWords(g: Game, r: Region, fort: number): string {
   const months = `${m} month${m === 1 ? '' : 's'} of barricades and strongpoints`;
   return fort > townWorksWorth(g, r) ? `, with ${months}, though its forts count for more` : `, behind ${months}`;
 }
+
+// ---- The town's guns in the ground role (slice 4) -------------------------------------------------------------------
+
+// The heavy anti-aircraft guns of a town that a garrison holds fire on the tanks that storm it (city defences, the
+// design director's ruling of 25 Nov 2026 02:23Z, choice 8, form section 6 as corrected in section 11: nothing is
+// added to air raids). Against tanks only, only in a storm of the town, only with a living garrison inside; and when
+// such a town falls by storm a level of the guns is lost with it. The storm's one assessment (game.ts assess) reads it,
+// so the battle card, the dice, the computer's storm decision and every forecast of the storm agree.
+
+/**
+ * The gun levels at a town that fire on its stormers' tanks: the built guns (air.ts gunsAt) where a living corps
+ * stands in its garrison. 0 with no garrison, no guns, or the switch off.
+ */
+export function townFlak(g: Game, r: Region): number {
+  if (!cityDefences(g)) return 0;
+  if (!garrisonOf(r).some((c) => !c.dead)) return 0;
+  return gunsAt(g, r.id);
+}
+
+/** The further cut to the tanks' attack from `level` gun levels dug in with the garrison: ground.armour a level, to ground.most. */
+export const flakCut = (level: number): number => (level > 0 ? Math.min(CITYDEF.ground.most, CITYDEF.ground.armour * level) : 0);
+
+/** The further cut to the tanks storming a town (on top of the streets' own): 0 with no garrison, no guns, or the switch off. */
+export const townFlakCut = (g: Game, r: Region): number => flakCut(townFlak(g, r));
+
+/** The most the town's guns can take from the tanks, where the stormer does not know them: the guns' top level's cut. */
+export const flakCutMost = (): number => flakCut(LIGHTS_TOP);
+
+/**
+ * The battle card's line for the guns against the tanks (the UI director's words, section 5): a second 'Armor' line
+ * after the streets line. The value matches neither of the fog patterns turn.ts keeps for the 'Armor' label; its own
+ * fog form is flakFog.
+ */
+export const flakLine = (cut: number): { label: string; value: string; effect: string } =>
+  ({ label: 'Armor', value: 'Heavy anti-aircraft guns dug in with the garrison', effect: `Tank attack cut by a further ${Math.round(cut * 100)}%` });
+
+/** Whether a ticket line is the guns' line against the tanks (flakLine), for the fog. */
+export const isFlakLine = (l: { label: string; value: string }): boolean => l.label === 'Armor' && /^Heavy anti-aircraft guns dug in with the garrison$/.test(l.value);
+
+/** The guns' line where the stormer has not identified the defence (the UI director's words, section 5). */
+export const flakFog = (): { label: string; value: string; effect: string } =>
+  ({ label: 'Armor', value: 'The garrison may have heavy anti-aircraft guns dug in', effect: `Tank attack cut by as much as ${Math.round(flakCutMost() * 100)}% if it has` });
+
+/**
+ * The price (form section 6): a town that had a garrison and guns at the storm's start and falls by storm loses
+ * ground.lost levels of its guns ('wk:aa:<region>' goes down, deleted at nought), and the ground keeps the mark
+ * 'aal:<region>' = the month it was lost (the art director's scorched pits). Surrender, starvation and handover keep the
+ * guns. Returns the result line for the battle's report (the UI director's words, section 6), or null. `level` is
+ * townFlak as the storm began; 0 (no garrison, no guns, the switch off) does nothing.
+ */
+export function flakLostWithTown(g: Game, r: Region, level: number, town: string): { label: string; value: string } | null {
+  if (!cityDefences(g) || level <= 0) return null;
+  const key = `wk:aa:${r.id}`;
+  const left = Math.max(0, (g.flags[key] ?? 0) - CITYDEF.ground.lost);
+  if (left > 0) g.flags[key] = left; else delete g.flags[key];
+  g.flags[`aal:${r.id}`] = g.turn;
+  return { label: 'Anti-aircraft guns', value: `The anti-aircraft guns of ${town} fought the tanks over open sights, and one level of them was lost with the town.` };
+}

@@ -8,7 +8,7 @@ import { assessAir, fly, type AirAssess } from '../src/campaign/air';
 import { AC } from '../src/campaign/aircampaigns';
 import { setAirPiece } from '../src/campaign/airversion';
 import { raidTargets } from '../src/campaign/airwar';
-import { cityNight, cityNightShare, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
+import { cityNight, cityNightShare, flakCut, flakCutMost, flakLostWithTown, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
 import { townSize } from '../src/campaign/towns';
 import { beginHuman, humanUp, orderMove, orderStorm, stepAI, stormOutlook } from '../src/campaign/turn';
@@ -18,7 +18,7 @@ import stage from '../data/campaign/stage.json';
 import { ARSENAL, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
 import { CITYDEF, LIGHTS_TOP, cityDefences, cityDefencesOn, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
-import { capture, createGame, endPhase, relocate } from '../src/campaign/game';
+import { assess, capture, createGame, endPhase, relocate } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
 import { startOpen } from '../src/campaign/staff';
 import { arsenalOffers, orderArsenal } from '../src/campaign/turn';
@@ -631,5 +631,160 @@ describe('city defences off: a town is as strong as its walls and forts (slice 3
     for (const c of ger.slice(0, 4)) orderMove(g, c, town.id);
     capture(g, town, 'GER');
     expect(g.flags[`tw:${town.id}`]).toBe(3);
+  });
+});
+
+// ---- Slice 4: the town's guns against the tanks that storm it -------------------------------------------------------
+
+/**
+ * Lodz held by one Polish corps, with the German army besieging it: one tank corps and one infantry corps inside the
+ * province, ready to storm. `guns` the built gun levels in the town; `inside: false` leaves it to its guard alone.
+ */
+function lodzStorm(on: boolean, o: { guns?: number; inside?: boolean } = {}): { g: Game; town: Region; inside: Corps | null; tank: Corps; foot: Corps } {
+  const { g, town, inside, ger } = lodzTown(on, { inside: o.inside });
+  const foot = ger.find((c) => c.kind === 'inf')!;
+  const tank = g.corps.find((c) => c.nat === 'GER' && c.kind === 'arm' && !c.dead)!;
+  relocate(g, tank, g.regions[foot.reg]);
+  tank.ap = Math.max(tank.ap, 3); foot.ap = Math.max(foot.ap, 3);
+  orderMove(g, foot, town.id);
+  orderMove(g, tank, town.id);
+  expect(tank.reg).toBe(town.id);
+  expect(foot.reg).toBe(town.id);
+  if (o.guns) g.flags[`wk:aa:${town.id}`] = o.guns;
+  return { g, town, inside, tank, foot };
+}
+const stormA = (g: Game, cs: Corps[], town: Region): number => assess(g, cs, town, { town: true }).A;
+const armorLines = (lines: { label: string; value: string; effect?: string }[]) => lines.filter((l) => l.label === 'Armor');
+
+describe('city defences: the town\'s guns against the tanks (slice 4)', () => {
+  it('cuts the tanks\' storm by 7% a level on top of the streets\' 75%: x0.93, 0.86, 0.79', () => {
+    const { g, town, tank } = lodzStorm(true);
+    const bare = stormA(g, [tank], town);
+    expect(armorLines(assess(g, [tank], town, { town: true }).lines).map((l) => l.value)).toEqual(['Tanks in the streets of the town']);
+    for (const [lv, mul] of [[1, 0.93], [2, 0.86], [3, 0.79]]) {
+      g.flags[`wk:aa:${town.id}`] = lv;
+      expect(townFlak(g, town)).toBe(lv);
+      expect(townFlakCut(g, town)).toBeCloseTo(1 - mul, 9);
+      expect(stormA(g, [tank], town) / bare, `level ${lv}`).toBeCloseTo(mul, 9);
+      const lines = armorLines(assess(g, [tank], town, { town: true }).lines);
+      expect(lines).toEqual([
+        { label: 'Armor', value: 'Tanks in the streets of the town', effect: 'Tank attack cut to 75%' },
+        { label: 'Armor', value: 'Heavy anti-aircraft guns dug in with the garrison', effect: `Tank attack cut by a further ${Math.round((1 - mul) * 100)}%` },
+      ]);
+    }
+  });
+
+  it('cuts by 25% at most', () => {
+    const { g, town, tank } = lodzStorm(true);
+    const bare = stormA(g, [tank], town);
+    g.flags[`wk:aa:${town.id}`] = 5;
+    expect(townFlakCut(g, town)).toBe(CITYDEF.ground.most);
+    expect(stormA(g, [tank], town) / bare).toBeCloseTo(0.75, 9);
+    expect(flakCut(4)).toBe(0.25);
+    expect(flakCutMost()).toBeCloseTo(0.21, 9);
+  });
+
+  it('does nothing against infantry, with no garrison, or with no guns', () => {
+    const s = lodzStorm(true);
+    const foot0 = stormA(s.g, [s.foot], s.town);
+    s.g.flags[`wk:aa:${s.town.id}`] = 3;
+    expect(stormA(s.g, [s.foot], s.town)).toBe(foot0);
+    expect(armorLines(assess(s.g, [s.foot], s.town, { town: true }).lines)).toEqual([]);
+    // No living garrison: the guns are there, but nobody has dug them in.
+    const n = lodzStorm(true);
+    const tank0 = stormA(n.g, [n.tank], n.town);
+    n.g.flags[`wk:aa:${n.town.id}`] = 3;
+    n.inside!.dead = true;
+    expect(townFlak(n.g, n.town)).toBe(0);
+    expect(townFlakCut(n.g, n.town)).toBe(0);
+    n.inside!.dead = false;
+    expect(townFlak(n.g, n.town)).toBe(3);
+    delete n.g.flags[`wk:aa:${n.town.id}`];
+    expect(townFlak(n.g, n.town)).toBe(0);
+    expect(stormA(n.g, [n.tank], n.town)).toBe(tank0);
+    expect(armorLines(assess(n.g, [n.tank], n.town, { town: true }).lines)).toHaveLength(1);
+  });
+
+  it('the card says the figure the dice use, and the staff\'s forecast and the battle agree', () => {
+    const { g, town, tank, foot } = lodzStorm(true, { guns: 2 });
+    const a = assess(g, [tank, foot], town, { town: true });
+    const line = armorLines(a.lines)[1];
+    expect(line.effect).toBe(`Tank attack cut by a further ${Math.round(townFlakCut(g, town) * 100)}%`);
+    expect(line.effect).toBe('Tank attack cut by a further 14%');
+    // Identified: the outlook shows the line as the assessment has it.
+    for (const c of town.garr!) (g.intel.known ??= {})[c.id] = g.turn;
+    const look = stormOutlook(g, town.id)!;
+    expect(armorLines(look.lines)).toContainEqual(line);
+    // The battle is fought at the assessment's figures.
+    const rep = orderStorm(g, town.id)!;
+    expect(rep.aPower).toBeCloseTo(a.A, 9);
+    expect(armorLines(rep.lines)).toContainEqual(line);
+  });
+
+  it('says only what the guns could take where the garrison is not identified', () => {
+    const { g, town } = lodzStorm(true, { guns: 1 });
+    for (const c of town.garr!) delete g.intel.known?.[c.id];
+    const look = stormOutlook(g, town.id)!;
+    expect(look.exact).toBe(false);
+    expect(armorLines(look.lines)).toContainEqual({ label: 'Armor', value: 'The garrison may have heavy anti-aircraft guns dug in', effect: 'Tank attack cut by as much as 21% if it has' });
+    expect(armorLines(look.lines).some((l) => /dug in with the garrison/.test(l.value))).toBe(false);
+  });
+
+  it('loses a level of the guns when the town falls by storm, and says so on the report', () => {
+    const { g, town, inside } = lodzStorm(true, { guns: 2 });
+    inside!.str = 0.2; inside!.org = 0.2;
+    const rep = orderStorm(g, town.id)!;
+    expect(rep.taken).toBe(true);
+    expect(g.flags[`wk:aa:${town.id}`]).toBe(1);
+    expect(g.flags[`aal:${town.id}`]).toBe(g.turn);
+    expect(rep.lines).toContainEqual({ label: 'Anti-aircraft guns', value: 'The anti-aircraft guns of Lodz fought the tanks over open sights, and one level of them was lost with the town.' });
+    // At level 1 the guns are gone with it.
+    const one = lodzStorm(true, { guns: 1 });
+    one.inside!.str = 0.2; one.inside!.org = 0.2;
+    expect(orderStorm(one.g, one.town.id)!.taken).toBe(true);
+    expect(`wk:aa:${one.town.id}` in one.g.flags).toBe(false);
+  });
+
+  it('keeps the guns when the storm is thrown back, when the town had no garrison, or when it falls otherwise', () => {
+    // Thrown back.
+    const b = lodzStorm(true, { guns: 2 });
+    b.inside!.str = 1; b.inside!.org = 1;
+    const rep = orderStorm(b.g, b.town.id, [b.tank])!;
+    expect(rep.taken).toBe(false);
+    expect(b.g.flags[`wk:aa:${b.town.id}`]).toBe(2);
+    expect(`aal:${b.town.id}` in b.g.flags).toBe(false);
+    expect(rep.lines.some((l) => l.label === 'Anti-aircraft guns')).toBe(false);
+    // A town with no garrison or no guns as the storm began pays nothing.
+    const n = lodzStorm(true, { guns: 2 });
+    expect(flakLostWithTown(n.g, n.town, 0, 'Lodz')).toBeNull();
+    expect(n.g.flags[`wk:aa:${n.town.id}`]).toBe(2);
+    expect(`aal:${n.town.id}` in n.g.flags).toBe(false);
+    // Starved out.
+    const hu = lodzTown(true, { inside: false });
+    hu.g.flags[`wk:aa:${hu.town.id}`] = 2;
+    hu.ger[0].str = 0.2;
+    orderMove(hu.g, hu.ger[0], hu.town.id);
+    for (let k = 0; k <= storesOf(hu.g, hu.town) && hu.town.ctrl === 'POL'; k++) siegeMonth(hu.g, 'POL');
+    expect(hu.town.ctrl).toBe('GER');
+    expect(hu.g.flags[`wk:aa:${hu.town.id}`]).toBe(2);
+    expect(`aal:${hu.town.id}` in hu.g.flags).toBe(false);
+  });
+});
+
+describe('city defences off: the town\'s guns do not fight tanks (slice 4)', () => {
+  it('reads no guns in a storm, cuts nothing, loses nothing, writes nothing', () => {
+    const { g, town, tank, foot, inside } = lodzStorm(false);
+    const a0 = assess(g, [tank, foot], town, { town: true });
+    g.flags[`wk:aa:${town.id}`] = 3;
+    expect(townFlak(g, town)).toBe(0);
+    const a1 = assess(g, [tank, foot], town, { town: true });
+    expect(a1.A).toBe(a0.A);
+    expect(a1.lines).toEqual(a0.lines);
+    inside!.str = 0.2; inside!.org = 0.2;
+    const rep = orderStorm(g, town.id)!;
+    expect(rep.taken).toBe(true);
+    expect(g.flags[`wk:aa:${town.id}`]).toBe(3);
+    expect(`aal:${town.id}` in g.flags).toBe(false);
+    expect(rep.lines.some((l) => l.label === 'Anti-aircraft guns' || /anti-aircraft/.test(l.value))).toBe(false);
   });
 });

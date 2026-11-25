@@ -59,7 +59,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { clearTownWorks, townWorksMonth, townWorksWords } from './citydefences';
+import { clearTownWorks, flakLine, flakLostWithTown, townFlak, townFlakCut, townWorksMonth, townWorksWords } from './citydefences';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, fortTerm } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize } from './towns';
@@ -1717,6 +1717,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // An assault the month the army comes up to the town goes in off the march, with nothing made ready.
   const rushed = town && g.flags[`siege:${target.id}`] === g.turn ? SIEGE.assault.hasty[townSize(g, target)] : 1;
   const hasty = rushed < 1;
+  // (City defences, the design director's ruling of 25 Nov 2026 02:23Z: the heavy anti-aircraft guns of a town with a
+  // living garrison fire on the tanks that storm it, a further cut on top of the streets'. 0 with the switch off.)
+  const flak = town ? townFlakCut(g, target) : 0;
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
     if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
@@ -1736,7 +1739,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     }
     if (c.kind === 'arm') {
       // In the streets of a town a tank is a target: there is no room to manoeuvre.
-      if (town) { p *= SIEGE.assault.armour; streets = true; }
+      if (town) { p *= SIEGE.assault.armour; streets = true; if (flak > 0) p *= 1 - flak; }
       else if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
       // Tanks against a defence that cannot stop them. In the grand campaign the edge shrinks by its anti-tank strength.
       else {
@@ -2192,6 +2195,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (armorShock) lines.push(at ? { label: 'Armor', value: `Tank attack up ${Math.round(25 * (1 - at.strength))}%` } : { label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
   if (streets) lines.push({ label: 'Armor', value: 'Tanks in the streets of the town', effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
+  if (streets && flak > 0) lines.push(flakLine(flak));
   if (hasty) lines.push({ label: 'A hasty assault', value: 'The army has only just come up to the town: it goes in off the march', effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
   if (flank > 1) lines.push({ label: 'Direction', value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
   // What the battle card tells of it: who will pay, how much of the tanks' shock is left, and what he brings against the works.
@@ -2695,6 +2699,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
+  // (City defences: the town's guns that fire on the stormers' tanks, as the storm begins; 0 with the switch off.)
+  const flakAt = town ? townFlak(g, target) : 0;
   // (Release 2, rearguard.ts) The rearguards holding the field against this attack: they cost the attackers time.
   const rears = town || opts.breakout ? [] : rearguardsAt(g, target, (nat) => atWar(g, nat, armyOf(attackers[0])));
   const gone = town ? [] : giveWay(g, a, attackers, target);
@@ -2763,6 +2769,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
+  let flakOut: { label: string; value: string } | null = null;
   // The share of its men each corps loses in this fight: what its morale makes of the day.
   const bled = new Map<number, number>();
   const attW = splitWeights(attackers, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
@@ -2922,6 +2929,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (watch > 0) { prisoners += watchMen; defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.round(watch * 10) / 10, men: watchMen, lost: watchMen, fate: 'surrendered', guard: true }); }
       for (const c of attackers) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
       fall(g, target, attNat, 'storm');
+      // (City defences: a town that had a garrison and guns as the storm began loses a level of them with it.)
+      flakOut = flakLostWithTown(g, target, flakAt, townName(target));
     }
     // (The fortress rows: where a fortress crew went into its works, the guard goes in with it and the town holds.)
     else if (inField && !intoWorks) {
@@ -2963,6 +2972,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     attLost, defLost, prisoners,
   };
   if (town) rep.town = true;
+  if (flakOut) rep.lines.push(flakOut);
   if (inField) rep.guarded = true;
   if (held) rep.siege = true;
   if (gates) rep.gates = true;
