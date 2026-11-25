@@ -4126,10 +4126,14 @@ function province(id: number) {
       const lineNo = (id: string | null): number => (id ? ['market', 'farm', 'school', 'camp', 'hospital', 'hall'].indexOf(id) : -1);
       // (Release 2, townqueue.ts) Where BUILD cannot be pressed for the builders or the money, the press that queues the
       // line's next level instead, and that level's name; nothing with the switch off or outside his month.
-      const queueOf_ = (line: string): { queue: string; queueLabel: string } => {
-        const me = t.mine ? s.human : null;
-        if (!me || !humanUp(s) || onEve(s) || whyNotQueue(s, me, r.id, line) !== null) return { queue: '', queueLabel: '' };
-        return { queue: `queue:${r.id}:${line}`, queueLabel: civicLine(line)?.levels[nextQueued(s, me, r.id, line) - 1] ?? '' };
+      // (A press of QUEUE queues the level above everything standing, going up and queued in the line, which can be a
+      // level above the one the offer describes: its name, level, price and months, and the level it goes up after,
+      // so that the map and the town card show what the press queues.)
+      const queueOf_ = (line: string): { queue: string; queueLabel: string; queueLevel: number; queueCost: number; queueMonths: number; queueAfter: string } => {
+        const me = t.mine ? s.human : null, l = civicLine(line);
+        if (!me || !l || !humanUp(s) || onEve(s) || whyNotQueue(s, me, r.id, line) !== null) return { queue: '', queueLabel: '', queueLevel: 0, queueCost: 0, queueMonths: 0, queueAfter: '' };
+        const lv = nextQueued(s, me, r.id, line);
+        return { queue: `queue:${r.id}:${line}`, queueLabel: l.levels[lv - 1] ?? '', queueLevel: lv, queueCost: shown(l.cost[lv - 1]), queueMonths: l.months[lv - 1], queueAfter: lv > 1 ? l.levels[lv - 2] : '' };
       };
       return {
         town: t.town, mine: t.mine, free: t.free, can: t.offers.filter((o) => o.why === null).length,
@@ -5972,7 +5976,8 @@ function townPage(s: Game, region: number): Page | null {
         : [`${o.has ? 'Next' : 'First'}: ${o.label}  \u00B7  ${moneyWords(o.cost)}  \u00B7  ${monthsWords(o.months)}`, o.effect, o.blurb];
     // (Release 2, townqueue.ts) Where BUILD cannot be pressed now for the builders or the money, the next level can be queued.
     const queueWhy = me && townQueueOn(s) ? whyNotQueue(s, me, region, o.line) : 'off';
-    const queued = queueWhy === null ? civicLine(o.line)?.levels[nextQueued(s, me!, region, o.line) - 1] ?? o.label : '';
+    const qLine = civicLine(o.line), qLevel = queueWhy === null ? nextQueued(s, me!, region, o.line) : 0;
+    const queued = queueWhy === null && qLine ? `${qLine.levels[qLevel - 1] ?? o.label} (${moneyWords(qLine.cost[qLevel - 1] ?? o.cost)} at today's price)` : '';
     return {
       nat: '', title: `${o.name}${o.has ? `  \u00B7  ${o.hasLabel}` : ''}`, lines,
       buttons: [
@@ -7216,9 +7221,13 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       if (b) noteOwnOrder(s, b, key, -1, offer?.label ?? b.name);
       note = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? 'It is not your month.' : offer?.why ?? 'That cannot be ordered now.';
     } else if (part[1] === 'cancel') {
+      // (Release 2, townqueue.ts: what was queued behind a building taken back, and needs it, comes off with it.)
+      const was = s.human ? queueOf(s, s.human).slice() : [];
       ok = orderCancelBuild(s, Number(part[2]));
       if (ok) forgetOwnOrder(Number(part[2]));
-      note = ok ? 'The order is taken back and the money returned.' : 'An order can only be taken back in the month it was placed.';
+      const off = s.human ? was.filter((q) => !queueOf(s, s.human!).includes(q)).map((q) => queuedName(s, q)) : [];
+      const offWords = off.length > 1 ? `${off.slice(0, -1).join(', ')} and ${off[off.length - 1]}` : off[0] ?? '';
+      note = ok ? `The order is taken back and the money returned.${off.length ? ` ${offWords.charAt(0).toUpperCase()}${offWords.slice(1)}, queued behind it, ${off.length === 1 ? 'comes' : 'come'} off the queue too: nothing had been paid.` : ''}` : 'An order can only be taken back in the month it was placed.';
     } else if (part[1] === 'again') {
       const plan = againPlan(s);
       const placed: string[] = [], out = plan ? plan.out.slice() : [];

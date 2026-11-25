@@ -17598,6 +17598,8 @@ namespace
 			{
 				const bool bBuild = Pick->Why.IsEmpty(), bQueue = !bBuild && !Pick->QueueAct.IsEmpty();
 				const FString Label = bQueue && !Pick->QueueLabel.IsEmpty() ? Pick->QueueLabel : Pick->Label;
+				// (the price of the building the press queues, which can be a level above the next)
+				const int32 PickPrice = bQueue && Pick->QueueLevel > 0 ? Pick->QueueCost : Pick->Cost;
 				const FString Tip = bBuild ? FString::Printf(TEXT("%s: %s, ready in %d month%s. %s"), *Label, *FText::AsNumber(Pick->Cost).ToString(), Pick->Months, Pick->Months == 1 ? TEXT("") : TEXT("s"), *Pick->Effect)
 					: bQueue ? FString::Printf(TEXT("%s, queued here: ordered for you at the opening of a month once the builders are free and the treasury can pay, at that day's price."), *Label)
 					: Pick->Why;
@@ -17610,7 +17612,7 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(TEXT("YOUR STAFF WOULD BUILD"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Label, *FText::AsNumber(Pick->Cost).ToString()))).Font(Serif(TEXT("Regular"), 12.0f)).ColorAndOpacity(bBuild || bQueue ? Cream : Muted)
+							SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Label, *FText::AsNumber(PickPrice).ToString()))).Font(Serif(TEXT("Regular"), 12.0f)).ColorAndOpacity(bBuild || bQueue ? Cream : Muted)
 						]
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
@@ -18047,11 +18049,19 @@ namespace
 			if (Chosen)
 			{
 				const bool bCan = Chosen->Why.IsEmpty();
-				const FString Ladder = Chosen->Level <= 1 ? FString(TEXT("Level 1 of 3: it can be raised twice more on this plot"))
+				// (Release 2, a queue for a town) Where BUILD is shut for the builders or the money, the button queues it instead,
+				// and the card shows the building that press queues: it can be a level above the next, behind what is going up
+				// or queued in the line.
+				const bool bQueue = !bCan && !Chosen->QueueAct.IsEmpty();
+				const bool bQueueShown = bQueue && Chosen->QueueLevel > Chosen->Level;
+				const FString ShownLabel = bQueue && !Chosen->QueueLabel.IsEmpty() ? Chosen->QueueLabel : Chosen->Label;
+				const int32 ShownLevel = bQueueShown ? Chosen->QueueLevel : Chosen->Level;
+				const FString Ladder = ShownLevel <= 1 ? FString(TEXT("Level 1 of 3: it can be raised twice more on this plot"))
+					: bQueueShown ? FString::Printf(TEXT("Level %d of 3: it goes up after the %s"), ShownLevel, *Chosen->QueueAfter.ToLower())
 					: FString::Printf(TEXT("Level %d of 3: it raises the %s"), Chosen->Level, *On.Label.ToLower());
 				Detail->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Chosen->Label)).Font(Serif(TEXT("Bold"), 18.0f)).ColorAndOpacity(bCan ? Cream : Muted)
+					SNew(STextBlock).Text(FText::FromString(ShownLabel)).Font(Serif(TEXT("Bold"), 18.0f)).ColorAndOpacity(bCan || bQueue ? Cream : Muted)
 				];
 				Detail->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
@@ -18071,15 +18081,13 @@ namespace
 						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(STextBlock).Text(FText::FromString(Chosen->Why)).Font(Typed(10.5f)).ColorAndOpacity(Muted).AutoWrapText(true)]
 					];
 				}
-				// (Release 2, a queue for a town) Where BUILD is shut for the builders or the money, the button queues it instead.
-				const bool bQueue = !bCan && !Chosen->QueueAct.IsEmpty();
-				const FString Verb = bQueue ? TEXT("QUEUE THE ") + (Chosen->QueueLabel.IsEmpty() ? Chosen->Label : Chosen->QueueLabel).ToUpper()
+				const FString Verb = bQueue ? TEXT("QUEUE THE ") + ShownLabel.ToUpper()
 					: (Chosen->Level <= 1 ? FString(TEXT("BUILD THE ")) : FString(TEXT("RAISE TO "))) + Chosen->Label.ToUpper();
 				Detail->AddSlot().FillHeight(1.0f)[SNew(SSpacer)];
 				Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
 				[
 					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[CostLine(Chosen->Cost, Chosen->Months, Cream, 10.5f, true)]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[CostLine(bQueueShown ? Chosen->QueueCost : Chosen->Cost, bQueueShown ? Chosen->QueueMonths : Chosen->Months, Cream, 10.5f, true)]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 					[
 						SNew(SBox).HeightOverride(40.0f)
@@ -18191,7 +18199,11 @@ namespace
 					{
 						const FTownOffer& Offer = *Each;
 						const bool bCan = Offer.Why.IsEmpty();
-						const FString Tip = FString::Printf(TEXT("%s: %s\n%s\n%s%s%s"), *Offer.Name, *Offer.Label, *Offer.Effect, *Offer.Blurb, bCan ? TEXT("") : *(TEXT("\n") + Offer.Why),
+						// (with the queue on, a press where BUILD is shut queues the level above what is going up or queued: shown as that)
+						const bool bQueueTile = !bCan && Offer.QueueLevel > 0;
+						const FString TileLabel = bQueueTile && !Offer.QueueLabel.IsEmpty() ? Offer.QueueLabel : Offer.Label;
+						const int32 TileLevel = bQueueTile ? Offer.QueueLevel : Offer.Level, TileCost = bQueueTile ? Offer.QueueCost : Offer.Cost, TileMonths = bQueueTile ? Offer.QueueMonths : Offer.Months;
+						const FString Tip = FString::Printf(TEXT("%s: %s\n%s\n%s%s%s"), *Offer.Name, *TileLabel, *Offer.Effect, *Offer.Blurb, bCan ? TEXT("") : *(TEXT("\n") + Offer.Why),
 							bCan || Offer.QueueAct.IsEmpty() ? TEXT("") : TEXT("\nPress to queue it: it is ordered for you once the builders are free and the treasury can pay."));
 						Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
 						[
@@ -18212,16 +18224,16 @@ namespace
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 									[
-										Picture(ModelOf(Offer.No, Offer.Level), FVector2D(114.0, 69.0))
+										Picture(ModelOf(Offer.No, TileLevel), FVector2D(114.0, 69.0))
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).AutoWrapText(true) // (no order is cut mid-word)
+										SNew(STextBlock).Text(FText::FromString(TileLabel)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).AutoWrapText(true) // (no order is cut mid-word)
 									]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bCan ? BrightBrass : Alarm.CopyWithNewOpacity(0.9f))
-										.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d mo"), *FText::AsNumber(Offer.Cost).ToString(), Offer.Months)))
+										.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d mo"), *FText::AsNumber(TileCost).ToString(), TileMonths)))
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 									[

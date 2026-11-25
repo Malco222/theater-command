@@ -2106,6 +2106,10 @@ struct FTownOffer
 	// (Release 2, a queue for a town) Where BUILD cannot be pressed for the builders or the money: the press that queues
 	// the line's next level, and that level's name. Empty with the queue switched off, or where nothing can be queued.
 	FString QueueAct, QueueLabel;
+	// The level that press queues (it can be a level above Level, behind what is going up or queued in the line), its
+	// price and months, and the name of the level it goes up after ('' for a first level). 0 and '' where nothing can be queued.
+	int32 QueueLevel = 0, QueueCost = 0, QueueMonths = 0;
+	FString QueueAfter;
 };
 
 struct FProvinceInfo

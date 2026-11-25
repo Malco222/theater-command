@@ -119,6 +119,24 @@ export function dropQueue(g: Game, nat: string, region: number, at: number): boo
   return true;
 }
 
+/**
+ * After the player takes back a building going up in one of his towns: what was queued behind it in the same line, and
+ * needs it, comes off as well, as TAKE IT OFF takes off what needs the one it takes. One that still stands on a level
+ * standing, going up or queued below it stays. Nothing was paid. Returns them, for the line that says so.
+ */
+export function dropBehind(g: Game, nat: string, region: number, line: string): Queued[] {
+  const all = queueOf(g, nat);
+  let top = civicLevel(g, line, region) + (civicGoing(g, nat, region)?.item === line ? 1 : 0);
+  const gone: Queued[] = [];
+  for (const q of all) {
+    if (q.region !== region || q.line !== line) continue;
+    if (q.level <= top + 1) top = Math.max(top, q.level);
+    else gone.push(q);
+  }
+  if (gone.length) keep(g, nat, all.filter((q) => !gone.includes(q)));
+  return gone;
+}
+
 /** Money as the player sees it, in whole numbers (a production point is BUDGET.scale). */
 const money = (pp: number): number => Math.floor(pp * BUDGET.scale + 1e-6);
 
@@ -136,10 +154,15 @@ export function queueHeads(g: Game, nat: string): QueueState[] {
   const out: QueueState[] = [], seen = new Set<number>();
   for (const q of queueOf(g, nat)) {
     if (seen.has(q.region)) continue;
-    seen.add(q.region);
     const l = civicLine(q.line), going = civicGoing(g, nat, q.region);
-    const cost = l ? l.cost[Math.min(l.cost.length, civicLevel(g, q.line, q.region) + 1) - 1] : 0;
-    out.push({ q, name: queuedName(g, q), cost: Math.round(cost * BUDGET.scale), short: going ? 0 : Math.max(0, Math.round(cost * BUDGET.scale) - money(n.pp)), after: going ? going.name.split(' at ')[0].toLowerCase() : '' });
+    // The level the presses would order next for it: the one above what stands and what is going up in its line (an
+    // item fills its line up to its level), named and priced as the news will name it. One already standing or going
+    // up is not the town's next: the presses take it off.
+    const ahead = civicLevel(g, q.line, q.region) + (going?.item === q.line ? 1 : 0);
+    if (!l || q.level <= ahead) continue;
+    seen.add(q.region);
+    const lv = Math.min(q.level, ahead + 1), cost = Math.round(l.cost[lv - 1] * BUDGET.scale);
+    out.push({ q, name: queuedName(g, { ...q, level: lv }), cost, short: going ? 0 : Math.max(0, cost - money(n.pp)), after: going ? going.name.split(' at ')[0].toLowerCase() : '' });
   }
   return out;
 }

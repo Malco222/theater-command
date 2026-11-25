@@ -80,7 +80,7 @@ import {
 import { footingView, orderFooting, whyNotFooting, type FootingId, type FootingView } from './footing';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
-import { pressQueue } from './townqueue';
+import { dropBehind, pressQueue } from './townqueue';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
@@ -2251,7 +2251,13 @@ export function orderBuildFort(g: Game, region: number): Build | null {
 }
 
 export function orderCancelBuild(g: Game, id: number): boolean {
-  return humanUp(g) && cancelBuild(g, g.human!, id);
+  if (!humanUp(g)) return false;
+  const b = g.nations[g.human!]?.queue.find((x) => x.id === id);
+  if (!cancelBuild(g, g.human!, id)) return false;
+  // (Release 2, townqueue.ts) A building taken back takes with it what was queued behind it in its line and needs it:
+  // nothing had been paid. (Nothing is queued with that switch off.)
+  if (b?.what === 'civic' && b.item) dropBehind(g, g.human!, b.region, b.item);
+  return true;
 }
 
 /**

@@ -8,14 +8,15 @@
 // 4. a lost town drops its queue unpaid;
 // 5. the staff leaves queues alone.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { civicAdvice, civicAI, civicLevel } from '../src/campaign/buildings';
+import { civicAdvice, civicAI, civicLevel, civicLine, whyNotCivic } from '../src/campaign/buildings';
 import { setDesk } from '../src/campaign/depth';
 import { createGame } from '../src/campaign/game';
+import { standDown } from '../src/campaign/liberation';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { TOWNQUEUE_STAGE } from '../src/campaign/stage';
 import { addQueue, dropQueue, pressQueue, queueHeads, queueOf, queuedAt, setTownQueue, townQueueOn, whyNotQueue, type Queued } from '../src/campaign/townqueue';
-import { beginHuman, endHuman, humanUp, orderBuilding, stepAI, townBuildings } from '../src/campaign/turn';
+import { beginHuman, endHuman, humanUp, orderBuilding, orderCancelBuild, stepAI, townBuildings } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
@@ -347,6 +348,7 @@ describe('the board and the town plan', () => {
 
 describe('build from the map (the province panel)', () => {
   interface Plots { best: string; queued: string; offers: { line: string; why: string; queue: string; queueLabel: string }[] }
+  interface Offer { line: string; level: number; why: string; queue: string; queueLabel: string; queueLevel: number; queueCost: number; queueMonths: number; queueAfter: string }
   const plotsOf = (region: number): Plots => (TC().province(region) as { plots: Plots }).plots;
 
   it('names the staff\'s pick for the town, and QUEUE presses only with the queue on and BUILD shut', () => {
@@ -368,5 +370,101 @@ describe('build from the map (the province panel)', () => {
     expect(next.queueLabel).not.toBe('');
     expect(act(next.queue).ok).toBe(true);
     expect(plotsOf(t.region).queued).toMatch(/^Queued: .+\. Goes up after the .+\.$/);
+  });
+
+  it('a press of QUEUE is shown as the building it queues: its name, level, price and months, behind what is going up', () => {
+    TC().start({ human: 'GER', seed: 3, view: 'grand' });
+    act('townqueuerule:on');
+    const t = board().towns.find((x) => x.state === 'ready')!;
+    expect(act(`civic:${t.region}:market`).ok).toBe(true);
+    const l = civicLine('market')!;
+    // The market hall is going up: the offer still describes it, and QUEUE queues the merchant quarter, at its own price.
+    let o = (plotsOf(t.region).offers as Offer[]).find((x) => x.line === 'market')!;
+    expect(o.level).toBe(1);
+    expect(o.queueLevel).toBe(2);
+    expect(o.queueLabel).toBe(l.levels[1]);
+    expect(o.queueCost).toBe(Math.round(l.cost[1] * 100));
+    expect(o.queueMonths).toBe(l.months[1]);
+    expect(o.queueAfter).toBe(l.levels[0]);
+    expect(act(o.queue).ok).toBe(true);
+    // And with that queued, the next press is the level above it.
+    o = (plotsOf(t.region).offers as Offer[]).find((x) => x.line === 'market')!;
+    expect(o.queueLevel).toBe(3);
+    expect(o.queueCost).toBe(Math.round(l.cost[2] * 100));
+    expect(o.queueAfter).toBe(l.levels[1]);
+    // Off, every one of them is empty.
+    act('townqueuerule:off');
+    o = (plotsOf(t.region).offers as Offer[]).find((x) => x.line === 'market')!;
+    expect([o.queue, o.queueLabel, o.queueAfter, o.queueLevel, o.queueCost, o.queueMonths]).toEqual(['', '', '', 0, 0, 0]);
+  });
+});
+
+describe('mends from the second read', () => {
+  interface Going { going: { id: number; act: string; cancel: boolean } | null }
+
+  it('a building taken back takes with it what was queued behind it in its line, and says so; the rest stands', () => {
+    TC().start({ human: 'GER', seed: 3, view: 'grand' });
+    act('townqueuerule:on');
+    const t = board().towns.find((x) => x.state === 'ready')!;
+    expect(act(`civic:${t.region}:market`).ok).toBe(true);
+    expect(act(`queue:${t.region}:market`).ok).toBe(true);
+    // Another line queued in the same town, where it has room for one: it does not need the market, and stays.
+    const other = board().towns.find((x) => x.region === t.region)!.then.find((b) => b.line !== 'market' && b.ok);
+    if (other) expect(act(other.act).ok).toBe(true);
+    const going = (board().towns.find((x) => x.region === t.region) as unknown as Going).going!;
+    expect(going.cancel).toBe(true);
+    const r = act(going.act);
+    expect(r.ok).toBe(true);
+    expect(r.note).toMatch(/^The order is taken back and the money returned\. The merchant quarter at .+, queued behind it, comes off the queue too: nothing had been paid\.$/);
+    expect(board().towns.find((x) => x.region === t.region)!.queue.map((q) => q.line)).toEqual(other ? [other.line] : []);
+    // A building taken back with nothing queued behind it says what it always said.
+    expect(act(`civic:${t.region}:market`).ok).toBe(true);
+    const again = (board().towns.find((x) => x.region === t.region) as unknown as Going).going!;
+    expect(act(again.act).note).toBe('The order is taken back and the money returned.');
+  });
+
+  it('rules alone: what still stands on a level queued below it stays when a building is taken back', () => {
+    const g = opened();
+    const town = civicAdvice(g, 'GER').home.find((r) => !civicOrders(g, 'GER', r).length && civicLevel(g, 'market', r) === 0 && whyNotCivic(g, 'GER', g.regions[r], 'market') === null)!;
+    g.nations.GER.pp = 0;
+    // Short of money: the market hall is queued; then the treasury is found and BUILD puts it up by hand.
+    expect(addQueue(g, 'GER', town, 'market')!.level).toBe(1);
+    g.nations.GER.pp = 500;
+    const b = orderBuilding(g, town, 'market')!;
+    expect(b).not.toBeNull();
+    expect(addQueue(g, 'GER', town, 'market')!.level).toBe(2);
+    expect(orderCancelBuild(g, b.id)).toBe(true);
+    // The market hall queued by itself is still there, so the merchant quarter behind it is too.
+    expect(queuedAt(g, 'GER', town).map((q) => q.level)).toEqual([1, 2]);
+  });
+
+  it('the board names and prices the level the presses will order next, as the news does', () => {
+    const g = opened();
+    const town = civicAdvice(g, 'GER').home.find((r) => !civicOrders(g, 'GER', r).length && civicLevel(g, 'market', r) === 0 && whyNotCivic(g, 'GER', g.regions[r], 'market') === null)!;
+    g.nations.GER.pp = 500;
+    const b = orderBuilding(g, town, 'market')!;
+    expect(b).not.toBeNull();
+    expect(addQueue(g, 'GER', town, 'market')!.level).toBe(2);
+    expect(addQueue(g, 'GER', town, 'market')!.level).toBe(3);
+    const l = civicLine('market')!;
+    let head = queueHeads(g, 'GER').find((x) => x.q.region === town)!;
+    expect(head.q.level).toBe(2);
+    expect(head.cost).toBe(Math.round(l.cost[1] * 100));
+    expect(head.name.startsWith(`the ${l.levels[1].toLowerCase()} at `)).toBe(true);
+    // A level that stands by the next opening is no town's head: the presses take it off and go on to the next.
+    g.townQueue!.GER.unshift({ region: town, line: 'market', level: 1 });
+    head = queueHeads(g, 'GER').find((x) => x.q.region === town)!;
+    expect(head.q.level).toBe(2);
+  });
+
+  it('a country that falls loses every building it queued: freed, it starts with no queue', () => {
+    const g = opened();
+    const [berlin, essen] = civicAdvice(g, 'GER').home;
+    g.nations.GER.pp = 0;
+    expect(addQueue(g, 'GER', berlin, 'school')).not.toBeNull();
+    expect(addQueue(g, 'GER', essen, 'school')).not.toBeNull();
+    expect(standDown(g)).toBe('GER');
+    expect(g.townQueue).toBeUndefined();
+    expect((JSON.parse(saveGame(g)) as { townQueue?: unknown }).townQueue).toBeUndefined();
   });
 });
