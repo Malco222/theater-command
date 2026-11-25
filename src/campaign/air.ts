@@ -57,7 +57,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { armedAt, atomRaidWorth, strikeFlown } from './atom';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { chartDist, globeDist, globeLeg, mapDist, nearX } from './wrap';
+import { chartDist, globeDist, globeLeg, mapDist, nearX, seaDist as seaChartDist } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
@@ -591,12 +591,23 @@ export function legKm(g: Game, f: AirFleet, from: number, to: number): number {
   return legKmAt(g, groupAt(g, f), from, to);
 }
 
-/** legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so). */
+/**
+ * legKm from a place on the chart: a province, or a sea where region is -1 (ferry.ts reads its known fighters so).
+ * Where the nearest point of the leg is one of its ends, the distance is the rules' own to that field, km() from a
+ * province (wrap.ts seaDist from a sea), whichever chart either is on: a field never reads two distances (the review
+ * of the air follow-on, finding 1: Moscow against the leg Kirov to Yaroslavl read 248.763 km on the globe where km()
+ * reads 259.688 on the map). Only a point inside the leg is measured by the leg's own ruler, below; so just inside
+ * an old-chart end of a leg that crosses to the far side the reading steps from the map's to the globe's.
+ */
 export function legKmAt(g: Game, p: { x: number; y: number; region: number; sea: number }, from: number, to: number): number {
   const A = g.regions[from], B = g.regions[to];
   const bx = nearX(g, B.x, A.x), px = nearX(g, p.x, A.x);
   const dx = bx - A.x, dy = B.y - A.y, L = dx * dx + dy * dy;
   const t = L > 0 ? clamp(((px - A.x) * dx + (p.y - A.y) * dy) / L, 0, 1) : 0;
+  if ((t <= 0 || t >= 1) && (p.region >= 0 || p.sea >= 0)) {
+    const E = t <= 0 ? A : B;
+    return (p.region >= 0 ? chartDist(g, g.regions[p.region], E) : seaChartDist(g, E, { id: p.sea, x: p.x, y: p.y })) * AIR.kmPerUnit;
+  }
   const qx = A.x + t * dx, qy = A.y + t * dy;
   if (globeLeg(g, A, B, p.region, p.sea)) return globeDist(g, px, p.y, qx, qy) * AIR.kmPerUnit;
   return Math.hypot(px - qx, p.y - qy) * AIR.kmPerUnit;

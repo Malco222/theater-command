@@ -15,7 +15,7 @@ import { legCovered, pointLeg, setFerry } from '../src/campaign/ferry';
 import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, Game, Region } from '../src/campaign/types';
-import { mapDist } from '../src/campaign/wrap';
+import { globeDist, mapDist, nearX } from '../src/campaign/wrap';
 
 const rows = AIR.fleets.length;
 afterEach(() => { AIR.fleets.splice(0, AIR.fleets.length - rows); });
@@ -102,5 +102,81 @@ describe('the ferry lane measures a leg as km() does', () => {
       expect(legKm(g, f, at(g, a).id, at(g, b).id)).toBe(was);
       expect(pointLeg(g, groupAt(g, f), at(g, a).id, at(g, b).id)).toBe(was);
     }
+  });
+});
+
+// One field, one distance (the review of the air follow-on, finding 1). Where the nearest point of a leg is one of its
+// ends, legKmAt reads km() to that end whatever chart it is on; only a point inside the leg is measured by the leg's own
+// ruler (the globe's where an end or the enemy's place is of the far side).
+describe('a leg never reads one of its ends differently from km()', () => {
+  /** The leg as legKmAt finds its nearest point on the chart: the share t along it, 0 at `from` and 1 at `to`. */
+  const along = (g: Game, e: Region, a: Region, b: Region): number => {
+    const bx = nearX(g, b.x, a.x), px = nearX(g, e.x, a.x), dx = bx - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+    return L > 0 ? Math.max(0, Math.min(1, ((px - a.x) * dx + (e.y - a.y) * dy) / L)) : 0;
+  };
+  const read = (g: Game, e: string, a: string, b: string) => {
+    const E = at(g, e), A = at(g, a), B = at(g, b);
+    const p = { x: E.x, y: E.y, region: E.id, sea: -1 };
+    const f = { ...g.airFleets[0], base: E.id, ship: undefined } as AirFleet;
+    const leg = legKmAt(g, p, A.id, B.id);
+    expect(legKm(g, f, A.id, B.id)).toBe(leg);
+    expect(pointLeg(g, p, A.id, B.id)).toBe(leg);
+    return { E, A, B, t: along(g, E, A, B), leg };
+  };
+
+  it('the leg that crosses from the old chart to the far side: Moscow against Kirov to Yaroslavl reads km() to Yaroslavl', () => {
+    const g = world();
+    const r = read(g, 'Moscow', 'Kirov', 'Yaroslavl');
+    // The nearest point is the leg's old-chart end, Yaroslavl, and both Moscow and Yaroslavl are of the old chart: km()
+    // reads the map there, 259.688 km; the leg read the globe's 248.763 before this mend.
+    expect(r.t).toBe(1);
+    expect(r.leg).toBe(km(g, r.E.id, r.B.id));
+    expect(r.leg).toBeCloseTo(259.688, 3);
+    // Just inside that end the leg's own ruler (the globe's, Kirov being of the far side) reads about 248.763: the step
+    // between the two rulers, about 10.9 km, is the far switch's known seam (wrap.ts), now at the end of the leg.
+    const eps = 1e-6, qx = nearX(g, r.B.x, r.A.x) + eps * (r.A.x - nearX(g, r.B.x, r.A.x)), qy = r.B.y + eps * (r.A.y - r.B.y);
+    const inside = globeDist(g, nearX(g, r.E.x, qx), r.E.y, qx, qy) * U;
+    expect(inside).toBeCloseTo(248.763, 2);
+    expect(r.leg - inside).toBeGreaterThan(10.9);
+    expect(r.leg - inside).toBeLessThan(11);
+    // Gorky against the same leg: its nearest point lies inside the leg, measured on the globe as before (197.031).
+    const gk = read(g, 'Gorky', 'Kirov', 'Yaroslavl');
+    expect(gk.t).toBeGreaterThan(0);
+    expect(gk.t).toBeLessThan(1);
+    expect(gk.leg).toBeCloseTo(197.031, 3);
+  });
+
+  it('a leg over the map\'s edge: Midway against Pearl Harbor to San Francisco reads km() to Pearl Harbor', () => {
+    const g = world();
+    const r = read(g, 'Midway', 'Pearl Harbor', 'San Francisco');
+    expect(r.t).toBe(0);
+    expect(r.leg).toBe(km(g, r.E.id, r.A.id));
+    expect(r.leg).toBeCloseTo(2084.56, 2);
+    // And the leg's own length, over the edge, is the globe's (km() from one end to the other).
+    expect(legKmAt(g, { x: r.A.x, y: r.A.y, region: r.A.id, sea: -1 }, r.B.id, r.B.id)).toBe(km(g, r.A.id, r.B.id));
+  });
+
+  it('every case: where the nearest point is an end, the leg reads km() to it, to the last digit; far chart and old', () => {
+    const g = world();
+    const cases: [string, string, string][] = [
+      ['Moscow', 'Kirov', 'Yaroslavl'], ['Gorky', 'Kirov', 'Yaroslavl'], ['Midway', 'Pearl Harbor', 'San Francisco'],
+      ['Rabaul', 'Lae', 'Port Moresby'], ['Rabaul', 'Port Moresby', 'Port Moresby'], ['Truk', 'Guam', 'Saipan'],
+      ['Manila', 'Formosa', 'Hong Kong'], ['Yaroslavl', 'Kirov', 'Kirov'], ['Kirov', 'Yaroslavl', 'Moscow'],
+      ['Berlin', 'Paris', 'London'], ['Rome', 'Marseille', 'Lyon'], ['Warsaw', 'Kiev', 'Moscow'], ['Ruhr', 'Brest', 'Hamburg'],
+      ['Stalingrad', 'Rostov', 'Kharkov'], ['Malta', 'Tunis', 'Tripoli'], ['Yaroslavl', 'Gorky', 'Moscow'],
+    ];
+    let ends = 0;
+    for (const [e, a, b] of cases) {
+      for (const [x, y] of [[a, b], [b, a]]) {
+        const r = read(g, e, x, y);
+        if (r.t <= 0) { expect(r.leg).toBe(km(g, r.E.id, r.A.id)); ends++; }
+        else if (r.t >= 1) { expect(r.leg).toBe(km(g, r.E.id, r.B.id)); ends++; }
+        // Inside the leg it is never farther than km() to the nearer end by more than the chart's own search allows
+        // (the nearest point is found on the chart, not on the globe: Manila against Formosa to Hong Kong reads 904.052,
+        // km() to Formosa 902.923, the review's note).
+        else expect(r.leg).toBeLessThanOrEqual(Math.min(km(g, r.E.id, r.A.id), km(g, r.E.id, r.B.id)) + 1.2);
+      }
+    }
+    expect(ends).toBeGreaterThanOrEqual(20);
   });
 });
