@@ -8,6 +8,7 @@
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
 #include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
 #include "Battle/HeavyWeather.h" // S6 hook (heavy weather: bow spray and ship ice)
+#include "Battle/SeaNight.h" // (the release 2 ocean, step 11: night fighting's looks, -TheaterSeaNightFight=)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -175,6 +176,7 @@ private:
 	TUniquePtr<FHeavyWeather> Weather;  // S6 hook (heavy weather): the bow spray, made only under -TheaterSeaSpray=1
 	TUniquePtr<FSeaUnder> Under;       // U1 hook (under water)
 	int32 UnderWindow = INDEX_NONE;    // U1 hook (under water): the window AimEye stands in (FSeaUnder::ByHandWindow his own dive)
+	FSeaNight Night;                   // (the release 2 ocean, step 11: the searchlights and the fleet's star shells; off, it draws nothing)
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;

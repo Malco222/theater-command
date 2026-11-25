@@ -1844,6 +1844,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		Below.UnitsPerMetre = UnitsPerMetre;
 		Under->Bind(Below, S.Rec.Board);
 	}
+	// (the release 2 ocean plan, step 11: night fighting's looks, off by default: -TheaterSeaNightFight=1 lays the
+	// searchlights' beams and the fleet's star shells, by the recording's own light; Battle/SeaNight)
+	Night.Begin(FSeaNight::FRoom{ this, Root.Get(), UnitsPerMetre }, S.Show, SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaNightFight="), Seed);
 
 	PlanShots();
 	if (!ShotFolder.IsEmpty())
@@ -6616,6 +6619,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		}
 	}
 	DrawWrecks();
+	Night.Tick(S.Show, S.BattleT, bSkipping || bSkippedOn, EyeAt); // (step 11: night fighting's beams and star shells)
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600, ViewH = 1000;
@@ -6810,6 +6814,7 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 		Under->End();
 		Under.Reset();
 	}
+	Night.End(); // (step 11: night fighting's lamps out and its mesh cleared before the room is given back)
 	HideScreen();
 	for (UAudioComponent* Bed : { DayBed.Get(), BattleBed.Get() })
 	{
