@@ -632,11 +632,11 @@ namespace LandField
 		 * it reaches into (FootSquares: a square's first and its end; one that lies across a square's edge is in each).
 		 * The clutter keeps out of them what would stand up into the body: no grass blowing through a bush; the ferns on
 		 * a bank's flank under a hedge, their tops below its shrubs' feet, stay. Empty with the word off. */
-		struct Footing
+		struct GrassFoot
 		{
 			float X = 0.0f, Y = 0.0f, Z = 0.0f, R = 0.0f;
 		};
-		std::vector<Footing> Feet;
+		std::vector<GrassFoot> Feet;
 		std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> FootSquares;
 		/** The footings' dial, on trial with them ("feetwide"): off, a clump may stand with half its own width inside a
 		 * footing's edge (as first built); on, its whole body and its blades' sweep in a full gust stand clear. */
@@ -1824,7 +1824,7 @@ namespace LandField
 		struct Reached
 		{
 			uint64_t Key;
-			Footing F;
+			GrassFoot F;
 		};
 		std::vector<Reached> All;
 		size_t Stand = 0;
@@ -1852,7 +1852,7 @@ namespace LandField
 					const int I0 = static_cast<int>(std::floor((FX - Reach) / ClutterSquare)), I1 = static_cast<int>(std::floor((FX + Reach) / ClutterSquare));
 					const int J0 = static_cast<int>(std::floor((FY - Reach) / ClutterSquare)), J1 = static_cast<int>(std::floor((FY + Reach) / ClutterSquare));
 					for (int J = J0; J <= J1; ++J)
-						for (int I = I0; I <= I1; ++I) All.push_back({ SquareKeyIJ(I, J), Footing{ FX, FY, P.Z, static_cast<float>(R) } });
+						for (int I = I0; I <= I1; ++I) All.push_back({ SquareKeyIJ(I, J), GrassFoot{ FX, FY, P.Z, static_cast<float>(R) } });
 				}
 		}
 		std::stable_sort(All.begin(), All.end(), [](const Reached& A, const Reached& B) { return A.Key < B.Key; });
@@ -8769,8 +8769,8 @@ namespace LandField
 			{
 				const uint64_t Key = Hash(G.Seed ^ 0xC107E5ull, static_cast<uint64_t>(static_cast<int64_t>(I)), static_cast<uint64_t>(static_cast<int64_t>(J)));
 				// (on trial, "feet": the bushes' bodies, the trunks and the stacks that reach into this square)
-				const Impl::Footing* Foot0 = nullptr;
-				const Impl::Footing* Foot1 = nullptr;
+				const Impl::GrassFoot* Foot0 = nullptr;
+				const Impl::GrassFoot* Foot1 = nullptr;
 				if (!G.FootSquares.empty())
 				{
 					const auto Stood = G.FootSquares.find(SquareKeyIJ(I, J));
@@ -9007,7 +9007,7 @@ namespace LandField
 						const double Tall = Own.Height * P.ScaleZ, Wide = Own.Radius * P.Scale, Tip = Z + Tall - 0.3;
 						const double Half = G.bFeetWide ? std::min(FootWide, Wide + BladeSweep * Tall) : std::min(FootEdge, 0.5 * Wide);
 						bool bIn = false;
-						for (const Impl::Footing* F = Foot0; F != Foot1 && !bIn; ++F) bIn = Tip > F->Z && Sq(X - F->X) + Sq(Y - F->Y) < Sq(F->R + Half);
+						for (const Impl::GrassFoot* F = Foot0; F != Foot1 && !bIn; ++F) bIn = Tip > F->Z && Sq(X - F->X) + Sq(Y - F->Y) < Sq(F->R + Half);
 						if (bIn) continue;
 					}
 					// (on burnt ground: 3 things in 10 stay within a round's core, the same ones every time the square is laid,
