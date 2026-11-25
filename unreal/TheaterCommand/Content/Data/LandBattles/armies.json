@@ -39,7 +39,7 @@
         "wood": { "rgb": "5A3E27", "about": "Rifle stock, walnut or laminated beech, oiled." },
         "steel": { "rgb": "2A2C2F", "about": "Blued and phosphated steel; also the canister and the shovel (painted field grey-green in life, near enough at a distance)." },
         "coat": { "rgb": "4E4B41", "about": "Greatcoat, field grey (not worn in July); as the blouse (was 5E6253)." },
-        "coat_dark": { "rgb": "4A4E42", "about": "The greatcoat's collar and shadowed panels." },
+        "coat_dark": { "rgb": "3A3E34", "about": "The greatcoat's collar and shadowed panels. (Was 4A4E42: taken down with the coat, 0.79 of its value as before.)" },
         "leather": { "rgb": "2A2520", "about": "Hobnailed leather soles." },
         "blanket": { "rgb": "6B5640", "about": "The water bottle's brown felt cover." },
         "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
