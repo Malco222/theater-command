@@ -694,15 +694,24 @@ export const hasAirfield = (g: Game, region: number): boolean => !airWar(g) || a
 export const gunsAt = (g: Game, region: number): number => g.flags[`wk:aa:${region}`] ?? 0;
 
 /**
- * The guns round a target as a count (Brian, 20 November 2026: "calculate how many flak guns they have"): the light
- * flak any target puts up, and the heavy and light guns of each level of anti-aircraft guns built there (two light
- * guns to every heavy one, as the record had it: the historian). A count for the raid card and the battle's picture;
- * the losses come from the shares the forecast has always used.
+ * The guns BUILT round a target as a count (Brian, 20 November 2026: "calculate how many flak guns they have"): the
+ * heavy and light guns of each level of anti-aircraft guns built there (two light guns to every heavy one, as the
+ * record had it: the historian); none where none are built. The light guns every target has stand apart from them
+ * (standingGuns): the count reads what the loss reads, the built guns and the standing ones, never the larger of the
+ * two (the design director, 25 Nov 2026 18:59Z). A count for the raid card and the battle's picture; the losses come
+ * from the shares the forecast has always used.
  */
 export function flakGuns(level: number): { light: number; heavy: number; all: number } {
-  const G = AIRWAR.count.guns, n = Math.max(0, level), heavy = n * G.heavy, light = Math.max(G.base, n * G.light);
+  const G = AIRWAR.count.guns, n = Math.max(0, level), heavy = n * G.heavy, light = n * G.light;
   return { light, heavy, all: light + heavy };
 }
+
+/**
+ * The light guns every target on land that bombers go for has, built guns or none: the count of the plain flak share
+ * the loss reads there by day and by night (assessAir: AIR.combat.flak, AIR.combat.night.flak). Named apart from the
+ * built guns (flakGuns), never folded into them.
+ */
+export const standingGuns = (): number => AIRWAR.count.guns.base;
 
 /** How many fighters make a squadron in a nation's air force in a year: some went to larger squadrons late in the war. */
 export function squadronSize(nat: string, year: number): number {
@@ -2338,6 +2347,13 @@ export interface AirAssess {
    * forecast already weighs, for the raid card; nothing in the rules reads them.
    */
   guns: { light: number; heavy: number; all: number };
+  /**
+   * The standing light guns every target has (standingGuns), counted apart from the built guns in `guns` wherever the
+   * loss reads the plain flak share and the count is given: a target on land that bombers go for, by day or by night
+   * (0 for a fight for the sky by fighters alone and for any raid at sea). A count for the raid card; nothing in the
+   * rules reads it.
+   */
+  standing: number;
   squadrons: number;
   groups: number;
   /**
@@ -2533,7 +2549,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // Weather (ruling 127): the sky over the target, and the groups whose own sky is closed stay on the ground.
   const wx = weatherOn(g);
   const sky: Sky = wx ? (sea ? skyAtSea(g, zone) : skyAt(g, target)) : 'clear';
-  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
+  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, standing: 0, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
   if (known) out.known = known;
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   if (sky === 'closed') { out.why = `Closed sky this month: nothing flies over ${place}.`; return out; }
@@ -2663,8 +2679,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // Guns round the factories bring down more of the bombers that come for them.
   out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? (known ? known.aa : gunsAt(g, target)) : 0;
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
-  // The same defences as counts: the guns round a target on land, and the squadrons able to meet the raid.
-  if (!sea && out.B > 0) out.guns = flakGuns(out.aa);
+  // The same defences as counts: the guns built round a target on land and, apart from them, the light guns every
+  // such target has (the plain flak share above), and the squadrons able to meet the raid.
+  if (!sea && out.B > 0) { out.guns = flakGuns(out.aa); out.standing = standingGuns(); }
   out.groups = out.def.length;
   out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w, turnToDate(g.turn).year), 0);
   if (known && unseenUp > 0) out.squadrons += squadronsOf(known.extraNat, unseenUp, turnToDate(g.turn).year);
