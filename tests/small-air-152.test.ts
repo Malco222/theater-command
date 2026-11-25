@@ -146,7 +146,8 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     const sent = Math.round(p.fighters), over = Math.floor(a.E);
     expect(p.effects[0]).toMatch(/^Fighter odds /);
     expect(p.effects.some((e) => e.startsWith('Too few'))).toBe(false);
-    expect(p.tooFew).toBe(`Too few fighters to hold this sky: it takes ${AIR.sky.least} over it at the end, you send ${sent > over ? `${sent}, and ${over} of them can be over it` : over}.`);
+    // (The UI director ruled these words at 04:55Z: the short line where every fighter sent can be over the target.)
+    expect(p.tooFew).toBe(`Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`);
     expect(['Very likely to win the air fight', 'Likely to win the air fight', 'The air fight could go either way', 'Likely to lose the air fight', 'Very likely to lose the air fight']).toContain(p.verdict);
     // The bridge's page for the plan carries both: the headline and the note.
     const page = airPage(h, `plan:superiority:${t.id}:${p.picked.join('.')}`)!;
@@ -183,7 +184,7 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     one.ftr = 40;
     const Q = planRaid(h, 'superiority', big!.t, [one.id], 'GER');
     expect(Q.why).toBeNull();
-    expect(Q.tooFew).toMatch(/^Too few fighters to hold this sky: it takes 50 over it at the end, you send 40(\.|, and \d+ of them can be over it\.)$/);
+    expect(Q.tooFew).toMatch(/^Too few fighters to hold this sky: it takes 50 still over it at the end, and you are sending 40(\.|, of which only \d+ can be over it\.)$/);
   });
 
   it('his own fight for the sky that nobody came up to meet is told to him in one plain sentence', () => {
@@ -211,8 +212,11 @@ describe('release 1.5.2: a small air arm fights over its army (seed 17, a war no
     const who = r.att.length === 1 ? r.att[0].fleet : '';
     expect(who).not.toBe('');
     const there = Math.floor(on.h.airFleets.filter((f) => r.att.some((x) => x.id === f.id)).reduce((s, f) => s + f.ftr, 0) + 1e-9);
-    expect(r.result).toMatch(new RegExp(`^${esc(who)} flies over ${esc(r.place)}, but no enemy fighters came up to meet it, and the sky is not won: it takes 50 fighters over it at the end, and \\d+ (was|were) there\\.$`));
-    expect(Number(r.result.match(/and (\d+) (?:was|were) there/)![1])).toBeLessThanOrEqual(there);
+    // (The UI director ruled these words at 04:55Z: the same two figures as the plan card's own line.)
+    expect(r.result).toMatch(new RegExp(`^${esc(who)} flies over ${esc(r.place)}, but no enemy fighters came up to meet it, and the sky is not won: it takes 50 still over it at the end, and only \\d+ (?:(?:was|were) there|of the \\d+ sent could be over it)\\.$`));
+    expect(Number(r.result.match(/and only (\d+)/)![1])).toBeLessThanOrEqual(there);
+    const flew = r.result.match(/of the (\d+) sent/);
+    if (flew) expect(Number(flew[1])).toBe(there);
     expect(on.news).toEqual([r.result]);
   });
 

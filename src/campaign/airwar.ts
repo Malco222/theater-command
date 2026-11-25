@@ -862,7 +862,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // cannot win it whatever the odds. The card says so in a line of its own, and words its chance for the fight alone.)
   if (kind === 'superiority' && smallOn(g) && a.E < AIR.sky.least) {
     const over = Math.floor(a.E), sent = Math.round(plan.fighters);
-    plan.tooFew = `Too few fighters to hold this sky: it takes ${AIR.sky.least} over it at the end, you send ${sent > over ? `${sent}, and ${over} of them can be over it` : over}.`;
+    // (Words ruled by the UI director, 04:55Z: the short line where every fighter sent can be over the target.)
+    plan.tooFew = `Too few fighters to hold this sky: it takes ${AIR.sky.least} still over it at the end, and you are sending ${sent > over ? `${sent}, of which only ${over} can be over it` : over}.`;
     plan.verdict = FIGHT_VERDICT.find(([least]) => fc.success >= least)![1];
   }
   plan.figures = figuresOf(g, kind, target, fc, nat);

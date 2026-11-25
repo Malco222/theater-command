@@ -5252,7 +5252,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         take(/break down about (\d+)% of the works/, (m) => `\u2212${m[1]}%`, 'of the town\'s works');
         take(/(\d+)% of the town guard/, (m) => `\u2212${m[1]}%`, 'of the town guard');
         take(/Fighter odds (\d+(?:\.\d+)?) to 1/, (m) => `${m[1]} to 1`, 'fighter odds going in');
-        take(/with (\d+(?:\.\d+)?) times what the defender/, (m) => `${m[1]}\u00D7`, 'the defender\'s fighters wins the sky');
+        // (1.5.2, the UI director 04:55Z: the box says what winning a sky takes, both figures, never a bare multiple.)
+        take(/with (\d+(?:\.\d+)?) times what the defender/, (m) => `${m[1]} to 1`, `against the defenders' own, with ${AIR.sky.least} fighters still over the target at the end`);
         take(/lose up to (\d+)% of their number/, (m) => `${m[1]}%`, 'of warships caught, at most');
         take(/About (\d+(?:\.\d+)?) bombs and torpedoes should hit/, (m) => m[1], 'bombs and torpedoes should hit');
         take(/chance of (\d+)% for (an? [a-z ]+?)[.,]/, (m) => `${m[1]}%`, (m) => `chance ${m[2]} goes down`);
