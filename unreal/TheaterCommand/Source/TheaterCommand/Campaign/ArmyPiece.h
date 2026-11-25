@@ -213,6 +213,12 @@ public:
 	 */
 	bool FunnelsNow(TArray<FFunnelNow>& OutFunnels, double& OutPace, double& OutGather) const;
 	/**
+	 * How she steamed Ago seconds ago, as FunnelsNow tells it for now (nought before her course began). Returned: how
+	 * much of that a puff made then still keeps, 1 out at sea and falling to 0 as her course ends; 0 for a piece not
+	 * under sail. See TheaterShipSmoke::Carries.
+	 */
+	double SteamedAt(double Ago, double& OutPace, double& OutGather) const;
+	/**
 	 * What must be added to a point of her, to find where it was when she was Back further astern (in the world's
 	 * measure) along the water she has crossed: round her turns on a course of her own, straight astern otherwise.
 	 */

@@ -92,6 +92,33 @@ namespace TheaterShipSmoke
 		return Out;
 	}
 
+	/** For this long before her course ends (seconds) a puff lets go of the fire that made it: see Carries and Keeps. */
+	inline constexpr double LetGo = 0.8;
+
+	/**
+	 * The fire a puff carries with it. The plume lies as her fire is Now (how far astern, how high, how far down the
+	 * wind, how big), but each puff is as thick and as dark as the fire that made it (Then, its age ago): the black of
+	 * working up goes down the plume with the puffs that were made then and thins out with them, and the plume never
+	 * changes colour all at once, as it would if every puff took the fire of the moment (on a course with bends she
+	 * eases and works up again several times in a few seconds). Keep, 1 to 0, is how much of the fire that made it a
+	 * puff still has: all of it out at sea, none as her course ends, so that she comes to rest under the smoke of a
+	 * ship lying still.
+	 */
+	inline FFire Carries(const FFire& Now, const FFire& Then, double Keep)
+	{
+		const double K = Clamp(Keep, 0.0, 1.0);
+		FFire Out = Now;
+		Out.Thick = Now.Thick + (Then.Thick - Now.Thick) * K;
+		Out.Dark = Now.Dark + (Then.Dark - Now.Dark) * K;
+		return Out;
+	}
+
+	/** How much of the fire that made it a puff keeps, with Left seconds of her course still to run. */
+	inline double Keeps(double Left)
+	{
+		return Smooth(0.0, LetGo, Left);
+	}
+
 	/** One puff of a plume: where it is from the funnel's top (in her lengths), how big, and how thick. */
 	struct FPuff
 	{

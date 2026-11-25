@@ -16663,7 +16663,16 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 						for (int32 PuffIndex = 0; PuffIndex < PlumePuffs; ++PuffIndex)
 						{
 							const double PuffAge = TheaterShipSmoke::AgeOf(Now, PuffIndex, PlumePuffs, PlumeSeed);
-							const TheaterShipSmoke::FPuff OnePuff = TheaterShipSmoke::Puff(Steam, PuffAge, PlumePuffs, PlumeGirth);
+							// (Under way each puff is as thick and as dark as the fire that made it, its age ago, and
+							// not as the fire is now: the plume never changes colour all at once. ShipSmoke.h, Carries.)
+							TheaterShipSmoke::FFire PuffFire = Steam;
+							if (bSteamsOn)
+							{
+								double MadePace = 0.0, MadeGather = 0.0;
+								const double MadeKeeps = Steamer->SteamedAt(PuffAge * TheaterShipSmoke::Life, MadePace, MadeGather);
+								PuffFire = TheaterShipSmoke::Carries(Steam, TheaterShipSmoke::Fire(MadePace, MadeGather, FunnelMuch, FunnelLong), MadeKeeps);
+							}
+							const TheaterShipSmoke::FPuff OnePuff = TheaterShipSmoke::Puff(PuffFire, PuffAge, PlumePuffs, PlumeGirth);
 							++FleetPuffs;
 							if (OnePuff.Thick <= 0.004)
 							{
@@ -16673,7 +16682,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 							const FVector PuffAstern = Steamer->AsternBy(PlumeTop, PuffBack);
 							const double PuffSway = FMath::Sin(Now * 0.7 + PlumeSeed * 40.0 + PuffIndex * 1.7) * 0.25 * OnePuff.Size * PlumeLong * PuffAge;
 							const FVector PuffAt = PlumeTop + PuffAstern + FVector(0.0, 0.0, OnePuff.Rise * PlumeLong) + LeeWay * (OnePuff.Lee * PlumeLong) + Right * PuffSway;
-							const TheaterShipSmoke::FInk PuffInk = TheaterShipSmoke::Ink(Steam.Dark, PuffAge);
+							const TheaterShipSmoke::FInk PuffInk = TheaterShipSmoke::Ink(PuffFire.Dark, PuffAge);
 							const FLinearColor PuffColour(static_cast<float>(PuffInk.R), static_cast<float>(PuffInk.G), static_cast<float>(PuffInk.B));
 							const double PuffSize = OnePuff.Size * PlumeLong;
 							if (OnePuff.Stretch > 1.0)

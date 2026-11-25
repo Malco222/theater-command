@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -403,6 +404,118 @@ int main()
 		Check(Blank.X == 0.0 && Blank.Y == 0.0, "no course handed in: no fault, and nothing moved");
 	}
 
+	// ---- The fire a puff carries: as thick and as dark as the fire that made it, and never the whole plume at once.
+	{
+		const FFire Slow = Fire(0.2, -0.5), Forced = Fire(0.5, 0.9);
+		const FFire All = Carries(Slow, Forced, 1.0), Nothing = Carries(Slow, Forced, 0.0), Half = Carries(Slow, Forced, 0.5), Over = Carries(Slow, Forced, 7.0), Under = Carries(Slow, Forced, -3.0);
+		Check(Forced.Dark > Slow.Dark + 0.5 && Forced.Thick > Slow.Thick + 0.15, "(the two fires of this check are far apart: " + Num(Slow.Dark) + " and " + Num(Forced.Dark) + ")");
+		auto Same = [](double A, double B) { return std::fabs(A - B) < 1.0e-12; };
+		Check(Same(All.Thick, Forced.Thick) && Same(All.Dark, Forced.Dark), "a puff carries the thickness and the darkness of the fire that made it");
+		Check(All.Reach == Slow.Reach && All.High == Slow.High && All.Lee == Slow.Lee && All.End == Slow.End, "and lies as the plume lies now");
+		Check(Nothing.Thick == Slow.Thick && Nothing.Dark == Slow.Dark && Nothing.Reach == Slow.Reach, "keeping nothing of it, it is the smoke of the moment");
+		Check(Half.Dark > Slow.Dark && Half.Dark < Forced.Dark && Half.Thick > Slow.Thick && Half.Thick < Forced.Thick, "keeping half, it is between the two");
+		Check(Same(Over.Dark, All.Dark) && Same(Over.Thick, All.Thick) && Under.Dark == Nothing.Dark && Under.Thick == Nothing.Thick, "what is kept is held between nothing and all");
+		Check(Keeps(0.0) == 0.0 && Keeps(-1.0) == 0.0 && Keeps(LetGo) == 1.0 && Keeps(60.0) == 1.0, "a puff keeps its fire out at sea and has let it go as her course ends");
+		bool bFalls = true;
+		for (double Left = 0.0; Left < LetGo; Left += 0.01)
+		{
+			bFalls = bFalls && Keeps(Left + 0.01) >= Keeps(Left) && Keeps(Left + 0.01) - Keeps(Left) < 0.02;
+		}
+		Check(bFalls, "and lets it go smoothly over the last " + Num(LetGo) + " s");
+	}
+	// Every puff of a plume followed frame by frame down two real courses, as the map lays it (CampaignMapActor.cpp,
+	// UpdateSmoke): the fire of the moment for where it lies, the fire that made it for how thick and dark it is.
+	{
+		const FVoyage* Courses[2] = { &Bent, &Line };
+		const char* CourseNames[2] = { "round the bends", "straight" };
+		const FFire Lying = Fire(0.0, 0.0);
+		for (int Which = 0; Which < 2; ++Which)
+		{
+			const FVoyage& Voyage = *Courses[Which];
+			const int Count = static_cast<int>(Voyage.At.size());
+			for (const int Rate : { 30, 60, 144 })
+			{
+				for (const int Many : { 6, 5, 4 })
+				{
+					std::vector<double> DarkWas(static_cast<size_t>(Many), 0.0), ThickWas(static_cast<size_t>(Many), 0.0), AgeWas(static_cast<size_t>(Many), 2.0);
+					double KeepWas = 1.0, WholeWas = 0.0, MostAtSea = 0.0, MostComingIn = 0.0, MostWhole = 0.0;
+					bool bWisps = true, bBlackGoesDown = false, bEndsStill = true;
+					for (int Frame = 0;; ++Frame)
+					{
+						const double Clock = std::min(static_cast<double>(Frame) / Rate, Voyage.Seconds);
+						const double Now = 100.0 + Clock;
+						double Pace = 0.0, Gather = 0.0;
+						Steams(Voyage.At.data(), Count, Voyage.Each, Voyage.Full, Clock, Pace, Gather);
+						const FFire Steam = Fire(Pace, Gather);
+						const double Keep = Keeps(Voyage.Seconds - Clock);
+						double Youngest = 2.0, YoungestDark = 0.0, OldestBlack = -1.0;
+						for (int K = 0; K < Many; ++K)
+						{
+							const size_t At = static_cast<size_t>(K);
+							const double Age = AgeOf(Now, K, Many, 0.31);
+							double MadePace = 0.0, MadeGather = 0.0;
+							Steams(Voyage.At.data(), Count, Voyage.Each, Voyage.Full, Clock - Age * Life, MadePace, MadeGather);
+							const FFire Own = Carries(Steam, Fire(MadePace, MadeGather), Keep);
+							if (Frame > 0 && Age > AgeWas[At])
+							{
+								// (the same puff as the frame before, not one that has left the funnel anew)
+								const double Changed = std::fabs(Own.Dark - DarkWas[At]) * Rate, Thinned = std::fabs(Own.Thick - ThickWas[At]) * Rate;
+								double& Most = Keep >= 1.0 && KeepWas >= 1.0 ? MostAtSea : MostComingIn;
+								Most = std::max(Most, std::max(Changed, Thinned));
+							}
+							// (made before she sailed, and before her fires were stirred for it: Steams reads how fast
+							// she gathers way from a little before to a little after)
+							if (Keep >= 1.0 && Clock - Age * Life < -GatherOver)
+							{
+								bWisps = bWisps && std::fabs(Own.Dark - Lying.Dark) < 1.0e-12 && std::fabs(Own.Thick - Lying.Thick) < 1.0e-12;
+							}
+							if (Age < Youngest)
+							{
+								Youngest = Age;
+								YoungestDark = Own.Dark;
+							}
+							if (Own.Dark > 0.9)
+							{
+								OldestBlack = std::max(OldestBlack, Age);
+							}
+							if (Clock >= Voyage.Seconds)
+							{
+								bEndsStill = bEndsStill && Own.Dark == Steam.Dark && Own.Thick == Steam.Thick;
+							}
+							DarkWas[At] = Own.Dark;
+							ThickWas[At] = Own.Thick;
+							AgeWas[At] = Age;
+						}
+						// (the black made working up is still in the plume, further down it, when her newest smoke has cleared)
+						bBlackGoesDown = bBlackGoesDown || (Keep >= 1.0 && YoungestDark < 0.6 && OldestBlack > Youngest + 0.1);
+						if (Frame > 0)
+						{
+							MostWhole = std::max(MostWhole, std::fabs(Steam.Dark - WholeWas) * Rate);
+						}
+						WholeWas = Steam.Dark;
+						KeepWas = Keep;
+						if (Clock >= Voyage.Seconds)
+						{
+							break;
+						}
+					}
+					const std::string Where = std::string(CourseNames[Which]) + ", " + std::to_string(Rate) + " frames a second, " + std::to_string(Many) + " puffs: ";
+					Check(MostAtSea < 1.0e-6, Where + "out at sea no puff changes its darkness or thickness (most " + Num(MostAtSea) + " a second)");
+					Check(MostComingIn < 2.6, Where + "coming in, a puff lets its fire go no faster than " + Num(MostComingIn) + " a second (black to pale takes over a third of a second)");
+					// (What this mends: round the bends she eases and works up again, and the fire of the moment goes
+					// from black to pale in about a fifth of a second. Taken for every puff, the whole plume blinked.)
+					Check(Which != 0 || MostWhole > 3.0, Where + "(the fire of the moment changes by up to " + Num(MostWhole) + " a second)");
+					if (std::getenv("SHIPSMOKE_SAY") && Many == 6)
+					{
+						std::printf("   %sthe fire of the moment changes by up to %.2f a second; a puff's own by %.6f at sea and %.2f coming in\n", Where.c_str(), MostWhole, MostAtSea, MostComingIn);
+					}
+					Check(bWisps, Where + "a puff made before she sailed is the wisp of a ship lying still");
+					Check(bBlackGoesDown, Where + "the black of working up goes down the plume when her newest smoke has cleared");
+					Check(bEndsStill, Where + "as her course ends every puff is the smoke of the moment");
+				}
+			}
+		}
+	}
 	std::printf("%d checks, %d faults\n", Checks, Faults);
 	return Faults == 0 ? 0 : 1;
 }

@@ -1830,19 +1830,29 @@ bool AArmyPiece::FunnelsNow(TArray<FFunnelNow>& OutFunnels, double& OutPace, dou
 		Stands.Long = Funnel.Long * Scale;
 		OutFunnels.Add(Stands);
 	}
-	if (bMarching && bSailing)
-	{
-		if (SailAt.Num() >= 2)
-		{
-			TheaterShipSmoke::Steams(SailAt.GetData(), SailAt.Num(), SailEach, SailFull, MarchClock, OutPace, OutGather);
-		}
-		else
-		{
-			// (the old sail, corner to corner on one ease)
-			TheaterShipSmoke::SteamsEased(MarchClock / FMath::Max(MarchTime, 1.0e-3), MarchTime, OutPace, OutGather);
-		}
-	}
+	SteamedAt(0.0, OutPace, OutGather);
 	return true;
+}
+
+double AArmyPiece::SteamedAt(double Ago, double& OutPace, double& OutGather) const
+{
+	OutPace = 0.0;
+	OutGather = 0.0;
+	if (!bMarching || !bSailing)
+	{
+		return 0.0;
+	}
+	const double Then = MarchClock - FMath::Max(Ago, 0.0);
+	if (SailAt.Num() >= 2)
+	{
+		TheaterShipSmoke::Steams(SailAt.GetData(), SailAt.Num(), SailEach, SailFull, Then, OutPace, OutGather);
+	}
+	else if (Then >= 0.0)
+	{
+		// (the old sail, corner to corner on one ease)
+		TheaterShipSmoke::SteamsEased(Then / FMath::Max(MarchTime, 1.0e-3), MarchTime, OutPace, OutGather);
+	}
+	return TheaterShipSmoke::Keeps(MarchTime - MarchClock);
 }
 
 FVector AArmyPiece::AsternBy(const FVector& Point, double Back) const
