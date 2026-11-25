@@ -197,9 +197,8 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   const k = g.byName[row[5]]?.theatre ?? -1;
   // (Nor out of a fight, on either chart: a corps with an enemy at war on its province or beside it, holding the ground
   // or standing on it, keeps its divisions there, and the row forms without them, as for a corps that cannot leave.
-  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026.)
-  const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, nat, r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, nat, u.nat));
-  const fighting = (c: Corps): boolean => { const r = g.regions[c.reg]; return enemy(r) || r.nb.some((j) => enemy(g.regions[j])); };
+  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026. `corpsInContact`.)
+  const fighting = (c: Corps): boolean => corpsInContact(g, nat, c);
   const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c) || fighting(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
@@ -272,6 +271,18 @@ export const formsAny = (claims: Claim[], n: number): boolean => n - claims.leng
  */
 export function ownShare(c: Corps): number {
   return c.out && c.outOf ? clamp(1 - c.out / c.outOf) : 1;
+}
+
+/**
+ * Whether a corps is in contact: an enemy at war with its country holds or stands on its province or one beside it,
+ * read as the board stands (the design director's ruling of 18:47Z, 25 November 2026: a date never lifts a corps out
+ * of a fight). The war rows' draw reads it (`heldAlready`), and on the old chart, under its own switch 'fromWait', so
+ * does a row that takes a named corps whole (game.ts, `expeditions`; her ruling of 19:47Z). Nothing changes.
+ */
+export function corpsInContact(g: Game, nat: string, c: Corps): boolean {
+  const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, nat, r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, nat, u.nat));
+  const r = g.regions[c.reg];
+  return enemy(r) || r.nb.some((j) => enemy(g.regions[j]));
 }
 
 /**

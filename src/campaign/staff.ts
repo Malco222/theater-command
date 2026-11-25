@@ -8,6 +8,7 @@
 
 import { raiseForts, trainCrews } from './fortrows';
 import { FORTS_STAGE } from './stage';
+import { FROMWAIT_STAGE } from './stage';
 import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
@@ -246,6 +247,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (WINCHANCE_STAGE) g.flags.winChance = 1;
   // True reach on the old chart (game.ts trueReach): a step of Units decide, set at a campaign's start only, where stage.json switches both on.
   if (UNITS_STAGE && TRUEREACH_STAGE) g.flags.trueReach = 1;
+  // The old chart's "from" rows wait on contact (game.ts expeditions): set at a campaign's start only, where stage.json switches it on.
+  if (FROMWAIT_STAGE) g.flags.fromWait = 1;
   // A neutral's bargains (release 2): only where stage.json switches them on.
   openBargains(g);
   openGovernment(g);
