@@ -15,6 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
+  laneCounts,
   CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, fuelLine, torpedoWords, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, harbourPatrol, huntShareOf, huntShareSunk, huntersIn, keptAfloat, keptByHand, laneLoss, openFleetRows, quality, screenGap, seaRng,
   passageWhy, sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
@@ -595,7 +596,8 @@ export function openEscorts(g: Game): void {
   openFleetRows(g);
   for (const f of g.fleets) {
     if (!f.tied || !atSea(f) || f.stance !== 'patrol') continue;
-    const rt = seaRoutes(g).find((r) => r.zones.includes(f.zone) && (r.to === f.nat || allied(g, r.to, f.nat)) && whyNotEscort(g, f, r.id) === null);
+    // (Only a lane that carries something laid: navy.ts laneCounts.)
+    const rt = seaRoutes(g).find((r) => laneCounts(r) && r.zones.includes(f.zone) && (r.to === f.nat || allied(g, r.to, f.nat)) && whyNotEscort(g, f, r.id) === null);
     if (rt) escort(g, f, rt.id);
   }
 }

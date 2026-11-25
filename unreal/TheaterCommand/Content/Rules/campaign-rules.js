@@ -47764,7 +47764,7 @@
     openFleetRows(g2);
     for (const f of g2.fleets) {
       if (!f.tied || !atSea(f) || f.stance !== "patrol") continue;
-      const rt = seaRoutes(g2).find((r) => r.zones.includes(f.zone) && (r.to === f.nat || allied(g2, r.to, f.nat)) && whyNotEscort(g2, f, r.id) === null);
+      const rt = seaRoutes(g2).find((r) => laneCounts(r) && r.zones.includes(f.zone) && (r.to === f.nat || allied(g2, r.to, f.nat)) && whyNotEscort(g2, f, r.id) === null);
       if (rt) escort(g2, f, rt.id);
     }
   }
@@ -63872,13 +63872,20 @@
   var holdsSea = (f) => atSea(f) && f.stance !== "passage";
   var fleetsOf = (g2, nat) => g2.fleets.filter((f) => f.nat === nat);
   var routeCache = /* @__PURE__ */ new WeakMap();
+  function cargoLaid(id) {
+    if (NAVY.convoys.some((c) => c.id === id)) return true;
+    const l = RES.lanes.find((x) => x.id === id);
+    if (!l) return false;
+    return l.oil > 0 || l.sup > 0 || (l.fields?.length ?? 0) > 0 || !!l.split && (l.split.oil > 0 || l.split.sup > 0);
+  }
+  var laneCounts = (rt) => rt.carries !== false;
   function seaRoutes(g2) {
     let rows = routeCache.get(g2.seas);
     if (!rows) {
       rows = [];
       const add = (id, name, to, keys) => {
         const zones = keys.map((k) => zoneOf(g2, k)).filter((z) => z >= 0);
-        if (zones.length && !rows.some((r) => r.id === id)) rows.push({ id, name, to, zones });
+        if (zones.length && !rows.some((r) => r.id === id)) rows.push({ id, name, to, zones, carries: cargoLaid(id) });
       };
       for (const l of RES.lanes) add(l.id, l.name, l.to, l.zones);
       for (const c of NAVY.convoys) add(c.id, c.name, c.to, c.zones);
@@ -65673,7 +65680,7 @@
   }
   function shippingIn(g2, nat, z) {
     let n = 0;
-    for (const rt of seaRoutes(g2)) if (rt.zones.includes(z) && g2.nations[rt.to]?.alive && atWar(g2, nat, rt.to) && !laneStopped(g2, rt.id)) n++;
+    for (const rt of seaRoutes(g2)) if (laneCounts(rt) && rt.zones.includes(z) && g2.nations[rt.to]?.alive && atWar(g2, nat, rt.to) && !laneStopped(g2, rt.id)) n++;
     return n;
   }
   function armyInAfrica(g2, cause) {
@@ -65694,7 +65701,7 @@
   }
   function lanesTo2(g2, to, z) {
     let n = 0;
-    for (const rt of seaRoutes(g2)) if (rt.to === to && rt.zones.includes(z) && g2.nations[rt.to]?.alive && !laneStopped(g2, rt.id)) n++;
+    for (const rt of seaRoutes(g2)) if (laneCounts(rt) && rt.to === to && rt.zones.includes(z) && g2.nations[rt.to]?.alive && !laneStopped(g2, rt.id)) n++;
     return n;
   }
   function huntBeat(g2, f, H, month3 = g2.turn) {
@@ -67542,7 +67549,7 @@
   function laneUnguarded(g2, f, seas) {
     let found2 = null;
     for (const rt of seaRoutes(g2)) {
-      if (!rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g2, f, rt.id)) continue;
+      if (!laneCounts(rt) || !rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g2, f, rt.id)) continue;
       if (g2.fleets.some((x) => x !== f && atSea(x) && x.stance === "escort" && x.lane === rt.id && (x.nat === f.nat || allied(g2, x.nat, f.nat)))) continue;
       const m = g2.convoys[rt.id];
       const fort = NAVY.convoys.find((c) => c.id === rt.id)?.base;
@@ -67599,7 +67606,7 @@
   function laneOnBeat(g2, f) {
     let found2 = null;
     for (const rt of seaRoutes(g2)) {
-      if (!rt.zones.includes(f.station) || whyNotEscort(g2, f, rt.id)) continue;
+      if (!laneCounts(rt) || !rt.zones.includes(f.station) || whyNotEscort(g2, f, rt.id)) continue;
       if (rt.to === f.nat) return rt;
       found2 ?? (found2 = rt);
     }

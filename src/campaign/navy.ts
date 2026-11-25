@@ -252,9 +252,36 @@ export const inPassage = (f: Fleet): boolean => f.stance === 'passage';
 const holdsSea = (f: Fleet): boolean => atSea(f) && f.stance !== 'passage';
 export const fleetsOf = (g: Game, nat: string): Fleet[] => g.fleets.filter((f) => f.nat === nat);
 
-/** A way cargoes travel by sea to one nation: a shipping lane of resources.json or a convoy route of navy.json. */
-export interface SeaRoute { id: string; name: string; to: string; zones: number[] }
+/**
+ * A way cargoes travel by sea to one nation: a shipping lane of resources.json or a convoy route of navy.json.
+ * `carries`: false where it carries nothing laid (cargoLaid), as seaRoutes reads it; every staff's choice by sea asks
+ * laneCounts. (A route laid in by hand without it, as a test's, counts.)
+ */
+export interface SeaRoute { id: string; name: string; to: string; zones: number[]; carries?: boolean }
 const routeCache = new WeakMap<SeaZone[], SeaRoute[]>();
+
+/**
+ * Whether a sea lane or convoy route carries something laid (the design director's ruling of 12:39Z, 25 November
+ * 2026, Pacific batch 3, A(2)): oil or supplies on its lane row (its own shares, or those it carries for another
+ * lane), oilfields, or a convoy route of its id. A 0 that stands for "not read" is not a read zero: a lane laid with
+ * nothing counted yet is no staff's need. Every staff, both sides, every stop, reads this one predicate wherever it
+ * counts lanes by sea (laneCounts: shippingIn, lanesTo, laneUnguarded, laneOnBeat, fleets.ts openEscorts).
+ * The lane stays on the pages and open to the player: escorting it and raiding it never read it. When a cargo is
+ * read and laid, the lane counts by the same rule with nothing else to change. Every row laid before the ruling
+ * carries something, so no existing choice moves, on either chart.
+ */
+function cargoLaid(id: string): boolean {
+  if (NAVY.convoys.some((c) => c.id === id)) return true;
+  const l = RES.lanes.find((x) => x.id === id);
+  if (!l) return false;
+  return l.oil > 0 || l.sup > 0 || (l.fields?.length ?? 0) > 0 || (!!l.split && (l.split.oil > 0 || l.split.sup > 0));
+}
+
+/** The one predicate every staff's count of lanes by sea reads: a route counts while it carries something laid (cargoLaid). */
+export const laneCounts = (rt: SeaRoute): boolean => rt.carries !== false;
+
+/** Whether the sea lane or convoy route of this id carries something laid, as every staff counts it (cargoLaid). */
+export const laneCarries = (g: Game, id: string): boolean => { const rt = seaRoutes(g).find((r) => r.id === id); return !!rt && laneCounts(rt); };
 
 /** Every route cargoes travel by sea, once each: what an escort can be bound to. */
 export function seaRoutes(g: Game): SeaRoute[] {
@@ -263,7 +290,7 @@ export function seaRoutes(g: Game): SeaRoute[] {
     rows = [];
     const add = (id: string, name: string, to: string, keys: string[]): void => {
       const zones = keys.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
-      if (zones.length && !rows!.some((r) => r.id === id)) rows!.push({ id, name, to, zones });
+      if (zones.length && !rows!.some((r) => r.id === id)) rows!.push({ id, name, to, zones, carries: cargoLaid(id) });
     };
     for (const l of RES.lanes) add(l.id, l.name, l.to, l.zones);
     for (const c of NAVY.convoys) add(c.id, c.name, c.to, c.zones);
@@ -2800,11 +2827,12 @@ export function wholeShares(total: number, weights: number[]): number[] {
 
 /**
  * The enemy's shipping in a sea, as a staff placing its boats by need counts it: the sea lanes and convoy routes
- * through it that feed a nation at war with this one, while cargoes still sail on them.
+ * through it that feed a nation at war with this one, while cargoes still sail on them (and a lane carries something
+ * laid: cargoLaid).
  */
 export function shippingIn(g: Game, nat: string, z: number): number {
   let n = 0;
-  for (const rt of seaRoutes(g)) if (rt.zones.includes(z) && g.nations[rt.to]?.alive && atWar(g, nat, rt.to) && !laneStopped(g, rt.id)) n++;
+  for (const rt of seaRoutes(g)) if (laneCounts(rt) && rt.zones.includes(z) && g.nations[rt.to]?.alive && atWar(g, nat, rt.to) && !laneStopped(g, rt.id)) n++;
   return n;
 }
 
@@ -2828,10 +2856,10 @@ function datedStation(g: Game, G: BeatGroup, row: FleetRow): number {
   return zoneOf(g, key);
 }
 
-/** How many of the sea lanes and convoy routes through a sea feed this nation this month (while it stands and cargoes sail on them). */
+/** How many of the sea lanes and convoy routes through a sea feed this nation this month (while it stands and cargoes sail on them, and a lane carries something laid: cargoLaid). */
 export function lanesTo(g: Game, to: string, z: number): number {
   let n = 0;
-  for (const rt of seaRoutes(g)) if (rt.to === to && rt.zones.includes(z) && g.nations[rt.to]?.alive && !laneStopped(g, rt.id)) n++;
+  for (const rt of seaRoutes(g)) if (laneCounts(rt) && rt.to === to && rt.zones.includes(z) && g.nations[rt.to]?.alive && !laneStopped(g, rt.id)) n++;
   return n;
 }
 
@@ -5569,7 +5597,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
 function laneUnguarded(g: Game, f: Fleet, seas: number[]): SeaRoute | null {
   let found: SeaRoute | null = null;
   for (const rt of seaRoutes(g)) {
-    if (!rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g, f, rt.id)) continue;
+    // (A lane that carries nothing laid is no staff's need: cargoLaid.)
+    if (!laneCounts(rt) || !rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g, f, rt.id)) continue;
     if (g.fleets.some((x) => x !== f && atSea(x) && x.stance === 'escort' && x.lane === rt.id && (x.nat === f.nat || allied(g, x.nat, f.nat)))) continue;
     // (Bleeding: raiders at sea on it now, an enemy in the fortress astride it, or cargo lost on it since last month.)
     const m = g.convoys[rt.id];
@@ -5635,7 +5664,8 @@ export function huntingSea(g: Game, f: Fleet, seas: number[]): number {
 function laneOnBeat(g: Game, f: Fleet): SeaRoute | null {
   let found: SeaRoute | null = null;
   for (const rt of seaRoutes(g)) {
-    if (!rt.zones.includes(f.station) || whyNotEscort(g, f, rt.id)) continue;
+    // (A lane that carries nothing laid is no staff's need: cargoLaid.)
+    if (!laneCounts(rt) || !rt.zones.includes(f.station) || whyNotEscort(g, f, rt.id)) continue;
     if (rt.to === f.nat) return rt;
     found ??= rt;
   }
