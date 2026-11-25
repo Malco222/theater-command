@@ -1796,6 +1796,23 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return null;
   }
 
+  /**
+   * The second a salvo's heads come level with the last point of a piece's ships, as they lie now (notPast's own
+   * measure): when she is let go to take up her orders again (the 'clearUntil' look field; the sea scene's countdown,
+   * 25 November 17:40Z). Never later than the salvo lands.
+   */
+  private passedAt(u: SeaUnit, s: Torp): number {
+    const L = dist(s.x0, s.y0, s.x, s.y);
+    if (L < 1) return s.at;
+    const ux = (s.x - s.x0) / L, uy = (s.y - s.y0) / L, len = SEA.classes[u.extra.cls as SeaClass].len;
+    let far = -Infinity;
+    for (const [hx, hy, hf] of this.hullsOf(u)) for (const k of HULL) {
+      const a = (hx + Math.sin(hf) * k * len - s.x0) * ux + (hy + Math.cos(hf) * k * len - s.y0) * uy;
+      if (a <= L && a > far) far = a;
+    }
+    return far === -Infinity ? s.at : Math.min(s.at, s.t0 + (Math.max(0, far) * SEA.torp.travel) / L);
+  }
+
   /** Whether a salvo's heads have yet to come level with some point of one of a piece's ships (keepClear). */
   private notPast(u: SeaUnit, s: Torp): boolean {
     const L = dist(s.x0, s.y0, s.x, s.y);
@@ -3381,13 +3398,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // Release 2's own water (only with it on), for the words on the player's own pieces (the UI director, 13:25Z):
       // 'heldFor', the piece of her own side in the way of the salvo she holds (looked for each second at the most: a
       // screen's launch), and 'heldForName', it as the log names a piece ("a cruiser of the Home Fleet": the field names no
-      // ship); 'clearFrom' and 'clearUntil', the launcher of the own salvo she keeps clear of and the second it lands, and
+      // ship); 'clearFrom' and 'clearUntil', the launcher of the own salvo she keeps clear of and the second its heads pass
+      // her where she lies now (passedAt: when she is let go; never later than it lands), and
       // 'clearFromName'; and 'ordered', with either, when she is under an order of the player's own, which stands.
       if (this.ownWater) {
         const hd = on ? this.holding.get(u.id) : undefined, hb = hd && hd.t >= this.t - 1 - 1e-9 ? this.byId.get(hd.by) : undefined;
         if (hd && hb) { x.heldFor = hd.by; x.heldForName = this.told(hb); } else { delete x.heldFor; delete x.heldForName; }
         const cl = on && this.clearSteered.has(u.id) ? this.clearing.get(u.id) : undefined, cb2 = cl ? this.byId.get(cl.from) : undefined;
-        if (cl && cb2) { x.clearFrom = cl.from; x.clearUntil = Math.round(cl.at * 10) / 10; x.clearFromName = this.told(cb2); } else { delete x.clearFrom; delete x.clearUntil; delete x.clearFromName; }
+        if (cl && cb2) { x.clearFrom = cl.from; x.clearUntil = Math.round(this.passedAt(u, cl) * 10) / 10; x.clearFromName = this.told(cb2); } else { delete x.clearFrom; delete x.clearUntil; delete x.clearFromName; }
         if ((x.heldFor !== undefined || x.clearFrom !== undefined) && this.orders.has(u.id)) x.ordered = true; else delete x.ordered;
       }
       const at = on && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
