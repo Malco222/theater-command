@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a87043e1 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6186d813 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -55906,6 +55906,12 @@
     }
     if (!g2.atSea.length) delete g2.atSea;
   }
+  function takenShare(g2, i) {
+    const share = g2.flags[`takecut:${i}`];
+    if (share !== void 0) return share;
+    const old = g2.flags[`cut:${i}`];
+    return old !== void 0 && old > 0 && old < 1 ? old : void 0;
+  }
   function expeditions(g2, nat) {
     const gone = [];
     (setup_1939_default.expeditions ?? []).forEach((row2, i) => {
@@ -55988,9 +55994,11 @@
       }
       const c = addCorps(g2, nat, row2[2], row2[3], g2.flags.open === 1 && o.openDivs !== void 0 ? o.openDivs : row2[4], reg.id, fell ? { ...o, hold: void 0 } : o);
       if (o.str !== void 0) c.str = o.str;
-      if (g2.flags.open === 1 && g2.flags[`cut:${i}`] !== void 0) {
-        c.str *= 1 - g2.flags[`cut:${i}`];
-        delete g2.flags[`cut:${i}`];
+      const taken2 = g2.flags.open === 1 ? takenShare(g2, i) : void 0;
+      if (taken2 !== void 0) {
+        c.str *= 1 - taken2;
+        delete g2.flags[`takecut:${i}`];
+        if (g2.flags[`cut:${i}`] === taken2) delete g2.flags[`cut:${i}`];
       }
       if (g2.flags.open === 1 && o.takes) {
         const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
@@ -55998,7 +56006,7 @@
         if (x) {
           x.str *= 1 - o.takes.share;
           if (nat === g2.human && o.takes.leaves) headline(g2, "event", o.takes.leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
-        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`cut:${j}`] = o.takes.share;
+        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`takecut:${j}`] = o.takes.share;
       }
       if (g2.flags.open === 1 && UNLESS.has(row2[2])) {
         g2.flags[`came:${i}`] = g2.turn;
