@@ -87,6 +87,10 @@ export function saveGame(g: Game): string {
     atSea: g.atSea?.length ? g.atSea : undefined,
     // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
     ac: g.ac,
+    // Better air unit names and the air groups' earned names (release 2): absent until a group is named under the switch,
+    // or a raid counted under the nicknames switch, so a save without them is written as it always was.
+    airNames: g.airNames,
+    airRates: g.airRates,
     // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
     subLook: g.subLook,
     // The sea patrol's record (release 2, Units decide, once it is live): absent otherwise, so such a save is written as it always was.
@@ -265,6 +269,8 @@ export function loadGame(text: string): Game | null {
   // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
+  if (d.airNames && typeof d.airNames === 'object') g.airNames = { at: {}, top: {}, ...d.airNames };
+  if (d.airRates && typeof d.airRates === 'object') g.airRates = d.airRates;
   if (Array.isArray(d.subLook)) g.subLook = d.subLook;
   if (d.patrolSunk && typeof d.patrolSunk === 'object') g.patrolSunk = d.patrolSunk;
   if (d.columns && typeof d.columns === 'object') g.columns = d.columns;

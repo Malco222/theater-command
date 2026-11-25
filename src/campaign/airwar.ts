@@ -16,6 +16,8 @@
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
 import { armedAt, strikeWords } from './atom';
+import { roleWord, shortName } from './airnames';
+import { calledName } from './airnicks';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate, type TicketLine } from '../core/ticket';
@@ -216,6 +218,15 @@ export interface GroupRow {
    * it is going, the hops still to fly (0 when it goes crated by sea), and whether it goes by sea. Never set otherwise.
    */
   way?: { to: number; toName: string; left: number; sea: boolean };
+  /**
+   * (Release 2, better air unit names) Its role in a plain word, 'fighters' or 'bombers', where its name does not say it
+   * (absent where it does), and its short form for a map counter. Words only.
+   */
+  role?: string;
+  short?: string;
+  /** (Release 2, earned names) Its name with its earned name set as its arm sets it, and its earned colours; absent until earned. */
+  called?: string;
+  colours?: { scheme: number; tier: number; since: number };
 }
 
 /** A sea patrol's line on its group's row (Q8, the UI director's words): the sea, and the share of the waters it reaches that its side's patrols watch. */
@@ -261,7 +272,15 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
     ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) && f.way === undefined ? { sky: [whyNotField(g, f)!] } : {}),
     ...(f.way !== undefined && own ? { way: { to: f.way.to, toName: g.regions[f.way.to]?.name ?? '', left: f.way.sea ? 0 : f.way.stops.length, sea: !!f.way.sea } } : {}),
+    // (Release 2: the role beside the name where the name does not say it, the counter's short form, the earned name and colours.)
+    ...airWords(f),
   };
+}
+
+/** A group's words for the card and the counter (release 2, airnames.ts and airnicks.ts): read by no rule. */
+export function airWords(f: AirFleet): { role?: string; short: string; called?: string; colours?: { scheme: number; tier: number; since: number } } {
+  const role = kindOf(f) === 'mixed' ? undefined : roleWord(f);
+  return { ...(role ? { role } : {}), short: shortName(f), ...(f.nick ? { called: calledName(f) } : {}), ...(f.colours ? { colours: { ...f.colours } } : {}) };
 }
 
 /** A nation's air groups, in the order of its airfields. */

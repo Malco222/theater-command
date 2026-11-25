@@ -128,7 +128,7 @@ import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrder
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import { cancelAtomStrike, orderAtomMaking, orderAtomPace, orderAtomPause, orderAtomPlants, orderAtomSite, orderAtomStrike, whyNotAtomPlants, whyNotAtomStrike } from '../../../src/campaign/turn';
-import { gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
+import { airWords, gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
 import { fieldRepairView } from '../../../src/campaign/fieldstate';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
 import { FIGHTERS } from '../../../src/campaign/fighters';
@@ -163,6 +163,7 @@ import { patrolLoss } from '../../../src/campaign/seapatrol';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
+import { airNamesOn, setAirNames } from '../../../src/campaign/airnames';
 import { markedOn, setMarked } from '../../../src/campaign/marked';
 import { thePlace } from '../../../src/campaign/bombers';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
@@ -820,6 +821,9 @@ function drawView() {
     }),
     air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && (f as { ship?: number }).ship === undefined && !fieldHidden.has(f.base)).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
+      // (Release 2, better air unit names and earned names: the role word where the name does not say it, the counter's
+      // short form, the name with its earned name set as its arm sets it, and its earned colours. Words and paint only.)
+      ...airWords(f),
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
     // branch fields its later models early, and one that neglects it keeps the old ones longer. The tanks' year is
@@ -1004,6 +1008,8 @@ function drawView() {
     dumps: (() => { try { return dumpsView(s).map((d) => ({ nat: d.nat, side: d.side, x: d.x, y: d.y, region: d.region, stock: d.stock, filling: d.filling })); } catch { return []; } })(),
     // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
     nickFlags: nicknamesOn(s),
+    // (Release 2, airnames.ts) Whether new air groups are named with their arms' own numbers and words.
+    airNames: airNamesOn(s),
     // (Release 2, marked.ts) Whether the armies that took his towns are marked in red.
     markedOn: markedOn(s),
     // (Release 2, fleetattack.ts) Whether the player's fleets can be dropped on an enemy fleet to attack it at once.
@@ -6726,6 +6732,16 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Earned names are off: no corps is given a new one, and none is shown on the flags. The names already earned are kept.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'airnames') {
+    // (Release 2, airnames.ts) Better air unit names, switched by the player in any month: a name is only a name, and a
+    // group keeps the name it was given.
+    setAirNames(s, part[1] === 'on');
+    ok = true;
+    note = airNamesOn(s)
+      ? 'Air units\' own names are on: each new air group is named the way its own air force numbered and named its units. The groups you have keep their names.'
+      : 'Air units\' own names are off: new air groups are named as before. The groups you have keep their names.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'secretwar') {
     // (Release 2, the spies thread of 24 November 2026) The secret war, all of release 2's spying under one switch, in
     // the campaign's opening month only.
@@ -8035,6 +8051,9 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 // name), TC.columns(on) only in a campaign's opening month ('set' false otherwise). The options page uses act('nicknames:on'
 // and so on) instead, which answers with the view.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
+// (Release 2, airnames.ts) Better air unit names: TC.airNames(on) at any time (new groups only); the options page uses act('airnames:on' / ':off').
+// Not on the ship list (R2_SHIP) yet: the air thread adds it after the Mac pass.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).airNames = (on: boolean) => { const s = game(); setAirNames(s, !!on); return { on: airNamesOn(s) }; };
 // (Release 2, fleetattack.ts) Fleets sent straight at the enemy: TC.fleetAttack(on) at any time; the options page uses act('fleetattackrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
 // (Release 2, rearguard.ts) Rearguards: TC.rearguard(on) at any time; the options page uses act('rearguardrule:on' / ':off').

@@ -1,0 +1,9 @@
+{
+ "_note": "Earned colours for air groups (release 2; Brian 25 November 2026 03:27Z, the design director's ruling of 03:31Z (3); src/campaign/airnicks.ts). Under the switch 'nicknames'; off, nothing here is read or written. A group that has completed 'tiers'[0] missions (the number its earned name comes at, nicknames.json air.need) wears a scheme of its nation's palette: tier 1 (the spinner), then tier 2 (the nose band) at 'tiers'[1] and tier 3 (the tail) at 'tiers'[2]. 'count' is 16: the 3D side's palette has 16 schemes PER NATION, the same length for every nation, and a group's 'scheme' (0 to 15) indexes its own nation's list, so it MUST match the 3D palette's length (the 3D air thread, 25 November). The scheme is picked by a hash of the war's seed, the nation and the group (never the war's dice), unique within the nation while the 16 last, and after that the least worn of them. No edge: no rule reads it. The palette is our own; the historian checks it against real units' schemes (no red tails). 'tiers'[1] 16 and [2] 24 are G.",
+ "count": 16,
+ "tiers": [
+  8,
+  16,
+  24
+ ]
+}

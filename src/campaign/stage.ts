@@ -167,3 +167,7 @@ export const ATOM_STAGE: boolean = staged('TC_ATOM', 'atomBomb');
 // the grand campaigns opened while this is true carry the flag 'ferry'. Forced by TC_FERRY.
 /** True where new grand campaigns open with air groups able to go to any friendly airfield by stages (stage.json 'ferry'). */
 export const FERRY_STAGE: boolean = staged('TC_FERRY', 'ferry');
+// Better air unit names (release 2; the design director's ruling of 25 November 2026 03:18Z): the grand campaigns opened
+// while this is true carry the flag 'airNames' (air.ts groupName). Words only. Forced by TC_AIRNAMES.
+/** True where new grand campaigns open with the air arms' own numbers and names (stage.json 'airNames'). */
+export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');

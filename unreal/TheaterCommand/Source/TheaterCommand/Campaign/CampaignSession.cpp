@@ -1266,6 +1266,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("airNames"), Out.bAirNames); // (release 2, airnames.ts)
 	Object->TryGetBoolField(TEXT("markedOn"), Out.bMarkedOn); // (release 2, the marked army)
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
 	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)

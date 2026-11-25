@@ -59,6 +59,9 @@ import { seaWhat, seaWhere } from './sea-words';
 import { baseField } from './bargains';
 import { flagName } from './flagnames';
 import { ferryOn, staffFerry } from './ferry';
+import { AIRNAMES, airBlocked, airNamesOn, nextNumber, type Label, type RungR2 } from './airnames';
+import { nicknamesOn } from './nicknames';
+import { airRaidFlown, airSupportFlown } from './airnicks';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -792,9 +795,10 @@ export const closeStrikes = (side: CloseSide): number =>
  * its side flew (`sorties`, by group id: the field's own count where the battle was fought on the field, else the
  * strikes the card gave), pays 'ready' readiness, and is done for the week. A side that made no strike flies none.
  */
-export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Record<number, number>): void {
+export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Record<number, number>, region = -1): void {
   if (!air) return;
   const stamp = g.turn * 10 + g.week;
+  const flown: AirFleet[] = [];
   for (const [side, home] of [[air.att, false], [air.def, true]] as const) {
     if (!side.strikes && !sorties) continue;
     for (const k of side.groups) {
@@ -811,8 +815,11 @@ export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Recor
       }
       f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
       f.closeAt = stamp;
+      flown.push(f);
     }
   }
+  // (Release 2, earned names for air groups under the switch 'nicknames': support flown over a battle is a mission completed.)
+  if (nicknamesOn(g)) airSupportFlown(g, flown, region);
 }
 
 /** True when enemy fighters still defend the sky over a coast and the invader has not won it: no invasion fleet can cross under them. */
@@ -878,9 +885,10 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
   let unique = name;
   for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
   const f: AirFleet = {
-    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind, strength, r) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+    id: g.nextAir++, nat, name: unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
     mission: 'support', target: -1, ready: 1, leader: null, moved: 0, lost: { ftr: 0, bmr: 0 },
   };
+  if (kind) f.name = groupName(g, nat, kind, strength, r, f);
   if (kind) { f.kind = kind; f.parent = unique; f.share = 1; }
   g.airFleets.push(f);
   return f;
@@ -902,8 +910,8 @@ const homeLost = (g: Game, nat: string): boolean => { const n = g.nations[nat]; 
  * and while its homeland is lost only the rows of its forces in exile, where it has them. Japan's navy names the
  * groups based on the Pacific islands, its army the rest (and all of them while the map cannot tell).
  */
-export function rungsOf(g: Game, nat: string, base: Region | null): Rung[] {
-  const ladder = (nat === 'JAP' && base && NAMES.navyBases.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
+export function rungsOf(g: Game, nat: string, base: Region | null, islands: string[] = NAMES.navyBases): Rung[] {
+  const ladder = (nat === 'JAP' && base && islands.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
   const now = ladder.filter((r) => (r.from ?? 1) <= g.turn && g.turn <= (r.until ?? Infinity));
   const exile = now.filter((r) => /in exile/.test(r.rung));
   return exile.length && homeLost(g, nat) ? exile : now.filter((r) => !/in exile/.test(r.rung));
@@ -922,8 +930,13 @@ export function nearestRung(rungs: Rung[], kind: 'ftr' | 'bmr', strength: number
   return best;
 }
 
-/** A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e). */
-export function formName(form: string, n: number): string {
+/**
+ * A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e).
+ * (Release 2, under the switch 'airNames': where an arm's list holds whole labels, "I./JG 26" or "II/5", the label
+ * stands for every number token.)
+ */
+export function formName(form: string, n: number | string): string {
+  if (typeof n === 'string') return form.replace(/\{n\+\d+\}|\{nth_fr\}|\{nth_nl\}|\{nth\}|\{n\}/g, n);
   return form
     .replace(/\{n\+(\d+)\}/g, (_, k: string) => String(n + Number(k)))
     .replace(/\{nth_fr\}/g, n === 1 ? (/R[ée]giment/i.test(form) ? '1er' : '1re') : `${n}e`)
@@ -937,7 +950,9 @@ export function formName(form: string, n: number): string {
  * country's ladder nearest its full strength, with the next number of that rung; where no rung is near, the plain
  * form ("3rd Fighter Group"), never another country's word. No two of a country's groups share a name.
  */
-function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null): string {
+function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null, grp?: AirFleet): string {
+  // (Release 2, the switch 'airNames': the arm's own numbers and words. Off, everything below is ruling 220's to the letter.)
+  if (airNamesOn(g)) return groupNameR2(g, nat, kind, strength, base, grp);
   const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x);
   const rungs = rungsOf(g, nat, base);
   for (let left = rungs; left.length;) {
@@ -955,6 +970,73 @@ function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, 
   let name: string;
   do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(AIRWAR.groups.names._default[kind], g.flags[key]); } while (taken(name));
   return name;
+}
+
+/**
+ * A new air group's name under the switch 'airNames' (release 2; the design director's rulings of 25 November 2026,
+ * airnames.ts; the historian's lists, air-unit-names-r2.json): the same rung as ruling 220 picks, with (a) the next
+ * number from the arm's own list in forming order, going on past its end; (b) the rung's role form where the arm said
+ * the role in its names; (c) for Japan's navy groups, the airfield's name at forming ({base}), a second group at the
+ * same field taking the navy's numbered form. Where no rung is near, the arm's own plain form (its 'fallback'; for an
+ * arm with none, the nearest rung of its own ladder however far), never another country's word. No name holds a
+ * blocked one. The positions are kept in g.airNames, apart from every other counter, and no dice are thrown. `grp`,
+ * where given, is told its short form and whether its name says its role (words for the card and the counter only).
+ */
+function groupNameR2(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null, grp?: AirFleet): string {
+  const taken = (x: string): boolean => airBlocked(x) || g.airFleets.some((f) => f.nat === nat && f.name === x);
+  const tell = (name: string, form: { ftr: string; bmr: string }, short?: string): string => {
+    if (grp) {
+      grp.roleNamed = form.ftr !== form.bmr;
+      if (short) grp.short = short; else delete grp.short;
+    }
+    return name;
+  };
+  const navy = nat === 'JAP' && !!base && AIRNAMES.navyIslands.includes(base.name);
+  const arm = navy ? 'JAP_navy' : nat;
+  const rungs = rungsOf(g, nat, base, AIRNAMES.navyIslands);
+  const plain = (form: { ftr: string; bmr: string; numbers?: { ftr: Label[]; bmr: Label[] } }): string => {
+    const got = nextNumber(g, `${arm}:${kind}`, form.numbers?.[kind], (n) => formName(form[kind], n), taken);
+    return tell(got.name, form);
+  };
+  const named = (r: Rung & RungR2): string => {
+    const form = r.formR2 ?? r.form;
+    const f = form[kind];
+    const short = (n: Label, at = ''): string | undefined => (r.short?.[kind] ? formName(r.short[kind], n).replace(/\{base\}/g, at) : undefined);
+    // Japan's navy: the airfield's name at forming (the record's station where the province holds one); a second group
+    // at the same field takes the navy's numbered form (the historian: the record's numbered groups).
+    if (/\{base\}/.test(f) && base) {
+      const at = AIRNAMES.navyStations[base.name] ?? base.name;
+      const x = f.replace(/\{base\}/g, at);
+      if (!taken(x)) return tell(x, form, short('', at));
+      return plain(AIRNAMES.fallback[arm] ?? AIRWAR.groups.names._default);
+    }
+    // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation.
+    if (!/\{n/.test(f)) return tell(f, form);
+    // (Germany's Gruppen: a label is passed over while a Geschwader-size group bears its Geschwader's number.)
+    const skip = r.skipIfTaken?.[kind];
+    const clash = (n: Label): boolean => !!skip && typeof n === 'string' && /\d+$/.test(n) && taken(formName(skip, Number(/\d+$/.exec(n)![0])));
+    const got = nextNumber(g, `${nat}:${kind}:${r.rung}`, r.numbers?.[kind], (n) => formName(f, n), (x) => taken(x), clash);
+    return tell(got.name, form, short(got.n));
+  };
+  const one = (r: Rung): boolean => { const f = ((r as Rung & RungR2).formR2 ?? r.form)[kind]; return !/\{n|\{base\}/.test(f) && taken(f); };
+  for (let left = rungs; left.length;) {
+    const r = nearestRung(left, kind, strength);
+    if (!r) break;
+    if (one(r)) { left = left.filter((x) => x !== r); continue; }
+    return named(r as Rung & RungR2);
+  }
+  const own = AIRNAMES.fallback[arm];
+  if (own) return plain(own);
+  // No plain form of its own: the rung of its own ladder nearest the group's strength, however far.
+  let best: Rung | null = null, bd = Infinity;
+  for (const r of rungs) {
+    const v = r[kind];
+    if (!(v > 0) || one(r)) continue;
+    const d = Math.abs(Math.log(Math.max(1, strength) / v));
+    if (d < bd) { bd = d; best = r; }
+  }
+  if (best) return named(best as Rung & RungR2);
+  return plain(AIRWAR.groups.names._default);
 }
 
 /**
@@ -996,7 +1078,7 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     out.push(grp);
   });
   // The names are given once every group is on the list, so that no two of a nation's are alike.
-  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
+  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null, grp);
   return out;
 }
 
@@ -1247,7 +1329,7 @@ function splitOff(g: Game, f: AirFleet, q: number): AirFleet {
   f.ftr -= grp.ftr; f.bmr -= grp.bmr;
   f.est = { ftr: f.est.ftr - grp.est.ftr, bmr: f.est.bmr - grp.est.bmr };
   const kind = grp.kind ?? (grp.bmr > grp.ftr ? 'bmr' : 'ftr');
-  grp.name = groupName(g, f.nat, kind, Math.max(grp.est[kind], grp[kind]), g.regions[grp.base] ?? null);
+  grp.name = groupName(g, f.nat, kind, Math.max(grp.est[kind], grp[kind]), g.regions[grp.base] ?? null, grp);
   g.airFleets.splice(g.airFleets.indexOf(f) + 1, 0, grp);
   return grp;
 }
@@ -1587,7 +1669,7 @@ function growCommands(g: Game, nat: string): void {
           id: g.nextAir++, nat, name: '', base: first.base, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
           mission: 'rest', target: -1, ready: first.ready, leader: null, moved: first.moved, lost: { ftr: 0, bmr: 0 }, kind, parent: r.name, share: 1 / n,
         };
-        grp.name = groupName(g, nat, kind, Math.round(want / n), base);
+        grp.name = groupName(g, nat, kind, Math.round(want / n), base, grp);
         g.airFleets.splice(++at, 0, grp);
         headline(g, 'info', `${grp.name} forms in ${base.name}, a new group of ${r.name}.`, nat, base.id);
       }
@@ -2616,6 +2698,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (transit) rep.ferry = transit.to;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
+  // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the
+  // hard fights, read from what the raid has just recorded. Off, nothing is counted or written.)
+  if (nicknamesOn(g)) airRaidFlown(g, m, { odds: rep.odds, bombers: a.B, bombed, E: a.E, D: a.D, sky: sky || held }, a.att.map((x, i) => ({ f: x.f, side: att[i] })), a.def.map((x, i) => ({ f: x.f, side: def[i] })), sea ? -1 : target);
 
   // (Release 2, atom.ts; the UI director under ruling 230 4e) A raid that carried the atomic bomb reads as any raid in
   // its own line; the strike is told in a line of its own, plain, the same whoever struck whom.

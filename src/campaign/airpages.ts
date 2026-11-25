@@ -26,7 +26,8 @@ import { afterCard, type AfterCard, type FoughtAir } from './airfought';
 import { band, raidFogOn } from './airfog';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
+/** (Release 2) An air group's row may carry its role word, its short form and its earned name as its arm sets it (airwar.ts airWords). */
+export interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; role?: string; short?: string; called?: string }
 export interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 /** What came of something pressed: `open` is the page to show next, `fly` aircraft to draw leaving for their target, `report` the id of the air report just filed. */
 export interface AirActResult {
@@ -64,6 +65,7 @@ function airfieldPage(g: Game, region: number): Page | null {
   const up = humanUp(g);
   const rows: PageRow[] = c.rows.map((x) => ({
     nat: x.nat, title: x.name, lines: groupLines(x, false),
+    ...(x.role ? { role: x.role } : {}), ...(x.short ? { short: x.short } : {}), ...(x.called ? { called: x.called } : {}),
     buttons: x.mine ? [{ label: 'ORDERS', act: `open:group:${x.id}`, ok: true, tip: 'Its standing orders, the raids it can fly, a reconnaissance, or a move to another airfield.' }] : [],
   }));
   return {

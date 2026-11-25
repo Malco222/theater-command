@@ -175,6 +175,7 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'relief': return `Back in supply at ${at} after ${n} months cut off.`;
     case 'honour': { const a = n ? awardOf(g, n) : undefined; return a ? `Honoured: ${awardTitle(g, a)}.` : 'Honoured.'; }
     case 'named': { const nick = (u as { nick?: string | null }).nick; return `Called ${nick ?? 'by a name of its own'} by its own army after ${n ?? NICKNAMES.need} hard fights, the last at ${at}.`; }
+    case 'airnamed': { const nick = (u as { nick?: string | null }).nick; return `Called ${nick ?? 'by a name of its own'} by its crews after ${n ?? 8} missions, the last ${atIn('over')}.`; }
     case 'bonds': return 'Sent home on a bond tour.';
     case 'school': return 'Sent home to the training schools as instructors.';
     case 'back': return 'Back from home and ready for orders.';

@@ -1385,6 +1385,31 @@ export interface AirFleet extends Storied {
    * the month and the hops it has flown in it. Out of the fight while it is set. `base` is the field it has reached.
    */
   way?: { to: number; stops: number[]; sea?: boolean; at?: [number, number] };
+  /**
+   * (Release 2, better air unit names; the switch 'airNames') Written only as a group is named under that switch: the
+   * short form for the map counter, where its rung has one, and true where its name itself says fighters or bombers
+   * (so the role is not shown beside it). Words only; no rule reads them.
+   */
+  short?: string;
+  roleNamed?: boolean;
+  /**
+   * (Release 2, earned names under the switch 'nicknames') A group of an arm that gives the Guards title, once it has
+   * earned it: its number in the Guards series, and the name it bore before. Words only; no rule reads them.
+   */
+  guards?: number;
+  was?: string;
+  /**
+   * (Release 2, earned names for air groups under the switch 'nicknames'; airnicks.ts, Brian's answer of 25 November
+   * 2026 03:31Z) Its missions completed: the count (a hard fight counts double), the month it last completed one (one a
+   * month), whether that month's was already counted double, and its hard fights in all. Read by no rule but the naming.
+   */
+  done?: { n: number; at: number; x: number; h: number };
+  /**
+   * (The same) Its earned colours: the scheme it wears from its nation's palette (the 3D side's, data/campaign/
+   * air-colours.json 'count' per nation), the tier of marking reached (1 spinner, 2 nose band, 3 tail) and the month
+   * it was first earned. Words and paint only: no edge.
+   */
+  colours?: { scheme: number; tier: number; since: number };
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1703,6 +1728,18 @@ export interface Game {
   atSea?: Voyage[];
   /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
   ac?: AirWarMemory;
+  /**
+   * (Release 2, better air unit names; air.ts groupName under the switch 'airNames') The forming-order position of each
+   * nation's series of names ('at', keyed nation:kind:rung, or nation:day:rung, or nation:base:province) and the largest
+   * number handed out in it ('top'). Absent until a group is named under the switch. Words only.
+   */
+  airNames?: { at: Record<string, number>; top: Record<string, number> };
+  /**
+   * (Release 2, earned names for air groups under the switch 'nicknames'; airnicks.ts) Each air arm's running tally by
+   * kind of mission, nation:mission: aircraft that flew it and aircraft lost on it, for its running loss rate. Absent
+   * while that switch is off. Read by no rule but the naming.
+   */
+  airRates?: Record<string, [number, number]>;
   /** A neutral's bargains (bargains.ts; release 2): absent while the switch is off. */
   bargains?: BargainBook;
   /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
