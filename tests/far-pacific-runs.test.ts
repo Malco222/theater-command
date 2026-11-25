@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { endStaffMonth, ferry } from '../src/campaign/ai';
 import { atWar, createGame, declareWar, relocate } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
-import { NAVY, fleetReach, navalAI, seaPath } from '../src/campaign/navy';
+import { NAVY, fleetReach, navalAI, navalUpkeep, seaPath, voyageMonths } from '../src/campaign/navy';
 import { PACIFIC, coversBeaches, firstOnRun, hopShores, hopsBind, laneOn, onRun, pacificFreed, pacificRuns, ringDrawn, runOf, runQuays } from '../src/campaign/pacific';
 import { oceanRuns, startOpen } from '../src/campaign/staff';
 import { acrossOcean, oceanShares, overseasOf, sailings } from '../src/campaign/world';
@@ -281,13 +281,22 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     expect(ringDrawn(g)).toBe(true);
     const second = fleet(g, 'JAP', '2nd Fleet');
     expect(fleetReach(g, second)).not.toContain(beach);
+    expect(voyageMonths(g, second, g.byName['Koepang'])).toBe(1);
     navalAI(g, 'JAP');
     expect(g.regions[second.base].name).toBe('Koepang');
-    expect(second.stance).toBe('port');
+    // (Release 2: beyond a month's steaming the move is a voyage, in the month after.)
+    expect(second.stance).toBe('passage');
+    expect(second.passage?.due).toBe(37);
     expect(g.headlines.some((h) => h.turn === 36 && h.text === 'The 2nd Fleet moves its base to Koepang to cover the landing at Darwin.')).toBe(true);
     expect(covering(g)).toEqual(['2nd Fleet']);
     for (const nm of ['Combined Fleet', 'Mobile Fleet']) expect(g.regions[fleet(g, 'JAP', nm).base].name, nm).toBe('Hiroshima');
+    // In the next it comes in, and lies that month in harbour there; from the month after it covers the crossing.
     g.turn = 37;
+    navalUpkeep(g, 'JAP');
+    navalAI(g, 'JAP');
+    expect([second.stance, second.zone]).toEqual(['port', second.home]);
+    g.turn = 38;
+    navalUpkeep(g, 'JAP');
     navalAI(g, 'JAP');
     expect(second.zone).toBe(beach);
     expect(second.stance).toBe('patrol');
@@ -316,11 +325,19 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     const f = fleet(g, 'JAP', went[0]);
     const home = g.regions[g.flags[`fl:cover:${f.id}`] - 1].name;
     expect(g.regions[f.base].name).toBe('Koepang');
-    // A month on, still covering the same beach, and then the ring is drawn.
+    // (Release 2: from home waters it is a voyage of three months.) A month on it is still on its way, covering the beach
+    // it will reach: no second fleet is sent after it.
+    expect(f.passage?.due).toBe(38);
     g.turn = 37;
+    navalUpkeep(g, 'JAP');
     navalAI(g, 'JAP');
-    expect(f.zone).toBe(beach);
+    expect(f.stance).toBe('passage');
+    expect(covering(g)).toEqual([f.name]);
+    // It comes in, covers the same beach, and then the ring is drawn.
     g.turn = 38;
+    navalUpkeep(g, 'JAP');
+    expect(f.zone).toBe(f.home);
+    expect(fleetReach(g, f)).toContain(beach);
     g.flags['war:JAP:USA'] = 30; g.flags['st:gain:JAP'] = 30;
     expect(ringDrawn(g)).toBe(true);
     navalAI(g, 'JAP');
@@ -328,6 +345,25 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     expect(g.flags[`fl:cover:${f.id}`]).toBeUndefined();
     expect(g.headlines.some((h) => h.turn === 38 && h.text === `The ${f.name} returns to ${home}.`)).toBe(true);
     // Another fleet goes to the beach instead.
+    expect(covering(g).length).toBe(1);
+    expect(covering(g)).not.toContain(f.name);
+  });
+
+  it("turns back a main fleet still on its way to the beach's harbour the month the ring is drawn (release 2, the far chart)", () => {
+    const { g } = darwin();
+    navalAI(g, 'JAP');
+    const f = fleet(g, 'JAP', covering(g)[0]);
+    const home = g.regions[g.flags[`fl:cover:${f.id}`] - 1];
+    expect(f.passage?.from).toBe(home.id);
+    g.turn = 37;
+    navalUpkeep(g, 'JAP');
+    g.flags['war:JAP:USA'] = 30; g.flags['st:gain:JAP'] = 30;
+    const news = g.headlines.length;
+    navalAI(g, 'JAP');
+    expect(f.base).toBe(home.id);
+    expect(f.passage?.back).toBe(true);
+    expect(g.flags[`fl:cover:${f.id}`]).toBeUndefined();
+    expect(g.headlines.slice(news).some((h) => h.text.startsWith(`The ${f.name} turns back for ${f.port}, `))).toBe(true);
     expect(covering(g).length).toBe(1);
     expect(covering(g)).not.toContain(f.name);
   });

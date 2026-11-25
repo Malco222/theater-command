@@ -722,6 +722,11 @@ export type Ships = Record<ShipClass, number>;
  * be bound to a shipping lane as its escort, or sent to a sea to hunt submarines.
  */
 export type Stance = 'patrol' | 'raid' | 'port' | 'escort' | 'hunt';
+/**
+ * What a fleet is doing, its orders and one state no order gives: 'passage', on its way to a new base beyond a month's
+ * steaming (release 2, the far chart: the design director's ruling of 04:33Z, 25 November 2026; navy.ts, rebase).
+ */
+export type FleetStance = Stance | 'passage';
 
 export interface SeaZone {
   id: number;
@@ -785,7 +790,21 @@ export interface Fleet extends Storied {
   bookBase?: [base: number, port: string, home: number, station: number];
   /** The sea the fleet is in. A fleet in harbour is counted in its home sea but takes no part there. */
   zone: number;
-  stance: Stance;
+  stance: FleetStance;
+  /**
+   * A fleet in passage to a new base (release 2, the far chart; navy.ts, rebase): the base, port and home sea it left
+   * (`from`, `fromPort`, `fromHome`, where it is turned back to), the seas of its way in order (`way`), the month it set
+   * out (`set`) and the month it comes in (`due`), and whether it is on its way back (`back`). Its base, port and home
+   * are the new harbour's from the month it sets out. Only while its stance is 'passage'.
+   */
+  passage?: { from: number; fromPort: string; fromHome: number; way: number[]; set: number; due: number; back?: true };
+  /**
+   * Its air strikes at anchor this month and last (release 2, the far chart; the design director's ruling of 04:33Z, 25
+   * November 2026, 2; navy.ts anchorLoss): for each, the month (`t`), the harbour (`at`), the ships sunk (`n`) and
+   * their share of its surface ships (`lost`), the strikers' weight in the air (`w`), and where they flew from as its
+   * side saw them (`from`: the sea of their carriers, or -1 and the airfield, and how far their bombers reach in km).
+   */
+  anchor?: { t: number; at: number; n: number; lost: number; w: number; from: { sea: number; field: number; km: number }[] }[];
   /** Where a computer-run fleet goes when it has nothing better to do, and what it does there. */
   station: number;
   duty: Stance;
@@ -869,7 +888,7 @@ export interface Fleet extends Storied {
    * sea (`z`) or harbour (`p`), and the fleet actions it fought (`f`, a sentence each). A record only, apart from its
    * diary (`log`, stories.ts). Written only under that switch.
    */
-  voyage?: { t: number; s: Stance; z: number; p: string; f?: string[] }[];
+  voyage?: { t: number; s: FleetStance; z: number; p: string; f?: string[] }[];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

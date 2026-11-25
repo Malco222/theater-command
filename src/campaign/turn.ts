@@ -13,7 +13,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, inPassage, laneNear, passageWhy, turnBack, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -1569,7 +1569,8 @@ const hisOrder = (f: Fleet, ok: boolean): boolean => {
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
+  // (Release 2, the far chart: a fleet in passage to a new base sent back to harbour turns back, to the one it left.)
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, f && inPassage(f) ? stance === 'port' && turnBack(g, f) : sail(g, f, zone, stance));
   // A task force given a new job keeps that one as its standing order; sent into harbour, it is released (release 2).
   if (ok) retask(g, f!);
   // A new order ends a shadow (release 2, shadow.ts).
@@ -1580,7 +1581,8 @@ export function orderFleet(g: Game, id: number, zone: number, stance: Stance): b
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
+  // (A fleet in passage is turned back, not sent on elsewhere: release 2, the far chart.)
+  const ok = !!f && !heldAfterAttack(g, f) && !inPassage(f) && hisOrder(f, rebase(g, f, g.regions[region]));
   if (ok) stopShadow(f!);
   // (Moved where the staff's book wanted it, the move that waited for him is made: navy.ts, bookWaits.)
   if (ok && f!.planBase?.base === g.regions[region].name) delete f!.planBase;
@@ -1743,19 +1745,22 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   const f = myFleet(g, id);
   if (!f) return null;
   const war = g.nations[f.nat].atWar.length > 0;
-  const held = heldAfterAttack(g, f);
+  // (Release 2, the far chart: a fleet in passage to a new base is held to its way. It can only be turned back.)
+  const held = heldAfterAttack(g, f) || inPassage(f);
   const out: FleetOptions = {
     seas: war && !held ? seaOptions(g, f, f.nat) : [],
-    lanes: war && !held ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
+    // (Release 2, the far chart: only the lanes within two months' steaming of it, and its own: laneNear.)
+    lanes: war && !held ? escortLanes(g, f.nat).filter((l) => laneNear(g, f, l)).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
     ports: held ? [] : baseTargets(g, f).map((r) => r.id),
     merge: mergeTargets(g, f).map((x) => x.id),
-    split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
+    split: g.flags.open === 1 && !inPassage(f) && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
   if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
   if (shadowOn(g)) out.shadow = war ? shadowTargets(g, f.id) : [];
   if (seaMinesOn(g)) out.mines = war && !held ? mineSeas(g, f.id) : [];
-  if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  if (inPassage(f)) out.held = `${passageWhy(g, f)} It can be turned back to ${f.passage?.fromPort ?? 'the harbour it left'}.`;
+  else if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
   return out;
 }
 

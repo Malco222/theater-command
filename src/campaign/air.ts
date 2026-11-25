@@ -27,7 +27,7 @@ import { fighterMonth, fighterTypesOn, lawK, typeEdge } from './fighters';
 import { armsOf, intoPool, unitsDecide, wayNow } from './units';
 import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
+import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, passageWhy, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { patrolFigures, patrolMet, patrolOn, patrolReach, patrolStaff } from './seapatrol';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
@@ -1754,6 +1754,9 @@ export function skyZone(g: Game, m: AirMission, target: number): number {
 export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: number): string | null {
   if (m === 'support' || m === 'rest') return null;
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
+  // (A carrier's aircraft fly nothing while it is in passage to a new base: release 2, the far chart. Its fighters'
+  // standing cover over it, 'support', is not barred.)
+  { const c = carrierOf(g, f); if (c?.stance === 'passage') return passageWhy(g, c); }
   // (The sea patrol, release 2: a standing order the sky works on through the month, not a raid it bars.)
   if (m === 'seapatrol') return whyNotPatrol(g, f, target);
   // Weather (ruling 127): a mission needs an open sky at its base and at its target.
@@ -2933,6 +2936,17 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
+      // (Release 2, the far chart: a strike at anchor is booked on the fleet, with where its strikers flew from as the
+      // fleet's side saw them, for its staff's weighing of staying against moving its base: navy.ts anchorLoss.)
+      if (m === 'harbour' && farOn(g)) {
+        const sunk = shipCount(struck![i].sunk) - struck![i].sunk.ss, had = shipCount(struck![i].ships) - struck![i].ships.ss;
+        const from = a.att.map((y) => {
+          const c = carrierOf(g, y.f), R = reach(y.f, g, raidJob(m));
+          return c && atSea(c) ? { sea: c.zone, field: -1, km: R.bmrRange } : { sea: -1, field: c ? c.base : y.f.base, km: R.bmrRange };
+        });
+        const w = a.att.reduce((s, y) => s + y.ftr + y.bmr, 0) * (airWeight(g, nat) ?? 1);
+        x.anchor = [...(x.anchor ?? []).filter((e) => e.t >= g.turn - 1), { t: g.turn, at: target, n: sunk, lost: had > 0 ? sunk / had : 0, w, from }];
+      }
       // It has been seen by those who struck it, and the strike gives away the decks it came from.
       (x.seen ??= {})[nat] = g.turn;
       for (const y of a.att) { const c = carrierOf(g, y.f); if (c && atSea(c)) (c.seen ??= {})[x.nat] = g.turn; }
@@ -3345,7 +3359,16 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
       raided.set(r.region, (raided.get(r.region) ?? 0) + sent * FB.raided);
     }
   }
-  const places = [...new Set([...troops, ...cities, ...raided.keys()])];
+  // (Release 2, the far chart: a harbour where a fleet struck at anchor stays, none being out of its strikers' reach, has
+  // the fighters first: it asks for its strikers' weight at the margin that holds the sky. navy.ts withdraws marks it;
+  // the design director's ruling of 04:33Z, 25 November 2026, 2. Nothing is marked off the far chart.)
+  const struck = new Map<number, number>();
+  for (const f of g.fleets) {
+    if (f.nat !== nat || f.base < 0 || atSea(f) || !((g.flags[`anc:${f.id}`] ?? -9) >= g.turn - 1)) continue;
+    const w = (f.anchor ?? []).filter((e) => e.t >= g.turn - 2 && e.at === f.base).reduce((s, e) => s + e.w, 0);
+    if (w > 0) struck.set(f.base, Math.max(struck.get(f.base) ?? 0, w));
+  }
+  const places = [...new Set([...troops, ...cities, ...raided.keys(), ...struck.keys()])];
   if (!places.length) return;
   const at = new Map(places.map((id, i) => [id, i]));
   const ask = new Float64Array(places.length);
@@ -3369,6 +3392,7 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   // The troops fighting the battles of the staff's main effort ask for the sky there (b447): the margin over the
   // enemy aircraft that can reach them that holds it by numbers (airwar.json sky 'own'), not their bare share.
   if (battles.length) for (const id of troops) if (battles.includes(id) || g.regions[id].nb.some((j) => battles.includes(j))) ask[at.get(id)!] *= Math.max(1, AIRWAR.sky.own);
+  for (const [id, w] of struck) ask[at.get(id)!] += w * Math.max(1, AIRWAR.sky.own);
   // Ruling 52(a): the fighters come up behind the army whether or not enemy aircraft are over it. Each stretch of
   // front asks for a standing share besides, by the divisions the nation has there: 'presence' of all that the
   // threat asks for, and all of the fighters where nothing threatens at all.

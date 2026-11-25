@@ -221,6 +221,72 @@ const japanBuilding = [
   { nat: 'JAP', fleet: 'Combined Fleet', cls: 'dd', from: 60, to: 64, perMonth: 2 },
 ];
 
+// Britain east of Suez (ruling 189(e); the historian's pacific-allied-fleet-rows.md, sections 2a to 2e), at stops 1 and
+// 2 only: the ships that went east come out of the European rows on their dates and back on theirs, so no ship is in two
+// oceans. Stops 3 to 5 are the staffs' plans (Britain's staff sends a fleet east only when at war with Japan), which
+// are the design director's to rule; none of these rows is read there. The China Fleet stands as Britain's eastern
+// fleet all war (the far books already pool its submarines and move its base to Colombo): Force Z, the Eastern Fleet
+// and, from November 1944, the East Indies Fleet are its ships by date. The British Pacific Fleet forms by its book at
+// stops 1 and 2 (its plain date is past the war's end, so it never forms at 3 to 5). The navy thread's readings (25
+// November 2026), where the historian names no fleet or row: the China Station's submarines stay (the far books' boats
+// are drawn from them); the destroyers that went to the Mediterranean in 1940 join the Mediterranean Fleet; the
+// cruisers that went to hunt raiders leave the chart and come back in January 1942; Hermes (a third of a carrier) and
+// the lent Saratoga have no row; Formidable goes back to the Mediterranean Fleet in October 1942, so Torch's row of turn
+// 39 finds her there. Rows of one month, one fleet and one source are one row: the game keys a row by them.
+const S12 = { stops: [1, 2] };
+const BPF = 'British Pacific Fleet';
+const britainEast = [
+  [8, 'UK', 'Mediterranean Fleet', { dd: 5 }, 'five of the China Station\'s destroyers', { ...S12, from: 'China Fleet' }],
+  [10, 'UK', 'China Fleet', { ca: -5 }, 'Five cruisers of the China Station leave to hunt raiders in the Indian Ocean and the South Atlantic', S12],
+  [28, 'UK', 'China Fleet', { bb: 2, dd: 2 }, 'Force Z, the battleship Prince of Wales, the battlecruiser Repulse and two destroyers,', { ...S12, from: 'Home Fleet' }],
+  [28, 'UK', 'China Fleet', { dd: 2 }, 'two more of Force Z\'s destroyers', { ...S12, from: 'Mediterranean Fleet' }],
+  [29, 'UK', 'China Fleet', { ca: 5 }, 'the cruisers Cornwall and Dorsetshire and three more, back from hunting raiders,', { ...S12, back: [10, 'China Fleet'] }],
+  [30, 'UK', 'China Fleet', { bb: 2, dd: 8 }, 'the battleships Royal Sovereign and Ramillies and eight destroyers', { ...S12, from: 'Home Fleet' }],
+  [30, 'UK', 'China Fleet', { bb: 1, dd: 8 }, 'the battleship Warspite, repaired in America, and eight destroyers', { ...S12, from: 'Mediterranean Fleet' }],
+  [30, 'UK', 'China Fleet', { bb: 2, ca: 2 }, 'the old battleships Revenge and Resolution and the cruisers Emerald and Caledon', S12],
+  [31, 'UK', 'China Fleet', { cv: 1 }, 'the carrier Formidable, repaired in America,', { ...S12, from: 'Mediterranean Fleet', by: 19 }],
+  [33, 'UK', 'China Fleet', { cv: 1 }, 'the carrier Illustrious', { ...S12, from: 'Mediterranean Fleet' }],
+  [36, 'UK', 'China Fleet', { cv: -1 }, 'The carrier Indomitable leaves the China Fleet for the Malta convoy', S12],
+  [38, 'UK', 'Mediterranean Fleet', { cv: 1 }, 'the carrier Formidable', { ...S12, from: 'China Fleet' }],
+  [41, 'UK', 'Home Fleet', { bb: 2, cv: 1 }, 'the battleships Royal Sovereign and Ramillies and the carrier Illustrious', { ...S12, from: 'China Fleet' }],
+  [41, 'UK', 'Mediterranean Fleet', { bb: 1 }, 'the battleship Warspite', { ...S12, from: 'China Fleet' }],
+  [41, 'UK', 'China Fleet', { bb: -2 }, 'The old battleships Revenge and Resolution go home to the reserve', S12],
+  [53, 'UK', 'China Fleet', { bb: 1 }, 'the battleship Valiant', { ...S12, from: 'Mediterranean Fleet' }],
+  [53, 'UK', 'China Fleet', { bb: 1 }, 'the battlecruiser Renown', { ...S12, from: 'Force H' }],
+  [53, 'UK', 'China Fleet', { cv: 1 }, 'the carrier Illustrious', { ...S12, from: 'Home Fleet' }],
+  [53, 'UK', 'China Fleet', { bb: 1 }, 'the battleship Queen Elizabeth, repaired,', S12],
+  [59, 'UK', 'China Fleet', { cv: 1 }, 'the carrier Victorious', { ...S12, from: 'Home Fleet' }],
+  [59, 'UK', 'China Fleet', { cv: 1 }, 'the carrier Indomitable', { ...S12, back: [36, 'China Fleet'] }],
+  [60, 'UK', 'China Fleet', { bb: 1 }, 'the new battleship Howe', S12],
+  [63, 'UK', BPF, { bb: 1, cv: 3, ca: 6 }, 'the battleship Howe, the carriers Indomitable, Victorious and Illustrious and six cruisers', { ...S12, from: 'China Fleet' }],
+  [63, 'UK', BPF, { bb: 1, dd: 15 }, 'the battleship King George V and fifteen destroyers', { ...S12, from: 'Home Fleet' }],
+  [63, 'UK', BPF, { cv: 1 }, 'the new carrier Indefatigable', S12],
+  [63, 'UK', 'China Fleet', { cv: 1, ca: 2 }, 'escort carriers with about a fleet carrier\'s aircraft, and two cruisers, for the East Indies Fleet,', S12],
+  [66, 'UK', 'China Fleet', { cv: 1 }, 'more of the escort carriers', S12],
+  [68, 'UK', 'China Fleet', { cv: 1 }, 'more of the escort carriers', S12],
+  [70, 'UK', BPF, { cv: 1 }, 'the new carrier Implacable', S12],
+];
+const britainEastFleets = [
+  { ...fleet('UK', BPF, 'Trincomalee', 'Trincomalee', 'ceylon', 'port', {}, 'Bruce Fraser'), from: 99, book: { stops: [1, 2], from: 63, ships: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 } } },
+];
+const britainEastMoves = [
+  { turn: 33, nat: 'UK', fleet: 'China Fleet', base: 'Mombasa', port: 'Kilindini', home: 'zanzibar', words: 'After the raid on Ceylon the China Fleet withdraws to Kilindini', stops: [1, 2] },
+  { turn: 49, nat: 'UK', fleet: 'China Fleet', base: 'Trincomalee', port: 'Trincomalee', home: 'ceylon', words: 'The China Fleet returns to Trincomalee', stops: [1, 2] },
+  { turn: 66, nat: 'UK', fleet: BPF, base: 'Sydney', port: 'Sydney', home: 'tasman', words: 'The British Pacific Fleet moves to Sydney', stops: [1, 2], ally: true },
+  { turn: 67, nat: 'UK', fleet: BPF, base: 'Admiralty Islands', port: 'Manus', home: 'bismarck', words: 'The British Pacific Fleet moves forward to Manus, for Okinawa', stops: [1, 2], ally: true },
+];
+{
+  const uk = new Set(['China Fleet', 'Home Fleet', 'Mediterranean Fleet', 'Force H', BPF]);
+  const keys = new Set();
+  for (const a of britainEast) {
+    need(uk.has(a[2]) && (!a[5].from || uk.has(a[5].from)), `Britain east: "${a[4]}" names a fleet that is not one of hers`);
+    const key = `${a[0]}:${a[2]}<${a[5].from ?? ''}`;
+    need(!keys.has(key), `Britain east: two rows of one month, fleet and source (${key}): the game reads only one`);
+    keys.add(key);
+  }
+  for (const m of britainEastMoves) need(owner.has(m.base) && chart.seas.zones.some((z) => z.id === m.home), `Britain east: move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
+}
+
 // America's fleets in the Pacific (the planner's pacific-fleets.json, in navy.json's own forms). A fleet that forms
 // later ('from') is a row of navy.json, where the navy's month looks for it; the others stand on the first day.
 // 'standing' is the planner's note of a rule that comes with the hunt, and is left out.
@@ -236,6 +302,14 @@ for (const b of japanBuilding) need(fleetNames.has(`${b.nat}|${b.fleet}`), `buil
 // The Atlantic Fleet is world.json's own row: three battleships and a carrier cross to it in May 1941 and come back (ruling 189(1)).
 fleetNames.add('USA|Atlantic Fleet');
 for (const a of pacific.arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
+// The playtest's #50 (25 Nov): the words of America's rows as the news reads them. A carrier "named for the one lost at
+// Midway" names a battle this war may never have (sandbox law: nothing in the news is the record's unless it happened
+// here), so those four come plainly, by their class ("Another new Essex-class carrier joins the Pacific Fleet"). And a row's words are the subject of "join(s) <the fleet>": a
+// verb of their own reads twice. The planner's file is left as it is; these are laid over it here.
+const usWords = (w) => (/, named for the one lost\b/.test(w) ? 'another new Essex-class carrier'
+  : w === 'twenty-three submarines reach Manila' ? 'twenty-three submarines, come out to Manila,' : w);
+const usArrivals = pacific.arrivals.map((a) => [a[0], a[1], a[2], a[3], usWords(a[4]), ...a.slice(5)]);
+for (const a of usArrivals) need(!/named for the one lost|\b(reach|reaches)\b/.test(a[4]), `arrival "${a[4]}": words the news cannot read`);
 for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
 // Ruling 234(d): a move with 'sea' in place of a base is the record's month at sea in a month of peace (the Pacific
 // Fleet's carriers in December 1941, at the stops that keep the book). The script's own marks beside it: 'with', the
@@ -390,14 +464,16 @@ const out = {
     fleets: [...fleets, ...usFleets.filter((f) => f.from === undefined)],
   },
   navy: {
-    fleets: usFleets.filter((f) => f.from !== undefined),
-    arrivals: [...arrivals, ...pacific.arrivals].sort((a, b) => a[0] - b[0]),
+    fleets: [...usFleets.filter((f) => f.from !== undefined), ...britainEastFleets],
+    arrivals: [...arrivals, ...usArrivals, ...britainEast].sort((a, b) => a[0] - b[0]),
     building: [...pacific.building, ...japanBuilding],
-    moves: usMoves,
+    moves: [...usMoves, ...britainEastMoves],
     // The design director's B1 of 25 November 2026, 02:35Z (pacific-japan-1125.md): ship quality for the two Pacific
-    // navies, which had none and fought at navy.json's 0.7 default. USA 1.0 and JAP 1.1, laid as G and flagged until the
-    // historian's 1939 middles replace them; whole world only, so the old chart's wars do not move.
-    quality: { USA: 1, JAP: 1.1 },
+    // navies, which had none and fought at navy.json's 0.7 default, seeded from the 1939 record at the historian's range
+    // middles (historian/japan-seed-checks-1125.md, section 2): Japan 1.15 (1.1 to 1.2: crews, night fighting and the
+    // torpedo; weakest at damage control), America 0.95 (0.9 to 1.0: damage control; weakest at night and with the
+    // torpedo). Radar is the tree's, not counted here. Whole world only, so the old chart's wars do not move.
+    quality: { USA: 0.95, JAP: 1.15 },
   },
   // Japan's character as a staff (paper 14, section 8, item 13; ruled with 181 to 202): where its budget leans. Its temper
   // (ruling 202(l)) is laid by china-line.json already; the two files must say the same thing.

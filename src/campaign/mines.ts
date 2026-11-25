@@ -17,7 +17,7 @@
 import data from '../../data/campaign/mines.json';
 import { Rng, hashString } from '../core/rng';
 import { allied, atWar, headline } from './game';
-import { NAVY, atSea, fleetName, fleetPower, fleetReach, sail, shipCount } from './navy';
+import { NAVY, atSea, fleetName, fleetPower, fleetReach, passageWhy, sail, shipCount } from './navy';
 import { seaWhere } from './sea-words';
 import { loseStars, mendStars } from './stars';
 import type { Fleet, Game, ShipClass } from './types';
@@ -62,6 +62,8 @@ const mineable = (g: Game, nat: string, z: number): boolean => !!g.seas[z]?.narr
 /** The order's own rule, the same for the player and the computer's admirals: why `f` cannot lay a field in `z`, or null. */
 function ruleOut(g: Game, f: Fleet, z: number): string | null {
   if (!shipCount(f.ships)) return 'There is no such fleet.';
+  // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
+  if (f.stance === 'passage') return passageWhy(g, f);
   if (!minelayer(f)) return 'Mines are laid by destroyers, cruisers or submarines: a fleet of battleships and carriers alone carries none.';
   if (!g.nations[f.nat]?.atWar.length) return 'Mines are laid only in a war.';
   if (f.mined === g.turn) return 'It has laid its mines this month already.';
