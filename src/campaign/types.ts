@@ -1379,6 +1379,12 @@ export interface AirFleet extends Storied {
   hours?: number;
   /** Its one experience counter, 0 to 1, written only under that switch. */
   fxp?: number;
+  /**
+   * On its way to another airfield by stages (release 2, the switch 'ferry'; ferry.ts), written only under that switch:
+   * where it is going, the fields still to land at in order (the last is `to`), or `sea` when it goes crated by sea, and
+   * the month and the hops it has flown in it. Out of the fight while it is set. `base` is the field it has reached.
+   */
+  way?: { to: number; stops: number[]; sea?: boolean; at?: [number, number] };
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1431,6 +1437,8 @@ export interface AirReport {
   result: string;
   /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
   dropped?: number;
+  /** A group caught by enemy fighters on its way to another airfield (ferry.ts): the field it was flying to. Never set with that switch off. */
+  ferry?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
