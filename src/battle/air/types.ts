@@ -12,6 +12,7 @@ import type { AirGround } from './ground';
 import type { Form, Pass, Role, Style, When } from './doctrine';
 import type { Loadout } from './guns';
 import type { ShipPlace, Strike } from './ships';
+import type { MarkPlace } from './troops';
 import type { AirCloud } from './sky';
 import type { Defence, DefRole } from './styles';
 
@@ -33,6 +34,11 @@ export type AirJob =
   | { do: 'hunt' }
   /** Fighters: hold the sky over a point, taking on anything that comes near. */
   | { do: 'patrol'; x: number; y: number }
+  /**
+   * Fighters, in a raid on troops (release 2): down to the low band over the target, passes on the troops, then home.
+   * Each pass a group completes counts its part of the group on target, and pays its part of the ground fire (troops.ts).
+   */
+  | { do: 'strafe' }
   /** On the ground, waiting to be scrambled (a defender with no radar warning). */
   | { do: 'wait' }
   /** Back to its own edge or airfield, and off the board. */
@@ -180,9 +186,11 @@ export interface AirPlace {
   /**
    * What the raid card forecast: aircraft each side should lose, and bombers that should get through. foeGuns: of the
    * defenders' losses ('foe'), those the bombers' own gunners bring down (ruling 227, forecastAir's foeGuns); the rest
-   * fall to the escort. Absent on a ticket made before ruling 227 reached the battle: none.
+   * fall to the escort. Absent on a ticket made before ruling 227 reached the battle: none. fire: in a raid on troops,
+   * of the raid's own fighters lost ('ftr'), those the card expects the ground fire to bring down as they strafe; the
+   * rest fall to the defending fighters. Absent for any other raid: none.
    */
-  forecast: { foe: number; foeGuns?: number; ftr: number; bmr: number; through: number; bomberLoss: number };
+  forecast: { foe: number; foeGuns?: number; ftr: number; bmr: number; through: number; bomberLoss: number; fire?: number };
   /** The raid card's chance of success (forecastAir's 'success'), for the after card's reckoning line. */
   chance: number;
   /**
@@ -217,6 +225,8 @@ export interface AirPlace {
   saved: Record<Side, number>;
   /** A raid on a harbour or a strike on a fleet: the campaign's law for ships, the ships as pieces, the stage, the carrier groups by kind (ships.ts). */
   ships?: ShipPlace | null;
+  /** A raid on troops (release 2): the army under the raid as pieces on the board, and the campaign's law for it (troops.ts). */
+  marks?: MarkPlace | null;
   /**
    * How the computer flies the defence (styles.ts; the tactics panel's item 5, ruling 239): the share of its weight
    * sent at the escort, and how far its staff climbs above a raid radar warned it of. Absent for a human defender,
@@ -276,6 +286,12 @@ export interface AirOutcome {
   sunk?: Record<number, Partial<Record<ShipClass, number>>>;
   /** And, where damage control is in play (ruling 240), those its repair parties kept afloat (ShipBook.kept). */
   kept?: Record<number, Partial<Record<ShipClass, number>>>;
+  /**
+   * A raid on troops (release 2): the fighters that strafed, each completed pass counting its part of its group, and
+   * the organisation cut the field earned by the campaign's own law (the campaign books it from 'dropped' and 'strafed').
+   */
+  strafed?: number;
+  troops?: { cut: number };
 }
 
 /**

@@ -41,7 +41,7 @@ import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
-import { settleFought, type BombLaw, type FoughtAir } from './airfought';
+import { settleFought, type BombLaw, type FoughtAir, type TroopLaw } from './airfought';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
@@ -2393,9 +2393,20 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const G = AIRWAR.ground;
     const r = g.regions[target];
     const foes = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
-    // Ground fire takes its share of the fighters that come down low.
-    a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
-    const low = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+    // Ground fire takes its share of the fighters that come down low. Fought out (release 2), the fighters it brought
+    // down are among the field's own losses, booked above; handed to the staff partway, what the field had cost stands
+    // (booked above too) and the dice roll only the rest's share of the ground fire.
+    if (!battle) a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
+    else if (staff) a.att.forEach((x, i) => {
+      const k = Math.min(x.f.ftr, rng.roll(Math.max(0, x.ftr * G.fire * luck() * staff.rest.ftr)));
+      if (!k) return;
+      // (As down() books a loss, its pilots back through the pool's own door; down() itself would add the field's losses again.)
+      const p = airPool(g, x.f.nat), back = rng.roll(k * saved(false));
+      x.f.ftr -= k; x.f.lost.ftr += k; att[i].lostFtr += k;
+      p.lostFtr += k; poolIn(g, x.f.nat, back, x.f); p.lostPilots += k - back;
+    });
+    // The fighters that count on the troops: every one that came through; fought out, those that strafed on the field.
+    const low = fix?.strafed() ?? a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
     const cut = troopCut(r, foes, (through + low * G.fighters) * troopWeight(g, nat));
     let divs = 0;
     for (const c of foes) {
@@ -3288,6 +3299,25 @@ export interface AirForecast {
 export function foundShare(g: Game, a: AirAssess, nat: string): number {
   // A harbour does not move: only ships at sea have to be found.
   return a.ships.some((x) => atSea(x) && fleetKnown(g, x, nat) !== 'exact') ? CARRIERS.strike.report : 1;
+}
+
+/**
+ * The law fly() weighs a raid on troops by (airfought.ts TroopLaw), from the bombers that drop and the fighters that
+ * strafe. Null for any other raid, or where no enemy stands there. An air battle carries it (release 2: a raid on troops
+ * fought out), so the field earns the very cut the campaign books.
+ */
+export function troopLaw(g: Game, a: AirAssess, m: AirMission, target: number): TroopLaw | null {
+  if (m !== 'ground') return null;
+  const G = AIRWAR.ground, r = g.regions[target], nat = a.att[0]?.f.nat ?? '';
+  const divs = r.units.reduce((s, c) => s + (!c.dead && atWar(g, nat, c.nat) ? c.divs : 0), 0);
+  if (divs <= 0) return null;
+  const w = troopWeight(g, nat);
+  return {
+    scale: G.scale, perDiv: G.perDiv, max: G.max, cover: G.cover[r.terrain] ?? 1, divs,
+    // As fly() aims the bombers: the day's accuracy, their research and the weather on the day; then the nation's weight row.
+    bomber: dayAim(g, nat, m) * techMul(g, nat, 'bombers') * a.aim * w, fighter: G.fighters * w,
+    fire: G.fire, dug: G.dug, str: G.str, value: G.value,
+  };
 }
 
 /**
