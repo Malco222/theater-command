@@ -10,7 +10,7 @@
 // A desk's month ends in one line of news, tagged with the desk so that an interface can offer to take it back.
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
-import { allied, atWar, bloc, headline } from './game';
+import { allied, atWar, bloc, headline, shoreRoom } from './game';
 import { turnToDate } from '../core/ticket';
 import { BUDGET, PRODUCTION, aiProduction, aiTeams, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
@@ -147,7 +147,8 @@ function shipping(g: Game, nat: string): void {
   if (!plan) return;
   const lift = liftView(g, nat);
   const force = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne).length;
-  const want = Math.min(STACK, Math.max(landingForce(), force));
+  // (An island of the Pacific takes its room and no more: no troopship is laid down for a corps that could not land. game.ts shoreRoom.)
+  const want = Math.min(STACK, shoreRoom(g, plan.to, nat), Math.max(landingForce(), force));
   if (lift.room <= 0 || lift.lift + lift.building.length >= want) return;
   const o = offers(g, nat).find((x) => x.key === 'ship:tp');
   if (o && o.why === null && o.at >= 0 && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, o.key, o.at);

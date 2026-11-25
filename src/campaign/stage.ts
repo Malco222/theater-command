@@ -202,3 +202,8 @@ export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');
 // TC_CITYDEFENCES.
 /** True where new grand campaigns open with searchlights, guns by night by what they see, and towns their garrisons fortify (stage.json 'cityDefences'). */
 export const CITYDEFENCES_STAGE: boolean = staged('TC_CITYDEFENCES', 'cityDefences');
+// Formations offered (release 2, Japan and the Pacific; the design director's ruling B8 of 25 November 2026): the grand
+// campaigns opened while this is true carry the flag 'offers' (game.ts offersOn). Read only on the whole world. Off
+// until its screen passes the Mac (his 13:39Z of that day). Forced by TC_OFFERS.
+/** True where new grand campaigns open with the player's dated rows as offers (stage.json 'offers'). */
+export const OFFERS_STAGE: boolean = staged('TC_OFFERS', 'offers');

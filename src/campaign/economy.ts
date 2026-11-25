@@ -9,7 +9,8 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
 import rivalsData from '../../data/campaign/rivals.json';
-import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
+import { roomAt } from './islands';
+import type { Build, Corps, Game, Kind, Region, ShipClass, Terrain } from './types';
 import { addCorps, allied, armySize, fights, headline, roomless } from './game';
 import { reformNames } from './drawn';
 import { DIPLOMACY, tradePartners } from './diplomacy';
@@ -687,7 +688,7 @@ export function deliver(g: Game, nat: string): void {
       if (nat === g.human) headline(g, 'info', `The new fortifications at ${r.name} are finished.`, nat, r.id);
       continue;
     }
-    const room = (x: Region): boolean => canRaise(g, nat, x) && x.units.filter((u) => allied(g, u.nat, nat) && !roomless(g, u)).length < STACK;
+    const room = (x: Region): boolean => canRaise(g, nat, x) && x.units.filter((u) => allied(g, u.nat, nat) && !roomless(g, u)).length < roomAt(g, x, nat);
     let at: Region | null = room(r) ? r : null;
     if (!at && n.capital >= 0 && room(g.regions[n.capital])) at = g.regions[n.capital];
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;

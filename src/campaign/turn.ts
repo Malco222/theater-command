@@ -21,6 +21,7 @@ import {
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type FieldBill, type GroundWorks, type ProbeReport,
   worksMonth,
+  declineOffer, rowOffers, takeOffer, type RowOffer,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { atItsPost } from './pacific';
@@ -977,6 +978,31 @@ export function whyNotSetAsideDirective(g: Game): string | null {
 /** The player tells the cabinet its directive will not be carried out: the trust is lost at once, and the next one is set sooner. */
 export function orderSetAside(g: Game): boolean {
   return g.human !== null && humanUp(g) && setAside(g, g.human);
+}
+
+// ---- Formations offered out of the player's own corps (ruling B8 of 25 November 2026; whole world only) -------------
+// A dated row that would take corps of his off the map is an offer, never a silent removal (game.ts `rowOffers`). The
+// month's offers are one list; he takes all, takes some, or declines, in his own month. None with the far side off.
+// The end of a loan is in the same list (an offer with `loan`): a lent regiment its division awaits goes home only if
+// he takes it.
+
+/** The player's open offers: what each would form and where, and which of his corps it would take. */
+export const formationOffers = (g: Game): RowOffer[] => rowOffers(g);
+export type { RowOffer };
+
+/** Why the player cannot answer an offer now, or null if he can. */
+export function whyNotAnswerOffers(g: Game): string | null {
+  return g.human === null || !humanUp(g) || onEve(g) ? 'It is not your month.' : null;
+}
+
+/** The player takes an offer: the formation is made as the record made it, out of the corps it names (a loan's end: the lent regiment is let go). Null where it was done, else the plain reason it was not; the offer then stands. */
+export function orderTakeFormation(g: Game, id: number): string | null {
+  return whyNotAnswerOffers(g) ?? takeOffer(g, id);
+}
+
+/** The player declines an offer: the formation never comes, and his corps stay as they are (a loan's end: the lent regiment stays his for good). */
+export function orderDeclineFormation(g: Game, id: number): boolean {
+  return whyNotAnswerOffers(g) === null && declineOffer(g, id);
 }
 
 /**

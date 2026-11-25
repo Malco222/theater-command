@@ -66,7 +66,7 @@ import { damageOf } from '../citydamage';
 import type { RepairView } from '../repairs';
 import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
-import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
+import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, laneNotCounted, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { PLANS, buildsOwn, planRules } from '../plans';
@@ -100,6 +100,7 @@ import {
   FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, ownBoatsReach, faultyRaiders, torpedoWords, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip, zoneOf,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
+import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME, shareWords } from '../domination';
@@ -117,7 +118,8 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoRoom, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { roomSays } from '../islands';
 import { setTeams, TEAMS_RELEASE } from '../teams';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
 import { tenthPct } from '../../core/math';
@@ -2889,6 +2891,11 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
     // A full province next door: one corps can still change places with a corps there, in one order.
     const one = picked.length === 1 ? picked[0] : null;
     if (one && g.regions[one.reg].nb.includes(id) && !hasRoom(g, r, one) && swapChoices(g, one, id).length) { openModal({ kind: 'swap', corps: one.id, target: id }); return true; }
+    // (Release 2, the Pacific's islands.) An island that has no room for one more corps says so in its own words to
+    // the corps next door that was refused, where nobody there can change places with it: "Singapore has room for
+    // 2 corps." (rulings 173(b) and 179(s); the 3D game's march says the same, campaign-bridge.ts).
+    const full = picked.filter((c) => g.regions[c.reg].nb.includes(id)).map((c) => whyNoRoom(g, c, r)).find(Boolean);
+    if (full) { ui.msg = full; refresh(); return true; }
     return false;
   }
   if (gateGone(leftGate)) ui.msg = gateGone(leftGate);
@@ -3751,11 +3758,13 @@ function swapCard(corpsId: number, target: number): string {
   const c = g.corps.find((x) => x.id === corpsId);
   const r = g.regions[target];
   const vs = c ? swapChoices(g, c, target) : [];
+  // (An island of the Pacific is full at its own room, and the card says that: "Singapore has room for 2 corps.")
+  const full = roomSays(g, r);
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
   const state = (x: Corps): string => `${num(men(x))} men at ${pct(x.str)} of its strength, ${x.dug ? `dug in, ${worksTag(x)}` : 'not dug in'}`;
   const rows = c ? vs.map((b) => `<div class="foldopt"><span class="grow"><b class="foldkeep">${esc(b.name)}</b><small>${esc(state(b))}. It marches to ${esc(g.regions[c.reg].name)}${c.dug ? ` and takes over the fieldworks ${esc(c.name)} stands in` : ''}${b.dug ? `; ${esc(c.name)} takes over its fieldworks` : ''}.</small></span><button class="btn small go" data-act="swap" data-a="${c.id}" data-b="${b.id}" title="${esc(c.name)} and ${esc(b.name)} change places.">Change places</button></div>`).join('') : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${c ? `${esc(g.regions[c.reg].name)} and ${esc(r.name)}` : esc(r.name)} · ${date(g.turn)}</div><h2>Change places</h2></header>
-    <div class="body"><p class="sub" style="margin:0 0 10px">${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them. It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || '<div class="empty">No corps there has the moves left to change places this month.</div>'}</div>
+    <div class="body"><p class="sub" style="margin:0 0 10px">${full ? `${esc(full)} ${c ? esc(c.name) : 'The corps'} cannot march in beside them.` : `${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them.`} It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || '<div class="empty">No corps there has the moves left to change places this month.</div>'}</div>
     <footer><button class="btn" data-act="close">Leave them where they are</button></footer>`;
 }
 
@@ -5822,7 +5831,10 @@ function fleetOrders(f: Fleet): string {
     out += `<h3>Its aircraft</h3><p class="sub" style="margin:0 0 6px">A carrier is a floating airfield. At sea its aircraft reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. Fighters keep enemy bombers off the fleet; strike aircraft go for ships, harbours and targets ashore. They are made up to strength only in harbour.</p>${wings.map((w) => `<button class="pickrow" data-act="wing" data-id="${w.id}">${groupIcon(w.kind, f.nat)}<span class="grow"><b>${esc(w.label)}</b> · ${num(w.aircraft)} of ${num(w.est)}<br>${small(esc(`${w.doing}. Reach ${num(w.range)} km.${w.aircraft < w.est ? ` ${w.note}` : ''}`))}</span><span class="tag${w.flew ? '' : ' good'}">${w.flew ? 'Flew' : w.kind === 'bmr' ? 'Plan a strike' : 'Orders'}</span></button>`).join('')}`;
   }
   if (pieces && o.lanes.length) {
-    out += `<h3 id="flanes">Escort a shipping lane</h3><p class="sub" style="margin:0 0 6px">An escort sails with the convoys the whole length of the lane. Destroyers count most, carriers and cruisers help, and battleships guard nothing.</p>${o.lanes.map((p) => `<div class="pickrow${p.bound ? ' pick' : ''}">${flagIcon(p.to, g.nations[p.to].color, 18, 'inh')}<span class="grow"><b>${esc(upFirst(p.name))}</b><br>${small(p.bound ? `This fleet is its escort. ${pc100(p.now)} of the cargoes are being sunk.` : p.why ? esc(p.why) : p.raid <= 0 ? 'No raiders are on it now.' : `Cargoes sunk: ${pc100(p.now)} now, ${pc100(p.then)} with this fleet as its escort.`)}</span>${p.bound ? '<span class="tag good">Escorting</span>' : `<button class="btn small go" data-act="escort" data-lane="${p.lane}" ${p.why ? `disabled title="${esc(p.why)}"` : ''}>Escort</button>`}</div>`).join('')}`;
+    // (Release 2: a lane whose shipping is not counted in the game says so in place of its losses, and that no staff
+    // guards or raids it: the design director's 12:39Z, Pacific batch 3, A(2); the UI director's words.)
+    const uncounted = (p: { lane: string; bound: boolean; why: string | null }): string => [p.bound ? 'This fleet is its escort.' : '', p.why ?? '', LANE_UNCOUNTED, LANE_NO_STAFF].filter(Boolean).map(esc).join(' ');
+    out += `<h3 id="flanes">Escort a shipping lane</h3><p class="sub" style="margin:0 0 6px">An escort sails with the convoys the whole length of the lane. Destroyers count most, carriers and cruisers help, and battleships guard nothing.</p>${o.lanes.map((p) => `<div class="pickrow${p.bound ? ' pick' : ''}">${flagIcon(p.to, g.nations[p.to].color, 18, 'inh')}<span class="grow"><b>${esc(upFirst(p.name))}</b><br>${small(!laneCarries(g, p.lane) ? uncounted(p) : p.bound ? `This fleet is its escort. ${pc100(p.now)} of the cargoes are being sunk.` : p.why ? esc(p.why) : p.raid <= 0 ? 'No raiders are on it now.' : `Cargoes sunk: ${pc100(p.now)} now, ${pc100(p.then)} with this fleet as its escort.`)}</span>${p.bound ? '<span class="tag good">Escorting</span>' : `<button class="btn small go" data-act="escort" data-lane="${p.lane}" ${p.why ? `disabled title="${esc(p.why)}"` : ''}>Escort</button>`}</div>`).join('')}`;
   }
   if (pieces) {
     const card = fleetView(g, f.id)!;
@@ -8213,10 +8225,18 @@ function bookBlock(b: Book): string {
 
 const seaNames = (zones: number[]): string => seaWhereList(zones.map((z) => g.seas[z].name));
 
+/** The fleets escorting a lane, as " Escorted by the X." ('' when none is). */
+function laneEscorts(id: string): string {
+  const fs = g.fleets.filter((f) => f.stance === 'escort' && f.lane === id && atSea(f) && shipCount(f.ships) > 0);
+  if (!fs.length) return '';
+  const names = fs.map((f) => `the ${esc(f.name)}`);
+  return ` Escorted by ${names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}.`;
+}
+
 /** Who is escorting a lane, in a sentence for its row. */
 function laneGuards(id: string, own: boolean): string {
-  const fs = g.fleets.filter((f) => f.stance === 'escort' && f.lane === id && atSea(f) && shipCount(f.ships) > 0);
-  if (fs.length) { const names = fs.map((f) => `the ${esc(f.name)}`); return ` Escorted by ${names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}.`; }
+  const escorted = laneEscorts(id);
+  if (escorted) return escorted;
   return own ? ' <b>No fleet is escorting it.</b> Pick up a fleet with destroyers and order it to escort this lane; a fleet that only patrols these seas gives a quarter of the cover.' : ' No fleet is escorting it.';
 }
 
@@ -8225,6 +8245,10 @@ function laneRow(l: Lane, me: string | null): string {
   const pct = Math.round(l.flow * 100);
   const mine = !!me && (l.to === me || allied(g, l.to, me)), foe = !!me && atWar(g, me, l.to);
   const carries = [l.full.oil > 0.05 ? `oil ${amt(l.oil)} of ${amt(l.full.oil)}` : '', l.full.sup > 0.05 ? `supplies ${amt(l.sup)} of ${amt(l.full.sup)}` : ''].filter(Boolean).join(' · ');
+  // A lane whose shipping the game does not count (the UI director's words, 12:57Z of 25 November 2026, 2(b)): "Not
+  // counted" in place of the share, its line in place of what is sunk, no bar and no colour of its own. A cut or idle
+  // one keeps the reason it stopped, which is no share of a cargo.
+  const uncounted = laneNotCounted(g, l);
   const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
   // What the lane runs on, the last sentence of its row; for a stopped lane, what stopped it and what would start it again (the Pacific's lanes alone: ruling 195(c), sheet 25 box 1).
   const key = laneKey(g, l.id, me), halted = l.state === 'cut' || l.state === 'idle';
@@ -8235,6 +8259,20 @@ function laneRow(l: Lane, me: string | null): string {
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
     : mine && l.state !== 'cut' ? (seaWar(g) ? laneGuards(l.id, l.to === me) : ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`)
     : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
+  if (uncounted) {
+    // No urging here: the line above says its loss takes nothing from the stores, so telling the player to escort it or
+    // to send raiders into it would ask for work the game says is worth nothing (the review of 25 November 2026). Only
+    // the fact of who is escorting it, if anyone is, stays. Stopped or running, it wears no colour and no bar (the UI
+    // director's 2(b): "None of these wears a colour"; an empty bar would read as a read zero): a lane that is cut or
+    // not running says why in its own sentence, as every stopped lane does.
+    const escorted = !halted && l.zones.length && seaWar(g) && mine ? laneEscorts(l.id) : '';
+    const stopped = !halted ? '' : key ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : '';
+    return `<div class="lane">
+    <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">By sea</span><span class="lflow">${esc(uncounted.value)}</span></div>
+    <small>${esc(l.text)} ${esc(uncounted.line)}${stopped}${esc(fight)}${escorted}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
+    ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
+  </div>`;
+  }
   return `<div class="lane ${l.state}">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
     <div class="oddsbar" title="${status}"><i style="width:${pct}%"></i></div>

@@ -46,6 +46,7 @@ import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strength
 import { armyOf } from './joint';
 import { townName } from './towns';
 import { corpsMood, forceMorale, moraleWord, restWord, type Mood } from './morale';
+import { withered } from './wither';
 
 export const DIVISIONS = data as unknown as {
   kinds: Record<Kind, { word: string; name: string; short: string }>;
@@ -495,6 +496,8 @@ export function whyNotOrder(g: Game, c: Corps): string | null {
   if (c.kind === 'fort') return FORT_NO_ORDERS;
   if (c.leave !== undefined) return `It is at home, out of the line, and takes no orders until ${turnToDate(c.leave).label}.`;
   if (c.school) return 'It is at the battle schools this month, and takes no orders until it is back. Call it back to march or fight now; it will have had no term.';
+  // (Ruling 173(e), the whole-world chart: a withered island garrison only defends.)
+  if (withered(g, c)) return 'Cut off and out of stores, it holds where it stands. It cannot attack, march or sail until stores reach it by sea.';
   if (c.town !== undefined) return garrisonLine(g, [c]);
   return null;
 }

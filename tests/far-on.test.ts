@@ -23,7 +23,7 @@ import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, far
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
-import { allied, armySize, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
+import { allied, armySize, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, rowOffers, sameSide, setWar, startPhase, takeOffer } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small, threatened } from '../src/campaign/league';
 import { MANPOWER, classNow, homeShare } from '../src/campaign/manpower';
@@ -141,9 +141,22 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     // The 5th Division is brought to Formosa in month 2 for the landing at Pakhoi, an operation of the book alone.
     const raise = (stop: number, human: string | null) => {
       const g = grand(human);
+      // (His rows are offers only where the switch 'offers' is on: stage.json, off until its screen passes, the design
+      // director's 13:39Z of 25 November 2026. A campaign opened with it on carries the flag; the test sets it by hand.)
+      if (human) g.flags.offers = 1;
       setStop(g, stop, true);
       g.turn = 2;
       startPhase(g, 'JAP');
+      // (Ruling B8 of 25 November 2026: the row takes a corps off the board, so a player's Japan is offered it, and
+      // nothing of his is taken until he says yes. Taken, it forms as the rule always formed it. This test pinned
+      // the row forming of itself for the player as for the computer.)
+      if (human === 'JAP') {
+        expect(g.corps.some((x) => x.nat === 'JAP' && x.name === '21st Army (5th Division)')).toBe(false);
+        expect(g.corps.some((x) => x.nat === 'JAP' && x.name === '12th Army (5th Division)')).toBe(true);
+        const offered = rowOffers(g).map((o) => [o.id, o.name]);
+        expect(offered).toEqual([[dated.findIndex((r) => r[1] === 'JAP' && r[2] === '21st Army (5th Division)'), '21st Army (5th Division)']]);
+        expect(takeOffer(g, offered[0][0] as number)).toBeNull();
+      }
       const c = g.corps.find((x) => x.nat === 'JAP' && x.name === '21st Army (5th Division)');
       expect(c, `stop ${stop}`).toBeDefined();
       expect(g.regions[c!.reg].name).toBe('Taihoku');

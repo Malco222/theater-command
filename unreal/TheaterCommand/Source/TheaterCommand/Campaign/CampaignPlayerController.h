@@ -1918,6 +1918,10 @@ private:
 	double DoorSince = 0.0; // when the door last came up: it takes no Enter in its first half second
 	bool bEnterByKey = false; // (EndMonth was called by the Enter key: on the question before the month's end it is SHOW ME)
 	double AtomBackAt = -1000.0; // (release 2, atom.ts) BACK given by Enter or Esc on a bomb raid's card: a doubled Enter ends no month
+	/** (Release 2, formations offered; ruling 134(f).) The act of the safe answer to a question asked in place on the open
+	 * page's head (GO BACK), or empty where the page asks nothing: Enter and Esc press it, and the other answer takes a click. */
+	FString SafeAnswerOnPage() const;
+	double SafeBackAt = -1000.0; // (as AtomBackAt) GO BACK given by Enter or Esc: a doubled Enter ends no month
 	bool bAlwaysWatch = false;
 	/** (Release 2, tc.Speed.MonthAside) The others' months are being played on the rules' thread: END THE MONTH waits for them. */
 	bool bMonthTurning = false;

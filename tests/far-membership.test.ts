@@ -44,6 +44,10 @@ const india = (): Game => {
 /** Month 30, Japan at war with America, Britain and the Netherlands, ashore in northern Malaya, the 5th Division at Ipoh. */
 const south = (): Game => {
   const g = startOpen(createGame(3, null));
+  // (Month 2 is read in its month: the 21st Army takes the 5th Division from the 12th Army, and the 25th Army's row of
+  // month 27 takes it from the 21st, as the record has it. Read first in month 27, after the 25th Army's, the month-2
+  // row would draw the one 5th Division a second time: a division is laid once, drawn.ts.)
+  g.turn = 2; startPhase(g, 'JAP');
   g.turn = 27; startPhase(g, 'JAP');
   g.turn = 28;
   for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);

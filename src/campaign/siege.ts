@@ -34,10 +34,12 @@ import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss, willBurn } from './prizes';
 import { cityHit } from './repairs';
-import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
+import { islandOf, roomAt } from './islands';
+import { KIND, MEN_PER_DIV, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
 import { flagName } from './flagnames';
 import { markStormed, townWorksWords, townWorksWorth } from './citydefences';
+import { withered } from './wither';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -675,7 +677,7 @@ export function musterNear(g: Game, nat: string, r: Region): Region | null {
   for (let i = 0; i < q.length; i++) {
     const x = g.regions[q[i]];
     if (x !== r && allied(g, nat, x.ctrl) && allied(g, nat, fieldCtrl(g, x))) {
-      if (x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length < STACK) return x;
+      if (x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length < roomAt(g, x, nat)) return x;
       crowded ??= x;
     }
     for (const j of x.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }
@@ -723,7 +725,9 @@ export function whyNotTakeField(g: Game, c: Corps): string | null {
   const r = g.regions[c.reg];
   if (besieged(g, r)) return `The enemy holds the country round ${townName(r)}: the garrison can come out only if the siege is raised.`;
   const here = r.units.filter((u) => allied(g, u.nat, c.nat) && u.kind !== 'eng' && !roomless(g, u)).length;
-  if (here >= STACK) return `There is no room in the field at ${r.name} for another corps.`;
+  // (On an island of the Pacific the corps inside the town are counted in the island's room already, this one among
+  // them, so its coming out asks no new place: islands.ts.)
+  if (here >= roomAt(g, r, c.nat) + (islandOf(g, r) && !roomless(g, c) ? 1 : 0)) return `There is no room in the field at ${r.name} for another corps.`;
   return null;
 }
 
@@ -974,7 +978,8 @@ export function storm(g: Game, corps: Corps[], r: Region): BattleReport | null {
 /** The corps of a garrison fit to come out against the army round the town. */
 export function salliers(g: Game, r: Region, nat: string): Corps[] {
   if (!besieged(g, r)) return NONE;
-  return garrisonOf(r).filter((c) => !c.dead && armyOf(c) === nat && c.kind !== 'fort' && c.org >= 0.25);
+  // (Ruling 173(e), the whole-world chart: a withered island garrison only defends. It makes no sortie.)
+  return garrisonOf(r).filter((c) => !c.dead && armyOf(c) === nat && c.kind !== 'fort' && c.org >= 0.25 && !withered(g, c));
 }
 
 /** Why a garrison cannot sally out, or null if it can. One sortie a month from each town. */
@@ -984,7 +989,7 @@ export function whyNotSally(g: Game, r: Region, nat: string): string | null {
   if (!garrisonOf(r).some((c) => armyOf(c) === nat)) return `You have no garrison in ${townName(r)}.`;
   if (g.flags[`sally:${r.id}`] === g.turn) return `The garrison of ${townName(r)} has made its sortie this month.`;
   const out = salliers(g, r, nat);
-  if (!out.length) return 'The garrison is too shaken to come out.';
+  if (!out.length) return garrisonOf(r).some((c) => !c.dead && armyOf(c) === nat && withered(g, c)) ? 'The garrison is cut off and out of stores. It holds the town and makes no sortie.' : 'The garrison is too shaken to come out.';
   // A garrison of guns alone makes no sortie (ruling 211(a)).
   if (!out.some(fights)) return aloneLine(out);
   return null;

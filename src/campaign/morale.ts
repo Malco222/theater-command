@@ -16,9 +16,10 @@
 import data from '../../data/campaign/morale.json';
 import { clamp } from '../core/math';
 import type { Corps, Game, Region } from './types';
-import { allied, atWar, fortRow, onPortStores } from './game';
+import { allied, atWar, enemyAshore, fortRow, monthsUnfed, onPortStores } from './game';
 import { crewStores, storesLeft } from './fortrows';
 import { cmdRally } from './commanders';
+import { floorWords, witherAt, witherStores, withered } from './wither';
 
 export const MORALE = data as unknown as {
   start: number;
@@ -203,13 +204,23 @@ export function corpsMood(g: Game, c: Corps): Mood {
   const quiet = resting(g, c);
   const left = fortRow(g, c) && (!c.supplied || onPortStores(g, c)) ? storesLeft(g, c) : null;
   const stores = left !== null ? { left, months: crewStores(c)! } : undefined;
-  const restLine = stores ? `${restWord(rest)}: living on its works' own stores, ${stores.left === 1 ? 'one month' : `${stores.left} months`} of them left. It holds its rest while they last, but gets no more; when they run out it is starved into surrender.`
+  // (Ruling 173(e), the whole-world chart: cut off on an island of the historian's table, a garrison withers to the
+  // island's floor and does not lay down its arms from hunger. Its card says where it stands. wither.ts. A withered
+  // garrison eating a besieged town's stores, or not yet reached by the ships now able to, is withered still.)
+  const isle = !c.supplied || stores || withered(g, c) ? witherAt(g, c, enemyAshore(g, c)) : null;
+  const kept = isle ? witherStores(g, c) : undefined;
+  const months = (n: number): string => (n === 1 ? 'one month' : `${n} months`);
+  // (The UI director's words, 14:00Z 25 November 2026: in the last month of its stores the line says so.)
+  const last = kept ?? monthsUnfed(c.org);
+  const restLine = isle && kept === 0 ? `Cut off and out of stores. It has withered to ${floorWords(isle)} of its strength and holds on there. It gets no rest and no drafts, and cannot attack, until stores reach it by sea.`
+    : stores ? `${restWord(rest)}: living on its works' own stores, ${stores.left === 1 ? 'one month' : `${stores.left} months`} of them left. It holds its rest while they last, but gets no more; when they run out it ${isle ? `withers to ${floorWords(isle)} of its strength and holds on` : 'is starved into surrender'}.`
+    : isle ? `Cut off from supply. It gets no rest, and its stores ${last === 1 ? 'run out this month. Then' : `last ${months(last)} more. After that`} it withers to ${floorWords(isle)} of its strength: it holds on but cannot attack.`
     : !c.supplied ? 'Cut off from supply: it gets no rest at all.'
     : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.`
     : quiet ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.`
     : `${restWord(rest)}: it has marched this month. A month where it neither marches nor fights would rest it properly.`;
   if (c.mor === undefined) {
-    return { morale: null, moraleWord: '', trend: 'steady', rest, restWord: restWord(rest), line: '', restLine: !c.supplied || stores ? restLine : `${restWord(rest)}.`, why: [], resting: false, ...(stores ? { stores } : {}) };
+    return { morale: null, moraleWord: '', trend: 'steady', rest, restWord: restWord(rest), line: '', restLine: !c.supplied || stores || isle ? restLine : `${restWord(rest)}.`, why: [], resting: false, ...(stores ? { stores } : {}) };
   }
   const why: MoodReason[] = (c.mw ?? [])
     .filter((e) => Math.abs(e[1]) >= 0.005)

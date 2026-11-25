@@ -12,13 +12,16 @@
 // on the outer islands), and in October 1941 the 25th made from the 298th and the division, the 24th from what is
 // left of the division. The draftees' growth of 1941 is the recorded gap; no dated cap or row stands in for it.
 import { vi } from 'vitest';
-vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+// (The offers rule has its own switch, off until its screen passes the Mac: stage.ts OFFERS_STAGE. On for this file.)
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, removeCorps, startPhase } from '../src/campaign/game';
+import { createGame, declineOffer, removeCorps, rowOffers, startPhase, takeOffer } from '../src/campaign/game';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import { shipsItsOwn } from '../src/campaign/world';
+import { askForm } from '../unreal/TheaterCommand/Rules/offers-look';
 import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import world from '../data/campaign/world.json';
@@ -110,13 +113,97 @@ describe('the islands by month, with no fighting', () => {
     });
   }
 
-  it("a player's America has the same rows and the same split", () => {
+  // (Moved by the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 3 of the dated
+  // rows: "Oahu's split: an offer too, yes. A reorganisation of the player's own forces is the player's choice." As
+  // first built a player's America had the split made in October 1941 without a word, as a computer's has.)
+  it("a player's America has the same rows, and the split is his to take or decline: offered in October 1941", () => {
     const g = startOpen(createGame(5, 'USA'));
-    months(g, 2, 28);
+    months(g, 2, 26);
+    // Nothing is made: the division and the 298th stand as they were, and the two rows are offered, each with the corps it takes.
+    expect(field(g, ISLAND).map((c) => c.name)).toEqual([HD, G298]);
+    const list = rowOffers(g);
+    expect(list.map((o) => [o.name, g.regions[o.region].name, o.since, o.last, o.takes.map((t) => t.name), o.why])).toEqual([
+      [D25, 'Honolulu', 26, 32, [G298, HD], null], [D24, 'Pearl Harbor', 26, 32, [HD], null]]);
+    expect(field(g, OUTER)).toHaveLength(3);
+    // Taken, in the order of the list, the split happens as the rule has it: the 25th takes its share first, the 24th what is left.
+    const was = sum(g, ISLAND);
+    for (const o of list) expect(takeOffer(g, o.id)).toBeNull();
     expect(field(g, ISLAND).map((c) => [c.name, c.full])).toEqual([[D25, 0.8], [D24, 0.65]]);
+    expect(named(g, HD)).toBeUndefined();
+    expect(sum(g, ISLAND)).toBeCloseTo(was, 6);
+    expect(rowOffers(g)).toEqual([]);
+    months(g, 27, 28);
     expect(sum(g, ISLAND)).toBeGreaterThan(0.95);
     expect(sum(g, ISLAND)).toBeLessThanOrEqual(1.45);
-    expect(field(g, OUTER)).toHaveLength(3);
+  });
+
+  it("declined, his Hawaiian Division stays whole and the two divisions never come out of it; a saved war keeps the offer", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const back = loadGame(saveGame(g))!;
+    expect(rowOffers(back)).toEqual(rowOffers(g));
+    const hd = named(g, HD)!;
+    for (const o of rowOffers(g)) expect(declineOffer(g, o.id)).toBe(true);
+    months(g, 27, 40);
+    expect([named(g, D25), named(g, D24), named(g, HD)]).toEqual([undefined, undefined, hd]);
+    expect(rowOffers(g)).toEqual([]);
+  });
+
+  // (The skeptic's review of 25 November 2026: taken in the other order, the 24th first, the offer of the 25th lapsed
+  // although the 298th still stood to form it, and the 24th's row said more men than the division held.)
+  it("taken the 24th first, with the division short: the 25th is still offered and forms from what is left, and each row says only the men it would get", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const hd = named(g, HD)!, g298 = named(g, G298)!;
+    hd.str = 0.6;
+    const was = sum(g, ISLAND);
+    const at = (nm: string) => rowOffers(g).find((o) => o.name === nm)!;
+    // The 24th asks 0.65 and the division holds 0.6: the row says the 0.6 it would get.
+    expect(at(D24).men).toBe(Math.round(0.6 * 15000));
+    expect(takeOffer(g, at(D24).id)).toBeNull();
+    expect(named(g, HD)).toBeUndefined();
+    // The 298th still stands: the offer of the 25th stands, with the one corps left, and forms from it.
+    expect(at(D25).why).toBeNull();
+    expect(at(D25).takes.map((t) => t.name)).toEqual([G298]);
+    expect(at(D25).men).toBe(Math.round(g298.divs * g298.str * 15000));
+    expect(takeOffer(g, at(D25).id)).toBeNull();
+    expect(field(g, ISLAND).map((c) => c.name).sort()).toEqual([D24, D25].sort());
+    expect(sum(g, ISLAND)).toBeCloseTo(was, 6);
+    expect(rowOffers(g)).toEqual([]);
+  });
+
+  // (The question counts the corps struck off whole, each once, with the men they hold when they go: the 25th takes
+  // the 298th whole and part of the division, and the 24th then empties what is left of it.)
+  it("ACCEPT ALL's question counts the corps the split empties, each once: the 298th and what the 25th leaves of the Hawaiian Division", () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const [d25] = rowOffers(g), g298 = d25.takes[0].men, hd = d25.takes[1].men;
+    const struck = g298 + (hd - (d25.men - g298));
+    expect(askForm(g, rowOffers(g))).toBe(`Form all 2? 2 of your corps leave the map, ${(Math.round(struck / 1000) * 1000).toLocaleString('en-US')} men, and 2 formations form. It cannot be undone.`);
+  });
+
+  it('an offer of the formations list lapses only when none of the corps it names is left', () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 26);
+    const news = g.headlines.length;
+    removeCorps(g, named(g, HD)!);
+    months(g, 27, 27);
+    // The 24th named the division alone: it lapses. The 25th still has the 298th: it stands.
+    expect(rowOffers(g).map((o) => o.name)).toEqual([D25]);
+    expect(g.headlines.slice(news).map((h) => h.text).filter((t) => /has lapsed/.test(t))).toEqual([
+      `The offer to form ${D24} has lapsed: the corps it was to be formed from is no longer on the map.`]);
+  });
+
+  it('left unanswered, the offers lapse after their half year, and he is told; his corps stay whole', () => {
+    const g = startOpen(createGame(5, 'USA'));
+    months(g, 2, 32);
+    expect(rowOffers(g).map((o) => o.name)).toEqual([D25, D24]);
+    const news = g.headlines.length;
+    months(g, 33, 33);
+    expect(rowOffers(g)).toEqual([]);
+    expect(g.headlines.slice(news).map((h) => h.text).filter((t) => /has lapsed/.test(t))).toEqual([
+      `The offer to form ${D25} has lapsed: its time has passed.`, `The offer to form ${D24} has lapsed: its time has passed.`]);
+    expect([named(g, D25), named(g, D24), named(g, HD) !== undefined]).toEqual([undefined, undefined, true]);
   });
 });
 

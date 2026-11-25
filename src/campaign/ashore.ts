@@ -22,7 +22,8 @@ import openData from '../../data/campaign/open.json';
 import { allied, atWar, corpsBase, roomless } from './game';
 import { corpsKnown, fogOn } from './intel';
 import { fieldCtrl } from './siege';
-import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type Region } from './types';
+import { roomAt } from './islands';
+import { KIND, TERRAIN_DEF, type Corps, type Game, type Region } from './types';
 
 /** The numbers of the reckoning (open.json, 'descent.strength'). */
 export interface StrengthRules {
@@ -172,7 +173,7 @@ export function followUp(g: Game, nat: string, quay: Region, wave: Corps[], at: 
   if (!S) return 0;
   const gone = new Set([...wave, ...counted].map((c) => c.id));
   const there = at.units.filter((u) => !u.dead && (u.nat === nat || allied(g, nat, u.nat)) && !roomless(g, u)).length;
-  const room = Math.max(0, Math.min((S.months - 1) * g.nations[nat].sealift, STACK - wave.length - there, most));
+  const room = Math.max(0, Math.min((S.months - 1) * g.nations[nat].sealift, roomAt(g, at, nat) - wave.length - there, most));
   if (room <= 0) return 0;
   const ours = (c: string): boolean => c === nat || allied(g, nat, c);
   const quiet = (r: Region): boolean => ours(r.ctrl) && !r.units.some((u) => !u.dead && atWar(g, nat, u.nat)) && !r.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));

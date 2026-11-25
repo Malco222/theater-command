@@ -35,7 +35,8 @@ import { FAR_FIRST, farOn } from './world';
 import { addCorps, armySize, atWar, bloc, capture, headline, relocate, removeCorps, sameSide, setWar, theName, roomless } from './game';
 import { signPeace } from './diplomacy';
 import { chartDist2 } from './wrap';
-import { STACK, type Corps, type Game, type Region } from './types';
+import { roomAt } from './islands';
+import type { Corps, Game, Region } from './types';
 
 interface ClientRow { patron: string; wars: string[] }
 
@@ -271,7 +272,7 @@ function parts(g: Game, client: string, patron: string): void {
     for (const c of g.corps.filter((x) => x.nat === client && x.reg === from.id && !x.dead)) {
       let best: Region | null = null, bd = Infinity;
       for (const r of g.regions) {
-        if (r === from || r.ctrl !== client || r.units.filter((u) => !roomless(g, u)).length >= STACK || r.units.some((u) => u.nat !== client)) continue;
+        if (r === from || r.ctrl !== client || r.units.filter((u) => !roomless(g, u)).length >= roomAt(g, r, client) || r.units.some((u) => u.nat !== client)) continue;
         const d = chartDist2(g, r, from);
         if (d < bd) { bd = d; best = r; }
       }
@@ -297,6 +298,13 @@ function parts(g: Game, client: string, patron: string): void {
 }
 
 // ---- The first day ------------------------------------------------------------------------------------
+
+/**
+ * Who held a province on the first day: the country the far side's first day gives it to where that was not its
+ * owner (`farGround`: Japan's ground in China), and otherwise its owner of that day. Read from the chart and the
+ * setup, never from the war: it says the same in every month and after every load.
+ */
+export const heldFirst = (r: Region): string => FAR_SETUP.held[r.name] ?? r.first ?? r.owner;
 
 /**
  * The far side's ground as it stood on 1 September 1939, set as the chart is attached and before its countries are
