@@ -39,7 +39,7 @@ import { openGovernment } from './government';
 import { openFooting } from './footing';
 import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
-import { openCityDefences } from './citydefences';
+import { cityStartLay } from './citydefences';
 import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
@@ -216,8 +216,8 @@ export function startOpen(g: Game, wide = true): Game {
   openFooting(g);
   openWeather(g);
   openAirVersion(g, majorsOf(g));
-  // (City defences: the searchlights the historian reads at this date, beside the start guns. Off, nothing.)
-  openCityDefences(g);
+  // (City defences: the searchlights and the guns the record reads at this date, over the start guns. Off, nothing.)
+  cityStartLay(g);
   openSecretWar(g);
   openManpower(g);
   numberDivisions(g);

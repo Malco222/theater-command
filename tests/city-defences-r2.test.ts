@@ -11,14 +11,14 @@ import { raidTargets } from '../src/campaign/airwar';
 import { cityNight, cityNightShare, flakCut, flakCutMost, flakLostWithTown, townFlak, townFlakCut, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
 import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
 import { townSize } from '../src/campaign/towns';
-import { beginHuman, humanUp, orderMove, orderStorm, stepAI, stormOutlook } from '../src/campaign/turn';
+import { beginHuman, humanUp, orderMove, orderStorm, runTurnAI, stepAI, stormOutlook } from '../src/campaign/turn';
 import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
 import stage from '../data/campaign/stage.json';
 import { ARSENAL, aiArsenal, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { CITYDEF, LIGHTS_TOP, WORKS_TOP, cityDefences, cityDefencesOn, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
+import { CITYDEF, LIGHTS_TOP, START_LAID, WORKS_TOP, cityDefences, cityDefencesOn, layStartGunsFromRecord, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
 import { assess, capture, createGame, endPhase, relocate } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
@@ -27,7 +27,12 @@ import { startOpen } from '../src/campaign/staff';
 import { arsenalOffers, orderArsenal } from '../src/campaign/turn';
 import type { AirFleet, Build, Corps, Game, Region } from '../src/campaign/types';
 
-const grand = (on: boolean): Game => { const g = startOpen(createGame(3, 'GER')); setCityDefences(g, on); g.nations.GER.pp = 500; return g; };
+/**
+ * The switch turned on (or off) in a campaign under way on the bare ground of release 1: its record's start is marked as
+ * laid first, so the lights and guns of the history start (slice 6) do not stand where these tests build their own.
+ */
+const switchBare = (g: Game, on: boolean): void => { if (on) g.flags[START_LAID] = 1; setCityDefences(g, on); };
+const grand = (on: boolean): Game => { const g = startOpen(createGame(3, 'GER')); switchBare(g, on); g.nations.GER.pp = 500; return g; };
 const offer = (g: Game, key: string, sel: number): Offer | undefined => offers(g, 'GER', sel).find((o) => o.key === key);
 /** Lets a month go by for the order book and hands over what is due. */
 const nextMonth = (g: Game): void => { g.turn += 1; deliver(g, 'GER'); };
@@ -244,7 +249,7 @@ function ruhrByNight(o: Night = {}): { g: Game; t: number; f: AirFleet; a: () =>
     setWeather(g, true);
   }
   g.turn = o.turn ?? 12;
-  setCityDefences(g, o.on ?? true);
+  switchBare(g, o.on ?? true);
   if (o.ac) g.flags.ac = 1;
   const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr > 0 && x.ship === undefined)!;
   f.bmr = o.bombers ?? 300;
@@ -797,8 +802,8 @@ describe('city defences off: the town\'s guns do not fight tanks (slice 4)', () 
 /** A September 1939 grand campaign with the switch on, its start laid as startOpen lays it under the switch. */
 function opened(on: boolean, from?: number): Game {
   const g = startOpen(createGame(3, null));
-  setCityDefences(g, on);
   if (from !== undefined) g.flags.openFrom = from;
+  setCityDefences(g, on);
   openCityDefences(g);
   return g;
 }
@@ -871,7 +876,7 @@ describe('city defences: the history start\'s rows (slice 5)', () => {
 /** Germany's staff with money in hand, its fighters kept or not, Fighter control or not, and Berlin and the Ruhr's guns set. */
 function staffOf(on: boolean, o: { fighters?: boolean; radar?: boolean; night?: string[]; raided?: boolean } = {}): Game {
   const g = startOpen(createGame(3, null));
-  setCityDefences(g, on);
+  switchBare(g, on);
   g.nations.GER.pp = 500;
   g.flags[`wk:aa:${g.byName.Berlin.id}`] = 2;
   g.flags[`wk:aa:${g.byName.Ruhr.id}`] = 1;
@@ -1029,5 +1034,141 @@ describe('city defences in the bridge (slice 5)', () => {
       expect(first.lit as number).toBeGreaterThan(0);
       expect('light' in first).toBe(false);
     }
+  });
+});
+
+// ---- Slice 6: start guns from the record, and the start lay wherever the switch comes on --------------------------
+// (City defences, the design director's ruling of 25 Nov 2026 04:10Z, "Start guns from the record"; the historian's
+// rows, historian/start-guns-1125.md, in citydefences.json startGuns.)
+
+/** History played by the computer up to a month, kept as saved text so that it is played once (the bridge's historyTo). */
+const histories = new Map<number, string>();
+function historyAt(from: number): Game {
+  let text = histories.get(from);
+  if (!text) {
+    const h = createGame(3, null);
+    while (h.turn < from) runTurnAI(h);
+    text = saveGame(h);
+    histories.set(from, text);
+  }
+  return loadGame(text)!;
+}
+/** A grand campaign begun at a start month, as the bench runners begin it: the switch set as it opens (stage.json's path), or not. */
+function begun(from: number, on: boolean): Game {
+  const g = from <= 1 ? createGame(3, null) : historyAt(from);
+  if (on) g.flags.cityDefences = 1;
+  return startOpen(g);
+}
+const gunsIn = (g: Game, name: string): number => g.flags[`wk:aa:${g.byName[name].id}`] ?? 0;
+const levels = (g: Game, prefix: string): Record<string, number> =>
+  Object.fromEntries(Object.keys(g.flags).filter((k) => k.startsWith(prefix)).sort().map((k) => [g.regions[+k.slice(prefix.length)].name, g.flags[k]]));
+/** The places of ruling 124 that the record does not read: they keep 124's level under the switch. */
+const STAND_INS = ['Paris', 'Lille', 'Lyon', 'Gorky', 'Kharkov'];
+
+describe('city defences: start guns from the record (slice 6)', () => {
+  it('keeps a row for every place read, none included, and a stand-in row not laid for each place of 124 not read', () => {
+    expect(typeof (cd as Record<string, unknown>)._startGuns).toBe('string');
+    for (const row of CITYDEF.startGuns) {
+      expect(row.why.length, row.region).toBeGreaterThan(10);
+      if (row.lay) expect(row.level! >= 0 && row.level! <= WORKS_TOP, row.region).toBe(true);
+      else { expect(row.mark).toBe('G'); expect(row.level).toBeUndefined(); }
+    }
+    const g = startOpen(createGame(3, null));
+    // Every name is the map's own, but Tokyo, which stands on the wider world beyond this one.
+    const missing = [...new Set(CITYDEF.startGuns.map((r) => r.region))].filter((n) => !g.byName[n]);
+    expect(missing).toEqual(['Tokyo']);
+    for (const n of ['Saxony', 'Frankfurt', 'Hanover', 'Rhineland']) expect(CITYDEF.start.some((r) => r.region === n && r.lay && r.level === 1 && r.mark === 'D'), n).toBe(true);
+  });
+
+  it('September 1939 with the switch on: the record decides, and 124 stands where nothing is read', () => {
+    const off = begun(1, false), g = begun(1, true);
+    for (const n of ['Berlin', 'Hamburg', 'Ruhr', 'Saxony', 'Frankfurt', 'Hanover']) expect(gunsIn(g, n), n).toBe(1);
+    expect(gunsIn(g, 'Rhineland')).toBe(0);
+    expect(gunsIn(off, 'Bohemia')).toBe(1);
+    expect(`wk:aa:${g.byName.Bohemia.id}` in g.flags).toBe(false);
+    expect(gunsIn(g, 'London')).toBe(1);
+    for (const n of ['Midlands', 'Lancashire', 'Washington', 'Detroit', 'Philadelphia']) expect(`wk:aa:${g.byName[n].id}` in g.flags, n).toBe(false);
+    expect(gunsIn(g, 'Moscow')).toBe(3);
+    for (const n of ['Rome', 'Lombardy', 'Piedmont']) expect(gunsIn(g, n), n).toBe(1);
+    for (const n of STAND_INS) { expect(gunsIn(off, n), n).toBe(1); expect(gunsIn(g, n), n).toBe(gunsIn(off, n)); }
+    // (New York, a place of 124 that no row names, keeps 124's level.)
+    expect(gunsIn(g, 'New York')).toBe(gunsIn(off, 'New York'));
+    // The new lights rows are laid; London's and Berlin's stand as slice 5 laid them; none in Paris, Rome or Washington.
+    for (const n of ['Saxony', 'Frankfurt', 'Hanover']) expect(lightsIn(g, n), n).toBe(1);
+    expect(lightsIn(g, 'Rhineland')).toBe(0);
+    expect(lightsIn(g, 'London')).toBe(2);
+    expect(lightsIn(g, 'Berlin')).toBe(1);
+    for (const n of ['Paris', 'Rome', 'Washington']) expect(lightsIn(g, n), n).toBe(0);
+  });
+
+  it('with the switch off, ruling 124 exactly: no lights, no mark of the lay', () => {
+    const g = begun(1, false);
+    expect(lightsFlags(g)).toEqual([]);
+    expect(START_LAID in g.flags).toBe(false);
+    expect(levels(g, 'wk:aa:')).toEqual({ Berlin: 1, Ruhr: 1, Bohemia: 1, Rome: 1, Lombardy: 1, Piedmont: 1, London: 1, Midlands: 1, Lancashire: 1, Paris: 1, Lille: 1, Lyon: 1, Moscow: 1, Gorky: 1, Kharkov: 1, Washington: 1, Philadelphia: 1, 'New York': 1 });
+  });
+
+  it('the same 1939 start when the switch comes on in the opening month of a war begun with it off', () => {
+    const on = begun(1, true), later = begun(1, false);
+    setCityDefences(later, true);
+    expect(levels(later, 'wk:aa:')).toEqual(levels(on, 'wk:aa:'));
+    expect(levels(later, 'wk:lights:')).toEqual(levels(on, 'wk:lights:'));
+  });
+
+  it('June 1941 (turn 22): Berlin, Hamburg and the Ruhr at 2, Cologne\'s region at 1, London 2, the Midlands and Lancashire 1', () => {
+    const g = begun(22, true);
+    expect(g.flags.openFrom).toBe(22);
+    for (const n of ['Berlin', 'Hamburg', 'Ruhr']) expect(gunsIn(g, n), n).toBe(2);
+    expect(gunsIn(g, 'Rhineland')).toBe(1);
+    expect(gunsIn(g, 'London')).toBe(2);
+    expect(gunsIn(g, 'Midlands')).toBe(1);
+    expect(gunsIn(g, 'Lancashire')).toBe(1);
+    expect(lightsIn(g, 'Rhineland')).toBe(1);
+  }, 240_000);
+
+  it('the turn 29 start (December 1941): Leningrad 3, and the American three at ruling 124\'s level', () => {
+    const off = begun(29, false), g = begun(29, true);
+    expect(gunsIn(g, 'Leningrad')).toBe(3);
+    for (const n of ['Washington', 'Detroit', 'Philadelphia']) expect(gunsIn(g, n), n).toBe(gunsIn(off, n));
+    expect(gunsIn(off, 'Washington')).toBe(2);
+  }, 240_000);
+
+  it('turned on in a later month: only raised, and once', () => {
+    const g = begun(1, false);
+    for (let k = 0; k < 2; k++) runTurnAI(g);
+    expect(g.turn).toBeGreaterThan(1);
+    const bohemia = gunsIn(g, 'Bohemia');
+    expect(bohemia).toBe(1);
+    const before = levels(g, 'wk:aa:');
+    setCityDefences(g, true);
+    expect(gunsIn(g, 'Bohemia')).toBe(bohemia);
+    expect(gunsIn(g, 'Moscow')).toBe(3);
+    expect(gunsIn(g, 'Midlands')).toBe(before.Midlands);
+    for (const [name, lv] of Object.entries(before)) expect(gunsIn(g, name), name).toBeGreaterThanOrEqual(lv);
+    expect(gunsIn(g, 'Hamburg')).toBe(1);
+    expect(lightsIn(g, 'London')).toBe(2);
+    // A second turning on changes nothing, even where the ground has changed since.
+    const laid = { aa: levels(g, 'wk:aa:'), lights: levels(g, 'wk:lights:') };
+    delete g.flags[`wk:aa:${g.byName.Moscow.id}`];
+    setCityDefences(g, false);
+    setCityDefences(g, true);
+    expect(gunsIn(g, 'Moscow')).toBe(0);
+    g.flags[`wk:aa:${g.byName.Moscow.id}`] = 3;
+    expect({ aa: levels(g, 'wk:aa:'), lights: levels(g, 'wk:lights:') }).toEqual(laid);
+  });
+
+  it('lays nothing outside a grand campaign, and passes over a row whose region the game does not have', () => {
+    const h = createGame(3, null);
+    setCityDefences(h, true);
+    expect(START_LAID in h.flags).toBe(false);
+    expect(Object.keys(h.flags).filter((k) => k.startsWith('wk:'))).toEqual([]);
+    const g = begun(1, false);
+    g.flags.cityDefences = 1;
+    const before = levels(g, 'wk:aa:');
+    expect(() => layStartGunsFromRecord(g, true, [
+      { region: 'Nowhere at all', turns: [1], level: 3, mark: 'L', lay: true, why: 'a test row: no such province' },
+      { region: 'Bohemia', turns: [1], level: 2, mark: 'G', lay: false, why: 'a test row: not laid' },
+    ])).not.toThrow();
+    expect(levels(g, 'wk:aa:')).toEqual(before);
   });
 });

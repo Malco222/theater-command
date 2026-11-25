@@ -23,6 +23,14 @@ import type { Sky } from './weather';
  */
 export interface LightsRow { region: string; turns: number[]; level: number; mark: 'L' | 'D' | 'F' | 'U'; lay: boolean; why: string }
 
+/**
+ * A row of the history start's guns (city defences, the design director's ruling of 25 Nov 2026 04:10Z, "Start guns
+ * from the record"; historian/start-guns-1125.md, section 2), in the lights' rows' shape: `level` 0 to 3 (0 a reading
+ * of none), `mark` the historian's as he wrote it ("D, U", "L, then U", or G for a stand-in). A row not laid has no
+ * level and changes nothing: it writes down that ruling 124's level stands there until read.
+ */
+export interface GunsRow { region: string; turns: number[]; level?: number; mark: string; lay: boolean; why: string }
+
 export const CITYDEF = data as unknown as {
   /** The share of a built gun level's day worth by night: dark, radar, lit (no radar), both. */
   night: { dark: number; radar: number; lit: number; both: number };
@@ -34,6 +42,7 @@ export const CITYDEF = data as unknown as {
   ground: { armour: number; most: number; lost: number };
   ai: { months: number };
   start: LightsRow[];
+  startGuns: GunsRow[];
 };
 
 /** The entrenching share by months done (defence.json entrench.share), read here as the town works' share. */
@@ -58,6 +67,9 @@ export const cityDefencesOn = (g: Game): boolean => g.flags.open === 1 && cityDe
 export function setCityDefences(g: Game, on: boolean): void {
   if (!on) { delete g.flags.cityDefences; return; }
   g.flags.cityDefences = 1;
+  // (The record's start, once, wherever the switch comes on: the 3D game's ship list right after the start or a load,
+  // the Options row, TC.cityDefences. The design director's ruling of 25 Nov 2026 04:10Z.)
+  cityStartLay(g);
 }
 
 /** The level of searchlights in a province, 0 to 3: always 0 with the switch off, whatever marks the ground keeps. */
@@ -75,11 +87,12 @@ export function startRowsAt<R extends { turns: number[]; lay: boolean }>(rows: R
 }
 
 /**
- * The history start (city defences, the design director's ruling of 25 Nov 2026 02:23Z, 'Also', and of 02:40Z on
- * which rows are laid): with the switch on, a campaign opens with searchlights where the historian reads a city belt
- * at the month the war began (openFrom, or the first month, the month the start guns read), province by name, at the
- * level he reads; none where he finds none. The rows say nothing of nations: whoever holds the province at that date
- * has the lights. A province keeps the higher level, as the start guns do (airversion.ts). Off: nothing.
+ * The searchlights of the history start (city defences, the design director's ruling of 25 Nov 2026 02:23Z, 'Also',
+ * and of 02:40Z on which rows are laid): with the switch on, searchlights where the historian reads a city belt at the
+ * month the war began (openFrom, or the first month, the month the start guns read), province by name, at the level
+ * he reads; none where he finds none. The rows say nothing of nations: whoever holds the province at that date has the
+ * lights. A province keeps the higher level, as the start guns do (airversion.ts). Off: nothing. cityStartLay lays
+ * them, with the guns; `rows` is for tests.
  */
 export function openCityDefences(g: Game, rows: LightsRow[] = CITYDEF.start): void {
   if (!cityDefences(g)) return;
@@ -89,6 +102,47 @@ export function openCityDefences(g: Game, rows: LightsRow[] = CITYDEF.start): vo
     if (!r || lv <= 0) continue;
     g.flags[`wk:lights:${r.id}`] = Math.max(g.flags[`wk:lights:${r.id}`] ?? 0, lv);
   }
+}
+
+// The record's start laid, once: 'cds' = 1 in g.flags once cityStartLay has laid a campaign's start (written only
+// with the switch on, in a grand campaign), so that turning the switch off and on again lays nothing more.
+export const START_LAID = 'cds';
+
+/**
+ * The anti-aircraft guns of the history start from the record (city defences, the design director's ruling of 25 Nov
+ * 2026 04:10Z, "Start guns from the record"): the laid rows of startGuns at the war's start month, by the lights' own
+ * lookup. Ruling 124's flat placement (airversion.ts layStartGuns, laid first and untouched) retires where a row reads
+ * the place, on a power's own ground that it holds (124's own condition: the province's owner holds it). `fresh` (the
+ * war still in its first month, so nobody has built or lost a gun yet): the record decides, a reading of none removing
+ * 124's guns. Otherwise only the higher level is kept: nothing is lowered or removed. A region the game in play does
+ * not have is passed over. `rows` is for tests.
+ */
+export function layStartGunsFromRecord(g: Game, fresh: boolean, rows: GunsRow[] = CITYDEF.startGuns): void {
+  if (!cityDefences(g)) return;
+  for (const row of startRowsAt(rows, g.flags.openFrom ?? 1)) {
+    const r = g.regions.find((x) => x.name === row.region);
+    if (!r || r.owner !== r.ctrl) continue;
+    const lv = Math.max(0, Math.min(WORKS_TOP, Math.floor(row.level ?? 0)));
+    const key = `wk:aa:${r.id}`;
+    if (fresh) {
+      if (lv > 0) g.flags[key] = lv; else delete g.flags[key];
+    } else if (lv > (g.flags[key] ?? 0)) g.flags[key] = lv;
+  }
+}
+
+/**
+ * The record's start, the searchlights and the guns together (city defences, the design director's ruling of 25 Nov
+ * 2026 04:10Z): once, in a grand campaign, with the switch on; nothing otherwise. Called as a campaign opens (staff.ts
+ * startOpen, after the start guns of ruling 124) and wherever the switch comes on in a campaign under way
+ * (setCityDefences). The war's start month is openFrom, or the first; while the war is still in that month the
+ * record sets the guns, and later it only raises them, the higher level kept. No headline, no news.
+ */
+export function cityStartLay(g: Game): void {
+  if (!cityDefences(g) || g.flags.open !== 1 || g.flags[START_LAID] === 1) return;
+  g.flags[START_LAID] = 1;
+  const began = g.flags.openFrom ?? 1;
+  openCityDefences(g);
+  layStartGunsFromRecord(g, g.turn === began);
 }
 
 // ---- The computer's order of searchlights (slice 5) ----------------------------------------------------------------
