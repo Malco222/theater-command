@@ -106,6 +106,7 @@ import type { FoughtAir } from '../../../src/campaign/airfought';
 import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
 import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the enemy's month near you)
+import { scrambleCalls } from './scramble-demo'; // (release 2, the scramble offer's stand-in: a demonstration, nothing booked)
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
@@ -7659,6 +7660,7 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 // lives outside the save: the screen sets it at start and again after every load.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
+Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCalls(game, battleTable.airStartOn)); // (release 2: the scramble offer's stand-in, Rules/scramble-demo.ts)
 // (Release 2, the marked army; Brian 24 November 2026 18:01Z) TC.marked(on) at any time: the corps that takes a town of
 // the player's wears a red tag until he beats it (marked.ts). The options page uses act('marked:on') and act('marked:off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).marked = (on: boolean) => { const s = game(); setMarked(s, !!on); return { on: markedOn(s) }; };

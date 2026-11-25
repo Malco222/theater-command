@@ -88658,6 +88658,92 @@
     return said.join(" ");
   }
 
+  // Rules/scramble-demo.ts
+  var DEMO_NOTE = "That was a demonstration of the scramble: nothing was booked, and the month goes on as it was.";
+  var scrambleCount = (n) => n.toLocaleString("en");
+  var scrambleAn = (word3) => /^[AEIOU]/i.test(word3) ? "An" : "A";
+  function findScramble(g2) {
+    const me = g2.human;
+    if (!me || !g2.nations[me]?.atWar.length) return null;
+    const kind = "bomb";
+    const found2 = [];
+    for (const nat of g2.nations[me].atWar) {
+      if (!g2.nations[nat]?.alive) continue;
+      for (const t of raidTargets(g2, kind, nat)) {
+        if (t.sea || t.holder !== me) continue;
+        const plan = planRaid(g2, kind, t.id, void 0, nat);
+        if (plan.why || !plan.picked.length || plan.bombers <= 0) continue;
+        if (!plan.meets.some((m) => m.nat === me && m.able > 0)) continue;
+        found2.push({ nat, target: t.id, ids: plan.picked, bombers: plan.bombers, km: t.km });
+      }
+    }
+    found2.sort((a, b) => b.bombers - a.bombers || a.km - b.km || a.target - b.target);
+    for (const c of found2.slice(0, 6)) {
+      const t = airTicket(g2, kind, c.target, c.ids, c.nat);
+      if (!t.ticket || t.ticket.def.nat !== me || !t.ticket.def.forces.length) continue;
+      const sum3 = (rows, k) => rows.filter((f) => f.kind === k).reduce((s, f) => s + f.men, 0);
+      const bombers = sum3(t.ticket.att.forces, "bmr"), escorts = sum3(t.ticket.att.forces, "ftr"), fighters = sum3(t.ticket.def.forces, "ftr");
+      const adj = g2.nations[c.nat]?.adj ?? c.nat;
+      const name = g2.regions[c.target].name;
+      const groups = [...new Set(t.ticket.def.forces.map((f) => f.name))];
+      const words2 = `${scrambleAn(adj)} ${adj} raid is heading for ${name}: about ${scrambleCount(bombers)} bombers, ${escorts > 0 ? `with ${scrambleCount(escorts)} fighters as escort` : "with no escort"}. About ${scrambleCount(fighters)} of your fighters can rise to meet it${groups.length ? ` (${groups.slice(0, 3).join(", ")}${groups.length > 3 ? " and more" : ""})` : ""}.`;
+      return {
+        id: `demo:${kind}:${c.target}:${c.nat}:${c.ids.join(".")}`,
+        kind,
+        target: c.target,
+        name,
+        nat: c.nat,
+        adj,
+        words: words2,
+        ticket: true,
+        bombers,
+        escorts,
+        fighters,
+        groups,
+        demo: true,
+        ids: c.ids
+      };
+    }
+    return null;
+  }
+  function scrambleCalls(game2, airStartOn) {
+    let mode = "big";
+    const offered = /* @__PURE__ */ new Map();
+    return {
+      scrambleMode(m) {
+        if (m === "every" || m === "big" || m === "never") mode = m;
+        return { mode };
+      },
+      scrambleDemo() {
+        if (mode === "never") return null;
+        const g2 = game2();
+        const offer = findScramble(g2);
+        if (!offer) return null;
+        const { ids: ids2, ...out } = offer;
+        offered.set(out.id, { kind: out.kind, target: out.target, nat: out.nat, ids: ids2 });
+        return out;
+      },
+      scrambleStart(id) {
+        const r = offered.get(String(id));
+        if (!r) return null;
+        const g2 = game2();
+        const settle2 = (fought) => {
+          let after;
+          const copy2 = fought ? loadGame(saveGame(g2)) : null;
+          const rep = copy2 ? launchRaid(copy2, r.kind, r.target, r.ids, r.nat, fought) : null;
+          if (copy2 && rep && fought) after = afterCard(copy2, rep, fought);
+          return { ok: true, note: DEMO_NOTE, demo: true, ...after ? { after } : {} };
+        };
+        return airStartOn(g2, r.kind, r.target, r.ids, r.nat, "def", settle2);
+      },
+      scrambleLeave(id, opts) {
+        offered.delete(String(id));
+        void opts;
+        return { ok: true };
+      }
+    };
+  }
+
   // ../../data/campaign/breakup.json
   var breakup_default = {
     _about: `Breaking a corps up (release 2; Brian 24 November 2026 18:02Z: "when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up if needed"). The player's own order, in his month, for one of his own corps standing in the field: the divisions he picks are split off as a corps of their own where it stands, with their own share of the men, the experience and the numbers, the corps' morale, rest, works and moves; the general stays with the corps. Nothing is lost or gained: the men of the two add up to the men of the one. A part rejoins the corps it came from, or another part of it, standing in the same place, never making a corps bigger than the corps was before it was broken up (so no corps is made bigger than it was raised and no road takes more men). No computer nation breaks its corps up. Switch: stage.json 'breakUp'.`,
@@ -100075,6 +100161,7 @@ ${standing5}`,
     return { on: subScene.on };
   };
   Object.assign(globalThis.TC, bargainCalls(game, view2));
+  Object.assign(globalThis.TC, scrambleCalls(game, battleTable.airStartOn));
   globalThis.TC.marked = (on) => {
     const s = game();
     setMarked(s, !!on);
