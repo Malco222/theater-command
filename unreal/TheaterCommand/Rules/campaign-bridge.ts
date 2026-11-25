@@ -4648,6 +4648,13 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
     const parts = ['bb', 'cv', 'ca', 'dd', 'ss'].filter((c) => (x[c] ?? 0) > 0).map((c) => `${x[c]} ${SHIP_WORD[c][x[c] === 1 ? 0 : 1]}`);
     return parts.length ? listOf(parts) : 'nothing';
   };
+  // (1.5.3, playtest #26) A battleship or carrier the likely count rounds away, though it may well go down, is named after it.
+  const likely = (x: Record<string, number>, heavy: string[]): string => {
+    const list = lost(x);
+    if (!heavy.length) return list;
+    const warn = `${listOf(heavy.map((c) => `a ${SHIP_WORD[c][0]}`))} may well go down`;
+    return list === 'nothing' ? `Probably nothing, but ${warn}` : `${list}, and ${warn}`;
+  };
   // (1.5.3, playtest #26) The fewest and the most each side loses as the dice fall, said plainly, and once where they are the same.
   const range = (r: Record<string, number>[], own: boolean): string => {
     const few = lost(r[0]), most = lost(r[1]);
@@ -4669,8 +4676,8 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   }));
   const ticket: PageRow[] = p.lines.map((l) => ({ nat: '', title: l.label, lines: [l.value, l.effect ?? ''].filter(Boolean), buttons: [] }));
   const losses: PageRow[] = p.odds ? [
-    { nat: card.nat, title: 'You are likely to lose', lines: [lost(p.likely.ours as unknown as Record<string, number>), range(p.range.ours as unknown as Record<string, number>[], true)], buttons: [] },
-    { nat: them?.nat ?? '', title: 'He is likely to lose', lines: [lost(p.likely.theirs as unknown as Record<string, number>), range(p.range.theirs as unknown as Record<string, number>[], false)], buttons: [] },
+    { nat: card.nat, title: 'You are likely to lose', lines: [likely(p.likely.ours as unknown as Record<string, number>, p.risk.ours), range(p.range.ours as unknown as Record<string, number>[], true)], buttons: [] },
+    { nat: them?.nat ?? '', title: 'He is likely to lose', lines: [likely(p.likely.theirs as unknown as Record<string, number>, p.risk.theirs), range(p.range.theirs as unknown as Record<string, number>[], false)], buttons: [] },
   ] : [];
   return {
     id: `fleetattack:${id}:${target}`, title: `ATTACK ${name.toUpperCase()}?`,

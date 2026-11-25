@@ -25,7 +25,7 @@ import { allied, atWar, headline, worksFor } from './game';
 import { fogOn } from './intel';
 import { CLASSES, NAVY, airOver, atSea, cutOff, fleetAction, fleetName, fleetPower, fleetReach, sail, seaRng, shipCount, surfaceShips } from './navy';
 import { lossAt, shares, type SeaPlanFleet, type SeaPlanSide } from './seaplan';
-import type { Fleet, Game, SeaReport, Ships } from './types';
+import type { Fleet, Game, SeaReport, ShipClass, Ships } from './types';
 
 export const FLEET_ATTACK = data as unknown as { atAnchor: number; gunsPerLevel: number };
 
@@ -64,6 +64,13 @@ const identified = (g: Game, viewer: string | null) => (x: Fleet): boolean => fl
 const SWING: [number, number] = [0.8, 1.2];
 const STEPS = 40;
 const VERDICT: [number, string][] = [[0.8, 'Very likely to win'], [0.6, 'Likely to win'], [0.4, 'It could go either way'], [0.2, 'Likely to lose'], [0, 'Very likely to lose']];
+/**
+ * (1.5.3, playtest #26) The heavy ships, and the share of one the forecast must expect a side to lose before it warns of
+ * it where the likely count rounds it away: expecting 0.35 to 0.45 of a battleship, the card listed none, and in the
+ * playtest one went down in 20 to 45% of such fights. Read from the forecast's own figures: no die is thrown for it.
+ */
+const HEAVY: ShipClass[] = ['bb', 'cv'];
+export const HEAVY_RISK = 0.2;
 
 /** Where the fight would be: the sea, and the harbour when the enemy lies in one. */
 interface Ground { harbour: boolean; zone: number; port: string | null; shore: number; anchor: number }
@@ -168,6 +175,9 @@ export interface FleetAttackPlan {
   seekAt: number;
   enough: boolean;
   likely: { ours: Ships; theirs: Ships };
+  /** (1.5.3) The losses as the forecast expects them, before rounding; and the heavy ships each side may well lose that the likely count rounds to none. */
+  expected: { ours: Ships; theirs: Ships };
+  risk: { ours: ShipClass[]; theirs: ShipClass[] };
   range: { ours: [Ships, Ships]; theirs: [Ships, Ships] };
   lines: TicketLine[];
   notes: string[];
@@ -205,7 +215,7 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
     fleet: f.id, target: t.id, where: at.harbour ? 'harbour' : 'sea', zone: at.zone, zoneName: sea.name, port: at.port,
     why: whyNotFleetAttack(g, id, target), ours, theirs, shore: at.shore, anchor: at.anchor, reported, odds: null, win: 0, verdict: '',
     found: at.harbour || t.stance === 'patrol' ? 1 : B.catchRaider, slips: 0, seekAt: B.seek, enough: false,
-    likely: { ours: zero(), theirs: zero() }, range: { ours: [zero(), zero()], theirs: [zero(), zero()] }, lines: [], notes: [],
+    likely: { ours: zero(), theirs: zero() }, expected: { ours: zero(), theirs: zero() }, risk: { ours: [], theirs: [] }, range: { ours: [zero(), zero()], theirs: [zero(), zero()] }, lines: [], notes: [],
   };
   const unseen = `${reported === 1 ? 'One force is' : `${reported} forces are`} reported with it and not identified: ${reported === 1 ? 'its' : 'their'} strength is not known.`;
   if (!met.length) {
@@ -233,6 +243,9 @@ export function planFleetAttack(g: Game, id: number, target: number, viewer: str
   plan.verdict = VERDICT.find(([v]) => plan.win >= v)![1];
   const each = (s: Ships): Ships => { const out = zero(); for (const c of CLASSES) out[c] = Math.round(s[c]); return out; };
   plan.likely = { ours: each(lo), theirs: each(lt) };
+  plan.expected = { ours: lo, theirs: lt };
+  const atRisk = (s: Ships, l: Ships): ShipClass[] => HEAVY.filter((c) => l[c] === 0 && s[c] >= HEAVY_RISK);
+  plan.risk = { ours: atRisk(lo, plan.likely.ours), theirs: atRisk(lt, plan.likely.theirs) };
   const worst = shares(plan.odds.low), best = shares(plan.odds.high);
   plan.range = {
     ours: [lossAt(mine, best.ours, Math.floor), lossAt(mine, worst.ours, Math.ceil)],

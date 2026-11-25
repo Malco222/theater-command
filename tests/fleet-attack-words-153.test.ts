@@ -1,18 +1,19 @@
 // Release 1.5.3: the fleet attack card's words (the 1.5.1 playtest, findings 25, 26 and 33). Words only, and the sea
 // report's strength line: no rule reads any of them, and the card stays a forecast that throws no die.
 //   25  a fleet the player's side has only reported keeps its name and its port to itself, in every refusal and on the card;
-//   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly;
+//   26  "1 ship", not "1 ships"; the losses listed with "and" before the last, and their range said plainly; a battleship
+//       or carrier the likely count rounds away, though it may well go down, named on that line;
 //   33  odds whose two ends read the same are said once: "More than 10 to 1 all day".
 import { describe, expect, it } from 'vitest';
 import { fleetKnown } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
 import { detach } from '../src/campaign/fleets';
-import { orderFleetAttack, planFleetAttack, whyNotFleetAttack } from '../src/campaign/fleetattack';
+import { HEAVY_RISK, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan } from '../src/campaign/fleetattack';
 import { setFog } from '../src/campaign/intel';
-import { loadGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { sail, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
-import { humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
@@ -184,8 +185,9 @@ describe('26: the card counts and lists its ships in plain words', () => {
     const [ours, theirs] = lossRows(p);
     expect(ours.title).toBe('You are likely to lose');
     expect(theirs.title).toBe('He is likely to lose');
-    expect(ours.lines[0]).toMatch(new RegExp(`^${LIST}$`));
-    expect(theirs.lines[0]).toMatch(new RegExp(`^${LIST}$`));
+    // (a heavy ship at real risk is named after the list: below)
+    expect(ours.lines[0]).toMatch(new RegExp(`^${LIST}(, and .+ may well go down)?$`));
+    expect(theirs.lines[0]).toMatch(new RegExp(`^${LIST}(, and .+ may well go down)?$`));
     expect(ours.lines[1]).toMatch(new RegExp(`^(At best you lose ${LIST}; at worst ${LIST}|You lose ${LIST} however the day goes)\\.$`));
     expect(theirs.lines[1]).toMatch(new RegExp(`^(At the least he loses ${LIST}; at the most ${LIST}|He loses ${LIST} however the day goes)\\.$`));
     for (const w of words(p)) {
@@ -196,6 +198,58 @@ describe('26: the card counts and lists its ships in plain words', () => {
     TC.start({ human: 'GER', view: 'grand', from: 1, seed: 3, world: true });
     const q = cardFor('Battle Fleet', 'Polish Navy');
     expect(lossRows(q)[0].lines[1]).toMatch(new RegExp(`^At best you lose nothing; at worst ${LIST}\\.$`));
+  });
+});
+
+describe('26: a heavy ship at real risk is named on the likely line', () => {
+  /** The heavy classes the plan names: a battleship or carrier the likely count rounds to none, expected at HEAVY_RISK or more. */
+  const atRisk = (p: FleetAttackPlan, side: 'ours' | 'theirs'): string[] => (['bb', 'cv'] as const).filter((c) => p.likely[side][c] === 0 && p.expected[side][c] >= HEAVY_RISK);
+
+  it('the playtest\'s case: the Home Fleet at the Battle Fleet may well lose a battleship, and the card says so', () => {
+    // UK from 1, seed 11: the line said "1 cruiser, 3 destroyers", and a battleship went down in 20 to 45% of the fights.
+    TC.start({ human: 'UK', view: 'grand', from: 1, seed: 11, depth: 'theatre' });
+    const before = TC.save().text as string;
+    const g = loadGame(before)!;
+    const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+    const plan = planFleetAttack(g, home.id, battle.id)!;
+    expect(plan.risk.ours).toEqual(atRisk(plan, 'ours'));
+    expect(plan.risk.theirs).toEqual(atRisk(plan, 'theirs'));
+    expect(plan.risk.ours).toContain('bb');
+    expect(plan.likely.ours.bb).toBe(0);
+    expect(plan.expected.ours.bb).toBeGreaterThanOrEqual(HEAVY_RISK);
+    const p = TC.page(`fleetattack:${home.id}:${battle.id}`) as Page;
+    const [ours, theirs] = lossRows(p);
+    expect(ours.lines[0]).toMatch(new RegExp(`^${LIST}, and a battleship${plan.risk.ours.includes('cv') ? ' and a carrier' : ''} may well go down$`));
+    if (!plan.risk.theirs.length) expect(theirs.lines[0]).toMatch(new RegExp(`^${LIST}$`));
+    else expect(theirs.lines[0]).toMatch(/, and a (battleship|carrier)( and a carrier)? may well go down$/);
+    // A forecast still: the card throws no die and changes nothing.
+    expect(TC.page(`fleetattack:${home.id}:${battle.id}`)).toEqual(p);
+    expect(TC.save().text).toBe(before);
+    const dice = g.rng.state, saved = saveGame(g);
+    planFleetAttack(g, home.id, battle.id);
+    expect(g.rng.state).toBe(dice);
+    expect(saveGame(g)).toBe(saved);
+  });
+
+  it('where nothing else is likely to go down: "Probably nothing, but a battleship and a carrier may well go down"', () => {
+    const g = startOpen(createGame(11, 'UK'));
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 50) stepAI(g);
+    beginHuman(g);
+    setFog(g, false);
+    const home = fleet(g, 'Home Fleet'), battle = fleet(g, 'Battle Fleet');
+    for (const f of g.fleets.filter((x) => x.nat === 'UK' && x.id !== home.id)) sail(g, f, f.home, 'port');
+    const sq = detach(g, home, { bb: 1, cv: 1 })!;
+    const plan = planFleetAttack(g, sq.id, battle.id)!;
+    expect(Object.values(plan.likely.ours).every((n) => n === 0)).toBe(true);
+    expect(plan.risk.ours).toEqual(['bb', 'cv']);
+    TC.load(saveGame(g));
+    const p = TC.page(`fleetattack:${sq.id}:${battle.id}`) as Page;
+    expect(lossRows(p)[0].lines[0]).toBe('Probably nothing, but a battleship and a carrier may well go down');
+    // Below the mark, nothing is added: a battleship expected at less than HEAVY_RISK is not named.
+    for (const side of ['ours', 'theirs'] as const) for (const c of ['bb', 'cv'] as const) {
+      if (plan.expected[side][c] < HEAVY_RISK) expect(plan.risk[side]).not.toContain(c);
+    }
   });
 });
 
