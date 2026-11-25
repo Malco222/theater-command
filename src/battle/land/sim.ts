@@ -160,6 +160,11 @@ const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdr
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
 /** A block's weight as its army's bar and break count it: the card's part for a corps come up from next door, else its power0. */
 const weightOf = (u: LandUnit): number => u.priced ?? u.power0;
+/**
+ * A block of the support teams the `teams` rule reads (sim.teamsRule): a machine-gun or a mortar team. A team of any
+ * other arm (a sniper pair, release 2) is never the rule's: on, it is counted, aimed and tallied as it is with it off.
+ */
+const ownArm = (u: LandUnit): u is LandUnit & { team: 'mg' | 'mor' } => u.team === 'mg' || u.team === 'mor';
 
 /** A field edge: the attack's own is the south, the defence's the north. */
 export type Edge = 'south' | 'north' | 'west' | 'east';
@@ -2712,7 +2717,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // reach its own weapon harms most (a machine gun does little to tanks, a mortar little close in: LAND.teams' armour
     // and close), the nearest as every block reckons it among those it harms alike. Only where no order names a target:
     // one the player names for a team stands (below), and the rule never re-aims a human seat (20:22Z).
-    const T = this.teamsRule && u.team ? LAND.teams[u.team] : null;
+    const T = this.teamsRule && ownArm(u) ? LAND.teams[u.team] : null;
     let harm = 0;
     for (const e of this.units) {
       // A block hidden from its side is never struck: nobody there knows it is there.
@@ -2955,7 +2960,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private tally(h: Hurt, u: LandUnit, blow: { dmg: number; nerve: number }): void {
     h.dmg += blow.dmg;
-    if (this.teamsRule && u.team) { h.team += blow.dmg; h.teamNerve += blow.dmg * blow.nerve; } else h.nerve += blow.nerve;
+    if (this.teamsRule && ownArm(u)) { h.team += blow.dmg; h.teamNerve += blow.dmg * blow.nerve; } else h.nerve += blow.nerve;
   }
   /**
    * One block's blow on another this tick: its weight (dmg), its nerve's multiplier, whether it lands on the front and
@@ -3596,7 +3601,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Empty for every other block, and for a team block with no division of its own.
    */
   ownLine(u: LandUnit): LandUnit[] {
-    if (!u.team) return [];
+    if (!ownArm(u)) return [];
     const parent = this.teamParent.get(u.corps);
     return parent === undefined ? [] : this.units.filter((p) => p.corps === parent && !p.team);
   }
@@ -3610,7 +3615,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.team || !this.teamParent.size) return 0;
     let n = 0;
     for (const t of this.units) {
-      if (!t.team || this.teamParent.get(t.corps) !== u.corps) continue;
+      if (!ownArm(t) || this.teamParent.get(t.corps) !== u.corps) continue;
       const line = this.ownLine(t), whole = line.reduce((a, p) => a + p.power0, 0);
       if (whole > 0 && line.includes(u)) n += t.power0 * (u.power0 / whole);
     }
@@ -3627,7 +3632,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * nothing in the running or the fresh, whatever its division.
    */
   private asItsLine(u: LandUnit, whole: (p: LandUnit) => number, part: (p: LandUnit) => number): number | null {
-    if (!this.teamsRule || !u.team) return null;
+    if (!this.teamsRule || !ownArm(u)) return null;
     const line = this.ownLine(u);
     if (!line.length) return null;
     const all = line.reduce((a, p) => a + whole(p), 0);

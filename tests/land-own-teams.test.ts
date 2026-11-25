@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { liveTicket } from '../src/battle/land/live';
 import { OWN_TEAM_ID, OWN_TEAM_SHARE, isOwnTeam, ownTeamParents, ownTeams, ownTeamsLook } from '../src/battle/land/own-teams';
 import { PIECES, ticketOf } from '../src/battle/land/pieces';
+import { LAND } from '../src/battle/land/rules';
 import { LandBattle } from '../src/battle/land/sim';
 import type { FieldTicket, ForceTicket, SideTicket } from '../src/battle/core/types';
 import type { LandPlace } from '../src/battle/land/field';
@@ -401,5 +402,50 @@ describe("support teams in battle: a team is its own division's, never a gun (th
       g.order = { kind: 'attack', target: tank.id }; g.path = [];
       expect((sim as unknown as { targetOf(u: T): T | null }).targetOf(g)).toBe(tank);
     }
+  });
+
+  it('reads only a machine-gun or a mortar team: a team of another arm (a sniper pair) is tallied, counted and aimed as with the rule off', () => {
+    type T = U & { x: number; y: number; hid?: boolean; aim?: number; order?: unknown };
+    type Hurt = { dmg: number; nerve: number; team: number; teamNerve: number };
+    const t = ownTeams(campaign('normandy-1944')).ticket;
+    // (a branch with no sniper pair has no figures for one: a stand-in for this test only, taken away after it)
+    const teams = LAND.teams as unknown as Record<string, unknown>, lent = !('snp' in teams);
+    if (lent) teams.snp = { ...LAND.teams.mg };
+    try {
+      const made = (rule: boolean, arm: string): { sums: Sums; g: T; line: U[]; tally: Hurt; target: string } => {
+        const { sim, units, sums } = field(t, rule);
+        const all = units as T[];
+        const g = all.find((u) => u.side === 'att' && u.team === 'mg')!, line = sums.ownLine(g);
+        // its division's line half worn and one block of it running, so a team that stands as its division is seen in every sum
+        for (const p of line) p.str = p.str0 * 0.5;
+        line[0].state = 'routing';
+        // (both of that division's team blocks made the arm asked for, so nothing else of the rule stands on that line)
+        for (const u of all.filter((u) => u.team && sums.ownLine(u).includes(line[0]))) u.team = arm;
+        const tank = all.find((u) => u.side === 'def' && u.kind === 'arm')!, foot = all.find((u) => u.side === 'def' && u.kind === 'inf')!;
+        for (const e of all) if (e.side === 'def') { e.x = g.x; e.y = g.y + 9000; }
+        tank.y = g.y + 300; foot.y = g.y + 500; tank.hid = false; foot.hid = false;
+        delete g.aim; delete g.order;
+        const h: Hurt = { dmg: 0, nerve: 0, team: 0, teamNerve: 0 };
+        (sim as unknown as { tally(h: Hurt, u: U, blow: { dmg: number; nerve: number }): void }).tally(h, g, { dmg: 2, nerve: 3 });
+        const got = (sim as unknown as { targetOf(u: T): T | null }).targetOf(g);
+        return { sums, g, line, tally: h, target: got === tank ? 'tank' : got === foot ? 'foot' : 'none' };
+      };
+      const sumsOf = (m: { sums: Sums }): number[] => [m.sums.wornShare('att'), m.sums.brokenShare('att'), m.sums.freshShare('att')];
+      // A machine-gun team: the rule reads it (its harm kept apart, its division's state in the sums, its target by harm).
+      const mgOn = made(true, 'mg'), mgOff = made(false, 'mg');
+      expect(mgOn.tally).toEqual({ dmg: 2, nerve: 0, team: 2, teamNerve: 6 });
+      expect(mgOff.tally).toEqual({ dmg: 2, nerve: 3, team: 0, teamNerve: 0 });
+      expect(sumsOf(mgOn)[0]).toBeGreaterThan(sumsOf(mgOff)[0] + 1e-6);
+      expect(sumsOf(mgOn)[1]).toBeGreaterThan(sumsOf(mgOff)[1] + 1e-6);
+      expect(mgOn.target).toBe('foot');
+      expect(mgOn.sums.ownTeamsPower(mgOn.line[0])).toBeGreaterThan(0);
+      // The same blocks as sniper pairs: nothing of the rule touches them, and they are no part of their division's teams' weight.
+      const snOn = made(true, 'snp'), snOff = made(false, 'snp');
+      expect(snOn.tally).toEqual({ dmg: 2, nerve: 3, team: 0, teamNerve: 0 });
+      expect(snOn.sums.ownLine(snOn.g)).toEqual([]);
+      expect(sumsOf(snOn)).toEqual(sumsOf(snOff));
+      expect(snOn.target).toBe(snOff.target);
+      expect(snOn.sums.ownTeamsPower(snOn.line[0])).toBe(0);
+    } finally { if (lent) delete teams.snp; }
   });
 });
