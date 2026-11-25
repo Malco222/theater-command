@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+class UMaterialInstanceDynamic;
 class USkyLightComponent;
 
 /**
@@ -44,13 +45,25 @@ class USkyLightComponent;
  *   picture comes up from black on the battle (Dawn). Snow keeps its own, as shipped. tc.Look.BounceStrength (1.0), tc.Look.BounceClosed (0.5) and
  *   tc.Look.BounceHue (1; 0 leaves the hue as the field's, -TheaterLookBounceUnclamped) tune it.
  *
+ * - tc.Look.Worn (-TheaterLookWorn): the ground battle's tanks, guns and lorries carry weathered paint, broken in patches
+ *   and flat, not one even coat (the art director, 25 Nov 05:00Z, art-director/reviews/battle-sky-and-worn-numbers.md
+ *   section 2: a large flat panel of the desert tank's hull varied by 2.3 of 255 over its whole area; her line is 10,
+ *   and the ground thread's Type 97, whose own file breaks her paint, carries 12 to 19). The battle's surface's own
+ *   weathering (the map's pieces' paint job), a mottle read in each body's own space, is laid on the vehicles' ink
+ *   (it paints the battle's tanks, guns and lorries near and far, its old wrecks and the aircraft over it), and its
+ *   roughness taken from 0.6, a sheen, to army paint's 0.85. Read as a battle's inks are made.
+ *   tc.Look.WornStrength (1), tc.Look.WornRepeat (metres, 2.5) and tc.Look.WornRoughness (0.85) tune it. The ground's
+ *   colour on a hull's lower third and on the men's boots and knees, and roughness by part, are the vehicles' and the
+ *   soldiers' own painting, not this.
+ *
  * The whole look's lens: one post-process volume over the whole play world (the map and every battle are laid in the one
  * world), above the ground battle's grade volume, carrying only the sharpening and the ambient occlusion fields. No other
  * volume or camera in the game sets those fields, so it fights nothing.
  *
  * The tunings can be set from the launch line too, for the Mac's sweeps: -TheaterLookCrispSharpen=,
  * -TheaterLookCrispFiltering=, -TheaterLookDepthStrength=, -TheaterLookDepthReach= (metres), -TheaterLookDepthRadius=
- * (metres), -TheaterLookDepthQuality=, -TheaterLookDepthClosed=, -TheaterLookBounceStrength=, -TheaterLookBounceClosed=.
+ * (metres), -TheaterLookDepthQuality=, -TheaterLookDepthClosed=, -TheaterLookBounceStrength=, -TheaterLookBounceClosed=, -TheaterLookWornStrength=, -TheaterLookWornRepeat= (metres),
+ * -TheaterLookWornRoughness=.
  */
 namespace WholeLook
 {
@@ -76,7 +89,9 @@ namespace WholeLook
 	/** The light a field gives back from below, from its mean paint (GroundMean, linear): the hue pulled inside the art
 	 * director's box with the value kept (unless tc.Look.BounceHue is 0), times tc.Look.BounceStrength, times
 	 * tc.Look.BounceClosed under a closed canopy, times the sun's share (SunHeight the sine of the sun's height: none
-	 * under the horizon, whole from 15 degrees up). Alpha 1. */
+	 * under the horizon, whole from 15 degrees up). Alpha 1. Read once, as the field is laid: the battle's sun stands still
+	 * for the whole fight (set once at the open). If the sun is ever made to climb during a battle, the bounce must be read
+	 * again with it, or a dawn attack's fill goes stale. */
 	FLinearColor BounceLight(const FLinearColor& Mean, bool bClosedCanopy, double SunHeight);
 
 	/** The ground battle says what it is fought under as its field is laid (a closed canopy: the jungle; the art director:
@@ -84,6 +99,10 @@ namespace WholeLook
 	 * is laid at tc.Look.DepthClosed under a closed canopy. */
 	void FieldLaid(bool bClosedCanopy);
 	void FieldGone();
+
+	/** tc.Look.Worn is on: the ground battle's vehicles' ink (made as a battle loads its inks, before any vehicle is drawn)
+	 * takes the weathered, flat paint. Nothing with it off. */
+	void Wear(UMaterialInstanceDynamic* VehicleInk);
 
 	/** A night before the attack plays first: the battle's sky lights keep the lower half as shipped, and Bounce is laid
 	 * under them at Dawn. FieldGone forgets it. */

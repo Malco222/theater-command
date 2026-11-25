@@ -8,6 +8,7 @@
 #include "Components/SkyLightComponent.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -43,6 +44,14 @@ namespace
 		TEXT("tc.Look.Bounce: its share under a closed canopy, the jungle (the art director: half to start)."));
 	TAutoConsoleVariable<int32> CVarBounceHue(TEXT("tc.Look.BounceHue"), 1,
 		TEXT("tc.Look.Bounce: 1 pulls the bounce's hue inside the art director's box (red/green 0.90 to 1.15, blue/green 0.80 to 1.05) with its value kept; 0 leaves the field's own hue."));
+	TAutoConsoleVariable<int32> CVarWorn(TEXT("tc.Look.Worn"), 0,
+		TEXT("Release 2, the whole picture: 1 breaks the ground battle's vehicles' paint in patches and lays it flat (rougher), so a hull is not one even coat (Look/WholeLook.h). Read as a battle opens."));
+	TAutoConsoleVariable<float> CVarWornStrength(TEXT("tc.Look.WornStrength"), 1.0f,
+		TEXT("tc.Look.Worn: how strongly the paint is broken (the surface's own Wear, 0 to 2; 1 the map's pieces')."));
+	TAutoConsoleVariable<float> CVarWornRepeat(TEXT("tc.Look.WornRepeat"), 2.5f,
+		TEXT("tc.Look.Worn: metres over which the patches' pattern repeats on a vehicle (its patches some tenths of a metre across)."));
+	TAutoConsoleVariable<float> CVarWornRoughness(TEXT("tc.Look.WornRoughness"), 0.85f,
+		TEXT("tc.Look.Worn: the vehicles' paint roughness (the battle's own is 0.6; the art director: army paint 0.8 to 0.9)."));
 
 	/** The engine's world units in a metre (the battles are laid at 100, as the engine's own measure is). */
 	constexpr float UnitsPerMetre = 100.0f;
@@ -375,6 +384,10 @@ void WholeLook::Start()
 	Tuned(TEXT("TheaterLookDepthClosed="), CVarDepthClosed);
 	Tuned(TEXT("TheaterLookBounceStrength="), CVarBounceStrength);
 	Tuned(TEXT("TheaterLookBounceClosed="), CVarBounceClosed);
+	Asked(TEXT("TheaterLookWorn"), CVarWorn);
+	Tuned(TEXT("TheaterLookWornStrength="), CVarWornStrength);
+	Tuned(TEXT("TheaterLookWornRepeat="), CVarWornRepeat);
+	Tuned(TEXT("TheaterLookWornRoughness="), CVarWornRoughness);
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLookBounceUnclamped")))
 	{
 		CVarBounceHue->Set(0, ECVF_SetByCode);
@@ -489,6 +502,27 @@ void WholeLook::Dawn()
 	}
 	DawnSkies.Reset();
 	UE_LOG(LogTheater, Display, TEXT("Whole look: the ground's bounce laid at the dawn: %.3f, %.3f, %.3f under %d sky lights"), DawnBounce.R, DawnBounce.G, DawnBounce.B, Laid);
+}
+
+void WholeLook::Wear(UMaterialInstanceDynamic* VehicleInk)
+{
+	if (!VehicleInk || CVarWorn.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	// (the battle's surface's own weathering, the map's pieces' paint job, art fix 12: a mottle read in each body's own
+	// space, so it stays put on her as she moves. The vehicles' points are painted with no metal mark (alpha whole), so
+	// only the mottle shows, at half its strength, and none of the surface's own chips: the vehicle's file and the kit
+	// lay hers. The far vehicles' inks copy this one's settings as they are made.)
+	const float Was = VehicleInk->K2_GetScalarParameterValue(TEXT("Roughness"));
+	const float Strength = FMath::Clamp(CVarWornStrength.GetValueOnGameThread(), 0.0f, 2.0f);
+	const float Repeat = FMath::Clamp(CVarWornRepeat.GetValueOnGameThread(), 0.2f, 20.0f);
+	const float Roughness = FMath::Clamp(CVarWornRoughness.GetValueOnGameThread(), 0.0f, 1.0f);
+	VehicleInk->SetScalarParameterValue(TEXT("Wear"), Strength);
+	VehicleInk->SetScalarParameterValue(TEXT("BlotTiling"), 1.0f / (Repeat * UnitsPerMetre));
+	VehicleInk->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+	UE_LOG(LogTheater, Display, TEXT("Whole look: worn ON: the vehicles' paint broken in patches (wear %.2f, the pattern repeating every %.1f m) and laid flat, roughness %.2f (it was %.2f)"),
+		Strength, Repeat, Roughness, Was);
 }
 
 void WholeLook::FieldLaid(bool bClosedCanopy)

@@ -1161,6 +1161,9 @@ void ALandBattle::LoadInks()
 	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
+	// (release 2, the whole picture's worn paint, tc.Look.Worn: the vehicles' paint broken in patches and laid flat;
+	// nothing with it off. Look/WholeLook.h)
+	WholeLook::Wear(SteelInk.Get());
 	// The wind and the sky's life (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually
 	// realistic and epic?"), each on its own switch and all three with "-TheaterLandEpic", off until the art director
 	// and the Mac's frame rate pass them. Built by build_content.py (TC_REBUILD=M_LandBlades,M_LandCloudShade,
