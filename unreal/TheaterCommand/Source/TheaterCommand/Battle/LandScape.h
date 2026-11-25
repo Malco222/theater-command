@@ -90,7 +90,7 @@ namespace LandScape
 		double HazeDensity = 0.0069;                 // at the field's ground (LandBattle's HazeDensity)
 		double SkyDust = 0.6;                        // LandBattle's SkyDust
 		double Grade[4] = { 0.45, 0.48, 1.0, 1.02 }; // the colour kept in the darks and the middles; red and blue gain
-		double Stops = -0.5;                         // exposure (LandBattle's half stop down)
+		double Stops = -0.5;                         // exposure (LandBattle's half stop down; the desert's half a stop more on trial "desertstop", an island's a third on "islandstop")
 		double Contrast = 1.42;                      // BattleLook's
 		double Toe = 0.55;                           // the film's toe (Unreal's own)
 		double KeyKelvin = 0.0;                      // 0: the battle's own

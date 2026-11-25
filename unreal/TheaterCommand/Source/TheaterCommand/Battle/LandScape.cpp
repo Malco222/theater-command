@@ -469,7 +469,35 @@ namespace LandScape
 
 	Air AirOf(Look L, double SnowLying, double Lat, double Lon, int Month, const std::string& Trial)
 	{
-		return AirFor(L, SnowLying, EastGold(L, SnowLying, Lat, Lon, Month, Trial));
+		Air A = AirFor(L, SnowLying, EastGold(L, SnowLying, Lat, Lon, Month, Trial));
+		// (the desert in full sun stopped down, as a cameraman stops down for sand: on the Mac the key and the sky's light
+		// put bright sand at the top of the film's curve, where it lost its colour (217,206,184 for a paint of 177,158,116,
+		// and pale vehicles with it; the art director's gate fault 1 and her ask of 25 November: half a stop first, never
+		// more than one in all). The desert's fields only, on trial "desertstop"; its target on the Mac in full sun: sand
+		// L 180 to 190 with red over green 1.12 or more, the darkest tenth of the frame no lower than L 20)
+		if (L == Look::Desert && SnowLying <= 0.3)
+		{
+			LandField::Field Words;
+			Words.Trial = Trial;
+			if (Words.Tried("desertstop"))
+			{
+				A.Stops -= 0.5;
+			}
+		}
+		// (an island's beach the same way, and milder: its fields run at -0.2 stops under a brighter sky than the
+		// desert's, so sunlit sand washes pale too, but its palms and jungle must not go dark. A third of a stop, to
+		// -0.5 and never past -0.7 (the art director's ask of 25 November), on trial "islandstop"; its target on the
+		// Mac: sunlit sand L 185 to 200, the darkest tenth of the frame L 20 or more, under 30% of the frame dark)
+		if (L == Look::Island && SnowLying <= 0.3)
+		{
+			LandField::Field Words;
+			Words.Trial = Trial;
+			if (Words.Tried("islandstop"))
+			{
+				A.Stops -= 0.3;
+			}
+		}
+		return A;
 	}
 
 	// ------------------------------------------------------------------ a region's plain answers
