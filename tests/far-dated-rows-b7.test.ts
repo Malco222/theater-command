@@ -325,7 +325,9 @@ describe('the 3D game\'s calls: one list on the month card, take all or pick', (
     expect(end.month.offers.rows.map((r) => r.name)).toEqual([FIFTH]);
     const list = TC().offers() as { count: number; note: string; can: boolean; rows: { id: number; name: string; what: string; where: string; region: number; since: string; takes: { name: string; where: string; size: string; men: number }[]; line: string; can: boolean; why: string }[] };
     expect(list).toEqual(end.month.offers);
-    expect(list.note).toBe('It would be formed out of corps you have, as the record formed it. Take it or decline: an offer stands until you answer.');
+    // (The UI director's marks of 25 November 2026, 13:39Z, section 5: "an offer stands until you answer" was untrue, and
+    // "the record" is our word; the player's is "history".)
+    expect(list.note).toBe('It would be formed out of corps you have, as history formed it. It waits for your answer until its last month, or until a corps it needs is gone.');
     const r = list.rows[0];
     expect(r).toMatchObject({ id: index(FIFTH), name: FIFTH, what: 'Infantry, 13,500 men', where: 'Taihoku', since: 'Offered in October 1939', can: true, why: '' });
     expect(r.takes).toHaveLength(1);

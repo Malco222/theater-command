@@ -46,5 +46,9 @@ describe('rulings B7 and B8 with the far switch off', () => {
     expect(end.month.offers).toEqual(NONE);
     // And on the card as it is read again from the month's report.
     expect(TC.page('reports').month.offers).toEqual(NONE);
+    // (The offers page and the card's row for it, on the UI director's marks of 25 November 2026: none, and empty.)
+    expect(TC.page('offers')).toEqual({ ok: false });
+    expect((end.month as { offersRow?: unknown }).offersRow).toEqual({ text: '', amber: false, act: '' });
+    expect((TC.page('reports').sections as { heading: string }[]).map((x) => x.heading)).not.toContain('FORMATIONS OFFERED');
   }, 900000);
 });

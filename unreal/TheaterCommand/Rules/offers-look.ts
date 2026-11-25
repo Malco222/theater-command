@@ -25,6 +25,8 @@
 // the rows without a second call. campaign-bridge.ts adds the calls to TC with Object.assign(TC, offerCalls(game, view)).
 
 import { formationOffers, orderDeclineFormation, orderTakeFormation, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
+import { loansEnding, rowsAwaitingWar, theName } from '../../../src/campaign/game';
+import { menWords } from '../../../src/campaign/manpower';
 import { turnToDate } from '../../../src/core/ticket';
 import { KIND, type Game } from '../../../src/campaign/types';
 
@@ -68,17 +70,118 @@ function rowLook(s: Game, o: RowOffer, shut: string | null): OfferLook {
   return { id: o.id, name: o.name, what, where, region: o.region, since, takes, line, after, can: !why, why, loan: o.loan !== null };
 }
 
-/** "2 formations offered", "1 loan at an end", or both joined. */
-function headOf(forms: number, loans: number): string {
-  const a = forms ? `${forms} formation${forms === 1 ? '' : 's'} offered` : '', b = loans ? `${loans} loan${loans === 1 ? '' : 's'} at an end` : '';
-  return [a, b].filter(Boolean).join(' and ');
+// (The words of the head, the note and the offers page's rows are the UI director's marks of 25 November 2026,
+// 13:39Z, pacific-japan/wip/offers-list-UI-MARKS.md, word for word; {braces} there are the figures computed here.)
+
+/** "10 formations offered", "10 formations offered, 1 loan ending", "1 loan ending" (the marks, section 5). */
+export function headOf(forms: number, loans: number): string {
+  const a = forms ? `${forms} formation${forms === 1 ? '' : 's'} offered` : '', b = loans ? `${loans} loan${loans === 1 ? '' : 's'} ending` : '';
+  return [a, b].filter(Boolean).join(', ');
 }
 
-/** The line under the heading: what the formations are, what each answer does at a loan's end, and that an offer stands until he answers. (A list of formations alone keeps the words it always had.) */
-function noteOf(forms: number, loans: number): string {
-  const a = forms ? `${forms === 1 ? 'It would be formed' : 'Each would be formed'} out of corps you have, as the record formed ${forms === 1 ? 'it' : 'them'}.` : '';
-  const b = loans ? (loans === 1 ? 'A regiment whose loan is over goes home if you take the offer, and stays yours if you decline.' : 'Regiments whose loans are over go home if you take the offer, and stay yours if you decline.') : '';
-  return [a, b, `Take ${forms + loans === 1 ? 'it or decline' : 'all, take some, or decline'}: an offer stands until you answer.`].filter(Boolean).join(' ');
+/**
+ * The note under the head (the marks, section 5): one formation, more than one, and the line added with loans. (With
+ * loans alone it is the loan's line only: the marks word no other, and the formations' lines would not be true.)
+ */
+export function noteOf(forms: number, loans: number): string {
+  const a = forms === 1 ? 'It would be formed out of corps you have, as history formed it. It waits for your answer until its last month, or until a corps it needs is gone.'
+    : forms > 1 ? 'Each would be formed out of corps you have, as history formed it. Each waits for your answer until its last month, or until a corps it needs is gone.' : '';
+  return [a, loans ? "A loan's end: send the regiment home into its division, or keep it for good." : ''].filter(Boolean).join(' ');
+}
+
+/** A month in words: "October 1939". */
+const monthOf = (t: number): string => turnToDate(t).label;
+/** The kinds' words as a division is named (the forces page's, campaign-bridge.ts): "Armoured", not "Armor". */
+export const DIV_WORD: Record<string, string> = { Armor: 'armoured', Engineers: 'engineer', Fortress: 'fortress' };
+const kindWord = (kind: string): string => { const w = DIV_WORD[KIND[kind as keyof typeof KIND]?.label ?? ''] ?? KIND[kind as keyof typeof KIND]?.label ?? 'Corps'; return w.charAt(0).toUpperCase() + w.slice(1); };
+/** "the 2nd Tank Division": a division's name with its article. */
+const theDivision = (name: string): string => (/^the /i.test(name) ? name : `the ${name}`);
+
+/** One line of a row on the offers page, and how it is set: '' plain, 'muted', or 'amber' (the marks: amber once, for an offer in its last month). */
+export interface OfferLine { text: string; tone: '' | 'muted' | 'amber' }
+
+/**
+ * An offer's lines on the offers page, in the marks' order (section 2): what forms and where; one line for each corps
+ * it takes, and where the men beyond the formation's go as the rule does it; what declining also gives up; when it was
+ * offered and until when; and, where FORM IT is shut, the reason. A loan's end: its three lines.
+ */
+export function offerLines(s: Game, o: RowOffer): OfferLine[] {
+  const place = (id: number): string => s.regions[id]?.name ?? '';
+  const out: OfferLine[] = [];
+  if (o.lent) {
+    out.push({ text: `${o.name}: lent to ${o.lent.to} until ${monthOf(o.since)}.`, tone: '' });
+    // (A division that never came or is gone takes nobody back: the rule's own case, `comeHome`. UI director to mark.)
+    out.push({ text: o.lent.goes === 'lost' ? `Sent home, it leaves the map: ${theDivision(o.lent.division)} is not there to take it. Kept, it stays yours for good.` : `Sent home, it goes back into ${theDivision(o.lent.division)}. Kept, it stays yours for good.`, tone: '' });
+  } else {
+    const r = o.region >= 0 ? s.regions[o.region] : null;
+    // (The design director's island test: a place with no land neighbour is "on", every other "at".)
+    const at = r ? `${r.nb.length === 0 ? 'on' : 'at'} ${r.name}` : '';
+    // (A row that joins a standing corps forms no corps of its own: it joins it where it stands. UI director to mark.)
+    const where = o.joins ? `, to join your ${o.joins}${at ? ` ${at}` : ''}` : at ? `, to form ${at}` : '';
+    out.push({ text: `${kindWord(o.kind)}, ${menWords(o.men)} men${where}.`, tone: '' });
+    for (const t of o.takes) out.push({ text: `Takes your ${t.name} at ${place(t.region)}, ${menWords(t.men)} men.`, tone: '' });
+    // (Every figure is menWords'. Where the corps taken and the formation read the same in round figures, 14,142 and
+    // 13,500 both "14,000", no line is added: the player sees no gap to read as men thrown away.)
+    const took = o.takes.reduce((n, t) => n + t.men, 0), over = menWords(took) === menWords(o.men) ? 0 : took - o.men;
+    // (The rule's own: a dated row strikes the corps it takes off whole and forms at its own size, so the rest are lost
+    // with them; nothing goes back to the depots. A row of the formations list takes only its own strength, and the
+    // rest stay in the last corps it draws on: UI director to mark.)
+    if (over > 0 && o.takes.length) out.push({ text: o.rest === 'stay' ? `The other ${menWords(over)} stay in your ${o.takes[o.takes.length - 1].name}.` : `The other ${menWords(over)} are lost with the old corps.`, tone: '' });
+    if (o.then.length) out.push({ text: `Declining it also gives up ${listed(o.then)}, which would later be formed out of it.`, tone: '' });
+  }
+  const last = o.last === null ? `Offered in ${monthOf(o.since)}.` : o.last <= s.turn ? `Offered in ${monthOf(o.since)}. This is its last month.` : `Offered in ${monthOf(o.since)}, open until ${monthOf(o.last)}.`;
+  out.push({ text: last, tone: o.last !== null && o.last <= s.turn ? 'amber' : 'muted' });
+  if (o.why && !o.lent) out.push({ text: o.why, tone: 'muted' });
+  return out;
+}
+
+/** The question ACCEPT ALL asks on the head row (the marks, section 4), or null where nothing can be answered. `rows` are the offers that would be answered. */
+export function askForm(s: Game, open: RowOffer[]): string | null {
+  const go = open.filter((o) => !o.why), passed = open.filter((o) => o.why && !o.lent);
+  if (!go.length) return null;
+  const corps = go.reduce((n, o) => n + o.takes.length, 0), men = go.reduce((n, o) => n + o.takes.reduce((m, t) => m + t.men, 0), 0);
+  const forms = go.filter((o) => !o.lent).length;
+  return `Form all ${go.length}? ${corps} of your corps leave the map, ${menWords(men)} men, and ${forms} formations form. It cannot be undone.${passed.length ? ` ${passed.length} cannot be formed this month and ${passed.length === 1 ? 'stays' : 'stay'} open.` : ''}`;
+}
+
+/** The question DECLINE ALL asks on the head row (the marks, section 4). */
+export function askDecline(open: RowOffer[]): string {
+  const loans = open.some((o) => o.lent);
+  return `Decline all ${open.length}? None of them will be offered again, and you keep the corps they would take${loans ? ', and the regiments lent to you' : ''}.`;
+}
+
+/**
+ * The month card's row for the offers (the marks, section 1): its text, whether it is amber (an offer in its last
+ * month), and the act that opens the page. Empty where nothing is offered. (A list of loans' ends alone is counted in
+ * the head's own words: the marks word no card row for it.)
+ */
+export function cardRowOf(s: Game, open: RowOffer[]): { text: string; amber: boolean; act: string } {
+  if (!open.length) return { text: '', amber: false, act: '' };
+  const forms = open.filter((o) => !o.lent), loans = open.length - forms.length;
+  const due = open.filter((o) => o.last !== null && o.last <= s.turn).length;
+  const n = forms.length || loans, word = forms.length ? 'formation' : 'loan';
+  const said = forms.length ? `${n} ${word}${n === 1 ? '' : 's'} offered` : `${n} ${word}${n === 1 ? '' : 's'} ending`;
+  const text = due ? `${said}, ${due} in its last month.` : n === 1 ? `${said}: it waits for your answer.` : `${said}: they wait for your answer.`;
+  return { text, amber: due > 0, act: 'open:offers' };
+}
+
+/**
+ * The two lines the design director asked for that the marks do not word (ruling of 13:39Z, 25 November 2026, dated
+ * rows, points 2 and 7), each muted on the offers page. UI director to mark both.
+ *   loans   his corps lent to a campaign that leave by themselves when the loan ends, with when (`loansEnding`).
+ *   waiting his dated rows that wait for their war to begin, by ruling B7, with what they wait for (`rowsAwaitingWar`).
+ */
+export function asideLines(s: Game): { loans: string[]; waiting: string[] } {
+  const who = (nat: string): string => (s.nations[nat] ? theName(s.nations[nat]) : nat);
+  const loans = loansEnding(s).map((l) => (l.until !== null
+    ? `${l.name} leaves your command by itself in ${monthOf(l.until)}, when its loan ends.` // UI director to mark
+    : l.takes ? `${l.name} leaves your command by itself once ${l.takes} is yours, when its loan ends.` // UI director to mark
+      : `${l.name} leaves your command by itself once ${listed(l.holds ?? [])} ${(l.holds ?? []).length === 1 ? 'is' : 'are'} lost, when its loan ends.`)); // UI director to mark
+  const waiting = rowsAwaitingWar(s).map((w) => (w.pair
+    ? `${w.name} waits for its war: it forms once ${who(w.pair[0])} and ${who(w.pair[1])} are at war.` // UI director to mark
+    : w.with === '*' ? `${w.name} waits for its war: it forms once you are at war.` // UI director to mark
+      : `${w.name} waits for its war: it forms once you are at war with ${who(w.with)}.`)); // UI director to mark
+  return { loans, waiting };
 }
 
 /** The player's open offers in plain words. A list of none where there is no player, no offer, or the whole world is off. */
@@ -121,7 +224,8 @@ export function offerCalls(game: () => Game, view: () => unknown) {
       // (A reason is a sentence of its own, with its capital: it follows a full stop, never a colon.)
       const said = [
         formed.length ? `${formed.length === 1 ? `${names.get(formed[0])} is formed` : `${formed.length} formations are formed: ${listed(formed.map((id) => names.get(id) ?? ''))}`}.` : '',
-        gone.length ? `${listed(gone.map((id) => names.get(id) ?? ''))} ${gone.length === 1 ? 'is' : 'are'} let go.` : '',
+        // (A loan's end is answered in the words of its buttons, SEND IT HOME and KEEP IT: the UI director's marks, section 3.)
+        gone.length ? `${listed(gone.map((id) => names.get(id) ?? ''))} ${gone.length === 1 ? 'is' : 'are'} sent home.` : '',
         ...left.map((x) => (x.name ? `${x.name} ${lent.has(x.id) ? 'stays' : 'is not formed'}. ${x.why}` : x.why)),
       ].filter(Boolean).join(' ');
       return { ok: taken.length > 0 && !left.length, taken, left, said, offers: offersLook(s), view: view() };
@@ -136,7 +240,7 @@ export function offerCalls(game: () => Game, view: () => unknown) {
       const unformed = declined.filter((id) => !lent.has(id)), kept = declined.filter((id) => lent.has(id));
       const said = [
         unformed.length ? `${unformed.length === 1 ? `${names.get(unformed[0])} is not formed` : `${unformed.length} formations are not formed`}: your corps stay as they are.` : '',
-        kept.length ? `${listed(kept.map((id) => names.get(id) ?? ''))} ${kept.length === 1 ? 'stays' : 'stay'} under your command.` : '',
+        kept.length ? `${listed(kept.map((id) => names.get(id) ?? ''))} ${kept.length === 1 ? 'stays' : 'stay'} yours for good.` : '',
       ].filter(Boolean).join(' ');
       return { ok: declined.length > 0, declined, said, offers: offersLook(s), view: view() };
     },

@@ -5086,7 +5086,22 @@ export interface OfferTakes { id: number; name: string; kind: Kind; region: numb
  * `last` is the last month in which it may be answered (`offerLast`): null for the end of a loan, which stands until
  * he answers.
  */
-export interface RowOffer { id: number; name: string; kind: Kind; divs: number; men: number; since: number; last: number | null; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null }
+export interface RowOffer {
+  id: number; name: string; kind: Kind; divs: number; men: number; since: number; last: number | null; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null;
+  /**
+   * What becomes of the men of the corps it takes beyond the formation's own (the offers page's line for them):
+   * 'lost' where the corps taken are struck off whole and the row forms at its own size (`expeditions`: nothing goes
+   * back to the depots), 'stay' where the row takes only its own strength out of them and the rest stay in the last
+   * corps it draws on (the formations list, `formRow`). Null for the end of a loan.
+   */
+  rest: 'lost' | 'stay' | null;
+  /**
+   * The end of a loan, from the row's own data: what the regiment was lent to do (`take Singapore`, `hold ...`), the
+   * division it goes back into, and how: 'into' the division on the map, 'later' remembered for a division still to be
+   * formed, 'lost' where that division never came or is gone. Null for a formation offered.
+   */
+  lent: { to: string; division: string; goes: 'into' | 'later' | 'lost' } | null;
+}
 
 /** One open offer of the player's, read with nothing changed. */
 function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
@@ -5115,7 +5130,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
     && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
       && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
-  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null };
+  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null };
 }
 
 const leaveKey = (i: number): string => `leave:${i}`;
@@ -5157,12 +5172,14 @@ function loanView(g: Game, nat: string, row: any[], i: number): RowOffer | null 
   const home = ((setup as any).expeditions as any[])[k];
   const there = g.flags[`sent:${k}`] === 1 && g.corps.some((x) => x.nat === nat && x.name === home[2] && !x.dead && x.divs === home[4]);
   const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
-  const lent = `It was lent to ${typeof o.takes === 'string' ? `take ${o.takes}` : Array.isArray(o.holds) ? `hold ${list(o.holds as string[])}` : 'a campaign'}, and its loan is over`;
+  const to = typeof o.takes === 'string' ? `take ${o.takes}` : Array.isArray(o.holds) ? `hold ${list(o.holds as string[])}` : 'a campaign';
+  const lent = `It was lent to ${to}, and its loan is over`;
   const goes = there ? `it goes home to its division, ${home[2]}`
     : g.flags[`sent:${k}`] === undefined ? `it goes home, and joins its division, ${home[2]}, when that is formed`
       : `it leaves the map, for its division, ${home[2]}, is not there to take it`;
   const mine = { id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) };
-  return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], last: null, region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.` };
+  return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], last: null, region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.`,
+    rest: null, lent: { to, division: home[2], goes: there ? 'into' : g.flags[`sent:${k}`] === undefined ? 'later' : 'lost' } };
 }
 
 /**
@@ -5175,7 +5192,7 @@ function formView(g: Game, nat: string, row: any[], id: number): RowOffer {
   const reg = formPlace(g, nat, row, made);
   const takes = made.map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
   const why = offerGone(g, nat, row, id) ?? (reg ? null : `There is nowhere for it to form: ${row[5]} is not yours.`);
-  return { id, name: row[2], kind: row[3], divs: row[4], men: Math.round(row[4] * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(id)], last: offerLast(g, row, id), region: reg ? reg.id : -1, joins: null, takes, why, then: [], loan: null };
+  return { id, name: row[2], kind: row[3], divs: row[4], men: Math.round(row[4] * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(id)], last: offerLast(g, row, id), region: reg ? reg.id : -1, joins: null, takes, why, then: [], loan: null, rest: 'stay', lent: null };
 }
 
 /** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */
@@ -5190,6 +5207,57 @@ export function rowOffers(g: Game): RowOffer[] {
   });
   ((setup as any).formations as any[] ?? []).forEach((row, k) => { if (row[1] === nat && offerOpen(g, nat, formId(k))) out.push(formView(g, nat, row, formId(k))); });
   return out.sort((a, b) => a.since - b.since || a.id - b.id);
+}
+
+/**
+ * For the offers page (the design director's ruling of 13:39Z, 25 November 2026, point 2 of the dated rows: "Until
+ * then they leave as today, and the offers page says so"): the player's corps lent to a campaign whose loan's end is
+ * not asked of him (`loanStays`: no division's row awaits it), which leave his command by themselves when the loan is
+ * over (`lentOver`). Each with what it was lent to do and when it leaves: by its month (`until`) where the date
+ * decides it, else when the place it was lent to take is his side's (`takes`) or the last place it was lent to hold is
+ * lost (`holds`). Read with nothing changed; none with the far side off.
+ */
+export function loansEnding(g: Game): { id: number; name: string; until: number | null; takes: string | null; holds: string[] | null }[] {
+  const nat = g.human;
+  if (nat === null || !farOn(g) || !g.nations[nat]?.alive) return [];
+  const out: { id: number; name: string; until: number | null; takes: string | null; holds: string[] | null }[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    const o = row[6] ?? {};
+    if (row[1] !== nat || !o.until || awaitedBy(nat, row[2]) >= 0 || !lentCorps(g, nat, i)) return;
+    // (By date where `lentOver` reads the date: the book's stops, or a row lent for no place.)
+    const byDate = stopDef(g).book || (!o.takes && !o.holds);
+    out.push({ id: i, name: lentCorps(g, nat, i)!.name, until: byDate ? o.until : null, takes: !byDate && !o.holds && typeof o.takes === 'string' ? o.takes : null, holds: !byDate && Array.isArray(o.holds) ? o.holds : null });
+  });
+  return out;
+}
+
+/**
+ * For the offers page (the same ruling, point 7: "One line on the offers page for a row waiting for its war: yes"):
+ * the player's dated rows that have come due and wait for their war to begin, by ruling B7. A row that names its war
+ * (`war`) and finds it not yet begun, or one posted on ground a country his is at peace with holds (`postedFor`).
+ * `with` is who he must be at war with: the posting's holder, or the other of the two its war names ('*' for any war);
+ * `pair` is set where its war is between two others (an ally's war it was raised to join). Read with nothing changed;
+ * none with the far side off.
+ */
+export function rowsAwaitingWar(g: Game): { id: number; name: string; with: string; pair: [string, string] | null; place: string }[] {
+  const nat = g.human;
+  if (nat === null || !farOn(g) || g.flags.open !== 1 || !g.nations[nat]?.alive || shipsItsOwn(g, nat)) return [];
+  const out: { id: number; name: string; with: string; pair: [string, string] | null; place: string }[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    const o = row[6] ?? {};
+    if (row[1] !== nat || g.flags[`sent:${i}`] || offerOpen(g, nat, i) || leaveOpen(g, nat, i)) return;
+    if ((o.stops && !(o.stops as number[]).includes(stopOf(g))) || (g.turn < row[0] && !(o.war && o.after !== undefined))) return;
+    if (o.war) {
+      const w = o.war as string[];
+      if (warOn(g, w) || warOver(g, i, w)) return;
+      const mine = w.includes(nat);
+      out.push({ id: i, name: row[2], with: mine ? (w[0] === nat ? w[1] : w[0]) : w[1], pair: mine ? null : [w[0], w[1]], place: row[5] });
+      return;
+    }
+    const posting = g.byName[row[5]];
+    if (posting && rowPlace(g, nat, row, o, posting).waits) out.push({ id: i, name: row[2], with: posting.ctrl, pair: null, place: row[5] });
+  });
+  return out;
 }
 
 /**

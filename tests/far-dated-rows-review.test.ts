@@ -435,18 +435,19 @@ describe("the 3D game's calls: a loan's end in the one list", () => {
     const t1 = row(g, T1)!;
     expect(TC().load(saveGame(g))).not.toBeNull();
     const list = TC().offers() as { count: number; head: string; note: string; can: boolean; rows: { id: number; name: string; what: string; where: string; since: string; takes: { name: string; where: string }[]; line: string; can: boolean; loan: boolean }[] };
-    expect(list).toMatchObject({ count: 2, head: '2 loans at an end', can: true });
-    expect(list.note).toBe('Regiments whose loans are over go home if you take the offer, and stay yours if you decline. Take all, take some, or decline: an offer stands until you answer.');
+    // (Head, note and the sentences said: the UI director's marks of 25 November 2026, 13:39Z, sections 3 and 5.)
+    expect(list).toMatchObject({ count: 2, head: '2 loans ending', can: true });
+    expect(list.note).toBe("A loan's end: send the regiment home into its division, or keep it for good.");
     expect(list.rows.map((r) => [r.id, r.name, r.loan])).toEqual([[index(T1), T1, true], [index(T6), T6, true]]);
     expect(list.rows[0]).toMatchObject({ what: `Armor, ${men(t1).toLocaleString('en-US')} men`, where: 'Hainan', since: 'Its loan ended in December 1941', can: true });
     expect(list.rows[0].takes.map((t) => [t.name, t.where])).toEqual([[T1, 'Hainan']]);
     expect(list.rows[0].line).toBe(`It was lent to take Singapore, and its loan is over. Let go, it goes home, and joins its division, ${D1}, when that is formed; kept, it stays under your command, and its division stays short of it.`);
 
     const go = TC().offerTake([index(T1)]) as { ok: boolean; taken: number[]; said: string; offers: { count: number; head: string; note: string } };
-    expect(go).toMatchObject({ ok: true, taken: [index(T1)], said: `${T1} is let go.` });
-    expect(go.offers).toMatchObject({ count: 1, head: '1 loan at an end', note: 'A regiment whose loan is over goes home if you take the offer, and stays yours if you decline. Take it or decline: an offer stands until you answer.' });
+    expect(go).toMatchObject({ ok: true, taken: [index(T1)], said: `${T1} is sent home.` });
+    expect(go.offers).toMatchObject({ count: 1, head: '1 loan ending', note: "A loan's end: send the regiment home into its division, or keep it for good." });
     const keep = TC().offerDecline('all') as { ok: boolean; declined: number[]; said: string; offers: { count: number } };
-    expect(keep).toMatchObject({ ok: true, declined: [index(T6)], said: `${T6} stays under your command.` });
+    expect(keep).toMatchObject({ ok: true, declined: [index(T6)], said: `${T6} stays yours for good.` });
     expect(keep.offers.count).toBe(0);
   });
 
@@ -458,8 +459,8 @@ describe("the 3D game's calls: a loan's end in the one list", () => {
     const list = calls.offers();
     const forms = list.rows.filter((r) => !r.loan).length;
     expect(forms).toBeGreaterThan(1);
-    expect(list.head).toBe(`${forms} formations offered and 2 loans at an end`);
-    expect(list.note).toBe('Each would be formed out of corps you have, as the record formed them. Regiments whose loans are over go home if you take the offer, and stay yours if you decline. Take all, take some, or decline: an offer stands until you answer.');
+    expect(list.head).toBe(`${forms} formations offered, 2 loans ending`);
+    expect(list.note).toBe("Each would be formed out of corps you have, as history formed it. Each waits for your answer until its last month, or until a corps it needs is gone. A loan's end: send the regiment home into its division, or keep it for good.");
   });
 
   it('a row says what declining it also gives up', () => {

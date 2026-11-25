@@ -116,7 +116,8 @@ import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
 import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the enemy's month near you)
 import { scrambleCalls } from './scramble-demo'; // (release 2, the scramble offer's stand-in: a demonstration, nothing booked)
-import { offerCalls, offersLook, type OffersLook } from './offers-look'; // (release 2, the whole world: formations offered out of the player's own corps, ruling B8)
+import { formationOffers, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
+import { DIV_WORD, askDecline, askForm, asideLines, cardRowOf, headOf, noteOf, offerCalls, offerLines, offersLook, type OffersLook } from './offers-look'; // (release 2, the whole world: formations offered out of the player's own corps, ruling B8)
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
@@ -154,7 +155,7 @@ import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
+import { CHART_NOW, answersOf, attachWorld, closedCountry, farOn, motherLine, patronOf } from '../../../src/campaign/world';
 import { islandOf, roomSays } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
@@ -2113,7 +2114,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
-  swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
+  swapAsked = ''; wreckAsked = ''; offersAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
   lastMonth = null;
   lastReel = -9;
@@ -2239,7 +2240,7 @@ function load(text: string) {
   g = loaded;
   startGunsLoaded(g);
   lessonsBegin(false);
-  swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
+  swapAsked = ''; wreckAsked = ''; offersAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
   const kept = reportOfSave(g);
   lastMonth = kept.report;
@@ -3570,6 +3571,13 @@ interface MonthCard {
    * regiment lent to a campaign, which its division awaits, goes home only if he lets it go.
    */
   offers: OffersLook;
+  /**
+   * (Release 2, the whole world; the UI director's marks of 25 November 2026, section 1.) The card's one row for the
+   * offers, first under the red bands: its text ("10 formations offered: they wait for your answer."), whether it is
+   * amber (only when an offer is in its last month), and the act a press makes ('open:offers', which opens the offers
+   * page). All empty ('', false, '') when nothing is offered, and always on the older maps.
+   */
+  offersRow: { text: string; amber: boolean; act: string };
 }
 
 /** The mark kept as the player's month opened: what the card that closes it is counted from. */
@@ -3646,6 +3654,7 @@ function shownCard(s: Game, c: RuleCard): MonthCard {
     rest: over > 0 ? `${over} more ${over === 1 ? 'line' : 'lines'} of news ${over === 1 ? 'is' : 'are'} in the Newsreel.` : "Every figure comes from the month's own battle reports.",
     // (Ruling B8) What is offered him this month and still open from earlier ones: one list, never a card each.
     offers: offersLook(s),
+    offersRow: ((): { text: string; amber: boolean; act: string } => { try { return cardRowOf(s, formationOffers(s)); } catch { return { text: '', amber: false, act: '' }; } })(),
   };
 }
 
@@ -4824,8 +4833,11 @@ function warPlan(on: string, target = -1) {
 
 // ---- Rooms drawn by one general panel: the bridge writes the words and the buttons, the game draws them ----------
 
-interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string; alarm?: string }
+// (`safe`, release 2: the safe answer of a question asked in place on a page's head, GO BACK, drawn in lit brass and
+// taking Enter and Esc, ruling 134(f); the offers page. `tones`, release 2: how each of a row's lines is set, '' plain,
+// 'muted' or 'amber', where a row says it; the offers page, on the UI director's marks of 25 November 2026.)
+interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean; safe?: boolean }
+interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string; alarm?: string; tones?: string[] }
 interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 
 /** A question about World Domination waiting for its second and third yes. */
@@ -4835,6 +4847,8 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   const out: { id: string; label: string }[] = [];
   if (!s.human) return out;
   if (lastMonth) out.push({ id: 'reports', label: "THE MONTH'S REPORT" });
+  // (Release 2, the whole world: the formations offered out of his own corps, ruling B8; the UI director's marks.)
+  if (offersPage(s)) out.push({ id: 'offers', label: 'FORMATIONS OFFERED' });
   if (s.stories.awards.some((a) => a.nat === s.human && !a.old)) out.push({ id: 'heroes', label: 'HEROES AT HOME' });
   if (commandBrief(s)) out.push({ id: 'staff', label: 'YOUR STAFF' });
   if (pictureSpies(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
@@ -5351,16 +5365,76 @@ function reportsPage(s: Game): Page | null {
       }));
     }
   } catch { staffed = []; }
+  // (Release 2, the whole world: the month card's row for the formations offered, so they can be found after the
+  // card is put away: the UI director's marks, section 1. Its button's words are not marked: UI director to mark.)
+  let offered: PageRow[] = [];
+  try {
+    const card = cardRowOf(s, formationOffers(s));
+    if (card.text) offered = [{ nat: '', title: '', lines: [card.text], tones: [card.amber ? 'amber' : ''], buttons: [{ label: 'SEE THE OFFERS', act: card.act, ok: true, tip: '' }] }];
+  } catch { offered = []; }
   return {
     id: 'reports', title: `THE MONTH'S REPORT  \u00B7  ${lastMonth.date.toUpperCase()}`,
     headline: lastMonth.rows.length ? `${mine.length ? `${mine.length} report${mine.length === 1 ? '' : 's'} from your own fronts` : 'Nothing touched your own fronts'}, ${rest.length} from elsewhere` : 'A quiet month',
     note: 'What every nation did while your month was closed, as it was shown on the table. Your own fronts come first.',
     top: [],
     sections: [
+      { heading: 'FORMATIONS OFFERED', text: '', rows: offered },
       { heading: 'YOUR FRONTS', text: mine.length ? '' : 'No enemy moved against you, and none of your ground changed hands.', rows: mine },
       { heading: 'WHAT YOUR STAFF DID', text: '', rows: staffed },
       { heading: 'ELSEWHERE', text: rest.length ? '' : 'Nothing was fought for elsewhere.', rows: rest },
       { heading: 'THE NEWS', text: lastMonth.news.join('\n'), rows: [] },
+    ].filter((x) => x.rows.length || x.text),
+  };
+}
+
+// ---- Formations offered (release 2, the whole world) ------------------------------------------------------
+// The design director's ruling B8 of 25 November 2026 and his rulings of 13:39Z that day; the words and the buttons
+// are the UI director's marks of 13:39Z (pacific-japan/wip/offers-list-UI-MARKS.md), word for word, built in
+// offers-look.ts. A page of the generic page system, id 'offers', as the cabinet's and a fleet's: the 3D game draws it
+// with no widget of its own. Its acts: offers:take:<id> (FORM IT, or SEND IT HOME at a loan's end), offers:decline:<id>
+// (DECLINE, or KEEP IT), offers:ask:take and offers:ask:decline (ACCEPT ALL and DECLINE ALL, which ask first, in place
+// on the head row), offers:back (GO BACK), and offers:all:take and offers:all:decline (FORM ALL and DECLINE ALL, the
+// answers to the two questions). Null with the whole world off, and where nothing is offered.
+
+/** The question asked on the offers page's head and the month it was asked ('take:30', 'decline:30'), or '' for none: a second state of the head, as THE LAST ACT's (domAsked). */
+let offersAsked = '';
+
+function offersPage(s: Game): Page | null {
+  if (!s.human || !farOn(s)) return null;
+  let open: RowOffer[] = [];
+  try { open = formationOffers(s); } catch { open = []; }
+  if (!open.length) return null;
+  const up = whyNotAnswerOffers(s) === null;
+  const forms = open.filter((o) => !o.lent).length, loans = open.length - forms;
+  const [what, when] = offersAsked.split(':');
+  const asked = up && when === String(s.turn) ? what : '';
+  const formQ = askForm(s, open);
+  const back: PageButton = { label: 'GO BACK', act: 'offers:back', ok: true, tip: '', safe: true };
+  let note = noteOf(forms, loans), top: PageButton[];
+  if (asked === 'take' && formQ) { note = formQ; top = [back, { label: 'FORM ALL', act: 'offers:all:take', ok: true, tip: '', danger: true }]; }
+  else if (asked === 'decline') { note = askDecline(open); top = [back, { label: 'DECLINE ALL', act: 'offers:all:decline', ok: true, tip: '', danger: true }]; }
+  else top = [{ label: 'ACCEPT ALL', act: 'offers:ask:take', ok: up && formQ !== null, tip: '' }, { label: 'DECLINE ALL', act: 'offers:ask:decline', ok: up, tip: '' }];
+  // (Not his month: every button greyed, and the reason said once, under the head: the marks, section 3.)
+  if (!up) note = `It is not your month.\n${note}`;
+  const rows: PageRow[] = open.map((o) => {
+    const lines = offerLines(s, o);
+    return {
+      nat: s.human as string, title: o.name, lines: lines.map((l) => l.text), tones: lines.map((l) => l.tone),
+      buttons: [
+        // (FORM IT shut is greyed, with its reason as its tip and as the row's last line; DECLINE stays open.)
+        { label: o.lent ? 'SEND IT HOME' : 'FORM IT', act: `offers:take:${o.id}`, ok: up && !o.why, tip: o.why ?? '' },
+        { label: o.lent ? 'KEEP IT' : 'DECLINE', act: `offers:decline:${o.id}`, ok: up, tip: '' },
+      ],
+    };
+  });
+  const aside = asideLines(s);
+  return {
+    id: 'offers', title: 'FORMATIONS OFFERED', headline: headOf(forms, loans), note, top,
+    sections: [
+      { heading: '', text: '', rows },
+      // (The two lines the design director asked for, muted, that the marks do not word: UI director to mark, with their headings.)
+      { heading: 'LENT TO YOU, AND LEAVING BY THEMSELVES', text: aside.loans.join('\n'), rows: [] },
+      { heading: 'WAITING FOR THEIR WAR', text: aside.waiting.join('\n'), rows: [] },
     ].filter((x) => x.rows.length || x.text),
   };
 }
@@ -5731,7 +5805,7 @@ function forcesPage(s: Game): Page | null {
     for (const c of field) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
     // (1.5.2, playtest #36: each kind with its own count and noun, "1 infantry division, 2 engineer divisions", never
     // "1 infantry divisions"; the kinds' words as a division is named, "armoured" and "engineer".)
-    const DIV_WORD: Record<string, string> = { Armor: 'armoured', Engineers: 'engineer', Fortress: 'fortress' };
+    // (The words are offers-look.ts's DIV_WORD, which the offers page reads too.)
     const what = [...kinds.entries()].map(([k, n]) => `${n} ${DIV_WORD[k] ?? k.toLowerCase()} division${n === 1 ? '' : 's'}`).join(', ');
     return {
       sort: (moving.length ? 0 : 1) * 1e6 - cs.reduce((n, c) => n + men(c), 0) / 1000,
@@ -6600,7 +6674,8 @@ function page(id: string, region = -1) {
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
-    : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : part[0] === 'fold' ? foldPage(s, Number(part[1])) : null;
+    : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : part[0] === 'fold' ? foldPage(s, Number(part[1]))
+    : id === 'offers' ? offersPage(s) : null;
   // (Release 2, atom.ts) THE ATOMIC PROJECT opened with a bomb in hand: the chip under END THE MONTH has done its work.
   if (p && id === 'atom' && s.human) { const a = s.nations[s.human]?.atom; if (a && (a.bombs ?? 0) > 0) a.seen = s.turn; }
   // An air group's row carries a large picture of its own machine, wherever the row is of an air group by name:
@@ -6769,6 +6844,19 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       }
     }
     return { ok, note, fly, flies, open, ...(air.after ? { after: air.after } : {}), view: view() };
+  }
+  if (part[0] === 'offers') {
+    // (Release 2, the whole world) The offers page's buttons (offersPage): an answer to one offer, ACCEPT ALL and
+    // DECLINE ALL asked first in place on the head, GO BACK, and the answers to the two questions. What is said after
+    // an answer is offers-look.ts's `said`. The page is closed once nothing is left on it.
+    const calls = offerCalls(game, view);
+    if (part[1] === 'ask') { offersAsked = `${part[2] === 'decline' ? 'decline' : 'take'}:${s.turn}`; return { ok: true, note: '', fly, flies, open, view: view() }; }
+    offersAsked = '';
+    if (part[1] === 'back') return { ok: true, note: '', fly, flies, open, view: view() };
+    const ids = part[1] === 'all' ? 'all' : [Number(part[2])];
+    const take = part[1] === 'take' || (part[1] === 'all' && part[2] === 'take');
+    const r = take ? calls.offerTake(ids) : calls.offerDecline(ids);
+    return { ok: r.ok, note: r.said, fly, flies, open: r.offers.count ? '' : 'close', view: r.view };
   }
   if (part[0] === 'probe') {
     // (Version 64) One corps feels out the line: the attack card is read again with what it found.
