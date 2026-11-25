@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 61597087 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 682e3ac9 2026-11-25. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -55575,6 +55575,32 @@
   function hallShare(g2, r) {
     const l = lineOf2("hall");
     return l?.occupiedShare ? l.occupiedShare * civicLevel(g2, "hall", r.id) : 0;
+  }
+  function civicAdvice(g2, nat) {
+    const n = g2.nations[nat];
+    if (!civicRules(g2) || !n?.alive) return { lines: [], home: [] };
+    const A = CIVIC.ai;
+    const worth3 = (r) => (n.capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND[r.terrain] * 10 + (r.port ? 1 : 0);
+    const home = g2.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth3(b) - worth3(a) || a.id - b.id);
+    const built = {};
+    for (const r of home) for (const { line, level } of civicAt(g2, r.id)) built[line.id] = (built[line.id] ?? 0) + level;
+    for (const b of n.queue) if (b.what === "civic" && b.item) built[b.item] = (built[b.item] ?? 0) + 1;
+    const lines2 = Object.keys(A.mix).sort((x, y) => (built[x] ?? 0) / A.mix[x] - (built[y] ?? 0) / A.mix[y] || A.mix[y] - A.mix[x]);
+    for (const l of CIVIC.lines) if (!lines2.includes(l.id)) lines2.push(l.id);
+    return { lines: lines2, home: home.map((r) => r.id) };
+  }
+  function civicReady(g2, nat) {
+    const n = g2.nations[nat];
+    if (!civicRules(g2) || !n?.alive) return 0;
+    let count4 = 0;
+    for (const r of g2.regions) {
+      if (r.ctrl !== nat) continue;
+      if (CIVIC.lines.some((l) => {
+        const lv = civicLevel(g2, l.id, r.id);
+        return lv < TOP2 && l.cost[lv] <= n.pp && whyNotCivic(g2, nat, r, l.id) === null;
+      })) count4++;
+    }
+    return count4;
   }
   function civicAI(g2, nat, earned, keeps = false, wait = false) {
     const n = g2.nations[nat];
@@ -113751,6 +113777,7 @@
     swapAsked = "";
     wreckAsked = "";
     fallenNation = null;
+    forgetOwnOrders();
     lastMonth = null;
     lastReel = -9;
     monthBook = null;
@@ -113866,6 +113893,7 @@
     swapAsked = "";
     wreckAsked = "";
     fallenNation = null;
+    forgetOwnOrders();
     const kept3 = reportOfSave(g);
     lastMonth = kept3.report;
     lastReel = -9;
@@ -116228,7 +116256,9 @@ ${next.text}` : ""}` : next ? next.also : "";
   }
   function cancel(id) {
     const s = game();
-    return { ok: orderCancelBuild(s, id), view: view2() };
+    const ok2 = orderCancelBuild(s, id);
+    if (ok2) forgetOwnOrder(id);
+    return { ok: ok2, view: view2() };
   }
   function arsenal(region = -1) {
     const s = game();
@@ -116262,7 +116292,9 @@ ${next.text}` : ""}` : next ? next.also : "";
   }
   function order(key7, region = -1) {
     const s = game();
+    const label = arsenalOffers(s, region).find((o) => o.key === key7)?.label ?? "";
     const built = orderArsenal(s, key7, region);
+    if (built) noteOwnOrder(s, built, key7, region, label || built.name);
     return { ok: !!built, name: built?.name ?? "", view: view2() };
   }
   function declare(on2) {
@@ -116346,6 +116378,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     } catch {
     }
     if (pictureTrade(s)) out.push({ id: "trade", label: "TRADE AGREEMENTS" });
+    if (homeFrontOn() && s.nations[s.human]?.alive && townBuildings(s, s.nations[s.human].capital)) out.push({ id: "home", label: "THE HOME FRONT" });
     if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: "towns", label: "TOWNS TO BUILD UP" });
     if (pictureDamaged(s).length) out.push({ id: "repairs", label: "DAMAGED TOWNS" });
     if (columnsOn(s) && s.nations[s.human]?.alive) out.push({ id: "lorries", label: "SUPPLY COLUMNS" });
@@ -116466,7 +116499,22 @@ ${next.text}` : ""}` : next ? next.also : "";
         tip: `Nothing is being raised or built, and there is ${inHand(me.pp).toLocaleString("en-US")} in the treasury. Open the ARSENAL to order corps, aircraft, ships or works.`
       });
     }
-    const theirs = { research: "research", arsenal: "build", "page:trade": "build", "page:spies": "spies", "page:repairs": "build" };
+    if (homeFrontOn()) {
+      let can2 = 0;
+      try {
+        can2 = civicReady(s, me.id);
+      } catch {
+        can2 = 0;
+      }
+      if (can2 > 0) {
+        out.push({
+          k: "page:home",
+          t: can2 === 1 ? "A TOWN CAN BUILD" : `${can2} TOWNS CAN BUILD`,
+          tip: `${can2 === 1 ? "One of your towns has" : `${can2} of your towns have`} the builders free and something the treasury can pay for: it holds ${inHand(me.pp).toLocaleString("en-US")}. Open THE HOME FRONT to build in each with one press.`
+        });
+      }
+    }
+    const theirs = { research: "research", arsenal: "build", "page:trade": "build", "page:spies": "spies", "page:repairs": "build", "page:home": "build" };
     return out.filter((t) => {
       const desk = t.k.startsWith("field:") ? "air" : theirs[t.k];
       try {
@@ -117407,6 +117455,8 @@ ${standing5}`,
       note: "A town is a high street with a few empty lots: a village has one, a town two, a city three and the capital four. Each lot takes one kind of building, and each building can be raised two more levels. A lot once built on stays that kind.",
       top: [
         { label: "SHOW ON THE MAP", act: `goto:region:${region}`, ok: true, tip: "Looks at the place on the map." },
+        // (Release 2, THE HOME FRONT) The way back to the board, where the game shows it.
+        ...homeFrontOn() ? [{ label: "THE HOME FRONT", act: "open:home", ok: true, tip: "Every town of yours on one board, with raising forces and everything on order." }] : [],
         { label: "TOWNS TO BUILD UP", act: "open:towns", ok: true, tip: "The best place for each kind of building now." },
         { label: "TRADE AGREEMENTS", act: "open:trade", ok: !!tradeLedger(s), tip: "What the commerce of your towns is traded for." }
       ],
@@ -117666,6 +117716,238 @@ ${standing5}`,
       note: "Commerce pays into the treasury, farming fills the depots, learning quickens research, training and medicine look after the army, and administration brings in tax and political capital. Pick any province of yours on the map and press TOWN PLAN to see its plots.",
       top: [{ label: "TRADE AGREEMENTS", act: "open:trade", ok: !!tradeLedger(s), tip: "What the commerce of your towns is traded for." }],
       sections
+    };
+  }
+  var homeFrontOn = () => !!globalThis.TC_HOME_FRONT;
+  var ordersNow = null;
+  var ordersBefore = null;
+  function forgetOwnOrders() {
+    ordersNow = null;
+    ordersBefore = null;
+  }
+  function noteOwnOrder(s, b, key7, region, label) {
+    if (key7.startsWith("work:")) return;
+    if (!ordersNow || ordersNow.turn !== s.turn) {
+      if (ordersNow && ordersNow.list.length) ordersBefore = ordersNow;
+      ordersNow = { turn: s.turn, list: [] };
+    }
+    ordersNow.list.push({ id: b.id, key: key7, region, label });
+  }
+  function forgetOwnOrder(id) {
+    if (ordersNow) ordersNow.list = ordersNow.list.filter((o) => o.id !== id);
+  }
+  var keyOfBuild = (b) => b.what === "corps" && b.kind && !b.elite && !b.airborne && !b.revive ? `corps:${b.kind}` : b.what === "air" && b.item ? `air:${b.item}` : b.what === "ship" && b.item ? `ship:${b.item}` : "";
+  function ownOrdersBefore(s) {
+    const kept3 = ordersNow && ordersNow.turn < s.turn && ordersNow.list.length ? ordersNow : ordersBefore && ordersBefore.turn < s.turn && ordersBefore.list.length ? ordersBefore : null;
+    if (kept3) return kept3;
+    if (ordersNow || ordersBefore) return null;
+    const me = s.human ? s.nations[s.human] : null;
+    let staffed = true;
+    try {
+      staffed = !!pictureCommand(s)?.desks.find((d) => d.id === "build")?.staff;
+    } catch {
+      staffed = true;
+    }
+    if (!me || staffed) return null;
+    const offers2 = arsenalOffers(s, -1);
+    const list5 = me.queue.filter((b) => b.ordered === s.turn - 1 && keyOfBuild(b)).map((b) => ({ key: keyOfBuild(b), region: -1, label: offers2.find((o) => o.key === keyOfBuild(b))?.label ?? b.name }));
+    return list5.length ? { turn: s.turn - 1, list: list5 } : null;
+  }
+  function ordersInWords(labels) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1);
+    const many = (l) => /(corps|ships)$/i.test(l) ? l : `${l}s`;
+    return listNames2([...counts].map(([l, n]) => `${n} ${lowFirst(n === 1 ? l : many(l))}`));
+  }
+  function againPlan(s) {
+    const me = s.human ? s.nations[s.human] : null;
+    const before = me ? ownOrdersBefore(s) : null;
+    if (!me || !before) return null;
+    const book3 = /* @__PURE__ */ new Map();
+    const offersAt = (region) => {
+      if (!book3.has(region)) book3.set(region, arsenalOffers(s, region));
+      return book3.get(region);
+    };
+    let pp = me.pp;
+    const go = [], out = [];
+    for (const it of before.list) {
+      const o = offersAt(it.region).find((x) => x.key === it.key);
+      if (!o) {
+        out.push({ label: it.label, why: "no longer on offer" });
+        continue;
+      }
+      if (o.why && !o.poor) {
+        out.push({ label: o.label, why: o.why.replace(/\.$/, "") });
+        continue;
+      }
+      if (o.cost > pp) {
+        out.push({ label: o.label, why: `${Math.max(1, shown(o.cost) - inHand(pp)).toLocaleString("en-US")} short` });
+        continue;
+      }
+      pp -= o.cost;
+      go.push({ key: it.key, region: it.region, label: o.label, cost: o.cost });
+    }
+    return { when: turnToDate(before.turn).label, go, out };
+  }
+  function homeBoard(s) {
+    const me = s.human ? s.nations[s.human] : null;
+    if (!me || !me.alive || !townBuildings(s, me.capital)) return null;
+    const up = humanUp(s) && !onEve(s);
+    const notUp = "It is not your month.";
+    const advice = civicAdvice(s, me.id);
+    const rank2 = new Map(advice.lines.map((l, i) => [l, i]));
+    const place3 = new Map(advice.home.map((id, i) => [id, i]));
+    const pays = /* @__PURE__ */ new Map();
+    try {
+      for (const p of ledger(s, me.id).provinces) pays.set(p.id, shown(p.total));
+    } catch {
+    }
+    const held3 = s.regions.filter((r) => r.ctrl === me.id).sort((a, b) => (place3.get(a.id) ?? 1e6) - (place3.get(b.id) ?? 1e6) || (pays.get(b.id) ?? 0) - (pays.get(a.id) ?? 0) || a.id - b.id);
+    const towns2 = [];
+    for (const r of held3) {
+      const t = townBuildings(s, r.id);
+      if (!t || !t.mine || !t.plots.length) continue;
+      const asBuild = (o) => ({
+        line: o.line,
+        name: o.name,
+        label: o.label,
+        cost: shown(o.cost),
+        months: o.months,
+        effect: o.effect,
+        ok: up && o.why === null,
+        why: !up ? notUp : o.poor ? `${Math.max(1, shown(o.cost) - inHand(me.pp)).toLocaleString("en-US")} short: the treasury holds ${inHand(me.pp).toLocaleString("en-US")}.` : o.why ?? "",
+        act: `civic:${r.id}:${o.line}`
+      });
+      const open3 = t.offers.filter((o) => o.why === null || o.poor).sort((a, b2) => (rank2.get(a.line) ?? 99) - (rank2.get(b2.line) ?? 99));
+      const b = me.queue.find((x) => x.what === "civic" && x.region === r.id);
+      const going = b ? { id: b.id, name: b.name.split(" at ")[0], due: turnToDate(b.eta).label, months: Math.max(0, b.eta - s.turn), cancel: b.ordered === s.turn && up, act: `home:cancel:${b.id}` } : null;
+      const best = open3.length ? asBuild(open3[0]) : null;
+      towns2.push({
+        region: r.id,
+        town: t.town,
+        province: r.name,
+        size: t.size,
+        own: r.owner === me.id,
+        pays: pays.get(r.id) ?? 0,
+        state: going ? "going" : !best ? "done" : open3[0].poor ? "short" : "ready",
+        plots: t.plots.map((p) => ({ s: !p.line ? "free" : p.building ? "going" : "built", line: p.line ?? "", name: p.line ? p.level > 0 ? p.label : p.name : "", level: p.level, months: p.building ? Math.max(0, p.due - s.turn) : 0 })),
+        best,
+        more: open3.slice(1).map(asBuild),
+        going,
+        // (why nothing is offered: the one reason every line gives, or that the town is complete)
+        note: best || going ? "" : ((whys) => whys.length && whys.every((w) => w === whys[0]) ? whys[0] : "Nothing more can be built here now.")(t.offers.map((o) => o.why ?? "").filter(Boolean))
+      });
+    }
+    const ready = towns2.filter((t) => t.state === "ready" || t.state === "short").length, goingUp = towns2.filter((t) => t.state === "going").length;
+    const book3 = ordersBookOf(s);
+    const orders2 = me.queue.filter((b) => b.what !== "civic").slice().sort((a, b) => a.eta - b.eta || a.id - b.id).map((b) => {
+      const l = orderLine(s, b, book3);
+      return { id: l.id, what: l.what, name: l.words, where: l.where, due: l.due, months: l.months, cost: shown(b.cost), cancel: l.canCancel && up, act: `home:cancel:${l.id}`, share: l.share, region: l.region };
+    });
+    const money3 = inHand(me.pp);
+    const raise2 = arsenalOffers(s, -1).filter((o) => o.group !== "works").map((o) => ({
+      key: o.key,
+      group: o.group,
+      label: o.label,
+      cost: shown(o.cost),
+      months: o.months,
+      where: s.regions[o.at]?.name ?? "",
+      note: o.note,
+      ok: up && !o.why,
+      why: !up ? notUp : o.poor && shown(o.cost) > money3 ? `${(shown(o.cost) - money3).toLocaleString("en-US")} short: the treasury holds ${money3.toLocaleString("en-US")}.` : o.why ?? "",
+      act: `home:order:${o.key}`
+    }));
+    const plan = againPlan(s);
+    const total = plan ? plan.go.reduce((sum3, x) => sum3 + shown(x.cost), 0) : 0;
+    const leftOut = plan && plan.out.length ? `Left out: ${plan.out.map((x) => `${lowFirst(x.label)} (${lowFirst(x.why)})`).join("; ")}.` : "";
+    const again = plan ? {
+      ok: up && plan.go.length > 0,
+      when: plan.when,
+      cost: total,
+      left: leftOut,
+      act: "home:again",
+      text: plan.go.length ? `As in ${plan.when}: ${ordersInWords(plan.go.map((x) => x.label))}.` : `Nothing of ${plan.when}'s order can be placed now.`,
+      why: !up ? notUp : plan.go.length ? "" : leftOut
+    } : null;
+    let T = null;
+    try {
+      T = treasuryOf(s, me.id);
+    } catch {
+      T = null;
+    }
+    const net = T ? T.net : 0;
+    let men2 = null;
+    try {
+      men2 = manpowerOf(s);
+    } catch {
+      men2 = null;
+    }
+    const short = (n) => Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString("en-US");
+    const tiles = [
+      { k: "money", label: "TREASURY", figure: money3.toLocaleString("en-US"), sub: T && T.budget ? `${net < 0 ? "−" : "+"}${Math.abs(net).toLocaleString("en-US")} a month` : "" },
+      { k: "orders", label: "ON ORDER", figure: String(orders2.length), sub: orders2.length ? `next ready ${orders2[0].due}` : "nothing is being raised" },
+      { k: "towns", label: "TOWNS", figure: String(towns2.length), sub: `${ready} can build  ·  ${goingUp} building` },
+      ...men2 ? [{ k: "men", label: "MEN IN RESERVE", figure: short(men2.men), sub: men2.word }] : []
+    ];
+    let staff = null;
+    try {
+      const v = commandOf(s), bar = deskBar(s, "build");
+      if (v && bar) staff = { on: bar.staff, line: bar.staff ? bar.line : deskRuns(s, "build"), label: bar.label, act: bar.act, tip: bar.tip, cap: v.cap, caps: v.caps.map((c) => ({ n: c, now: c === v.cap, act: `cap:${c}` })) };
+    } catch {
+      staff = null;
+    }
+    return { nation: me.name, date: turnToDate(s.turn).label, up, money: money3, net, tiles, counts: { ready, going: goingUp, all: towns2.length }, towns: towns2, raise: raise2, again, orders: orders2, staff };
+  }
+  function homePage(s) {
+    const h = homeBoard(s);
+    if (!h) return null;
+    const cash = (n2) => n2.toLocaleString("en-US");
+    const can2 = h.towns.filter((t) => t.state === "ready" || t.state === "short");
+    const townRows = can2.slice(0, 60).map((t) => ({
+      nat: "",
+      title: `${t.town}${t.town === t.province ? "" : `, ${t.province}`}  ·  ${t.size}${t.pays ? `  ·  pays ${cash(t.pays)}` : ""}`,
+      lines: [`${t.best.name}: ${t.best.label}  ·  ${cash(t.best.cost)}  ·  ${monthsWords(t.best.months)}`, t.best.effect],
+      buttons: [
+        { label: "BUILD", act: t.best.act, ok: t.best.ok, tip: t.best.ok ? `${t.best.label}: ${t.best.effect}` : t.best.why },
+        { label: "TOWN PLAN", act: `open:town:${t.region}`, ok: true, tip: "Every plot of this town and everything that could be built there." },
+        { label: "SHOW ON THE MAP", act: `goto:region:${t.region}`, ok: true, tip: "Looks at the place on the map." }
+      ]
+    }));
+    const goingRows = h.towns.filter((t) => t.going).map((t) => ({
+      nat: "",
+      title: `${t.going.name}  ·  ${t.town}`,
+      lines: [`Due ${t.going.due}.`],
+      buttons: t.going.cancel ? [{ label: "TAKE IT BACK", act: t.going.act, ok: true, tip: "The order is taken back and the money returned. Only in the month it was placed." }] : []
+    }));
+    const raiseRows = [
+      ...h.again ? [{ nat: "", title: `Order again${h.again.cost ? `  ·  ${cash(h.again.cost)}` : ""}`, lines: [h.again.text, h.again.left].filter(Boolean), buttons: [{ label: "ORDER AGAIN", act: h.again.act, ok: h.again.ok, tip: h.again.ok ? "Places each of these orders again at today's price." : h.again.why }] }] : [],
+      ...h.raise.map((o) => ({
+        nat: "",
+        title: `${o.label}  ·  ${cash(o.cost)}  ·  ${monthsWords(o.months)}`,
+        lines: [o.note, o.ok ? "" : o.why].filter(Boolean),
+        buttons: [{ label: "RAISE", act: o.act, ok: o.ok, tip: o.ok ? o.note : o.why }]
+      }))
+    ];
+    const orderRows = h.orders.map((o) => ({
+      nat: "",
+      title: `${o.name}  ·  ${cash(o.cost)}`,
+      lines: [`${o.where ? `${o.where}. ` : ""}Due ${o.due}.`],
+      buttons: o.cancel ? [{ label: "TAKE IT BACK", act: o.act, ok: true, tip: "The order is taken back and the money returned. Only in the month it was placed." }] : []
+    }));
+    const n = h.counts.ready;
+    return {
+      id: "home",
+      title: `THE HOME FRONT  ·  ${h.nation.toUpperCase()}  ·  ${h.date.toUpperCase()}`,
+      headline: `${h.money >= 0 ? `${cash(h.money)} to spend` : `The treasury is ${cash(-h.money)} overdrawn`}, and ${n === 0 ? "no town can take a building now" : n === 1 ? "one town can take a building" : `${n} towns can take a building`}`,
+      note: "Every town of yours, raising forces and everything on order, in one place. BUILD puts up the building your staff would choose for that town; TOWN PLAN shows every choice.",
+      top: [{ label: "TRADE AGREEMENTS", act: "open:trade", ok: !!tradeLedger(s), tip: "What the commerce of your towns is traded for." }],
+      sections: [
+        { heading: "TOWNS THAT CAN TAKE A BUILDING", text: can2.length ? can2.length > 60 ? `The richest 60 of ${can2.length}.` : "" : "Every town is building or complete.", rows: townRows },
+        ...goingRows.length ? [{ heading: "GOING UP IN YOUR TOWNS", text: "", rows: goingRows }] : [],
+        { heading: "RAISE FORCES", text: h.up ? "" : "It is not your month.", rows: raiseRows },
+        { heading: "ON ORDER", text: orderRows.length ? "" : "Nothing is being raised.", rows: orderRows }
+      ],
+      home: h
     };
   }
   function tradePage(s) {
@@ -118162,7 +118444,7 @@ ${standing5}`,
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "repairs" ? repairsPage(s) : id === "lorries" ? lorriesPage(s) : id === "atom" ? atomPage2(s) : id === "staff" ? staffPage(s) : id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "crossings" ? crossingsPage(s) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : part[0] === "battle" ? battleReportPage(s, Number(part[1])) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "fleetattack" ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : part[0] === "fold" ? foldPage(s, Number(part[1])) : null;
+    const p = id === "repairs" ? repairsPage(s) : id === "lorries" ? lorriesPage(s) : id === "atom" ? atomPage2(s) : id === "staff" ? staffPage(s) : id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : id === "home" ? homePage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "crossings" ? crossingsPage(s) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : part[0] === "battle" ? battleReportPage(s, Number(part[1])) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "fleetattack" ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : part[0] === "fold" ? foldPage(s, Number(part[1])) : null;
     if (p && id === "atom" && s.human) {
       const a = s.nations[s.human]?.atom;
       if (a && (a.bombs ?? 0) > 0) a.seen = s.turn;
@@ -118206,7 +118488,7 @@ ${standing5}`,
   var runsLine = (lead2, desk) => lead2.toLowerCase().endsWith(lowFirst(desk).replace(/^the /, "")) ? `${lead2} runs itself for you.` : `${lead2} run${/s$/.test(lead2) ? "" : "s"} ${lowFirst(desk)}.`;
   function deskOfPage(id) {
     const head = id.split(":")[0];
-    return head === "spies" ? "spies" : head === "trade" || head === "towns" ? "build" : head === "airfield" ? "air" : head === "fleet" ? "navy" : null;
+    return head === "spies" ? "spies" : head === "trade" || head === "towns" || head === "home" ? "build" : head === "airfield" ? "air" : head === "fleet" ? "navy" : null;
   }
   function deskBar(s, desk) {
     let v = null;
@@ -118391,6 +118673,33 @@ ${standing5}`,
           ok2 = false;
         }
         note4 = ok2 ? `${v?.town ?? "The town"} is repaired: it pays in full again from this month.` : v?.why ?? "It cannot be repaired now.";
+      }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "home") {
+      if (part[1] === "order") {
+        const key7 = part.slice(2).join(":");
+        const offer = arsenalOffers(s, -1).find((o) => o.key === key7);
+        const b = orderArsenal(s, key7, -1);
+        ok2 = !!b;
+        if (b) noteOwnOrder(s, b, key7, -1, offer?.label ?? b.name);
+        note4 = b ? `${b.name} ordered. Due ${turnToDate(b.eta).label}.` : !humanUp(s) ? "It is not your month." : offer?.why ?? "That cannot be ordered now.";
+      } else if (part[1] === "cancel") {
+        ok2 = orderCancelBuild(s, Number(part[2]));
+        if (ok2) forgetOwnOrder(Number(part[2]));
+        note4 = ok2 ? "The order is taken back and the money returned." : "An order can only be taken back in the month it was placed.";
+      } else if (part[1] === "again") {
+        const plan = againPlan(s);
+        const placed3 = [], out = plan ? plan.out.slice() : [];
+        for (const it of humanUp(s) && plan ? plan.go : []) {
+          const b = orderArsenal(s, it.key, it.region);
+          if (b) {
+            placed3.push(it.label);
+            noteOwnOrder(s, b, it.key, it.region, it.label);
+          } else out.push({ label: it.label, why: arsenalOffers(s, it.region).find((o) => o.key === it.key)?.why?.replace(/\.$/, "") ?? "it cannot be ordered now" });
+        }
+        ok2 = placed3.length > 0;
+        note4 = !humanUp(s) ? "It is not your month." : !plan ? "There is no earlier order of yours to repeat." : `${ok2 ? `Ordered again: ${ordersInWords(placed3)}.` : "Nothing could be ordered again."}${out.length ? ` Left out: ${out.map((x) => `${lowFirst(x.label)} (${lowFirst(x.why)})`).join("; ")}.` : ""}`;
       }
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
@@ -120028,6 +120337,7 @@ ${standing5}`,
     const set = setLogistics(s, which, !!on2);
     return { set, on: logisticsSet(s, which) };
   };
+  globalThis.TC.homeFront = () => homeBoard(game());
   var R2_SHIP = {
     nicknames: (s) => {
       setNicknames(s, true);
