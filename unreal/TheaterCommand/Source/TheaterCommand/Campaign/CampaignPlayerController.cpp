@@ -7111,8 +7111,11 @@ void ACampaignPlayerController::LayOutFleet()
 		FleetNext = TEXT("patrol");
 	}
 	Tray.FleetNext = FleetNext;
+	Tray.FleetHeld = FleetHand.Held;
 	Tray.PendingButton = FText::GetEmpty();
+	// (1.5.2) A fleet held where this month's battle left it is told so, and not told to right-click seas it cannot go to.
 	Tray.Hint = FText::FromString(!View.bHumanUp ? TEXT("It is not your month.")
+		: !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s Esc lets it go."), *FleetHand.Held)
 		: Tray.bFleetGrand && FleetHand.Coasts.Num() > 0
 		? TEXT("Right-click a ringed sea to send it there, a coast in red to shell it, a port in blue to make it the fleet's home, or its own harbour to bring it in. ORDERS has the rest. Esc lets it go.")
 		: TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go."));
@@ -7256,12 +7259,19 @@ void ACampaignPlayerController::SetFleetStance(const FString& Stance)
 	{
 		// At sea already: it changes what it is doing where it is.
 		FString Note;
-		const FString Name = Fleet->Name;
+		const FString Name = Fleet->Name, Was = Fleet->Stance;
 		if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:%s"), FleetInHand, Fleet->Zone, *FleetNext), Note))
 		{
 			ShowWar(Session->GetView(), TArray<FCorpsMove>());
 			Notify(FString::Printf(TEXT("%s: %s."), *Name, FleetNext == TEXT("raid") ? TEXT("raiding merchant shipping, and keeping clear of the enemy fleet")
 				: FleetNext == TEXT("hunt") ? TEXT("hunting submarines with its destroyers") : TEXT("on patrol, seeking the enemy's warships and guarding the convoys")), 5.0);
+		}
+		else
+		{
+			// (1.5.2) Refused (held where this month's battle left it, or cut off beyond a shut strait): it says why, and
+			// the button stays on what the fleet is doing, not on the order it was refused.
+			FleetNext = Was;
+			Notify(Note.IsEmpty() ? FString(TEXT("That order cannot be given now.")) : Note, 5.0);
 		}
 	}
 	RefreshOrders();

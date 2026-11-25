@@ -8386,21 +8386,22 @@ namespace
 				};
 				if (Army.bFleet)
 				{
-					// A fleet in hand: what it does at sea, the way home, and a card for each ship.
+					// A fleet in hand: what it does at sea, the way home, and a card for each ship. (1.5.2) Held where this month's
+					// battle left it, its orders at sea and the way home are dimmed, each saying why, as its page and the seas do.
 					TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
 					[
 						SNew(STextBlock).Text(FText::FromString(TEXT("At sea:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
 					];
 					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 					[
-						SNew(SBox).ToolTipText(FText::FromString(TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it.")))
+						SNew(SBox).IsEnabled(Army.FleetHeld.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetHeld.IsEmpty() ? Army.FleetHeld : FString(TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it."))))
 						[
 							OrderButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
 						]
 					];
 					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, Army.bFleetGrand ? 5.0f : 22.0f, 0.0f)
 					[
-						SNew(SBox).ToolTipText(FText::FromString(TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet.")))
+						SNew(SBox).IsEnabled(Army.FleetHeld.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetHeld.IsEmpty() ? Army.FleetHeld : FString(TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet."))))
 						[
 							OrderButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
 						]
@@ -8409,7 +8410,7 @@ namespace
 					{
 						TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
 						[
-							SNew(SBox).ToolTipText(FText::FromString(TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do.")))
+							SNew(SBox).IsEnabled(Army.FleetHeld.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetHeld.IsEmpty() ? Army.FleetHeld : FString(TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do."))))
 							[
 								OrderButton(TEXT("HUNT SUBMARINES"), Army.FleetNext == TEXT("hunt"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("hunt")); } })
 							]
@@ -8417,7 +8418,7 @@ namespace
 					}
 					TrayOrders->AddSlot().AutoWidth()
 					[
-						SNew(SBox).ToolTipText(FText::FromString(TEXT("Safe from the enemy fleet, and takes no part at sea.")))
+						SNew(SBox).IsEnabled(Army.FleetHeld.IsEmpty()).ToolTipText(FText::FromString(!Army.FleetHeld.IsEmpty() ? Army.FleetHeld : FString(TEXT("Safe from the enemy fleet, and takes no part at sea."))))
 						[
 							OrderButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), [this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
 						]
