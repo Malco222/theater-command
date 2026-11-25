@@ -2794,12 +2794,16 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
         ? { label: 'Height', value: 'You will be above them', effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` }
         : { label: 'Height', value: 'Level', effect: 'Ground observers warn them in time to climb to your height, not above it: neither side has the height.' });
   }
-  if (out.guns.all) {
+  if (out.guns.all || out.standing) {
+    // (The UI director, 25 Nov 2026 19:10Z, section B: the built guns first, the standing light guns named apart.)
+    const n = (x: number): string => x.toLocaleString('en-US'), S = n(out.standing);
+    const split = `${n(out.guns.light)} light and ${n(out.guns.heavy)} heavy, and the ${S} light guns every target has.`;
     out.lines.push({
       label: 'Flak',
-      // (Fog on raids: weighed on one side's knowledge, the guns are its reckoning, not a sight of them.)
-      value: known ? `About ${out.guns.all.toLocaleString('en-US')} guns may stand round ${place}` : `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
-      effect: `${out.guns.heavy ? `${out.guns.heavy.toLocaleString('en-US')} heavy and ${out.guns.light.toLocaleString('en-US')} light` : 'Light guns only'}. They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
+      // (Fog on raids: weighed on one side's knowledge, the built guns are its reckoning, not a sight of them; the
+      // standing light guns every target has are never hidden.)
+      value: !out.guns.all ? `Only the ${S} light guns every target has.` : known ? `About ${n(out.guns.all)} guns may stand round ${place}, ${split}` : `About ${n(out.guns.all)} guns built here, ${split}`,
+      effect: `They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
     });
   }
   const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g, f) < 1);
