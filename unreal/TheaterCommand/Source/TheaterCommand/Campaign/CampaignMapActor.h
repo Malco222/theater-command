@@ -10,6 +10,7 @@
 #include "Campaign/CampaignView.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
+#include "Campaign/PortLife.h"
 #include "Effects/BattleEffects.h"
 #include "CampaignMapActor.generated.h"
 
@@ -1114,6 +1115,42 @@ private:
 	void UpdateTrains(const FVector& CameraFocus, float CameraDistance);
 	/** (Ruling 125.) Makes a train up for the province it sets out from: a flak wagon at its tail where guns guard the line, a second behind the tender at level 3. */
 	void MakeUpTrain(FTrain& Train, int32 FromRegion) const;
+	/**
+	 * (Release 2, the campaign map's upgrade 4, second half: busy ports. Campaign/PortLife.h has the reckoning and
+	 * Campaign/CampaignPortLife.cpp the rest; tc.Map.PortLife, off as it comes.) A small merchant ship or two works
+	 * each port near the eye: out along its fairway, round in the offing, back, and lying off the quay between rounds.
+	 * Decoration only: no rule reads it and nothing of it is saved.
+	 */
+	struct FPortRoads
+	{
+		int32 Region = INDEX_NONE; // the port's province
+		int32 Ships = 1; // how many work it: two at a city's or a capital's port
+		bool bManned = false; // its ships are on the water now
+		bool bFouled = false; // a fleet lies on its fairway: its ships are put away until she has gone
+		float Shown = 0.0f; // how much of its ships is on the water, 0 to 1: they grow onto it and off it
+		TheaterPortLife::FRoads Laid; // its fairway, as it was found, and the times of once round it
+	};
+	/** One of the little ships: which port's she is, which of its ships, and her models (the hull, and the foam of her wake). */
+	struct FPortCraft
+	{
+		int32 Roads = INDEX_NONE;
+		int32 Place = 0;
+		bool bWakeShown = false;
+		TObjectPtr<UProceduralMeshComponent> Hull;
+		TObjectPtr<UProceduralMeshComponent> Foam;
+	};
+	TArray<FPortRoads> PortRoads;
+	TArray<FPortCraft> PortCraft;
+	bool bPortRoadsStale = true; // (the towns were built again: the ports' fairways are found again when next wanted)
+	TMap<int32, FVector2D> PortQuaysFound; // the quays the fairways were found from: while the towns' quays stand where these do, the fairways stand
+	TArray<int32> PortsToFind; // the ports whose fairways are looked for, the greater first, one a frame
+	int32 PortsNext = 0, PortsDry = 0, PortsCrowded = 0; // how far down that list the looking has got; how many had no water, and how many gave way to a greater port
+	double PortFleetsLooked = -1.0e9; // when the fleets were last looked for on the fairways
+	/** Looks for the next port's fairway (all of them afresh after the towns were built). */
+	void FindPortRoads();
+	/** Takes a port's ships off the water (every port's, for INDEX_NONE). */
+	void ParkPortCraft(int32 Roads);
+	void UpdatePortLife(const FVector& CameraFocus, float CameraDistance);
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed

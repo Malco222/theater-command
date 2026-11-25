@@ -9278,6 +9278,7 @@ void ACampaignMapActor::BuildTowns()
 	TownBeacons.Reset();
 	TownLandmarks.Reset();
 	TownQuays.Reset();
+	bPortRoadsStale = true; // (release 2, busy ports: the quays are found again, and so are the fairways off them)
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -18106,6 +18107,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateRailLight(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateColumns(CameraFocus, CameraDistance); // (release 2: supply columns' convoys on the roads, CampaignColumns.cpp)
+	UpdatePortLife(CameraFocus, CameraDistance); // (release 2: the little ships at the ports, CampaignPortLife.cpp; tc.Map.PortLife)
 	UpdateClouds();
 	UpdateFlashes();
 	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)
