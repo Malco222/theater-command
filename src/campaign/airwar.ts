@@ -33,7 +33,7 @@ import { airKnown, airMetWords, seaSeenWords } from './seasight';
 import { airfieldOpenTo } from './prizes';
 import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
-import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
+import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, townWorksPhrase, type TownHit } from './siege';
 import { townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
@@ -596,7 +596,7 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   if (kind === 'town') {
     const v = siegeView(g, t)!;
     const who = sight[t] === SIGHT.none && !v.by ? 'its garrison not known' : v.inside ? `${plural(v.inside, 'corps', 'corps')} inside${v.guard > 0 ? ' with its guard' : ''}` : 'held by its guard alone';
-    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsAt(g, t) ? `, level ${gunsAt(g, t)} guns` : ''}`;
+    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${townWorksPhrase(g, r)}${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsAt(g, t) ? `, level ${gunsAt(g, t)} guns` : ''}${lightsAt(g, t) ? `, level ${lightsAt(g, t)} searchlights` : ''}`;
   }
   if (kind === 'bomb' || kind === 'night') {
     const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : ''];

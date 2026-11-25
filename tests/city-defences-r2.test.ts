@@ -8,18 +8,21 @@ import { assessAir, fly, type AirAssess } from '../src/campaign/air';
 import { AC } from '../src/campaign/aircampaigns';
 import { setAirPiece } from '../src/campaign/airversion';
 import { raidTargets } from '../src/campaign/airwar';
-import { cityNight, cityNightShare } from '../src/campaign/citydefences';
+import { cityNight, cityNightShare, townWorksAt, townWorksMonth, townWorksWorth } from '../src/campaign/citydefences';
+import { SIEGE, besieged, fieldWalls, garrison, ringClosed, siegeMonth, siegeView, storesOf, townBonus } from '../src/campaign/siege';
+import { townSize } from '../src/campaign/towns';
+import { beginHuman, humanUp, orderMove, orderStorm, stepAI, stormOutlook } from '../src/campaign/turn';
 import { techOf } from '../src/campaign/tech';
 import { WEATHER, setWeather, zoneOfRegion } from '../src/campaign/weather';
 import stage from '../data/campaign/stage.json';
 import { ARSENAL, offers, workLevel, worksUpkeep, type Offer } from '../src/campaign/arsenal';
 import { CITYDEF, LIGHTS_TOP, cityDefences, cityDefencesOn, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
-import { createGame } from '../src/campaign/game';
+import { capture, createGame, endPhase, relocate } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
 import { startOpen } from '../src/campaign/staff';
 import { arsenalOffers, orderArsenal } from '../src/campaign/turn';
-import type { AirFleet, Build, Game } from '../src/campaign/types';
+import type { AirFleet, Build, Corps, Game, Region } from '../src/campaign/types';
 
 const grand = (on: boolean): Game => { const g = startOpen(createGame(3, 'GER')); setCityDefences(g, on); g.nations.GER.pp = 500; return g; };
 const offer = (g: Game, key: string, sel: number): Offer | undefined => offers(g, 'GER', sel).find((o) => o.key === key);
@@ -394,5 +397,221 @@ describe('city defences off: the night raid is as it was (slice 2)', () => {
     }
     // Today's figure, as shipped: the guns by night as by day, times the night's 0.7.
     expect(ruhrByNight({ on: false, guns: 3, lights: 3 }).a().gunLoss).toBeCloseTo((0.01 + 3 * 0.012) * 0.7, 12);
+  });
+});
+
+// ---- Slice 3: a garrison fortifies its town -------------------------------------------------------------------------
+
+/** A grand campaign with the player's first month open, as the game's own screen would have it (tests/siege.test.ts). */
+function playingGer(on: boolean): Game {
+  const g = startOpen(createGame(3, 'GER'));
+  for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+  beginHuman(g);
+  setCityDefences(g, on);
+  return g;
+}
+/**
+ * Germany in September 1939 with Lodz (a town) held against her: one Polish corps inside the town, nobody in the
+ * field, no forts. `inside: false` leaves the town to its guard alone.
+ */
+function lodzTown(on: boolean, o: { inside?: boolean } = {}): { g: Game; town: Region; inside: Corps | null; ger: Corps[] } {
+  const g = playingGer(on);
+  const town = g.byName['Lodz'];
+  town.fort = null;
+  let inside: Corps | null = null;
+  if (o.inside !== false) {
+    inside = town.units.find((u) => u.nat === 'POL' && u.kind === 'inf')!;
+    expect(garrison(g, inside)).toBe(true);
+  }
+  for (const u of [...town.units]) relocate(g, u, g.byName['Warsaw']);
+  const ger = town.nb.flatMap((j) => g.regions[j].units.filter((u) => u.nat === 'GER' && u.kind !== 'fort' && u.kind !== 'eng' && u.ap > 0));
+  return { g, town, inside, ger };
+}
+const natIdx = (g: Game, nat: string): number => Object.keys(g.nations).indexOf(nat);
+/** Lays town works by hand, as a garrison would have put them up for `nat`. */
+const layWorks = (g: Game, r: Region, months: number, nat = r.ctrl): void => { g.flags[`tw:${r.id}`] = months; g.flags[`twn:${r.id}`] = natIdx(g, nat); };
+/** The town works' marks of one province. */
+const worksFlags = (g: Game, r: Region): string[] => Object.keys(g.flags).filter((k) => k === `tw:${r.id}` || k === `twn:${r.id}` || k === `tws:${r.id}`);
+
+describe('city defences: a garrison fortifies its town (slice 3)', () => {
+  it('a garrison puts up a month of works at each of its month ends, to three, besieged or not', () => {
+    const { g, town } = lodzTown(true);
+    expect(townWorksAt(g, town)).toBe(0);
+    const bare = townBonus(g, town);
+    for (const m of [1, 2, 3, 3]) {
+      townWorksMonth(g, 'POL');
+      expect(townWorksAt(g, town)).toBe(m);
+      expect(g.flags[`twn:${town.id}`]).toBe(natIdx(g, 'POL'));
+    }
+    expect(townBonus(g, town)).toBeCloseTo(bare + 0.3, 9);
+    // Another nation's month end does nothing for Poland's town.
+    const other = lodzTown(true);
+    townWorksMonth(other.g, 'GER');
+    expect(townWorksAt(other.g, other.town)).toBe(0);
+    // Under siege it still grows (ruling choice 7).
+    const s = lodzTown(true);
+    s.ger[0].str = 0.2;
+    orderMove(s.g, s.ger[0], s.town.id);
+    expect(besieged(s.g, s.town)).toBe(true);
+    townWorksMonth(s.g, 'POL');
+    townWorksMonth(s.g, 'POL');
+    expect(townWorksAt(s.g, s.town)).toBe(2);
+  });
+
+  it('gains nothing at the month end after a storm, won or lost, and grows again the month after', () => {
+    const { g, town, inside, ger } = lodzTown(true);
+    layWorks(g, town, 1);
+    inside!.str = 1; inside!.org = 1;
+    const a = ger[0];
+    a.str = 0.25;
+    orderMove(g, a, town.id);
+    const rep = orderStorm(g, town.id)!;
+    expect(rep.taken).toBe(false);
+    expect(g.flags[`tws:${town.id}`]).toBe(g.turn);
+    townWorksMonth(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(1);
+    expect(g.flags[`tws:${town.id}`]).toBeUndefined();
+    townWorksMonth(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(2);
+  });
+
+  it('fades a month a month with no garrison inside, and is gone at nought', () => {
+    const { g, town } = lodzTown(true, { inside: false });
+    layWorks(g, town, 3);
+    for (const m of [2, 1]) { townWorksMonth(g, 'POL'); expect(townWorksAt(g, town)).toBe(m); }
+    townWorksMonth(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(0);
+    expect(worksFlags(g, town)).toEqual([]);
+  });
+
+  it('is cleared when the town falls by storm, opens its gates or starves, and counts for nobody else', () => {
+    // By storm.
+    const st = lodzTown(true);
+    layWorks(st.g, st.town, 3);
+    st.inside!.str = 0.3; st.inside!.org = 0.3;
+    for (const c of st.ger.slice(0, 4)) orderMove(st.g, c, st.town.id);
+    expect(orderStorm(st.g, st.town.id)!.taken).toBe(true);
+    expect(st.town.ctrl).toBe('GER');
+    expect(st.g.flags[`tw:${st.town.id}`]).toBeUndefined();
+    expect(st.g.flags[`twn:${st.town.id}`]).toBeUndefined();
+    // The stormers' own month end puts up nothing in the month they stormed it.
+    townWorksMonth(st.g, 'GER');
+    expect(townWorksAt(st.g, st.town)).toBe(0);
+    // Opening its gates to a summons.
+    const gt = lodzTown(true, { inside: false });
+    layWorks(gt.g, gt.town, 2);
+    for (const c of gt.ger.slice(0, 4)) if (gt.town.ctrl !== 'GER') orderMove(gt.g, c, gt.town.id);
+    expect(gt.town.ctrl).toBe('GER');
+    expect(worksFlags(gt.g, gt.town)).toEqual([]);
+    // Starved out.
+    const hu = lodzTown(true, { inside: false });
+    hu.ger[0].str = 0.2;
+    orderMove(hu.g, hu.ger[0], hu.town.id);
+    expect(ringClosed(hu.g, hu.town)).toBe(true);
+    layWorks(hu.g, hu.town, 2);
+    for (let k = 0; k <= storesOf(hu.g, hu.town) && hu.town.ctrl === 'POL'; k++) siegeMonth(hu.g, 'POL');
+    expect(hu.town.ctrl).toBe('GER');
+    expect(worksFlags(hu.g, hu.town)).toEqual([]);
+    // Any other change of holder (here set by hand): the works count for nobody, and the next month end clears them.
+    const ho = lodzTown(true);
+    layWorks(ho.g, ho.town, 3);
+    const before = townBonus(ho.g, ho.town);
+    ho.town.ctrl = 'GER';
+    expect(townWorksAt(ho.g, ho.town)).toBe(0);
+    expect(townWorksWorth(ho.g, ho.town)).toBe(0);
+    expect(townBonus(ho.g, ho.town)).toBeCloseTo(before - 0.3, 9);
+    townWorksMonth(ho.g, 'ITA');
+    expect(worksFlags(ho.g, ho.town)).toEqual([]);
+  });
+
+  it('counts the larger of the works and the forts, never both', () => {
+    const { g, town } = lodzTown(true);
+    const size = SIEGE.bonus[townSize(g, town)] - 1;
+    for (const m of [0, 1, 2, 3]) {
+      if (m) layWorks(g, town, m); else delete g.flags[`tw:${town.id}`];
+      const works = m ? 0.3 * [0.5, 0.75, 1][m - 1] : 0;
+      expect(townWorksWorth(g, town)).toBeCloseTo(works, 9);
+      town.fort = null;
+      expect(townBonus(g, town)).toBeCloseTo(1 + size + works, 9);
+      for (const lv of [1, 2, 3]) {
+        town.fort = { lv, vs: ['GER'] };
+        expect(townBonus(g, town), `${m} months, fort ${lv}`).toBeCloseTo(1 + size + Math.max(SIEGE.fortBonus[lv], works), 9);
+      }
+    }
+    // The guard fighting in the field gets the same larger-of, scaled by the share the forts do not already slow.
+    town.fort = { lv: 1, vs: ['GER'] };
+    layWorks(g, town, 3);
+    expect(fieldWalls(g, town, 0, 0.5)).toBeCloseTo(1 + size + 0.3 * 0.5, 9);
+    town.fort = null;
+    expect(fieldWalls(g, town, 0, 1)).toBeCloseTo(1 + size + 0.3, 9);
+  });
+
+  it('is worn with the walls: a city at three months is 1 + (0.7 + 0.3) x (1 - breach)', () => {
+    const { g, town } = lodzTown(true);
+    // (Lodz is a town on the map: two victory points make it a city, towns.ts townSize.)
+    town.vp = Math.max(town.vp, 2);
+    expect(townSize(g, town)).toBe('city');
+    layWorks(g, town, 3);
+    for (const b of [0, 20, 45, 70]) {
+      g.flags[`breach:${town.id}`] = b;
+      expect(townBonus(g, town)).toBeCloseTo(1 + (0.7 + 0.3) * (1 - b / 100), 9);
+    }
+  });
+
+  it('says the months in the town line: the siege panel, the storm card, the raid card and the targets', () => {
+    const { g, town, ger } = lodzTown(true);
+    layWorks(g, town, 3);
+    expect(siegeView(g, town.id)!.lines[0]).toMatch(/^Troops inside Lodz fight 70% stronger, behind 3 months of barricades and strongpoints\. /);
+    layWorks(g, town, 1);
+    expect(siegeView(g, town.id)!.lines[0]).toMatch(/fight 55% stronger, behind 1 month of barricades and strongpoints\. /);
+    town.fort = { lv: 2, vs: ['GER'] };
+    expect(siegeView(g, town.id)!.lines[0]).toMatch(/fight 70% stronger, with 1 month of barricades and strongpoints, though its forts count for more\. /);
+    town.fort = null;
+    layWorks(g, town, 2);
+    g.flags[`breach:${town.id}`] = 10;
+    for (const c of ger.slice(0, 2)) orderMove(g, c, town.id);
+    const look = stormOutlook(g, town.id)!;
+    expect(look.lines.find((l) => l.label === 'The town')!.effect).toMatch(/stronger in the streets, behind 2 months of barricades and strongpoints: bombardment has already broken down 10% of its works$/);
+    const a = assessAir(g, [g.airFleets.find((x) => x.nat === 'GER' && x.bmr > 0 && x.ship === undefined)!], 'town', town.id);
+    expect(a.lines.find((l) => l.label === 'The town')!.value).toMatch(/stronger, behind 2 months of barricades and strongpoints, with 10% of its works already broken down$/);
+    g.flags[`wk:aa:${town.id}`] = 2;
+    g.flags[`wk:lights:${town.id}`] = 2;
+    const t = raidTargets(g, 'town', 'GER').find((x) => x.id === town.id);
+    expect(t).toBeDefined();
+    expect(t!.what).toMatch(/fight \d+% stronger, behind 2 months of barricades and strongpoints, 10% of its works broken, under siege, level 2 guns, level 2 searchlights$/);
+  });
+
+  it('runs at the month end, after the month\'s storms', () => {
+    const { g, town } = lodzTown(true);
+    endPhase(g, 'POL');
+    expect(townWorksAt(g, town)).toBe(1);
+  });
+});
+
+describe('city defences off: a town is as strong as its walls and forts (slice 3)', () => {
+  it('reads no town works the ground keeps, writes none, clears none', () => {
+    const on = lodzTown(false);
+    const { g, town, ger } = on;
+    const bonus = townBonus(g, town), field = fieldWalls(g, town, 0, 1), panel = siegeView(g, town.id)!.lines;
+    layWorks(g, town, 3);
+    g.flags[`tws:${town.id}`] = g.turn;
+    expect(townWorksAt(g, town)).toBe(0);
+    expect(townBonus(g, town)).toBe(bonus);
+    expect(fieldWalls(g, town, 0, 1)).toBe(field);
+    expect(siegeView(g, town.id)!.lines).toEqual(panel);
+    townWorksMonth(g, 'POL');
+    endPhase(g, 'POL');
+    expect(g.flags[`tw:${town.id}`]).toBe(3);
+    expect(g.flags[`tws:${town.id}`]).toBe(g.turn);
+    const fresh = lodzTown(false);
+    endPhase(fresh.g, 'POL');
+    fresh.inside!.str = 0.3; fresh.inside!.org = 0.3;
+    for (const c of fresh.ger.slice(0, 4)) orderMove(fresh.g, c, fresh.town.id);
+    orderStorm(fresh.g, fresh.town.id);
+    expect(worksFlags(fresh.g, fresh.town)).toEqual([]);
+    // A capture with the switch off leaves the marks where they lie, and nothing reads them.
+    for (const c of ger.slice(0, 4)) orderMove(g, c, town.id);
+    capture(g, town, 'GER');
+    expect(g.flags[`tw:${town.id}`]).toBe(3);
   });
 });

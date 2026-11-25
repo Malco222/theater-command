@@ -6,10 +6,12 @@
 // a nation or a date. Off: nothing of it is read, no flag is written and every war is the war without it.
 
 import data from '../../data/campaign/citydefences.json';
+import defence from '../../data/campaign/defence.json';
 import { gunsAt } from './air';
 import { AC } from './aircampaigns';
+import { garrisonOf } from './siege';
 import { hasTech } from './tech';
-import type { Game } from './types';
+import type { Game, Region } from './types';
 import type { Sky } from './weather';
 
 /** A row of the history start's table: searchlights laid where the historian reads a city belt at that date. */
@@ -27,6 +29,9 @@ export const CITYDEF = data as unknown as {
   ai: { months: number };
   start: LightsRow[];
 };
+
+/** The entrenching share by months done (defence.json entrench.share), read here as the town works' share. */
+const ENTRENCH = (defence as unknown as { entrench: { share: number[] } }).entrench;
 
 /** The most levels of searchlights a province can have (the guns' own top). */
 export const LIGHTS_TOP = 3;
@@ -104,3 +109,87 @@ export const cityNightShare = (g: Game, target: number, bombers: number, sky: Sk
  * guns and no radar. A floor, never a multiplier: the caller takes the larger of it and the fighters' own figure.
  */
 export const lightsFloor = (g: Game, target: number, sky: Sky): number => (cityDefences(g) && sky === 'clear' ? CITYDEF.fighters[lightsAt(g, target)] ?? 0 : 0);
+
+// ---- A garrison fortifies its town (slice 3) ------------------------------------------------------------------------
+
+// Town works (city defences, the design director's ruling of 25 Nov 2026 02:23Z, choices 6 and 7): barricades and
+// strongpoints a garrison puts up in the town it holds, a month at a time, kept on the ground in flags as fieldworks
+// are, never as a fort level (two nations' traits read fort levels as 'works'). `tw:<region>` the months done (1 to
+// works.most, gone at 0); `twn:<region>` whose they are, as `fwn:` keeps a nation (its place among g.nations);
+// `tws:<region>` the month the town was last stormed, kept until its holder's month end has read it. All three are
+// written only with the switch on.
+
+const nationIndex = (g: Game, nat: string): number => Object.keys(g.nations).indexOf(nat);
+
+/**
+ * The months of works a town has for its holder, 0 to works.most: 0 with the switch off, and 0 where the works on the
+ * ground were put up by anyone but the province's holder now (a change of holder clears them; until the month end
+ * does, they count for nobody).
+ */
+export function townWorksAt(g: Game, r: Region): number {
+  if (!cityDefences(g)) return 0;
+  const m = g.flags[`tw:${r.id}`] ?? 0;
+  if (m <= 0 || g.flags[`twn:${r.id}`] !== nationIndex(g, r.ctrl)) return 0;
+  return Math.min(CITYDEF.works.most, m);
+}
+
+/**
+ * What the town works add inside the walls, above 1: works.worth times the entrenching share for the months done
+ * (defence.json entrench.share, 0.5 / 0.75 / 1), so +0.15 / +0.225 / +0.3. The walls take the larger of it and the
+ * forts' bonus, never both (siege.ts wallsOf). 0 with the switch off.
+ */
+export function townWorksWorth(g: Game, r: Region): number {
+  const m = townWorksAt(g, r);
+  return m > 0 ? CITYDEF.works.worth * (ENTRENCH.share[m - 1] ?? 1) : 0;
+}
+
+/** Clears a town's works: the town has changed hands (capture, and so every fall). Off: nothing. */
+export function clearTownWorks(g: Game, r: Region): void {
+  if (!cityDefences(g)) return;
+  delete g.flags[`tw:${r.id}`];
+  delete g.flags[`twn:${r.id}`];
+}
+
+/** Marks a town stormed this month, won or lost (siege.ts storm): its works gain nothing at its holder's month end. Off: nothing. */
+export function markStormed(g: Game, r: Region): void {
+  if (cityDefences(g)) g.flags[`tws:${r.id}`] = g.turn;
+}
+
+/**
+ * The town works at the end of `nat`'s month (beside digIn, after every storm of the month has been fought): a town it
+ * holds with a living corps of its garrison inside, and not stormed since its last month end, gains a month, to
+ * works.most, under siege too; a town of its with no garrison loses one. Works on ground that has changed holder are
+ * cleared whoever's month it is. Off: nothing is read or written.
+ */
+export function townWorksMonth(g: Game, nat: string): void {
+  if (!cityDefences(g)) return;
+  const idx = nationIndex(g, nat);
+  for (const r of g.regions) {
+    const key = `tw:${r.id}`, by = `twn:${r.id}`, hit = `tws:${r.id}`;
+    if (g.flags[key] !== undefined && g.flags[by] !== nationIndex(g, r.ctrl)) { delete g.flags[key]; delete g.flags[by]; }
+    if (r.ctrl !== nat) continue;
+    const stormed = g.flags[hit] !== undefined;
+    if (stormed) delete g.flags[hit];
+    const m = g.flags[key] ?? 0;
+    if (garrisonOf(r).some((c) => !c.dead)) {
+      if (stormed || m >= CITYDEF.works.most) continue;
+      g.flags[key] = m + 1;
+      g.flags[by] = idx;
+    } else if (m > 0) {
+      if (m <= 1) { delete g.flags[key]; delete g.flags[by]; } else g.flags[key] = m - 1;
+    }
+  }
+}
+
+/**
+ * The town works in the town line's own comma list (the UI director's words, section 4), after the strength: ", behind
+ * 3 months of barricades and strongpoints", or where the forts count for more and the works add nothing, ", with 3
+ * months of barricades and strongpoints, though its forts count for more". '' with none, or with the switch off.
+ * `fort` is the forts' bonus inside the walls as the walls count it.
+ */
+export function townWorksWords(g: Game, r: Region, fort: number): string {
+  const m = townWorksAt(g, r);
+  if (m <= 0) return '';
+  const months = `${m} month${m === 1 ? '' : 's'} of barricades and strongpoints`;
+  return fort > townWorksWorth(g, r) ? `, with ${months}, though its forts count for more` : `, behind ${months}`;
+}

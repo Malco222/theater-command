@@ -59,7 +59,8 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { clearTownWorks, townWorksMonth, townWorksWords } from './citydefences';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, fortTerm } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize } from './towns';
 import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
@@ -1919,7 +1920,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       // ("Panama City, Panama's capital", not "Capital of Panama City"; "Lodz, a city", not "City of Lodz": the UI director,
       // builds 1668 and 1678.)
       label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}${served ? '' : `, dug by ${theName(g.nations[worksBy(target)])}: they give its defenders no cover`}` : ''}`,
-      effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
+      effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${townWorksWords(g, target, fortTerm(target, served))}${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
     // (Which share stands behind which: the design director's 07:36Z.)
     if (crewP > 0) {
@@ -3134,6 +3135,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   g.supplyDirty = true;
   // Works standing empty go with the ground: whoever takes it from their owner finds nothing he can use.
   if (g.flags[`fw:${r.id}`] !== undefined) { const left = groundWorks(g, r.id); if (!left || !allied(g, r.ctrl, left.nat)) clearWorks(g, r.id); }
+  // (City defences: the town's barricades and strongpoints were its old holder's, and go with him. Off: nothing.)
+  clearTownWorks(g, r);
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
@@ -4579,6 +4582,9 @@ export function endPhase(g: Game, nat: string): void {
   // And again as it closes, before the other staffs move: what he saw this month he goes on knowing.
   if (nat === g.human) seeCuts(g);
   digIn(g, nat);
+  // (City defences: a garrison's month in its town is a month's barricades and strongpoints, read after every storm of
+  // the month has been fought; a town left empty loses a month. Off: nothing is read or written.)
+  townWorksMonth(g, nat);
   if (g.nations[nat].alive) desertWorks(g, nat, true);
   siegeEmpties(g);
   mendPrizes(g, nat);

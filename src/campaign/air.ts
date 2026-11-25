@@ -38,7 +38,7 @@ import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
 import { fuelAir } from './resources';
-import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, townWorksPhrase, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { settleFought, type BombLaw, type FoughtAir } from './airfought';
@@ -1954,7 +1954,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${harbourOf(place)}`, effect: dark || 'They bring down more of the bombers' });
   if (m === 'town') {
     const r = g.regions[target], gone = breachOf(g, r);
-    out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
+    out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
   if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${place}`, effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
