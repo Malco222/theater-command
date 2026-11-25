@@ -526,9 +526,11 @@ namespace
 	/** Each vehicle's own worn ink, by her number in the battle (VehicleInk), for the battle WornOpen opened. */
 	TMap<int32, TWeakObjectPtr<UMaterialInstanceDynamic>> WornInks;
 
-	/** The men's worn parents (MenParent): the near men's and the crowd's, and whether each has been looked for. */
+	/** The men's worn parents (MenParent): the near men's and the crowd's; whether each was looked for and not found
+	 * (build_content.py not run: not looked for again, said once); a found one the collector freed between battles, when
+	 * nothing held it, is loaded again (the 3D pre-check, 25 Nov 12:28Z). */
 	TWeakObjectPtr<UMaterialInterface> MenParents[2];
-	bool bMenLooked[2] = { false, false };
+	bool bMenMissing[2] = { false, false };
 
 	/** A material of the campaign's, quietly (nullptr when build_content.py has not made it). */
 	UMaterialInterface* Campaign(const TCHAR* Path)
@@ -658,12 +660,12 @@ UMaterialInterface* WholeLook::MenParent(bool bCrowd)
 		return nullptr;
 	}
 	const int32 Which = bCrowd ? 1 : 0;
-	if (!MenParents[Which].IsValid() && !bMenLooked[Which])
+	if (!MenParents[Which].IsValid() && !bMenMissing[Which])
 	{
-		bMenLooked[Which] = true;
 		MenParents[Which] = Campaign(bCrowd ? TEXT("/Game/Campaign/Materials/M_LandCrowdWorn.M_LandCrowdWorn") : TEXT("/Game/Campaign/Materials/M_LandManWorn.M_LandManWorn"));
 		if (!MenParents[Which].IsValid())
 		{
+			bMenMissing[Which] = true;
 			UE_LOG(LogTheater, Warning, TEXT("Whole look: worn is on but /Game/Campaign/Materials/%s is missing (run Tools/build_content.sh): the men keep one roughness, and their paint's roughness is not written."),
 				bCrowd ? TEXT("M_LandCrowdWorn") : TEXT("M_LandManWorn"));
 		}
