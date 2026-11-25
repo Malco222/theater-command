@@ -837,29 +837,35 @@ namespace LandMen
 				St.Offset = V3(P["root_offset"]);
 				if (!St.Piece.empty() && !St.Socket.empty()) Cl.Seats.push_back(std::move(St));
 			}
-			// (a prop's keys: any of the clip's fields holding "track_fields", starting with "t", and "track", a key a row)
-			for (size_t K = 0; C.K == J::Obj && K < C.Vals.size(); ++K)
+			// (a prop's keys: any of the clip's fields holding "track_fields", starting with "t", and "track", a key a row;
+			// and any such field of the clip's "props", where the tankers' files keep theirs: "binoculars")
+			const auto ReadProps = [&Cl](const J& Holder)
 			{
-				const J& Pk = C.Vals[K];
-				const J& Fs = Pk["track_fields"];
-				const J& Tk = Pk["track"];
-				if (Pk.K != J::Obj || Fs.Size() < 2 || Tk.Size() == 0 || Fs.At(0).Text() != "t") continue;
-				Clip::PropKeys Pr;
-				Pr.Name = C.Keys[K];
-				for (size_t F = 1; F < Fs.Size(); ++F) Pr.Fields.push_back(Fs.At(F).Text());
-				const size_t Width = Pr.Fields.size();
-				bool bOrdered = true;
-				for (size_t R = 0; R < Tk.Size(); ++R)
+				for (size_t K = 0; Holder.K == J::Obj && K < Holder.Vals.size(); ++K)
 				{
-					const J& Row = Tk.At(R);
-					if (Row.Size() < Width + 1) continue;
-					const float T = static_cast<float>(Row.Number(0));
-					bOrdered = bOrdered && (Pr.T.empty() || T >= Pr.T.back());
-					Pr.T.push_back(T);
-					for (size_t F = 0; F < Width; ++F) Pr.Values.push_back(static_cast<float>(Row.Number(F + 1)));
+					const J& Pk = Holder.Vals[K];
+					const J& Fs = Pk["track_fields"];
+					const J& Tk = Pk["track"];
+					if (Pk.K != J::Obj || Fs.Size() < 2 || Tk.Size() == 0 || Fs.At(0).Text() != "t") continue;
+					Clip::PropKeys Pr;
+					Pr.Name = Holder.Keys[K];
+					for (size_t F = 1; F < Fs.Size(); ++F) Pr.Fields.push_back(Fs.At(F).Text());
+					const size_t Width = Pr.Fields.size();
+					bool bOrdered = true;
+					for (size_t R = 0; R < Tk.Size(); ++R)
+					{
+						const J& Row = Tk.At(R);
+						if (Row.Size() < Width + 1) continue;
+						const float T = static_cast<float>(Row.Number(0));
+						bOrdered = bOrdered && (Pr.T.empty() || T >= Pr.T.back());
+						Pr.T.push_back(T);
+						for (size_t F = 0; F < Width; ++F) Pr.Values.push_back(static_cast<float>(Row.Number(F + 1)));
+					}
+					if (!Pr.T.empty() && bOrdered && !Cl.PropOf(Pr.Name)) Cl.Props.push_back(std::move(Pr));
 				}
-				if (!Pr.T.empty() && bOrdered) Cl.Props.push_back(std::move(Pr));
-			}
+			};
+			ReadProps(C);
+			ReadProps(C["props"]);
 			Clips.push_back(std::move(Cl));
 		}
 		for (Clip& Cl : Clips)
@@ -2354,7 +2360,13 @@ namespace LandMen
 		// ---------------------------------------------------------------------------------------------------------
 		// Poses of the rules, drawn.
 		// ---------------------------------------------------------------------------------------------------------
-		Stance StanceOf(const Soldier& S, const std::string& Role, const std::string& Pose, bool bMoving, int Serves = 0) const
+		/** The rules' cover a kneeling man fires over (drill.ts CoverKind): fieldworks, a wall or a window, a tree, a rock, a wreck. */
+		static bool LowCover(const std::string& Cover)
+		{
+			return Cover == "works" || Cover == "building" || Cover == "woods" || Cover == "rock" || Cover == "wreck";
+		}
+
+		Stance StanceOf(const Soldier& S, const std::string& Role, const std::string& Pose, bool bMoving, int Serves = 0, const std::string& Cover = std::string()) const
 		{
 			Stance St;
 			St.Pose = Pose;
@@ -2368,9 +2380,20 @@ namespace LandMen
 			{
 				// (release 2's "teamguns": set down a moment, he is at his weapon still, as deployed, not kneeling apart
 				// with his rifle up)
-				Stance AtHer = StanceOf(S, Role, "deployed", bMoving, Serves);
+				Stance AtHer = StanceOf(S, Role, "deployed", bMoving, Serves, Cover);
 				AtHer.Pose = Pose;
 				return AtHer;
+			}
+			// A section's machine gunner halted (release 2; Brian, 25 November 16:06Z: "a soldier would never shoot this
+			// like a rifle position"): he is down behind his gun on her bipod, waiting as he fires (the rules have him
+			// fire so already, lmg_burst). He kneels with her at his hip (his file's fire_kneel, a hip hold) only where
+			// something low stands before him to fire over, and stands with her at his hip only for the bursts of fire on
+			// the move (fire_stand). A rifleman kneels to wait as before.
+			if (bGunner && !bMoving && (Pose == "wait" || Pose == "fire_kneel") && !LowCover(Cover) && S.ClipIndex("fire_prone") >= 0)
+			{
+				Use("fire_prone", Stance::Hold, Prone);
+				St.bFiring = true;
+				return St;
 			}
 			if (Pose == "walk" || Pose == "run" || Pose == "advance" || Pose == "creep" || Pose == "flee") Use(Pose.c_str(), Stance::Gait, Up);
 			else if (Pose == "crawl") Use("crawl", Stance::Gait, Prone);
@@ -4034,9 +4057,10 @@ namespace LandMen
 				for (size_t B = std::min(C, Mn.Stances.size()), Back = 0; B > 0 && Back < 8 && !Like; --B, ++Back)
 				{
 					const Stance& O = Mn.Stances[B - 1];
-					if (O.bMoving == bMoving && O.Pose == Cg.Pose) Like = &O;
+					// (a gunner's waiting stance is by his cover too: lying in the open, kneeling behind something low)
+					if (O.bMoving == bMoving && O.Pose == Cg.Pose && (S.Weapon != "lmg" || LowCover(O.Cover) == LowCover(Cg.Cover))) Like = &O;
 				}
-				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving, Mn.Serves);
+				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving, Mn.Serves, Cg.Cover);
 				St.T = Cg.T;
 				St.SeatOn = Cg.SeatOn;
 				St.Seat = Cg.Seat;
@@ -5395,12 +5419,59 @@ namespace LandMen
 	{
 		if (Man < 0 || static_cast<size_t>(Man) >= Inner->Men.size()) return false;
 		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
-		if (Mn.State != Impl::Man::Alive || !Mn.S || Mn.Cur.Clip < 0 || Mn.Cur.LastT < 0.f) return false;
-		const Clip& C = Mn.S->Clips[static_cast<size_t>(Mn.Cur.Clip)];
+		if (!Mn.S) return false;
+		// (a rider's clip and its time are his seat's, SetRide; a man on his feet shows his own)
+		int ClipIx = Mn.Cur.Clip;
+		float At = Mn.Cur.LastT;
+		if (Mn.bRider)
+		{
+			if (!Mn.RideNow.bShown) return false;
+			ClipIx = Mn.RideNow.Clip;
+			At = Mn.RideNow.Time;
+		}
+		else if (Mn.State != Impl::Man::Alive || At < 0.f) return false;
+		if (ClipIx < 0 || static_cast<size_t>(ClipIx) >= Mn.S->Clips.size()) return false;
+		const Clip& C = Mn.S->Clips[static_cast<size_t>(ClipIx)];
 		const Clip::PropKeys* P = C.PropOf(Track);
 		if (!P) return false;
 		Out.resize(P->Fields.size());
-		P->Sample(Mn.Cur.LastT, C.bLoop, C.Long, Out.data());
+		P->Sample(At, C.bLoop, C.Long, Out.data());
+		return true;
+	}
+
+	bool Crowd::PropFrame(int Man, const std::string& Track, Xform& Out) const
+	{
+		if (Man < 0 || static_cast<size_t>(Man) >= Inner->Men.size()) return false;
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		if (!Mn.S) return false;
+		const int ClipIx = Mn.bRider ? Mn.RideNow.Clip : Mn.Cur.Clip;
+		if (ClipIx < 0 || static_cast<size_t>(ClipIx) >= Mn.S->Clips.size()) return false;
+		const Clip::PropKeys* P = Mn.S->Clips[static_cast<size_t>(ClipIx)].PropOf(Track);
+		std::vector<float> Keys;
+		if (!P || !PropAt(Man, Track, Keys)) return false;
+		// (its fields by name: where it is, how it is turned, and whether it is in his hands at all)
+		float At[3] = { 0.f, 0.f, 0.f };
+		Quat Q;
+		bool bPlaced = false;
+		for (size_t F = 0; F < P->Fields.size() && F < Keys.size(); ++F)
+		{
+			const std::string& Name = P->Fields[F];
+			if (Name == "x") { At[0] = Keys[F]; bPlaced = true; }
+			else if (Name == "y") At[1] = Keys[F];
+			else if (Name == "z") At[2] = Keys[F];
+			else if (Name == "qw") Q.W = Keys[F];
+			else if (Name == "qx") Q.X = Keys[F];
+			else if (Name == "qy") Q.Y = Keys[F];
+			else if (Name == "qz") Q.Z = Keys[F];
+			else if (Name == "shown" && Keys[F] < 0.5f) return false;
+		}
+		if (!bPlaced) return false;
+		Xform Own;
+		QMat(QNormal(Q), Own.R);
+		Own.T[0] = At[0];
+		Own.T[1] = At[1];
+		Own.T[2] = At[2];
+		Out = Compose(Mn.bRider ? Mn.RideNow.Seat : Mn.World, Own);
 		return true;
 	}
 }

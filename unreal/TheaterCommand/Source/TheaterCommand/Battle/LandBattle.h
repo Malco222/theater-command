@@ -349,6 +349,12 @@ private:
 	TArray<int32> FreeReels;
 	int32 ReelTracksSeen = 0;
 	bool bReelTried = false;
+	/** The tank commanders' field glasses (release 2, on trial "glasses"; Content/Models/Battle's Binoculars): one copy
+	 * a commander (FRider::Glass), where his hatch clip's prop keys "binoculars" hold them (RideTanks), put away
+	 * while his clip has none. Made the first time the riders are stepped with the trial on. */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> GlassCopies;
+	bool bGlassTried = false;
 	/** The support teams' weapons (release 2, on trial "teamguns": a machine gun on its mount or a mortar at each team's
 	 * key man; Battle/LandTeamGun, the state's TeamGuns): each weapon file's two meshes instanced, its mount ([2 * its
 	 * kind]) and what turns on it and is carried ([2 * its kind + 1]); the copies of a live battle's reset given back to

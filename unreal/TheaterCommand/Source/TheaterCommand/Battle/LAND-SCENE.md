@@ -72,6 +72,8 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      the ground stayed dry (23 November). The two may sit on one line.
    - `-TheaterLandScars=N`, `-TheaterLandScarMonths=M`, `-TheaterLandNoScars` (release 2): old shell holes from
      earlier battles over the same field, as a recording's root `"scars": {"count", "months"}` gives them.
+     They gather along the field's old lines (hedges, lanes, the village's edge): a line stepped finer than 4 m, as
+     a lane's is, has its steps joined, and the lines take no more than about a hole to 3 m of their length.
    - `-TheaterLandOldRuts=N`, `-TheaterLandOldRutMonths=M`, `-TheaterLandNoOldRuts` (release 2, mud memory): the ruts
      of battles fought here in mud before, as a recording's root `"oldRuts": {"count", "months"}` gives them: dried
      pale under three months, then a lusher green line fading; puddled with `-TheaterLandWeatherWord=mud`.
@@ -885,6 +887,15 @@ section gunner with his gun, `soldier_<ARMY>_lmg.json` (the German MG 42) and th
 MG 34), the scene reads those files (`MakeMen`'s list) and `LandMen` draws a section's `mg` man from them: `_lmg34`
 before July 1942 where it is made, else `_lmg`, else the American's `_bar` as before. Off, the files are not read and he
 is the rifleman he was. The men's test plays one of each date (`Tools/land_show`).
+Halted in the open (the rules' `wait`, or `fire_kneel`, with no works, building, woods, rock or wreck for his cover)
+he lies behind his gun on its bipod, `fire_prone`, and kneels only where low cover stands before him; on his feet he
+fires from the hip as before (Brian, 25 November 16:06Z: a gunner never shoulders the gun like a rifle).
+
+**The tank commander's field glasses** (trial word `glasses`, off; `-TheaterLandNoGlasses` off whatever the word
+says): the tankers' files carry a `props.binoculars` track on `commander_hatch` and the two hatch deaths. `LandMen`
+reads it (`Crowd::PropFrame`, the prop's place and turn in the world for a rider too) and `RideTanks` draws
+`Content/Models/Battle/Binoculars.json` there as instances, once he is over six tenths out of his hatch; nothing is
+drawn at the roof gun, where the track says put away. The men's test checks them in his hands at every moment.
 
 Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
 `islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.
