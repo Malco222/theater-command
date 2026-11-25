@@ -2531,9 +2531,9 @@ export function anchorLoss(g: Game, f: Fleet): number {
  * strike showed them: each with a month's steaming on, through straits open to them, and the reach of its strike
  * aircraft. A sighting with nothing kept of it is not placed. And the enemy's fields: where its side's sight shows them
  * (intel.ts sightOf, the province seen whole), each enemy group with strike aircraft on its field, with its reach;
- * beyond its sight, every enemy field it knows of, with the reach of the strike types it has met (the strikes from land
- * in its book); and the fields the strikers flew from, with theirs. `seas`: the reach from each sea; `fields`: the
- * reach from each field.
+ * beyond its sight, every enemy field it knows of, with the reach of the best of the land strike types its holder's side
+ * has in service (known to every seat at war with it: the ruling of 16:19Z, 2); and the fields the strikers flew from,
+ * with theirs. Nothing new is kept. `seas`: the reach from each sea; `fields`: the reach from each field.
  */
 export function strikeThreat(g: Game, f: Fleet): { seas: Map<number, number>; fields: Map<number, number> } {
   const seas = new Map<number, number>(), fields = new Map<number, number>();
@@ -2549,10 +2549,8 @@ export function strikeThreat(g: Game, f: Fleet): { seas: Map<number, number>; fi
   };
   const field = (id: number, R: number): void => { if (id >= 0 && R > 0 && (fields.get(id) ?? -1) < R) fields.set(id, R); };
   const reported = (c: Fleet): boolean => shipCount(c.ships) > 0 && fleetFound(g, c, f.nat) !== 'none';
-  const book = anchorStrikes(g, f);
-  let met = 0;
-  for (const e of book) for (const o of e.from) {
-    if (o.sea < 0) { field(o.field, o.km); met = Math.max(met, o.km); continue; }
+  for (const e of anchorStrikes(g, f)) for (const o of e.from) {
+    if (o.sea < 0) { field(o.field, o.km); continue; }
     const c = o.fleet !== undefined ? g.fleets.find((x) => x.id === o.fleet) : undefined;
     if (!c || !reported(c)) steam([o.sea], o.nat ?? c?.nat, o.km);
   }
@@ -2561,9 +2559,21 @@ export function strikeThreat(g: Game, f: Fleet): { seas: Map<number, number>; fi
     const w = g.airFleets.find((a) => a.ship === c.id && a.bmr > 0);
     if (w) steam(atSea(c) ? [c.zone] : c.base >= 0 ? g.regions[c.base].seas : [c.home], c.nat, airRange(w, g, 'harbour').bmr);
   }
-  const sight = sightOf(g, f.nat);
-  for (const a of g.airFleets) if (a.ship === undefined && a.bmr > 0 && a.base >= 0 && atWar(g, a.nat, f.nat) && sight[a.base] === SIGHT.full) field(a.base, airRange(a, g, 'harbour').bmr);
-  if (met > 0) for (const r of g.regions) if (sight[r.id] !== SIGHT.full && atWar(g, r.ctrl, f.nat) && hasAirfield(g, r.id)) field(r.id, met);
+  // Each enemy's land strike types in service, known to every seat at war with it: the best reach among them.
+  const sight = sightOf(g, f.nat), best = new Map<string, number>();
+  for (const a of g.airFleets) {
+    if (a.ship !== undefined || a.bmr <= 0 || !atWar(g, a.nat, f.nat)) continue;
+    const R = airRange(a, g, 'harbour').bmr;
+    if ((best.get(a.nat) ?? 0) < R) best.set(a.nat, R);
+    if (a.base >= 0 && sight[a.base] === SIGHT.full) field(a.base, R);
+  }
+  if (best.size) for (const r of g.regions) {
+    if (sight[r.id] === SIGHT.full || !atWar(g, r.ctrl, f.nat) || !hasAirfield(g, r.id)) continue;
+    // (Its holder's types, or an ally's at war with the fleet's nation that could fly from it.)
+    let R = 0;
+    for (const [n, k] of best) if (k > R && (n === r.ctrl || allied(g, n, r.ctrl))) R = k;
+    field(r.id, R);
+  }
   return { seas, fields };
 }
 

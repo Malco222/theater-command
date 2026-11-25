@@ -5,7 +5,8 @@
 // 3. The readiness gather and a strike's way home are made in their month only within a month's steaming; beyond it
 //    they are a voyage. A fleet with no harbour it can reach is not scuttled, in passage or in harbour as its base
 //    falls: it waits at sea until one opens; the player's waits for his order, and he may scuttle it; with his navy
-//    handed over, his admirals make for a harbour as a staff would. (And the ruling of 16:05Z: what the staff sees.)
+//    handed over, his admirals make for a harbour as a staff would. (And the rulings of 16:05Z and 16:19Z: what the
+//    staff sees, and the enemy's land strike types in service known to every seat at war with it.)
 // 4. Once the Pacific lanes are laid a fleet's page lists every lane, nearest first.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
@@ -116,24 +117,26 @@ describe('1. out of reach: where the enemy could strike from next month, at the 
     for (const z of g.regions[mf.base].seas) expect(strikeThreat(g, f).seas.get(z)).toBe(R);
   });
 
-  it('the enemy\'s fields: groups where its sight shows them, every field it knows of beyond it with the reach it has met', () => {
+  it('the enemy\'s fields: groups where its sight shows them, every field it knows of beyond it with its best type in service', () => {
     const g = startOpen(createGame(3, null));
     declareWar(g, 'ITA', 'UK');
     const f = fleet(g, 'ITA', '1st Fleet'), malta = g.byName['Malta'];
     const sight = sightOf(g, 'ITA');
+    // Britain's land strike types in service (and its allies' at war with Italy), known to Italy's staff: the best reach.
+    const best = Math.max(...g.airFleets.filter((a) => a.ship === undefined && a.bmr > 0 && atWar(g, a.nat, 'ITA') && (a.nat === 'UK' || allied(g, a.nat, 'UK')))
+      .map((a) => airRange(a, g, 'harbour').bmr));
+    expect(best).toBeGreaterThan(0);
     const beyond = g.regions.filter((r) => r.ctrl === 'UK' && hasAirfield(g, r.id) && sight[r.id] !== SIGHT.full);
     expect(beyond.length).toBeGreaterThan(5);
-    // Struck from a carrier only, it has met no strike from land: the fields beyond its sight are not counted.
+    // Struck from a carrier only or from Malta's field, it is the same: every British field beyond its sight counts, with that reach.
     const ark = g.fleets.find((c) => c.nat === 'UK' && c.ships.cv > 0)!;
-    f.anchor = [{ t: g.turn, at: f.base, n: 2, lost: 0.15, w: 200, from: [{ sea: ark.home, field: -1, km: 300, nat: 'UK', fleet: ark.id }] }];
-    for (const r of beyond) expect(strikeThreat(g, f).fields.has(r.id)).toBe(false);
-    // Struck from Malta's field: every British field beyond its sight counts, with that reach.
-    f.anchor = [{ t: g.turn, at: f.base, n: 2, lost: 0.15, w: 200, from: [{ sea: -1, field: malta.id, km: 900, nat: 'UK' }] }];
-    const T = strikeThreat(g, f);
-    for (const r of beyond) expect(T.fields.get(r.id)).toBeGreaterThanOrEqual(900);
-    const first = safeHarbour(g, f)!;
-    expect(first).toBeTruthy();
-    for (const r of beyond) expect(km(g, r.id, first.id)).toBeGreaterThan(900);
+    for (const from of [{ sea: ark.home, field: -1, km: 300, nat: 'UK', fleet: ark.id }, { sea: -1, field: malta.id, km: 900, nat: 'UK' }]) {
+      f.anchor = [{ t: g.turn, at: f.base, n: 2, lost: 0.15, w: 200, from: [from] }];
+      const T = strikeThreat(g, f);
+      for (const r of beyond) expect(T.fields.get(r.id)).toBeGreaterThanOrEqual(best);
+    }
+    const first = safeHarbour(g, f);
+    if (first) for (const r of beyond) expect(km(g, r.id, first.id)).toBeGreaterThan(best);
     // A field in its sight counts only with a group with strike aircraft on it, with that group's reach.
     const bav = g.byName['Bavaria'];
     bav.ctrl = 'UK';
@@ -144,9 +147,10 @@ describe('1. out of reach: where the enemy could strike from next month, at the 
     group.base = bav.id;
     const R = airRange(group, g, 'harbour').bmr;
     expect(strikeThreat(g, f).fields.get(bav.id)).toBe(R);
-    const then = safeHarbour(g, f);
-    if (km(g, bav.id, first.id) <= R) expect(then?.id).not.toBe(first.id);
-    if (then) { expect(km(g, malta.id, then.id)).toBeGreaterThan(900); expect(km(g, bav.id, then.id)).toBeGreaterThan(R); }
+    // And a field beyond its sight held by a nation at peace with it counts for nothing.
+    const neutral = g.regions.find((r) => sight[r.id] !== SIGHT.full && hasAirfield(g, r.id) && g.nations[r.ctrl] && !atWar(g, r.ctrl, 'ITA') && r.ctrl !== 'ITA' && !allied(g, r.ctrl, 'ITA'))!;
+    expect(neutral).toBeTruthy();
+    expect(strikeThreat(g, f).fields.has(neutral.id)).toBe(false);
   });
 });
 
