@@ -38,7 +38,7 @@ step() {
 }
 
 # The core's own files: the sky, the air sky it lays through, and what those two need to link.
-CORE=("$SRC/Battle/SeaSky.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirDesk.cpp" \
+CORE=("$SRC/Battle/SeaSky.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirDesk.cpp" \
   "$SRC/Battle/AirGround.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Effects/TheaterFxCore.cpp")
 FLAGS=(-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC")
 

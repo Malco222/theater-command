@@ -84,7 +84,7 @@ mkdir -p "$MARKS"
 step "marks_extract (DrawMarks cut out of the game's source)" python3 -I -B "$HERE/marks_extract.py" "$SRC" "$MARKS"
 if [ -f "$MARKS/marks_bodies.inc" ]; then
   step "marks_pool_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$MARKS" -I"$HERE" "$HERE/marks_pool_test.cpp" \
-    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" \
+    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" \
     "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/marks_pool_test"
 fi
 if [ -x "$OUT/marks_pool_test" ]; then
@@ -124,7 +124,7 @@ if [ -x "$OUT/fold_table" ]; then
   step "fold_table (written again, byte for byte Battle/FleetWavesFold.inl)" fold_again
 fi
 step "sea_waves_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/sea_waves_test.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" \
-  "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" \
+  "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" \
   "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/sea_waves_test"
 if [ -x "$OUT/sea_waves_test" ]; then
   # (the ride's cost on the battles' own recorded actions; none found is a failure, not a skip)
@@ -179,7 +179,7 @@ mkdir -p "$DAY"
 step "day_extract (today's light and haze cut out of the game's source)" python3 -I -B "$HERE/day_extract.py" "$SRC" "$DAY"
 if [ -f "$DAY/day_cut.inc" ]; then
   step "sea_day_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$DAY" -I"$HERE" "$HERE/sea_day_test.cpp" "$SRC/Battle/SeaDayCore.cpp" \
-    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" \
+    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" \
     "$SRC/Effects/TheaterFxCore.cpp" "$SRC/Battle/SeaUnderCore.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" -o "$OUT/sea_day_test"
 fi
 if [ -x "$OUT/sea_day_test" ]; then
